@@ -241,8 +241,11 @@ function shotBattle(dayPhase = 0.2, outName = "04-battle.png", title = "Lines cl
     const u = world.spawnUnit(Team.Enemy, t, fieldX + ux * 70 + px * off, fieldY + uy * 70 + py * off);
     eUnits.push(u.id);
   });
-  // A couple of defensive buildings + a tower for flavour near the player line.
+  // A couple of defensive buildings + a tower for flavour near the player line,
+  // flanked by watchfires (they really sing in the night shot).
   world.spawnBuilding(Team.Player, "watch_tower", start.x + ux * 150 + px * 120, start.y + uy * 150 + py * 120, true);
+  world.spawnBuilding(Team.Player, "watchfire", fieldX - ux * 130 + px * 150, fieldY - uy * 130 + py * 150, true);
+  world.spawnBuilding(Team.Player, "watchfire", fieldX - ux * 130 - px * 150, fieldY - uy * 130 - py * 150, true);
 
   // Order both lines to fight.
   for (const id of pUnits) {
@@ -282,6 +285,10 @@ function shotBattle(dayPhase = 0.2, outName = "04-battle.png", title = "Lines cl
   cam.zoom = 1.25;
   renderer.dayPhase = dayPhase;
 
+  // Fire signature abilities so the pulsing auras show in the still.
+  world.useAbility(pUnits);
+  world.useAbility(eUnits);
+
   // Select a few player units to show selection rings + health bars.
   for (const id of pUnits.slice(0, 4)) {
     const e = world.byId.get(id);
@@ -308,6 +315,124 @@ function shotBattle(dayPhase = 0.2, outName = "04-battle.png", title = "Lines cl
 }
 
 // ------------------------------------------------------------- in-match HUD --
+// ---------------------------------------------------- abilities & watchfire --
+function shotAbilities() {
+  const map = generateMap("open_plains", 4242);
+  const world = new World(4242);
+  world.init(map, [{}, {}], [1, 1]);
+  const W = 1280;
+  const H = 760;
+  const { c, ctx } = makeCtx(W, H);
+  const renderer = new Renderer(c as any);
+  renderer.prepare(map);
+  const cam = new Camera();
+  cam.setViewport(W, H);
+  cam.setWorld(map.worldW, map.worldH);
+
+  const cx = map.worldW / 2;
+  const cy = map.worldH / 2;
+  // A line of ability-using units, each mid-ability, behind a watchfire.
+  const roster = ["militia", "spearman", "knight", "archer", "skirmisher"];
+  const ids: number[] = [];
+  roster.forEach((t, i) => {
+    const u = world.spawnUnit(Team.Player, t, cx - 150 + i * 74, cy + 30);
+    u.facing = -Math.PI / 2;
+    ids.push(u.id);
+  });
+  // Enemy knights charging in from the top for the auras to read against.
+  for (let i = 0; i < 3; i++) {
+    const e = world.spawnUnit(Team.Enemy, "knight", cx - 80 + i * 74, cy - 110);
+    e.facing = Math.PI / 2;
+    world.useAbility([e.id]);
+  }
+  world.spawnBuilding(Team.Player, "watchfire", cx, cy + 96, true);
+  world.useAbility(ids);
+
+  world.fog[Team.Player].fill(FOG_VISIBLE);
+  cam.centerOn(cx, cy);
+  cam.zoom = 2.3;
+  renderer.dayPhase = 0.78; // night, so the watchfire glow and auras pop
+
+  renderer.render(
+    world, cam, new Particles(10), 0.016, 2.0, Team.Player,
+    [], null, { active: false, x0: 0, y0: 0, x1: 0, y1: 0 }, null,
+  );
+
+  // Caption + per-unit ability tags.
+  ctx.textAlign = "center";
+  ctx.font = "bold 24px Georgia, serif";
+  ctx.fillStyle = "rgba(0,0,0,0.55)";
+  ctx.fillText("Signature abilities — fire them in the fight", W / 2 + 2, 42);
+  ctx.fillStyle = "#ffe9b0";
+  ctx.fillText("Signature abilities — fire them in the fight", W / 2, 40);
+  const tags = ["Shield Wall", "Brace Spears", "Cavalry Charge", "Volley", "Volley"];
+  ids.forEach((id, i) => {
+    const e = world.byId.get(id)!;
+    const sx = cam.worldToScreenX(e.x);
+    const sy = cam.worldToScreenY(e.y) + 54;
+    ctx.font = "bold 13px sans-serif";
+    ctx.fillStyle = "rgba(0,0,0,0.6)";
+    ctx.fillText(tags[i], sx + 1, sy + 1);
+    ctx.fillStyle = "#cfe9ff";
+    ctx.fillText(tags[i], sx, sy);
+  });
+  ctx.textAlign = "left";
+  save("11-abilities.png", c);
+}
+
+// ------------------------------------------------------- drag-paint walls --
+function shotWallPaint() {
+  const map = generateMap("highlands", 7);
+  const world = new World(7);
+  world.init(map, [{}, {}], [1, 1]);
+  const W = 1280;
+  const H = 760;
+  const { c, ctx } = makeCtx(W, H);
+  const renderer = new Renderer(c as any);
+  renderer.prepare(map);
+  const cam = new Camera();
+  cam.setViewport(W, H);
+  cam.setWorld(map.worldW, map.worldH);
+
+  const start = map.starts[Team.Player];
+  // A handful of villagers ready to build.
+  for (let i = 0; i < 4; i++) {
+    world.spawnUnit(Team.Player, "villager", start.x - 40 + i * 26, start.y + 70).selected = true;
+  }
+  // A short existing wall + gate, with a gap the player is now painting closed.
+  const TILE = map.worldW / map.cols;
+  for (let i = -4; i <= -2; i++) {
+    world.spawnBuilding(Team.Player, "stone_wall", start.x + i * TILE, start.y - 60, true);
+  }
+  world.spawnBuilding(Team.Player, "gate", start.x + 3 * TILE, start.y - 60, true);
+
+  world.fog[Team.Player].fill(FOG_VISIBLE);
+  cam.centerOn(start.x, start.y - 30);
+  cam.zoom = 2.1;
+
+  // Build the live drag preview: a snapped run of stone-wall ghosts.
+  const y = start.y - 60;
+  const line: { x: number; y: number; valid: boolean }[] = [];
+  for (let i = -1; i <= 3; i++) {
+    line.push({ x: start.x + i * TILE, y, valid: world.canPlace(Team.Player, "stone_wall", start.x + i * TILE, y) });
+  }
+  const ghost = { type: "stone_wall", x: start.x, y, valid: true, line };
+
+  renderer.render(
+    world, cam, new Particles(10), 0.016, 2.0, Team.Player,
+    [], ghost, { active: false, x0: 0, y0: 0, x1: 0, y1: 0 }, null,
+  );
+
+  ctx.textAlign = "center";
+  ctx.font = "bold 24px Georgia, serif";
+  ctx.fillStyle = "rgba(0,0,0,0.55)";
+  ctx.fillText("Drag to paint a wall — the whole run at once", W / 2 + 2, 42);
+  ctx.fillStyle = "#ffe9b0";
+  ctx.fillText("Drag to paint a wall — the whole run at once", W / 2, 40);
+  ctx.textAlign = "left";
+  save("11b-wallpaint.png", c);
+}
+
 function shotHUD(scene: ReturnType<typeof shotBattle>) {
   const { world, map, cam, pUnits } = scene;
   const W = 1280;
@@ -444,6 +569,8 @@ shotRarities();
 const scene = shotBattle();
 shotBattle(0.74, "09-night-battle.png", "Night raid — battle under the dark");
 shotHUD(scene);
+shotAbilities();
+shotWallPaint();
 shotFortress();
 shotMenus();
 console.log("Done.");
