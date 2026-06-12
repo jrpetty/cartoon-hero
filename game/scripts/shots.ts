@@ -1,0 +1,369 @@
+// Headless screenshot generator. Runs the game's own rendering code through a
+// node canvas (no browser) to produce preview PNGs of units, buildings, a live
+// battle, and the menus. Bundled with esbuild and run on node.
+
+import { createCanvas, GlobalFonts } from "@napi-rs/canvas";
+import { writeFileSync, mkdirSync } from "fs";
+
+// --- Shim the few DOM bits our render/UI code expects -----------------------
+(globalThis as any).document = {
+  createElement: (tag: string) => {
+    if (tag === "canvas") return createCanvas(8, 8);
+    throw new Error("unsupported element " + tag);
+  },
+};
+
+import { generateMap } from "../src/maps/generator";
+import { World, FOG_VISIBLE } from "../src/sim/world";
+import { Team, Kind, BuildState, OrderKind } from "../src/sim/types";
+import { Renderer } from "../src/render/renderer";
+import { Camera } from "../src/engine/camera";
+import { Particles } from "../src/engine/particles";
+import { drawUnit, drawBuilding, drawResource } from "../src/render/draw";
+import { PAL, shade, withAlpha } from "../src/render/palette";
+import { UNITS } from "../src/content/units";
+import { BUILDINGS } from "../src/content/buildings";
+import { RARITIES } from "../src/meta/rarity";
+import { HUD } from "../src/ui/hud";
+import { ui } from "../src/ui/ui";
+import { MenuScreen, SetupScreen, ArmoryScreen } from "../src/ui/screens";
+import { Profile } from "../src/meta/profile";
+
+const OUT = new URL("../shots/", import.meta.url).pathname;
+mkdirSync(OUT, { recursive: true });
+
+function save(name: string, canvas: any) {
+  writeFileSync(OUT + name, canvas.toBuffer("image/png"));
+  console.log("wrote shots/" + name);
+}
+
+function makeCtx(w: number, h: number) {
+  const c = createCanvas(w, h);
+  const ctx = c.getContext("2d") as any;
+  return { c, ctx };
+}
+
+function groundPlate(ctx: any, x: number, y: number, w: number, h: number) {
+  const g = ctx.createLinearGradient(0, y, 0, y + h);
+  g.addColorStop(0, shade(PAL.grass, 0.05));
+  g.addColorStop(1, shade(PAL.grassDark, -0.05));
+  ctx.fillStyle = g;
+  ctx.fillRect(x, y, w, h);
+  // soft vignette
+  ctx.fillStyle = "rgba(0,0,0,0.18)";
+  ctx.fillRect(x, y + h - 40, w, 40);
+}
+
+function label(ctx: any, text: string, x: number, y: number, sub?: string, color = "#f3e9d2") {
+  ctx.textAlign = "center";
+  ctx.font = "bold 15px sans-serif";
+  ctx.fillStyle = "rgba(0,0,0,0.55)";
+  ctx.fillText(text, x + 1, y + 1);
+  ctx.fillStyle = color;
+  ctx.fillText(text, x, y);
+  if (sub) {
+    ctx.font = "12px sans-serif";
+    ctx.fillStyle = "#c8bfa6";
+    ctx.fillText(sub, x, y + 17);
+  }
+  ctx.textAlign = "left";
+}
+
+// Build a throwaway world so we can mint properly-initialised entities.
+function scratchWorld(): World {
+  const map = generateMap("open_plains", 4242);
+  const w = new World(4242);
+  w.init(map, [{}, {}], [1, 1]);
+  return w;
+}
+
+// ----------------------------------------------------------------- units --
+function shotUnits() {
+  const w = scratchWorld();
+  const ids = Object.keys(UNITS);
+  const cols = 5;
+  const rows = Math.ceil(ids.length / cols);
+  const cellW = 200;
+  const cellH = 188;
+  const W = cols * cellW;
+  const H = rows * cellH + 64;
+  const { c, ctx } = makeCtx(W, H);
+  groundPlate(ctx, 0, 0, W, H);
+  ctx.textAlign = "center";
+  ctx.font = "bold 30px Georgia, serif";
+  ctx.fillStyle = "#ffe9b0";
+  ctx.fillText("Banner & Blade — The Host", W / 2, 40);
+  ctx.textAlign = "left";
+
+  ids.forEach((id, i) => {
+    const def = UNITS[id];
+    const cx = (i % cols) * cellW + cellW / 2;
+    const cy = Math.floor(i / cols) * cellH + 130;
+    // pedestal
+    ctx.fillStyle = "rgba(20,24,12,0.25)";
+    ctx.beginPath();
+    ctx.ellipse(cx, cy + 24, 46, 16, 0, 0, Math.PI * 2);
+    ctx.fill();
+    const e = w.spawnUnit(Team.Player, id, cx, cy);
+    e.x = cx;
+    e.y = cy;
+    e.vx = e.vy = 0;
+    e.facing = -Math.PI / 6;
+    // scale up heroes a touch for legibility
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.scale(1.7, 1.7);
+    ctx.translate(-cx, -cy);
+    drawUnit(ctx, e, 1.4);
+    ctx.restore();
+    label(ctx, def.name, cx, cy + 64, `${def.armorClass} · ⚔${def.attack} ❤${def.hp}`);
+    e.alive = false;
+  });
+  save("01-units.png", c);
+}
+
+// ------------------------------------------------------------- buildings --
+function shotBuildings() {
+  const w = scratchWorld();
+  const ids = Object.keys(BUILDINGS);
+  const cols = 5;
+  const rows = Math.ceil(ids.length / cols);
+  const cellW = 210;
+  const cellH = 200;
+  const W = cols * cellW;
+  const H = rows * cellH + 64;
+  const { c, ctx } = makeCtx(W, H);
+  groundPlate(ctx, 0, 0, W, H);
+  ctx.textAlign = "center";
+  ctx.font = "bold 30px Georgia, serif";
+  ctx.fillStyle = "#ffe9b0";
+  ctx.fillText("Banner & Blade — The Realm", W / 2, 40);
+  ctx.textAlign = "left";
+
+  ids.forEach((id, i) => {
+    const def = BUILDINGS[id];
+    const cx = (i % cols) * cellW + cellW / 2;
+    const cy = Math.floor(i / cols) * cellH + 132;
+    const e = w.spawnBuilding(Team.Player, id, cx, cy, true);
+    e.x = cx;
+    e.y = cy;
+    drawBuilding(ctx, e, 1.2, Team.Player);
+    label(ctx, def.name, cx, cy + 70, `❤${def.hp}${def.attack ? ` · ⚔${def.attack}` : ""}`);
+    e.alive = false;
+  });
+  save("02-buildings.png", c);
+}
+
+// ----------------------------------------------------------- rarity row --
+function shotRarities() {
+  const w = scratchWorld();
+  const W = 1180;
+  const H = 320;
+  const { c, ctx } = makeCtx(W, H);
+  groundPlate(ctx, 0, 0, W, H);
+  ctx.textAlign = "center";
+  ctx.font = "bold 28px Georgia, serif";
+  ctx.fillStyle = "#ffe9b0";
+  ctx.fillText("War Chest Rarities — the same Knight, six tiers", W / 2, 44);
+  ctx.font = "15px sans-serif";
+  ctx.fillStyle = "#c8bfa6";
+  ctx.fillText("Higher rarity = more health, more attack, and an ornate aura", W / 2, 70);
+  ctx.textAlign = "left";
+
+  const n = RARITIES.length;
+  const cellW = W / n;
+  RARITIES.forEach((r, i) => {
+    const cx = i * cellW + cellW / 2;
+    const cy = 175;
+    ctx.fillStyle = "rgba(20,24,12,0.25)";
+    ctx.beginPath();
+    ctx.ellipse(cx, cy + 26, 44, 15, 0, 0, Math.PI * 2);
+    ctx.fill();
+    const e = w.spawnUnit(Team.Player, "knight", cx, cy);
+    e.x = cx;
+    e.y = cy;
+    e.vx = e.vy = 0;
+    e.facing = -Math.PI / 6;
+    e.variantRarity = i;
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.scale(1.7, 1.7);
+    ctx.translate(-cx, -cy);
+    drawUnit(ctx, e, 1.4);
+    ctx.restore();
+    label(ctx, r.name, cx, cy + 78, undefined, r.color);
+    e.alive = false;
+  });
+  save("03-rarities.png", c);
+}
+
+// --------------------------------------------------------------- battle --
+function shotBattle() {
+  const map = generateMap("open_plains", 99221);
+  const world = new World(99221);
+  world.init(map, [{}, {}], [1, 1]);
+  const W = 1280;
+  const H = 760;
+  const { c } = makeCtx(W, H);
+  const renderer = new Renderer(c as any);
+  renderer.prepare(map);
+  const cam = new Camera();
+  cam.setViewport(W, H);
+  cam.setWorld(map.worldW, map.worldH);
+
+  // Stage a clash just in front of the player's base, toward the centre.
+  const start = map.starts[Team.Player];
+  const cxw = map.worldW / 2;
+  const cyw = map.worldH / 2;
+  const dx = cxw - start.x;
+  const dy = cyw - start.y;
+  const dl = Math.hypot(dx, dy);
+  const ux = dx / dl;
+  const uy = dy / dl;
+  const fieldX = start.x + ux * 260;
+  const fieldY = start.y + uy * 260;
+  // perpendicular for line formations
+  const px = -uy;
+  const py = ux;
+
+  const playerComp = ["militia", "militia", "spearman", "archer", "archer", "knight", "knight", "catapult"];
+  const enemyComp = ["militia", "spearman", "spearman", "archer", "skirmisher", "knight", "ram", "militia"];
+
+  const pUnits: number[] = [];
+  const eUnits: number[] = [];
+  playerComp.forEach((t, i) => {
+    const off = (i - playerComp.length / 2) * 34;
+    const u = world.spawnUnit(Team.Player, t, fieldX - ux * 70 + px * off, fieldY - uy * 70 + py * off);
+    pUnits.push(u.id);
+  });
+  enemyComp.forEach((t, i) => {
+    const off = (i - enemyComp.length / 2) * 34;
+    const u = world.spawnUnit(Team.Enemy, t, fieldX + ux * 70 + px * off, fieldY + uy * 70 + py * off);
+    eUnits.push(u.id);
+  });
+  // A couple of defensive buildings + a tower for flavour near the player line.
+  world.spawnBuilding(Team.Player, "watch_tower", start.x + ux * 150 + px * 120, start.y + uy * 150 + py * 120, true);
+
+  // Order both lines to fight.
+  for (const id of pUnits) {
+    const t = eUnits[Math.floor(Math.random() * eUnits.length)];
+    world.issueAttack([id], t);
+  }
+  for (const id of eUnits) {
+    const t = pUnits[Math.floor(Math.random() * pUnits.length)];
+    world.issueAttack([id], t);
+  }
+
+  // Run a short while so units close, swing, and arrows/rocks are mid-air.
+  const particles = new Particles(600);
+  for (let i = 0; i < 26; i++) {
+    world.tick();
+    for (const ev of world.drainEvents()) {
+      if (ev.kind === "siege") particles.burst(ev.x, ev.y, 14, PAL.dust, 150, { maxLife: 0.8, size: 3 });
+      if (ev.kind === "death") particles.burst(ev.x, ev.y, 7, PAL.blood, 100, { maxLife: 0.6, size: 2 });
+    }
+  }
+  // Reveal the area so everything draws.
+  world.fog[Team.Player].fill(FOG_VISIBLE);
+  cam.centerOn(fieldX, fieldY);
+  cam.zoom = 1.25;
+
+  // Select a few player units to show selection rings + health bars.
+  for (const id of pUnits.slice(0, 4)) {
+    const e = world.byId.get(id);
+    if (e) e.selected = true;
+  }
+
+  renderer.render(
+    world, cam, particles, 0.016, 2.0, Team.Player,
+    [{ x: fieldX + ux * 70, y: fieldY + uy * 70, age: 0.1, kind: "attack" }],
+    null, { active: false, x0: 0, y0: 0, x1: 0, y1: 0 }, null,
+  );
+
+  // Title banner.
+  const ctx = renderer.ctx as any;
+  ctx.textAlign = "center";
+  ctx.font = "bold 26px Georgia, serif";
+  ctx.fillStyle = "rgba(0,0,0,0.5)";
+  ctx.fillText("Lines clash on the Open Plains", W / 2 + 2, 40 + 2);
+  ctx.fillStyle = "#ffe9b0";
+  ctx.fillText("Lines clash on the Open Plains", W / 2, 40);
+  ctx.textAlign = "left";
+  save("04-battle.png", c);
+  return { world, map, cam, pUnits };
+}
+
+// ------------------------------------------------------------- in-match HUD --
+function shotHUD(scene: ReturnType<typeof shotBattle>) {
+  const { world, map, cam, pUnits } = scene;
+  const W = 1280;
+  const H = 760;
+  const { c, ctx } = makeCtx(W, H);
+  const renderer = new Renderer(c as any);
+  renderer.prepare(map);
+  cam.setViewport(W, H);
+  world.fog[Team.Player].fill(FOG_VISIBLE);
+  renderer.render(
+    world, cam, new Particles(10), 0.016, 2.0, Team.Player,
+    [], null, { active: false, x0: 0, y0: 0, x1: 0, y1: 0 }, null,
+  );
+
+  const hud = new HUD();
+  hud.prepare(map);
+  hud.addAlert("⚠ Your forces are under attack!", scene.map.worldW / 2, scene.map.worldH / 2);
+  const sel = pUnits.map((id) => world.byId.get(id)!).filter(Boolean).slice(0, 6);
+  for (const e of sel) e.selected = true;
+  const noop = () => {};
+  const ctrl: any = {
+    trainUnit: noop, research: noop, startPlacement: noop, ungarrison: noop,
+    trade: noop, stopSelection: noop, holdSelection: noop, setAttackMoveMode: noop,
+    minimapNavigate: noop, minimapCommand: noop, openMenu: noop,
+  };
+  ui.begin(ctx, { mx: -50, my: -50, clicked: false, rightClicked: false });
+  hud.draw(W, H, world, cam, Team.Player, sel, 0.016, ctrl, false);
+  ui.flushTooltip(W, H);
+  save("05-hud.png", c);
+}
+
+// ----------------------------------------------------------------- menus --
+function shotMenus() {
+  const profile = new Profile();
+  profile.data.totalXp = 1820;
+  profile.data.renown = 760;
+  profile.data.stats = { wins: 7, losses: 3, played: 10, bestStreak: 4, streak: 2 };
+
+  const W = 1280;
+  const H = 760;
+
+  {
+    const { c, ctx } = makeCtx(W, H);
+    ui.begin(ctx, { mx: -50, my: -50, clicked: false, rightClicked: false });
+    new MenuScreen().draw(W, H, 1.0, profile);
+    ui.flushTooltip(W, H);
+    save("06-menu.png", c);
+  }
+  {
+    const { c, ctx } = makeCtx(W, H);
+    ui.begin(ctx, { mx: -50, my: -50, clicked: false, rightClicked: false });
+    new SetupScreen().draw(W, H, 1.0, profile);
+    ui.flushTooltip(W, H);
+    save("07-setup.png", c);
+  }
+  {
+    const { c, ctx } = makeCtx(W, H);
+    // Grant a few shinies so the collection/odds look alive.
+    ui.begin(ctx, { mx: -50, my: -50, clicked: false, rightClicked: false });
+    new ArmoryScreen().draw(W, H, 1.0, 0.016, profile);
+    ui.flushTooltip(W, H);
+    save("08-armory.png", c);
+  }
+}
+
+console.log("Rendering Banner & Blade preview shots…");
+shotUnits();
+shotBuildings();
+shotRarities();
+const scene = shotBattle();
+shotHUD(scene);
+shotMenus();
+console.log("Done.");
