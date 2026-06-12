@@ -33,6 +33,12 @@ function tcol(team: number): TeamCol {
   return gColorResolver ? gColorResolver(team) : teamColor(team);
 }
 
+// Buildings whose windows light up at night.
+const WINDOW_GLOW = new Set([
+  "town_center", "house", "mill", "barracks", "archery_range", "stable",
+  "blacksmith", "market", "castle", "watch_tower",
+]);
+
 function shadow(ctx: Ctx, x: number, y: number, rx: number, ry: number, alpha = 0.25) {
   ctx.fillStyle = `rgba(20, 24, 12, ${alpha})`;
   ctx.beginPath();
@@ -181,6 +187,25 @@ export function drawBuilding(ctx: Ctx, e: Entity, time: number, selectedTeamView
     default: {
       ctx.fillStyle = PAL.stone;
       ctx.fillRect(e.x - half, e.y - half, half * 2, half * 2);
+    }
+  }
+
+  // After dark, lived-in buildings show warm lit windows and a soft hearth
+  // glow — sells the night and makes towns feel alive.
+  if (isNight(gDayPhase) && WINDOW_GLOW.has(e.type)) {
+    const flick = 0.8 + Math.sin(time * 6 + e.id * 1.7) * 0.12;
+    const g = ctx.createRadialGradient(e.x, e.y, 1, e.x, e.y, half * 1.7);
+    g.addColorStop(0, withAlpha("#ffbe5a", 0.1 * flick));
+    g.addColorStop(1, withAlpha("#ffbe5a", 0));
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.arc(e.x, e.y, half * 1.7, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = withAlpha("#ffd98a", 0.9 * flick);
+    const wn = e.radius > 40 ? 3 : 2;
+    for (let i = 0; i < wn; i++) {
+      const wx = e.x + ((i + 0.5) / wn - 0.5) * half * 1.1;
+      ctx.fillRect(wx - 1.5, e.y + half * 0.18, 3, 4);
     }
   }
 
@@ -793,6 +818,11 @@ function body(ctx: Ctx, r: number, cloth: string, clothDark: string) {
   ctx.fillStyle = cloth;
   ctx.beginPath();
   ctx.arc(-r * 0.18, -r * 0.18, r * 0.82, 0, Math.PI * 2);
+  ctx.fill();
+  // top-left rim light gives the toy-soldier look a rounded, lit feel
+  ctx.fillStyle = withAlpha("#ffffff", 0.16);
+  ctx.beginPath();
+  ctx.arc(-r * 0.38, -r * 0.42, r * 0.4, 0, Math.PI * 2);
   ctx.fill();
 }
 

@@ -20,6 +20,7 @@ import { PAL, teamColor, withAlpha } from "./palette";
 import { BUILDINGS } from "../content/buildings";
 import { TILE } from "../content/balance";
 import { skyTint } from "../content/daynight";
+import { Terrain } from "../maps/generator";
 import type { MapData } from "../maps/generator";
 
 // Battlefield decals: corpses, stuck arrows and scorch marks linger after the
@@ -75,6 +76,8 @@ export class Renderer {
   decals: Decal[] = [];
   floaters: Floater[] = [];
   dayPhase = 0.18; // 0..1 around the day/night cycle
+  private waterCells: number[] = []; // [x0,y0,x1,y1,...] water cell centres
+  private vignette: HTMLCanvasElement | null = null;
 
   constructor(public canvas: HTMLCanvasElement) {
     this.ctx = canvas.getContext("2d")!;
@@ -193,6 +196,16 @@ export class Renderer {
     this.fogCanvas.width = map.cols;
     this.fogCanvas.height = map.rows;
     this.fogCtx = this.fogCanvas.getContext("2d")!;
+    // Water cell centres (world coords) for the animated glint pass.
+    this.waterCells = [];
+    for (let cy = 0; cy < map.rows; cy++) {
+      for (let cx = 0; cx < map.cols; cx++) {
+        if (map.terrain[cy * map.cols + cx] === Terrain.Water) {
+          this.waterCells.push(cx * TILE + TILE / 2, cy * TILE + TILE / 2);
+        }
+      }
+    }
+    this.vignette = null; // rebuilt on first frame for the current canvas size
   }
 
   addShake(amp: number) {
@@ -274,6 +287,28 @@ export class Renderer {
 
     // Ground decals (corpses, arrows, scorch) sit on the terrain, under units.
     this.guard(ctx, "decals", worldTf, () => this.drawDecals(ctx, dt, vx0, vy0, vx1, vy1));
+
+    // Living water: drifting glints on visible water cells. Each cell twinkles
+    // on its own phase; cheap because it's culled to the viewport.
+    this.guard(ctx, "water", worldTf, () => {
+      const wc = this.waterCells;
+      for (let i = 0; i < wc.length; i += 2) {
+        const x = wc[i];
+        const y = wc[i + 1];
+        if (x < vx0 || x > vx1 || y < vy0 || y > vy1) continue;
+        const phase = x * 0.137 + y * 0.211;
+        const s = Math.sin(time * 1.7 + phase);
+        if (s <= 0.55) continue;
+        const a = (s - 0.55) * 0.8;
+        const jx = Math.sin(phase * 3.1) * TILE * 0.3 + Math.sin(time * 0.6 + phase) * 3;
+        const jy = Math.cos(phase * 2.3) * TILE * 0.3;
+        ctx.strokeStyle = withAlpha("#eaf7ff", a);
+        ctx.lineWidth = 1.2;
+        ctx.beginPath();
+        ctx.arc(x + jx, y + jy, 2.2 + s * 1.6, Math.PI * 0.1, Math.PI * 0.9);
+        ctx.stroke();
+      }
+    });
 
     // Collect and sort drawable entities by y (painter's algorithm).
     const drawables: Entity[] = [];
@@ -433,6 +468,20 @@ export class Renderer {
       ctx.fillStyle = `rgba(${tr | 0}, ${tg | 0}, ${tb | 0}, ${ta})`;
       ctx.fillRect(0, 0, W, H);
     }
+
+    // Cinematic vignette — cached per canvas size, a single blit per frame.
+    if (!this.vignette || this.vignette.width !== W || this.vignette.height !== H) {
+      this.vignette = document.createElement("canvas");
+      this.vignette.width = W;
+      this.vignette.height = H;
+      const vctx = this.vignette.getContext("2d")!;
+      const g = vctx.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.42, W / 2, H / 2, Math.hypot(W, H) * 0.62);
+      g.addColorStop(0, "rgba(8,6,3,0)");
+      g.addColorStop(1, "rgba(8,6,3,0.30)");
+      vctx.fillStyle = g;
+      vctx.fillRect(0, 0, W, H);
+    }
+    ctx.drawImage(this.vignette, 0, 0);
 
     // Drag selection box (screen space).
     if (dragBox.active) {
