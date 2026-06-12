@@ -148,6 +148,9 @@ export function drawBuilding(ctx: Ctx, e: Entity, time: number, selectedTeamView
     case "stable": drawStable(ctx, e, half, tc); break;
     case "blacksmith": drawBlacksmith(ctx, e, half, time); break;
     case "market": drawMarket(ctx, e, half, tc); break;
+    case "palisade": drawPalisade(ctx, e, half); break;
+    case "stone_wall": drawStoneWall(ctx, e, half); break;
+    case "gate": drawGate(ctx, e, half, tc); break;
     case "watch_tower": drawTower(ctx, e, half, tc); break;
     case "castle": drawCastle(ctx, e, half, tc, time); break;
     case "siege_workshop": drawSiegeWorkshop(ctx, e, half); break;
@@ -447,6 +450,91 @@ function drawMarket(ctx: Ctx, e: Entity, half: number, tc: any) {
   ctx.beginPath();
   ctx.arc(e.x + half * 0.4, e.y + half * 0.42, half * 0.07, 0, Math.PI * 2);
   ctx.fill();
+}
+
+function drawPalisade(ctx: Ctx, e: Entity, half: number) {
+  // A run of sharpened logs lashed together.
+  ctx.fillStyle = PAL.woodDark;
+  ctx.fillRect(e.x - half, e.y - 2, half * 2, 5);
+  const stakes = 4;
+  for (let i = 0; i < stakes; i++) {
+    const sx = e.x - half + 3 + (i * (half * 2 - 6)) / (stakes - 1);
+    ctx.fillStyle = shade(PAL.wood, i % 2 ? -0.08 : 0.05);
+    ctx.beginPath();
+    ctx.moveTo(sx - 3, e.y + half * 0.5);
+    ctx.lineTo(sx - 3, e.y - half * 0.5);
+    ctx.lineTo(sx, e.y - half * 0.9);
+    ctx.lineTo(sx + 3, e.y - half * 0.5);
+    ctx.lineTo(sx + 3, e.y + half * 0.5);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = withAlpha("#ffffff", 0.1);
+    ctx.fillRect(sx - 3, e.y - half * 0.5, 1.5, half);
+  }
+}
+
+function drawStoneWall(ctx: Ctx, e: Entity, half: number) {
+  const g = ctx.createLinearGradient(e.x, e.y - half, e.x, e.y + half);
+  g.addColorStop(0, PAL.stoneLight);
+  g.addColorStop(1, PAL.stoneDark);
+  ctx.fillStyle = g;
+  ctx.fillRect(e.x - half, e.y - half * 0.7, half * 2, half * 1.5);
+  // crenellations
+  ctx.fillStyle = PAL.stoneDark;
+  for (let i = 0; i < 3; i++) {
+    ctx.fillRect(e.x - half + i * (half * 0.72), e.y - half * 0.95, half * 0.5, half * 0.3);
+  }
+  // mortar lines
+  ctx.strokeStyle = withAlpha(PAL.stoneDark, 0.6);
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(e.x - half, e.y);
+  ctx.lineTo(e.x + half, e.y);
+  ctx.moveTo(e.x, e.y - half * 0.7);
+  ctx.lineTo(e.x, e.y + half * 0.8);
+  ctx.stroke();
+}
+
+function drawGate(ctx: Ctx, e: Entity, half: number, tc: any) {
+  // stone posts
+  ctx.fillStyle = PAL.stoneDark;
+  ctx.fillRect(e.x - half, e.y - half, half * 0.5, half * 2);
+  ctx.fillRect(e.x + half * 0.5, e.y - half, half * 0.5, half * 2);
+  ctx.fillStyle = PAL.stone;
+  ctx.fillRect(e.x - half + 1, e.y - half, half * 0.4, half * 0.4);
+  ctx.fillRect(e.x + half * 0.55, e.y - half, half * 0.4, half * 0.4);
+  // doors
+  if (e.gateOpen) {
+    ctx.fillStyle = PAL.woodDark;
+    ctx.save();
+    ctx.translate(e.x - half * 0.5, e.y);
+    ctx.rotate(-0.9);
+    ctx.fillRect(-half * 0.1, -half * 0.55, half * 0.5, half * 0.5);
+    ctx.restore();
+    ctx.save();
+    ctx.translate(e.x + half * 0.5, e.y);
+    ctx.rotate(0.9);
+    ctx.fillRect(-half * 0.4, -half * 0.55, half * 0.5, half * 0.5);
+    ctx.restore();
+  } else {
+    ctx.fillStyle = PAL.wood;
+    ctx.fillRect(e.x - half * 0.5, e.y - half * 0.7, half, half * 1.4);
+    ctx.strokeStyle = PAL.woodDark;
+    ctx.lineWidth = 1.5;
+    for (let i = -1; i <= 1; i++) {
+      ctx.beginPath();
+      ctx.moveTo(e.x + i * half * 0.3, e.y - half * 0.7);
+      ctx.lineTo(e.x + i * half * 0.3, e.y + half * 0.7);
+      ctx.stroke();
+    }
+    ctx.beginPath();
+    ctx.moveTo(e.x - half * 0.5, e.y);
+    ctx.lineTo(e.x + half * 0.5, e.y);
+    ctx.stroke();
+  }
+  // team pennant on the post
+  ctx.fillStyle = tc.main;
+  ctx.fillRect(e.x - half, e.y - half - 1, half * 2, 2.5);
 }
 
 function drawTower(ctx: Ctx, e: Entity, half: number, tc: any) {

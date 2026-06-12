@@ -26,6 +26,7 @@ export interface MatchController {
   research(building: Entity, techId: string): void;
   startPlacement(type: string): void;
   ungarrison(building: Entity): void;
+  toggleGate(building: Entity): void;
   trade(action: "sell_wood" | "sell_food" | "buy_wood" | "buy_food"): void;
   stopSelection(): void;
   holdSelection(): void;
@@ -34,6 +35,34 @@ export interface MatchController {
   minimapCommand(wx: number, wy: number): void;
   openMenu(): void;
 }
+
+interface BuildCategory {
+  id: string;
+  label: string;
+  hint: string;
+  buildings: string[];
+}
+
+const BUILD_CATEGORIES: BuildCategory[] = [
+  {
+    id: "economy",
+    label: "Economy",
+    hint: "Houses, drop-off camps, farms, market and expansion Town Centers.",
+    buildings: ["house", "mill", "lumber_camp", "mining_camp", "farm", "market", "town_center"],
+  },
+  {
+    id: "military",
+    label: "Military",
+    hint: "Production and upgrade buildings for your army.",
+    buildings: ["barracks", "archery_range", "stable", "siege_workshop", "blacksmith"],
+  },
+  {
+    id: "defense",
+    label: "Defense",
+    hint: "Walls, gates, towers and the mighty Castle.",
+    buildings: ["palisade", "stone_wall", "gate", "watch_tower", "castle"],
+  },
+];
 
 export const MINIMAP_SIZE = 196;
 const CARD_W = 4;
@@ -45,11 +74,13 @@ export class HUD {
   private minimapBase: HTMLCanvasElement | null = null;
   alerts: Alert[] = [];
   buildMenuOpen = false;
+  buildCategory: string | null = null;
 
   prepare(map: MapData) {
     this.minimapBase = buildMinimapBase(map, MINIMAP_SIZE);
     this.alerts = [];
     this.buildMenuOpen = false;
+    this.buildCategory = null;
   }
 
   addAlert(text: string, x?: number, y?: number) {
@@ -242,10 +273,22 @@ export class HUD {
 
     if (villagers.length > 0 && (this.buildMenuOpen || own.every((e) => e.type === "villager"))) {
       if (this.buildMenuOpen) {
-        // Build menu: every placeable building.
-        for (const id of Object.keys(BUILDINGS)) {
-          if (slot >= CARD_W * CARD_H - 1) break;
+        if (!this.buildCategory) {
+          // Pick a build category.
+          for (const cat of BUILD_CATEGORIES) {
+            place(cat.label, () => (this.buildCategory = cat.id), {
+              accent: true,
+              size: 13,
+              tooltip: [cat.label, cat.hint],
+            });
+          }
+          place("Close", () => (this.buildMenuOpen = false), { danger: true });
+          return;
+        }
+        const cat = BUILD_CATEGORIES.find((c) => c.id === this.buildCategory)!;
+        for (const id of cat.buildings) {
           const def = BUILDINGS[id];
+          if (!def) continue;
           const lockedAge = p.age < def.age;
           const lockedReq = def.requires && !world.hasBuilding(team, def.requires);
           const cantAfford = !world.canAfford(p.resources, def.cost);
@@ -254,6 +297,7 @@ export class HUD {
             () => {
               ctrl.startPlacement(id);
               this.buildMenuOpen = false;
+              this.buildCategory = null;
             },
             {
               disabled: lockedAge || !!lockedReq || cantAfford,
@@ -267,10 +311,13 @@ export class HUD {
             },
           );
         }
-        place("Back", () => (this.buildMenuOpen = false), { danger: true });
+        place("Back", () => (this.buildCategory = null), { danger: true });
         return;
       }
-      place("Build", () => (this.buildMenuOpen = true), { accent: true, tooltip: ["Open the construction menu (B)"] });
+      place("Build", () => {
+        this.buildMenuOpen = true;
+        this.buildCategory = null;
+      }, { accent: true, tooltip: ["Open the construction menu (B)"] });
     }
 
     if (combatUnits.length > 0) {
@@ -337,6 +384,15 @@ export class HUD {
         place("Sell 🍖", () => ctrl.trade("sell_food"), { tooltip: ["Sell 100 food → 75 gold"] });
         place("Buy 🪵", () => ctrl.trade("buy_wood"), { tooltip: ["Buy 75 wood ← 100 gold"] });
         place("Buy 🍖", () => ctrl.trade("buy_food"), { tooltip: ["Buy 75 food ← 100 gold"] });
+      }
+      if (building.type === "gate") {
+        place(building.gateOpen ? "Close Gate" : "Open Gate", () => ctrl.toggleGate(building), {
+          accent: true,
+          tooltip: [
+            building.gateOpen ? "Bar the gate shut" : "Swing the gate open",
+            "Otherwise it opens for your troops and shuts when foes draw near.",
+          ],
+        });
       }
       if (building.garrison.length > 0) {
         place(`Eject ${building.garrison.length}`, () => ctrl.ungarrison(building), {

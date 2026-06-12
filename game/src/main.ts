@@ -137,7 +137,10 @@ class App {
     if (k === "a") this.attackMoveArmed = true;
     if (k === "s") this.world.issueStop(this.playerSelection().map((e) => e.id));
     if (k === "h") this.world.issueHold(this.playerSelection().map((e) => e.id));
-    if (k === "b") this.hud.buildMenuOpen = true;
+    if (k === "b") {
+      this.hud.buildMenuOpen = true;
+      this.hud.buildCategory = null;
+    }
     if (k === "g") {
       const b = this.playerSelection().find((e) => e.kind === Kind.Building);
       if (b) this.world.ungarrison(b.id);
@@ -242,6 +245,10 @@ class App {
     ungarrison: (b) => {
       this.world?.ungarrison(b.id);
       audio.play("command");
+    },
+    toggleGate: (b) => {
+      this.world?.toggleGate(b.id);
+      audio.play("build");
     },
     trade: (action) => {
       if (this.world?.marketTrade(PLAYER, action)) audio.play("coin");

@@ -329,7 +329,7 @@ function shotHUD(scene: ReturnType<typeof shotBattle>) {
   for (const e of sel) e.selected = true;
   const noop = () => {};
   const ctrl: any = {
-    trainUnit: noop, research: noop, startPlacement: noop, ungarrison: noop,
+    trainUnit: noop, research: noop, startPlacement: noop, ungarrison: noop, toggleGate: noop,
     trade: noop, stopSelection: noop, holdSelection: noop, setAttackMoveMode: noop,
     minimapNavigate: noop, minimapCommand: noop, openMenu: noop,
   };
@@ -373,6 +373,66 @@ function shotMenus() {
   }
 }
 
+// --------------------------------------------------------------- fortress --
+function shotFortress() {
+  const map = generateMap("black_forest", 31415);
+  const world = new World(31415);
+  world.init(map, [{}, {}], [1, 1]);
+  const W = 1280;
+  const H = 760;
+  const { c } = makeCtx(W, H);
+  const renderer = new Renderer(c as any);
+  renderer.prepare(map);
+  renderer.dayPhase = 0.5; // dusk siege
+  const cam = new Camera();
+  cam.setViewport(W, H);
+  cam.setWorld(map.worldW, map.worldH);
+
+  const T = 32;
+  const cx = map.starts[Team.Player].x;
+  const cy = map.starts[Team.Player].y;
+  const R = 5;
+  for (let i = -R; i <= R; i++) {
+    for (const [gx, gy] of [[i, -R], [i, R], [-R, i], [R, i]] as [number, number][]) {
+      const wx = cx + gx * T;
+      const wy = cy + gy * T;
+      if (gy === R && gx === 0) {
+        const g = world.spawnBuilding(Team.Player, "gate", wx, wy, true);
+        g.gateOpen = true;
+        continue;
+      }
+      if (Math.abs(gx) === R && Math.abs(gy) === R) continue; // corners get towers
+      world.spawnBuilding(Team.Player, "stone_wall", wx, wy, true);
+    }
+  }
+  for (const [gx, gy] of [[-R, -R], [R, -R], [-R, R], [R, R]] as [number, number][]) {
+    world.spawnBuilding(Team.Player, "watch_tower", cx + gx * T, cy + gy * T, true);
+  }
+  world.spawnBuilding(Team.Player, "house", cx - 3 * T, cy - 2 * T, true);
+  world.spawnBuilding(Team.Player, "house", cx + 3 * T, cy - 2 * T, true);
+  // defenders inside
+  for (let i = 0; i < 9; i++) {
+    world.spawnUnit(Team.Player, i % 2 ? "archer" : "militia", cx + (Math.random() - 0.5) * R * T, cy + (Math.random() - 0.3) * R * T);
+  }
+  // besiegers massing at the gate
+  for (let i = 0; i < 7; i++) {
+    world.spawnUnit(Team.Enemy, i % 3 === 0 ? "ram" : "knight", cx + (i - 3) * 34, cy + (R + 3) * T + (i % 2) * 26);
+  }
+  world.fog[Team.Player].fill(FOG_VISIBLE);
+  cam.centerOn(cx, cy + 30);
+  cam.zoom = 1.15;
+  renderer.render(world, cam, new Particles(10), 0.016, 2.0, Team.Player, [], null, { active: false, x0: 0, y0: 0, x1: 0, y1: 0 }, null);
+  const ctx = renderer.ctx as any;
+  ctx.textAlign = "center";
+  ctx.font = "bold 26px Georgia, serif";
+  ctx.fillStyle = "rgba(0,0,0,0.5)";
+  ctx.fillText("Hold the walls — a fortress at dusk", W / 2 + 2, 42);
+  ctx.fillStyle = "#ffe9b0";
+  ctx.fillText("Hold the walls — a fortress at dusk", W / 2, 40);
+  ctx.textAlign = "left";
+  save("10-fortress.png", c);
+}
+
 console.log("Rendering Banner & Blade preview shots…");
 shotUnits();
 shotBuildings();
@@ -380,5 +440,6 @@ shotRarities();
 const scene = shotBattle();
 shotBattle(0.74, "09-night-battle.png", "Night raid — battle under the dark");
 shotHUD(scene);
+shotFortress();
 shotMenus();
 console.log("Done.");

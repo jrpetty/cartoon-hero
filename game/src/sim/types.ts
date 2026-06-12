@@ -120,6 +120,8 @@ export interface Entity {
   productionQueue: string[];
   productionTime: number; // seconds remaining on current item
   garrison: EntityId[];
+  gateOpen: boolean; // gates only: is the passage currently open
+  gateForce: number; // 0 = auto, 1 = forced open, 2 = forced shut
 
   // Projectile
   projTargetId: EntityId;

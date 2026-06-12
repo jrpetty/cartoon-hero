@@ -103,7 +103,7 @@ function makeEntity(): Entity {
     amount: 0,
     buildState: BuildState.Done, buildProgress: 1, popProvided: 0,
     rallyX: -1, rallyY: -1, productionQueue: [], productionTime: 0,
-    garrison: [],
+    garrison: [], gateOpen: false, gateForce: 0,
     projTargetId: -1, projDamage: 0, projSpeed: 0, projSourceTeam: Team.Neutral,
     projArmorClassBonusFrom: "", projElapsed: 0, projDuration: 0, projFromX: 0, projFromY: 0,
     animPhase: 0, hitFlash: 0, lastDamageTime: -999, selected: false,
@@ -1002,6 +1002,11 @@ export class World {
     if (e.buildState !== BuildState.Done) return;
     const def = BUILDINGS[e.type];
 
+    // Gates: open for the owner when safe, bar shut when the enemy is near.
+    if (e.type === "gate" && this.tickCount % 5 === e.id % 5) {
+      this.updateGate(e);
+    }
+
     // Production queue.
     if (e.productionQueue.length > 0) {
       const p = this.players[e.team];
@@ -1026,6 +1031,38 @@ export class World {
         this.emit("bow", e.x, e.y, e.team);
       }
     }
+  }
+
+  private updateGate(e: Entity) {
+    let open: boolean;
+    if (e.gateForce === 1) {
+      open = true;
+    } else if (e.gateForce === 2) {
+      open = false;
+    } else {
+      const near = this.spatial.query(e.x, e.y, 96) as Entity[];
+      let friendly = false;
+      let enemy = false;
+      for (const n of near) {
+        if (!n.alive || n.kind !== Kind.Unit) continue;
+        if (n.team === e.team && dist(n.x, n.y, e.x, e.y) < 52) friendly = true;
+        else if (n.team !== e.team && n.team !== Team.Neutral) enemy = true;
+      }
+      open = friendly && !enemy;
+    }
+    if (open !== e.gateOpen) {
+      e.gateOpen = open;
+      // Open => clear the cell so units can pass; shut => block it again.
+      this.grid.stampFootprint(e.x, e.y, 1, !open);
+    }
+  }
+
+  /** Cycle a gate between forced-open and forced-shut (player override). */
+  toggleGate(id: EntityId) {
+    const e = this.byId.get(id);
+    if (!e || !e.alive || e.type !== "gate") return;
+    e.gateForce = e.gateOpen ? 2 : 1;
+    this.updateGate(e);
   }
 
   itemTime(item: string): number {
