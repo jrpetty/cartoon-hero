@@ -18,7 +18,7 @@ const NEI = [
 ];
 
 export class FlowField {
-  cost: Float32Array; // integration field (distance-to-goal)
+  cost: Float64Array; // integration field (distance-to-goal)
   dirX: Float32Array;
   dirY: Float32Array;
   goalX: number;
@@ -26,7 +26,7 @@ export class FlowField {
 
   constructor(private grid: NavGrid, goalWorldX: number, goalWorldY: number) {
     const n = grid.cols * grid.rows;
-    this.cost = new Float32Array(n).fill(Infinity);
+    this.cost = new Float64Array(n).fill(Infinity);
     this.dirX = new Float32Array(n);
     this.dirY = new Float32Array(n);
     this.goalX = goalWorldX;
@@ -45,7 +45,10 @@ export class FlowField {
     }
     if (!grid.inBounds(gcx, gcy)) return;
 
-    // Dijkstra with a simple bucket-ish approach via a binary heap.
+    // Dijkstra with a binary heap and a closed set. The closed set is load-
+    // bearing: without it, float32 round-up in the cost store can make a
+    // relaxation look like an improvement forever and grow the heap unboundedly.
+    const closed = new Uint8Array(grid.cols * grid.rows);
     const start = grid.idx(gcx, gcy);
     this.cost[start] = 0;
     const heap: { c: number; i: number }[] = [{ c: 0, i: start }];
@@ -81,6 +84,8 @@ export class FlowField {
 
     while (heap.length) {
       const { c, i } = pop();
+      if (closed[i]) continue;
+      closed[i] = 1;
       if (c > this.cost[i]) continue;
       const cx = i % grid.cols;
       const cy = (i / grid.cols) | 0;
@@ -92,6 +97,7 @@ export class FlowField {
           if (grid.isBlocked(cx + dx, cy) && grid.isBlocked(cx, cy + dy)) continue;
         }
         const ni = grid.idx(nx, ny);
+        if (closed[ni]) continue;
         const nc = c + w;
         if (nc < this.cost[ni]) {
           this.cost[ni] = nc;
@@ -112,6 +118,11 @@ export class FlowField {
           const nx = cx + dx;
           const ny = cy + dy;
           if (!grid.inBounds(nx, ny)) continue;
+          // Never point diagonally through a blocked corner — followers would
+          // clip into the wall.
+          if (dx !== 0 && dy !== 0 && (grid.isBlocked(cx + dx, cy) || grid.isBlocked(cx, cy + dy))) {
+            continue;
+          }
           const nc = this.cost[grid.idx(nx, ny)];
           if (nc < best) {
             best = nc;

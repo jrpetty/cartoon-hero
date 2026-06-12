@@ -84,7 +84,7 @@ export const UNITS: Record<string, UnitDef> = {
     name: "Spearman",
     desc: "Anti-cavalry specialist. Brutal vs knights, weak against everything else.",
     armorClass: ArmorClass.Infantry,
-    hp: 55,
+    hp: 60,
     attack: 5,
     range: 0,
     attackInterval: 1.1,
@@ -98,7 +98,7 @@ export const UNITS: Record<string, UnitDef> = {
     trainedAt: "barracks",
     age: 0,
     ranged: false,
-    bonus: { [ArmorClass.Cavalry]: 16, [ArmorClass.Siege]: 4 },
+    bonus: { [ArmorClass.Cavalry]: 25, [ArmorClass.Siege]: 5 },
   }),
 
   archer: U({
