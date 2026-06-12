@@ -365,7 +365,7 @@ function shotAbilities() {
   ctx.fillText("Signature abilities — fire them in the fight", W / 2 + 2, 42);
   ctx.fillStyle = "#ffe9b0";
   ctx.fillText("Signature abilities — fire them in the fight", W / 2, 40);
-  const tags = ["Shield Wall", "Brace Spears", "Cavalry Charge", "Volley", "Volley"];
+  const tags = ["War Cry", "Brace Spears", "Cavalry Charge", "Arrow Volley", "Caltrops"];
   ids.forEach((id, i) => {
     const e = world.byId.get(id)!;
     const sx = cam.worldToScreenX(e.x);

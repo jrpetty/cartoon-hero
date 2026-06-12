@@ -696,19 +696,21 @@ export function drawUnit(ctx: Ctx, e: Entity, time: number) {
     ctx.fill();
   }
 
-  // Active-ability aura: a pulsing coloured ring beneath the unit.
-  if (e.abilityActive > 0) {
-    const ab = ABILITIES[e.type];
-    if (ab) {
-      const pulse = 0.62 + Math.sin(time * 9 + e.id) * 0.22;
-      ctx.strokeStyle = withAlpha(ab.color, 0.85 * pulse);
-      ctx.lineWidth = 2.2;
-      ctx.beginPath();
-      ctx.ellipse(e.x, e.y + e.radius * 0.5, e.radius * 1.5, e.radius * 0.7, 0, 0, Math.PI * 2);
-      ctx.stroke();
-      ctx.fillStyle = withAlpha(ab.color, 0.14 * pulse);
-      ctx.fill();
-    }
+  // Status aura: the unit's own active ability, or a rally/slow applied to it.
+  // A pulsing coloured ring beneath the feet, colour by status (priority order).
+  let auraColor: string | null = null;
+  if (e.abilityActive > 0 && ABILITIES[e.type]) auraColor = ABILITIES[e.type].color;
+  else if (e.rallyTimer > 0) auraColor = "#ffcf5a"; // War Cry rally
+  else if (e.slowTimer > 0) auraColor = "#8ad6ff"; // Caltrops slow
+  if (auraColor) {
+    const pulse = 0.62 + Math.sin(time * 9 + e.id) * 0.22;
+    ctx.strokeStyle = withAlpha(auraColor, 0.85 * pulse);
+    ctx.lineWidth = 2.2;
+    ctx.beginPath();
+    ctx.ellipse(e.x, e.y + e.radius * 0.5, e.radius * 1.5, e.radius * 0.7, 0, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.fillStyle = withAlpha(auraColor, 0.14 * pulse);
+    ctx.fill();
   }
 
   shadow(ctx, e.x + 1, e.y + e.radius * 0.55, e.radius * 0.95, e.radius * 0.42);

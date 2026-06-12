@@ -143,6 +143,8 @@ export interface Entity {
   // Active ability (signature self-buff)
   abilityCooldown: number; // seconds until usable again (0 = ready)
   abilityActive: number; // seconds of buff remaining (0 = inactive)
+  slowTimer: number; // seconds of enemy-applied slow remaining (Caltrops)
+  rallyTimer: number; // seconds of ally-applied attack boost remaining (War Cry)
 
   // Visual helpers (render only; safe to derive)
   animPhase: number;

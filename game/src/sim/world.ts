@@ -19,7 +19,7 @@ import { UNITS, UnitDef } from "../content/units";
 import { BUILDINGS, BuildingDef } from "../content/buildings";
 import { AGES, MAX_AGE, UPGRADES } from "../content/tech";
 import { dayPhase, visionMult } from "../content/daynight";
-import { ABILITIES } from "../content/abilities";
+import { ABILITIES, SLOW_MULT, RALLY_ATK_MULT } from "../content/abilities";
 import {
   AGE_ARMOR_BONUS,
   AGE_ATTACK_BONUS,
@@ -108,7 +108,7 @@ function makeEntity(): Entity {
     garrison: [], gateOpen: false, gateForce: 0,
     projTargetId: -1, projDamage: 0, projSpeed: 0, projSourceTeam: Team.Neutral,
     projArmorClassBonusFrom: "", projElapsed: 0, projDuration: 0, projFromX: 0, projFromY: 0,
-    abilityCooldown: 0, abilityActive: 0,
+    abilityCooldown: 0, abilityActive: 0, slowTimer: 0, rallyTimer: 0,
     animPhase: 0, hitFlash: 0, lastDamageTime: -999, selected: false,
     variantRarity: 0, tier: 0,
   };
@@ -385,7 +385,8 @@ export class World {
 
   /**
    * Trigger each selected unit's signature ability if it has one and it's off
-   * cooldown. Returns how many actually fired (for UI feedback).
+   * cooldown. Resolves the ability by kind (self-buff, ally rally, enemy slow,
+   * burst heal, or an area volley). Returns how many fired (for UI feedback).
    */
   useAbility(ids: EntityId[]): number {
     let fired = 0;
@@ -396,6 +397,68 @@ export class World {
       if (!ab || e.abilityCooldown > 0) continue;
       e.abilityActive = ab.duration;
       e.abilityCooldown = ab.cooldown;
+
+      switch (ab.kind) {
+        case "rally": {
+          // Lift the attack of every nearby ally (and yourself).
+          const r = ab.radius ?? 150;
+          for (const n of this.spatial.query(e.x, e.y, r) as Entity[]) {
+            if (n.alive && n.kind === Kind.Unit && n.team === e.team && dist(e.x, e.y, n.x, n.y) <= r) {
+              n.rallyTimer = Math.max(n.rallyTimer, ab.statusDuration ?? 6);
+            }
+          }
+          break;
+        }
+        case "slow": {
+          // Hobble nearby enemies.
+          const r = ab.radius ?? 120;
+          for (const n of this.spatial.query(e.x, e.y, r) as Entity[]) {
+            if (n.alive && n.kind === Kind.Unit && n.team !== e.team && n.team !== Team.Neutral &&
+                dist(e.x, e.y, n.x, n.y) <= r) {
+              n.slowTimer = Math.max(n.slowTimer, ab.statusDuration ?? 4);
+            }
+          }
+          break;
+        }
+        case "heal": {
+          // Instantly mend wounded allies around the caster.
+          const r = ab.radius ?? 160;
+          const amt = ab.amount ?? 40;
+          for (const n of this.spatial.query(e.x, e.y, r) as Entity[]) {
+            if (n.alive && n.kind === Kind.Unit && n.team === e.team && n.hp < n.maxHp &&
+                dist(e.x, e.y, n.x, n.y) <= r) {
+              n.hp = Math.min(n.maxHp, n.hp + amt);
+            }
+          }
+          break;
+        }
+        case "volley": {
+          // Rain a barrage on the unit's target (or the nearest foe in sight).
+          const r = ab.radius ?? 84;
+          const amt = ab.amount ?? 16;
+          let ix = e.x;
+          let iy = e.y;
+          const tgt = this.byId.get(e.order.target);
+          if (tgt && tgt.alive && tgt.team !== e.team && tgt.team !== Team.Neutral) {
+            ix = tgt.x;
+            iy = tgt.y;
+          } else {
+            const foe = this.findEnemyInRange(e, e.visionRange);
+            if (foe) {
+              ix = foe.x;
+              iy = foe.y;
+            }
+          }
+          for (const n of this.spatial.query(ix, iy, r) as Entity[]) {
+            if (n.alive && n.team !== e.team && n.team !== Team.Neutral && dist(ix, iy, n.x, n.y) <= r) {
+              this.dealDamage(e.team, n, amt, e.type);
+            }
+          }
+          this.emit("ability", ix, iy, e.team, ab.id);
+          break;
+        }
+      }
+
       this.emit("ability", e.x, e.y - e.radius, e.team, ab.id);
       fired++;
     }
@@ -583,6 +646,8 @@ export class World {
       e.attackCooldown = Math.max(0, e.attackCooldown - SIM_DT);
       e.abilityCooldown = Math.max(0, e.abilityCooldown - SIM_DT);
       e.abilityActive = Math.max(0, e.abilityActive - SIM_DT);
+      e.slowTimer = Math.max(0, e.slowTimer - SIM_DT);
+      e.rallyTimer = Math.max(0, e.rallyTimer - SIM_DT);
       e.hitFlash = Math.max(0, e.hitFlash - SIM_DT * 3);
       switch (e.kind) {
         case Kind.Unit: this.tickUnit(e); break;
@@ -1198,13 +1263,15 @@ export class World {
   // Damage -------------------------------------------------------------------
 
   /** Attack value including tech/age bonuses and RPS bonus vs the target. */
-  /** Movement speed including any active-ability multiplier (Charge / Shield Wall). */
+  /** Movement speed including ability buffs (Charge / Brace) and Caltrops slow. */
   private effectiveSpeed(e: Entity): number {
+    let s = e.speed;
     if (e.abilityActive > 0) {
       const ab = ABILITIES[e.type];
-      if (ab?.speedMult) return e.speed * ab.speedMult;
+      if (ab?.speedMult) s *= ab.speedMult;
     }
-    return e.speed;
+    if (e.slowTimer > 0) s *= SLOW_MULT;
+    return s;
   }
 
   /** Seconds between shots, shortened by Volley while active. */
@@ -1233,6 +1300,8 @@ export class World {
       if (ab.attackMult) atk *= ab.attackMult;
       if (ab.bonusVs) bonus += ab.bonusVs[target.armorClass] ?? 0;
     }
+    // War Cry rally from a nearby ally.
+    if (e.rallyTimer > 0) atk *= RALLY_ATK_MULT;
     return atk + bonus;
   }
 

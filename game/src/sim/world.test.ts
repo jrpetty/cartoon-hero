@@ -189,3 +189,58 @@ describe("Victory", () => {
     expect(w.player(Team.Enemy).defeated).toBe(true);
   });
 });
+
+describe("Unit abilities", () => {
+  it("Sanctuary heals wounded allies in radius", () => {
+    const w = makeWorld();
+    const monk = w.spawnUnit(Team.Player, "monk", 1000, 1000);
+    const ally = w.spawnUnit(Team.Player, "militia", 1040, 1000);
+    w.dealDamage(Team.Enemy, ally, 40, "militia");
+    const hurt = ally.hp;
+    expect(hurt).toBeLessThan(ally.maxHp);
+    run(w, 0.2); // settle so the spatial index sees the units
+    expect(w.useAbility([monk.id])).toBe(1);
+    expect(ally.hp).toBeGreaterThan(hurt);
+  });
+
+  it("Caltrops slows nearby enemies but not allies", () => {
+    const w = makeWorld();
+    const skirm = w.spawnUnit(Team.Player, "skirmisher", 1000, 1000);
+    const foe = w.spawnUnit(Team.Enemy, "knight", 1050, 1000);
+    const friend = w.spawnUnit(Team.Player, "militia", 1050, 1010);
+    run(w, 0.2);
+    w.useAbility([skirm.id]);
+    expect(foe.slowTimer).toBeGreaterThan(0);
+    expect(friend.slowTimer).toBe(0);
+  });
+
+  it("War Cry rallies nearby allies", () => {
+    const w = makeWorld();
+    const leader = w.spawnUnit(Team.Player, "militia", 1000, 1000);
+    const ally = w.spawnUnit(Team.Player, "spearman", 1060, 1000);
+    run(w, 0.2);
+    w.useAbility([leader.id]);
+    expect(leader.rallyTimer).toBeGreaterThan(0);
+    expect(ally.rallyTimer).toBeGreaterThan(0);
+  });
+
+  it("Arrow Volley strikes everything around the target", () => {
+    const w = makeWorld();
+    const archer = w.spawnUnit(Team.Player, "archer", 1000, 1000);
+    const a = w.spawnUnit(Team.Enemy, "militia", 1000, 1100);
+    const b = w.spawnUnit(Team.Enemy, "militia", 1030, 1110);
+    run(w, 0.2);
+    w.issueAttack([archer.id], a.id);
+    w.useAbility([archer.id]);
+    expect(a.hp).toBeLessThan(a.maxHp);
+    expect(b.hp).toBeLessThan(b.maxHp);
+  });
+
+  it("an ability can't be used again until off cooldown", () => {
+    const w = makeWorld();
+    const knight = w.spawnUnit(Team.Player, "knight", 1000, 1000);
+    expect(w.useAbility([knight.id])).toBe(1);
+    expect(w.useAbility([knight.id])).toBe(0); // still cooling down
+    expect(knight.abilityActive).toBeGreaterThan(0);
+  });
+});
