@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+    <title>Banner &amp; Blade</title>
+    <style>
+      :root { color-scheme: dark; }
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      html, body { width: 100%; height: 100%; overflow: hidden; background: #0d0b08; }
+      body {
+        font-family: "Trebuchet MS", "Segoe UI", system-ui, sans-serif;
+        user-select: none;
+        -webkit-user-select: none;
+        color: #f3e9d2;
+      }
+      #app { position: fixed; inset: 0; }
+      canvas { display: block; image-rendering: optimizeQuality; }
+      #app canvas { position: absolute; inset: 0; }
+      .nocursor { cursor: none; }
+    </style>
+  </head>
+  <body>
+    <div id="app"></div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
