@@ -96,7 +96,7 @@ export const PRESETS: MapPreset[] = [
   },
 ];
 
-const AMOUNT = { tree: 125, gold_mine: 800, berries: 150 };
+const AMOUNT = { tree: 125, gold_mine: 800, berries: 220 };
 
 export function generateMap(presetId: string, seed: number, players = 2): MapData {
   const preset = PRESETS.find((p) => p.id === presetId) ?? PRESETS[0];
@@ -262,9 +262,9 @@ export function generateMap(presetId: string, seed: number, players = 2): MapDat
     const wx = acx + Math.round(Math.cos(woodAngle) * 9);
     const wy = acy + Math.round(Math.sin(woodAngle) * 9);
     cluster("tree", wx, wy, 14, 3);
-    // Berries close to the TC.
+    // Berries close to the TC — a generous patch so early food isn't starved.
     const berryAngle = woodAngle + rng.range(1.5, 2.5);
-    cluster("berries", acx + Math.round(Math.cos(berryAngle) * 6), acy + Math.round(Math.sin(berryAngle) * 6), 6, 1);
+    cluster("berries", acx + Math.round(Math.cos(berryAngle) * 6), acy + Math.round(Math.sin(berryAngle) * 6), 9, 2);
     // Gold a bit farther out.
     const goldAngle = woodAngle - rng.range(1.5, 2.5);
     cluster("gold_mine", acx + Math.round(Math.cos(goldAngle) * 8), acy + Math.round(Math.sin(goldAngle) * 8), 4, 1);
@@ -272,7 +272,7 @@ export function generateMap(presetId: string, seed: number, players = 2): MapDat
     const ecx = Math.round(acx + (cols / 2 - acx) * 0.45);
     const ecy = Math.round(acy + (rows / 2 - acy) * 0.45);
     cluster("gold_mine", ecx, ecy, 3, 2);
-    cluster("berries", ecx + rng.int(-4, 4), ecy + rng.int(-4, 4), 4, 1);
+    cluster("berries", ecx + rng.int(-4, 4), ecy + rng.int(-4, 4), 6, 2);
     cluster("tree", ecx + rng.int(-6, 6), ecy + rng.int(-6, 6), 8, 3);
   }
 
