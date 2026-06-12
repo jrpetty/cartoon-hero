@@ -138,7 +138,7 @@ export const BUILDINGS: Record<string, BuildingDef> = {
     tiles: 3,
     age: 1,
     requires: "barracks",
-    trains: ["archer", "skirmisher"],
+    trains: ["archer", "skirmisher", "crossbow"],
   }),
   blacksmith: B({
     id: "blacksmith",
@@ -181,7 +181,7 @@ export const BUILDINGS: Record<string, BuildingDef> = {
     buildTime: 40,
     tiles: 3,
     age: 2,
-    trains: ["catapult", "ram"],
+    trains: ["catapult", "ram", "trebuchet"],
   }),
   watch_tower: B({
     id: "watch_tower",

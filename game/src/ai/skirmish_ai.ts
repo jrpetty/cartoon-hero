@@ -7,7 +7,7 @@ import { BuildState, Entity, Kind, OrderKind, ResourceKind, Team } from "../sim/
 import { UNITS } from "../content/units";
 import { ABILITIES } from "../content/abilities";
 import { BUILDINGS } from "../content/buildings";
-import { UPGRADES } from "../content/tech";
+import { UPGRADES, AGES } from "../content/tech";
 import { TILE } from "../content/balance";
 import { DifficultyDef } from "./difficulty";
 import { RNG } from "../engine/rng";
@@ -21,6 +21,8 @@ interface SeenComposition {
   siege: number;
 }
 
+type AIStyle = "rush" | "boom" | "turtle" | "balanced";
+
 export class SkirmishAI {
   private timer = 0;
   private rng: RNG;
@@ -32,6 +34,11 @@ export class SkirmishAI {
   private wallsPlanned = false;
   private attacking = false;
   private gameTime = 0;
+  private seenWalls = 0;
+  private lastRetreatTime = -999;
+  private savingForAge = false;
+  /** Personality — biases army timing, eco focus and turtling. */
+  private style: AIStyle = "balanced";
 
   constructor(
     private world: World,
@@ -39,8 +46,52 @@ export class SkirmishAI {
     private diff: DifficultyDef,
   ) {
     this.rng = world.rng.fork(100 + team);
+    // Squire stays vanilla; mid tiers get the full personality spread; the top
+    // tiers stay aggressive (no turtling) so they keep the pressure on.
+    const pools: Record<string, AIStyle[]> = {
+      squire: ["balanced"],
+      knight: ["rush", "boom", "turtle", "balanced", "balanced"],
+      lord: ["rush", "balanced", "balanced", "boom"],
+      warlord: ["rush", "rush", "balanced", "balanced", "boom"],
+    };
+    const styles = pools[diff.id] ?? ["balanced"];
+    this.style = styles[this.rng.int(0, styles.length - 1)];
     // First wave shouldn't come absurdly early on slow tiers.
-    this.lastWaveTime = -diff.attackEverySec * 0.4;
+    this.lastWaveTime = -this.cadence * 0.4;
+  }
+
+  // Personality-scaled tunables ------------------------------------------------
+  private get armySize(): number {
+    const m = { rush: 0.62, boom: 1.35, turtle: 1.5, balanced: 1 }[this.style];
+    return Math.max(6, Math.round(this.diff.attackArmySize * m));
+  }
+  private get cadence(): number {
+    const m = { rush: 0.58, boom: 1.18, turtle: 1.3, balanced: 1 }[this.style];
+    return this.diff.attackEverySec * m;
+  }
+  private get villagerGoal(): number {
+    const m = { rush: 0.82, boom: 1.25, turtle: 1.05, balanced: 1 }[this.style];
+    return Math.round(this.diff.villagerTarget * m);
+  }
+  private get turtles(): boolean {
+    return this.style === "turtle";
+  }
+
+  /** Rough combat strength of own (mine=true) or hostile units near a point. */
+  private strengthNear(x: number, y: number, r: number, mine: boolean): number {
+    let s = 0;
+    const r2 = r * r;
+    for (const e of this.world.entities) {
+      if (!e.alive || e.kind !== Kind.Unit) continue;
+      if (mine ? e.team !== this.team : !this.isHostile(e.team)) continue;
+      if (e.type === "villager") continue;
+      const dx = e.x - x;
+      const dy = e.y - y;
+      if (dx * dx + dy * dy > r2) continue;
+      const def = UNITS[e.type];
+      s += (def?.attack ?? 4) + e.hp * 0.08;
+    }
+    return s;
   }
 
   update(dt: number) {
@@ -103,6 +154,20 @@ export class SkirmishAI {
   private base(): Entity | null {
     const tcs = this.myBuildings("town_center");
     return tcs[0] ?? this.myBuildings()[0] ?? null;
+  }
+
+  /** Cost of the next age the AI is ready to research, or null if not ready. */
+  private ageUpCost(p: ReturnType<World["player"]>): { food: number; wood: number; gold: number } | null {
+    const vills = this.myUnits("villager").length;
+    if (p.age === 0 && this.diff.maxAge >= 1 && this.myBuildings("barracks").length > 0 &&
+        vills >= Math.floor(this.villagerGoal * 0.55)) {
+      return AGES[1].cost;
+    }
+    if (p.age === 1 && this.diff.maxAge >= 2 && this.myBuildings("blacksmith").length > 0 &&
+        vills >= Math.floor(this.villagerGoal * 0.8)) {
+      return AGES[2].cost;
+    }
+    return null;
   }
 
   /** Try to place a building somewhere in a ring around (cx, cy). */
@@ -168,6 +233,15 @@ export class SkirmishAI {
     this.seen.archer = Math.max(this.seen.archer, now.archer);
     this.seen.cavalry = Math.max(this.seen.cavalry, now.cavalry);
     this.seen.siege = Math.max(this.seen.siege, now.siege);
+
+    // Count the enemy's fortifications we've laid eyes on — drives siege.
+    let walls = 0;
+    for (const e of this.world.entities) {
+      if (!e.alive || !this.isHostile(e.team) || e.kind !== Kind.Building) continue;
+      if (this.world.fogAt(this.team, e.x, e.y) === 0) continue;
+      if (e.type === "stone_wall" || e.type === "gate" || e.type === "palisade" || e.type === "castle") walls++;
+    }
+    this.seenWalls = walls;
   }
 
   // ------------------------------------------------------------- economy --
@@ -177,10 +251,16 @@ export class SkirmishAI {
     const base = this.base();
     if (!base) return;
 
-    // 1. Keep villager production rolling.
+    // If we're ready to advance an age but can't afford it, stop spending food
+    // (villagers + army) so the cost can actually be banked — otherwise the AI
+    // dribbles every scrap into units and never reaches the next age.
+    const gate = this.ageUpCost(p);
+    this.savingForAge = gate !== null && !this.world.canAfford(p.resources, gate);
+
+    // 1. Keep villager production rolling (paused while saving for an age).
     const villagers = this.myUnits("villager");
     for (const tc of this.myBuildings("town_center")) {
-      if (villagers.length < this.diff.villagerTarget && tc.productionQueue.length < 2) {
+      if (!this.savingForAge && villagers.length < this.villagerGoal && tc.productionQueue.length < 2) {
         this.world.trainUnit(this.team, tc.id, "villager");
       }
     }
@@ -251,7 +331,7 @@ export class SkirmishAI {
    * without sealing the AI's own resource lines.
    */
   private buildDefenses(base: Entity) {
-    if (!this.diff.buildsWalls || this.wallsPlanned) return;
+    if ((!this.diff.buildsWalls && !this.turtles) || this.wallsPlanned) return;
     const p = this.world.player(this.team);
     if (p.age < 1 || p.resources.wood < 160) return;
     if (this.myUnits("villager").length < 16) return;
@@ -439,7 +519,7 @@ export class SkirmishAI {
 
     // Advance to Feudal.
     if (p.age === 0 && this.diff.maxAge >= 1 && haveDone("barracks") &&
-        villagerCount >= Math.floor(this.diff.villagerTarget * 0.55)) {
+        villagerCount >= Math.floor(this.villagerGoal * 0.55)) {
       const tc = this.myBuildings("town_center")[0];
       if (tc) this.world.research(this.team, tc.id, "age");
     }
@@ -466,7 +546,7 @@ export class SkirmishAI {
 
     // Advance to Castle.
     if (p.age === 1 && this.diff.maxAge >= 2 && haveDone("blacksmith") &&
-        villagerCount >= Math.floor(this.diff.villagerTarget * 0.8)) {
+        villagerCount >= Math.floor(this.villagerGoal * 0.8)) {
       const tc = this.myBuildings("town_center")[0];
       if (tc) this.world.research(this.team, tc.id, "age");
     }
@@ -504,7 +584,7 @@ export class SkirmishAI {
 
   /** Field the one Champion once the economy can spare the cost. */
   private heroStep() {
-    if (!this.diff.usesAbilities) return;
+    if (!this.diff.usesAbilities || this.savingForAge) return;
     const p = this.world.player(this.team);
     if (p.heroState !== "none") return;
     if (this.myUnits("villager").length < 12) return;
@@ -537,12 +617,20 @@ export class SkirmishAI {
       base.spearman = 0.15;
       base.skirmisher = 0.1;
     } else {
-      base.knight = 0.32;
-      base.archer = 0.28;
-      base.militia = 0.2;
-      base.catapult = 0.1;
+      base.knight = 0.3;
+      base.crossbow = 0.26;
+      base.archer = 0.04;
+      base.militia = 0.18;
+      base.catapult = 0.08;
       base.ram = 0.05;
-      base.spearman = 0.05;
+      base.spearman = 0.06;
+      base.trebuchet = 0.03;
+      // The enemy is walling up — bring the wall-breakers.
+      if (this.seenWalls >= 4 && this.myBuildings("siege_workshop").length > 0) {
+        base.ram += 0.14;
+        base.trebuchet += 0.1;
+        base.catapult += 0.08;
+      }
     }
     if (!this.diff.counters) return base;
 
@@ -565,10 +653,13 @@ export class SkirmishAI {
   }
 
   private trainArmy() {
+    // Hold army production too while banking for an age — get to the next tier
+    // first; a Dark-Age army just feeds a Feudal one. (Keep a token defence.)
+    if (this.savingForAge && this.armyUnits().length >= 4) return;
     const p = this.world.player(this.team);
     const comp = this.composition();
     const army = this.armyUnits();
-    const want = Math.max(this.diff.attackArmySize * 1.4, army.length + 4);
+    const want = Math.max(this.armySize * 1.4, army.length + 4);
 
     const countByType: Record<string, number> = {};
     for (const u of army) countByType[u.type] = (countByType[u.type] ?? 0) + 1;
@@ -646,11 +737,34 @@ export class SkirmishAI {
     const armyPop = army.reduce((s, u) => s + (UNITS[u.type]?.pop ?? 1), 0);
     if (this.attacking) {
       // Wave over when army is spent.
-      if (armyPop < this.diff.attackArmySize * 0.35) this.attacking = false;
+      if (armyPop < this.armySize * 0.35) { this.attacking = false; return; }
+      // Smart retreat: only if our committed force (plus nearby reinforcements)
+      // is badly outmatched — not just because the defender has the home edge.
+      // Rate-limited so the army doesn't oscillate at the wall.
+      const fighting = army.filter((u) => u.order.kind === OrderKind.Attack || u.order.kind === OrderKind.AttackMove);
+      if (fighting.length >= 5 && this.gameTime - this.lastRetreatTime > 14) {
+        let fx = 0;
+        let fy = 0;
+        for (const u of fighting) { fx += u.x; fy += u.y; }
+        fx /= fighting.length;
+        fy /= fighting.length;
+        const mine = this.strengthNear(fx, fy, 700, true); // our force + reinforcements
+        const foe = this.strengthNear(fx, fy, 440, false);
+        // Only bail from a genuinely overwhelming force — never from a small
+        // garrison we should be steamrolling.
+        if (foe > 110 && mine < foe * 0.38) {
+          const home = this.world.map.starts[this.team];
+          this.world.issueMove(army.map((u) => u.id), home.x, home.y, false, false);
+          this.attacking = false;
+          this.lastRetreatTime = this.gameTime;
+          this.lastWaveTime = this.gameTime - this.cadence * 0.55; // regroup, then come again
+          return;
+        }
+      }
       return;
     }
-    if (armyPop < this.diff.attackArmySize) return;
-    if (this.gameTime - this.lastWaveTime < this.diff.attackEverySec) return;
+    if (armyPop < this.armySize) return;
+    if (this.gameTime - this.lastWaveTime < this.cadence) return;
 
     this.lastWaveTime = this.gameTime;
     this.attacking = true;
@@ -670,8 +784,25 @@ export class SkirmishAI {
       ty = enemyBuildings[0].y;
     }
 
-    const ids = army.map((u) => u.id);
-    if (this.diff.counters && army.length >= 10) {
+    // Siege engines peel off to smash the nearest fortification on the approach
+    // so the melee isn't left chipping a stone wall with swords.
+    const siege = army.filter((u) => UNITS[u.type]?.armorClass === "siege");
+    let melee = army;
+    if (siege.length > 0) {
+      const forts = this.world.entities.filter(
+        (e) => e.alive && e.kind === Kind.Building && this.isHostile(e.team) &&
+          this.world.fogAt(this.team, e.x, e.y) !== 0 &&
+          ["stone_wall", "gate", "palisade", "watch_tower", "castle"].includes(e.type),
+      );
+      if (forts.length > 0) {
+        forts.sort((a, b) => dist(a.x, a.y, tx, ty) - dist(b.x, b.y, tx, ty));
+        this.world.issueAttack(siege.map((u) => u.id), forts[0].id);
+        melee = army.filter((u) => UNITS[u.type]?.armorClass !== "siege");
+      }
+    }
+
+    const ids = melee.map((u) => u.id);
+    if (this.diff.counters && melee.length >= 10) {
       // Two-prong: main force + flank.
       const main = ids.slice(0, Math.floor(ids.length * 0.7));
       const flank = ids.slice(Math.floor(ids.length * 0.7));
@@ -679,20 +810,35 @@ export class SkirmishAI {
       const side = this.rng.bool() ? 1 : -1;
       this.world.issueMove(flank, tx + side * 420, ty - side * 420, false, true);
       this.world.issueMove(flank, tx, ty, true, true);
-    } else {
+    } else if (ids.length > 0) {
       this.world.issueMove(ids, tx, ty, false, true);
     }
   }
 
+  /** Raid: send fast units to butcher the enemy's villagers / eco. */
   private harassStep() {
-    if (!this.diff.harasses) return;
-    if (this.gameTime - this.lastHarassTime < 90) return;
-    const knights = this.myUnits("knight").filter((u) => u.order.kind === OrderKind.Idle);
-    if (knights.length < 3) return;
+    if (!this.diff.harasses && this.style !== "rush") return;
+    const cool = this.style === "rush" ? 55 : 85;
+    if (this.gameTime - this.lastHarassTime < cool) return;
+    let raiders = this.myUnits("knight").filter((u) => u.order.kind === OrderKind.Idle);
+    if (raiders.length < 3) {
+      raiders = raiders.concat(this.myUnits("militia").filter((u) => u.order.kind === OrderKind.Idle));
+    }
+    if (raiders.length < 3) return;
     this.lastHarassTime = this.gameTime;
-    const raiders = knights.slice(0, 3).map((u) => u.id);
+    const ids = raiders.slice(0, 4).map((u) => u.id);
+    // Prefer a visible enemy villager; otherwise sweep their base eco.
+    const vills = this.world.entities.filter(
+      (e) => e.alive && e.kind === Kind.Unit && this.isHostile(e.team) && e.type === "villager" &&
+        this.world.fogAt(this.team, e.x, e.y) === FOG_VISIBLE,
+    );
+    const base = this.base();
+    if (vills.length > 0 && base) {
+      vills.sort((a, b) => dist(a.x, a.y, base.x, base.y) - dist(b.x, b.y, base.x, base.y));
+      this.world.issueAttack(ids, vills[0].id);
+      return;
+    }
     const start = this.world.map.starts[this.enemyTeam];
-    // Hit the likely woodline/eco around their base.
-    this.world.issueMove(raiders, start.x + this.rng.range(-300, 300), start.y + this.rng.range(-300, 300), false, true);
+    this.world.issueMove(ids, start.x + this.rng.range(-300, 300), start.y + this.rng.range(-300, 300), false, true);
   }
 }

@@ -777,8 +777,10 @@ export function drawUnit(ctx: Ctx, e: Entity, time: number) {
     case "spearman": drawSpearman(ctx, e, tc, lunge); break;
     case "archer": drawArcher(ctx, e, tc, atkFrac); break;
     case "skirmisher": drawSkirmisher(ctx, e, tc, atkFrac); break;
+    case "crossbow": drawCrossbow(ctx, e, tc, atkFrac); break;
     case "knight": drawKnight(ctx, e, tc, moving, time, lunge); break;
     case "catapult": drawCatapult(ctx, e, tc, atkFrac); break;
+    case "trebuchet": drawTrebuchet(ctx, e, tc, atkFrac); break;
     case "ram": drawRam(ctx, e, tc, atkFrac); break;
     case "hero": drawHero(ctx, e, tc, lunge, time); break;
     case "monk": drawMonk(ctx, e, tc, time); break;
@@ -1029,6 +1031,88 @@ function drawKnight(ctx: Ctx, e: Entity, tc: any, moving: boolean, time: number,
   ctx.moveTo(-fx * r * 0.5, -fy * r * 0.5 - r * 0.3);
   ctx.lineTo(fx * r * (2 + lunge), fy * r * (2 + lunge) - r * 0.2);
   ctx.stroke();
+}
+
+function drawCrossbow(ctx: Ctx, e: Entity, tc: any, atkFrac: number) {
+  const r = e.radius;
+  body(ctx, r, tc.main, tc.dark);
+  head(ctx, r, PAL.steelDark); // helmeted
+  const [fx, fy] = weaponAngleParts(e.facing);
+  const px = -fy;
+  const py = fx;
+  // horizontal stock pointed forward
+  ctx.strokeStyle = PAL.woodDark;
+  ctx.lineWidth = 2.4;
+  ctx.beginPath();
+  ctx.moveTo(fx * r * 0.2, fy * r * 0.2);
+  ctx.lineTo(fx * r * 1.5, fy * r * 1.5);
+  ctx.stroke();
+  // steel prod across the front
+  const tipX = fx * r * 1.5;
+  const tipY = fy * r * 1.5;
+  ctx.strokeStyle = PAL.steel;
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(tipX + px * r * 0.7, tipY + py * r * 0.7);
+  ctx.lineTo(tipX - px * r * 0.7, tipY - py * r * 0.7);
+  ctx.stroke();
+  // loaded bolt glints just before a shot
+  if (atkFrac > 0.6) {
+    ctx.strokeStyle = "#e8e2cf";
+    ctx.lineWidth = 1.4;
+    ctx.beginPath();
+    ctx.moveTo(fx * r * 0.4, fy * r * 0.4);
+    ctx.lineTo(tipX, tipY);
+    ctx.stroke();
+  }
+}
+
+function drawTrebuchet(ctx: Ctx, e: Entity, tc: any, atkFrac: number) {
+  const r = e.radius;
+  ctx.save();
+  ctx.rotate(e.facing);
+  // heavy timber base
+  ctx.fillStyle = PAL.woodDark;
+  ctx.fillRect(-r * 0.9, -r * 0.7, r * 1.8, r * 1.4);
+  ctx.fillStyle = PAL.wood;
+  ctx.fillRect(-r * 0.75, -r * 0.5, r * 1.5, r);
+  // A-frame uprights
+  ctx.strokeStyle = PAL.woodLight;
+  ctx.lineWidth = 3;
+  for (const s of [-1, 1]) {
+    ctx.beginPath();
+    ctx.moveTo(s * r * 0.5, r * 0.5);
+    ctx.lineTo(0, -r * 1.1);
+    ctx.stroke();
+  }
+  // long throwing beam pivoting over the frame; counterweight on the short end
+  const beam = atkFrac > 0.85 ? 1.1 : atkFrac > 0 ? -0.7 + (1 - atkFrac) * 1.8 : 1.1;
+  const px = Math.cos(beam);
+  const py = Math.sin(beam);
+  ctx.strokeStyle = "#5a4632";
+  ctx.lineWidth = 3.4;
+  ctx.beginPath();
+  ctx.moveTo(px * r * 1.7, -r * 1.1 - py * r * 1.7);
+  ctx.lineTo(-px * r * 0.7, -r * 1.1 + py * r * 0.7);
+  ctx.stroke();
+  // counterweight block
+  ctx.fillStyle = "#2c2c30";
+  ctx.fillRect(-px * r * 0.7 - 3, -r * 1.1 + py * r * 0.7 - 3, 7, 7);
+  // sling pouch
+  ctx.fillStyle = PAL.leather;
+  ctx.beginPath();
+  ctx.arc(px * r * 1.7, -r * 1.1 - py * r * 1.7, r * 0.22, 0, Math.PI * 2);
+  ctx.fill();
+  // wheels + pennant
+  ctx.fillStyle = "#3a2c1c";
+  for (const wx of [-r * 0.6, r * 0.6]) {
+    ctx.beginPath();
+    ctx.arc(wx, r * 0.6, r * 0.26, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.fillStyle = tc.main;
+  ctx.fillRect(-r * 0.9, -r * 0.1, r * 0.35, r * 0.2);
+  ctx.restore();
 }
 
 function drawCatapult(ctx: Ctx, e: Entity, tc: any, atkFrac: number) {

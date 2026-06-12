@@ -1107,7 +1107,13 @@ export class World {
     e.carryKind = kind;
     e.gatherCooldown -= SIM_DT;
     if (e.gatherCooldown <= 0) {
-      e.gatherCooldown = GATHER_TICK / (this.players[e.team]?.econMult ?? 1) * (isFarm ? FARM_TICK_MULT : 1);
+      const gp = this.players[e.team];
+      let econ = gp?.econMult ?? 1;
+      if (gp) {
+        if (gp.upgrades.has("wheelbarrow")) econ *= 1 + UPGRADES.wheelbarrow.amount;
+        if (gp.upgrades.has("hand_cart")) econ *= 1 + UPGRADES.hand_cart.amount;
+      }
+      e.gatherCooldown = (GATHER_TICK / econ) * (isFarm ? FARM_TICK_MULT : 1);
       const take = Math.min(GATHER_RATE * GATHER_TICK * 10, node.amount); // chunked
       const got = Math.min(take, VILLAGER_CARRY_CAP - e.carry, 1.2);
       e.carry += got;
