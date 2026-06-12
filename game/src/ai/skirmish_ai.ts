@@ -76,9 +76,9 @@ export class SkirmishAI {
     );
   }
 
-  /** Any non-self player team is a foe (no alliances in a free-for-all). */
+  /** A foe is any hostile team (respects 2v2 alliances). */
   private isHostile(t: Team): boolean {
-    return t !== this.team && t < this.world.numTeams;
+    return this.world.areHostile(this.team, t);
   }
 
   /** The rival we're focusing: the nearest non-defeated enemy by base distance. */
@@ -87,7 +87,7 @@ export class SkirmishAI {
     let best: Team = ((this.team + 1) % this.world.numTeams) as Team;
     let bestD = Infinity;
     for (let t = 0; t < this.world.numTeams; t++) {
-      if (t === this.team) continue;
+      if (!this.isHostile(t as Team)) continue;
       const p = this.world.player(t as Team);
       if (!p || p.defeated) continue;
       const s = this.world.map.starts[t];

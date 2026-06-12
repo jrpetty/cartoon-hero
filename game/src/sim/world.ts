@@ -131,6 +131,8 @@ export class World {
   fogCols = 0;
   fogRows = 0;
   numTeams = 2; // number of player teams in this match (2..MAX_TEAMS)
+  /** Alliance id per team; teams sharing an id are allies. Default: all solo. */
+  alliances: number[] = [];
   winner: Team | null = null;
   map!: MapData;
   private lastAlertTime: number[] = [];
@@ -142,7 +144,7 @@ export class World {
 
   // ---------------------------------------------------------------- setup --
 
-  init(map: MapData, loadouts: Record<string, number>[], econMults: number[]) {
+  init(map: MapData, loadouts: Record<string, number>[], econMults: number[], alliances?: number[]) {
     this.map = map;
     this.worldW = map.worldW;
     this.worldH = map.worldH;
@@ -156,6 +158,11 @@ export class World {
     // A match has as many player teams as it has loadouts (2 for 1v1, up to 4
     // for a free-for-all). Everything below is sized off numTeams.
     this.numTeams = Math.min(loadouts.length, map.starts.length);
+    // Alliances default to everyone-for-themselves (1v1 / FFA). A 2v2 passes
+    // e.g. [0,1,0,1] so teams 0&2 ally against 1&3.
+    this.alliances = alliances && alliances.length >= this.numTeams
+      ? alliances.slice(0, this.numTeams)
+      : Array.from({ length: this.numTeams }, (_, t) => t);
     this.lastAlertTime = new Array(this.numTeams).fill(-99);
     for (let t = 0; t < this.numTeams; t++) {
       this.players.push({
@@ -194,6 +201,20 @@ export class World {
 
   player(team: Team): PlayerState {
     return this.players[team];
+  }
+
+  /** Same team, or teams sharing an alliance. Neutral allies no one. */
+  areAllied(a: Team, b: Team): boolean {
+    if (a === b) return true;
+    if (a === Team.Neutral || b === Team.Neutral) return false;
+    if (a >= this.numTeams || b >= this.numTeams) return false;
+    return this.alliances[a] === this.alliances[b];
+  }
+
+  /** Opposing player teams (never Neutral, never allies). */
+  areHostile(a: Team, b: Team): boolean {
+    if (a === Team.Neutral || b === Team.Neutral) return false;
+    return !this.areAllied(a, b);
   }
 
   // ------------------------------------------------------------- spawning --
@@ -403,7 +424,7 @@ export class World {
           // Lift the attack of every nearby ally (and yourself).
           const r = ab.radius ?? 150;
           for (const n of this.spatial.query(e.x, e.y, r) as Entity[]) {
-            if (n.alive && n.kind === Kind.Unit && n.team === e.team && dist(e.x, e.y, n.x, n.y) <= r) {
+            if (n.alive && n.kind === Kind.Unit && this.areAllied(e.team, n.team) && dist(e.x, e.y, n.x, n.y) <= r) {
               n.rallyTimer = Math.max(n.rallyTimer, ab.statusDuration ?? 6);
             }
           }
@@ -413,7 +434,7 @@ export class World {
           // Hobble nearby enemies.
           const r = ab.radius ?? 120;
           for (const n of this.spatial.query(e.x, e.y, r) as Entity[]) {
-            if (n.alive && n.kind === Kind.Unit && n.team !== e.team && n.team !== Team.Neutral &&
+            if (n.alive && n.kind === Kind.Unit && this.areHostile(e.team, n.team) &&
                 dist(e.x, e.y, n.x, n.y) <= r) {
               n.slowTimer = Math.max(n.slowTimer, ab.statusDuration ?? 4);
             }
@@ -425,7 +446,7 @@ export class World {
           const r = ab.radius ?? 160;
           const amt = ab.amount ?? 40;
           for (const n of this.spatial.query(e.x, e.y, r) as Entity[]) {
-            if (n.alive && n.kind === Kind.Unit && n.team === e.team && n.hp < n.maxHp &&
+            if (n.alive && n.kind === Kind.Unit && this.areAllied(e.team, n.team) && n.hp < n.maxHp &&
                 dist(e.x, e.y, n.x, n.y) <= r) {
               n.hp = Math.min(n.maxHp, n.hp + amt);
             }
@@ -439,7 +460,7 @@ export class World {
           let ix = e.x;
           let iy = e.y;
           const tgt = this.byId.get(e.order.target);
-          if (tgt && tgt.alive && tgt.team !== e.team && tgt.team !== Team.Neutral) {
+          if (tgt && tgt.alive && this.areHostile(e.team, tgt.team)) {
             ix = tgt.x;
             iy = tgt.y;
           } else {
@@ -450,7 +471,7 @@ export class World {
             }
           }
           for (const n of this.spatial.query(ix, iy, r) as Entity[]) {
-            if (n.alive && n.team !== e.team && n.team !== Team.Neutral && dist(ix, iy, n.x, n.y) <= r) {
+            if (n.alive && this.areHostile(e.team, n.team) && dist(ix, iy, n.x, n.y) <= r) {
               this.dealDamage(e.team, n, amt, e.type);
             }
           }
@@ -1044,7 +1065,7 @@ export class World {
     let bestD = Infinity;
     for (const n of near) {
       if (!n.alive || n.hp <= 0) continue;
-      if (n.team === e.team || n.team === Team.Neutral) continue;
+      if (!this.areHostile(e.team, n.team)) continue;
       if (n.kind !== Kind.Unit && n.kind !== Kind.Building) continue;
       // Prefer units over buildings slightly.
       const d = dist2(e.x, e.y, n.x, n.y) * (n.kind === Kind.Building ? 1.8 : 1);
@@ -1139,7 +1160,7 @@ export class World {
       for (const n of near) {
         if (!n.alive || n.kind !== Kind.Unit) continue;
         if (n.team === e.team && dist(n.x, n.y, e.x, e.y) < 52) friendly = true;
-        else if (n.team !== e.team && n.team !== Team.Neutral) enemy = true;
+        else if (this.areHostile(e.team, n.team)) enemy = true;
       }
       open = friendly && !enemy;
     }
@@ -1248,7 +1269,7 @@ export class World {
       if (aoe > 0) {
         const near = this.spatial.query(e.x, e.y, aoe) as Entity[];
         for (const n of near) {
-          if (!n.alive || n.team === e.projSourceTeam || n.team === Team.Neutral) continue;
+          if (!n.alive || !this.areHostile(e.projSourceTeam, n.team)) continue;
           if (n.kind !== Kind.Unit && n.kind !== Kind.Building) continue;
           this.dealDamage(e.projSourceTeam, n, e.projDamage, e.projArmorClassBonusFrom);
         }
@@ -1419,6 +1440,20 @@ export class World {
         }
       }
     }
+
+    // Shared sight: allies see what each other sees (take the brighter state).
+    for (let a = 0; a < this.numTeams; a++) {
+      for (let b = a + 1; b < this.numTeams; b++) {
+        if (this.alliances[a] !== this.alliances[b]) continue;
+        const fa = this.fog[a];
+        const fb = this.fog[b];
+        for (let i = 0; i < fa.length; i++) {
+          const m = fa[i] > fb[i] ? fa[i] : fb[i];
+          fa[i] = m;
+          fb[i] = m;
+        }
+      }
+    }
   }
 
   fogAt(team: Team, wx: number, wy: number): number {
@@ -1448,12 +1483,16 @@ export class World {
       if (e.alive && e.kind === Kind.Building && e.team < this.numTeams) buildings[e.team]++;
     }
     const alive: Team[] = [];
+    const aliveAlliances = new Set<number>();
     for (let t = 0; t < this.numTeams; t++) {
       if (buildings[t] === 0) this.players[t].defeated = true;
-      else if (!this.players[t].defeated) alive.push(t as Team);
+      else if (!this.players[t].defeated) {
+        alive.push(t as Team);
+        aliveAlliances.add(this.alliances[t]);
+      }
     }
-    // Last realm standing wins. (In 1v1 this is just the surviving team.)
-    if (alive.length <= 1) this.winner = alive[0] ?? Team.Neutral;
+    // Last alliance standing wins; winner is a surviving member of it.
+    if (aliveAlliances.size <= 1) this.winner = alive[0] ?? Team.Neutral;
   }
 
   // Queries for UI/AI -------------------------------------------------------------

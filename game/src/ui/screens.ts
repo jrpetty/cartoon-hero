@@ -20,7 +20,8 @@ export interface SkirmishConfig {
   seed: number;
   difficulty: string;
   fairMode: boolean;
-  players: number; // 2 = 1v1, 4 = free-for-all
+  players: number; // 2 = 1v1, 4 = FFA or 2v2
+  allied: boolean; // true = 2v2 teams (you + ally vs two foes)
 }
 
 // ------------------------------------------------------------- background --
@@ -170,6 +171,7 @@ export class SetupScreen {
     difficulty: "knight",
     fairMode: false,
     players: 2,
+    allied: false,
   };
 
   draw(W: number, H: number, time: number, profile: Profile): "start" | "back" | null {
@@ -235,16 +237,19 @@ export class SetupScreen {
     ui.panel(x0, y, colW, 64);
     ui.text("Game Mode", x0 + 16, y + 24, { size: 16, bold: true, color: PAL.uiAccent });
     const modes = [
-      { n: "Duel — 1v1", p: 2, hint: "Classic one-on-one against a single commander." },
-      { n: "Free-for-All — 4", p: 4, hint: "You and three AI rivals on a four-corner map. Last realm standing wins." },
+      { n: "Duel — 1v1", p: 2, ally: false, hint: "Classic one-on-one against a single commander." },
+      { n: "Free-for-All — 4", p: 4, ally: false, hint: "You and three AI rivals on a four-corner map. Last realm standing wins." },
+      { n: "Teams — 2v2", p: 4, ally: true, hint: "You and an AI ally hold one side of the map against two enemies. Win or lose together." },
     ];
+    const mw = (colW - 150 - 16 - 24) / 3;
     for (let i = 0; i < modes.length; i++) {
-      const sel = this.config.players === modes[i].p;
-      if (ui.button(modes[i].n, x0 + 150 + i * (210 + 12), y + 16, 210, 32, {
+      const sel = this.config.players === modes[i].p && this.config.allied === modes[i].ally;
+      if (ui.button(modes[i].n, x0 + 150 + i * (mw + 12), y + 16, mw, 32, {
         accent: sel,
         tooltip: [modes[i].n, modes[i].hint],
       })) {
         this.config.players = modes[i].p;
+        this.config.allied = modes[i].ally;
         audio.play("ui");
       }
     }

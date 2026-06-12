@@ -492,6 +492,74 @@ function shotFFA() {
   save("12-ffa.png", c);
 }
 
+// ------------------------------------------------------------- 2v2 teams --
+function shotTeams() {
+  const map = generateMap("open_plains", 8181, 4);
+  const world = new World(8181);
+  // Teams 0 & 2 (top) ally vs 1 & 3 (bottom).
+  world.init(map, [{}, {}, {}, {}], [1, 1, 1, 1], [0, 1, 0, 1]);
+  const W = 820;
+  const H = 820;
+  const { c, ctx } = makeCtx(W, H);
+  const renderer = new Renderer(c as any);
+  renderer.prepare(map);
+  const cam = new Camera();
+  cam.setViewport(W, H);
+  cam.setWorld(map.worldW, map.worldH);
+
+  const comps = ["militia", "spearman", "archer", "knight"];
+  map.starts.forEach((s, t) => {
+    const cxw = map.worldW / 2;
+    const cyw = map.worldH / 2;
+    const dl = Math.hypot(cxw - s.x, cyw - s.y);
+    const ux = (cxw - s.x) / dl;
+    const uy = (cyw - s.y) / dl;
+    comps.forEach((u, i) => {
+      world.spawnUnit(t as any, u, s.x + ux * 90 + (i - 1.5) * 26, s.y + uy * 90);
+    });
+  });
+
+  for (let t = 0; t < 4; t++) world.fog[t].fill(FOG_VISIBLE);
+  cam.centerOn(map.worldW / 2, map.worldH / 2);
+  cam.zoom = Math.min(W / map.worldW, H / map.worldH) * 0.99;
+
+  renderer.render(
+    world, cam, new Particles(10), 0.016, 2.0, Team.Player,
+    [], null, { active: false, x0: 0, y0: 0, x1: 0, y1: 0 }, null,
+  );
+
+  // Labels: top pair are friends, bottom pair are the enemy team.
+  const names = ["You (Azure)", "Foe (Crimson)", "Ally (Verdant)", "Foe (Amber)"];
+  map.starts.forEach((s, t) => {
+    const sx = cam.worldToScreenX(s.x);
+    const sy = cam.worldToScreenY(s.y) - 36;
+    ctx.textAlign = "center";
+    ctx.font = "bold 15px sans-serif";
+    ctx.fillStyle = "rgba(0,0,0,0.6)";
+    ctx.fillText(names[t], sx + 1, sy + 1);
+    ctx.fillStyle = PAL.teams[t].light;
+    ctx.fillText(names[t], sx, sy);
+  });
+  // A dotted line marking the front between the two alliances.
+  ctx.strokeStyle = "rgba(255,255,255,0.35)";
+  ctx.lineWidth = 2;
+  ctx.setLineDash([10, 8]);
+  ctx.beginPath();
+  ctx.moveTo(0, H / 2);
+  ctx.lineTo(W, H / 2);
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  ctx.textAlign = "center";
+  ctx.font = "bold 26px Georgia, serif";
+  ctx.fillStyle = "rgba(0,0,0,0.55)";
+  ctx.fillText("Teams 2v2 — you and an ally vs two foes", W / 2 + 2, 42);
+  ctx.fillStyle = "#ffe9b0";
+  ctx.fillText("Teams 2v2 — you and an ally vs two foes", W / 2, 40);
+  ctx.textAlign = "left";
+  save("13-teams.png", c);
+}
+
 function shotHUD(scene: ReturnType<typeof shotBattle>) {
   const { world, map, cam, pUnits } = scene;
   const W = 1280;
@@ -631,6 +699,7 @@ shotHUD(scene);
 shotAbilities();
 shotWallPaint();
 shotFFA();
+shotTeams();
 shotFortress();
 shotMenus();
 console.log("Done.");

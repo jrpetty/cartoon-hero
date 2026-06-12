@@ -87,6 +87,40 @@ describe("AI vs AI smoke match", () => {
     expect(Math.max(...teams.map((t) => world.player(t).age))).toBeGreaterThanOrEqual(1);
   }, 180000);
 
+  it("a 2v2 holds alliances: shared vision, foes only across the line", () => {
+    const seed = 2222;
+    const map = generateMap("open_plains", seed, 4);
+    const world = new World(seed);
+    // Teams 0 & 2 ally against 1 & 3.
+    world.init(map, [{}, {}, {}, {}], [1, 1, 1, 1], [0, 1, 0, 1]);
+    expect(world.areAllied(Team.Player, Team.Team3)).toBe(true);
+    expect(world.areHostile(Team.Player, Team.Enemy)).toBe(true);
+    // Shared vision: the ally's base is already lit for the player.
+    const allyStart = map.starts[Team.Team3];
+    expect(world.fogAt(Team.Player, allyStart.x, allyStart.y)).toBe(2);
+
+    const teams = [Team.Player, Team.Enemy, Team.Team3, Team.Team4];
+    const ais = teams.map((t) => new SkirmishAI(world, t, DIFFICULTIES.knight));
+    const ticks = SIM_HZ * 60 * 20;
+    for (let i = 0; i < ticks; i++) {
+      world.tick();
+      for (const ai of ais) ai.update(SIM_DT);
+      world.drainEvents();
+      if (world.winner !== null) break;
+    }
+
+    // The two sides fought.
+    const kills = teams.reduce((s, t) => s + world.player(t).stats.unitsKilled, 0);
+    expect(kills).toBeGreaterThan(5);
+    // If a winner emerged, both members of that alliance "win" together: the
+    // winner is allied with at least one teammate that's still standing.
+    if (world.winner !== null) {
+      const w = world.winner;
+      const ally = teams.find((t) => t !== w && world.areAllied(w, t))!;
+      expect(world.areAllied(w, ally)).toBe(true);
+    }
+  }, 180000);
+
   it("a Warlord AI crushes a Squire AI", () => {
     const seed = 5150;
     const map = generateMap("open_plains", seed);

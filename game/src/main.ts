@@ -215,7 +215,12 @@ class App {
       loadouts.push(this.profile.matchLoadout(true));
       econMults.push(diff.econMult);
     }
-    world.init(map, loadouts, econMults);
+    // 2v2: teams 0&2 vs 1&3 (alliance id = team % 2), so allies share the map's
+    // top/bottom edge. Otherwise everyone is solo (1v1 / FFA).
+    const alliances = config.allied && numPlayers === 4
+      ? Array.from({ length: numPlayers }, (_, t) => t % 2)
+      : undefined;
+    world.init(map, loadouts, econMults, alliances);
     this.world = world;
     this.ais = [];
     for (let t = 1; t < numPlayers; t++) {
@@ -784,7 +789,8 @@ class App {
     const playerOut = world.player(PLAYER).defeated;
     if ((world.winner !== null || playerOut) && this.matchOverTimer < 0) {
       this.matchOverTimer = 1.8;
-      this.playerWon = world.winner === PLAYER && !playerOut;
+      // Win if your alliance is the last standing (and you're still in it).
+      this.playerWon = world.winner !== null && world.areAllied(world.winner, PLAYER) && !playerOut;
       this.hud.addAlert(this.playerWon ? "🏆 The last enemy is broken!" : "💀 Your last building has fallen…");
       if (this.playerWon) audio.play("levelup");
       else audio.play("collapse");
