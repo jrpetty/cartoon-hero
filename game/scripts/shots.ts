@@ -529,17 +529,21 @@ function shotTeams() {
     [], null, { active: false, x0: 0, y0: 0, x1: 0, y1: 0 }, null,
   );
 
-  // Labels: top pair are friends, bottom pair are the enemy team.
-  const names = ["You (Azure)", "Foe (Crimson)", "Ally (Verdant)", "Foe (Amber)"];
+  // Labels by diplomacy: you & ally on top, two enemies below.
   map.starts.forEach((s, t) => {
+    const rel = world.relationTo(Team.Player, t as any);
+    const label = rel === "self" ? "You" : rel === "ally" ? "Ally" : "Enemy";
+    const col = rel === "self" ? PAL.diplomacy.self.light
+      : rel === "ally" ? PAL.diplomacy.ally.light
+      : PAL.diplomacy.enemies[world.enemyIndexOf(Team.Player, t as any)].light;
     const sx = cam.worldToScreenX(s.x);
     const sy = cam.worldToScreenY(s.y) - 36;
     ctx.textAlign = "center";
     ctx.font = "bold 15px sans-serif";
     ctx.fillStyle = "rgba(0,0,0,0.6)";
-    ctx.fillText(names[t], sx + 1, sy + 1);
-    ctx.fillStyle = PAL.teams[t].light;
-    ctx.fillText(names[t], sx, sy);
+    ctx.fillText(label, sx + 1, sy + 1);
+    ctx.fillStyle = col;
+    ctx.fillText(label, sx, sy);
   });
   // A dotted line marking the front between the two alliances.
   ctx.strokeStyle = "rgba(255,255,255,0.35)";
@@ -559,6 +563,60 @@ function shotTeams() {
   ctx.fillText("Teams 2v2 — you and an ally vs two foes", W / 2, 40);
   ctx.textAlign = "left";
   save("13-teams.png", c);
+}
+
+function shotDiplomacy() {
+  const map = generateMap("open_plains", 51, 4);
+  const world = new World(51);
+  world.init(map, [{}, {}, {}, {}], [1, 1, 1, 1], [0, 1, 0, 1]);
+  const W = 1280;
+  const H = 760;
+  const { c, ctx } = makeCtx(W, H);
+  const renderer = new Renderer(c as any);
+  renderer.prepare(map);
+  const cam = new Camera();
+  cam.setViewport(W, H);
+  cam.setWorld(map.worldW, map.worldH);
+
+  // A skirmish near the centre: you + ally on the left, two foes on the right.
+  const cx = map.worldW / 2;
+  const cy = map.worldH / 2;
+  const line = (team: number, x: number, types: string[]) =>
+    types.forEach((t, i) => world.spawnUnit(team as any, t, x, cy - 60 + i * 40));
+  line(Team.Player, cx - 90, ["militia", "knight", "archer"]); // You (blue)
+  line(Team.Team3, cx - 150, ["spearman", "militia", "monk"]); // Ally (teal)
+  line(Team.Enemy, cx + 90, ["knight", "militia", "archer"]); // Enemy (red)
+  line(Team.Team4, cx + 150, ["spearman", "skirmisher", "knight"]); // Enemy (amber)
+
+  for (let t = 0; t < 4; t++) world.fog[t].fill(FOG_VISIBLE);
+  cam.centerOn(cx, cy);
+  cam.zoom = 2.0;
+  renderer.render(
+    world, cam, new Particles(10), 0.016, 2.0, Team.Player,
+    [], null, { active: false, x0: 0, y0: 0, x1: 0, y1: 0 }, null,
+  );
+
+  // Draw the HUD too, so the diplomacy minimap legend shows in context.
+  const hud = new HUD();
+  hud.prepare(map);
+  const noop = () => {};
+  const ctrl: any = {
+    trainUnit: noop, research: noop, startPlacement: noop, ungarrison: noop, toggleGate: noop,
+    trade: noop, stopSelection: noop, holdSelection: noop, setAttackMoveMode: noop, useAbility: noop,
+    minimapNavigate: noop, minimapCommand: noop, minimapPing: noop, openMenu: noop,
+  };
+  ui.begin(ctx, { mx: -50, my: -50, clicked: false, rightClicked: false });
+  hud.draw(W, H, world, cam, Team.Player, [], 0.016, ctrl, false);
+  ui.flushTooltip(W, H);
+
+  ctx.textAlign = "center";
+  ctx.font = "bold 24px Georgia, serif";
+  ctx.fillStyle = "rgba(0,0,0,0.55)";
+  ctx.fillText("Diplomacy colours — you (blue) + ally (teal) vs foes (red/amber)", W / 2 + 2, 58);
+  ctx.fillStyle = "#ffe9b0";
+  ctx.fillText("Diplomacy colours — you (blue) + ally (teal) vs foes (red/amber)", W / 2, 56);
+  ctx.textAlign = "left";
+  save("15-diplomacy.png", c);
 }
 
 function shotPostmatch() {
@@ -723,6 +781,7 @@ shotAbilities();
 shotWallPaint();
 shotFFA();
 shotTeams();
+shotDiplomacy();
 shotPostmatch();
 shotFortress();
 shotMenus();

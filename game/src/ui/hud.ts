@@ -221,6 +221,15 @@ export class HUD {
       }
     }
 
+    // In team games, colour the map by relation to you, not raw team.
+    const diplo = world.hasTeamAlliances();
+    const diploMain = (t: Team): string => {
+      const rel = world.relationTo(team, t);
+      if (rel === "self") return PAL.diplomacy.self.main;
+      if (rel === "ally") return PAL.diplomacy.ally.main;
+      return PAL.diplomacy.enemies[world.enemyIndexOf(team, t) % PAL.diplomacy.enemies.length].main;
+    };
+
     // Entities as dots.
     for (const e of world.entities) {
       if (!e.alive) continue;
@@ -230,7 +239,7 @@ export class HUD {
       if (e.kind === Kind.Resource) {
         color = e.type === "tree" ? "#2f5b28" : e.type === "gold_mine" ? PAL.goldVein : "#b13a4a";
       } else {
-        color = teamColor(e.team).main;
+        color = diplo ? diploMain(e.team) : teamColor(e.team).main;
       }
       const s = e.kind === Kind.Building ? 3 : 1.6;
       ctx.fillStyle = color;
@@ -254,6 +263,31 @@ export class HUD {
     ctx.strokeStyle = "rgba(243, 233, 210, 0.9)";
     ctx.lineWidth = 1;
     ctx.strokeRect(mmX + cam.x * sx - vw / 2, mmY + cam.y * sy - vh / 2, vw, vh);
+
+    // Diplomacy legend (team games only): You / Ally / Enemy swatches.
+    if (diplo) {
+      const legend: [string, string][] = [
+        ["You", PAL.diplomacy.self.main],
+        ["Ally", PAL.diplomacy.ally.main],
+        ["Enemy", PAL.diplomacy.enemies[0].main],
+      ];
+      const lw = 58;
+      const lh = 12 + legend.length * 14;
+      const lx = mmX + 4;
+      const ly = mmY + 4;
+      ctx.fillStyle = "rgba(12,9,5,0.72)";
+      ctx.fillRect(lx, ly, lw, lh);
+      ctx.strokeStyle = withAlpha(PAL.uiAccent, 0.3);
+      ctx.lineWidth = 1;
+      ctx.strokeRect(lx, ly, lw, lh);
+      for (let i = 0; i < legend.length; i++) {
+        const [label, col] = legend[i];
+        const ry = ly + 8 + i * 14;
+        ctx.fillStyle = col;
+        ctx.fillRect(lx + 7, ry + 2, 9, 9);
+        ui.text(label, lx + 22, ry + 7, { size: 11, color: "#e7ddc4" });
+      }
+    }
 
     // Player pings: expanding cyan rings, both on the minimap and (briefly) in
     // the world. Friendly signals — "look here", "rally here".

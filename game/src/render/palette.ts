@@ -48,6 +48,18 @@ export const PAL = {
     { main: "#d8a83a", light: "#eccd7d", dark: "#90702a", name: "Amber" },
   ],
 
+  // Diplomacy colours — used in team games to recolour units relative to the
+  // viewer: you (blue), allies (teal), enemies (warm reds).
+  diplomacy: {
+    self: { main: "#3a6fd8", light: "#7da3ec", dark: "#274a90", name: "You" },
+    ally: { main: "#2fb39a", light: "#74e3cd", dark: "#1c7c6a", name: "Ally" },
+    enemies: [
+      { main: "#d8403a", light: "#ec837d", dark: "#902a27", name: "Enemy" },
+      { main: "#e0822f", light: "#f2b272", dark: "#96521c", name: "Enemy" },
+      { main: "#c64fb0", light: "#e58fd4", dark: "#85317a", name: "Enemy" },
+    ],
+  },
+
   // UI
   uiParchment: "#e9dcc0",
   uiParchmentDark: "#d4c3a0",

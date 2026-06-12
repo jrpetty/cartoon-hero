@@ -14,6 +14,7 @@ import {
   drawSelectionRing,
   drawUnit,
   setDrawDayPhase,
+  setTeamColorResolver,
 } from "./draw";
 import { PAL, teamColor, withAlpha } from "./palette";
 import { BUILDINGS } from "../content/buildings";
@@ -197,6 +198,18 @@ export class Renderer {
     const W = canvas.width;
     const H = canvas.height;
     setDrawDayPhase(this.dayPhase);
+    // Team games: colour units by relation to the viewer (you/ally/enemy).
+    if (world.hasTeamAlliances()) {
+      setTeamColorResolver((team) => {
+        if (team >= world.numTeams) return teamColor(team);
+        const rel = world.relationTo(viewTeam, team as Team);
+        return rel === "self" ? PAL.diplomacy.self
+          : rel === "ally" ? PAL.diplomacy.ally
+          : PAL.diplomacy.enemies[world.enemyIndexOf(viewTeam, team as Team) % PAL.diplomacy.enemies.length];
+      });
+    } else {
+      setTeamColorResolver(null);
+    }
 
     // Screen shake decay.
     this.shakeAmp *= Math.pow(0.0015, dt);

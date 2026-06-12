@@ -20,6 +20,18 @@ export function setDrawDayPhase(p: number) {
   gDayPhase = p;
 }
 
+// Optional viewer-relative colour resolver (diplomacy colouring in team games).
+// When set, entities are coloured by their relation to the viewer instead of by
+// raw team. Null = use the global per-team colours (1v1 / FFA).
+type TeamCol = ReturnType<typeof teamColor>;
+let gColorResolver: ((team: number) => TeamCol) | null = null;
+export function setTeamColorResolver(fn: ((team: number) => TeamCol) | null) {
+  gColorResolver = fn;
+}
+function tcol(team: number): TeamCol {
+  return gColorResolver ? gColorResolver(team) : teamColor(team);
+}
+
 function shadow(ctx: Ctx, x: number, y: number, rx: number, ry: number, alpha = 0.25) {
   ctx.fillStyle = `rgba(20, 24, 12, ${alpha})`;
   ctx.beginPath();
@@ -106,7 +118,7 @@ export function drawResource(ctx: Ctx, e: Entity, time: number) {
 export function drawBuilding(ctx: Ctx, e: Entity, time: number, selectedTeamView: Team) {
   const def = BUILDINGS[e.type];
   const half = e.radius;
-  const tc = teamColor(e.team);
+  const tc = tcol(e.team);
 
   // Foundation / construction states.
   if (e.buildState !== BuildState.Done) {
@@ -679,7 +691,7 @@ function drawSiegeWorkshop(ctx: Ctx, e: Entity, half: number) {
 // -------------------------------------------------------------------- units --
 
 export function drawUnit(ctx: Ctx, e: Entity, time: number) {
-  const tc = teamColor(e.team);
+  const tc = tcol(e.team);
   const moving = Math.hypot(e.vx, e.vy) > 4;
   const bob = moving ? Math.sin(e.animPhase * 9) * 1.4 : Math.sin(e.animPhase * 2.4) * 0.4;
   // Attack lunge: strongest right after an attack starts cooling down.

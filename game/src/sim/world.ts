@@ -217,6 +217,32 @@ export class World {
     return !this.areAllied(a, b);
   }
 
+  /** True when at least two teams share an alliance (i.e. a 2v2 team game). */
+  hasTeamAlliances(): boolean {
+    for (let a = 0; a < this.numTeams; a++) {
+      for (let b = a + 1; b < this.numTeams; b++) {
+        if (this.alliances[a] === this.alliances[b]) return true;
+      }
+    }
+    return false;
+  }
+
+  /** Relation of `team` to the viewer, for diplomacy colouring. */
+  relationTo(viewer: Team, team: Team): "self" | "ally" | "enemy" {
+    if (team === viewer) return "self";
+    return this.areAllied(viewer, team) ? "ally" : "enemy";
+  }
+
+  /** Stable 0-based index of `team` among the viewer's enemies (for colours). */
+  enemyIndexOf(viewer: Team, team: Team): number {
+    let idx = 0;
+    for (let t = 0; t < this.numTeams; t++) {
+      if (t === team) break;
+      if (this.areHostile(viewer, t as Team)) idx++;
+    }
+    return idx;
+  }
+
   // ------------------------------------------------------------- spawning --
 
   /** Effective stats for a unit owned by `team`, applying rarity + age/tech. */
