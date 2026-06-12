@@ -16,6 +16,7 @@ export interface DifficultyDef {
   reactionSec: number; // decision loop interval
   maxAge: number;
   buildsCastle: boolean;
+  buildsWalls: boolean; // lays a defensive wall + gate across its front
 }
 
 export const DIFFICULTIES: Record<string, DifficultyDef> = {
@@ -34,6 +35,7 @@ export const DIFFICULTIES: Record<string, DifficultyDef> = {
     reactionSec: 2.4,
     maxAge: 1,
     buildsCastle: false,
+    buildsWalls: false,
   },
   knight: {
     id: "knight",
@@ -50,6 +52,7 @@ export const DIFFICULTIES: Record<string, DifficultyDef> = {
     reactionSec: 1.2,
     maxAge: 2,
     buildsCastle: false,
+    buildsWalls: false,
   },
   lord: {
     id: "lord",
@@ -66,6 +69,7 @@ export const DIFFICULTIES: Record<string, DifficultyDef> = {
     reactionSec: 0.8,
     maxAge: 2,
     buildsCastle: true,
+    buildsWalls: true,
   },
   warlord: {
     id: "warlord",
@@ -82,6 +86,7 @@ export const DIFFICULTIES: Record<string, DifficultyDef> = {
     reactionSec: 0.5,
     maxAge: 2,
     buildsCastle: true,
+    buildsWalls: true,
   },
 };
 

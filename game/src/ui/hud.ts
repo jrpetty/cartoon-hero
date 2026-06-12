@@ -9,6 +9,7 @@ import { UNITS } from "../content/units";
 import { BUILDINGS } from "../content/buildings";
 import { AGES, MAX_AGE, UPGRADES } from "../content/tech";
 import { PAL, teamColor, withAlpha } from "../render/palette";
+import { dayLabel, dayPhase, isNight } from "../content/daynight";
 import { rarityByIndex } from "../meta/rarity";
 import { ui } from "./ui";
 import { buildMinimapBase } from "../render/terrain";
@@ -128,6 +129,41 @@ export class HUD {
     const mins = Math.floor(world.time / 60);
     const secs = Math.floor(world.time % 60);
     ui.text(`${mins}:${secs.toString().padStart(2, "0")}`, W / 2, 17, { align: "center", size: 14 });
+
+    // Day/night dial + label.
+    const phase = dayPhase(world.time);
+    const night = isNight(phase);
+    const dialX = W / 2 + 52;
+    if (night) {
+      ctx.fillStyle = "#cdd6ea";
+      ctx.beginPath();
+      ctx.arc(dialX, 17, 7, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = PAL.uiPanel;
+      ctx.beginPath();
+      ctx.arc(dialX + 3, 15, 6, 0, Math.PI * 2);
+      ctx.fill();
+    } else {
+      const warm = phase < 0.08 || phase >= 0.4;
+      ctx.fillStyle = warm ? "#ffcf6a" : "#ffe9b0";
+      ctx.beginPath();
+      ctx.arc(dialX, 17, 6, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = withAlpha("#ffd98a", 0.7);
+      ctx.lineWidth = 1.5;
+      for (let i = 0; i < 8; i++) {
+        const a = (i / 8) * Math.PI * 2;
+        ctx.beginPath();
+        ctx.moveTo(dialX + Math.cos(a) * 8, 17 + Math.sin(a) * 8);
+        ctx.lineTo(dialX + Math.cos(a) * 10.5, 17 + Math.sin(a) * 10.5);
+        ctx.stroke();
+      }
+    }
+    ui.text(dayLabel(phase), dialX + 16, 17, {
+      size: 12,
+      color: night ? "#9fb0d6" : "#e8c98a",
+      bold: night,
+    });
 
     if (ui.button("Menu", W - 74, 5, 64, 24, { size: 13 })) ctrl.openMenu();
 

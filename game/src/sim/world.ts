@@ -18,6 +18,7 @@ import {
 import { UNITS, UnitDef } from "../content/units";
 import { BUILDINGS, BuildingDef } from "../content/buildings";
 import { AGES, MAX_AGE, UPGRADES } from "../content/tech";
+import { dayPhase, visionMult } from "../content/daynight";
 import {
   AGE_ARMOR_BONUS,
   AGE_ATTACK_BONUS,
@@ -1268,13 +1269,19 @@ export class World {
         if (f[i] === FOG_VISIBLE) f[i] = FOG_EXPLORED;
       }
     }
+    // Night shrinks sight by up to 40%. Buildings (lit by braziers and watch-
+    // fires) keep most of theirs, so your base never goes fully blind.
+    const phase = dayPhase(this.time);
+    const nightMult = visionMult(phase);
+    const buildingMult = Math.max(0.82, nightMult);
     for (const e of this.entities) {
       if (!e.alive || e.team === Team.Neutral) continue;
       if (e.kind !== Kind.Unit && e.kind !== Kind.Building) continue;
       const f = this.fog[e.team];
       const cx = this.grid.worldToCellX(e.x);
       const cy = this.grid.worldToCellY(e.y);
-      const r = Math.ceil(e.visionRange / TILE);
+      const mult = e.kind === Kind.Building ? buildingMult : nightMult;
+      const r = Math.max(2, Math.ceil((e.visionRange * mult) / TILE));
       const r2 = r * r;
       for (let dy = -r; dy <= r; dy++) {
         for (let dx = -r; dx <= r; dx++) {

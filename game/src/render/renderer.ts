@@ -17,7 +17,7 @@ import {
 import { PAL, teamColor, withAlpha } from "./palette";
 import { BUILDINGS } from "../content/buildings";
 import { TILE } from "../content/balance";
-import { lerp } from "../engine/math";
+import { skyTint } from "../content/daynight";
 import type { MapData } from "../maps/generator";
 
 // Battlefield decals: corpses, stuck arrows and scorch marks linger after the
@@ -44,26 +44,6 @@ interface Floater {
   size: number;
 }
 
-/** Day/night sky tint by cycle phase (0..1). Returns rgba overlay components. */
-function skyTint(phase: number): [number, number, number, number] {
-  const keys: [number, [number, number, number, number]][] = [
-    [0.0, [255, 168, 96, 0.16]], // dawn
-    [0.22, [255, 255, 255, 0.0]], // bright day
-    [0.46, [255, 120, 60, 0.2]], // dusk
-    [0.6, [22, 32, 74, 0.5]], // night
-    [0.9, [18, 28, 68, 0.46]], // deep night
-    [1.0, [255, 168, 96, 0.16]], // back to dawn
-  ];
-  for (let i = 0; i < keys.length - 1; i++) {
-    const [p0, c0] = keys[i];
-    const [p1, c1] = keys[i + 1];
-    if (phase >= p0 && phase <= p1) {
-      const t = (phase - p0) / (p1 - p0 || 1);
-      return [lerp(c0[0], c1[0], t), lerp(c0[1], c1[1], t), lerp(c0[2], c1[2], t), lerp(c0[3], c1[3], t)];
-    }
-  }
-  return [0, 0, 0, 0];
-}
 
 export interface CommandMarker {
   x: number;

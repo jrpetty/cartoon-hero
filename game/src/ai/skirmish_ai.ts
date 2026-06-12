@@ -28,6 +28,7 @@ export class SkirmishAI {
   private lastHarassTime = 0;
   private lastScoutTime = -999;
   private scoutId = -1;
+  private wallsPlanned = false;
   private attacking = false;
   private gameTime = 0;
 
@@ -207,6 +208,9 @@ export class SkirmishAI {
       if (tc) this.assignBuilder(tc, 3);
     }
 
+    // 8b. Fortify the front with a wall + gate once established.
+    this.buildDefenses(base);
+
     // 9. Castle for late-game defense/elite production.
     if (this.diff.buildsCastle && p.age >= 2 && this.myBuildings("castle").length === 0 &&
         this.world.canAfford(p.resources, BUILDINGS.castle.cost)) {
@@ -217,6 +221,57 @@ export class SkirmishAI {
       const castle = this.placeNear("castle", fx, fy, 0, 6);
       if (castle) this.assignBuilder(castle, 3);
     }
+  }
+
+  /**
+   * Lay a defensive wall line with a central gate across the approach from the
+   * base toward the map centre, backed by a watch tower. Built once, when the
+   * economy can spare a few builders. Kept short so it screens the front
+   * without sealing the AI's own resource lines.
+   */
+  private buildDefenses(base: Entity) {
+    if (!this.diff.buildsWalls || this.wallsPlanned) return;
+    const p = this.world.player(this.team);
+    if (p.age < 1 || p.resources.wood < 160) return;
+    if (this.myUnits("villager").length < 16) return;
+
+    const cx = this.world.worldW / 2;
+    const cy = this.world.worldH / 2;
+    const dx = cx - base.x;
+    const dy = cy - base.y;
+    const dl = Math.hypot(dx, dy) || 1;
+    const ux = dx / dl;
+    const uy = dy / dl;
+    const px = -uy;
+    const py = ux;
+    const front = 4.5 * TILE;
+    const fx = base.x + ux * front;
+    const fy = base.y + uy * front;
+
+    const builders: number[] = [];
+    const span = 3; // segments either side of the gate
+    for (let i = -span; i <= span; i++) {
+      const wx = fx + px * i * TILE;
+      const wy = fy + py * i * TILE;
+      const type = i === 0 ? "gate" : "stone_wall";
+      const b = this.world.placeBuilding(this.team, type, wx, wy);
+      if (b) builders.push(b.id);
+    }
+    const tower = this.world.placeBuilding(this.team, "watch_tower", fx - ux * TILE, fy - uy * TILE);
+    if (tower) builders.push(tower.id);
+
+    // Send a handful of villagers to raise it all (queued), then resume eco.
+    if (builders.length > 0) {
+      const vills = this.myUnits("villager")
+        .filter((v) => v.order.kind !== OrderKind.Build)
+        .sort((a, b) => dist(a.x, a.y, fx, fy) - dist(b.x, b.y, fx, fy))
+        .slice(0, 4);
+      builders.forEach((bid, i) => {
+        const v = vills[i % vills.length];
+        if (v) this.world.issueBuildRepair([v.id], bid, true);
+      });
+    }
+    this.wallsPlanned = true;
   }
 
   private gatherTargets(age: number): Record<ResourceKind, number> {

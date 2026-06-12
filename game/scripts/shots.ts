@@ -316,7 +316,11 @@ function shotHUD(scene: ReturnType<typeof shotBattle>) {
   const renderer = new Renderer(c as any);
   renderer.prepare(map);
   cam.setViewport(W, H);
-  world.fog[Team.Player].fill(FOG_VISIBLE);
+  // Push the clock into the dead of night so the moon dial and the tighter
+  // night vision both show in the HUD shot.
+  world.time = 144; // ~0.72 of the day cycle
+  for (let i = 0; i < 6; i++) world.tick();
+  renderer.dayPhase = 0.72;
   renderer.render(
     world, cam, new Particles(10), 0.016, 2.0, Team.Player,
     [], null, { active: false, x0: 0, y0: 0, x1: 0, y1: 0 }, null,
@@ -324,7 +328,7 @@ function shotHUD(scene: ReturnType<typeof shotBattle>) {
 
   const hud = new HUD();
   hud.prepare(map);
-  hud.addAlert("⚠ Your forces are under attack!", scene.map.worldW / 2, scene.map.worldH / 2);
+  hud.addAlert("⚠ Night raid — your forces are under attack!", scene.map.worldW / 2, scene.map.worldH / 2);
   const sel = pUnits.map((id) => world.byId.get(id)!).filter(Boolean).slice(0, 6);
   for (const e of sel) e.selected = true;
   const noop = () => {};

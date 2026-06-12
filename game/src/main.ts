@@ -7,6 +7,7 @@ import { BuildState, Entity, EntityId, Kind, OrderKind, Team } from "./sim/types
 import { UNITS } from "./content/units";
 import { BUILDINGS } from "./content/buildings";
 import { SIM_DT } from "./content/balance";
+import { dayPhase } from "./content/daynight";
 import { generateMap } from "./maps/generator";
 import { SkirmishAI } from "./ai/skirmish_ai";
 import { DIFFICULTIES } from "./ai/difficulty";
@@ -32,7 +33,6 @@ import { computeRewards, MatchRewards } from "./meta/progression";
 type AppState = "menu" | "setup" | "armory" | "match" | "postmatch";
 
 const PLAYER = Team.Player;
-const DAY_CYCLE = 200; // seconds for a full day→night→day rotation
 
 class App {
   canvas: HTMLCanvasElement;
@@ -584,8 +584,8 @@ class App {
     this.particles.update(dt);
     audio.updateMusic(dt, !this.ingameMenu);
 
-    // Day/night cycle (visual; deterministic off sim time).
-    this.renderer.dayPhase = (world.time % DAY_CYCLE) / DAY_CYCLE;
+    // Day/night cycle (deterministic off sim time; drives sky tint + vision).
+    this.renderer.dayPhase = dayPhase(world.time);
 
     // Damaged buildings smoke and burn.
     this.smokeTimer -= dt;
