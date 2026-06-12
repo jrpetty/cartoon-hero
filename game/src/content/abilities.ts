@@ -13,7 +13,7 @@ import { ArmorClass } from "../sim/types";
 //
 // Only the unit types listed here have an ability.
 
-export type AbilityKind = "buff" | "rally" | "slow" | "heal" | "volley";
+export type AbilityKind = "buff" | "rally" | "slow" | "heal" | "volley" | "cleave";
 
 export interface AbilityDef {
   id: string;
@@ -37,6 +37,20 @@ export interface AbilityDef {
 }
 
 export const ABILITIES: Record<string, AbilityDef> = {
+  // Champion: a heroic sweep that wounds every foe around him and emboldens
+  // every ally — the centrepiece of a hero-led push.
+  hero: {
+    id: "heroic_cleave",
+    name: "Heroic Cleave",
+    desc: "A sweeping blow: heavy damage to all enemies around the Champion, and a rallying surge for nearby allies.",
+    kind: "cleave",
+    cooldown: 15,
+    duration: 1.6,
+    radius: 115,
+    amount: 24,
+    statusDuration: 5,
+    color: "#ffd24a",
+  },
   // Villager: not a fighter — a panic button to survive a raid and run for it.
   villager: {
     id: "take_cover",

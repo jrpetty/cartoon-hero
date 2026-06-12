@@ -4,6 +4,7 @@
 
 import { BuildState, Entity, Kind, Team } from "../sim/types";
 import { BUILDINGS } from "../content/buildings";
+import { UNITS } from "../content/units";
 import { PAL, shade, teamColor, withAlpha } from "./palette";
 import { rarityByIndex } from "../meta/rarity";
 import { TILE } from "../content/balance";
@@ -725,6 +726,21 @@ export function drawUnit(ctx: Ctx, e: Entity, time: number) {
     ctx.fill();
   }
 
+  // Heroes wear a permanent golden aura plus level pips above their head.
+  if (UNITS[e.type]?.hero) {
+    const pulse = 0.6 + Math.sin(time * 3 + e.id) * 0.2;
+    ctx.fillStyle = withAlpha("#ffd24a", 0.16 * pulse);
+    ctx.beginPath();
+    ctx.ellipse(e.x, e.y + e.radius * 0.5, e.radius * 1.9, e.radius * 0.95, 0, 0, Math.PI * 2);
+    ctx.fill();
+    for (let i = 0; i < e.heroLevel; i++) {
+      ctx.fillStyle = "#ffe07a";
+      ctx.beginPath();
+      ctx.arc(e.x - (e.heroLevel - 1) * 3 + i * 6, e.y - e.radius * 2.1, 2, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
   shadow(ctx, e.x + 1, e.y + e.radius * 0.55, e.radius * 0.95, e.radius * 0.42);
 
   ctx.save();
@@ -739,6 +755,7 @@ export function drawUnit(ctx: Ctx, e: Entity, time: number) {
     case "knight": drawKnight(ctx, e, tc, moving, time, lunge); break;
     case "catapult": drawCatapult(ctx, e, tc, atkFrac); break;
     case "ram": drawRam(ctx, e, tc, atkFrac); break;
+    case "hero": drawHero(ctx, e, tc, lunge, time); break;
     case "monk": drawMonk(ctx, e, tc, time); break;
     default: {
       ctx.fillStyle = tc.main;
@@ -1057,6 +1074,57 @@ function drawRam(ctx: Ctx, e: Entity, tc: any, atkFrac: number) {
   ctx.fillStyle = tc.main;
   ctx.fillRect(-r * 0.85, -r * 0.55, r * 1.7, 3);
   ctx.restore();
+}
+
+function drawHero(ctx: Ctx, e: Entity, tc: any, lunge: number, time: number) {
+  const r = e.radius;
+  // Flowing team cape behind.
+  ctx.fillStyle = shade(tc.dark, -0.1);
+  ctx.beginPath();
+  ctx.moveTo(-r * 0.5, -r * 0.2);
+  ctx.quadraticCurveTo(-r * 1.1, r * 0.6 + Math.sin(time * 4) * 1.5, -r * 0.2, r * 1.0);
+  ctx.quadraticCurveTo(r * 0.2, r * 0.5, r * 0.5, -r * 0.2);
+  ctx.fill();
+  // Armoured body + team surcoat.
+  body(ctx, r, tc.main, tc.dark);
+  ctx.fillStyle = PAL.steel;
+  ctx.beginPath();
+  ctx.arc(0, 0, r * 0.5, 0, Math.PI * 2);
+  ctx.fill();
+  head(ctx, r, PAL.steel);
+  // Golden crown.
+  ctx.fillStyle = "#ffd24a";
+  for (let i = -1; i <= 1; i++) {
+    ctx.beginPath();
+    ctx.moveTo(i * r * 0.3 - r * 0.12, -r * 0.7);
+    ctx.lineTo(i * r * 0.3, -r * 0.95);
+    ctx.lineTo(i * r * 0.3 + r * 0.12, -r * 0.7);
+    ctx.fill();
+  }
+  ctx.fillRect(-r * 0.42, -r * 0.72, r * 0.84, r * 0.14);
+  const [fx, fy] = weaponAngleParts(e.facing);
+  // Kite shield on the off-hand.
+  ctx.fillStyle = tc.dark;
+  ctx.beginPath();
+  ctx.ellipse(-fy * r * 0.8, fx * r * 0.8, r * 0.42, r * 0.6, e.facing, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = "#ffd24a";
+  ctx.beginPath();
+  ctx.arc(-fy * r * 0.8, fx * r * 0.8, r * 0.16, 0, Math.PI * 2);
+  ctx.fill();
+  // Greatsword, gleaming.
+  ctx.strokeStyle = "#f2f0e6";
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.moveTo(fx * r * 0.3, fy * r * 0.3);
+  ctx.lineTo(fx * r * (1.85 + lunge), fy * r * (1.85 + lunge));
+  ctx.stroke();
+  ctx.strokeStyle = "#ffd24a";
+  ctx.lineWidth = 4;
+  ctx.beginPath();
+  ctx.moveTo(fx * r * 0.2 - fy * r * 0.35, fy * r * 0.2 + fx * r * 0.35);
+  ctx.lineTo(fx * r * 0.2 + fy * r * 0.35, fy * r * 0.2 - fx * r * 0.35);
+  ctx.stroke();
 }
 
 function drawMonk(ctx: Ctx, e: Entity, tc: any, time: number) {

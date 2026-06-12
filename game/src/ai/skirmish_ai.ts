@@ -491,6 +491,7 @@ export class SkirmishAI {
 
   private military() {
     this.trainArmy();
+    this.heroStep();
     this.scoutStep();
 
     const defended = this.defendStep();
@@ -501,13 +502,26 @@ export class SkirmishAI {
     this.abilityStep();
   }
 
+  /** Field the one Champion once the economy can spare the cost. */
+  private heroStep() {
+    if (!this.diff.usesAbilities) return;
+    const p = this.world.player(this.team);
+    if (p.heroState !== "none") return;
+    if (this.myUnits("villager").length < 12) return;
+    if (p.resources.gold < 120 || p.resources.food < 150) return;
+    const tc = this.myBuildings("town_center")[0];
+    if (tc) this.world.trainUnit(this.team, tc.id, "hero");
+  }
+
   /** Fire signature abilities on a knot of army units that are mid-fight. */
   private abilityStep() {
     if (!this.diff.usesAbilities) return;
     const fighters = this.armyUnits().filter(
       (e) => ABILITIES[e.type] && e.abilityCooldown <= 0 && e.order.kind === OrderKind.Attack,
     );
-    if (fighters.length >= 2) this.world.useAbility(fighters.map((f) => f.id));
+    // Fire in a real melee (2+), or whenever the Champion is in the thick of it.
+    const hero = fighters.find((f) => UNITS[f.type]?.hero);
+    if (fighters.length >= 2 || hero) this.world.useAbility(fighters.map((f) => f.id));
   }
 
   /** Composition weights, optionally countering what we've seen. */

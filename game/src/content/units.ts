@@ -27,6 +27,7 @@ export interface UnitDef {
   canRepair?: boolean;
   healer?: boolean;
   aoeRadius?: number; // siege splash
+  hero?: boolean; // unique, levels up in-match, respawns; one per player
 }
 
 const U = (d: UnitDef) => d;
@@ -210,6 +211,29 @@ export const UNITS: Record<string, UnitDef> = {
     age: 2,
     ranged: false,
     bonus: { [ArmorClass.Building]: 50 },
+  }),
+
+  hero: U({
+    id: "hero",
+    name: "Champion",
+    desc: "Your unique hero. Towering in a fight, grows stronger with every kill, and rises again at your Town Center if he falls.",
+    armorClass: ArmorClass.Infantry,
+    hp: 320,
+    attack: 16,
+    range: 0,
+    attackInterval: 1.0,
+    armor: 3,
+    speed: 96,
+    visionRange: 190,
+    radius: 12,
+    cost: { food: 150, wood: 0, gold: 120 },
+    buildTime: 35,
+    pop: 3,
+    trainedAt: "town_center",
+    age: 0,
+    ranged: false,
+    hero: true,
+    bonus: { [ArmorClass.Archer]: 5, [ArmorClass.Siege]: 6, [ArmorClass.Cavalry]: 6, [ArmorClass.Building]: 4 },
   }),
 
   monk: U({

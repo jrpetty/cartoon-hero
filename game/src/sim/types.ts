@@ -145,6 +145,8 @@ export interface Entity {
   abilityActive: number; // seconds of buff remaining (0 = inactive)
   slowTimer: number; // seconds of enemy-applied slow remaining (Caltrops)
   rallyTimer: number; // seconds of ally-applied attack boost remaining (War Cry)
+  heroLevel: number; // hero units only: 0..5, raises stats
+  heroKills: number; // hero units only: kills credited toward the next level
 
   // Visual helpers (render only; safe to derive)
   animPhase: number;

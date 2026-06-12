@@ -565,6 +565,52 @@ function shotTeams() {
   save("13-teams.png", c);
 }
 
+function shotHero() {
+  const map = generateMap("open_plains", 909, 2);
+  const world = new World(909);
+  world.init(map, [{}, {}], [1, 1]);
+  const W = 1280;
+  const H = 760;
+  const { c, ctx } = makeCtx(W, H);
+  const renderer = new Renderer(c as any);
+  renderer.prepare(map);
+  const cam = new Camera();
+  cam.setViewport(W, H);
+  cam.setWorld(map.worldW, map.worldH);
+
+  const cx = map.worldW / 2;
+  const cy = map.worldH / 2;
+  // The Champion, mid-cleave, surrounded by foes, with allies at his back.
+  const hero = world.spawnUnit(Team.Player, "hero", cx, cy);
+  hero.heroLevel = 3; // show the level pips + golden aura
+  hero.facing = -0.3;
+  const foes = ["militia", "spearman", "archer", "knight", "skirmisher", "militia"];
+  foes.forEach((t, i) => {
+    const a = (i / foes.length) * Math.PI * 2;
+    world.spawnUnit(Team.Enemy, t, cx + Math.cos(a) * 70, cy + Math.sin(a) * 70);
+  });
+  world.spawnUnit(Team.Player, "militia", cx - 70, cy + 50);
+  world.spawnUnit(Team.Player, "archer", cx - 100, cy + 30);
+  world.useAbility([hero.id]); // Heroic Cleave aura + rally
+
+  world.fog[Team.Player].fill(FOG_VISIBLE);
+  cam.centerOn(cx, cy);
+  cam.zoom = 2.4;
+  renderer.render(
+    world, cam, new Particles(10), 0.016, 2.0, Team.Player,
+    [], null, { active: false, x0: 0, y0: 0, x1: 0, y1: 0 }, null,
+  );
+
+  ctx.textAlign = "center";
+  ctx.font = "bold 25px Georgia, serif";
+  ctx.fillStyle = "rgba(0,0,0,0.55)";
+  ctx.fillText("The Champion — a hero who levels up, cleaves, and rises again", W / 2 + 2, 46);
+  ctx.fillStyle = "#ffe9b0";
+  ctx.fillText("The Champion — a hero who levels up, cleaves, and rises again", W / 2, 44);
+  ctx.textAlign = "left";
+  save("16-hero.png", c);
+}
+
 function shotDiplomacy() {
   const map = generateMap("open_plains", 51, 4);
   const world = new World(51);
@@ -781,6 +827,7 @@ shotAbilities();
 shotWallPaint();
 shotFFA();
 shotTeams();
+shotHero();
 shotDiplomacy();
 shotPostmatch();
 shotFortress();

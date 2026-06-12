@@ -58,7 +58,7 @@ export const BUILDINGS: Record<string, BuildingDef> = {
     tiles: 3,
     sight: 260,
     popProvided: 10,
-    trains: ["villager"],
+    trains: ["villager", "hero"],
     isDropoff: true,
     dropoffKinds: ["food", "wood", "gold"],
     attack: 8,

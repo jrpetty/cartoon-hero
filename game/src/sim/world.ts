@@ -56,6 +56,10 @@ export interface PlayerState {
   /** Economy handicap/bonus (AI difficulty; player = 1). */
   econMult: number;
   defeated: boolean;
+  /** Hero (Champion) lifecycle: none = never trained, alive, or respawning. */
+  heroState: "none" | "alive" | "respawning";
+  heroRespawnTimer: number; // seconds until the Champion rises again
+  heroLevel: number; // saved level, carried across a respawn
   stats: {
     unitsKilled: number;
     unitsLost: number;
@@ -64,6 +68,10 @@ export interface PlayerState {
     gathered: number;
   };
 }
+
+/** Kills needed to reach hero levels 1..5. */
+export const HERO_THRESHOLDS = [3, 7, 12, 18, 26];
+const HERO_RESPAWN_SEC = 45;
 
 export interface WorldEvent {
   kind:
@@ -108,7 +116,7 @@ function makeEntity(): Entity {
     garrison: [], gateOpen: false, gateForce: 0,
     projTargetId: -1, projDamage: 0, projSpeed: 0, projSourceTeam: Team.Neutral,
     projArmorClassBonusFrom: "", projElapsed: 0, projDuration: 0, projFromX: 0, projFromY: 0,
-    abilityCooldown: 0, abilityActive: 0, slowTimer: 0, rallyTimer: 0,
+    abilityCooldown: 0, abilityActive: 0, slowTimer: 0, rallyTimer: 0, heroLevel: 0, heroKills: 0,
     animPhase: 0, hitFlash: 0, lastDamageTime: -999, selected: false,
     variantRarity: 0, tier: 0,
   };
@@ -175,6 +183,9 @@ export class World {
         loadout: loadouts[t] ?? {},
         econMult: econMults[t] ?? 1,
         defeated: false,
+        heroState: "none",
+        heroRespawnTimer: 0,
+        heroLevel: 0,
         stats: { unitsKilled: 0, unitsLost: 0, buildingsRazed: 0, buildingsLost: 0, gathered: 0 },
       });
       this.fog.push(new Uint8Array(this.fogCols * this.fogRows));
@@ -504,12 +515,60 @@ export class World {
           this.emit("ability", ix, iy, e.team, ab.id);
           break;
         }
+        case "cleave": {
+          // A heroic sweep: damage every foe around the hero, rally every ally.
+          const r = ab.radius ?? 115;
+          for (const n of this.spatial.query(e.x, e.y, r) as Entity[]) {
+            if (!n.alive || n.kind !== Kind.Unit || dist(e.x, e.y, n.x, n.y) > r) continue;
+            if (this.areHostile(e.team, n.team)) this.dealDamage(e.team, n, ab.amount ?? 24, e.type);
+            else if (this.areAllied(e.team, n.team)) {
+              n.rallyTimer = Math.max(n.rallyTimer, ab.statusDuration ?? 5);
+            }
+          }
+          break;
+        }
       }
 
       this.emit("ability", e.x, e.y - e.radius, e.team, ab.id);
       fired++;
     }
     return fired;
+  }
+
+  /** Apply a hero's level bonuses to a freshly-spawned Champion. */
+  private applyHeroLevel(e: Entity, level: number) {
+    e.heroLevel = level;
+    e.heroKills = level > 0 ? HERO_THRESHOLDS[level - 1] : 0;
+    e.maxHp += level * 55;
+    e.attack += level * 4;
+    e.armor += level;
+    e.hp = e.maxHp;
+  }
+
+  /** Credit the nearest friendly Champion for a kill near (x,y) and level it up. */
+  private creditHeroKill(byTeam: Team, x: number, y: number) {
+    let hero: Entity | null = null;
+    let best = 170 * 170;
+    for (const h of this.spatial.query(x, y, 180) as Entity[]) {
+      if (!h.alive || h.team !== byTeam || !UNITS[h.type]?.hero) continue;
+      const d = dist2(x, y, h.x, h.y);
+      if (d < best) {
+        best = d;
+        hero = h;
+      }
+    }
+    if (!hero) return;
+    hero.heroKills++;
+    const p = this.players[byTeam];
+    while (hero.heroLevel < HERO_THRESHOLDS.length && hero.heroKills >= HERO_THRESHOLDS[hero.heroLevel]) {
+      hero.heroLevel++;
+      hero.maxHp += 55;
+      hero.hp = Math.min(hero.maxHp, hero.hp + 55);
+      hero.attack += 4;
+      hero.armor += 1;
+      if (p) p.heroLevel = hero.heroLevel;
+      this.emit("ability", hero.x, hero.y - hero.radius, byTeam, "hero_levelup");
+    }
   }
 
   /** Validate placement + pay cost + spawn foundation. Returns entity or null. */
@@ -565,6 +624,8 @@ export class World {
     if (b.buildState !== BuildState.Done) return false;
     if (!BUILDINGS[b.type].trains.includes(unitType)) return false;
     if (p.age < def.age) return false;
+    // One Champion per realm: only trainable when none is fielded or pending.
+    if (def.hero && (p.heroState !== "none" || b.productionQueue.includes("u:hero"))) return false;
     if (b.productionQueue.length >= 8) return false;
     if (p.popUsed + def.pop > p.popCap) return false;
     if (!this.canAfford(p.resources, def.cost)) return false;
@@ -572,6 +633,16 @@ export class World {
     b.productionQueue.push(`u:${unitType}`);
     if (b.productionQueue.length === 1) b.productionTime = def.buildTime;
     return true;
+  }
+
+  /** Champion availability for the command card. */
+  heroStatus(team: Team): { trainable: boolean; label: string } {
+    const p = this.players[team];
+    if (!p || p.heroState === "none") return { trainable: true, label: "" };
+    if (p.heroState === "respawning") {
+      return { trainable: false, label: `Rises in ${Math.ceil(p.heroRespawnTimer)}s` };
+    }
+    return { trainable: false, label: "In the field" };
   }
 
   research(team: Team, buildingId: EntityId, techId: string): boolean {
@@ -721,6 +792,30 @@ export class World {
     if (this.tickCount % 5 === 0) this.recomputeVision();
     if (this.tickCount % 20 === 0) this.checkVictory();
     if (this.tickCount % 600 === 0) this.compact();
+    this.tickHeroRespawns();
+  }
+
+  /** Bring fallen Champions back at their Town Center once the timer elapses. */
+  private tickHeroRespawns() {
+    for (let t = 0; t < this.numTeams; t++) {
+      const p = this.players[t];
+      if (!p || p.heroState !== "respawning") continue;
+      p.heroRespawnTimer -= SIM_DT;
+      if (p.heroRespawnTimer > 0) continue;
+      const tc = this.entities.find(
+        (e) => e.alive && e.team === t && e.kind === Kind.Building &&
+          e.type === "town_center" && e.buildState === BuildState.Done,
+      );
+      if (!tc) {
+        p.heroRespawnTimer = 0; // wait for a Town Center to exist
+        continue;
+      }
+      const [sx, sy] = this.grid.nearestOpenWorld(tc.x, tc.y + tc.radius + 20);
+      const u = this.spawnUnit(t as Team, "hero", sx, sy);
+      this.applyHeroLevel(u, p.heroLevel);
+      p.heroState = "alive";
+      this.emit("spawn", sx, sy, t as Team, "hero");
+    }
   }
 
   // Units ------------------------------------------------------------------
@@ -1229,6 +1324,10 @@ export class World {
       }
       const [sx, sy] = this.grid.nearestOpenWorld(b.x, b.y + b.radius + 20);
       const u = this.spawnUnit(b.team, type, sx, sy);
+      if (def.hero) {
+        p.heroState = "alive";
+        this.applyHeroLevel(u, p.heroLevel);
+      }
       this.emit("spawn", sx, sy, b.team, type);
       if (b.rallyX >= 0) {
         const rallyTarget = this.entityAt(b.rallyX, b.rallyY);
@@ -1410,6 +1509,13 @@ export class World {
         owner.stats.unitsLost++;
       }
       if (killer) killer.stats.unitsKilled++;
+      this.creditHeroKill(byTeam, e.x, e.y);
+      // The Champion falls — but rises again at the Town Center after a while.
+      if (def?.hero && owner) {
+        owner.heroState = "respawning";
+        owner.heroRespawnTimer = HERO_RESPAWN_SEC;
+        owner.heroLevel = e.heroLevel;
+      }
       this.emit("death", e.x, e.y, e.team, e.type);
     } else if (e.kind === Kind.Building) {
       const def = BUILDINGS[e.type];

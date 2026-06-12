@@ -243,4 +243,64 @@ describe("Unit abilities", () => {
     expect(w.useAbility([knight.id])).toBe(0); // still cooling down
     expect(knight.abilityActive).toBeGreaterThan(0);
   });
+
+  it("Heroic Cleave hits all foes around the hero and rallies allies", () => {
+    const w = makeWorld();
+    const hero = w.spawnUnit(Team.Player, "hero", 1000, 1000);
+    const foeA = w.spawnUnit(Team.Enemy, "militia", 1040, 1000);
+    const foeB = w.spawnUnit(Team.Enemy, "militia", 1000, 1050);
+    const ally = w.spawnUnit(Team.Player, "spearman", 1050, 1010);
+    run(w, 0.2);
+    expect(w.useAbility([hero.id])).toBe(1);
+    expect(foeA.hp).toBeLessThan(foeA.maxHp);
+    expect(foeB.hp).toBeLessThan(foeB.maxHp);
+    expect(ally.rallyTimer).toBeGreaterThan(0);
+  });
+});
+
+describe("Hero units", () => {
+  it("trains one Champion per player and blocks a second", () => {
+    const w = makeWorld();
+    const tc = w.entitiesOf(Team.Player, Kind.Building).find((e) => e.type === "town_center")!;
+    w.player(Team.Player).resources.food = 999;
+    w.player(Team.Player).resources.gold = 999;
+    expect(w.trainUnit(Team.Player, tc.id, "hero")).toBe(true);
+    expect(w.trainUnit(Team.Player, tc.id, "hero")).toBe(false); // already pending
+    run(w, UNITS.hero.buildTime + 2);
+    expect(w.countOf(Team.Player, "hero")).toBe(1);
+    expect(w.player(Team.Player).heroState).toBe("alive");
+    expect(w.trainUnit(Team.Player, tc.id, "hero")).toBe(false); // already fielded
+  });
+
+  it("levels up from nearby kills, gaining HP and attack", () => {
+    const w = makeWorld();
+    const hero = w.spawnUnit(Team.Player, "hero", 1000, 1000);
+    const baseHp = hero.maxHp;
+    const baseAtk = hero.attack;
+    run(w, 0.2);
+    // Three enemies die next to the hero → level 1.
+    for (let i = 0; i < 3; i++) {
+      const foe = w.spawnUnit(Team.Enemy, "militia", 1000 + i * 8, 1010);
+      w.dealDamage(Team.Player, foe, 9999, "hero");
+    }
+    expect(hero.heroLevel).toBe(1);
+    expect(hero.maxHp).toBeGreaterThan(baseHp);
+    expect(hero.attack).toBeGreaterThan(baseAtk);
+  });
+
+  it("respawns at the Town Center after it falls", () => {
+    const w = makeWorld();
+    const tc = w.entitiesOf(Team.Player, Kind.Building).find((e) => e.type === "town_center")!;
+    w.player(Team.Player).resources.food = 999;
+    w.player(Team.Player).resources.gold = 999;
+    w.trainUnit(Team.Player, tc.id, "hero");
+    run(w, UNITS.hero.buildTime + 2);
+    const hero = w.entitiesOf(Team.Player, Kind.Unit).find((e) => e.type === "hero")!;
+    w.dealDamage(Team.Enemy, hero, 99999, "militia");
+    expect(w.player(Team.Player).heroState).toBe("respawning");
+    expect(w.countOf(Team.Player, "hero")).toBe(0);
+    run(w, 47); // respawn timer is 45s
+    expect(w.player(Team.Player).heroState).toBe("alive");
+    expect(w.countOf(Team.Player, "hero")).toBe(1);
+  });
 });

@@ -456,15 +456,19 @@ export class HUD {
       for (const unitId of def.trains) {
         const u = UNITS[unitId];
         const lockedAge = p.age < u.age;
+        const heroState = u.hero ? world.heroStatus(team) : null;
+        const heroLocked = !!heroState && !heroState.trainable;
         place(
           u.name.split(" ")[0].slice(0, 7),
           () => ctrl.trainUnit(building, unitId),
           {
-            disabled: lockedAge || !world.canAfford(p.resources, u.cost) || p.popUsed + u.pop > p.popCap,
+            accent: !!u.hero && !heroLocked,
+            disabled: lockedAge || heroLocked || !world.canAfford(p.resources, u.cost) || p.popUsed + u.pop > p.popCap,
             tooltip: [
-              u.name,
+              u.name + (u.hero ? " ★" : ""),
               this.cost(u.cost) + `  (${u.pop} pop)`,
               ...(lockedAge ? [`Requires ${AGES[u.age].name}`] : []),
+              ...(heroState && heroState.label ? [heroState.label] : []),
               u.desc,
             ],
             badge: String(building.productionQueue.filter((q) => q === `u:${unitId}`).length || ""),
