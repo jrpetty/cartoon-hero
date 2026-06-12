@@ -20,6 +20,7 @@ import { Renderer, CommandMarker, GhostPlacement } from "./render/renderer";
 import { PAL, withAlpha } from "./render/palette";
 import { HUD, MatchController, MINIMAP_SIZE } from "./ui/hud";
 import { ui } from "./ui/ui";
+import { CodexScreen } from "./ui/codex";
 import {
   ArmoryScreen,
   MenuScreen,
@@ -31,7 +32,7 @@ import {
 import { Profile } from "./meta/profile";
 import { computeRewards, MatchRewards } from "./meta/progression";
 
-type AppState = "menu" | "setup" | "armory" | "match" | "postmatch";
+type AppState = "menu" | "setup" | "armory" | "match" | "postmatch" | "codex";
 
 const PLAYER = Team.Player;
 // Buildings you can drag-paint into a continuous run.
@@ -51,6 +52,7 @@ class App {
   setup = new SetupScreen();
   armory = new ArmoryScreen();
   postmatch = new PostMatchScreen();
+  codexScreen = new CodexScreen();
 
   // Match state
   world: World | null = null;
@@ -776,6 +778,14 @@ class App {
           audio.play("ui");
         } else if (action === "armory") {
           this.state = "armory";
+          audio.play("ui");
+        } else if (action === "codex") {
+          this.state = "codex";
+          audio.play("ui");
+        }
+      } else if (this.state === "codex") {
+        if (this.codexScreen.draw(W, H, this.time) === "back") {
+          this.state = "menu";
           audio.play("ui");
         }
       } else if (this.state === "setup") {

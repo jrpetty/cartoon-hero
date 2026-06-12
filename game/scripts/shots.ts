@@ -27,6 +27,7 @@ import { RARITIES } from "../src/meta/rarity";
 import { HUD } from "../src/ui/hud";
 import { ui } from "../src/ui/ui";
 import { MenuScreen, SetupScreen, ArmoryScreen, PostMatchScreen } from "../src/ui/screens";
+import { CodexScreen } from "../src/ui/codex";
 import { computeRewards } from "../src/meta/progression";
 import { Profile } from "../src/meta/profile";
 
@@ -665,6 +666,30 @@ function shotDiplomacy() {
   save("15-diplomacy.png", c);
 }
 
+function shotCodex() {
+  const W = 1280;
+  const H = 760;
+  const screen = new CodexScreen();
+  // Units tab, Knight selected — shows the counter web + ability block.
+  (screen as any).selUnit = "knight";
+  {
+    const { c, ctx } = makeCtx(W, H);
+    ui.begin(ctx, { mx: -50, my: -50, clicked: false, rightClicked: false });
+    screen.draw(W, H, 2.0);
+    ui.flushTooltip(W, H);
+    save("17-codex.png", c);
+  }
+  // Ages & Tech tab.
+  (screen as any).tab = "tech";
+  {
+    const { c, ctx } = makeCtx(W, H);
+    ui.begin(ctx, { mx: -50, my: -50, clicked: false, rightClicked: false });
+    screen.draw(W, H, 2.0);
+    ui.flushTooltip(W, H);
+    save("17b-codex-tech.png", c);
+  }
+}
+
 function shotPostmatch() {
   const W = 1280;
   const H = 760;
@@ -830,6 +855,7 @@ shotTeams();
 shotHero();
 shotDiplomacy();
 shotPostmatch();
+shotCodex();
 shotFortress();
 shotMenus();
 console.log("Done.");

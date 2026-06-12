@@ -96,7 +96,7 @@ const RES_TYPE_KIND: Record<string, ResourceKind> = {
 
 let nextId = 1;
 
-function makeEntity(): Entity {
+export function makeEntity(): Entity {
   return {
     id: nextId++,
     kind: Kind.Unit,
