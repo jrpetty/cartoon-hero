@@ -232,14 +232,23 @@ export class Renderer {
     const vx1 = cam.x + W / 2 / cam.zoom + pad;
     const vy1 = cam.y + H / 2 / cam.zoom + pad;
 
-    // Terrain.
+    // Terrain — blit only the slice under the camera, not the whole map. (The
+    // cache spans the world at TERRAIN_SCALE; drawing all of it every frame was
+    // a heavy per-frame native allocation that leaked memory over a match.)
     if (this.terrainCache) {
       ctx.imageSmoothingEnabled = true;
-      ctx.drawImage(
-        this.terrainCache,
-        0, 0, this.terrainCache.width, this.terrainCache.height,
-        0, 0, this.terrainCache.width / TERRAIN_SCALE, this.terrainCache.height / TERRAIN_SCALE,
-      );
+      const cx0 = Math.max(0, vx0);
+      const cy0 = Math.max(0, vy0);
+      const cx1 = Math.min(world.worldW, vx1);
+      const cy1 = Math.min(world.worldH, vy1);
+      if (cx1 > cx0 && cy1 > cy0) {
+        ctx.drawImage(
+          this.terrainCache,
+          cx0 * TERRAIN_SCALE, cy0 * TERRAIN_SCALE,
+          (cx1 - cx0) * TERRAIN_SCALE, (cy1 - cy0) * TERRAIN_SCALE,
+          cx0, cy0, cx1 - cx0, cy1 - cy0,
+        );
+      }
     }
 
     // Ground decals (corpses, arrows, scorch) sit on the terrain, under units.
@@ -374,7 +383,20 @@ export class Renderer {
     }
     if (this.fogCanvas) {
       ctx.imageSmoothingEnabled = true;
-      ctx.drawImage(this.fogCanvas, 0, 0, world.fogCols, world.fogRows, 0, 0, world.worldW, world.worldH);
+      // Same viewport culling as terrain — only upscale the visible fog slice.
+      const fox = world.fogCols / world.worldW;
+      const foy = world.fogRows / world.worldH;
+      const cx0 = Math.max(0, vx0);
+      const cy0 = Math.max(0, vy0);
+      const cx1 = Math.min(world.worldW, vx1);
+      const cy1 = Math.min(world.worldH, vy1);
+      if (cx1 > cx0 && cy1 > cy0) {
+        ctx.drawImage(
+          this.fogCanvas,
+          cx0 * fox, cy0 * foy, (cx1 - cx0) * fox, (cy1 - cy0) * foy,
+          cx0, cy0, cx1 - cx0, cy1 - cy0,
+        );
+      }
     }
 
     ctx.restore();

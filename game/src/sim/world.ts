@@ -1029,7 +1029,10 @@ export class World {
       return;
     }
     const d = dist(e.x, e.y, node.x, node.y);
-    const reach = e.radius + node.radius + 8;
+    // Reach a full tile out so a villager standing on any adjacent open cell can
+    // work the node — even one wedged between a drop-off building and its
+    // neighbours (resources block the grid, so close cells are often impassable).
+    const reach = e.radius + node.radius + TILE * 0.7;
     if (d > reach) {
       e.order.tx = node.x;
       e.order.ty = node.y;
@@ -1628,6 +1631,34 @@ export class World {
   }
 
   // Queries for UI/AI -------------------------------------------------------------
+
+  /**
+   * Nearest gatherable node at a point — a resource, or one of `team`'s farms.
+   * Uses a slightly generous pick radius so a berry/tree tucked against a
+   * drop-off building is still selectable for gathering instead of the building.
+   */
+  resourceAt(wx: number, wy: number, team?: Team): Entity | null {
+    const near = this.spatial.query(wx, wy, 44) as Entity[];
+    let best: Entity | null = null;
+    let bestD = Infinity;
+    for (const e of near) {
+      if (!e.alive) continue;
+      const isFarm = e.kind === Kind.Building && e.type === "farm" &&
+        e.buildState === BuildState.Done && (team === undefined || e.team === team);
+      if (e.kind === Kind.Resource) {
+        if (e.amount <= 0) continue;
+      } else if (!isFarm) {
+        continue;
+      }
+      const r = Math.max(e.radius + 10, 16);
+      const d = dist2(wx, wy, e.x, e.y);
+      if (d < r * r && d < bestD) {
+        bestD = d;
+        best = e;
+      }
+    }
+    return best;
+  }
 
   entityAt(wx: number, wy: number, team?: Team): Entity | null {
     const near = this.spatial.query(wx, wy, 48) as Entity[];

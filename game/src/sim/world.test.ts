@@ -104,6 +104,26 @@ describe("Construction & placement", () => {
     const blocked = w.placeBuilding(Team.Player, "house", tc.x, tc.y);
     expect(blocked).toBeNull();
   });
+
+  it("villagers gather a berry that sits next to a mill", () => {
+    const w = makeWorld();
+    const p = w.player(Team.Player);
+    const TILE = 32;
+    const berry = w.spawnResource("berries", 1600, 1600, 150);
+    // A mill a few tiles away (a valid, non-overlapping drop-off).
+    const mill = w.placeBuilding(Team.Player, "mill", berry.x + TILE * 3, berry.y);
+    expect(mill).not.toBeNull();
+    mill!.buildState = 0;
+    run(w, 0.1); // settle so the spatial index sees the new nodes
+    // Right-clicking on the berry resolves to the berry (not some other thing).
+    expect(w.resourceAt(berry.x + 2, berry.y + 2, Team.Player)?.id).toBe(berry.id);
+    // A villager beside the berry can work it and bank food.
+    const vill = w.spawnUnit(Team.Player, "villager", berry.x, berry.y + TILE * 2);
+    const food0 = p.resources.food;
+    w.issueGather([vill.id], berry.id);
+    run(w, 30);
+    expect(p.resources.food).toBeGreaterThan(food0);
+  });
 });
 
 describe("Combat", () => {

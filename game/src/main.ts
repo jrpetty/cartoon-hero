@@ -493,6 +493,22 @@ class App {
     if (units.length === 0) return;
 
     const ids = units.map((e) => e.id);
+
+    // Gatherers prefer a nearby resource even if a building (e.g. a mill built
+    // right next to berries) sits closer to the click point.
+    const gatherers0 = units.filter((e) => UNITS[e.type]?.canGather);
+    if (gatherers0.length > 0) {
+      const node = this.world.resourceAt(wx, wy, PLAYER);
+      if (node && this.world.visibleTo(PLAYER, node) && !(target && target.team !== PLAYER && target.kind !== Kind.Resource)) {
+        this.world.issueGather(gatherers0.map((e) => e.id), node.id, shift);
+        const rest = units.filter((e) => !UNITS[e.type]?.canGather);
+        if (rest.length) this.world.issueMove(rest.map((e) => e.id), wx, wy, shift);
+        this.markers.push({ x: wx, y: wy, age: 0, kind: "move" });
+        audio.play("command");
+        return;
+      }
+    }
+
     if (target && target.alive && this.world.visibleTo(PLAYER, target)) {
       if (target.team !== PLAYER && target.kind !== Kind.Resource) {
         this.world.issueAttack(ids, target.id, shift);
@@ -629,6 +645,16 @@ class App {
   // -------------------------------------------------------------------- frame --
 
   frame() {
+    // A throw anywhere in a frame must never kill the loop — always reschedule.
+    try {
+      this.frameBody();
+    } catch (err) {
+      console.error("frame error (recovered):", err);
+    }
+    requestAnimationFrame(() => this.frame());
+  }
+
+  frameBody() {
     const now = performance.now();
     let dt = (now - this.lastFrame) / 1000;
     this.lastFrame = now;
@@ -691,8 +717,6 @@ class App {
     this.frameDouble = null;
     this.frameRight = null;
     this.frameDragEnd = null;
-
-    requestAnimationFrame(() => this.frame());
   }
 
   matchFrame(dt: number, W: number, H: number) {
