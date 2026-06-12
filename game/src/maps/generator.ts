@@ -98,7 +98,7 @@ export const PRESETS: MapPreset[] = [
 
 const AMOUNT = { tree: 125, gold_mine: 800, berries: 150 };
 
-export function generateMap(presetId: string, seed: number): MapData {
+export function generateMap(presetId: string, seed: number, players = 2): MapData {
   const preset = PRESETS.find((p) => p.id === presetId) ?? PRESETS[0];
   const rng = new RNG(seed);
   const W = preset.size;
@@ -138,20 +138,29 @@ export function generateMap(presetId: string, seed: number): MapData {
     }
   }
 
-  // --- Start positions: opposite corners with margin -----------------------
+  // --- Start positions ------------------------------------------------------
+  // 1v1: opposite corners (180° pair). FFA: all four corners, kept as two
+  // mirror pairs so the map stays rotationally symmetric and fair.
   const margin = Math.floor(cols * 0.18);
   const sx = margin + rng.int(0, 4);
   const sy = margin + rng.int(0, 4);
   const startCellA: [number, number] = [sx, sy];
   const startCellB = mirror(sx, sy);
-  const starts = [
-    { x: startCellA[0] * TILE + TILE / 2, y: startCellA[1] * TILE + TILE / 2 },
-    { x: startCellB[0] * TILE + TILE / 2, y: startCellB[1] * TILE + TILE / 2 },
-  ];
+  const startCellC: [number, number] = [cols - 1 - sx, sy];
+  const startCellD = mirror(startCellC[0], startCellC[1]);
+  // Index order: 0=A 1=B (then) 2=C 3=D. A↔B and C↔D are mirror pairs.
+  const startCells: [number, number][] = players >= 4
+    ? [startCellA, startCellB, startCellC, startCellD]
+    : [startCellA, startCellB];
+  // Bases we place resources around; the mirror handles each one's partner.
+  const primaries: [number, number][] = players >= 4
+    ? [startCellA, startCellC]
+    : [startCellA];
+  const starts = startCells.map(([cx, cy]) => ({ x: cx * TILE + TILE / 2, y: cy * TILE + TILE / 2 }));
   const startSafeR = 11; // cells kept clear of water/forest around each start
 
   const nearStart = (cx: number, cy: number, r = startSafeR) => {
-    for (const [scx, scy] of [startCellA, startCellB]) {
+    for (const [scx, scy] of startCells) {
       const dx = cx - scx;
       const dy = cy - scy;
       if (dx * dx + dy * dy < r * r) return true;
@@ -247,24 +256,25 @@ export function generateMap(presetId: string, seed: number): MapData {
   };
 
   // --- Per-start resources (mirrored automatically) -------------------------
-  const [acx, acy] = startCellA;
-  // Main woodline: a fat arc of trees just outside the base.
-  const woodAngle = rng.range(0, Math.PI * 2);
-  const wx = acx + Math.round(Math.cos(woodAngle) * 9);
-  const wy = acy + Math.round(Math.sin(woodAngle) * 9);
-  cluster("tree", wx, wy, 14, 3);
-  // Berries close to the TC.
-  const berryAngle = woodAngle + rng.range(1.5, 2.5);
-  cluster("berries", acx + Math.round(Math.cos(berryAngle) * 6), acy + Math.round(Math.sin(berryAngle) * 6), 6, 1);
-  // Gold a bit farther out.
-  const goldAngle = woodAngle - rng.range(1.5, 2.5);
-  cluster("gold_mine", acx + Math.round(Math.cos(goldAngle) * 8), acy + Math.round(Math.sin(goldAngle) * 8), 4, 1);
-  // Natural expansion: berries + gold toward the middle.
-  const ecx = Math.round(acx + (cols / 2 - acx) * 0.45);
-  const ecy = Math.round(acy + (rows / 2 - acy) * 0.45);
-  cluster("gold_mine", ecx, ecy, 3, 2);
-  cluster("berries", ecx + rng.int(-4, 4), ecy + rng.int(-4, 4), 4, 1);
-  cluster("tree", ecx + rng.int(-6, 6), ecy + rng.int(-6, 6), 8, 3);
+  for (const [acx, acy] of primaries) {
+    // Main woodline: a fat arc of trees just outside the base.
+    const woodAngle = rng.range(0, Math.PI * 2);
+    const wx = acx + Math.round(Math.cos(woodAngle) * 9);
+    const wy = acy + Math.round(Math.sin(woodAngle) * 9);
+    cluster("tree", wx, wy, 14, 3);
+    // Berries close to the TC.
+    const berryAngle = woodAngle + rng.range(1.5, 2.5);
+    cluster("berries", acx + Math.round(Math.cos(berryAngle) * 6), acy + Math.round(Math.sin(berryAngle) * 6), 6, 1);
+    // Gold a bit farther out.
+    const goldAngle = woodAngle - rng.range(1.5, 2.5);
+    cluster("gold_mine", acx + Math.round(Math.cos(goldAngle) * 8), acy + Math.round(Math.sin(goldAngle) * 8), 4, 1);
+    // Natural expansion: berries + gold toward the middle.
+    const ecx = Math.round(acx + (cols / 2 - acx) * 0.45);
+    const ecy = Math.round(acy + (rows / 2 - acy) * 0.45);
+    cluster("gold_mine", ecx, ecy, 3, 2);
+    cluster("berries", ecx + rng.int(-4, 4), ecy + rng.int(-4, 4), 4, 1);
+    cluster("tree", ecx + rng.int(-6, 6), ecy + rng.int(-6, 6), 8, 3);
+  }
 
   // --- Contested center gold -------------------------------------------------
   cluster("gold_mine", Math.floor(cols / 2), Math.floor(rows / 2), 3, 3);
@@ -280,6 +290,7 @@ export function generateMap(presetId: string, seed: number): MapData {
 
   // --- Chokepoints: forest barriers with a central lane ---------------------
   if (preset.chokes && preset.chokes > 0) {
+    const [acx, acy] = startCellA;
     const midC = cols / 2;
     const midR = rows / 2;
     const dx = midC - acx;

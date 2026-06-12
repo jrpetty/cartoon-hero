@@ -3,7 +3,7 @@
 // sim loop, input routing and the meta-progression loop around each match.
 
 import { World, WorldEvent } from "./sim/world";
-import { BuildState, Entity, EntityId, Kind, OrderKind, Team } from "./sim/types";
+import { BuildState, Entity, EntityId, Kind, MAX_TEAMS, OrderKind, Team } from "./sim/types";
 import { UNITS } from "./content/units";
 import { ABILITIES } from "./content/abilities";
 import { BUILDINGS } from "./content/buildings";
@@ -54,7 +54,7 @@ class App {
 
   // Match state
   world: World | null = null;
-  ai: SkirmishAI | null = null;
+  ais: SkirmishAI[] = [];
   config: SkirmishConfig | null = null;
   selection: EntityId[] = [];
   controlGroups: EntityId[][] = Array.from({ length: 10 }, () => []);
@@ -64,6 +64,7 @@ class App {
   attackMoveArmed = false;
   ingameMenu = false;
   matchOverTimer = -1;
+  playerWon = false;
   matchRewards: MatchRewards | null = null;
   matchWon = false;
   xpBefore = 0;
@@ -204,15 +205,22 @@ class App {
   startMatch(config: SkirmishConfig) {
     this.config = config;
     const diff = DIFFICULTIES[config.difficulty];
-    const map = generateMap(config.presetId, config.seed);
+    const numPlayers = Math.max(2, Math.min(MAX_TEAMS, config.players ?? 2));
+    const map = generateMap(config.presetId, config.seed, numPlayers);
     const world = new World(config.seed);
-    world.init(
-      map,
-      [this.profile.matchLoadout(config.fairMode), this.profile.matchLoadout(true)],
-      [1, diff.econMult],
-    );
+    // Team 0 is the human; teams 1..n-1 are AI opponents (free-for-all).
+    const loadouts = [this.profile.matchLoadout(config.fairMode)];
+    const econMults = [1];
+    for (let t = 1; t < numPlayers; t++) {
+      loadouts.push(this.profile.matchLoadout(true));
+      econMults.push(diff.econMult);
+    }
+    world.init(map, loadouts, econMults);
     this.world = world;
-    this.ai = new SkirmishAI(world, Team.Enemy, diff);
+    this.ais = [];
+    for (let t = 1; t < numPlayers; t++) {
+      this.ais.push(new SkirmishAI(world, t as Team, diff));
+    }
     this.renderer.prepare(map);
     this.renderer.clearFx();
     this.hud.prepare(map);
@@ -636,7 +644,7 @@ class App {
       let steps = 0;
       while (this.accumulator >= SIM_DT && steps < 5) {
         world.tick();
-        this.ai?.update(SIM_DT);
+        for (const ai of this.ais) ai.update(SIM_DT);
         this.accumulator -= SIM_DT;
         steps++;
       }
@@ -771,16 +779,19 @@ class App {
     }
 
     // ---- victory / defeat ----
-    if (world.winner !== null && this.matchOverTimer < 0) {
+    // The match ends for the human when a winner is decided, or the moment
+    // their own realm is wiped out (the AIs may fight on, but the human is out).
+    const playerOut = world.player(PLAYER).defeated;
+    if ((world.winner !== null || playerOut) && this.matchOverTimer < 0) {
       this.matchOverTimer = 1.8;
-      const won = world.winner === PLAYER;
-      this.hud.addAlert(won ? "🏆 The enemy is broken!" : "💀 Your last building has fallen…");
-      if (won) audio.play("levelup");
+      this.playerWon = world.winner === PLAYER && !playerOut;
+      this.hud.addAlert(this.playerWon ? "🏆 The last enemy is broken!" : "💀 Your last building has fallen…");
+      if (this.playerWon) audio.play("levelup");
       else audio.play("collapse");
     }
     if (this.matchOverTimer > 0) {
       this.matchOverTimer -= dt;
-      if (this.matchOverTimer <= 0) this.finishMatch(world.winner === PLAYER);
+      if (this.matchOverTimer <= 0) this.finishMatch(this.playerWon);
     }
   }
 
@@ -812,7 +823,7 @@ class App {
     this.profile.save();
     this.postmatch.reset();
     this.world = null;
-    this.ai = null;
+    this.ais = [];
     this.ingameMenu = false;
     this.state = "postmatch";
   }

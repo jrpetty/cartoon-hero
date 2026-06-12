@@ -76,8 +76,28 @@ export class SkirmishAI {
     );
   }
 
+  /** Any non-self player team is a foe (no alliances in a free-for-all). */
+  private isHostile(t: Team): boolean {
+    return t !== this.team && t < this.world.numTeams;
+  }
+
+  /** The rival we're focusing: the nearest non-defeated enemy by base distance. */
   private get enemyTeam(): Team {
-    return (1 - this.team) as Team;
+    const myBase = this.base();
+    let best: Team = ((this.team + 1) % this.world.numTeams) as Team;
+    let bestD = Infinity;
+    for (let t = 0; t < this.world.numTeams; t++) {
+      if (t === this.team) continue;
+      const p = this.world.player(t as Team);
+      if (!p || p.defeated) continue;
+      const s = this.world.map.starts[t];
+      const d = myBase && s ? dist(myBase.x, myBase.y, s.x, s.y) : 0;
+      if (d < bestD) {
+        bestD = d;
+        best = t as Team;
+      }
+    }
+    return best;
   }
 
   private base(): Entity | null {
@@ -135,7 +155,7 @@ export class SkirmishAI {
     this.seen.siege *= decay;
     const now: SeenComposition = { infantry: 0, archer: 0, cavalry: 0, siege: 0 };
     for (const e of this.world.entities) {
-      if (!e.alive || e.team !== this.enemyTeam || e.kind !== Kind.Unit) continue;
+      if (!e.alive || !this.isHostile(e.team) || e.kind !== Kind.Unit) continue;
       if (this.world.fogAt(this.team, e.x, e.y) !== FOG_VISIBLE) continue;
       const def = UNITS[e.type];
       if (!def) continue;
@@ -580,7 +600,7 @@ export class SkirmishAI {
     let threatY = 0;
     let threats = 0;
     for (const e of this.world.entities) {
-      if (!e.alive || e.team !== this.enemyTeam || e.kind !== Kind.Unit) continue;
+      if (!e.alive || !this.isHostile(e.team) || e.kind !== Kind.Unit) continue;
       if (e.type === "villager") continue;
       for (const b of buildings) {
         if (dist(e.x, e.y, b.x, b.y) < 320) {

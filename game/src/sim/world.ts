@@ -130,9 +130,10 @@ export class World {
   fog: Uint8Array[] = [];
   fogCols = 0;
   fogRows = 0;
+  numTeams = 2; // number of player teams in this match (2..MAX_TEAMS)
   winner: Team | null = null;
   map!: MapData;
-  private lastAlertTime: number[] = [-99, -99, -99];
+  private lastAlertTime: number[] = [];
 
   constructor(seed: number) {
     this.rng = new RNG(seed);
@@ -152,7 +153,11 @@ export class World {
     // Terrain blocking (water / cliffs) from map data.
     for (const [cx, cy] of map.blockedCells) this.grid.setBlocked(cx, cy, true);
 
-    for (let t = 0; t < 2; t++) {
+    // A match has as many player teams as it has loadouts (2 for 1v1, up to 4
+    // for a free-for-all). Everything below is sized off numTeams.
+    this.numTeams = Math.min(loadouts.length, map.starts.length);
+    this.lastAlertTime = new Array(this.numTeams).fill(-99);
+    for (let t = 0; t < this.numTeams; t++) {
       this.players.push({
         team: t as Team,
         resources: { ...map.startResources },
@@ -167,8 +172,6 @@ export class World {
       });
       this.fog.push(new Uint8Array(this.fogCols * this.fogRows));
     }
-    // Neutral fog (unused but keeps indexing safe).
-    this.fog.push(new Uint8Array(this.fogCols * this.fogRows));
 
     // Resources.
     for (const r of map.resources) {
@@ -176,7 +179,7 @@ export class World {
     }
 
     // Starting bases.
-    for (let t = 0; t < 2; t++) {
+    for (let t = 0; t < this.numTeams; t++) {
       const start = map.starts[t];
       this.spawnBuilding(t as Team, "town_center", start.x, start.y, true);
       const offsets = [
@@ -1315,7 +1318,7 @@ export class World {
   // Vision / fog ---------------------------------------------------------------
 
   private recomputeVision() {
-    for (let t = 0; t < 2; t++) {
+    for (let t = 0; t < this.numTeams; t++) {
       const f = this.fog[t];
       // visible -> explored
       for (let i = 0; i < f.length; i++) {
@@ -1370,16 +1373,18 @@ export class World {
 
   private checkVictory() {
     if (this.winner !== null) return;
-    for (let t = 0; t < 2; t++) {
-      let buildings = 0;
-      for (const e of this.entities) {
-        if (e.alive && e.team === t && e.kind === Kind.Building) buildings++;
-      }
-      if (buildings === 0) {
-        this.players[t].defeated = true;
-        this.winner = (1 - t) as Team;
-      }
+    // Count standing buildings per team in one sweep.
+    const buildings = new Array(this.numTeams).fill(0);
+    for (const e of this.entities) {
+      if (e.alive && e.kind === Kind.Building && e.team < this.numTeams) buildings[e.team]++;
     }
+    const alive: Team[] = [];
+    for (let t = 0; t < this.numTeams; t++) {
+      if (buildings[t] === 0) this.players[t].defeated = true;
+      else if (!this.players[t].defeated) alive.push(t as Team);
+    }
+    // Last realm standing wins. (In 1v1 this is just the surviving team.)
+    if (alive.length <= 1) this.winner = alive[0] ?? Team.Neutral;
   }
 
   // Queries for UI/AI -------------------------------------------------------------

@@ -433,6 +433,65 @@ function shotWallPaint() {
   save("11b-wallpaint.png", c);
 }
 
+// ------------------------------------------------------- 4-player free-for-all --
+function shotFFA() {
+  const map = generateMap("open_plains", 31337, 4);
+  const world = new World(31337);
+  world.init(map, [{}, {}, {}, {}], [1, 1, 1, 1]);
+  const W = 820;
+  const H = 820;
+  const { c, ctx } = makeCtx(W, H);
+  const renderer = new Renderer(c as any);
+  renderer.prepare(map);
+  const cam = new Camera();
+  cam.setViewport(W, H);
+  cam.setWorld(map.worldW, map.worldH);
+
+  // Drop a little starter army by each base so the four colours read clearly.
+  const comps = ["militia", "spearman", "archer", "knight"];
+  map.starts.forEach((s, t) => {
+    const cxw = map.worldW / 2;
+    const cyw = map.worldH / 2;
+    const ux = (cxw - s.x) / Math.hypot(cxw - s.x, cyw - s.y);
+    const uy = (cyw - s.y) / Math.hypot(cxw - s.x, cyw - s.y);
+    comps.forEach((u, i) => {
+      world.spawnUnit(t as any, u, s.x + ux * 90 + (i - 1.5) * 26, s.y + uy * 90);
+    });
+  });
+
+  for (let t = 0; t < 4; t++) world.fog[t].fill(FOG_VISIBLE);
+  cam.centerOn(map.worldW / 2, map.worldH / 2);
+  cam.zoom = Math.min(W / map.worldW, H / map.worldH) * 0.99;
+
+  renderer.render(
+    world, cam, new Particles(10), 0.016, 2.0, Team.Player,
+    [], null, { active: false, x0: 0, y0: 0, x1: 0, y1: 0 }, null,
+  );
+
+  // Corner labels in each team's colour.
+  const names = ["You (Azure)", "Crimson", "Verdant", "Amber"];
+  map.starts.forEach((s, t) => {
+    const sx = cam.worldToScreenX(s.x);
+    const sy = cam.worldToScreenY(s.y) - 36;
+    const col = PAL.teams[t].light;
+    ctx.textAlign = "center";
+    ctx.font = "bold 15px sans-serif";
+    ctx.fillStyle = "rgba(0,0,0,0.6)";
+    ctx.fillText(names[t], sx + 1, sy + 1);
+    ctx.fillStyle = col;
+    ctx.fillText(names[t], sx, sy);
+  });
+
+  ctx.textAlign = "center";
+  ctx.font = "bold 26px Georgia, serif";
+  ctx.fillStyle = "rgba(0,0,0,0.55)";
+  ctx.fillText("Free-for-All — four realms, last one standing", W / 2 + 2, 42);
+  ctx.fillStyle = "#ffe9b0";
+  ctx.fillText("Free-for-All — four realms, last one standing", W / 2, 40);
+  ctx.textAlign = "left";
+  save("12-ffa.png", c);
+}
+
 function shotHUD(scene: ReturnType<typeof shotBattle>) {
   const { world, map, cam, pUnits } = scene;
   const W = 1280;
@@ -571,6 +630,7 @@ shotBattle(0.74, "09-night-battle.png", "Night raid — battle under the dark");
 shotHUD(scene);
 shotAbilities();
 shotWallPaint();
+shotFFA();
 shotFortress();
 shotMenus();
 console.log("Done.");

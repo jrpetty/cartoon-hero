@@ -44,6 +44,8 @@ export const PAL = {
   teams: [
     { main: "#3a6fd8", light: "#7da3ec", dark: "#274a90", name: "Azure" },
     { main: "#d8403a", light: "#ec837d", dark: "#902a27", name: "Crimson" },
+    { main: "#3aa84e", light: "#79d08a", dark: "#246e34", name: "Verdant" },
+    { main: "#d8a83a", light: "#eccd7d", dark: "#90702a", name: "Amber" },
   ],
 
   // UI

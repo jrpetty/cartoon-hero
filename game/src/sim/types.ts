@@ -7,9 +7,15 @@ export type EntityId = number;
 
 export const enum Team {
   Player = 0,
-  Enemy = 1,
-  Neutral = 2,
+  Enemy = 1, // also the primary rival in 1v1
+  Team3 = 2,
+  Team4 = 3,
+  // Neutral sits above any player slot so player teams can occupy 0..N-1.
+  Neutral = 9,
 }
+
+/** Highest number of player teams supported in one match. */
+export const MAX_TEAMS = 4;
 
 export const enum Kind {
   Unit = 0,

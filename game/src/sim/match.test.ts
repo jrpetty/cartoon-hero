@@ -56,6 +56,37 @@ describe("AI vs AI smoke match", () => {
     expect(maxAge).toBeGreaterThanOrEqual(1);
   }, 120000);
 
+  it("a four-way free-for-all runs to a clean finish", () => {
+    const seed = 4444;
+    const map = generateMap("open_plains", seed, 4);
+    expect(map.starts.length).toBe(4);
+    const world = new World(seed);
+    world.init(map, [{}, {}, {}, {}], [1, 1, 1, 1]);
+    expect(world.numTeams).toBe(4);
+    expect(world.fog.length).toBe(4);
+    const teams = [Team.Player, Team.Enemy, Team.Team3, Team.Team4];
+    const ais = teams.map((t) => new SkirmishAI(world, t, DIFFICULTIES.knight));
+
+    const ticks = SIM_HZ * 60 * 22;
+    for (let i = 0; i < ticks; i++) {
+      world.tick();
+      for (const ai of ais) ai.update(SIM_DT);
+      world.drainEvents();
+      if (world.winner !== null) break;
+    }
+
+    // Every realm got an economy going from its own corner.
+    for (const t of teams) {
+      expect(world.player(t).stats.gathered).toBeGreaterThan(500);
+    }
+    // The free-for-all actually fought: plenty of cross-team kills, and at
+    // least one realm advanced an age — i.e. the four corners are live and
+    // hostile, not deadlocked.
+    const kills = teams.reduce((s, t) => s + world.player(t).stats.unitsKilled, 0);
+    expect(kills).toBeGreaterThan(5);
+    expect(Math.max(...teams.map((t) => world.player(t).age))).toBeGreaterThanOrEqual(1);
+  }, 180000);
+
   it("a Warlord AI crushes a Squire AI", () => {
     const seed = 5150;
     const map = generateMap("open_plains", seed);
