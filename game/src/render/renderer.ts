@@ -106,6 +106,23 @@ export class Renderer {
     this.floaters.length = 0;
   }
 
+  // Render resilience: a single bad draw must never blank the whole frame.
+  // Run `fn`; on throw, restore the transform/state and log the cause once.
+  private warned = new Set<string>();
+  private guard(ctx: CanvasRenderingContext2D, key: string, tf: DOMMatrix | null, fn: () => void) {
+    try {
+      fn();
+    } catch (err) {
+      if (tf) ctx.setTransform(tf);
+      ctx.globalAlpha = 1;
+      ctx.shadowBlur = 0;
+      if (!this.warned.has(key)) {
+        this.warned.add(key);
+        console.error(`render guard [${key}]:`, err);
+      }
+    }
+  }
+
   private drawDecals(ctx: CanvasRenderingContext2D, dt: number, vx0: number, vy0: number, vx1: number, vy1: number) {
     for (let i = this.decals.length - 1; i >= 0; i--) {
       const d = this.decals[i];
@@ -232,6 +249,10 @@ export class Renderer {
     const vx1 = cam.x + W / 2 / cam.zoom + pad;
     const vy1 = cam.y + H / 2 / cam.zoom + pad;
 
+    // Snapshot of the world-space transform — used to recover from any draw
+    // that throws so it can't corrupt the rest of the frame.
+    const worldTf = ctx.getTransform();
+
     // Terrain — blit only the slice under the camera, not the whole map. (The
     // cache spans the world at TERRAIN_SCALE; drawing all of it every frame was
     // a heavy per-frame native allocation that leaked memory over a match.)
@@ -252,7 +273,7 @@ export class Renderer {
     }
 
     // Ground decals (corpses, arrows, scorch) sit on the terrain, under units.
-    this.drawDecals(ctx, dt, vx0, vy0, vx1, vy1);
+    this.guard(ctx, "decals", worldTf, () => this.drawDecals(ctx, dt, vx0, vy0, vx1, vy1));
 
     // Collect and sort drawable entities by y (painter's algorithm).
     const drawables: Entity[] = [];
@@ -291,12 +312,14 @@ export class Renderer {
         e.kind === Kind.Building &&
         world.fogAt(viewTeam, e.x, e.y) !== FOG_VISIBLE;
       if (ghosted) ctx.globalAlpha = 0.45;
-      switch (e.kind) {
-        case Kind.Resource: drawResource(ctx, e, time); break;
-        case Kind.Building: drawBuilding(ctx, e, time, viewTeam); break;
-        case Kind.Unit: drawUnit(ctx, e, time); break;
-        case Kind.Projectile: drawProjectile(ctx, e); break;
-      }
+      this.guard(ctx, "entity:" + e.type, worldTf, () => {
+        switch (e.kind) {
+          case Kind.Resource: drawResource(ctx, e, time); break;
+          case Kind.Building: drawBuilding(ctx, e, time, viewTeam); break;
+          case Kind.Unit: drawUnit(ctx, e, time); break;
+          case Kind.Projectile: drawProjectile(ctx, e); break;
+        }
+      });
       if (ghosted) ctx.globalAlpha = 1;
     }
 
@@ -305,7 +328,7 @@ export class Renderer {
       if (e.kind !== Kind.Unit && e.kind !== Kind.Building) continue;
       if (e.selected || (e.hp < e.maxHp && time - e.lastDamageTime < 6)) {
         if (e.kind === Kind.Building && e.buildState !== BuildState.Done) continue;
-        drawHealthBar(ctx, e);
+        this.guard(ctx, "healthbar:" + e.type, worldTf, () => drawHealthBar(ctx, e));
       }
     }
 
@@ -313,16 +336,17 @@ export class Renderer {
     for (const p of particles.pool) {
       if (!p.active) continue;
       if (p.x < vx0 || p.x > vx1 || p.y < vy0 || p.y > vy1) continue;
-      const lifeFrac = p.life / p.maxLife;
-      ctx.globalAlpha = p.fade ? lifeFrac : 1;
-      const size = p.shrink ? p.size * lifeFrac : p.size;
+      const lifeFrac = p.maxLife > 0 ? p.life / p.maxLife : 0;
+      ctx.globalAlpha = p.fade ? Math.max(0, Math.min(1, lifeFrac)) : 1;
+      const rawSize = p.shrink ? p.size * lifeFrac : p.size;
+      const size = Number.isFinite(rawSize) ? Math.max(0.4, rawSize) : 0.4;
       ctx.fillStyle = p.color;
       if (p.glow) {
         ctx.shadowColor = p.color;
         ctx.shadowBlur = 8;
       }
       ctx.beginPath();
-      ctx.arc(p.x, p.y, Math.max(0.4, size), 0, Math.PI * 2);
+      ctx.arc(p.x, p.y, size, 0, Math.PI * 2);
       ctx.fill();
       if (p.glow) ctx.shadowBlur = 0;
     }
@@ -367,37 +391,39 @@ export class Renderer {
     }
 
     // Fog of war overlay.
-    this.fogDirtyTimer -= dt;
-    if (this.fogDirtyTimer <= 0 && this.fogCtx && this.fogCanvas) {
-      this.fogDirtyTimer = 0.12;
-      const img = this.fogCtx.createImageData(world.fogCols, world.fogRows);
-      const fog = world.fog[viewTeam];
-      for (let i = 0; i < fog.length; i++) {
-        const o = i * 4;
-        img.data[o] = 8;
-        img.data[o + 1] = 7;
-        img.data[o + 2] = 4;
-        img.data[o + 3] = fog[i] === FOG_UNSEEN ? 255 : fog[i] === FOG_VISIBLE ? 0 : 110;
+    this.guard(ctx, "fog", worldTf, () => {
+      this.fogDirtyTimer -= dt;
+      if (this.fogDirtyTimer <= 0 && this.fogCtx && this.fogCanvas) {
+        this.fogDirtyTimer = 0.12;
+        const img = this.fogCtx.createImageData(world.fogCols, world.fogRows);
+        const fog = world.fog[viewTeam];
+        for (let i = 0; i < fog.length; i++) {
+          const o = i * 4;
+          img.data[o] = 8;
+          img.data[o + 1] = 7;
+          img.data[o + 2] = 4;
+          img.data[o + 3] = fog[i] === FOG_UNSEEN ? 255 : fog[i] === FOG_VISIBLE ? 0 : 110;
+        }
+        this.fogCtx.putImageData(img, 0, 0);
       }
-      this.fogCtx.putImageData(img, 0, 0);
-    }
-    if (this.fogCanvas) {
-      ctx.imageSmoothingEnabled = true;
-      // Same viewport culling as terrain — only upscale the visible fog slice.
-      const fox = world.fogCols / world.worldW;
-      const foy = world.fogRows / world.worldH;
-      const cx0 = Math.max(0, vx0);
-      const cy0 = Math.max(0, vy0);
-      const cx1 = Math.min(world.worldW, vx1);
-      const cy1 = Math.min(world.worldH, vy1);
-      if (cx1 > cx0 && cy1 > cy0) {
-        ctx.drawImage(
-          this.fogCanvas,
-          cx0 * fox, cy0 * foy, (cx1 - cx0) * fox, (cy1 - cy0) * foy,
-          cx0, cy0, cx1 - cx0, cy1 - cy0,
-        );
+      if (this.fogCanvas) {
+        ctx.imageSmoothingEnabled = true;
+        // Same viewport culling as terrain — only upscale the visible fog slice.
+        const fox = world.fogCols / world.worldW;
+        const foy = world.fogRows / world.worldH;
+        const cx0 = Math.max(0, vx0);
+        const cy0 = Math.max(0, vy0);
+        const cx1 = Math.min(world.worldW, vx1);
+        const cy1 = Math.min(world.worldH, vy1);
+        if (cx1 > cx0 && cy1 > cy0) {
+          ctx.drawImage(
+            this.fogCanvas,
+            cx0 * fox, cy0 * foy, (cx1 - cx0) * fox, (cy1 - cy0) * foy,
+            cx0, cy0, cx1 - cx0, cy1 - cy0,
+          );
+        }
       }
-    }
+    });
 
     ctx.restore();
 
