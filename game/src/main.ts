@@ -17,8 +17,8 @@ import { Input } from "./engine/input";
 import { Particles } from "./engine/particles";
 import { audio } from "./engine/audio";
 import { Renderer, CommandMarker, GhostPlacement } from "./render/renderer";
-import { PAL } from "./render/palette";
-import { HUD, MatchController } from "./ui/hud";
+import { PAL, withAlpha } from "./render/palette";
+import { HUD, MatchController, MINIMAP_SIZE } from "./ui/hud";
 import { ui } from "./ui/ui";
 import {
   ArmoryScreen,
@@ -65,11 +65,13 @@ class App {
   ingameMenu = false;
   matchOverTimer = -1;
   playerWon = false;
+  combatHeat = 0; // 0..1 battle intensity, drives combat music
   matchRewards: MatchRewards | null = null;
   matchWon = false;
   xpBefore = 0;
   levelsGained = 0;
-  endStats = { unitsKilled: 0, unitsLost: 0, buildingsRazed: 0, gathered: 0 };
+  endStats = { unitsKilled: 0, unitsLost: 0, buildingsRazed: 0, buildingsLost: 0, gathered: 0 };
+  endFoeStats = { unitsKilled: 0, gathered: 0, buildingsRazed: 0 };
   endDuration = 0;
 
   // Frame-level input flags consumed by UI/world each frame.
@@ -289,6 +291,7 @@ class App {
     },
     minimapNavigate: (wx, wy) => this.camera.centerOn(wx, wy),
     minimapCommand: (wx, wy) => this.issueContextCommand(wx, wy, null),
+    minimapPing: (wx, wy) => this.dropPing(wx, wy),
     openMenu: () => {
       this.ingameMenu = true;
     },
@@ -340,10 +343,59 @@ class App {
     if (!this.input.shift) this.placing = null;
   }
 
+  /** A clickable row of control-group chips above the minimap (number + live count). */
+  drawControlGroups(W: number, H: number) {
+    if (!this.world) return;
+    const ctx = this.renderer.ctx;
+    const chipW = 34;
+    const chipH = 22;
+    const y = H - MINIMAP_SIZE - 10 - chipH - 6;
+    let x = 12;
+    const selSet = new Set(this.selection);
+    for (let g = 1; g <= 9; g++) {
+      const live = this.controlGroups[g].filter((id) => this.world!.byId.get(id)?.alive);
+      if (live.length === 0) continue;
+      const hover = ui.mx >= x && ui.mx <= x + chipW && ui.my >= y && ui.my <= y + chipH;
+      // A chip is "active" if its members are exactly the current selection.
+      const active = live.length === selSet.size && live.every((id) => selSet.has(id));
+      ctx.fillStyle = active ? withAlpha(PAL.uiAccent, 0.85) : hover ? "rgba(40,32,20,0.95)" : "rgba(20,16,10,0.85)";
+      ctx.strokeStyle = withAlpha(PAL.uiAccent, active ? 1 : 0.4);
+      ctx.lineWidth = 1;
+      ctx.fillRect(x, y, chipW, chipH);
+      ctx.strokeRect(x, y, chipW, chipH);
+      ctx.fillStyle = active ? "#1a1208" : PAL.uiAccent;
+      ctx.font = "bold 12px sans-serif";
+      ctx.textAlign = "left";
+      ctx.fillText(String(g), x + 5, y + 15);
+      ctx.fillStyle = active ? "#1a1208" : "#e7ddc4";
+      ctx.font = "11px sans-serif";
+      ctx.textAlign = "right";
+      ctx.fillText(String(live.length), x + chipW - 5, y + 15);
+      if (hover && this.frameClick && !ui.pointerConsumed) {
+        ui.pointerConsumed = true;
+        this.select(live);
+      }
+      x += chipW + 4;
+    }
+    ctx.textAlign = "left";
+  }
+
+  dropPing(wx: number, wy: number) {
+    this.hud.addPing(wx, wy);
+    this.markers.push({ x: wx, y: wy, age: 0, kind: "rally" }); // quick in-world flare
+    audio.play("ui");
+  }
+
   worldClick(sx: number, sy: number) {
     if (!this.world) return;
     const wx = this.camera.screenToWorldX(sx);
     const wy = this.camera.screenToWorldY(sy);
+
+    // Alt+click drops a ping (look-here signal) instead of selecting.
+    if (this.input.alt) {
+      this.dropPing(wx, wy);
+      return;
+    }
 
     if (this.placing) {
       const villagers = this.playerSelection().filter((e) => UNITS[e.type]?.canBuild);
@@ -493,7 +545,9 @@ class App {
         audio.play(name);
       }
     };
+    const heat: Record<string, number> = { sword: 0.06, bow: 0.03, siege: 0.12, death: 0.1, collapse: 0.15 };
     for (const ev of events) {
+      if (heat[ev.kind]) this.combatHeat = Math.min(1, this.combatHeat + heat[ev.kind]);
       switch (ev.kind) {
         case "sword":
           sfx("sword", "sword");
@@ -591,6 +645,7 @@ class App {
       my: this.input.my,
       clicked: !!this.frameClick,
       rightClicked: !!this.frameRight,
+      alt: this.input.alt,
     });
 
     if (this.state === "match" && this.world) {
@@ -620,7 +675,7 @@ class App {
       } else if (this.state === "postmatch" && this.matchRewards) {
         const action = this.postmatch.draw(
           W, H, this.time, dt,
-          this.matchWon, this.endStats, this.endDuration,
+          this.matchWon, this.endStats, this.endFoeStats, this.endDuration,
           this.matchRewards, this.profile, this.xpBefore, this.levelsGained,
         );
         if (action === "continue") {
@@ -657,7 +712,9 @@ class App {
     }
     this.handleEvents(world.drainEvents());
     this.particles.update(dt);
-    audio.updateMusic(dt, !this.ingameMenu);
+    // Combat heat fades over a few seconds; it drives the music's intensity.
+    this.combatHeat *= Math.pow(0.5, dt / 3);
+    audio.updateMusic(dt, !this.ingameMenu, this.ingameMenu ? 0 : this.combatHeat);
 
     // Day/night cycle (deterministic off sim time; drives sky tint + vision).
     this.renderer.dayPhase = dayPhase(world.time);
@@ -744,6 +801,7 @@ class App {
 
     // ---- HUD (consumes pointer if clicked over panels) ----
     this.hud.draw(W, H, world, this.camera, PLAYER, selected, dt, this.controller, this.attackMoveArmed);
+    this.drawControlGroups(W, H);
     ui.flushTooltip(W, H);
 
     // ---- in-game menu overlay ----
@@ -809,8 +867,19 @@ class App {
       unitsKilled: p.stats.unitsKilled,
       unitsLost: p.stats.unitsLost,
       buildingsRazed: p.stats.buildingsRazed,
+      buildingsLost: p.stats.buildingsLost,
       gathered: p.stats.gathered,
     };
+    // Aggregate the opposing alliance for a side-by-side comparison.
+    const foe = { unitsKilled: 0, gathered: 0, buildingsRazed: 0 };
+    for (let t = 0; t < world.numTeams; t++) {
+      if (!world.areHostile(PLAYER, t as Team)) continue;
+      const s = world.player(t as Team).stats;
+      foe.unitsKilled += s.unitsKilled;
+      foe.gathered += s.gathered;
+      foe.buildingsRazed += s.buildingsRazed;
+    }
+    this.endFoeStats = foe;
     this.endDuration = world.time;
     this.xpBefore = this.profile.data.totalXp;
     const rewards = computeRewards({

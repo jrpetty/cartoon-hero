@@ -37,6 +37,18 @@ export interface AbilityDef {
 }
 
 export const ABILITIES: Record<string, AbilityDef> = {
+  // Villager: not a fighter — a panic button to survive a raid and run for it.
+  villager: {
+    id: "take_cover",
+    name: "Take Cover",
+    desc: "Down tools and run! +8 armour and +50% speed for 5s to escape a raid and reach safety.",
+    kind: "buff",
+    cooldown: 25,
+    duration: 5,
+    armorBonus: 8,
+    speedMult: 1.5,
+    color: "#9fd0ff",
+  },
   // Man-at-Arms: a frontline leader who lifts the whole battle line.
   militia: {
     id: "war_cry",

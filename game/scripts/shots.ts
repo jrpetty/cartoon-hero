@@ -26,7 +26,8 @@ import { BUILDINGS } from "../src/content/buildings";
 import { RARITIES } from "../src/meta/rarity";
 import { HUD } from "../src/ui/hud";
 import { ui } from "../src/ui/ui";
-import { MenuScreen, SetupScreen, ArmoryScreen } from "../src/ui/screens";
+import { MenuScreen, SetupScreen, ArmoryScreen, PostMatchScreen } from "../src/ui/screens";
+import { computeRewards } from "../src/meta/progression";
 import { Profile } from "../src/meta/profile";
 
 const OUT = new URL("../shots/", import.meta.url).pathname;
@@ -560,6 +561,27 @@ function shotTeams() {
   save("13-teams.png", c);
 }
 
+function shotPostmatch() {
+  const W = 1280;
+  const H = 760;
+  const { c, ctx } = makeCtx(W, H);
+  const profile = new Profile();
+  const rewards = computeRewards({
+    win: true, durationSec: 735, unitsKilled: 48, buildingsRazed: 6,
+    difficulty: "lord", fairMode: false,
+  });
+  const screen = new PostMatchScreen();
+  ui.begin(ctx, { mx: -50, my: -50, clicked: false, rightClicked: false });
+  screen.draw(
+    W, H, 2, 1, true,
+    { unitsKilled: 48, unitsLost: 22, buildingsRazed: 6, buildingsLost: 3, gathered: 9400 },
+    { unitsKilled: 22, gathered: 7100, buildingsRazed: 3 },
+    735, rewards, profile, profile.data.totalXp, 1,
+  );
+  ui.flushTooltip(W, H);
+  save("14-postmatch.png", c);
+}
+
 function shotHUD(scene: ReturnType<typeof shotBattle>) {
   const { world, map, cam, pUnits } = scene;
   const W = 1280;
@@ -581,6 +603,7 @@ function shotHUD(scene: ReturnType<typeof shotBattle>) {
   const hud = new HUD();
   hud.prepare(map);
   hud.addAlert("⚠ Night raid — your forces are under attack!", scene.map.worldW / 2, scene.map.worldH / 2);
+  hud.addPing(scene.map.worldW / 2 + 120, scene.map.worldH / 2 - 60);
   const sel = pUnits.map((id) => world.byId.get(id)!).filter(Boolean).slice(0, 6);
   for (const e of sel) e.selected = true;
   const noop = () => {};
@@ -700,6 +723,7 @@ shotAbilities();
 shotWallPaint();
 shotFFA();
 shotTeams();
+shotPostmatch();
 shotFortress();
 shotMenus();
 console.log("Done.");

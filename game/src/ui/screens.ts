@@ -662,7 +662,8 @@ export class PostMatchScreen {
     time: number,
     dt: number,
     won: boolean,
-    stats: { unitsKilled: number; unitsLost: number; buildingsRazed: number; gathered: number },
+    stats: { unitsKilled: number; unitsLost: number; buildingsRazed: number; buildingsLost: number; gathered: number },
+    foe: { unitsKilled: number; gathered: number; buildingsRazed: number },
     durationSec: number,
     rewards: MatchRewards,
     profile: Profile,
@@ -694,18 +695,39 @@ export class PostMatchScreen {
     ui.text("Battle Report", x0 + 20, y0 + 26, { size: 17, bold: true, color: PAL.uiAccent });
     const mins = Math.floor(durationSec / 60);
     const secs = Math.floor(durationSec % 60);
+    const kd = stats.unitsLost > 0 ? (stats.unitsKilled / stats.unitsLost).toFixed(2) : "—";
     const lines: [string, string][] = [
       ["Duration", `${mins}:${secs.toString().padStart(2, "0")}`],
-      ["Enemies slain", String(stats.unitsKilled)],
       ["Units lost", String(stats.unitsLost)],
+      ["Kill / loss ratio", kd],
       ["Buildings razed", String(stats.buildingsRazed)],
-      ["Resources gathered", String(stats.gathered)],
+      ["Buildings lost", String(stats.buildingsLost)],
     ];
-    let ly = y0 + 60;
+    let ly = y0 + 54;
     for (const [k, v] of lines) {
       ui.text(k, x0 + 20, ly, { size: 14, color: "#bdb49a" });
       ui.text(v, x0 + colW - 20, ly, { size: 14, bold: true, align: "right" });
-      ly += 32;
+      ly += 23;
+    }
+
+    // You-vs-enemy comparison bars (you in azure, foe in crimson).
+    ly += 4;
+    const cmp: [string, number, number][] = [
+      ["Slain", stats.unitsKilled, foe.unitsKilled],
+      ["Razed", stats.buildingsRazed, foe.buildingsRazed],
+      ["Gathered", stats.gathered, foe.gathered],
+    ];
+    for (const [label, mine, theirs] of cmp) {
+      const max = Math.max(mine, theirs, 1);
+      const bw = colW - 40;
+      ctx.fillStyle = withAlpha("#000000", 0.25);
+      ctx.fillRect(x0 + 20, ly, bw, 14);
+      ctx.fillStyle = PAL.teams[0].main;
+      ctx.fillRect(x0 + 20, ly, bw * (mine / max) * 0.5, 6);
+      ctx.fillStyle = PAL.teams[1].main;
+      ctx.fillRect(x0 + 20, ly + 8, bw * (theirs / max) * 0.5, 6);
+      ui.text(`${label}: ${mine} vs ${theirs}`, x0 + 24, ly + 11, { size: 11, color: "#e7ddc4" });
+      ly += 19;
     }
 
     // Rewards.

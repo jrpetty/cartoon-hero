@@ -134,18 +134,26 @@ export class Audio {
     }
   }
 
-  // --- Light generative ambient music -------------------------------------
+  // --- Generative music: a calm bed that swells into combat ----------------
   private scale = [0, 3, 5, 7, 10]; // minor pentatonic
   private root = 196; // G3
+  private drumTimer = 0;
 
-  updateMusic(dt: number, playing: boolean) {
+  /**
+   * `intensity` (0..1) is the battle heat: it speeds the melody, brightens the
+   * notes, and brings in a war-drum pulse so a big fight sounds like one.
+   */
+  updateMusic(dt: number, playing: boolean, intensity = 0) {
     if (!this.ctx || this.muted || this.musicVol <= 0 || !playing) return;
+    const heat = Math.max(0, Math.min(1, intensity));
+
+    // Melody — notes come faster and a touch louder as the battle heats up.
     this.musicTimer -= dt;
     if (this.musicTimer <= 0) {
-      this.musicTimer = 1.1 + Math.random() * 0.9;
+      this.musicTimer = (1.1 + Math.random() * 0.9) * (1 - heat * 0.55);
       const t0 = this.ctx.currentTime;
       const step = this.scale[Math.floor(Math.random() * this.scale.length)];
-      const oct = Math.random() < 0.4 ? 2 : 1;
+      const oct = Math.random() < 0.4 + heat * 0.2 ? 2 : 1;
       const freq = this.root * Math.pow(2, step / 12) * oct;
       const osc = this.ctx.createOscillator();
       const g = this.ctx.createGain();
@@ -154,7 +162,7 @@ export class Audio {
       osc.connect(g);
       g.connect(this.musicGain);
       g.gain.setValueAtTime(0.0001, t0);
-      g.gain.linearRampToValueAtTime(0.18, t0 + 0.4);
+      g.gain.linearRampToValueAtTime(0.18 + heat * 0.08, t0 + 0.4);
       g.gain.exponentialRampToValueAtTime(0.0001, t0 + 2.2);
       osc.start(t0);
       osc.stop(t0 + 2.3);
@@ -171,6 +179,52 @@ export class Audio {
       osc2.start(t0);
       osc2.stop(t0 + 3.1);
     }
+
+    // War drums — only roll in during a real fight, faster as it intensifies.
+    if (heat > 0.18) {
+      this.drumTimer -= dt;
+      if (this.drumTimer <= 0) {
+        this.drumTimer = 0.62 - heat * 0.26; // ~0.6s down to ~0.36s per beat
+        this.drumHit(0.10 + heat * 0.14);
+      }
+    } else {
+      this.drumTimer = 0;
+    }
+  }
+
+  /** A low war-drum thump (sine kick + filtered noise) on the music bus. */
+  private drumHit(peak: number) {
+    if (!this.ctx) return;
+    const t0 = this.ctx.currentTime;
+    const osc = this.ctx.createOscillator();
+    const g = this.ctx.createGain();
+    osc.type = "sine";
+    osc.frequency.setValueAtTime(120, t0);
+    osc.frequency.exponentialRampToValueAtTime(48, t0 + 0.18);
+    osc.connect(g);
+    g.connect(this.musicGain);
+    g.gain.setValueAtTime(peak, t0);
+    g.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.26);
+    osc.start(t0);
+    osc.stop(t0 + 0.28);
+    // a little skin/snap
+    const len = Math.floor(this.ctx.sampleRate * 0.12);
+    const buf = this.ctx.createBuffer(1, len, this.ctx.sampleRate);
+    const d = buf.getChannelData(0);
+    for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / len);
+    const src = this.ctx.createBufferSource();
+    src.buffer = buf;
+    const filt = this.ctx.createBiquadFilter();
+    filt.type = "lowpass";
+    filt.frequency.value = 220;
+    const ng = this.ctx.createGain();
+    ng.gain.setValueAtTime(peak * 0.5, t0);
+    ng.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.14);
+    src.connect(filt);
+    filt.connect(ng);
+    ng.connect(this.musicGain);
+    src.start(t0);
+    src.stop(t0 + 0.12);
   }
 }
 

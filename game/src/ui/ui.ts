@@ -8,6 +8,7 @@ export interface UIFrameInput {
   my: number;
   clicked: boolean; // left release this frame
   rightClicked: boolean;
+  alt?: boolean; // Alt held this frame (used for minimap pings)
 }
 
 export class UI {
@@ -16,6 +17,7 @@ export class UI {
   my = 0;
   clicked = false;
   rightClicked = false;
+  alt = false;
   /** Set true by any widget that consumed the pointer this frame. */
   pointerConsumed = false;
   hoveredTooltip: { text: string[]; x: number; y: number } | null = null;
@@ -26,6 +28,7 @@ export class UI {
     this.my = input.my;
     this.clicked = input.clicked;
     this.rightClicked = input.rightClicked;
+    this.alt = !!input.alt;
     this.pointerConsumed = false;
     this.hoveredTooltip = null;
   }

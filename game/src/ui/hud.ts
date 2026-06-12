@@ -36,6 +36,7 @@ export interface MatchController {
   useAbility(): void;
   minimapNavigate(wx: number, wy: number): void;
   minimapCommand(wx: number, wy: number): void;
+  minimapPing(wx: number, wy: number): void;
   openMenu(): void;
 }
 
@@ -72,16 +73,19 @@ const CARD_W = 4;
 const CARD_H = 3;
 const BTN = 56;
 const GAP = 6;
+const PING_LIFE = 2.4; // seconds a minimap ping lingers
 
 export class HUD {
   private minimapBase: HTMLCanvasElement | null = null;
   alerts: Alert[] = [];
+  pings: { x: number; y: number; age: number }[] = [];
   buildMenuOpen = false;
   buildCategory: string | null = null;
 
   prepare(map: MapData) {
     this.minimapBase = buildMinimapBase(map, MINIMAP_SIZE);
     this.alerts = [];
+    this.pings = [];
     this.buildMenuOpen = false;
     this.buildCategory = null;
   }
@@ -89,6 +93,11 @@ export class HUD {
   addAlert(text: string, x?: number, y?: number) {
     this.alerts.unshift({ text, time: 5, x, y });
     if (this.alerts.length > 4) this.alerts.pop();
+  }
+
+  addPing(x: number, y: number) {
+    this.pings.push({ x, y, age: 0 });
+    if (this.pings.length > 8) this.pings.shift();
   }
 
   draw(
@@ -187,6 +196,8 @@ export class HUD {
       ay += 22;
     }
     this.alerts = this.alerts.filter((a) => a.time > 0);
+    for (const ping of this.pings) ping.age += dt;
+    this.pings = this.pings.filter((ping) => ping.age < PING_LIFE);
 
     // ----------------------------------------------------------- minimap --
     const mmX = 10;
@@ -244,12 +255,27 @@ export class HUD {
     ctx.lineWidth = 1;
     ctx.strokeRect(mmX + cam.x * sx - vw / 2, mmY + cam.y * sy - vh / 2, vw, vh);
 
+    // Player pings: expanding cyan rings, both on the minimap and (briefly) in
+    // the world. Friendly signals — "look here", "rally here".
+    for (const ping of this.pings) {
+      const t = ping.age / PING_LIFE;
+      const pulse = (ping.age * 2.2) % 1;
+      ctx.strokeStyle = withAlpha("#79e0ff", (1 - t) * (1 - pulse));
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(mmX + ping.x * sx, mmY + ping.y * sy, 3 + pulse * 9, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+
     // Minimap interaction.
     if (ui.hit(mmX, mmY, MINIMAP_SIZE, MINIMAP_SIZE)) {
       ui.pointerConsumed = true;
       const wx = (ui.mx - mmX) / sx;
       const wy = (ui.my - mmY) / sy;
-      if (ui.clicked) ctrl.minimapNavigate(wx, wy);
+      if (ui.clicked) {
+        if (ui.alt) ctrl.minimapPing(wx, wy);
+        else ctrl.minimapNavigate(wx, wy);
+      }
       if (ui.rightClicked) ctrl.minimapCommand(wx, wy);
     }
 

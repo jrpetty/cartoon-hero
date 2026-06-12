@@ -614,6 +614,11 @@ export class SkirmishAI {
     if (threats < 2) return false;
     threatX /= threats;
     threatY /= threats;
+    // Villagers caught in the raid take cover and scatter.
+    const panicked = this.myUnits("villager")
+      .filter((v) => v.abilityCooldown <= 0 && dist(v.x, v.y, threatX, threatY) < 360)
+      .map((v) => v.id);
+    if (panicked.length) this.world.useAbility(panicked);
     this.attacking = false;
     const defenders = this.armyUnits().filter((u) => u.order.kind !== OrderKind.Attack);
     if (defenders.length) {
