@@ -12,6 +12,9 @@ export const POP_PER_TOWNCENTER = 10;
 export const VILLAGER_CARRY_CAP = 10;
 export const GATHER_RATE = 0.45; // resource units per gather tick action
 export const GATHER_TICK = 0.6; // seconds per gather action
+// Farms tick slightly slower than foraging — they're infinite and raid-safe,
+// so they pay a small speed tax. Kept mild so farming feels productive.
+export const FARM_TICK_MULT = 1.1;
 
 export const START_RESOURCES = { food: 200, wood: 200, gold: 100 };
 

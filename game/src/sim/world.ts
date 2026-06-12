@@ -25,6 +25,7 @@ import {
   AGE_ATTACK_BONUS,
   GATHER_RATE,
   GATHER_TICK,
+  FARM_TICK_MULT,
   POP_CAP_HARD,
   PROJECTILE_SPEED,
   RARITY_ARMOR_BONUS,
@@ -1047,7 +1048,7 @@ export class World {
     e.carryKind = kind;
     e.gatherCooldown -= SIM_DT;
     if (e.gatherCooldown <= 0) {
-      e.gatherCooldown = GATHER_TICK / (this.players[e.team]?.econMult ?? 1) * (isFarm ? 1.35 : 1);
+      e.gatherCooldown = GATHER_TICK / (this.players[e.team]?.econMult ?? 1) * (isFarm ? FARM_TICK_MULT : 1);
       const take = Math.min(GATHER_RATE * GATHER_TICK * 10, node.amount); // chunked
       const got = Math.min(take, VILLAGER_CARRY_CAP - e.carry, 1.2);
       e.carry += got;
