@@ -17,6 +17,7 @@ export class Input {
   middleDown = false;
   shift = false;
   ctrl = false;
+  alt = false;
   keys = new Set<string>();
   wheelDelta = 0;
 
@@ -123,6 +124,10 @@ export class Input {
   private handleKeyDown = (e: KeyboardEvent) => {
     this.shift = e.shiftKey;
     this.ctrl = e.ctrlKey || e.metaKey;
+    this.alt = e.altKey;
+    // Browsers reserve Ctrl+digit for tab switching; Alt+digit is our
+    // control-group fallback, so keep the browser out of it.
+    if (e.altKey && /^[0-9]$/.test(e.key)) e.preventDefault();
     const k = e.key.length === 1 ? e.key.toLowerCase() : e.key;
     this.keys.add(k);
     this.onKeyDown?.(e.key);
@@ -131,6 +136,7 @@ export class Input {
   private handleKeyUp = (e: KeyboardEvent) => {
     this.shift = e.shiftKey;
     this.ctrl = e.ctrlKey || e.metaKey;
+    this.alt = e.altKey;
     const k = e.key.length === 1 ? e.key.toLowerCase() : e.key;
     this.keys.delete(k);
   };

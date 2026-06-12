@@ -50,7 +50,7 @@ Production build: `npm run build` (output in `dist/`), preview with `npm run pre
 | S / H | Stop / Hold position |
 | B | Build menu (villagers) |
 | G | Ungarrison selected building |
-| Ctrl+1–9 / 1–9 | Set / recall control group (double-tap to center) |
+| Ctrl/Alt+1–9 / 1–9 | Set / recall control group (double-tap to center) |
 | WASD-ish + arrows, edge scroll, middle-drag | Camera |
 | Mouse wheel | Zoom |
 | Esc | Cancel placement / pause menu |

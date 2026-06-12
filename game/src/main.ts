@@ -142,7 +142,7 @@ class App {
     // Control groups.
     if (/^[0-9]$/.test(k)) {
       const idx = parseInt(k, 10);
-      if (this.input.ctrl) {
+      if (this.input.ctrl || this.input.alt) {
         this.controlGroups[idx] = this.playerSelection().map((e) => e.id);
         this.hud.addAlert(`Group ${idx} set (${this.controlGroups[idx].length})`);
       } else {
@@ -574,7 +574,6 @@ class App {
       if (this.input.isDown("ArrowDown")) dy += 1;
       if (this.input.isDown("ArrowLeft")) dx -= 1;
       if (this.input.isDown("d") || this.input.isDown("ArrowRight")) dx += 1;
-      if (this.input.isDown("ArrowLeft") || this.input.isDown("q")) dx -= 0; // reserved
       // edge scroll (only when mouse inside window)
       if (this.input.mx >= 0 && this.input.my >= 0) {
         if (this.input.mx < edge) dx -= 1;
