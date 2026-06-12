@@ -89,7 +89,12 @@ describe("Construction & placement", () => {
     const start = w.map.starts[Team.Player];
     const before = p.popCap;
     const woodBefore = p.resources.wood;
-    const house = w.placeBuilding(Team.Player, "house", start.x + 150, start.y + 150);
+    // Find an open spot near the base (the home berry patch may sit on some).
+    let house = null;
+    for (const [dx, dy] of [[150, 150], [-150, 150], [150, -150], [-150, -150], [210, 0], [0, -210], [-210, 0]]) {
+      house = w.placeBuilding(Team.Player, "house", start.x + dx, start.y + dy);
+      if (house) break;
+    }
     expect(house).not.toBeNull();
     expect(p.resources.wood).toBe(woodBefore - BUILDINGS.house.cost.wood);
     const vills = w.entitiesOf(Team.Player, Kind.Unit).filter((e) => e.type === "villager");

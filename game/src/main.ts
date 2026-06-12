@@ -63,6 +63,9 @@ class App {
   placing: string | null = null;
   attackMoveArmed = false;
   ingameMenu = false;
+  paused = false;
+  gameSpeed = 1; // 0.5 / 1 / 2 / 3
+  private idleVillIndex = 0;
   matchOverTimer = -1;
   playerWon = false;
   combatHeat = 0; // 0..1 battle intensity, drives combat music
@@ -152,6 +155,12 @@ class App {
       const b = this.playerSelection().find((e) => e.kind === Kind.Building);
       if (b) this.world.ungarrison(b.id);
     }
+    // QoL: pause, game speed, idle villager, select army.
+    if (k === "p" || k === " ") this.togglePause();
+    if (k === "+" || k === "=") this.cycleSpeed(1);
+    if (k === "-" || k === "_") this.cycleSpeed(-1);
+    if (k === ".") this.selectIdleVillager();
+    if (k === ",") this.selectAllArmy();
     // Control groups.
     if (/^[0-9]$/.test(k)) {
       const idx = parseInt(k, 10);
@@ -380,6 +389,87 @@ class App {
     ctx.textAlign = "left";
   }
 
+  // ----------------------------------------------------------- QoL controls --
+  togglePause() {
+    this.paused = !this.paused;
+    this.hud.addAlert(this.paused ? "⏸ Paused" : "▶ Resumed");
+  }
+
+  setSpeed(v: number) {
+    this.gameSpeed = v;
+    this.paused = false;
+    this.hud.addAlert(`Speed ${v}×`);
+  }
+
+  cycleSpeed(dir: number) {
+    const speeds = [0.5, 1, 2, 3];
+    if (this.paused) { this.paused = false; return; }
+    const i = Math.max(0, Math.min(speeds.length - 1, speeds.indexOf(this.gameSpeed) + dir));
+    this.setSpeed(speeds[i]);
+  }
+
+  /** Cycle the camera through idle villagers, selecting each in turn. */
+  selectIdleVillager() {
+    if (!this.world) return;
+    const idle = this.world
+      .entitiesOf(PLAYER, Kind.Unit)
+      .filter((e) => e.type === "villager" && e.order.kind === OrderKind.Idle);
+    if (idle.length === 0) { this.hud.addAlert("No idle villagers"); return; }
+    this.idleVillIndex = this.idleVillIndex % idle.length;
+    const v = idle[this.idleVillIndex];
+    this.idleVillIndex++;
+    this.select([v.id]);
+    this.camera.centerOn(v.x, v.y);
+  }
+
+  /** Select every military unit you own (everything that isn't a villager). */
+  selectAllArmy() {
+    if (!this.world) return;
+    const army = this.world
+      .entitiesOf(PLAYER, Kind.Unit)
+      .filter((e) => !UNITS[e.type]?.canGather);
+    if (army.length === 0) { this.hud.addAlert("No army units"); return; }
+    this.select(army.map((e) => e.id));
+  }
+
+  /** Pause/speed chips in the top bar + idle-villager & army buttons by the minimap. */
+  drawQoLBar(W: number, H: number) {
+    if (!this.world) return;
+    const ctx = this.renderer.ctx;
+    const chip = (label: string, x: number, y: number, w: number, h: number, active: boolean, onClick: () => void, danger = false) => {
+      const hover = ui.mx >= x && ui.mx <= x + w && ui.my >= y && ui.my <= y + h;
+      ctx.fillStyle = active ? withAlpha(PAL.uiAccent, 0.9) : hover ? "rgba(54,42,24,0.96)" : "rgba(18,14,9,0.72)";
+      ctx.fillRect(x, y, w, h);
+      ctx.strokeStyle = withAlpha(PAL.uiAccent, active ? 1 : 0.35);
+      ctx.lineWidth = 1;
+      ctx.strokeRect(x, y, w, h);
+      ctx.fillStyle = active ? "#1a1208" : danger ? "#f0a878" : PAL.uiParchment;
+      ctx.font = "bold 12px sans-serif";
+      ctx.textAlign = "center";
+      ctx.fillText(label, x + w / 2, y + h / 2 + 4);
+      if (hover && this.frameClick && !ui.pointerConsumed) { ui.pointerConsumed = true; onClick(); }
+    };
+
+    // Pause + speed, right of the day/night clock.
+    let x = W / 2 + 150;
+    chip(this.paused ? "▶" : "❚❚", x, 4, 26, 26, false, () => this.togglePause(), this.paused);
+    x += 29;
+    for (const s of [0.5, 1, 2, 3]) {
+      chip(s === 0.5 ? "½×" : s + "×", x, 4, 28, 26, this.gameSpeed === s && !this.paused, () => this.setSpeed(s));
+      x += 31;
+    }
+    ctx.textAlign = "left";
+
+    // Idle-villager + army, above the minimap.
+    const idleCount = this.world
+      .entitiesOf(PLAYER, Kind.Unit)
+      .filter((e) => e.type === "villager" && e.order.kind === OrderKind.Idle).length;
+    const by = H - MINIMAP_SIZE - 10 - 22 - 6 - 26 - 4;
+    chip(`Idle ${idleCount}`, 12, by, 70, 24, idleCount > 0, () => this.selectIdleVillager());
+    chip("Army", 86, by, 60, 24, false, () => this.selectAllArmy());
+    ctx.textAlign = "left";
+  }
+
   dropPing(wx: number, wy: number) {
     this.hud.addPing(wx, wy);
     this.markers.push({ x: wx, y: wy, age: 0, kind: "rally" }); // quick in-world flare
@@ -412,7 +502,7 @@ class App {
 
     if (this.attackMoveArmed) {
       const units = this.playerSelection().filter((e) => e.kind === Kind.Unit);
-      this.world.issueMove(units.map((e) => e.id), wx, wy, this.input.shift, true);
+      this.world.issueFormationMove(units.map((e) => e.id), wx, wy, this.input.shift, true);
       this.markers.push({ x: wx, y: wy, age: 0, kind: "attack" });
       this.attackMoveArmed = false;
       audio.play("command");
@@ -546,7 +636,7 @@ class App {
       }
     }
     // Default: move.
-    this.world.issueMove(ids, wx, wy, shift);
+    this.world.issueFormationMove(ids, wx, wy, shift);
     this.markers.push({ x: wx, y: wy, age: 0, kind: "move" });
     audio.play("command");
   }
@@ -722,17 +812,18 @@ class App {
   matchFrame(dt: number, W: number, H: number) {
     const world = this.world!;
 
-    // ---- simulate (fixed timestep) ----
-    if (!this.ingameMenu && world.winner === null) {
-      this.accumulator += dt;
+    // ---- simulate (fixed timestep, scaled by game speed) ----
+    if (!this.ingameMenu && !this.paused && world.winner === null) {
+      this.accumulator += dt * this.gameSpeed;
       let steps = 0;
-      while (this.accumulator >= SIM_DT && steps < 5) {
+      const maxSteps = 5 + Math.ceil(this.gameSpeed) * 2; // allow catch-up at high speed
+      while (this.accumulator >= SIM_DT && steps < maxSteps) {
         world.tick();
         for (const ai of this.ais) ai.update(SIM_DT);
         this.accumulator -= SIM_DT;
         steps++;
       }
-      if (steps === 5) this.accumulator = 0; // drop time if we can't keep up
+      if (steps === maxSteps) this.accumulator = 0; // drop time if we can't keep up
     }
     this.handleEvents(world.drainEvents());
     this.particles.update(dt);
@@ -826,6 +917,7 @@ class App {
     // ---- HUD (consumes pointer if clicked over panels) ----
     this.hud.draw(W, H, world, this.camera, PLAYER, selected, dt, this.controller, this.attackMoveArmed);
     this.drawControlGroups(W, H);
+    this.drawQoLBar(W, H);
     ui.flushTooltip(W, H);
 
     // ---- in-game menu overlay ----

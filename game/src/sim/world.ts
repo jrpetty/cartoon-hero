@@ -393,6 +393,62 @@ export class World {
     }
   }
 
+  /**
+   * Like issueMove, but spreads the group into a box formation facing the
+   * direction of travel so units arrive side-by-side instead of stacking on
+   * one point. Used for player commands; the AI keeps the cheaper issueMove.
+   */
+  issueFormationMove(ids: EntityId[], tx: number, ty: number, queue = false, attackMove = false) {
+    const movers = ids
+      .map((id) => this.byId.get(id))
+      .filter((e): e is Entity => !!e && e.alive && e.kind === Kind.Unit);
+    if (movers.length <= 1) return this.issueMove(ids, tx, ty, queue, attackMove);
+    const kind = attackMove ? OrderKind.AttackMove : OrderKind.Move;
+    const n = movers.length;
+
+    // Forward = from the group's centre toward the target.
+    let ax = 0;
+    let ay = 0;
+    for (const e of movers) { ax += e.x; ay += e.y; }
+    ax /= n; ay /= n;
+    let ang = Math.atan2(ty - ay, tx - ax);
+    if (!Number.isFinite(ang)) ang = 0;
+    const ux = Math.cos(ang);
+    const uy = Math.sin(ang);
+    const px = -uy; // rightward across the front
+    const py = ux;
+    const cols = Math.max(1, Math.round(Math.sqrt(n)));
+    const spacing = 24;
+
+    // Slot positions: a grid centred on the target, front rank at the target.
+    const slots: { x: number; y: number }[] = [];
+    for (let i = 0; i < n; i++) {
+      const col = i % cols;
+      const row = Math.floor(i / cols);
+      const lx = (col - (cols - 1) / 2) * spacing;
+      const ly = row * spacing;
+      const [sx, sy] = this.grid.nearestOpenWorld(tx + px * lx - ux * ly, ty + py * lx - uy * ly);
+      slots.push({ x: sx, y: sy });
+    }
+
+    const flow = n > 3 ? new FlowField(this.grid, tx, ty) : null;
+    const used = new Array(n).fill(false);
+    for (const e of movers) {
+      let best = -1;
+      let bestD = Infinity;
+      for (let s = 0; s < n; s++) {
+        if (used[s]) continue;
+        const d = dist2(e.x, e.y, slots[s].x, slots[s].y);
+        if (d < bestD) { bestD = d; best = s; }
+      }
+      used[best] = true;
+      const order: Order = { kind, tx: slots[best].x, ty: slots[best].y, target: -1 };
+      (order as any).flow = flow;
+      (order as any).slot = true;
+      this.resolveOrderQueue(e, order, queue);
+    }
+  }
+
   issueAttack(ids: EntityId[], targetId: EntityId, queue = false) {
     const target = this.byId.get(targetId);
     if (!target || !target.alive) return;
@@ -886,9 +942,12 @@ export class World {
     const d = Math.hypot(dx, dy);
 
     // Arrival check: flow-field groups stop when near goal or crowded by
-    // arrived allies; singles when close.
-    const arriveDist = flow ? 26 : 10;
-    if (d < arriveDist || (flow && flow.reached(e.x, e.y))) {
+    // arrived allies; singles when close. Formation ("slot") moves settle on
+    // their own slot, only honouring the shared goal once they're close to it.
+    const isSlot = !!(e.order as any).slot;
+    const arriveDist = flow ? (isSlot ? 15 : 26) : 10;
+    const reachedGoal = !!flow && flow.reached(e.x, e.y);
+    if (d < arriveDist || (reachedGoal && (!isSlot || d < 55))) {
       // If this was a "walk to building then garrison" move, complete it.
       if (e.order.target !== -1) {
         const b = this.byId.get(e.order.target);
