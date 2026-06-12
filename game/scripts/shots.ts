@@ -198,7 +198,7 @@ function shotRarities() {
 }
 
 // --------------------------------------------------------------- battle --
-function shotBattle() {
+function shotBattle(dayPhase = 0.2, outName = "04-battle.png", title = "Lines clash on the Open Plains") {
   const map = generateMap("open_plains", 99221);
   const world = new World(99221);
   world.init(map, [{}, {}], [1, 1]);
@@ -263,10 +263,24 @@ function shotBattle() {
       if (ev.kind === "death") particles.burst(ev.x, ev.y, 7, PAL.blood, 100, { maxLife: 0.6, size: 2 });
     }
   }
+  // Seed some battlefield juice for the still: corpses, stuck arrows, floating
+  // damage, scorch — the kind of thing that builds up seconds into a fight.
+  for (let i = 0; i < 10; i++) {
+    const ang = Math.random() * Math.PI * 2;
+    const rad = Math.random() * 90;
+    renderer.addCorpse(fieldX + Math.cos(ang) * rad, fieldY + Math.sin(ang) * rad, Math.random() < 0.5 ? 0 : 1, false);
+    renderer.addStuckArrow(fieldX + Math.cos(ang) * rad * 1.2, fieldY + Math.sin(ang) * rad, Math.random() * Math.PI * 2);
+  }
+  renderer.addScorch(fieldX + 40, fieldY + 20, 28);
+  for (let i = 0; i < 6; i++) {
+    renderer.addFloater(fieldX + (Math.random() - 0.5) * 140, fieldY + (Math.random() - 0.5) * 100, String(3 + Math.floor(Math.random() * 18)), Math.random() < 0.5 ? "#fff0c0" : "#ff9a8a", 13);
+  }
+
   // Reveal the area so everything draws.
   world.fog[Team.Player].fill(FOG_VISIBLE);
   cam.centerOn(fieldX, fieldY);
   cam.zoom = 1.25;
+  renderer.dayPhase = dayPhase;
 
   // Select a few player units to show selection rings + health bars.
   for (const id of pUnits.slice(0, 4)) {
@@ -285,11 +299,11 @@ function shotBattle() {
   ctx.textAlign = "center";
   ctx.font = "bold 26px Georgia, serif";
   ctx.fillStyle = "rgba(0,0,0,0.5)";
-  ctx.fillText("Lines clash on the Open Plains", W / 2 + 2, 40 + 2);
+  ctx.fillText(title, W / 2 + 2, 40 + 2);
   ctx.fillStyle = "#ffe9b0";
-  ctx.fillText("Lines clash on the Open Plains", W / 2, 40);
+  ctx.fillText(title, W / 2, 40);
   ctx.textAlign = "left";
-  save("04-battle.png", c);
+  save(outName, c);
   return { world, map, cam, pUnits };
 }
 
@@ -364,6 +378,7 @@ shotUnits();
 shotBuildings();
 shotRarities();
 const scene = shotBattle();
+shotBattle(0.74, "09-night-battle.png", "Night raid — battle under the dark");
 shotHUD(scene);
 shotMenus();
 console.log("Done.");

@@ -66,7 +66,7 @@ export interface PlayerState {
 export interface WorldEvent {
   kind:
     | "sword" | "bow" | "arrowHit" | "siege" | "death" | "collapse"
-    | "build" | "complete" | "underattack" | "age" | "deposit" | "spawn";
+    | "build" | "complete" | "underattack" | "age" | "deposit" | "spawn" | "hit";
   x: number;
   y: number;
   team: Team;
@@ -289,7 +289,7 @@ export class World {
   // --------------------------------------------------------------- events --
 
   private emit(kind: WorldEvent["kind"], x: number, y: number, team: Team, data?: string) {
-    if (this.events.length < 256) this.events.push({ kind, x, y, team, data });
+    if (this.events.length < 512) this.events.push({ kind, x, y, team, data });
   }
 
   drainEvents(): WorldEvent[] {
@@ -1167,6 +1167,12 @@ export class World {
     target.hp -= dmg;
     target.hitFlash = 1;
     target.lastDamageTime = this.time;
+
+    // Floating damage numbers only for fights the human player is part of —
+    // keeps the event stream (and the screen) from drowning in big melees.
+    if (fromTeam === Team.Player || target.team === Team.Player) {
+      this.emit("hit", target.x, target.y - target.radius, fromTeam, String(Math.round(dmg)));
+    }
 
     // Under-attack alert (rate limited).
     const p = this.players[target.team];

@@ -32,6 +32,7 @@ import { computeRewards, MatchRewards } from "./meta/progression";
 type AppState = "menu" | "setup" | "armory" | "match" | "postmatch";
 
 const PLAYER = Team.Player;
+const DAY_CYCLE = 200; // seconds for a full day→night→day rotation
 
 class App {
   canvas: HTMLCanvasElement;
@@ -75,6 +76,8 @@ class App {
 
   sfxCooldown = new Map<string, number>();
   time = 0;
+  showDamageNumbers = true;
+  private smokeTimer = 0;
   private accumulator = 0;
   private lastFrame = performance.now();
 
@@ -204,6 +207,7 @@ class App {
     this.world = world;
     this.ai = new SkirmishAI(world, Team.Enemy, diff);
     this.renderer.prepare(map);
+    this.renderer.clearFx();
     this.hud.prepare(map);
     this.particles.clear();
     this.selection = [];
@@ -427,6 +431,13 @@ class App {
         case "arrowHit":
           sfx("arrowHit", "arrowHit");
           this.particles.burst(ev.x, ev.y, 3, "#d9cfb4", 70, { maxLife: 0.2, size: 1.5 });
+          if (Math.random() < 0.6) this.renderer.addStuckArrow(ev.x, ev.y, Math.random() * Math.PI * 2);
+          break;
+        case "hit":
+          if (this.showDamageNumbers && ev.data) {
+            const friendly = ev.team === PLAYER;
+            this.renderer.addFloater(ev.x, ev.y, ev.data, friendly ? "#fff0c0" : "#ff9a8a", 13);
+          }
           break;
         case "siege":
           sfx("siege", "siege", 0.2);
@@ -437,11 +448,14 @@ class App {
         case "death":
           sfx("sword", "death", 0.15);
           this.particles.burst(ev.x, ev.y, 9, PAL.blood, 110, { maxLife: 0.5, size: 2.2, gravity: 140 });
+          this.renderer.addCorpse(ev.x, ev.y, ev.team, false);
           break;
         case "collapse":
           sfx("collapse", "collapse", 0.3);
           this.particles.burst(ev.x, ev.y, 36, PAL.dust, 200, { maxLife: 1.1, size: 4.2, gravity: 50 });
           this.particles.burst(ev.x, ev.y, 16, PAL.smoke, 90, { maxLife: 1.6, size: 5, gravity: -30 });
+          this.particles.burst(ev.x, ev.y, 12, PAL.fire, 140, { maxLife: 0.6, size: 3, glow: true });
+          this.renderer.addScorch(ev.x, ev.y, 30);
           this.renderer.addShake(7);
           break;
         case "build":
@@ -562,6 +576,26 @@ class App {
     this.handleEvents(world.drainEvents());
     this.particles.update(dt);
     audio.updateMusic(dt, !this.ingameMenu);
+
+    // Day/night cycle (visual; deterministic off sim time).
+    this.renderer.dayPhase = (world.time % DAY_CYCLE) / DAY_CYCLE;
+
+    // Damaged buildings smoke and burn.
+    this.smokeTimer -= dt;
+    if (this.smokeTimer <= 0) {
+      this.smokeTimer = 0.09;
+      for (const e of world.entities) {
+        if (!e.alive || e.kind !== Kind.Building || e.buildState !== BuildState.Done) continue;
+        const frac = e.hp / e.maxHp;
+        if (frac >= 0.5) continue;
+        const sx = e.x + (Math.random() - 0.5) * e.radius;
+        const sy = e.y - e.radius * 0.3 + (Math.random() - 0.5) * e.radius * 0.4;
+        this.particles.spawn({ x: sx, y: sy, vx: (Math.random() - 0.5) * 8, vy: -22 - Math.random() * 14, color: PAL.smoke, maxLife: 1.4 + Math.random(), size: 3 + Math.random() * 2.5, gravity: -8, drag: 0.96 });
+        if (frac < 0.28 && Math.random() < 0.5) {
+          this.particles.spawn({ x: sx, y: sy, vx: (Math.random() - 0.5) * 10, vy: -30 - Math.random() * 14, color: Math.random() < 0.5 ? PAL.fire : PAL.fireBright, maxLife: 0.45, size: 2.4 + Math.random() * 2, gravity: -30, glow: true });
+        }
+      }
+    }
 
     // ---- camera movement ----
     if (!this.ingameMenu) {
