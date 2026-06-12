@@ -7,8 +7,18 @@ import { BUILDINGS } from "../content/buildings";
 import { PAL, shade, teamColor, withAlpha } from "./palette";
 import { rarityByIndex } from "../meta/rarity";
 import { TILE } from "../content/balance";
+import { isNight } from "../content/daynight";
+import { ABILITIES } from "../content/abilities";
 
 type Ctx = CanvasRenderingContext2D;
+
+// The renderer pushes the live day-cycle phase here each frame so world-space
+// art (watchfire glow, etc.) can react to night without threading it through
+// every draw signature. Derived from deterministic sim time upstream.
+let gDayPhase = 0;
+export function setDrawDayPhase(p: number) {
+  gDayPhase = p;
+}
 
 function shadow(ctx: Ctx, x: number, y: number, rx: number, ry: number, alpha = 0.25) {
   ctx.fillStyle = `rgba(20, 24, 12, ${alpha})`;
@@ -151,6 +161,7 @@ export function drawBuilding(ctx: Ctx, e: Entity, time: number, selectedTeamView
     case "palisade": drawPalisade(ctx, e, half); break;
     case "stone_wall": drawStoneWall(ctx, e, half); break;
     case "gate": drawGate(ctx, e, half, tc); break;
+    case "watchfire": drawWatchfire(ctx, e, half, time); break;
     case "watch_tower": drawTower(ctx, e, half, tc); break;
     case "castle": drawCastle(ctx, e, half, tc, time); break;
     case "siege_workshop": drawSiegeWorkshop(ctx, e, half); break;
@@ -537,6 +548,46 @@ function drawGate(ctx: Ctx, e: Entity, half: number, tc: any) {
   ctx.fillRect(e.x - half, e.y - half - 1, half * 2, 2.5);
 }
 
+function drawWatchfire(ctx: Ctx, e: Entity, half: number, time: number) {
+  const flick = 0.78 + Math.sin(time * 11 + e.x) * 0.12 + Math.sin(time * 17 + e.y) * 0.1;
+  const night = isNight(gDayPhase);
+  // Warm ground glow — bigger and brighter once the sun is down.
+  const glowR = half * (night ? 4.6 : 2.4) * flick;
+  const g = ctx.createRadialGradient(e.x, e.y - half * 0.3, 1, e.x, e.y - half * 0.3, glowR);
+  g.addColorStop(0, withAlpha("#ffd27a", night ? 0.5 : 0.28));
+  g.addColorStop(0.5, withAlpha("#ff9a3c", night ? 0.22 : 0.1));
+  g.addColorStop(1, withAlpha("#ff9a3c", 0));
+  ctx.fillStyle = g;
+  ctx.beginPath();
+  ctx.arc(e.x, e.y - half * 0.3, glowR, 0, Math.PI * 2);
+  ctx.fill();
+  // Three legs of a timber brazier stand.
+  ctx.strokeStyle = PAL.woodDark;
+  ctx.lineWidth = 2;
+  for (const dx of [-half * 0.55, 0, half * 0.55]) {
+    ctx.beginPath();
+    ctx.moveTo(e.x + dx, e.y - half * 0.2);
+    ctx.lineTo(e.x + dx * 0.35, e.y + half * 0.7);
+    ctx.stroke();
+  }
+  // Iron bowl.
+  ctx.fillStyle = "#3a3026";
+  ctx.beginPath();
+  ctx.ellipse(e.x, e.y - half * 0.2, half * 0.7, half * 0.32, 0, 0, Math.PI * 2);
+  ctx.fill();
+  // Flames — stacked teardrops, hot core to cool tip, dancing with the flicker.
+  const fh = half * (1.5 + flick * 0.5);
+  for (const [col, sc, off] of [["#ff7a1c", 1, 0], ["#ffb43c", 0.66, 0.18], ["#ffe98a", 0.34, 0.34]] as const) {
+    ctx.fillStyle = col;
+    const sway = Math.sin(time * 9 + off * 10) * half * 0.18;
+    ctx.beginPath();
+    ctx.moveTo(e.x + sway, e.y - half * 0.35 - fh * sc);
+    ctx.quadraticCurveTo(e.x - half * 0.6 * sc, e.y - half * 0.35 - fh * sc * 0.35, e.x, e.y - half * 0.3);
+    ctx.quadraticCurveTo(e.x + half * 0.6 * sc, e.y - half * 0.35 - fh * sc * 0.35, e.x + sway, e.y - half * 0.35 - fh * sc);
+    ctx.fill();
+  }
+}
+
 function drawTower(ctx: Ctx, e: Entity, half: number, tc: any) {
   // tall cylinder reads via vertical gradient
   const g = ctx.createLinearGradient(e.x - half, e.y, e.x + half, e.y);
@@ -643,6 +694,21 @@ export function drawUnit(ctx: Ctx, e: Entity, time: number) {
     ctx.beginPath();
     ctx.ellipse(e.x, e.y + e.radius * 0.5, e.radius * 1.7, e.radius * 0.8, 0, 0, Math.PI * 2);
     ctx.fill();
+  }
+
+  // Active-ability aura: a pulsing coloured ring beneath the unit.
+  if (e.abilityActive > 0) {
+    const ab = ABILITIES[e.type];
+    if (ab) {
+      const pulse = 0.62 + Math.sin(time * 9 + e.id) * 0.22;
+      ctx.strokeStyle = withAlpha(ab.color, 0.85 * pulse);
+      ctx.lineWidth = 2.2;
+      ctx.beginPath();
+      ctx.ellipse(e.x, e.y + e.radius * 0.5, e.radius * 1.5, e.radius * 0.7, 0, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.fillStyle = withAlpha(ab.color, 0.14 * pulse);
+      ctx.fill();
+    }
   }
 
   shadow(ctx, e.x + 1, e.y + e.radius * 0.55, e.radius * 0.95, e.radius * 0.42);

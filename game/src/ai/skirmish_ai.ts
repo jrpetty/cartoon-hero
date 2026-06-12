@@ -5,6 +5,7 @@
 import { World } from "../sim/world";
 import { BuildState, Entity, Kind, OrderKind, ResourceKind, Team } from "../sim/types";
 import { UNITS } from "../content/units";
+import { ABILITIES } from "../content/abilities";
 import { BUILDINGS } from "../content/buildings";
 import { UPGRADES } from "../content/tech";
 import { TILE } from "../content/balance";
@@ -477,6 +478,16 @@ export class SkirmishAI {
       this.attackStep();
       this.harassStep();
     }
+    this.abilityStep();
+  }
+
+  /** Fire signature abilities on a knot of army units that are mid-fight. */
+  private abilityStep() {
+    if (!this.diff.usesAbilities) return;
+    const fighters = this.armyUnits().filter(
+      (e) => ABILITIES[e.type] && e.abilityCooldown <= 0 && e.order.kind === OrderKind.Attack,
+    );
+    if (fighters.length >= 2) this.world.useAbility(fighters.map((f) => f.id));
   }
 
   /** Composition weights, optionally countering what we've seen. */

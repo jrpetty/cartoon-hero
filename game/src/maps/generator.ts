@@ -41,6 +41,7 @@ export interface MapPreset {
   size: number; // world units square
   forestry: number; // 0..1 density of extra forest
   water: number; // 0..1 amount of lakes/river
+  chokes?: number; // 0..1 strength of forest barriers that carve lanes
 }
 
 export const PRESETS: MapPreset[] = [
@@ -67,6 +68,31 @@ export const PRESETS: MapPreset[] = [
     size: 3400,
     forestry: 0.35,
     water: 0.55,
+  },
+  {
+    id: "highlands",
+    name: "Highlands",
+    desc: "Rolling country dotted with ponds and copses. A balanced all-rounder.",
+    size: 3300,
+    forestry: 0.5,
+    water: 0.22,
+  },
+  {
+    id: "crossroads",
+    name: "Crossroads",
+    desc: "A small, near-bare arena. No room to hide — the better army wins, fast.",
+    size: 2800,
+    forestry: 0.16,
+    water: 0.0,
+  },
+  {
+    id: "gauntlet",
+    name: "Gauntlet",
+    desc: "Forest barriers funnel every attack through narrow lanes. Hold the gap.",
+    size: 3400,
+    forestry: 0.3,
+    water: 0.05,
+    chokes: 0.85,
   },
 ];
 
@@ -250,6 +276,31 @@ export function generateMap(presetId: string, seed: number): MapData {
     const cy = rng.int(4, rows - 5);
     if (nearStart(cx, cy, 13)) continue;
     cluster("tree", cx, cy, rng.int(5, 12), rng.int(2, 3));
+  }
+
+  // --- Chokepoints: forest barriers with a central lane ---------------------
+  if (preset.chokes && preset.chokes > 0) {
+    const midC = cols / 2;
+    const midR = rows / 2;
+    const dx = midC - acx;
+    const dy = midR - acy;
+    const dl = Math.hypot(dx, dy) || 1;
+    const ux = dx / dl;
+    const uy = dy / dl;
+    const px = -uy; // perpendicular to the base→center axis
+    const py = ux;
+    // Barrier sits two-thirds of the way out; mirror() gives the foe's twin.
+    const bx = acx + ux * dl * 0.6;
+    const by = acy + uy * dl * 0.6;
+    const span = Math.floor(cols * 0.2);
+    const gap = 3 + Math.floor(preset.chokes * 2); // open lane width (cells)
+    for (let s = -span; s <= span; s++) {
+      if (Math.abs(s) <= gap) continue; // leave the lane clear
+      const cx = Math.round(bx + px * s);
+      const cy = Math.round(by + py * s);
+      if (!inB(cx, cy) || nearStart(cx, cy, 11)) continue;
+      cluster("tree", cx, cy, 2, 1);
+    }
   }
 
   const blockedCells: [number, number][] = [];

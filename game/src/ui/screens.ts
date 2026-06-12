@@ -180,22 +180,28 @@ export class SetupScreen {
     const x0 = W / 2 - colW / 2;
     let y = 110;
 
-    // Map presets.
-    ui.panel(x0, y, colW, 150);
+    // Map presets — laid out in a grid that wraps every 3 cards.
+    const perRow = 3;
+    const cardH = 96;
+    const rowGap = 12;
+    const rows = Math.ceil(PRESETS.length / perRow);
+    const panelH = 38 + rows * (cardH + rowGap);
+    ui.panel(x0, y, colW, panelH);
     ui.text("Battlefield", x0 + 16, y + 22, { size: 16, bold: true, color: PAL.uiAccent });
-    const cardW = (colW - 48 - 24) / 3;
+    const cardW = (colW - 32 - (perRow - 1) * 12) / perRow;
     for (let i = 0; i < PRESETS.length; i++) {
       const p = PRESETS[i];
-      const cx = x0 + 16 + i * (cardW + 12);
+      const cx = x0 + 16 + (i % perRow) * (cardW + 12);
+      const cy = y + 38 + Math.floor(i / perRow) * (cardH + rowGap);
       const sel = this.config.presetId === p.id;
-      if (ui.button("", cx, y + 38, cardW, 96, { accent: sel })) {
+      if (ui.button("", cx, cy, cardW, cardH, { accent: sel })) {
         this.config.presetId = p.id;
         audio.play("ui");
       }
-      ui.text(p.name, cx + 12, y + 58, { size: 15, bold: true, color: sel ? "#ffe9b0" : PAL.uiParchment });
-      wrapText(p.desc, cx + 12, y + 80, cardW - 24, 13, "#bdb49a");
+      ui.text(p.name, cx + 12, cy + 20, { size: 15, bold: true, color: sel ? "#ffe9b0" : PAL.uiParchment });
+      wrapText(p.desc, cx + 12, cy + 42, cardW - 24, 13, "#bdb49a");
     }
-    y += 162;
+    y += panelH + 12;
 
     // Seed + difficulty row.
     ui.panel(x0, y, colW, 86);

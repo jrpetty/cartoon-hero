@@ -6,6 +6,7 @@ import { World, FOG_UNSEEN } from "../sim/world";
 import { BuildState, Entity, Kind, Team } from "../sim/types";
 import { Camera } from "../engine/camera";
 import { UNITS } from "../content/units";
+import { ABILITIES } from "../content/abilities";
 import { BUILDINGS } from "../content/buildings";
 import { AGES, MAX_AGE, UPGRADES } from "../content/tech";
 import { PAL, teamColor, withAlpha } from "../render/palette";
@@ -32,6 +33,7 @@ export interface MatchController {
   stopSelection(): void;
   holdSelection(): void;
   setAttackMoveMode(): void;
+  useAbility(): void;
   minimapNavigate(wx: number, wy: number): void;
   minimapCommand(wx: number, wy: number): void;
   openMenu(): void;
@@ -60,8 +62,8 @@ const BUILD_CATEGORIES: BuildCategory[] = [
   {
     id: "defense",
     label: "Defense",
-    hint: "Walls, gates, towers and the mighty Castle.",
-    buildings: ["palisade", "stone_wall", "gate", "watch_tower", "castle"],
+    hint: "Walls, gates, towers, watchfires and the mighty Castle.",
+    buildings: ["palisade", "stone_wall", "gate", "watchfire", "watch_tower", "castle"],
   },
 ];
 
@@ -363,6 +365,29 @@ export class HUD {
         accent: true,
         tooltip: ["Attack-move (A)", "March and engage anything hostile on the way."],
       });
+      // Signature ability for whichever ability-carrying type is selected.
+      const abilityUnit = combatUnits.find((e) => ABILITIES[e.type]);
+      if (abilityUnit) {
+        const ab = ABILITIES[abilityUnit.type];
+        const ready = combatUnits.filter((e) => ABILITIES[e.type]?.id === ab.id && e.abilityCooldown <= 0);
+        const minCd = Math.min(
+          ...combatUnits
+            .filter((e) => ABILITIES[e.type]?.id === ab.id)
+            .map((e) => e.abilityCooldown),
+        );
+        place(ab.name.split(" ")[0], () => ctrl.useAbility(), {
+          accent: ready.length > 0,
+          disabled: ready.length === 0,
+          badge: ready.length === 0 && minCd > 0 ? String(Math.ceil(minCd)) : "",
+          tooltip: [
+            `${ab.name} (Q)`,
+            ab.desc,
+            ready.length > 0
+              ? `${ready.length} ready`
+              : `On cooldown — ${Math.ceil(minCd)}s`,
+          ],
+        });
+      }
       return;
     }
 

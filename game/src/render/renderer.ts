@@ -13,6 +13,7 @@ import {
   drawResource,
   drawSelectionRing,
   drawUnit,
+  setDrawDayPhase,
 } from "./draw";
 import { PAL, teamColor, withAlpha } from "./palette";
 import { BUILDINGS } from "../content/buildings";
@@ -57,6 +58,8 @@ export interface GhostPlacement {
   x: number;
   y: number;
   valid: boolean;
+  /** When drag-painting a wall, the snapped tile centres of the whole run. */
+  line?: { x: number; y: number; valid: boolean }[];
 }
 
 export class Renderer {
@@ -193,6 +196,7 @@ export class Renderer {
     const { ctx, canvas } = this;
     const W = canvas.width;
     const H = canvas.height;
+    setDrawDayPhase(this.dayPhase);
 
     // Screen shake decay.
     this.shakeAmp *= Math.pow(0.0015, dt);
@@ -322,14 +326,21 @@ export class Renderer {
       const def = BUILDINGS[ghost.type];
       if (def) {
         const tiles = def.tiles;
-        const sx = Math.round(ghost.x / TILE) * TILE + (tiles % 2 === 1 ? TILE / 2 : 0);
-        const sy = Math.round(ghost.y / TILE) * TILE + (tiles % 2 === 1 ? TILE / 2 : 0);
         const half = (tiles * TILE) / 2;
-        ctx.fillStyle = ghost.valid ? withAlpha("#7df27d", 0.3) : withAlpha("#f25d4a", 0.35);
-        ctx.fillRect(sx - half, sy - half, half * 2, half * 2);
-        ctx.strokeStyle = ghost.valid ? "#7df27d" : "#f25d4a";
-        ctx.lineWidth = 2;
-        ctx.strokeRect(sx - half, sy - half, half * 2, half * 2);
+        const cell = (x: number, y: number, valid: boolean) => {
+          const sx = Math.round(x / TILE) * TILE + (tiles % 2 === 1 ? TILE / 2 : 0);
+          const sy = Math.round(y / TILE) * TILE + (tiles % 2 === 1 ? TILE / 2 : 0);
+          ctx.fillStyle = valid ? withAlpha("#7df27d", 0.3) : withAlpha("#f25d4a", 0.35);
+          ctx.fillRect(sx - half, sy - half, half * 2, half * 2);
+          ctx.strokeStyle = valid ? "#7df27d" : "#f25d4a";
+          ctx.lineWidth = 2;
+          ctx.strokeRect(sx - half, sy - half, half * 2, half * 2);
+        };
+        if (ghost.line && ghost.line.length > 0) {
+          for (const pt of ghost.line) cell(pt.x, pt.y, pt.valid);
+        } else {
+          cell(ghost.x, ghost.y, ghost.valid);
+        }
       }
     }
 

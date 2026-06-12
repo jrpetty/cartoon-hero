@@ -17,6 +17,7 @@ export interface DifficultyDef {
   maxAge: number;
   buildsCastle: boolean;
   buildsWalls: boolean; // lays a defensive wall + gate across its front
+  usesAbilities: boolean; // fires unit signature abilities in fights
 }
 
 export const DIFFICULTIES: Record<string, DifficultyDef> = {
@@ -36,6 +37,7 @@ export const DIFFICULTIES: Record<string, DifficultyDef> = {
     maxAge: 1,
     buildsCastle: false,
     buildsWalls: false,
+    usesAbilities: false,
   },
   knight: {
     id: "knight",
@@ -53,6 +55,7 @@ export const DIFFICULTIES: Record<string, DifficultyDef> = {
     maxAge: 2,
     buildsCastle: false,
     buildsWalls: false,
+    usesAbilities: true,
   },
   lord: {
     id: "lord",
@@ -70,6 +73,7 @@ export const DIFFICULTIES: Record<string, DifficultyDef> = {
     maxAge: 2,
     buildsCastle: true,
     buildsWalls: true,
+    usesAbilities: true,
   },
   warlord: {
     id: "warlord",
@@ -87,6 +91,7 @@ export const DIFFICULTIES: Record<string, DifficultyDef> = {
     maxAge: 2,
     buildsCastle: true,
     buildsWalls: true,
+    usesAbilities: true,
   },
 };
 

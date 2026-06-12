@@ -134,6 +134,10 @@ export interface Entity {
   projFromX: number;
   projFromY: number;
 
+  // Active ability (signature self-buff)
+  abilityCooldown: number; // seconds until usable again (0 = ready)
+  abilityActive: number; // seconds of buff remaining (0 = inactive)
+
   // Visual helpers (render only; safe to derive)
   animPhase: number;
   hitFlash: number;

@@ -19,6 +19,7 @@ import { UNITS, UnitDef } from "../content/units";
 import { BUILDINGS, BuildingDef } from "../content/buildings";
 import { AGES, MAX_AGE, UPGRADES } from "../content/tech";
 import { dayPhase, visionMult } from "../content/daynight";
+import { ABILITIES } from "../content/abilities";
 import {
   AGE_ARMOR_BONUS,
   AGE_ATTACK_BONUS,
@@ -67,7 +68,7 @@ export interface PlayerState {
 export interface WorldEvent {
   kind:
     | "sword" | "bow" | "arrowHit" | "siege" | "death" | "collapse"
-    | "build" | "complete" | "underattack" | "age" | "deposit" | "spawn" | "hit";
+    | "build" | "complete" | "underattack" | "age" | "deposit" | "spawn" | "hit" | "ability";
   x: number;
   y: number;
   team: Team;
@@ -107,6 +108,7 @@ function makeEntity(): Entity {
     garrison: [], gateOpen: false, gateForce: 0,
     projTargetId: -1, projDamage: 0, projSpeed: 0, projSourceTeam: Team.Neutral,
     projArmorClassBonusFrom: "", projElapsed: 0, projDuration: 0, projFromX: 0, projFromY: 0,
+    abilityCooldown: 0, abilityActive: 0,
     animPhase: 0, hitFlash: 0, lastDamageTime: -999, selected: false,
     variantRarity: 0, tier: 0,
   };
@@ -378,6 +380,25 @@ export class World {
     }
   }
 
+  /**
+   * Trigger each selected unit's signature ability if it has one and it's off
+   * cooldown. Returns how many actually fired (for UI feedback).
+   */
+  useAbility(ids: EntityId[]): number {
+    let fired = 0;
+    for (const id of ids) {
+      const e = this.byId.get(id);
+      if (!e || !e.alive || e.kind !== Kind.Unit) continue;
+      const ab = ABILITIES[e.type];
+      if (!ab || e.abilityCooldown > 0) continue;
+      e.abilityActive = ab.duration;
+      e.abilityCooldown = ab.cooldown;
+      this.emit("ability", e.x, e.y - e.radius, e.team, ab.id);
+      fired++;
+    }
+    return fired;
+  }
+
   /** Validate placement + pay cost + spawn foundation. Returns entity or null. */
   placeBuilding(team: Team, type: string, wx: number, wy: number): Entity | null {
     const def = BUILDINGS[type];
@@ -557,6 +578,8 @@ export class World {
     for (const e of this.entities) {
       if (!e.alive) continue;
       e.attackCooldown = Math.max(0, e.attackCooldown - SIM_DT);
+      e.abilityCooldown = Math.max(0, e.abilityCooldown - SIM_DT);
+      e.abilityActive = Math.max(0, e.abilityActive - SIM_DT);
       e.hitFlash = Math.max(0, e.hitFlash - SIM_DT * 3);
       switch (e.kind) {
         case Kind.Unit: this.tickUnit(e); break;
@@ -714,10 +737,11 @@ export class World {
       }
     }
 
+    const moveSpeed = this.effectiveSpeed(e);
     const neighbors = this.spatial.query(e.x, e.y, 40) as Entity[];
-    let [sx, sy] = applySeparation(e, neighbors, desX * e.speed, desY * e.speed);
+    let [sx, sy] = applySeparation(e, neighbors, desX * moveSpeed, desY * moveSpeed);
     const sl = Math.hypot(sx, sy) || 1;
-    const spd = Math.min(e.speed, sl);
+    const spd = Math.min(moveSpeed, sl);
     e.vx = (sx / sl) * spd;
     e.vy = (sy / sl) * spd;
 
@@ -752,7 +776,7 @@ export class World {
       e.vx = e.vy = 0;
       e.facing = Math.atan2(target.y - e.y, target.x - e.x);
       if (e.attackCooldown <= 0 && def.attack > 0) {
-        e.attackCooldown = e.attackInterval;
+        e.attackCooldown = this.effectiveInterval(e);
         if (def.ranged) {
           this.fireProjectile(e, target, def);
           this.emit(def.id === "catapult" ? "siege" : "bow", e.x, e.y, e.team);
@@ -1171,6 +1195,24 @@ export class World {
   // Damage -------------------------------------------------------------------
 
   /** Attack value including tech/age bonuses and RPS bonus vs the target. */
+  /** Movement speed including any active-ability multiplier (Charge / Shield Wall). */
+  private effectiveSpeed(e: Entity): number {
+    if (e.abilityActive > 0) {
+      const ab = ABILITIES[e.type];
+      if (ab?.speedMult) return e.speed * ab.speedMult;
+    }
+    return e.speed;
+  }
+
+  /** Seconds between shots, shortened by Volley while active. */
+  private effectiveInterval(e: Entity): number {
+    if (e.abilityActive > 0) {
+      const ab = ABILITIES[e.type];
+      if (ab?.atkIntervalMult) return e.attackInterval * ab.atkIntervalMult;
+    }
+    return e.attackInterval;
+  }
+
   private effectiveAttack(e: Entity, def: UnitDef, target: Entity): number {
     const p = this.players[e.team];
     let atk = e.attack;
@@ -1181,7 +1223,13 @@ export class World {
         if (up && up.kind === "attack" && up.appliesTo.includes(def.armorClass)) atk += up.amount;
       }
     }
-    const bonus = def.bonus[target.armorClass] ?? 0;
+    let bonus = def.bonus[target.armorClass] ?? 0;
+    // Active ability buffs (Charge damage, Brace's anti-cavalry bite, …).
+    const ab = e.abilityActive > 0 ? ABILITIES[e.type] : undefined;
+    if (ab) {
+      if (ab.attackMult) atk *= ab.attackMult;
+      if (ab.bonusVs) bonus += ab.bonusVs[target.armorClass] ?? 0;
+    }
     return atk + bonus;
   }
 
@@ -1195,6 +1243,11 @@ export class World {
         const up = UPGRADES[upId];
         if (up && up.kind === "armor" && def && up.appliesTo.includes(def.armorClass)) armor += up.amount;
       }
+    }
+    // Shield Wall / Brace add armour while active.
+    if (target.abilityActive > 0) {
+      const ab = ABILITIES[target.type];
+      if (ab?.armorBonus) armor += ab.armorBonus;
     }
     return armor;
   }
@@ -1280,7 +1333,8 @@ export class World {
       const f = this.fog[e.team];
       const cx = this.grid.worldToCellX(e.x);
       const cy = this.grid.worldToCellY(e.y);
-      const mult = e.kind === Kind.Building ? buildingMult : nightMult;
+      // Watchfires burn through the dark — full sight regardless of the hour.
+      const mult = e.type === "watchfire" ? 1 : e.kind === Kind.Building ? buildingMult : nightMult;
       const r = Math.max(2, Math.ceil((e.visionRange * mult) / TILE));
       const r2 = r * r;
       for (let dy = -r; dy <= r; dy++) {

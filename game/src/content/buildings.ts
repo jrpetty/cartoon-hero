@@ -198,6 +198,16 @@ export const BUILDINGS: Record<string, BuildingDef> = {
     attackInterval: 1.0,
     garrisonCap: 5,
   }),
+  watchfire: B({
+    id: "watchfire",
+    name: "Watchfire",
+    desc: "A beacon that burns through the dark. Wide sight the night can't dim — light up your walls and the approaches to your base.",
+    hp: 360,
+    cost: { food: 0, wood: 40, gold: 0 },
+    buildTime: 12,
+    tiles: 1,
+    sight: 320,
+  }),
   palisade: B({
     id: "palisade",
     name: "Palisade",

@@ -5,8 +5,9 @@
 import { World, WorldEvent } from "./sim/world";
 import { BuildState, Entity, EntityId, Kind, OrderKind, Team } from "./sim/types";
 import { UNITS } from "./content/units";
+import { ABILITIES } from "./content/abilities";
 import { BUILDINGS } from "./content/buildings";
-import { SIM_DT } from "./content/balance";
+import { SIM_DT, TILE } from "./content/balance";
 import { dayPhase } from "./content/daynight";
 import { generateMap } from "./maps/generator";
 import { SkirmishAI } from "./ai/skirmish_ai";
@@ -33,6 +34,8 @@ import { computeRewards, MatchRewards } from "./meta/progression";
 type AppState = "menu" | "setup" | "armory" | "match" | "postmatch";
 
 const PLAYER = Team.Player;
+// Buildings you can drag-paint into a continuous run.
+const LINE_BUILDABLE = new Set(["palisade", "stone_wall"]);
 
 class App {
   canvas: HTMLCanvasElement;
@@ -137,6 +140,7 @@ class App {
     if (k === "a") this.attackMoveArmed = true;
     if (k === "s") this.world.issueStop(this.playerSelection().map((e) => e.id));
     if (k === "h") this.world.issueHold(this.playerSelection().map((e) => e.id));
+    if (k === "q") this.controller.useAbility();
     if (k === "b") {
       this.hud.buildMenuOpen = true;
       this.hud.buildCategory = null;
@@ -264,6 +268,12 @@ class App {
     setAttackMoveMode: () => {
       this.attackMoveArmed = true;
     },
+    useAbility: () => {
+      const ids = this.playerSelection().filter((e) => e.kind === Kind.Unit).map((e) => e.id);
+      const fired = this.world?.useAbility(ids) ?? 0;
+      if (fired > 0) audio.play("command");
+      else this.hud.addAlert("Ability not ready.");
+    },
     minimapNavigate: (wx, wy) => this.camera.centerOn(wx, wy),
     minimapCommand: (wx, wy) => this.issueContextCommand(wx, wy, null),
     openMenu: () => {
@@ -272,6 +282,50 @@ class App {
   };
 
   // -------------------------------------------------------- world interaction --
+
+  /** Snapped, de-duplicated tile centres along a drag, for wall painting/preview. */
+  wallLinePoints(wx0: number, wy0: number, wx1: number, wy1: number): { x: number; y: number }[] {
+    const steps = Math.max(0, Math.round(Math.hypot(wx1 - wx0, wy1 - wy0) / TILE));
+    const out: { x: number; y: number }[] = [];
+    const seen = new Set<string>();
+    for (let i = 0; i <= steps; i++) {
+      const t = steps === 0 ? 0 : i / steps;
+      const wx = wx0 + (wx1 - wx0) * t;
+      const wy = wy0 + (wy1 - wy0) * t;
+      const cx = Math.round(wx / TILE);
+      const cy = Math.round(wy / TILE);
+      const key = `${cx},${cy}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push({ x: cx * TILE + TILE / 2, y: cy * TILE + TILE / 2 });
+    }
+    return out;
+  }
+
+  /** Drag-release while a wall is selected: lay a whole run of segments at once. */
+  paintWallLine(box: { x0: number; y0: number; x1: number; y1: number }) {
+    if (!this.world || !this.placing) return;
+    const pts = this.wallLinePoints(
+      this.camera.screenToWorldX(box.x0), this.camera.screenToWorldY(box.y0),
+      this.camera.screenToWorldX(box.x1), this.camera.screenToWorldY(box.y1),
+    );
+    const villagers = this.playerSelection().filter((e) => UNITS[e.type]?.canBuild);
+    const placed: EntityId[] = [];
+    for (const pt of pts) {
+      const b = this.world.placeBuilding(PLAYER, this.placing, pt.x, pt.y);
+      if (b) placed.push(b.id);
+    }
+    if (placed.length > 0) {
+      placed.forEach((id, i) => {
+        const v = villagers[i % Math.max(1, villagers.length)];
+        if (v) this.world!.issueBuildRepair([v.id], id, true);
+      });
+      audio.play("build");
+    } else {
+      this.hud.addAlert("Cannot build there.");
+    }
+    if (!this.input.shift) this.placing = null;
+  }
 
   worldClick(sx: number, sy: number) {
     if (!this.world) return;
@@ -488,6 +542,14 @@ class App {
           if (ev.team === PLAYER) sfx("levelup", "age", 1);
           break;
         }
+        case "ability": {
+          const col = ABILITIES[
+            Object.keys(ABILITIES).find((k) => ABILITIES[k].id === ev.data) ?? ""
+          ]?.color ?? "#ffe98a";
+          this.particles.burst(ev.x, ev.y, 14, col, 130, { maxLife: 0.5, size: 2.4, glow: true, gravity: -40 });
+          if (ev.team === PLAYER) sfx("command", "ability", 0.1);
+          break;
+        }
         case "deposit":
           break;
         case "spawn":
@@ -634,6 +696,7 @@ class App {
 
     // ---- ghost placement validity ----
     let ghost: GhostPlacement | null = null;
+    let suppressDragBox = false;
     if (this.placing) {
       const wx = this.camera.screenToWorldX(this.input.mx);
       const wy = this.camera.screenToWorldY(this.input.my);
@@ -641,6 +704,19 @@ class App {
       const p = world.player(PLAYER);
       const valid = world.canPlace(PLAYER, this.placing, wx, wy) && world.canAfford(p.resources, def.cost);
       ghost = { type: this.placing, x: wx, y: wy, valid };
+      // Drag-painting a wall: preview the whole snapped run instead of a box.
+      if (LINE_BUILDABLE.has(this.placing) && this.input.drag.active) {
+        const d = this.input.drag;
+        const pts = this.wallLinePoints(
+          this.camera.screenToWorldX(d.x0), this.camera.screenToWorldY(d.y0),
+          this.camera.screenToWorldX(d.x1), this.camera.screenToWorldY(d.y1),
+        );
+        ghost.line = pts.map((pt) => ({
+          x: pt.x, y: pt.y,
+          valid: world.canPlace(PLAYER, this.placing!, pt.x, pt.y),
+        }));
+        suppressDragBox = true;
+      }
     }
 
     // ---- render world ----
@@ -650,7 +726,7 @@ class App {
     ) ?? null;
     this.renderer.render(
       world, this.camera, this.particles, dt, this.time, PLAYER,
-      this.markers, ghost, this.input.drag, rallyFrom,
+      this.markers, ghost, suppressDragBox ? { active: false, x0: 0, y0: 0, x1: 0, y1: 0 } : this.input.drag, rallyFrom,
     );
 
     // ---- HUD (consumes pointer if clicked over panels) ----
@@ -674,7 +750,10 @@ class App {
 
     // ---- route unconsumed pointer input to the world ----
     if (!this.ingameMenu) {
-      if (this.frameDragEnd && !ui.pointerConsumed) this.worldDragSelect(this.frameDragEnd);
+      if (this.frameDragEnd && !ui.pointerConsumed) {
+        if (this.placing && LINE_BUILDABLE.has(this.placing)) this.paintWallLine(this.frameDragEnd);
+        else this.worldDragSelect(this.frameDragEnd);
+      }
       if (this.frameDouble && !ui.pointerConsumed) {
         this.worldDoubleClick(this.frameDouble.x, this.frameDouble.y);
       } else if (this.frameClick && !ui.pointerConsumed) {
