@@ -176,7 +176,10 @@ export class World {
 
   banners: Banner[] = [];
 
-  init(map: MapData, loadouts: Record<string, number>[], econMults: number[], alliances?: number[], commanders?: string[]) {
+  nomad = false;
+
+  init(map: MapData, loadouts: Record<string, number>[], econMults: number[], alliances?: number[], commanders?: string[], nomad = false) {
+    this.nomad = nomad;
     this.map = map;
     this.worldW = map.worldW;
     this.worldH = map.worldH;
@@ -205,6 +208,11 @@ export class World {
         res.food += b.startResources.food ?? 0;
         res.wood += b.startResources.wood ?? 0;
         res.gold += b.startResources.gold ?? 0;
+      }
+      // Nomad: no Town Center to start, so stake them enough wood to raise one.
+      if (nomad) {
+        res.wood += 280;
+        res.food += 50;
       }
       this.players.push({
         team: t as Team,
@@ -239,15 +247,22 @@ export class World {
     // Starting bases.
     for (let t = 0; t < this.numTeams; t++) {
       const start = map.starts[t];
-      this.spawnBuilding(t as Team, "town_center", start.x, start.y, true);
-      const offsets = [
-        [-60, 50], [0, 64], [60, 50],
-      ];
-      // Commander bonus villagers join the starting three.
       const extra = COMMANDERS[commanders?.[t] ?? ""]?.bonus.startVillagers ?? 0;
-      for (let i = 0; i < extra; i++) offsets.push([-90 + i * 36, 84]);
-      for (const [dx, dy] of offsets) {
-        this.spawnUnit(t as Team, "villager", start.x + dx, start.y + dy);
+      if (nomad) {
+        // No Town Center — villagers dotted across a wide area around the spawn.
+        const count = 4 + extra; // a touch more than the standard three
+        for (let i = 0; i < count; i++) {
+          const a = this.rng.range(0, Math.PI * 2);
+          const r = this.rng.range(TILE * 1.5, TILE * 6); // wide scatter
+          this.spawnUnit(t as Team, "villager", start.x + Math.cos(a) * r, start.y + Math.sin(a) * r);
+        }
+      } else {
+        this.spawnBuilding(t as Team, "town_center", start.x, start.y, true);
+        const offsets: number[][] = [[-60, 50], [0, 64], [60, 50]];
+        for (let i = 0; i < extra; i++) offsets.push([-90 + i * 36, 84]);
+        for (const [dx, dy] of offsets) {
+          this.spawnUnit(t as Team, "villager", start.x + dx, start.y + dy);
+        }
       }
     }
     this.recomputeVision();

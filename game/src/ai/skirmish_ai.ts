@@ -156,6 +156,20 @@ export class SkirmishAI {
     return tcs[0] ?? this.myBuildings()[0] ?? null;
   }
 
+  /** Plant a Town Center at the villagers' centre of mass (nomad / rebuild). */
+  private foundTownCenter(p: ReturnType<World["player"]>) {
+    if (this.myBuildings("town_center", false).length > 0) return; // already founding
+    const vills = this.myUnits("villager");
+    if (vills.length === 0 || !this.world.canAfford(p.resources, BUILDINGS.town_center.cost)) return;
+    let cx = 0;
+    let cy = 0;
+    for (const v of vills) { cx += v.x; cy += v.y; }
+    cx /= vills.length;
+    cy /= vills.length;
+    const tc = this.placeNear("town_center", cx, cy, 0, 4);
+    if (tc) this.assignBuilder(tc, Math.min(3, vills.length));
+  }
+
   /** Cost of the next age the AI is ready to research, or null if not ready. */
   private ageUpCost(p: ReturnType<World["player"]>): { food: number; wood: number; gold: number } | null {
     const vills = this.myUnits("villager").length;
@@ -249,7 +263,12 @@ export class SkirmishAI {
   private economy() {
     const p = this.world.player(this.team);
     const base = this.base();
-    if (!base) return;
+    // No Town Center (nomad start, or ours was razed): raise one near our
+    // villagers before anything else — without it nothing can be produced.
+    if (!base) {
+      this.foundTownCenter(p);
+      return;
+    }
 
     // If we're ready to advance an age but can't afford it, stop spending food
     // (villagers + army) so the cost can actually be banked — otherwise the AI

@@ -187,14 +187,40 @@ describe("Combat", () => {
 
   it("a unit ordered to attack a building destroys it", () => {
     const w = makeWorld();
-    const house = w.placeBuilding(Team.Enemy, "house", 1500, 1500)!;
-    house.buildState = 0; // BuildState.Done
-    house.hp = 60;
-    const ram = w.spawnUnit(Team.Player, "ram", 1400, 1500);
-    w.issueAttack([ram.id], house.id);
+    // Find an open spot (richer maps may seed resources on the exact tile).
+    let house = null;
+    for (const [hx, hy] of [[1500, 1500], [1500, 1400], [1600, 1500], [1400, 1500], [1500, 1600]]) {
+      house = w.placeBuilding(Team.Enemy, "house", hx, hy);
+      if (house) break;
+    }
+    expect(house).not.toBeNull();
+    house!.buildState = 0; // BuildState.Done
+    house!.hp = 60;
+    const ram = w.spawnUnit(Team.Player, "ram", house!.x - 100, house!.y);
+    w.issueAttack([ram.id], house!.id);
     run(w, 30);
-    expect(house.alive).toBe(false);
+    expect(house!.alive).toBe(false);
     expect(w.player(Team.Player).stats.buildingsRazed).toBe(1);
+  });
+});
+
+describe("Nomad start", () => {
+  it("spawns scattered villagers, no Town Center, and extra wood", () => {
+    const map = generateMap("open_plains", 99, 2, true);
+    const w = new World(99);
+    w.init(map, [{}, {}], [1, 1], undefined, undefined, true);
+    // No starting Town Center.
+    expect(w.countOf(Team.Player, "town_center")).toBe(0);
+    // A handful of villagers, dotted around (not all on one tile).
+    const vills = w.entitiesOf(Team.Player, Kind.Unit).filter((e) => e.type === "villager");
+    expect(vills.length).toBeGreaterThanOrEqual(4);
+    const spread = Math.max(...vills.map((v) => Math.hypot(v.x - vills[0].x, v.y - vills[0].y)));
+    expect(spread).toBeGreaterThan(40);
+    // Enough wood banked to raise a Town Center (350).
+    expect(w.player(Team.Player).resources.wood).toBeGreaterThanOrEqual(350);
+    // Spawns are spread across the map, not in fixed corners.
+    const [a, b] = map.starts;
+    expect(Math.hypot(a.x - b.x, a.y - b.y)).toBeGreaterThan(map.worldW * 0.3);
   });
 });
 

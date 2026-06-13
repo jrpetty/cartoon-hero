@@ -96,9 +96,10 @@ export const PRESETS: MapPreset[] = [
   },
 ];
 
-const AMOUNT = { tree: 125, gold_mine: 800, berries: 220 };
+// Richer nodes than before — more food/wood/gold banked in every patch.
+const AMOUNT = { tree: 160, gold_mine: 1000, berries: 250 };
 
-export function generateMap(presetId: string, seed: number, players = 2): MapData {
+export function generateMap(presetId: string, seed: number, players = 2, nomad = false): MapData {
   const preset = PRESETS.find((p) => p.id === presetId) ?? PRESETS[0];
   const rng = new RNG(seed);
   const W = preset.size;
@@ -139,23 +140,42 @@ export function generateMap(presetId: string, seed: number, players = 2): MapDat
   }
 
   // --- Start positions ------------------------------------------------------
-  // 1v1: opposite corners (180° pair). FFA: all four corners, kept as two
-  // mirror pairs so the map stays rotationally symmetric and fair.
   const margin = Math.floor(cols * 0.18);
-  const sx = margin + rng.int(0, 4);
-  const sy = margin + rng.int(0, 4);
-  const startCellA: [number, number] = [sx, sy];
-  const startCellB = mirror(sx, sy);
-  const startCellC: [number, number] = [cols - 1 - sx, sy];
-  const startCellD = mirror(startCellC[0], startCellC[1]);
-  // Index order: 0=A 1=B (then) 2=C 3=D. A↔B and C↔D are mirror pairs.
-  const startCells: [number, number][] = players >= 4
-    ? [startCellA, startCellB, startCellC, startCellD]
-    : [startCellA, startCellB];
-  // Bases we place resources around; the mirror handles each one's partner.
-  const primaries: [number, number][] = players >= 4
-    ? [startCellA, startCellC]
-    : [startCellA];
+  let startCells: [number, number][];
+  let primaries: [number, number][];
+  // In nomad maps resources surround the actual (random) spawns, not mirrors.
+  let mirrorRes = true;
+
+  if (nomad) {
+    // Spawn anywhere on the map — random points, well spaced, on inland ground.
+    const nMargin = Math.floor(cols * 0.14);
+    const minSep = cols * (players >= 4 ? 0.3 : 0.42);
+    const pts: [number, number][] = [];
+    let guard = 0;
+    while (pts.length < players && guard++ < 4000) {
+      const cx = rng.int(nMargin, cols - 1 - nMargin);
+      const cy = rng.int(nMargin, rows - 1 - nMargin);
+      if (pts.every(([px, py]) => (px - cx) ** 2 + (py - cy) ** 2 > minSep * minSep)) pts.push([cx, cy]);
+    }
+    while (pts.length < players) pts.push([rng.int(nMargin, cols - 1 - nMargin), rng.int(nMargin, rows - 1 - nMargin)]);
+    startCells = pts;
+    primaries = pts; // each spawn gets its own (un-mirrored) resource ring
+    mirrorRes = false;
+  } else {
+    // 1v1: opposite corners (180° pair). FFA: all four corners, kept as two
+    // mirror pairs so the map stays rotationally symmetric and fair.
+    const sx = margin + rng.int(0, 4);
+    const sy = margin + rng.int(0, 4);
+    const startCellA: [number, number] = [sx, sy];
+    const startCellB = mirror(sx, sy);
+    const startCellC: [number, number] = [cols - 1 - sx, sy];
+    const startCellD = mirror(startCellC[0], startCellC[1]);
+    startCells = players >= 4
+      ? [startCellA, startCellB, startCellC, startCellD]
+      : [startCellA, startCellB];
+    primaries = players >= 4 ? [startCellA, startCellC] : [startCellA];
+  }
+  const startCellA = startCells[0];
   const starts = startCells.map(([cx, cy]) => ({ x: cx * TILE + TILE / 2, y: cy * TILE + TILE / 2 }));
   const startSafeR = 11; // cells kept clear of water/forest around each start
 
@@ -217,7 +237,7 @@ export function generateMap(presetId: string, seed: number, players = 2): MapDat
   }
 
   // --- Resource helpers -----------------------------------------------------
-  const placeRes = (type: ResourceSpawn["type"], cx: number, cy: number, mirrored = true) => {
+  const placeRes = (type: ResourceSpawn["type"], cx: number, cy: number, mirrored = mirrorRes) => {
     if (!inB(cx, cy)) return;
     const i = idx(cx, cy);
     if (blockedSet.has(i) || resCells.has(i) || terrain[i] === Terrain.Water) return;
@@ -255,37 +275,55 @@ export function generateMap(presetId: string, seed: number, players = 2): MapDat
     }
   };
 
-  // --- Per-start resources (mirrored automatically) -------------------------
+  // --- Per-start resources (mirrored on standard maps) ----------------------
   for (const [acx, acy] of primaries) {
     // Main woodline: a fat arc of trees just outside the base.
     const woodAngle = rng.range(0, Math.PI * 2);
     const wx = acx + Math.round(Math.cos(woodAngle) * 9);
     const wy = acy + Math.round(Math.sin(woodAngle) * 9);
-    cluster("tree", wx, wy, 14, 3);
+    cluster("tree", wx, wy, 20, 3);
+    // A second woodline on the far side so wood never runs dry early.
+    cluster("tree", acx - Math.round(Math.cos(woodAngle) * 9), acy - Math.round(Math.sin(woodAngle) * 9), 12, 3);
     // Berries close to the TC — a generous patch so early food isn't starved.
     const berryAngle = woodAngle + rng.range(1.5, 2.5);
-    cluster("berries", acx + Math.round(Math.cos(berryAngle) * 6), acy + Math.round(Math.sin(berryAngle) * 6), 9, 2);
+    cluster("berries", acx + Math.round(Math.cos(berryAngle) * 6), acy + Math.round(Math.sin(berryAngle) * 6), 11, 2);
     // Gold a bit farther out.
     const goldAngle = woodAngle - rng.range(1.5, 2.5);
-    cluster("gold_mine", acx + Math.round(Math.cos(goldAngle) * 8), acy + Math.round(Math.sin(goldAngle) * 8), 4, 1);
+    cluster("gold_mine", acx + Math.round(Math.cos(goldAngle) * 8), acy + Math.round(Math.sin(goldAngle) * 8), 6, 1);
     // Natural expansion: berries + gold toward the middle.
     const ecx = Math.round(acx + (cols / 2 - acx) * 0.45);
     const ecy = Math.round(acy + (rows / 2 - acy) * 0.45);
-    cluster("gold_mine", ecx, ecy, 3, 2);
-    cluster("berries", ecx + rng.int(-4, 4), ecy + rng.int(-4, 4), 6, 2);
-    cluster("tree", ecx + rng.int(-6, 6), ecy + rng.int(-6, 6), 8, 3);
+    cluster("gold_mine", ecx, ecy, 5, 2);
+    cluster("berries", ecx + rng.int(-4, 4), ecy + rng.int(-4, 4), 8, 2);
+    cluster("tree", ecx + rng.int(-6, 6), ecy + rng.int(-6, 6), 12, 3);
   }
 
   // --- Contested center gold -------------------------------------------------
-  cluster("gold_mine", Math.floor(cols / 2), Math.floor(rows / 2), 3, 3);
+  cluster("gold_mine", Math.floor(cols / 2), Math.floor(rows / 2), 6, 3);
 
   // --- Scattered forest ------------------------------------------------------
-  const forests = Math.floor(preset.forestry * 26);
+  const forests = Math.floor(preset.forestry * 34);
   for (let i = 0; i < forests; i++) {
     const cx = rng.int(4, cols - 5);
     const cy = rng.int(4, rows - 5);
     if (nearStart(cx, cy, 13)) continue;
-    cluster("tree", cx, cy, rng.int(5, 12), rng.int(2, 3));
+    cluster("tree", cx, cy, rng.int(6, 14), rng.int(2, 3));
+  }
+
+  // --- Extra resources strewn across the whole map (richer maps) ------------
+  const extraGold = 4 + Math.floor((cols * rows) / 2600);
+  for (let i = 0; i < extraGold; i++) {
+    const cx = rng.int(5, cols - 6);
+    const cy = rng.int(5, rows - 6);
+    if (nearStart(cx, cy, 9)) continue;
+    cluster("gold_mine", cx, cy, rng.int(2, 4), 2);
+  }
+  const extraBerries = 4 + Math.floor((cols * rows) / 3000);
+  for (let i = 0; i < extraBerries; i++) {
+    const cx = rng.int(5, cols - 6);
+    const cy = rng.int(5, rows - 6);
+    if (nearStart(cx, cy, 9)) continue;
+    cluster("berries", cx, cy, rng.int(3, 6), 2);
   }
 
   // --- Chokepoints: forest barriers with a central lane ---------------------

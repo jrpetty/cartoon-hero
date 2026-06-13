@@ -223,7 +223,7 @@ class App {
     this.config = config;
     const diff = DIFFICULTIES[config.difficulty];
     const numPlayers = Math.max(2, Math.min(MAX_TEAMS, config.players ?? 2));
-    const map = generateMap(config.presetId, config.seed, numPlayers);
+    const map = generateMap(config.presetId, config.seed, numPlayers, config.nomad);
     const world = new World(config.seed);
     // Team 0 is the human; teams 1..n-1 are AI opponents (free-for-all).
     const loadouts = [this.profile.matchLoadout(config.fairMode)];
@@ -242,7 +242,7 @@ class App {
     for (let t = 1; t < numPlayers; t++) {
       commanders.push(COMMANDER_IDS[Math.floor(Math.random() * COMMANDER_IDS.length)]);
     }
-    world.init(map, loadouts, econMults, alliances, commanders);
+    world.init(map, loadouts, econMults, alliances, commanders, config.nomad);
     this.world = world;
     this.ais = [];
     for (let t = 1; t < numPlayers; t++) {

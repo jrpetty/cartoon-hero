@@ -24,6 +24,7 @@ export interface SkirmishConfig {
   players: number; // 2 = 1v1, 4 = FFA or 2v2
   allied: boolean; // true = 2v2 teams (you + ally vs two foes)
   commander: string; // selected commander id
+  nomad: boolean; // no starting Town Center; villagers scattered on the map
 }
 
 // ------------------------------------------------------------- background --
@@ -204,6 +205,7 @@ export class SetupScreen {
     players: 2,
     allied: false,
     commander: "",
+    nomad: false,
   };
 
   draw(W: number, H: number, time: number, profile: Profile): "start" | "back" | null {
@@ -313,19 +315,24 @@ export class SetupScreen {
     }
     y += 102;
 
-    // Fair mode.
+    // Fair mode + Nomad — two toggles sharing a row.
     ui.panel(x0, y, colW, 64);
+    const half = colW / 2;
     const fm = this.config.fairMode;
     if (ui.button(fm ? "✓" : " ", x0 + 16, y + 16, 32, 32, { accent: fm })) {
       this.config.fairMode = !fm;
       audio.play("ui");
     }
-    ui.text("Ranked match — all-Common loadout (pure skill, +25% rewards)", x0 + 60, y + 26, { size: 14, bold: true });
-    ui.text(
-      fm ? "Your unlocked variants are benched for this battle." : "Your equipped variants will take the field.",
-      x0 + 60, y + 46,
-      { size: 12, color: "#bdb49a" },
-    );
+    ui.text("Ranked (all-Common, +25% rewards)", x0 + 56, y + 26, { size: 13, bold: true });
+    ui.text(fm ? "Variants benched." : "Equipped variants take the field.", x0 + 56, y + 46, { size: 11, color: "#bdb49a" });
+
+    const nm = this.config.nomad;
+    if (ui.button(nm ? "✓" : " ", x0 + half + 16, y + 16, 32, 32, { accent: nm })) {
+      this.config.nomad = !nm;
+      audio.play("ui");
+    }
+    ui.text("Nomad start", x0 + half + 56, y + 26, { size: 13, bold: true });
+    ui.text("No Town Center — settle where you land.", x0 + half + 56, y + 46, { size: 11, color: "#bdb49a" });
     y += 80;
 
     let action: "start" | "back" | null = null;

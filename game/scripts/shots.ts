@@ -666,6 +666,37 @@ function shotDiplomacy() {
   save("15-diplomacy.png", c);
 }
 
+function shotNomad() {
+  const map = generateMap("highlands", 51, 2, true);
+  const world = new World(51);
+  world.init(map, [{}, {}], [1, 1], undefined, undefined, true);
+  const W = 1280;
+  const H = 760;
+  const { c, ctx } = makeCtx(W, H);
+  const renderer = new Renderer(c as any);
+  renderer.prepare(map);
+  const cam = new Camera();
+  cam.setViewport(W, H);
+  cam.setWorld(map.worldW, map.worldH);
+  // Centre on the player's scattered spawn.
+  const s = map.starts[Team.Player];
+  world.fog[Team.Player].fill(FOG_VISIBLE);
+  cam.centerOn(s.x, s.y);
+  cam.zoom = 1.5;
+  renderer.render(
+    world, cam, new Particles(10), 0.016, 2.0, Team.Player,
+    [], null, { active: false, x0: 0, y0: 0, x1: 0, y1: 0 }, null,
+  );
+  ctx.textAlign = "center";
+  ctx.font = "bold 25px Georgia, serif";
+  ctx.fillStyle = "rgba(0,0,0,0.55)";
+  ctx.fillText("Nomad start — no Town Center, settle where you land", W / 2 + 2, 46);
+  ctx.fillStyle = "#ffe9b0";
+  ctx.fillText("Nomad start — no Town Center, settle where you land", W / 2, 44);
+  ctx.textAlign = "left";
+  save("19-nomad.png", c);
+}
+
 function shotCommanders() {
   const W = 1280;
   const H = 760;
@@ -899,4 +930,5 @@ shotCodex();
 shotFortress();
 shotMenus();
 shotCommanders();
+shotNomad();
 console.log("Done.");
