@@ -10,8 +10,19 @@ import { rarityByIndex } from "../meta/rarity";
 import { TILE } from "../content/balance";
 import { isNight } from "../content/daynight";
 import { ABILITIES } from "../content/abilities";
+import { spriteFor } from "./sprites";
 
 type Ctx = CanvasRenderingContext2D;
+
+/** Draw a baked sprite centered at the local origin, sized to the radius. */
+function blitSprite(ctx: Ctx, sp: { img: CanvasImageSource; scale: number; anchorY: number }, radius: number) {
+  const w = radius * 2.6 * sp.scale;
+  const iw = (sp.img as HTMLImageElement).width || w;
+  const ih = (sp.img as HTMLImageElement).height || w;
+  const h = w * (ih / iw);
+  // anchorY 1 = feet on the origin, 0.5 = centered.
+  ctx.drawImage(sp.img, -w / 2, -h * sp.anchorY, w, h);
+}
 
 // The renderer pushes the live day-cycle phase here each frame so world-space
 // art (watchfire glow, etc.) can react to night without threading it through
@@ -165,6 +176,13 @@ export function drawBuilding(ctx: Ctx, e: Entity, time: number, selectedTeamView
 
   shadow(ctx, e.x + half * 0.12, e.y + half * 0.55, half * 1.05, half * 0.45, 0.3);
 
+  const bsprite = spriteFor(e.type);
+  if (bsprite) {
+    ctx.save();
+    ctx.translate(e.x, e.y);
+    blitSprite(ctx, bsprite, half);
+    ctx.restore();
+  } else
   switch (e.type) {
     case "town_center": drawTownCenter(ctx, e, half, tc, time); break;
     case "house": drawHouse(ctx, e, half, tc); break;
@@ -787,6 +805,9 @@ export function drawUnit(ctx: Ctx, e: Entity, time: number) {
   ctx.save();
   ctx.translate(e.x + Math.cos(e.facing) * lunge * 4, e.y - bob + Math.sin(e.facing) * lunge * 4);
 
+  const usprite = spriteFor(e.type);
+  if (usprite) { blitSprite(ctx, usprite, e.radius); ctx.restore(); return drawUnitOverlays(ctx, e, bob); }
+
   switch (e.type) {
     case "villager": drawVillager(ctx, e, tc, moving); break;
     case "militia": drawMilitia(ctx, e, tc, lunge); break;
@@ -808,8 +829,12 @@ export function drawUnit(ctx: Ctx, e: Entity, time: number) {
     }
   }
   ctx.restore();
+  drawUnitOverlays(ctx, e, bob);
+}
 
-  // Rarity trim ring.
+// Rarity trim ring + hit flash, drawn in world space after the body (procedural
+// or baked sprite). Shared so the sprite fast-path keeps these cues.
+function drawUnitOverlays(ctx: Ctx, e: Entity, bob: number) {
   if (e.variantRarity >= 1) {
     const r = rarityByIndex(e.variantRarity);
     ctx.strokeStyle = withAlpha(r.color, 0.85);

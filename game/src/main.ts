@@ -18,6 +18,7 @@ import { Input } from "./engine/input";
 import { Particles } from "./engine/particles";
 import { audio } from "./engine/audio";
 import { Renderer, CommandMarker, GhostPlacement } from "./render/renderer";
+import { loadSprites } from "./render/sprites";
 import { PAL, withAlpha } from "./render/palette";
 import { HUD, MatchController, MINIMAP_SIZE } from "./ui/hud";
 import { ui } from "./ui/ui";
@@ -103,6 +104,9 @@ class App {
     this.resize();
     window.addEventListener("resize", () => this.resize());
     this.wireInput();
+    // Load any Meshy-baked sprites (no-op if none generated yet); procedural art
+    // fills in until each image is ready, so we don't block startup on it.
+    loadSprites().then((n) => { if (n) console.log(`[sprites] loaded ${n} baked models`); });
     requestAnimationFrame(() => this.frame());
   }
 
