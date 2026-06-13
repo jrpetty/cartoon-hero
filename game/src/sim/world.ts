@@ -619,9 +619,9 @@ export class World {
     k.vetKills++;
     while (k.veterancy < VET_THRESHOLDS.length && k.vetKills >= VET_THRESHOLDS[k.veterancy]) {
       k.veterancy++;
-      const bump = Math.round(k.maxHp * 0.12);
-      k.maxHp += bump;
-      k.hp = Math.min(k.maxHp, k.hp + bump);
+      // Bigger max HP (but NOT a heal — staying alive is the unit's job), plus
+      // a sharper edge in attack and, from Elite, armour.
+      k.maxHp += Math.round(k.maxHp * 0.12);
       k.attack += 1;
       if (k.veterancy >= 2) k.armor += 1;
       if (k.team === Team.Player) this.emit("ability", k.x, k.y - k.radius, k.team, "veteran");
