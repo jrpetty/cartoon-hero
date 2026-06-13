@@ -169,7 +169,7 @@ function shotRarities() {
   ctx.fillText("War Chest Rarities — the same Knight, six tiers", W / 2, 44);
   ctx.font = "15px sans-serif";
   ctx.fillStyle = "#c8bfa6";
-  ctx.fillText("Higher rarity = more health, more attack, and an ornate aura", W / 2, 70);
+  ctx.fillText("Higher rarity = more health, attack, speed — and a stronger, faster-recharging ability", W / 2, 70);
   ctx.textAlign = "left";
 
   const n = RARITIES.length;

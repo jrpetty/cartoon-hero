@@ -263,14 +263,42 @@ describe("Fog of war", () => {
 });
 
 describe("Victory", () => {
-  it("declares a winner when one side loses all buildings", () => {
+  it("a team with villagers left (but no buildings) is NOT defeated yet", () => {
     const w = makeWorld();
+    // Raze every enemy building but leave their villagers — they can rebuild,
+    // so the match must NOT end (this is also the nomad start state).
     for (const e of w.entitiesOf(Team.Enemy, Kind.Building)) {
       w.dealDamage(Team.Player, e, 999999, "test");
     }
     run(w, 2);
+    expect(w.player(Team.Enemy).defeated).toBe(false);
+    expect(w.winner).toBe(null);
+  });
+
+  it("declares a winner once a side has no buildings AND no villagers", () => {
+    const w = makeWorld();
+    for (const e of w.entitiesOf(Team.Enemy)) {
+      if (e.kind === Kind.Building || (e.kind === Kind.Unit && UNITS[e.type]?.canBuild)) {
+        w.dealDamage(Team.Player, e, 999999, "test");
+      }
+    }
+    run(w, 2);
     expect(w.winner).toBe(Team.Player);
     expect(w.player(Team.Enemy).defeated).toBe(true);
+  });
+
+  it("units get stronger stats and a better ability at higher rarity", () => {
+    const w = makeWorld();
+    w.player(Team.Player).loadout.knight = 5;
+    w.player(Team.Enemy).loadout.knight = 0;
+    const hi = w.spawnUnit(Team.Player, "knight", 1000, 1000);
+    const lo = w.spawnUnit(Team.Enemy, "knight", 1100, 1000);
+    expect(hi.maxHp).toBeGreaterThan(lo.maxHp);
+    expect(hi.speed).toBeGreaterThan(lo.speed);
+    w.useAbility([hi.id]);
+    w.useAbility([lo.id]);
+    expect(hi.abilityCooldown).toBeLessThan(lo.abilityCooldown); // recharges faster
+    expect(hi.abilityActive).toBeGreaterThan(lo.abilityActive); // lasts longer
   });
 });
 

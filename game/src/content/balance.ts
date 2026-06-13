@@ -28,6 +28,11 @@ export const AGE_ARMOR_BONUS = [0, 0, 1, 2];
 export const RARITY_HP_MULT = [1.0, 1.06, 1.13, 1.22, 1.34, 1.5];
 export const RARITY_ATK_MULT = [1.0, 1.05, 1.11, 1.19, 1.3, 1.45];
 export const RARITY_ARMOR_BONUS = [0, 0, 1, 1, 2, 3];
+// Higher rarities are also a touch quicker, and their signature ability is
+// stronger: a shorter cooldown and a more potent effect (longer/bigger).
+export const RARITY_SPEED_MULT = [1.0, 1.0, 1.02, 1.04, 1.06, 1.09];
+export const RARITY_ABILITY_CD_MULT = [1.0, 0.96, 0.92, 0.86, 0.8, 0.72];
+export const RARITY_ABILITY_POWER_MULT = [1.0, 1.05, 1.1, 1.16, 1.24, 1.35];
 
 // AI eco multipliers per difficulty (gather speed / build speed handicap).
 // Only the top tier gets a real bonus; lower tiers are handicapped.

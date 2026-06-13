@@ -28,9 +28,12 @@ import {
   FARM_TICK_MULT,
   POP_CAP_HARD,
   PROJECTILE_SPEED,
+  RARITY_ABILITY_CD_MULT,
+  RARITY_ABILITY_POWER_MULT,
   RARITY_ARMOR_BONUS,
   RARITY_ATK_MULT,
   RARITY_HP_MULT,
+  RARITY_SPEED_MULT,
   REPAIR_RATE,
   SIM_DT,
   TILE,
@@ -329,7 +332,7 @@ export class World {
     e.armor = def.armor + (RARITY_ARMOR_BONUS[rarity] ?? 0) + armorPlus;
     e.range = def.range;
     e.attackInterval = def.attackInterval;
-    e.speed = def.speed;
+    e.speed = def.speed * (RARITY_SPEED_MULT[rarity] ?? 1);
     e.visionRange = def.visionRange;
     e.radius = def.radius;
     e.armorClass = def.armorClass;
@@ -571,35 +574,38 @@ export class World {
       if (!e || !e.alive || e.kind !== Kind.Unit) continue;
       const ab = ABILITIES[e.type];
       if (!ab || e.abilityCooldown > 0) continue;
-      e.abilityActive = ab.duration;
-      e.abilityCooldown = ab.cooldown;
+      // Higher-rarity units wield a stronger, faster-recharging ability.
+      const pm = RARITY_ABILITY_POWER_MULT[e.variantRarity] ?? 1;
+      const cm = RARITY_ABILITY_CD_MULT[e.variantRarity] ?? 1;
+      e.abilityActive = ab.duration * pm;
+      e.abilityCooldown = ab.cooldown * cm;
 
       switch (ab.kind) {
         case "rally": {
           // Lift the attack of every nearby ally (and yourself).
-          const r = ab.radius ?? 150;
+          const r = (ab.radius ?? 150) * pm;
           for (const n of this.spatial.query(e.x, e.y, r) as Entity[]) {
             if (n.alive && n.kind === Kind.Unit && this.areAllied(e.team, n.team) && dist(e.x, e.y, n.x, n.y) <= r) {
-              n.rallyTimer = Math.max(n.rallyTimer, ab.statusDuration ?? 6);
+              n.rallyTimer = Math.max(n.rallyTimer, (ab.statusDuration ?? 6) * pm);
             }
           }
           break;
         }
         case "slow": {
           // Hobble nearby enemies.
-          const r = ab.radius ?? 120;
+          const r = (ab.radius ?? 120) * pm;
           for (const n of this.spatial.query(e.x, e.y, r) as Entity[]) {
             if (n.alive && n.kind === Kind.Unit && this.areHostile(e.team, n.team) &&
                 dist(e.x, e.y, n.x, n.y) <= r) {
-              n.slowTimer = Math.max(n.slowTimer, ab.statusDuration ?? 4);
+              n.slowTimer = Math.max(n.slowTimer, (ab.statusDuration ?? 4) * pm);
             }
           }
           break;
         }
         case "heal": {
           // Instantly mend wounded allies around the caster.
-          const r = ab.radius ?? 160;
-          const amt = ab.amount ?? 40;
+          const r = (ab.radius ?? 160) * pm;
+          const amt = (ab.amount ?? 40) * pm;
           for (const n of this.spatial.query(e.x, e.y, r) as Entity[]) {
             if (n.alive && n.kind === Kind.Unit && this.areAllied(e.team, n.team) && n.hp < n.maxHp &&
                 dist(e.x, e.y, n.x, n.y) <= r) {
@@ -610,8 +616,8 @@ export class World {
         }
         case "volley": {
           // Rain a barrage on the unit's target (or the nearest foe in sight).
-          const r = ab.radius ?? 84;
-          const amt = ab.amount ?? 16;
+          const r = (ab.radius ?? 84) * pm;
+          const amt = (ab.amount ?? 16) * pm;
           let ix = e.x;
           let iy = e.y;
           const tgt = this.byId.get(e.order.target);
@@ -635,12 +641,12 @@ export class World {
         }
         case "cleave": {
           // A heroic sweep: damage every foe around the hero, rally every ally.
-          const r = ab.radius ?? 115;
+          const r = (ab.radius ?? 115) * pm;
           for (const n of this.spatial.query(e.x, e.y, r) as Entity[]) {
             if (!n.alive || n.kind !== Kind.Unit || dist(e.x, e.y, n.x, n.y) > r) continue;
-            if (this.areHostile(e.team, n.team)) this.dealDamage(e.team, n, ab.amount ?? 24, e.type, e.id);
+            if (this.areHostile(e.team, n.team)) this.dealDamage(e.team, n, (ab.amount ?? 24) * pm, e.type, e.id);
             else if (this.areAllied(e.team, n.team)) {
-              n.rallyTimer = Math.max(n.rallyTimer, ab.statusDuration ?? 5);
+              n.rallyTimer = Math.max(n.rallyTimer, (ab.statusDuration ?? 5) * pm);
             }
           }
           break;
@@ -1850,15 +1856,20 @@ export class World {
 
   private checkVictory() {
     if (this.winner !== null) return;
-    // Count standing buildings per team in one sweep.
+    // A team is only out when it has NO buildings AND no villager to rebuild
+    // one — so a nomad start (villagers, no Town Center) isn't an instant loss,
+    // and a razed base with surviving villagers can still make a comeback.
     const buildings = new Array(this.numTeams).fill(0);
+    const villagers = new Array(this.numTeams).fill(0);
     for (const e of this.entities) {
-      if (e.alive && e.kind === Kind.Building && e.team < this.numTeams) buildings[e.team]++;
+      if (!e.alive || e.team >= this.numTeams) continue;
+      if (e.kind === Kind.Building) buildings[e.team]++;
+      else if (e.kind === Kind.Unit && UNITS[e.type]?.canBuild) villagers[e.team]++;
     }
     const alive: Team[] = [];
     const aliveAlliances = new Set<number>();
     for (let t = 0; t < this.numTeams; t++) {
-      if (buildings[t] === 0) this.players[t].defeated = true;
+      if (buildings[t] === 0 && villagers[t] === 0) this.players[t].defeated = true;
       else if (!this.players[t].defeated) {
         alive.push(t as Team);
         aliveAlliances.add(this.alliances[t]);
