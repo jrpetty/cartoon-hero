@@ -36,6 +36,7 @@ export class SkirmishAI {
   private gameTime = 0;
   private seenWalls = 0;
   private lastRetreatTime = -999;
+  private lastAllyHelpTime = -999;
   private savingForAge = false;
   /** Personality — biases army timing, eco focus and turtling. */
   private style: AIStyle = "balanced";
@@ -154,6 +155,66 @@ export class SkirmishAI {
   private base(): Entity | null {
     const tcs = this.myBuildings("town_center");
     return tcs[0] ?? this.myBuildings()[0] ?? null;
+  }
+
+  // --------------------------------------------------- team coordination --
+
+  /** True when this AI has at least one living allied teammate (a team game). */
+  private hasAlly(): boolean {
+    for (let t = 0; t < this.world.numTeams; t++) {
+      if (t === this.team) continue;
+      if (!this.world.areAllied(this.team, t as Team)) continue;
+      const p = this.world.player(t as Team);
+      if (p && !p.defeated) return true;
+    }
+    return false;
+  }
+
+  /** Rough total strength of a team (buildings + standing army). */
+  private teamStrength(t: Team): number {
+    let s = 0;
+    for (const e of this.world.entities) {
+      if (!e.alive || e.team !== t) continue;
+      if (e.kind === Kind.Building) s += 12;
+      else if (e.kind === Kind.Unit && e.type !== "villager") s += (UNITS[e.type]?.attack ?? 4) + e.hp * 0.05;
+    }
+    return s;
+  }
+
+  /**
+   * The foe the whole alliance should concentrate on. Every allied AI computes
+   * this the same way (weakest standing enemy, tie-break by team index), so they
+   * converge on one target instead of splitting their pushes — concentration of
+   * force is what actually wins team games. Falls back to the nearest enemy when
+   * we have no teammate (1v1 / FFA are unchanged).
+   */
+  private get focusEnemy(): Team {
+    if (!this.hasAlly()) return this.enemyTeam;
+    let best: Team = this.enemyTeam;
+    let bestScore = Infinity;
+    for (let t = 0; t < this.world.numTeams; t++) {
+      if (!this.isHostile(t as Team)) continue;
+      const p = this.world.player(t as Team);
+      if (!p || p.defeated) continue;
+      const score = this.teamStrength(t as Team);
+      if (score < bestScore - 0.001) {
+        bestScore = score;
+        best = t as Team;
+      }
+    }
+    return best;
+  }
+
+  /** True if a living ally is currently assaulting (army units mid-attack). */
+  private allyAssaulting(): boolean {
+    let assaulting = 0;
+    for (const e of this.world.entities) {
+      if (!e.alive || e.kind !== Kind.Unit || e.team === this.team) continue;
+      if (!this.world.areAllied(this.team, e.team)) continue;
+      if (e.type === "villager") continue;
+      if (e.order.kind === OrderKind.Attack || e.order.kind === OrderKind.AttackMove) assaulting++;
+    }
+    return assaulting >= 5;
   }
 
   /** Plant a Town Center at the villagers' centre of mass (nomad / rebuild). */
@@ -749,7 +810,7 @@ export class SkirmishAI {
         }
       }
     }
-    if (threats < 2) return false;
+    if (threats < 2) return this.allyDefendStep();
     threatX /= threats;
     threatY /= threats;
     // Villagers caught in the raid take cover and scatter.
@@ -762,6 +823,49 @@ export class SkirmishAI {
     if (defenders.length) {
       this.world.issueMove(defenders.map((u) => u.id), threatX, threatY, false, true);
     }
+    return true;
+  }
+
+  /**
+   * Our own base is safe — if a teammate is being overrun, march a relief force
+   * to the raid. We commit our spare army (idle/defending units, not those
+   * already mid-attack) so we don't abandon an assault we've already launched,
+   * and rate-limit so the relief column doesn't jitter in place.
+   */
+  private allyDefendStep(): boolean {
+    if (!this.hasAlly()) return false;
+    if (this.gameTime - this.lastAllyHelpTime < 8) return false;
+
+    // Find the worst raid on an allied (non-self) base.
+    let bestX = 0;
+    let bestY = 0;
+    let bestThreats = 0;
+    for (let t = 0; t < this.world.numTeams; t++) {
+      if (t === this.team || !this.world.areAllied(this.team, t as Team)) continue;
+      const p = this.world.player(t as Team);
+      if (!p || p.defeated) continue;
+      const allyBuildings = this.world.entities.filter(
+        (e) => e.alive && e.team === t && e.kind === Kind.Building,
+      );
+      let tx = 0;
+      let ty = 0;
+      let n = 0;
+      for (const e of this.world.entities) {
+        if (!e.alive || !this.isHostile(e.team) || e.kind !== Kind.Unit || e.type === "villager") continue;
+        for (const b of allyBuildings) {
+          if (dist(e.x, e.y, b.x, b.y) < 340) { tx += e.x; ty += e.y; n++; break; }
+        }
+      }
+      if (n > bestThreats) { bestThreats = n; bestX = tx / n; bestY = ty / n; }
+    }
+    // Only bother for a real raid (3+ attackers) and if we have a force to send.
+    if (bestThreats < 3) return false;
+    const relief = this.armyUnits().filter((u) => u.order.kind !== OrderKind.Attack);
+    if (relief.length < 4) return false;
+
+    this.lastAllyHelpTime = this.gameTime;
+    this.attacking = false;
+    this.world.issueMove(relief.map((u) => u.id), bestX, bestY, false, true);
     return true;
   }
 
@@ -796,18 +900,24 @@ export class SkirmishAI {
       }
       return;
     }
-    if (armyPop < this.armySize) return;
-    if (this.gameTime - this.lastWaveTime < this.cadence) return;
+    // Pile onto a teammate's attack even a little under-strength: a combined
+    // two-army hit lands far harder than two solo waves arriving apart.
+    const joiningAlly = this.allyAssaulting() && armyPop >= this.armySize * 0.6 &&
+      this.gameTime - this.lastWaveTime > this.cadence * 0.4;
+    if (armyPop < this.armySize && !joiningAlly) return;
+    if (!joiningAlly && this.gameTime - this.lastWaveTime < this.cadence) return;
 
     this.lastWaveTime = this.gameTime;
     this.attacking = true;
 
+    // Concentrate on the alliance's shared focus enemy (the nearest foe in 1v1).
+    const target = this.focusEnemy;
     // Primary target: nearest known enemy building, else their start position.
     const enemyBuildings = this.world.entities.filter(
-      (e) => e.alive && e.team === this.enemyTeam && e.kind === Kind.Building &&
+      (e) => e.alive && e.team === target && e.kind === Kind.Building &&
         this.world.fogAt(this.team, e.x, e.y) !== 0,
     );
-    const start = this.world.map.starts[this.enemyTeam];
+    const start = this.world.map.starts[target];
     let tx = start.x;
     let ty = start.y;
     const base = this.base();
