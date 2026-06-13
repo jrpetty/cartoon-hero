@@ -92,7 +92,7 @@ export interface Banner {
 }
 
 /** Kills needed to reach hero levels 1..5. */
-export const HERO_THRESHOLDS = [3, 7, 12, 18, 26];
+export const HERO_THRESHOLDS = [4, 10, 17, 26, 37];
 /** Kills needed to reach veterancy ranks 1..3 (Veteran / Elite / Legendary). */
 export const VET_THRESHOLDS = [2, 5, 9];
 const HERO_RESPAWN_SEC = 45;
@@ -137,7 +137,7 @@ export function makeEntity(): Entity {
     amount: 0,
     buildState: BuildState.Done, buildProgress: 1, popProvided: 0,
     rallyX: -1, rallyY: -1, productionQueue: [], productionTime: 0,
-    garrison: [], gateOpen: false, gateForce: 0,
+    garrison: [], gateOpen: false, gateForce: 0, farmWorker: -1,
     projTargetId: -1, projDamage: 0, projSpeed: 0, projSourceTeam: Team.Neutral,
     projArmorClassBonusFrom: "", projElapsed: 0, projDuration: 0, projFromX: 0, projFromY: 0,
     abilityCooldown: 0, abilityActive: 0, slowTimer: 0, rallyTimer: 0, heroLevel: 0, heroKills: 0,
@@ -663,10 +663,10 @@ export class World {
   private applyHeroLevel(e: Entity, level: number) {
     e.heroLevel = level;
     e.heroKills = level > 0 ? HERO_THRESHOLDS[level - 1] : 0;
-    e.maxHp += level * 55;
-    e.attack += level * 4;
-    e.armor += level;
-    e.hp = e.maxHp;
+    e.maxHp += level * 35;
+    e.attack += level * 3;
+    e.armor += Math.floor(level / 2); // +1 at lvl 2-3, +2 at lvl 4-5
+    e.hp = e.maxHp; // respawn at full (not a mid-fight heal)
   }
 
   /**
@@ -711,10 +711,11 @@ export class World {
     const p = this.players[byTeam];
     while (hero.heroLevel < HERO_THRESHOLDS.length && hero.heroKills >= HERO_THRESHOLDS[hero.heroLevel]) {
       hero.heroLevel++;
-      hero.maxHp += 55;
-      hero.hp = Math.min(hero.maxHp, hero.hp + 55);
-      hero.attack += 4;
-      hero.armor += 1;
+      // Tougher over time, but no mid-fight heal (a kill shouldn't top you up),
+      // and a gentler curve so a few kills don't make him unstoppable.
+      hero.maxHp += 35;
+      hero.attack += 3;
+      if (hero.heroLevel % 2 === 0) hero.armor += 1; // +1 at levels 2 & 4 (max +2)
       if (p) p.heroLevel = hero.heroLevel;
       this.emit("ability", hero.x, hero.y - hero.radius, byTeam, "hero_levelup");
     }
@@ -1212,6 +1213,47 @@ export class World {
     }
   }
 
+  /** Is villager `v` currently the worker bound to `farm` (gathering it or returning from it)? */
+  private worksFarm(v: Entity, farm: Entity): boolean {
+    if (v.order.target === farm.id) return true;
+    if (v.order.kind === OrderKind.Return && (v.order.queue ?? []).some((o) => o.target === farm.id)) return true;
+    return false;
+  }
+
+  /** A villager bumped off a taken farm: send it to the nearest free farm, else any resource, else idle. */
+  private reassignFarmer(e: Entity, fromFarm: Entity) {
+    let bestFarm: Entity | null = null;
+    let bestFd = Infinity;
+    for (const f of this.entities) {
+      if (!f.alive || f.kind !== Kind.Building || f.type !== "farm" || f.team !== e.team) continue;
+      if (f.id === fromFarm.id || f.buildState !== BuildState.Done) continue;
+      const owner = this.byId.get(f.farmWorker);
+      if (owner && owner.alive && owner.id !== e.id && this.worksFarm(owner, f)) continue;
+      const d = dist2(e.x, e.y, f.x, f.y);
+      if (d < bestFd) { bestFd = d; bestFarm = f; }
+    }
+    if (bestFarm) {
+      bestFarm.farmWorker = e.id;
+      e.order = { kind: OrderKind.Gather, tx: bestFarm.x, ty: bestFarm.y, target: bestFarm.id };
+      e.path = null;
+      return;
+    }
+    // No free farm — fall back to the nearest natural resource.
+    let bestR: Entity | null = null;
+    let bestRd = Infinity;
+    for (const r of this.entities) {
+      if (!r.alive || r.kind !== Kind.Resource || r.amount <= 0) continue;
+      const d = dist2(e.x, e.y, r.x, r.y);
+      if (d < bestRd) { bestRd = d; bestR = r; }
+    }
+    if (bestR) {
+      e.order = { kind: OrderKind.Gather, tx: bestR.x, ty: bestR.y, target: bestR.id };
+      e.path = null;
+    } else {
+      this.finishOrder(e);
+    }
+  }
+
   private stepGather(e: Entity, def: UnitDef) {
     const node = this.byId.get(e.order.target);
     if (!node || !node.alive || (node.kind === Kind.Resource && node.amount <= 0)) {
@@ -1230,6 +1272,17 @@ export class World {
     if (isFarm && node.buildState !== BuildState.Done) {
       this.finishOrder(e);
       return;
+    }
+    // One farmer per farm: if another villager already works this farm, this one
+    // is bumped to the nearest free farm (or any other resource).
+    if (isFarm) {
+      const owner = this.byId.get(node.farmWorker);
+      const taken = owner && owner.alive && owner.id !== e.id && this.worksFarm(owner, node);
+      if (taken) {
+        this.reassignFarmer(e, node);
+        return;
+      }
+      node.farmWorker = e.id; // claim it
     }
     const kind = isFarm ? ResourceKind.Food : RES_TYPE_KIND[node.type];
     if (!kind) {

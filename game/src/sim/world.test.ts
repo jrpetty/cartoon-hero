@@ -240,6 +240,45 @@ describe("Nomad start", () => {
   });
 });
 
+describe("Farms", () => {
+  it("only one villager works a farm; extras are sent elsewhere", () => {
+    const w = makeWorld();
+    const p = w.player(Team.Player);
+    let farm = null;
+    for (const [fx, fy] of [[1500, 1500], [1500, 1400], [1600, 1500], [1400, 1500], [1500, 1600]]) {
+      farm = w.placeBuilding(Team.Player, "farm", fx, fy);
+      if (farm) break;
+    }
+    expect(farm).not.toBeNull();
+    farm!.buildState = 0; // Done
+    const vs: number[] = [];
+    for (let i = 0; i < 4; i++) vs.push(w.spawnUnit(Team.Player, "villager", 1480 + i * 10, 1560).id);
+    w.issueGather(vs, farm!.id);
+    run(w, 12);
+    const onFarm = vs.filter((id) => w.byId.get(id)!.order.target === farm!.id).length;
+    expect(onFarm).toBe(1);
+  });
+});
+
+describe("Hero leveling", () => {
+  it("levels modestly from kills and does NOT heal on level-up", () => {
+    const w = makeWorld();
+    const hero = w.spawnUnit(Team.Player, "hero", 1000, 1000);
+    const baseHp = hero.maxHp;
+    const baseAtk = hero.attack;
+    for (let n = 0; n < 6; n++) {
+      const foe = w.spawnUnit(Team.Enemy, "villager", 1012, 1000);
+      foe.maxHp = foe.hp = 5;
+      w.issueAttack([hero.id], foe.id);
+      for (let i = 0; i < SIM_HZ * 4 && foe.alive; i++) w.tick();
+    }
+    expect(hero.heroLevel).toBe(1); // 6 kills → only level 1 (threshold 4, next at 10)
+    expect(hero.maxHp).toBe(baseHp + 35);
+    expect(hero.attack).toBe(baseAtk + 3);
+    expect(hero.hp).toBeLessThan(hero.maxHp); // took chip damage; no free heal topped it off
+  });
+});
+
 describe("Fog of war", () => {
   it("enemy base starts unexplored and own base is visible", () => {
     const w = makeWorld();
@@ -390,10 +429,10 @@ describe("Hero units", () => {
     const baseHp = hero.maxHp;
     const baseAtk = hero.attack;
     run(w, 0.2);
-    // Three enemies die next to the hero → level 1.
-    for (let i = 0; i < 3; i++) {
+    // Four enemies die next to the hero → level 1 (threshold is 4 kills).
+    for (let i = 0; i < 4; i++) {
       const foe = w.spawnUnit(Team.Enemy, "militia", 1000 + i * 8, 1010);
-      w.dealDamage(Team.Player, foe, 9999, "hero");
+      w.dealDamage(Team.Player, foe, 9999, "hero", hero.id);
     }
     expect(hero.heroLevel).toBe(1);
     expect(hero.maxHp).toBeGreaterThan(baseHp);

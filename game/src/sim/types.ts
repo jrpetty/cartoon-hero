@@ -128,6 +128,7 @@ export interface Entity {
   garrison: EntityId[];
   gateOpen: boolean; // gates only: is the passage currently open
   gateForce: number; // 0 = auto, 1 = forced open, 2 = forced shut
+  farmWorker: EntityId; // farms only: the one villager allowed to work it (-1 = free)
 
   // Projectile
   projTargetId: EntityId;
