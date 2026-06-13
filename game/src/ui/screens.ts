@@ -9,6 +9,7 @@ import { MatchRewards, levelFromXp } from "../meta/progression";
 import { UNITS } from "../content/units";
 import { PRESETS } from "../maps/generator";
 import { DIFFICULTIES, DIFFICULTY_IDS } from "../ai/difficulty";
+import { COMMANDERS, COMMANDER_IDS, commanderPerks } from "../content/commanders";
 import { PAL, shade, withAlpha } from "../render/palette";
 import { ui } from "./ui";
 import { RNG, randomSeed } from "../engine/rng";
@@ -22,6 +23,7 @@ export interface SkirmishConfig {
   fairMode: boolean;
   players: number; // 2 = 1v1, 4 = FFA or 2v2
   allied: boolean; // true = 2v2 teams (you + ally vs two foes)
+  commander: string; // selected commander id
 }
 
 // ------------------------------------------------------------- background --
@@ -99,6 +101,33 @@ export class MenuScreen {
     drawMenuBackground(W, H, time);
     const ctx = ui.ctx;
 
+    // First-launch (or freshly-recruited) commander reveal overlay.
+    const reveal = COMMANDERS[profile.data.commanderReveal];
+    if (reveal) {
+      ctx.fillStyle = "rgba(8,6,3,0.78)";
+      ctx.fillRect(0, 0, W, H);
+      ui.text("⚑ A Commander Joins Your Banner ⚑", W / 2, H * 0.26, {
+        align: "center", size: 26, bold: true, color: "#ffe9b0", font: "Georgia, serif",
+      });
+      const pw = 460;
+      const px = W / 2 - pw / 2;
+      const py = H * 0.32;
+      ui.panel(px, py, pw, 200, { light: true });
+      ui.text(reveal.name, W / 2, py + 40, { align: "center", size: 30, bold: true, color: reveal.color, font: "Georgia, serif" });
+      ui.text(reveal.title, W / 2, py + 66, { align: "center", size: 16, color: "#d8cdb4" });
+      wrapText(reveal.desc, px + 30, py + 96, pw - 60, 14, "#bdb49a");
+      let ry = py + 150;
+      for (const perk of commanderPerks(reveal)) {
+        ui.text("• " + perk, W / 2, ry, { align: "center", size: 13, color: PAL.uiAccent });
+        ry += 18;
+      }
+      if (ui.button("Claim", W / 2 - 90, py + 216, 180, 46, { accent: true, size: 18 })) {
+        profile.clearCommanderReveal();
+        audio.play("levelup");
+      }
+      return null;
+    }
+
     // Title with drop shadow.
     ctx.save();
     ctx.textAlign = "center";
@@ -174,6 +203,7 @@ export class SetupScreen {
     fairMode: false,
     players: 2,
     allied: false,
+    commander: "",
   };
 
   draw(W: number, H: number, time: number, profile: Profile): "start" | "back" | null {
@@ -257,6 +287,32 @@ export class SetupScreen {
     }
     y += 80;
 
+    // Commander selector (cycle through the ones you own).
+    if (!profile.ownsCommander(this.config.commander)) {
+      this.config.commander = profile.data.commander || profile.data.commanders[0] || "";
+    }
+    ui.panel(x0, y, colW, 86);
+    ui.text("Commander", x0 + 16, y + 24, { size: 16, bold: true, color: PAL.uiAccent });
+    const owned = COMMANDER_IDS.filter((id) => profile.ownsCommander(id));
+    const cur = COMMANDERS[this.config.commander];
+    const cycle = (dir: number) => {
+      const i = owned.indexOf(this.config.commander);
+      const next = owned[(i + dir + owned.length) % owned.length];
+      this.config.commander = next;
+      profile.selectCommander(next);
+      audio.play("ui");
+    };
+    if (owned.length > 1) {
+      if (ui.button("‹", x0 + 150, y + 14, 28, 28, {})) cycle(-1);
+      if (ui.button("›", x0 + colW - 44, y + 14, 28, 28, {})) cycle(1);
+    }
+    if (cur) {
+      ui.text(`${cur.name} — ${cur.title}`, x0 + 190, y + 26, { size: 15, bold: true, color: cur.color });
+      ui.text(commanderPerks(cur).join("   •   "), x0 + 190, y + 48, { size: 12, color: "#d8cdb4" });
+      ui.text(`${owned.length}/${COMMANDER_IDS.length} unlocked — recruit more in the Armory`, x0 + 190, y + 68, { size: 11, color: "#9b927c" });
+    }
+    y += 102;
+
     // Fair mode.
     ui.panel(x0, y, colW, 64);
     const fm = this.config.fairMode;
@@ -305,8 +361,10 @@ interface SpinTicket {
   unitName: string;
 }
 
+const COMMANDER_RECRUIT_COST = 500;
+
 export class ArmoryScreen {
-  tab: "chests" | "collection" = "chests";
+  tab: "chests" | "collection" | "commanders" = "chests";
   // Chest-opening overlay state.
   private opening: ChestDef | null = null;
   private result: RollResult | null = null;
@@ -330,17 +388,19 @@ export class ArmoryScreen {
     let action: "back" | null = null;
     if (!this.opening) {
       // Tabs.
-      const tabW = 160;
-      if (ui.button("War Chests", W / 2 - tabW - 6, 112, tabW, 36, { accent: this.tab === "chests" })) {
-        this.tab = "chests";
-        audio.play("ui");
-      }
-      if (ui.button("Collection", W / 2 + 6, 112, tabW, 36, { accent: this.tab === "collection" })) {
-        this.tab = "collection";
-        audio.play("ui");
+      const tabW = 150;
+      const tabs: [typeof this.tab, string][] = [["chests", "War Chests"], ["commanders", "Commanders"], ["collection", "Collection"]];
+      let tx = W / 2 - (tabs.length * (tabW + 8) - 8) / 2;
+      for (const [id, label] of tabs) {
+        if (ui.button(label, tx, 112, tabW, 36, { accent: this.tab === id })) {
+          this.tab = id;
+          audio.play("ui");
+        }
+        tx += tabW + 8;
       }
 
       if (this.tab === "chests") this.drawChests(W, H, profile);
+      else if (this.tab === "commanders") this.drawCommanders(W, H, profile);
       else this.drawCollection(W, H, profile);
 
       if (ui.button("⟵ Back", 24, H - 68, 130, 44, { size: 15 })) action = "back";
@@ -540,6 +600,57 @@ export class ArmoryScreen {
         this.result = null;
       }
     }
+  }
+
+  private drawCommanders(W: number, H: number, profile: Profile) {
+    const owned = COMMANDER_IDS.filter((id) => profile.ownsCommander(id)).length;
+    ui.text(`${owned}/${COMMANDER_IDS.length} commanders unlocked`, W / 2, 170, {
+      align: "center", size: 15, color: "#d8cdb4",
+    });
+    const canRecruit = owned < COMMANDER_IDS.length && profile.data.renown >= COMMANDER_RECRUIT_COST;
+    if (ui.button(`Recruit a Commander — ${COMMANDER_RECRUIT_COST} ✦`, W / 2 - 180, 186, 360, 40, {
+      accent: canRecruit, disabled: !canRecruit, size: 15,
+    })) {
+      const got = profile.recruitCommander(COMMANDER_RECRUIT_COST);
+      if (got) {
+        profile.selectCommander(got);
+        profile.clearCommanderReveal(); // shown inline here, not on the menu
+        audio.play("levelup");
+      }
+    }
+
+    const cols = 3;
+    const cw = 320;
+    const gap = 18;
+    const x0 = W / 2 - (cols * cw + (cols - 1) * gap) / 2;
+    const y0 = 244;
+    COMMANDER_IDS.forEach((id, i) => {
+      const def = COMMANDERS[id];
+      const has = profile.ownsCommander(id);
+      const selected = profile.data.commander === id;
+      const x = x0 + (i % cols) * (cw + gap);
+      const y = y0 + Math.floor(i / cols) * 150;
+      ui.panel(x, y, cw, 138, { light: has });
+      if (!has) { ui.ctx.fillStyle = "rgba(8,6,3,0.45)"; ui.ctx.fillRect(x, y, cw, 138); }
+      ui.text(has ? `${def.name} — ${def.title}` : `??? — ${def.title}`, x + 16, y + 26, {
+        size: 15, bold: true, color: has ? def.color : "#7a7263",
+      });
+      if (has) {
+        wrapText(def.desc, x + 16, y + 48, cw - 32, 12, "#bdb49a");
+        let py = y + 96;
+        for (const perk of commanderPerks(def)) {
+          ui.text("• " + perk, x + 16, py, { size: 11, color: PAL.uiAccent });
+          py += 16;
+        }
+        if (selected) ui.text("✓ Leading", x + cw - 90, y + 26, { size: 12, bold: true, color: PAL.uiGood });
+        else if (ui.button("Lead", x + cw - 78, y + 104, 62, 24, { size: 12 })) {
+          profile.selectCommander(id);
+          audio.play("ui");
+        }
+      } else {
+        ui.text("Locked — recruit to reveal", x + 16, y + 60, { size: 12, color: "#9b927c" });
+      }
+    });
   }
 
   private drawCollection(W: number, H: number, profile: Profile) {

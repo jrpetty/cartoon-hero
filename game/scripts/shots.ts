@@ -666,6 +666,40 @@ function shotDiplomacy() {
   save("15-diplomacy.png", c);
 }
 
+function shotCommanders() {
+  const W = 1280;
+  const H = 760;
+  // 1) First-launch commander reveal on the menu.
+  {
+    const p = new Profile();
+    p.data.commanders = ["banneret"];
+    p.data.commander = "banneret";
+    p.data.commanderReveal = "banneret";
+    const { c, ctx } = makeCtx(W, H);
+    ui.begin(ctx, { mx: -50, my: -50, clicked: false, rightClicked: false });
+    new MenuScreen().draw(W, H, 1.0, p);
+    ui.flushTooltip(W, H);
+    save("18-commander-reveal.png", c);
+  }
+  // 2) Armory Commanders tab.
+  {
+    const p = new Profile();
+    p.data.renown = 760;
+    for (const id of ["steward", "quartermaster", "marshal", "banneret"]) {
+      if (!p.ownsCommander(id)) p.data.commanders.push(id);
+    }
+    p.data.commander = "marshal";
+    p.clearCommanderReveal();
+    const a = new ArmoryScreen();
+    (a as any).tab = "commanders";
+    const { c, ctx } = makeCtx(W, H);
+    ui.begin(ctx, { mx: -50, my: -50, clicked: false, rightClicked: false });
+    a.draw(W, H, 1.0, 0.016, p);
+    ui.flushTooltip(W, H);
+    save("18b-commander-armory.png", c);
+  }
+}
+
 function shotCodex() {
   const W = 1280;
   const H = 760;
@@ -753,6 +787,12 @@ function shotMenus() {
   profile.data.totalXp = 1820;
   profile.data.renown = 760;
   profile.data.stats = { wins: 7, losses: 3, played: 10, bestStreak: 4, streak: 2 };
+  // Own a few commanders so the selectors look alive; no reveal for these shots.
+  for (const id of ["steward", "marshal", "banneret"]) {
+    if (!profile.ownsCommander(id)) profile.data.commanders.push(id);
+  }
+  profile.data.commander = "banneret";
+  profile.clearCommanderReveal();
 
   const W = 1280;
   const H = 760;
@@ -858,4 +898,5 @@ shotPostmatch();
 shotCodex();
 shotFortress();
 shotMenus();
+shotCommanders();
 console.log("Done.");

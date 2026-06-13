@@ -44,6 +44,7 @@ import { SpatialGrid } from "../engine/spatialgrid";
 import { RNG } from "../engine/rng";
 import { dist, dist2 } from "../engine/math";
 import type { MapData } from "../maps/generator";
+import { COMMANDERS, CommanderPower } from "../content/commanders";
 
 export interface PlayerState {
   team: Team;
@@ -61,6 +62,14 @@ export interface PlayerState {
   heroState: "none" | "alive" | "respawning";
   heroRespawnTimer: number; // seconds until the Champion rises again
   heroLevel: number; // saved level, carried across a respawn
+  // Commander (leader) — passive bonuses + an optional banner power.
+  commander: string;
+  buildMult: number; // construction speed (×)
+  gatherMultC: number; // commander gather speed (×)
+  unitHpMult: number; // combat unit max HP (×)
+  unitArmorBonus: number; // combat unit armor (flat)
+  vetMult: number; // veterancy gained faster (×)
+  powerCooldown: number; // seconds until the commander power is ready
   stats: {
     unitsKilled: number;
     unitsLost: number;
@@ -68,6 +77,15 @@ export interface PlayerState {
     buildingsLost: number;
     gathered: number;
   };
+}
+
+/** A planted commander banner buffing nearby friendly units. */
+export interface Banner {
+  team: Team;
+  x: number;
+  y: number;
+  expires: number;
+  power: CommanderPower;
 }
 
 /** Kills needed to reach hero levels 1..5. */
@@ -156,7 +174,9 @@ export class World {
 
   // ---------------------------------------------------------------- setup --
 
-  init(map: MapData, loadouts: Record<string, number>[], econMults: number[], alliances?: number[]) {
+  banners: Banner[] = [];
+
+  init(map: MapData, loadouts: Record<string, number>[], econMults: number[], alliances?: number[], commanders?: string[]) {
     this.map = map;
     this.worldW = map.worldW;
     this.worldH = map.worldH;
@@ -177,19 +197,35 @@ export class World {
       : Array.from({ length: this.numTeams }, (_, t) => t);
     this.lastAlertTime = new Array(this.numTeams).fill(-99);
     for (let t = 0; t < this.numTeams; t++) {
+      const cmdId = commanders?.[t] ?? "";
+      const cmd = COMMANDERS[cmdId];
+      const b = cmd?.bonus ?? {};
+      const res = { ...map.startResources };
+      if (b.startResources) {
+        res.food += b.startResources.food ?? 0;
+        res.wood += b.startResources.wood ?? 0;
+        res.gold += b.startResources.gold ?? 0;
+      }
       this.players.push({
         team: t as Team,
-        resources: { ...map.startResources },
+        resources: res,
         age: 0,
         upgrades: new Set(),
         popUsed: 0,
-        popCap: 0,
+        popCap: b.popBonus ?? 0,
         loadout: loadouts[t] ?? {},
         econMult: econMults[t] ?? 1,
         defeated: false,
         heroState: "none",
         heroRespawnTimer: 0,
         heroLevel: 0,
+        commander: cmdId,
+        buildMult: b.buildMult ?? 1,
+        gatherMultC: b.gatherMult ?? 1,
+        unitHpMult: b.unitHpMult ?? 1,
+        unitArmorBonus: b.unitArmorBonus ?? 0,
+        vetMult: b.vetMult ?? 1,
+        powerCooldown: 0,
         stats: { unitsKilled: 0, unitsLost: 0, buildingsRazed: 0, buildingsLost: 0, gathered: 0 },
       });
       this.fog.push(new Uint8Array(this.fogCols * this.fogRows));
@@ -207,6 +243,9 @@ export class World {
       const offsets = [
         [-60, 50], [0, 64], [60, 50],
       ];
+      // Commander bonus villagers join the starting three.
+      const extra = COMMANDERS[commanders?.[t] ?? ""]?.bonus.startVillagers ?? 0;
+      for (let i = 0; i < extra; i++) offsets.push([-90 + i * 36, 84]);
       for (const [dx, dy] of offsets) {
         this.spawnUnit(t as Team, "villager", start.x + dx, start.y + dy);
       }
@@ -265,10 +304,14 @@ export class World {
     const p = this.players[team];
     const rarity = p?.loadout[def.id] ?? 0;
     e.variantRarity = rarity;
-    e.maxHp = Math.round(def.hp * (RARITY_HP_MULT[rarity] ?? 1));
+    // Commander bonuses apply to soldiers (not villagers).
+    const soldier = !def.canGather;
+    const hpMult = soldier ? (p?.unitHpMult ?? 1) : 1;
+    const armorPlus = soldier ? (p?.unitArmorBonus ?? 0) : 0;
+    e.maxHp = Math.round(def.hp * (RARITY_HP_MULT[rarity] ?? 1) * hpMult);
     e.hp = e.maxHp;
     e.attack = Math.round(def.attack * (RARITY_ATK_MULT[rarity] ?? 1));
-    e.armor = def.armor + (RARITY_ARMOR_BONUS[rarity] ?? 0);
+    e.armor = def.armor + (RARITY_ARMOR_BONUS[rarity] ?? 0) + armorPlus;
     e.range = def.range;
     e.attackInterval = def.attackInterval;
     e.speed = def.speed;
@@ -617,7 +660,9 @@ export class World {
     const def = UNITS[k.type];
     if (!def || def.canGather || def.hero || def.attack <= 0) return;
     k.vetKills++;
-    while (k.veterancy < VET_THRESHOLDS.length && k.vetKills >= VET_THRESHOLDS[k.veterancy]) {
+    const vetMult = this.players[k.team]?.vetMult ?? 1;
+    const need = (rank: number) => Math.max(1, Math.round(VET_THRESHOLDS[rank] / vetMult));
+    while (k.veterancy < VET_THRESHOLDS.length && k.vetKills >= need(k.veterancy)) {
       k.veterancy++;
       // Bigger max HP (but NOT a heal — staying alive is the unit's job), plus
       // a sharper edge in attack and, from Elite, armour.
@@ -651,6 +696,59 @@ export class World {
       hero.armor += 1;
       if (p) p.heroLevel = hero.heroLevel;
       this.emit("ability", hero.x, hero.y - hero.radius, byTeam, "hero_levelup");
+    }
+  }
+
+  // Commander power -----------------------------------------------------------
+
+  /** True if `team`'s commander has a power ready to plant. */
+  powerReady(team: Team): boolean {
+    const p = this.players[team];
+    if (!p || p.powerCooldown > 0) return false;
+    return !!COMMANDERS[p.commander]?.power;
+  }
+
+  /** Plant the commander's banner at (wx,wy). Returns true if planted. */
+  placeBanner(team: Team, wx: number, wy: number): boolean {
+    const p = this.players[team];
+    const power = COMMANDERS[p?.commander ?? ""]?.power;
+    if (!p || !power || p.powerCooldown > 0) return false;
+    this.banners.push({ team, x: wx, y: wy, expires: this.time + power.duration, power });
+    p.powerCooldown = power.cooldown;
+    this.emit("ability", wx, wy, team, power.id);
+    return true;
+  }
+
+  /** The active friendly banner covering (x,y), if any. */
+  private bannerAt(team: Team, x: number, y: number): Banner | null {
+    for (const b of this.banners) {
+      if (!this.areAllied(team, b.team)) continue;
+      const r = b.power.radius;
+      const dx = x - b.x;
+      const dy = y - b.y;
+      if (dx * dx + dy * dy <= r * r) return b;
+    }
+    return null;
+  }
+
+  /** Per-tick: expire banners, heal soldiers standing under one, cool powers. */
+  private tickBanners() {
+    for (let t = 0; t < this.numTeams; t++) {
+      const p = this.players[t];
+      if (p && p.powerCooldown > 0) p.powerCooldown = Math.max(0, p.powerCooldown - SIM_DT);
+    }
+    if (this.banners.length === 0) return;
+    this.banners = this.banners.filter((b) => b.expires > this.time);
+    for (const b of this.banners) {
+      if (b.power.militaryRegen <= 0) continue;
+      const r = b.power.radius;
+      for (const e of this.spatial.query(b.x, b.y, r) as Entity[]) {
+        if (!e.alive || e.kind !== Kind.Unit || e.hp >= e.maxHp) continue;
+        if (!this.areAllied(b.team, e.team)) continue;
+        if (UNITS[e.type]?.canGather) continue; // soldiers only
+        if (dist2(b.x, b.y, e.x, e.y) > r * r) continue;
+        e.hp = Math.min(e.maxHp, e.hp + b.power.militaryRegen * SIM_DT);
+      }
     }
   }
 
@@ -876,6 +974,7 @@ export class World {
     if (this.tickCount % 20 === 0) this.checkVictory();
     if (this.tickCount % 600 === 0) this.compact();
     this.tickHeroRespawns();
+    this.tickBanners();
   }
 
   /** Bring fallen Champions back at their Town Center once the timer elapses. */
@@ -1138,7 +1237,11 @@ export class World {
       if (gp) {
         if (gp.upgrades.has("wheelbarrow")) econ *= 1 + UPGRADES.wheelbarrow.amount;
         if (gp.upgrades.has("hand_cart")) econ *= 1 + UPGRADES.hand_cart.amount;
+        econ *= gp.gatherMultC; // commander passive
       }
+      // Rally banner boosts gathering for villagers standing in its radius.
+      const banner = this.bannerAt(e.team, e.x, e.y);
+      if (banner) econ *= banner.power.villagerGatherMult;
       e.gatherCooldown = (GATHER_TICK / econ) * (isFarm ? FARM_TICK_MULT : 1);
       const take = Math.min(GATHER_RATE * GATHER_TICK * 10, node.amount); // chunked
       const got = Math.min(take, VILLAGER_CARRY_CAP - e.carry, 1.2);
@@ -1222,7 +1325,8 @@ export class World {
     e.facing = Math.atan2(b.y - e.y, b.x - e.x);
     e.animPhase += SIM_DT * 2;
     if (b.buildState !== BuildState.Done) {
-      const mult = this.players[e.team]?.econMult ?? 1;
+      const pp = this.players[e.team];
+      const mult = (pp?.econMult ?? 1) * (pp?.buildMult ?? 1); // commander build speed
       b.buildProgress += (SIM_DT / bdef.buildTime) * mult;
       b.hp = Math.min(b.maxHp, b.hp + (b.maxHp * 0.92 * SIM_DT * mult) / bdef.buildTime);
       b.buildState = BuildState.UnderConstruction;
@@ -1562,6 +1666,11 @@ export class World {
     if (target.abilityActive > 0) {
       const ab = ABILITIES[target.type];
       if (ab?.armorBonus) armor += ab.armorBonus;
+    }
+    // Rally banner toughens soldiers standing under it.
+    if (target.kind === Kind.Unit && !UNITS[target.type]?.canGather) {
+      const banner = this.bannerAt(target.team, target.x, target.y);
+      if (banner) armor += banner.power.militaryArmor;
     }
     return armor;
   }

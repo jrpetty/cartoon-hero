@@ -310,6 +310,49 @@ export class Renderer {
       }
     });
 
+    // Commander banners — radius aura on the ground + a waving standard.
+    this.guard(ctx, "banners", worldTf, () => {
+      for (const b of world.banners) {
+        if (b.x < vx0 - b.power.radius || b.x > vx1 + b.power.radius) continue;
+        const col = b.power.color;
+        const pulse = 0.5 + Math.sin(time * 2 + b.x) * 0.2;
+        // radius ring
+        ctx.strokeStyle = withAlpha(col, 0.4 * pulse);
+        ctx.lineWidth = 2;
+        ctx.setLineDash([8, 8]);
+        ctx.beginPath();
+        ctx.arc(b.x, b.y, b.power.radius, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        // soft fill
+        const g = ctx.createRadialGradient(b.x, b.y, 1, b.x, b.y, b.power.radius);
+        g.addColorStop(0, withAlpha(col, 0.07));
+        g.addColorStop(1, withAlpha(col, 0));
+        ctx.fillStyle = g;
+        ctx.beginPath();
+        ctx.arc(b.x, b.y, b.power.radius, 0, Math.PI * 2);
+        ctx.fill();
+        // pole + waving flag
+        ctx.strokeStyle = "#5a4632";
+        ctx.lineWidth = 2.5;
+        ctx.beginPath();
+        ctx.moveTo(b.x, b.y);
+        ctx.lineTo(b.x, b.y - 26);
+        ctx.stroke();
+        ctx.fillStyle = col;
+        const w = 5 + Math.sin(time * 6 + b.y) * 1.5;
+        ctx.beginPath();
+        ctx.moveTo(b.x, b.y - 26);
+        ctx.lineTo(b.x + 16, b.y - 23 + w * 0.4);
+        ctx.lineTo(b.x, b.y - 16);
+        ctx.fill();
+        ctx.fillStyle = "#ffe07a";
+        ctx.beginPath();
+        ctx.arc(b.x, b.y - 27, 2, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    });
+
     // Collect and sort drawable entities by y (painter's algorithm).
     const drawables: Entity[] = [];
     for (const e of world.entities) {

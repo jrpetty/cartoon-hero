@@ -7,6 +7,7 @@ import { BuildState, Entity, EntityId, Kind, MAX_TEAMS, OrderKind, Team } from "
 import { UNITS } from "./content/units";
 import { ABILITIES } from "./content/abilities";
 import { BUILDINGS } from "./content/buildings";
+import { COMMANDERS, COMMANDER_IDS } from "./content/commanders";
 import { SIM_DT, TILE } from "./content/balance";
 import { dayPhase } from "./content/daynight";
 import { generateMap } from "./maps/generator";
@@ -64,6 +65,7 @@ class App {
   markers: CommandMarker[] = [];
   placing: string | null = null;
   attackMoveArmed = false;
+  powerArmed = false; // commander power placement mode
   ingameMenu = false;
   paused = false;
   gameSpeed = 1; // 0.5 / 1 / 2 / 3
@@ -140,6 +142,7 @@ class App {
     const k = key.length === 1 ? key.toLowerCase() : key;
     if (k === "Escape") {
       if (this.placing) this.placing = null;
+      else if (this.powerArmed) this.powerArmed = false;
       else if (this.attackMoveArmed) this.attackMoveArmed = false;
       else this.ingameMenu = !this.ingameMenu;
       return;
@@ -163,6 +166,7 @@ class App {
     if (k === "-" || k === "_") this.cycleSpeed(-1);
     if (k === ".") this.selectIdleVillager();
     if (k === ",") this.selectAllArmy();
+    if (k === "c") this.armCommanderPower();
     // Control groups.
     if (/^[0-9]$/.test(k)) {
       const idx = parseInt(k, 10);
@@ -233,7 +237,12 @@ class App {
     const alliances = config.allied && numPlayers === 4
       ? Array.from({ length: numPlayers }, (_, t) => t % 2)
       : undefined;
-    world.init(map, loadouts, econMults, alliances);
+    // Player leads with their chosen commander; the AIs each draw a random one.
+    const commanders = [config.commander || this.profile.data.commander];
+    for (let t = 1; t < numPlayers; t++) {
+      commanders.push(COMMANDER_IDS[Math.floor(Math.random() * COMMANDER_IDS.length)]);
+    }
+    world.init(map, loadouts, econMults, alliances, commanders);
     this.world = world;
     this.ais = [];
     for (let t = 1; t < numPlayers; t++) {
@@ -469,7 +478,27 @@ class App {
     const by = H - MINIMAP_SIZE - 10 - 22 - 6 - 26 - 4;
     chip(`Idle ${idleCount}`, 12, by, 70, 24, idleCount > 0, () => this.selectIdleVillager());
     chip("Army", 86, by, 60, 24, false, () => this.selectAllArmy());
+
+    // Commander power button (only if your commander has one).
+    const p = this.world.player(PLAYER);
+    const power = COMMANDERS[p.commander]?.power;
+    if (power) {
+      const ready = p.powerCooldown <= 0;
+      const label = this.powerArmed ? "Place ⚑" : ready ? `⚑ ${power.name.split(" ")[0]}` : `${Math.ceil(p.powerCooldown)}s`;
+      chip(label, 150, by, 96, 24, this.powerArmed || ready, () => this.armCommanderPower());
+    }
     ctx.textAlign = "left";
+  }
+
+  armCommanderPower() {
+    if (!this.world) return;
+    if (this.world.powerReady(PLAYER)) {
+      this.powerArmed = true;
+      this.placing = null;
+      this.attackMoveArmed = false;
+    } else {
+      this.hud.addAlert("Commander power not ready.");
+    }
   }
 
   dropPing(wx: number, wy: number) {
@@ -482,6 +511,18 @@ class App {
     if (!this.world) return;
     const wx = this.camera.screenToWorldX(sx);
     const wy = this.camera.screenToWorldY(sy);
+
+    // Planting the commander banner.
+    if (this.powerArmed) {
+      if (this.world.placeBanner(PLAYER, wx, wy)) {
+        const power = COMMANDERS[this.world.player(PLAYER).commander]?.power;
+        this.markers.push({ x: wx, y: wy, age: 0, kind: "rally" });
+        this.hud.addAlert(`⚑ ${power?.name ?? "Banner"} planted!`);
+        audio.play("command");
+      }
+      this.powerArmed = false;
+      return;
+    }
 
     // Alt+click drops a ping (look-here signal) instead of selecting.
     if (this.input.alt) {

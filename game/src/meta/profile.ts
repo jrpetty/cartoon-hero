@@ -4,6 +4,7 @@
 
 import { COLLECTIBLE_UNIT_IDS, variantKey } from "./catalog";
 import { levelFromXp, levelUpRenown } from "./progression";
+import { COMMANDER_IDS } from "../content/commanders";
 
 const STORAGE_KEY = "banner_and_blade_profile_v1";
 
@@ -15,6 +16,10 @@ export interface ProfileData {
   loadout: Record<string, number>; // unitId -> equipped rarity
   stats: { wins: number; losses: number; played: number; bestStreak: number; streak: number };
   openedChests: number;
+  commanders: string[]; // owned commander ids
+  commander: string; // selected commander id
+  /** First-launch reveal: the just-granted commander to show, or "". */
+  commanderReveal: string;
 }
 
 function defaultProfile(): ProfileData {
@@ -33,6 +38,9 @@ function defaultProfile(): ProfileData {
     loadout,
     stats: { wins: 0, losses: 0, played: 0, bestStreak: 0, streak: 0 },
     openedChests: 0,
+    commanders: [],
+    commander: "",
+    commanderReveal: "",
   };
 }
 
@@ -61,7 +69,53 @@ export class Profile {
         changed = true;
       }
     }
+    // Older saves predate commanders; back-fill the fields.
+    if (!Array.isArray(this.data.commanders)) { this.data.commanders = []; changed = true; }
+    if (this.data.commander === undefined) { this.data.commander = ""; changed = true; }
+    if (this.data.commanderReveal === undefined) { this.data.commanderReveal = ""; changed = true; }
+    // First launch: grant a random starter commander ("your first chest").
+    if (this.data.commanders.length === 0) {
+      const starter = COMMANDER_IDS[Math.floor(Math.random() * COMMANDER_IDS.length)];
+      this.data.commanders.push(starter);
+      this.data.commander = starter;
+      this.data.commanderReveal = starter;
+      changed = true;
+    }
+    if (!this.data.commander || !this.data.commanders.includes(this.data.commander)) {
+      this.data.commander = this.data.commanders[0] ?? "";
+      changed = true;
+    }
     if (changed) this.save();
+  }
+
+  // --- Commanders -----------------------------------------------------------
+  ownsCommander(id: string): boolean {
+    return this.data.commanders.includes(id);
+  }
+
+  selectCommander(id: string) {
+    if (this.ownsCommander(id)) {
+      this.data.commander = id;
+      this.save();
+    }
+  }
+
+  /** Recruit a random un-owned commander for Renown. Returns its id, or "". */
+  recruitCommander(cost: number): string {
+    const locked = COMMANDER_IDS.filter((id) => !this.ownsCommander(id));
+    if (locked.length === 0 || !this.spendRenown(cost)) return "";
+    const id = locked[Math.floor(Math.random() * locked.length)];
+    this.data.commanders.push(id);
+    this.data.commanderReveal = id;
+    this.save();
+    return id;
+  }
+
+  clearCommanderReveal() {
+    if (this.data.commanderReveal) {
+      this.data.commanderReveal = "";
+      this.save();
+    }
   }
 
   static load(): Profile {

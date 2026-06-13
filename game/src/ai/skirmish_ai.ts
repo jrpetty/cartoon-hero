@@ -580,6 +580,20 @@ export class SkirmishAI {
       this.harassStep();
     }
     this.abilityStep();
+    this.commanderPowerStep();
+  }
+
+  /** Plant the commander banner amid a real fight when it's ready. */
+  private commanderPowerStep() {
+    if (!this.world.powerReady(this.team)) return;
+    const fighters = this.armyUnits().filter(
+      (u) => u.order.kind === OrderKind.Attack || u.order.kind === OrderKind.AttackMove,
+    );
+    if (fighters.length < 5) return;
+    let x = 0;
+    let y = 0;
+    for (const u of fighters) { x += u.x; y += u.y; }
+    this.world.placeBanner(this.team, x / fighters.length, y / fighters.length);
   }
 
   /** Field the one Champion once the economy can spare the cost. */
