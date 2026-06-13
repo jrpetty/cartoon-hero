@@ -155,6 +155,7 @@ export interface Entity {
   animPhase: number;
   hitFlash: number;
   lastDamageTime: number;
+  lastAttackerId: EntityId; // who last hit us (for retaliation / anti-kite)
   selected: boolean;
 
   // Variant/meta (player units may carry stat multipliers + a rarity tint)

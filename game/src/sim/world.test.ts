@@ -185,6 +185,22 @@ describe("Combat", () => {
     expect(vet.attack).toBeGreaterThan(baseAtk);
   });
 
+  it("attack-moving units fight back against a ranged attacker (anti-kite)", () => {
+    const w = makeWorld();
+    const m = w.spawnUnit(Team.Player, "militia", 1000, 1400);
+    const archer = w.spawnUnit(Team.Enemy, "archer", 1280, 1400); // shoots from range
+    w.issueAttack([archer.id], m.id);
+    w.issueFormationMove([m.id], 1700, 1400, false, true); // attack-move past it
+    let engaged = false;
+    for (let i = 0; i < SIM_HZ * 20; i++) {
+      w.tick();
+      if (m.order.kind === OrderKind.Attack) engaged = true;
+      if (!archer.alive) break;
+    }
+    expect(engaged).toBe(true);
+    expect(archer.alive).toBe(false);
+  });
+
   it("a unit ordered to attack a building destroys it", () => {
     const w = makeWorld();
     // Find an open spot (richer maps may seed resources on the exact tile).

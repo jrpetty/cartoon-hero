@@ -139,7 +139,7 @@ export function makeEntity(): Entity {
     projArmorClassBonusFrom: "", projElapsed: 0, projDuration: 0, projFromX: 0, projFromY: 0,
     abilityCooldown: 0, abilityActive: 0, slowTimer: 0, rallyTimer: 0, heroLevel: 0, heroKills: 0,
     veterancy: 0, vetKills: 0, projSourceId: -1,
-    animPhase: 0, hitFlash: 0, lastDamageTime: -999, selected: false,
+    animPhase: 0, hitFlash: 0, lastDamageTime: -999, lastAttackerId: -1, selected: false,
     variantRarity: 0, tier: 0,
   };
 }
@@ -1032,9 +1032,11 @@ export class World {
         this.stepMove(e, def, false);
         break;
       case OrderKind.AttackMove:
-        // Scan for enemies while moving.
-        if (this.tickCount % 4 === e.id % 4) {
-          const enemy = this.findEnemyInRange(e, Math.max(e.visionRange * 0.8, e.range + 40));
+        // Engage anything in sight — and always answer whatever's shooting us
+        // (so the march isn't kited by ranged units out past our scan).
+        if (this.tickCount % 3 === e.id % 3) {
+          const enemy = this.retaliationTarget(e) ??
+            this.findEnemyInRange(e, Math.max(e.visionRange, e.range + 60));
           if (enemy) {
             const am = e.order;
             e.order = { kind: OrderKind.Attack, tx: enemy.x, ty: enemy.y, target: enemy.id, queue: [{ ...am }] };
@@ -1359,11 +1361,28 @@ export class World {
     }
   }
 
+  /**
+   * Whatever just hit us — so units fight back instead of being kited or
+   * marching obliviously while taking fire. Leashed so they don't chase forever.
+   */
+  private retaliationTarget(e: Entity): Entity | null {
+    if (e.lastAttackerId < 0 || this.time - e.lastDamageTime > 3) return null;
+    const a = this.byId.get(e.lastAttackerId);
+    if (!a || !a.alive || a.kind !== Kind.Unit || !this.areHostile(e.team, a.team)) return null;
+    const leash = e.visionRange * 1.6;
+    if (dist2(e.x, e.y, a.x, a.y) > leash * leash) return null;
+    return a;
+  }
+
   private autoAcquire(e: Entity, def: UnitDef, hold: boolean) {
     if (def.attack <= 0) return;
     if (this.tickCount % 5 !== e.id % 5) return;
-    const scanRange = hold ? Math.max(e.range + 20, 60) : e.visionRange * 0.85;
-    const enemy = this.findEnemyInRange(e, scanRange);
+    // Idle units always answer an attacker; hold units only scan their post.
+    let enemy = hold ? null : this.retaliationTarget(e);
+    if (!enemy) {
+      const scanRange = hold ? Math.max(e.range + 20, 60) : e.visionRange * 0.85;
+      enemy = this.findEnemyInRange(e, scanRange);
+    }
     if (enemy) {
       const home: Order | null = hold ? null : { kind: OrderKind.Move, tx: e.x, ty: e.y, target: -1 };
       e.order = {
@@ -1696,6 +1715,7 @@ export class World {
     target.hp -= dmg;
     target.hitFlash = 1;
     target.lastDamageTime = this.time;
+    if (fromId >= 0) target.lastAttackerId = fromId;
 
     // Floating damage numbers only for fights the human player is part of —
     // keeps the event stream (and the screen) from drowning in big melees.
