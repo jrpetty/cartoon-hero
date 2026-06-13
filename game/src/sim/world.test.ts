@@ -168,6 +168,23 @@ describe("Combat", () => {
     expect(duel("skirmisher", "archer")).toBe("skirmisher");
   });
 
+  it("units gain veterancy from kills (stronger HP/attack)", () => {
+    const w = makeWorld();
+    const vet = w.spawnUnit(Team.Player, "militia", 1600, 1600);
+    const baseHp = vet.maxHp;
+    const baseAtk = vet.attack;
+    for (let n = 0; n < 6; n++) {
+      const foe = w.spawnUnit(Team.Enemy, "villager", 1612, 1600);
+      foe.maxHp = foe.hp = 5;
+      w.issueAttack([vet.id], foe.id);
+      for (let i = 0; i < SIM_HZ * 4 && foe.alive; i++) w.tick();
+    }
+    expect(vet.vetKills).toBe(6);
+    expect(vet.veterancy).toBeGreaterThanOrEqual(2);
+    expect(vet.maxHp).toBeGreaterThan(baseHp);
+    expect(vet.attack).toBeGreaterThan(baseAtk);
+  });
+
   it("a unit ordered to attack a building destroys it", () => {
     const w = makeWorld();
     const house = w.placeBuilding(Team.Enemy, "house", 1500, 1500)!;

@@ -766,6 +766,22 @@ export function drawUnit(ctx: Ctx, e: Entity, time: number) {
     }
   }
 
+  // Veterancy chevrons above seasoned units (gold, one per rank).
+  if (e.veterancy > 0 && !UNITS[e.type]?.hero) {
+    const cy = e.y - e.radius * 1.7;
+    const col = e.veterancy >= 3 ? "#ffe07a" : e.veterancy >= 2 ? "#ffd24a" : "#e8c98a";
+    ctx.strokeStyle = col;
+    ctx.lineWidth = 1.4;
+    for (let i = 0; i < e.veterancy; i++) {
+      const cx = e.x - (e.veterancy - 1) * 3 + i * 6;
+      ctx.beginPath();
+      ctx.moveTo(cx - 2.2, cy + 1.4);
+      ctx.lineTo(cx, cy - 1.4);
+      ctx.lineTo(cx + 2.2, cy + 1.4);
+      ctx.stroke();
+    }
+  }
+
   shadow(ctx, e.x + 1, e.y + e.radius * 0.55, e.radius * 0.95, e.radius * 0.42);
 
   ctx.save();

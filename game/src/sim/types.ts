@@ -131,6 +131,7 @@ export interface Entity {
 
   // Projectile
   projTargetId: EntityId;
+  projSourceId: EntityId; // unit that fired (for kill credit / veterancy)
   projDamage: number;
   projSpeed: number;
   projSourceTeam: Team;
@@ -147,6 +148,8 @@ export interface Entity {
   rallyTimer: number; // seconds of ally-applied attack boost remaining (War Cry)
   heroLevel: number; // hero units only: 0..5, raises stats
   heroKills: number; // hero units only: kills credited toward the next level
+  veterancy: number; // combat units: 0..3 rank earned from kills
+  vetKills: number; // kills credited toward the next veterancy rank
 
   // Visual helpers (render only; safe to derive)
   animPhase: number;

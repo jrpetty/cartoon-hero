@@ -72,6 +72,8 @@ export interface PlayerState {
 
 /** Kills needed to reach hero levels 1..5. */
 export const HERO_THRESHOLDS = [3, 7, 12, 18, 26];
+/** Kills needed to reach veterancy ranks 1..3 (Veteran / Elite / Legendary). */
+export const VET_THRESHOLDS = [2, 5, 9];
 const HERO_RESPAWN_SEC = 45;
 
 export interface WorldEvent {
@@ -118,6 +120,7 @@ export function makeEntity(): Entity {
     projTargetId: -1, projDamage: 0, projSpeed: 0, projSourceTeam: Team.Neutral,
     projArmorClassBonusFrom: "", projElapsed: 0, projDuration: 0, projFromX: 0, projFromY: 0,
     abilityCooldown: 0, abilityActive: 0, slowTimer: 0, rallyTimer: 0, heroLevel: 0, heroKills: 0,
+    veterancy: 0, vetKills: 0, projSourceId: -1,
     animPhase: 0, hitFlash: 0, lastDamageTime: -999, selected: false,
     variantRarity: 0, tier: 0,
   };
@@ -566,7 +569,7 @@ export class World {
           }
           for (const n of this.spatial.query(ix, iy, r) as Entity[]) {
             if (n.alive && this.areHostile(e.team, n.team) && dist(ix, iy, n.x, n.y) <= r) {
-              this.dealDamage(e.team, n, amt, e.type);
+              this.dealDamage(e.team, n, amt, e.type, e.id);
             }
           }
           this.emit("ability", ix, iy, e.team, ab.id);
@@ -577,7 +580,7 @@ export class World {
           const r = ab.radius ?? 115;
           for (const n of this.spatial.query(e.x, e.y, r) as Entity[]) {
             if (!n.alive || n.kind !== Kind.Unit || dist(e.x, e.y, n.x, n.y) > r) continue;
-            if (this.areHostile(e.team, n.team)) this.dealDamage(e.team, n, ab.amount ?? 24, e.type);
+            if (this.areHostile(e.team, n.team)) this.dealDamage(e.team, n, ab.amount ?? 24, e.type, e.id);
             else if (this.areAllied(e.team, n.team)) {
               n.rallyTimer = Math.max(n.rallyTimer, ab.statusDuration ?? 5);
             }
@@ -600,6 +603,29 @@ export class World {
     e.attack += level * 4;
     e.armor += level;
     e.hp = e.maxHp;
+  }
+
+  /**
+   * Award a kill to the unit that landed it, ranking it up the veterancy ladder
+   * (Veteran → Elite → Legendary). Villagers, heroes (own leveling) and
+   * buildings don't earn veterancy.
+   */
+  private creditVeterancy(killerId: EntityId) {
+    if (killerId < 0) return;
+    const k = this.byId.get(killerId);
+    if (!k || !k.alive || k.kind !== Kind.Unit) return;
+    const def = UNITS[k.type];
+    if (!def || def.canGather || def.hero || def.attack <= 0) return;
+    k.vetKills++;
+    while (k.veterancy < VET_THRESHOLDS.length && k.vetKills >= VET_THRESHOLDS[k.veterancy]) {
+      k.veterancy++;
+      const bump = Math.round(k.maxHp * 0.12);
+      k.maxHp += bump;
+      k.hp = Math.min(k.maxHp, k.hp + bump);
+      k.attack += 1;
+      if (k.veterancy >= 2) k.armor += 1;
+      if (k.team === Team.Player) this.emit("ability", k.x, k.y - k.radius, k.team, "veteran");
+    }
   }
 
   /** Credit the nearest friendly Champion for a kill near (x,y) and level it up. */
@@ -1051,7 +1077,7 @@ export class World {
           this.fireProjectile(e, target, def);
           this.emit(def.id === "catapult" ? "siege" : "bow", e.x, e.y, e.team);
         } else {
-          this.dealDamage(e.team, target, this.effectiveAttack(e, def, target), def.id);
+          this.dealDamage(e.team, target, this.effectiveAttack(e, def, target), def.id, e.id);
           this.emit("sword", target.x, target.y, e.team);
         }
       }
@@ -1434,6 +1460,7 @@ export class World {
     e.projTargetId = target.id;
     e.projDamage = dmg;
     e.projSourceTeam = from.team;
+    e.projSourceId = from.kind === Kind.Unit ? from.id : -1;
     e.projArmorClassBonusFrom = sourceType;
     e.radius = e.type === "rock" ? 5 : 2;
     const speed = e.type === "rock" ? PROJECTILE_SPEED * 0.55 : PROJECTILE_SPEED;
@@ -1465,11 +1492,11 @@ export class World {
         for (const n of near) {
           if (!n.alive || !this.areHostile(e.projSourceTeam, n.team)) continue;
           if (n.kind !== Kind.Unit && n.kind !== Kind.Building) continue;
-          this.dealDamage(e.projSourceTeam, n, e.projDamage, e.projArmorClassBonusFrom);
+          this.dealDamage(e.projSourceTeam, n, e.projDamage, e.projArmorClassBonusFrom, e.projSourceId);
         }
         this.emit("siege", e.x, e.y, e.projSourceTeam);
       } else if (target && target.alive) {
-        this.dealDamage(e.projSourceTeam, target, e.projDamage, e.projArmorClassBonusFrom);
+        this.dealDamage(e.projSourceTeam, target, e.projDamage, e.projArmorClassBonusFrom, e.projSourceId);
         this.emit("arrowHit", e.x, e.y, e.projSourceTeam);
       }
     }
@@ -1539,7 +1566,7 @@ export class World {
     return armor;
   }
 
-  dealDamage(fromTeam: Team, target: Entity, rawDamage: number, sourceType: string) {
+  dealDamage(fromTeam: Team, target: Entity, rawDamage: number, sourceType: string, fromId: EntityId = -1) {
     if (!target.alive) return;
     const dmg = Math.max(1, rawDamage - this.effectiveArmor(target));
     target.hp -= dmg;
@@ -1562,6 +1589,7 @@ export class World {
     // Villagers fight back if idle and attacked in melee… keep simple: no.
 
     if (target.hp <= 0) {
+      this.creditVeterancy(fromId);
       this.kill(target, fromTeam);
     }
   }
