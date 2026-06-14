@@ -48,6 +48,7 @@ import { RNG } from "../engine/rng";
 import { dist, dist2 } from "../engine/math";
 import type { MapData } from "../maps/generator";
 import { COMMANDERS, CommanderPower } from "../content/commanders";
+import { BoonEffect, emptyBoonEffect, aggregateBoons } from "../content/boons";
 
 export interface PlayerState {
   team: Team;
@@ -73,6 +74,7 @@ export interface PlayerState {
   unitArmorBonus: number; // combat unit armor (flat)
   vetMult: number; // veterancy gained faster (×)
   powerCooldown: number; // seconds until the commander power is ready
+  boon: BoonEffect; // aggregated case-unlocked customization modifiers
   stats: {
     unitsKilled: number;
     unitsLost: number;
@@ -119,6 +121,9 @@ const RES_TYPE_KIND: Record<string, ResourceKind> = {
 
 /** Buildings units can walk over (don't block the nav grid). */
 const BUILDING_WALKABLE = new Set<string>(["farm"]);
+
+/** Wall-class buildings (Bulwark boon, cheaper/tougher fortifications). */
+const WALL_TYPES = new Set<string>(["palisade", "stone_wall", "gate"]);
 
 let nextId = 1;
 
@@ -186,7 +191,7 @@ export class World {
 
   nomad = false;
 
-  init(map: MapData, loadouts: Record<string, number>[], econMults: number[], alliances?: number[], commanders?: string[], nomad = false) {
+  init(map: MapData, loadouts: Record<string, number>[], econMults: number[], alliances?: number[], commanders?: string[], nomad = false, boonLoadouts?: { id: string; rarity: number }[][]) {
     this.nomad = nomad;
     this.map = map;
     this.worldW = map.worldW;
@@ -242,6 +247,7 @@ export class World {
         unitArmorBonus: b.unitArmorBonus ?? 0,
         vetMult: b.vetMult ?? 1,
         powerCooldown: 0,
+        boon: aggregateBoons(boonLoadouts?.[t] ?? []),
         stats: { unitsKilled: 0, unitsLost: 0, buildingsRazed: 0, buildingsLost: 0, gathered: 0 },
       });
       this.fog.push(new Uint8Array(this.fogCols * this.fogRows));
@@ -327,18 +333,27 @@ export class World {
     const p = this.players[team];
     const rarity = p?.loadout[def.id] ?? 0;
     e.variantRarity = rarity;
+    const bn = p?.boon ?? emptyBoonEffect();
     // Commander bonuses apply to soldiers (not villagers).
     const soldier = !def.canGather;
-    const hpMult = soldier ? (p?.unitHpMult ?? 1) : 1;
-    const armorPlus = soldier ? (p?.unitArmorBonus ?? 0) : 0;
+    const hpMult = (soldier ? (p?.unitHpMult ?? 1) : 1) * bn.hpMult; // boon HP applies to all
+    const armorPlus = (soldier ? (p?.unitArmorBonus ?? 0) : 0) + bn.armorBonus;
+    // Attack boon by armour class.
+    let atkBoon = 1;
+    if (def.armorClass === ArmorClass.Infantry) atkBoon = bn.atkMultInfantry;
+    else if (def.armorClass === ArmorClass.Archer) atkBoon = bn.atkMultArcher;
+    else if (def.armorClass === ArmorClass.Cavalry) atkBoon = bn.atkMultCavalry;
+    // Speed boon: army-wide, plus cavalry/villager extras.
+    let spdBoon = soldier ? bn.armySpeedMult : bn.villSpeedMult;
+    if (def.armorClass === ArmorClass.Cavalry) spdBoon *= bn.cavSpeedMult;
     e.maxHp = Math.round(def.hp * (RARITY_HP_MULT[rarity] ?? 1) * hpMult);
     e.hp = e.maxHp;
-    e.attack = Math.round(def.attack * (RARITY_ATK_MULT[rarity] ?? 1));
+    e.attack = Math.round(def.attack * (RARITY_ATK_MULT[rarity] ?? 1) * atkBoon);
     e.armor = def.armor + (RARITY_ARMOR_BONUS[rarity] ?? 0) + armorPlus;
-    e.range = def.range;
+    e.range = def.range + (def.armorClass === ArmorClass.Archer ? bn.archerRangeBonus : 0);
     e.attackInterval = def.attackInterval;
-    e.speed = def.speed * (RARITY_SPEED_MULT[rarity] ?? 1);
-    e.visionRange = def.visionRange;
+    e.speed = def.speed * (RARITY_SPEED_MULT[rarity] ?? 1) * spdBoon;
+    e.visionRange = def.visionRange * bn.visionMult;
     e.radius = def.radius;
     e.armorClass = def.armorClass;
   }
@@ -370,20 +385,24 @@ export class World {
     e.x = Math.round(x / TILE) * TILE + (tiles % 2 === 1 ? TILE / 2 : 0);
     e.y = Math.round(y / TILE) * TILE + (tiles % 2 === 1 ? TILE / 2 : 0);
     e.radius = (tiles * TILE) / 2;
-    e.maxHp = def.hp;
+    const bn = this.players[team]?.boon ?? emptyBoonEffect();
+    const hpMult = WALL_TYPES.has(type) ? bn.wallHpMult : bn.buildingHpMult;
+    const maxHp = Math.round(def.hp * hpMult);
+    e.maxHp = maxHp;
     e.armorClass = ArmorClass.Building;
     e.armor = 1;
     e.visionRange = def.sight;
     e.attack = def.attack;
-    e.range = def.range;
-    e.attackInterval = def.attackInterval;
+    // Vigilant Watch: defensive buildings fire faster and farther.
+    e.range = def.range + (def.attack > 0 ? bn.towerRangeBonus : 0);
+    e.attackInterval = def.attack > 0 ? def.attackInterval * bn.towerCdMult : def.attackInterval;
     if (completed) {
-      e.hp = def.hp;
+      e.hp = maxHp;
       e.buildState = BuildState.Done;
       e.buildProgress = 1;
       this.onBuildingCompleted(e, def, true);
     } else {
-      e.hp = Math.max(1, def.hp * 0.08);
+      e.hp = Math.max(1, maxHp * 0.08);
       e.buildState = BuildState.Foundation;
       e.buildProgress = 0;
     }
@@ -793,7 +812,9 @@ export class World {
     if (!def || !p) return null;
     if (p.age < def.age) return null;
     if (def.requires && !this.hasBuilding(team, def.requires)) return null;
-    if (!this.canAfford(p.resources, def.cost)) return null;
+    // Master Masons (buildings) / Bulwark (walls) make construction cheaper.
+    const cost = this.scaledCost(def.cost, WALL_TYPES.has(type) ? p.boon.wallCostMult : p.boon.buildCostMult);
+    if (!this.canAfford(p.resources, cost)) return null;
     const tiles = def.tiles;
     const sx = Math.round(wx / TILE) * TILE + (tiles % 2 === 1 ? TILE / 2 : 0);
     const sy = Math.round(wy / TILE) * TILE + (tiles % 2 === 1 ? TILE / 2 : 0);
@@ -814,7 +835,7 @@ export class World {
         return null;
       }
     }
-    this.pay(p.resources, def.cost);
+    this.pay(p.resources, cost);
     const e = this.spawnBuilding(team, type, sx, sy, false);
     this.emit("build", e.x, e.y, team, type);
     return e;
@@ -850,10 +871,11 @@ export class World {
     if (def.hero && (p.heroState !== "none" || b.productionQueue.includes("u:hero"))) return false;
     if (b.productionQueue.length >= 8) return false;
     if (p.popUsed + def.pop > p.popCap) return false;
-    if (!this.canAfford(p.resources, def.cost)) return false;
-    this.pay(p.resources, def.cost);
+    const cost = this.scaledCost(def.cost, p.boon.unitCostMult); // Quartermaster
+    if (!this.canAfford(p.resources, cost)) return false;
+    this.pay(p.resources, cost);
     b.productionQueue.push(`u:${unitType}`);
-    if (b.productionQueue.length === 1) b.productionTime = def.buildTime;
+    if (b.productionQueue.length === 1) b.productionTime = def.buildTime * p.boon.trainSpeedMult;
     return true;
   }
 
@@ -969,6 +991,12 @@ export class World {
     bag.gold -= cost.gold;
   }
 
+  /** Cost scaled by a multiplier (boons: cheaper units/buildings), rounded. */
+  private scaledCost(cost: { food: number; wood: number; gold: number }, mult: number) {
+    if (mult === 1) return cost;
+    return { food: Math.round(cost.food * mult), wood: Math.round(cost.wood * mult), gold: Math.round(cost.gold * mult) };
+  }
+
   // ----------------------------------------------------------------- tick --
 
   tick() {
@@ -1046,6 +1074,12 @@ export class World {
   private tickUnit(e: Entity) {
     const def = UNITS[e.type];
     e.animPhase += SIM_DT * (1 + (Math.hypot(e.vx, e.vy) > 4 ? 2 : 0));
+
+    // Field Medic boon: units mend out of combat (5s since last hit).
+    const rgn = this.players[e.team]?.boon.regenRate ?? 0;
+    if (rgn > 0 && e.hp < e.maxHp && this.time - e.lastDamageTime > 5) {
+      e.hp = Math.min(e.maxHp, e.hp + rgn * SIM_DT);
+    }
 
     switch (e.order.kind) {
       case OrderKind.Idle:
@@ -1339,13 +1373,15 @@ export class World {
         if (gp.upgrades.has("wheelbarrow")) econ *= 1 + UPGRADES.wheelbarrow.amount;
         if (gp.upgrades.has("hand_cart")) econ *= 1 + UPGRADES.hand_cart.amount;
         econ *= gp.gatherMultC; // commander passive
+        if (kind === ResourceKind.Food) econ *= gp.boon.foodGatherMult; // Bountiful Fields
       }
       // Rally banner boosts gathering for villagers standing in its radius.
       const banner = this.bannerAt(e.team, e.x, e.y);
       if (banner) econ *= banner.power.villagerGatherMult;
       e.gatherCooldown = (GATHER_TICK / econ) * (isFarm ? FARM_TICK_MULT : 1);
+      const cap = VILLAGER_CARRY_CAP * (gp?.boon.villCarryMult ?? 1); // Wayfarers
       const take = Math.min(GATHER_RATE * GATHER_TICK * 10, node.amount); // chunked
-      const got = Math.min(take, VILLAGER_CARRY_CAP - e.carry, 1.2);
+      const got = Math.min(take, cap - e.carry, 1.2);
       e.carry += got;
       if (!isFarm) {
         node.amount -= got;
@@ -1354,7 +1390,7 @@ export class World {
           this.grid.stampFootprint(node.x, node.y, 1, false);
         }
       }
-      if (e.carry >= VILLAGER_CARRY_CAP) this.startReturn(e);
+      if (e.carry >= cap) this.startReturn(e);
     }
   }
 
@@ -1568,7 +1604,9 @@ export class World {
         const item = e.productionQueue.shift()!;
         this.completeProduction(e, item);
         if (e.productionQueue.length > 0) {
-          e.productionTime = this.itemTime(e.productionQueue[0]);
+          const next = e.productionQueue[0];
+          const trainMult = next.startsWith("u:") ? (p?.boon.trainSpeedMult ?? 1) : 1; // Quartermaster
+          e.productionTime = this.itemTime(next) * trainMult;
         }
       }
     }
@@ -1795,7 +1833,13 @@ export class World {
 
   dealDamage(fromTeam: Team, target: Entity, rawDamage: number, sourceType: string, fromId: EntityId = -1) {
     if (!target.alive) return;
-    const dmg = Math.max(1, rawDamage - this.effectiveArmor(target));
+    // Reaver boon: extra damage to villagers and buildings (eco denial / sieging).
+    const attacker = this.players[fromTeam];
+    let raw = rawDamage;
+    if (attacker && attacker.boon.raiderMult > 1 && (target.kind === Kind.Building || target.type === "villager")) {
+      raw *= attacker.boon.raiderMult;
+    }
+    const dmg = Math.max(1, raw - this.effectiveArmor(target));
     target.hp -= dmg;
     target.hitFlash = 1;
     target.lastDamageTime = this.time;
