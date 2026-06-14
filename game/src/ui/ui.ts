@@ -87,8 +87,9 @@ export class UI {
     } = {},
   ): boolean {
     const { ctx } = this;
-    const hover = this.hit(x, y, w, h) && !opts.disabled;
-    if (this.hit(x, y, w, h)) this.pointerConsumed = true;
+    const over = this.hit(x, y, w, h);
+    const hover = over && !opts.disabled;
+    if (over) this.pointerConsumed = true;
 
     const base = opts.danger ? "#5a2320" : opts.accent ? "#5a4520" : "#3a3226";
     const fill = opts.disabled ? "#2a251d" : hover ? shade(base, 0.18) : base;
@@ -121,7 +122,9 @@ export class UI {
       this.text(opts.badge, x + w - 10, y + 2, { align: "center", size: 11, color: "#1c150c", bold: true });
     }
 
-    if (hover && opts.tooltip && opts.tooltip.length) {
+    // Show the tooltip even when disabled — so you can read an item's cost and
+    // requirements before you can afford or unlock it.
+    if (over && opts.tooltip && opts.tooltip.length) {
       this.hoveredTooltip = { text: opts.tooltip, x: this.mx, y };
     }
     return hover && this.clicked && !opts.disabled;

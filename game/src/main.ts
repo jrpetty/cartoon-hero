@@ -255,6 +255,18 @@ class App {
     return out;
   }
 
+  /** Everything currently selected, any team — so you can inspect (e.g. click
+   *  an enemy unit to read its health/stats). Commands still use playerSelection. */
+  selectedEntities(): Entity[] {
+    if (!this.world) return [];
+    const out: Entity[] = [];
+    for (const id of this.selection) {
+      const e = this.world.byId.get(id);
+      if (e && e.alive) out.push(e);
+    }
+    return out;
+  }
+
   select(ids: EntityId[]) {
     if (!this.world) return;
     for (const id of this.selection) {
@@ -1080,7 +1092,9 @@ class App {
     );
 
     // ---- HUD (consumes pointer if clicked over panels) ----
-    this.hud.draw(W, H, world, this.camera, PLAYER, selected, dt, this.controller, this.attackMoveArmed, this.spectating);
+    // Pass the full selection (any team) so the info panel can show a clicked
+    // enemy/neutral unit's health; the command card filters to own units.
+    this.hud.draw(W, H, world, this.camera, PLAYER, this.selectedEntities(), dt, this.controller, this.attackMoveArmed, this.spectating);
     if (this.spectating) this.drawSpectatorHud(W, H, world);
     this.drawControlGroups(W, H);
     this.drawQoLBar(W, H);
