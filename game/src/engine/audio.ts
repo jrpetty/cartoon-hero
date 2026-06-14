@@ -11,6 +11,7 @@ type SfxName =
   | "arrowHit"
   | "siege"
   | "collapse"
+  | "death"
   | "alert"
   | "ui"
   | "coin"
@@ -71,6 +72,11 @@ export class Audio {
     osc.stop(t0 + attack + decay + 0.02);
   }
 
+  /** Small random multiplier so repeated SFX don't sound mechanical. */
+  private vary(amt = 0.06): number {
+    return 1 + (Math.random() * 2 - 1) * amt;
+  }
+
   private tone(
     freq: number,
     type: OscillatorType,
@@ -78,9 +84,10 @@ export class Audio {
     decay: number,
     peak: number,
     freqEnd?: number,
+    delay = 0,
   ) {
     if (!this.ctx) return;
-    const t0 = this.ctx.currentTime;
+    const t0 = this.ctx.currentTime + delay;
     const osc = this.ctx.createOscillator();
     const g = this.ctx.createGain();
     osc.type = type;
@@ -91,9 +98,9 @@ export class Audio {
     this.env(osc, g, t0, attack, decay, peak);
   }
 
-  private noise(duration: number, peak: number, filterFreq: number, type: BiquadFilterType = "bandpass") {
+  private noise(duration: number, peak: number, filterFreq: number, type: BiquadFilterType = "bandpass", delay = 0) {
     if (!this.ctx) return;
-    const t0 = this.ctx.currentTime;
+    const t0 = this.ctx.currentTime + delay;
     const len = Math.floor(this.ctx.sampleRate * duration);
     const buf = this.ctx.createBuffer(1, len, this.ctx.sampleRate);
     const d = buf.getChannelData(0);
@@ -115,69 +122,94 @@ export class Audio {
 
   play(name: SfxName) {
     if (!this.ctx || this.muted) return;
+    const v = this.vary();
     switch (name) {
-      case "select": this.tone(620, "triangle", 0.005, 0.07, 0.25); break;
-      case "command": this.tone(420, "triangle", 0.005, 0.08, 0.22, 520); break;
-      case "build": this.noise(0.18, 0.18, 900, "lowpass"); break;
-      case "complete": this.tone(523, "sine", 0.01, 0.18, 0.3, 784); break;
-      case "sword": this.noise(0.12, 0.25, 2600, "bandpass"); break;
-      case "bow": this.tone(880, "sawtooth", 0.005, 0.08, 0.12, 320); break;
-      case "arrowHit": this.noise(0.08, 0.2, 1800); break;
-      case "siege": this.tone(90, "square", 0.005, 0.3, 0.35, 40); this.noise(0.25, 0.2, 500, "lowpass"); break;
-      case "collapse": this.noise(0.5, 0.35, 300, "lowpass"); break;
-      case "alert": this.tone(300, "square", 0.01, 0.18, 0.2, 360); break;
-      case "ui": this.tone(700, "sine", 0.004, 0.05, 0.18); break;
-      case "coin": this.tone(1180, "triangle", 0.004, 0.09, 0.2, 1568); break;
+      case "select": this.tone(620 * v, "triangle", 0.005, 0.07, 0.25); break;
+      case "command": this.tone(420 * v, "triangle", 0.005, 0.08, 0.22, 520 * v); break;
+      case "build":
+        // Two quick wooden knocks.
+        this.noise(0.08, 0.16, 800, "lowpass");
+        this.noise(0.1, 0.14, 700, "lowpass", 0.09);
+        break;
+      case "complete": this.tone(523, "sine", 0.01, 0.18, 0.3, 784); this.tone(784, "sine", 0.02, 0.22, 0.16, 1046, 0.06); break;
+      case "sword":
+        // Layered metal clang: two filtered bursts + a short bright ring.
+        this.noise(0.09, 0.22, 2600 * v, "bandpass");
+        this.noise(0.07, 0.16, 4200 * v, "highpass", 0.012);
+        this.tone(1900 * v, "triangle", 0.002, 0.08, 0.1, 1200 * v, 0.006);
+        break;
+      case "bow":
+        // String twang: quick down-sweep plus a tiny pluck of noise.
+        this.tone(900 * v, "sawtooth", 0.004, 0.09, 0.12, 300);
+        this.noise(0.04, 0.08, 2400, "bandpass");
+        break;
+      case "arrowHit": this.noise(0.08, 0.2, 1800 * v); this.noise(0.05, 0.1, 600, "lowpass", 0.01); break;
+      case "siege":
+        // Deep cannon boom + thrown debris (a second crack tail for body).
+        this.tone(92 * v, "square", 0.005, 0.32, 0.36, 40);
+        this.noise(0.28, 0.22, 520, "lowpass");
+        this.noise(0.22, 0.12, 1600, "bandpass", 0.05);
+        break;
+      case "collapse":
+        this.tone(70, "square", 0.01, 0.5, 0.22, 32);
+        this.noise(0.5, 0.34, 300, "lowpass");
+        this.noise(0.4, 0.2, 900, "bandpass", 0.12);
+        break;
+      case "death":
+        // A short downward grunt-thud — a fallen soldier.
+        this.tone(220 * v, "triangle", 0.005, 0.16, 0.18, 90);
+        this.noise(0.12, 0.12, 500, "lowpass", 0.01);
+        break;
+      case "alert":
+        // Two-note war horn.
+        this.tone(300, "square", 0.02, 0.22, 0.22, 300);
+        this.tone(400, "square", 0.02, 0.28, 0.2, 400, 0.18);
+        break;
+      case "ui": this.tone(700 * v, "sine", 0.004, 0.05, 0.18); break;
+      case "coin": this.tone(1180 * v, "triangle", 0.004, 0.09, 0.2, 1568); break;
       case "tick": this.tone(1000, "square", 0.002, 0.025, 0.08); break;
       case "reveal": this.tone(440, "sine", 0.01, 0.4, 0.3, 1320); break;
-      case "levelup": this.tone(523, "sine", 0.01, 0.25, 0.3, 1047); this.tone(659, "sine", 0.02, 0.3, 0.2, 1318); break;
+      case "levelup":
+        this.tone(523, "sine", 0.01, 0.25, 0.3, 1047);
+        this.tone(659, "sine", 0.02, 0.3, 0.2, 1318, 0.08);
+        this.tone(784, "sine", 0.02, 0.32, 0.16, 1568, 0.16);
+        break;
     }
   }
 
   // --- Generative music: a calm bed that swells into combat ----------------
   private scale = [0, 3, 5, 7, 10]; // minor pentatonic
   private root = 196; // G3
+  // A slow minor progression (i – VI – III – VII) gives the bed direction
+  // instead of meandering; the melody and bass follow the current chord root.
+  private chords = [0, 8, 3, 10];
+  private chordIdx = 0;
+  private barTimer = 0;
+  private lastStep = 0; // last melody scale index, for stepwise motion
   private drumTimer = 0;
 
   /**
    * `intensity` (0..1) is the battle heat: it speeds the melody, brightens the
-   * notes, and brings in a war-drum pulse so a big fight sounds like one.
+   * notes, brings in a bass pulse and a war-drum beat so a big fight sounds
+   * like one.
    */
   updateMusic(dt: number, playing: boolean, intensity = 0) {
     if (!this.ctx || this.muted || this.musicVol <= 0 || !playing) return;
     const heat = Math.max(0, Math.min(1, intensity));
 
-    // Melody — notes come faster and a touch louder as the battle heats up.
+    // Bars — advance the chord and lay a sustained pad + bass under it.
+    this.barTimer -= dt;
+    if (this.barTimer <= 0) {
+      this.barTimer = 4.4 * (1 - heat * 0.3);
+      this.chordIdx = (this.chordIdx + 1) % this.chords.length;
+      this.layChord(this.chords[this.chordIdx], heat, this.barTimer);
+    }
+
+    // Melody — picks chord-friendly notes, drifts stepwise, rests now and then.
     this.musicTimer -= dt;
     if (this.musicTimer <= 0) {
-      this.musicTimer = (1.1 + Math.random() * 0.9) * (1 - heat * 0.55);
-      const t0 = this.ctx.currentTime;
-      const step = this.scale[Math.floor(Math.random() * this.scale.length)];
-      const oct = Math.random() < 0.4 + heat * 0.2 ? 2 : 1;
-      const freq = this.root * Math.pow(2, step / 12) * oct;
-      const osc = this.ctx.createOscillator();
-      const g = this.ctx.createGain();
-      osc.type = "sine";
-      osc.frequency.value = freq;
-      osc.connect(g);
-      g.connect(this.musicGain);
-      g.gain.setValueAtTime(0.0001, t0);
-      g.gain.linearRampToValueAtTime(0.18 + heat * 0.08, t0 + 0.4);
-      g.gain.exponentialRampToValueAtTime(0.0001, t0 + 2.2);
-      osc.start(t0);
-      osc.stop(t0 + 2.3);
-      // soft fifth pad underneath
-      const osc2 = this.ctx.createOscillator();
-      const g2 = this.ctx.createGain();
-      osc2.type = "triangle";
-      osc2.frequency.value = freq * 0.5;
-      osc2.connect(g2);
-      g2.connect(this.musicGain);
-      g2.gain.setValueAtTime(0.0001, t0);
-      g2.gain.linearRampToValueAtTime(0.08, t0 + 0.8);
-      g2.gain.exponentialRampToValueAtTime(0.0001, t0 + 3);
-      osc2.start(t0);
-      osc2.stop(t0 + 3.1);
+      this.musicTimer = (0.95 + Math.random() * 0.75) * (1 - heat * 0.5);
+      if (Math.random() > 0.16) this.playMelodyNote(heat);
     }
 
     // War drums — only roll in during a real fight, faster as it intensifies.
@@ -190,6 +222,66 @@ export class Audio {
     } else {
       this.drumTimer = 0;
     }
+  }
+
+  /** Sustained chord pad (root + fifth + octave) with a low bass pulse. */
+  private layChord(semis: number, heat: number, dur: number) {
+    if (!this.ctx) return;
+    const t0 = this.ctx.currentTime;
+    const base = this.root * Math.pow(2, semis / 12);
+    const voices: [number, OscillatorType, number][] = [
+      [base, "triangle", 0.07 + heat * 0.03],
+      [base * 1.5, "sine", 0.05], // fifth
+      [base * 2, "sine", 0.03], // octave
+    ];
+    for (const [freq, type, peak] of voices) {
+      const osc = this.ctx.createOscillator();
+      const g = this.ctx.createGain();
+      osc.type = type;
+      osc.frequency.value = freq;
+      osc.connect(g);
+      g.connect(this.musicGain);
+      g.gain.setValueAtTime(0.0001, t0);
+      g.gain.linearRampToValueAtTime(peak, t0 + dur * 0.35);
+      g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur + 0.6);
+      osc.start(t0);
+      osc.stop(t0 + dur + 0.7);
+    }
+    // Bass: the chord root an octave down, a slow swelling pulse.
+    const bass = this.ctx.createOscillator();
+    const bg = this.ctx.createGain();
+    bass.type = "sine";
+    bass.frequency.value = base * 0.5;
+    bass.connect(bg);
+    bg.connect(this.musicGain);
+    bg.gain.setValueAtTime(0.0001, t0);
+    bg.gain.linearRampToValueAtTime(0.12 + heat * 0.06, t0 + 0.3);
+    bg.gain.exponentialRampToValueAtTime(0.0001, t0 + dur * 0.9);
+    bass.start(t0);
+    bass.stop(t0 + dur + 0.1);
+  }
+
+  /** A single melody note over the current chord, biased to stepwise motion. */
+  private playMelodyNote(heat: number) {
+    if (!this.ctx) return;
+    // Drift one scale-step from the last note (occasionally leap), wrap in range.
+    const move = Math.random() < 0.7 ? (Math.random() < 0.5 ? -1 : 1) : (Math.random() < 0.5 ? -2 : 2);
+    this.lastStep = Math.max(0, Math.min(this.scale.length - 1, this.lastStep + move));
+    const semis = this.chords[this.chordIdx] + this.scale[this.lastStep];
+    const oct = Math.random() < 0.35 + heat * 0.2 ? 2 : 1;
+    const freq = this.root * Math.pow(2, semis / 12) * oct;
+    const t0 = this.ctx.currentTime;
+    const osc = this.ctx.createOscillator();
+    const g = this.ctx.createGain();
+    osc.type = "sine";
+    osc.frequency.value = freq;
+    osc.connect(g);
+    g.connect(this.musicGain);
+    g.gain.setValueAtTime(0.0001, t0);
+    g.gain.linearRampToValueAtTime(0.16 + heat * 0.08, t0 + 0.35);
+    g.gain.exponentialRampToValueAtTime(0.0001, t0 + 2.0);
+    osc.start(t0);
+    osc.stop(t0 + 2.1);
   }
 
   /** A low war-drum thump (sine kick + filtered noise) on the music bus. */

@@ -160,10 +160,7 @@ class App {
       this.hud.buildMenuOpen = true;
       this.hud.buildCategory = null;
     }
-    if (k === "g") {
-      const b = this.playerSelection().find((e) => e.kind === Kind.Building);
-      if (b) this.world.ungarrison(b.id);
-    }
+    if (k === "g") this.garrisonSelected();
     // QoL: pause, game speed, idle villager, select army.
     if (k === "p" || k === " ") this.togglePause();
     if (k === "+" || k === "=") this.cycleSpeed(1);
@@ -193,6 +190,52 @@ class App {
         }
       }
     }
+  }
+
+  /**
+   * Garrison (G): tuck the selected units into a building, or eject if only a
+   * building is selected. Targets the selected building when it can hold troops,
+   * otherwise the nearest friendly building with free space. Any unit can
+   * garrison — villagers included — so they can take cover from a raid.
+   */
+  garrisonSelected() {
+    if (!this.world) return;
+    const sel = this.playerSelection();
+    const units = sel.filter((e) => e.kind === Kind.Unit && e.team === PLAYER);
+    const selBuilding = sel.find((e) => e.kind === Kind.Building && e.team === PLAYER);
+    const cap = (e: Entity) => BUILDINGS[e.type]?.garrisonCap ?? 0;
+
+    // Just a building selected (no troops to load) → eject its garrison.
+    if (selBuilding && units.length === 0) {
+      if (cap(selBuilding) > 0 && selBuilding.garrison.length > 0) {
+        this.world.ungarrison(selBuilding.id);
+        this.hud.addAlert("Garrison ejected.");
+        audio.play("command");
+      }
+      return;
+    }
+    if (units.length === 0) return;
+
+    // Prefer the selected building; else the nearest friendly one with room.
+    let target: Entity | null = selBuilding && cap(selBuilding) > 0 ? selBuilding : null;
+    if (!target) {
+      let cx = 0;
+      let cy = 0;
+      for (const u of units) { cx += u.x; cy += u.y; }
+      cx /= units.length;
+      cy /= units.length;
+      let bestD = Infinity;
+      for (const e of this.world.entities) {
+        if (!e.alive || e.kind !== Kind.Building || e.team !== PLAYER) continue;
+        if (e.buildState !== BuildState.Done || cap(e) <= 0 || e.garrison.length >= cap(e)) continue;
+        const d = Math.hypot(e.x - cx, e.y - cy);
+        if (d < bestD) { bestD = d; target = e; }
+      }
+    }
+    if (!target) { this.hud.addAlert("No garrison-capable building nearby."); return; }
+    this.world.garrison(units.map((u) => u.id), target.id);
+    this.hud.addAlert(`Garrisoning into ${BUILDINGS[target.type]?.name ?? "building"}…`);
+    audio.play("command");
   }
 
   // --------------------------------------------------------------- selection --
@@ -307,6 +350,7 @@ class App {
     setAttackMoveMode: () => {
       this.attackMoveArmed = true;
     },
+    garrisonSelection: () => this.garrisonSelected(),
     useAbility: () => {
       const ids = this.playerSelection().filter((e) => e.kind === Kind.Unit).map((e) => e.id);
       const fired = this.world?.useAbility(ids) ?? 0;
@@ -727,7 +771,7 @@ class App {
           this.renderer.addShake(4);
           break;
         case "death":
-          sfx("sword", "death", 0.15);
+          sfx("death", "death", 0.14);
           this.particles.burst(ev.x, ev.y, 9, PAL.blood, 110, { maxLife: 0.5, size: 2.2, gravity: 140 });
           this.renderer.addCorpse(ev.x, ev.y, ev.team, false);
           break;

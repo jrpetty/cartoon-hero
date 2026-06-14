@@ -12,6 +12,31 @@ import { DIFFICULTIES } from "../ai/difficulty";
 import { SIM_DT, SIM_HZ } from "../content/balance";
 
 describe("AI vs AI smoke match", () => {
+  it("two AIs fight across an Islands map (they cross the carved fords)", () => {
+    const seed = 31337;
+    const map = generateMap("islands", seed);
+    const world = new World(seed);
+    world.init(map, [{}, {}], [1, 1]);
+    const ais = [
+      new SkirmishAI(world, Team.Player, DIFFICULTIES.knight),
+      new SkirmishAI(world, Team.Enemy, DIFFICULTIES.knight),
+    ];
+    const ticks = SIM_HZ * 60 * 16;
+    for (let i = 0; i < ticks; i++) {
+      world.tick();
+      for (const ai of ais) ai.update(SIM_DT);
+      world.drainEvents();
+      if (world.winner !== null) break;
+    }
+    // Both economies ran, and the sides actually reached each other and fought —
+    // proving the land bridges are traversable on a water-heavy map.
+    expect(world.player(Team.Player).stats.gathered).toBeGreaterThan(800);
+    expect(world.player(Team.Enemy).stats.gathered).toBeGreaterThan(800);
+    const kills =
+      world.player(Team.Player).stats.unitsKilled + world.player(Team.Enemy).stats.unitsKilled;
+    expect(kills).toBeGreaterThan(3);
+  }, 180000);
+
   it("two Knight AIs develop economies and armies and fight", () => {
     const seed = 20260612;
     const map = generateMap("open_plains", seed);

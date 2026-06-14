@@ -33,6 +33,7 @@ export interface MatchController {
   stopSelection(): void;
   holdSelection(): void;
   setAttackMoveMode(): void;
+  garrisonSelection(): void;
   useAbility(): void;
   minimapNavigate(wx: number, wy: number): void;
   minimapCommand(wx: number, wy: number): void;
@@ -424,6 +425,9 @@ export class HUD {
       place("Atk Move", () => ctrl.setAttackMoveMode(), {
         accent: true,
         tooltip: ["Attack-move (A)", "March and engage anything hostile on the way."],
+      });
+      place("Garrison", () => ctrl.garrisonSelection(), {
+        tooltip: ["Garrison (G)", "Tuck units into the nearest building for cover + extra arrows."],
       });
       // Signature ability for whichever ability-carrying type is selected.
       const abilityUnit = combatUnits.find((e) => ABILITIES[e.type]);

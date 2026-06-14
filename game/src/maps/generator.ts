@@ -78,6 +78,14 @@ export const PRESETS: MapPreset[] = [
     water: 0.22,
   },
   {
+    id: "islands",
+    name: "Islands",
+    desc: "Lakes carve the land into linked holds. Fight over the land bridges.",
+    size: 3500,
+    forestry: 0.3,
+    water: 0.78,
+  },
+  {
     id: "crossroads",
     name: "Crossroads",
     desc: "A small, near-bare arena. No room to hide — the better army wins, fast.",
@@ -100,8 +108,12 @@ export const PRESETS: MapPreset[] = [
 const AMOUNT = { tree: 160, gold_mine: 1000, berries: 250 };
 
 export function generateMap(presetId: string, seed: number, players = 2, nomad = false): MapData {
-  const preset = PRESETS.find((p) => p.id === presetId) ?? PRESETS[0];
   const rng = new RNG(seed);
+  // "random" rolls a real preset from the seed (so the map is still replayable).
+  const preset =
+    presetId === "random"
+      ? PRESETS[rng.int(0, PRESETS.length - 1)]
+      : PRESETS.find((p) => p.id === presetId) ?? PRESETS[0];
   const W = preset.size;
   const H = preset.size;
   const cols = Math.ceil(W / TILE);
@@ -200,7 +212,21 @@ export function generateMap(presetId: string, seed: number, players = 2, nomad =
     }
   };
 
-  if (preset.water > 0.4) {
+  if (preset.id === "islands") {
+    // Many lakes break the land into holds; corridors (carved below) keep every
+    // base reachable so the map is always winnable without ships.
+    const lakeCount = 24;
+    for (let i = 0; i < lakeCount; i++) {
+      const cx = rng.int(5, cols - 6);
+      const cy = rng.int(5, rows - 6);
+      const r = rng.int(3, 6);
+      for (let dy = -r; dy <= r; dy++) {
+        for (let dx = -r; dx <= r; dx++) {
+          if (dx * dx + dy * dy <= r * r) addWater(cx + dx, cy + dy);
+        }
+      }
+    }
+  } else if (preset.water > 0.4) {
     // Winding river through the middle with 2 crossings.
     const crossings: number[] = [
       Math.floor(rows * 0.3) + rng.int(-3, 3),
@@ -234,6 +260,38 @@ export function generateMap(presetId: string, seed: number, players = 2, nomad =
         }
       }
     }
+  }
+
+  // --- Land bridges: guarantee every base connects to the centre -----------
+  // On water-heavy maps lakes/rivers could otherwise wall a base off entirely
+  // (we have no ships). Carving a passable lane from each start to the centre —
+  // all lanes meeting there — keeps the whole map mutually reachable. Lane cells
+  // are reserved so no tree/gold spawns later and re-blocks them.
+  if (preset.id === "islands" || preset.water > 0.4) {
+    const midC = Math.floor(cols / 2);
+    const midR = Math.floor(rows / 2);
+    const carveLand = (x0c: number, y0c: number, x1c: number, y1c: number, halfWidth: number) => {
+      const steps = Math.ceil(Math.hypot(x1c - x0c, y1c - y0c));
+      for (let s = 0; s <= steps; s++) {
+        const t = s / steps;
+        const cx = Math.round(x0c + (x1c - x0c) * t);
+        const cy = Math.round(y0c + (y1c - y0c) * t);
+        for (let w = -halfWidth; w <= halfWidth; w++) {
+          for (let h = -halfWidth; h <= halfWidth; h++) {
+            const nx = cx + w;
+            const ny = cy + h;
+            if (!inB(nx, ny)) continue;
+            const i = idx(nx, ny);
+            if (terrain[i] === Terrain.Water) {
+              terrain[i] = Terrain.Sand; // a ford/causeway across the water
+              blockedSet.delete(i);
+            }
+            resCells.add(i); // keep the lane clear of resource nodes
+          }
+        }
+      }
+    };
+    for (const [scx, scy] of startCells) carveLand(scx, scy, midC, midR, 1);
   }
 
   // --- Resource helpers -----------------------------------------------------

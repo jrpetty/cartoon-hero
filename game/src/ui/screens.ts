@@ -218,17 +218,22 @@ export class SetupScreen {
     const x0 = W / 2 - colW / 2;
     let y = 110;
 
-    // Map presets — laid out in a grid that wraps every 3 cards.
+    // Map presets — laid out in a grid that wraps every 3 cards. A "Random"
+    // card (rolled fresh from the seed each match) is appended after the set.
+    const cards = [
+      ...PRESETS.map((p) => ({ id: p.id, name: p.name, desc: p.desc })),
+      { id: "random", name: "🎲 Random", desc: "A surprise battlefield — a different preset every match." },
+    ];
     const perRow = 3;
     const cardH = 96;
     const rowGap = 12;
-    const rows = Math.ceil(PRESETS.length / perRow);
+    const rows = Math.ceil(cards.length / perRow);
     const panelH = 38 + rows * (cardH + rowGap);
     ui.panel(x0, y, colW, panelH);
     ui.text("Battlefield", x0 + 16, y + 22, { size: 16, bold: true, color: PAL.uiAccent });
     const cardW = (colW - 32 - (perRow - 1) * 12) / perRow;
-    for (let i = 0; i < PRESETS.length; i++) {
-      const p = PRESETS[i];
+    for (let i = 0; i < cards.length; i++) {
+      const p = cards[i];
       const cx = x0 + 16 + (i % perRow) * (cardW + 12);
       const cy = y + 38 + Math.floor(i / perRow) * (cardH + rowGap);
       const sel = this.config.presetId === p.id;
