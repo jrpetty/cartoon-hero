@@ -57,6 +57,29 @@ function shadow(ctx: Ctx, x: number, y: number, rx: number, ry: number, alpha = 
   ctx.fill();
 }
 
+// A bold team-coloured ground disc + ring under every unit — the clearest "who
+// owns this" cue, readable at a glance even in a big mixed-team brawl.
+function teamRing(ctx: Ctx, x: number, y: number, r: number, tc: TeamCol) {
+  const rx = r * 1.15;
+  const ry = r * 0.52;
+  // Soft filled disc.
+  ctx.fillStyle = withAlpha(tc.main, 0.42);
+  ctx.beginPath();
+  ctx.ellipse(x, y, rx, ry, 0, 0, Math.PI * 2);
+  ctx.fill();
+  // Dark contrast rim so the colour reads on any terrain, then a bright ring.
+  ctx.lineWidth = 3;
+  ctx.strokeStyle = "rgba(8, 8, 6, 0.55)";
+  ctx.beginPath();
+  ctx.ellipse(x, y, rx + 0.5, ry + 0.5, 0, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.lineWidth = 2;
+  ctx.strokeStyle = tc.light;
+  ctx.beginPath();
+  ctx.ellipse(x, y, rx, ry, 0, 0, Math.PI * 2);
+  ctx.stroke();
+}
+
 // ---------------------------------------------------------------- resources --
 
 export function drawResource(ctx: Ctx, e: Entity, time: number) {
@@ -801,6 +824,7 @@ export function drawUnit(ctx: Ctx, e: Entity, time: number) {
   }
 
   shadow(ctx, e.x + 1, e.y + e.radius * 0.55, e.radius * 0.95, e.radius * 0.42);
+  teamRing(ctx, e.x, e.y + e.radius * 0.55, e.radius, tc);
 
   ctx.save();
   ctx.translate(e.x + Math.cos(e.facing) * lunge * 4, e.y - bob + Math.sin(e.facing) * lunge * 4);
