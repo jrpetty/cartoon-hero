@@ -107,15 +107,24 @@ export const PRESETS: MapPreset[] = [
 // Richer nodes than before — more food/wood/gold banked in every patch.
 const AMOUNT = { tree: 160, gold_mine: 1000, berries: 250 };
 
-export function generateMap(presetId: string, seed: number, players = 2, nomad = false): MapData {
+export function generateMap(
+  presetId: string,
+  seed: number,
+  players = 2,
+  nomad = false,
+  alliances?: number[],
+): MapData {
   const rng = new RNG(seed);
   // "random" rolls a real preset from the seed (so the map is still replayable).
   const preset =
     presetId === "random"
       ? PRESETS[rng.int(0, PRESETS.length - 1)]
       : PRESETS.find((p) => p.id === presetId) ?? PRESETS[0];
-  const W = preset.size;
-  const H = preset.size;
+  // Grow the field with the player count so 8 realms aren't cramped (keeps the
+  // per-player area roughly constant beyond 4 players).
+  const sizeScale = players > 4 ? Math.sqrt(players / 4) : 1;
+  const W = Math.round((preset.size * sizeScale) / TILE) * TILE;
+  const H = W;
   const cols = Math.ceil(W / TILE);
   const rows = Math.ceil(H / TILE);
   const terrain = new Uint8Array(cols * rows);
@@ -174,18 +183,30 @@ export function generateMap(presetId: string, seed: number, players = 2, nomad =
     primaries = pts; // each spawn gets its own (un-mirrored) resource ring
     mirrorRes = false;
   } else {
-    // 1v1: opposite corners (180° pair). FFA: all four corners, kept as two
-    // mirror pairs so the map stays rotationally symmetric and fair.
-    const sx = margin + rng.int(0, 4);
-    const sy = margin + rng.int(0, 4);
-    const startCellA: [number, number] = [sx, sy];
-    const startCellB = mirror(sx, sy);
-    const startCellC: [number, number] = [cols - 1 - sx, sy];
-    const startCellD = mirror(startCellC[0], startCellC[1]);
-    startCells = players >= 4
-      ? [startCellA, startCellB, startCellC, startCellD]
-      : [startCellA, startCellB];
-    primaries = players >= 4 ? [startCellA, startCellC] : [startCellA];
+    // Evenly space every start on a ring around the centre — inherently fair
+    // (each equidistant from the middle and its neighbours). Teammates are
+    // seated next to each other so an alliance holds one arc of the map.
+    const ringR = Math.min(cols, rows) * 0.5 - margin;
+    const ccx = cols / 2;
+    const ccy = rows / 2;
+    const a0 = rng.range(0, Math.PI * 2);
+    // Slot k (clockwise) → a team, ordered so same-alliance teams are adjacent.
+    const order = Array.from({ length: players }, (_, t) => t).sort(
+      (a, b) => (alliances?.[a] ?? a) - (alliances?.[b] ?? b) || a - b,
+    );
+    startCells = new Array(players);
+    for (let k = 0; k < players; k++) {
+      const ang = a0 + (k / players) * Math.PI * 2;
+      const cx = Math.round(ccx + Math.cos(ang) * ringR);
+      const cy = Math.round(ccy + Math.sin(ang) * ringR);
+      startCells[order[k]] = [
+        Math.max(margin, Math.min(cols - 1 - margin, cx)),
+        Math.max(margin, Math.min(rows - 1 - margin, cy)),
+      ];
+    }
+    // Every realm gets its own identical resource ring → a perfectly even start.
+    primaries = startCells;
+    mirrorRes = false;
   }
   const startCellA = startCells[0];
   const starts = startCells.map(([cx, cy]) => ({ x: cx * TILE + TILE / 2, y: cy * TILE + TILE / 2 }));

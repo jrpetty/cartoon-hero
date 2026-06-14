@@ -228,8 +228,11 @@ export class Renderer {
     const W = canvas.width;
     const H = canvas.height;
     setDrawDayPhase(this.dayPhase);
-    // Team games: colour units by relation to the viewer (you/ally/enemy).
-    if (world.hasTeamAlliances()) {
+    // Spectators see absolute per-realm colours (every side distinct); players
+    // see units coloured by relation to themselves (you/ally/enemy).
+    if (world.revealAll) {
+      setTeamColorResolver(null); // default = absolute PAL.teams colour per team
+    } else if (world.hasTeamAlliances()) {
       setTeamColorResolver((team) => {
         if (team >= world.numTeams) return teamColor(team);
         const rel = world.relationTo(viewTeam, team as Team);

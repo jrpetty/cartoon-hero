@@ -275,20 +275,21 @@ class App {
     this.config = config;
     const diff = DIFFICULTIES[config.difficulty];
     const numPlayers = Math.max(2, Math.min(MAX_TEAMS, config.players ?? 2));
-    const map = generateMap(config.presetId, config.seed, numPlayers, config.nomad);
+    // Even teams split the realms into two alliances (alliance id = team % 2),
+    // e.g. 2v2, 3v3, 4v4. Otherwise everyone is solo (FFA). Computed first so the
+    // map can seat teammates next to each other.
+    const alliances = config.allied
+      ? Array.from({ length: numPlayers }, (_, t) => t % 2)
+      : undefined;
+    const map = generateMap(config.presetId, config.seed, numPlayers, config.nomad, alliances);
     const world = new World(config.seed);
-    // Team 0 is the human; teams 1..n-1 are AI opponents (free-for-all).
+    // Team 0 is the human; teams 1..n-1 are AI opponents.
     const loadouts = [this.profile.matchLoadout(config.fairMode)];
     const econMults = [1];
     for (let t = 1; t < numPlayers; t++) {
       loadouts.push(this.profile.matchLoadout(true));
       econMults.push(diff.econMult);
     }
-    // 2v2: teams 0&2 vs 1&3 (alliance id = team % 2), so allies share the map's
-    // top/bottom edge. Otherwise everyone is solo (1v1 / FFA).
-    const alliances = config.allied && numPlayers === 4
-      ? Array.from({ length: numPlayers }, (_, t) => t % 2)
-      : undefined;
     // Player leads with their chosen commander; the AIs each draw a random one.
     const commanders = [config.commander || this.profile.data.commander];
     for (let t = 1; t < numPlayers; t++) {
@@ -331,7 +332,10 @@ class App {
     this.config = config;
     const diff = DIFFICULTIES[config.difficulty];
     const numPlayers = Math.max(2, Math.min(MAX_TEAMS, config.players ?? 2));
-    const map = generateMap(config.presetId, config.seed, numPlayers, config.nomad);
+    const alliances = config.allied
+      ? Array.from({ length: numPlayers }, (_, t) => t % 2)
+      : undefined;
+    const map = generateMap(config.presetId, config.seed, numPlayers, config.nomad, alliances);
     const world = new World(config.seed);
     const loadouts: Record<string, number>[] = [];
     const econMults: number[] = [];
@@ -341,9 +345,6 @@ class App {
       econMults.push(diff.econMult);
       commanders.push(COMMANDER_IDS[Math.floor(Math.random() * COMMANDER_IDS.length)]);
     }
-    const alliances = config.allied && numPlayers === 4
-      ? Array.from({ length: numPlayers }, (_, t) => t % 2)
-      : undefined;
     world.init(map, loadouts, econMults, alliances, commanders, config.nomad);
     world.revealAll = true; // spectators see the entire battlefield
     this.world = world;

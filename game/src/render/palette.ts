@@ -46,6 +46,10 @@ export const PAL = {
     { main: "#d8403a", light: "#ec837d", dark: "#902a27", name: "Crimson" },
     { main: "#3aa84e", light: "#79d08a", dark: "#246e34", name: "Verdant" },
     { main: "#d8a83a", light: "#eccd7d", dark: "#90702a", name: "Amber" },
+    { main: "#8a5cf0", light: "#b69bf6", dark: "#5a37a8", name: "Violet" },
+    { main: "#2fb3c9", light: "#74dcec", dark: "#1c7785", name: "Teal" },
+    { main: "#e0822f", light: "#f2b272", dark: "#96521c", name: "Coral" },
+    { main: "#f06a9a", light: "#f7a3c0", dark: "#a83f68", name: "Rose" },
   ],
 
   // Diplomacy colours — used in team games to recolour units relative to the
@@ -57,6 +61,10 @@ export const PAL = {
       { main: "#d8403a", light: "#ec837d", dark: "#902a27", name: "Enemy" },
       { main: "#e0822f", light: "#f2b272", dark: "#96521c", name: "Enemy" },
       { main: "#c64fb0", light: "#e58fd4", dark: "#85317a", name: "Enemy" },
+      { main: "#7cbf3a", light: "#aee072", dark: "#527f22", name: "Enemy" },
+      { main: "#8a5cf0", light: "#b69bf6", dark: "#5a37a8", name: "Enemy" },
+      { main: "#e6c12f", light: "#f4dd7e", dark: "#9a7f17", name: "Enemy" },
+      { main: "#f06a9a", light: "#f7a3c0", dark: "#a83f68", name: "Enemy" },
     ],
   },
 

@@ -10,12 +10,16 @@ export const enum Team {
   Enemy = 1, // also the primary rival in 1v1
   Team3 = 2,
   Team4 = 3,
+  Team5 = 4,
+  Team6 = 5,
+  Team7 = 6,
+  Team8 = 7,
   // Neutral sits above any player slot so player teams can occupy 0..N-1.
   Neutral = 9,
 }
 
 /** Highest number of player teams supported in one match. */
-export const MAX_TEAMS = 4;
+export const MAX_TEAMS = 8;
 
 export const enum Kind {
   Unit = 0,

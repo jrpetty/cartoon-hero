@@ -10,11 +10,15 @@ import { Entity, Kind, Team } from "../sim/types";
 import { UNITS } from "../content/units";
 import { COMMANDERS } from "../content/commanders";
 
-const TEAM_COLORS = ["#6f9bff", "#ff6f6f", "#6fff9b", "#ffe06f"];
 const AGE_NAMES = ["Dark", "Feudal", "Castle"];
 
+/** Absolute per-realm colour (matches the in-world spectator colouring). */
+function teamColor(t: number): string {
+  return PAL.teams[t % PAL.teams.length].main;
+}
+
 export function teamLabel(t: Team): string {
-  return ["Blue", "Red", "Green", "Yellow"][t] ?? `Team ${t + 1}`;
+  return PAL.teams[t]?.name ?? `Realm ${t + 1}`;
 }
 
 export interface SpectatorCardRect {
@@ -69,18 +73,23 @@ export function drawSpectatorPanels(
     size: 12, color: "#9c9379",
   });
 
-  const cardW = 272;
+  // Up to 4 realms stack in one right-hand column; 5–8 split into two columns.
+  const cardW = 250;
   const cardH = 116;
   const gap = 8;
-  const cx = W - cardW - 12;
-  let cy = 44;
+  const cols = world.numTeams > 4 ? 2 : 1;
+  const perCol = Math.ceil(world.numTeams / cols);
   const rects: SpectatorCardRect[] = [];
 
   for (let t = 0; t < world.numTeams; t++) {
+    const colIdx = Math.floor(t / perCol); // 0 = rightmost column
+    const rowIdx = t % perCol;
+    const cx = W - cardW - 12 - colIdx * (cardW + 12);
+    const cy = 44 + rowIdx * (cardH + gap);
     const p = world.player(t as Team);
     const g = a[t];
     const dead = p.defeated;
-    const col = TEAM_COLORS[t % TEAM_COLORS.length];
+    const col = teamColor(t);
     const dim = dead ? "#7a7060" : "#d8cdaf";
 
     ui.panel(cx, cy, cardW, cardH, { light: true });
@@ -122,7 +131,6 @@ export function drawSpectatorPanels(
     ctx.fillRect(cx + 14, cy + 98, barW * frac, 8);
 
     rects.push({ team: t, x: cx, y: cy, w: cardW, h: cardH, focus: g.firstBld });
-    cy += cardH + gap;
   }
   return rects;
 }

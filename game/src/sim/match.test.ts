@@ -12,6 +12,32 @@ import { DIFFICULTIES } from "../ai/difficulty";
 import { SIM_DT, SIM_HZ } from "../content/balance";
 
 describe("AI vs AI smoke match", () => {
+  it("runs an 8-realm free-for-all on a ring map", () => {
+    const seed = 80808;
+    const N = 8;
+    const map = generateMap("highlands", seed, N);
+    expect(map.starts.length).toBe(N);
+    const world = new World(seed);
+    world.init(map, Array.from({ length: N }, () => ({})), Array.from({ length: N }, () => 1));
+    expect(world.numTeams).toBe(N);
+    const ais = Array.from({ length: N }, (_, t) => new SkirmishAI(world, t as Team, DIFFICULTIES.knight));
+    const ticks = SIM_HZ * 60 * 12;
+    for (let i = 0; i < ticks; i++) {
+      world.tick();
+      for (const ai of ais) ai.update(SIM_DT);
+      world.drainEvents();
+      if (world.winner !== null) break;
+    }
+    // Every realm built an economy from its own slice of the ring.
+    for (let t = 0; t < N; t++) {
+      expect(world.player(t as Team).stats.gathered).toBeGreaterThan(400);
+    }
+    // And the eight-way war actually happened.
+    const kills = Array.from({ length: N }, (_, t) => world.player(t as Team).stats.unitsKilled)
+      .reduce((s, k) => s + k, 0);
+    expect(kills).toBeGreaterThan(8);
+  }, 180000);
+
   it("two AIs fight across an Islands map (they cross the carved fords)", () => {
     const seed = 31337;
     const map = generateMap("islands", seed);

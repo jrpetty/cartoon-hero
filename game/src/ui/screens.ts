@@ -272,27 +272,34 @@ export class SetupScreen {
     }
     y += 98;
 
-    // Game mode: duel vs free-for-all.
-    ui.panel(x0, y, colW, 64);
-    ui.text("Game Mode", x0 + 16, y + 24, { size: 16, bold: true, color: PAL.uiAccent });
-    const modes = [
-      { n: "Duel — 1v1", p: 2, ally: false, hint: "Classic one-on-one against a single commander." },
-      { n: "Free-for-All — 4", p: 4, ally: false, hint: "You and three AI rivals on a four-corner map. Last realm standing wins." },
-      { n: "Teams — 2v2", p: 4, ally: true, hint: "You and an AI ally hold one side of the map against two enemies. Win or lose together." },
-    ];
-    const mw = (colW - 150 - 16 - 24) / 3;
-    for (let i = 0; i < modes.length; i++) {
-      const sel = this.config.players === modes[i].p && this.config.allied === modes[i].ally;
-      if (ui.button(modes[i].n, x0 + 150 + i * (mw + 12), y + 16, mw, 32, {
-        accent: sel,
-        tooltip: [modes[i].n, modes[i].hint],
-      })) {
-        this.config.players = modes[i].p;
-        this.config.allied = modes[i].ally;
+    // Players (2–8) + team format.
+    ui.panel(x0, y, colW, 96);
+    ui.text("Players", x0 + 16, y + 26, { size: 16, bold: true, color: PAL.uiAccent });
+    const counts = [2, 3, 4, 5, 6, 7, 8];
+    const bw = 40;
+    for (let i = 0; i < counts.length; i++) {
+      const c = counts[i];
+      const sel = this.config.players === c;
+      if (ui.button(String(c), x0 + 120 + i * (bw + 8), y + 12, bw, 30, { accent: sel })) {
+        this.config.players = c;
+        if (c < 4) this.config.allied = false; // teams need at least 4
         audio.play("ui");
       }
     }
-    y += 80;
+    ui.text("Format", x0 + 16, y + 66, { size: 16, bold: true, color: PAL.uiAccent });
+    const teamsOK = this.config.players >= 4;
+    const teamHalf = this.config.players / 2;
+    const teamLabel = `Even Teams (${Math.ceil(teamHalf)}v${Math.floor(teamHalf)})`;
+    if (ui.button("Free-for-All", x0 + 120, y + 54, 160, 30, {
+      accent: !this.config.allied,
+      tooltip: ["Free-for-All", "Every realm for itself — last one standing wins."],
+    })) { this.config.allied = false; audio.play("ui"); }
+    if (ui.button(teamsOK ? teamLabel : "Even Teams (4+)", x0 + 290, y + 54, 200, 30, {
+      accent: this.config.allied,
+      disabled: !teamsOK,
+      tooltip: ["Even Teams", "Split into two allied sides with shared vision. Needs 4+ players."],
+    })) { this.config.allied = true; audio.play("ui"); }
+    y += 112;
 
     // Commander selector (cycle through the ones you own).
     if (!profile.ownsCommander(this.config.commander)) {

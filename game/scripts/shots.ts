@@ -914,10 +914,11 @@ function shotFortress() {
 }
 
 function shotSpectate() {
-  const map = generateMap("highlands", 77, 4);
+  const N = 8;
+  const map = generateMap("highlands", 77, N);
   const world = new World(77);
-  world.init(map, [{}, {}, {}, {}], [1, 1, 1, 1], undefined,
-    ["marshal", "magnate", "warden", "drillmaster"]);
+  world.init(map, Array.from({ length: N }, () => ({})), Array.from({ length: N }, () => 1), undefined,
+    ["marshal", "magnate", "warden", "drillmaster", "steward", "banneret", "warpriest", "quartermaster"]);
   world.revealAll = true;
   const W = 1280;
   const H = 760;
@@ -928,30 +929,26 @@ function shotSpectate() {
   cam.setViewport(W, H);
   cam.setWorld(map.worldW, map.worldH);
   cam.centerOn(map.worldW / 2, map.worldH / 2);
-  cam.zoom = 0.85;
+  cam.zoom = 0.62;
 
-  // Populate each realm with armies, villagers and a few buildings, and seed
-  // some stats so the spectator cards read like a match in full swing.
-  const armies = [
-    ["knight", "knight", "militia", "archer", "archer", "spearman"],
-    ["militia", "militia", "archer", "skirmisher", "knight"],
-    ["spearman", "archer", "archer", "crossbow"],
-    ["knight", "militia"],
-  ];
-  for (let t = 0; t < 4; t++) {
+  // Populate every realm with an army, villagers and stats so the eight cards
+  // read like a match in full swing.
+  const pool = ["knight", "militia", "archer", "spearman", "skirmisher", "crossbow"];
+  for (let t = 0; t < N; t++) {
     const s = map.starts[t];
-    for (let i = 0; i < armies[t].length; i++) {
-      world.spawnUnit(t as any, armies[t][i], s.x + 30 + (i % 4) * 26, s.y + 30 + Math.floor(i / 4) * 26);
+    const n = 3 + (t % 4);
+    for (let i = 0; i < n; i++) {
+      world.spawnUnit(t as any, pool[(t + i) % pool.length], s.x + 24 + (i % 3) * 24, s.y + 24 + Math.floor(i / 3) * 24);
     }
-    for (let i = 0; i < 4 + t; i++) world.spawnUnit(t as any, "villager", s.x - 60 - i * 14, s.y - 20);
+    for (let i = 0; i < 3 + (t % 5); i++) world.spawnUnit(t as any, "villager", s.x - 50 - i * 12, s.y - 16);
     const p = world.player(t as any);
-    p.age = [2, 1, 2, 0][t];
-    p.resources = { food: 320 + t * 80, wood: 210 + t * 40, gold: 150 + t * 90 };
-    p.stats.gathered = 4200 - t * 700;
-    p.stats.unitsKilled = 18 - t * 4;
-    p.stats.unitsLost = 6 + t * 3;
+    p.age = [2, 1, 2, 0, 1, 2, 0, 1][t];
+    p.resources = { food: 200 + t * 60, wood: 150 + t * 30, gold: 100 + t * 70 };
+    p.stats.gathered = 4200 - t * 380;
+    p.stats.unitsKilled = 20 - t * 2;
+    p.stats.unitsLost = 4 + t * 2;
   }
-  world.player(Team.Team4).defeated = true; // show a fallen realm card too
+  world.player(Team.Team8).defeated = true; // show a fallen realm card too
 
   renderer.render(
     world, cam, new Particles(10), 0.016, 3.0, Team.Player,
