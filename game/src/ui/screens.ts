@@ -208,7 +208,7 @@ export class SetupScreen {
     nomad: false,
   };
 
-  draw(W: number, H: number, time: number, profile: Profile): "start" | "back" | null {
+  draw(W: number, H: number, time: number, profile: Profile): "start" | "spectate" | "back" | null {
     drawMenuBackground(W, H, time);
     ui.text("Skirmish Setup", W / 2, 64, {
       align: "center", size: 34, bold: true, color: "#ffe9b0", font: "Georgia, serif",
@@ -340,8 +340,9 @@ export class SetupScreen {
     ui.text("No Town Center — settle where you land.", x0 + half + 56, y + 46, { size: 11, color: "#bdb49a" });
     y += 80;
 
-    let action: "start" | "back" | null = null;
+    let action: "start" | "spectate" | "back" | null = null;
     if (ui.button("⟵ Back", x0, y, 130, 44, { size: 15 })) action = "back";
+    if (ui.button("👁 Watch", x0 + colW - 360, y, 130, 44, { size: 15, tooltip: ["Spectate an AI vs AI battle", "All sides are AI — sit back and watch."] })) action = "spectate";
     if (ui.button("⚔  To Battle!", x0 + colW - 220, y, 220, 44, { accent: true, size: 18 })) action = "start";
     return action;
   }

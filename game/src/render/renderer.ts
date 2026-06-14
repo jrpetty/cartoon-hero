@@ -468,8 +468,8 @@ export class Renderer {
       }
     }
 
-    // Fog of war overlay.
-    this.guard(ctx, "fog", worldTf, () => {
+    // Fog of war overlay (skipped entirely for spectators — they see all).
+    if (!world.revealAll) this.guard(ctx, "fog", worldTf, () => {
       this.fogDirtyTimer -= dt;
       if (this.fogDirtyTimer <= 0 && this.fogCtx && this.fogCanvas) {
         this.fogDirtyTimer = 0.12;

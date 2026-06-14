@@ -68,6 +68,7 @@ class App {
   attackMoveArmed = false;
   powerArmed = false; // commander power placement mode
   ingameMenu = false;
+  spectating = false; // watch mode: all teams are AI, no player commands
   paused = false;
   gameSpeed = 1; // 0.5 / 1 / 2 / 3
   private idleVillIndex = 0;
@@ -145,13 +146,20 @@ class App {
     if (this.state !== "match" || !this.world) return;
     const k = key.length === 1 ? key.toLowerCase() : key;
     if (k === "Escape") {
-      if (this.placing) this.placing = null;
+      if (this.spectating) this.exitToMenu();
+      else if (this.placing) this.placing = null;
       else if (this.powerArmed) this.powerArmed = false;
       else if (this.attackMoveArmed) this.attackMoveArmed = false;
       else this.ingameMenu = !this.ingameMenu;
       return;
     }
     if (this.ingameMenu) return;
+    // Pause / game-speed work in every mode (including spectating).
+    if (k === "p" || k === " ") this.togglePause();
+    if (k === "+" || k === "=") this.cycleSpeed(1);
+    if (k === "-" || k === "_") this.cycleSpeed(-1);
+    // Spectators only watch — no army commands.
+    if (this.spectating) return;
     if (k === "a") this.attackMoveArmed = true;
     if (k === "s") this.world.issueStop(this.playerSelection().map((e) => e.id));
     if (k === "h") this.world.issueHold(this.playerSelection().map((e) => e.id));
@@ -161,10 +169,6 @@ class App {
       this.hud.buildCategory = null;
     }
     if (k === "g") this.garrisonSelected();
-    // QoL: pause, game speed, idle villager, select army.
-    if (k === "p" || k === " ") this.togglePause();
-    if (k === "+" || k === "=") this.cycleSpeed(1);
-    if (k === "-" || k === "_") this.cycleSpeed(-1);
     if (k === ".") this.selectIdleVillager();
     if (k === ",") this.selectAllArmy();
     if (k === "c") this.armCommanderPower();
@@ -311,8 +315,60 @@ class App {
     this.camera.zoom = 1;
     this.camera.centerOn(map.starts[PLAYER].x, map.starts[PLAYER].y);
     this.accumulator = 0;
+    this.spectating = false;
     this.state = "match";
     this.hud.addAlert(`${map.name} — vs ${diff.name}. Your villagers await orders!`);
+    audio.play("complete");
+  }
+
+  /**
+   * Watch mode: every team is AI-controlled and the whole map is revealed. We
+   * reuse the setup config (map, players, difficulty, alliances) but give team 0
+   * a brain too and award no rewards — it's purely for watching.
+   */
+  startSpectate(config: SkirmishConfig) {
+    this.config = config;
+    const diff = DIFFICULTIES[config.difficulty];
+    const numPlayers = Math.max(2, Math.min(MAX_TEAMS, config.players ?? 2));
+    const map = generateMap(config.presetId, config.seed, numPlayers, config.nomad);
+    const world = new World(config.seed);
+    const loadouts: Record<string, number>[] = [];
+    const econMults: number[] = [];
+    const commanders: string[] = [];
+    for (let t = 0; t < numPlayers; t++) {
+      loadouts.push(this.profile.matchLoadout(true)); // fair, all-Common loadouts
+      econMults.push(diff.econMult);
+      commanders.push(COMMANDER_IDS[Math.floor(Math.random() * COMMANDER_IDS.length)]);
+    }
+    const alliances = config.allied && numPlayers === 4
+      ? Array.from({ length: numPlayers }, (_, t) => t % 2)
+      : undefined;
+    world.init(map, loadouts, econMults, alliances, commanders, config.nomad);
+    world.revealAll = true; // spectators see the entire battlefield
+    this.world = world;
+    this.ais = [];
+    for (let t = 0; t < numPlayers; t++) {
+      this.ais.push(new SkirmishAI(world, t as Team, diff));
+    }
+    this.renderer.prepare(map);
+    this.renderer.clearFx();
+    this.hud.prepare(map);
+    this.particles.clear();
+    this.selection = [];
+    this.controlGroups = Array.from({ length: 10 }, () => []);
+    this.markers = [];
+    this.placing = null;
+    this.attackMoveArmed = false;
+    this.ingameMenu = false;
+    this.matchOverTimer = -1;
+    this.matchRewards = null;
+    this.camera.setWorld(map.worldW, map.worldH);
+    this.camera.zoom = 0.85;
+    this.camera.centerOn(map.worldW / 2, map.worldH / 2);
+    this.accumulator = 0;
+    this.spectating = true;
+    this.state = "match";
+    this.hud.addAlert(`👁 Spectating — ${map.name}, ${numPlayers} AI ${diff.name}s. Sit back.`);
     audio.play("complete");
   }
 
@@ -888,6 +944,7 @@ class App {
         const action = this.setup.draw(W, H, this.time, this.profile);
         if (action === "back") this.state = "menu";
         else if (action === "start") this.startMatch({ ...this.setup.config });
+        else if (action === "spectate") this.startSpectate({ ...this.setup.config });
       } else if (this.state === "armory") {
         const action = this.armory.draw(W, H, this.time, dt, this.profile);
         if (action === "back") {
@@ -1022,6 +1079,7 @@ class App {
 
     // ---- HUD (consumes pointer if clicked over panels) ----
     this.hud.draw(W, H, world, this.camera, PLAYER, selected, dt, this.controller, this.attackMoveArmed);
+    if (this.spectating) this.drawSpectatorHud(W, H, world);
     this.drawControlGroups(W, H);
     this.drawQoLBar(W, H);
     ui.flushTooltip(W, H);
@@ -1042,7 +1100,7 @@ class App {
     }
 
     // ---- route unconsumed pointer input to the world ----
-    if (!this.ingameMenu) {
+    if (!this.ingameMenu && !this.spectating) {
       if (this.frameDragEnd && !ui.pointerConsumed) {
         if (this.placing && LINE_BUILDABLE.has(this.placing)) this.paintWallLine(this.frameDragEnd);
         else this.worldDragSelect(this.frameDragEnd);
@@ -1064,21 +1122,89 @@ class App {
     }
 
     // ---- victory / defeat ----
-    // The match ends for the human when a winner is decided, or the moment
-    // their own realm is wiped out (the AIs may fight on, but the human is out).
-    const playerOut = world.player(PLAYER).defeated;
-    if ((world.winner !== null || playerOut) && this.matchOverTimer < 0) {
-      this.matchOverTimer = 1.8;
-      // Win if your alliance is the last standing (and you're still in it).
-      this.playerWon = world.winner !== null && world.areAllied(world.winner, PLAYER) && !playerOut;
-      this.hud.addAlert(this.playerWon ? "🏆 The last enemy is broken!" : "💀 Your last building has fallen…");
-      if (this.playerWon) audio.play("levelup");
-      else audio.play("collapse");
+    if (this.spectating) {
+      // No stake in the fight — just announce the victor and bow out to the menu.
+      if (world.winner !== null && this.matchOverTimer < 0) {
+        this.matchOverTimer = 3.0;
+        this.hud.addAlert(`🏆 ${this.teamLabel(world.winner)} wins the battle!`);
+        audio.play("levelup");
+      }
+      if (this.matchOverTimer > 0) {
+        this.matchOverTimer -= dt;
+        if (this.matchOverTimer <= 0) this.exitToMenu();
+      }
+    } else {
+      // The match ends for the human when a winner is decided, or the moment
+      // their own realm is wiped out (the AIs may fight on, but the human is out).
+      const playerOut = world.player(PLAYER).defeated;
+      if ((world.winner !== null || playerOut) && this.matchOverTimer < 0) {
+        this.matchOverTimer = 1.8;
+        // Win if your alliance is the last standing (and you're still in it).
+        this.playerWon = world.winner !== null && world.areAllied(world.winner, PLAYER) && !playerOut;
+        this.hud.addAlert(this.playerWon ? "🏆 The last enemy is broken!" : "💀 Your last building has fallen…");
+        if (this.playerWon) audio.play("levelup");
+        else audio.play("collapse");
+      }
+      if (this.matchOverTimer > 0) {
+        this.matchOverTimer -= dt;
+        if (this.matchOverTimer <= 0) this.finishMatch(this.playerWon);
+      }
     }
-    if (this.matchOverTimer > 0) {
-      this.matchOverTimer -= dt;
-      if (this.matchOverTimer <= 0) this.finishMatch(this.playerWon);
+  }
+
+  /** A readable name for a team, used in spectator callouts. */
+  private teamLabel(t: Team): string {
+    return ["Blue", "Red", "Green", "Yellow"][t] ?? `Team ${t + 1}`;
+  }
+
+  /** Live scoreboard while spectating: each AI realm's army, villagers, bases. */
+  private drawSpectatorHud(W: number, H: number, world: World) {
+    const colors = ["#6f9bff", "#ff6f6f", "#6fff9b", "#ffe06f"];
+    const counts = Array.from({ length: world.numTeams }, () => ({ army: 0, vills: 0, bld: 0 }));
+    for (const e of world.entities) {
+      if (!e.alive || e.team >= world.numTeams) continue;
+      const c = counts[e.team];
+      if (e.kind === Kind.Building) c.bld++;
+      else if (e.kind === Kind.Unit) {
+        if (e.type === "villager") c.vills++;
+        else if (e.type !== "monk") c.army++;
+      }
     }
+    const rowH = 22;
+    const panelW = 250;
+    const panelH = 30 + world.numTeams * rowH;
+    const px = W / 2 - panelW / 2;
+    const py = 8;
+    ui.panel(px, py, panelW, panelH, { light: true });
+    ui.text("👁 SPECTATING", W / 2, py + 18, { align: "center", size: 14, bold: true, color: PAL.uiAccent });
+    for (let t = 0; t < world.numTeams; t++) {
+      const ry = py + 30 + t * rowH;
+      const dead = world.player(t as Team).defeated;
+      const c = counts[t];
+      ui.text(this.teamLabel(t as Team), px + 14, ry + 12, {
+        size: 13, bold: true, color: dead ? "#7a7060" : colors[t % colors.length],
+      });
+      ui.text(
+        dead ? "defeated" : `⚔ ${c.army}   👤 ${c.vills}   🏠 ${c.bld}`,
+        px + panelW - 14, ry + 12,
+        { align: "right", size: 12, color: dead ? "#7a7060" : "#d8cdaf" },
+      );
+    }
+    ui.text(
+      this.paused ? "Paused — Space to resume" : "Space pause · +/- speed · Esc to leave",
+      W / 2, py + panelH + 14, { align: "center", size: 11, color: "#bdb49a" },
+    );
+  }
+
+  /** Tear down the current match and return to the main menu (spectator exit). */
+  private exitToMenu() {
+    if (this.world) this.world.revealAll = false;
+    this.world = null;
+    this.ais = [];
+    this.spectating = false;
+    this.ingameMenu = false;
+    this.matchOverTimer = -1;
+    this.state = "menu";
   }
 
   finishMatch(won: boolean) {

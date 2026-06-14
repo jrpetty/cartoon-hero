@@ -166,6 +166,8 @@ export class World {
   fog: Uint8Array[] = [];
   fogCols = 0;
   fogRows = 0;
+  /** Spectator mode: reveal the entire map to every viewer (no fog). */
+  revealAll = false;
   numTeams = 2; // number of player teams in this match (2..MAX_TEAMS)
   /** Alliance id per team; teams sharing an id are allies. Default: all solo. */
   alliances: number[] = [];
@@ -1909,6 +1911,7 @@ export class World {
   }
 
   fogAt(team: Team, wx: number, wy: number): number {
+    if (this.revealAll) return FOG_VISIBLE; // spectator sees the whole field
     const cx = this.grid.worldToCellX(wx);
     const cy = this.grid.worldToCellY(wy);
     if (cx < 0 || cy < 0 || cx >= this.fogCols || cy >= this.fogRows) return FOG_UNSEEN;
@@ -1917,7 +1920,7 @@ export class World {
 
   /** Is this entity visible to `team` right now? */
   visibleTo(team: Team, e: Entity): boolean {
-    if (e.team === team) return true;
+    if (this.revealAll || e.team === team) return true;
     const f = this.fogAt(team, e.x, e.y);
     if (f === FOG_VISIBLE) return true;
     // Explored buildings remain visible as "last known" — renderer handles ghosting.

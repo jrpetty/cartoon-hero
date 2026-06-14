@@ -318,6 +318,16 @@ describe("Fog of war", () => {
     expect(w.fogAt(Team.Player, foe.x, foe.y)).toBe(0); // unseen
   });
 
+  it("revealAll (spectator) shows the whole map and every unit", () => {
+    const w = makeWorld();
+    const foe = w.map.starts[Team.Enemy];
+    expect(w.fogAt(Team.Player, foe.x, foe.y)).toBe(0); // unseen normally
+    w.revealAll = true;
+    expect(w.fogAt(Team.Player, foe.x, foe.y)).toBe(2); // now fully visible
+    const enemyVill = w.entitiesOf(Team.Enemy, Kind.Unit)[0];
+    expect(w.visibleTo(Team.Player, enemyVill)).toBe(true);
+  });
+
   it("a scout reveals terrain and it stays explored after leaving", () => {
     const w = makeWorld();
     const mid = { x: w.worldW / 2, y: w.worldH / 2 };
