@@ -117,6 +117,9 @@ const RES_TYPE_KIND: Record<string, ResourceKind> = {
   berries: ResourceKind.Food,
 };
 
+/** Buildings units can walk over (don't block the nav grid). */
+const BUILDING_WALKABLE = new Set<string>(["farm"]);
+
 let nextId = 1;
 
 export function makeEntity(): Entity {
@@ -382,7 +385,9 @@ export class World {
       e.buildState = BuildState.Foundation;
       e.buildProgress = 0;
     }
-    this.grid.stampFootprint(e.x, e.y, tiles, true);
+    // Farms are crop plots — units freely walk across them, so they never block
+    // the nav grid (placement overlap is still guarded in placeBuilding).
+    if (!BUILDING_WALKABLE.has(type)) this.grid.stampFootprint(e.x, e.y, tiles, true);
     this.entities.push(e);
     this.byId.set(e.id, e);
     return e;
@@ -791,13 +796,20 @@ export class World {
     const sx = Math.round(wx / TILE) * TILE + (tiles % 2 === 1 ? TILE / 2 : 0);
     const sy = Math.round(wy / TILE) * TILE + (tiles % 2 === 1 ? TILE / 2 : 0);
     if (!this.grid.footprintClear(sx, sy, tiles)) return null;
+    const overlaps = (ent: Entity) =>
+      Math.abs(ent.x - sx) < (tiles * TILE) / 2 + ent.radius &&
+      Math.abs(ent.y - sy) < (tiles * TILE) / 2 + ent.radius;
     // No building on top of units.
     const near = this.spatial.query(sx, sy, tiles * TILE * 0.75) as Entity[];
     for (const n of near) {
-      if (n.alive && (n as Entity).kind === Kind.Unit) {
-        const ent = n as Entity;
-        if (Math.abs(ent.x - sx) < (tiles * TILE) / 2 + ent.radius &&
-            Math.abs(ent.y - sy) < (tiles * TILE) / 2 + ent.radius) return null;
+      if (n.alive && (n as Entity).kind === Kind.Unit && overlaps(n as Entity)) return null;
+    }
+    // No building on top of a walkable building (farm) — those don't stamp the
+    // grid, so footprintClear can't catch them. Scanned directly since the
+    // spatial index may not include a farm placed this same tick.
+    for (const ent of this.entities) {
+      if (ent.alive && ent.kind === Kind.Building && BUILDING_WALKABLE.has(ent.type) && overlaps(ent)) {
+        return null;
       }
     }
     this.pay(p.resources, def.cost);
@@ -1180,7 +1192,8 @@ export class World {
     } else if (!this.grid.isBlockedWorld(e.x, ny)) {
       e.y = ny;
     } else if (!flow) {
-      e.path = null; // force repath
+      e.path = null; // wedged against a building corner — replan immediately
+      e.repathCooldown = 0;
     }
     if (Math.hypot(e.vx, e.vy) > 1) e.facing = Math.atan2(e.vy, e.vx);
     return false;
@@ -1824,7 +1837,9 @@ export class World {
       this.emit("death", e.x, e.y, e.team, e.type);
     } else if (e.kind === Kind.Building) {
       const def = BUILDINGS[e.type];
-      this.grid.stampFootprint(e.x, e.y, def.tiles, false);
+      // Walkable buildings never stamped the grid; don't clear cells they may
+      // share with adjacent obstacles.
+      if (!BUILDING_WALKABLE.has(e.type)) this.grid.stampFootprint(e.x, e.y, def.tiles, false);
       if (owner) {
         owner.popCap = Math.max(0, owner.popCap - e.popProvided);
         owner.stats.buildingsLost++;

@@ -258,6 +258,36 @@ describe("Farms", () => {
     const onFarm = vs.filter((id) => w.byId.get(id)!.order.target === farm!.id).length;
     expect(onFarm).toBe(1);
   });
+
+  it("units can walk across a farm (it doesn't block the nav grid)", () => {
+    const w = makeWorld();
+    let farm = null;
+    for (const [fx, fy] of [[1500, 1500], [1500, 1400], [1600, 1500], [1400, 1500]]) {
+      farm = w.placeBuilding(Team.Player, "farm", fx, fy);
+      if (farm) break;
+    }
+    expect(farm).not.toBeNull();
+    farm!.buildState = 0; // Done
+    // The farm's tiles are passable...
+    expect(w.grid.isBlockedWorld(farm!.x, farm!.y)).toBe(false);
+    // ...and a unit ordered straight through it reaches the far side.
+    const u = w.spawnUnit(Team.Player, "knight", farm!.x - 140, farm!.y);
+    w.issueMove([u.id], farm!.x + 140, farm!.y);
+    run(w, 12);
+    expect(u.x).toBeGreaterThan(farm!.x);
+  });
+
+  it("rejects placing another building on top of a farm", () => {
+    const w = makeWorld();
+    let farm = null;
+    for (const [fx, fy] of [[1500, 1500], [1500, 1400], [1600, 1500], [1400, 1500]]) {
+      farm = w.placeBuilding(Team.Player, "farm", fx, fy);
+      if (farm) break;
+    }
+    expect(farm).not.toBeNull();
+    const blocked = w.placeBuilding(Team.Player, "house", farm!.x, farm!.y);
+    expect(blocked).toBeNull();
+  });
 });
 
 describe("Hero leveling", () => {

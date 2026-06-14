@@ -67,6 +67,13 @@ export function findPath(
   let tcy = grid.worldToCellY(ty);
 
   if (!grid.inBounds(scx, scy)) return null;
+  // If we're sitting on a blocked cell (shoved onto a footprint, spawned tight),
+  // step out to the nearest open cell so the search has somewhere to begin.
+  if (grid.isBlocked(scx, scy)) {
+    const [owx, owy] = grid.nearestOpenWorld(sx, sy);
+    scx = grid.worldToCellX(owx);
+    scy = grid.worldToCellY(owy);
+  }
   // If the goal cell is blocked, retarget to the nearest open cell.
   if (grid.isBlocked(tcx, tcy)) {
     const [owx, owy] = grid.nearestOpenWorld(tx, ty);
@@ -164,11 +171,31 @@ function smooth(grid: NavGrid, pts: number[]): number[] {
   return out;
 }
 
-export function lineClear(grid: NavGrid, x0: number, y0: number, x1: number, y1: number): boolean {
-  const steps = Math.ceil(Math.hypot(x1 - x0, y1 - y0) / (16));
-  for (let i = 1; i < steps; i++) {
+/**
+ * Clear line of sight between two world points, keeping a perpendicular
+ * `clearance` band free so smoothed paths don't shave building corners (which
+ * leaves units snagging on edges). A wider band = units route with more berth.
+ */
+export function lineClear(
+  grid: NavGrid,
+  x0: number, y0: number,
+  x1: number, y1: number,
+  clearance = 11,
+): boolean {
+  const dx = x1 - x0;
+  const dy = y1 - y0;
+  const len = Math.hypot(dx, dy) || 1;
+  const steps = Math.ceil(len / 12);
+  // Unit perpendicular, scaled to the clearance we want on either side.
+  const px = (-dy / len) * clearance;
+  const py = (dx / len) * clearance;
+  for (let i = 0; i <= steps; i++) {
     const t = i / steps;
-    if (grid.isBlockedWorld(x0 + (x1 - x0) * t, y0 + (y1 - y0) * t)) return false;
+    const cx = x0 + dx * t;
+    const cy = y0 + dy * t;
+    if (grid.isBlockedWorld(cx, cy)) return false;
+    if (grid.isBlockedWorld(cx + px, cy + py)) return false;
+    if (grid.isBlockedWorld(cx - px, cy - py)) return false;
   }
   return true;
 }
