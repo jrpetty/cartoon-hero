@@ -28,6 +28,11 @@ type AIStyle = "rush" | "boom" | "turtle" | "balanced";
 // what one ally has seen, the whole team reasons about and counters.
 const AI_ROSTER = new WeakMap<World, SkirmishAI[]>();
 
+// High-value structures an assault should drive toward (the kill, not the wall).
+const PRODUCTION = new Set([
+  "town_center", "barracks", "archery_range", "stable", "siege_workshop", "blacksmith", "mill", "market",
+]);
+
 export class SkirmishAI {
   private timer = 0;
   private rng: RNG;
@@ -42,6 +47,7 @@ export class SkirmishAI {
   private seenWalls = 0;
   private lastRetreatTime = -999;
   private lastAllyHelpTime = -999;
+  private lastPressTime = -999;
   private lastCalloutTime = -999;
   private savingForAge = false;
   /** Building types we've finished at least once — drives prompt rebuilds. */
@@ -956,15 +962,55 @@ export class SkirmishAI {
     return true;
   }
 
+  /**
+   * Mid-assault: keep stalled units advancing toward the highest-value enemy we
+   * can see — fleeing villagers first (the eco kill), then the Town Center and
+   * production, then anything. If we can't see a thing, march into their start
+   * to scout and commit rather than idling at the edge. Units already swinging
+   * are left on their target, so this presses the attack without thrashing.
+   */
+  private pressAttack() {
+    const army = this.armyUnits();
+    if (army.length === 0) return;
+    const idle = army.filter((u) => u.order.kind !== OrderKind.Attack);
+    if (idle.length === 0) return; // everyone's already fighting — good
+    let cx = 0;
+    let cy = 0;
+    for (const u of army) { cx += u.x; cy += u.y; }
+    cx /= army.length;
+    cy /= army.length;
+
+    let best: Entity | null = null;
+    let bestScore = -Infinity;
+    for (const e of this.world.entities) {
+      if (!e.alive || e.team === this.team || !this.isHostile(e.team)) continue;
+      if (e.kind !== Kind.Unit && e.kind !== Kind.Building) continue;
+      if (this.world.fogAt(this.team, e.x, e.y) === 0) continue; // unseen
+      let pri: number;
+      if (e.kind === Kind.Unit) pri = e.type === "villager" ? 130 : e.type === "monk" ? 90 : 55;
+      else pri = e.type === "town_center" ? 100 : PRODUCTION.has(e.type) ? 70 : 35;
+      const score = pri - dist(cx, cy, e.x, e.y) * 0.04;
+      if (score > bestScore) { bestScore = score; best = e; }
+    }
+
+    const ids = idle.map((u) => u.id);
+    if (best) {
+      if (best.kind === Kind.Unit) this.world.issueAttack(ids, best.id);
+      else this.world.issueMove(ids, best.x, best.y, false, true); // attack-move onto it
+    } else {
+      const s = this.world.map.starts[this.focusEnemy];
+      this.world.issueMove(ids, s.x, s.y, false, true); // blind — push in and find them
+    }
+  }
+
   private attackStep() {
     const army = this.armyUnits();
     const armyPop = army.reduce((s, u) => s + (UNITS[u.type]?.pop ?? 1), 0);
     if (this.attacking) {
-      // Wave over when army is spent.
-      if (armyPop < this.armySize * 0.35) { this.attacking = false; return; }
-      // Smart retreat: only if our committed force (plus nearby reinforcements)
-      // is badly outmatched — not just because the defender has the home edge.
-      // Rate-limited so the army doesn't oscillate at the wall.
+      // Wave over only when the force is genuinely spent.
+      if (armyPop < this.armySize * 0.3) { this.attacking = false; return; }
+      // Smart retreat: bail only from a genuinely overwhelming force (keep the
+      // army alive) — never from a garrison we should be steamrolling.
       const fighting = army.filter((u) => u.order.kind === OrderKind.Attack || u.order.kind === OrderKind.AttackMove);
       if (fighting.length >= 5 && this.gameTime - this.lastRetreatTime > 14) {
         let fx = 0;
@@ -974,9 +1020,7 @@ export class SkirmishAI {
         fy /= fighting.length;
         const mine = this.strengthNear(fx, fy, 700, true); // our force + reinforcements
         const foe = this.strengthNear(fx, fy, 440, false);
-        // Only bail from a genuinely overwhelming force — never from a small
-        // garrison we should be steamrolling.
-        if (foe > 110 && mine < foe * 0.38) {
+        if (foe > 120 && mine < foe * 0.4) {
           const home = this.world.map.starts[this.team];
           this.world.issueMove(army.map((u) => u.id), home.x, home.y, false, false);
           this.attacking = false;
@@ -984,6 +1028,13 @@ export class SkirmishAI {
           this.lastWaveTime = this.gameTime - this.cadence * 0.55; // regroup, then come again
           return;
         }
+      }
+      // Keep driving for the kill: re-command any stalled units toward the
+      // enemy's villagers / Town Center / production instead of loitering at the
+      // wall. This is what makes the AI actually finish a base.
+      if (this.gameTime - this.lastPressTime > 1.5) {
+        this.lastPressTime = this.gameTime;
+        this.pressAttack();
       }
       return;
     }
