@@ -111,32 +111,35 @@ export class HUD {
     dt: number,
     ctrl: MatchController,
     attackMoveArmed: boolean,
+    spectating = false,
   ) {
     const ctx = ui.ctx;
     const p = world.player(team);
 
     // ---------------------------------------------------------- top bar --
     ui.panel(0, 0, W, 34);
-    const res = p.resources;
-    const items: [string, string, number][] = [
-      ["🍖", "#e89a5a", Math.floor(res.food)],
-      ["🪵", "#b08a52", Math.floor(res.wood)],
-      ["🪙", PAL.goldVein, Math.floor(res.gold)],
-    ];
-    let x = 14;
-    for (const [icon, color, val] of items) {
-      ui.text(icon, x, 17, { size: 15 });
-      ui.text(String(val), x + 22, 17, { size: 14, color, bold: true });
-      x += 92;
+    if (!spectating) {
+      const res = p.resources;
+      const items: [string, string, number][] = [
+        ["🍖", "#e89a5a", Math.floor(res.food)],
+        ["🪵", "#b08a52", Math.floor(res.wood)],
+        ["🪙", PAL.goldVein, Math.floor(res.gold)],
+      ];
+      let x = 14;
+      for (const [icon, color, val] of items) {
+        ui.text(icon, x, 17, { size: 15 });
+        ui.text(String(val), x + 22, 17, { size: 14, color, bold: true });
+        x += 92;
+      }
+      const popBlocked = p.popUsed >= p.popCap;
+      ui.text(`Pop ${p.popUsed}/${p.popCap}`, x, 17, {
+        size: 14,
+        color: popBlocked ? PAL.uiBad : PAL.uiParchment,
+        bold: popBlocked,
+      });
+      x += 110;
+      ui.text(AGES[p.age].name, x, 17, { size: 14, color: PAL.uiAccent, bold: true });
     }
-    const popBlocked = p.popUsed >= p.popCap;
-    ui.text(`Pop ${p.popUsed}/${p.popCap}`, x, 17, {
-      size: 14,
-      color: popBlocked ? PAL.uiBad : PAL.uiParchment,
-      bold: popBlocked,
-    });
-    x += 110;
-    ui.text(AGES[p.age].name, x, 17, { size: 14, color: PAL.uiAccent, bold: true });
 
     const mins = Math.floor(world.time / 60);
     const secs = Math.floor(world.time % 60);
@@ -319,13 +322,15 @@ export class HUD {
     const cardH = CARD_H * (BTN + GAP) + GAP + 8;
     const cardX = W - cardW - 10;
     const cardY = H - cardH - 10;
-    ui.panel(cardX, cardY, cardW, cardH);
-    this.drawCommandCard(cardX + 8, cardY + 8, world, team, selection, ctrl);
+    if (!spectating) {
+      ui.panel(cardX, cardY, cardW, cardH);
+      this.drawCommandCard(cardX + 8, cardY + 8, world, team, selection, ctrl);
+    }
 
     // -------------------------------------------------- selection panel --
     const selX = mmX + MINIMAP_SIZE + 18;
     const selW = cardX - selX - 12;
-    if (selection.length > 0 && selW > 200) {
+    if (!spectating && selection.length > 0 && selW > 200) {
       const selH = 104;
       const selY = H - selH - 10;
       ui.panel(selX, selY, selW, selH);

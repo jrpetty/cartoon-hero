@@ -21,6 +21,7 @@ import { Renderer, CommandMarker, GhostPlacement } from "./render/renderer";
 import { loadSprites } from "./render/sprites";
 import { PAL, withAlpha } from "./render/palette";
 import { HUD, MatchController, MINIMAP_SIZE } from "./ui/hud";
+import { drawSpectatorPanels, teamLabel } from "./ui/spectator";
 import { ui } from "./ui/ui";
 import { CodexScreen } from "./ui/codex";
 import {
@@ -1078,7 +1079,7 @@ class App {
     );
 
     // ---- HUD (consumes pointer if clicked over panels) ----
-    this.hud.draw(W, H, world, this.camera, PLAYER, selected, dt, this.controller, this.attackMoveArmed);
+    this.hud.draw(W, H, world, this.camera, PLAYER, selected, dt, this.controller, this.attackMoveArmed, this.spectating);
     if (this.spectating) this.drawSpectatorHud(W, H, world);
     this.drawControlGroups(W, H);
     this.drawQoLBar(W, H);
@@ -1154,46 +1155,26 @@ class App {
 
   /** A readable name for a team, used in spectator callouts. */
   private teamLabel(t: Team): string {
-    return ["Blue", "Red", "Green", "Yellow"][t] ?? `Team ${t + 1}`;
+    return teamLabel(t);
   }
 
-  /** Live scoreboard while spectating: each AI realm's army, villagers, bases. */
+  /**
+   * Rich live spectator HUD: one detailed card per realm (army, villagers, pop,
+   * resources, gathered, K/L, bases + a military-strength bar). Drawing lives in
+   * ui/spectator; here we layer click-to-follow onto the returned card rects.
+   */
   private drawSpectatorHud(W: number, H: number, world: World) {
-    const colors = ["#6f9bff", "#ff6f6f", "#6fff9b", "#ffe06f"];
-    const counts = Array.from({ length: world.numTeams }, () => ({ army: 0, vills: 0, bld: 0 }));
-    for (const e of world.entities) {
-      if (!e.alive || e.team >= world.numTeams) continue;
-      const c = counts[e.team];
-      if (e.kind === Kind.Building) c.bld++;
-      else if (e.kind === Kind.Unit) {
-        if (e.type === "villager") c.vills++;
-        else if (e.type !== "monk") c.army++;
+    const rects = drawSpectatorPanels(W, H, world, this.gameSpeed, this.paused);
+    for (const r of rects) {
+      if (!ui.hit(r.x, r.y, r.w, r.h)) continue;
+      ui.pointerConsumed = true;
+      if (ui.clicked) {
+        const fx = r.focus ? r.focus.x : world.map.starts[r.team]?.x ?? world.worldW / 2;
+        const fy = r.focus ? r.focus.y : world.map.starts[r.team]?.y ?? world.worldH / 2;
+        this.camera.centerOn(fx, fy);
+        audio.play("ui");
       }
     }
-    const rowH = 22;
-    const panelW = 250;
-    const panelH = 30 + world.numTeams * rowH;
-    const px = W / 2 - panelW / 2;
-    const py = 8;
-    ui.panel(px, py, panelW, panelH, { light: true });
-    ui.text("👁 SPECTATING", W / 2, py + 18, { align: "center", size: 14, bold: true, color: PAL.uiAccent });
-    for (let t = 0; t < world.numTeams; t++) {
-      const ry = py + 30 + t * rowH;
-      const dead = world.player(t as Team).defeated;
-      const c = counts[t];
-      ui.text(this.teamLabel(t as Team), px + 14, ry + 12, {
-        size: 13, bold: true, color: dead ? "#7a7060" : colors[t % colors.length],
-      });
-      ui.text(
-        dead ? "defeated" : `⚔ ${c.army}   👤 ${c.vills}   🏠 ${c.bld}`,
-        px + panelW - 14, ry + 12,
-        { align: "right", size: 12, color: dead ? "#7a7060" : "#d8cdaf" },
-      );
-    }
-    ui.text(
-      this.paused ? "Paused — Space to resume" : "Space pause · +/- speed · Esc to leave",
-      W / 2, py + panelH + 14, { align: "center", size: 11, color: "#bdb49a" },
-    );
   }
 
   /** Tear down the current match and return to the main menu (spectator exit). */

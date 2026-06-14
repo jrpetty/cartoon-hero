@@ -25,6 +25,7 @@ import { UNITS } from "../src/content/units";
 import { BUILDINGS } from "../src/content/buildings";
 import { RARITIES } from "../src/meta/rarity";
 import { HUD } from "../src/ui/hud";
+import { drawSpectatorPanels } from "../src/ui/spectator";
 import { ui } from "../src/ui/ui";
 import { MenuScreen, SetupScreen, ArmoryScreen, PostMatchScreen } from "../src/ui/screens";
 import { CodexScreen } from "../src/ui/codex";
@@ -912,6 +913,62 @@ function shotFortress() {
   save("10-fortress.png", c);
 }
 
+function shotSpectate() {
+  const map = generateMap("highlands", 77, 4);
+  const world = new World(77);
+  world.init(map, [{}, {}, {}, {}], [1, 1, 1, 1], undefined,
+    ["marshal", "magnate", "warden", "drillmaster"]);
+  world.revealAll = true;
+  const W = 1280;
+  const H = 760;
+  const { c, ctx } = makeCtx(W, H);
+  const renderer = new Renderer(c as any);
+  renderer.prepare(map);
+  const cam = new Camera();
+  cam.setViewport(W, H);
+  cam.setWorld(map.worldW, map.worldH);
+  cam.centerOn(map.worldW / 2, map.worldH / 2);
+  cam.zoom = 0.85;
+
+  // Populate each realm with armies, villagers and a few buildings, and seed
+  // some stats so the spectator cards read like a match in full swing.
+  const armies = [
+    ["knight", "knight", "militia", "archer", "archer", "spearman"],
+    ["militia", "militia", "archer", "skirmisher", "knight"],
+    ["spearman", "archer", "archer", "crossbow"],
+    ["knight", "militia"],
+  ];
+  for (let t = 0; t < 4; t++) {
+    const s = map.starts[t];
+    for (let i = 0; i < armies[t].length; i++) {
+      world.spawnUnit(t as any, armies[t][i], s.x + 30 + (i % 4) * 26, s.y + 30 + Math.floor(i / 4) * 26);
+    }
+    for (let i = 0; i < 4 + t; i++) world.spawnUnit(t as any, "villager", s.x - 60 - i * 14, s.y - 20);
+    const p = world.player(t as any);
+    p.age = [2, 1, 2, 0][t];
+    p.resources = { food: 320 + t * 80, wood: 210 + t * 40, gold: 150 + t * 90 };
+    p.stats.gathered = 4200 - t * 700;
+    p.stats.unitsKilled = 18 - t * 4;
+    p.stats.unitsLost = 6 + t * 3;
+  }
+  world.player(Team.Team4).defeated = true; // show a fallen realm card too
+
+  renderer.render(
+    world, cam, new Particles(10), 0.016, 3.0, Team.Player,
+    [], null, { active: false, x0: 0, y0: 0, x1: 0, y1: 0 }, null,
+  );
+
+  const hud = new HUD();
+  hud.prepare(map);
+  const noop = () => {};
+  const ctrl: any = new Proxy({}, { get: () => noop });
+  ui.begin(ctx, { mx: -50, my: -50, clicked: false, rightClicked: false });
+  hud.draw(W, H, world, cam, Team.Player, [], 0.016, ctrl, false, true);
+  drawSpectatorPanels(W, H, world, 3, false);
+  ui.flushTooltip(W, H);
+  save("17-spectate.png", c);
+}
+
 console.log("Rendering Banner & Blade preview shots…");
 shotUnits();
 shotBuildings();
@@ -931,4 +988,5 @@ shotFortress();
 shotMenus();
 shotCommanders();
 shotNomad();
+shotSpectate();
 console.log("Done.");
