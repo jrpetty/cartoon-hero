@@ -10,6 +10,8 @@ import { UNITS } from "../content/units";
 import { PRESETS } from "../maps/generator";
 import { DIFFICULTIES, DIFFICULTY_IDS } from "../ai/difficulty";
 import { COMMANDERS, COMMANDER_IDS, commanderPerks } from "../content/commanders";
+import { BOONS, BOONS_BY_ID, BOON_CATEGORIES, BoonCategory } from "../content/boons";
+import { rollBoonCache, boonKey, BOON_CACHE_COST } from "../meta/boon_cache";
 import { PAL, shade, withAlpha } from "../render/palette";
 import { ui } from "./ui";
 import { RNG, randomSeed } from "../engine/rng";
@@ -384,7 +386,8 @@ interface SpinTicket {
 const COMMANDER_RECRUIT_COST = 500;
 
 export class ArmoryScreen {
-  tab: "chests" | "collection" | "commanders" = "chests";
+  tab: "chests" | "boons" | "collection" | "commanders" = "chests";
+  private lastBoonRoll: { name: string; rarity: number; dup: boolean; refund: number } | null = null;
   // Chest-opening overlay state.
   private opening: ChestDef | null = null;
   private result: RollResult | null = null;
@@ -401,15 +404,15 @@ export class ArmoryScreen {
     ui.text("The Armory", W / 2, 56, {
       align: "center", size: 34, bold: true, color: "#ffe9b0", font: "Georgia, serif",
     });
-    ui.text(`✦ ${profile.data.renown} Renown`, W / 2, 92, {
+    ui.text(`✦ ${profile.data.renown} Renown      ⚔ ${profile.data.valor} Valor`, W / 2, 92, {
       align: "center", size: 17, bold: true, color: PAL.uiAccent,
     });
 
     let action: "back" | null = null;
     if (!this.opening) {
       // Tabs.
-      const tabW = 150;
-      const tabs: [typeof this.tab, string][] = [["chests", "War Chests"], ["commanders", "Commanders"], ["collection", "Collection"]];
+      const tabW = 138;
+      const tabs: [typeof this.tab, string][] = [["chests", "War Chests"], ["boons", "Boons"], ["commanders", "Commanders"], ["collection", "Collection"]];
       let tx = W / 2 - (tabs.length * (tabW + 8) - 8) / 2;
       for (const [id, label] of tabs) {
         if (ui.button(label, tx, 112, tabW, 36, { accent: this.tab === id })) {
@@ -420,6 +423,7 @@ export class ArmoryScreen {
       }
 
       if (this.tab === "chests") this.drawChests(W, H, profile);
+      else if (this.tab === "boons") this.drawBoons(W, H, profile);
       else if (this.tab === "commanders") this.drawCommanders(W, H, profile);
       else this.drawCollection(W, H, profile);
 
@@ -620,6 +624,69 @@ export class ArmoryScreen {
         this.result = null;
       }
     }
+  }
+
+  private drawBoons(W: number, H: number, profile: Profile) {
+    const colW = Math.min(960, W - 80);
+    const x0 = W / 2 - colW / 2;
+    let y = 162;
+
+    // Warband Cache — buy a boon roll with Valor.
+    ui.panel(x0, y, colW, 70);
+    ui.text("Warband Cache", x0 + 16, y + 26, { size: 17, bold: true, color: PAL.uiAccent });
+    ui.text("Roll a boon — higher rarity is a stronger version of the same boon.", x0 + 16, y + 48, { size: 12, color: "#bdb49a" });
+    const canAfford = profile.data.valor >= BOON_CACHE_COST;
+    if (ui.button(`Open — ${BOON_CACHE_COST} ⚔`, x0 + colW - 200, y + 18, 184, 36, { accent: canAfford, disabled: !canAfford, tooltip: canAfford ? undefined : ["Not enough Valor", "Earn Valor by fighting — kills, razings and wins."] })) {
+      if (profile.spendValor(BOON_CACHE_COST)) {
+        const roll = rollBoonCache(profile.boonSetSnapshot(), new RNG(randomSeed()));
+        if (roll.duplicate) profile.addValor(roll.refund);
+        else profile.grantBoon(roll.key);
+        profile.save();
+        this.lastBoonRoll = { name: roll.name, rarity: roll.rarity, dup: roll.duplicate, refund: roll.refund };
+        audio.play("reveal");
+      }
+    }
+    if (this.lastBoonRoll) {
+      const r = rarityByIndex(this.lastBoonRoll.rarity);
+      const msg = this.lastBoonRoll.dup ? `Duplicate — refunded ${this.lastBoonRoll.refund} ⚔` : "NEW!";
+      ui.text(`${this.lastBoonRoll.name} · ${r.name}  —  ${msg}`, x0 + 16, y + 66, { size: 13, bold: true, color: r.color });
+    }
+    y += 84;
+
+    ui.text(`Boon slots unlocked: ${profile.boonSlots()} / 3 — equip one per category, more unlock as you level up.`, x0 + 16, y, { size: 13, color: "#d8cdb4" });
+    y += 20;
+
+    // Three category columns.
+    const unlocked = profile.unlockedBoonCategories();
+    const unlockLvl: Record<BoonCategory, number> = { offensive: 1, defensive: 5, supportive: 12 };
+    const cw = (colW - 24) / 3;
+    BOON_CATEGORIES.forEach((cat, ci) => {
+      const cx = x0 + ci * (cw + 12);
+      const isUnlocked = unlocked.includes(cat);
+      const title = cat[0].toUpperCase() + cat.slice(1);
+      ui.text(isUnlocked ? title : `${title} 🔒 (L${unlockLvl[cat]})`, cx + 6, y + 14, {
+        size: 14, bold: true, color: isUnlocked ? PAL.uiAccent : "#7a7264",
+      });
+      const equipped = profile.data.equippedBoons[cat];
+      let by = y + 28;
+      for (const def of BOONS.filter((b) => b.category === cat)) {
+        const best = profile.bestBoonRarity(def.id);
+        const owns = best >= 0;
+        const isEq = equipped === def.id;
+        const ch = 52;
+        const r = owns ? rarityByIndex(best) : null;
+        if (ui.button("", cx, by, cw, ch, { accent: isEq, disabled: !owns || !isUnlocked })) {
+          profile.equipBoon(def.id, !isEq);
+          audio.play("ui");
+        }
+        ui.text(def.name + (isEq ? "  ✓" : ""), cx + 10, by + 16, {
+          size: 13, bold: true, color: owns ? (r ? r.color : PAL.uiParchment) : "#6f685a",
+        });
+        const sub = owns ? def.detail(best) : "Locked — find it in a Warband Cache";
+        wrapText(sub, cx + 10, by + 34, cw - 20, 11, owns ? "#cabfa4" : "#6f685a");
+        by += ch + 8;
+      }
+    });
   }
 
   private drawCommanders(W: number, H: number, profile: Profile) {
@@ -879,7 +946,7 @@ export class PostMatchScreen {
     ui.ctx.stroke();
     ly += 22;
     ui.text("Total", x1 + 20, ly, { size: 15, bold: true });
-    ui.text(`+${rewards.xp} XP   +${rewards.renown} ✦`, x1 + colW - 20, ly, {
+    ui.text(`+${rewards.xp} XP   +${rewards.renown} ✦   +${rewards.valor} ⚔`, x1 + colW - 20, ly, {
       size: 15, bold: true, align: "right", color: PAL.uiAccent,
     });
 

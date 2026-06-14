@@ -5,6 +5,13 @@
 import { COLLECTIBLE_UNIT_IDS, variantKey } from "./catalog";
 import { levelFromXp, levelUpRenown } from "./progression";
 import { COMMANDER_IDS } from "../content/commanders";
+import { BOONS_BY_ID, BoonCategory, BOON_CATEGORIES } from "../content/boons";
+import { boonKey } from "./boon_cache";
+
+/** Boon slots unlock with account level: 1 → 2 (L5) → 3 (L12). */
+const SLOT_UNLOCK_LEVELS = [1, 5, 12];
+// Which category each slot belongs to, in unlock order.
+const SLOT_CATEGORY: BoonCategory[] = ["offensive", "defensive", "supportive"];
 
 const STORAGE_KEY = "banner_and_blade_profile_v1";
 
@@ -20,6 +27,9 @@ export interface ProfileData {
   commander: string; // selected commander id
   /** First-launch reveal: the just-granted commander to show, or "". */
   commanderReveal: string;
+  valor: number; // combat-earned currency for boon caches
+  boons: string[]; // owned boon keys `boonId:rarity`
+  equippedBoons: Record<BoonCategory, string>; // category -> equipped boonId ("" none)
 }
 
 function defaultProfile(): ProfileData {
@@ -41,16 +51,21 @@ function defaultProfile(): ProfileData {
     commanders: [],
     commander: "",
     commanderReveal: "",
+    valor: 150,
+    boons: [],
+    equippedBoons: { offensive: "", defensive: "", supportive: "" },
   };
 }
 
 export class Profile {
   data: ProfileData;
   private ownedSet: Set<string>;
+  private boonSet: Set<string>;
 
   constructor(data?: ProfileData) {
     this.data = data ?? defaultProfile();
     this.ownedSet = new Set(this.data.owned);
+    this.boonSet = new Set(this.data.boons ?? []);
     this.migrate();
   }
 
@@ -85,7 +100,83 @@ export class Profile {
       this.data.commander = this.data.commanders[0] ?? "";
       changed = true;
     }
+    // Boons / Valor — back-fill for older saves.
+    if (typeof this.data.valor !== "number") { this.data.valor = 150; changed = true; }
+    if (!Array.isArray(this.data.boons)) { this.data.boons = []; this.boonSet = new Set(); changed = true; }
+    if (!this.data.equippedBoons) {
+      this.data.equippedBoons = { offensive: "", defensive: "", supportive: "" };
+      changed = true;
+    }
     if (changed) this.save();
+  }
+
+  // --- Boons & Valor --------------------------------------------------------
+  addValor(n: number) {
+    this.data.valor = Math.max(0, Math.round(this.data.valor + n));
+  }
+
+  spendValor(n: number): boolean {
+    if (this.data.valor < n) return false;
+    this.data.valor -= n;
+    this.save();
+    return true;
+  }
+
+  ownsBoon(key: string): boolean {
+    return this.boonSet.has(key);
+  }
+
+  boonSetSnapshot(): Set<string> {
+    return new Set(this.boonSet);
+  }
+
+  /** Add a boon to the collection. Returns true if newly owned. */
+  grantBoon(key: string): boolean {
+    if (this.boonSet.has(key)) return false;
+    this.boonSet.add(key);
+    this.data.boons.push(key);
+    return true;
+  }
+
+  /** Highest owned rarity of a boon, or -1 if unowned. */
+  bestBoonRarity(boonId: string): number {
+    for (let r = 5; r >= 0; r--) if (this.boonSet.has(boonKey(boonId, r))) return r;
+    return -1;
+  }
+
+  /** Number of boon slots unlocked at the current level (1..3). */
+  boonSlots(): number {
+    const lvl = this.level;
+    let n = 0;
+    for (const need of SLOT_UNLOCK_LEVELS) if (lvl >= need) n++;
+    return n;
+  }
+
+  /** Categories currently unlocked, in order. */
+  unlockedBoonCategories(): BoonCategory[] {
+    return SLOT_CATEGORY.slice(0, this.boonSlots());
+  }
+
+  /** Equip an owned boon into its category slot (only if that slot is unlocked). */
+  equipBoon(boonId: string, on: boolean) {
+    const def = BOONS_BY_ID[boonId];
+    if (!def) return;
+    if (this.bestBoonRarity(boonId) < 0) return; // must own at least one tier
+    if (!this.unlockedBoonCategories().includes(def.category)) return; // slot locked
+    this.data.equippedBoons[def.category] = on ? boonId : "";
+    this.save();
+  }
+
+  /** Boons to apply in a match: one per unlocked category, at best owned rarity. */
+  equippedBoonLoadout(): { id: string; rarity: number }[] {
+    const out: { id: string; rarity: number }[] = [];
+    for (const cat of this.unlockedBoonCategories()) {
+      const id = this.data.equippedBoons[cat];
+      if (!id) continue;
+      const r = this.bestBoonRarity(id);
+      if (r >= 0) out.push({ id, rarity: r });
+    }
+    return out;
   }
 
   // --- Commanders -----------------------------------------------------------
@@ -130,6 +221,7 @@ export class Profile {
 
   save() {
     this.data.owned = [...this.ownedSet];
+    this.data.boons = [...this.boonSet];
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(this.data));
     } catch {

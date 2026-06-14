@@ -13,7 +13,8 @@ export interface MatchOutcome {
 export interface MatchRewards {
   xp: number;
   renown: number;
-  breakdown: { label: string; xp: number; renown: number }[];
+  valor: number; // combat-earned currency, spent on boon caches
+  breakdown: { label: string; xp: number; renown: number; valor: number }[];
 }
 
 const DIFF_MULT: Record<string, number> = {
@@ -49,26 +50,29 @@ export function levelFromXp(totalXp: number): { level: number; into: number; nee
 export function computeRewards(o: MatchOutcome): MatchRewards {
   const mult = (DIFF_MULT[o.difficulty] ?? 1) * (o.fairMode ? 1.25 : 1);
   const breakdown: MatchRewards["breakdown"] = [];
-  const add = (label: string, xp: number, renown: number) => {
-    breakdown.push({ label, xp: Math.round(xp), renown: Math.round(renown) });
+  const add = (label: string, xp: number, renown: number, valor: number) => {
+    breakdown.push({ label, xp: Math.round(xp), renown: Math.round(renown), valor: Math.round(valor) });
   };
 
-  add("Match played", 40, 12);
-  if (o.win) add("Victory", 120 * mult, 45 * mult);
-  else add("Defeat (still learning)", 25, 8);
+  // Valor is combat-weighted (kills/razings/wins) — boons are earned by fighting.
+  add("Match played", 40, 12, 5);
+  if (o.win) add("Victory", 120 * mult, 45 * mult, 25 * mult);
+  else add("Defeat (still learning)", 25, 8, 6);
 
   const mins = o.durationSec / 60;
-  add("Time on field", Math.min(mins, 30) * 6, Math.min(mins, 30) * 1.5);
-  add("Enemies slain", o.unitsKilled * 1.5, o.unitsKilled * 0.4);
-  add("Buildings razed", o.buildingsRazed * 8 * mult, o.buildingsRazed * 2 * mult);
+  add("Time on field", Math.min(mins, 30) * 6, Math.min(mins, 30) * 1.5, 0);
+  add("Enemies slain", o.unitsKilled * 1.5, o.unitsKilled * 0.4, o.unitsKilled * 0.9);
+  add("Buildings razed", o.buildingsRazed * 8 * mult, o.buildingsRazed * 2 * mult, o.buildingsRazed * 3 * mult);
 
   let xp = 0;
   let renown = 0;
+  let valor = 0;
   for (const b of breakdown) {
     xp += b.xp;
     renown += b.renown;
+    valor += b.valor;
   }
-  return { xp: Math.round(xp), renown: Math.round(renown), breakdown };
+  return { xp: Math.round(xp), renown: Math.round(renown), valor: Math.round(valor), breakdown };
 }
 
 /** Reward granted on each level-up. */

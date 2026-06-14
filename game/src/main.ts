@@ -307,7 +307,10 @@ class App {
     for (let t = 1; t < numPlayers; t++) {
       commanders.push(COMMANDER_IDS[Math.floor(Math.random() * COMMANDER_IDS.length)]);
     }
-    world.init(map, loadouts, econMults, alliances, commanders, config.nomad);
+    // The human's equipped boons (none in fair mode); AI realms get none.
+    const boonLoadouts: { id: string; rarity: number }[][] = [config.fairMode ? [] : this.profile.equippedBoonLoadout()];
+    for (let t = 1; t < numPlayers; t++) boonLoadouts.push([]);
+    world.init(map, loadouts, econMults, alliances, commanders, config.nomad, boonLoadouts);
     this.world = world;
     this.ais = [];
     for (let t = 1; t < numPlayers; t++) {
@@ -1249,6 +1252,7 @@ class App {
     const lvl = this.profile.addXp(rewards.xp);
     this.levelsGained = lvl.levelsGained;
     this.profile.addRenown(rewards.renown);
+    this.profile.addValor(rewards.valor);
     this.profile.recordResult(won);
     this.profile.save();
     this.postmatch.reset();
