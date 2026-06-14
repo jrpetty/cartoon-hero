@@ -18,6 +18,13 @@ export interface DifficultyDef {
   buildsCastle: boolean;
   buildsWalls: boolean; // lays a defensive wall + gate across its front
   usesAbilities: boolean; // fires unit signature abilities in fights
+  /**
+   * Chance (0..1) the AI fumbles an *optional* action on a given decision —
+   * forgets to micro, mis-aims a push, skips a raid. Models human sloppiness so
+   * easy tiers feel beatably-human, not just slow. Never touches core economy
+   * (villager production, founding a Town Center), so a low tier still develops.
+   */
+  executionError: number;
 }
 
 export const DIFFICULTIES: Record<string, DifficultyDef> = {
@@ -38,6 +45,7 @@ export const DIFFICULTIES: Record<string, DifficultyDef> = {
     buildsCastle: false,
     buildsWalls: false,
     usesAbilities: false,
+    executionError: 0.4,
   },
   knight: {
     id: "knight",
@@ -56,6 +64,7 @@ export const DIFFICULTIES: Record<string, DifficultyDef> = {
     buildsCastle: false,
     buildsWalls: false,
     usesAbilities: true,
+    executionError: 0.15,
   },
   lord: {
     id: "lord",
@@ -74,6 +83,7 @@ export const DIFFICULTIES: Record<string, DifficultyDef> = {
     buildsCastle: true,
     buildsWalls: true,
     usesAbilities: true,
+    executionError: 0.04,
   },
   warlord: {
     id: "warlord",
@@ -92,6 +102,7 @@ export const DIFFICULTIES: Record<string, DifficultyDef> = {
     buildsCastle: true,
     buildsWalls: true,
     usesAbilities: true,
+    executionError: 0.0,
   },
 };
 

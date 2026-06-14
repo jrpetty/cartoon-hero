@@ -100,7 +100,7 @@ const HERO_RESPAWN_SEC = 45;
 export interface WorldEvent {
   kind:
     | "sword" | "bow" | "arrowHit" | "siege" | "death" | "collapse"
-    | "build" | "complete" | "underattack" | "age" | "deposit" | "spawn" | "hit" | "ability";
+    | "build" | "complete" | "underattack" | "age" | "deposit" | "spawn" | "hit" | "ability" | "callout";
   x: number;
   y: number;
   team: Team;
@@ -425,6 +425,11 @@ export class World {
     const out = this.events;
     this.events = [];
     return out;
+  }
+
+  /** AI voice line — surfaced by the UI for allies of the viewing player. */
+  callout(team: Team, x: number, y: number, text: string) {
+    this.emit("callout", x, y, team, text);
   }
 
   // ------------------------------------------------------------- commands --

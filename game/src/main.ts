@@ -755,6 +755,13 @@ class App {
             this.hud.addAlert("⚠ Your forces are under attack!", ev.x, ev.y);
           }
           break;
+        case "callout":
+          // Surface an allied AI's voice line (not our own) so team games feel
+          // like a coordinated front rather than silent co-op.
+          if (ev.team !== PLAYER && this.world?.areAllied(PLAYER, ev.team) && ev.data) {
+            this.hud.addAlert(`🗣 Ally: ${ev.data}`, ev.x, ev.y);
+          }
+          break;
         case "age": {
           const ageNames = ["Dark Age", "Feudal Age", "Castle Age"];
           const who = ev.team === PLAYER ? "You have" : "The enemy has";

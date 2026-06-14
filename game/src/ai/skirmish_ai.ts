@@ -23,6 +23,11 @@ interface SeenComposition {
 
 type AIStyle = "rush" | "boom" | "turtle" | "balanced";
 
+// Every AI brain in a match registers here (keyed by World, GC-safe). Teammates
+// read each other's scouted composition so intel is pooled across the alliance —
+// what one ally has seen, the whole team reasons about and counters.
+const AI_ROSTER = new WeakMap<World, SkirmishAI[]>();
+
 export class SkirmishAI {
   private timer = 0;
   private rng: RNG;
@@ -37,7 +42,12 @@ export class SkirmishAI {
   private seenWalls = 0;
   private lastRetreatTime = -999;
   private lastAllyHelpTime = -999;
+  private lastCalloutTime = -999;
   private savingForAge = false;
+  /** Building types we've finished at least once — drives prompt rebuilds. */
+  private everBuilt = new Set<string>();
+  /** Shared roster of all AI brains in this match (for ally intel pooling). */
+  private roster: SkirmishAI[];
   /** Personality — biases army timing, eco focus and turtling. */
   private style: AIStyle = "balanced";
 
@@ -59,6 +69,39 @@ export class SkirmishAI {
     this.style = styles[this.rng.int(0, styles.length - 1)];
     // First wave shouldn't come absurdly early on slow tiers.
     this.lastWaveTime = -this.cadence * 0.4;
+
+    // Join the match roster so allies can pool intel.
+    let roster = AI_ROSTER.get(world);
+    if (!roster) { roster = []; AI_ROSTER.set(world, roster); }
+    roster.push(this);
+    this.roster = roster;
+  }
+
+  /** Living allied AI brains (excluding self) for intel pooling. */
+  private alliedAIs(): SkirmishAI[] {
+    return this.roster.filter(
+      (a) => a !== this && this.world.areAllied(this.team, a.team) && !this.world.player(a.team).defeated,
+    );
+  }
+
+  /** A small chance to fumble an optional action — see DifficultyDef. */
+  private flub(): boolean {
+    return this.rng.range(0, 1) < this.diff.executionError;
+  }
+
+  /** Compass direction of (ax,ay) relative to (ox,oy), e.g. "north". */
+  private compass(ox: number, oy: number, ax: number, ay: number): string {
+    const deg = (Math.atan2(ay - oy, ax - ox) * 180) / Math.PI; // y grows downward
+    const i = Math.round(((deg + 360) % 360) / 45) % 8;
+    return ["east", "south-east", "south", "south-west", "west", "north-west", "north", "north-east"][i];
+  }
+
+  /** Emit an AI voice line (team games only), rate-limited against spam. */
+  private say(text: string, x: number, y: number, minGap = 14): void {
+    if (!this.hasAlly()) return;
+    if (this.gameTime - this.lastCalloutTime < minGap) return;
+    this.lastCalloutTime = this.gameTime;
+    this.world.callout(this.team, x, y, text);
   }
 
   // Personality-scaled tunables ------------------------------------------------
@@ -363,6 +406,9 @@ export class SkirmishAI {
     // 5. Farms once berries thin out.
     this.maybeBuildFarms(base, villagers.length);
 
+    // 5b. Replace anything a raid has razed, ahead of normal build gates.
+    this.rebuildStep(base);
+
     // 6. Military/tech buildings + age advances per the build order.
     this.buildOrder(p, base, villagers.length);
 
@@ -543,6 +589,34 @@ export class SkirmishAI {
     }
   }
 
+  /**
+   * Promptly replace a core building that's been destroyed. We only rebuild
+   * types we'd actually completed before (so it reacts to razes, not to a build
+   * order we haven't reached yet) and place near the base with two builders so
+   * the hole is filled fast. One rebuild per cycle keeps it from over-spending.
+   */
+  private rebuildStep(base: Entity) {
+    const REBUILDABLE = [
+      "barracks", "archery_range", "stable", "blacksmith", "siege_workshop",
+      "mill", "market", "lumber_camp", "mining_camp",
+    ];
+    const p = this.world.player(this.team);
+    // Remember everything currently standing so we know what "lost" means.
+    for (const b of this.myBuildings()) this.everBuilt.add(b.type);
+    for (const type of REBUILDABLE) {
+      if (!this.everBuilt.has(type)) continue;
+      if (this.myBuildings(type, false).length > 0) continue; // still have one (or building)
+      const def = BUILDINGS[type];
+      if (!def || !this.world.canAfford(p.resources, def.cost)) continue;
+      const b = this.placeNear(type, base.x, base.y, 3, 8);
+      if (b) {
+        this.assignBuilder(b, 2);
+        this.say(`rebuilding our ${def.name.toLowerCase()}.`, b.x, b.y, 20);
+        return; // one per cycle
+      }
+    }
+  }
+
   private maybeBuildCamps(base: Entity) {
     const p = this.world.player(this.team);
     if (p.resources.wood < 110) return;
@@ -690,6 +764,7 @@ export class SkirmishAI {
   /** Fire signature abilities on a knot of army units that are mid-fight. */
   private abilityStep() {
     if (!this.diff.usesAbilities) return;
+    if (this.flub()) return; // fumbled the ability timing
     const fighters = this.armyUnits().filter(
       (e) => ABILITIES[e.type] && e.abilityCooldown <= 0 && e.order.kind === OrderKind.Attack,
     );
@@ -728,7 +803,15 @@ export class SkirmishAI {
     }
     if (!this.diff.counters) return base;
 
-    const s = this.seen;
+    // Pool scouted intel across the alliance: counter the strongest read of the
+    // enemy army that any teammate has, not just what we personally can see.
+    const s: SeenComposition = { ...this.seen };
+    for (const ally of this.alliedAIs()) {
+      s.infantry = Math.max(s.infantry, ally.seen.infantry);
+      s.archer = Math.max(s.archer, ally.seen.archer);
+      s.cavalry = Math.max(s.cavalry, ally.seen.cavalry);
+      s.siege = Math.max(s.siege, ally.seen.siege);
+    }
     const total = s.infantry + s.archer + s.cavalry + s.siege;
     if (total < 3) return base;
     // Blend the base comp with counters to the observed army.
@@ -776,6 +859,7 @@ export class SkirmishAI {
   private scoutStep() {
     if (!this.diff.scouts) return;
     if (this.gameTime - this.lastScoutTime < 120) return;
+    if (this.flub()) return; // forgot to send the scout this time
     const scout = this.world.byId.get(this.scoutId);
     if (scout && scout.alive && scout.order.kind !== OrderKind.Idle) return;
     // Use the cheapest spare military unit; fall back to a villager early on.
@@ -813,6 +897,8 @@ export class SkirmishAI {
     if (threats < 2) return this.allyDefendStep();
     threatX /= threats;
     threatY /= threats;
+    // A serious raid — call for the cavalry.
+    if (threats >= 3) this.say("my base is under attack — I need help!", threatX, threatY, 18);
     // Villagers caught in the raid take cover and scatter.
     const panicked = this.myUnits("villager")
       .filter((v) => v.abilityCooldown <= 0 && dist(v.x, v.y, threatX, threatY) < 360)
@@ -865,6 +951,7 @@ export class SkirmishAI {
 
     this.lastAllyHelpTime = this.gameTime;
     this.attacking = false;
+    this.say("hold on — sending help your way!", bestX, bestY, 18);
     this.world.issueMove(relief.map((u) => u.id), bestX, bestY, false, true);
     return true;
   }
@@ -907,6 +994,9 @@ export class SkirmishAI {
     if (armyPop < this.armySize && !joiningAlly) return;
     if (!joiningAlly && this.gameTime - this.lastWaveTime < this.cadence) return;
 
+    // Fumbled the timing — dither a few seconds before committing the push.
+    if (this.flub()) { this.lastWaveTime = this.gameTime - this.cadence * 0.7; return; }
+
     this.lastWaveTime = this.gameTime;
     this.attacking = true;
 
@@ -925,6 +1015,20 @@ export class SkirmishAI {
       enemyBuildings.sort((a, b) => dist(a.x, a.y, base.x, base.y) - dist(b.x, b.y, base.x, base.y));
       tx = enemyBuildings[0].x;
       ty = enemyBuildings[0].y;
+    }
+
+    // Sloppier tiers mis-stage their push (fat fingers); top tiers hit clean.
+    const jit = this.diff.executionError * 320;
+    if (jit > 1) { tx += this.rng.range(-jit, jit); ty += this.rng.range(-jit, jit); }
+
+    // Call the assault so the player hears a teammate's attack coming in.
+    if (army.length) {
+      let cx = 0;
+      let cy = 0;
+      for (const u of army) { cx += u.x; cy += u.y; }
+      cx /= army.length;
+      cy /= army.length;
+      this.say(`pressing the attack from the ${this.compass(tx, ty, cx, cy)}!`, cx, cy, 16);
     }
 
     // Siege engines peel off to smash the nearest fortification on the approach
@@ -963,6 +1067,7 @@ export class SkirmishAI {
     if (!this.diff.harasses && this.style !== "rush") return;
     const cool = this.style === "rush" ? 55 : 85;
     if (this.gameTime - this.lastHarassTime < cool) return;
+    if (this.flub()) return; // skipped the raid
     let raiders = this.myUnits("knight").filter((u) => u.order.kind === OrderKind.Idle);
     if (raiders.length < 3) {
       raiders = raiders.concat(this.myUnits("militia").filter((u) => u.order.kind === OrderKind.Idle));
