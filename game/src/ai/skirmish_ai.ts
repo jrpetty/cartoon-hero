@@ -979,7 +979,22 @@ export class SkirmishAI {
     for (const u of army) { cx += u.x; cy += u.y; }
     cx /= army.length;
     cy /= army.length;
+    const ids = idle.map((u) => u.id);
 
+    // 1. Smash whatever we're piled against (wall, gate, tower, any building) so
+    //    a defended base can't simply wall us out — we breach and pour in.
+    let blocker: Entity | null = null;
+    let blockD = 150;
+    for (const e of this.world.entities) {
+      if (!e.alive || !this.isHostile(e.team) || e.kind !== Kind.Building) continue;
+      if (this.world.fogAt(this.team, e.x, e.y) === 0) continue;
+      const d = dist(cx, cy, e.x, e.y);
+      if (d < blockD) { blockD = d; blocker = e; }
+    }
+    if (blocker) { this.world.issueAttack(ids, blocker.id); return; }
+
+    // 2. Otherwise drive at the highest-value target we can see: fleeing
+    //    villagers (eco kill), then Town Centre / production, then anything.
     let best: Entity | null = null;
     let bestScore = -Infinity;
     for (const e of this.world.entities) {
@@ -992,15 +1007,11 @@ export class SkirmishAI {
       const score = pri - dist(cx, cy, e.x, e.y) * 0.04;
       if (score > bestScore) { bestScore = score; best = e; }
     }
+    if (best) { this.world.issueAttack(ids, best.id); return; }
 
-    const ids = idle.map((u) => u.id);
-    if (best) {
-      if (best.kind === Kind.Unit) this.world.issueAttack(ids, best.id);
-      else this.world.issueMove(ids, best.x, best.y, false, true); // attack-move onto it
-    } else {
-      const s = this.world.map.starts[this.focusEnemy];
-      this.world.issueMove(ids, s.x, s.y, false, true); // blind — push in and find them
-    }
+    // 3. Blind — march into their start to scout and commit.
+    const s = this.world.map.starts[this.focusEnemy];
+    this.world.issueMove(ids, s.x, s.y, false, true);
   }
 
   private attackStep() {
