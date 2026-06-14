@@ -223,6 +223,7 @@ export class Renderer {
     ghost: GhostPlacement | null,
     dragBox: { active: boolean; x0: number; y0: number; x1: number; y1: number },
     rallyFrom: Entity | null,
+    hoveredId = -1,
   ) {
     const { ctx, canvas } = this;
     const W = canvas.width;
@@ -404,10 +405,10 @@ export class Renderer {
       if (ghosted) ctx.globalAlpha = 1;
     }
 
-    // Health bars for damaged or selected entities.
+    // Health bars for hovered, selected or recently-damaged entities.
     for (const e of drawables) {
       if (e.kind !== Kind.Unit && e.kind !== Kind.Building) continue;
-      if (e.selected || (e.hp < e.maxHp && time - e.lastDamageTime < 6)) {
+      if (e.selected || e.id === hoveredId || (e.hp < e.maxHp && time - e.lastDamageTime < 6)) {
         if (e.kind === Kind.Building && e.buildState !== BuildState.Done) continue;
         this.guard(ctx, "healthbar:" + e.type, worldTf, () => drawHealthBar(ctx, e));
       }

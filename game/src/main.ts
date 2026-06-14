@@ -1086,9 +1086,18 @@ class App {
     const rallyFrom = selected.find(
       (e) => e.kind === Kind.Building && BUILDINGS[e.type]?.trains.length && e.rallyX >= 0,
     ) ?? null;
+    // Pop a health bar above whatever the cursor is over (no click needed).
+    let hoveredId = -1;
+    if (!this.placing && this.input.mx >= 0 && this.input.my >= 0) {
+      const hw = this.camera.screenToWorldX(this.input.mx);
+      const hh = this.camera.screenToWorldY(this.input.my);
+      const he = world.entityAt(hw, hh);
+      if (he && he.kind !== Kind.Projectile && world.visibleTo(PLAYER, he)) hoveredId = he.id;
+    }
     this.renderer.render(
       world, this.camera, this.particles, dt, this.time, PLAYER,
       this.markers, ghost, suppressDragBox ? { active: false, x0: 0, y0: 0, x1: 0, y1: 0 } : this.input.drag, rallyFrom,
+      hoveredId,
     );
 
     // ---- HUD (consumes pointer if clicked over panels) ----
@@ -1116,9 +1125,11 @@ class App {
     }
 
     // ---- route unconsumed pointer input to the world ----
-    if (!this.ingameMenu && !this.spectating) {
+    // Spectators can still left-click/drag to select-and-inspect units, but
+    // issue no commands.
+    if (!this.ingameMenu) {
       if (this.frameDragEnd && !ui.pointerConsumed) {
-        if (this.placing && LINE_BUILDABLE.has(this.placing)) this.paintWallLine(this.frameDragEnd);
+        if (!this.spectating && this.placing && LINE_BUILDABLE.has(this.placing)) this.paintWallLine(this.frameDragEnd);
         else this.worldDragSelect(this.frameDragEnd);
       }
       if (this.frameDouble && !ui.pointerConsumed) {
@@ -1126,7 +1137,7 @@ class App {
       } else if (this.frameClick && !ui.pointerConsumed) {
         this.worldClick(this.frameClick.x, this.frameClick.y);
       }
-      if (this.frameRight && !ui.pointerConsumed) {
+      if (!this.spectating && this.frameRight && !ui.pointerConsumed) {
         if (this.placing) {
           this.placing = null;
         } else {

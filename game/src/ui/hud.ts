@@ -328,9 +328,13 @@ export class HUD {
     }
 
     // -------------------------------------------------- selection panel --
+    // Works while spectating too (inspect any unit) — kept clear of the right-
+    // hand realm cards, which take one or two columns there.
     const selX = mmX + MINIMAP_SIZE + 18;
-    const selW = cardX - selX - 12;
-    if (!spectating && selection.length > 0 && selW > 200) {
+    const specCols = world.numTeams > 4 ? 2 : 1;
+    const rightEdge = spectating ? W - specCols * 262 : cardX;
+    const selW = rightEdge - selX - 12;
+    if (selection.length > 0 && selW > 200) {
       const selH = 104;
       const selY = H - selH - 10;
       ui.panel(selX, selY, selW, selH);
