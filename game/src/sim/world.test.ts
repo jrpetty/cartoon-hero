@@ -288,6 +288,25 @@ describe("Farms", () => {
     const blocked = w.placeBuilding(Team.Player, "house", farm!.x, farm!.y);
     expect(blocked).toBeNull();
   });
+
+  it("a villager working a farm stands on the plot", () => {
+    const w = makeWorld();
+    let farm = null;
+    for (const [fx, fy] of [[1500, 1500], [1500, 1400], [1600, 1500], [1400, 1500]]) {
+      farm = w.placeBuilding(Team.Player, "farm", fx, fy);
+      if (farm) break;
+    }
+    expect(farm).not.toBeNull();
+    farm!.buildState = 0; // Done
+    farm!.amount = 999999; // renewable food (set on completion in real games)
+    const v = w.spawnUnit(Team.Player, "villager", farm!.x + 50, farm!.y + 40);
+    w.issueGather([v.id], farm!.id);
+    run(w, 6);
+    // The farmer should be standing on the farm footprint, not beside it, and
+    // actively harvesting (carrying food).
+    expect(Math.hypot(v.x - farm!.x, v.y - farm!.y)).toBeLessThan(farm!.radius);
+    expect(v.carry).toBeGreaterThan(0);
+  });
 });
 
 describe("Hero leveling", () => {

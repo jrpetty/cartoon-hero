@@ -1310,10 +1310,15 @@ export class World {
       return;
     }
     const d = dist(e.x, e.y, node.x, node.y);
-    // Reach a full tile out so a villager standing on any adjacent open cell can
-    // work the node — even one wedged between a drop-off building and its
-    // neighbours (resources block the grid, so close cells are often impassable).
-    const reach = e.radius + node.radius + TILE * 0.7;
+    // Farms are walkable, so the farmer stands *on* the plot (near its centre) —
+    // it reads unmistakably as "this villager is farming". Other nodes block the
+    // grid, so reach a tile out to work them from any adjacent open cell.
+    // For farms the work point is the plot centre; the reach sits just past the
+    // mover's arrival distance so the farmer settles on the plot and harvests
+    // (too tight and it parks at the edge without ever gathering).
+    const reach = isFarm
+      ? TILE * 0.6
+      : e.radius + node.radius + TILE * 0.7;
     if (d > reach) {
       e.order.tx = node.x;
       e.order.ty = node.y;
