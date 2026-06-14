@@ -1,26 +1,38 @@
-// Inline the Vite build into a single self-contained HTML file that runs from
-// file:// with no server. Robust against two classic pitfalls:
-//   1. Using the JS as String.replace's 2nd arg lets `$&`/`$\`` etc. inject the
-//      matched text — so we use a function replacer (no special substitution).
-//   2. A literal `</script>` anywhere in the JS would close the inline tag early
-//      and dump the rest as page text — so we neutralise it.
+// Build a single self-contained HTML that runs by double-click from file:// in
+// any browser. We bundle the app to a *classic* IIFE script (not an ES module)
+// so there are no module/CORS/file:// execution quirks, then inline it.
+//
+//   node scripts/inline.mjs   →   dist/banner-and-blade.html
 
-import { readFileSync, writeFileSync } from "node:fs";
+import { build } from "esbuild";
+import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
 
-const dist = new URL("../dist/", import.meta.url);
-const html = readFileSync(new URL("index.html", dist), "utf8");
+const root = new URL("../", import.meta.url);
 
-const tag = html.match(/<script type="module"[^>]*src="([^"]+)"[^>]*><\/script>/);
-if (!tag) throw new Error("inline: no <script type=module src=...> found in dist/index.html");
-
-const jsRel = tag[1].replace(/^\.?\//, "");
-let js = readFileSync(new URL(jsRel, dist), "utf8");
-// Never let the bundle terminate the inline <script>.
+// 1. Bundle src/main.ts → minified IIFE (classic script, self-executing).
+const result = await build({
+  entryPoints: [new URL("src/main.ts", root).pathname],
+  bundle: true,
+  minify: true,
+  format: "iife",
+  target: ["es2020"],
+  write: false,
+  legalComments: "none",
+  logLevel: "warning",
+});
+let js = result.outputFiles[0].text;
+// A literal </script> in the bundle would close the inline tag early.
 js = js.split("</script").join("<\\/script");
 
-const out = html.replace(tag[0], () => `<script type="module">\n${js}\n</script>`);
-writeFileSync(new URL("banner-and-blade.html", dist), out);
+// 2. Inline it into the HTML template, replacing the dev module script.
+const html = readFileSync(new URL("index.html", root), "utf8");
+const tag = /<script[^>]*src="[^"]*main\.ts"[^>]*><\/script>/;
+if (!tag.test(html)) throw new Error("inline: could not find the dev <script src=…main.ts> in index.html");
+const out = html.replace(tag, () => `<script>\n${js}\n</script>`);
 
 const closes = (out.match(/<\/script>/g) || []).length;
 if (closes !== 1) throw new Error(`inline: expected exactly one </script>, found ${closes}`);
-console.log(`wrote dist/banner-and-blade.html (${Math.round(out.length / 1024)}KB, ${closes} script tag)`);
+
+mkdirSync(new URL("dist/", root), { recursive: true });
+writeFileSync(new URL("dist/banner-and-blade.html", root), out);
+console.log(`wrote dist/banner-and-blade.html (${Math.round(out.length / 1024)}KB, classic IIFE, ${closes} script tag)`);
