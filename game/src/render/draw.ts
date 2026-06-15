@@ -835,23 +835,23 @@ export function drawUnit(ctx: Ctx, e: Entity, time: number) {
   switch (e.type) {
     case "villager": drawVillager(ctx, e, tc, moving); break;
     case "militia": drawMilitia(ctx, e, tc, lunge); break;
-    case "twohand": drawMilitia(ctx, e, tc, lunge); break;
+    case "twohand": drawTwohand(ctx, e, tc, lunge); break;
     case "spearman": drawSpearman(ctx, e, tc, lunge); break;
-    case "pikeman": drawSpearman(ctx, e, tc, lunge); break;
-    case "scout": drawRaider(ctx, e, tc, moving, lunge); break;
+    case "pikeman": drawPikeman(ctx, e, tc, lunge); break;
+    case "scout": drawScout(ctx, e, tc, moving); break;
     case "archer": drawArcher(ctx, e, tc, atkFrac); break;
     case "skirmisher": drawSkirmisher(ctx, e, tc, atkFrac); break;
     case "crossbow": drawCrossbow(ctx, e, tc, atkFrac); break;
     case "knight": drawKnight(ctx, e, tc, moving, time, lunge); break;
     case "horseman": drawHorseman(ctx, e, tc, moving); break;
     case "raider": drawRaider(ctx, e, tc, moving, lunge); break;
-    case "javelin": drawSkirmisher(ctx, e, tc, atkFrac); break;
-    case "handcannon": drawCrossbow(ctx, e, tc, atkFrac); break;
+    case "javelin": drawJavelin(ctx, e, tc, atkFrac); break;
+    case "handcannon": drawHandcannon(ctx, e, tc, atkFrac); break;
     case "catapult": drawCatapult(ctx, e, tc, atkFrac); break;
     case "trebuchet": drawTrebuchet(ctx, e, tc, atkFrac); break;
     case "ram": drawRam(ctx, e, tc, atkFrac); break;
     case "hero": drawHero(ctx, e, tc, lunge, time); break;
-    case "king": drawHero(ctx, e, tc, lunge, time); break;
+    case "king": drawKing(ctx, e, tc, lunge, time); break;
     case "monk": drawMonk(ctx, e, tc, time); break;
     default: {
       ctx.fillStyle = tc.main;
@@ -1422,6 +1422,266 @@ function drawMonk(ctx: Ctx, e: Entity, tc: any, time: number) {
   ctx.fillStyle = withAlpha(PAL.heal, glow);
   ctx.beginPath();
   ctx.arc(fx * r * 0.9, fy * r * 0.9 - r * 1.2, 3, 0, Math.PI * 2);
+  ctx.fill();
+}
+
+// Two-Handed Swordsman: heavy plate, full helm, a huge greatsword gripped in
+// both gauntlets — no shield (that's what tells it apart from the Militia).
+function drawTwohand(ctx: Ctx, e: Entity, tc: any, lunge: number) {
+  const r = e.radius;
+  body(ctx, r, tc.main, tc.dark);
+  // plate breastplate over the surcoat
+  ctx.fillStyle = withAlpha(PAL.steel, 0.5);
+  ctx.beginPath();
+  ctx.arc(0, 0, r * 0.55, 0, Math.PI * 2);
+  ctx.fill();
+  head(ctx, r, PAL.steel); // full steel helm
+  ctx.strokeStyle = shade(PAL.steelDark, -0.2);
+  ctx.lineWidth = 1;
+  ctx.beginPath(); // visor slit
+  ctx.moveTo(-r * 0.18, -r * 0.4);
+  ctx.lineTo(r * 0.18, -r * 0.4);
+  ctx.stroke();
+  const [fx, fy] = weaponAngleParts(e.facing);
+  const reach = 2.05 + lunge;
+  // long gleaming blade
+  ctx.strokeStyle = "#dfe3ea";
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.moveTo(-fx * r * 0.5, -fy * r * 0.5);
+  ctx.lineTo(fx * r * reach, fy * r * reach);
+  ctx.stroke();
+  // crossguard
+  const gx = fx * r * 0.25;
+  const gy = fy * r * 0.25;
+  ctx.strokeStyle = shade(tc.dark, -0.1);
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.moveTo(gx - fy * r * 0.42, gy + fx * r * 0.42);
+  ctx.lineTo(gx + fy * r * 0.42, gy - fx * r * 0.42);
+  ctx.stroke();
+  // both gauntlets on the grip
+  ctx.fillStyle = PAL.steelDark;
+  for (const d of [0.05, -0.3]) {
+    ctx.beginPath();
+    ctx.arc(fx * r * d, fy * r * d, r * 0.16, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
+// Pikeman: a far longer haft than the Spearman, a small team pennant flying at
+// the grip, and a slim leaf-blade — the reach is the read.
+function drawPikeman(ctx: Ctx, e: Entity, tc: any, lunge: number) {
+  const r = e.radius;
+  body(ctx, r, tc.main, tc.dark);
+  head(ctx, r, PAL.steelDark);
+  const [fx, fy] = weaponAngleParts(e.facing);
+  const reach = 3.0 + lunge * 0.7; // pike (Spearman is ~2.2)
+  ctx.strokeStyle = PAL.wood;
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(-fx * r * 1.0, -fy * r * 1.0);
+  ctx.lineTo(fx * r * reach, fy * r * reach);
+  ctx.stroke();
+  // pennant near the grip
+  const bx = fx * r * 0.55;
+  const by = fy * r * 0.55;
+  ctx.fillStyle = tc.main;
+  ctx.beginPath();
+  ctx.moveTo(bx, by);
+  ctx.lineTo(bx + fx * r * 0.55 - fy * r * 0.42, by + fy * r * 0.55 + fx * r * 0.42);
+  ctx.lineTo(bx + fx * r * 0.55, by + fy * r * 0.55);
+  ctx.closePath();
+  ctx.fill();
+  // long leaf head
+  const tipX = fx * r * reach;
+  const tipY = fy * r * reach;
+  ctx.fillStyle = PAL.steel;
+  ctx.beginPath();
+  ctx.moveTo(tipX + fx * r * 0.5, tipY + fy * r * 0.5);
+  ctx.lineTo(tipX - fy * r * 0.18, tipY + fx * r * 0.18);
+  ctx.lineTo(tipX + fy * r * 0.18, tipY - fx * r * 0.18);
+  ctx.closePath();
+  ctx.fill();
+}
+
+// Scout: a light, pale, fast pony and an unarmed rider carrying a tall pennant
+// mast — reads as a recon unit, not the sabre-swinging Raider.
+function drawScout(ctx: Ctx, e: Entity, tc: any, moving: boolean) {
+  const r = e.radius;
+  ctx.save();
+  ctx.rotate(e.facing);
+  const gallop = moving ? Math.sin(e.animPhase * 15) * 1.5 : 0;
+  ctx.fillStyle = "#8a7257";
+  ctx.beginPath();
+  ctx.ellipse(0, 0, r * 1.15, r * 0.46, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.ellipse(r * 1.02, -r * 0.12, r * 0.34, r * 0.19, -0.4, 0, Math.PI * 2);
+  ctx.fill();
+  if (moving) {
+    ctx.strokeStyle = "#6d5942";
+    ctx.lineWidth = 2;
+    for (const lx of [-r * 0.55, r * 0.5]) {
+      ctx.beginPath();
+      ctx.moveTo(lx, r * 0.3);
+      ctx.lineTo(lx + gallop * 2.2, r * 0.74);
+      ctx.stroke();
+    }
+  }
+  ctx.restore();
+  // light rider
+  ctx.fillStyle = tc.main;
+  ctx.beginPath();
+  ctx.arc(-r * 0.05, -r * 0.42, r * 0.34, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = PAL.skin;
+  ctx.beginPath();
+  ctx.arc(-r * 0.05, -r * 0.62, r * 0.22, 0, Math.PI * 2);
+  ctx.fill();
+  // tall scouting pennant (fixed mast, not a weapon)
+  ctx.strokeStyle = PAL.woodLight;
+  ctx.lineWidth = 1.6;
+  ctx.beginPath();
+  ctx.moveTo(r * 0.15, -r * 0.3);
+  ctx.lineTo(r * 0.15, -r * 1.5);
+  ctx.stroke();
+  ctx.fillStyle = tc.light;
+  ctx.beginPath();
+  ctx.moveTo(r * 0.15, -r * 1.5);
+  ctx.lineTo(r * 0.78, -r * 1.32);
+  ctx.lineTo(r * 0.15, -r * 1.12);
+  ctx.closePath();
+  ctx.fill();
+}
+
+// Javelin Thrower: a soldier in team colours with a back-fan of spare javelins,
+// winding up an overhand throw — distinct from the leather-clad Skirmisher.
+function drawJavelin(ctx: Ctx, e: Entity, tc: any, atkFrac: number) {
+  const r = e.radius;
+  body(ctx, r, tc.main, tc.dark);
+  head(ctx, r, PAL.leather);
+  const [fx, fy] = weaponAngleParts(e.facing);
+  // bundle of spare javelins fanned across the back
+  ctx.strokeStyle = PAL.woodDark;
+  ctx.lineWidth = 1.2;
+  for (const o of [-0.28, 0, 0.28]) {
+    const ang = e.facing + Math.PI + o;
+    ctx.beginPath();
+    ctx.moveTo(Math.cos(ang) * r * 0.2, Math.sin(ang) * r * 0.2);
+    ctx.lineTo(Math.cos(ang) * r * 1.2, Math.sin(ang) * r * 1.2);
+    ctx.stroke();
+  }
+  // the throwing javelin, cocked overhead then hurled forward
+  const raise = atkFrac > 0.7 ? (atkFrac - 0.7) / 0.3 : 0;
+  const back = 0.7 + raise * 0.7;
+  ctx.strokeStyle = PAL.woodLight;
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(-fx * r * back, -fy * r * back - raise * 4);
+  ctx.lineTo(fx * r * 1.9, fy * r * 1.9 - raise * 4);
+  ctx.stroke();
+  ctx.fillStyle = PAL.steel;
+  ctx.beginPath();
+  ctx.arc(fx * r * 1.9, fy * r * 1.9 - raise * 4, r * 0.12, 0, Math.PI * 2);
+  ctx.fill();
+}
+
+// Hand Cannoneer: a long iron barrel on a wooden stock, with a muzzle flash and
+// drifting smoke when it fires — gunpowder, not the Crossbow's steel prod.
+function drawHandcannon(ctx: Ctx, e: Entity, tc: any, atkFrac: number) {
+  const r = e.radius;
+  body(ctx, r, tc.main, tc.dark);
+  head(ctx, r, PAL.steelDark);
+  const [fx, fy] = weaponAngleParts(e.facing);
+  // wooden stock
+  ctx.strokeStyle = PAL.woodDark;
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.moveTo(-fx * r * 0.6, -fy * r * 0.6);
+  ctx.lineTo(fx * r * 0.4, fy * r * 0.4);
+  ctx.stroke();
+  // iron barrel
+  ctx.strokeStyle = "#3a3d42";
+  ctx.lineWidth = 2.6;
+  ctx.beginPath();
+  ctx.moveTo(-fx * r * 0.3, -fy * r * 0.3);
+  ctx.lineTo(fx * r * 1.7, fy * r * 1.7);
+  ctx.stroke();
+  const mx = fx * r * 1.7;
+  const my = fy * r * 1.7;
+  if (atkFrac > 0.82) {
+    const f = (atkFrac - 0.82) / 0.18;
+    ctx.fillStyle = withAlpha("#ffd24a", f);
+    ctx.beginPath();
+    ctx.arc(mx, my, r * 0.5 * f + 1.5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = withAlpha("#ffae3a", f * 0.8);
+    ctx.beginPath();
+    ctx.arc(mx + fx * 4, my + fy * 4, r * 0.3 * f, 0, Math.PI * 2);
+    ctx.fill();
+  } else if (atkFrac > 0.4) {
+    ctx.fillStyle = withAlpha("#cfcabd", 0.35 * (atkFrac - 0.4));
+    ctx.beginPath();
+    ctx.arc(mx + fx * 5, my + fy * 5, r * 0.4, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
+// King: a robed, bearded monarch under a big jewelled crown, bearing an orbed
+// sceptre rather than a war blade — clearly royalty, not the Champion hero.
+function drawKing(ctx: Ctx, e: Entity, tc: any, lunge: number, time: number) {
+  const r = e.radius;
+  // long royal robe
+  ctx.fillStyle = shade(tc.dark, -0.05);
+  ctx.beginPath();
+  ctx.moveTo(-r * 0.6, -r * 0.1);
+  ctx.quadraticCurveTo(-r * 1.2, r * 0.9 + Math.sin(time * 3) * 1.5, 0, r * 1.2);
+  ctx.quadraticCurveTo(r * 1.2, r * 0.9 - Math.sin(time * 3) * 1.5, r * 0.6, -r * 0.1);
+  ctx.fill();
+  body(ctx, r, tc.main, tc.dark);
+  // ermine collar + gold medallion
+  ctx.fillStyle = "#f0ece0";
+  ctx.beginPath();
+  ctx.arc(0, r * 0.2, r * 0.5, 0.2, Math.PI - 0.2);
+  ctx.fill();
+  ctx.fillStyle = "#ffd24a";
+  ctx.beginPath();
+  ctx.arc(0, 0, r * 0.22, 0, Math.PI * 2);
+  ctx.fill();
+  head(ctx, r);
+  // grey royal beard
+  ctx.fillStyle = "#d8d2c4";
+  ctx.beginPath();
+  ctx.arc(0, -r * 0.2, r * 0.3, 0.1, Math.PI - 0.1);
+  ctx.fill();
+  // big crown band + points
+  ctx.fillStyle = "#ffd24a";
+  ctx.fillRect(-r * 0.5, -r * 0.78, r * 1.0, r * 0.16);
+  for (let i = -2; i <= 2; i++) {
+    ctx.beginPath();
+    ctx.moveTo(i * r * 0.24 - r * 0.1, -r * 0.78);
+    ctx.lineTo(i * r * 0.24, -r * 1.08);
+    ctx.lineTo(i * r * 0.24 + r * 0.1, -r * 0.78);
+    ctx.fill();
+  }
+  ctx.fillStyle = "#d8403a"; // jewels
+  for (let i = -1; i <= 1; i++) {
+    ctx.beginPath();
+    ctx.arc(i * r * 0.3, -r * 0.7, r * 0.06, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  // orbed golden sceptre
+  const [fx, fy] = weaponAngleParts(e.facing);
+  ctx.strokeStyle = "#e8b13c";
+  ctx.lineWidth = 2.6;
+  ctx.beginPath();
+  ctx.moveTo(fx * r * 0.3, fy * r * 0.3);
+  ctx.lineTo(fx * r * (1.1 + lunge * 0.4), fy * r * (1.1 + lunge * 0.4));
+  ctx.stroke();
+  ctx.fillStyle = "#ffe07a";
+  ctx.beginPath();
+  ctx.arc(fx * r * (1.2 + lunge * 0.4), fy * r * (1.2 + lunge * 0.4), r * 0.16, 0, Math.PI * 2);
   ctx.fill();
 }
 
