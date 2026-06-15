@@ -655,7 +655,7 @@ export class ArmoryScreen {
     // Warband Cache — buy a boon roll with Valor.
     ui.panel(x0, y, colW, 70);
     ui.text("Warband Cache", x0 + 16, y + 26, { size: 17, bold: true, color: PAL.uiAccent });
-    ui.text("Roll a boon — higher rarity is a stronger version of the same boon.", x0 + 16, y + 48, { size: 12, color: "#bdb49a" });
+    ui.text("You own every boon at Common. Open caches to roll higher rarities — stronger versions of the same boon.", x0 + 16, y + 48, { size: 12, color: "#bdb49a" });
     const canAfford = profile.data.valor >= BOON_CACHE_COST;
     if (ui.button(`Open — ${BOON_CACHE_COST} ⚔`, x0 + colW - 200, y + 18, 184, 36, { accent: canAfford, disabled: !canAfford, tooltip: canAfford ? undefined : ["Not enough Valor", "Earn Valor by fighting — kills, razings and wins."] })) {
       if (profile.spendValor(BOON_CACHE_COST)) {

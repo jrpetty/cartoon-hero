@@ -5,7 +5,7 @@
 import { COLLECTIBLE_UNIT_IDS, variantKey } from "./catalog";
 import { levelFromXp, levelUpRenown } from "./progression";
 import { COMMANDER_IDS } from "../content/commanders";
-import { BOONS_BY_ID, BoonCategory, BOON_CATEGORIES } from "../content/boons";
+import { BOONS_BY_ID, BoonCategory, BOON_CATEGORIES, BOON_IDS } from "../content/boons";
 import { boonKey } from "./boon_cache";
 
 /** Default age order for the battle plan (which category unlocks at which age). */
@@ -51,7 +51,8 @@ function defaultProfile(): ProfileData {
     commander: "",
     commanderReveal: "",
     valor: 150,
-    boons: [],
+    // Everyone owns every boon at base (Common) rarity; higher tiers unlock.
+    boons: BOON_IDS.map((id) => boonKey(id, 0)),
     equippedBoons: { offensive: "", defensive: "", supportive: "" },
     boonOrder: [...DEFAULT_BOON_ORDER],
   };
@@ -103,6 +104,12 @@ export class Profile {
     // Boons / Valor — back-fill for older saves.
     if (typeof this.data.valor !== "number") { this.data.valor = 150; changed = true; }
     if (!Array.isArray(this.data.boons)) { this.data.boons = []; this.boonSet = new Set(); changed = true; }
+    // Grant every boon's base (Common) tier to everyone — only the higher
+    // rarities are earned. Back-fills older saves and any boons added later.
+    for (const id of BOON_IDS) {
+      const k = boonKey(id, 0);
+      if (!this.boonSet.has(k)) { this.boonSet.add(k); this.data.boons.push(k); changed = true; }
+    }
     if (!this.data.equippedBoons) {
       this.data.equippedBoons = { offensive: "", defensive: "", supportive: "" };
       changed = true;

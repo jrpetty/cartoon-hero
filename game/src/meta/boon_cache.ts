@@ -1,7 +1,8 @@
-// Warband Cache: bought with Valor, rolls a boon at a weighted rarity. A higher
-// rarity is a stronger version of the same boon. Duplicates refund a little
-// Valor so the grind never fully stalls. Kept separate from the unit-variant
-// chests so the boon economy can be tuned (or merged) independently later.
+// Warband Cache: bought with Valor, rolls an UPGRADED tier of a boon. Everyone
+// owns every boon at base (Common) rarity already, so the cache only ever grants
+// the advanced rarities (Uncommon and up) — a stronger version of the same boon.
+// Duplicates refund a little Valor so the grind never fully stalls. Kept separate
+// from the unit-variant chests so the boon economy can be tuned independently.
 
 import { RNG } from "../engine/rng";
 import { RARITY_WEIGHTS, rarityByIndex } from "./rarity";
@@ -29,9 +30,11 @@ export interface BoonRoll {
 
 const DUP_REFUND = [25, 50, 100, 220, 500, 1200];
 
-/** Roll a Warband Cache. Pure given the RNG, so it's deterministic and testable. */
+/** Roll a Warband Cache. Pure given the RNG, so it's deterministic and testable.
+ *  Rolls an advanced rarity (1..N) only — base Common is owned by everyone. */
 export function rollBoonCache(owned: Set<string>, rng: RNG): BoonRoll {
-  const rarity = rng.weightedIndex(RARITY_WEIGHTS);
+  // Drop the Common slot and re-weight across the advanced tiers.
+  const rarity = rng.weightedIndex(RARITY_WEIGHTS.slice(1)) + 1;
   const boonId = rng.pick(BOON_IDS);
   const key = boonKey(boonId, rarity);
   const duplicate = owned.has(key);

@@ -1,16 +1,30 @@
 import { describe, expect, it } from "vitest";
 import { Profile } from "./profile";
-import { rollBoonCache, boonKey, BOON_CACHE_COST } from "./boon_cache";
+import { rollBoonCache, boonKey, BOON_CACHE_COST, parseBoonKey } from "./boon_cache";
+import { BOON_IDS } from "../content/boons";
 import { RNG } from "../engine/rng";
 
 describe("Boon meta (battle plan)", () => {
-  it("starts with Valor, no boons, and a default age order", () => {
+  it("starts with Valor, every boon at base rarity, and a default age order", () => {
     const p = new Profile();
     expect(p.data.valor).toBeGreaterThan(0);
-    expect(p.data.boons.length).toBe(0);
+    // Everyone owns every boon at Common (rarity 0) by default.
+    expect(p.data.boons.length).toBe(BOON_IDS.length);
+    for (const id of BOON_IDS) expect(p.bestBoonRarity(id)).toBe(0);
     expect(p.data.boonOrder.length).toBe(3);
     // Default: one of each category, distinct ages.
     expect(new Set(p.data.boonOrder).size).toBe(3);
+  });
+
+  it("equips any boon by default (all owned at base) and the cache only grants advanced tiers", () => {
+    const p = new Profile();
+    // No grant needed — base is owned, so it equips straight away.
+    p.equipBoon("whetstones", true);
+    expect(p.equippedBoonPlan().some((b) => b.id === "whetstones" && b.rarity === 0)).toBe(true);
+    // Caches never roll Common.
+    for (let s = 0; s < 30; s++) {
+      expect(parseBoonKey(rollBoonCache(new Set(), new RNG(s)).key).rarity).toBeGreaterThanOrEqual(1);
+    }
   });
 
   it("equips one boon per category and assigns each an unlock age", () => {
