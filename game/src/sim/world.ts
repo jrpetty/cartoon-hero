@@ -913,7 +913,10 @@ export class World {
       }
     }
     this.pay(p.resources, cost);
-    const e = this.spawnBuilding(team, type, sx, sy, false);
+    // Pass the RAW click coords — spawnBuilding snaps once. Passing the already
+    // snapped sx/sy would double-snap (odd footprints round up a whole tile,
+    // landing the building one block down-right of the ghost).
+    const e = this.spawnBuilding(team, type, wx, wy, false);
     this.emit("build", e.x, e.y, team, type);
     return e;
   }
