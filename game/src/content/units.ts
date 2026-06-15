@@ -152,7 +152,7 @@ export const UNITS: Record<string, UnitDef> = {
   horseman: U({
     id: "horseman",
     name: "Horseman",
-    desc: "Mounted skirmisher. Pelts foes from horseback and runs down siege; its light barding turns arrows but offers nothing against blades. (Castle Age)",
+    desc: "Mounted skirmisher. Pelts foes from horseback and runs down siege; its light barding turns arrows but offers nothing against blades. (Feudal Age)",
     armorClass: ArmorClass.Cavalry,
     hp: 65,
     attack: 8,
@@ -167,7 +167,7 @@ export const UNITS: Record<string, UnitDef> = {
     buildTime: 20,
     pop: 1,
     trainedAt: "stable",
-    age: 2,
+    age: 1,
     ranged: true,
     bonus: { [ArmorClass.Siege]: 14 },
   }),

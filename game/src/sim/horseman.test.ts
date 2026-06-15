@@ -13,15 +13,18 @@ function makeWorld(): World {
 }
 
 describe("Horseman", () => {
-  it("exists as a Castle-age ranged cavalry trained at the stable", () => {
+  it("exists as a Feudal-age ranged cavalry trained at the stable", () => {
     const h = UNITS.horseman;
     expect(h).toBeTruthy();
-    expect(h.age).toBe(2);
+    expect(h.age).toBe(1); // Feudal — available with the Stable
     expect(h.ranged).toBe(true);
     expect(h.attack).toBe(8);
     expect(h.trainedAt).toBe("stable");
     expect(BUILDINGS.stable.trains).toContain("horseman");
     expect(h.bonus.siege).toBeGreaterThan(0); // bonus damage vs siege
+    // Stable now unlocks in Feudal; the Knight stays Castle.
+    expect(BUILDINGS.stable.age).toBe(1);
+    expect(UNITS.knight.age).toBe(2);
   });
 
   it("spawns with 2 pierce armor and 0 melee armor", () => {
