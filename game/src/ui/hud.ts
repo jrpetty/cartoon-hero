@@ -511,15 +511,15 @@ export class HUD {
           },
         );
       }
-      if (building.type === "blacksmith") {
-        for (const upId of Object.keys(UPGRADES)) {
-          const up = UPGRADES[upId];
-          if (p.upgrades.has(upId)) continue;
-          place(up.name.split(" ")[0].slice(0, 7), () => ctrl.research(building, upId), {
-            disabled: p.age < up.age || !world.canAfford(p.resources, up.cost),
-            tooltip: [up.name, this.cost(up.cost), up.desc],
-          });
-        }
+      // Research housed in this building (Blacksmith combat techs, eco techs at
+      // the Mill / Lumber Camp / Mining Camp, etc.).
+      for (const upId of Object.keys(UPGRADES)) {
+        const up = UPGRADES[upId];
+        if (up.researchedAt !== building.type || p.upgrades.has(upId)) continue;
+        place(up.name.split(" ")[0].slice(0, 7), () => ctrl.research(building, upId), {
+          disabled: p.age < up.age || !world.canAfford(p.resources, up.cost),
+          tooltip: [up.name, this.cost(up.cost), up.desc],
+        });
       }
       if (building.type === "market") {
         place("Sell 🪵", () => ctrl.trade("sell_wood"), { tooltip: ["Sell 100 wood → 75 gold"] });

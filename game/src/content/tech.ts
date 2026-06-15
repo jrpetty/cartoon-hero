@@ -43,9 +43,15 @@ export interface UpgradeDef {
   cost: { food: number; wood: number; gold: number };
   time: number;
   age: number;
-  kind: "attack" | "armor" | "econ";
+  kind: "attack" | "armor" | "hp" | "speed" | "bonus" | "econ";
   /** Which armor classes it benefits. */
   appliesTo: string[];
+  /** Or specific unit ids (per-unit "elite" upgrades). */
+  appliesToUnits?: string[];
+  /** For kind "bonus": the armor class the extra bonus damage applies vs. */
+  bonusVs?: string;
+  /** For kind "econ": which resource it speeds (omit = handled elsewhere). */
+  resource?: string;
   amount: number;
   researchedAt: string;
 }
@@ -160,5 +166,44 @@ export const UPGRADES: Record<string, UpgradeDef> = {
     appliesTo: [],
     amount: 0.15,
     researchedAt: "blacksmith",
+  },
+
+  // --- Cavalry (unit-type) ---
+  husbandry: {
+    id: "husbandry", name: "Husbandry", desc: "Cavalry move noticeably faster. (Feudal Age)",
+    cost: { food: 150, wood: 0, gold: 0 }, time: 30, age: 1,
+    kind: "speed", appliesTo: ["cavalry"], amount: 14, researchedAt: "blacksmith",
+  },
+  bloodlines: {
+    id: "bloodlines", name: "Bloodlines", desc: "Cavalry gain +20 HP. (Castle Age)",
+    cost: { food: 0, wood: 0, gold: 200 }, time: 35, age: 2,
+    kind: "hp", appliesTo: ["cavalry"], amount: 20, researchedAt: "blacksmith",
+  },
+  // --- Per-unit "elite" upgrades ---
+  longswords: {
+    id: "longswords", name: "Long Swords", desc: "Man-at-Arms & Two-Handed Swordsmen +3 attack. (Castle Age)",
+    cost: { food: 0, wood: 0, gold: 160 }, time: 35, age: 2,
+    kind: "attack", appliesTo: [], appliesToUnits: ["militia", "twohand"], amount: 3, researchedAt: "blacksmith",
+  },
+  pikes: {
+    id: "pikes", name: "Pikes", desc: "Spearmen & Pikemen +12 bonus damage vs cavalry. (Castle Age)",
+    cost: { food: 0, wood: 0, gold: 150 }, time: 35, age: 2,
+    kind: "bonus", appliesTo: [], appliesToUnits: ["spearman", "pikeman"], bonusVs: "cavalry", amount: 12, researchedAt: "blacksmith",
+  },
+  // --- Economy (researched at the gathering buildings) ---
+  horse_collar: {
+    id: "horse_collar", name: "Horse Collar", desc: "Farms & foraging yield 18% more food. (Feudal Age)",
+    cost: { food: 0, wood: 75, gold: 0 }, time: 25, age: 1,
+    kind: "econ", appliesTo: [], resource: "food", amount: 0.18, researchedAt: "mill",
+  },
+  bow_saw: {
+    id: "bow_saw", name: "Bow Saw", desc: "Villagers chop wood 18% faster. (Feudal Age)",
+    cost: { food: 75, wood: 0, gold: 0 }, time: 25, age: 1,
+    kind: "econ", appliesTo: [], resource: "wood", amount: 0.18, researchedAt: "lumber_camp",
+  },
+  gold_mining: {
+    id: "gold_mining", name: "Gold Mining", desc: "Villagers mine gold 18% faster. (Feudal Age)",
+    cost: { food: 100, wood: 0, gold: 0 }, time: 25, age: 1,
+    kind: "econ", appliesTo: [], resource: "gold", amount: 0.18, researchedAt: "mining_camp",
   },
 };

@@ -349,7 +349,15 @@ export class World {
     // Speed boon: army-wide, plus cavalry/villager extras.
     let spdBoon = soldier ? bn.armySpeedMult : bn.villSpeedMult;
     if (def.armorClass === ArmorClass.Cavalry) spdBoon *= bn.cavSpeedMult;
-    e.maxHp = Math.round(def.hp * (RARITY_HP_MULT[rarity] ?? 1) * hpMult);
+    // Flat HP from researched "hp" upgrades (e.g. Bloodlines for cavalry).
+    let hpFlat = 0;
+    if (p) {
+      for (const upId of p.upgrades) {
+        const up = UPGRADES[upId];
+        if (up?.kind === "hp" && (up.appliesTo.includes(def.armorClass) || (up.appliesToUnits?.includes(def.id) ?? false))) hpFlat += up.amount;
+      }
+    }
+    e.maxHp = Math.round(def.hp * (RARITY_HP_MULT[rarity] ?? 1) * hpMult) + hpFlat;
     e.hp = e.maxHp;
     e.attack = Math.round(def.attack * (RARITY_ATK_MULT[rarity] ?? 1) * atkBoon);
     e.armor = def.armor + (RARITY_ARMOR_BONUS[rarity] ?? 0) + armorPlus;
@@ -371,12 +379,18 @@ export class World {
     const p = this.players[team];
     if (!p) return;
     p.boon = aggregateBoons(p.boonPlan.filter((b) => b.age <= p.age));
+    this.refreshTeamUnits(team);
+  }
+
+  /** Re-derive every unit's stats for a team (after a boon/HP-upgrade unlock),
+   *  preserving current HP fraction, veterancy and hero level. */
+  private refreshTeamUnits(team: Team) {
     for (const e of this.entities) {
       if (!e.alive || e.kind !== Kind.Unit || e.team !== team) continue;
       const def = UNITS[e.type];
       if (!def) continue;
       const frac = e.maxHp > 0 ? e.hp / e.maxHp : 1;
-      this.applyUnitStats(e, def, team); // base + rarity + current boon
+      this.applyUnitStats(e, def, team); // base + rarity + current boon + hp upgrades
       // Re-stack veterancy (compounds, matches creditVeterancy) and hero level.
       for (let i = 0; i < e.veterancy; i++) e.maxHp += Math.round(e.maxHp * 0.12);
       e.attack += e.veterancy;
@@ -1419,6 +1433,11 @@ export class World {
       if (gp) {
         if (gp.upgrades.has("wheelbarrow")) econ *= 1 + UPGRADES.wheelbarrow.amount;
         if (gp.upgrades.has("hand_cart")) econ *= 1 + UPGRADES.hand_cart.amount;
+        // Resource-specific eco upgrades (Horse Collar / Bow Saw / Gold Mining).
+        for (const upId of gp.upgrades) {
+          const up = UPGRADES[upId];
+          if (up?.kind === "econ" && up.resource === kind) econ *= 1 + up.amount;
+        }
         econ *= gp.gatherMultC; // commander passive
         if (kind === ResourceKind.Food) econ *= gp.boon.foodGatherMult; // Bountiful Fields
       }
@@ -1740,7 +1759,10 @@ export class World {
         }
       }
     } else if (item.startsWith("t:")) {
-      p.upgrades.add(item.slice(2));
+      const upId = item.slice(2);
+      p.upgrades.add(upId);
+      // HP upgrades are baked at spawn — refresh the standing army so it benefits.
+      if (UPGRADES[upId]?.kind === "hp") this.refreshTeamUnits(b.team);
       this.emit("complete", b.x, b.y, b.team, item);
     } else if (item === "a:age") {
       p.age = Math.min(MAX_AGE, p.age + 1);
@@ -1816,6 +1838,13 @@ export class World {
   /** Movement speed including ability buffs (Charge / Brace) and Caltrops slow. */
   private effectiveSpeed(e: Entity): number {
     let s = e.speed;
+    const p = this.players[e.team];
+    if (p) {
+      for (const upId of p.upgrades) {
+        const up = UPGRADES[upId];
+        if (up?.kind === "speed" && (up.appliesTo.includes(e.armorClass) || (up.appliesToUnits?.includes(e.type) ?? false))) s += up.amount;
+      }
+    }
     if (e.abilityActive > 0) {
       const ab = ABILITIES[e.type];
       if (ab?.speedMult) s *= ab.speedMult;
@@ -1836,14 +1865,18 @@ export class World {
   private effectiveAttack(e: Entity, def: UnitDef, target: Entity): number {
     const p = this.players[e.team];
     let atk = e.attack;
+    let bonus = def.bonus[target.armorClass] ?? 0;
     if (p) {
       atk += AGE_ATTACK_BONUS[p.age] ?? 0;
       for (const upId of p.upgrades) {
         const up = UPGRADES[upId];
-        if (up && up.kind === "attack" && up.appliesTo.includes(def.armorClass)) atk += up.amount;
+        if (!up) continue;
+        const hits = up.appliesTo.includes(def.armorClass) || (up.appliesToUnits?.includes(def.id) ?? false);
+        if (!hits) continue;
+        if (up.kind === "attack") atk += up.amount;
+        else if (up.kind === "bonus" && up.bonusVs === target.armorClass) bonus += up.amount;
       }
     }
-    let bonus = def.bonus[target.armorClass] ?? 0;
     // Active ability buffs (Charge damage, Brace's anti-cavalry bite, …).
     const ab = e.abilityActive > 0 ? ABILITIES[e.type] : undefined;
     if (ab) {
@@ -1864,7 +1897,7 @@ export class World {
       const def = UNITS[target.type];
       for (const upId of p.upgrades) {
         const up = UPGRADES[upId];
-        if (up && up.kind === "armor" && def && up.appliesTo.includes(def.armorClass)) armor += up.amount;
+        if (up && up.kind === "armor" && def && (up.appliesTo.includes(def.armorClass) || (up.appliesToUnits?.includes(target.type) ?? false))) armor += up.amount;
       }
     }
     // Shield Wall / Brace add armour while active.
