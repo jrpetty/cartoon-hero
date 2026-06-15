@@ -841,6 +841,9 @@ export function drawUnit(ctx: Ctx, e: Entity, time: number) {
     case "crossbow": drawCrossbow(ctx, e, tc, atkFrac); break;
     case "knight": drawKnight(ctx, e, tc, moving, time, lunge); break;
     case "horseman": drawHorseman(ctx, e, tc, moving); break;
+    case "raider": drawRaider(ctx, e, tc, moving, lunge); break;
+    case "javelin": drawSkirmisher(ctx, e, tc, atkFrac); break;
+    case "handcannon": drawCrossbow(ctx, e, tc, atkFrac); break;
     case "catapult": drawCatapult(ctx, e, tc, atkFrac); break;
     case "trebuchet": drawTrebuchet(ctx, e, tc, atkFrac); break;
     case "ram": drawRam(ctx, e, tc, atkFrac); break;
@@ -1143,6 +1146,48 @@ function drawHorseman(ctx: Ctx, e: Entity, tc: any, moving: boolean) {
   ctx.lineWidth = 2;
   ctx.beginPath();
   ctx.arc(-r * 0.1 + fx * r * 0.55, -r * 0.42 + fy * r * 0.55, r * 0.55, e.facing - 1.1, e.facing + 1.1);
+  ctx.stroke();
+}
+
+function drawRaider(ctx: Ctx, e: Entity, tc: any, moving: boolean, lunge: number) {
+  const r = e.radius;
+  const [fx, fy] = weaponAngleParts(e.facing);
+  // Lean, fast horse.
+  ctx.save();
+  ctx.rotate(e.facing);
+  const gallop = moving ? Math.sin(e.animPhase * 13) * 1.4 : 0;
+  ctx.fillStyle = "#574033";
+  ctx.beginPath();
+  ctx.ellipse(0, 0, r * 1.2, r * 0.5, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.ellipse(r * 1.05, -r * 0.12, r * 0.36, r * 0.2, -0.4, 0, Math.PI * 2);
+  ctx.fill();
+  if (moving) {
+    ctx.strokeStyle = "#3c2c20";
+    ctx.lineWidth = 2;
+    for (const lx of [-r * 0.6, r * 0.55]) {
+      ctx.beginPath();
+      ctx.moveTo(lx, r * 0.32);
+      ctx.lineTo(lx + gallop * 2, r * 0.78);
+      ctx.stroke();
+    }
+  }
+  ctx.restore();
+  // Rider — light, no heavy barding.
+  ctx.fillStyle = tc.main;
+  ctx.beginPath();
+  ctx.arc(-r * 0.05, -r * 0.4, r * 0.38, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = PAL.skin;
+  ctx.beginPath();
+  ctx.arc(-r * 0.05, -r * 0.62, r * 0.24, 0, Math.PI * 2);
+  ctx.fill();
+  // Curved sabre, swung forward on the attack.
+  ctx.strokeStyle = PAL.steel;
+  ctx.lineWidth = 2.2;
+  ctx.beginPath();
+  ctx.arc(fx * r * (0.8 + lunge) , -r * 0.4 + fy * r * (0.8 + lunge), r * 0.6, e.facing - 0.6, e.facing + 0.8);
   ctx.stroke();
 }
 
