@@ -835,7 +835,10 @@ export function drawUnit(ctx: Ctx, e: Entity, time: number) {
   switch (e.type) {
     case "villager": drawVillager(ctx, e, tc, moving); break;
     case "militia": drawMilitia(ctx, e, tc, lunge); break;
+    case "twohand": drawMilitia(ctx, e, tc, lunge); break;
     case "spearman": drawSpearman(ctx, e, tc, lunge); break;
+    case "pikeman": drawSpearman(ctx, e, tc, lunge); break;
+    case "scout": drawRaider(ctx, e, tc, moving, lunge); break;
     case "archer": drawArcher(ctx, e, tc, atkFrac); break;
     case "skirmisher": drawSkirmisher(ctx, e, tc, atkFrac); break;
     case "crossbow": drawCrossbow(ctx, e, tc, atkFrac); break;

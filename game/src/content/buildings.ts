@@ -58,7 +58,7 @@ export const BUILDINGS: Record<string, BuildingDef> = {
     tiles: 3,
     sight: 260,
     popProvided: 10,
-    trains: ["villager", "hero"],
+    trains: ["villager", "scout", "hero"],
     isDropoff: true,
     dropoffKinds: ["food", "wood", "gold"],
     attack: 8,
@@ -126,7 +126,7 @@ export const BUILDINGS: Record<string, BuildingDef> = {
     cost: { food: 0, wood: 160, gold: 0 },
     buildTime: 35,
     tiles: 3,
-    trains: ["militia", "spearman"],
+    trains: ["militia", "spearman", "twohand", "pikeman"],
   }),
   archery_range: B({
     id: "archery_range",

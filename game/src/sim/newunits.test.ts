@@ -33,4 +33,30 @@ describe("New units", () => {
     expect(r.hp).toBeLessThan(UNITS.knight.hp); // low-ish health
     expect(r.bonus[ArmorClass.Villager]).toBeGreaterThanOrEqual(10); // eco raider
   });
+
+  it("Scout: cheap Dark-age outrider with big vision from the Town Center", () => {
+    const s = UNITS.scout;
+    expect(s.age).toBe(0);
+    expect(s.trainedAt).toBe("town_center");
+    expect(BUILDINGS.town_center.trains).toContain("scout");
+    expect(s.visionRange).toBeGreaterThan(UNITS.knight.visionRange);
+    expect(s.attack).toBeLessThan(UNITS.militia.attack); // not a real soldier
+  });
+
+  it("Two-Handed Swordsman: Castle heavy infantry above the Man-at-Arms", () => {
+    const t = UNITS.twohand;
+    expect(t.age).toBe(2);
+    expect(t.trainedAt).toBe("barracks");
+    expect(BUILDINGS.barracks.trains).toContain("twohand");
+    expect(t.attack).toBeGreaterThan(UNITS.militia.attack);
+    expect(t.hp).toBeGreaterThan(UNITS.militia.hp);
+  });
+
+  it("Pikeman: Castle anti-cavalry stronger than the Spearman", () => {
+    const p = UNITS.pikeman;
+    expect(p.age).toBe(2);
+    expect(p.trainedAt).toBe("barracks");
+    expect(BUILDINGS.barracks.trains).toContain("pikeman");
+    expect(p.bonus[ArmorClass.Cavalry]).toBeGreaterThan(UNITS.spearman.bonus[ArmorClass.Cavalry] ?? 0);
+  });
 });
