@@ -854,6 +854,20 @@ export class World {
     return this.grid.footprintClear(sx, sy, tiles);
   }
 
+  /** How many distinct qualifying building types `team` has, vs how many an age needs. */
+  ageRequirementProgress(team: Team, ageIndex: number): { have: number; need: number } {
+    const age = AGES[ageIndex];
+    if (!age) return { have: 0, need: 0 };
+    let have = 0;
+    for (const id of age.requiresAny) if (this.hasBuilding(team, id)) have++;
+    return { have: Math.min(have, age.requiresCount), need: age.requiresCount };
+  }
+
+  ageRequirementMet(team: Team, ageIndex: number): boolean {
+    const { have, need } = this.ageRequirementProgress(team, ageIndex);
+    return have >= need;
+  }
+
   hasBuilding(team: Team, type: string): boolean {
     for (const e of this.entities) {
       if (e.alive && e.team === team && e.kind === Kind.Building && e.type === type && e.buildState === BuildState.Done) {
@@ -901,7 +915,7 @@ export class World {
       const next = p.age + 1;
       if (next > MAX_AGE || b.type !== "town_center") return false;
       const age = AGES[next];
-      if (age.requires && !this.hasBuilding(team, age.requires)) return false;
+      if (!this.ageRequirementMet(team, next)) return false;
       if (!this.canAfford(p.resources, age.cost)) return false;
       if (b.productionQueue.some((q) => q === "a:age")) return false;
       this.pay(p.resources, age.cost);

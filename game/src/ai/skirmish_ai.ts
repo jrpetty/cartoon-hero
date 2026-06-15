@@ -283,11 +283,11 @@ export class SkirmishAI {
   /** Cost of the next age the AI is ready to research, or null if not ready. */
   private ageUpCost(p: ReturnType<World["player"]>): { food: number; wood: number; gold: number } | null {
     const vills = this.myUnits("villager").length;
-    if (p.age === 0 && this.diff.maxAge >= 1 && this.myBuildings("barracks").length > 0 &&
+    if (p.age === 0 && this.diff.maxAge >= 1 && this.world.ageRequirementMet(this.team, 1) &&
         vills >= Math.floor(this.villagerGoal * 0.55)) {
       return AGES[1].cost;
     }
-    if (p.age === 1 && this.diff.maxAge >= 2 && this.myBuildings("blacksmith").length > 0 &&
+    if (p.age === 1 && this.diff.maxAge >= 2 && this.world.ageRequirementMet(this.team, 2) &&
         vills >= Math.floor(this.villagerGoal * 0.8)) {
       return AGES[2].cost;
     }
@@ -669,16 +669,22 @@ export class SkirmishAI {
 
   private buildOrder(p: ReturnType<World["player"]>, base: Entity, villagerCount: number) {
     const have = (t: string) => this.myBuildings(t, false).length > 0;
-    const haveDone = (t: string) => this.myBuildings(t).length > 0;
 
     // Dark Age: barracks once the eco can carry it.
     if (!have("barracks") && villagerCount >= 6 && p.resources.wood >= 170) {
       const b = this.placeNear("barracks", base.x, base.y, 4, 9);
       if (b) this.assignBuilder(b);
     }
+    // Second Feudal qualifier (advancing now needs any 2 of a set) — a Mill is a
+    // cheap, always-useful drop-off that satisfies it.
+    if (p.age === 0 && have("barracks") && !have("mill") &&
+        !this.world.ageRequirementMet(this.team, 1) && p.resources.wood >= 110) {
+      const b = this.placeNear("mill", base.x, base.y, 3, 7);
+      if (b) this.assignBuilder(b);
+    }
 
     // Advance to Feudal.
-    if (p.age === 0 && this.diff.maxAge >= 1 && haveDone("barracks") &&
+    if (p.age === 0 && this.diff.maxAge >= 1 && this.world.ageRequirementMet(this.team, 1) &&
         villagerCount >= Math.floor(this.villagerGoal * 0.55)) {
       const tc = this.myBuildings("town_center")[0];
       if (tc) this.world.research(this.team, tc.id, "age");
@@ -704,8 +710,8 @@ export class SkirmishAI {
       }
     }
 
-    // Advance to Castle.
-    if (p.age === 1 && this.diff.maxAge >= 2 && haveDone("blacksmith") &&
+    // Advance to Castle (needs any 2 Feudal buildings — we build several).
+    if (p.age === 1 && this.diff.maxAge >= 2 && this.world.ageRequirementMet(this.team, 2) &&
         villagerCount >= Math.floor(this.villagerGoal * 0.8)) {
       const tc = this.myBuildings("town_center")[0];
       if (tc) this.world.research(this.team, tc.id, "age");

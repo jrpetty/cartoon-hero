@@ -340,8 +340,9 @@ export class CodexScreen {
         i === 0 ? "Where every realm begins." : `${fmtCost(age.cost)} · ${age.advanceTime}s at the Town Center`,
         ax + 16, top + 48, { size: 12, color: "#bdb49a" },
       );
-      if (age.requires) {
-        ui.text(`Requires: ${BUILDINGS[age.requires].name}`, ax + 16, top + 66, { size: 12, color: "#d8cdb4" });
+      if (age.requiresCount > 0) {
+        const names = age.requiresAny.map((id) => BUILDINGS[id]?.name ?? id).join(", ");
+        ui.text(`Requires: any ${age.requiresCount} of — ${names}`, ax + 16, top + 66, { size: 12, color: "#d8cdb4" });
       }
       const unlockU = Object.values(UNITS).filter((u) => u.age === i).map((u) => u.name);
       const unlockB = Object.values(BUILDINGS).filter((b) => b.age === i).map((b) => b.name);

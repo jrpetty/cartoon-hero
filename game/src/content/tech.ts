@@ -5,25 +5,30 @@ export interface AgeDef {
   index: number;
   name: string;
   cost: { food: number; wood: number; gold: number };
-  /** Building that must exist before you can advance to this age. */
-  requires: string | null;
+  /** Advance once you've built at least `requiresCount` distinct types from
+   *  this set — so openings diverge (military, boom, or defensive paths all
+   *  reach the next age). Empty/0 for the Dark Age. */
+  requiresAny: string[];
+  requiresCount: number;
   advanceTime: number; // seconds to research at the Town Center
 }
 
 export const AGES: AgeDef[] = [
-  { index: 0, name: "Dark Age", cost: { food: 0, wood: 0, gold: 0 }, requires: null, advanceTime: 0 },
+  { index: 0, name: "Dark Age", cost: { food: 0, wood: 0, gold: 0 }, requiresAny: [], requiresCount: 0, advanceTime: 0 },
   {
     index: 1,
     name: "Feudal Age",
     cost: { food: 300, wood: 0, gold: 0 },
-    requires: "barracks",
+    requiresAny: ["barracks", "mill", "lumber_camp", "mining_camp"],
+    requiresCount: 2,
     advanceTime: 30,
   },
   {
     index: 2,
     name: "Castle Age",
     cost: { food: 500, wood: 0, gold: 200 },
-    requires: "blacksmith",
+    requiresAny: ["barracks", "archery_range", "stable", "blacksmith", "market", "watch_tower"],
+    requiresCount: 2,
     advanceTime: 40,
   },
 ];

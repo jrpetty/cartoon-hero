@@ -490,7 +490,9 @@ export class HUD {
       }
       if (building.type === "town_center" && p.age < MAX_AGE) {
         const next = AGES[p.age + 1];
-        const reqOk = !next.requires || world.hasBuilding(team, next.requires);
+        const prog = world.ageRequirementProgress(team, p.age + 1);
+        const reqOk = prog.have >= prog.need;
+        const reqNames = next.requiresAny.map((id) => BUILDINGS[id]?.name ?? id).join(", ");
         place(
           `${next.name.split(" ")[0]} Age`,
           () => ctrl.research(building, "age"),
@@ -501,7 +503,9 @@ export class HUD {
             tooltip: [
               `Advance to ${next.name}`,
               this.cost(next.cost),
-              ...(next.requires && !reqOk ? [`Requires ${BUILDINGS[next.requires].name}`] : []),
+              ...(next.requiresCount > 0
+                ? [`Build any ${next.requiresCount} (${prog.have}/${prog.need}): ${reqNames}`]
+                : []),
               "Unlocks new units, buildings and +attack/+armor for your army.",
             ],
           },
