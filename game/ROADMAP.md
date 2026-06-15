@@ -41,12 +41,20 @@ at the top of each section.
   Bow Saw (wood), Gold Mining (gold), Caravan (trade), Loom (villager survive),
   Town Watch (vision), Treadmill Crane (build speed).
 
-## Game modes (next big build — order)
-1. **Survival / Horde** — hold out vs escalating AI waves; survive N waves to
-   win. *Decision pending: solo only, or allow AI allies (co-op)?*
-2. **King of the Hill** — hold the central hill for a cumulative timer to win.
-   *Decision pending: hold time (~3 min?).*
-3. **Regicide** — each side has a King; kill the enemy King to win, protect yours.
+## Game modes (NEXT BIG BUILD — decisions locked, build in this order)
+1. **Survival / Horde** — **co-op**: you + 1–3 AI allies vs escalating AI waves
+   that spawn from the map edges. Survive all waves to win; wiped out = lose.
+2. **King of the Hill** — hold the central hill for **5 minutes cumulative,
+   uncontested** control to win. The timer **pauses while an enemy stands on
+   the site** and **resumes when they step off** (progress is kept, not reset).
+3. **Regicide** — each side gets a King; kill the enemy King to win, protect
+   yours (buildings don't decide it).
+
+## Done since last update
+- New units: Scout (Dark/TC), Two-Handed Swordsman (Castle/Barracks), Pikeman
+  (Castle/Barracks). Earlier: Horseman, Javelin, Hand Cannoneer, Raider.
+- Unit-tech upgrades: Husbandry, Bloodlines, Long Swords, Pikes (Blacksmith);
+  Horse Collar / Bow Saw / Gold Mining (Mill / Lumber Camp / Mining Camp).
 
 ## Bigger / later
 - **Multiplayer (PvP)** — the real replayability unlock. Deterministic sim
