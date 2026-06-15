@@ -346,10 +346,15 @@ class App {
   startSpectate(config: SkirmishConfig) {
     this.config = config;
     const diff = DIFFICULTIES[config.difficulty];
-    const numPlayers = Math.max(2, Math.min(MAX_TEAMS, config.players ?? 2));
-    const alliances = config.allied
-      ? Array.from({ length: numPlayers }, (_, t) => t % 2)
-      : undefined;
+    const mode = config.mode ?? "conquest";
+    // Mirror startMatch's mode setup so Watch mode honours KotH / Regicide /
+    // Survival (previously spectate always fell back to Conquest).
+    const side = Math.max(2, Math.min(mode === "survival" ? MAX_TEAMS - 1 : MAX_TEAMS, config.players ?? 2));
+    const numPlayers = mode === "survival" ? side + 1 : side;
+    const hordeTeam = mode === "survival" ? side : -1;
+    let alliances: number[] | undefined;
+    if (mode === "survival") alliances = Array.from({ length: numPlayers }, (_, t) => (t === hordeTeam ? 1 : 0));
+    else if (config.allied) alliances = Array.from({ length: numPlayers }, (_, t) => t % 2);
     const map = generateMap(config.presetId, config.seed, numPlayers, config.nomad, alliances);
     const world = new World(config.seed);
     const loadouts: Record<string, number>[] = [];
@@ -360,11 +365,12 @@ class App {
       econMults.push(diff.econMult);
       commanders.push(COMMANDER_IDS[Math.floor(Math.random() * COMMANDER_IDS.length)]);
     }
-    world.init(map, loadouts, econMults, alliances, commanders, config.nomad);
+    world.init(map, loadouts, econMults, alliances, commanders, config.nomad, undefined, mode);
     world.revealAll = true; // spectators see the entire battlefield
     this.world = world;
     this.ais = [];
     for (let t = 0; t < numPlayers; t++) {
+      if (t === hordeTeam) continue; // the horde is sim-driven, no brain
       this.ais.push(new SkirmishAI(world, t as Team, diff));
     }
     this.renderer.prepare(map);
