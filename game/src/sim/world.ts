@@ -2118,8 +2118,11 @@ export class World {
     if (wave >= 5) pool.push("knight", "skirmisher");
     if (wave >= 8) pool.push("knight", "ram");
     if (wave >= 10) pool.push("knight", "catapult");
-    // Aim the wave at a random surviving player base.
-    const targets = this.entities.filter((e) => e.alive && e.kind === Kind.Building && e.team !== this.hordeTeam && e.team < this.numTeams);
+    // Aim the wave at a surviving player base — or, if they've not built yet
+    // (nomad start), at their villagers, so the horde always finds them.
+    const isPlayer = (e: Entity) => e.team !== this.hordeTeam && e.team < this.numTeams;
+    let targets = this.entities.filter((e) => e.alive && e.kind === Kind.Building && isPlayer(e));
+    if (targets.length === 0) targets = this.entities.filter((e) => e.alive && e.kind === Kind.Unit && isPlayer(e));
     const aim = targets.length ? targets[this.rng.int(0, targets.length - 1)] : { x: this.worldW / 2, y: this.worldH / 2 };
     // Spawn along a random map edge.
     const edge = this.rng.int(0, 3);
