@@ -216,7 +216,7 @@ export function drawBuilding(ctx: Ctx, e: Entity, time: number, selectedTeamView
     case "barracks": drawBarracks(ctx, e, half, tc); break;
     case "archery_range": drawArcheryRange(ctx, e, half, tc); break;
     case "stable": drawStable(ctx, e, half, tc); break;
-    case "blacksmith": drawBlacksmith(ctx, e, half, time); break;
+    case "blacksmith": drawBlacksmith(ctx, e, half, tc, time); break;
     case "market": drawMarket(ctx, e, half, tc); break;
     case "palisade": drawPalisade(ctx, e, half); break;
     case "stone_wall": drawStoneWall(ctx, e, half); break;
@@ -298,54 +298,163 @@ function banner(ctx: Ctx, x: number, y: number, tc: { main: string; dark: string
   ctx.fill();
 }
 
-function drawTownCenter(ctx: Ctx, e: Entity, half: number, tc: any, time: number) {
-  // stone base
-  ctx.fillStyle = PAL.stone;
-  ctx.fillRect(e.x - half + 3, e.y - half * 0.2, half * 2 - 6, half * 1.1);
-  ctx.fillStyle = PAL.stoneDark;
-  ctx.fillRect(e.x - half + 3, e.y + half * 0.62, half * 2 - 6, half * 0.28);
-  // timber upper
-  ctx.fillStyle = PAL.wood;
-  ctx.fillRect(e.x - half + 8, e.y - half * 0.62, half * 2 - 16, half * 0.5);
-  ctx.strokeStyle = PAL.woodDark;
-  ctx.lineWidth = 2;
-  for (let i = 0; i < 4; i++) {
-    const lx = e.x - half + 10 + ((half * 2 - 20) * i) / 3;
+// ---- shared shaded-building parts (world space) ----------------------------
+// A stone wall block: vertical gradient, mortar courses, soft outline.
+function stoneBlock(ctx: Ctx, x: number, y: number, w: number, h: number, tone = PAL.stone) {
+  ctx.fillStyle = grad(ctx, x, y, x, y + h, shade(tone, 0.18), shade(tone, -0.18));
+  ctx.beginPath();
+  ctx.roundRect(x, y, w, h, 3);
+  ctx.fill();
+  softOutline(ctx, 1.4);
+  ctx.strokeStyle = "rgba(70,64,56,0.32)";
+  ctx.lineWidth = 1;
+  for (let yy = y + h * 0.34; yy < y + h - 1; yy += h * 0.32) {
     ctx.beginPath();
-    ctx.moveTo(lx, e.y - half * 0.62);
-    ctx.lineTo(lx, e.y - half * 0.12);
+    ctx.moveTo(x + 2, yy);
+    ctx.lineTo(x + w - 2, yy);
     ctx.stroke();
   }
-  // grand gabled roof
-  roofGable(ctx, e.x, e.y - half * 0.55, half * 2.04, half * 0.9, tc.dark);
-  roofGable(ctx, e.x, e.y - half * 0.62, half * 1.5, half * 0.62, tc.main);
-  // door
-  ctx.fillStyle = PAL.woodDark;
+}
+
+// A timber-framed plaster wall (warm), with corner posts.
+function woodBlock(ctx: Ctx, x: number, y: number, w: number, h: number) {
+  ctx.fillStyle = grad(ctx, x, y, x, y + h, "#d8c8a8", "#b49a72");
   ctx.beginPath();
-  ctx.arc(e.x, e.y + half * 0.55, half * 0.22, Math.PI, 0);
+  ctx.roundRect(x, y, w, h, 3);
   ctx.fill();
-  ctx.fillRect(e.x - half * 0.22, e.y + half * 0.55, half * 0.44, half * 0.34);
-  banner(ctx, e.x + half * 0.7, e.y - half * 0.55, tc, time, e.id);
+  softOutline(ctx, 1.4);
+  ctx.fillStyle = PAL.woodDark; // corner posts + lintel
+  ctx.fillRect(x, y, 4, h);
+  ctx.fillRect(x + w - 4, y, 4, h);
+  ctx.fillRect(x, y, w, 3.5);
+}
+
+function cornerPosts(ctx: Ctx, x: number, y: number, w: number, h: number) {
+  ctx.fillStyle = PAL.woodDark;
+  ctx.fillRect(x, y, 4, h);
+  ctx.fillRect(x + w - 4, y, 4, h);
+}
+
+// A hipped tiled roof in FULL team colour, shaded with tile rows + ridge.
+function hipRoof(ctx: Ctx, cx: number, eaveY: number, halfW: number, peakY: number, tc: any) {
+  const slate = tc.main;
+  ctx.fillStyle = grad(ctx, cx, peakY, cx, eaveY, shade(slate, 0.24), shade(slate, -0.2));
+  ctx.beginPath();
+  ctx.moveTo(cx - halfW, eaveY);
+  ctx.lineTo(cx - halfW * 0.42, peakY);
+  ctx.lineTo(cx + halfW * 0.42, peakY);
+  ctx.lineTo(cx + halfW, eaveY);
+  ctx.closePath();
+  ctx.fill();
+  softOutline(ctx, 1.6);
+  ctx.strokeStyle = "rgba(255,255,255,0.12)"; // tile courses
+  ctx.lineWidth = 1;
+  for (let r = 0.25; r < 1; r += 0.25) {
+    const y = peakY + (eaveY - peakY) * r;
+    const hw = halfW * 0.42 + (halfW - halfW * 0.42) * r;
+    ctx.beginPath();
+    ctx.moveTo(cx - hw, y);
+    ctx.lineTo(cx + hw, y);
+    ctx.stroke();
+  }
+  ctx.strokeStyle = shade(slate, 0.42); // ridge highlight
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(cx - halfW * 0.42, peakY);
+  ctx.lineTo(cx + halfW * 0.42, peakY);
+  ctx.stroke();
+}
+
+// An arched timber door.
+function archDoor(ctx: Ctx, cx: number, baseY: number, w: number, h: number) {
+  ctx.fillStyle = grad(ctx, cx, baseY - h, cx, baseY, PAL.wood, PAL.woodDark);
+  ctx.beginPath();
+  ctx.moveTo(cx - w / 2, baseY);
+  ctx.lineTo(cx - w / 2, baseY - h * 0.55);
+  ctx.quadraticCurveTo(cx, baseY - h, cx + w / 2, baseY - h * 0.55);
+  ctx.lineTo(cx + w / 2, baseY);
+  ctx.closePath();
+  ctx.fill();
+  softOutline(ctx, 1.2);
+  ctx.strokeStyle = PAL.woodLight;
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(cx, baseY);
+  ctx.lineTo(cx, baseY - h * 0.65);
+  ctx.stroke();
+}
+
+// A small window with a warm-lit pane.
+function litWindow(ctx: Ctx, cx: number, cy: number, s: number) {
+  ctx.fillStyle = "rgba(20,16,10,0.65)";
+  ctx.fillRect(cx - s, cy - s, s * 2, s * 2);
+  ctx.fillStyle = "#ffd98a";
+  ctx.fillRect(cx - s + 1, cy - s + 1, s * 2 - 2, s * 2 - 2);
+  ctx.strokeStyle = "rgba(20,16,10,0.5)";
+  ctx.lineWidth = 0.8;
+  ctx.beginPath();
+  ctx.moveTo(cx, cy - s + 1);
+  ctx.lineTo(cx, cy + s - 1);
+  ctx.stroke();
+}
+
+// A conical team-colour roof for round towers.
+function coneRoof(ctx: Ctx, cx: number, baseY: number, halfW: number, peakY: number, tc: any) {
+  const c = tc.main;
+  ctx.fillStyle = grad(ctx, cx, peakY, cx, baseY, shade(c, 0.24), shade(c, -0.2));
+  ctx.beginPath();
+  ctx.moveTo(cx - halfW, baseY);
+  ctx.lineTo(cx, peakY);
+  ctx.lineTo(cx + halfW, baseY);
+  ctx.closePath();
+  ctx.fill();
+  softOutline(ctx, 1.4);
+  ctx.strokeStyle = shade(c, 0.42);
+  ctx.lineWidth = 1.4;
+  ctx.beginPath();
+  ctx.moveTo(cx, peakY);
+  ctx.lineTo(cx - halfW * 0.45, baseY);
+  ctx.stroke();
+}
+
+function drawTownCenter(ctx: Ctx, e: Entity, half: number, tc: any, time: number) {
+  // two flanking stone towers with team-colour caps
+  for (const sx of [-1, 1]) {
+    const tx = e.x + sx * half * 0.78;
+    stoneBlock(ctx, tx - half * 0.24, e.y - half * 0.3, half * 0.48, half * 1.15);
+    hipRoof(ctx, tx, e.y - half * 0.3, half * 0.36, e.y - half * 0.78, tc);
+  }
+  // main hall
+  stoneBlock(ctx, e.x - half * 0.62, e.y - half * 0.1, half * 1.24, half * 0.95);
+  cornerPosts(ctx, e.x - half * 0.62, e.y - half * 0.1, half * 1.24, half * 0.95);
+  litWindow(ctx, e.x - half * 0.32, e.y + half * 0.28, half * 0.1);
+  litWindow(ctx, e.x + half * 0.32, e.y + half * 0.28, half * 0.1);
+  archDoor(ctx, e.x, e.y + half * 0.85, half * 0.38, half * 0.5);
+  hipRoof(ctx, e.x, e.y - half * 0.1, half * 0.82, e.y - half * 0.78, tc);
+  banner(ctx, e.x + half * 0.7, e.y - half * 0.5, tc, time, e.id);
 }
 
 function drawHouse(ctx: Ctx, e: Entity, half: number, tc: any) {
-  ctx.fillStyle = PAL.wood;
-  ctx.fillRect(e.x - half + 4, e.y - half * 0.25, half * 2 - 8, half * 1.05);
-  roofGable(ctx, e.x, e.y - half * 0.4, half * 1.9, half * 0.85, PAL.thatch);
-  ctx.fillStyle = PAL.thatchDark;
-  ctx.fillRect(e.x - half * 0.95, e.y - half * 0.02, half * 1.9, 3);
-  ctx.fillStyle = PAL.woodDark;
-  ctx.fillRect(e.x - half * 0.16, e.y + half * 0.3, half * 0.32, half * 0.5);
-  // team trim on door frame
-  ctx.fillStyle = tc.main;
-  ctx.fillRect(e.x - half * 0.2, e.y + half * 0.26, half * 0.4, 2.5);
+  woodBlock(ctx, e.x - half * 0.72, e.y - half * 0.1, half * 1.44, half * 0.9);
+  litWindow(ctx, e.x - half * 0.28, e.y + half * 0.28, half * 0.1);
+  archDoor(ctx, e.x + half * 0.28, e.y + half * 0.8, half * 0.3, half * 0.42);
+  hipRoof(ctx, e.x, e.y - half * 0.1, half * 0.78, e.y - half * 0.72, tc);
+  // chimney + curling smoke
+  ctx.fillStyle = PAL.stoneDark;
+  ctx.fillRect(e.x + half * 0.42, e.y - half * 0.7, half * 0.16, half * 0.4);
+  ctx.fillStyle = "rgba(220,220,220,0.45)";
+  for (let i = 0; i < 3; i++) {
+    ctx.beginPath();
+    ctx.arc(e.x + half * 0.5 + i * 2, e.y - half * 0.85 - i * half * 0.22, half * 0.1 + i * 1.5, 0, Math.PI * 2);
+    ctx.fill();
+  }
 }
 
 function drawMill(ctx: Ctx, e: Entity, half: number, tc: any, time: number) {
-  ctx.fillStyle = PAL.stone;
-  ctx.fillRect(e.x - half * 0.6, e.y - half * 0.3, half * 1.2, half * 1.15);
-  roofGable(ctx, e.x, e.y - half * 0.5, half * 1.3, half * 0.7, tc.main);
-  // rotating blades
+  woodBlock(ctx, e.x - half * 0.5, e.y - half * 0.2, half * 1.0, half * 1.0);
+  litWindow(ctx, e.x, e.y + half * 0.35, half * 0.1);
+  hipRoof(ctx, e.x, e.y - half * 0.2, half * 0.66, e.y - half * 0.62, tc);
+  // rotating sail blades
   const a = time * 0.9;
   ctx.strokeStyle = PAL.woodLight;
   ctx.lineWidth = 3;
@@ -363,10 +472,17 @@ function drawMill(ctx: Ctx, e: Entity, half: number, tc: any, time: number) {
 }
 
 function drawLumberCamp(ctx: Ctx, e: Entity, half: number) {
-  // lean-to
-  ctx.fillStyle = PAL.wood;
-  ctx.fillRect(e.x - half + 4, e.y - half * 0.4, half, half * 1.2);
-  roofGable(ctx, e.x - half * 0.5 + 4, e.y - half * 0.5, half * 1.1, half * 0.5, PAL.thatchDark);
+  // timber lean-to (a utility shed — no team roof)
+  woodBlock(ctx, e.x - half * 0.9, e.y - half * 0.25, half * 0.95, half * 1.0);
+  ctx.fillStyle = grad(ctx, e.x, e.y - half * 0.55, e.x, e.y - half * 0.15, shade(PAL.thatch, 0.1), PAL.thatchDark);
+  ctx.beginPath();
+  ctx.moveTo(e.x - half * 0.95, e.y - half * 0.15);
+  ctx.lineTo(e.x - half * 0.6, e.y - half * 0.55);
+  ctx.lineTo(e.x + half * 0.1, e.y - half * 0.55);
+  ctx.lineTo(e.x + half * 0.05, e.y - half * 0.15);
+  ctx.closePath();
+  ctx.fill();
+  softOutline(ctx, 1.4);
   // log pile
   ctx.fillStyle = PAL.trunk;
   for (let i = 0; i < 3; i++) {
@@ -387,8 +503,7 @@ function drawLumberCamp(ctx: Ctx, e: Entity, half: number) {
 }
 
 function drawMiningCamp(ctx: Ctx, e: Entity, half: number) {
-  ctx.fillStyle = PAL.stoneDark;
-  ctx.fillRect(e.x - half + 4, e.y - half * 0.3, half * 2 - 8, half * 1.05);
+  stoneBlock(ctx, e.x - half * 0.9, e.y - half * 0.2, half * 1.8, half * 1.0, PAL.stoneDark);
   // mine entrance arch
   ctx.fillStyle = "#241c12";
   ctx.beginPath();
@@ -428,37 +543,37 @@ function drawFarm(ctx: Ctx, e: Entity, half: number) {
 }
 
 function drawBarracks(ctx: Ctx, e: Entity, half: number, tc: any) {
-  ctx.fillStyle = PAL.stone;
-  ctx.fillRect(e.x - half + 3, e.y - half * 0.35, half * 2 - 6, half * 1.2);
-  roofGable(ctx, e.x, e.y - half * 0.52, half * 2, half * 0.78, PAL.roofSlate);
-  // crossed-sword shield emblem
-  ctx.fillStyle = tc.main;
+  stoneBlock(ctx, e.x - half * 0.78, e.y - half * 0.15, half * 1.56, half * 1.0);
+  cornerPosts(ctx, e.x - half * 0.78, e.y - half * 0.15, half * 1.56, half * 1.0);
+  hipRoof(ctx, e.x, e.y - half * 0.15, half * 0.95, e.y - half * 0.82, tc);
+  // crossed-sword shield emblem on the wall
+  ctx.fillStyle = shade(tc.main, -0.1);
   ctx.beginPath();
-  ctx.moveTo(e.x, e.y - half * 0.05);
-  ctx.lineTo(e.x + half * 0.22, e.y + half * 0.12);
-  ctx.lineTo(e.x + half * 0.16, e.y + half * 0.42);
-  ctx.lineTo(e.x, e.y + half * 0.55);
-  ctx.lineTo(e.x - half * 0.16, e.y + half * 0.42);
-  ctx.lineTo(e.x - half * 0.22, e.y + half * 0.12);
+  ctx.moveTo(e.x, e.y - half * 0.02);
+  ctx.lineTo(e.x + half * 0.2, e.y + half * 0.14);
+  ctx.lineTo(e.x + half * 0.15, e.y + half * 0.42);
+  ctx.lineTo(e.x, e.y + half * 0.54);
+  ctx.lineTo(e.x - half * 0.15, e.y + half * 0.42);
+  ctx.lineTo(e.x - half * 0.2, e.y + half * 0.14);
   ctx.closePath();
   ctx.fill();
+  softOutline(ctx, 1.2);
   ctx.strokeStyle = PAL.steel;
   ctx.lineWidth = 2;
   ctx.beginPath();
-  ctx.moveTo(e.x - half * 0.12, e.y + half * 0.1);
-  ctx.lineTo(e.x + half * 0.12, e.y + half * 0.42);
-  ctx.moveTo(e.x + half * 0.12, e.y + half * 0.1);
-  ctx.lineTo(e.x - half * 0.12, e.y + half * 0.42);
+  ctx.moveTo(e.x - half * 0.11, e.y + half * 0.12);
+  ctx.lineTo(e.x + half * 0.11, e.y + half * 0.42);
+  ctx.moveTo(e.x + half * 0.11, e.y + half * 0.12);
+  ctx.lineTo(e.x - half * 0.11, e.y + half * 0.42);
   ctx.stroke();
 }
 
 function drawArcheryRange(ctx: Ctx, e: Entity, half: number, tc: any) {
-  ctx.fillStyle = PAL.wood;
-  ctx.fillRect(e.x - half + 3, e.y - half * 0.3, half * 1.1, half * 1.1);
-  roofGable(ctx, e.x - half * 0.45 + 3, e.y - half * 0.45, half * 1.2, half * 0.6, tc.main);
+  woodBlock(ctx, e.x - half * 0.9, e.y - half * 0.15, half * 1.1, half * 0.95);
+  hipRoof(ctx, e.x - half * 0.35, e.y - half * 0.15, half * 0.66, e.y - half * 0.68, tc);
   // target butt
   const tx = e.x + half * 0.55;
-  const ty = e.y + half * 0.25;
+  const ty = e.y + half * 0.3;
   for (const [r, col] of [[half * 0.34, "#e6ddc4"], [half * 0.24, "#cc4444"], [half * 0.13, "#e6ddc4"], [half * 0.05, "#cc4444"]] as [number, string][]) {
     ctx.fillStyle = col;
     ctx.beginPath();
@@ -475,48 +590,45 @@ function drawArcheryRange(ctx: Ctx, e: Entity, half: number, tc: any) {
 }
 
 function drawStable(ctx: Ctx, e: Entity, half: number, tc: any) {
-  ctx.fillStyle = PAL.wood;
-  ctx.fillRect(e.x - half + 3, e.y - half * 0.3, half * 2 - 6, half * 1.1);
-  roofGable(ctx, e.x, e.y - half * 0.5, half * 2, half * 0.7, PAL.thatch);
+  woodBlock(ctx, e.x - half * 0.85, e.y - half * 0.1, half * 1.7, half * 0.95);
+  hipRoof(ctx, e.x, e.y - half * 0.1, half * 1.0, e.y - half * 0.7, tc);
   // stall openings
   ctx.fillStyle = PAL.woodDark;
   for (let i = -1; i <= 1; i++) {
     ctx.beginPath();
-    ctx.arc(e.x + i * half * 0.55, e.y + half * 0.45, half * 0.2, Math.PI, 0);
+    ctx.arc(e.x + i * half * 0.5, e.y + half * 0.5, half * 0.18, Math.PI, 0);
     ctx.fill();
-    ctx.fillRect(e.x + i * half * 0.55 - half * 0.2, e.y + half * 0.45, half * 0.4, half * 0.3);
+    ctx.fillRect(e.x + i * half * 0.5 - half * 0.18, e.y + half * 0.5, half * 0.36, half * 0.28);
   }
   // horseshoe emblem
   ctx.strokeStyle = tc.light;
   ctx.lineWidth = 2.5;
   ctx.beginPath();
-  ctx.arc(e.x, e.y - half * 0.05, half * 0.16, Math.PI * 0.15, Math.PI * 0.85, true);
+  ctx.arc(e.x, e.y + half * 0.12, half * 0.15, Math.PI * 0.15, Math.PI * 0.85, true);
   ctx.stroke();
 }
 
-function drawBlacksmith(ctx: Ctx, e: Entity, half: number, time: number) {
-  ctx.fillStyle = PAL.stoneDark;
-  ctx.fillRect(e.x - half + 3, e.y - half * 0.3, half * 2 - 6, half * 1.1);
-  roofGable(ctx, e.x, e.y - half * 0.48, half * 2, half * 0.66, PAL.roofSlate);
+function drawBlacksmith(ctx: Ctx, e: Entity, half: number, tc: any, time: number) {
+  stoneBlock(ctx, e.x - half * 0.78, e.y - half * 0.1, half * 1.56, half * 0.95, PAL.stoneDark);
+  hipRoof(ctx, e.x, e.y - half * 0.1, half * 0.95, e.y - half * 0.72, tc);
   // glowing forge window
   const glow = 0.6 + Math.sin(time * 5 + e.id) * 0.25;
   ctx.fillStyle = withAlpha(PAL.fire, glow);
-  ctx.fillRect(e.x - half * 0.25, e.y + half * 0.1, half * 0.5, half * 0.4);
+  ctx.fillRect(e.x - half * 0.22, e.y + half * 0.16, half * 0.44, half * 0.34);
   ctx.fillStyle = withAlpha(PAL.fireBright, glow * 0.7);
-  ctx.fillRect(e.x - half * 0.15, e.y + half * 0.18, half * 0.3, half * 0.24);
+  ctx.fillRect(e.x - half * 0.13, e.y + half * 0.22, half * 0.26, half * 0.2);
   // chimney
-  ctx.fillStyle = PAL.stone;
-  ctx.fillRect(e.x + half * 0.45, e.y - half * 0.85, half * 0.22, half * 0.45);
+  ctx.fillStyle = PAL.stoneDark;
+  ctx.fillRect(e.x + half * 0.5, e.y - half * 0.6, half * 0.2, half * 0.5);
   // anvil silhouette
   ctx.fillStyle = "#3c4148";
-  ctx.fillRect(e.x - half * 0.7, e.y + half * 0.35, half * 0.32, half * 0.12);
-  ctx.fillRect(e.x - half * 0.62, e.y + half * 0.24, half * 0.16, half * 0.12);
+  ctx.fillRect(e.x - half * 0.66, e.y + half * 0.42, half * 0.3, half * 0.12);
+  ctx.fillRect(e.x - half * 0.58, e.y + half * 0.32, half * 0.15, half * 0.12);
 }
 
 function drawMarket(ctx: Ctx, e: Entity, half: number, tc: any) {
-  ctx.fillStyle = PAL.wood;
-  ctx.fillRect(e.x - half + 4, e.y - half * 0.15, half * 2 - 8, half * 0.95);
-  // striped awning
+  woodBlock(ctx, e.x - half * 0.9, e.y - half * 0.05, half * 1.8, half * 0.85);
+  // striped awning (team colour)
   const stripes = 6;
   for (let i = 0; i < stripes; i++) {
     ctx.fillStyle = i % 2 === 0 ? tc.main : PAL.uiParchment;
@@ -668,49 +780,62 @@ function drawWatchfire(ctx: Ctx, e: Entity, half: number, time: number) {
 }
 
 function drawTower(ctx: Ctx, e: Entity, half: number, tc: any) {
-  // tall cylinder reads via vertical gradient
+  // tall cylinder reads via horizontal gradient (rounded shading)
   const g = ctx.createLinearGradient(e.x - half, e.y, e.x + half, e.y);
   g.addColorStop(0, PAL.stoneLight);
   g.addColorStop(0.5, PAL.stone);
   g.addColorStop(1, PAL.stoneDark);
   ctx.fillStyle = g;
-  ctx.fillRect(e.x - half * 0.75, e.y - half * 1.3, half * 1.5, half * 2.1);
-  // crenellations
-  ctx.fillStyle = PAL.stoneDark;
-  for (let i = 0; i < 4; i++) {
-    ctx.fillRect(e.x - half * 0.75 + i * half * 0.42, e.y - half * 1.5, half * 0.26, half * 0.24);
+  ctx.beginPath();
+  ctx.roundRect(e.x - half * 0.75, e.y - half * 1.05, half * 1.5, half * 1.85, 4);
+  ctx.fill();
+  softOutline(ctx, 1.4);
+  // mortar courses
+  ctx.strokeStyle = "rgba(70,64,56,0.3)";
+  ctx.lineWidth = 1;
+  for (let yy = e.y - half * 0.7; yy < e.y + half * 0.7; yy += half * 0.4) {
+    ctx.beginPath();
+    ctx.moveTo(e.x - half * 0.72, yy);
+    ctx.lineTo(e.x + half * 0.72, yy);
+    ctx.stroke();
   }
   // arrow slit
   ctx.fillStyle = "#241c12";
-  ctx.fillRect(e.x - 1.5, e.y - half * 0.6, 3, half * 0.5);
-  ctx.fillStyle = tc.main;
-  ctx.fillRect(e.x - half * 0.75, e.y - half * 1.26, half * 1.5, 3);
+  ctx.fillRect(e.x - 1.5, e.y - half * 0.4, 3, half * 0.5);
+  // pointed team-colour roof + finial flag
+  coneRoof(ctx, e.x, e.y - half * 1.0, half * 0.92, e.y - half * 1.8, tc);
+  ctx.strokeStyle = PAL.woodDark;
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.moveTo(e.x, e.y - half * 1.8);
+  ctx.lineTo(e.x, e.y - half * 2.05);
+  ctx.stroke();
+  ctx.fillStyle = tc.light;
+  ctx.beginPath();
+  ctx.moveTo(e.x, e.y - half * 2.05);
+  ctx.lineTo(e.x + half * 0.4, e.y - half * 1.98);
+  ctx.lineTo(e.x, e.y - half * 1.9);
+  ctx.fill();
 }
 
 function drawCastle(ctx: Ctx, e: Entity, half: number, tc: any, time: number) {
-  // corner towers
+  // four corner towers, each capped with a team-colour cone
   for (const [px, py] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) {
     const cx = e.x + px * half * 0.72;
     const cy = e.y + py * half * 0.72;
-    ctx.fillStyle = PAL.stoneDark;
+    ctx.fillStyle = grad(ctx, cx - half * 0.32, cy, cx + half * 0.32, cy, PAL.stoneLight, PAL.stoneDark);
     ctx.beginPath();
     ctx.arc(cx, cy, half * 0.32, 0, Math.PI * 2);
     ctx.fill();
-    ctx.fillStyle = PAL.stone;
-    ctx.beginPath();
-    ctx.arc(cx - 1.5, cy - 1.5, half * 0.26, 0, Math.PI * 2);
-    ctx.fill();
+    softOutline(ctx, 1.2);
+    coneRoof(ctx, cx, cy - half * 0.22, half * 0.36, cy - half * 0.78, tc);
   }
   // keep
-  const g = ctx.createLinearGradient(e.x, e.y - half, e.x, e.y + half);
-  g.addColorStop(0, PAL.stoneLight);
-  g.addColorStop(1, PAL.stoneDark);
-  ctx.fillStyle = g;
-  ctx.fillRect(e.x - half * 0.62, e.y - half * 0.62, half * 1.24, half * 1.24);
+  stoneBlock(ctx, e.x - half * 0.62, e.y - half * 0.55, half * 1.24, half * 1.1);
   // crenellated top edge
   ctx.fillStyle = PAL.stoneDark;
   for (let i = 0; i < 5; i++) {
-    ctx.fillRect(e.x - half * 0.62 + i * half * 0.28, e.y - half * 0.72, half * 0.16, half * 0.16);
+    ctx.fillRect(e.x - half * 0.62 + i * half * 0.28, e.y - half * 0.66, half * 0.16, half * 0.16);
   }
   // gate
   ctx.fillStyle = "#241c12";
