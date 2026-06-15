@@ -699,6 +699,11 @@ export class SkirmishAI {
         const b = this.placeNear("blacksmith", base.x, base.y, 3, 8);
         if (b) this.assignBuilder(b);
       }
+      // Stable is a Feudal building now — gets cavalry (Horsemen/Raiders) going.
+      if (!have("stable") && p.resources.wood >= 185) {
+        const b = this.placeNear("stable", base.x, base.y, 4, 9);
+        if (b) this.assignBuilder(b);
+      }
       // A defensive tower at the front.
       if (this.myBuildings("watch_tower", false).length < (this.diff.id === "squire" ? 0 : 2) &&
           p.resources.wood > 220) {
@@ -718,10 +723,6 @@ export class SkirmishAI {
     }
 
     if (p.age >= 2) {
-      if (!have("stable") && p.resources.wood >= 185) {
-        const b = this.placeNear("stable", base.x, base.y, 4, 9);
-        if (b) this.assignBuilder(b);
-      }
       if (!have("siege_workshop") && p.resources.wood >= 210) {
         const b = this.placeNear("siege_workshop", base.x, base.y, 4, 9);
         if (b) this.assignBuilder(b);
@@ -732,10 +733,34 @@ export class SkirmishAI {
   // ------------------------------------------------------------ military --
 
   private armyUnits(): Entity[] {
-    return this.myUnits().filter((e) => e.type !== "villager" && e.type !== "monk");
+    // Scouts are utility (kept out of battle lines); villagers/monks aren't army.
+    return this.myUnits().filter((e) => e.type !== "villager" && e.type !== "monk" && e.type !== "scout");
+  }
+
+  /** A harassing AI keeps a couple of Raiders for eco raids (they're a Feudal
+   *  unit it would otherwise rush past). */
+  private ensureRaiders() {
+    if ((!this.diff.harasses && this.style !== "rush") || this.savingForAge) return;
+    const p = this.world.player(this.team);
+    if (p.age < 1 || this.world.countOf(this.team, "raider") >= 2) return;
+    if (p.popUsed >= p.popCap || !this.world.canAfford(p.resources, UNITS.raider.cost)) return;
+    const stable = this.myBuildings("stable").find((b) => b.productionQueue.length < 2);
+    if (stable) this.world.trainUnit(this.team, stable.id, "raider");
+  }
+
+  /** Keep one cheap Scout around for early map vision. */
+  private trainScout() {
+    if (!this.diff.scouts || this.gameTime > 360) return;
+    if (this.world.countOf(this.team, "scout") > 0) return;
+    const p = this.world.player(this.team);
+    if (p.popUsed >= p.popCap) return;
+    const tc = this.myBuildings("town_center")[0];
+    if (tc && tc.productionQueue.length < 2) this.world.trainUnit(this.team, tc.id, "scout");
   }
 
   private military() {
+    this.trainScout();
+    this.ensureRaiders();
     this.trainArmy();
     this.heroStep();
     this.scoutStep();
@@ -793,19 +818,23 @@ export class SkirmishAI {
       base.militia = 0.7;
       base.spearman = 0.3;
     } else if (p.age === 1) {
-      base.militia = 0.4;
-      base.archer = 0.35;
-      base.spearman = 0.15;
-      base.skirmisher = 0.1;
+      base.militia = 0.32;
+      base.archer = 0.26;
+      base.spearman = 0.12;
+      base.skirmisher = 0.08;
+      base.horseman = 0.1; // ranged cavalry harasser
+      base.javelin = 0.07; // anti-cavalry ranged
+      base.raider = 0.1; // eco harass
     } else {
-      base.knight = 0.3;
-      base.crossbow = 0.26;
-      base.archer = 0.04;
-      base.militia = 0.18;
+      base.knight = 0.26;
+      base.crossbow = 0.18;
+      base.handcannon = 0.08; // gunpowder line
+      base.twohand = 0.12; // heavy infantry top end
+      base.pikeman = 0.08; // anti-cavalry
       base.catapult = 0.08;
       base.ram = 0.05;
-      base.spearman = 0.06;
       base.trebuchet = 0.03;
+      base.horseman = 0.05; // anti-siege ranged cav
       // The enemy is walling up — bring the wall-breakers.
       if (this.seenWalls >= 4 && this.myBuildings("siege_workshop").length > 0) {
         base.ram += 0.14;
@@ -829,11 +858,15 @@ export class SkirmishAI {
     // Blend the base comp with counters to the observed army.
     const counter: Record<string, number> = {};
     const add = (k: string, v: number) => (counter[k] = (counter[k] ?? 0) + v);
-    add("archer", (s.infantry / total) * 0.8);
-    add("skirmisher", (s.archer / total) * 0.6);
-    add("knight", (s.archer / total) * 0.4 + (s.siege / total) * 0.7);
-    add("spearman", (s.cavalry / total) * 0.9);
-    add("militia", (s.archer / total) * 0.2 + (s.siege / total) * 0.3);
+    add("archer", (s.infantry / total) * 0.5);
+    add("handcannon", (s.infantry / total) * 0.4); // gunpowder shreds infantry (Castle)
+    add("skirmisher", (s.archer / total) * 0.4);
+    add("javelin", (s.archer / total) * 0.2);
+    add("knight", (s.archer / total) * 0.3 + (s.siege / total) * 0.4);
+    add("horseman", (s.siege / total) * 0.4); // ranged anti-siege cav
+    add("spearman", (s.cavalry / total) * 0.45);
+    add("pikeman", (s.cavalry / total) * 0.55); // best anti-cav (Castle)
+    add("militia", (s.archer / total) * 0.2 + (s.siege / total) * 0.2);
     const out: Record<string, number> = {};
     for (const k of new Set([...Object.keys(base), ...Object.keys(counter)])) {
       out[k] = (base[k] ?? 0) * 0.45 + (counter[k] ?? 0) * 0.55;
@@ -874,9 +907,10 @@ export class SkirmishAI {
     if (this.flub()) return; // forgot to send the scout this time
     const scout = this.world.byId.get(this.scoutId);
     if (scout && scout.alive && scout.order.kind !== OrderKind.Idle) return;
-    // Use the cheapest spare military unit; fall back to a villager early on.
+    // Prefer the dedicated Scout, then a spare soldier, then an early villager.
     const army = this.armyUnits();
-    const unit = army.find((u) => u.order.kind === OrderKind.Idle) ??
+    const unit = this.myUnits("scout").find((u) => u.order.kind === OrderKind.Idle) ??
+      army.find((u) => u.order.kind === OrderKind.Idle) ??
       (this.gameTime < 180 ? this.myUnits("villager")[0] : undefined);
     if (!unit) return;
     this.scoutId = unit.id;
@@ -1136,10 +1170,10 @@ export class SkirmishAI {
     const cool = this.style === "rush" ? 55 : 85;
     if (this.gameTime - this.lastHarassTime < cool) return;
     if (this.flub()) return; // skipped the raid
-    let raiders = this.myUnits("knight").filter((u) => u.order.kind === OrderKind.Idle);
-    if (raiders.length < 3) {
-      raiders = raiders.concat(this.myUnits("militia").filter((u) => u.order.kind === OrderKind.Idle));
-    }
+    const idle = (t: string) => this.myUnits(t).filter((u) => u.order.kind === OrderKind.Idle);
+    // Dedicated raiders first (Raider/Horseman), then Knights, then any spare Man-at-Arms.
+    let raiders = [...idle("raider"), ...idle("horseman"), ...idle("knight")];
+    if (raiders.length < 3) raiders = raiders.concat(idle("militia"));
     if (raiders.length < 3) return;
     this.lastHarassTime = this.gameTime;
     const ids = raiders.slice(0, 4).map((u) => u.id);
