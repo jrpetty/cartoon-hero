@@ -104,6 +104,7 @@ export interface Entity {
   attackCooldown: number; // seconds remaining until next shot
   attackInterval: number; // seconds between shots
   armor: number;
+  pierceArmor: number; // armor vs ranged/projectile hits (melee uses `armor`)
   armorClass: ArmorClass;
   visionRange: number;
 

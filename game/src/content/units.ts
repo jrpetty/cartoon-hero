@@ -10,6 +10,9 @@ export interface UnitDef {
   range: number; // 0 = melee (uses contact range)
   attackInterval: number; // seconds
   armor: number;
+  /** Armor vs ranged hits. Defaults to `armor` when omitted (no melee/pierce
+   *  split); set it to model units that resist arrows but not blades. */
+  pierceArmor?: number;
   speed: number; // world units / sec
   visionRange: number;
   radius: number;
@@ -144,6 +147,29 @@ export const UNITS: Record<string, UnitDef> = {
     age: 1,
     ranged: true,
     bonus: { [ArmorClass.Archer]: 6 },
+  }),
+
+  horseman: U({
+    id: "horseman",
+    name: "Horseman",
+    desc: "Mounted skirmisher. Pelts foes from horseback and runs down siege; its light barding turns arrows but offers nothing against blades. (Castle Age)",
+    armorClass: ArmorClass.Cavalry,
+    hp: 65,
+    attack: 8,
+    range: 140,
+    attackInterval: 1.6,
+    armor: 0, // no melee armor — blades cut it down
+    pierceArmor: 2, // light barding turns arrows
+    speed: 108,
+    visionRange: 170,
+    radius: 11,
+    cost: { food: 70, wood: 0, gold: 40 },
+    buildTime: 20,
+    pop: 1,
+    trainedAt: "stable",
+    age: 2,
+    ranged: true,
+    bonus: { [ArmorClass.Siege]: 14 },
   }),
 
   crossbow: U({

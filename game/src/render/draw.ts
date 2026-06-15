@@ -840,6 +840,7 @@ export function drawUnit(ctx: Ctx, e: Entity, time: number) {
     case "skirmisher": drawSkirmisher(ctx, e, tc, atkFrac); break;
     case "crossbow": drawCrossbow(ctx, e, tc, atkFrac); break;
     case "knight": drawKnight(ctx, e, tc, moving, time, lunge); break;
+    case "horseman": drawHorseman(ctx, e, tc, moving); break;
     case "catapult": drawCatapult(ctx, e, tc, atkFrac); break;
     case "trebuchet": drawTrebuchet(ctx, e, tc, atkFrac); break;
     case "ram": drawRam(ctx, e, tc, atkFrac); break;
@@ -1095,6 +1096,53 @@ function drawKnight(ctx: Ctx, e: Entity, tc: any, moving: boolean, time: number,
   ctx.beginPath();
   ctx.moveTo(-fx * r * 0.5, -fy * r * 0.5 - r * 0.3);
   ctx.lineTo(fx * r * (2 + lunge), fy * r * (2 + lunge) - r * 0.2);
+  ctx.stroke();
+}
+
+function drawHorseman(ctx: Ctx, e: Entity, tc: any, moving: boolean) {
+  const r = e.radius;
+  const [fx, fy] = weaponAngleParts(e.facing);
+  // Horse, oriented along facing.
+  ctx.save();
+  ctx.rotate(e.facing);
+  const gallop = moving ? Math.sin(e.animPhase * 11) * 1.2 : 0;
+  ctx.fillStyle = "#6b5238";
+  ctx.beginPath();
+  ctx.ellipse(0, 0, r * 1.18, r * 0.56, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.ellipse(r * 1.08, -r * 0.1, r * 0.38, r * 0.23, -0.35, 0, Math.PI * 2);
+  ctx.fill();
+  if (moving) {
+    ctx.strokeStyle = "#4a3626";
+    ctx.lineWidth = 2;
+    for (const lx of [-r * 0.6, r * 0.55]) {
+      ctx.beginPath();
+      ctx.moveTo(lx, r * 0.36);
+      ctx.lineTo(lx + gallop * 2, r * 0.8);
+      ctx.stroke();
+    }
+  }
+  // Light team cloth (lighter than the knight's heavy caparison).
+  ctx.fillStyle = withAlpha(tc.main, 0.7);
+  ctx.beginPath();
+  ctx.ellipse(-r * 0.15, 0, r * 0.6, r * 0.46, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+  // Rider.
+  ctx.fillStyle = tc.main;
+  ctx.beginPath();
+  ctx.arc(-r * 0.1, -r * 0.4, r * 0.42, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = PAL.skin;
+  ctx.beginPath();
+  ctx.arc(-r * 0.1, -r * 0.64, r * 0.26, 0, Math.PI * 2);
+  ctx.fill();
+  // Recurve bow held forward.
+  ctx.strokeStyle = PAL.woodDark;
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.arc(-r * 0.1 + fx * r * 0.55, -r * 0.42 + fy * r * 0.55, r * 0.55, e.facing - 1.1, e.facing + 1.1);
   ctx.stroke();
 }
 

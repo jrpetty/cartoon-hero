@@ -170,7 +170,7 @@ export const BUILDINGS: Record<string, BuildingDef> = {
     tiles: 3,
     age: 2,
     requires: "barracks",
-    trains: ["knight"],
+    trains: ["knight", "horseman"],
   }),
   siege_workshop: B({
     id: "siege_workshop",

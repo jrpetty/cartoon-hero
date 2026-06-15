@@ -138,7 +138,7 @@ export function makeEntity(): Entity {
     hp: 1, maxHp: 1,
     vx: 0, vy: 0, speed: 0,
     attack: 0, range: 0, attackCooldown: 0, attackInterval: 1,
-    armor: 0, armorClass: ArmorClass.Infantry, visionRange: 100,
+    armor: 0, pierceArmor: 0, armorClass: ArmorClass.Infantry, visionRange: 100,
     order: { kind: OrderKind.Idle, tx: 0, ty: 0, target: -1 },
     path: null, pathIndex: 0, repathCooldown: 0,
     carry: 0, carryKind: null, gatherCooldown: 0,
@@ -350,6 +350,9 @@ export class World {
     e.hp = e.maxHp;
     e.attack = Math.round(def.attack * (RARITY_ATK_MULT[rarity] ?? 1) * atkBoon);
     e.armor = def.armor + (RARITY_ARMOR_BONUS[rarity] ?? 0) + armorPlus;
+    // Pierce armor mirrors melee armor unless the unit defines a different value
+    // (e.g. the Horseman: 0 melee / 2 pierce). The delta rides on top of bonuses.
+    e.pierceArmor = e.armor + (def.pierceArmor !== undefined ? def.pierceArmor - def.armor : 0);
     e.range = def.range + (def.armorClass === ArmorClass.Archer ? bn.archerRangeBonus : 0);
     e.attackInterval = def.attackInterval;
     e.speed = def.speed * (RARITY_SPEED_MULT[rarity] ?? 1) * spdBoon;
@@ -391,6 +394,7 @@ export class World {
     e.maxHp = maxHp;
     e.armorClass = ArmorClass.Building;
     e.armor = 1;
+    e.pierceArmor = 1;
     e.visionRange = def.sight;
     e.attack = def.attack;
     // Vigilant Watch: defensive buildings fire faster and farther.
@@ -1752,11 +1756,11 @@ export class World {
         for (const n of near) {
           if (!n.alive || !this.areHostile(e.projSourceTeam, n.team)) continue;
           if (n.kind !== Kind.Unit && n.kind !== Kind.Building) continue;
-          this.dealDamage(e.projSourceTeam, n, e.projDamage, e.projArmorClassBonusFrom, e.projSourceId);
+          this.dealDamage(e.projSourceTeam, n, e.projDamage, e.projArmorClassBonusFrom, e.projSourceId, true);
         }
         this.emit("siege", e.x, e.y, e.projSourceTeam);
       } else if (target && target.alive) {
-        this.dealDamage(e.projSourceTeam, target, e.projDamage, e.projArmorClassBonusFrom, e.projSourceId);
+        this.dealDamage(e.projSourceTeam, target, e.projDamage, e.projArmorClassBonusFrom, e.projSourceId, true);
         this.emit("arrowHit", e.x, e.y, e.projSourceTeam);
       }
     }
@@ -1807,9 +1811,10 @@ export class World {
     return atk + bonus;
   }
 
-  private effectiveArmor(target: Entity): number {
+  private effectiveArmor(target: Entity, ranged = false): number {
     const p = this.players[target.team];
-    let armor = target.armor;
+    // Ranged hits bite pierce armor; melee bites melee armor (same for most units).
+    let armor = ranged ? target.pierceArmor : target.armor;
     if (p && target.kind === Kind.Unit) {
       armor += AGE_ARMOR_BONUS[p.age] ?? 0;
       const def = UNITS[target.type];
@@ -1831,7 +1836,7 @@ export class World {
     return armor;
   }
 
-  dealDamage(fromTeam: Team, target: Entity, rawDamage: number, sourceType: string, fromId: EntityId = -1) {
+  dealDamage(fromTeam: Team, target: Entity, rawDamage: number, sourceType: string, fromId: EntityId = -1, ranged = false) {
     if (!target.alive) return;
     // Reaver boon: extra damage to villagers and buildings (eco denial / sieging).
     const attacker = this.players[fromTeam];
@@ -1839,7 +1844,7 @@ export class World {
     if (attacker && attacker.boon.raiderMult > 1 && (target.kind === Kind.Building || target.type === "villager")) {
       raw *= attacker.boon.raiderMult;
     }
-    const dmg = Math.max(1, raw - this.effectiveArmor(target));
+    const dmg = Math.max(1, raw - this.effectiveArmor(target, ranged));
     target.hp -= dmg;
     target.hitFlash = 1;
     target.lastDamageTime = this.time;
