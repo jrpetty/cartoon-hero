@@ -737,6 +737,29 @@ export class SkirmishAI {
     return this.myUnits().filter((e) => e.type !== "villager" && e.type !== "monk" && e.type !== "scout");
   }
 
+  /** Regicide: our own King, if he still lives. */
+  private myKing(): Entity | null {
+    for (const e of this.world.entities) {
+      if (e.alive && e.type === "king" && e.team === this.team) return e;
+    }
+    return null;
+  }
+
+  /** Regicide: the nearest enemy King we could march on. */
+  private enemyKing(): Entity | null {
+    const base = this.base();
+    const ox = base?.x ?? this.world.map.starts[this.team].x;
+    const oy = base?.y ?? this.world.map.starts[this.team].y;
+    let best: Entity | null = null;
+    let bestD = Infinity;
+    for (const e of this.world.entities) {
+      if (!e.alive || e.type !== "king" || !this.isHostile(e.team)) continue;
+      const d = dist(ox, oy, e.x, e.y);
+      if (d < bestD) { bestD = d; best = e; }
+    }
+    return best;
+  }
+
   /** A harassing AI keeps a couple of Raiders for eco raids (they're a Feudal
    *  unit it would otherwise rush past). */
   private ensureRaiders() {
@@ -765,13 +788,57 @@ export class SkirmishAI {
     this.heroStep();
     this.scoutStep();
 
-    const defended = this.defendStep();
-    if (!defended) {
+    // Regicide: guarding our own King pre-empts everything else when he's in
+    // danger. Otherwise it just posts a light bodyguard and lets us play on.
+    const kingEmergency = this.world.mode === "regicide" && this.kingDefense();
+    const defended = !kingEmergency && this.defendStep();
+    if (!kingEmergency && !defended) {
       this.attackStep();
       this.harassStep();
     }
     this.abilityStep();
     this.commanderPowerStep();
+  }
+
+  /**
+   * Regicide bodyguard. Keeps a small standing escort on our King and, when an
+   * enemy force closes on him, recalls the army and walks the King back into the
+   * safety of our base. Returns true only for a genuine emergency, so on a quiet
+   * front we still raid eco and grind the enemy army as normal.
+   */
+  private kingDefense(): boolean {
+    const king = this.myKing();
+    if (!king) return false; // already lost — nothing to guard
+    const threat = this.strengthNear(king.x, king.y, 400, false);
+    const army = this.armyUnits();
+
+    if (threat > 50) {
+      this.attacking = false;
+      this.say("protect the King!", king.x, king.y, 16);
+      // Walk the King home, behind whatever defences and bodies we have.
+      const home = this.base() ?? this.world.map.starts[this.team];
+      if (dist(king.x, king.y, home.x, home.y) > 120) {
+        this.world.issueMove([king.id], home.x, home.y);
+      }
+      // Collapse onto the King — everyone for a heavy push, else the spare line.
+      const heavy = threat > 140;
+      const recall = heavy ? army : army.filter((u) => u.order.kind !== OrderKind.Attack);
+      if (recall.length) this.world.issueMove(recall.map((u) => u.id), king.x, king.y, false, true);
+      return true;
+    }
+
+    // Quiet: keep a token escort posted with the King (second-line units only,
+    // so we don't strip a wave that's already out the door).
+    const guards = army.filter((u) => dist(u.x, u.y, king.x, king.y) < 220);
+    if (guards.length < 3) {
+      const spare = army
+        .filter((u) => u.order.kind !== OrderKind.Attack && dist(u.x, u.y, king.x, king.y) >= 220)
+        .slice(0, 3 - guards.length);
+      if (spare.length) {
+        this.world.issueMove(spare.map((u) => u.id), king.x + this.rng.range(-40, 40), king.y + this.rng.range(-40, 40));
+      }
+    }
+    return false;
   }
 
   /** Plant the commander banner amid a real fight when it's ready. */
@@ -1020,6 +1087,22 @@ export class SkirmishAI {
     cx /= army.length;
     cy /= army.length;
     const ids = idle.map((u) => u.id);
+
+    // 0. Regicide: take the King only when he's there for the taking. If his
+    //    escort is light next to our striking force, cut him down and end it;
+    //    otherwise fall through and keep wearing down their eco/army — as that
+    //    fight is won his guard thins out and this opens up on its own.
+    if (this.world.mode === "regicide") {
+      const ek = this.enemyKing();
+      if (ek && this.world.fogAt(this.team, ek.x, ek.y) !== 0) {
+        const guards = this.strengthNear(ek.x, ek.y, 320, false);
+        const ours = this.strengthNear(cx, cy, 360, true);
+        if (guards < 45 || guards < ours * 0.5) {
+          this.world.issueAttack(ids, ek.id);
+          return;
+        }
+      }
+    }
 
     // 1. Smash whatever we're piled against (wall, gate, tower, any building) so
     //    a defended base can't simply wall us out — we breach and pour in.
