@@ -286,34 +286,34 @@ class App {
   startMatch(config: SkirmishConfig) {
     this.config = config;
     const diff = DIFFICULTIES[config.difficulty];
-    const numPlayers = Math.max(2, Math.min(MAX_TEAMS, config.players ?? 2));
-    // Even teams split the realms into two alliances (alliance id = team % 2),
-    // e.g. 2v2, 3v3, 4v4. Otherwise everyone is solo (FFA). Computed first so the
-    // map can seat teammates next to each other.
-    const alliances = config.allied
-      ? Array.from({ length: numPlayers }, (_, t) => t % 2)
-      : undefined;
+    const mode = config.mode ?? "conquest";
+    // Survival is co-op: the chosen player count is your side (all allied), and
+    // one extra "horde" team is appended for the waves.
+    const side = Math.max(2, Math.min(mode === "survival" ? MAX_TEAMS - 1 : MAX_TEAMS, config.players ?? 2));
+    const numPlayers = mode === "survival" ? side + 1 : side;
+    const hordeTeam = mode === "survival" ? side : -1;
+    // Alliances: survival = all players vs the horde; even-teams = two sides; else FFA.
+    let alliances: number[] | undefined;
+    if (mode === "survival") alliances = Array.from({ length: numPlayers }, (_, t) => (t === hordeTeam ? 1 : 0));
+    else if (config.allied) alliances = Array.from({ length: numPlayers }, (_, t) => t % 2);
     const map = generateMap(config.presetId, config.seed, numPlayers, config.nomad, alliances);
     const world = new World(config.seed);
-    // Team 0 is the human; teams 1..n-1 are AI opponents.
+    // Team 0 is the human; the rest are AI (allies or opponents), plus the horde.
     const loadouts = [this.profile.matchLoadout(config.fairMode)];
     const econMults = [1];
+    const commanders = [config.commander || this.profile.data.commander];
+    const boonLoadouts: { id: string; rarity: number; age: number }[][] = [config.fairMode ? [] : this.profile.equippedBoonPlan()];
     for (let t = 1; t < numPlayers; t++) {
       loadouts.push(this.profile.matchLoadout(true));
       econMults.push(diff.econMult);
-    }
-    // Player leads with their chosen commander; the AIs each draw a random one.
-    const commanders = [config.commander || this.profile.data.commander];
-    for (let t = 1; t < numPlayers; t++) {
       commanders.push(COMMANDER_IDS[Math.floor(Math.random() * COMMANDER_IDS.length)]);
+      boonLoadouts.push([]);
     }
-    // The human's equipped boons (none in fair mode); AI realms get none.
-    const boonLoadouts: { id: string; rarity: number; age: number }[][] = [config.fairMode ? [] : this.profile.equippedBoonPlan()];
-    for (let t = 1; t < numPlayers; t++) boonLoadouts.push([]);
-    world.init(map, loadouts, econMults, alliances, commanders, config.nomad, boonLoadouts);
+    world.init(map, loadouts, econMults, alliances, commanders, config.nomad, boonLoadouts, mode);
     this.world = world;
     this.ais = [];
     for (let t = 1; t < numPlayers; t++) {
+      if (t === hordeTeam) continue; // the horde has no brain — the sim spawns its waves
       this.ais.push(new SkirmishAI(world, t as Team, diff));
     }
     this.renderer.prepare(map);
@@ -1108,6 +1108,7 @@ class App {
     // enemy/neutral unit's health; the command card filters to own units.
     this.hud.draw(W, H, world, this.camera, PLAYER, this.selectedEntities(), dt, this.controller, this.attackMoveArmed, this.spectating);
     if (this.spectating) this.drawSpectatorHud(W, H, world);
+    if (world.mode !== "conquest") this.drawModeStatus(W, H, world);
     this.drawControlGroups(W, H);
     this.drawQoLBar(W, H);
     ui.flushTooltip(W, H);
@@ -1185,6 +1186,38 @@ class App {
   /** A readable name for a team, used in spectator callouts. */
   private teamLabel(t: Team): string {
     return teamLabel(t);
+  }
+
+  /** Top-centre objective readout for the non-Conquest game modes. */
+  private drawModeStatus(W: number, H: number, world: World) {
+    const fmt = (s: number) => `${Math.floor(s / 60)}:${Math.floor(s % 60).toString().padStart(2, "0")}`;
+    let line = "";
+    if (world.mode === "survival") {
+      const wave = world.survivalWave;
+      const total = world.survivalWavesTotal;
+      const hordeLeft = world.hordeTeam >= 0 ? world.entitiesOf(world.hordeTeam as Team, Kind.Unit).length : 0;
+      line = world.survivalWon
+        ? `Final wave! Clear ${hordeLeft} remaining to win`
+        : `🌊 Wave ${wave} / ${total}` + (hordeLeft > 0 ? `   ·   ${hordeLeft} enemies left` : "   ·   brace for the next wave");
+    } else if (world.mode === "koth") {
+      // Show the player's alliance hold vs the best enemy hold.
+      const prog = world.kothProgress();
+      let mine = 0;
+      let foe = 0;
+      for (const { team, hold } of prog) {
+        if (world.areAllied(PLAYER, team)) mine = Math.max(mine, hold);
+        else foe = Math.max(foe, hold);
+      }
+      line = `👑 Hold the Hill — You ${fmt(mine)} / ${fmt(world.kothGoal)}   ·   Enemy ${fmt(foe)}`;
+    } else if (world.mode === "regicide") {
+      const myKing = world.entities.some((e) => e.alive && e.type === "king" && world.areAllied(PLAYER, e.team));
+      const foeKings = world.entities.filter((e) => e.alive && e.type === "king" && !world.areAllied(PLAYER, e.team)).length;
+      line = `♚ Regicide — Your King: ${myKing ? "alive" : "FALLEN"}   ·   Enemy Kings: ${foeKings}`;
+    }
+    if (!line) return;
+    const w = 460;
+    ui.panel(W / 2 - w / 2, 38, w, 28, { light: true });
+    ui.text(line, W / 2, 56, { align: "center", size: 14, bold: true, color: PAL.uiAccent });
   }
 
   /**

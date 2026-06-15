@@ -440,6 +440,28 @@ export const UNITS: Record<string, UnitDef> = {
     bonus: { [ArmorClass.Archer]: 4, [ArmorClass.Building]: 4 },
   }),
 
+  king: U({
+    id: "king",
+    name: "King",
+    desc: "Your sovereign. In Regicide, protect your King and slay the enemy's to win. Sturdy and brave, but losing him loses the game.",
+    armorClass: ArmorClass.Infantry,
+    hp: 250,
+    attack: 10,
+    range: 0,
+    attackInterval: 1.2,
+    armor: 3,
+    speed: 90,
+    visionRange: 160,
+    radius: 11,
+    cost: { food: 0, wood: 0, gold: 0 },
+    buildTime: 1,
+    pop: 0,
+    trainedAt: "", // never trained — spawned at match start in Regicide
+    age: 0,
+    ranged: false,
+    bonus: {},
+  }),
+
   pikeman: U({
     id: "pikeman",
     name: "Pikeman",

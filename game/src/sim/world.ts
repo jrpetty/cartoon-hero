@@ -9,6 +9,7 @@ import {
   Entity,
   EntityId,
   Kind,
+  GameMode,
   Order,
   OrderKind,
   ResourceBag,
@@ -193,8 +194,23 @@ export class World {
 
   nomad = false;
 
-  init(map: MapData, loadouts: Record<string, number>[], econMults: number[], alliances?: number[], commanders?: string[], nomad = false, boonLoadouts?: { id: string; rarity: number; age: number }[][]) {
+  // --- Game mode state ---
+  mode: GameMode = "conquest";
+  hordeTeam = -1; // survival: the team that the waves belong to (no base/economy)
+  survivalWave = 0; // waves spawned so far
+  survivalWavesTotal = 12; // survive this many to win
+  private survivalTimer = 0; // seconds until the next wave
+  survivalWon = false;
+  // King of the Hill: cumulative uncontested hold per team (seconds).
+  kothHold: number[] = [];
+  kothGoal = 300; // 5 minutes
+  hillX = 0;
+  hillY = 0;
+  hillR = 0;
+
+  init(map: MapData, loadouts: Record<string, number>[], econMults: number[], alliances?: number[], commanders?: string[], nomad = false, boonLoadouts?: { id: string; rarity: number; age: number }[][], mode: GameMode = "conquest") {
     this.nomad = nomad;
+    this.mode = mode;
     this.map = map;
     this.worldW = map.worldW;
     this.worldH = map.worldH;
@@ -261,8 +277,17 @@ export class World {
       this.spawnResource(r.type, r.x, r.y, r.amount);
     }
 
+    // Game-mode setup.
+    this.kothHold = new Array(this.numTeams).fill(0);
+    this.hillX = map.worldW / 2;
+    this.hillY = map.worldH / 2;
+    this.hillR = Math.min(map.worldW, map.worldH) * 0.085; // central control zone
+    if (mode === "survival") this.hordeTeam = this.numTeams - 1; // last team = the horde
+    this.survivalTimer = 45; // first wave grace period
+
     // Starting bases.
     for (let t = 0; t < this.numTeams; t++) {
+      if (t === this.hordeTeam) continue; // the horde has no base — it spawns waves
       const start = map.starts[t];
       const extra = COMMANDERS[commanders?.[t] ?? ""]?.bonus.startVillagers ?? 0;
       if (nomad) {
@@ -280,6 +305,11 @@ export class World {
         for (const [dx, dy] of offsets) {
           this.spawnUnit(t as Team, "villager", start.x + dx, start.y + dy);
         }
+      }
+      // Regicide: every realm fields a King to protect.
+      if (mode === "regicide") {
+        const k = this.spawnUnit(t as Team, "king", start.x, start.y + 90);
+        k.facing = Math.PI / 2;
       }
     }
     this.recomputeVision();
@@ -1101,6 +1131,7 @@ export class World {
     }
 
     if (this.tickCount % 5 === 0) this.recomputeVision();
+    if (this.mode !== "conquest") this.tickGameMode();
     if (this.tickCount % 20 === 0) this.checkVictory();
     if (this.tickCount % 600 === 0) this.compact();
     this.tickHeroRespawns();
@@ -2061,8 +2092,90 @@ export class World {
 
   // Victory ---------------------------------------------------------------------
 
+  // ----------------------------------------------------------- game modes --
+
+  private tickGameMode() {
+    if (this.mode === "survival") this.tickSurvival();
+    else if (this.mode === "koth") this.tickKoth();
+  }
+
+  /** Survival: spawn escalating waves from the map edges at the players. */
+  private tickSurvival() {
+    if (this.hordeTeam < 0 || this.survivalWon || this.winner !== null) return;
+    this.survivalTimer -= SIM_DT;
+    if (this.survivalTimer > 0) return;
+    if (this.survivalWave >= this.survivalWavesTotal) { this.survivalWon = true; return; }
+    this.survivalWave++;
+    this.survivalTimer = Math.max(22, 42 - this.survivalWave); // waves quicken
+    this.spawnWave(this.survivalWave);
+  }
+
+  private spawnWave(wave: number) {
+    const size = 4 + Math.floor(wave * 1.8);
+    // Composition escalates with the wave number.
+    const pool: string[] = ["militia", "spearman"];
+    if (wave >= 3) pool.push("archer");
+    if (wave >= 5) pool.push("knight", "skirmisher");
+    if (wave >= 8) pool.push("knight", "ram");
+    if (wave >= 10) pool.push("knight", "catapult");
+    // Aim the wave at a random surviving player base.
+    const targets = this.entities.filter((e) => e.alive && e.kind === Kind.Building && e.team !== this.hordeTeam && e.team < this.numTeams);
+    const aim = targets.length ? targets[this.rng.int(0, targets.length - 1)] : { x: this.worldW / 2, y: this.worldH / 2 };
+    // Spawn along a random map edge.
+    const edge = this.rng.int(0, 3);
+    const ids: EntityId[] = [];
+    for (let i = 0; i < size; i++) {
+      let x: number;
+      let y: number;
+      const j = this.rng.range(0.1, 0.9);
+      if (edge === 0) { x = j * this.worldW; y = 30; }
+      else if (edge === 1) { x = j * this.worldW; y = this.worldH - 30; }
+      else if (edge === 2) { x = 30; y = j * this.worldH; }
+      else { x = this.worldW - 30; y = j * this.worldH; }
+      const type = pool[this.rng.int(0, pool.length - 1)];
+      const u = this.spawnUnit(this.hordeTeam as Team, type, x, y);
+      // Wave units are a touch tougher each wave so late game stays threatening.
+      const tough = 1 + wave * 0.04;
+      u.maxHp = Math.round(u.maxHp * tough); u.hp = u.maxHp;
+      ids.push(u.id);
+    }
+    this.issueFormationMove(ids, aim.x, aim.y, false, true); // attack-move in
+    this.emit("underattack", aim.x, aim.y, Team.Player);
+  }
+
+  /** KotH: accrue uncontested hold time for whichever alliance holds the hill. */
+  private tickKoth() {
+    const present = new Set<number>();
+    for (const e of this.entities) {
+      if (!e.alive || e.kind !== Kind.Unit || e.team >= this.numTeams) continue;
+      if (UNITS[e.type]?.canGather) continue; // villagers don't contest
+      const dx = e.x - this.hillX;
+      const dy = e.y - this.hillY;
+      if (dx * dx + dy * dy <= this.hillR * this.hillR) present.add(this.alliances[e.team]);
+    }
+    // Only an uncontested holder accrues; contested or empty pauses (no reset).
+    if (present.size !== 1) return;
+    const holder = [...present][0];
+    for (let t = 0; t < this.numTeams; t++) {
+      if (this.alliances[t] !== holder) continue;
+      this.kothHold[t] += SIM_DT;
+      if (this.kothHold[t] >= this.kothGoal && this.winner === null) this.winner = t as Team;
+    }
+  }
+
+  /** Best (max) hold time achieved by each alliance — for the HUD. */
+  kothProgress(): { team: Team; hold: number }[] {
+    const out: { team: Team; hold: number }[] = [];
+    for (let t = 0; t < this.numTeams; t++) out.push({ team: t as Team, hold: this.kothHold[t] });
+    return out;
+  }
+
   private checkVictory() {
     if (this.winner !== null) return;
+    if (this.mode === "survival") return this.checkVictorySurvival();
+    if (this.mode === "regicide") return this.checkVictoryRegicide();
+    // koth is decided by hold time (in tick); it still uses elimination below too.
+
     // A team is only out when it has NO buildings AND no villager to rebuild
     // one — so a nomad start (villagers, no Town Center) isn't an instant loss,
     // and a razed base with surviving villagers can still make a comeback.
@@ -2084,6 +2197,42 @@ export class World {
     }
     // Last alliance standing wins; winner is a surviving member of it.
     if (aliveAlliances.size <= 1) this.winner = alive[0] ?? Team.Neutral;
+  }
+
+  /** Survival: the player alliance wins by clearing every wave; loses if wiped. */
+  private checkVictorySurvival() {
+    let playersStanding = false;
+    for (let t = 0; t < this.numTeams; t++) {
+      if (t === this.hordeTeam) continue;
+      const hasBase = this.entities.some((e) => e.alive && e.team === t &&
+        (e.kind === Kind.Building || (e.kind === Kind.Unit && UNITS[e.type]?.canBuild)));
+      if (hasBase) playersStanding = true; else this.players[t].defeated = true;
+    }
+    if (!playersStanding) { this.winner = this.hordeTeam as Team; return; } // players wiped out
+    const hordeLeft = this.entities.some((e) => e.alive && e.team === this.hordeTeam && e.kind === Kind.Unit);
+    if (this.survivalWon && !hordeLeft) this.winner = Team.Player; // all waves cleared
+  }
+
+  /** Regicide: an alliance is out when it has no living King. */
+  private checkVictoryRegicide() {
+    const allianceKings = new Map<number, number>();
+    for (let t = 0; t < this.numTeams; t++) allianceKings.set(this.alliances[t], 0);
+    for (const e of this.entities) {
+      if (e.alive && e.type === "king" && e.team < this.numTeams) {
+        allianceKings.set(this.alliances[e.team], (allianceKings.get(this.alliances[e.team]) ?? 0) + 1);
+      }
+    }
+    const aliveAlliances: number[] = [];
+    for (let t = 0; t < this.numTeams; t++) {
+      const kings = allianceKings.get(this.alliances[t]) ?? 0;
+      if (kings === 0) this.players[t].defeated = true;
+      else if (!aliveAlliances.includes(this.alliances[t])) aliveAlliances.push(this.alliances[t]);
+    }
+    if (aliveAlliances.length <= 1) {
+      for (let t = 0; t < this.numTeams; t++) {
+        if (!this.players[t].defeated) { this.winner = t as Team; break; }
+      }
+    }
   }
 
   // Queries for UI/AI -------------------------------------------------------------

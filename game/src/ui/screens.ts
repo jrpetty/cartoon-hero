@@ -8,6 +8,7 @@ import { CATALOG, COLLECTIBLE_UNIT_IDS, variantKey, VARIANT_BY_KEY } from "../me
 import { MatchRewards, levelFromXp } from "../meta/progression";
 import { UNITS } from "../content/units";
 import { PRESETS } from "../maps/generator";
+import { GameMode } from "../sim/types";
 import { DIFFICULTIES, DIFFICULTY_IDS } from "../ai/difficulty";
 import { COMMANDERS, COMMANDER_IDS, commanderPerks } from "../content/commanders";
 import { BOONS, BOONS_BY_ID, BOON_CATEGORIES, BoonCategory } from "../content/boons";
@@ -27,6 +28,7 @@ export interface SkirmishConfig {
   allied: boolean; // true = 2v2 teams (you + ally vs two foes)
   commander: string; // selected commander id
   nomad: boolean; // no starting Town Center; villagers scattered on the map
+  mode: GameMode; // conquest / survival / koth / regicide
 }
 
 // ------------------------------------------------------------- background --
@@ -208,6 +210,7 @@ export class SetupScreen {
     allied: false,
     commander: "",
     nomad: false,
+    mode: "conquest",
   };
 
   draw(W: number, H: number, time: number, profile: Profile): "start" | "spectate" | "back" | null {
@@ -302,6 +305,24 @@ export class SetupScreen {
       tooltip: ["Even Teams", "Split into two allied sides with shared vision. Needs 4+ players."],
     })) { this.config.allied = true; audio.play("ui"); }
     y += 112;
+
+    // Game mode.
+    ui.panel(x0, y, colW, 64);
+    ui.text("Mode", x0 + 16, y + 24, { size: 16, bold: true, color: PAL.uiAccent });
+    const modes: [GameMode, string, string][] = [
+      ["conquest", "Conquest", "Destroy every enemy. The classic skirmish."],
+      ["survival", "Survival", "Co-op: you + AI allies hold out against escalating waves."],
+      ["koth", "King of the Hill", "Hold the centre for 5 cumulative minutes to win."],
+      ["regicide", "Regicide", "Each side has a King — slay theirs, protect yours."],
+    ];
+    const mwid = (colW - 150 - 16 - 36) / 4;
+    for (let i = 0; i < modes.length; i++) {
+      const [id, label, hint] = modes[i];
+      if (ui.button(label.length > 11 ? "KotH" : label, x0 + 150 + i * (mwid + 12), y + 16, mwid, 32, {
+        accent: this.config.mode === id, size: 12, tooltip: [label, hint],
+      })) { this.config.mode = id; audio.play("ui"); }
+    }
+    y += 80;
 
     // Commander selector (cycle through the ones you own).
     if (!profile.ownsCommander(this.config.commander)) {

@@ -851,6 +851,7 @@ export function drawUnit(ctx: Ctx, e: Entity, time: number) {
     case "trebuchet": drawTrebuchet(ctx, e, tc, atkFrac); break;
     case "ram": drawRam(ctx, e, tc, atkFrac); break;
     case "hero": drawHero(ctx, e, tc, lunge, time); break;
+    case "king": drawHero(ctx, e, tc, lunge, time); break;
     case "monk": drawMonk(ctx, e, tc, time); break;
     default: {
       ctx.fillStyle = tc.main;

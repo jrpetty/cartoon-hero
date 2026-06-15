@@ -357,6 +357,21 @@ export class Renderer {
       }
     });
 
+    // King of the Hill: the central control zone.
+    if (world.mode === "koth") {
+      ctx.save();
+      ctx.strokeStyle = withAlpha("#ffe07a", 0.85);
+      ctx.lineWidth = 3;
+      ctx.setLineDash([10, 8]);
+      ctx.beginPath();
+      ctx.arc(world.hillX, world.hillY, world.hillR, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.fillStyle = withAlpha("#ffe07a", 0.07);
+      ctx.fill();
+      ctx.restore();
+    }
+
     // Collect and sort drawable entities by y (painter's algorithm).
     const drawables: Entity[] = [];
     for (const e of world.entities) {

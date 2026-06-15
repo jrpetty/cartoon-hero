@@ -21,6 +21,15 @@ export const enum Team {
 /** Highest number of player teams supported in one match. */
 export const MAX_TEAMS = 8;
 
+/**
+ * Victory rulesets.
+ *  - conquest: eliminate every enemy (default).
+ *  - survival: a player alliance holds out against escalating waves.
+ *  - koth:     hold the central hill for a cumulative time to win.
+ *  - regicide: protect your King and slay the enemy's.
+ */
+export type GameMode = "conquest" | "survival" | "koth" | "regicide";
+
 export const enum Kind {
   Unit = 0,
   Building = 1,
