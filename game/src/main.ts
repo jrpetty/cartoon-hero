@@ -308,7 +308,7 @@ class App {
       commanders.push(COMMANDER_IDS[Math.floor(Math.random() * COMMANDER_IDS.length)]);
     }
     // The human's equipped boons (none in fair mode); AI realms get none.
-    const boonLoadouts: { id: string; rarity: number }[][] = [config.fairMode ? [] : this.profile.equippedBoonLoadout()];
+    const boonLoadouts: { id: string; rarity: number; age: number }[][] = [config.fairMode ? [] : this.profile.equippedBoonPlan()];
     for (let t = 1; t < numPlayers; t++) boonLoadouts.push([]);
     world.init(map, loadouts, econMults, alliances, commanders, config.nomad, boonLoadouts);
     this.world = world;

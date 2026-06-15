@@ -653,29 +653,37 @@ export class ArmoryScreen {
     }
     y += 84;
 
-    ui.text(`Boon slots unlocked: ${profile.boonSlots()} / 3 — equip one per category, more unlock as you level up.`, x0 + 16, y, { size: 13, color: "#d8cdb4" });
-    y += 20;
+    ui.text("Battle Plan — equip one Offensive, Defensive & Supportive boon, then set which age each unlocks (they stack as you advance).", x0 + 16, y, { size: 13, color: "#d8cdb4" });
+    y += 22;
 
-    // Three category columns.
-    const unlocked = profile.unlockedBoonCategories();
-    const unlockLvl: Record<BoonCategory, number> = { offensive: 1, defensive: 5, supportive: 12 };
+    const AGE_LABEL = ["Age I (start)", "Age II", "Age III"];
     const cw = (colW - 24) / 3;
     BOON_CATEGORIES.forEach((cat, ci) => {
       const cx = x0 + ci * (cw + 12);
-      const isUnlocked = unlocked.includes(cat);
       const title = cat[0].toUpperCase() + cat.slice(1);
-      ui.text(isUnlocked ? title : `${title} 🔒 (L${unlockLvl[cat]})`, cx + 6, y + 14, {
-        size: 14, bold: true, color: isUnlocked ? PAL.uiAccent : "#7a7264",
-      });
+      ui.text(title, cx + 6, y + 14, { size: 14, bold: true, color: PAL.uiAccent });
+
+      // Age picker: which age this category's boon unlocks at (I / II / III).
+      const curAge = profile.boonAgeFor(cat);
+      const bw = (cw - 12) / 3;
+      for (let a = 0; a < 3; a++) {
+        if (ui.button(["I", "II", "III"][a], cx + a * (bw + 4), y + 24, bw, 22, {
+          accent: curAge === a, size: 12, tooltip: [AGE_LABEL[a], "When this boon activates in a match."],
+        })) {
+          profile.setBoonAge(cat, a);
+          audio.play("ui");
+        }
+      }
+
       const equipped = profile.data.equippedBoons[cat];
-      let by = y + 28;
+      let by = y + 54;
       for (const def of BOONS.filter((b) => b.category === cat)) {
         const best = profile.bestBoonRarity(def.id);
         const owns = best >= 0;
         const isEq = equipped === def.id;
-        const ch = 52;
+        const ch = 50;
         const r = owns ? rarityByIndex(best) : null;
-        if (ui.button("", cx, by, cw, ch, { accent: isEq, disabled: !owns || !isUnlocked })) {
+        if (ui.button("", cx, by, cw, ch, { accent: isEq, disabled: !owns })) {
           profile.equipBoon(def.id, !isEq);
           audio.play("ui");
         }
@@ -683,8 +691,8 @@ export class ArmoryScreen {
           size: 13, bold: true, color: owns ? (r ? r.color : PAL.uiParchment) : "#6f685a",
         });
         const sub = owns ? def.detail(best) : "Locked — find it in a Warband Cache";
-        wrapText(sub, cx + 10, by + 34, cw - 20, 11, owns ? "#cabfa4" : "#6f685a");
-        by += ch + 8;
+        wrapText(sub, cx + 10, by + 32, cw - 20, 11, owns ? "#cabfa4" : "#6f685a");
+        by += ch + 7;
       }
     });
   }

@@ -7,8 +7,9 @@ import { BUILDINGS } from "../content/buildings";
 function worldWithBoon(boon?: { id: string; rarity: number }): World {
   const map = generateMap("open_plains", 4242);
   const w = new World(4242);
-  // Team 0 gets the boon; team 1 is the baseline.
-  w.init(map, [{}, {}], [1, 1], undefined, undefined, false, [boon ? [boon] : [], []]);
+  // Team 0 gets the boon active from the start (age 0); team 1 is the baseline.
+  const plan = boon ? [{ ...boon, age: 0 }] : [];
+  w.init(map, [{}, {}], [1, 1], undefined, undefined, false, [plan, []]);
   return w;
 }
 
@@ -61,6 +62,22 @@ describe("Boons", () => {
       return w.player(Team.Player).resources.food;
     };
     expect(tick(fields)).toBeGreaterThan(tick(base));
+  });
+
+  it("an age-gated boon is inactive until that age, then buffs the existing army", () => {
+    const map = generateMap("open_plains", 4242);
+    const w = new World(4242);
+    // Iron Discipline assigned to Age II (unlock age 1), not active at the start.
+    w.init(map, [{}, {}], [1, 1], undefined, undefined, false, [[{ id: "iron_discipline", rarity: 3, age: 1 }], []]);
+    const u = w.spawnUnit(Team.Player, "spearman", 1000, 1000);
+    const baseHp = u.maxHp;
+    // Take a little damage so we can check the buff scales HP without a free heal.
+    u.hp = baseHp - 10;
+    // Advance the realm to Age II → the boon activates and the existing unit grows.
+    w.player(Team.Player).age = 1;
+    w.recomputeBoons(Team.Player);
+    expect(u.maxHp).toBeGreaterThan(baseHp);
+    expect(u.hp).toBeLessThan(u.maxHp); // still wounded — no free heal
   });
 
   it("boon-free players are unaffected (AI/tests unchanged)", () => {

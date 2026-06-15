@@ -3,49 +3,56 @@ import { Profile } from "./profile";
 import { rollBoonCache, boonKey, BOON_CACHE_COST } from "./boon_cache";
 import { RNG } from "../engine/rng";
 
-describe("Boon meta", () => {
-  it("starts with Valor, no boons, and one slot at level 1", () => {
+describe("Boon meta (battle plan)", () => {
+  it("starts with Valor, no boons, and a default age order", () => {
     const p = new Profile();
     expect(p.data.valor).toBeGreaterThan(0);
     expect(p.data.boons.length).toBe(0);
-    expect(p.boonSlots()).toBe(1);
-    expect(p.unlockedBoonCategories()).toEqual(["offensive"]);
+    expect(p.data.boonOrder.length).toBe(3);
+    // Default: one of each category, distinct ages.
+    expect(new Set(p.data.boonOrder).size).toBe(3);
   });
 
-  it("unlocks more slots as the account levels up", () => {
+  it("equips one boon per category and assigns each an unlock age", () => {
     const p = new Profile();
-    p.addXp(1_000_000); // jump to a high level
-    expect(p.boonSlots()).toBe(3);
-    expect(p.unlockedBoonCategories()).toEqual(["offensive", "defensive", "supportive"]);
-  });
-
-  it("owns, ranks and equips boons (best rarity wins)", () => {
-    const p = new Profile();
-    p.addXp(1_000_000); // unlock all slots
-    p.grantBoon(boonKey("whetstones", 1));
-    p.grantBoon(boonKey("whetstones", 3));
-    expect(p.ownsBoon(boonKey("whetstones", 3))).toBe(true);
-    expect(p.bestBoonRarity("whetstones")).toBe(3);
+    p.grantBoon(boonKey("whetstones", 3));      // offensive
+    p.grantBoon(boonKey("iron_discipline", 1)); // defensive
+    p.grantBoon(boonKey("bountiful_fields", 2)); // supportive
     p.equipBoon("whetstones", true);
-    const load = p.equippedBoonLoadout();
-    expect(load).toContainEqual({ id: "whetstones", rarity: 3 });
+    p.equipBoon("iron_discipline", true);
+    p.equipBoon("bountiful_fields", true);
+    // Put the eco boon first (start), attack at age II, defense at age III.
+    p.setBoonAge("supportive", 0);
+    p.setBoonAge("offensive", 1);
+    p.setBoonAge("defensive", 2);
+    const plan = p.equippedBoonPlan();
+    expect(plan).toContainEqual({ id: "bountiful_fields", rarity: 2, age: 0 });
+    expect(plan).toContainEqual({ id: "whetstones", rarity: 3, age: 1 });
+    expect(plan).toContainEqual({ id: "iron_discipline", rarity: 1, age: 2 });
   });
 
-  it("won't equip a boon whose category slot is locked", () => {
-    const p = new Profile(); // level 1 → only offensive unlocked
-    p.grantBoon(boonKey("iron_discipline", 2)); // defensive
-    p.equipBoon("iron_discipline", true);
-    expect(p.equippedBoonLoadout().some((b) => b.id === "iron_discipline")).toBe(false);
+  it("setBoonAge keeps the order a permutation (swaps, never duplicates)", () => {
+    const p = new Profile();
+    p.setBoonAge("supportive", 0); // whatever was at age 0 moves to supportive's old slot
+    expect(new Set(p.data.boonOrder).size).toBe(3); // still one per age
+    expect(p.boonAgeFor("supportive")).toBe(0);
+  });
+
+  it("uses the best owned rarity of an equipped boon", () => {
+    const p = new Profile();
+    p.grantBoon(boonKey("whetstones", 1));
+    p.grantBoon(boonKey("whetstones", 4));
+    p.equipBoon("whetstones", true);
+    expect(p.bestBoonRarity("whetstones")).toBe(4);
+    expect(p.equippedBoonPlan().some((b) => b.id === "whetstones" && b.rarity === 4)).toBe(true);
   });
 
   it("Warband Cache rolls a valid boon; duplicates refund Valor", () => {
     const owned = new Set<string>();
-    const rng = new RNG(7);
-    const roll = rollBoonCache(owned, rng);
+    const roll = rollBoonCache(owned, new RNG(7));
     expect(roll.key).toBe(boonKey(roll.boonId, roll.rarity));
     expect(roll.duplicate).toBe(false);
     owned.add(roll.key);
-    // Re-roll the same seed → same draw → now a duplicate with a refund.
     const dup = rollBoonCache(owned, new RNG(7));
     expect(dup.duplicate).toBe(true);
     expect(dup.refund).toBeGreaterThan(0);
@@ -56,7 +63,7 @@ describe("Boon meta", () => {
     p.data.valor = BOON_CACHE_COST;
     expect(p.spendValor(BOON_CACHE_COST)).toBe(true);
     expect(p.data.valor).toBe(0);
-    expect(p.spendValor(1)).toBe(false); // can't overspend
+    expect(p.spendValor(1)).toBe(false);
     p.addValor(50);
     expect(p.data.valor).toBe(50);
   });

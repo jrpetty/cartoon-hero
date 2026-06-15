@@ -74,7 +74,9 @@ export interface PlayerState {
   unitArmorBonus: number; // combat unit armor (flat)
   vetMult: number; // veterancy gained faster (×)
   powerCooldown: number; // seconds until the commander power is ready
-  boon: BoonEffect; // aggregated case-unlocked customization modifiers
+  /** Battle plan: each boon unlocks at its assigned age (0/1/2) and stacks. */
+  boonPlan: { id: string; rarity: number; age: number }[];
+  boon: BoonEffect; // boons currently active (unlocked at or below the current age)
   stats: {
     unitsKilled: number;
     unitsLost: number;
@@ -191,7 +193,7 @@ export class World {
 
   nomad = false;
 
-  init(map: MapData, loadouts: Record<string, number>[], econMults: number[], alliances?: number[], commanders?: string[], nomad = false, boonLoadouts?: { id: string; rarity: number }[][]) {
+  init(map: MapData, loadouts: Record<string, number>[], econMults: number[], alliances?: number[], commanders?: string[], nomad = false, boonLoadouts?: { id: string; rarity: number; age: number }[][]) {
     this.nomad = nomad;
     this.map = map;
     this.worldW = map.worldW;
@@ -247,7 +249,8 @@ export class World {
         unitArmorBonus: b.unitArmorBonus ?? 0,
         vetMult: b.vetMult ?? 1,
         powerCooldown: 0,
-        boon: aggregateBoons(boonLoadouts?.[t] ?? []),
+        boonPlan: boonLoadouts?.[t] ?? [],
+        boon: aggregateBoons((boonLoadouts?.[t] ?? []).filter((bn) => bn.age <= 0)),
         stats: { unitsKilled: 0, unitsLost: 0, buildingsRazed: 0, buildingsLost: 0, gathered: 0 },
       });
       this.fog.push(new Uint8Array(this.fogCols * this.fogRows));
@@ -359,6 +362,32 @@ export class World {
     e.visionRange = def.visionRange * bn.visionMult;
     e.radius = def.radius;
     e.armorClass = def.armorClass;
+  }
+
+  /** Recompute a team's active boons for its current age, then refresh its army
+   *  so a newly-unlocked boon buffs the troops you already have (veterancy and
+   *  hero levels are preserved). Called on age-up. */
+  recomputeBoons(team: Team) {
+    const p = this.players[team];
+    if (!p) return;
+    p.boon = aggregateBoons(p.boonPlan.filter((b) => b.age <= p.age));
+    for (const e of this.entities) {
+      if (!e.alive || e.kind !== Kind.Unit || e.team !== team) continue;
+      const def = UNITS[e.type];
+      if (!def) continue;
+      const frac = e.maxHp > 0 ? e.hp / e.maxHp : 1;
+      this.applyUnitStats(e, def, team); // base + rarity + current boon
+      // Re-stack veterancy (compounds, matches creditVeterancy) and hero level.
+      for (let i = 0; i < e.veterancy; i++) e.maxHp += Math.round(e.maxHp * 0.12);
+      e.attack += e.veterancy;
+      e.armor += Math.max(0, e.veterancy - 1);
+      if (def.hero && e.heroLevel > 0) {
+        e.maxHp += e.heroLevel * 35;
+        e.attack += e.heroLevel * 3;
+        e.armor += Math.floor(e.heroLevel / 2);
+      }
+      e.hp = Math.max(1, Math.round(e.maxHp * frac));
+    }
   }
 
   spawnUnit(team: Team, type: string, x: number, y: number): Entity {
@@ -1715,6 +1744,7 @@ export class World {
       this.emit("complete", b.x, b.y, b.team, item);
     } else if (item === "a:age") {
       p.age = Math.min(MAX_AGE, p.age + 1);
+      this.recomputeBoons(b.team); // unlock this age's boon and buff the army
       this.emit("age", b.x, b.y, b.team, String(p.age));
     }
   }

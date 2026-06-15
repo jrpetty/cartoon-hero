@@ -8,10 +8,8 @@ import { COMMANDER_IDS } from "../content/commanders";
 import { BOONS_BY_ID, BoonCategory, BOON_CATEGORIES } from "../content/boons";
 import { boonKey } from "./boon_cache";
 
-/** Boon slots unlock with account level: 1 → 2 (L5) → 3 (L12). */
-const SLOT_UNLOCK_LEVELS = [1, 5, 12];
-// Which category each slot belongs to, in unlock order.
-const SLOT_CATEGORY: BoonCategory[] = ["offensive", "defensive", "supportive"];
+/** Default age order for the battle plan (which category unlocks at which age). */
+const DEFAULT_BOON_ORDER: BoonCategory[] = ["offensive", "defensive", "supportive"];
 
 const STORAGE_KEY = "banner_and_blade_profile_v1";
 
@@ -30,6 +28,7 @@ export interface ProfileData {
   valor: number; // combat-earned currency for boon caches
   boons: string[]; // owned boon keys `boonId:rarity`
   equippedBoons: Record<BoonCategory, string>; // category -> equipped boonId ("" none)
+  boonOrder: BoonCategory[]; // which category unlocks at age slot 0/1/2
 }
 
 function defaultProfile(): ProfileData {
@@ -54,6 +53,7 @@ function defaultProfile(): ProfileData {
     valor: 150,
     boons: [],
     equippedBoons: { offensive: "", defensive: "", supportive: "" },
+    boonOrder: [...DEFAULT_BOON_ORDER],
   };
 }
 
@@ -107,6 +107,10 @@ export class Profile {
       this.data.equippedBoons = { offensive: "", defensive: "", supportive: "" };
       changed = true;
     }
+    if (!Array.isArray(this.data.boonOrder) || this.data.boonOrder.length !== 3) {
+      this.data.boonOrder = [...DEFAULT_BOON_ORDER];
+      changed = true;
+    }
     if (changed) this.save();
   }
 
@@ -144,37 +148,39 @@ export class Profile {
     return -1;
   }
 
-  /** Number of boon slots unlocked at the current level (1..3). */
-  boonSlots(): number {
-    const lvl = this.level;
-    let n = 0;
-    for (const need of SLOT_UNLOCK_LEVELS) if (lvl >= need) n++;
-    return n;
+  /** The age slot (0=start, 1=2nd age, 2=3rd age) a category unlocks at. */
+  boonAgeFor(cat: BoonCategory): number {
+    const i = this.data.boonOrder.indexOf(cat);
+    return i < 0 ? 0 : i;
   }
 
-  /** Categories currently unlocked, in order. */
-  unlockedBoonCategories(): BoonCategory[] {
-    return SLOT_CATEGORY.slice(0, this.boonSlots());
+  /** Put `cat` at age slot `age`, swapping with whatever category was there
+   *  (the order stays a permutation — one category per age). */
+  setBoonAge(cat: BoonCategory, age: number) {
+    const order = this.data.boonOrder;
+    const cur = order.indexOf(cat);
+    if (cur < 0 || age < 0 || age >= order.length || age === cur) return;
+    [order[cur], order[age]] = [order[age], order[cur]];
+    this.save();
   }
 
-  /** Equip an owned boon into its category slot (only if that slot is unlocked). */
+  /** Equip an owned boon for its category (any category, any rarity owned). */
   equipBoon(boonId: string, on: boolean) {
     const def = BOONS_BY_ID[boonId];
     if (!def) return;
     if (this.bestBoonRarity(boonId) < 0) return; // must own at least one tier
-    if (!this.unlockedBoonCategories().includes(def.category)) return; // slot locked
     this.data.equippedBoons[def.category] = on ? boonId : "";
     this.save();
   }
 
-  /** Boons to apply in a match: one per unlocked category, at best owned rarity. */
-  equippedBoonLoadout(): { id: string; rarity: number }[] {
-    const out: { id: string; rarity: number }[] = [];
-    for (const cat of this.unlockedBoonCategories()) {
+  /** The pre-match battle plan: each equipped boon + the age it unlocks at. */
+  equippedBoonPlan(): { id: string; rarity: number; age: number }[] {
+    const out: { id: string; rarity: number; age: number }[] = [];
+    for (const cat of BOON_CATEGORIES) {
       const id = this.data.equippedBoons[cat];
       if (!id) continue;
       const r = this.bestBoonRarity(id);
-      if (r >= 0) out.push({ id, rarity: r });
+      if (r >= 0) out.push({ id, rarity: r, age: this.boonAgeFor(cat) });
     }
     return out;
   }
