@@ -99,11 +99,18 @@ export function withAlpha(hex: string, a: number): string {
   return `rgba(${r},${g},${b},${a})`;
 }
 
-/** Darken/lighten a hex color by a factor (-1..1). */
+/** Parse "#rrggbb" or "rgb(r,g,b)" into [r,g,b]. */
+function parseRGB(col: string): [number, number, number] {
+  if (col[0] === "#") {
+    return [parseInt(col.slice(1, 3), 16), parseInt(col.slice(3, 5), 16), parseInt(col.slice(5, 7), 16)];
+  }
+  const m = col.match(/(\d+(?:\.\d+)?)/g);
+  return m ? [+m[0], +m[1], +m[2]] : [128, 128, 128];
+}
+
+/** Darken/lighten a hex or rgb() color by a factor (-1..1). */
 export function shade(hex: string, f: number): string {
-  const r = parseInt(hex.slice(1, 3), 16);
-  const g = parseInt(hex.slice(3, 5), 16);
-  const b = parseInt(hex.slice(5, 7), 16);
+  const [r, g, b] = parseRGB(hex);
   const adj = (c: number) => {
     const v = f > 0 ? c + (255 - c) * f : c * (1 + f);
     return Math.max(0, Math.min(255, Math.round(v)));
