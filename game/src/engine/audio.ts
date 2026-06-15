@@ -132,12 +132,19 @@ export class Audio {
         this.noise(0.1, 0.14, 700, "lowpass", 0.09);
         break;
       case "complete": this.tone(523, "sine", 0.01, 0.18, 0.3, 784); this.tone(784, "sine", 0.02, 0.22, 0.16, 1046, 0.06); break;
-      case "sword":
-        // Layered metal clang: two filtered bursts + a short bright ring.
-        this.noise(0.09, 0.22, 2600 * v, "bandpass");
-        this.noise(0.07, 0.16, 4200 * v, "highpass", 0.012);
-        this.tone(1900 * v, "triangle", 0.002, 0.08, 0.1, 1200 * v, 0.006);
+      case "sword": {
+        // Metallic clash. The 'metal' comes from INHARMONIC partials (ratios
+        // 1 : 1.51 : 2.19, not whole numbers) ringing out over a bright noise
+        // transient, with a low thunk underneath for weight.
+        const b = this.vary(0.09);
+        this.noise(0.05, 0.26, 5200 * b, "highpass");          // bright 'shing' transient
+        this.noise(0.07, 0.18, 3000 * b, "bandpass", 0.004);   // blade scrape body
+        this.tone(2100 * b, "triangle", 0.001, 0.17, 0.11, 1500 * b, 0.004); // clang partial 1
+        this.tone(3170 * b, "triangle", 0.001, 0.14, 0.07, 2300 * b, 0.004); // partial 2 (inharmonic)
+        this.tone(4600 * b, "sine", 0.001, 0.11, 0.05, 3600 * b, 0.006);     // partial 3 (shimmer)
+        this.tone(170 * b, "triangle", 0.002, 0.05, 0.11, 85, 0.001);        // low thunk (weight)
         break;
+      }
       case "bow":
         // String twang: quick down-sweep plus a tiny pluck of noise.
         this.tone(900 * v, "sawtooth", 0.004, 0.09, 0.12, 300);
