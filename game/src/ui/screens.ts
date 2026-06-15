@@ -11,8 +11,8 @@ import { PRESETS } from "../maps/generator";
 import { GameMode } from "../sim/types";
 import { DIFFICULTIES, DIFFICULTY_IDS } from "../ai/difficulty";
 import { COMMANDERS, COMMANDER_IDS, commanderPerks } from "../content/commanders";
-import { BOONS, BOONS_BY_ID, BOON_CATEGORIES, BoonCategory } from "../content/boons";
-import { rollBoonCache, boonKey, BOON_CACHE_COST } from "../meta/boon_cache";
+import { BOONS, BOONS_BY_ID, BOON_CATEGORIES, BoonCategory, BOON_IDS } from "../content/boons";
+import { rollBoonCache, boonKey, BOON_CACHE_COST, BoonRoll } from "../meta/boon_cache";
 import { PAL, shade, withAlpha } from "../render/palette";
 import { ui } from "./ui";
 import { RNG, randomSeed } from "../engine/rng";
@@ -408,10 +408,12 @@ const COMMANDER_RECRUIT_COST = 500;
 
 export class ArmoryScreen {
   tab: "chests" | "boons" | "collection" | "commanders" = "chests";
-  private lastBoonRoll: { name: string; rarity: number; dup: boolean; refund: number } | null = null;
   // Chest-opening overlay state.
   private opening: ChestDef | null = null;
   private result: RollResult | null = null;
+  // Boon-cache opening overlay (same lottery spinner, boon payload).
+  private boonOpening = false;
+  private boonResult: BoonRoll | null = null;
   private tickets: SpinTicket[] = [];
   private spinT = 0; // 0..1 animation progress
   private spinDur = 4.2;
@@ -430,7 +432,7 @@ export class ArmoryScreen {
     });
 
     let action: "back" | null = null;
-    if (!this.opening) {
+    if (!this.opening && !this.boonOpening) {
       // Tabs.
       const tabW = 138;
       const tabs: [typeof this.tab, string][] = [["chests", "War Chests"], ["boons", "Boons"], ["commanders", "Commanders"], ["collection", "Collection"]];
@@ -449,8 +451,10 @@ export class ArmoryScreen {
       else this.drawCollection(W, H, profile);
 
       if (ui.button("⟵ Back", 24, H - 68, 130, 44, { size: 15 })) action = "back";
-    } else {
+    } else if (this.opening) {
       this.drawOpening(W, H, dt, profile);
+    } else {
+      this.drawBoonOpening(W, H, dt, profile);
     }
     return action;
   }
@@ -647,6 +651,147 @@ export class ArmoryScreen {
     }
   }
 
+  private startBoonOpening(profile: Profile) {
+    if (!profile.spendValor(BOON_CACHE_COST)) return;
+    const rng = new RNG(randomSeed());
+    this.boonResult = rollBoonCache(profile.boonSetSnapshot(), rng);
+    this.boonOpening = true;
+    this.spinT = 0;
+    this.revealed = false;
+    this.claimed = false;
+    this.lastTickIndex = -1;
+    // Ticker strip: 60 boon tickets at advanced rarities, winner at index 52.
+    this.tickets = [];
+    const advW = RARITIES.slice(1).map((r) => r.weight); // caches never roll Common
+    for (let i = 0; i < 60; i++) {
+      const rarity = rng.weightedIndex(advW) + 1;
+      const id = rng.pick(BOON_IDS);
+      this.tickets.push({ rarity, unitName: BOONS_BY_ID[id].name });
+    }
+    this.tickets[52] = { rarity: this.boonResult.rarity, unitName: this.boonResult.name };
+    audio.play("ui");
+  }
+
+  private drawBoonOpening(W: number, H: number, dt: number, profile: Profile) {
+    const ctx = ui.ctx;
+    const res = this.boonResult!;
+    ctx.fillStyle = "rgba(8, 6, 3, 0.78)";
+    ctx.fillRect(0, 0, W, H);
+
+    if (!this.revealed) {
+      this.spinT = Math.min(1, this.spinT + dt / this.spinDur);
+      const ease = 1 - Math.pow(1 - this.spinT, 3.2);
+      const ticketW = 132;
+      const finalOffset = 52 * ticketW;
+      const startOffset = finalOffset - ticketW * 34;
+      const offset = startOffset + (finalOffset - startOffset) * ease;
+
+      const idx = Math.floor(offset / ticketW);
+      if (idx !== this.lastTickIndex) {
+        this.lastTickIndex = idx;
+        audio.play("tick");
+      }
+
+      const cy = H / 2;
+      ui.text("Opening Warband Cache…", W / 2, cy - 130, { align: "center", size: 20, bold: true, color: PAL.uiAccent });
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(W / 2 - 420, cy - 70, 840, 140);
+      ctx.clip();
+      for (let i = 0; i < this.tickets.length; i++) {
+        const t = this.tickets[i];
+        const x = W / 2 + (i * ticketW - offset);
+        if (x < W / 2 - 500 || x > W / 2 + 500) continue;
+        const r = rarityByIndex(t.rarity);
+        ctx.fillStyle = shade("#2a2218", 0.05);
+        ctx.beginPath();
+        ctx.roundRect(x - ticketW / 2 + 5, cy - 60, ticketW - 10, 120, 7);
+        ctx.fill();
+        ctx.strokeStyle = r.color;
+        ctx.lineWidth = 2.5;
+        ctx.stroke();
+        ctx.fillStyle = withAlpha(r.color, 0.18);
+        ctx.fill();
+        ui.text(t.unitName, x, cy - 14, { align: "center", size: 13, bold: true });
+        ui.text(r.name, x, cy + 16, { align: "center", size: 11, color: r.color, bold: true });
+      }
+      ctx.restore();
+      ctx.strokeStyle = "#ffe9b0";
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.moveTo(W / 2, cy - 78);
+      ctx.lineTo(W / 2, cy + 78);
+      ctx.stroke();
+
+      if (this.spinT >= 1) {
+        this.revealed = true;
+        audio.play("reveal");
+        if (res.rarity >= 3) audio.play("levelup");
+        const r = rarityByIndex(res.rarity);
+        this.particles.burst(W / 2, H / 2, 26 + res.rarity * 22, r.color, 260, {
+          maxLife: 1.2, size: 3.4, gravity: 160, glow: res.rarity >= 4,
+        });
+      }
+      if (ui.clicked) this.spinT = 1;
+    } else {
+      const r = rarityByIndex(res.rarity);
+      const def = BOONS_BY_ID[res.boonId];
+      const cw = 380;
+      const chH = 300;
+      const x = W / 2 - cw / 2;
+      const y = H / 2 - chH / 2 - 20;
+      ctx.save();
+      ctx.shadowColor = r.color;
+      ctx.shadowBlur = res.rarity >= 3 ? 42 : 18;
+      ctx.fillStyle = "#241d12";
+      ctx.beginPath();
+      ctx.roundRect(x, y, cw, chH, 12);
+      ctx.fill();
+      ctx.restore();
+      ctx.strokeStyle = r.color;
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.roundRect(x, y, cw, chH, 12);
+      ctx.stroke();
+
+      ui.text(r.name.toUpperCase(), W / 2, y + 40, { align: "center", size: 16, bold: true, color: r.color });
+      ui.text(res.name, W / 2, y + 84, { align: "center", size: 24, bold: true, color: "#ffe9b0" });
+      ui.text(`${def.category[0].toUpperCase() + def.category.slice(1)} boon`, W / 2, y + 114, { align: "center", size: 14, color: "#bdb49a" });
+      wrapText(def.detail(res.rarity), x + 28, y + 150, cw - 56, 14, "#d8cdb4");
+
+      if (res.duplicate) {
+        ui.text(`Duplicate — refunded ${res.refund} ⚔`, W / 2, y + 224, { align: "center", size: 14, color: PAL.uiAccent });
+      } else {
+        ui.text("Upgraded! Equip it in your Battle Plan.", W / 2, y + 224, { align: "center", size: 13, color: "#9fd08a" });
+      }
+
+      this.particles.update(dt);
+      for (const p of this.particles.pool) {
+        if (!p.active) continue;
+        ctx.globalAlpha = p.life / p.maxLife;
+        ctx.fillStyle = p.color;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.size * (p.life / p.maxLife), 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+
+      if (!this.claimed && ui.button("Claim", W / 2 - 80, y + chH - 64, 160, 42, { accent: true, size: 17 })) {
+        this.claimed = true;
+        if (res.duplicate) {
+          profile.addValor(res.refund);
+          audio.play("coin");
+        } else {
+          profile.grantBoon(res.key);
+          audio.play("complete");
+        }
+        profile.save();
+        this.boonOpening = false;
+        this.boonResult = null;
+      }
+    }
+  }
+
   private drawBoons(W: number, H: number, profile: Profile) {
     const colW = Math.min(960, W - 80);
     const x0 = W / 2 - colW / 2;
@@ -658,19 +803,7 @@ export class ArmoryScreen {
     ui.text("You own every boon at Common. Open caches to roll higher rarities — stronger versions of the same boon.", x0 + 16, y + 48, { size: 12, color: "#bdb49a" });
     const canAfford = profile.data.valor >= BOON_CACHE_COST;
     if (ui.button(`Open — ${BOON_CACHE_COST} ⚔`, x0 + colW - 200, y + 18, 184, 36, { accent: canAfford, disabled: !canAfford, tooltip: canAfford ? undefined : ["Not enough Valor", "Earn Valor by fighting — kills, razings and wins."] })) {
-      if (profile.spendValor(BOON_CACHE_COST)) {
-        const roll = rollBoonCache(profile.boonSetSnapshot(), new RNG(randomSeed()));
-        if (roll.duplicate) profile.addValor(roll.refund);
-        else profile.grantBoon(roll.key);
-        profile.save();
-        this.lastBoonRoll = { name: roll.name, rarity: roll.rarity, dup: roll.duplicate, refund: roll.refund };
-        audio.play("reveal");
-      }
-    }
-    if (this.lastBoonRoll) {
-      const r = rarityByIndex(this.lastBoonRoll.rarity);
-      const msg = this.lastBoonRoll.dup ? `Duplicate — refunded ${this.lastBoonRoll.refund} ⚔` : "NEW!";
-      ui.text(`${this.lastBoonRoll.name} · ${r.name}  —  ${msg}`, x0 + 16, y + 66, { size: 13, bold: true, color: r.color });
+      this.startBoonOpening(profile);
     }
     y += 84;
 
