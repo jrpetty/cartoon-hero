@@ -90,9 +90,14 @@ export function drawResource(ctx: Ctx, e: Entity, time: number) {
   if (e.type === "tree") {
     const sway = Math.sin(time * 0.8 + e.id) * 0.8;
     shadow(ctx, e.x + 3, e.y + 5, 11 * frac, 5 * frac);
-    // trunk
-    ctx.fillStyle = PAL.trunk;
+    // trunk with a little rounded shading
+    ctx.fillStyle = grad(ctx, e.x - 2, e.y, e.x + 2, e.y, shade(PAL.trunk, 0.12), shade(PAL.trunk, -0.18));
     ctx.fillRect(e.x - 2, e.y - 4, 4, 9);
+    // dark canopy underlayer for a crisp silhouette
+    ctx.fillStyle = shade(PAL.foliage1, -0.22);
+    ctx.beginPath();
+    ctx.arc(e.x + sway * 0.4, e.y - 6, 10 * frac + v(2) * 2, 0, Math.PI * 2);
+    ctx.fill();
     // layered canopy
     const layers: [number, number, string][] = [
       [9 * frac, 4, PAL.foliage1],
@@ -105,15 +110,15 @@ export function drawResource(ctx: Ctx, e: Entity, time: number) {
       ctx.arc(e.x + sway * 0.4, e.y - 8 + oy, r + v(2) * 2, 0, Math.PI * 2);
       ctx.fill();
     }
-    // highlight
-    ctx.fillStyle = withAlpha("#dff0c0", 0.25);
+    // sun-side highlight
+    ctx.fillStyle = withAlpha("#dff0c0", 0.3);
     ctx.beginPath();
     ctx.arc(e.x - 3 + sway * 0.4, e.y - 12, 3.5 * frac, 0, Math.PI * 2);
     ctx.fill();
   } else if (e.type === "gold_mine") {
     shadow(ctx, e.x + 2, e.y + 6, 13 * frac + 2, 5);
     // rock pile
-    ctx.fillStyle = PAL.goldRock;
+    ctx.fillStyle = grad(ctx, e.x, e.y - 9 * frac, e.x, e.y + 7, shade(PAL.goldRock, 0.12), shade(PAL.goldRock, -0.1));
     ctx.beginPath();
     ctx.moveTo(e.x - 13 * frac, e.y + 7);
     ctx.lineTo(e.x - 6, e.y - 9 * frac);
@@ -1566,51 +1571,71 @@ function drawCrossbow(ctx: Ctx, e: Entity, tc: any, atkFrac: number) {
   }
 }
 
+// A shaded, spoked siege wheel.
+function siegeWheel(ctx: Ctx, wx: number, wy: number, wr: number) {
+  ctx.fillStyle = grad(ctx, wx - wr, wy, wx + wr, wy, "#4a3826", "#241910");
+  ctx.beginPath();
+  ctx.arc(wx, wy, wr, 0, Math.PI * 2);
+  ctx.fill();
+  softOutline(ctx, 1.2);
+  ctx.strokeStyle = "#1c130a";
+  ctx.lineWidth = 1;
+  for (let i = 0; i < 4; i++) {
+    const a = (i * Math.PI) / 4;
+    ctx.beginPath();
+    ctx.moveTo(wx - Math.cos(a) * wr, wy - Math.sin(a) * wr);
+    ctx.lineTo(wx + Math.cos(a) * wr, wy + Math.sin(a) * wr);
+    ctx.stroke();
+  }
+  ctx.fillStyle = "#5a4632";
+  ctx.beginPath();
+  ctx.arc(wx, wy, wr * 0.26, 0, Math.PI * 2);
+  ctx.fill();
+}
+
 function drawTrebuchet(ctx: Ctx, e: Entity, tc: any, atkFrac: number) {
   const r = e.radius;
   ctx.save();
   ctx.rotate(e.facing);
+  siegeWheel(ctx, -r * 0.6, r * 0.55, r * 0.28);
+  siegeWheel(ctx, r * 0.6, r * 0.55, r * 0.28);
   // heavy timber base
-  ctx.fillStyle = PAL.woodDark;
-  ctx.fillRect(-r * 0.9, -r * 0.7, r * 1.8, r * 1.4);
-  ctx.fillStyle = PAL.wood;
-  ctx.fillRect(-r * 0.75, -r * 0.5, r * 1.5, r);
+  ctx.fillStyle = grad(ctx, 0, -r * 0.6, 0, r * 0.6, shade(PAL.wood, 0.1), PAL.woodDark);
+  ctx.beginPath();
+  ctx.roundRect(-r * 0.85, -r * 0.55, r * 1.7, r * 1.1, 3);
+  ctx.fill();
+  softOutline(ctx, 1.4);
   // A-frame uprights
   ctx.strokeStyle = PAL.woodLight;
-  ctx.lineWidth = 3;
+  ctx.lineWidth = r * 0.12;
+  ctx.lineCap = "round";
   for (const s of [-1, 1]) {
     ctx.beginPath();
-    ctx.moveTo(s * r * 0.5, r * 0.5);
+    ctx.moveTo(s * r * 0.5, r * 0.4);
     ctx.lineTo(0, -r * 1.1);
     ctx.stroke();
   }
-  // long throwing beam pivoting over the frame; counterweight on the short end
+  // throwing beam (counterweight short end, sling long end)
   const beam = atkFrac > 0.85 ? 1.1 : atkFrac > 0 ? -0.7 + (1 - atkFrac) * 1.8 : 1.1;
   const px = Math.cos(beam);
   const py = Math.sin(beam);
-  ctx.strokeStyle = "#5a4632";
-  ctx.lineWidth = 3.4;
+  ctx.strokeStyle = grad(ctx, px * r * 1.7, -r * 1.1 - py * r * 1.7, -px * r * 0.7, -r * 1.1 + py * r * 0.7, PAL.woodLight, PAL.woodDark);
+  ctx.lineWidth = r * 0.14;
   ctx.beginPath();
   ctx.moveTo(px * r * 1.7, -r * 1.1 - py * r * 1.7);
   ctx.lineTo(-px * r * 0.7, -r * 1.1 + py * r * 0.7);
   ctx.stroke();
-  // counterweight block
-  ctx.fillStyle = "#2c2c30";
-  ctx.fillRect(-px * r * 0.7 - 3, -r * 1.1 + py * r * 0.7 - 3, 7, 7);
-  // sling pouch
-  ctx.fillStyle = PAL.leather;
+  ctx.fillStyle = "#2c2c30"; // counterweight
   ctx.beginPath();
-  ctx.arc(px * r * 1.7, -r * 1.1 - py * r * 1.7, r * 0.22, 0, Math.PI * 2);
+  ctx.arc(-px * r * 0.7, -r * 1.1 + py * r * 0.7, r * 0.22, 0, Math.PI * 2);
   ctx.fill();
-  // wheels + pennant
-  ctx.fillStyle = "#3a2c1c";
-  for (const wx of [-r * 0.6, r * 0.6]) {
-    ctx.beginPath();
-    ctx.arc(wx, r * 0.6, r * 0.26, 0, Math.PI * 2);
-    ctx.fill();
-  }
+  softOutline(ctx, 1.2);
+  ctx.fillStyle = PAL.leather; // sling pouch
+  ctx.beginPath();
+  ctx.arc(px * r * 1.7, -r * 1.1 - py * r * 1.7, r * 0.2, 0, Math.PI * 2);
+  ctx.fill();
   ctx.fillStyle = tc.main;
-  ctx.fillRect(-r * 0.9, -r * 0.1, r * 0.35, r * 0.2);
+  ctx.fillRect(-r * 0.85, -r * 0.05, r * 0.32, r * 0.18);
   ctx.restore();
 }
 
@@ -1618,34 +1643,31 @@ function drawCatapult(ctx: Ctx, e: Entity, tc: any, atkFrac: number) {
   const r = e.radius;
   ctx.save();
   ctx.rotate(e.facing);
-  // frame
-  ctx.fillStyle = PAL.woodDark;
-  ctx.fillRect(-r, -r * 0.6, r * 2, r * 1.2);
-  ctx.fillStyle = PAL.wood;
-  ctx.fillRect(-r * 0.85, -r * 0.45, r * 1.7, r * 0.9);
-  // wheels
-  ctx.fillStyle = "#3a2c1c";
   for (const [wx, wy] of [[-r * 0.7, -r * 0.62], [-r * 0.7, r * 0.62], [r * 0.7, -r * 0.62], [r * 0.7, r * 0.62]]) {
-    ctx.beginPath();
-    ctx.arc(wx, wy, r * 0.26, 0, Math.PI * 2);
-    ctx.fill();
+    siegeWheel(ctx, wx, wy, r * 0.26);
   }
-  // throwing arm: cocked back as it reloads, snaps forward on fire
+  // frame
+  ctx.fillStyle = grad(ctx, 0, -r * 0.55, 0, r * 0.55, shade(PAL.wood, 0.1), PAL.woodDark);
+  ctx.beginPath();
+  ctx.roundRect(-r * 0.9, -r * 0.5, r * 1.8, r, 3);
+  ctx.fill();
+  softOutline(ctx, 1.4);
+  // throwing arm: cocked back to reload, snaps forward on fire
   const armAngle = atkFrac > 0.85 ? -0.4 : atkFrac > 0 ? 0.9 - (0.85 - atkFrac) : -0.4;
-  ctx.strokeStyle = PAL.woodLight;
-  ctx.lineWidth = 3.2;
+  ctx.strokeStyle = grad(ctx, -r * 0.4, 0, -r * 0.4 + Math.cos(armAngle) * r * 1.2, -Math.sin(armAngle) * r * 1.2, PAL.woodLight, PAL.woodDark);
+  ctx.lineWidth = r * 0.14;
+  ctx.lineCap = "round";
   ctx.beginPath();
   ctx.moveTo(-r * 0.4, 0);
   ctx.lineTo(-r * 0.4 + Math.cos(armAngle) * r * 1.2, -Math.sin(armAngle) * r * 1.2);
   ctx.stroke();
-  // cup
-  ctx.fillStyle = PAL.leather;
+  ctx.fillStyle = PAL.leather; // cup
   ctx.beginPath();
   ctx.arc(-r * 0.4 + Math.cos(armAngle) * r * 1.2, -Math.sin(armAngle) * r * 1.2, r * 0.2, 0, Math.PI * 2);
   ctx.fill();
-  // team pennant
+  softOutline(ctx, 1.1);
   ctx.fillStyle = tc.main;
-  ctx.fillRect(r * 0.75, -r * 0.1, r * 0.45, r * 0.2);
+  ctx.fillRect(r * 0.7, -r * 0.08, r * 0.4, r * 0.18);
   ctx.restore();
 }
 
@@ -1653,39 +1675,49 @@ function drawRam(ctx: Ctx, e: Entity, tc: any, atkFrac: number) {
   const r = e.radius;
   ctx.save();
   ctx.rotate(e.facing);
-  // protective roof
-  ctx.fillStyle = PAL.woodDark;
+  siegeWheel(ctx, -r * 0.5, r * 0.7, r * 0.22);
+  siegeWheel(ctx, r * 0.5, r * 0.7, r * 0.22);
+  // swinging log with an iron head (drawn under the roof)
+  const swing = atkFrac > 0.8 ? (atkFrac - 0.8) / 0.2 : 0;
+  ctx.strokeStyle = grad(ctx, -r * 0.6, 0, r * 1.3, 0, shade(PAL.trunk, 0.12), shade(PAL.trunk, -0.2));
+  ctx.lineWidth = r * 0.26;
+  ctx.lineCap = "round";
+  ctx.beginPath();
+  ctx.moveTo(-r * 0.5, 0);
+  ctx.lineTo(r * (1.0 + swing * 0.5), 0);
+  ctx.stroke();
+  ctx.fillStyle = grad(ctx, r * (1.0 + swing * 0.5), -r * 0.2, r * (1.2 + swing * 0.5), r * 0.2, PAL.steel, PAL.steelDark);
+  ctx.beginPath();
+  ctx.moveTo(r * (1.0 + swing * 0.5), -r * 0.2);
+  ctx.lineTo(r * (1.35 + swing * 0.5), 0);
+  ctx.lineTo(r * (1.0 + swing * 0.5), r * 0.2);
+  ctx.closePath();
+  ctx.fill();
+  softOutline(ctx, 1.2);
+  // protective gabled roof
+  ctx.fillStyle = grad(ctx, 0, -r * 0.75, 0, r * 0.75, shade(PAL.wood, 0.08), PAL.woodDark);
   ctx.beginPath();
   ctx.moveTo(-r, r * 0.55);
-  ctx.lineTo(-r, -r * 0.55);
-  ctx.lineTo(-r * 0.6, -r * 0.75);
-  ctx.lineTo(r * 0.6, -r * 0.75);
-  ctx.lineTo(r, -r * 0.55);
+  ctx.lineTo(-r, -r * 0.5);
+  ctx.lineTo(-r * 0.6, -r * 0.78);
+  ctx.lineTo(r * 0.6, -r * 0.78);
+  ctx.lineTo(r, -r * 0.5);
   ctx.lineTo(r, r * 0.55);
   ctx.lineTo(r * 0.6, r * 0.75);
   ctx.lineTo(-r * 0.6, r * 0.75);
   ctx.closePath();
   ctx.fill();
-  ctx.fillStyle = PAL.wood;
-  ctx.fillRect(-r * 0.85, -r * 0.5, r * 1.7, r);
-  // plank lines
-  ctx.strokeStyle = PAL.woodDark;
+  softOutline(ctx, 1.6);
+  ctx.strokeStyle = "rgba(20,16,10,0.3)"; // planks
   ctx.lineWidth = 1;
   for (let i = -2; i <= 2; i++) {
     ctx.beginPath();
-    ctx.moveTo(i * r * 0.35, -r * 0.5);
-    ctx.lineTo(i * r * 0.35, r * 0.5);
+    ctx.moveTo(i * r * 0.35, -r * 0.6);
+    ctx.lineTo(i * r * 0.35, r * 0.55);
     ctx.stroke();
   }
-  // swinging log tip: pokes out the front on attack
-  const swing = atkFrac > 0.8 ? (atkFrac - 0.8) / 0.2 : 0;
-  ctx.fillStyle = PAL.trunk;
-  ctx.fillRect(r * (0.6 + swing * 0.5), -r * 0.14, r * 0.7, r * 0.28);
-  ctx.fillStyle = PAL.steelDark;
-  ctx.fillRect(r * (1.2 + swing * 0.5), -r * 0.17, r * 0.16, r * 0.34);
-  // team stripe
-  ctx.fillStyle = tc.main;
-  ctx.fillRect(-r * 0.85, -r * 0.55, r * 1.7, 3);
+  ctx.fillStyle = tc.main; // team ridge
+  ctx.fillRect(-r * 0.6, -r * 0.78, r * 1.2, 3);
   ctx.restore();
 }
 

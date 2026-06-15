@@ -821,7 +821,9 @@ class App {
       switch (ev.kind) {
         case "sword":
           sfx("sword", "sword");
-          this.particles.burst(ev.x, ev.y, 4, "#ffd9a0", 90, { maxLife: 0.25, size: 1.8 });
+          // dust puff + a couple of bright metallic glints for a punchy clash
+          this.particles.burst(ev.x, ev.y, 5, "#ffd9a0", 95, { maxLife: 0.22, size: 1.8 });
+          this.particles.burst(ev.x, ev.y, 3, "#fff6e0", 150, { maxLife: 0.16, size: 1.4, glow: true });
           break;
         case "bow":
           sfx("bow", "bow");
@@ -829,6 +831,7 @@ class App {
         case "arrowHit":
           sfx("arrowHit", "arrowHit");
           this.particles.burst(ev.x, ev.y, 3, "#d9cfb4", 70, { maxLife: 0.2, size: 1.5 });
+          this.particles.burst(ev.x, ev.y, 2, "#fff6e0", 130, { maxLife: 0.14, size: 1.2, glow: true });
           if (Math.random() < 0.6) this.renderer.addStuckArrow(ev.x, ev.y, Math.random() * Math.PI * 2);
           break;
         case "hit":
@@ -846,6 +849,7 @@ class App {
         case "death":
           sfx("death", "death", 0.14);
           this.particles.burst(ev.x, ev.y, 9, PAL.blood, 110, { maxLife: 0.5, size: 2.2, gravity: 140 });
+          this.particles.burst(ev.x, ev.y, 5, "#ffffff", 80, { maxLife: 0.18, size: 2.4, glow: true });
           this.renderer.addCorpse(ev.x, ev.y, ev.team, false);
           break;
         case "collapse":
