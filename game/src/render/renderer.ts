@@ -224,6 +224,7 @@ export class Renderer {
     dragBox: { active: boolean; x0: number; y0: number; x1: number; y1: number },
     rallyFrom: Entity | null,
     hoveredId = -1,
+    alpha = 1, // 0..1 interpolation between the last two sim ticks
   ) {
     const { ctx, canvas } = this;
     const W = canvas.width;
@@ -382,6 +383,22 @@ export class Renderer {
     }
     drawables.sort((a, b) => a.y - b.y || a.id - b.id);
 
+    // Tween each entity toward this frame's fraction between sim ticks so motion
+    // is smooth at 60fps over the 20Hz sim. Originals are restored in `finally`
+    // so the simulation never sees the interpolated values.
+    const interpOX: number[] = [];
+    const interpOY: number[] = [];
+    if (alpha < 1) {
+      for (let i = 0; i < drawables.length; i++) {
+        const e = drawables[i];
+        interpOX.push(e.x);
+        interpOY.push(e.y);
+        e.x = e.prevX + (e.x - e.prevX) * alpha;
+        e.y = e.prevY + (e.y - e.prevY) * alpha;
+      }
+    }
+    try {
+
     // Selection rings under everything else.
     for (const e of drawables) {
       if (e.selected) drawSelectionRing(ctx, e, e.team === viewTeam);
@@ -426,6 +443,16 @@ export class Renderer {
       if (e.selected || e.id === hoveredId || (e.hp < e.maxHp && time - e.lastDamageTime < 6)) {
         if (e.kind === Kind.Building && e.buildState !== BuildState.Done) continue;
         this.guard(ctx, "healthbar:" + e.type, worldTf, () => drawHealthBar(ctx, e));
+      }
+    }
+
+    } finally {
+      // Restore true sim positions regardless of any draw error above.
+      if (alpha < 1) {
+        for (let i = 0; i < drawables.length; i++) {
+          drawables[i].x = interpOX[i];
+          drawables[i].y = interpOY[i];
+        }
       }
     }
 

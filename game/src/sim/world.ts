@@ -137,7 +137,7 @@ export function makeEntity(): Entity {
     team: Team.Neutral,
     type: "",
     alive: true,
-    x: 0, y: 0, radius: 8, facing: 0,
+    x: 0, y: 0, prevX: 0, prevY: 0, radius: 8, facing: 0,
     hp: 1, maxHp: 1,
     vx: 0, vy: 0, speed: 0,
     attack: 0, range: 0, attackCooldown: 0, attackInterval: 1,
@@ -441,6 +441,8 @@ export class World {
     e.team = team;
     e.type = type;
     [e.x, e.y] = this.grid ? this.grid.nearestOpenWorld(x, y) : [x, y];
+    e.prevX = e.x;
+    e.prevY = e.y;
     this.applyUnitStats(e, def, team);
     e.facing = this.rng.range(0, Math.PI * 2);
     this.entities.push(e);
@@ -460,6 +462,8 @@ export class World {
     const tiles = def.tiles;
     e.x = Math.round(x / TILE) * TILE + (tiles % 2 === 1 ? TILE / 2 : 0);
     e.y = Math.round(y / TILE) * TILE + (tiles % 2 === 1 ? TILE / 2 : 0);
+    e.prevX = e.x;
+    e.prevY = e.y;
     e.radius = (tiles * TILE) / 2;
     const bn = this.players[team]?.boon ?? emptyBoonEffect();
     const hpMult = WALL_TYPES.has(type) ? bn.wallHpMult : bn.buildingHpMult;
@@ -498,6 +502,8 @@ export class World {
     e.type = type;
     e.x = Math.floor(x / TILE) * TILE + TILE / 2;
     e.y = Math.floor(y / TILE) * TILE + TILE / 2;
+    e.prevX = e.x;
+    e.prevY = e.y;
     e.radius = TILE / 2;
     e.amount = amount;
     e.hp = e.maxHp = 1;
@@ -1096,6 +1102,14 @@ export class World {
   tick() {
     this.tickCount++;
     this.time += SIM_DT;
+
+    // Snapshot positions so the renderer can interpolate between ticks (smooth
+    // 60fps motion over the 20Hz sim). Done before anything moves this tick.
+    for (const e of this.entities) {
+      if (!e.alive) continue;
+      e.prevX = e.x;
+      e.prevY = e.y;
+    }
 
     // Rebuild spatial hash.
     this.spatial.clear();
@@ -1819,6 +1833,8 @@ export class World {
     e.type = sourceType === "catapult" ? "rock" : "arrow";
     e.x = from.x;
     e.y = from.y;
+    e.prevX = e.x;
+    e.prevY = e.y;
     e.projFromX = from.x;
     e.projFromY = from.y;
     e.projTargetId = target.id;

@@ -1107,10 +1107,12 @@ class App {
       const he = world.entityAt(hw, hh);
       if (he && he.kind !== Kind.Projectile && world.visibleTo(PLAYER, he)) hoveredId = he.id;
     }
+    // Interpolation factor: how far we are into the next sim tick (0..1).
+    const alpha = (this.ingameMenu || this.paused) ? 1 : Math.min(1, this.accumulator / SIM_DT);
     this.renderer.render(
       world, this.camera, this.particles, dt, this.time, PLAYER,
       this.markers, ghost, suppressDragBox ? { active: false, x0: 0, y0: 0, x1: 0, y1: 0 } : this.input.drag, rallyFrom,
-      hoveredId,
+      hoveredId, alpha,
     );
 
     // ---- HUD (consumes pointer if clicked over panels) ----

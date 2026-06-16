@@ -96,6 +96,10 @@ export interface Entity {
   alive: boolean;
   x: number;
   y: number;
+  /** Position at the start of the current sim tick. The renderer interpolates
+   *  between (prevX,prevY) and (x,y) for smooth 60fps motion over the 20Hz sim. */
+  prevX: number;
+  prevY: number;
   radius: number;
   facing: number; // radians
 
