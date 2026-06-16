@@ -44,6 +44,40 @@ describe("Lockstep determinism", () => {
     expect(worldChecksum(a.world)).toBe(worldChecksum(b.world));
   });
 
+  it("varied commands (train + move) stay deterministic across clients", () => {
+    const SEED = 9001;
+    const aToB: Turn[] = [];
+    const bToA: Turn[] = [];
+    const a = new Lockstep(freshWorld(SEED), Team.Player, [Team.Player, Team.Enemy], 4, (t) => aToB.push(t));
+    const b = new Lockstep(freshWorld(SEED), Team.Enemy, [Team.Player, Team.Enemy], 4, (t) => bToA.push(t));
+    const tcA = a.world.entitiesOf(Team.Player, Kind.Building).find((e) => e.type === "town_center")!.id;
+    const tcB = b.world.entitiesOf(Team.Enemy, Kind.Building).find((e) => e.type === "town_center")!.id;
+    const start = worldChecksum(a.world);
+
+    for (let frame = 0; frame < 200; frame++) {
+      if (frame % 30 === 0) {
+        a.localCommand({ t: "train", team: Team.Player, buildingId: tcA, unit: "villager" });
+        b.localCommand({ t: "train", team: Team.Enemy, buildingId: tcB, unit: "villager" });
+      }
+      if (frame % 17 === 0) {
+        const idsA = a.world.entitiesOf(Team.Player, Kind.Unit).map((e) => e.id);
+        const idsB = b.world.entitiesOf(Team.Enemy, Kind.Unit).map((e) => e.id);
+        a.localCommand({ t: "move", team: Team.Player, ids: idsA, x: 700, y: 400 + frame, queue: false, attackMove: false, formation: true });
+        b.localCommand({ t: "move", team: Team.Enemy, ids: idsB, x: 700, y: 500 + frame, queue: false, attackMove: false, formation: true });
+      }
+      a.authorTurn();
+      b.authorTurn();
+      while (bToA.length) a.receiveTurn(bToA.shift()!);
+      while (aToB.length) b.receiveTurn(aToB.shift()!);
+      while (a.step()) { /* */ }
+      while (b.step()) { /* */ }
+    }
+    expect(a.currentTick).toBe(b.currentTick);
+    expect(worldChecksum(a.world)).toBe(worldChecksum(b.world));
+    // Sanity: the sim actually advanced and did work (not a no-op match).
+    expect(worldChecksum(a.world)).not.toBe(start);
+  });
+
   it("a tick cannot advance until every player's turn has arrived", () => {
     const a = new Lockstep(freshWorld(7), Team.Player, [Team.Player, Team.Enemy], 3);
     // Warm-up ticks (0..2) are pre-seeded, so exactly inputDelay steps are free.

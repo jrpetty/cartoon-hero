@@ -23,7 +23,7 @@ export class Lockstep {
   readonly teams: Team[];
   private buffer = new Map<number, Map<Team, Command[]>>();
   private pending: Command[] = [];
-  private nextAuthorTick = 0;
+  nextAuthorTick = 0;
 
   constructor(
     public world: World,

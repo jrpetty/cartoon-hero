@@ -34,10 +34,13 @@ import {
 } from "./ui/screens";
 import { Profile } from "./meta/profile";
 import { computeRewards, MatchRewards } from "./meta/progression";
+import { Command, applyCommand } from "./sim/commands";
+import { NetSession } from "./net/session";
+import { PeerLink } from "./net/webrtc";
+import { NetLobby, NetStart } from "./ui/net_lobby";
 
 type AppState = "menu" | "setup" | "armory" | "match" | "postmatch" | "codex";
 
-const PLAYER = Team.Player;
 // Buildings you can drag-paint into a continuous run.
 const LINE_BUILDABLE = new Set(["palisade", "stone_wall"]);
 
@@ -70,6 +73,13 @@ class App {
   powerArmed = false; // commander power placement mode
   ingameMenu = false;
   spectating = false; // watch mode: all teams are AI, no player commands
+  /** The team this client controls/views. 0 for single-player & the net host;
+   *  the net joiner sets it to their team. (Was the old PLAYER constant.) */
+  me: Team = Team.Player;
+  net: NetSession | null = null; // active lockstep session in multiplayer
+  private netAccumulator = 0;
+  private netDesyncAlerted = false;
+  private lobby = new NetLobby();
   paused = false;
   gameSpeed = 1; // 0.5 / 1 / 2 / 3
   private idleVillIndex = 0;
@@ -162,8 +172,8 @@ class App {
     // Spectators only watch — no army commands.
     if (this.spectating) return;
     if (k === "a") this.attackMoveArmed = true;
-    if (k === "s") this.world.issueStop(this.playerSelection().map((e) => e.id));
-    if (k === "h") this.world.issueHold(this.playerSelection().map((e) => e.id));
+    if (k === "s") this.dispatch({ t: "stop", team: this.me, ids: this.playerSelection().map((e) => e.id) });
+    if (k === "h") this.dispatch({ t: "hold", team: this.me, ids: this.playerSelection().map((e) => e.id) });
     if (k === "q") this.controller.useAbility();
     if (k === "b") {
       this.hud.buildMenuOpen = true;
@@ -206,8 +216,8 @@ class App {
   garrisonSelected() {
     if (!this.world) return;
     const sel = this.playerSelection();
-    const units = sel.filter((e) => e.kind === Kind.Unit && e.team === PLAYER);
-    const selBuilding = sel.find((e) => e.kind === Kind.Building && e.team === PLAYER);
+    const units = sel.filter((e) => e.kind === Kind.Unit && e.team === this.me);
+    const selBuilding = sel.find((e) => e.kind === Kind.Building && e.team === this.me);
     const cap = (e: Entity) => BUILDINGS[e.type]?.garrisonCap ?? 0;
 
     // Just a building selected (no troops to load) → eject its garrison.
@@ -231,14 +241,14 @@ class App {
       cy /= units.length;
       let bestD = Infinity;
       for (const e of this.world.entities) {
-        if (!e.alive || e.kind !== Kind.Building || e.team !== PLAYER) continue;
+        if (!e.alive || e.kind !== Kind.Building || e.team !== this.me) continue;
         if (e.buildState !== BuildState.Done || cap(e) <= 0 || e.garrison.length >= cap(e)) continue;
         const d = Math.hypot(e.x - cx, e.y - cy);
         if (d < bestD) { bestD = d; target = e; }
       }
     }
     if (!target) { this.hud.addAlert("No garrison-capable building nearby."); return; }
-    this.world.garrison(units.map((u) => u.id), target.id);
+    this.dispatch({ t: "garrison", team: this.me, ids: units.map((u) => u.id), buildingId: target.id });
     this.hud.addAlert(`Garrisoning into ${BUILDINGS[target.type]?.name ?? "building"}…`);
     audio.play("command");
   }
@@ -250,7 +260,7 @@ class App {
     const out: Entity[] = [];
     for (const id of this.selection) {
       const e = this.world.byId.get(id);
-      if (e && e.alive && e.team === PLAYER) out.push(e);
+      if (e && e.alive && e.team === this.me) out.push(e);
     }
     return out;
   }
@@ -330,11 +340,62 @@ class App {
     this.matchRewards = null;
     this.camera.setWorld(map.worldW, map.worldH);
     this.camera.zoom = 1;
-    this.camera.centerOn(map.starts[PLAYER].x, map.starts[PLAYER].y);
+    this.camera.centerOn(map.starts[this.me].x, map.starts[this.me].y);
     this.accumulator = 0;
     this.spectating = false;
+    this.endNet();
+    this.me = Team.Player;
     this.state = "match";
     this.hud.addAlert(`${map.name} — vs ${diff.name}. Your villagers await orders!`);
+    audio.play("complete");
+  }
+
+  /** Tear down any active net session/link (called when leaving a net match). */
+  private endNet() {
+    if (this.net) {
+      try { this.net.link.close(); } catch { /* */ }
+      this.net = null;
+    }
+    this.netDesyncAlerted = false;
+  }
+
+  /** Start a peer-to-peer 1v1 once the lobby handshake has connected. Both
+   *  clients build the identical world from the shared seed (fair, all-Common,
+   *  no commanders/boons) and drive it under lockstep. */
+  startNetMatch(start: NetStart) {
+    const numPlayers = 2;
+    const map = generateMap("open_plains", start.seed, numPlayers, false);
+    const world = new World(start.seed);
+    const loadouts = [this.profile.matchLoadout(true), this.profile.matchLoadout(true)];
+    const econMults = [1, 1];
+    const commanders = ["", ""];
+    world.init(map, loadouts, econMults, undefined, commanders, false, undefined, "conquest");
+    this.world = world;
+    this.ais = [];
+    this.net = new NetSession(start.link, start.isHost);
+    this.me = this.net.localTeam;
+    this.net.attach(world, 5);
+    this.net.link.onClose = () => this.hud.addAlert("⚠ Opponent disconnected.");
+    this.renderer.prepare(map);
+    this.renderer.clearFx();
+    this.hud.prepare(map);
+    this.particles.clear();
+    this.selection = [];
+    this.controlGroups = Array.from({ length: 10 }, () => []);
+    this.markers = [];
+    this.placing = null;
+    this.attackMoveArmed = false;
+    this.ingameMenu = false;
+    this.matchOverTimer = -1;
+    this.matchRewards = null;
+    this.netAccumulator = 0;
+    this.netDesyncAlerted = false;
+    this.camera.setWorld(map.worldW, map.worldH);
+    this.camera.zoom = 1;
+    this.camera.centerOn(map.starts[this.me].x, map.starts[this.me].y);
+    this.spectating = false;
+    this.state = "match";
+    this.hud.addAlert("🔗 Connected — 1v1. Good luck!");
     audio.play("complete");
   }
 
@@ -390,6 +451,8 @@ class App {
     this.camera.centerOn(map.worldW / 2, map.worldH / 2);
     this.accumulator = 0;
     this.spectating = true;
+    this.endNet();
+    this.me = Team.Player;
     this.state = "match";
     this.hud.addAlert(`👁 Spectating — ${map.name}, ${numPlayers} AI ${diff.name}s. Sit back.`);
     audio.play("complete");
@@ -398,32 +461,35 @@ class App {
   // The HUD acts through this controller.
   controller: MatchController = {
     trainUnit: (b, type) => {
-      if (this.world?.trainUnit(PLAYER, b.id, type)) audio.play("ui");
+      this.dispatch({ t: "train", team: this.me, buildingId: b.id, unit: type });
+      audio.play("ui");
     },
     research: (b, techId) => {
-      if (this.world?.research(PLAYER, b.id, techId)) audio.play("ui");
+      this.dispatch({ t: "research", team: this.me, buildingId: b.id, tech: techId });
+      audio.play("ui");
     },
     startPlacement: (type) => {
       this.placing = type;
       audio.play("ui");
     },
     ungarrison: (b) => {
-      this.world?.ungarrison(b.id);
+      this.dispatch({ t: "ungarrison", team: this.me, buildingId: b.id });
       audio.play("command");
     },
     toggleGate: (b) => {
-      this.world?.toggleGate(b.id);
+      this.dispatch({ t: "gate", team: this.me, buildingId: b.id });
       audio.play("build");
     },
     trade: (action) => {
-      if (this.world?.marketTrade(PLAYER, action)) audio.play("coin");
+      this.dispatch({ t: "trade", team: this.me, action });
+      audio.play("coin");
     },
     stopSelection: () => {
-      this.world?.issueStop(this.playerSelection().map((e) => e.id));
+      this.dispatch({ t: "stop", team: this.me, ids: this.playerSelection().map((e) => e.id) });
       audio.play("command");
     },
     holdSelection: () => {
-      this.world?.issueHold(this.playerSelection().map((e) => e.id));
+      this.dispatch({ t: "hold", team: this.me, ids: this.playerSelection().map((e) => e.id) });
       audio.play("command");
     },
     setAttackMoveMode: () => {
@@ -432,9 +498,8 @@ class App {
     garrisonSelection: () => this.garrisonSelected(),
     useAbility: () => {
       const ids = this.playerSelection().filter((e) => e.kind === Kind.Unit).map((e) => e.id);
-      const fired = this.world?.useAbility(ids) ?? 0;
-      if (fired > 0) audio.play("command");
-      else this.hud.addAlert("Ability not ready.");
+      if (ids.length) this.dispatch({ t: "ability", team: this.me, ids });
+      audio.play("command");
     },
     minimapNavigate: (wx, wy) => this.camera.centerOn(wx, wy),
     minimapCommand: (wx, wy) => this.issueContextCommand(wx, wy, null),
@@ -465,6 +530,13 @@ class App {
     return out;
   }
 
+  /** Funnel every player action through here: queued for lockstep in a net game,
+   *  applied immediately in single-player. Keeps both paths in one place. */
+  dispatch(cmd: Command) {
+    if (this.net?.lock) this.net.lock.localCommand(cmd);
+    else if (this.world) applyCommand(this.world, cmd);
+  }
+
   /** Drag-release while a wall is selected: lay a whole run of segments at once. */
   paintWallLine(box: { x0: number; y0: number; x1: number; y1: number }) {
     if (!this.world || !this.placing) return;
@@ -473,20 +545,15 @@ class App {
       this.camera.screenToWorldX(box.x1), this.camera.screenToWorldY(box.y1),
     );
     const villagers = this.playerSelection().filter((e) => UNITS[e.type]?.canBuild);
-    const placed: EntityId[] = [];
-    for (const pt of pts) {
-      const b = this.world.placeBuilding(PLAYER, this.placing, pt.x, pt.y);
-      if (b) placed.push(b.id);
-    }
-    if (placed.length > 0) {
-      placed.forEach((id, i) => {
-        const v = villagers[i % Math.max(1, villagers.length)];
-        if (v) this.world!.issueBuildRepair([v.id], id, true);
-      });
-      audio.play("build");
-    } else {
-      this.hud.addAlert("Cannot build there.");
-    }
+    let any = false;
+    pts.forEach((pt, i) => {
+      if (!this.world!.canPlace(this.me, this.placing!, pt.x, pt.y)) return;
+      const v = villagers[i % Math.max(1, villagers.length)];
+      this.dispatch({ t: "place", team: this.me, building: this.placing!, x: pt.x, y: pt.y, builders: v ? [v.id] : [] });
+      any = true;
+    });
+    if (any) audio.play("build");
+    else this.hud.addAlert("Cannot build there.");
     if (!this.input.shift) this.placing = null;
   }
 
@@ -550,7 +617,7 @@ class App {
   selectIdleVillager() {
     if (!this.world) return;
     const idle = this.world
-      .entitiesOf(PLAYER, Kind.Unit)
+      .entitiesOf(this.me, Kind.Unit)
       .filter((e) => e.type === "villager" && e.order.kind === OrderKind.Idle);
     if (idle.length === 0) { this.hud.addAlert("No idle villagers"); return; }
     this.idleVillIndex = this.idleVillIndex % idle.length;
@@ -564,7 +631,7 @@ class App {
   selectAllArmy() {
     if (!this.world) return;
     const army = this.world
-      .entitiesOf(PLAYER, Kind.Unit)
+      .entitiesOf(this.me, Kind.Unit)
       .filter((e) => !UNITS[e.type]?.canGather);
     if (army.length === 0) { this.hud.addAlert("No army units"); return; }
     this.select(army.map((e) => e.id));
@@ -600,14 +667,14 @@ class App {
 
     // Idle-villager + army, above the minimap.
     const idleCount = this.world
-      .entitiesOf(PLAYER, Kind.Unit)
+      .entitiesOf(this.me, Kind.Unit)
       .filter((e) => e.type === "villager" && e.order.kind === OrderKind.Idle).length;
     const by = H - MINIMAP_SIZE - 10 - 22 - 6 - 26 - 4;
     chip(`Idle ${idleCount}`, 12, by, 70, 24, idleCount > 0, () => this.selectIdleVillager());
     chip("Army", 86, by, 60, 24, false, () => this.selectAllArmy());
 
     // Commander power button (only if your commander has one).
-    const p = this.world.player(PLAYER);
+    const p = this.world.player(this.me);
     const power = COMMANDERS[p.commander]?.power;
     if (power) {
       const ready = p.powerCooldown <= 0;
@@ -619,7 +686,7 @@ class App {
 
   armCommanderPower() {
     if (!this.world) return;
-    if (this.world.powerReady(PLAYER)) {
+    if (this.world.powerReady(this.me)) {
       this.powerArmed = true;
       this.placing = null;
       this.attackMoveArmed = false;
@@ -641,8 +708,9 @@ class App {
 
     // Planting the commander banner.
     if (this.powerArmed) {
-      if (this.world.placeBanner(PLAYER, wx, wy)) {
-        const power = COMMANDERS[this.world.player(PLAYER).commander]?.power;
+      if (this.world.powerReady(this.me)) {
+        this.dispatch({ t: "banner", team: this.me, x: wx, y: wy });
+        const power = COMMANDERS[this.world.player(this.me).commander]?.power;
         this.markers.push({ x: wx, y: wy, age: 0, kind: "rally" });
         this.hud.addAlert(`⚑ ${power?.name ?? "Banner"} planted!`);
         audio.play("command");
@@ -659,9 +727,8 @@ class App {
 
     if (this.placing) {
       const villagers = this.playerSelection().filter((e) => UNITS[e.type]?.canBuild);
-      const placed = this.world.placeBuilding(PLAYER, this.placing, wx, wy);
-      if (placed) {
-        this.world.issueBuildRepair(villagers.map((v) => v.id), placed.id, this.input.shift);
+      if (this.world.canPlace(this.me, this.placing, wx, wy)) {
+        this.dispatch({ t: "place", team: this.me, building: this.placing, x: wx, y: wy, builders: villagers.map((v) => v.id) });
         audio.play("build");
         if (!this.input.shift) this.placing = null;
       } else {
@@ -672,7 +739,7 @@ class App {
 
     if (this.attackMoveArmed) {
       const units = this.playerSelection().filter((e) => e.kind === Kind.Unit);
-      this.world.issueFormationMove(units.map((e) => e.id), wx, wy, this.input.shift, true);
+      this.dispatch({ t: "move", team: this.me, ids: units.map((e) => e.id), x: wx, y: wy, queue: this.input.shift, attackMove: true, formation: true });
       this.markers.push({ x: wx, y: wy, age: 0, kind: "attack" });
       this.attackMoveArmed = false;
       audio.play("command");
@@ -681,8 +748,8 @@ class App {
 
     // Plain selection click.
     const e = this.world.entityAt(wx, wy);
-    if (e && e.kind !== Kind.Projectile && this.world.visibleTo(PLAYER, e)) {
-      if (this.input.shift && e.team === PLAYER) {
+    if (e && e.kind !== Kind.Projectile && this.world.visibleTo(this.me, e)) {
+      if (this.input.shift && e.team === this.me) {
         const cur = new Set(this.selection);
         if (cur.has(e.id)) cur.delete(e.id);
         else cur.add(e.id);
@@ -699,11 +766,11 @@ class App {
     if (!this.world) return;
     const wx = this.camera.screenToWorldX(sx);
     const wy = this.camera.screenToWorldY(sy);
-    const e = this.world.entityAt(wx, wy, PLAYER);
+    const e = this.world.entityAt(wx, wy, this.me);
     if (!e || e.kind !== Kind.Unit) return;
     // Select all units of this type currently on screen.
     const ids: EntityId[] = [];
-    for (const o of this.world.entitiesOf(PLAYER, Kind.Unit)) {
+    for (const o of this.world.entitiesOf(this.me, Kind.Unit)) {
       if (o.type !== e.type) continue;
       const ox = this.camera.worldToScreenX(o.x);
       const oy = this.camera.worldToScreenY(o.y);
@@ -720,7 +787,7 @@ class App {
     const wy1 = Math.max(this.camera.screenToWorldY(box.y0), this.camera.screenToWorldY(box.y1));
     const units: EntityId[] = [];
     const buildings: EntityId[] = [];
-    for (const e of this.world.entitiesOf(PLAYER)) {
+    for (const e of this.world.entitiesOf(this.me)) {
       if (e.x < wx0 || e.x > wx1 || e.y < wy0 || e.y > wy1) continue;
       if (e.kind === Kind.Unit) units.push(e.id);
       else if (e.kind === Kind.Building) buildings.push(e.id);
@@ -739,11 +806,14 @@ class App {
     const target = this.world.entityAt(wx, wy);
     const shift = this.input.shift;
 
+    const mv = (mids: EntityId[], formation: boolean) =>
+      this.dispatch({ t: "move", team: this.me, ids: mids, x: wx, y: wy, queue: shift, attackMove: false, formation });
+
     // Production buildings: right-click sets rally.
     if (units.length === 0 && buildingsSel.length > 0) {
       for (const b of buildingsSel) {
         if (BUILDINGS[b.type]?.trains.length) {
-          this.world.setRally(b.id, wx, wy);
+          this.dispatch({ t: "rally", team: this.me, buildingId: b.id, x: wx, y: wy });
           this.markers.push({ x: wx, y: wy, age: 0, kind: "rally" });
         }
       }
@@ -758,47 +828,47 @@ class App {
     // right next to berries) sits closer to the click point.
     const gatherers0 = units.filter((e) => UNITS[e.type]?.canGather);
     if (gatherers0.length > 0) {
-      const node = this.world.resourceAt(wx, wy, PLAYER);
-      if (node && this.world.visibleTo(PLAYER, node) && !(target && target.team !== PLAYER && target.kind !== Kind.Resource)) {
-        this.world.issueGather(gatherers0.map((e) => e.id), node.id, shift);
+      const node = this.world.resourceAt(wx, wy, this.me);
+      if (node && this.world.visibleTo(this.me, node) && !(target && target.team !== this.me && target.kind !== Kind.Resource)) {
+        this.dispatch({ t: "gather", team: this.me, ids: gatherers0.map((e) => e.id), node: node.id, queue: shift });
         const rest = units.filter((e) => !UNITS[e.type]?.canGather);
-        if (rest.length) this.world.issueMove(rest.map((e) => e.id), wx, wy, shift);
+        if (rest.length) mv(rest.map((e) => e.id), false);
         this.markers.push({ x: wx, y: wy, age: 0, kind: "move" });
         audio.play("command");
         return;
       }
     }
 
-    if (target && target.alive && this.world.visibleTo(PLAYER, target)) {
-      if (target.team !== PLAYER && target.kind !== Kind.Resource) {
-        this.world.issueAttack(ids, target.id, shift);
+    if (target && target.alive && this.world.visibleTo(this.me, target)) {
+      if (target.team !== this.me && target.kind !== Kind.Resource) {
+        this.dispatch({ t: "attack", team: this.me, ids, target: target.id, queue: shift });
         this.markers.push({ x: wx, y: wy, age: 0, kind: "attack" });
         audio.play("command");
         return;
       }
-      if (target.kind === Kind.Resource || (target.team === PLAYER && target.type === "farm" && target.buildState === BuildState.Done)) {
+      if (target.kind === Kind.Resource || (target.team === this.me && target.type === "farm" && target.buildState === BuildState.Done)) {
         const gatherers = units.filter((e) => UNITS[e.type]?.canGather);
         if (gatherers.length) {
-          this.world.issueGather(gatherers.map((e) => e.id), target.id, shift);
+          this.dispatch({ t: "gather", team: this.me, ids: gatherers.map((e) => e.id), node: target.id, queue: shift });
           const rest = units.filter((e) => !UNITS[e.type]?.canGather);
-          if (rest.length) this.world.issueMove(rest.map((e) => e.id), wx, wy, shift);
+          if (rest.length) mv(rest.map((e) => e.id), false);
           this.markers.push({ x: wx, y: wy, age: 0, kind: "move" });
           audio.play("command");
           return;
         }
       }
-      if (target.team === PLAYER && target.kind === Kind.Building) {
+      if (target.team === this.me && target.kind === Kind.Building) {
         // Villagers repair/finish construction; combat units garrison.
         const builders = units.filter((e) => UNITS[e.type]?.canBuild);
         const fighters = units.filter((e) => !UNITS[e.type]?.canBuild);
         if (builders.length && (target.buildState !== BuildState.Done || target.hp < target.maxHp)) {
-          this.world.issueBuildRepair(builders.map((e) => e.id), target.id, shift);
+          this.dispatch({ t: "build", team: this.me, ids: builders.map((e) => e.id), building: target.id, queue: shift });
         }
         const cap = BUILDINGS[target.type]?.garrisonCap ?? 0;
         if (fighters.length && cap > 0) {
-          this.world.garrison(fighters.map((e) => e.id), target.id);
+          this.dispatch({ t: "garrison", team: this.me, ids: fighters.map((e) => e.id), buildingId: target.id });
         } else if (fighters.length) {
-          this.world.issueMove(fighters.map((e) => e.id), wx, wy, shift);
+          mv(fighters.map((e) => e.id), false);
         }
         this.markers.push({ x: wx, y: wy, age: 0, kind: "move" });
         audio.play("command");
@@ -806,7 +876,7 @@ class App {
       }
     }
     // Default: move.
-    this.world.issueFormationMove(ids, wx, wy, shift);
+    mv(ids, true);
     this.markers.push({ x: wx, y: wy, age: 0, kind: "move" });
     audio.play("command");
   }
@@ -842,7 +912,7 @@ class App {
           break;
         case "hit":
           if (this.showDamageNumbers && ev.data) {
-            const friendly = ev.team === PLAYER;
+            const friendly = ev.team === this.me;
             this.renderer.addFloater(ev.x, ev.y, ev.data, friendly ? "#fff0c0" : "#ff9a8a", 13);
           }
           break;
@@ -870,14 +940,14 @@ class App {
           sfx("build", "build", 0.4);
           break;
         case "complete":
-          if (ev.team === PLAYER) {
+          if (ev.team === this.me) {
             sfx("complete", "complete", 0.5);
             const name = BUILDINGS[ev.data ?? ""]?.name;
             if (name) this.hud.addAlert(`${name} completed.`);
           }
           break;
         case "underattack":
-          if (ev.team === PLAYER) {
+          if (ev.team === this.me) {
             sfx("alert", "alert", 4);
             this.hud.addAlert("⚠ Your forces are under attack!", ev.x, ev.y);
           }
@@ -885,15 +955,15 @@ class App {
         case "callout":
           // Surface an allied AI's voice line (not our own) so team games feel
           // like a coordinated front rather than silent co-op.
-          if (ev.team !== PLAYER && this.world?.areAllied(PLAYER, ev.team) && ev.data) {
+          if (ev.team !== this.me && this.world?.areAllied(this.me, ev.team) && ev.data) {
             this.hud.addAlert(`🗣 Ally: ${ev.data}`, ev.x, ev.y);
           }
           break;
         case "age": {
           const ageNames = ["Dark Age", "Feudal Age", "Castle Age"];
-          const who = ev.team === PLAYER ? "You have" : "The enemy has";
+          const who = ev.team === this.me ? "You have" : "The enemy has";
           this.hud.addAlert(`${who} advanced to the ${ageNames[parseInt(ev.data ?? "0", 10)]}!`);
-          if (ev.team === PLAYER) sfx("levelup", "age", 1);
+          if (ev.team === this.me) sfx("levelup", "age", 1);
           break;
         }
         case "ability": {
@@ -901,13 +971,13 @@ class App {
             Object.keys(ABILITIES).find((k) => ABILITIES[k].id === ev.data) ?? ""
           ]?.color ?? "#ffe98a";
           this.particles.burst(ev.x, ev.y, 14, col, 130, { maxLife: 0.5, size: 2.4, glow: true, gravity: -40 });
-          if (ev.team === PLAYER) sfx("command", "ability", 0.1);
+          if (ev.team === this.me) sfx("command", "ability", 0.1);
           break;
         }
         case "deposit":
           break;
         case "spawn":
-          if (ev.team === PLAYER) sfx("complete", "spawn", 2);
+          if (ev.team === this.me) sfx("complete", "spawn", 2);
           break;
       }
     }
@@ -955,6 +1025,9 @@ class App {
         if (action === "skirmish") {
           this.state = "setup";
           audio.play("ui");
+        } else if (action === "multiplayer") {
+          audio.play("ui");
+          this.lobby.open((start) => this.startNetMatch(start));
         } else if (action === "armory") {
           this.state = "armory";
           audio.play("ui");
@@ -1002,8 +1075,27 @@ class App {
   matchFrame(dt: number, W: number, H: number) {
     const world = this.world!;
 
-    // ---- simulate (fixed timestep, scaled by game speed) ----
-    if (!this.ingameMenu && !this.paused && world.winner === null) {
+    // ---- simulate ----
+    if (this.net) {
+      // Lockstep: author local input at the fixed sim rate (no game-speed, and
+      // never pausing — a local pause would just stall the peer), capped so we
+      // don't run far ahead of a lagging opponent; step as far as the received
+      // remote input allows. AIs don't run (both teams are human).
+      if (world.winner === null) {
+        this.netAccumulator += dt;
+        const ahead = this.net.lock!.inputDelay + 12;
+        let guard = 0;
+        while (this.netAccumulator >= SIM_DT && this.net.authorLead < ahead && guard++ < 30) {
+          this.net.authorTick();
+          this.netAccumulator -= SIM_DT;
+        }
+        this.net.stepReady(10);
+        if (this.net.desynced && !this.netDesyncAlerted) {
+          this.netDesyncAlerted = true;
+          this.hud.addAlert("⚠ Connection desynced — the match is out of sync.");
+        }
+      }
+    } else if (!this.ingameMenu && !this.paused && world.winner === null) {
       this.accumulator += dt * this.gameSpeed;
       let steps = 0;
       const maxSteps = 5 + Math.ceil(this.gameSpeed) * 2; // allow catch-up at high speed
@@ -1076,8 +1168,8 @@ class App {
       const wx = this.camera.screenToWorldX(this.input.mx);
       const wy = this.camera.screenToWorldY(this.input.my);
       const def = BUILDINGS[this.placing];
-      const p = world.player(PLAYER);
-      const valid = world.canPlace(PLAYER, this.placing, wx, wy) && world.canAfford(p.resources, def.cost);
+      const p = world.player(this.me);
+      const valid = world.canPlace(this.me, this.placing, wx, wy) && world.canAfford(p.resources, def.cost);
       ghost = { type: this.placing, x: wx, y: wy, valid };
       // Drag-painting a wall: preview the whole snapped run instead of a box.
       if (LINE_BUILDABLE.has(this.placing) && this.input.drag.active) {
@@ -1088,7 +1180,7 @@ class App {
         );
         ghost.line = pts.map((pt) => ({
           x: pt.x, y: pt.y,
-          valid: world.canPlace(PLAYER, this.placing!, pt.x, pt.y),
+          valid: world.canPlace(this.me, this.placing!, pt.x, pt.y),
         }));
         suppressDragBox = true;
       }
@@ -1105,12 +1197,13 @@ class App {
       const hw = this.camera.screenToWorldX(this.input.mx);
       const hh = this.camera.screenToWorldY(this.input.my);
       const he = world.entityAt(hw, hh);
-      if (he && he.kind !== Kind.Projectile && world.visibleTo(PLAYER, he)) hoveredId = he.id;
+      if (he && he.kind !== Kind.Projectile && world.visibleTo(this.me, he)) hoveredId = he.id;
     }
     // Interpolation factor: how far we are into the next sim tick (0..1).
-    const alpha = (this.ingameMenu || this.paused) ? 1 : Math.min(1, this.accumulator / SIM_DT);
+    const acc = this.net ? this.netAccumulator : this.accumulator;
+    const alpha = (!this.net && (this.ingameMenu || this.paused)) ? 1 : Math.min(1, acc / SIM_DT);
     this.renderer.render(
-      world, this.camera, this.particles, dt, this.time, PLAYER,
+      world, this.camera, this.particles, dt, this.time, this.me,
       this.markers, ghost, suppressDragBox ? { active: false, x0: 0, y0: 0, x1: 0, y1: 0 } : this.input.drag, rallyFrom,
       hoveredId, alpha,
     );
@@ -1118,7 +1211,7 @@ class App {
     // ---- HUD (consumes pointer if clicked over panels) ----
     // Pass the full selection (any team) so the info panel can show a clicked
     // enemy/neutral unit's health; the command card filters to own units.
-    this.hud.draw(W, H, world, this.camera, PLAYER, this.selectedEntities(), dt, this.controller, this.attackMoveArmed, this.spectating);
+    this.hud.draw(W, H, world, this.camera, this.me, this.selectedEntities(), dt, this.controller, this.attackMoveArmed, this.spectating);
     if (this.spectating) this.drawSpectatorHud(W, H, world);
     if (world.mode !== "conquest") this.drawModeStatus(W, H, world);
     this.drawControlGroups(W, H);
@@ -1179,11 +1272,11 @@ class App {
     } else {
       // The match ends for the human when a winner is decided, or the moment
       // their own realm is wiped out (the AIs may fight on, but the human is out).
-      const playerOut = world.player(PLAYER).defeated;
+      const playerOut = world.player(this.me).defeated;
       if ((world.winner !== null || playerOut) && this.matchOverTimer < 0) {
         this.matchOverTimer = 1.8;
         // Win if your alliance is the last standing (and you're still in it).
-        this.playerWon = world.winner !== null && world.areAllied(world.winner, PLAYER) && !playerOut;
+        this.playerWon = world.winner !== null && world.areAllied(world.winner, this.me) && !playerOut;
         this.hud.addAlert(this.playerWon ? "🏆 The last enemy is broken!" : "💀 Your last building has fallen…");
         if (this.playerWon) audio.play("levelup");
         else audio.play("collapse");
@@ -1217,13 +1310,13 @@ class App {
       let mine = 0;
       let foe = 0;
       for (const { team, hold } of prog) {
-        if (world.areAllied(PLAYER, team)) mine = Math.max(mine, hold);
+        if (world.areAllied(this.me, team)) mine = Math.max(mine, hold);
         else foe = Math.max(foe, hold);
       }
       line = `👑 Hold the Hill — You ${fmt(mine)} / ${fmt(world.kothGoal)}   ·   Enemy ${fmt(foe)}`;
     } else if (world.mode === "regicide") {
-      const myKing = world.entities.some((e) => e.alive && e.type === "king" && world.areAllied(PLAYER, e.team));
-      const foeKings = world.entities.filter((e) => e.alive && e.type === "king" && !world.areAllied(PLAYER, e.team)).length;
+      const myKing = world.entities.some((e) => e.alive && e.type === "king" && world.areAllied(this.me, e.team));
+      const foeKings = world.entities.filter((e) => e.alive && e.type === "king" && !world.areAllied(this.me, e.team)).length;
       line = `♚ Regicide — Your King: ${myKing ? "alive" : "FALLEN"}   ·   Enemy Kings: ${foeKings}`;
     }
     if (!line) return;
@@ -1259,12 +1352,14 @@ class App {
     this.spectating = false;
     this.ingameMenu = false;
     this.matchOverTimer = -1;
+    this.endNet();
+    this.me = Team.Player;
     this.state = "menu";
   }
 
   finishMatch(won: boolean) {
     const world = this.world!;
-    const p = world.player(PLAYER);
+    const p = world.player(this.me);
     this.matchWon = won;
     this.endStats = {
       unitsKilled: p.stats.unitsKilled,
@@ -1276,7 +1371,7 @@ class App {
     // Aggregate the opposing alliance for a side-by-side comparison.
     const foe = { unitsKilled: 0, gathered: 0, buildingsRazed: 0 };
     for (let t = 0; t < world.numTeams; t++) {
-      if (!world.areHostile(PLAYER, t as Team)) continue;
+      if (!world.areHostile(this.me, t as Team)) continue;
       const s = world.player(t as Team).stats;
       foe.unitsKilled += s.unitsKilled;
       foe.gathered += s.gathered;

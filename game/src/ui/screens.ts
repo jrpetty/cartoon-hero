@@ -102,7 +102,7 @@ export function drawMenuBackground(W: number, H: number, time: number) {
 // ------------------------------------------------------------------- menu --
 
 export class MenuScreen {
-  draw(W: number, H: number, time: number, profile: Profile): "skirmish" | "armory" | "codex" | null {
+  draw(W: number, H: number, time: number, profile: Profile): "skirmish" | "multiplayer" | "armory" | "codex" | null {
     drawMenuBackground(W, H, time);
     const ctx = ui.ctx;
 
@@ -158,16 +158,18 @@ export class MenuScreen {
     ui.bar(W / 2 - 150, H * 0.36 + 36, 300, 9, info.into / info.need, PAL.uiAccent);
     ui.text(`${info.into}/${info.need} XP`, W / 2, H * 0.36 + 54, { align: "center", size: 11, color: "#bdb49a" });
 
-    let action: "skirmish" | "armory" | "codex" | null = null;
+    let action: "skirmish" | "multiplayer" | "armory" | "codex" | null = null;
     const bw = 280;
     const bx = W / 2 - bw / 2;
     let by = H * 0.36 + 92;
     if (ui.button("⚔  Skirmish", bx, by, bw, 52, { accent: true, size: 19 })) action = "skirmish";
-    by += 64;
-    if (ui.button(`🗝  Armory   (${profile.data.renown} ✦)`, bx, by, bw, 52, { size: 17 })) action = "armory";
-    by += 64;
-    if (ui.button("📖  Codex — Tech Tree", bx, by, bw, 46, { size: 15 })) action = "codex";
-    by += 58;
+    by += 60;
+    if (ui.button("🔗  Multiplayer — 1v1", bx, by, bw, 46, { size: 16, tooltip: ["Play a friend, peer-to-peer", "Swap connection codes — no server needed."] })) action = "multiplayer";
+    by += 56;
+    if (ui.button(`🗝  Armory   (${profile.data.renown} ✦)`, bx, by, bw, 48, { size: 16 })) action = "armory";
+    by += 56;
+    if (ui.button("📖  Codex — Tech Tree", bx, by, bw, 44, { size: 15 })) action = "codex";
+    by += 54;
 
     // Volume sliders.
     ui.panel(bx, by, bw, 96, { light: true });
