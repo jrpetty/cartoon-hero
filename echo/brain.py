@@ -105,6 +105,26 @@ Be concrete. Quote their phrasing where it's distinctive. 400-700 words."""
                      model=SYNTH_MODEL, max_tokens=2000)
 
 
+def evolve_dossier(previous: str, context: str) -> str:
+    """Re-sync the dossier from everything learned since it was written —
+    chat memories, decision outcomes, and confirmed changes of mind."""
+    system = (
+        "You maintain a person's first-person operating manual (their dossier). "
+        "Update it using new evidence gathered since it was last written: things "
+        "they've said, decisions they've made and how those turned out, and views "
+        "they've changed. Keep the existing structure and voice. Strengthen what's "
+        "confirmed, revise what's changed, and fold in new patterns (e.g. where "
+        "they're over- or under-confident). Don't invent; ground every change in "
+        "the evidence. Return the full revised dossier in the first person."
+    )
+    user = (
+        f"Current dossier:\n\"\"\"\n{previous or '(empty — write a first version from the evidence)'}\n\"\"\"\n\n"
+        f"New evidence since then:\n{context or '(nothing new logged yet)'}"
+    )
+    return _complete(system, [{"role": "user", "content": user}],
+                     model=SYNTH_MODEL, max_tokens=2000)
+
+
 # --- chat / argue / speak-as-me --------------------------------------------
 
 MODE_INSTRUCTIONS = {

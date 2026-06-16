@@ -132,6 +132,17 @@ def dossier():
     return db.get_dossier() or "(no dossier yet — finish the interview and synthesize)"
 
 
+@app.post("/api/dossier/refresh")
+def dossier_refresh():
+    """Evolve the dossier from everything learned since it was last written."""
+    try:
+        updated = brain.evolve_dossier(db.get_dossier(), db.context_digest())
+    except brain.BrainError as exc:
+        raise HTTPException(503, str(exc))
+    db.set_dossier(updated)
+    return {"dossier": updated}
+
+
 # --- chat / argue / asme ---------------------------------------------------
 
 @app.post("/api/chat")
@@ -144,7 +155,7 @@ def chat(payload: ChatIn):
         for m in db.recent_messages(mode, limit=12)
     ]
     dossier = db.get_dossier()
-    prior_memory = db.memory_digest()
+    prior_memory = db.context_digest()
     try:
         reply = brain.chat(mode, history, dossier, prior_memory)
     except brain.BrainError as exc:
@@ -188,7 +199,7 @@ def create_decision(payload: DecisionIn):
     advice = None
     if brain.has_key():
         try:
-            advice = brain.advise_decision(decision, db.get_dossier(), db.memory_digest())
+            advice = brain.advise_decision(decision, db.get_dossier(), db.context_digest())
         except brain.BrainError:
             advice = None
     db.add_memory("fact", f"I decided: {payload.title}. Prediction: {payload.prediction}",
@@ -202,7 +213,7 @@ def draft_decision(payload: DraftIn):
         raise HTTPException(400, "Give the decision a title first.")
     try:
         return brain.draft_decision(payload.title, payload.context,
-                                    db.get_dossier(), db.memory_digest())
+                                    db.get_dossier(), db.context_digest())
     except brain.BrainError as exc:
         raise HTTPException(503, str(exc))
 
@@ -221,8 +232,23 @@ def run_reminders():
 
 @app.post("/api/decisions/{dec_id}/review")
 def review(dec_id: int, payload: ReviewIn):
-    db.review_decision(dec_id, payload.outcome, max(0, min(100, payload.self_grade)))
-    return {"ok": True}
+    grade = max(0, min(100, payload.self_grade))
+    db.review_decision(dec_id, payload.outcome, grade)
+    # Close the loop: a graded decision becomes a calibration signal the rest of
+    # Echo reasons from (e.g. "decide for me" learns your track record).
+    dec = next((d for d in db.list_decisions() if d["id"] == dec_id), None)
+    if dec:
+        calib = "well-calibrated" if abs(grade - dec["confidence"]) <= 15 else (
+            "overconfident" if dec["confidence"] > grade else "underconfident")
+    else:
+        calib = "graded"
+    db.add_memory(
+        "feeling",
+        f"On '{dec['title'] if dec else 'a decision'}' I was {dec['confidence'] if dec else '?'}% "
+        f"confident and turned out {grade}% right ({calib}). Outcome: {payload.outcome}",
+        source="decision", topic="calibration",
+    )
+    return {"ok": True, "calibration": calib}
 
 
 # --- memory ----------------------------------------------------------------
@@ -250,6 +276,28 @@ def get_contradictions():
 def dismiss_contradiction(cid: int):
     db.dismiss_contradiction(cid)
     return {"ok": True}
+
+
+@app.post("/api/contradictions/{cid}/confirm")
+def confirm_contradiction(cid: int):
+    """You confirm you changed your mind — Echo adopts the new view and folds it
+    into your dossier so the whole model stays consistent."""
+    con = next((c for c in db.list_contradictions(include_dismissed=True)
+                if c["id"] == cid), None)
+    if not con:
+        raise HTTPException(404, "Unknown contradiction")
+    db.add_memory("view", f"I changed my mind: I no longer think \"{con['old_view']}\" — "
+                  f"now I think \"{con['new_view']}\".", source="contradiction",
+                  topic=con.get("topic"))
+    db.dismiss_contradiction(cid)
+    updated = None
+    if brain.has_key() and db.get_dossier():
+        try:
+            updated = brain.evolve_dossier(db.get_dossier(), db.context_digest())
+            db.set_dossier(updated)
+        except brain.BrainError:
+            updated = None
+    return {"ok": True, "dossier_updated": updated is not None}
 
 
 # --- voice (premium, optional) ---------------------------------------------

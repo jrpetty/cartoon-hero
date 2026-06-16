@@ -283,10 +283,12 @@ function renderDue(due) {
 }
 window.gradeDecision = async (id) => {
   try {
-    await api(`/api/decisions/${id}/review`, {
+    const r = await api(`/api/decisions/${id}/review`, {
       method: "POST",
       body: JSON.stringify({ outcome: $("#out-" + id).value, self_grade: +$("#grade-" + id).value }),
     });
+    if (r.calibration && r.calibration !== "graded")
+      alert(`Logged. On this one you were ${r.calibration}. Echo will remember that.`);
     refreshStatus();
     loadDecisions();
   } catch (e) { alert(e.message); }
@@ -321,7 +323,10 @@ async function loadContradictions() {
       <div class="was">used to think: ${esc(c.old_view)}</div>
       <div class="now">now: ${esc(c.new_view)}</div>
       ${c.note ? `<div class="meta">${esc(c.note)}</div>` : ""}
-      <button class="ghost" onclick="dismissContradiction(${c.id})">dismiss</button>
+      <div class="row">
+        <button class="ghost" onclick="confirmContradiction(${c.id})">✓ I changed my mind</button>
+        <button class="ghost" onclick="dismissContradiction(${c.id})">dismiss</button>
+      </div>
     </div>`).join("");
 }
 window.dismissContradiction = async (id) => {
@@ -329,9 +334,27 @@ window.dismissContradiction = async (id) => {
   loadContradictions();
   refreshStatus();
 };
+window.confirmContradiction = async (id) => {
+  const r = await api(`/api/contradictions/${id}/confirm`, { method: "POST" });
+  loadContradictions();
+  refreshStatus();
+  if (r.dossier_updated) { loadDossier(); }
+};
 async function loadDossier() {
   $("#dossier-text").textContent = await api("/api/dossier");
 }
+$("#dossier-refresh").onclick = async () => {
+  const btn = $("#dossier-refresh");
+  btn.disabled = true;
+  btn.textContent = "Re-syncing from everything…";
+  try {
+    const r = await api("/api/dossier/refresh", { method: "POST" });
+    $("#dossier-text").textContent = r.dossier;
+    refreshStatus();
+  } catch (e) { alert(e.message); }
+  btn.disabled = false;
+  btn.textContent = "♻️ Re-sync from everything I've learned";
+};
 function esc(s) { return (s || "").replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c])); }
 
 // --- boot ------------------------------------------------------------------

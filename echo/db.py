@@ -223,6 +223,46 @@ def memory_digest(limit: int = 60) -> str:
     return "\n".join(reversed(lines))
 
 
+def decisions_summary(limit: int = 12) -> str:
+    """Recent decisions with how they turned out — your track record."""
+    rows = list_decisions()[:limit]
+    lines = []
+    for d in rows:
+        line = f"- {d['title']} (confidence {d['confidence']}%)"
+        if d.get("prediction"):
+            line += f" — predicted: {d['prediction']}"
+        if d.get("self_grade") is not None:
+            line += f" → actually {d['self_grade']}% right"
+            if d.get("outcome"):
+                line += f" ({d['outcome']})"
+        lines.append(line)
+    return "\n".join(lines)
+
+
+def contradictions_summary(limit: int = 12) -> str:
+    """Open, unresolved shifts in your views."""
+    rows = list_contradictions()[:limit]
+    return "\n".join(
+        f"- used to think: {c['old_view']} | now: {c['new_view']}" for c in rows
+    )
+
+
+def context_digest() -> str:
+    """The full connective context every mode reasons from: what you've said,
+    your decision track record, and your unresolved contradictions."""
+    parts = []
+    mem = memory_digest()
+    if mem:
+        parts.append("What I've learned about them:\n" + mem)
+    dec = decisions_summary()
+    if dec:
+        parts.append("Their decision track record:\n" + dec)
+    con = contradictions_summary()
+    if con:
+        parts.append("Unresolved shifts in their views:\n" + con)
+    return "\n\n".join(parts)
+
+
 # --- decisions -------------------------------------------------------------
 
 def add_decision(

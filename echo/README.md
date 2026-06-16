@@ -30,6 +30,21 @@ One brain. One memory. Four modes.
 Everything lands in one SQLite database (`echo.db`) plus an evolving markdown
 dossier.
 
+### One brain — how it all links together
+
+The modes aren't silos; they feed a single evolving model of you:
+
+- Every mode (chat, argue, decide, decision-advice) reasons from the **same
+  shared context**: your dossier, your memories, your **decision track record**,
+  and your **unresolved contradictions**. So "decide for me" knows how your past
+  calls actually turned out, and "argue against me" knows your open tensions.
+- **Grading a decision feeds back** as a calibration signal ("on career bets I
+  tend to be overconfident") that the rest of Echo then reasons from.
+- **Confirming a contradiction** ("I changed my mind") updates your dossier so
+  the whole model stays consistent.
+- The dossier is **living**: hit *Re-sync from everything I've learned* and Echo
+  rewrites it from all the evidence accumulated since — not just the interview.
+
 ### Voice
 
 Talk with your voice and have replies read aloud. By default this uses the

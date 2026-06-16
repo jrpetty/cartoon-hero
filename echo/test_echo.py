@@ -158,3 +158,42 @@ def test_draft_without_key_503(client, monkeypatch):
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
     r = client.post("/api/decisions/draft", json={"title": "Move cities"})
     assert r.status_code == 503
+
+
+def test_grading_feeds_calibration_into_memory(client):
+    dec_id = client.post("/api/decisions", json={
+        "title": "Bet on the startup", "prediction": "Big win", "confidence": 90,
+        "review_in_days": 1,
+    }).json()["id"]
+    r = client.post(f"/api/decisions/{dec_id}/review",
+                    json={"outcome": "Flopped", "self_grade": 20})
+    assert r.json()["calibration"] == "overconfident"
+    # The graded outcome is now a memory the rest of Echo reasons from.
+    mem = client.get("/api/memory?topic=calibration").json()["memory"]
+    assert any("overconfident" in m["content"] for m in mem)
+
+
+def test_context_digest_links_everything(client):
+    import db
+    db.add_memory("view", "I value freedom", source="interview")
+    db.add_decision("Quit job", "", "", "happier", 70, db.now())
+    db.add_contradiction("I hate risk", "I quit my stable job", "shift", "risk")
+    digest = db.context_digest()
+    assert "freedom" in digest
+    assert "Quit job" in digest
+    assert "used to think" in digest
+
+
+def test_confirm_contradiction_logs_view_and_resolves(client):
+    import db
+    cid = db.add_contradiction("I'd never move abroad", "I'm moving to Lisbon", "", "location")
+    r = client.post(f"/api/contradictions/{cid}/confirm")
+    assert r.status_code == 200
+    assert client.get("/api/contradictions").json()["contradictions"] == []
+    mem = client.get("/api/memory").json()["memory"]
+    assert any("changed my mind" in m["content"] for m in mem)
+
+
+def test_dossier_refresh_needs_key(client, monkeypatch):
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    assert client.post("/api/dossier/refresh").status_code == 503
