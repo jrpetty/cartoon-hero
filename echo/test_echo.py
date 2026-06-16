@@ -197,3 +197,36 @@ def test_confirm_contradiction_logs_view_and_resolves(client):
 def test_dossier_refresh_needs_key(client, monkeypatch):
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
     assert client.post("/api/dossier/refresh").status_code == 503
+
+
+def test_open_when_no_password(client, monkeypatch):
+    monkeypatch.delenv("ECHO_PASSWORD", raising=False)
+    assert client.get("/api/state").status_code == 200
+
+
+def test_password_gate_blocks_and_unlocks(client, monkeypatch):
+    monkeypatch.setenv("ECHO_PASSWORD", "hunter2")
+    # API is blocked without a valid cookie
+    assert client.get("/api/state").status_code == 401
+    # The page redirects to login (TestClient follows it to a 200 login page)
+    page = client.get("/")
+    assert "Unlock" in page.text
+
+    # Wrong password is rejected
+    assert client.post("/login", data={"password": "nope"}).status_code == 401
+
+    # Correct password sets the cookie; the client keeps it for later requests
+    ok = client.post("/login", data={"password": "hunter2"})
+    assert ok.status_code == 200  # followed redirect to "/"
+    assert client.get("/api/state").status_code == 200
+
+    # Static assets stay reachable for the login page
+    monkeypatch.setenv("ECHO_PASSWORD", "hunter2")
+    assert client.get("/static/style.css").status_code == 200
+
+
+def test_manifest_and_sw_served(client):
+    assert client.get("/manifest.webmanifest").status_code == 200
+    sw = client.get("/sw.js")
+    assert sw.status_code == 200
+    assert "serviceWorker".lower() in sw.text.lower() or "fetch" in sw.text

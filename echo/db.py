@@ -5,12 +5,15 @@ tables, one SQLite file. Designed so the whole picture of a person can be
 rebuilt (and re-summarised) from raw rows at any time.
 """
 import json
+import os
 import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-DB_PATH = Path(__file__).with_name("echo.db")
+# Where the one giant database lives. Override with ECHO_DB_PATH so it can sit
+# on a mounted persistent disk in the cloud (e.g. /data/echo.db).
+DB_PATH = Path(os.environ.get("ECHO_DB_PATH", Path(__file__).with_name("echo.db")))
 
 
 def now() -> str:
@@ -24,6 +27,8 @@ def get_connection() -> sqlite3.Connection:
 
 
 def init_db() -> None:
+    # Make sure the directory exists (matters for a mounted disk like /data).
+    DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     conn = get_connection()
     cur = conn.cursor()
 

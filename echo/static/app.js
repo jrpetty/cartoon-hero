@@ -120,6 +120,7 @@ async function refreshStatus() {
     ];
     if (!s.has_key) bits.unshift("⚠ no API key");
     $("#status").textContent = bits.join("  ·  ");
+    if (s.auth_enabled) $("#logout-form").classList.remove("hidden");
     if (s.decisions_due?.length) renderDue(s.decisions_due);
   } catch (e) { $("#status").textContent = "offline"; }
 }
@@ -358,5 +359,8 @@ $("#dossier-refresh").onclick = async () => {
 function esc(s) { return (s || "").replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c])); }
 
 // --- boot ------------------------------------------------------------------
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.register("/sw.js").catch(() => {});
+}
 refreshStatus();
 loadInterview();

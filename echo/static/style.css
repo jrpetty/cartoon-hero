@@ -30,6 +30,10 @@ header {
 }
 .tagline { color: var(--muted); font-size: 13px; }
 .status { color: var(--muted); font-size: 13px; }
+header { gap: 10px; }
+.logout { background: transparent; border: 1px solid var(--line); color: var(--muted);
+  border-radius: 8px; padding: 5px 9px; cursor: pointer; font-size: 14px; }
+.logout:hover { color: var(--text); }
 
 .tabs { display: flex; gap: 6px; padding: 14px 24px 0; flex-wrap: wrap; }
 .tabs button {

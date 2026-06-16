@@ -8,11 +8,19 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import List, Optional
 
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile
-from fastapi.responses import FileResponse, PlainTextResponse, Response
+from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
+from fastapi.responses import (
+    FileResponse,
+    HTMLResponse,
+    JSONResponse,
+    PlainTextResponse,
+    RedirectResponse,
+    Response,
+)
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
+import auth
 import brain
 import db
 import notify
@@ -25,6 +33,63 @@ notify.start_scheduler()
 app = FastAPI(title="Echo")
 
 CHAT_MODES = ("chat", "argue", "asme", "decide")
+
+# Paths reachable without logging in (the login page + assets it needs).
+_OPEN_PATHS = ("/login", "/static/", "/manifest.webmanifest", "/sw.js", "/favicon")
+
+
+@app.middleware("http")
+async def require_login(request: Request, call_next):
+    if not auth.enabled():
+        return await call_next(request)
+    path = request.url.path
+    if path.startswith(_OPEN_PATHS) or auth.cookie_valid(request.cookies.get(auth.COOKIE_NAME, "")):
+        return await call_next(request)
+    if path.startswith("/api/"):
+        return JSONResponse({"detail": "Not authenticated"}, status_code=401)
+    return RedirectResponse("/login")
+
+
+_LOGIN_PAGE = """<!DOCTYPE html><html><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Echo · unlock</title><style>
+body{{margin:0;height:100vh;display:flex;align-items:center;justify-content:center;
+background:radial-gradient(900px 500px at 70% -10%,#1b1640,#0e0f13 60%);
+font-family:-apple-system,Segoe UI,Roboto,sans-serif;color:#e7e9ee}}
+form{{background:#181a21;border:1px solid #2a2e3a;border-radius:16px;padding:32px;width:300px;text-align:center}}
+h1{{margin:0 0 4px;letter-spacing:1px}} p{{color:#8b93a7;font-size:13px;margin:0 0 20px}}
+input{{width:100%;box-sizing:border-box;background:#20232c;border:1px solid #2a2e3a;color:#e7e9ee;
+padding:12px;border-radius:10px;font-size:15px;margin-bottom:12px}}
+button{{width:100%;background:linear-gradient(135deg,#7c5cff,#9b7bff);color:#fff;border:0;
+padding:12px;border-radius:10px;font-size:15px;font-weight:600;cursor:pointer}}
+.err{{color:#ff6b6b;font-size:13px;margin-bottom:10px;min-height:16px}}
+</style></head><body><form method="post" action="/login">
+<h1>🔊 Echo</h1><p>your second voice</p>
+<div class="err">{error}</div>
+<input type="password" name="password" placeholder="password" autofocus autocomplete="current-password">
+<button type="submit">Unlock</button></form></body></html>"""
+
+
+@app.get("/login", response_class=HTMLResponse)
+def login_page():
+    return _LOGIN_PAGE.format(error="")
+
+
+@app.post("/login")
+def login(password: str = Form("")):
+    if not auth.check_password(password):
+        return HTMLResponse(_LOGIN_PAGE.format(error="Wrong password."), status_code=401)
+    resp = RedirectResponse("/", status_code=303)
+    resp.set_cookie(auth.COOKIE_NAME, auth.expected_token(), httponly=True,
+                    samesite="lax", max_age=60 * 60 * 24 * 90)
+    return resp
+
+
+@app.post("/logout")
+def logout():
+    resp = RedirectResponse("/login", status_code=303)
+    resp.delete_cookie(auth.COOKIE_NAME)
+    return resp
 
 STATIC_DIR = Path(__file__).with_name("static")
 
@@ -88,6 +153,7 @@ def state():
     s["premium_tts"] = voice.tts_available()
     s["premium_stt"] = voice.stt_available()
     s["email_reminders"] = notify.email_configured()
+    s["auth_enabled"] = auth.enabled()
     return s
 
 
@@ -334,6 +400,20 @@ async def stt(audio: UploadFile = File(...)):
 @app.get("/api/export", response_class=PlainTextResponse)
 def export():
     return db.export_all()
+
+
+# --- PWA (installable on phones) -------------------------------------------
+
+@app.get("/manifest.webmanifest")
+def manifest():
+    return FileResponse(STATIC_DIR / "manifest.webmanifest",
+                        media_type="application/manifest+json")
+
+
+@app.get("/sw.js")
+def service_worker():
+    # Served from root so its scope covers the whole app.
+    return FileResponse(STATIC_DIR / "sw.js", media_type="application/javascript")
 
 
 # Static assets (served last so /api routes win).
