@@ -50,6 +50,7 @@
         <button data-mode="chat" class="active">💬 Talk with me</button>
         <button data-mode="argue">🥊 Argue against me</button>
         <button data-mode="asme">🪞 Speak as me</button>
+        <button data-mode="decide">🧭 Decide for me</button>
       </div>
       <div class="chat-log" id="chat-log"></div>
       <div class="chat-input">
@@ -67,6 +68,7 @@
         <p class="muted">Record what you're choosing, why, and what you predict. Echo grades your calibration later.</p>
         <input id="d-title" placeholder="The decision (e.g. 'Take the new job')" />
         <textarea id="d-context" rows="2" placeholder="Context — what's the situation?"></textarea>
+        <button class="ghost" id="d-draft" title="Let Echo draft the reasoning & prediction as you">🧭 Draft this for me</button>
         <textarea id="d-reasoning" rows="2" placeholder="Your reasoning — why this way?"></textarea>
         <textarea id="d-prediction" rows="2" placeholder="Your prediction — what will happen?"></textarea>
         <div class="row">
@@ -89,6 +91,11 @@
 
     <!-- MEMORY -->
     <section id="tab-memory" class="tab">
+      <div id="contradictions-card" class="card hidden">
+        <h2>🔀 Shifts I've noticed</h2>
+        <p class="muted">Where something you said clashes with what you said before.</p>
+        <div id="contradictions-list"></div>
+      </div>
       <div class="card">
         <h2>What Echo knows</h2>
         <p class="muted">Everything you've said and how you feel — one growing database.</p>

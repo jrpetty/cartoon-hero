@@ -27,10 +27,16 @@ document.querySelectorAll(".tabs button").forEach((b) => {
   };
 });
 
-// --- voice (Web Speech API) ------------------------------------------------
+// --- voice (premium ElevenLabs/Whisper with browser fallback) --------------
 const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+let voiceCfg = { premium_tts: false, premium_stt: false };
+(async () => {
+  try { voiceCfg = await api("/api/voice/config"); } catch (e) {}
+})();
+
 function listen(targetEl, micBtn) {
-  if (!SR) { alert("Voice input needs Chrome/Edge. Type instead — it all works."); return; }
+  if (voiceCfg.premium_stt && window.MediaRecorder) return recordPremium(targetEl, micBtn);
+  if (!SR) { alert("Voice input needs Chrome/Edge (or set OPENAI_API_KEY for Whisper). Type instead — it all works."); return; }
   const rec = new SR();
   rec.lang = "en-US";
   rec.interimResults = true;
@@ -46,7 +52,57 @@ function listen(targetEl, micBtn) {
   rec.onerror = () => micBtn.classList.remove("listening");
   rec.start();
 }
-function speak(text) {
+
+// Premium STT: record a clip, send to Whisper, append the transcript.
+async function recordPremium(targetEl, micBtn) {
+  if (micBtn.classList.contains("listening") && micBtn._recorder) {
+    micBtn._recorder.stop();
+    return;
+  }
+  let stream;
+  try { stream = await navigator.mediaDevices.getUserMedia({ audio: true }); }
+  catch (e) { alert("Couldn't access the mic."); return; }
+  const rec = new MediaRecorder(stream);
+  const chunks = [];
+  micBtn._recorder = rec;
+  micBtn.classList.add("listening");
+  micBtn.title = "Click to stop";
+  rec.ondataavailable = (e) => chunks.push(e.data);
+  rec.onstop = async () => {
+    stream.getTracks().forEach((t) => t.stop());
+    micBtn.classList.remove("listening");
+    micBtn._recorder = null;
+    micBtn.title = "Speak";
+    const blob = new Blob(chunks, { type: "audio/webm" });
+    const fd = new FormData();
+    fd.append("audio", blob, "speech.webm");
+    try {
+      const res = await fetch("/api/stt", { method: "POST", body: fd });
+      const data = await res.json();
+      if (data.text) targetEl.value = (targetEl.value ? targetEl.value + " " : "") + data.text;
+    } catch (e) { alert("Transcription failed."); }
+  };
+  rec.start();
+}
+
+let currentAudio = null;
+async function speak(text) {
+  if (voiceCfg.premium_tts) {
+    try {
+      const res = await fetch("/api/tts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text }),
+      });
+      if (res.status === 200) {
+        const blob = await res.blob();
+        if (currentAudio) currentAudio.pause();
+        currentAudio = new Audio(URL.createObjectURL(blob));
+        currentAudio.play();
+        return;
+      }
+    } catch (e) { /* fall through to browser voice */ }
+  }
   if (!window.speechSynthesis) return;
   const u = new SpeechSynthesisUtterance(text);
   u.rate = 1.02; u.pitch = 1.0;
@@ -123,7 +179,12 @@ document.querySelectorAll(".mode-switch button").forEach((b) => {
     document.querySelectorAll(".mode-switch button").forEach((x) => x.classList.remove("active"));
     b.classList.add("active");
     mode = b.dataset.mode;
-    addBubble("note", { chat: "— talking with you —", argue: "— I'll argue the other side —", asme: "— I'll answer as you —" }[mode]);
+    addBubble("note", {
+      chat: "— talking with you —",
+      argue: "— I'll argue the other side —",
+      asme: "— I'll answer as you —",
+      decide: "— tell me the choice; I'll make the call as you —",
+    }[mode]);
   };
 });
 function addBubble(role, text) {
@@ -148,6 +209,8 @@ async function sendChat() {
     thinking.textContent = data.reply;
     if ($("#speak-replies").checked) speak(data.reply);
     if (data.learned?.length) addBubble("note", "🧠 learned: " + data.learned.map((m) => m.content).join(" · "));
+    if (data.contradictions?.length)
+      data.contradictions.forEach((c) => addBubble("note", `🔀 you used to think "${c.old}" — now "${c.new}"`));
     refreshStatus();
   } catch (e) { thinking.textContent = "⚠ " + e.message; }
 }
@@ -159,6 +222,23 @@ $("#chat-mic").onclick = () => listen($("#chat-text"), $("#chat-mic"));
 
 // --- decisions -------------------------------------------------------------
 $("#d-confidence").oninput = (e) => ($("#d-conf-label").textContent = e.target.value);
+$("#d-draft").onclick = async () => {
+  const title = $("#d-title").value.trim();
+  if (!title) { alert("Give the decision a title first."); return; }
+  $("#d-draft").disabled = true;
+  $("#d-draft").textContent = "Drafting as you…";
+  try {
+    const d = await api("/api/decisions/draft", {
+      method: "POST",
+      body: JSON.stringify({ title, context: $("#d-context").value }),
+    });
+    $("#d-reasoning").value = d.reasoning || "";
+    $("#d-prediction").value = d.prediction || "";
+    if (d.confidence != null) { $("#d-confidence").value = d.confidence; $("#d-conf-label").textContent = d.confidence; }
+  } catch (e) { alert(e.message); }
+  $("#d-draft").disabled = false;
+  $("#d-draft").textContent = "🧭 Draft this for me";
+};
 $("#d-save").onclick = async () => {
   const title = $("#d-title").value.trim();
   if (!title) { alert("Give the decision a title."); return; }
@@ -229,7 +309,26 @@ async function loadMemory() {
   $("#memory-list").innerHTML = memory.length
     ? memory.map((m) => `<div class="mem"><span class="kind">${esc(m.kind)}</span><span>${esc(m.content)}</span></div>`).join("")
     : '<p class="muted">Nothing yet. Do the interview or just talk.</p>';
+  loadContradictions();
 }
+async function loadContradictions() {
+  const { contradictions } = await api("/api/contradictions");
+  const card = $("#contradictions-card");
+  if (!contradictions.length) { card.classList.add("hidden"); return; }
+  card.classList.remove("hidden");
+  $("#contradictions-list").innerHTML = contradictions.map((c) => `
+    <div class="contradiction">
+      <div class="was">used to think: ${esc(c.old_view)}</div>
+      <div class="now">now: ${esc(c.new_view)}</div>
+      ${c.note ? `<div class="meta">${esc(c.note)}</div>` : ""}
+      <button class="ghost" onclick="dismissContradiction(${c.id})">dismiss</button>
+    </div>`).join("");
+}
+window.dismissContradiction = async (id) => {
+  await api(`/api/contradictions/${id}/dismiss`, { method: "POST" });
+  loadContradictions();
+  refreshStatus();
+};
 async function loadDossier() {
   $("#dossier-text").textContent = await api("/api/dossier");
 }

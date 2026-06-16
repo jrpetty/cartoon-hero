@@ -8,18 +8,23 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import List, Optional
 
-from fastapi import FastAPI, HTTPException
-from fastapi.responses import FileResponse, PlainTextResponse
+from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from fastapi.responses import FileResponse, PlainTextResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 import brain
 import db
+import notify
+import voice
 from questions import BY_ID, QUESTIONS
 
 db.init_db()
+notify.start_scheduler()
 
 app = FastAPI(title="Echo")
+
+CHAT_MODES = ("chat", "argue", "asme", "decide")
 
 STATIC_DIR = Path(__file__).with_name("static")
 
@@ -32,8 +37,17 @@ class AnswerIn(BaseModel):
 
 
 class ChatIn(BaseModel):
-    mode: str = "chat"  # chat | argue | asme
+    mode: str = "chat"  # chat | argue | asme | decide
     message: str
+
+
+class DraftIn(BaseModel):
+    title: str
+    context: str = ""
+
+
+class TTSIn(BaseModel):
+    text: str
 
 
 class DecisionIn(BaseModel):
@@ -70,6 +84,10 @@ def state():
     s["has_key"] = brain.has_key()
     s["total_questions"] = len(QUESTIONS)
     s["decisions_due"] = db.decisions_due()
+    s["contradictions"] = len(db.list_contradictions())
+    s["premium_tts"] = voice.tts_available()
+    s["premium_stt"] = voice.stt_available()
+    s["email_reminders"] = notify.email_configured()
     return s
 
 
@@ -118,31 +136,41 @@ def dossier():
 
 @app.post("/api/chat")
 def chat(payload: ChatIn):
-    mode = payload.mode if payload.mode in ("chat", "argue", "asme") else "chat"
+    mode = payload.mode if payload.mode in CHAT_MODES else "chat"
     db.add_message(mode, "user", payload.message)
 
     history = [
         {"role": "user" if m["role"] == "user" else "assistant", "content": m["content"]}
         for m in db.recent_messages(mode, limit=12)
     ]
+    dossier = db.get_dossier()
+    prior_memory = db.memory_digest()
     try:
-        reply = brain.chat(mode, history, db.get_dossier(), db.memory_digest())
+        reply = brain.chat(mode, history, dossier, prior_memory)
     except brain.BrainError as exc:
         raise HTTPException(503, str(exc))
 
     db.add_message(mode, "echo", reply)
 
-    # Learn from what the user said (best-effort; never blocks the reply).
-    learned = []
+    # Learn from what the user said, and spot contradictions with the past.
+    # Best-effort: never blocks or fails the reply.
+    learned, contradictions = [], []
     try:
-        learned = brain.extract_memories(payload.message, db.get_dossier())
+        learned = brain.extract_memories(payload.message, dossier)
         for m in learned:
             db.add_memory(m["kind"], m["content"], source=mode,
                           topic=m.get("topic"), sentiment=m.get("sentiment"))
+        if learned:
+            contradictions = brain.find_contradictions(
+                [m["content"] for m in learned], prior_memory, dossier
+            )
+            for c in contradictions:
+                db.add_contradiction(c["old"], c["new"], c.get("note", ""),
+                                     c.get("topic"))
     except brain.BrainError:
         pass
 
-    return {"reply": reply, "learned": learned}
+    return {"reply": reply, "learned": learned, "contradictions": contradictions}
 
 
 # --- decisions -------------------------------------------------------------
@@ -168,9 +196,27 @@ def create_decision(payload: DecisionIn):
     return {"id": dec_id, "review_at": review_at, "advice": advice}
 
 
+@app.post("/api/decisions/draft")
+def draft_decision(payload: DraftIn):
+    if not payload.title.strip():
+        raise HTTPException(400, "Give the decision a title first.")
+    try:
+        return brain.draft_decision(payload.title, payload.context,
+                                    db.get_dossier(), db.memory_digest())
+    except brain.BrainError as exc:
+        raise HTTPException(503, str(exc))
+
+
 @app.get("/api/decisions")
 def get_decisions():
     return {"decisions": db.list_decisions(), "due": db.decisions_due()}
+
+
+@app.post("/api/reminders/run")
+def run_reminders():
+    if not notify.email_configured():
+        raise HTTPException(503, "Email reminders aren't configured (set SMTP_HOST and ECHO_EMAIL_TO).")
+    return {"sent": notify.run_due_reminders()}
 
 
 @app.post("/api/decisions/{dec_id}/review")
@@ -191,6 +237,50 @@ def add_memory(payload: MemoryIn):
     mem_id = db.add_memory(payload.kind, payload.content, source="manual",
                            topic=payload.topic, sentiment=payload.sentiment)
     return {"id": mem_id}
+
+
+# --- contradictions --------------------------------------------------------
+
+@app.get("/api/contradictions")
+def get_contradictions():
+    return {"contradictions": db.list_contradictions()}
+
+
+@app.post("/api/contradictions/{cid}/dismiss")
+def dismiss_contradiction(cid: int):
+    db.dismiss_contradiction(cid)
+    return {"ok": True}
+
+
+# --- voice (premium, optional) ---------------------------------------------
+
+@app.get("/api/voice/config")
+def voice_config():
+    return {"premium_tts": voice.tts_available(), "premium_stt": voice.stt_available()}
+
+
+@app.post("/api/tts")
+def tts(payload: TTSIn):
+    if not voice.tts_available():
+        # 204 tells the frontend to fall back to browser speech synthesis.
+        return Response(status_code=204)
+    try:
+        audio = voice.synthesize(payload.text)
+    except Exception as exc:
+        raise HTTPException(502, f"TTS failed: {exc}")
+    return Response(content=audio, media_type="audio/mpeg")
+
+
+@app.post("/api/stt")
+async def stt(audio: UploadFile = File(...)):
+    if not voice.stt_available():
+        raise HTTPException(503, "Premium speech-to-text not configured (set OPENAI_API_KEY).")
+    data = await audio.read()
+    try:
+        text = voice.transcribe(data, audio.filename or "speech.webm")
+    except Exception as exc:
+        raise HTTPException(502, f"Transcription failed: {exc}")
+    return {"text": text}
 
 
 @app.get("/api/export", response_class=PlainTextResponse)

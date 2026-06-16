@@ -101,3 +101,60 @@ def test_memory_extraction_json_parsing():
     assert parsed[0]["content"] == "I value freedom"
 
     assert brain._parse_json_array("nothing structured here") == []
+
+
+def test_json_object_and_clamp_helpers():
+    import brain
+    obj = brain._parse_json_object('here: {"reasoning":"because","confidence":80}')
+    assert obj["confidence"] == 80
+    assert brain._parse_json_object("no json") == {}
+    assert brain._clamp_int(250) == 100
+    assert brain._clamp_int(-5) == 0
+    assert brain._clamp_int("oops") == 50
+
+
+def test_contradictions_crud(client):
+    import db
+    cid = db.add_contradiction("I hate risk", "I just took a big risk", "shift", "risk")
+    listed = client.get("/api/contradictions").json()["contradictions"]
+    assert any(c["id"] == cid for c in listed)
+
+    client.post(f"/api/contradictions/{cid}/dismiss")
+    assert client.get("/api/contradictions").json()["contradictions"] == []
+    # state still counts only active contradictions
+    assert client.get("/api/state").json()["contradictions"] == 0
+
+
+def test_reminders_require_smtp(client, monkeypatch):
+    monkeypatch.delenv("SMTP_HOST", raising=False)
+    monkeypatch.delenv("ECHO_EMAIL_TO", raising=False)
+    assert client.post("/api/reminders/run").status_code == 503
+
+
+def test_decisions_to_remind_lifecycle(client):
+    import db
+    from datetime import datetime, timezone
+    dec_id = db.add_decision("Old call", "", "", "it works out", 60,
+                             datetime(2000, 1, 1, tzinfo=timezone.utc).isoformat())
+    due = db.decisions_to_remind()
+    assert any(d["id"] == dec_id for d in due)
+    db.mark_reminded(dec_id)
+    assert all(d["id"] != dec_id for d in db.decisions_to_remind())
+
+
+def test_voice_config_off_without_keys(client, monkeypatch):
+    monkeypatch.delenv("ELEVENLABS_API_KEY", raising=False)
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    cfg = client.get("/api/voice/config").json()
+    assert cfg == {"premium_tts": False, "premium_stt": False}
+
+
+def test_tts_no_key_returns_204(client, monkeypatch):
+    monkeypatch.delenv("ELEVENLABS_API_KEY", raising=False)
+    assert client.post("/api/tts", json={"text": "hello"}).status_code == 204
+
+
+def test_draft_without_key_503(client, monkeypatch):
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    r = client.post("/api/decisions/draft", json={"title": "Move cities"})
+    assert r.status_code == 503

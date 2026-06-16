@@ -21,10 +21,28 @@ One brain. One memory. Four modes.
 - **🥊 Argue against me** — state a take; Echo steelmans the opposite *using what
   it knows about you* so the counter-argument actually lands.
 - **🪞 Speak as me** — ask a question and Echo answers **as you**, in your voice.
+- **🧭 Decide for me** — hand Echo a choice and it makes the call *and* writes the
+  reasoning you'd give. In the Decisions tab, **"Draft this for me"** pre-fills a
+  decision's reasoning, prediction and confidence as you.
+- **🔀 Contradiction-spotting** — when something you say clashes with what you said
+  before, Echo flags it ("you used to think X, now you're saying Y").
 
 Everything lands in one SQLite database (`echo.db`) plus an evolving markdown
-dossier. Talk with your voice (browser speech-to-text) and have replies read
-back aloud.
+dossier.
+
+### Voice
+
+Talk with your voice and have replies read aloud. By default this uses the
+browser's built-in speech (Chrome/Edge). Set `ELEVENLABS_API_KEY` for natural
+text-to-speech and `OPENAI_API_KEY` for Whisper speech-to-text — Echo upgrades
+automatically and falls back to the browser if a key is missing.
+
+### Email reminders
+
+Decisions come back to you to grade. Set SMTP env vars (`SMTP_HOST`,
+`ECHO_EMAIL_TO`, …) and a background thread emails you when a decision's review
+date arrives — once per decision. Without SMTP, Echo just prompts you on-open.
+Trigger a check manually with `POST /api/reminders/run`.
 
 ## Run it
 

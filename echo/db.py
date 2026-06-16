@@ -91,13 +91,34 @@ def init_db() -> None:
         """
         CREATE TABLE IF NOT EXISTS messages (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            mode TEXT NOT NULL,          -- chat | argue | asme
+            mode TEXT NOT NULL,          -- chat | argue | asme | decide
             role TEXT NOT NULL,          -- user | echo
             content TEXT NOT NULL,
             created_at TEXT NOT NULL
         );
         """
     )
+
+    # Contradictions Echo notices between something you said before and now.
+    cur.execute(
+        """
+        CREATE TABLE IF NOT EXISTS contradictions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            old_view TEXT NOT NULL,
+            new_view TEXT NOT NULL,
+            note TEXT,
+            topic TEXT,
+            dismissed INTEGER NOT NULL DEFAULT 0,
+            created_at TEXT NOT NULL
+        );
+        """
+    )
+
+    # Lazy migration: track when a decision's review reminder was emailed.
+    cols = {r["name"] for r in cur.execute("PRAGMA table_info(decisions)").fetchall()}
+    if "reminded_at" not in cols:
+        cur.execute("ALTER TABLE decisions ADD COLUMN reminded_at TEXT")
+
     conn.commit()
     conn.close()
 
@@ -284,6 +305,66 @@ def recent_messages(mode: str, limit: int = 12) -> List[Dict[str, Any]]:
     return [dict(r) for r in reversed(rows)]
 
 
+# --- contradictions --------------------------------------------------------
+
+def add_contradiction(old_view: str, new_view: str, note: str = "",
+                      topic: Optional[str] = None) -> int:
+    conn = get_connection()
+    cur = conn.execute(
+        """
+        INSERT INTO contradictions(old_view, new_view, note, topic, created_at)
+        VALUES (?, ?, ?, ?, ?)
+        """,
+        (old_view, new_view, note, topic, now()),
+    )
+    conn.commit()
+    cid = cur.lastrowid
+    conn.close()
+    return cid
+
+
+def list_contradictions(include_dismissed: bool = False) -> List[Dict[str, Any]]:
+    conn = get_connection()
+    q = "SELECT * FROM contradictions"
+    if not include_dismissed:
+        q += " WHERE dismissed = 0"
+    q += " ORDER BY id DESC"
+    rows = conn.execute(q).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+def dismiss_contradiction(cid: int) -> None:
+    conn = get_connection()
+    conn.execute("UPDATE contradictions SET dismissed = 1 WHERE id = ?", (cid,))
+    conn.commit()
+    conn.close()
+
+
+# --- reminders -------------------------------------------------------------
+
+def decisions_to_remind() -> List[Dict[str, Any]]:
+    """Due, ungraded decisions that haven't been emailed about yet."""
+    conn = get_connection()
+    rows = conn.execute(
+        """
+        SELECT * FROM decisions
+        WHERE reviewed_at IS NULL AND reminded_at IS NULL AND review_at <= ?
+        ORDER BY review_at
+        """,
+        (now(),),
+    ).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+def mark_reminded(dec_id: int) -> None:
+    conn = get_connection()
+    conn.execute("UPDATE decisions SET reminded_at = ? WHERE id = ?", (now(), dec_id))
+    conn.commit()
+    conn.close()
+
+
 def stats() -> Dict[str, Any]:
     conn = get_connection()
     c = conn.cursor()
@@ -312,6 +393,7 @@ def export_all() -> str:
             "interview": all_answers(),
             "memory": list_memory(limit=100000),
             "decisions": list_decisions(),
+            "contradictions": list_contradictions(include_dismissed=True),
         },
         indent=2,
     )
