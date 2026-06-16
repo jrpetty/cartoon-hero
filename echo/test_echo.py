@@ -173,6 +173,47 @@ def test_grading_feeds_calibration_into_memory(client):
     assert any("overconfident" in m["content"] for m in mem)
 
 
+def test_calibration_empty(client):
+    r = client.get("/api/calibration").json()
+    assert r["graded"] == 0
+    assert r["label"] is None
+    assert r["buckets"] == []
+
+
+def test_calibration_flags_overconfidence(client):
+    # Three high-confidence calls that mostly went badly => overconfident.
+    for grade in (20, 30, 40):
+        dec = client.post("/api/decisions", json={
+            "title": "Bold bet", "confidence": 90, "review_in_days": 1,
+        }).json()["id"]
+        client.post(f"/api/decisions/{dec}/review",
+                    json={"outcome": "meh", "self_grade": grade})
+
+    r = client.get("/api/calibration").json()
+    assert r["graded"] == 3
+    assert r["avg_confidence"] == 90
+    assert r["avg_accuracy"] == 30
+    assert r["bias"] == 60            # 90 stated - 30 actual
+    assert r["label"] == "overconfident"
+    # All three calls sit in the 80-100 confidence band.
+    assert len(r["buckets"]) == 1
+    assert r["buckets"][0]["count"] == 3
+    assert r["buckets"][0]["stated"] == 90
+    assert r["buckets"][0]["actual"] == 30
+    assert r["best"]["grade"] == 40 and r["worst"]["grade"] == 20
+
+
+def test_calibration_well_calibrated_label(client):
+    dec = client.post("/api/decisions", json={
+        "title": "Steady call", "confidence": 70, "review_in_days": 1,
+    }).json()["id"]
+    client.post(f"/api/decisions/{dec}/review",
+                json={"outcome": "as expected", "self_grade": 72})
+    r = client.get("/api/calibration").json()
+    assert r["label"] == "well-calibrated"
+    assert r["avg_gap"] == 2
+
+
 def test_context_digest_links_everything(client):
     import db
     db.add_memory("view", "I value freedom", source="interview")

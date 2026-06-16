@@ -294,7 +294,36 @@ window.gradeDecision = async (id) => {
     loadDecisions();
   } catch (e) { alert(e.message); }
 };
+async function loadCalibration() {
+  const body = $("#calibration-body");
+  let r;
+  try { r = await api("/api/calibration"); }
+  catch (e) { body.textContent = "—"; return; }
+  if (!r.graded) {
+    body.innerHTML = `Grade a few decisions and your scorecard shows up here — <b>this is the whole point</b>. It tells you whether your confidence actually tracks reality.`;
+    return;
+  }
+  const sign = r.bias > 0 ? "+" : "";
+  const labelClass = r.label === "well-calibrated" ? "good" : "warn";
+  const insight = {
+    overconfident: `You lean <b>overconfident</b> — your gut runs about ${Math.abs(r.bias)} points hotter than reality.`,
+    underconfident: `You lean <b>underconfident</b> — you're about ${Math.abs(r.bias)} points better than you give yourself credit for.`,
+    "well-calibrated": `You're <b>well-calibrated</b> — your confidence and reality line up. That's rare.`,
+  }[r.label];
+  const rows = r.buckets.map((b) => {
+    const off = b.actual - b.stated;
+    const tag = Math.abs(off) <= 10 ? "on the money" : off < 0 ? `${-off} pts too sure` : `${off} pts too modest`;
+    return `<tr><td>said&nbsp;${b.label}</td><td>→ <b>${b.actual}%</b> right</td><td class="meta">${b.count} call${b.count > 1 ? "s" : ""} · ${tag}</td></tr>`;
+  }).join("");
+  body.innerHTML = `
+    <div class="calib-head"><span class="badge ${labelClass}">${r.label}</span>
+      <span class="meta">${r.graded} graded · avg confidence ${r.avg_confidence}% vs actual ${r.avg_accuracy}% (${sign}${r.bias})</span></div>
+    <p class="calib-insight">${insight} Your typical miss is <b>${r.avg_gap} pts</b>.</p>
+    <table class="calib"><tbody>${rows}</tbody></table>
+    <div class="meta calib-bw">Best call: ${esc(r.best.title)} (${r.best.grade}% right) · Worst: ${esc(r.worst.title)} (${r.worst.grade}% right)</div>`;
+}
 async function loadDecisions() {
+  loadCalibration();
   const { decisions, due } = await api("/api/decisions");
   renderDue(due);
   $("#decisions-list").innerHTML = decisions.length

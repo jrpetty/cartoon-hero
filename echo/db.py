@@ -328,6 +328,73 @@ def review_decision(dec_id: int, outcome: str, self_grade: int) -> None:
     conn.close()
 
 
+# Confidence bands for the reliability curve. Lower bound inclusive, upper
+# exclusive — except the top band, which includes 100.
+_CALIB_BANDS = [(0, 20), (20, 40), (40, 60), (60, 80), (80, 101)]
+
+
+def calibration_report() -> Dict[str, Any]:
+    """The whole point, made visible: how well your confidence tracks reality.
+
+    Computed purely from graded decisions — for each, your stated confidence vs
+    how right you turned out (self_grade). Surfaces overall bias, the average
+    miss, and a reliability curve ("when you said 90%, you were right 60%").
+    """
+    graded = [d for d in list_decisions() if d.get("self_grade") is not None]
+    n = len(graded)
+    report: Dict[str, Any] = {
+        "graded": n,
+        "total": len(list_decisions()),
+        "avg_confidence": None,
+        "avg_accuracy": None,
+        "bias": None,
+        "avg_gap": None,
+        "label": None,
+        "buckets": [],
+        "best": None,
+        "worst": None,
+    }
+    if not n:
+        return report
+
+    avg_conf = sum(d["confidence"] for d in graded) / n
+    avg_acc = sum(d["self_grade"] for d in graded) / n
+    bias = avg_conf - avg_acc  # positive => overconfident
+    avg_gap = sum(abs(d["confidence"] - d["self_grade"]) for d in graded) / n
+    label = (
+        "well-calibrated" if abs(bias) <= 10
+        else "overconfident" if bias > 0
+        else "underconfident"
+    )
+
+    buckets = []
+    for lo, hi in _CALIB_BANDS:
+        items = [d for d in graded if lo <= d["confidence"] < hi]
+        if items:
+            buckets.append({
+                "label": f"{lo}–{min(hi, 100)}%",
+                "count": len(items),
+                "stated": round(sum(i["confidence"] for i in items) / len(items)),
+                "actual": round(sum(i["self_grade"] for i in items) / len(items)),
+            })
+
+    best = max(graded, key=lambda d: d["self_grade"])
+    worst = min(graded, key=lambda d: d["self_grade"])
+    report.update({
+        "avg_confidence": round(avg_conf),
+        "avg_accuracy": round(avg_acc),
+        "bias": round(bias),
+        "avg_gap": round(avg_gap),
+        "label": label,
+        "buckets": buckets,
+        "best": {"title": best["title"], "confidence": best["confidence"],
+                 "grade": best["self_grade"]},
+        "worst": {"title": worst["title"], "confidence": worst["confidence"],
+                  "grade": worst["self_grade"]},
+    })
+    return report
+
+
 # --- messages --------------------------------------------------------------
 
 def add_message(mode: str, role: str, content: str) -> None:

@@ -15,9 +15,13 @@ One brain. One memory. Four modes.
 - **💬 Talk / Lore-keeper** — chat with something that actually remembers you.
   Every exchange quietly extracts durable views, facts, feelings, people and
   jokes into the database.
-- **⚖️ Decision Logger** — record a decision, your reasoning, your prediction and
-  your confidence. Echo pressure-tests it now and pings you to **grade your own
-  calibration** when the review date arrives.
+- **⚖️ Decision Logger + Calibration Scorecard** — record a decision, your
+  reasoning, your prediction and your confidence. Echo pressure-tests it now and
+  pings you to **grade your own calibration** when the review date arrives. The
+  Decisions tab then shows your **scorecard**: whether you run over- or
+  under-confident, your typical miss, and a reliability curve ("when you said
+  90%, you were actually right 60% of the time"). This is the payoff of the whole
+  loop — your judgment, measured.
 - **🥊 Argue against me** — state a take; Echo steelmans the opposite *using what
   it knows about you* so the counter-argument actually lands.
 - **🪞 Speak as me** — ask a question and Echo answers **as you**, in your voice.
@@ -90,9 +94,14 @@ tab (or `GET /api/export`) to dump the entire brain as JSON anytime.
 pytest
 ```
 
-## Roadmap
+## What's next
 
-- Premium cloud voices (ElevenLabs / Whisper) for a more natural sound
-- Real scheduled reminders (email via your inbox) instead of on-open prompts
-- Per-topic memory recall and contradiction-spotting ("you used to think…")
-- A "decide for me" mode that drafts a choice + the reasoning you'd give
+The original roadmap — premium voices, real email reminders, contradiction
+spotting, and "decide for me" — is all shipped. What's left is depth:
+
+- **Calibration by domain** — tag decisions (career / money / relationships) so the
+  scorecard can say *where* you're miscalibrated, not just by how much.
+- **A "Today" home surface** — open straight into what's due to grade and your
+  latest calibration read, so there's always a reason to come back.
+- **Trends over time** — is your calibration improving? Chart bias month over month.
+- **Multi-user accounts** — today it's a single-user, single-password brain.

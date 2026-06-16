@@ -289,6 +289,12 @@ def get_decisions():
     return {"decisions": db.list_decisions(), "due": db.decisions_due()}
 
 
+@app.get("/api/calibration")
+def calibration():
+    """Your calibration scorecard — confidence vs. how things actually went."""
+    return db.calibration_report()
+
+
 @app.post("/api/reminders/run")
 def run_reminders():
     if not notify.email_configured():

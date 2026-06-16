@@ -111,6 +111,17 @@ button.ghost:disabled { opacity: .5; cursor: default; }
 .decision .meta { color: var(--muted); font-size: 12px; }
 .grade { color: var(--accent-2); font-weight: 600; }
 
+.calib-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 6px; }
+.badge { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px;
+  padding: 4px 10px; border-radius: 999px; }
+.badge.good { color: var(--accent-2); background: rgba(0,211,167,.12); border: 1px solid var(--accent-2); }
+.badge.warn { color: var(--warn); background: rgba(255,176,32,.10); border: 1px solid var(--warn); }
+.calib-insight { font-size: 14px; line-height: 1.5; margin: 8px 0; }
+table.calib { width: 100%; border-collapse: collapse; margin: 6px 0; font-size: 13px; }
+table.calib td { padding: 6px 8px 6px 0; border-bottom: 1px solid var(--line); }
+table.calib td:first-child { color: var(--muted); white-space: nowrap; }
+.calib-bw { margin-top: 8px; }
+
 .mem { display: flex; gap: 8px; padding: 9px 0; border-bottom: 1px solid var(--line); font-size: 14px; }
 .kind { color: var(--accent); font-size: 11px; text-transform: uppercase; letter-spacing: .5px; min-width: 78px; }
 .dossier { white-space: pre-wrap; line-height: 1.55; font-family: inherit; font-size: 15px; }
