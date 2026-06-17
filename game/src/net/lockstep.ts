@@ -24,6 +24,9 @@ export class Lockstep {
   private buffer = new Map<number, Map<Team, Command[]>>();
   private pending: Command[] = [];
   nextAuthorTick = 0;
+  /** Teams whose player has left: their turns are treated as empty forever, so
+   *  the rest of the lobby keeps simulating in sync instead of deadlocking. */
+  private dropped = new Set<Team>();
 
   constructor(
     public world: World,
@@ -72,21 +75,29 @@ export class Lockstep {
     this.submit(turn.tick, turn.team, turn.cmds);
   }
 
-  /** True when every player's commands for the current tick are present. */
+  /** Mark a team as departed; its turns no longer gate progress. */
+  dropTeam(team: Team) {
+    this.dropped.add(team);
+  }
+
+  /** True when every still-present player's commands for the current tick are in. */
   canStep(): boolean {
     const m = this.buffer.get(this.currentTick);
-    if (!m) return false;
-    for (const tm of this.teams) if (!m.has(tm)) return false;
+    for (const tm of this.teams) {
+      if (this.dropped.has(tm)) continue;
+      if (!m || !m.has(tm)) return false;
+    }
     return true;
   }
 
   /** Advance exactly one tick if ready. Returns false if still waiting on input. */
   step(): boolean {
     if (!this.canStep()) return false;
-    const m = this.buffer.get(this.currentTick)!;
+    const m = this.buffer.get(this.currentTick) ?? new Map<Team, Command[]>();
     const tagged: { cmd: Command; seq: number }[] = [];
     let seq = 0;
     for (const tm of this.teams) {
+      if (this.dropped.has(tm)) continue;
       for (const c of m.get(tm) ?? []) tagged.push({ cmd: c, seq: seq++ });
     }
     for (const cmd of sortCommands(tagged)) applyCommand(this.world, cmd);

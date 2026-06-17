@@ -50,6 +50,15 @@ export const PAL = {
     { main: "#2fb3c9", light: "#74dcec", dark: "#1c7785", name: "Teal" },
     { main: "#e0822f", light: "#f2b272", dark: "#96521c", name: "Coral" },
     { main: "#f06a9a", light: "#f7a3c0", dark: "#a83f68", name: "Rose" },
+    // Second eight, for matches up to 8v8.
+    { main: "#9ad02f", light: "#c3e879", dark: "#658a1c", name: "Lime" },
+    { main: "#7a6048", light: "#a98c6c", dark: "#4e3c2c", name: "Umber" },
+    { main: "#cf5fd8", light: "#e29bec", dark: "#883a90", name: "Magenta" },
+    { main: "#3ad8b0", light: "#7decce", dark: "#249077", name: "Jade" },
+    { main: "#5c78f0", light: "#9bacf6", dark: "#374aa8", name: "Indigo" },
+    { main: "#d8d23a", light: "#ece97d", dark: "#90892a", name: "Gold" },
+    { main: "#d83a6f", light: "#ec7da3", dark: "#90274a", name: "Ruby" },
+    { main: "#9aa8b4", light: "#c6d0d8", dark: "#646e78", name: "Steel" },
   ],
 
   // Diplomacy colours — used in team games to recolour units relative to the

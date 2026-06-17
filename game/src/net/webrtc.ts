@@ -17,7 +17,9 @@ function decode(code: string): RTCSessionDescriptionInit {
   return JSON.parse(atob(code.trim()));
 }
 
-export class PeerLink {
+import { Transport } from "./transport";
+
+export class PeerLink implements Transport {
   pc: RTCPeerConnection;
   private channel: RTCDataChannel | null = null;
   onOpen?: () => void;

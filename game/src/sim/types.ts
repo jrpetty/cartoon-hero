@@ -14,12 +14,20 @@ export const enum Team {
   Team6 = 5,
   Team7 = 6,
   Team8 = 7,
+  Team9 = 8,
+  Team10 = 9,
+  Team11 = 10,
+  Team12 = 11,
+  Team13 = 12,
+  Team14 = 13,
+  Team15 = 14,
+  Team16 = 15,
   // Neutral sits above any player slot so player teams can occupy 0..N-1.
-  Neutral = 9,
+  Neutral = 16,
 }
 
-/** Highest number of player teams supported in one match. */
-export const MAX_TEAMS = 8;
+/** Highest number of player teams supported in one match (e.g. 8v8). */
+export const MAX_TEAMS = 16;
 
 /**
  * Victory rulesets.

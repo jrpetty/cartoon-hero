@@ -36,7 +36,6 @@ import { Profile } from "./meta/profile";
 import { computeRewards, MatchRewards } from "./meta/progression";
 import { Command, applyCommand } from "./sim/commands";
 import { NetSession } from "./net/session";
-import { PeerLink } from "./net/webrtc";
 import { NetLobby, NetStart } from "./ui/net_lobby";
 
 type AppState = "menu" | "setup" | "armory" | "match" | "postmatch" | "codex";
@@ -353,29 +352,30 @@ class App {
   /** Tear down any active net session/link (called when leaving a net match). */
   private endNet() {
     if (this.net) {
-      try { this.net.link.close(); } catch { /* */ }
+      try { this.net.transport.close(); } catch { /* */ }
       this.net = null;
     }
     this.netDesyncAlerted = false;
   }
 
-  /** Start a peer-to-peer 1v1 once the lobby handshake has connected. Both
-   *  clients build the identical world from the shared seed (fair, all-Common,
-   *  no commanders/boons) and drive it under lockstep. */
+  /** Start a networked match (server-relayed 2–16 players, or serverless 1v1)
+   *  once the lobby has connected. Every client builds the identical world from
+   *  the shared seed (fair all-Common, no commanders/boons, given alliances) and
+   *  drives it under lockstep. */
   startNetMatch(start: NetStart) {
-    const numPlayers = 2;
-    const map = generateMap("open_plains", start.seed, numPlayers, false);
-    const world = new World(start.seed);
-    const loadouts = [this.profile.matchLoadout(true), this.profile.matchLoadout(true)];
-    const econMults = [1, 1];
-    const commanders = ["", ""];
-    world.init(map, loadouts, econMults, undefined, commanders, false, undefined, "conquest");
+    const { transport, localTeam, teams, alliances, seed, numTeams } = start;
+    const map = generateMap("open_plains", seed, numTeams, false);
+    const world = new World(seed);
+    const loadouts = teams.map(() => this.profile.matchLoadout(true));
+    const econMults = teams.map(() => 1);
+    const commanders = teams.map(() => "");
+    world.init(map, loadouts, econMults, alliances, commanders, false, undefined, "conquest");
     this.world = world;
     this.ais = [];
-    this.net = new NetSession(start.link, start.isHost);
-    this.me = this.net.localTeam;
+    this.net = new NetSession(transport, localTeam, teams);
+    this.me = localTeam;
     this.net.attach(world, 5);
-    this.net.link.onClose = () => this.hud.addAlert("⚠ Opponent disconnected.");
+    transport.onClose = () => this.hud.addAlert("⚠ Connection lost.");
     this.renderer.prepare(map);
     this.renderer.clearFx();
     this.hud.prepare(map);
