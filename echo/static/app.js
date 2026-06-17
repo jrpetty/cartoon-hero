@@ -15,16 +15,23 @@ const api = async (path, opts = {}) => {
 };
 
 // --- tabs ------------------------------------------------------------------
+function activateTab(name) {
+  document.querySelectorAll(".tabs button").forEach((x) => x.classList.toggle("active", x.dataset.tab === name));
+  document.querySelectorAll(".tab").forEach((x) => x.classList.remove("active"));
+  $("#tab-" + name).classList.add("active");
+  if (name === "today") loadToday();
+  if (name === "interview") loadInterview();
+  if (name === "decisions") loadDecisions();
+  if (name === "memory") loadMemory();
+  if (name === "dossier") loadDossier();
+}
 document.querySelectorAll(".tabs button").forEach((b) => {
-  b.onclick = () => {
-    document.querySelectorAll(".tabs button").forEach((x) => x.classList.remove("active"));
-    document.querySelectorAll(".tab").forEach((x) => x.classList.remove("active"));
-    b.classList.add("active");
-    $("#tab-" + b.dataset.tab).classList.add("active");
-    if (b.dataset.tab === "decisions") loadDecisions();
-    if (b.dataset.tab === "memory") loadMemory();
-    if (b.dataset.tab === "dossier") loadDossier();
-  };
+  b.onclick = () => activateTab(b.dataset.tab);
+});
+// Buttons anywhere can jump to a tab via data-goto (used by the Today surface).
+document.addEventListener("click", (e) => {
+  const el = e.target.closest("[data-goto]");
+  if (el) activateTab(el.dataset.goto);
 });
 
 // --- voice (premium ElevenLabs/Whisper with browser fallback) --------------
@@ -266,32 +273,39 @@ $("#d-save").onclick = async () => {
   } catch (e) { alert(e.message); }
   $("#d-save").disabled = false;
 };
-function renderDue(due) {
-  const box = $("#decisions-due");
-  if (!box) return;
-  if (!due.length) { box.innerHTML = ""; return; }
-  box.innerHTML = `<div class="card due"><h2>⏰ Time to grade yourself</h2>${due
+// Inline grading cards for due decisions. `prefix` keeps the input ids unique
+// when the same due list is shown on both the Today and Decisions tabs.
+function dueItemsHTML(due, prefix = "") {
+  return due
     .map(
       (d) => `<div class="decision">
         <b>${esc(d.title)}</b>
         <div class="meta">You predicted: ${esc(d.prediction || "—")} (confidence ${d.confidence}%)</div>
-        <textarea id="out-${d.id}" rows="2" placeholder="What actually happened?"></textarea>
-        <div class="row"><label>How right were you? <input type="number" id="grade-${d.id}" min="0" max="100" value="50" style="width:64px"/>%</label>
-        <button class="primary" onclick="gradeDecision(${d.id})">Save grade</button></div>
+        <textarea id="${prefix}out-${d.id}" rows="2" placeholder="What actually happened?"></textarea>
+        <div class="row"><label>How right were you? <input type="number" id="${prefix}grade-${d.id}" min="0" max="100" value="50" style="width:64px"/>%</label>
+        <button class="primary" onclick="gradeDecision(${d.id}, '${prefix}')">Save grade</button></div>
       </div>`
     )
-    .join("")}</div>`;
+    .join("");
 }
-window.gradeDecision = async (id) => {
+function renderDue(due) {
+  const box = $("#decisions-due");
+  if (!box) return;
+  box.innerHTML = due.length
+    ? `<div class="card due"><h2>⏰ Time to grade yourself</h2>${dueItemsHTML(due)}</div>`
+    : "";
+}
+window.gradeDecision = async (id, prefix = "") => {
   try {
     const r = await api(`/api/decisions/${id}/review`, {
       method: "POST",
-      body: JSON.stringify({ outcome: $("#out-" + id).value, self_grade: +$("#grade-" + id).value }),
+      body: JSON.stringify({ outcome: $(`#${prefix}out-${id}`).value, self_grade: +$(`#${prefix}grade-${id}`).value }),
     });
     if (r.calibration && r.calibration !== "graded")
       alert(`Logged. On this one you were ${r.calibration}. Echo will remember that.`);
     refreshStatus();
     loadDecisions();
+    loadToday();
   } catch (e) { alert(e.message); }
 };
 async function loadCalibration() {
@@ -387,9 +401,59 @@ $("#dossier-refresh").onclick = async () => {
 };
 function esc(s) { return (s || "").replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c])); }
 
+// --- today (home surface) --------------------------------------------------
+function greeting() {
+  const h = new Date().getHours();
+  return h < 5 ? "Still up" : h < 12 ? "Good morning" : h < 18 ? "Good afternoon" : "Good evening";
+}
+async function loadToday() {
+  let t;
+  try { t = await api("/api/today"); }
+  catch (e) { $("#today-body").innerHTML = `<div class="card"><p class="muted">⚠ ${esc(e.message)}</p></div>`; return; }
+
+  const parts = [];
+
+  // The single best next step, given how far along you are.
+  parts.push(`<div class="card today-hero">
+    <h2>${greeting()}.</h2>
+    <p class="muted">${esc(t.next.detail)}</p>
+    <button class="primary" data-goto="${t.next.tab}">${esc(t.next.label)} →</button>
+  </div>`);
+
+  // What needs you now: due decisions, gradeable inline.
+  if (t.due.length) {
+    parts.push(`<div class="card due"><h2>⏰ Time to grade yourself</h2>${dueItemsHTML(t.due, "t")}</div>`);
+  }
+
+  // Your latest calibration read.
+  const c = t.calibration;
+  if (c && c.graded) {
+    const cls = c.label === "well-calibrated" ? "good" : "warn";
+    const sign = c.bias > 0 ? "+" : "";
+    parts.push(`<div class="card">
+      <h2>Your calibration</h2>
+      <div class="calib-head"><span class="badge ${cls}">${c.label}</span>
+        <span class="meta">${c.graded} graded · ${sign}${c.bias} vs reality · typical miss ${c.avg_gap} pts</span></div>
+      <button class="ghost" data-goto="decisions">See the full scorecard →</button>
+    </div>`);
+  }
+
+  // Unresolved shifts in your views.
+  if (t.contradictions) {
+    parts.push(`<div class="card">
+      <p>🔀 <b>${t.contradictions}</b> unresolved shift${t.contradictions !== 1 ? "s" : ""} in your views.</p>
+      <button class="ghost" data-goto="memory">Review them →</button>
+    </div>`);
+  }
+
+  parts.push(`<p class="muted small today-stats">${t.counts.memories} memories · ${t.counts.decisions} decisions · ${t.counts.messages} messages${t.has_dossier ? " · dossier ✓" : ""}</p>`);
+
+  $("#today-body").innerHTML = parts.join("");
+}
+
 // --- boot ------------------------------------------------------------------
 if ("serviceWorker" in navigator) {
   navigator.serviceWorker.register("/sw.js").catch(() => {});
 }
 refreshStatus();
-loadInterview();
+loadToday();

@@ -111,6 +111,11 @@ button.ghost:disabled { opacity: .5; cursor: default; }
 .decision .meta { color: var(--muted); font-size: 12px; }
 .grade { color: var(--accent-2); font-weight: 600; }
 
+.today-hero { background: linear-gradient(135deg, rgba(124,92,255,.16), rgba(0,211,167,.08)); border-color: var(--accent); }
+.today-hero h2 { font-size: 22px; }
+.today-hero .primary { margin-top: 6px; }
+.today-stats { text-align: center; margin-top: 4px; }
+
 .calib-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 6px; }
 .badge { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px;
   padding: 4px 10px; border-radius: 999px; }

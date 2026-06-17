@@ -295,6 +295,44 @@ def calibration():
     return db.calibration_report()
 
 
+@app.get("/api/today")
+def today():
+    """The home surface: what needs you now + your latest calibration read +
+    the single best next step, given how far along you are."""
+    answered = len(db.answered_ids())
+    total_q = len(QUESTIONS)
+    s = db.stats()
+    due = db.decisions_due()
+    contradictions = db.list_contradictions()
+
+    if answered < total_q:
+        nxt = {"tab": "interview", "label": "Continue the interview",
+               "detail": f"{answered}/{total_q} questions answered — depth here makes everything else better."}
+    elif not s["has_dossier"]:
+        nxt = {"tab": "interview", "label": "Build your dossier",
+               "detail": "You've answered everything — synthesize it into your operating manual."}
+    elif due:
+        nxt = {"tab": "today", "label": "Grade your calls",
+               "detail": f"{len(due)} decision{'s' if len(due) != 1 else ''} due — grade them to sharpen your calibration."}
+    elif contradictions:
+        nxt = {"tab": "memory", "label": "Resolve a shift",
+               "detail": f"{len(contradictions)} unresolved shift{'s' if len(contradictions) != 1 else ''} in your views."}
+    else:
+        nxt = {"tab": "decisions", "label": "Log a decision",
+               "detail": "Nothing pending — capture a choice you're weighing right now."}
+
+    return {
+        "due": due,
+        "calibration": db.calibration_report(),
+        "contradictions": len(contradictions),
+        "interview": {"answered": answered, "total": total_q, "done": answered >= total_q},
+        "has_dossier": s["has_dossier"],
+        "counts": {"memories": s["memories"], "decisions": s["decisions"],
+                   "messages": s["messages"]},
+        "next": nxt,
+    }
+
+
 @app.post("/api/reminders/run")
 def run_reminders():
     if not notify.email_configured():

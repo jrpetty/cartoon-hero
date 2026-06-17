@@ -26,7 +26,8 @@
   </header>
 
   <nav class="tabs">
-    <button data-tab="interview" class="active">🎤 Interview</button>
+    <button data-tab="today" class="active">🏠 Today</button>
+    <button data-tab="interview">🎤 Interview</button>
     <button data-tab="chat">💬 Talk</button>
     <button data-tab="decisions">⚖️ Decisions</button>
     <button data-tab="memory">🧠 Memory</button>
@@ -34,8 +35,13 @@
   </nav>
 
   <main>
+    <!-- TODAY -->
+    <section id="tab-today" class="tab active">
+      <div id="today-body"><p class="muted">Loading…</p></div>
+    </section>
+
     <!-- INTERVIEW -->
-    <section id="tab-interview" class="tab active">
+    <section id="tab-interview" class="tab">
       <div class="card">
         <div class="progress"><div id="interview-bar"></div></div>
         <p class="muted" id="interview-progress"></p>

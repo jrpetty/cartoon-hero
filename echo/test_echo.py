@@ -214,6 +214,32 @@ def test_calibration_well_calibrated_label(client):
     assert r["avg_gap"] == 2
 
 
+def test_today_next_step_starts_with_interview(client):
+    r = client.get("/api/today").json()
+    assert r["next"]["tab"] == "interview"   # nothing answered yet
+    assert r["due"] == []
+    assert r["calibration"]["graded"] == 0
+    assert r["interview"] == {"answered": 0, "total": 20, "done": False}
+
+
+def test_today_surfaces_due_and_calibration(client):
+    import db
+    from datetime import datetime, timezone
+    # One graded decision => calibration read.
+    g = client.post("/api/decisions", json={
+        "title": "Past call", "confidence": 80, "review_in_days": 1,
+    }).json()["id"]
+    client.post(f"/api/decisions/{g}/review", json={"outcome": "ok", "self_grade": 50})
+    # One overdue, ungraded => shows up in the due list.
+    due_id = db.add_decision("Due one", "", "", "pred", 70,
+                             datetime(2000, 1, 1, tzinfo=timezone.utc).isoformat())
+
+    r = client.get("/api/today").json()
+    assert any(d["id"] == due_id for d in r["due"])
+    assert r["calibration"]["graded"] == 1
+    assert r["counts"]["decisions"] == 2
+
+
 def test_context_digest_links_everything(client):
     import db
     db.add_memory("view", "I value freedom", source="interview")
