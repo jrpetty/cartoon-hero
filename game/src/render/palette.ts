@@ -96,8 +96,43 @@ export const PAL = {
   heal: "#7df2a9",
 };
 
+// High-contrast team palette for the colorblind option. Hues are spread for
+// luminance + warm/cool separation so adjacent teams stay distinguishable for
+// the common deuter/protan/tritan cases. light/dark are derived at load.
+const CB_MAIN: { main: string; name: string }[] = [
+  { main: "#1f6fe0", name: "Blue" },
+  { main: "#ff7a18", name: "Orange" },
+  { main: "#f5d800", name: "Yellow" },
+  { main: "#00b3b3", name: "Cyan" },
+  { main: "#e0188a", name: "Pink" },
+  { main: "#36c25a", name: "Green" },
+  { main: "#9b6bff", name: "Purple" },
+  { main: "#b05a18", name: "Brown" },
+  { main: "#6fd0ff", name: "Sky" },
+  { main: "#d83a2f", name: "Red" },
+  { main: "#a6e022", name: "Lime" },
+  { main: "#ff9ecb", name: "Rose" },
+  { main: "#2f9e7a", name: "Teal" },
+  { main: "#c0a8ff", name: "Lilac" },
+  { main: "#e8e8e8", name: "White" },
+  { main: "#7a7f88", name: "Grey" },
+];
+
+function teamFromMain(m: { main: string; name: string }) {
+  return { main: m.main, light: shade(m.main, 0.42), dark: shade(m.main, -0.42), name: m.name };
+}
+
+// Built lazily on first use so `shade` is defined; swapped by setColorblindTeams.
+let cbTeams: { main: string; light: string; dark: string; name: string }[] | null = null;
+let activeTeams: { main: string; light: string; dark: string; name: string }[] = PAL.teams;
+
+export function setColorblindTeams(on: boolean) {
+  if (on && !cbTeams) cbTeams = CB_MAIN.map(teamFromMain);
+  activeTeams = on ? cbTeams! : PAL.teams;
+}
+
 export function teamColor(team: number) {
-  return PAL.teams[team] ?? PAL.teams[0];
+  return activeTeams[team] ?? activeTeams[0];
 }
 
 /** Quick alpha helper for hex colors. */

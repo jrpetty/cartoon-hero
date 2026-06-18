@@ -102,7 +102,7 @@ export function drawMenuBackground(W: number, H: number, time: number) {
 // ------------------------------------------------------------------- menu --
 
 export class MenuScreen {
-  draw(W: number, H: number, time: number, profile: Profile): "skirmish" | "multiplayer" | "armory" | "codex" | null {
+  draw(W: number, H: number, time: number, profile: Profile): "skirmish" | "multiplayer" | "armory" | "codex" | "settings" | null {
     drawMenuBackground(W, H, time);
     const ctx = ui.ctx;
 
@@ -158,7 +158,7 @@ export class MenuScreen {
     ui.bar(W / 2 - 150, H * 0.36 + 36, 300, 9, info.into / info.need, PAL.uiAccent);
     ui.text(`${info.into}/${info.need} XP`, W / 2, H * 0.36 + 54, { align: "center", size: 11, color: "#bdb49a" });
 
-    let action: "skirmish" | "multiplayer" | "armory" | "codex" | null = null;
+    let action: "skirmish" | "multiplayer" | "armory" | "codex" | "settings" | null = null;
     const bw = 280;
     const bx = W / 2 - bw / 2;
     let by = H * 0.36 + 92;
@@ -168,18 +168,9 @@ export class MenuScreen {
     by += 56;
     if (ui.button(`🗝  Armory   (${profile.data.renown} ✦)`, bx, by, bw, 48, { size: 16 })) action = "armory";
     by += 56;
-    if (ui.button("📖  Codex — Tech Tree", bx, by, bw, 44, { size: 15 })) action = "codex";
+    if (ui.button("📖  Codex", bx, by, bw / 2 - 6, 44, { size: 14 })) action = "codex";
+    if (ui.button("⚙  Settings", bx + bw / 2 + 6, by, bw / 2 - 6, 44, { size: 14 })) action = "settings";
     by += 54;
-
-    // Volume sliders.
-    ui.panel(bx, by, bw, 96, { light: true });
-    ui.text("Master", bx + 16, by + 20, { size: 12 });
-    audio.masterVol = ui.slider(bx + 90, by + 20, bw - 110, audio.masterVol, ui.clicked || isMouseDown());
-    ui.text("Effects", bx + 16, by + 48, { size: 12 });
-    audio.sfxVol = ui.slider(bx + 90, by + 48, bw - 110, audio.sfxVol, ui.clicked || isMouseDown());
-    ui.text("Music", bx + 16, by + 76, { size: 12 });
-    audio.musicVol = ui.slider(bx + 90, by + 76, bw - 110, audio.musicVol, ui.clicked || isMouseDown());
-    audio.applyVolumes();
 
     const stats = profile.data.stats;
     ui.text(

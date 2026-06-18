@@ -21,6 +21,8 @@ export interface Particle {
 export class Particles {
   pool: Particle[] = [];
   private cursor = 0;
+  /** 0..1 spawn fraction — lowered by the "reduce effects" setting. */
+  density = 1;
 
   constructor(max = 2000) {
     for (let i = 0; i < max; i++) {
@@ -58,6 +60,9 @@ export class Particles {
   }
 
   spawn(opts: Partial<Particle> & { x: number; y: number }) {
+    // Cosmetic only (never sim), so a probabilistic skip is safe and keeps the
+    // thinning uniform across every effect.
+    if (this.density < 1 && Math.random() > this.density) return;
     const p = this.acquire();
     p.active = true;
     p.x = opts.x;

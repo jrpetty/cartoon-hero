@@ -37,8 +37,11 @@ import { computeRewards, MatchRewards } from "./meta/progression";
 import { Command, applyCommand } from "./sim/commands";
 import { NetSession } from "./net/session";
 import { NetLobby, NetStart } from "./ui/net_lobby";
+import { Settings, loadSettings, saveSettings } from "./meta/settings";
+import { SettingsScreen } from "./ui/settings_screen";
+import { setColorblindTeams } from "./render/palette";
 
-type AppState = "menu" | "setup" | "armory" | "match" | "postmatch" | "codex";
+type AppState = "menu" | "setup" | "armory" | "match" | "postmatch" | "codex" | "settings";
 
 // Buildings you can drag-paint into a continuous run.
 const LINE_BUILDABLE = new Set(["palisade", "stone_wall"]);
@@ -58,6 +61,9 @@ class App {
   armory = new ArmoryScreen();
   postmatch = new PostMatchScreen();
   codexScreen = new CodexScreen();
+  settingsScreen = new SettingsScreen();
+  settings: Settings = loadSettings();
+  private settingsReturn: AppState = "menu"; // where Back from settings goes
 
   // Match state
   world: World | null = null;
@@ -115,6 +121,7 @@ class App {
     this.resize();
     window.addEventListener("resize", () => this.resize());
     this.wireInput();
+    this.applySettings();
     // Load any Meshy-baked sprites (no-op if none generated yet); procedural art
     // fills in until each image is ready, so we don't block startup on it.
     loadSprites().then((n) => { if (n) console.log(`[sprites] loaded ${n} baked models`); });
@@ -594,6 +601,26 @@ class App {
     ctx.textAlign = "left";
   }
 
+  /** Push the current settings into the live engine systems. Called at boot and
+   *  every frame the settings screen is open (for instant preview). */
+  applySettings() {
+    const s = this.settings;
+    audio.masterVol = s.masterVol;
+    audio.sfxVol = s.sfxVol;
+    audio.musicVol = s.musicVol;
+    audio.muted = s.muted;
+    audio.applyVolumes();
+    setColorblindTeams(s.colorblind);
+    this.particles.density = s.reduceEffects ? 0.4 : 1;
+    this.showDamageNumbers = s.damageNumbers;
+  }
+
+  private openSettings(returnTo: AppState) {
+    this.settingsReturn = returnTo;
+    this.state = "settings";
+    audio.play("ui");
+  }
+
   // ----------------------------------------------------------- QoL controls --
   togglePause() {
     this.paused = !this.paused;
@@ -1034,6 +1061,16 @@ class App {
         } else if (action === "codex") {
           this.state = "codex";
           audio.play("ui");
+        } else if (action === "settings") {
+          this.openSettings("menu");
+        }
+      } else if (this.state === "settings") {
+        const a = this.settingsScreen.draw(W, H, this.time, this.settings, this.input.leftDown);
+        this.applySettings(); // live preview every frame
+        if (a === "back") {
+          saveSettings(this.settings);
+          this.state = this.settingsReturn;
+          audio.play("ui");
         }
       } else if (this.state === "codex") {
         if (this.codexScreen.draw(W, H, this.time) === "back") {
@@ -1135,7 +1172,7 @@ class App {
 
     // ---- camera movement ----
     if (!this.ingameMenu) {
-      const camSpeed = 540 / this.camera.zoom;
+      const camSpeed = this.settings.scrollSpeed / this.camera.zoom;
       const edge = 16;
       let dx = 0;
       let dy = 0;
@@ -1144,8 +1181,8 @@ class App {
       if (this.input.isDown("ArrowDown")) dy += 1;
       if (this.input.isDown("ArrowLeft")) dx -= 1;
       if (this.input.isDown("d") || this.input.isDown("ArrowRight")) dx += 1;
-      // edge scroll (only when mouse inside window)
-      if (this.input.mx >= 0 && this.input.my >= 0) {
+      // edge scroll (only when enabled and the mouse is inside the window)
+      if (this.settings.edgeScroll && this.input.mx >= 0 && this.input.my >= 0) {
         if (this.input.mx < edge) dx -= 1;
         if (this.input.mx > W - edge) dx += 1;
         if (this.input.my < edge) dy -= 1;
@@ -1223,12 +1260,15 @@ class App {
       const ctx = this.renderer.ctx;
       ctx.fillStyle = "rgba(8, 6, 3, 0.6)";
       ctx.fillRect(0, 0, W, H);
-      ui.panel(W / 2 - 150, H / 2 - 110, 300, 220, { light: true });
-      ui.text("Paused", W / 2, H / 2 - 80, { align: "center", size: 22, bold: true, color: PAL.uiAccent });
-      if (ui.button("Resume", W / 2 - 110, H / 2 - 44, 220, 44, { accent: true, size: 16 })) {
+      ui.panel(W / 2 - 150, H / 2 - 130, 300, 270, { light: true });
+      ui.text("Paused", W / 2, H / 2 - 100, { align: "center", size: 22, bold: true, color: PAL.uiAccent });
+      if (ui.button("Resume", W / 2 - 110, H / 2 - 64, 220, 44, { accent: true, size: 16 })) {
         this.ingameMenu = false;
       }
-      if (ui.button("Concede & Quit", W / 2 - 110, H / 2 + 14, 220, 44, { danger: true, size: 15 })) {
+      if (ui.button("⚙  Settings", W / 2 - 110, H / 2 - 12, 220, 44, { size: 15 })) {
+        this.openSettings("match"); // returns to the (still-paused) match
+      }
+      if (ui.button("Concede & Quit", W / 2 - 110, H / 2 + 40, 220, 44, { danger: true, size: 15 })) {
         this.finishMatch(false);
       }
     }
