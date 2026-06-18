@@ -21,6 +21,18 @@ export interface NetStart {
 
 interface LobbyPlayer { slot: number; name: string; side: number; ready: boolean; }
 
+/** Forgiving normalization of the server address a player types. Accepts a bare
+ *  IP/host, adds ws://, and supplies the default port — so "26.13.45.201",
+ *  "26.13.45.201:8787" and "ws://26.13.45.201:8787" all work. */
+export function normalizeWsUrl(raw: string): string {
+  let s = (raw || "").trim();
+  if (!s) return "";
+  if (!/^wss?:\/\//i.test(s)) s = "ws://" + s;
+  // Add the default port if none was given (after the host, before any path).
+  s = s.replace(/^(wss?:\/\/[^/:]+)(\/|$)/i, `$1:8787$2`);
+  return s;
+}
+
 const LS_URL = "bb_server_url";
 const LS_NAME = "bb_player_name";
 
@@ -110,9 +122,15 @@ export class NetLobby {
     status.style.cssText = "color:#e0a05a;font-size:13px;margin-top:8px";
     back.onclick = () => this.showHome();
     connect.onclick = () => {
+      const wsUrl = normalizeWsUrl(url.value);
+      if (!wsUrl) { status.textContent = "Enter the server address (e.g. ws://26.13.45.201:8787)."; return; }
       this.save(LS_URL, url.value); this.save(LS_NAME, name.value);
-      status.textContent = "Connecting…";
-      this.connectServer(url.value.trim(), name.value.trim() || "Player", room.value.trim() || "main", (msg) => (status.textContent = msg));
+      status.textContent = `Connecting to ${wsUrl}…`;
+      try {
+        this.connectServer(wsUrl, name.value.trim() || "Player", room.value.trim() || "main", (msg) => (status.textContent = msg));
+      } catch {
+        status.textContent = "Couldn't open that address — check it and try again.";
+      }
     };
     p.append("Server address", url, "Display name", name, "Room", room, connect, back, status);
   }

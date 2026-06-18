@@ -164,7 +164,7 @@ export class MenuScreen {
     let by = H * 0.36 + 92;
     if (ui.button("⚔  Skirmish", bx, by, bw, 52, { accent: true, size: 19 })) action = "skirmish";
     by += 60;
-    if (ui.button("🔗  Multiplayer — 1v1", bx, by, bw, 46, { size: 16, tooltip: ["Play a friend, peer-to-peer", "Swap connection codes — no server needed."] })) action = "multiplayer";
+    if (ui.button("🔗  Multiplayer", bx, by, bw, 46, { size: 16, tooltip: ["Play online — up to 8 vs 8", "Join a hosted server, or quick 1v1 with no server."] })) action = "multiplayer";
     by += 56;
     if (ui.button(`🗝  Armory   (${profile.data.renown} ✦)`, bx, by, bw, 48, { size: 16 })) action = "armory";
     by += 56;
