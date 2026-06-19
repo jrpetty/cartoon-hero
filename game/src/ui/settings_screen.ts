@@ -81,6 +81,7 @@ export class SettingsScreen {
       y += 34;
     }
     s.reduceEffects = this.toggle(lx, y, colW - 44, "Reduce effects (faster 8v8)", s.reduceEffects); y += 40;
+    s.weather = this.toggle(lx, y, colW - 44, "Weather effects", s.weather); y += 40;
     s.colorblind = this.toggle(lx, y, colW - 44, "Colorblind team colors", s.colorblind); y += 40;
 
     // ----- right column: Controls reference -----

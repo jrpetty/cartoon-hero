@@ -11,6 +11,7 @@ export interface Settings {
   scrollSpeed: number; // base camera pan speed (px/s at zoom 1)
   reduceEffects: boolean; // thin out particles on weaker machines / big 8v8s
   colorblind: boolean; // high-contrast team palette
+  weather: boolean; // atmospheric rain/snow/overcast overlay
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -23,6 +24,7 @@ export const DEFAULT_SETTINGS: Settings = {
   scrollSpeed: 540,
   reduceEffects: false,
   colorblind: false,
+  weather: true,
 };
 
 const KEY = "bb_settings";

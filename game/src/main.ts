@@ -43,6 +43,7 @@ import { setColorblindTeams } from "./render/palette";
 import { TeamMetrics, snapshotMetrics } from "./sim/metrics";
 import { drawScoreboard } from "./ui/scoreboard";
 import { drawProductionPanel } from "./ui/production_panel";
+import { Weather } from "./render/weather";
 
 type AppState = "menu" | "setup" | "armory" | "match" | "postmatch" | "codex" | "settings";
 
@@ -83,6 +84,7 @@ class App {
   spectating = false; // watch mode: all teams are AI, no player commands
   showScoreboard = false; // Tab — live multi-team scoreboard overlay
   showProduction = false; // V — production overview panel
+  private weather = new Weather();
   /** Time-series of per-team metrics, sampled through the match, for the graphs. */
   private matchHistory: { t: number; m: TeamMetrics[] }[] = [];
   private nextSampleT = 0;
@@ -345,6 +347,7 @@ class App {
       this.ais.push(new SkirmishAI(world, t as Team, diff));
     }
     this.renderer.prepare(map);
+    this.weather.configure(map.seed, map.name);
     this.renderer.clearFx();
     this.hud.prepare(map);
     this.particles.clear();
@@ -397,6 +400,7 @@ class App {
     this.net.attach(world, 5);
     transport.onClose = () => this.hud.addAlert("⚠ Connection lost.");
     this.renderer.prepare(map);
+    this.weather.configure(map.seed, map.name);
     this.renderer.clearFx();
     this.hud.prepare(map);
     this.particles.clear();
@@ -459,6 +463,7 @@ class App {
       this.ais.push(new SkirmishAI(world, t as Team, diff));
     }
     this.renderer.prepare(map);
+    this.weather.configure(map.seed, map.name);
     this.renderer.clearFx();
     this.hud.prepare(map);
     this.particles.clear();
@@ -1285,6 +1290,11 @@ class App {
       this.markers, ghost, suppressDragBox ? { active: false, x0: 0, y0: 0, x1: 0, y1: 0 } : this.input.drag, rallyFrom,
       hoveredId, alpha,
     );
+
+    // ---- weather overlay (cosmetic, screen-space, over world & under HUD) ----
+    if (this.settings.weather) {
+      this.weather.render(this.renderer.ctx, W, H, dt, this.settings.reduceEffects ? 0.45 : 1);
+    }
 
     // ---- HUD (consumes pointer if clicked over panels) ----
     // Pass the full selection (any team) so the info panel can show a clicked
