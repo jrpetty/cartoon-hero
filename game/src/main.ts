@@ -42,6 +42,7 @@ import { SettingsScreen } from "./ui/settings_screen";
 import { setColorblindTeams } from "./render/palette";
 import { TeamMetrics, snapshotMetrics } from "./sim/metrics";
 import { drawScoreboard } from "./ui/scoreboard";
+import { drawProductionPanel } from "./ui/production_panel";
 
 type AppState = "menu" | "setup" | "armory" | "match" | "postmatch" | "codex" | "settings";
 
@@ -81,6 +82,7 @@ class App {
   ingameMenu = false;
   spectating = false; // watch mode: all teams are AI, no player commands
   showScoreboard = false; // Tab — live multi-team scoreboard overlay
+  showProduction = false; // V — production overview panel
   /** Time-series of per-team metrics, sampled through the match, for the graphs. */
   private matchHistory: { t: number; m: TeamMetrics[] }[] = [];
   private nextSampleT = 0;
@@ -184,6 +186,7 @@ class App {
     if (k === "+" || k === "=") this.cycleSpeed(1);
     if (k === "-" || k === "_") this.cycleSpeed(-1);
     if (k === "Tab") this.showScoreboard = !this.showScoreboard; // live scoreboard
+    if (k === "v") this.showProduction = !this.showProduction; // production overview
     // Spectators only watch — no army commands.
     if (this.spectating) return;
     if (k === "a") this.attackMoveArmed = true;
@@ -639,6 +642,7 @@ class App {
     this.nextSampleT = 0;
     this.endGraph = null;
     this.showScoreboard = false;
+    this.showProduction = false;
   }
 
   /** Sample every team's metrics at a fixed game-time cadence for the graphs. */
@@ -731,7 +735,8 @@ class App {
       .filter((e) => e.type === "villager" && e.order.kind === OrderKind.Idle).length;
     const by = H - MINIMAP_SIZE - 10 - 22 - 6 - 26 - 4;
     chip(`Idle ${idleCount}`, 12, by, 70, 24, idleCount > 0, () => this.selectIdleVillager());
-    chip("Army", 86, by, 60, 24, false, () => this.selectAllArmy());
+    chip("Army", 86, by, 46, 24, false, () => this.selectAllArmy());
+    chip("⚒", 136, by, 30, 24, this.showProduction, () => { this.showProduction = !this.showProduction; });
 
     // Commander power button (only if your commander has one).
     const p = this.world.player(this.me);
@@ -739,7 +744,7 @@ class App {
     if (power) {
       const ready = p.powerCooldown <= 0;
       const label = this.powerArmed ? "Place ⚑" : ready ? `⚑ ${power.name.split(" ")[0]}` : `${Math.ceil(p.powerCooldown)}s`;
-      chip(label, 150, by, 96, 24, this.powerArmed || ready, () => this.armCommanderPower());
+      chip(label, 170, by, 96, 24, this.powerArmed || ready, () => this.armCommanderPower());
     }
     ctx.textAlign = "left";
   }
@@ -1289,6 +1294,13 @@ class App {
     if (world.mode !== "conquest") this.drawModeStatus(W, H, world);
     this.drawControlGroups(W, H);
     this.drawQoLBar(W, H);
+    if (this.showProduction && !this.spectating) {
+      const jump = drawProductionPanel(W, H, world, this.me);
+      if (jump != null) {
+        const b = world.byId.get(jump);
+        if (b) { this.select([jump]); this.camera.centerOn(b.x, b.y); }
+      }
+    }
     if (this.showScoreboard) drawScoreboard(W, H, world, this.me);
     ui.flushTooltip(W, H);
 
