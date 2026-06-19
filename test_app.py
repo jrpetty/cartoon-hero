@@ -28,6 +28,18 @@ def test_create_player_and_record_match():
     assert season["points"] == 3
 
 
+def test_dashboard_served():
+    resp = client.get("/")
+    assert resp.status_code == 200
+    assert "Cartoon Hero" in resp.text
+
+    css = client.get("/static/styles.css")
+    assert css.status_code == 200
+
+    js = client.get("/static/app.js")
+    assert js.status_code == 200
+
+
 def test_get_players_and_season():
     resp = client.get("/players")
     assert resp.status_code == 200

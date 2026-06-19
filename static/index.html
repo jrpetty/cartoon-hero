@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Cartoon Hero — Season Dashboard</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="stylesheet" href="/static/styles.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="crest">⚽</span>
+      <div>
+        <h1>Cartoon Hero</h1>
+        <p class="subtitle">FIFA-style season tracker</p>
+      </div>
+    </div>
+    <button id="refresh" class="ghost-btn" type="button">↻ Refresh</button>
+  </header>
+
+  <main>
+    <section class="stats" aria-label="Season summary">
+      <article class="stat-card">
+        <span class="stat-label">Games Played</span>
+        <span class="stat-value" id="stat-games">—</span>
+      </article>
+      <article class="stat-card">
+        <span class="stat-label">Points</span>
+        <span class="stat-value" id="stat-points">—</span>
+      </article>
+      <article class="stat-card">
+        <span class="stat-label">Points / Game</span>
+        <span class="stat-value" id="stat-ppg">—</span>
+      </article>
+      <article class="stat-card">
+        <span class="stat-label">Rating Cap</span>
+        <span class="stat-value" id="stat-cap">—</span>
+      </article>
+      <article class="stat-card">
+        <span class="stat-label">Budget</span>
+        <span class="stat-value" id="stat-budget">—</span>
+      </article>
+    </section>
+
+    <div class="grid">
+      <section class="panel">
+        <div class="panel-head">
+          <h2>Squad</h2>
+          <span class="pill" id="squad-count">0 players</span>
+        </div>
+        <div class="table-wrap">
+          <table id="players-table">
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>Rating</th>
+                <th>Nationality</th>
+                <th>Homegrown</th>
+                <th>Apps</th>
+                <th>Injury</th>
+              </tr>
+            </thead>
+            <tbody id="players-body">
+              <tr><td colspan="6" class="empty">Loading…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <aside class="side">
+        <section class="panel">
+          <div class="panel-head"><h2>Record Match</h2></div>
+          <p class="hint">Log a result to update the season tally.</p>
+          <div class="result-btns">
+            <button class="result-btn win" data-result="W" type="button">Win <small>+3</small></button>
+            <button class="result-btn draw" data-result="D" type="button">Draw <small>+1</small></button>
+            <button class="result-btn loss" data-result="L" type="button">Loss <small>+0</small></button>
+          </div>
+        </section>
+
+        <section class="panel">
+          <div class="panel-head"><h2>Add Player</h2></div>
+          <form id="player-form" class="stack">
+            <label>Name
+              <input name="name" type="text" required placeholder="e.g. Alex Hunter" />
+            </label>
+            <label>Rating
+              <input name="rating" type="number" min="1" max="99" value="60" required />
+            </label>
+            <label>Nationality
+              <input name="nationality" type="text" required placeholder="e.g. ENG" />
+            </label>
+            <label class="check">
+              <input name="homegrown" type="checkbox" /> Homegrown
+            </label>
+            <button class="primary-btn" type="submit">Add to squad</button>
+          </form>
+        </section>
+      </aside>
+    </div>
+  </main>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  <script src="/static/app.js"></script>
+</body>
+</html>

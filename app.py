@@ -1,5 +1,8 @@
+from pathlib import Path
 from typing import List
 from fastapi import FastAPI
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 from database import init_db, add_player, list_players, record_match, get_season
 from schemas import PlayerCreate, Player, MatchCreate, Season
 
@@ -7,6 +10,15 @@ from schemas import PlayerCreate, Player, MatchCreate, Season
 init_db()
 
 app = FastAPI(title="Cartoon Hero Tracker")
+
+STATIC_DIR = Path(__file__).with_name("static")
+app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+
+
+@app.get("/", include_in_schema=False)
+def dashboard():
+    """Serve the season dashboard."""
+    return FileResponse(STATIC_DIR / "index.html")
 
 
 @app.post("/players", response_model=Player)
