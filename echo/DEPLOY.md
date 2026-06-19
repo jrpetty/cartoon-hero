@@ -5,6 +5,23 @@ lock and storage that survives redeploys. Recommended host: **Fly.io** (free
 tier covers a small always-on app with a persistent disk; HTTPS is automatic,
 which the mic/voice needs).
 
+## Fastest: one command
+
+After installing the Fly CLI and logging into your account, `deploy.sh` does
+everything else — app, persistent disk, secrets, deploy:
+
+```bash
+curl -L https://fly.io/install.sh | sh   # install flyctl (once)
+fly auth login                           # log into YOUR Fly account (once)
+cd echo && ./deploy.sh                   # it asks 4 things, then ships it
+```
+
+`fly auth login` is the only step that has to be you — it's the browser sign-in
+to your own account. The script handles the rest and prints your live link.
+
+The manual walkthrough below is the same steps, spelled out, if you'd rather run
+them yourself or something needs adjusting.
+
 ## 1. Install the Fly CLI & sign up
 ```bash
 # macOS
