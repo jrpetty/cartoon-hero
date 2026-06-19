@@ -468,7 +468,11 @@ class App {
   // The HUD acts through this controller.
   controller: MatchController = {
     trainUnit: (b, type) => {
-      this.dispatch({ t: "train", team: this.me, buildingId: b.id, unit: type });
+      // Queue the unit in every selected production building of this type (so
+      // double-click-select all your stables, then mass-produce in one click).
+      const sameType = this.playerSelection().filter((e) => e.kind === Kind.Building && e.type === b.type);
+      const targets = sameType.length ? sameType : [b];
+      for (const bld of targets) this.dispatch({ t: "train", team: this.me, buildingId: bld.id, unit: type });
       audio.play("ui");
     },
     research: (b, techId) => {
@@ -794,10 +798,11 @@ class App {
     const wx = this.camera.screenToWorldX(sx);
     const wy = this.camera.screenToWorldY(sy);
     const e = this.world.entityAt(wx, wy, this.me);
-    if (!e || e.kind !== Kind.Unit) return;
-    // Select all units of this type currently on screen.
+    if (!e || (e.kind !== Kind.Unit && e.kind !== Kind.Building)) return;
+    // Select every entity of this kind+type currently on screen — units (an army
+    // of one type) or buildings (e.g. all your stables, to mass-train at once).
     const ids: EntityId[] = [];
-    for (const o of this.world.entitiesOf(this.me, Kind.Unit)) {
+    for (const o of this.world.entitiesOf(this.me, e.kind)) {
       if (o.type !== e.type) continue;
       const ox = this.camera.worldToScreenX(o.x);
       const oy = this.camera.worldToScreenY(o.y);

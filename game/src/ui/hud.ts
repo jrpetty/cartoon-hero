@@ -466,6 +466,9 @@ export class HUD {
 
     if (building && building.buildState === BuildState.Done) {
       const def = BUILDINGS[building.type];
+      // When several production buildings of the same type are selected, training
+      // queues into all of them — so show the combined queued count per unit.
+      const prodSiblings = own.filter((e) => e.kind === Kind.Building && e.type === building.type && e.buildState === BuildState.Done);
       for (const unitId of def.trains) {
         const u = UNITS[unitId];
         const lockedAge = p.age < u.age;
@@ -481,10 +484,11 @@ export class HUD {
               u.name + (u.hero ? " ★" : ""),
               this.cost(u.cost) + `  (${u.pop} pop)`,
               ...(lockedAge ? [`Requires ${AGES[u.age].name}`] : []),
+              ...(prodSiblings.length > 1 ? [`Queues in all ${prodSiblings.length} selected ${def.name}s`] : []),
               ...(heroState && heroState.label ? [heroState.label] : []),
               u.desc,
             ],
-            badge: String(building.productionQueue.filter((q) => q === `u:${unitId}`).length || ""),
+            badge: String(prodSiblings.reduce((n, b) => n + b.productionQueue.filter((q) => q === `u:${unitId}`).length, 0) || ""),
           },
         );
       }
