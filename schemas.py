@@ -22,6 +22,11 @@ class MatchCreate(BaseModel):
     result: str  # 'W', 'D', 'L'
 
 
+class Match(BaseModel):
+    id: int
+    result: str
+
+
 class Season(BaseModel):
     games_played: int
     points: int

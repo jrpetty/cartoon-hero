@@ -3,11 +3,20 @@ from typing import List
 from fastapi import FastAPI
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
-from database import init_db, add_player, list_players, record_match, get_season
-from schemas import PlayerCreate, Player, MatchCreate, Season
+from database import (
+    init_db,
+    add_player,
+    list_players,
+    record_match,
+    get_season,
+    list_matches,
+)
+from schemas import PlayerCreate, Player, MatchCreate, Season, Match
+from seed import seed_if_empty
 
-# initialize database on startup
+# initialize database and populate demo data on first run
 init_db()
+seed_if_empty()
 
 app = FastAPI(title="Cartoon Hero Tracker")
 
@@ -38,6 +47,11 @@ def get_players():
 def add_match(match: MatchCreate):
     record_match(match.result)
     return Season(**get_season())
+
+
+@app.get("/matches", response_model=List[Match])
+def get_matches(limit: int = 20):
+    return [Match(**m) for m in list_matches(limit)]
 
 
 @app.get("/season", response_model=Season)

@@ -10,10 +10,24 @@ Create a virtual environment and install dependencies:
 pip install -r requirements.txt
 ```
 
-Run the API locally:
+Run everything with one command (installs deps if needed, then starts the server):
+
+```bash
+./run.sh
+```
+
+Or run the API directly:
 
 ```bash
 uvicorn app:app --reload
+```
+
+On first launch the database is automatically populated with a demo squad and a
+season of results, so the dashboard has something to explore immediately. Reseed
+at any time with:
+
+```bash
+python seed.py
 ```
 
 Then open the dashboard at <http://127.0.0.1:8000/> to view season stats, manage

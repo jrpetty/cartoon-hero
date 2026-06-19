@@ -9,6 +9,11 @@ const api = {
     if (!r.ok) throw new Error("Failed to load players");
     return r.json();
   },
+  async matches() {
+    const r = await fetch("/matches?limit=20");
+    if (!r.ok) throw new Error("Failed to load matches");
+    return r.json();
+  },
   async addPlayer(payload) {
     const r = await fetch("/players", {
       method: "POST",
@@ -43,8 +48,35 @@ function renderSeason(s) {
   document.getElementById("stat-points").textContent = s.points;
   const ppg = s.games_played ? (s.points / s.games_played).toFixed(2) : "0.00";
   document.getElementById("stat-ppg").textContent = ppg;
-  document.getElementById("stat-cap").textContent = s.rating_cap;
-  document.getElementById("stat-budget").textContent = s.budget.toLocaleString();
+  document.getElementById("stat-budget").textContent = "$" + s.budget.toLocaleString();
+}
+
+// matches arrive most-recent-first from the API
+function renderForm(matches) {
+  const counts = { W: 0, D: 0, L: 0 };
+  matches.forEach((m) => {
+    if (counts[m.result] !== undefined) counts[m.result] += 1;
+  });
+  document.getElementById("stat-record").textContent =
+    `${counts.W}-${counts.D}-${counts.L}`;
+  document.getElementById("form-summary").textContent =
+    `last ${matches.length} match${matches.length === 1 ? "" : "es"}`;
+
+  const strip = document.getElementById("form-strip");
+  if (!matches.length) {
+    strip.innerHTML = '<span class="empty">No matches yet</span>';
+    return;
+  }
+  const labels = { W: "W", D: "D", L: "L" };
+  const titles = { W: "Win", D: "Draw", L: "Loss" };
+  // show oldest -> newest so the strip reads left to right
+  strip.innerHTML = [...matches]
+    .reverse()
+    .map(
+      (m) =>
+        `<span class="form-chip ${m.result.toLowerCase()}" title="${titles[m.result] || m.result}">${labels[m.result] || "?"}</span>`
+    )
+    .join("");
 }
 
 function renderPlayers(players) {
@@ -87,9 +119,14 @@ function escapeHtml(str) {
 
 async function refresh() {
   try {
-    const [season, players] = await Promise.all([api.season(), api.players()]);
+    const [season, players, matches] = await Promise.all([
+      api.season(),
+      api.players(),
+      api.matches(),
+    ]);
     renderSeason(season);
     renderPlayers(players);
+    renderForm(matches);
   } catch (e) {
     toast(e.message, true);
   }
@@ -100,10 +137,10 @@ document.getElementById("refresh").addEventListener("click", refresh);
 document.querySelectorAll(".result-btn").forEach((btn) => {
   btn.addEventListener("click", async () => {
     try {
-      const season = await api.recordMatch(btn.dataset.result);
-      renderSeason(season);
+      await api.recordMatch(btn.dataset.result);
       const labels = { W: "Win", D: "Draw", L: "Loss" };
       toast(`${labels[btn.dataset.result]} recorded`);
+      refresh();
     } catch (e) {
       toast(e.message, true);
     }

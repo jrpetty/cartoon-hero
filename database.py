@@ -104,5 +104,27 @@ def get_season() -> Dict[str, Any]:
     return dict(row)
 
 
+def list_matches(limit: int = 20) -> List[Dict[str, Any]]:
+    """Return recent match results, most recent first."""
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute(
+        "SELECT id, result FROM matches WHERE season_id=1 ORDER BY id DESC LIMIT ?",
+        (limit,),
+    )
+    rows = cur.fetchall()
+    conn.close()
+    return [dict(row) for row in rows]
+
+
+def count_players() -> int:
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute("SELECT COUNT(*) AS n FROM players")
+    n = cur.fetchone()["n"]
+    conn.close()
+    return n
+
+
 if __name__ == "__main__":
     init_db()

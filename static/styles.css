@@ -113,6 +113,23 @@ tbody tr:hover { background: rgba(79, 124, 255, 0.06); }
 .badge.no { background: rgba(147, 160, 200, 0.12); color: var(--muted); }
 .badge.injured { background: rgba(231, 76, 60, 0.15); color: var(--loss); }
 
+.form-panel { margin-top: -4px; }
+.form-strip { display: flex; flex-wrap: wrap; gap: 8px; }
+.form-chip {
+  width: 34px;
+  height: 34px;
+  border-radius: 9px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 14px;
+  color: #0c1020;
+}
+.form-chip.w { background: var(--win); }
+.form-chip.d { background: var(--draw); }
+.form-chip.l { background: var(--loss); color: #fff; }
+
 .hint { color: var(--muted); font-size: 13px; margin: 0 0 14px; }
 
 .result-btns { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
