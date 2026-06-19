@@ -107,6 +107,14 @@ export function worldChecksum(world: World): number {
     h = mix(h, Math.round(e.hp * 100));
     h = mix(h, e.order.kind);
     h = mix(h, e.order.target);
+    // Also hash state that can diverge before it shows up in position/hp, so a
+    // desync is caught early: shift-queue depth, carried resources, attack
+    // cooldown, and production progress.
+    h = mix(h, e.order.queue?.length ?? 0);
+    h = mix(h, Math.round(e.carry * 100));
+    h = mix(h, Math.round(e.attackCooldown * 100));
+    h = mix(h, e.productionQueue.length);
+    h = mix(h, Math.round(e.productionTime * 100));
   }
   // Per-player economy/pop/age.
   for (let t = 0; t < world.numTeams; t++) {

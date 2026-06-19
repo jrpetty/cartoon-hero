@@ -13,7 +13,7 @@ export class NetSession {
   lock: Lockstep | null = null;
   desynced = false;
   private localSums = new Map<number, number>();
-  private remoteSums = new Map<number, number>();
+  private remoteSums = new Map<number, Map<Team, number>>();
   private readonly sumEvery = 40; // compare state every ~2s of sim time
 
   constructor(public transport: Transport, public localTeam: Team, public teams: Team[]) {}
@@ -25,7 +25,8 @@ export class NetSession {
     this.transport.onData = (raw) => {
       const m = raw as { t?: string; turn?: never; tick?: number; sum?: number; team?: number };
       if (m.t === "turn" && m.turn) this.lock?.receiveTurn(m.turn);
-      else if (m.t === "sum" && typeof m.tick === "number" && typeof m.sum === "number") this.compare(m.tick, m.sum);
+      else if (m.t === "sum" && typeof m.tick === "number" && typeof m.sum === "number" && typeof m.team === "number")
+        this.compare(m.tick, m.team as Team, m.sum);
       else if (m.t === "drop" && typeof m.team === "number") this.lock?.dropTeam(m.team as Team);
     };
   }
@@ -55,7 +56,7 @@ export class NetSession {
       if (t % this.sumEvery === 0) {
         const sum = worldChecksum(lock.world);
         this.localSums.set(t, sum);
-        this.transport.send({ t: "sum", tick: t, sum });
+        this.transport.send({ t: "sum", tick: t, sum, team: this.localTeam });
         this.compare(t);
       }
       n++;
@@ -63,10 +64,18 @@ export class NetSession {
     return n;
   }
 
-  private compare(tick: number, remote?: number) {
-    if (remote !== undefined) this.remoteSums.set(tick, remote);
-    const r = this.remoteSums.get(tick);
+  // Remote checksums keyed by tick AND author team: with 3+ players several peers
+  // report a sum for the same tick, so a single shared slot would let a matching
+  // peer mask another peer's divergence.
+  private compare(tick: number, team?: Team, remote?: number) {
+    if (team !== undefined && remote !== undefined) {
+      let m = this.remoteSums.get(tick);
+      if (!m) { m = new Map(); this.remoteSums.set(tick, m); }
+      m.set(team, remote);
+    }
     const l = this.localSums.get(tick);
-    if (r !== undefined && l !== undefined && r !== l) this.desynced = true;
+    const m = this.remoteSums.get(tick);
+    if (l === undefined || !m) return;
+    for (const v of m.values()) if (v !== l) { this.desynced = true; return; }
   }
 }

@@ -392,6 +392,9 @@ class App {
     this.markers = [];
     this.placing = null;
     this.attackMoveArmed = false;
+    this.powerArmed = false;
+    this.paused = false;
+    this.gameSpeed = 1;
     this.ingameMenu = false;
     this.matchOverTimer = -1;
     this.matchRewards = null;
@@ -872,7 +875,7 @@ class App {
     }
 
     if (target && target.alive && this.world.visibleTo(this.me, target)) {
-      if (target.team !== this.me && target.kind !== Kind.Resource) {
+      if (this.world.areHostile(this.me, target.team) && target.kind !== Kind.Resource) {
         this.dispatch({ t: "attack", team: this.me, ids, target: target.id, queue: shift });
         this.markers.push({ x: wx, y: wy, age: 0, kind: "attack" });
         audio.play("command");
@@ -1444,6 +1447,8 @@ class App {
     this.world = null;
     this.ais = [];
     this.ingameMenu = false;
+    this.endNet(); // close any net link and clear the session
+    this.me = Team.Player; // back to the default perspective for the next match
     this.state = "postmatch";
   }
 }

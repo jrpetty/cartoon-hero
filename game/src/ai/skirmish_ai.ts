@@ -503,8 +503,10 @@ export class SkirmishAI {
         const v = vills[i % vills.length];
         if (v) this.world.issueBuildRepair([v.id], bid, true);
       });
+      // Only consider walls "planned" once something actually went down; if every
+      // segment hit blocked tiles, retry next cycle instead of giving up forever.
+      this.wallsPlanned = true;
     }
-    this.wallsPlanned = true;
   }
 
   private gatherTargets(age: number): Record<ResourceKind, number> {

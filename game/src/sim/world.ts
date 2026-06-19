@@ -633,6 +633,9 @@ export class World {
     for (const id of ids) {
       const e = this.byId.get(id);
       if (!e || !e.alive || e.kind !== Kind.Unit) continue;
+      // No friendly fire: never let a unit force-attack its own or an allied
+      // entity. (Neutral targets — huntable/gaia — are still attackable.)
+      if (this.areAllied(e.team, target.team)) continue;
       this.resolveOrderQueue(e, { kind: OrderKind.Attack, tx: target.x, ty: target.y, target: targetId }, queue);
     }
   }
@@ -999,7 +1002,11 @@ export class World {
       const age = AGES[next];
       if (!this.ageRequirementMet(team, next)) return false;
       if (!this.canAfford(p.resources, age.cost)) return false;
-      if (b.productionQueue.some((q) => q === "a:age")) return false;
+      // Only one age advance in flight per realm — checking just this building's
+      // queue let a second Town Center double-charge and over-advance.
+      const alreadyAging = this.entities.some((e) =>
+        e.alive && e.team === team && e.kind === Kind.Building && e.productionQueue.includes("a:age"));
+      if (alreadyAging) return false;
       this.pay(p.resources, age.cost);
       b.productionQueue.push("a:age");
       if (b.productionQueue.length === 1) b.productionTime = age.advanceTime;
@@ -1720,7 +1727,7 @@ export class World {
         if (e.productionQueue.length > 0) {
           const next = e.productionQueue[0];
           const trainMult = next.startsWith("u:") ? (p?.boon.trainSpeedMult ?? 1) : 1; // Quartermaster
-          e.productionTime = this.itemTime(next) * trainMult;
+          e.productionTime = this.itemTime(next, p?.age ?? 0) * trainMult;
         }
       }
     }
@@ -1769,11 +1776,13 @@ export class World {
     this.updateGate(e);
   }
 
-  itemTime(item: string): number {
+  itemTime(item: string, age = 0): number {
     if (item.startsWith("u:")) return UNITS[item.slice(2)]?.buildTime ?? 10;
     if (item.startsWith("t:")) return UPGRADES[item.slice(2)]?.time ?? 20;
     if (item === "a:age") {
-      return 30; // refined per-age below when queued first
+      // Advancing to the next age — use that age's real advance time, not a
+      // hardcoded value (which gave a free speed-up when queued behind another item).
+      return AGES[age + 1]?.advanceTime ?? 30;
     }
     return 10;
   }
@@ -1785,10 +1794,12 @@ export class World {
       const type = item.slice(2);
       const def = UNITS[type];
       if (p.popUsed + def.pop > p.popCap) {
-        // No room: refund and bail.
-        p.resources.food += def.cost.food;
-        p.resources.wood += def.cost.wood;
-        p.resources.gold += def.cost.gold;
+        // No room: refund exactly what was charged (the boon-scaled cost, not the
+        // full sticker price — otherwise cost-reduction boons mint resources).
+        const paid = this.scaledCost(def.cost, p.boon.unitCostMult);
+        p.resources.food += paid.food;
+        p.resources.wood += paid.wood;
+        p.resources.gold += paid.gold;
         return;
       }
       const [sx, sy] = this.grid.nearestOpenWorld(b.x, b.y + b.radius + 20);
@@ -2232,7 +2243,15 @@ export class World {
     }
     if (!playersStanding) { this.winner = this.hordeTeam as Team; return; } // players wiped out
     const hordeLeft = this.entities.some((e) => e.alive && e.team === this.hordeTeam && e.kind === Kind.Unit);
-    if (this.survivalWon && !hordeLeft) this.winner = Team.Player; // all waves cleared
+    if (this.survivalWon && !hordeLeft) {
+      // All waves cleared — credit a surviving defender, not always team 0 (which
+      // may have been wiped while an ally held on in a co-op survival match).
+      let winner: Team = Team.Player;
+      for (let t = 0; t < this.numTeams; t++) {
+        if (t !== this.hordeTeam && !this.players[t].defeated) { winner = t as Team; break; }
+      }
+      this.winner = winner;
+    }
   }
 
   /** Regicide: an alliance is out when it has no living King. */
