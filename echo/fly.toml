@@ -1,0 +1,27 @@
+# Fly.io config for Echo.
+# Change `app` to a unique name (e.g. echo-yourname), then run `fly launch`
+# in this directory — it will adopt this file.
+app = "echo-changeme"
+primary_region = "lhr"   # pick one near you: iad, lax, ams, syd, …
+
+[build]
+
+[env]
+  ECHO_DB_PATH = "/data/echo.db"
+  PORT = "8080"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  min_machines_running = 0
+
+# Persistent disk: your one giant database survives restarts and redeploys.
+[[mounts]]
+  source = "echo_data"
+  destination = "/data"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "256mb"

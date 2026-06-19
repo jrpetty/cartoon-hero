@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>Echo</title>
+  <link rel="stylesheet" href="/static/style.css" />
+  <link rel="manifest" href="/manifest.webmanifest" />
+  <meta name="theme-color" content="#0e0f13" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Echo" />
+  <link rel="apple-touch-icon" href="/static/apple-touch-icon.png" />
+</head>
+<body>
+  <header>
+    <div class="brand">
+      <span class="dot"></span>
+      <h1>Echo</h1>
+      <span class="tagline">your second voice</span>
+    </div>
+    <div class="status" id="status">loading…</div>
+    <form method="post" action="/logout" id="logout-form" class="hidden">
+      <button type="submit" class="logout" title="Lock Echo">🔒</button>
+    </form>
+  </header>
+
+  <nav class="tabs">
+    <button data-tab="today" class="active">🏠 Today</button>
+    <button data-tab="interview">🎤 Interview</button>
+    <button data-tab="chat">💬 Talk</button>
+    <button data-tab="decisions">⚖️ Decisions</button>
+    <button data-tab="memory">🧠 Memory</button>
+    <button data-tab="dossier">📜 Dossier</button>
+  </nav>
+
+  <main>
+    <!-- TODAY -->
+    <section id="tab-today" class="tab active">
+      <div id="today-body"><p class="muted">Loading…</p></div>
+    </section>
+
+    <!-- INTERVIEW -->
+    <section id="tab-interview" class="tab">
+      <div class="card">
+        <div class="progress"><div id="interview-bar"></div></div>
+        <p class="muted" id="interview-progress"></p>
+        <h2 id="interview-question">…</h2>
+        <textarea id="interview-answer" rows="5" placeholder="Take it seriously — depth here makes everything better. Type or hit the mic."></textarea>
+        <div class="row">
+          <button class="mic" id="interview-mic" title="Speak your answer">🎙️</button>
+          <button class="primary" id="interview-submit">Save & next →</button>
+        </div>
+        <div id="interview-done" class="hidden">
+          <h2>That's the warm-up done. 🎯</h2>
+          <p class="muted">Now I'll synthesize everything into your dossier — a first-person operating manual for being you.</p>
+          <button class="primary" id="synthesize">Build my dossier ✨</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- CHAT -->
+    <section id="tab-chat" class="tab">
+      <div class="mode-switch">
+        <button data-mode="chat" class="active">💬 Talk with me</button>
+        <button data-mode="argue">🥊 Argue against me</button>
+        <button data-mode="asme">🪞 Speak as me</button>
+        <button data-mode="decide">🧭 Decide for me</button>
+      </div>
+      <div class="chat-log" id="chat-log"></div>
+      <div class="chat-input">
+        <button class="mic" id="chat-mic" title="Speak">🎙️</button>
+        <textarea id="chat-text" rows="1" placeholder="Say something…"></textarea>
+        <button class="primary" id="chat-send">Send</button>
+      </div>
+      <label class="speak-toggle"><input type="checkbox" id="speak-replies" /> 🔊 read replies aloud</label>
+    </section>
+
+    <!-- DECISIONS -->
+    <section id="tab-decisions" class="tab">
+      <div class="card" id="calibration-card">
+        <h2>⚖️ Your calibration</h2>
+        <div id="calibration-body" class="muted">Loading…</div>
+      </div>
+      <div class="card">
+        <h2>Log a decision</h2>
+        <p class="muted">Record what you're choosing, why, and what you predict. Echo grades your calibration later.</p>
+        <input id="d-title" placeholder="The decision (e.g. 'Take the new job')" />
+        <textarea id="d-context" rows="2" placeholder="Context — what's the situation?"></textarea>
+        <button class="ghost" id="d-draft" title="Let Echo draft the reasoning & prediction as you">🧭 Draft this for me</button>
+        <textarea id="d-reasoning" rows="2" placeholder="Your reasoning — why this way?"></textarea>
+        <textarea id="d-prediction" rows="2" placeholder="Your prediction — what will happen?"></textarea>
+        <div class="row">
+          <label>Confidence <b id="d-conf-label">60</b>%</label>
+          <input type="range" id="d-confidence" min="0" max="100" value="60" />
+        </div>
+        <div class="row">
+          <label>Review in <input type="number" id="d-days" value="90" min="1" style="width:64px" /> days</label>
+          <button class="primary" id="d-save">Log it</button>
+        </div>
+        <div id="d-advice" class="advice hidden"></div>
+      </div>
+
+      <div id="decisions-due"></div>
+      <div class="card">
+        <h2>Your decisions</h2>
+        <div id="decisions-list"></div>
+      </div>
+    </section>
+
+    <!-- MEMORY -->
+    <section id="tab-memory" class="tab">
+      <div id="contradictions-card" class="card hidden">
+        <h2>🔀 Shifts I've noticed</h2>
+        <p class="muted">Where something you said clashes with what you said before.</p>
+        <div id="contradictions-list"></div>
+      </div>
+      <div class="card">
+        <h2>What Echo knows</h2>
+        <p class="muted">Everything you've said and how you feel — one growing database.</p>
+        <div id="memory-list"></div>
+        <a href="/api/export" target="_blank" class="muted small">⬇ export everything (JSON)</a>
+      </div>
+    </section>
+
+    <!-- DOSSIER -->
+    <section id="tab-dossier" class="tab">
+      <div class="card">
+        <h2>Your dossier</h2>
+        <p class="muted">The operating manual for being you. It evolves as everything you say and do feeds back in.</p>
+        <button class="ghost" id="dossier-refresh">♻️ Re-sync from everything I've learned</button>
+        <pre id="dossier-text" class="dossier">…</pre>
+      </div>
+    </section>
+  </main>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

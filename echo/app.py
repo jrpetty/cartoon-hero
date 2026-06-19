@@ -1,0 +1,464 @@
+"""Echo — one brain, one memory, four modes.
+
+A personal AI that interviews you, builds a model of how you think and feel,
+and uses that single growing picture to log decisions, stress-test your takes,
+remember your life, and one day speak on your behalf.
+"""
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
+from typing import List, Optional
+
+from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
+from fastapi.responses import (
+    FileResponse,
+    HTMLResponse,
+    JSONResponse,
+    PlainTextResponse,
+    RedirectResponse,
+    Response,
+)
+from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel
+
+import auth
+import brain
+import db
+import notify
+import voice
+from questions import BY_ID, QUESTIONS
+
+db.init_db()
+notify.start_scheduler()
+
+app = FastAPI(title="Echo")
+
+CHAT_MODES = ("chat", "argue", "asme", "decide")
+
+# Paths reachable without logging in (the login page + assets it needs).
+_OPEN_PATHS = ("/login", "/static/", "/manifest.webmanifest", "/sw.js", "/favicon")
+
+
+@app.middleware("http")
+async def require_login(request: Request, call_next):
+    if not auth.enabled():
+        return await call_next(request)
+    path = request.url.path
+    if path.startswith(_OPEN_PATHS) or auth.cookie_valid(request.cookies.get(auth.COOKIE_NAME, "")):
+        return await call_next(request)
+    if path.startswith("/api/"):
+        return JSONResponse({"detail": "Not authenticated"}, status_code=401)
+    return RedirectResponse("/login")
+
+
+_LOGIN_PAGE = """<!DOCTYPE html><html><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Echo · unlock</title><style>
+body{{margin:0;height:100vh;display:flex;align-items:center;justify-content:center;
+background:radial-gradient(900px 500px at 70% -10%,#1b1640,#0e0f13 60%);
+font-family:-apple-system,Segoe UI,Roboto,sans-serif;color:#e7e9ee}}
+form{{background:#181a21;border:1px solid #2a2e3a;border-radius:16px;padding:32px;width:300px;text-align:center}}
+h1{{margin:0 0 4px;letter-spacing:1px}} p{{color:#8b93a7;font-size:13px;margin:0 0 20px}}
+input{{width:100%;box-sizing:border-box;background:#20232c;border:1px solid #2a2e3a;color:#e7e9ee;
+padding:12px;border-radius:10px;font-size:15px;margin-bottom:12px}}
+button{{width:100%;background:linear-gradient(135deg,#7c5cff,#9b7bff);color:#fff;border:0;
+padding:12px;border-radius:10px;font-size:15px;font-weight:600;cursor:pointer}}
+.err{{color:#ff6b6b;font-size:13px;margin-bottom:10px;min-height:16px}}
+</style></head><body><form method="post" action="/login">
+<h1>🔊 Echo</h1><p>your second voice</p>
+<div class="err">{error}</div>
+<input type="password" name="password" placeholder="password" autofocus autocomplete="current-password">
+<button type="submit">Unlock</button></form></body></html>"""
+
+
+@app.get("/login", response_class=HTMLResponse)
+def login_page():
+    return _LOGIN_PAGE.format(error="")
+
+
+@app.post("/login")
+def login(password: str = Form("")):
+    if not auth.check_password(password):
+        return HTMLResponse(_LOGIN_PAGE.format(error="Wrong password."), status_code=401)
+    resp = RedirectResponse("/", status_code=303)
+    resp.set_cookie(auth.COOKIE_NAME, auth.expected_token(), httponly=True,
+                    samesite="lax", max_age=60 * 60 * 24 * 90)
+    return resp
+
+
+@app.post("/logout")
+def logout():
+    resp = RedirectResponse("/login", status_code=303)
+    resp.delete_cookie(auth.COOKIE_NAME)
+    return resp
+
+STATIC_DIR = Path(__file__).with_name("static")
+
+
+# --- schemas ---------------------------------------------------------------
+
+class AnswerIn(BaseModel):
+    question_id: str
+    answer: str
+
+
+class ChatIn(BaseModel):
+    mode: str = "chat"  # chat | argue | asme | decide
+    message: str
+
+
+class DraftIn(BaseModel):
+    title: str
+    context: str = ""
+
+
+class TTSIn(BaseModel):
+    text: str
+
+
+class DecisionIn(BaseModel):
+    title: str
+    context: str = ""
+    reasoning: str = ""
+    prediction: str = ""
+    confidence: int = 50
+    review_in_days: int = 90
+
+
+class ReviewIn(BaseModel):
+    outcome: str
+    self_grade: int
+
+
+class MemoryIn(BaseModel):
+    kind: str = "fact"
+    content: str
+    topic: Optional[str] = None
+    sentiment: Optional[str] = None
+
+
+# --- pages -----------------------------------------------------------------
+
+@app.get("/")
+def index():
+    return FileResponse(STATIC_DIR / "index.html")
+
+
+@app.get("/api/state")
+def state():
+    s = db.stats()
+    s["has_key"] = brain.has_key()
+    s["total_questions"] = len(QUESTIONS)
+    s["decisions_due"] = db.decisions_due()
+    s["contradictions"] = len(db.list_contradictions())
+    s["premium_tts"] = voice.tts_available()
+    s["premium_stt"] = voice.stt_available()
+    s["email_reminders"] = notify.email_configured()
+    s["auth_enabled"] = auth.enabled()
+    return s
+
+
+# --- interview -------------------------------------------------------------
+
+@app.get("/api/interview/next")
+def interview_next():
+    done = set(db.answered_ids())
+    for q in QUESTIONS:
+        if q["id"] not in done:
+            return {"done": False, "question": q, "answered": len(done),
+                    "total": len(QUESTIONS)}
+    return {"done": True, "answered": len(done), "total": len(QUESTIONS)}
+
+
+@app.post("/api/interview/answer")
+def interview_answer(payload: AnswerIn):
+    q = BY_ID.get(payload.question_id)
+    if not q:
+        raise HTTPException(404, "Unknown question")
+    db.save_answer(q["id"], q["text"], payload.answer)
+    # Each answer is also raw memory, regardless of whether a key is set.
+    db.add_memory("view", payload.answer, source="interview", topic=q["id"])
+    return interview_next()
+
+
+@app.post("/api/interview/synthesize")
+def interview_synthesize():
+    answers = db.all_answers()
+    if not answers:
+        raise HTTPException(400, "No answers yet — do the interview first.")
+    try:
+        dossier = brain.synthesize_dossier(answers, previous=db.get_dossier())
+    except brain.BrainError as exc:
+        raise HTTPException(503, str(exc))
+    db.set_dossier(dossier)
+    return {"dossier": dossier}
+
+
+@app.get("/api/dossier", response_class=PlainTextResponse)
+def dossier():
+    return db.get_dossier() or "(no dossier yet — finish the interview and synthesize)"
+
+
+@app.post("/api/dossier/refresh")
+def dossier_refresh():
+    """Evolve the dossier from everything learned since it was last written."""
+    try:
+        updated = brain.evolve_dossier(db.get_dossier(), db.context_digest())
+    except brain.BrainError as exc:
+        raise HTTPException(503, str(exc))
+    db.set_dossier(updated)
+    return {"dossier": updated}
+
+
+# --- chat / argue / asme ---------------------------------------------------
+
+@app.post("/api/chat")
+def chat(payload: ChatIn):
+    mode = payload.mode if payload.mode in CHAT_MODES else "chat"
+    db.add_message(mode, "user", payload.message)
+
+    history = [
+        {"role": "user" if m["role"] == "user" else "assistant", "content": m["content"]}
+        for m in db.recent_messages(mode, limit=12)
+    ]
+    dossier = db.get_dossier()
+    prior_memory = db.context_digest()
+    try:
+        reply = brain.chat(mode, history, dossier, prior_memory)
+    except brain.BrainError as exc:
+        raise HTTPException(503, str(exc))
+
+    db.add_message(mode, "echo", reply)
+
+    # Learn from what the user said, and spot contradictions with the past.
+    # Best-effort: never blocks or fails the reply.
+    learned, contradictions = [], []
+    try:
+        learned = brain.extract_memories(payload.message, dossier)
+        for m in learned:
+            db.add_memory(m["kind"], m["content"], source=mode,
+                          topic=m.get("topic"), sentiment=m.get("sentiment"))
+        if learned:
+            contradictions = brain.find_contradictions(
+                [m["content"] for m in learned], prior_memory, dossier
+            )
+            for c in contradictions:
+                db.add_contradiction(c["old"], c["new"], c.get("note", ""),
+                                     c.get("topic"))
+    except brain.BrainError:
+        pass
+
+    return {"reply": reply, "learned": learned, "contradictions": contradictions}
+
+
+# --- decisions -------------------------------------------------------------
+
+@app.post("/api/decisions")
+def create_decision(payload: DecisionIn):
+    review_at = (
+        datetime.now(timezone.utc) + timedelta(days=max(1, payload.review_in_days))
+    ).isoformat()
+    dec_id = db.add_decision(
+        payload.title, payload.context, payload.reasoning,
+        payload.prediction, max(0, min(100, payload.confidence)), review_at,
+    )
+    decision = {**payload.model_dump(), "id": dec_id}
+    advice = None
+    if brain.has_key():
+        try:
+            advice = brain.advise_decision(decision, db.get_dossier(), db.context_digest())
+        except brain.BrainError:
+            advice = None
+    db.add_memory("fact", f"I decided: {payload.title}. Prediction: {payload.prediction}",
+                  source="decision", topic="decisions")
+    return {"id": dec_id, "review_at": review_at, "advice": advice}
+
+
+@app.post("/api/decisions/draft")
+def draft_decision(payload: DraftIn):
+    if not payload.title.strip():
+        raise HTTPException(400, "Give the decision a title first.")
+    try:
+        return brain.draft_decision(payload.title, payload.context,
+                                    db.get_dossier(), db.context_digest())
+    except brain.BrainError as exc:
+        raise HTTPException(503, str(exc))
+
+
+@app.get("/api/decisions")
+def get_decisions():
+    return {"decisions": db.list_decisions(), "due": db.decisions_due()}
+
+
+@app.get("/api/calibration")
+def calibration():
+    """Your calibration scorecard — confidence vs. how things actually went."""
+    return db.calibration_report()
+
+
+@app.get("/api/today")
+def today():
+    """The home surface: what needs you now + your latest calibration read +
+    the single best next step, given how far along you are."""
+    answered = len(db.answered_ids())
+    total_q = len(QUESTIONS)
+    s = db.stats()
+    due = db.decisions_due()
+    contradictions = db.list_contradictions()
+
+    if answered < total_q:
+        nxt = {"tab": "interview", "label": "Continue the interview",
+               "detail": f"{answered}/{total_q} questions answered — depth here makes everything else better."}
+    elif not s["has_dossier"]:
+        nxt = {"tab": "interview", "label": "Build your dossier",
+               "detail": "You've answered everything — synthesize it into your operating manual."}
+    elif due:
+        nxt = {"tab": "today", "label": "Grade your calls",
+               "detail": f"{len(due)} decision{'s' if len(due) != 1 else ''} due — grade them to sharpen your calibration."}
+    elif contradictions:
+        nxt = {"tab": "memory", "label": "Resolve a shift",
+               "detail": f"{len(contradictions)} unresolved shift{'s' if len(contradictions) != 1 else ''} in your views."}
+    else:
+        nxt = {"tab": "decisions", "label": "Log a decision",
+               "detail": "Nothing pending — capture a choice you're weighing right now."}
+
+    return {
+        "due": due,
+        "calibration": db.calibration_report(),
+        "contradictions": len(contradictions),
+        "interview": {"answered": answered, "total": total_q, "done": answered >= total_q},
+        "has_dossier": s["has_dossier"],
+        "counts": {"memories": s["memories"], "decisions": s["decisions"],
+                   "messages": s["messages"]},
+        "next": nxt,
+    }
+
+
+@app.post("/api/reminders/run")
+def run_reminders():
+    if not notify.email_configured():
+        raise HTTPException(503, "Email reminders aren't configured (set SMTP_HOST and ECHO_EMAIL_TO).")
+    return {"sent": notify.run_due_reminders()}
+
+
+@app.post("/api/decisions/{dec_id}/review")
+def review(dec_id: int, payload: ReviewIn):
+    grade = max(0, min(100, payload.self_grade))
+    db.review_decision(dec_id, payload.outcome, grade)
+    # Close the loop: a graded decision becomes a calibration signal the rest of
+    # Echo reasons from (e.g. "decide for me" learns your track record).
+    dec = next((d for d in db.list_decisions() if d["id"] == dec_id), None)
+    if dec:
+        calib = "well-calibrated" if abs(grade - dec["confidence"]) <= 15 else (
+            "overconfident" if dec["confidence"] > grade else "underconfident")
+    else:
+        calib = "graded"
+    db.add_memory(
+        "feeling",
+        f"On '{dec['title'] if dec else 'a decision'}' I was {dec['confidence'] if dec else '?'}% "
+        f"confident and turned out {grade}% right ({calib}). Outcome: {payload.outcome}",
+        source="decision", topic="calibration",
+    )
+    return {"ok": True, "calibration": calib}
+
+
+# --- memory ----------------------------------------------------------------
+
+@app.get("/api/memory")
+def memory(topic: Optional[str] = None, limit: int = 200):
+    return {"memory": db.list_memory(limit=limit, topic=topic)}
+
+
+@app.post("/api/memory")
+def add_memory(payload: MemoryIn):
+    mem_id = db.add_memory(payload.kind, payload.content, source="manual",
+                           topic=payload.topic, sentiment=payload.sentiment)
+    return {"id": mem_id}
+
+
+# --- contradictions --------------------------------------------------------
+
+@app.get("/api/contradictions")
+def get_contradictions():
+    return {"contradictions": db.list_contradictions()}
+
+
+@app.post("/api/contradictions/{cid}/dismiss")
+def dismiss_contradiction(cid: int):
+    db.dismiss_contradiction(cid)
+    return {"ok": True}
+
+
+@app.post("/api/contradictions/{cid}/confirm")
+def confirm_contradiction(cid: int):
+    """You confirm you changed your mind — Echo adopts the new view and folds it
+    into your dossier so the whole model stays consistent."""
+    con = next((c for c in db.list_contradictions(include_dismissed=True)
+                if c["id"] == cid), None)
+    if not con:
+        raise HTTPException(404, "Unknown contradiction")
+    db.add_memory("view", f"I changed my mind: I no longer think \"{con['old_view']}\" — "
+                  f"now I think \"{con['new_view']}\".", source="contradiction",
+                  topic=con.get("topic"))
+    db.dismiss_contradiction(cid)
+    updated = None
+    if brain.has_key() and db.get_dossier():
+        try:
+            updated = brain.evolve_dossier(db.get_dossier(), db.context_digest())
+            db.set_dossier(updated)
+        except brain.BrainError:
+            updated = None
+    return {"ok": True, "dossier_updated": updated is not None}
+
+
+# --- voice (premium, optional) ---------------------------------------------
+
+@app.get("/api/voice/config")
+def voice_config():
+    return {"premium_tts": voice.tts_available(), "premium_stt": voice.stt_available()}
+
+
+@app.post("/api/tts")
+def tts(payload: TTSIn):
+    if not voice.tts_available():
+        # 204 tells the frontend to fall back to browser speech synthesis.
+        return Response(status_code=204)
+    try:
+        audio = voice.synthesize(payload.text)
+    except Exception as exc:
+        raise HTTPException(502, f"TTS failed: {exc}")
+    return Response(content=audio, media_type="audio/mpeg")
+
+
+@app.post("/api/stt")
+async def stt(audio: UploadFile = File(...)):
+    if not voice.stt_available():
+        raise HTTPException(503, "Premium speech-to-text not configured (set OPENAI_API_KEY).")
+    data = await audio.read()
+    try:
+        text = voice.transcribe(data, audio.filename or "speech.webm")
+    except Exception as exc:
+        raise HTTPException(502, f"Transcription failed: {exc}")
+    return {"text": text}
+
+
+@app.get("/api/export", response_class=PlainTextResponse)
+def export():
+    return db.export_all()
+
+
+# --- PWA (installable on phones) -------------------------------------------
+
+@app.get("/manifest.webmanifest")
+def manifest():
+    return FileResponse(STATIC_DIR / "manifest.webmanifest",
+                        media_type="application/manifest+json")
+
+
+@app.get("/sw.js")
+def service_worker():
+    # Served from root so its scope covers the whole app.
+    return FileResponse(STATIC_DIR / "sw.js", media_type="application/javascript")
+
+
+# Static assets (served last so /api routes win).
+app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
