@@ -40,6 +40,8 @@ import { NetLobby, NetStart } from "./ui/net_lobby";
 import { Settings, loadSettings, saveSettings } from "./meta/settings";
 import { SettingsScreen } from "./ui/settings_screen";
 import { setColorblindTeams } from "./render/palette";
+import { TeamMetrics, snapshotMetrics } from "./sim/metrics";
+import { drawScoreboard } from "./ui/scoreboard";
 
 type AppState = "menu" | "setup" | "armory" | "match" | "postmatch" | "codex" | "settings";
 
@@ -78,6 +80,12 @@ class App {
   powerArmed = false; // commander power placement mode
   ingameMenu = false;
   spectating = false; // watch mode: all teams are AI, no player commands
+  showScoreboard = false; // Tab — live multi-team scoreboard overlay
+  /** Time-series of per-team metrics, sampled through the match, for the graphs. */
+  private matchHistory: { t: number; m: TeamMetrics[] }[] = [];
+  private nextSampleT = 0;
+  /** Aggregated (your alliance vs enemies) series, built at match end. */
+  endGraph: { ts: number[]; mine: Record<string, number[]>; foe: Record<string, number[]> } | null = null;
   /** The team this client controls/views. 0 for single-player & the net host;
    *  the net joiner sets it to their team. (Was the old PLAYER constant.) */
   me: Team = Team.Player;
@@ -175,6 +183,7 @@ class App {
     if (k === "p" || k === " ") this.togglePause();
     if (k === "+" || k === "=") this.cycleSpeed(1);
     if (k === "-" || k === "_") this.cycleSpeed(-1);
+    if (k === "Tab") this.showScoreboard = !this.showScoreboard; // live scoreboard
     // Spectators only watch — no army commands.
     if (this.spectating) return;
     if (k === "a") this.attackMoveArmed = true;
@@ -349,6 +358,7 @@ class App {
     this.camera.centerOn(map.starts[this.me].x, map.starts[this.me].y);
     this.accumulator = 0;
     this.spectating = false;
+    this.resetMatchTelemetry();
     this.endNet();
     this.me = Team.Player;
     this.state = "match";
@@ -400,6 +410,7 @@ class App {
     this.matchRewards = null;
     this.netAccumulator = 0;
     this.netDesyncAlerted = false;
+    this.resetMatchTelemetry();
     this.camera.setWorld(map.worldW, map.worldH);
     this.camera.zoom = 1;
     this.camera.centerOn(map.starts[this.me].x, map.starts[this.me].y);
@@ -461,6 +472,7 @@ class App {
     this.camera.centerOn(map.worldW / 2, map.worldH / 2);
     this.accumulator = 0;
     this.spectating = true;
+    this.resetMatchTelemetry();
     this.endNet();
     this.me = Team.Player;
     this.state = "match";
@@ -620,6 +632,20 @@ class App {
     setColorblindTeams(s.colorblind);
     this.particles.density = s.reduceEffects ? 0.4 : 1;
     this.showDamageNumbers = s.damageNumbers;
+  }
+
+  private resetMatchTelemetry() {
+    this.matchHistory = [];
+    this.nextSampleT = 0;
+    this.endGraph = null;
+    this.showScoreboard = false;
+  }
+
+  /** Sample every team's metrics at a fixed game-time cadence for the graphs. */
+  private sampleHistory(world: World) {
+    if (world.time < this.nextSampleT) return;
+    this.nextSampleT = world.time + 4; // every 4s of sim time
+    this.matchHistory.push({ t: world.time, m: snapshotMetrics(world) });
   }
 
   private openSettings(returnTo: AppState) {
@@ -1101,6 +1127,7 @@ class App {
           W, H, this.time, dt,
           this.matchWon, this.endStats, this.endFoeStats, this.endDuration,
           this.matchRewards, this.profile, this.xpBefore, this.levelsGained,
+          this.endGraph,
         );
         if (action === "continue") {
           this.state = "menu";
@@ -1153,6 +1180,7 @@ class App {
       if (steps === maxSteps) this.accumulator = 0; // drop time if we can't keep up
     }
     this.handleEvents(world.drainEvents());
+    this.sampleHistory(world);
     this.particles.update(dt);
     // Combat heat fades over a few seconds; it drives the music's intensity.
     this.combatHeat *= Math.pow(0.5, dt / 3);
@@ -1261,6 +1289,7 @@ class App {
     if (world.mode !== "conquest") this.drawModeStatus(W, H, world);
     this.drawControlGroups(W, H);
     this.drawQoLBar(W, H);
+    if (this.showScoreboard) drawScoreboard(W, H, world, this.me);
     ui.flushTooltip(W, H);
 
     // ---- in-game menu overlay ----
@@ -1427,6 +1456,19 @@ class App {
     }
     this.endFoeStats = foe;
     this.endDuration = world.time;
+    // Aggregate the time-series into your-alliance vs enemies for the graphs.
+    if (this.matchHistory.length >= 2) {
+      const keys = ["score", "military", "economy"] as const;
+      const mine: Record<string, number[]> = {};
+      const foeS: Record<string, number[]> = {};
+      for (const k of keys) {
+        mine[k] = this.matchHistory.map((s) => s.m.reduce((a, tm) => a + (world.areAllied(this.me, tm.team) ? tm[k] : 0), 0));
+        foeS[k] = this.matchHistory.map((s) => s.m.reduce((a, tm) => a + (world.areHostile(this.me, tm.team) ? tm[k] : 0), 0));
+      }
+      this.endGraph = { ts: this.matchHistory.map((s) => s.t), mine, foe: foeS };
+    } else {
+      this.endGraph = null;
+    }
     this.xpBefore = this.profile.data.totalXp;
     const rewards = computeRewards({
       win: won,

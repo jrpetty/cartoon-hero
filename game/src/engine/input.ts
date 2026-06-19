@@ -128,6 +128,7 @@ export class Input {
     // Browsers reserve Ctrl+digit for tab switching; Alt+digit is our
     // control-group fallback, so keep the browser out of it.
     if (e.altKey && /^[0-9]$/.test(e.key)) e.preventDefault();
+    if (e.key === "Tab") e.preventDefault(); // Tab = scoreboard, not focus-cycle
     const k = e.key.length === 1 ? e.key.toLowerCase() : e.key;
     this.keys.add(k);
     this.onKeyDown?.(e.key);

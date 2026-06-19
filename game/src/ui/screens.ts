@@ -1005,11 +1005,47 @@ function drawChestArt(cx: number, cy: number, scale: number, tier: number) {
 
 // -------------------------------------------------------------- post-match --
 
+type GraphSeries = { ts: number[]; mine: Record<string, number[]>; foe: Record<string, number[]> } | null;
+
 export class PostMatchScreen {
   private xpAnim = 0;
+  private graphMetric: "score" | "military" | "economy" = "score";
 
   reset() {
     this.xpAnim = 0;
+  }
+
+  /** A two-line time-series chart (your alliance vs enemies). */
+  private drawChart(x: number, y: number, w: number, h: number, ts: number[], mine: number[], foe: number[]) {
+    const ctx = ui.ctx;
+    const n = ts.length;
+    const max = Math.max(1, ...mine, ...foe);
+    // Frame + gridlines.
+    ctx.strokeStyle = withAlpha("#ffffff", 0.08);
+    ctx.lineWidth = 1;
+    for (let g = 0; g <= 4; g++) {
+      const gy = y + (h * g) / 4;
+      ctx.beginPath(); ctx.moveTo(x, gy); ctx.lineTo(x + w, gy); ctx.stroke();
+    }
+    const plot = (vals: number[], color: string) => {
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      for (let i = 0; i < n; i++) {
+        const px = x + (n <= 1 ? 0 : (i / (n - 1)) * w);
+        const py = y + h - (vals[i] / max) * h;
+        if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+      }
+      ctx.stroke();
+    };
+    plot(foe, PAL.teams[1].main);
+    plot(mine, PAL.teams[0].main);
+    ctx.lineWidth = 1;
+    // Y-axis max + time axis labels.
+    ui.text(String(Math.round(max)), x + 4, y + 12, { size: 10, color: "#9a917b" });
+    const endMin = Math.floor((ts[n - 1] ?? 0) / 60);
+    const endSec = Math.floor((ts[n - 1] ?? 0) % 60);
+    ui.text(`${endMin}:${endSec.toString().padStart(2, "0")}`, x + w - 4, y + h - 4, { size: 10, align: "right", color: "#9a917b" });
   }
 
   draw(
@@ -1025,6 +1061,7 @@ export class PostMatchScreen {
     profile: Profile,
     xpBefore: number,
     levelsGained: number,
+    graph: GraphSeries = null,
   ): "continue" | null {
     drawMenuBackground(W, H, time);
     const ctx = ui.ctx;
@@ -1120,7 +1157,33 @@ export class PostMatchScreen {
     }
     ui.bar(x0 + 20, y0 + 256 + 38, barW - 40, 10, info.into / info.need, PAL.uiAccent);
 
-    if (ui.button("Continue", W / 2 - 110, H - 90, 220, 48, { accent: true, size: 18 })) {
+    // Progression graph: your alliance vs the enemy, over the match.
+    if (graph && graph.ts.length >= 2) {
+      const gy = y0 + 256 + 76;
+      const gh = Math.min(178, H - 100 - gy);
+      ui.panel(x0, gy, barW, gh, { light: true });
+      ui.text("Progression", x0 + 20, gy + 22, { size: 15, bold: true, color: PAL.uiAccent });
+      // Metric tabs.
+      const tabs: ["score" | "military" | "economy", string][] = [["score", "Score"], ["military", "Army"], ["economy", "Economy"]];
+      let tx = x0 + 150;
+      for (const [id, label] of tabs) {
+        if (ui.button(label, tx, gy + 8, 92, 26, { accent: this.graphMetric === id, size: 12 })) {
+          this.graphMetric = id;
+          audio.play("ui");
+        }
+        tx += 100;
+      }
+      // Legend.
+      const ctx = ui.ctx;
+      ctx.fillStyle = PAL.teams[0].main; ctx.fillRect(x0 + barW - 220, gy + 16, 12, 12);
+      ui.text("You", x0 + barW - 204, gy + 26, { size: 12, color: "#e7ddc4" });
+      ctx.fillStyle = PAL.teams[1].main; ctx.fillRect(x0 + barW - 150, gy + 16, 12, 12);
+      ui.text("Enemies", x0 + barW - 134, gy + 26, { size: 12, color: "#e7ddc4" });
+      this.drawChart(x0 + 40, gy + 44, barW - 80, gh - 60,
+        graph.ts, graph.mine[this.graphMetric], graph.foe[this.graphMetric]);
+    }
+
+    if (ui.button("Continue", W / 2 - 110, H - 64, 220, 48, { accent: true, size: 18 })) {
       return "continue";
     }
     return null;
