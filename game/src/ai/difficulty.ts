@@ -18,6 +18,7 @@ export interface DifficultyDef {
   buildsCastle: boolean;
   buildsWalls: boolean; // lays a defensive wall + gate across its front
   usesAbilities: boolean; // fires unit signature abilities in fights
+  focusFire: boolean; // concentrates army fire on priority targets (siege/ranged/wounded)
   /**
    * Chance (0..1) the AI fumbles an *optional* action on a given decision —
    * forgets to micro, mis-aims a push, skips a raid. Models human sloppiness so
@@ -45,6 +46,7 @@ export const DIFFICULTIES: Record<string, DifficultyDef> = {
     buildsCastle: false,
     buildsWalls: false,
     usesAbilities: false,
+    focusFire: false,
     executionError: 0.4,
   },
   knight: {
@@ -64,6 +66,7 @@ export const DIFFICULTIES: Record<string, DifficultyDef> = {
     buildsCastle: false,
     buildsWalls: false,
     usesAbilities: true,
+    focusFire: false,
     executionError: 0.15,
   },
   lord: {
@@ -83,6 +86,7 @@ export const DIFFICULTIES: Record<string, DifficultyDef> = {
     buildsCastle: true,
     buildsWalls: true,
     usesAbilities: true,
+    focusFire: true,
     executionError: 0.04,
   },
   warlord: {
@@ -102,8 +106,29 @@ export const DIFFICULTIES: Record<string, DifficultyDef> = {
     buildsCastle: true,
     buildsWalls: true,
     usesAbilities: true,
+    focusFire: true,
+    executionError: 0.0,
+  },
+  conqueror: {
+    id: "conqueror",
+    name: "Conqueror",
+    desc: "The ultimate test. A booming economy, flawless micro, and waves that never stop.",
+    econMult: 1.5,
+    villagerTarget: 36,
+    scouts: true,
+    counters: true,
+    expands: true,
+    harasses: true,
+    attackArmySize: 18,
+    attackEverySec: 48,
+    reactionSec: 0.35,
+    maxAge: 2,
+    buildsCastle: true,
+    buildsWalls: true,
+    usesAbilities: true,
+    focusFire: true,
     executionError: 0.0,
   },
 };
 
-export const DIFFICULTY_IDS = ["squire", "knight", "lord", "warlord"];
+export const DIFFICULTY_IDS = ["squire", "knight", "lord", "warlord", "conqueror"];

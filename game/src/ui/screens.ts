@@ -254,12 +254,13 @@ export class SetupScreen {
     }
 
     ui.text("Enemy Commander", x0 + 210, y + 22, { size: 16, bold: true, color: PAL.uiAccent });
-    const dw = (colW - 226 - 16 - 36) / 4;
+    const gapD = 10;
+    const dw = (colW - 226 - 16 - 36 - gapD * (DIFFICULTY_IDS.length - 1)) / DIFFICULTY_IDS.length;
     for (let i = 0; i < DIFFICULTY_IDS.length; i++) {
       const d = DIFFICULTIES[DIFFICULTY_IDS[i]];
       const sel = this.config.difficulty === d.id;
       if (
-        ui.button(d.name, x0 + 210 + i * (dw + 12), y + 38, dw, 34, {
+        ui.button(d.name, x0 + 210 + i * (dw + gapD), y + 38, dw, 34, {
           accent: sel,
           tooltip: [d.name, d.desc],
         })

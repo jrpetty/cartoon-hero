@@ -3,7 +3,7 @@
 // composition, expansion, harassment and attack pacing (see difficulty.ts).
 
 import { World } from "../sim/world";
-import { BuildState, Entity, Kind, OrderKind, ResourceKind, Team } from "../sim/types";
+import { ArmorClass, BuildState, Entity, Kind, OrderKind, ResourceKind, Team } from "../sim/types";
 import { UNITS } from "../content/units";
 import { ABILITIES } from "../content/abilities";
 import { BUILDINGS } from "../content/buildings";
@@ -33,6 +33,19 @@ const PRODUCTION = new Set([
   "town_center", "barracks", "archery_range", "stable", "siege_workshop", "blacksmith", "mill", "market",
 ]);
 
+/** Kill-order value of an enemy unit in an army clash — delete what hurts us
+ *  most or is about to die first. Exported for testing. */
+export function armyTargetPriority(type: string): number {
+  const u = UNITS[type];
+  if (!u) return 40;
+  if (u.hero) return 115;
+  if (u.armorClass === ArmorClass.Siege) return 120; // splash/rams wreck a clumped army
+  if (type === "monk") return 95; // heals/converts
+  if (u.range >= 60) return 80; // archers/crossbow/handcannon/skirmisher/javelin
+  if (u.armorClass === ArmorClass.Cavalry) return 60;
+  return 45; // infantry
+}
+
 export class SkirmishAI {
   private timer = 0;
   private rng: RNG;
@@ -49,6 +62,7 @@ export class SkirmishAI {
   private lastAllyHelpTime = -999;
   private lastPressTime = -999;
   private lastCalloutTime = -999;
+  private lastFocusId = -1; // current focus-fire target (avoids re-issuing every tick)
   private savingForAge = false;
   /** Building types we've finished at least once — drives prompt rebuilds. */
   private everBuilt = new Set<string>();
@@ -70,6 +84,7 @@ export class SkirmishAI {
       knight: ["rush", "boom", "turtle", "balanced", "balanced"],
       lord: ["rush", "balanced", "balanced", "boom"],
       warlord: ["rush", "rush", "balanced", "balanced", "boom"],
+      conqueror: ["rush", "rush", "balanced", "boom"],
     };
     const styles = pools[diff.id] ?? ["balanced"];
     this.style = styles[this.rng.int(0, styles.length - 1)];
@@ -1139,6 +1154,46 @@ export class SkirmishAI {
     this.world.issueMove(ids, s.x, s.y, false, true);
   }
 
+  /**
+   * Focus fire: when our army is locked in a fight, drive the melee line onto the
+   * single most valuable enemy unit nearby (siege > champion > monk > ranged,
+   * with a bonus for the wounded) so threats die one at a time instead of damage
+   * spreading. Ranged units keep auto-firing/kiting. Re-issues only when the
+   * target changes, so it's cheap to call every cycle. Returns true when it took
+   * over a fight (so the caller skips the generic base-press this cycle).
+   */
+  private focusFireStep(): boolean {
+    if (!this.diff.focusFire) return false;
+    const army = this.armyUnits();
+    if (army.length < 4) return false;
+    let cx = 0;
+    let cy = 0;
+    for (const u of army) { cx += u.x; cy += u.y; }
+    cx /= army.length;
+    cy /= army.length;
+
+    let best: Entity | null = null;
+    let bestScore = -Infinity;
+    for (const e of this.world.entities) {
+      if (!e.alive || e.kind !== Kind.Unit || !this.isHostile(e.team) || e.type === "villager") continue;
+      const d = dist(cx, cy, e.x, e.y);
+      if (d > 260) continue; // only what we're actually fighting
+      if (this.world.fogAt(this.team, e.x, e.y) === 0) continue;
+      const wounded = (1 - e.hp / Math.max(1, e.maxHp)) * 45; // finish low-HP targets
+      const score = armyTargetPriority(e.type) + wounded - d * 0.05;
+      if (score > bestScore) { bestScore = score; best = e; }
+    }
+    if (!best) { this.lastFocusId = -1; return false; }
+
+    const melee = army.filter((u) => (UNITS[u.type]?.range ?? 0) < 60);
+    const ids = (melee.length >= 3 ? melee : army).map((u) => u.id);
+    if (best.id !== this.lastFocusId) {
+      this.world.issueAttack(ids, best.id);
+      this.lastFocusId = best.id;
+    }
+    return true;
+  }
+
   private attackStep() {
     const army = this.armyUnits();
     const armyPop = army.reduce((s, u) => s + (UNITS[u.type]?.pop ?? 1), 0);
@@ -1168,7 +1223,10 @@ export class SkirmishAI {
       // Keep driving for the kill: re-command any stalled units toward the
       // enemy's villagers / Town Center / production instead of loitering at the
       // wall. This is what makes the AI actually finish a base.
-      if (this.gameTime - this.lastPressTime > 1.5) {
+      // Concentrate fire on the deadliest/weakest enemy in the melee (high tiers
+      // only); fall back to driving at the base when no defenders are close.
+      const focusing = this.focusFireStep();
+      if (!focusing && this.gameTime - this.lastPressTime > 1.5) {
         this.lastPressTime = this.gameTime;
         this.pressAttack();
       }
