@@ -89,7 +89,7 @@ describe("Multiplayer menu — full click-through against a live server", () => 
     const other = new WebSocket(`ws://127.0.0.1:${srv.port}`);
     other.onopen = () => other.send(JSON.stringify({ t: "hello", name: "Buddy", room: "menutest" }));
     await flush(60);
-    expect(panelHtml()).toContain("2/16");
+    expect(panelHtml()).toContain("2 players");
     const startBtn2 = button("Start Match");
     expect(startBtn2!.disabled).toBe(false);
 

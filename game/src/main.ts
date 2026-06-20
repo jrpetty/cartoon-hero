@@ -401,10 +401,12 @@ class App {
     const econMults = teams.map(() => 1);
     const commanders = teams.map(() => "");
     world.init(map, loadouts, econMults, alliances, commanders, false, undefined, "conquest");
+    if (start.observer) world.revealAll = true; // casters see the whole board
     this.world = world;
     this.ais = [];
-    this.net = new NetSession(transport, localTeam, teams);
+    this.net = new NetSession(transport, localTeam, teams, start.observer);
     this.me = localTeam;
+    this.spectating = !!start.observer; // no commands, full vision, caster HUD
     this.net.attach(world, 5);
     this.net.onChat = (m) => { if (m.text) this.addChatLine(m.name || teamLabel((m.team ?? 0) as Team), m.text, (m.team ?? 0) as Team); };
     this.net.onPing = (m) => this.remotePing(m.x ?? 0, m.y ?? 0, (m.team ?? 0) as Team);
@@ -430,10 +432,9 @@ class App {
     this.resetMatchTelemetry();
     this.camera.setWorld(map.worldW, map.worldH);
     this.camera.zoom = 1;
-    this.camera.centerOn(map.starts[this.me].x, map.starts[this.me].y);
-    this.spectating = false;
+    this.camera.centerOn(start.observer ? map.worldW / 2 : map.starts[this.me].x, start.observer ? map.worldH / 2 : map.starts[this.me].y);
     this.state = "match";
-    this.hud.addAlert("🔗 Connected — 1v1. Good luck!");
+    this.hud.addAlert(start.observer ? "👁 Observing — the match is underway." : "🔗 Connected — good luck!");
     audio.play("complete");
   }
 
@@ -1209,14 +1210,19 @@ class App {
       // don't run far ahead of a lagging opponent; step as far as the received
       // remote input allows. AIs don't run (both teams are human).
       if (world.winner === null) {
-        this.netAccumulator += dt;
-        const ahead = this.net.lock!.inputDelay + 12;
-        let guard = 0;
-        while (this.netAccumulator >= SIM_DT && this.net.authorLead < ahead && guard++ < 30) {
-          this.net.authorTick();
-          this.netAccumulator -= SIM_DT;
+        if (this.net.observer) {
+          // Observers don't author input — just simulate as relayed turns arrive.
+          this.net.stepReady(20);
+        } else {
+          this.netAccumulator += dt;
+          const ahead = this.net.lock!.inputDelay + 12;
+          let guard = 0;
+          while (this.netAccumulator >= SIM_DT && this.net.authorLead < ahead && guard++ < 30) {
+            this.net.authorTick();
+            this.netAccumulator -= SIM_DT;
+          }
+          this.net.stepReady(10);
         }
-        this.net.stepReady(10);
         if (this.net.desynced && !this.netDesyncAlerted) {
           this.netDesyncAlerted = true;
           this.hud.addAlert("⚠ Connection desynced — the match is out of sync.");

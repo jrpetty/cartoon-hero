@@ -76,7 +76,8 @@ function room(name) {
   return r;
 }
 function host(r) {
-  return r.clients.reduce((h, c) => (h === null || c.slot < h.slot ? c : h), null);
+  // Observers can never be host; the lowest-slot player is.
+  return r.clients.filter((c) => !c.observer).reduce((h, c) => (h === null || c.slot < h.slot ? c : h), null);
 }
 function lobbyState(r) {
   const h = host(r);
@@ -84,7 +85,7 @@ function lobbyState(r) {
     t: "lobby",
     host: h ? h.slot : -1,
     started: r.started,
-    players: r.clients.map((c) => ({ slot: c.slot, name: c.name, side: c.side, ready: c.ready })),
+    players: r.clients.map((c) => ({ slot: c.slot, name: c.name, side: c.side, ready: c.ready, observer: c.observer })),
   };
 }
 function broadcast(r, obj, except) {
@@ -93,11 +94,13 @@ function broadcast(r, obj, except) {
 }
 
 function startMatch(r) {
-  if (r.started || r.clients.length < 2) return;
+  // Only actual players get teams; observers just watch.
+  const players = r.clients.filter((c) => !c.observer);
+  if (r.started || players.length < 2) return;
   r.started = true;
   // Allies get consecutive team indices (and so adjacent map starts): sort by
   // side, then by join order.
-  const ordered = [...r.clients].sort((a, b) => a.side - b.side || a.slot - b.slot);
+  const ordered = players.sort((a, b) => a.side - b.side || a.slot - b.slot);
   const numTeams = ordered.length;
   const alliances = [];
   const slotTeams = [];
@@ -133,9 +136,9 @@ function handleConn(socket) {
         if (r.clients.length >= MAX_PLAYERS) { send({ t: "error", msg: "Room is full (16 players)." }); return; }
         const used = new Set(r.clients.map((c) => c.slot));
         let slot = 0; while (used.has(slot)) slot++;
-        me = { socket, slot, name: (m.name || `Player ${slot + 1}`).toString().slice(0, 24), side: slot % 2, ready: false, send };
+        me = { socket, slot, name: (m.name || `Player ${slot + 1}`).toString().slice(0, 24), side: slot % 2, ready: false, observer: !!m.observer, send };
         r.clients.push(me);
-        send({ t: "welcome", slot, room: name, max: MAX_PLAYERS });
+        send({ t: "welcome", slot, room: name, max: MAX_PLAYERS, observer: me.observer });
         broadcast(r, lobbyState(r));
         break;
       }

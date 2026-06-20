@@ -22,7 +22,7 @@ interface Client {
   started: Promise<void>;
 }
 
-function makeClient(url: string, name: string): Client {
+function makeClient(url: string, name: string, observer = false, room = "test"): Client {
   let resolveJoined!: () => void;
   let resolveStarted!: () => void;
   const ws = new WebSocket(url);
@@ -34,19 +34,20 @@ function makeClient(url: string, name: string): Client {
     joined: new Promise((r) => (resolveJoined = r)),
     started: new Promise((r) => (resolveStarted = r)),
   };
-  ws.onopen = () => t.send({ t: "hello", name, room: "test" });
+  ws.onopen = () => t.send({ t: "hello", name, room, observer });
   t.onData = (raw) => {
     const m = raw as { t: string; slot?: number; seed?: number; numTeams?: number; alliances?: number[]; slotTeams?: { slot: number; team: number }[] };
     if (m.t === "welcome") { c.slot = m.slot!; resolveJoined(); }
     else if (m.t === "start") {
-      c.team = m.slotTeams!.find((s) => s.slot === c.slot)!.team;
+      const mine = m.slotTeams!.find((s) => s.slot === c.slot);
+      c.team = mine ? mine.team : 0; // observers view as team 0
       const n = m.numTeams!;
       const teams = Array.from({ length: n }, (_, i) => i as Team);
       const map = generateMap("open_plains", m.seed!, n, false);
       const world = new World(m.seed!);
       world.init(map, teams.map(() => ({})), teams.map(() => 1), m.alliances, teams.map(() => ""), false, undefined, "conquest");
       c.world = world;
-      c.session = new NetSession(t, c.team as Team, teams); // attach overrides t.onData
+      c.session = new NetSession(t, c.team as Team, teams, observer || !mine); // attach overrides t.onData
       c.session.attach(world, 4);
       resolveStarted();
     }
@@ -134,6 +135,41 @@ describe("Relay server end-to-end", () => {
     // Survivors kept advancing past where they were when the peer left.
     survivors.forEach((c, i) => expect(c.session!.lock!.currentTick).toBeGreaterThan(before[i]));
     for (const c of survivors) c.ws.close();
+    await flush();
+  });
+
+  it("an observer simulates the match in sync without authoring input", async () => {
+    const url = `ws://127.0.0.1:${srv.port}`;
+    const a = makeClient(url, "P1", false, "obsroom");
+    const b = makeClient(url, "P2", false, "obsroom");
+    const obs = makeClient(url, "Caster", true, "obsroom");
+    await Promise.all([a.joined, b.joined, obs.joined]);
+    // Host is the lowest-slot *player* (observer can't host).
+    const host = [a, b].reduce((h, c) => (c.slot < h.slot ? c : h));
+    host.send({ t: "start" });
+    await Promise.all([a.started, b.started, obs.started]);
+
+    for (let frame = 0; frame < 120; frame++) {
+      for (const c of [a, b, obs]) {
+        if (frame % 20 === 0 && c !== obs) {
+          const ids = c.world!.entitiesOf(c.team as Team, Kind.Unit).map((e) => e.id);
+          c.session!.lock!.localCommand({ t: "move", team: c.team as Team, ids, x: 600, y: 480 + c.team * 30, queue: false, attackMove: false, formation: true });
+        }
+        c.session!.authorTick(); // a no-op for the observer
+      }
+      await flush(6);
+      for (const c of [a, b, obs]) c.session!.stepReady(20);
+    }
+    await flush(20);
+    for (const c of [a, b, obs]) c.session!.stepReady(40);
+
+    expect(obs.session!.desynced).toBe(false);
+    expect(obs.session!.lock!.currentTick).toBeGreaterThan(60);
+    // The observer's world hashes identically to a player's at the same tick.
+    if (obs.session!.lock!.currentTick === a.session!.lock!.currentTick) {
+      expect(worldChecksum(obs.world!)).toBe(worldChecksum(a.world!));
+    }
+    for (const c of [a, b, obs]) c.ws.close();
     await flush();
   });
 

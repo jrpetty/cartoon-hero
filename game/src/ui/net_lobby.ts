@@ -17,9 +17,10 @@ export interface NetStart {
   alliances: number[];
   seed: number;
   numTeams: number;
+  observer?: boolean; // joined to watch, not play
 }
 
-interface LobbyPlayer { slot: number; name: string; side: number; ready: boolean; }
+interface LobbyPlayer { slot: number; name: string; side: number; ready: boolean; observer?: boolean; }
 
 /** Forgiving normalization of the server address a player types. Accepts a bare
  *  IP/host, adds ws://, and supplies the default port — so "26.13.45.201",
@@ -127,18 +128,30 @@ export class NetLobby {
       this.save(LS_URL, url.value); this.save(LS_NAME, name.value);
       status.textContent = `Connecting to ${wsUrl}…`;
       try {
-        this.connectServer(wsUrl, name.value.trim() || "Player", room.value.trim() || "main", (msg) => (status.textContent = msg));
+        this.connectServer(wsUrl, name.value.trim() || "Player", room.value.trim() || "main", false, (msg) => (status.textContent = msg));
       } catch {
         status.textContent = "Couldn't open that address — check it and try again.";
       }
     };
-    p.append("Server address", url, "Display name", name, "Room", room, connect, back, status);
+    const observe = this.btn("Observe", false);
+    observe.onclick = () => {
+      const wsUrl = normalizeWsUrl(url.value);
+      if (!wsUrl) { status.textContent = "Enter the server address first."; return; }
+      this.save(LS_URL, url.value); this.save(LS_NAME, name.value);
+      status.textContent = `Connecting as observer to ${wsUrl}…`;
+      try { this.connectServer(wsUrl, name.value.trim() || "Observer", room.value.trim() || "main", true, (msg) => (status.textContent = msg)); }
+      catch { status.textContent = "Couldn't open that address — check it and try again."; }
+    };
+    p.append("Server address", url, "Display name", name, "Room", room, connect, observe, back, status);
   }
 
-  private connectServer(url: string, name: string, room: string, status: (m: string) => void) {
+  private observing = false;
+
+  private connectServer(url: string, name: string, room: string, observer: boolean, status: (m: string) => void) {
     const ws = new WSLink(url);
     this.ws = ws;
-    ws.onOpen = () => ws.send({ t: "hello", name, room });
+    this.observing = observer;
+    ws.onOpen = () => ws.send({ t: "hello", name, room, observer });
     ws.onClose = () => status("Disconnected. Check the address and that the server is running.");
     ws.onData = (raw) => {
       const m = raw as { t: string; slot?: number; host?: number; players?: LobbyPlayer[]; msg?: string;
@@ -147,9 +160,14 @@ export class NetLobby {
       else if (m.t === "lobby") { this.hostSlot = m.host!; this.players = m.players!; this.renderRoom(); }
       else if (m.t === "error") { status(m.msg || "Server refused the connection."); }
       else if (m.t === "start") {
-        const localTeam = m.slotTeams!.find((s) => s.slot === this.slot)!.team as Team;
         const teams = Array.from({ length: m.numTeams! }, (_, i) => i as Team);
-        this.finish({ transport: ws, localTeam, teams, alliances: m.alliances!, seed: m.seed!, numTeams: m.numTeams! });
+        const mine = m.slotTeams!.find((s) => s.slot === this.slot);
+        if (!mine) {
+          // Not assigned a team → we joined to observe.
+          this.finish({ transport: ws, localTeam: Team.Player, teams, alliances: m.alliances!, seed: m.seed!, numTeams: m.numTeams!, observer: true });
+        } else {
+          this.finish({ transport: ws, localTeam: mine.team as Team, teams, alliances: m.alliances!, seed: m.seed!, numTeams: m.numTeams! });
+        }
       }
     };
   }
@@ -161,21 +179,26 @@ export class NetLobby {
       const meTag = pl.slot === this.slot ? " (you)" : "";
       const hostTag = pl.slot === this.hostSlot ? " ⭐" : "";
       const col = pl.side === 0 ? "#7da3ec" : "#ec837d";
+      const right = pl.observer ? `<span style="color:#bdb49a">👁 Observer</span>` : `<span style="color:${col}">${sideName(pl.side)}</span>`;
+      const mark = pl.observer ? "👁" : pl.ready ? "✅" : "⬜";
       return `<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid #3a2f1c">
-        <span>${pl.ready ? "✅" : "⬜"} ${pl.name}${meTag}${hostTag}</span>
-        <span style="color:${col}">${sideName(pl.side)}</span></div>`;
+        <span>${mark} ${pl.name}${meTag}${hostTag}</span>${right}</div>`;
     }).join("");
-    const counts = [0, 1].map((s) => this.players.filter((p) => p.side === s).length);
-    this.set(this.title(`Lobby — ${this.players.length}/16`) +
-      this.note(`Sides: <b style="color:#7da3ec">A ${counts[0]}</b> vs <b style="color:#ec837d">B ${counts[1]}</b>. ${isHost ? "You're the host — start when everyone's in." : "Waiting for the host to start…"}`) +
+    const playerCount = this.players.filter((p) => !p.observer).length;
+    const obsCount = this.players.length - playerCount;
+    const counts = [0, 1].map((s) => this.players.filter((p) => !p.observer && p.side === s).length);
+    this.set(this.title(`Lobby — ${playerCount} players${obsCount ? ` · ${obsCount} 👁` : ""}`) +
+      this.note(`Sides: <b style="color:#7da3ec">A ${counts[0]}</b> vs <b style="color:#ec837d">B ${counts[1]}</b>. ${this.observing ? "You're observing — the match starts when the host begins." : isHost ? "You're the host — start when everyone's in." : "Waiting for the host to start…"}`) +
       `<div style="margin:8px 0">${rows}</div>`);
     const p = this.panel();
     const me = this.players.find((pl) => pl.slot === this.slot);
-    const toA = this.btn("Side A", me?.side !== 0); toA.onclick = () => this.ws!.send({ t: "side", side: 0 });
-    const toB = this.btn("Side B", me?.side !== 1); toB.onclick = () => this.ws!.send({ t: "side", side: 1 });
-    const ready = this.btn(me?.ready ? "Unready" : "Ready", !me?.ready);
-    ready.onclick = () => this.ws!.send({ t: "ready", ready: !me?.ready });
-    p.append(toA, toB, ready);
+    if (!this.observing) {
+      const toA = this.btn("Side A", me?.side !== 0); toA.onclick = () => this.ws!.send({ t: "side", side: 0 });
+      const toB = this.btn("Side B", me?.side !== 1); toB.onclick = () => this.ws!.send({ t: "side", side: 1 });
+      const ready = this.btn(me?.ready ? "Unready" : "Ready", !me?.ready);
+      ready.onclick = () => this.ws!.send({ t: "ready", ready: !me?.ready });
+      p.append(toA, toB, ready);
+    }
     if (isHost) {
       const start = this.btn("⚔ Start Match");
       start.disabled = this.players.length < 2;

@@ -16,7 +16,7 @@ export class NetSession {
   private remoteSums = new Map<number, Map<Team, number>>();
   private readonly sumEvery = 40; // compare state every ~2s of sim time
 
-  constructor(public transport: Transport, public localTeam: Team, public teams: Team[]) {}
+  constructor(public transport: Transport, public localTeam: Team, public teams: Team[], public observer = false) {}
 
   /** App-level message hooks (chat & map pings) — set by the match shell. */
   onChat?: (msg: { name?: string; text?: string; team?: number }) => void;
@@ -43,7 +43,7 @@ export class NetSession {
   /** Author + send the local team's turn for one tick. Driven at the real-time
    *  sim rate, independent of stepping, so a stalled peer still receives our
    *  input (otherwise everyone would deadlock waiting on each other). */
-  authorTick() { this.lock?.authorTurn(); }
+  authorTick() { if (!this.observer) this.lock?.authorTurn(); }
 
   /** How far the local author cursor is ahead of the simulated tick — used to
    *  cap how far we run ahead of a lagging peer. */
@@ -62,7 +62,8 @@ export class NetSession {
       if (t % this.sumEvery === 0) {
         const sum = worldChecksum(lock.world);
         this.localSums.set(t, sum);
-        this.transport.send({ t: "sum", tick: t, sum, team: this.localTeam });
+        // Observers verify silently; players publish their checksum.
+        if (!this.observer) this.transport.send({ t: "sum", tick: t, sum, team: this.localTeam });
         this.compare(t);
       }
       n++;
