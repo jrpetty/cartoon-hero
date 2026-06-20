@@ -18,16 +18,22 @@ export class NetSession {
 
   constructor(public transport: Transport, public localTeam: Team, public teams: Team[]) {}
 
+  /** App-level message hooks (chat & map pings) — set by the match shell. */
+  onChat?: (msg: { name?: string; text?: string; team?: number }) => void;
+  onPing?: (msg: { x?: number; y?: number; team?: number }) => void;
+
   /** Build the lockstep driver over a freshly-inited world and wire the wire. */
   attach(world: World, inputDelay = 5) {
     this.lock = new Lockstep(world, this.localTeam, this.teams, inputDelay,
       (turn) => this.transport.send({ t: "turn", turn }));
     this.transport.onData = (raw) => {
-      const m = raw as { t?: string; turn?: never; tick?: number; sum?: number; team?: number };
+      const m = raw as { t?: string; turn?: never; tick?: number; sum?: number; team?: number; name?: string; text?: string; x?: number; y?: number };
       if (m.t === "turn" && m.turn) this.lock?.receiveTurn(m.turn);
       else if (m.t === "sum" && typeof m.tick === "number" && typeof m.sum === "number" && typeof m.team === "number")
         this.compare(m.tick, m.team as Team, m.sum);
       else if (m.t === "drop" && typeof m.team === "number") this.lock?.dropTeam(m.team as Team);
+      else if (m.t === "chat") this.onChat?.(m as { name?: string; text?: string; team?: number });
+      else if (m.t === "ping") this.onPing?.(m as { x?: number; y?: number; team?: number });
     };
   }
 

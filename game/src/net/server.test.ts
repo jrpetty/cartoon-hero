@@ -137,6 +137,30 @@ describe("Relay server end-to-end", () => {
     await flush();
   });
 
+  it("relays chat and map pings to the other players in the room", async () => {
+    const url = `ws://127.0.0.1:${srv.port}`;
+    const a = new WebSocket(url);
+    const b = new WebSocket(url);
+    const bMsgs: { t: string; text?: string; x?: number; slot?: number }[] = [];
+    b.onmessage = (e) => bMsgs.push(JSON.parse(e.data as string));
+    await new Promise((r) => (a.onopen = () => r(null)));
+    await new Promise((r) => (b.onopen = () => r(null)));
+    a.send(JSON.stringify({ t: "hello", name: "A", room: "chatroom" }));
+    b.send(JSON.stringify({ t: "hello", name: "B", room: "chatroom" }));
+    await flush(40);
+
+    a.send(JSON.stringify({ t: "chat", name: "A", text: "glhf", team: 0 }));
+    await flush(40);
+    expect(bMsgs.some((m) => m.t === "chat" && m.text === "glhf")).toBe(true);
+
+    a.send(JSON.stringify({ t: "ping", x: 123, y: 456, team: 0 }));
+    await flush(40);
+    expect(bMsgs.some((m) => m.t === "ping" && m.x === 123)).toBe(true);
+
+    a.close(); b.close();
+    await flush();
+  });
+
   it("supports a full 16-team (8v8) world with two alliances", () => {
     const n = 16;
     const seed = 777;

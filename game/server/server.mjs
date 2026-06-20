@@ -144,6 +144,8 @@ function handleConn(socket) {
       case "start": if (me && r && host(r) === me) startMatch(r); break;
       case "turn":
       case "sum": if (r && r.started) broadcast(r, m, socket); break; // relay to others
+      case "chat":
+      case "ping": if (r && me) broadcast(r, { ...m, slot: me.slot }, socket); break; // relay (lobby + match)
       default: break;
     }
   };

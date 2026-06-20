@@ -22,6 +22,7 @@ const CONTROLS: [string, string][] = [
   [". / ,", "Idle villager · Select army"],
   ["0–9", "Control groups (Ctrl+# sets)"],
   ["Tab / V", "Scoreboard · Production panel"],
+  ["Enter / Alt-click", "Chat (MP) · Map ping"],
   ["WASD / Arrows / edge", "Pan camera"],
   ["Mouse wheel", "Zoom"],
   ["P / Space", "Pause"],

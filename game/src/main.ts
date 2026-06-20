@@ -44,6 +44,7 @@ import { TeamMetrics, snapshotMetrics } from "./sim/metrics";
 import { drawScoreboard } from "./ui/scoreboard";
 import { drawProductionPanel } from "./ui/production_panel";
 import { Weather } from "./render/weather";
+import { drawChat, ChatLine } from "./ui/chat";
 
 type AppState = "menu" | "setup" | "armory" | "match" | "postmatch" | "codex" | "settings";
 
@@ -85,6 +86,10 @@ class App {
   showScoreboard = false; // Tab — live multi-team scoreboard overlay
   showProduction = false; // V — production overview panel
   private weather = new Weather();
+  // Multiplayer chat (Enter to open) + log.
+  private chatOpen = false;
+  private chatDraft = "";
+  private chatLog: ChatLine[] = [];
   /** Time-series of per-team metrics, sampled through the match, for the graphs. */
   private matchHistory: { t: number; m: TeamMetrics[] }[] = [];
   private nextSampleT = 0;
@@ -173,6 +178,9 @@ class App {
 
   handleKey(key: string) {
     if (this.state !== "match" || !this.world) return;
+    // Chat capture takes precedence over every game hotkey while typing.
+    if (this.chatOpen) { this.handleChatKey(key); return; }
+    if (key === "Enter" && this.net) { this.chatOpen = true; return; } // open chat (MP only)
     const k = key.length === 1 ? key.toLowerCase() : key;
     if (k === "Escape") {
       if (this.spectating) this.exitToMenu();
@@ -398,6 +406,8 @@ class App {
     this.net = new NetSession(transport, localTeam, teams);
     this.me = localTeam;
     this.net.attach(world, 5);
+    this.net.onChat = (m) => { if (m.text) this.addChatLine(m.name || teamLabel((m.team ?? 0) as Team), m.text, (m.team ?? 0) as Team); };
+    this.net.onPing = (m) => this.remotePing(m.x ?? 0, m.y ?? 0, (m.team ?? 0) as Team);
     transport.onClose = () => this.hud.addAlert("⚠ Connection lost.");
     this.renderer.prepare(map);
     this.weather.configure(map.seed, map.name);
@@ -648,6 +658,9 @@ class App {
     this.endGraph = null;
     this.showScoreboard = false;
     this.showProduction = false;
+    this.chatOpen = false;
+    this.chatDraft = "";
+    this.chatLog = [];
   }
 
   /** Sample every team's metrics at a fixed game-time cadence for the graphs. */
@@ -769,6 +782,38 @@ class App {
     this.hud.addPing(wx, wy);
     this.markers.push({ x: wx, y: wy, age: 0, kind: "rally" }); // quick in-world flare
     audio.play("ui");
+    this.net?.transport.send({ t: "ping", x: wx, y: wy, team: this.me }); // share with the lobby
+  }
+
+  /** Show an incoming network ping from another player. */
+  private remotePing(x: number, y: number, team: Team) {
+    this.hud.addPing(x, y);
+    this.markers.push({ x, y, age: 0, kind: "rally" });
+    this.hud.addAlert(`📍 ${teamLabel(team)} pinged the map`);
+    audio.play("ui");
+  }
+
+  private myName(): string {
+    try { return localStorage.getItem("bb_player_name") || "You"; } catch { return "You"; }
+  }
+
+  private handleChatKey(key: string) {
+    if (key === "Enter") {
+      const text = this.chatDraft.trim();
+      if (text && this.net) { this.net.transport.send({ t: "chat", name: this.myName(), text, team: this.me }); this.addChatLine(this.myName(), text, this.me); }
+      this.chatOpen = false; this.chatDraft = "";
+    } else if (key === "Escape") {
+      this.chatOpen = false; this.chatDraft = "";
+    } else if (key === "Backspace") {
+      this.chatDraft = this.chatDraft.slice(0, -1);
+    } else if (key.length === 1 && this.chatDraft.length < 120) {
+      this.chatDraft += key;
+    }
+  }
+
+  addChatLine(name: string, text: string, team: Team) {
+    this.chatLog.push({ name: name.slice(0, 24), text: text.slice(0, 120), team, t: this.time });
+    if (this.chatLog.length > 30) this.chatLog.shift();
   }
 
   worldClick(sx: number, sy: number) {
@@ -1217,7 +1262,7 @@ class App {
     }
 
     // ---- camera movement ----
-    if (!this.ingameMenu) {
+    if (!this.ingameMenu && !this.chatOpen) {
       const camSpeed = this.settings.scrollSpeed / this.camera.zoom;
       const edge = 16;
       let dx = 0;
@@ -1312,6 +1357,7 @@ class App {
       }
     }
     if (this.showScoreboard) drawScoreboard(W, H, world, this.me);
+    if (this.net) drawChat(W, H, this.chatLog, this.chatOpen ? this.chatDraft : null, this.time, H - MINIMAP_SIZE - 70);
     ui.flushTooltip(W, H);
 
     // ---- in-game menu overlay ----
