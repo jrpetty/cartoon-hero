@@ -321,9 +321,9 @@ describe("Hero leveling", () => {
       w.issueAttack([hero.id], foe.id);
       for (let i = 0; i < SIM_HZ * 4 && foe.alive; i++) w.tick();
     }
-    expect(hero.heroLevel).toBe(1); // 6 kills → only level 1 (threshold 4, next at 10)
-    expect(hero.maxHp).toBe(baseHp + 35);
-    expect(hero.attack).toBe(baseAtk + 3);
+    expect(hero.heroLevel).toBe(1); // 6 kills → only level 1 (threshold 5, next at 12)
+    expect(hero.maxHp).toBe(baseHp + 24); // HERO_HP_PER_LVL
+    expect(hero.attack).toBe(baseAtk + 2); // HERO_ATK_PER_LVL
     expect(hero.hp).toBeLessThan(hero.maxHp); // took chip damage; no free heal topped it off
   });
 });
@@ -488,8 +488,8 @@ describe("Hero units", () => {
     const baseHp = hero.maxHp;
     const baseAtk = hero.attack;
     run(w, 0.2);
-    // Four enemies die next to the hero → level 1 (threshold is 4 kills).
-    for (let i = 0; i < 4; i++) {
+    // Five enemies die next to the hero → level 1 (threshold is 5 kills).
+    for (let i = 0; i < 5; i++) {
       const foe = w.spawnUnit(Team.Enemy, "militia", 1000 + i * 8, 1010);
       w.dealDamage(Team.Player, foe, 9999, "hero", hero.id);
     }

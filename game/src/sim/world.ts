@@ -96,8 +96,11 @@ export interface Banner {
   power: CommanderPower;
 }
 
-/** Kills needed to reach hero levels 1..5. */
-export const HERO_THRESHOLDS = [4, 10, 17, 26, 37];
+/** Kills needed to reach hero levels 1..5 (a touch slower so he doesn't snowball). */
+export const HERO_THRESHOLDS = [5, 12, 20, 30, 42];
+/** Per-level Champion bonuses (kept modest — he was overtuned). */
+export const HERO_HP_PER_LVL = 24;
+export const HERO_ATK_PER_LVL = 2;
 /** Kills needed to reach veterancy ranks 1..3 (Veteran / Elite / Legendary). */
 export const VET_THRESHOLDS = [2, 5, 9];
 const HERO_RESPAWN_SEC = 45;
@@ -426,8 +429,8 @@ export class World {
       e.attack += e.veterancy;
       e.armor += Math.max(0, e.veterancy - 1);
       if (def.hero && e.heroLevel > 0) {
-        e.maxHp += e.heroLevel * 35;
-        e.attack += e.heroLevel * 3;
+        e.maxHp += e.heroLevel * HERO_HP_PER_LVL;
+        e.attack += e.heroLevel * HERO_ATK_PER_LVL;
         e.armor += Math.floor(e.heroLevel / 2);
       }
       e.hp = Math.max(1, Math.round(e.maxHp * frac));
@@ -780,8 +783,8 @@ export class World {
   private applyHeroLevel(e: Entity, level: number) {
     e.heroLevel = level;
     e.heroKills = level > 0 ? HERO_THRESHOLDS[level - 1] : 0;
-    e.maxHp += level * 35;
-    e.attack += level * 3;
+    e.maxHp += level * HERO_HP_PER_LVL;
+    e.attack += level * HERO_ATK_PER_LVL;
     e.armor += Math.floor(level / 2); // +1 at lvl 2-3, +2 at lvl 4-5
     e.hp = e.maxHp; // respawn at full (not a mid-fight heal)
   }
@@ -830,8 +833,8 @@ export class World {
       hero.heroLevel++;
       // Tougher over time, but no mid-fight heal (a kill shouldn't top you up),
       // and a gentler curve so a few kills don't make him unstoppable.
-      hero.maxHp += 35;
-      hero.attack += 3;
+      hero.maxHp += HERO_HP_PER_LVL;
+      hero.attack += HERO_ATK_PER_LVL;
       if (hero.heroLevel % 2 === 0) hero.armor += 1; // +1 at levels 2 & 4 (max +2)
       if (p) p.heroLevel = hero.heroLevel;
       this.emit("ability", hero.x, hero.y - hero.radius, byTeam, "hero_levelup");

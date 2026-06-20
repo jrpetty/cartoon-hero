@@ -428,44 +428,43 @@ export class Renderer {
       ctx.fill();
     }
 
-    // One guard around the whole batch instead of a closure+try/catch per entity
-    // (that allocation churn was a real cost at high pop); the outer frame loop
-    // still recovers if anything here throws.
-    try {
-      for (const e of drawables) {
-        const ghosted =
-          e.team !== viewTeam &&
-          e.kind === Kind.Building &&
-          world.fogAt(viewTeam, e.x, e.y) !== FOG_VISIBLE;
-        if (ghosted) ctx.globalAlpha = 0.45;
+    // Per-entity isolation so one bad draw never wipes the rest of the frame —
+    // but inline (no closure/string alloc, which was the real cost we removed).
+    for (const e of drawables) {
+      const ghosted =
+        e.team !== viewTeam &&
+        e.kind === Kind.Building &&
+        world.fogAt(viewTeam, e.x, e.y) !== FOG_VISIBLE;
+      if (ghosted) ctx.globalAlpha = 0.45;
+      try {
         switch (e.kind) {
           case Kind.Resource: drawResource(ctx, e, time); break;
           case Kind.Building: drawBuilding(ctx, e, time, viewTeam); break;
           case Kind.Unit: drawUnit(ctx, e, time, lod); break;
           case Kind.Projectile: drawProjectile(ctx, e); break;
         }
-        if (ghosted) ctx.globalAlpha = 1;
+      } catch (err) {
+        if (worldTf) ctx.setTransform(worldTf);
+        ctx.globalAlpha = 1; ctx.shadowBlur = 0;
+        if (!this.warned.has("entity")) { this.warned.add("entity"); console.error("render guard [entity]:", err); }
       }
-    } catch (err) {
-      if (worldTf) ctx.setTransform(worldTf);
-      ctx.globalAlpha = 1; ctx.shadowBlur = 0;
-      if (!this.warned.has("entities")) { this.warned.add("entities"); console.error("render guard [entities]:", err); }
+      if (ghosted) ctx.globalAlpha = 1;
     }
 
     // Health bars for hovered, selected or recently-damaged entities. Zoomed
     // out (lod), only the selected get one — the rest are too small to read.
-    try {
-      for (const e of drawables) {
-        if (e.kind !== Kind.Unit && e.kind !== Kind.Building) continue;
-        const show = e.selected || e.id === hoveredId || (lod === 0 && e.hp < e.maxHp && time - e.lastDamageTime < 6);
-        if (!show) continue;
-        if (e.kind === Kind.Building && e.buildState !== BuildState.Done) continue;
+    for (const e of drawables) {
+      if (e.kind !== Kind.Unit && e.kind !== Kind.Building) continue;
+      const show = e.selected || e.id === hoveredId || (lod === 0 && e.hp < e.maxHp && time - e.lastDamageTime < 6);
+      if (!show) continue;
+      if (e.kind === Kind.Building && e.buildState !== BuildState.Done) continue;
+      try {
         drawHealthBar(ctx, e);
+      } catch (err) {
+        if (worldTf) ctx.setTransform(worldTf);
+        ctx.globalAlpha = 1; ctx.shadowBlur = 0;
+        if (!this.warned.has("healthbar")) { this.warned.add("healthbar"); console.error("render guard [healthbar]:", err); }
       }
-    } catch (err) {
-      if (worldTf) ctx.setTransform(worldTf);
-      ctx.globalAlpha = 1; ctx.shadowBlur = 0;
-      if (!this.warned.has("healthbars")) { this.warned.add("healthbars"); console.error("render guard [healthbars]:", err); }
     }
 
     } finally {
