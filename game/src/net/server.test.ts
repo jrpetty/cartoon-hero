@@ -197,6 +197,37 @@ describe("Relay server end-to-end", () => {
     await flush();
   });
 
+  it("enforces room passwords (first to join sets it)", async () => {
+    const url = `ws://127.0.0.1:${srv.port}`;
+    const open = (ws: WebSocket) => new Promise((r) => (ws.onopen = () => r(null)));
+    const collect = (ws: WebSocket) => { const out: { t: string }[] = []; ws.onmessage = (e) => out.push(JSON.parse(e.data as string)); return out; };
+
+    const a = new WebSocket(url); const am = collect(a); await open(a);
+    a.send(JSON.stringify({ t: "hello", name: "A", room: "locked", pass: "secret" }));
+    await flush(40);
+    expect(am.some((m) => m.t === "welcome")).toBe(true); // creator gets in & sets the password
+
+    const b = new WebSocket(url); const bm = collect(b); await open(b);
+    b.send(JSON.stringify({ t: "hello", name: "B", room: "locked", pass: "nope" }));
+    await flush(40);
+    expect(bm.some((m) => m.t === "error")).toBe(true); // wrong password
+    expect(bm.some((m) => m.t === "welcome")).toBe(false);
+
+    const c = new WebSocket(url); const cm = collect(c); await open(c);
+    c.send(JSON.stringify({ t: "hello", name: "C", room: "locked", pass: "secret" }));
+    await flush(40);
+    expect(cm.some((m) => m.t === "welcome")).toBe(true); // right password gets in
+
+    // A room created with no password stays open.
+    const d = new WebSocket(url); const dm = collect(d); await open(d);
+    d.send(JSON.stringify({ t: "hello", name: "D", room: "openroom" }));
+    await flush(40);
+    expect(dm.some((m) => m.t === "welcome")).toBe(true);
+
+    a.close(); b.close(); c.close(); d.close();
+    await flush();
+  });
+
   it("supports a full 16-team (8v8) world with two alliances", () => {
     const n = 16;
     const seed = 777;

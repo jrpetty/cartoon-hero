@@ -72,7 +72,7 @@ const rooms = new Map(); // name -> { clients: Client[], started: bool, slotTeam
 
 function room(name) {
   let r = rooms.get(name);
-  if (!r) { r = { clients: [], started: false, slotTeams: new Map() }; rooms.set(name, r); }
+  if (!r) { r = { clients: [], started: false, slotTeams: new Map(), pass: "" }; rooms.set(name, r); }
   return r;
 }
 function host(r) {
@@ -131,7 +131,12 @@ function handleConn(socket) {
     switch (m.t) {
       case "hello": {
         const name = (m.room || "main").toString().slice(0, 32);
+        const pass = (m.pass || "").toString().slice(0, 64);
+        const existing = rooms.get(name);
+        // The first to enter a room sets its password; everyone else must match.
+        if (existing && (existing.pass || "") !== pass) { send({ t: "error", msg: "Wrong room password." }); return; }
         r = room(name);
+        if (!existing) r.pass = pass;
         if (r.started) { send({ t: "error", msg: "That match is already in progress." }); return; }
         if (r.clients.length >= MAX_PLAYERS) { send({ t: "error", msg: "Room is full (16 players)." }); return; }
         const used = new Set(r.clients.map((c) => c.slot));

@@ -49,6 +49,35 @@ Notes:
 - If someone disconnects mid-match, the rest keep playing — that team's units
   simply go idle.
 
+## Room passwords
+
+Rooms can be locked. The **first** player to enter a room sets its password (the
+"Password" field on the Join-a-Server screen); everyone else must enter the same
+one or they're rejected with "Wrong room password." Leave it blank for an open
+room. The password lives only in memory and resets once the room empties, so it's
+a lightweight gate for friends — not account security.
+
+## Hosting on the public internet
+
+The server already binds `0.0.0.0`, so to let friends connect over the internet
+(no VPN) you just need to make your machine reachable. Easiest → most robust:
+
+1. **A tunnel (no router setup, works behind CGNAT).** Run a tool like
+   **playit.gg**, **ngrok** (`ngrok tcp 8787`) or **Cloudflare Tunnel**; it gives
+   you a public address that forwards to your local `:8787`. Friends use
+   `ws://<that-address>`.
+2. **Port forwarding.** Give your PC a static LAN IP, forward external TCP **8787**
+   → that IP:8787 on your router, allow Node through the firewall, and share
+   `ws://<your-public-ip>:8787`. Verify from outside with
+   `http://<public-ip>:8787/`. (Won't work if your ISP uses CGNAT — use a tunnel.)
+3. **A cheap VPS.** Run the server on a $4–6/mo box for an always-on public IP.
+
+Notes:
+- Open the **game from the local HTML file** so the browser allows plain `ws://`.
+  A page served over `https://` can only use `wss://` (put a TLS reverse proxy /
+  Caddy in front, or use a tunnel that provides `wss://`).
+- Always set a room password when exposing the server publicly.
+
 ## Capacity & topology
 
 One connection per client (star topology), so 8v8 is 16 sockets, not a 240-link

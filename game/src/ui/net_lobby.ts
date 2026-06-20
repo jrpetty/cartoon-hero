@@ -117,41 +117,36 @@ export class NetLobby {
     const url = this.field(this.ls(LS_URL, "ws://localhost:8787"), "ws://10.0.0.5:8787");
     const name = this.field(this.ls(LS_NAME, "Player"), "Your name");
     const room = this.field("main", "Room name");
+    const pass = this.field("", "Room password (optional)");
     const connect = this.btn("Connect");
     const back = this.btn("Back", false);
     const status = document.createElement("div");
     status.style.cssText = "color:#e0a05a;font-size:13px;margin-top:8px";
     back.onclick = () => this.showHome();
-    connect.onclick = () => {
+    const go = (observer: boolean) => {
       const wsUrl = normalizeWsUrl(url.value);
       if (!wsUrl) { status.textContent = "Enter the server address (e.g. ws://26.13.45.201:8787)."; return; }
       this.save(LS_URL, url.value); this.save(LS_NAME, name.value);
-      status.textContent = `Connecting to ${wsUrl}…`;
+      status.textContent = `Connecting${observer ? " as observer" : ""} to ${wsUrl}…`;
       try {
-        this.connectServer(wsUrl, name.value.trim() || "Player", room.value.trim() || "main", false, (msg) => (status.textContent = msg));
+        this.connectServer(wsUrl, name.value.trim() || (observer ? "Observer" : "Player"), room.value.trim() || "main", pass.value, observer, (msg) => (status.textContent = msg));
       } catch {
         status.textContent = "Couldn't open that address — check it and try again.";
       }
     };
+    connect.onclick = () => go(false);
     const observe = this.btn("Observe", false);
-    observe.onclick = () => {
-      const wsUrl = normalizeWsUrl(url.value);
-      if (!wsUrl) { status.textContent = "Enter the server address first."; return; }
-      this.save(LS_URL, url.value); this.save(LS_NAME, name.value);
-      status.textContent = `Connecting as observer to ${wsUrl}…`;
-      try { this.connectServer(wsUrl, name.value.trim() || "Observer", room.value.trim() || "main", true, (msg) => (status.textContent = msg)); }
-      catch { status.textContent = "Couldn't open that address — check it and try again."; }
-    };
-    p.append("Server address", url, "Display name", name, "Room", room, connect, observe, back, status);
+    observe.onclick = () => go(true);
+    p.append("Server address", url, "Display name", name, "Room", room, "Password (first to join sets it)", pass, connect, observe, back, status);
   }
 
   private observing = false;
 
-  private connectServer(url: string, name: string, room: string, observer: boolean, status: (m: string) => void) {
+  private connectServer(url: string, name: string, room: string, pass: string, observer: boolean, status: (m: string) => void) {
     const ws = new WSLink(url);
     this.ws = ws;
     this.observing = observer;
-    ws.onOpen = () => ws.send({ t: "hello", name, room, observer });
+    ws.onOpen = () => ws.send({ t: "hello", name, room, pass, observer });
     ws.onClose = () => status("Disconnected. Check the address and that the server is running.");
     ws.onData = (raw) => {
       const m = raw as { t: string; slot?: number; host?: number; players?: LobbyPlayer[]; msg?: string;
