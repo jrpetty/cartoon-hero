@@ -76,6 +76,7 @@ export class Renderer {
   decals: Decal[] = [];
   floaters: Floater[] = [];
   dayPhase = 0.18; // 0..1 around the day/night cycle
+  aggressiveLod = false; // "Reduce effects" → simplify units sooner
   private waterCells: number[] = []; // [x0,y0,x1,y1,...] water cell centres
   private vignette: HTMLCanvasElement | null = null;
 
@@ -382,6 +383,13 @@ export class Renderer {
       drawables.push(e);
     }
     drawables.sort((a, b) => a.y - b.y || a.id - b.id);
+    // Level-of-detail: when zoomed out or there's a big crowd on screen, draw
+    // units as cheap blobs (skip auras/chevrons/weapons) — the detail is sub-pixel
+    // anyway and this is what keeps a high-pop 8v8 smooth. "Reduce effects" makes
+    // it kick in sooner for weaker machines.
+    const zoomCut = this.aggressiveLod ? 0.82 : 0.62;
+    const crowdCut = this.aggressiveLod ? 160 : 340;
+    const lod = cam.zoom < zoomCut || drawables.length > crowdCut ? 1 : 0;
 
     // Tween each entity toward this frame's fraction between sim ticks so motion
     // is smooth at 60fps over the 20Hz sim. Originals are restored in `finally`
@@ -420,30 +428,44 @@ export class Renderer {
       ctx.fill();
     }
 
-    for (const e of drawables) {
-      const ghosted =
-        e.team !== viewTeam &&
-        e.kind === Kind.Building &&
-        world.fogAt(viewTeam, e.x, e.y) !== FOG_VISIBLE;
-      if (ghosted) ctx.globalAlpha = 0.45;
-      this.guard(ctx, "entity:" + e.type, worldTf, () => {
+    // One guard around the whole batch instead of a closure+try/catch per entity
+    // (that allocation churn was a real cost at high pop); the outer frame loop
+    // still recovers if anything here throws.
+    try {
+      for (const e of drawables) {
+        const ghosted =
+          e.team !== viewTeam &&
+          e.kind === Kind.Building &&
+          world.fogAt(viewTeam, e.x, e.y) !== FOG_VISIBLE;
+        if (ghosted) ctx.globalAlpha = 0.45;
         switch (e.kind) {
           case Kind.Resource: drawResource(ctx, e, time); break;
           case Kind.Building: drawBuilding(ctx, e, time, viewTeam); break;
-          case Kind.Unit: drawUnit(ctx, e, time); break;
+          case Kind.Unit: drawUnit(ctx, e, time, lod); break;
           case Kind.Projectile: drawProjectile(ctx, e); break;
         }
-      });
-      if (ghosted) ctx.globalAlpha = 1;
+        if (ghosted) ctx.globalAlpha = 1;
+      }
+    } catch (err) {
+      if (worldTf) ctx.setTransform(worldTf);
+      ctx.globalAlpha = 1; ctx.shadowBlur = 0;
+      if (!this.warned.has("entities")) { this.warned.add("entities"); console.error("render guard [entities]:", err); }
     }
 
-    // Health bars for hovered, selected or recently-damaged entities.
-    for (const e of drawables) {
-      if (e.kind !== Kind.Unit && e.kind !== Kind.Building) continue;
-      if (e.selected || e.id === hoveredId || (e.hp < e.maxHp && time - e.lastDamageTime < 6)) {
+    // Health bars for hovered, selected or recently-damaged entities. Zoomed
+    // out (lod), only the selected get one — the rest are too small to read.
+    try {
+      for (const e of drawables) {
+        if (e.kind !== Kind.Unit && e.kind !== Kind.Building) continue;
+        const show = e.selected || e.id === hoveredId || (lod === 0 && e.hp < e.maxHp && time - e.lastDamageTime < 6);
+        if (!show) continue;
         if (e.kind === Kind.Building && e.buildState !== BuildState.Done) continue;
-        this.guard(ctx, "healthbar:" + e.type, worldTf, () => drawHealthBar(ctx, e));
+        drawHealthBar(ctx, e);
       }
+    } catch (err) {
+      if (worldTf) ctx.setTransform(worldTf);
+      ctx.globalAlpha = 1; ctx.shadowBlur = 0;
+      if (!this.warned.has("healthbars")) { this.warned.add("healthbars"); console.error("render guard [healthbars]:", err); }
     }
 
     } finally {

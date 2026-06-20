@@ -650,6 +650,7 @@ class App {
     audio.applyVolumes();
     setColorblindTeams(s.colorblind);
     this.particles.density = s.reduceEffects ? 0.4 : 1;
+    this.renderer.aggressiveLod = s.reduceEffects;
     this.showDamageNumbers = s.damageNumbers;
   }
 

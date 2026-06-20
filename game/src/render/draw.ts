@@ -887,8 +887,22 @@ function drawSiegeWorkshop(ctx: Ctx, e: Entity, half: number) {
 
 // -------------------------------------------------------------------- units --
 
-export function drawUnit(ctx: Ctx, e: Entity, time: number) {
+export function drawUnit(ctx: Ctx, e: Entity, time: number, lod = 0) {
   const tc = tcol(e.team);
+  // Level-of-detail blob: a single filled body (+ a flag dot for the champion).
+  // Used when zoomed out / in big crowds, where the full art is sub-pixel.
+  if (lod > 0) {
+    ctx.fillStyle = withAlpha("#0a0805", 0.28);
+    ctx.beginPath();
+    ctx.ellipse(e.x, e.y + e.radius * 0.55, e.radius * 0.9, e.radius * 0.4, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = tc.main;
+    ctx.beginPath();
+    ctx.ellipse(e.x, e.y, e.radius * 0.92, e.radius * 0.72, 0, 0, Math.PI * 2);
+    ctx.fill();
+    if (UNITS[e.type]?.hero) { ctx.fillStyle = "#ffd24a"; ctx.beginPath(); ctx.arc(e.x, e.y - e.radius, 2.2, 0, Math.PI * 2); ctx.fill(); }
+    return;
+  }
   const moving = Math.hypot(e.vx, e.vy) > 4;
   const bob = moving ? Math.sin(e.animPhase * 9) * 1.4 : Math.sin(e.animPhase * 2.4) * 0.4;
   // Attack lunge: strongest right after an attack starts cooling down.
