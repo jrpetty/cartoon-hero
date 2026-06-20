@@ -136,7 +136,13 @@ export class SkirmishAI {
   }
   private get villagerGoal(): number {
     const m = { rush: 0.82, boom: 1.25, turtle: 1.05, balanced: 1 }[this.style];
-    return Math.round(this.diff.villagerTarget * m);
+    const base = this.diff.villagerTarget * m;
+    // Once at the top age, real opponents (Knight+) keep growing the economy so a
+    // full-pop army is affordable (otherwise they plateau ~60). Gated to max age
+    // so early-age progression thresholds stay stable.
+    const p = this.world.player(this.team);
+    const grow = this.diff.maxAge >= 2 && p.age >= this.diff.maxAge ? 16 + this.gameTime / 60 : 0;
+    return Math.round(Math.min(base + grow, base * 2.2));
   }
   private get turtles(): boolean {
     return this.style === "turtle";
@@ -303,7 +309,7 @@ export class SkirmishAI {
       return AGES[1].cost;
     }
     if (p.age === 1 && this.diff.maxAge >= 2 && this.world.ageRequirementMet(this.team, 2) &&
-        vills >= Math.floor(this.villagerGoal * 0.8)) {
+        vills >= Math.floor(this.villagerGoal * 0.6)) {
       return AGES[2].cost;
     }
     return null;
@@ -400,6 +406,15 @@ export class SkirmishAI {
     // dribbles every scrap into units and never reaches the next age.
     const gate = this.ageUpCost(p);
     this.savingForAge = gate !== null && !this.world.canAfford(p.resources, gate);
+
+    // 0. The instant the age-up is affordable, research it — before villager or
+    //    army production can nibble the banked cost back below it. (Otherwise the
+    //    AI trains a villager the moment it can afford one and never quite banks
+    //    the full age cost, stalling in an age forever.)
+    if (gate !== null && !this.savingForAge) {
+      const tc0 = this.myBuildings("town_center")[0];
+      if (tc0) this.world.research(this.team, tc0.id, "age");
+    }
 
     // 1. Keep villager production rolling (paused while saving for an age).
     const villagers = this.myUnits("villager");
@@ -738,7 +753,7 @@ export class SkirmishAI {
 
     // Advance to Castle (needs any 2 Feudal buildings — we build several).
     if (p.age === 1 && this.diff.maxAge >= 2 && this.world.ageRequirementMet(this.team, 2) &&
-        villagerCount >= Math.floor(this.villagerGoal * 0.8)) {
+        villagerCount >= Math.floor(this.villagerGoal * 0.6)) {
       const tc = this.myBuildings("town_center")[0];
       if (tc) this.world.research(this.team, tc.id, "age");
     }
@@ -746,6 +761,20 @@ export class SkirmishAI {
     if (p.age >= 2) {
       if (!have("siege_workshop") && p.resources.wood >= 210) {
         const b = this.placeNear("siege_workshop", base.x, base.y, 4, 9);
+        if (b) this.assignBuilder(b);
+      }
+    }
+
+    // Extra military production so a big economy can actually spend into a
+    // full-pop army — one of each building can't fill the cap. Scales with the
+    // villager count, Knight+ only (weaker tiers stay on a single line).
+    if (this.diff.maxAge >= 2 && p.age >= 1 && p.resources.wood >= 240) {
+      const milTypes = ["barracks", "archery_range", "stable"].filter((t) => have(t));
+      const milCount = milTypes.reduce((n, t) => n + this.myBuildings(t, false).length, 0);
+      const target = Math.min(8, 2 + Math.floor(villagerCount / 11));
+      if (milTypes.length && milCount < target) {
+        milTypes.sort((a, b) => this.myBuildings(a, false).length - this.myBuildings(b, false).length);
+        const b = this.placeNear(milTypes[0], base.x, base.y, 4, 12);
         if (b) this.assignBuilder(b);
       }
     }
@@ -910,7 +939,7 @@ export class SkirmishAI {
       base.archer = 0.26;
       base.spearman = 0.12;
       base.skirmisher = 0.08;
-      base.horseman = 0.1; // ranged cavalry harasser
+      base.horseman = 0.1; // fast melee cavalry
       base.javelin = 0.07; // anti-cavalry ranged
       base.raider = 0.1; // eco harass
     } else {
@@ -922,7 +951,7 @@ export class SkirmishAI {
       base.catapult = 0.08;
       base.ram = 0.05;
       base.trebuchet = 0.03;
-      base.horseman = 0.05; // anti-siege ranged cav
+      base.horseman = 0.05; // anti-siege melee cav
       // The enemy is walling up — bring the wall-breakers.
       if (this.seenWalls >= 4 && this.myBuildings("siege_workshop").length > 0) {
         base.ram += 0.14;
@@ -951,7 +980,7 @@ export class SkirmishAI {
     add("skirmisher", (s.archer / total) * 0.4);
     add("javelin", (s.archer / total) * 0.2);
     add("knight", (s.archer / total) * 0.3 + (s.siege / total) * 0.4);
-    add("horseman", (s.siege / total) * 0.4); // ranged anti-siege cav
+    add("horseman", (s.siege / total) * 0.4); // melee anti-siege cav
     add("spearman", (s.cavalry / total) * 0.45);
     add("pikeman", (s.cavalry / total) * 0.55); // best anti-cav (Castle)
     add("militia", (s.archer / total) * 0.2 + (s.siege / total) * 0.2);
@@ -969,7 +998,10 @@ export class SkirmishAI {
     const p = this.world.player(this.team);
     const comp = this.composition();
     const army = this.armyUnits();
-    const want = Math.max(this.armySize * 1.4, army.length + 4);
+    // Grow the army steadily; the greedy trainer below only spends what's
+    // affordable, so this naturally scales with the economy (toward the pop cap
+    // late game) without starving villager/age production.
+    const want = Math.max(this.armySize * 1.4, army.length + 5);
 
     const countByType: Record<string, number> = {};
     for (const u of army) countByType[u.type] = (countByType[u.type] ?? 0) + 1;
