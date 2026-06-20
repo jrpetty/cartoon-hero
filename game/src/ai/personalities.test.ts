@@ -5,6 +5,7 @@ import { generateMap } from "../maps/generator";
 import { SkirmishAI, armyTargetPriority } from "./skirmish_ai";
 import { DIFFICULTIES, DIFFICULTY_IDS } from "./difficulty";
 import { SIM_DT, SIM_HZ } from "../content/balance";
+import { BUILDINGS } from "../content/buildings";
 
 describe("Difficulty tiers", () => {
   it("has five tiers, all fully specified, Conqueror the hardest", () => {
@@ -44,6 +45,24 @@ describe("Focus-fire target priority", () => {
     // Unknown type falls back to a low value.
     expect(armyTargetPriority("nonsense")).toBeLessThan(siege);
   });
+});
+
+describe("AI population growth", () => {
+  it("a house provides 10 population", () => {
+    expect(BUILDINGS.house.popProvided).toBe(10);
+  });
+
+  it("doesn't stay pop-blocked — builds houses ahead of the curve", () => {
+    const w = new World(99);
+    w.init(generateMap("open_plains", 99, 2), [{}, {}], [1, 1]);
+    const ai = new SkirmishAI(w, Team.Enemy, DIFFICULTIES.knight);
+    for (let i = 0; i < SIM_HZ * 180; i++) { w.tick(); ai.update(SIM_DT); w.drainEvents(); }
+    const p = w.player(Team.Enemy);
+    // Grew well past the starting cap of 10 (the bug: stuck at 10).
+    expect(p.popCap).toBeGreaterThanOrEqual(30);
+    // And isn't sitting jammed against the cap — it keeps headroom to produce.
+    expect(p.popCap - p.popUsed).toBeGreaterThan(2);
+  }, 60000);
 });
 
 describe("Conqueror AI plays a real game", () => {

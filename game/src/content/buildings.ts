@@ -69,12 +69,12 @@ export const BUILDINGS: Record<string, BuildingDef> = {
   house: B({
     id: "house",
     name: "House",
-    desc: "Raises your population limit so you can field a larger force.",
+    desc: "Raises your population limit by 10 so you can field a larger force.",
     hp: 480,
     cost: { food: 0, wood: 30, gold: 0 },
     buildTime: 18,
     tiles: 2,
-    popProvided: 5,
+    popProvided: 10,
   }),
   mill: B({
     id: "mill",

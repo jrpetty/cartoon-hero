@@ -8,7 +8,7 @@ import { UNITS } from "../content/units";
 import { ABILITIES } from "../content/abilities";
 import { BUILDINGS } from "../content/buildings";
 import { UPGRADES, AGES } from "../content/tech";
-import { TILE } from "../content/balance";
+import { TILE, POP_CAP_HARD } from "../content/balance";
 import { DifficultyDef } from "./difficulty";
 import { RNG } from "../engine/rng";
 import { dist } from "../engine/math";
@@ -409,11 +409,15 @@ export class SkirmishAI {
       }
     }
 
-    // 2. Houses ahead of pop block.
+    // 2. Houses well ahead of the pop block. Build several at once and start
+    //    early — the old one-at-a-time, nearly-capped trigger left the AI
+    //    perpetually pop-blocked with a tiny army.
     const housesBuilding = this.myBuildings("house", false).filter(
       (h) => h.buildState !== BuildState.Done,
     ).length;
-    if (p.popCap - p.popUsed < 6 && housesBuilding === 0 && p.popCap < 200) {
+    const headroom = p.popCap - p.popUsed;
+    const wantAhead = 12 + this.myBuildings("town_center").length * 6; // grow faster with more bases
+    if (headroom < wantAhead && housesBuilding < 2 && p.popCap < POP_CAP_HARD) {
       const h = this.placeNear("house", base.x, base.y, 3, 8);
       if (h) this.assignBuilder(h);
     }
