@@ -266,11 +266,11 @@ export const UNITS: Record<string, UnitDef> = {
     name: "Champion",
     desc: "Your unique hero. Towering in a fight, grows stronger with every kill, and rises again at your Town Center if he falls.",
     armorClass: ArmorClass.Infantry,
-    hp: 260,
+    hp: 230,
     attack: 12,
     range: 0,
     attackInterval: 1.0,
-    armor: 3,
+    armor: 2,
     speed: 96,
     visionRange: 190,
     radius: 12,
@@ -281,7 +281,7 @@ export const UNITS: Record<string, UnitDef> = {
     age: 0,
     ranged: false,
     hero: true,
-    bonus: { [ArmorClass.Archer]: 5, [ArmorClass.Siege]: 6, [ArmorClass.Cavalry]: 6, [ArmorClass.Building]: 4 },
+    bonus: { [ArmorClass.Archer]: 3, [ArmorClass.Siege]: 4, [ArmorClass.Cavalry]: 4, [ArmorClass.Building]: 3 },
   }),
 
   trebuchet: U({

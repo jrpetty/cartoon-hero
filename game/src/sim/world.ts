@@ -103,7 +103,7 @@ export const HERO_HP_PER_LVL = 24;
 export const HERO_ATK_PER_LVL = 2;
 /** Kills needed to reach veterancy ranks 1..3 (Veteran / Elite / Legendary). */
 export const VET_THRESHOLDS = [2, 5, 9];
-const HERO_RESPAWN_SEC = 45;
+const HERO_RESPAWN_SEC = 65;
 
 export interface WorldEvent {
   kind:

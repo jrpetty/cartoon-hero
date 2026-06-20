@@ -509,7 +509,7 @@ describe("Hero units", () => {
     w.dealDamage(Team.Enemy, hero, 99999, "militia");
     expect(w.player(Team.Player).heroState).toBe("respawning");
     expect(w.countOf(Team.Player, "hero")).toBe(0);
-    run(w, 47); // respawn timer is 45s
+    run(w, 67); // respawn timer is 65s
     expect(w.player(Team.Player).heroState).toBe("alive");
     expect(w.countOf(Team.Player, "hero")).toBe(1);
   });
