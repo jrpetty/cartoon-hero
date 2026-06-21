@@ -11,11 +11,29 @@ import { generateMap } from "../maps/generator";
 import { UNITS } from "../content/units";
 import { SIM_HZ } from "../content/balance";
 import { activeTraits, applyBuff, traitsOf, ActiveTrait } from "./traits";
+import { applyItems } from "./items";
 
 export interface UnitStack {
   type: string;
   count: number;
   star?: number; // 1..3 — TFT-style upgrade; scales HP & attack
+}
+
+/** A single placed unit (player boards expand to these — carries items). */
+export interface ArenaUnit {
+  type: string;
+  star?: number;
+  items?: string[];
+}
+
+/** Expand stacks (count>1) and pass through single units into a flat unit list. */
+function normalize(list: (UnitStack | ArenaUnit)[]): ArenaUnit[] {
+  const out: ArenaUnit[] = [];
+  for (const u of list) {
+    const n = (u as UnitStack).count ?? 1;
+    for (let k = 0; k < n; k++) out.push({ type: u.type, star: u.star, items: (u as ArenaUnit).items });
+  }
+  return out;
 }
 
 export interface BattleResult {
@@ -30,41 +48,37 @@ export interface BattleResult {
 
 const STAR_MULT = [1, 1, 1.8, 3.2]; // index by star (1..3)
 
-function spawnArmy(w: World, stacks: UnitStack[], team: Team, side: number): EntityId[] {
+function spawnArmy(w: World, units: ArenaUnit[], team: Team, side: number): EntityId[] {
   const cx = w.worldW / 2;
   const cy = w.worldH / 2;
   const ids: EntityId[] = [];
   // Active synergies for this side's composition (by distinct deployed types).
-  const traits = activeTraits([...new Set(stacks.map((s) => s.type))]);
+  const traits = activeTraits([...new Set(units.map((u) => u.type))]);
   const buffByType = new Map<string, ActiveTrait[]>();
-  let i = 0;
-  for (const s of stacks) {
-    if (!UNITS[s.type]) continue;
-    const star = Math.max(1, Math.min(3, s.star ?? 1));
+  units.forEach((au, i) => {
+    if (!UNITS[au.type]) return;
+    const star = Math.max(1, Math.min(3, au.star ?? 1));
     const mult = STAR_MULT[star];
-    // Which active traits buff this unit type.
-    let myTraits = buffByType.get(s.type);
+    let myTraits = buffByType.get(au.type);
     if (!myTraits) {
-      const mine = new Set(traitsOf(s.type).map((t) => t.id));
+      const mine = new Set(traitsOf(au.type).map((t) => t.id));
       myTraits = traits.filter((at) => mine.has(at.trait.id) && at.tier);
-      buffByType.set(s.type, myTraits);
+      buffByType.set(au.type, myTraits);
     }
-    for (let k = 0; k < s.count; k++) {
-      const x = cx + side * 170 + (i % 4) * 16 * side;
-      const y = cy - 50 + Math.floor(i / 4) * 18;
-      const u = w.spawnUnit(team, s.type, x, y);
-      if (mult !== 1) {
-        u.maxHp = Math.round(u.maxHp * mult);
-        u.hp = u.maxHp;
-        u.attack = Math.round(u.attack * mult);
-      }
-      for (const at of myTraits) if (at.tier) applyBuff(u, at.tier.buff);
-      u.stance = Stance.Aggressive; // hunt — no economy, just fight
-      u.variantRarity = star - 1; // a visual tier glow if rendered
-      ids.push(u.id);
-      i++;
+    const x = cx + side * 170 + (i % 4) * 16 * side;
+    const y = cy - 50 + Math.floor(i / 4) * 18;
+    const u = w.spawnUnit(team, au.type, x, y);
+    if (mult !== 1) {
+      u.maxHp = Math.round(u.maxHp * mult);
+      u.hp = u.maxHp;
+      u.attack = Math.round(u.attack * mult);
     }
-  }
+    for (const at of myTraits) if (at.tier) applyBuff(u, at.tier.buff);
+    if (au.items?.length) applyItems(u, au.items);
+    u.stance = Stance.Aggressive; // hunt — no economy, just fight
+    u.variantRarity = star - 1; // a visual tier glow if rendered
+    ids.push(u.id);
+  });
   return ids;
 }
 
@@ -79,15 +93,17 @@ const alivePower = (w: World, team: Team): { count: number; power: number } => {
   return { count, power };
 };
 
-export function resolveBattle(a: UnitStack[], b: UnitStack[], seed = 1, maxSeconds = 40): BattleResult {
+export function resolveBattle(
+  a: (UnitStack | ArenaUnit)[], b: (UnitStack | ArenaUnit)[], seed = 1, maxSeconds = 40,
+): BattleResult {
   const map = generateMap("open_plains", seed, 2);
   const w = new World(seed);
   w.init(map, [{}, {}], [1, 1], [0, 1]); // two hostile sides
   const cx = w.worldW / 2;
   const cy = w.worldH / 2;
 
-  const idsA = spawnArmy(w, a, Team.Player, -1);
-  const idsB = spawnArmy(w, b, Team.Enemy, 1);
+  const idsA = spawnArmy(w, normalize(a), Team.Player, -1);
+  const idsB = spawnArmy(w, normalize(b), Team.Enemy, 1);
   // March both lines into the centre so they actually clash.
   w.issueFormationMove(idsA, cx + 30, cy, false, true);
   w.issueFormationMove(idsB, cx - 30, cy, false, true);

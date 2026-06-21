@@ -7,12 +7,14 @@ import { PAL, withAlpha } from "../render/palette";
 import { UNITS } from "../content/units";
 import { WarbandRun, UNIT_TIER, Piece } from "../sim/warband";
 import { traitsOf } from "../sim/traits";
+import { ITEMS } from "../sim/items";
 
 const TIER_COLOR = ["#888888", "#9aa8b4", "#4caf50", "#3a78d8", "#9b5cf0", "#e0a020"];
 const shortName = (type: string) => (UNITS[type]?.name ?? type).split(" ")[0];
 const stars = (n: number) => "★".repeat(n);
 
 export class WarbandScreen {
+  private selectedItem = -1; // index into the run's item stash, or -1
   draw(W: number, H: number, time: number, run: WarbandRun): "exit" | null {
     const ctx = ui.ctx;
     ctx.fillStyle = "#15110b";
@@ -73,6 +75,30 @@ export class WarbandScreen {
     const bx = 232;
     const bw = W - bx - 16;
     ui.text(`Your Warband  (deploying top ${run.level})`, bx, 80, { size: 14, bold: true, color: PAL.uiAccent });
+    // ---- relic stash tray ----
+    if (run.phase === "shop") {
+      let tx = bx + 290;
+      ui.text("Relics:", tx, 80, { size: 12, color: "#9a917b" });
+      tx += 52;
+      if (run.itemStash.length === 0) ui.text("—", tx, 80, { size: 12, color: "#6f6a5c" });
+      run.itemStash.forEach((id, idx) => {
+        const it = ITEMS[id];
+        if (!it) return;
+        const cw = 60;
+        const cyy = 66;
+        const sel = this.selectedItem === idx;
+        const hov = ui.mx >= tx && ui.mx <= tx + cw && ui.my >= cyy && ui.my <= cyy + 22;
+        ctx.fillStyle = sel ? withAlpha(it.color, 0.5) : hov ? withAlpha(it.color, 0.3) : withAlpha(it.color, 0.16);
+        ctx.fillRect(tx, cyy, cw, 22);
+        ctx.strokeStyle = it.color; ctx.lineWidth = sel ? 2 : 1; ctx.strokeRect(tx + 0.5, cyy + 0.5, cw - 1, 21);
+        ui.text(it.short, tx + cw / 2, cyy + 15, { align: "center", size: 11, bold: true, color: it.color });
+        if (hov && ui.clicked && !ui.pointerConsumed) { ui.pointerConsumed = true; this.selectedItem = sel ? -1 : idx; }
+        tx += cw + 6;
+      });
+      if (this.selectedItem >= 0 && this.selectedItem < run.itemStash.length) {
+        ui.text("→ click a unit to equip", tx + 6, 80, { size: 11, bold: true, color: "#ffd24a" });
+      } else this.selectedItem = -1;
+    }
     const cap = run.level;
     const order = run.pieces.map((_, i) => i).sort((a, b) =>
       run.pieces[b].star - run.pieces[a].star || (UNIT_TIER[run.pieces[b].type] ?? 0) - (UNIT_TIER[run.pieces[a].type] ?? 0));
@@ -85,7 +111,12 @@ export class WarbandScreen {
       const row = Math.floor(i / perRow);
       const cx = bx + col * (cardW + 8);
       const cy = 96 + row * (cardH + 8);
-      this.pieceCard(cx, cy, cardW, cardH, p, deployedSet.has(i), () => { if (run.phase === "shop") run.sell(i); });
+      this.pieceCard(cx, cy, cardW, cardH, p, deployedSet.has(i), () => {
+        if (run.phase !== "shop") return;
+        if (this.selectedItem >= 0 && this.selectedItem < run.itemStash.length) {
+          if (run.equipItem(this.selectedItem, i)) this.selectedItem = -1;
+        } else run.sell(i);
+      });
     });
     if (run.pieces.length === 0) ui.text("Buy units from the shop below…", bx, 120, { size: 13, color: "#9a917b" });
 
@@ -145,8 +176,15 @@ export class WarbandScreen {
     ctx.strokeStyle = withAlpha(TIER_COLOR[tier], deployed ? 1 : 0.5);
     ctx.lineWidth = deployed ? 2 : 1;
     ctx.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1);
-    ui.text(shortName(p.type), x + w / 2, y + 22, { align: "center", size: 12, bold: true, color: "#e7ddc4" });
-    ui.text(stars(p.star), x + w / 2, y + 40, { align: "center", size: 13, color: p.star >= 3 ? "#ffd24a" : p.star === 2 ? "#cfe0ff" : "#9a917b" });
+    ui.text(shortName(p.type), x + w / 2, y + 20, { align: "center", size: 12, bold: true, color: "#e7ddc4" });
+    ui.text(stars(p.star), x + w / 2, y + 36, { align: "center", size: 13, color: p.star >= 3 ? "#ffd24a" : p.star === 2 ? "#cfe0ff" : "#9a917b" });
+    // Equipped relics as colored pips along the bottom.
+    let ix = x + 5;
+    for (const id of p.items) {
+      ctx.fillStyle = ITEMS[id]?.color ?? "#fff";
+      ctx.fillRect(ix, y + h - 9, 8, 6);
+      ix += 10;
+    }
     if (hover && ui.clicked && !ui.pointerConsumed) { ui.pointerConsumed = true; onClick(); }
   }
 

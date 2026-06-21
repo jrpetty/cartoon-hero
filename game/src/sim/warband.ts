@@ -6,8 +6,9 @@
 
 import { RNG } from "../engine/rng";
 import { UNITS } from "../content/units";
-import { resolveBattle, UnitStack } from "./autobattle";
+import { resolveBattle, UnitStack, ArenaUnit } from "./autobattle";
 import { activeTraits, ActiveTrait } from "./traits";
+import { ITEM_IDS, MAX_ITEMS } from "./items";
 
 /** Shop tier (1 cheap/weak … 5 rare/strong); buying costs the tier in gold. */
 export const UNIT_TIER: Record<string, number> = {
@@ -38,7 +39,7 @@ const REROLL_COST = 2;
 const XP_BUY = 4; // gold → +4 xp
 const MAX_LEVEL = 9;
 
-export interface Piece { type: string; star: number; } // star 1..3
+export interface Piece { type: string; star: number; items: string[]; } // star 1..3
 export interface Opponent { id: number; name: string; life: number; alive: boolean; }
 
 const NAMES = ["Ironclad", "Crimson", "Verdant", "Stormcrow", "Ashveil", "Goldhand", "Nightfall"];
@@ -52,6 +53,7 @@ export class WarbandRun {
   streak = 0; // +win streak / −loss streak
   life = 100;
   pieces: Piece[] = []; // bench + board combined; the top `level` deploy
+  itemStash: string[] = []; // unequipped relics
   shop: (string | null)[] = [];
   opponents: Opponent[] = [];
   phase: "shop" | "result" | "over" = "shop";
@@ -104,7 +106,7 @@ export class WarbandRun {
     if (this.gold < c) return false;
     this.gold -= c;
     this.shop[slot] = null;
-    this.pieces.push({ type, star: 1 });
+    this.pieces.push({ type, star: 1, items: [] });
     this.merge();
     return true;
   }
@@ -129,15 +131,49 @@ export class WarbandRun {
         for (const [type, n] of Object.entries(counts)) {
           if (n >= 3) {
             let removed = 0;
+            const carried: string[] = [];
             for (let i = this.pieces.length - 1; i >= 0 && removed < 3; i--) {
-              if (this.pieces[i].type === type && this.pieces[i].star === star) { this.pieces.splice(i, 1); removed++; }
+              if (this.pieces[i].type === type && this.pieces[i].star === star) {
+                carried.push(...this.pieces[i].items); // the upgrade inherits the components' relics
+                this.pieces.splice(i, 1);
+                removed++;
+              }
             }
-            this.pieces.push({ type, star: star + 1 });
+            const keep = carried.slice(0, MAX_ITEMS);
+            this.itemStash.push(...carried.slice(MAX_ITEMS)); // overflow relics go back to the stash
+            this.pieces.push({ type, star: star + 1, items: keep });
             changed = true;
           }
         }
       }
     }
+  }
+
+  /** Equip a stashed relic onto a piece (max 3 per unit). */
+  equipItem(stashIndex: number, pieceIndex: number): boolean {
+    if (this.phase !== "shop") return false;
+    if (stashIndex < 0 || stashIndex >= this.itemStash.length) return false;
+    const p = this.pieces[pieceIndex];
+    if (!p || p.items.length >= MAX_ITEMS) return false;
+    p.items.push(this.itemStash.splice(stashIndex, 1)[0]);
+    return true;
+  }
+
+  /** Indices of the pieces that deploy this round (strongest `level`). */
+  private deployedIndices(): number[] {
+    return this.pieces.map((_, i) => i)
+      .sort((a, b) => this.pieces[b].star - this.pieces[a].star ||
+        (UNIT_TIER[this.pieces[b].type] ?? 0) - (UNIT_TIER[this.pieces[a].type] ?? 0) ||
+        this.pieces[b].items.length - this.pieces[a].items.length)
+      .slice(0, this.boardCap());
+  }
+
+  /** Deployed units (with their relics) for the battle resolver. */
+  boardUnits(): ArenaUnit[] {
+    return this.deployedIndices().map((i) => {
+      const p = this.pieces[i];
+      return { type: p.type, star: p.star, items: p.items };
+    });
   }
 
   /** The units that actually deploy this round (strongest `level` pieces). */
@@ -161,6 +197,8 @@ export class WarbandRun {
     const interest = Math.min(5, Math.floor(this.gold / 10));
     const streakBonus = Math.min(3, Math.abs(this.streak) >= 2 ? Math.floor(Math.abs(this.streak) / 2) + 1 : 0);
     this.gold += 5 + interest + streakBonus;
+    // A relic every few rounds — equip it to build a carry.
+    if (this.round % 3 === 2) this.itemStash.push(ITEM_IDS[this.rng.int(0, ITEM_IDS.length - 1)]);
     this.rollShop();
     this.phase = "shop";
   }
@@ -197,7 +235,7 @@ export class WarbandRun {
     if (!foes.length) { this.outcome = "win"; this.phase = "over"; return; }
     const foe = foes[this.round % foes.length];
     const seed = this.rng.int(1, 1e9);
-    const res = resolveBattle(this.boardStacks(), this.opponentStacks(seed), seed);
+    const res = resolveBattle(this.boardUnits(), this.opponentStacks(seed), seed);
     const won = res.winner === "A";
     const dmg = won ? 0 : 3 + res.powerB * 2; // lose → take damage scaled by enemy survivors
     if (won) {
@@ -244,7 +282,7 @@ export class WarbandRun {
 
   /** Active synergies on your currently-deployed warband (for the screen). */
   activeTraits(): ActiveTrait[] {
-    return activeTraits([...new Set(this.boardStacks().map((s) => s.type))]);
+    return activeTraits([...new Set(this.boardUnits().map((u) => u.type))]);
   }
 
   /** Placement (1 = winner) once the run is over. */
