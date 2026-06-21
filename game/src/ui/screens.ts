@@ -102,7 +102,7 @@ export function drawMenuBackground(W: number, H: number, time: number) {
 // ------------------------------------------------------------------- menu --
 
 export class MenuScreen {
-  draw(W: number, H: number, time: number, profile: Profile): "skirmish" | "multiplayer" | "armory" | "codex" | "settings" | null {
+  draw(W: number, H: number, time: number, profile: Profile): "skirmish" | "multiplayer" | "warband" | "armory" | "codex" | "settings" | null {
     drawMenuBackground(W, H, time);
     const ctx = ui.ctx;
 
@@ -158,13 +158,15 @@ export class MenuScreen {
     ui.bar(W / 2 - 150, H * 0.36 + 36, 300, 9, info.into / info.need, PAL.uiAccent);
     ui.text(`${info.into}/${info.need} XP`, W / 2, H * 0.36 + 54, { align: "center", size: 11, color: "#bdb49a" });
 
-    let action: "skirmish" | "multiplayer" | "armory" | "codex" | "settings" | null = null;
+    let action: "skirmish" | "multiplayer" | "warband" | "armory" | "codex" | "settings" | null = null;
     const bw = 280;
     const bx = W / 2 - bw / 2;
     let by = H * 0.36 + 92;
     if (ui.button("⚔  Skirmish", bx, by, bw, 52, { accent: true, size: 19 })) action = "skirmish";
     by += 60;
     if (ui.button("🔗  Multiplayer", bx, by, bw, 46, { size: 16, tooltip: ["Play online — up to 8 vs 8", "Join a hosted server, or quick 1v1 with no server."] })) action = "multiplayer";
+    by += 56;
+    if (ui.button("🎲  Warband Tactics", bx, by, bw, 46, { size: 16, tooltip: ["Auto-battler", "Draft a warband, merge star-ups, fight for the last spot standing."] })) action = "warband";
     by += 56;
     if (ui.button(`🗝  Armory   (${profile.data.renown} ✦)`, bx, by, bw, 48, { size: 16 })) action = "armory";
     by += 56;

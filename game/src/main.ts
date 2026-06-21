@@ -15,6 +15,8 @@ import { SkirmishAI } from "./ai/skirmish_ai";
 import { DIFFICULTIES } from "./ai/difficulty";
 import { Camera } from "./engine/camera";
 import { wallLinePoints as computeWallLine } from "./engine/wallline";
+import { WarbandRun } from "./sim/warband";
+import { WarbandScreen } from "./ui/warband_screen";
 import { Input } from "./engine/input";
 import { Particles } from "./engine/particles";
 import { audio } from "./engine/audio";
@@ -47,7 +49,7 @@ import { drawProductionPanel } from "./ui/production_panel";
 import { Weather } from "./render/weather";
 import { drawChat, ChatLine } from "./ui/chat";
 
-type AppState = "menu" | "setup" | "armory" | "match" | "postmatch" | "codex" | "settings";
+type AppState = "menu" | "setup" | "armory" | "match" | "postmatch" | "codex" | "settings" | "warband";
 
 // Buildings you can drag-paint into a continuous run.
 const LINE_BUILDABLE = new Set(["palisade", "stone_wall"]);
@@ -68,6 +70,8 @@ class App {
   postmatch = new PostMatchScreen();
   codexScreen = new CodexScreen();
   settingsScreen = new SettingsScreen();
+  warbandScreen = new WarbandScreen();
+  warband: WarbandRun | null = null;
   settings: Settings = loadSettings();
   private settingsReturn: AppState = "menu"; // where Back from settings goes
 
@@ -1150,6 +1154,10 @@ class App {
         } else if (action === "multiplayer") {
           audio.play("ui");
           this.lobby.open((start) => this.startNetMatch(start));
+        } else if (action === "warband") {
+          this.warband = new WarbandRun();
+          this.state = "warband";
+          audio.play("ui");
         } else if (action === "armory") {
           this.state = "armory";
           audio.play("ui");
@@ -1158,6 +1166,12 @@ class App {
           audio.play("ui");
         } else if (action === "settings") {
           this.openSettings("menu");
+        }
+      } else if (this.state === "warband" && this.warband) {
+        if (this.warbandScreen.draw(W, H, this.time, this.warband) === "exit") {
+          this.warband = null;
+          this.state = "menu";
+          audio.play("ui");
         }
       } else if (this.state === "settings") {
         const a = this.settingsScreen.draw(W, H, this.time, this.settings, this.input.leftDown);
