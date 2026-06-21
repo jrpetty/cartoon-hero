@@ -468,6 +468,16 @@ export class WarbandScreen {
     const ents = b.world.entities
       .filter((e) => e.alive && e.kind === Kind.Unit && e.type !== "villager" && (!setup || e.team === 0))
       .sort((p, q) => p.y - q.y);
+    // In setup, draw each unit at the EXACT centre of its assigned arena cell.
+    // (The sim snaps spawn positions to its 32-unit nav grid, which doesn't line
+    //  up with the 40-unit board cells — so we use the cell, not the entity pos.)
+    const cellByEnt = new Map<number, { col: number; row: number }>();
+    if (setup) {
+      const players = b.world.entities
+        .filter((e) => e.alive && e.kind === Kind.Unit && e.type !== "villager" && e.team === 0)
+        .sort((p, q) => p.id - q.id);
+      players.forEach((e, k) => { const d = deployment[k]; if (d) cellByEnt.set(e.id, { col: d.col, row: d.row }); });
+    }
     setTeamColorResolver(null);
     ctx.save();
     ctx.beginPath(); ctx.rect(x, y, w, h); ctx.clip();
@@ -476,7 +486,9 @@ export class WarbandScreen {
     if (sh > 0.1) ctx.translate((Math.random() * 2 - 1) * sh, (Math.random() * 2 - 1) * sh);
     const starGlow = ["#9aa8b4", "#cfe0ff", "#ffd24a"]; // 1★ / 2★ / 3★
     for (const e of ents) {
-      const sx = mapX(e.x), sy = mapY(e.y);
+      const cell = cellByEnt.get(e.id);
+      const sx = cell ? x + (cell.col + 0.5) * cellW : mapX(e.x);
+      const sy = cell ? y + (cell.row + 0.5) * cellH : mapY(e.y);
       const lifted = e.id === heldEntityId;
       // Anchor the feet below the cell centre so the unit's BODY sits in the
       // middle of the square (the sprite is feet-anchored and rises upward).
