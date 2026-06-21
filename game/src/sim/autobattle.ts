@@ -19,11 +19,25 @@ export interface UnitStack {
   star?: number; // 1..3 — TFT-style upgrade; scales HP & attack
 }
 
-/** A single placed unit (player boards expand to these — carries items). */
+/** A single placed unit (player boards expand to these — carries items + a cell). */
 export interface ArenaUnit {
   type: string;
   star?: number;
   items?: string[];
+  col?: number; // board column 0..9 (0..4 = player half, 5..9 = enemy half)
+  row?: number; // board row 0..9
+}
+
+// The placement board is a 10×10 grid; each side owns a 5×10 half.
+export const GRID_COLS = 10;
+export const GRID_ROWS = 10;
+export const GRID_CELL = 40; // world units per cell
+
+/** Centre of board cell (col,row) in world space, around the arena centre. */
+export function cellToWorld(cx: number, cy: number, col: number, row: number): { x: number; y: number } {
+  const left = cx - (GRID_COLS / 2) * GRID_CELL;
+  const top = cy - (GRID_ROWS / 2) * GRID_CELL;
+  return { x: left + (col + 0.5) * GRID_CELL, y: top + (row + 0.5) * GRID_CELL };
 }
 
 /** Expand stacks (count>1) and pass through single units into a flat unit list. */
@@ -31,7 +45,8 @@ function normalize(list: (UnitStack | ArenaUnit)[]): ArenaUnit[] {
   const out: ArenaUnit[] = [];
   for (const u of list) {
     const n = (u as UnitStack).count ?? 1;
-    for (let k = 0; k < n; k++) out.push({ type: u.type, star: u.star, items: (u as ArenaUnit).items });
+    const a = u as ArenaUnit;
+    for (let k = 0; k < n; k++) out.push({ type: u.type, star: u.star, items: a.items, col: a.col, row: a.row });
   }
   return out;
 }
@@ -68,9 +83,11 @@ function spawnArmy(w: World, units: ArenaUnit[], team: Team, side: number, posFn
       myTraits = traits.filter((at) => mine.has(at.trait.id) && at.tier);
       buffByType.set(au.type, myTraits);
     }
-    const pos = posFn
-      ? posFn(i, n, cx, cy, side)
-      : { x: cx + side * 170 + (i % 4) * 16 * side, y: cy - 50 + Math.floor(i / 4) * 18 };
+    const pos = (au.col != null && au.row != null)
+      ? cellToWorld(cx, cy, au.col, au.row) // explicit board placement wins
+      : posFn
+        ? posFn(i, n, cx, cy, side)
+        : { x: cx + side * 170 + (i % 4) * 16 * side, y: cy - 50 + Math.floor(i / 4) * 18 };
     const u = w.spawnUnit(team, au.type, pos.x, pos.y);
     if (mult !== 1) {
       u.maxHp = Math.round(u.maxHp * mult);

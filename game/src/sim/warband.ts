@@ -39,8 +39,16 @@ const REROLL_COST = 2;
 const XP_BUY = 4; // gold → +4 xp
 const MAX_LEVEL = 9;
 
-export interface Piece { type: string; star: number; items: string[]; } // star 1..3
+export interface Piece { type: string; star: number; items: string[]; col?: number; row?: number; } // star 1..3, col/row = board cell
 export interface Opponent { id: number; name: string; life: number; alive: boolean; }
+
+// Default fill order for auto-placing un-positioned units: front rank first
+// (the column nearest the centre line), rows from the middle outward.
+const ROW_ORDER = [4, 5, 3, 6, 2, 7, 1, 8, 0, 9];
+const PLAYER_CELLS: { c: number; r: number }[] = [];
+for (const c of [4, 3, 2, 1, 0]) for (const r of ROW_ORDER) PLAYER_CELLS.push({ c, r });
+const ENEMY_CELLS: { c: number; r: number }[] = [];
+for (const c of [5, 6, 7, 8, 9]) for (const r of ROW_ORDER) ENEMY_CELLS.push({ c, r });
 
 /** An AI opponent's hidden economy — identical rules to the player's. */
 interface FoeBrain { gold: number; level: number; xp: number; pieces: Piece[]; rng: RNG; }
@@ -190,12 +198,46 @@ export class WarbandRun {
       .slice(0, this.boardCap());
   }
 
-  /** Deployed units (with their relics) for the battle resolver. */
+  /** Deployed units (with relics + board cell) for the battle resolver. Any
+   *  un-positioned unit is auto-placed into the next free front-rank cell. */
   boardUnits(): ArenaUnit[] {
+    const idx = this.deployedIndices();
+    const used = new Set<string>();
+    for (const i of idx) { const p = this.pieces[i]; if (p.col != null && p.row != null) used.add(`${p.col},${p.row}`); }
+    let ai = 0;
+    for (const i of idx) {
+      const p = this.pieces[i];
+      if (p.col == null || p.row == null) {
+        while (ai < PLAYER_CELLS.length && used.has(`${PLAYER_CELLS[ai].c},${PLAYER_CELLS[ai].r}`)) ai++;
+        const cell = PLAYER_CELLS[Math.min(ai, PLAYER_CELLS.length - 1)];
+        p.col = cell.c; p.row = cell.r; used.add(`${cell.c},${cell.r}`); ai++;
+      }
+    }
+    return idx.map((i) => {
+      const p = this.pieces[i];
+      return { type: p.type, star: p.star, items: p.items, col: p.col, row: p.row };
+    });
+  }
+
+  /** The deployed pieces with their board cells (for the placement UI). */
+  deployment(): { index: number; type: string; star: number; col: number; row: number }[] {
+    this.boardUnits(); // ensure every deployed piece has a cell assigned
     return this.deployedIndices().map((i) => {
       const p = this.pieces[i];
-      return { type: p.type, star: p.star, items: p.items };
+      return { index: i, type: p.type, star: p.star, col: p.col!, row: p.row! };
     });
+  }
+
+  /** Move a piece to a board cell on your half (0..4 × 0..9). Swaps if taken. */
+  place(index: number, col: number, row: number): boolean {
+    if (this.phase !== "shop") return false;
+    if (col < 0 || col > 4 || row < 0 || row > 9) return false;
+    const p = this.pieces[index];
+    if (!p) return false;
+    const occ = this.pieces.find((q, qi) => qi !== index && q.col === col && q.row === row);
+    if (occ) { occ.col = p.col; occ.row = p.row; } // swap cells
+    p.col = col; p.row = row;
+    return true;
   }
 
   /** The units that actually deploy this round (strongest `level` pieces). */
@@ -265,13 +307,16 @@ export class WarbandRun {
     }
   }
 
-  /** An opponent's deployed warband — its strongest pieces, same cap as yours. */
+  /** An opponent's deployed warband — its strongest pieces on its own half. */
   private foeBoard(b: FoeBrain): ArenaUnit[] {
     const cap = b.level; // same rule the player plays by
     return [...b.pieces]
       .sort((p, q) => q.star - p.star || (UNIT_TIER[q.type] ?? 0) - (UNIT_TIER[p.type] ?? 0))
       .slice(0, cap)
-      .map((p) => ({ type: p.type, star: p.star }));
+      .map((p, i) => {
+        const cell = ENEMY_CELLS[Math.min(i, ENEMY_CELLS.length - 1)];
+        return { type: p.type, star: p.star, col: cell.c, row: cell.r };
+      });
   }
 
   private livingFoes(): Opponent[] { return this.opponents.filter((o) => o.alive); }

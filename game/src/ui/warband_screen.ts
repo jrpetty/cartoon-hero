@@ -11,7 +11,7 @@ import { Kind } from "../sim/types";
 import { TILE } from "../content/balance";
 import { UNITS } from "../content/units";
 import { WarbandRun, UNIT_TIER, Piece } from "../sim/warband";
-import { LiveBattle } from "../sim/autobattle";
+import { LiveBattle, GRID_COLS, GRID_ROWS, GRID_CELL } from "../sim/autobattle";
 import { traitsOf } from "../sim/traits";
 import { ITEMS } from "../sim/items";
 
@@ -26,10 +26,7 @@ export class WarbandScreen {
   private battleSig = "";
   private stepAccum = 0;
   private lastTime = 0;
-  // Smoothed "camera" over the board so the action stays framed and large.
-  private viewCX = 0;
-  private viewCY = 0;
-  private viewScale = 0;
+  private heldPiece = -1; // piece index "picked up" for placement, or -1
 
   draw(W: number, H: number, time: number, run: WarbandRun): "exit" | null {
     const ctx = ui.ctx;
@@ -107,7 +104,6 @@ export class WarbandScreen {
       if (sig !== this.battleSig || !this.battle) {
         this.battle = new LiveBattle(run.boardUnits(), run.pendingOpp, run.pendingSeed);
         this.battleSig = sig;
-        this.viewScale = 0; // re-frame the camera for the new matchup
       }
     }
     // Advance the live fight in real (scaled) time, then bank the result.
@@ -123,7 +119,7 @@ export class WarbandScreen {
     ui.text(`Your Warband  ·  deploying top ${run.deployCount()}`, boardX, 80, { size: 14, bold: true, color: PAL.uiAccent });
     ui.text(`vs ${run.pendingFoeName()}`, boardX + boardW, 80, { size: 13, bold: true, align: "right", color: "#e0786a" });
 
-    this.drawBoard(boardX, boardY, boardW, boardH, time, dt, run.phase === "shop");
+    this.drawBoard(boardX, boardY, boardW, boardH, time, dt, run);
 
     // ---- bench (your pieces) + relic tray ----
     const benchY = boardBottom + 8;
@@ -188,7 +184,7 @@ export class WarbandScreen {
           this.battle = new LiveBattle(run.boardUnits(), run.pendingOpp, run.pendingSeed);
           this.battle.begin();
           this.stepAccum = 0;
-          this.viewScale = 0;
+          this.heldPiece = -1;
         }
       }
     } else if (run.phase === "battle") {
@@ -224,127 +220,105 @@ export class WarbandScreen {
 
   /** The tiled arena. In setup it shows your placement (enemy hidden); once the
    *  fight starts it reveals and renders the live, animated battle. */
-  private drawBoard(x: number, y: number, w: number, h: number, time: number, dt: number, setup: boolean) {
+  private drawBoard(x: number, y: number, w: number, h: number, time: number, dt: number, run: WarbandRun) {
     const ctx = ui.ctx;
+    const setup = run.phase === "shop";
+    const cellW = w / GRID_COLS;
+    const cellH = h / GRID_ROWS;
+
     ctx.fillStyle = "#0c0a06";
     ctx.fillRect(x - 2, y - 2, w + 4, h + 4);
-    // Checkerboard tiles, player half (left) tinted blue, enemy half (right) red.
-    const cols = 10, rows = 6;
-    const tw = w / cols, tlh = h / rows;
-    for (let c = 0; c < cols; c++) {
-      for (let r = 0; r < rows; r++) {
-        const tx = x + c * tw, ty = y + r * tlh;
+    // 10×10 placement grid: your half (left 5 cols) blue, enemy half (right) red.
+    for (let c = 0; c < GRID_COLS; c++) {
+      for (let r = 0; r < GRID_ROWS; r++) {
+        const tx = x + c * cellW, ty = y + r * cellH;
         const dark = (c + r) % 2 === 0;
-        const mine = c < cols / 2;
+        const mine = c < GRID_COLS / 2;
         ctx.fillStyle = dark ? "#1a261f" : "#212e24";
-        ctx.fillRect(tx, ty, tw + 1, tlh + 1);
-        ctx.fillStyle = withAlpha(mine ? "#3a78d8" : "#d8564a", dark ? 0.06 : 0.03);
-        ctx.fillRect(tx, ty, tw + 1, tlh + 1);
+        ctx.fillRect(tx, ty, cellW + 1, cellH + 1);
+        ctx.fillStyle = withAlpha(mine ? "#3a78d8" : "#d8564a", dark ? 0.07 : 0.035);
+        ctx.fillRect(tx, ty, cellW + 1, cellH + 1);
       }
     }
     ctx.strokeStyle = "rgba(0,0,0,0.22)"; ctx.lineWidth = 1;
     ctx.beginPath();
-    for (let c = 1; c < cols; c++) { ctx.moveTo(x + c * tw, y); ctx.lineTo(x + c * tw, y + h); }
-    for (let r = 1; r < rows; r++) { ctx.moveTo(x, y + r * tlh); ctx.lineTo(x + w, y + r * tlh); }
+    for (let c = 1; c < GRID_COLS; c++) { ctx.moveTo(x + c * cellW, y); ctx.lineTo(x + c * cellW, y + h); }
+    for (let r = 1; r < GRID_ROWS; r++) { ctx.moveTo(x, y + r * cellH); ctx.lineTo(x + w, y + r * cellH); }
     ctx.stroke();
-    ctx.strokeStyle = withAlpha(PAL.uiAccent, 0.3); ctx.lineWidth = 2;
+    ctx.strokeStyle = withAlpha(PAL.uiAccent, 0.32); ctx.lineWidth = 2;
     ctx.beginPath(); ctx.moveTo(x + w / 2, y); ctx.lineTo(x + w / 2, y + h); ctx.stroke();
     ctx.strokeStyle = "rgba(0,0,0,0.5)"; ctx.lineWidth = 3;
     ctx.strokeRect(x + 1.5, y + 1.5, w - 3, h - 3);
 
     if (!this.battle) return;
-    if (setup) this.drawSetup(x, y, w, h, time);
-    else this.drawLiveBattle(x, y, w, h, time, dt);
-  }
+    const b = this.battle;
+    // World ↔ screen mapping: the 10×10 world grid maps onto the board rect, so
+    // a unit on cell (c,r) sits exactly in that on-screen cell.
+    const worldLeft = b.cx - (GRID_COLS / 2) * GRID_CELL;
+    const worldTop = b.cy - (GRID_ROWS / 2) * GRID_CELL;
+    const sxk = w / (GRID_COLS * GRID_CELL);
+    const syk = h / (GRID_ROWS * GRID_CELL);
+    const mapX = (wx: number) => x + (wx - worldLeft) * sxk;
+    const mapY = (wy: number) => y + (wy - worldTop) * syk;
+    const us = (cellH * 0.82) / TILE; // unit drawn ~80% of a cell tall
 
-  /** Setup phase: your deployed units, one per square on your half, enemy hidden. */
-  private drawSetup(x: number, y: number, w: number, h: number, time: number) {
-    const ctx = ui.ctx;
-    // Enemy half is fogged until the battle begins.
-    ctx.fillStyle = "rgba(8,5,3,0.62)";
-    ctx.fillRect(x + w / 2 + 1.5, y + 1.5, w / 2 - 3, h - 3);
-    ui.text("🔒 Enemy warband hidden", x + w * 0.75, y + h / 2 - 8, { align: "center", size: 15, bold: true, color: "#caa" });
-    ui.text("revealed when the battle begins", x + w * 0.75, y + h / 2 + 12, { align: "center", size: 12, color: "#8a8278" });
-
-    const players = this.battle!.world.entities
-      .filter((e) => e.alive && e.kind === Kind.Unit && e.team === 0 && e.type !== "villager")
-      .sort((p, q) => p.id - q.id); // stable deploy order (strongest first)
-    if (!players.length) return;
-
-    // Lay them out one-per-cell on the left half, front rank nearest the centre.
-    const n = players.length;
-    const rowsN = Math.min(4, Math.max(1, Math.ceil(n / 4)));
-    const colsN = Math.max(1, Math.ceil(n / rowsN));
-    const regionW = w * 0.46;
-    const cellW = regionW / colsN;
-    const cellH = (h - 24) / rowsN;
-    const us = Math.min(cellW, cellH) / (TILE * 3.15); // sized to ~1/3 of a cell
-    const rightEdge = x + w / 2 - 14; // front column hugs the divider
-
-    setTeamColorResolver(null);
-    players.forEach((e, i) => {
-      const col = Math.floor(i / rowsN); // 0 = front (nearest centre)
-      const row = i % rowsN;
-      const rowsInCol = col === colsN - 1 ? n - col * rowsN : rowsN;
-      const cellCX = rightEdge - (col + 0.5) * cellW;
-      const cellCY = y + h / 2 + (row - (rowsInCol - 1) / 2) * cellH;
-      // Placement square.
-      ctx.fillStyle = withAlpha("#3a78d8", 0.10);
-      ctx.fillRect(cellCX - cellW / 2 + 3, cellCY - cellH / 2 + 3, cellW - 6, cellH - 6);
-      ctx.strokeStyle = withAlpha("#5a86c8", 0.5); ctx.lineWidth = 1.5;
-      ctx.strokeRect(cellCX - cellW / 2 + 3, cellCY - cellH / 2 + 3, cellW - 6, cellH - 6);
-      // The unit, centred in its square (feet a touch below middle).
-      ctx.save();
-      ctx.beginPath(); ctx.rect(cellCX - cellW / 2, cellCY - cellH / 2, cellW, cellH); ctx.clip();
-      ctx.translate(cellCX, cellCY + TILE * 0.55 * us); // feet just below centre → body centred
-      ctx.scale(us, us);
-      ctx.translate(-e.x, -e.y);
-      try { drawUnit(ctx, e, time, 0); } catch { /* keep the frame alive */ }
-      ctx.restore();
-    });
-  }
-
-  /** Battle phase: render the live sim with an adaptive camera that keeps the
-   *  action framed and the units large as the fight moves and thins. */
-  private drawLiveBattle(x: number, y: number, w: number, h: number, time: number, dt: number) {
-    const ctx = ui.ctx;
-    const b = this.battle!;
-    const ents = b.world.entities
-      .filter((e) => e.alive && e.kind === Kind.Unit && e.type !== "villager")
-      .sort((p, q) => p.y - q.y);
-
-    let tCX = b.cx, tCY = b.cy, tScale = 2.4;
-    if (ents.length) {
-      let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
-      for (const e of ents) { minX = Math.min(minX, e.x); maxX = Math.max(maxX, e.x); minY = Math.min(minY, e.y); maxY = Math.max(maxY, e.y); }
-      // Sprites anchor at the feet and rise, so extend the box up to cover bodies.
-      const top = minY - 38, bottom = maxY + 10;
-      const bw = (maxX - minX) + 70 * 2;
-      const bh = (bottom - top) + 24 * 2;
-      tCX = (minX + maxX) / 2;
-      tCY = (top + bottom) / 2;
-      tScale = Math.max(1.6, Math.min(3.8, Math.min(w / bw, h / bh)));
+    // ---- placement interaction (setup only) ----
+    const deployment = setup ? run.deployment() : [];
+    if (setup) {
+      const hovC = Math.floor((ui.mx - x) / cellW);
+      const hovR = Math.floor((ui.my - y) / cellH);
+      const inPlayer = ui.mx >= x && ui.mx < x + w && ui.my >= y && ui.my < y + h && hovC >= 0 && hovC <= 4 && hovR >= 0 && hovR <= 9;
+      // Highlight the held unit's cell, then the hovered cell.
+      const held = deployment.find((d) => d.index === this.heldPiece);
+      if (held) {
+        ctx.strokeStyle = "#ffd24a"; ctx.lineWidth = 2.5;
+        ctx.strokeRect(x + held.col * cellW + 2, y + held.row * cellH + 2, cellW - 4, cellH - 4);
+      }
+      if (inPlayer) {
+        ctx.fillStyle = withAlpha(this.heldPiece >= 0 ? "#ffd24a" : "#cfe0ff", 0.16);
+        ctx.fillRect(x + hovC * cellW + 1, y + hovR * cellH + 1, cellW - 2, cellH - 2);
+      }
+      if (ui.clicked && !ui.pointerConsumed) {
+        if (inPlayer) {
+          ui.pointerConsumed = true;
+          const occ = deployment.find((d) => d.col === hovC && d.row === hovR);
+          if (this.heldPiece >= 0) { run.place(this.heldPiece, hovC, hovR); this.heldPiece = -1; }
+          else if (occ) this.heldPiece = occ.index;
+        } else this.heldPiece = -1;
+      }
     }
-    if (this.viewScale === 0) { this.viewCX = tCX; this.viewCY = tCY; this.viewScale = tScale; }
-    const k = Math.min(1, dt * 3.5);
-    this.viewCX += (tCX - this.viewCX) * k;
-    this.viewCY += (tCY - this.viewCY) * k;
-    this.viewScale += (tScale - this.viewScale) * k;
 
+    // ---- enemy fog (setup) ----
+    if (setup) {
+      ctx.fillStyle = "rgba(8,5,3,0.66)";
+      ctx.fillRect(x + w / 2 + 1.5, y + 1.5, w / 2 - 3, h - 3);
+      ui.text("🔒 Enemy warband hidden", x + w * 0.75, y + h / 2 - 8, { align: "center", size: 15, bold: true, color: "#caa" });
+      ui.text("revealed when the battle begins", x + w * 0.75, y + h / 2 + 12, { align: "center", size: 12, color: "#8a8278" });
+      ui.text(this.heldPiece >= 0 ? "Click a cell to place the unit" : "Click a unit, then a cell, to position your warband",
+        x + w * 0.25, y + h - 12, { align: "center", size: 12, color: this.heldPiece >= 0 ? "#ffd24a" : "#9a917b" });
+    }
+
+    // ---- units ----
+    const ents = b.world.entities
+      .filter((e) => e.alive && e.kind === Kind.Unit && e.type !== "villager" && (!setup || e.team === 0))
+      .sort((p, q) => p.y - q.y);
     setTeamColorResolver(null);
     ctx.save();
     ctx.beginPath(); ctx.rect(x, y, w, h); ctx.clip();
-    ctx.translate(x + w / 2, y + h / 2);
-    ctx.scale(this.viewScale, this.viewScale);
-    ctx.translate(-this.viewCX, -this.viewCY);
     for (const e of ents) {
+      const sx = mapX(e.x), sy = mapY(e.y);
+      ctx.save();
+      ctx.translate(sx, sy + cellH * 0.20); // feet a touch below cell centre
+      ctx.scale(us, us);
+      ctx.translate(-e.x, -e.y);
       try { drawUnit(ctx, e, time, 0); } catch { /* never let one unit kill the frame */ }
+      ctx.restore();
       const frac = Math.max(0, Math.min(1, e.hp / e.maxHp));
-      if (frac < 1) {
-        const barW = 24, barH = 3.5, byy = e.y - 26;
-        ctx.fillStyle = "rgba(0,0,0,0.75)"; ctx.fillRect(e.x - barW / 2, byy, barW, barH);
+      if (!setup && frac < 1) {
+        const barW = cellW * 0.5, barH = 3, byy = sy - cellH * 0.32;
+        ctx.fillStyle = "rgba(0,0,0,0.75)"; ctx.fillRect(sx - barW / 2, byy, barW, barH);
         ctx.fillStyle = e.team === 0 ? "#5ad06a" : "#e0564a";
-        ctx.fillRect(e.x - barW / 2, byy, barW * frac, barH);
+        ctx.fillRect(sx - barW / 2, byy, barW * frac, barH);
       }
     }
     ctx.restore();
@@ -352,7 +326,7 @@ export class WarbandScreen {
 
   /** A signature of the current matchup — rebuild the preview when it changes. */
   private sig(run: WarbandRun): string {
-    const board = run.boardUnits().map((u) => `${u.type}${u.star ?? 1}${(u.items ?? []).join(",")}`).join("|");
+    const board = run.boardUnits().map((u) => `${u.type}${u.star ?? 1}@${u.col},${u.row}:${(u.items ?? []).join(",")}`).join("|");
     return `${run.round}:${run.pendingSeed}:${board}`;
   }
 

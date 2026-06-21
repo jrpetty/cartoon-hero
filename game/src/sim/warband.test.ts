@@ -70,6 +70,31 @@ describe("Warband Tactics run engine", () => {
     expect(foeLifeAfter <= foeLifeBefore).toBe(true);
   });
 
+  it("places units on distinct board cells and lets you move/swap them", () => {
+    const run = new WarbandRun(8);
+    run.gold = 50; run.level = 4;
+    run.shop = ["knight", "archer", "spearman", "militia", "horseman"];
+    run.buy(0); run.buy(1); run.buy(2); run.buy(3);
+    // Every deployed unit gets a unique cell on the player's half (cols 0..4).
+    const dep = run.deployment();
+    expect(dep.length).toBe(4);
+    const cells = new Set(dep.map((d) => `${d.col},${d.row}`));
+    expect(cells.size).toBe(4);
+    for (const d of dep) { expect(d.col).toBeGreaterThanOrEqual(0); expect(d.col).toBeLessThanOrEqual(4); }
+    // Move one unit to an empty cell.
+    expect(run.place(dep[0].index, 0, 9)).toBe(true);
+    expect(run.deployment().find((d) => d.index === dep[0].index)).toMatchObject({ col: 0, row: 9 });
+    // Placing onto an occupied cell swaps the two.
+    const a = run.deployment().find((d) => d.index === dep[1].index)!;
+    const targetCell = run.deployment().find((d) => d.index === dep[2].index)!;
+    run.place(a.index, targetCell.col, targetCell.row);
+    const after = run.deployment();
+    expect(after.find((d) => d.index === a.index)).toMatchObject({ col: targetCell.col, row: targetCell.row });
+    // Off-board cells are rejected.
+    expect(run.place(dep[0].index, 5, 0)).toBe(false); // col 5 is the enemy half
+    expect(run.place(dep[0].index, 0, 10)).toBe(false);
+  });
+
   it("opponents run the same economy and field a warband that grows over rounds", () => {
     const run = new WarbandRun(3);
     const sizes: number[] = [];
