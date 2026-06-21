@@ -6,6 +6,8 @@
 
 import { ui } from "./ui";
 import { isMouseDown } from "./screens";
+import { WarbandFx } from "./warband_fx";
+import { audio } from "../engine/audio";
 import { PAL, withAlpha } from "../render/palette";
 import { drawUnit, setTeamColorResolver } from "../render/draw";
 import { Kind } from "../sim/types";
@@ -37,6 +39,8 @@ export class WarbandScreen {
   private pressX = 0;
   private pressY = 0;
   private sellBox = { x: 0, y: 0, w: 0, h: 0 }; // last frame's sell-box rect
+  private fx = new WarbandFx();
+  private prevPhase = "shop";
 
   draw(W: number, H: number, time: number, run: WarbandRun): "exit" | null {
     const ctx = ui.ctx;
@@ -55,18 +59,28 @@ export class WarbandScreen {
     let action: "exit" | null = null;
 
     // ---- header ----
-    ctx.fillStyle = "rgba(8,6,3,0.9)";
-    ctx.fillRect(0, 0, W, 56);
-    ui.text("⚔ Warband Tactics", 20, 34, { size: 22, bold: true, color: PAL.uiAccent, font: "Georgia, serif" });
-    const stat = (label: string, val: string, x: number, col = "#e7ddc4") => {
-      ui.text(label, x, 22, { size: 11, color: "#9a917b" });
-      ui.text(val, x, 42, { size: 18, bold: true, color: col });
+    const hg = ctx.createLinearGradient(0, 0, 0, 56);
+    hg.addColorStop(0, "rgba(26,19,10,0.96)"); hg.addColorStop(1, "rgba(8,6,3,0.94)");
+    ctx.fillStyle = hg; ctx.fillRect(0, 0, W, 56);
+    ctx.fillStyle = withAlpha(PAL.uiAccent, 0.5); ctx.fillRect(0, 55, W, 1.5);
+    ui.text("⚔ Warband Tactics", 20, 35, { size: 22, bold: true, color: PAL.uiAccent, font: "Georgia, serif" });
+    const stat = (label: string, val: string, x: number, col = "#e7ddc4", icon?: () => void) => {
+      ctx.fillStyle = "rgba(0,0,0,0.3)"; this.roundRect(ctx, x - 10, 8, 74, 40, 6); ctx.fill();
+      ui.text(label, x, 22, { size: 10, color: "#9a917b" });
+      ui.text(val, icon ? x + 16 : x, 43, { size: 18, bold: true, color: col });
+      if (icon) icon();
     };
     stat("ROUND", String(run.round), 280);
-    stat("GOLD", String(run.gold), 360, "#ffd24a");
-    stat("LEVEL", String(run.level), 440);
-    stat("LIFE", String(run.life), 520, run.life <= 25 ? "#e0564a" : "#7df2a9");
-    stat("STREAK", (run.streak > 0 ? "+" : "") + run.streak, 600, run.streak > 0 ? "#7df2a9" : run.streak < 0 ? "#e0a878" : "#9a917b");
+    stat("GOLD", String(run.gold), 360, "#ffd24a", () => {
+      ctx.save(); ctx.shadowColor = "#ffd24a"; ctx.shadowBlur = 6;
+      const cg = ctx.createRadialGradient(364, 35, 1, 366, 37, 7);
+      cg.addColorStop(0, "#ffe89a"); cg.addColorStop(1, "#e0a52a");
+      ctx.fillStyle = cg; ctx.beginPath(); ctx.arc(366, 37, 6.5, 0, Math.PI * 2); ctx.fill(); ctx.restore();
+      ctx.strokeStyle = "#a8771e"; ctx.lineWidth = 1; ctx.beginPath(); ctx.arc(366, 37, 6.5, 0, Math.PI * 2); ctx.stroke();
+    });
+    stat("LEVEL", String(run.level), 452);
+    stat("LIFE", String(run.life), 540, run.life <= 25 ? "#e0564a" : "#7df2a9");
+    stat("STREAK", (run.streak > 0 ? "+" : "") + run.streak, 628, run.streak > 0 ? "#7df2a9" : run.streak < 0 ? "#e0a878" : "#9a917b");
     if (ui.button("Quit Run", W - 120, 12, 100, 32, { danger: true, size: 13 })) action = "exit";
 
     // ---- standings sidebar ----
@@ -128,7 +142,16 @@ export class WarbandScreen {
       this.stepAccum += dt * 20 * BATTLE_SPEED; // 20 = SIM_HZ
       const n = Math.floor(this.stepAccum);
       if (n > 0) { this.stepAccum -= n; this.battle.step(n); }
+      if (this.battle.fxEvents.length) { this.fx.ingest(this.battle.fxEvents); this.battle.fxEvents.length = 0; }
       if (this.battle.done) run.finishFight(this.battle.result());
+    }
+    this.fx.update(dt);
+    // Phase-transition stingers.
+    if (run.phase !== this.prevPhase) {
+      if (run.phase === "battle") audio.play("alert");
+      else if (run.phase === "result" && run.lastResult) audio.play(run.lastResult.won ? "complete" : "collapse");
+      else if (run.phase === "shop") this.fx.clear();
+      this.prevPhase = run.phase;
     }
 
     // ---- board title + enemy banner ----
@@ -178,7 +201,7 @@ export class WarbandScreen {
         const equipping = this.selectedItem >= 0 && this.selectedItem < run.itemStash.length;
         if (equipping && ui.clicked) { ui.pointerConsumed = true; if (run.equipItem(this.selectedItem, i)) this.selectedItem = -1; }
         else if (!equipping && this.pressEdge && this.heldPiece < 0) {
-          this.heldPiece = i; this.heldFromBoard = false; this.grabbedThisPress = true; ui.pointerConsumed = true;
+          this.heldPiece = i; this.heldFromBoard = false; this.grabbedThisPress = true; ui.pointerConsumed = true; audio.play("select");
         }
       }
     });
@@ -196,12 +219,12 @@ export class WarbandScreen {
       run.shop.forEach((type, i) => {
         const cx = bx + i * (sw + 8);
         const cy = shopY + 14;
-        if (type) this.shopCard(cx, cy, sw, 70, type, run.gold >= run.cost(type), () => run.buy(i));
+        if (type) this.shopCard(cx, cy, sw, 70, type, run.gold >= run.cost(type), () => { if (run.buy(i)) audio.play("coin"); });
         else { ctx.fillStyle = "rgba(0,0,0,0.25)"; ctx.fillRect(cx, cy, sw, 70); }
       });
       const rxx = bx + 5 * (120 + 8) + 8;
-      if (ui.button("Reroll  (2g)", rxx, shopY + 14, 130, 32, { disabled: run.gold < 2, size: 13, tooltip: ["New shop", "Costs 2 gold."] })) run.reroll();
-      if (ui.button(`Level Up  (4g)`, rxx, shopY + 52, 130, 32, { disabled: run.gold < 4 || run.level >= 9, size: 13, tooltip: ["+4 XP", "Raises board size & shop odds."] })) run.buyXp();
+      if (ui.button("Reroll  (2g)", rxx, shopY + 14, 130, 32, { disabled: run.gold < 2, size: 13, tooltip: ["New shop", "Costs 2 gold."] })) { if (run.reroll()) audio.play("ui"); }
+      if (ui.button(`Level Up  (4g)`, rxx, shopY + 52, 130, 32, { disabled: run.gold < 4 || run.level >= 9, size: 13, tooltip: ["+4 XP", "Raises board size & shop odds."] })) { if (run.buyXp()) audio.play("levelup"); }
       if (ui.button("⚔ FIGHT", rxx, shopY + 92, 130, 36, { accent: true, size: 16, tooltip: ["Send your warband into the arena."] })) {
         if (run.beginFight()) {
           this.battle = new LiveBattle(run.boardUnits(), run.pendingOpp, run.pendingSeed);
@@ -254,6 +277,81 @@ export class WarbandScreen {
     return action;
   }
 
+  private roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.arcTo(x + w, y, x + w, y + h, r);
+    ctx.arcTo(x + w, y + h, x, y + h, r);
+    ctx.arcTo(x, y + h, x, y, r);
+    ctx.arcTo(x, y, x + w, y, r);
+    ctx.closePath();
+  }
+
+  private brazier(ctx: CanvasRenderingContext2D, cx: number, cy: number, time: number) {
+    ctx.fillStyle = "#1c150e"; ctx.beginPath(); ctx.ellipse(cx, cy + 2, 8, 4, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = "#2a2118"; ctx.beginPath(); ctx.ellipse(cx, cy, 7, 3.5, 0, 0, Math.PI * 2); ctx.fill();
+    const f = 0.72 + 0.28 * Math.sin(time * 9 + cx * 0.3);
+    const f2 = 0.72 + 0.28 * Math.sin(time * 13 + cy * 0.3 + 1);
+    ctx.save();
+    ctx.shadowColor = "#ff9128"; ctx.shadowBlur = 18 * f; ctx.globalAlpha = 0.92;
+    ctx.fillStyle = "#ff7a18"; ctx.beginPath(); ctx.ellipse(cx, cy - 7 * f, 4.4, 9.5 * f, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = "#ffd862"; ctx.beginPath(); ctx.ellipse(cx, cy - 6 * f2, 2.3, 5.5 * f2, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.restore();
+  }
+
+  /** The painterly stone arena: platform, team-tinted board, glowing centre line,
+   *  vignette, ornate frame and flickering corner braziers. */
+  private drawArena(x: number, y: number, w: number, h: number, cellW: number, cellH: number, time: number) {
+    const ctx = ui.ctx;
+    // Raised stone platform (drop shadow + base).
+    ctx.save();
+    ctx.shadowColor = "rgba(0,0,0,0.6)"; ctx.shadowBlur = 20; ctx.shadowOffsetY = 7;
+    ctx.fillStyle = "#0b0906"; this.roundRect(ctx, x - 6, y - 6, w + 12, h + 12, 12); ctx.fill();
+    ctx.restore();
+
+    // Painterly ground gradient.
+    const g = ctx.createLinearGradient(0, y, 0, y + h);
+    g.addColorStop(0, "#27372c"); g.addColorStop(0.5, "#1d2c23"); g.addColorStop(1, "#14201a");
+    ctx.fillStyle = g; ctx.fillRect(x, y, w, h);
+
+    // Checker + team tint, strongest at the centre line.
+    for (let c = 0; c < GRID_COLS; c++) {
+      const mine = c < GRID_COLS / 2;
+      const tintA = Math.max(0.025, 0.11 - Math.abs(c - (GRID_COLS / 2 - 0.5)) * 0.012);
+      for (let r = 0; r < GRID_ROWS; r++) {
+        const tx = x + c * cellW, ty = y + r * cellH;
+        if ((c + r) % 2 === 0) { ctx.fillStyle = "rgba(255,255,255,0.022)"; ctx.fillRect(tx, ty, cellW + 1, cellH + 1); }
+        ctx.fillStyle = withAlpha(mine ? "#3f86e0" : "#e0584a", tintA);
+        ctx.fillRect(tx, ty, cellW + 1, cellH + 1);
+      }
+    }
+    // Grid lines (dark + faint highlight for an engraved look).
+    ctx.strokeStyle = "rgba(0,0,0,0.28)"; ctx.lineWidth = 1; ctx.beginPath();
+    for (let c = 1; c < GRID_COLS; c++) { ctx.moveTo(x + c * cellW, y); ctx.lineTo(x + c * cellW, y + h); }
+    for (let r = 1; r < GRID_ROWS; r++) { ctx.moveTo(x, y + r * cellH); ctx.lineTo(x + w, y + r * cellH); }
+    ctx.stroke();
+
+    // Glowing animated centre divide.
+    const mid = x + w / 2, pulse = 0.5 + 0.5 * Math.sin(time * 2.2);
+    ctx.save();
+    ctx.shadowColor = withAlpha(PAL.uiAccent, 0.85); ctx.shadowBlur = 10 + pulse * 10;
+    ctx.strokeStyle = withAlpha(PAL.uiAccent, 0.4 + pulse * 0.3); ctx.lineWidth = 2.5;
+    ctx.beginPath(); ctx.moveTo(mid, y + 3); ctx.lineTo(mid, y + h - 3); ctx.stroke();
+    ctx.restore();
+
+    // Vignette.
+    const vg = ctx.createRadialGradient(x + w / 2, y + h / 2, Math.min(w, h) * 0.22, x + w / 2, y + h / 2, Math.max(w, h) * 0.62);
+    vg.addColorStop(0, "rgba(0,0,0,0)"); vg.addColorStop(1, "rgba(0,0,0,0.42)");
+    ctx.fillStyle = vg; ctx.fillRect(x, y, w, h);
+
+    // Ornate frame + corner braziers.
+    ctx.strokeStyle = "rgba(0,0,0,0.6)"; ctx.lineWidth = 4; ctx.strokeRect(x + 2, y + 2, w - 4, h - 4);
+    ctx.strokeStyle = withAlpha("#caa56a", 0.5); ctx.lineWidth = 1.5; ctx.strokeRect(x + 5.5, y + 5.5, w - 11, h - 11);
+    for (const [bx2, by2] of [[x + 16, y + 15], [x + w - 16, y + 15], [x + 16, y + h - 15], [x + w - 16, y + h - 15]] as const) {
+      this.brazier(ctx, bx2, by2, time);
+    }
+  }
+
   /** The tiled arena. In setup it shows your placement (enemy hidden); once the
    *  fight starts it reveals and renders the live, animated battle. */
   private drawBoard(x: number, y: number, w: number, h: number, time: number, dt: number, run: WarbandRun) {
@@ -262,29 +360,7 @@ export class WarbandScreen {
     const cellW = w / GRID_COLS;
     const cellH = h / GRID_ROWS;
 
-    ctx.fillStyle = "#0c0a06";
-    ctx.fillRect(x - 2, y - 2, w + 4, h + 4);
-    // 10×10 placement grid: your half (left 5 cols) blue, enemy half (right) red.
-    for (let c = 0; c < GRID_COLS; c++) {
-      for (let r = 0; r < GRID_ROWS; r++) {
-        const tx = x + c * cellW, ty = y + r * cellH;
-        const dark = (c + r) % 2 === 0;
-        const mine = c < GRID_COLS / 2;
-        ctx.fillStyle = dark ? "#1a261f" : "#212e24";
-        ctx.fillRect(tx, ty, cellW + 1, cellH + 1);
-        ctx.fillStyle = withAlpha(mine ? "#3a78d8" : "#d8564a", dark ? 0.07 : 0.035);
-        ctx.fillRect(tx, ty, cellW + 1, cellH + 1);
-      }
-    }
-    ctx.strokeStyle = "rgba(0,0,0,0.22)"; ctx.lineWidth = 1;
-    ctx.beginPath();
-    for (let c = 1; c < GRID_COLS; c++) { ctx.moveTo(x + c * cellW, y); ctx.lineTo(x + c * cellW, y + h); }
-    for (let r = 1; r < GRID_ROWS; r++) { ctx.moveTo(x, y + r * cellH); ctx.lineTo(x + w, y + r * cellH); }
-    ctx.stroke();
-    ctx.strokeStyle = withAlpha(PAL.uiAccent, 0.32); ctx.lineWidth = 2;
-    ctx.beginPath(); ctx.moveTo(x + w / 2, y); ctx.lineTo(x + w / 2, y + h); ctx.stroke();
-    ctx.strokeStyle = "rgba(0,0,0,0.5)"; ctx.lineWidth = 3;
-    ctx.strokeRect(x + 1.5, y + 1.5, w - 3, h - 3);
+    this.drawArena(x, y, w, h, cellW, cellH, time);
 
     if (!this.battle) return;
     const b = this.battle;
@@ -332,7 +408,7 @@ export class WarbandScreen {
       // Grab a board unit on press (when nothing held and not equipping a relic).
       if (this.pressEdge && this.heldPiece < 0 && inPlayer && !equipping && !ui.pointerConsumed) {
         const occ = deployment.find((d) => d.col === hovC && d.row === hovR);
-        if (occ) { this.heldPiece = occ.index; this.heldFromBoard = true; this.grabbedThisPress = true; ui.pointerConsumed = true; }
+        if (occ) { this.heldPiece = occ.index; this.heldFromBoard = true; this.grabbedThisPress = true; ui.pointerConsumed = true; audio.play("select"); }
       }
       // Equip a selected relic by clicking a board unit.
       if (ui.clicked && inPlayer && equipping && !ui.pointerConsumed) {
@@ -357,13 +433,13 @@ export class WarbandScreen {
 
       // Resolve a release: sell / place / swap / keep-armed / put-down / cancel.
       if (ui.clicked && this.heldPiece >= 0 && !ui.pointerConsumed) {
-        if (overSell) { run.sell(this.heldPiece); this.heldPiece = -1; ui.pointerConsumed = true; }
+        if (overSell) { if (run.sell(this.heldPiece)) audio.play("coin"); this.heldPiece = -1; ui.pointerConsumed = true; }
         else if (inPlayer && this.heldFromBoard) {
           ui.pointerConsumed = true;
           const sameCell = heldDep && heldDep.col === hovC && heldDep.row === hovR;
           if (sameCell && !this.movedSincePress && this.grabbedThisPress) { /* just picked up → keep armed */ }
           else if (sameCell && !this.movedSincePress) this.heldPiece = -1; // clicked its own cell again → put down
-          else { run.place(this.heldPiece, hovC, hovR); this.heldPiece = -1; }
+          else { run.place(this.heldPiece, hovC, hovR); audio.play("command"); this.heldPiece = -1; }
         } else this.heldPiece = -1; // dropped off-board (or a bench unit, which can't be placed) → cancel
       }
 
@@ -372,30 +448,58 @@ export class WarbandScreen {
         x + w * 0.25, y + h - 12, { align: "center", size: 12, color: this.heldPiece >= 0 ? "#ffd24a" : "#9a917b" });
     }
 
-    // ---- units ----
+    // ---- units + combat FX ----
     const ents = b.world.entities
       .filter((e) => e.alive && e.kind === Kind.Unit && e.type !== "villager" && (!setup || e.team === 0))
       .sort((p, q) => p.y - q.y);
     setTeamColorResolver(null);
     ctx.save();
     ctx.beginPath(); ctx.rect(x, y, w, h); ctx.clip();
+    // Screen-shake the contents (not the frame) during heavy combat.
+    const sh = this.fx.shake;
+    if (sh > 0.1) ctx.translate((Math.random() * 2 - 1) * sh, (Math.random() * 2 - 1) * sh);
+    const starGlow = ["#9aa8b4", "#cfe0ff", "#ffd24a"]; // 1★ / 2★ / 3★
     for (const e of ents) {
       const sx = mapX(e.x), sy = mapY(e.y);
+      const lifted = e.id === heldEntityId;
+      // Soft drop shadow grounds the unit on its cell.
+      ctx.globalAlpha = lifted ? 0.12 : 0.32;
+      ctx.fillStyle = "#000";
+      ctx.beginPath(); ctx.ellipse(sx, sy + cellH * 0.30, cellW * 0.22, cellH * 0.11, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.globalAlpha = 1;
+      // Star-tier ring for 2★/3★ units (variantRarity = star-1).
+      const star = (e.variantRarity ?? 0) + 1;
+      if (star >= 2) {
+        ctx.save();
+        ctx.strokeStyle = withAlpha(starGlow[Math.min(2, star - 1)], 0.9);
+        ctx.shadowColor = starGlow[Math.min(2, star - 1)]; ctx.shadowBlur = 8; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.ellipse(sx, sy + cellH * 0.30, cellW * 0.24, cellH * 0.12, 0, 0, Math.PI * 2); ctx.stroke();
+        ctx.restore();
+      }
       ctx.save();
-      ctx.globalAlpha = e.id === heldEntityId ? 0.3 : 1; // lifted unit rides the cursor
+      ctx.globalAlpha = lifted ? 0.3 : 1; // lifted unit rides the cursor
       ctx.translate(sx, sy + cellH * 0.06); // feet near cell centre, body fills the cell
       ctx.scale(us, us);
       ctx.translate(-e.x, -e.y);
       try { drawUnit(ctx, e, time, 0); } catch { /* never let one unit kill the frame */ }
       ctx.restore();
+      // Star pips above the unit in setup so tiers read at a glance.
+      if (setup && star >= 2 && !lifted) {
+        for (let s = 0; s < star; s++) {
+          ctx.fillStyle = starGlow[Math.min(2, star - 1)];
+          ctx.beginPath(); ctx.arc(sx - (star - 1) * 4 + s * 8, sy - cellH * 0.34, 2.4, 0, Math.PI * 2); ctx.fill();
+        }
+      }
       const frac = Math.max(0, Math.min(1, e.hp / e.maxHp));
       if (!setup && frac < 1) {
-        const barW = cellW * 0.5, barH = 3, byy = sy - cellH * 0.32;
-        ctx.fillStyle = "rgba(0,0,0,0.75)"; ctx.fillRect(sx - barW / 2, byy, barW, barH);
+        const barW = cellW * 0.5, barH = 3.5, byy = sy - cellH * 0.34;
+        ctx.fillStyle = "rgba(0,0,0,0.78)"; ctx.fillRect(sx - barW / 2 - 1, byy - 1, barW + 2, barH + 2);
         ctx.fillStyle = e.team === 0 ? "#5ad06a" : "#e0564a";
         ctx.fillRect(sx - barW / 2, byy, barW * frac, barH);
       }
     }
+    // Combat FX (sparks + floating damage) on top of the units.
+    this.fx.draw(ctx, mapX, mapY, (sxk + syk) / 2);
     ctx.restore();
   }
 
@@ -410,11 +514,12 @@ export class WarbandScreen {
     const tier = UNIT_TIER[p.type] ?? 1;
     const hover = ui.mx >= x && ui.mx <= x + w && ui.my >= y && ui.my <= y + h;
     ctx.globalAlpha = held ? 0.4 : 1; // a lifted unit dims on its bench slot
-    ctx.fillStyle = deployed ? "rgba(40,34,20,0.95)" : hover ? "rgba(30,24,15,0.95)" : "rgba(18,14,9,0.85)";
-    ctx.fillRect(x, y, w, h);
-    ctx.strokeStyle = withAlpha(TIER_COLOR[tier], deployed ? 1 : hover ? 0.85 : 0.5);
-    ctx.lineWidth = deployed ? 2 : 1;
-    ctx.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1);
+    const g = ctx.createLinearGradient(0, y, 0, y + h);
+    g.addColorStop(0, withAlpha(TIER_COLOR[tier], hover ? 0.26 : 0.16));
+    g.addColorStop(1, "rgba(14,10,6,0.95)");
+    ctx.fillStyle = g; this.roundRect(ctx, x, y, w, h, 6); ctx.fill();
+    ctx.strokeStyle = withAlpha(TIER_COLOR[tier], hover ? 0.95 : 0.6);
+    ctx.lineWidth = 1.5; this.roundRect(ctx, x + 0.75, y + 0.75, w - 1.5, h - 1.5, 6); ctx.stroke();
     ui.text(shortName(p.type), x + w / 2, y + 18, { align: "center", size: 12, bold: true, color: "#e7ddc4" });
     ui.text(stars(p.star), x + w / 2, y + 34, { align: "center", size: 13, color: p.star >= 3 ? "#ffd24a" : p.star === 2 ? "#cfe0ff" : "#9a917b" });
     let ix = x + 5;
@@ -429,21 +534,41 @@ export class WarbandScreen {
   private shopCard(x: number, y: number, w: number, h: number, type: string, affordable: boolean, onClick: () => void) {
     const ctx = ui.ctx;
     const tier = UNIT_TIER[type] ?? 1;
+    const col = TIER_COLOR[tier];
     const hover = ui.mx >= x && ui.mx <= x + w && ui.my >= y && ui.my <= y + h;
-    ctx.fillStyle = affordable ? (hover ? "rgba(54,42,24,0.96)" : "rgba(28,22,13,0.92)") : "rgba(16,12,8,0.85)";
-    ctx.fillRect(x, y, w, h);
-    ctx.strokeStyle = withAlpha(TIER_COLOR[tier], 0.9);
-    ctx.lineWidth = 2;
-    ctx.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1);
-    ui.text(shortName(type), x + w / 2, y + 22, { align: "center", size: 14, bold: true, color: affordable ? "#e7ddc4" : "#6f6a5c" });
+    const oy = hover && affordable ? -3 : 0; // lift on hover
+    ctx.save();
+    ctx.shadowColor = "rgba(0,0,0,0.55)"; ctx.shadowBlur = hover && affordable ? 12 : 5; ctx.shadowOffsetY = 4;
+    const g = ctx.createLinearGradient(0, y + oy, 0, y + oy + h);
+    g.addColorStop(0, withAlpha(col, affordable ? 0.3 : 0.1));
+    g.addColorStop(0.45, "rgba(26,20,12,0.96)");
+    g.addColorStop(1, "rgba(13,9,5,0.98)");
+    ctx.fillStyle = g; this.roundRect(ctx, x, y + oy, w, h, 8); ctx.fill();
+    ctx.restore();
+    ctx.strokeStyle = withAlpha(col, affordable ? 0.95 : 0.4); ctx.lineWidth = 2;
+    this.roundRect(ctx, x + 1, y + oy + 1, w - 2, h - 2, 7); ctx.stroke();
+    // Tier accent bar along the top.
+    ctx.fillStyle = withAlpha(col, affordable ? 1 : 0.5);
+    ctx.fillRect(x + 6, y + oy + 4, w - 12, 2.5);
+    ui.text(shortName(type), x + w / 2, y + oy + 26, { align: "center", size: 14, bold: true, color: affordable ? "#f2e8d0" : "#6f6a5c" });
     const tt = traitsOf(type).slice(0, 2);
-    let txx = x + 8;
-    for (const tr of tt) {
-      ui.text(tr.name, txx, y + 40, { size: 9.5, color: tr.color });
-      txx += tr.name.length * 5.6 + 8;
-    }
-    ui.text(`Tier ${tier}`, x + 8, y + h - 10, { size: 10, color: TIER_COLOR[tier] });
-    ui.text(`${tier}g`, x + w - 8, y + h - 10, { align: "right", size: 13, bold: true, color: affordable ? "#ffd24a" : "#7a6a3a" });
+    let txx = x + 10;
+    for (const tr of tt) { ui.text(tr.name, txx, y + oy + 44, { size: 9.5, color: affordable ? tr.color : withAlpha(tr.color, 0.5) }); txx += tr.name.length * 5.6 + 8; }
+    ui.text(`Tier ${tier}`, x + 10, y + oy + h - 10, { size: 10, color: withAlpha(col, affordable ? 1 : 0.5) });
+    // Gold coin with the cost.
+    this.coin(ctx, x + w - 18, y + oy + h - 13, tier, affordable);
     if (hover && affordable && ui.clicked && !ui.pointerConsumed) { ui.pointerConsumed = true; onClick(); }
+  }
+
+  /** A small gold coin glyph with a number on it. */
+  private coin(ctx: CanvasRenderingContext2D, cx: number, cy: number, n: number, bright = true) {
+    ctx.save();
+    if (bright) { ctx.shadowColor = "#ffd24a"; ctx.shadowBlur = 6; }
+    const g = ctx.createRadialGradient(cx - 2, cy - 2, 1, cx, cy, 8);
+    g.addColorStop(0, bright ? "#ffe89a" : "#9a8a55"); g.addColorStop(1, bright ? "#e0a52a" : "#6a5a30");
+    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(cx, cy, 7.5, 0, Math.PI * 2); ctx.fill();
+    ctx.restore();
+    ctx.strokeStyle = bright ? "#a8771e" : "#544622"; ctx.lineWidth = 1; ctx.beginPath(); ctx.arc(cx, cy, 7.5, 0, Math.PI * 2); ctx.stroke();
+    ui.text(String(n), cx, cy + 4, { align: "center", size: 11, bold: true, color: bright ? "#5a3e08" : "#3a3018" });
   }
 }

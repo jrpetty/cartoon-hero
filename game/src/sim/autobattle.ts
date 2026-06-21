@@ -5,7 +5,7 @@
 // dropped in and ticked to a conclusion. Pure + deterministic (seeded), so it's
 // fully testable and replay-safe.
 
-import { World } from "./world";
+import { World, WorldEvent } from "./world";
 import { Kind, Stance, Team, EntityId } from "./types";
 import { generateMap } from "../maps/generator";
 import { UNITS } from "../content/units";
@@ -179,6 +179,8 @@ export class LiveBattle {
   ticks = 0;
   started = false;
   done = false;
+  /** Combat events from the last step(s) — drained by the UI for hit/death FX. */
+  fxEvents: WorldEvent[] = [];
   private idsA: EntityId[];
   private idsB: EntityId[];
   private maxTicks: number;
@@ -212,7 +214,7 @@ export class LiveBattle {
     if (!this.started || this.done) return;
     for (let k = 0; k < ticks && !this.done; k++) {
       this.world.tick();
-      this.world.drainEvents();
+      for (const ev of this.world.drainEvents()) { if (this.fxEvents.length < 256) this.fxEvents.push(ev); }
       this.ticks++;
       if (this.ticks % 5 === 0 || this.ticks >= this.maxTicks) {
         const a = alivePower(this.world, Team.Player).count;
