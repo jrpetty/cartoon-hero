@@ -15,8 +15,8 @@ import { TILE } from "../content/balance";
 import { UNITS } from "../content/units";
 import { WarbandRun, UNIT_TIER, Piece } from "../sim/warband";
 import { LiveBattle, GRID_COLS, GRID_ROWS, GRID_CELL } from "../sim/autobattle";
-import { traitsOf } from "../sim/traits";
-import { ITEMS } from "../sim/items";
+import { traitsOf, Buff } from "../sim/traits";
+import { ITEMS, Item } from "../sim/items";
 
 const TIER_COLOR = ["#888888", "#9aa8b4", "#4caf50", "#3a78d8", "#9b5cf0", "#e0a020"];
 const shortName = (type: string) => (UNITS[type]?.name ?? type).split(" ")[0];
@@ -41,6 +41,7 @@ export class WarbandScreen {
   private sellBox = { x: 0, y: 0, w: 0, h: 0 }; // last frame's sell-box rect
   private fx = new WarbandFx();
   private prevPhase = "shop";
+  private itemTip: { id: string; x: number; y: number } | null = null;
 
   draw(W: number, H: number, time: number, run: WarbandRun): "exit" | null {
     const ctx = ui.ctx;
@@ -117,6 +118,37 @@ export class WarbandScreen {
       sy += th + 3;
     }
 
+    // ---- relics ----
+    this.itemTip = null;
+    if (run.phase === "shop") {
+      sy += 14;
+      ui.text("Relics", sx, sy, { size: 14, bold: true, color: PAL.uiAccent });
+      ui.text("hover for details · click then a unit", sx + 56, sy, { size: 9.5, color: "#6f6a5c" });
+      sy += 12;
+      if (run.itemStash.length === 0) { ui.text("— none yet —", sx, sy + 12, { size: 11, color: "#6f6a5c" }); sy += 22; }
+      const tile = 42, gap = 6, per = 4;
+      run.itemStash.forEach((id, idx) => {
+        const it = ITEMS[id];
+        if (!it) return;
+        const tilex = sx + (idx % per) * (tile + gap);
+        const tiley = sy + Math.floor(idx / per) * (tile + gap);
+        const sel = this.selectedItem === idx;
+        const hov = ui.mx >= tilex && ui.mx <= tilex + tile && ui.my >= tiley && ui.my <= tiley + tile;
+        const g = ctx.createLinearGradient(0, tiley, 0, tiley + tile);
+        g.addColorStop(0, withAlpha(it.color, sel ? 0.5 : hov ? 0.36 : 0.22));
+        g.addColorStop(1, "rgba(12,9,5,0.95)");
+        if (sel || hov) { ctx.save(); ctx.shadowColor = it.color; ctx.shadowBlur = sel ? 12 : 7; }
+        ctx.fillStyle = g; this.roundRect(ctx, tilex, tiley, tile, tile, 7); ctx.fill();
+        if (sel || hov) ctx.restore();
+        ctx.strokeStyle = withAlpha(it.color, sel ? 1 : 0.8); ctx.lineWidth = sel ? 2.5 : 1.5;
+        this.roundRect(ctx, tilex + 1, tiley + 1, tile - 2, tile - 2, 6); ctx.stroke();
+        this.itemIcon(ctx, tilex + tile / 2, tiley + tile / 2 - 2, tile * 0.5, it);
+        if (hov) this.itemTip = { id, x: tilex + tile + 8, y: tiley };
+        if (hov && ui.clicked && !ui.pointerConsumed) { ui.pointerConsumed = true; this.selectedItem = sel ? -1 : idx; }
+      });
+      if (run.itemStash.length) sy += Math.ceil(run.itemStash.length / per) * (tile + gap);
+    }
+
     // ---- board geometry ----
     const bx = 232;
     const boardX = bx;
@@ -160,29 +192,12 @@ export class WarbandScreen {
 
     this.drawBoard(boardX, boardY, boardW, boardH, time, dt, run);
 
-    // ---- bench (your pieces) + relic tray ----
+    // ---- bench (your pieces) ----
     const benchY = boardBottom + 8;
     ui.text("Bench", boardX, benchY - 2, { size: 12, bold: true, color: "#9a917b" });
-    if (run.phase === "shop") {
-      let tx = boardX + 60;
-      run.itemStash.forEach((id, idx) => {
-        const it = ITEMS[id];
-        if (!it) return;
-        const cw = 56;
-        const cyy = benchY - 18;
-        const sel = this.selectedItem === idx;
-        const hov = ui.mx >= tx && ui.mx <= tx + cw && ui.my >= cyy && ui.my <= cyy + 16;
-        ctx.fillStyle = sel ? withAlpha(it.color, 0.5) : hov ? withAlpha(it.color, 0.3) : withAlpha(it.color, 0.16);
-        ctx.fillRect(tx, cyy, cw, 16);
-        ctx.strokeStyle = it.color; ctx.lineWidth = sel ? 2 : 1; ctx.strokeRect(tx + 0.5, cyy + 0.5, cw - 1, 15);
-        ui.text(it.short, tx + cw / 2, cyy + 12, { align: "center", size: 10, bold: true, color: it.color });
-        if (hov && ui.clicked && !ui.pointerConsumed) { ui.pointerConsumed = true; this.selectedItem = sel ? -1 : idx; }
-        tx += cw + 5;
-      });
-      if (this.selectedItem >= 0 && this.selectedItem < run.itemStash.length) {
-        ui.text("→ click a unit to equip", tx + 6, benchY - 6, { size: 11, bold: true, color: "#ffd24a" });
-      } else this.selectedItem = -1;
-    }
+    if (this.selectedItem >= 0 && this.selectedItem < run.itemStash.length) {
+      ui.text("Relic ready — click a unit to equip it", boardX + 52, benchY - 2, { size: 12, bold: true, color: "#ffd24a" });
+    } else if (this.selectedItem >= run.itemStash.length) this.selectedItem = -1;
 
     // Bench = your reserve (non-deployed) pieces. Pick one up to drag it into
     // the Sell box, or click it with a relic selected to equip.
@@ -272,6 +287,7 @@ export class WarbandScreen {
       ui.text(`${shortName(p.type)} ${stars(p.star)}`, cxp + cwd / 2, cyp + 18, { align: "center", size: 12, bold: true, color: "#ffe9b0" });
     }
     if (run.phase !== "shop") this.heldPiece = -1; // never carry a held unit out of setup
+    this.drawItemTip(W, H);
     this.wasDown = down;
 
     return action;
@@ -462,23 +478,26 @@ export class WarbandScreen {
     for (const e of ents) {
       const sx = mapX(e.x), sy = mapY(e.y);
       const lifted = e.id === heldEntityId;
-      // Soft drop shadow grounds the unit on its cell.
-      ctx.globalAlpha = lifted ? 0.12 : 0.32;
-      ctx.fillStyle = "#000";
-      ctx.beginPath(); ctx.ellipse(sx, sy + cellH * 0.30, cellW * 0.22, cellH * 0.11, 0, 0, Math.PI * 2); ctx.fill();
-      ctx.globalAlpha = 1;
-      // Star-tier ring for 2★/3★ units (variantRarity = star-1).
+      // Anchor the feet below the cell centre so the unit's BODY sits in the
+      // middle of the square (the sprite is feet-anchored and rises upward).
+      const footY = sy + cellH * 0.24;
       const star = (e.variantRarity ?? 0) + 1;
+      // Soft drop shadow at the feet.
+      ctx.globalAlpha = lifted ? 0.12 : 0.34;
+      ctx.fillStyle = "#000";
+      ctx.beginPath(); ctx.ellipse(sx, footY, cellW * 0.2, cellH * 0.1, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.globalAlpha = 1;
+      // Star-tier ring at the feet for 2★/3★.
       if (star >= 2) {
         ctx.save();
         ctx.strokeStyle = withAlpha(starGlow[Math.min(2, star - 1)], 0.9);
         ctx.shadowColor = starGlow[Math.min(2, star - 1)]; ctx.shadowBlur = 8; ctx.lineWidth = 2;
-        ctx.beginPath(); ctx.ellipse(sx, sy + cellH * 0.30, cellW * 0.24, cellH * 0.12, 0, 0, Math.PI * 2); ctx.stroke();
+        ctx.beginPath(); ctx.ellipse(sx, footY, cellW * 0.22, cellH * 0.11, 0, 0, Math.PI * 2); ctx.stroke();
         ctx.restore();
       }
       ctx.save();
       ctx.globalAlpha = lifted ? 0.3 : 1; // lifted unit rides the cursor
-      ctx.translate(sx, sy + cellH * 0.06); // feet near cell centre, body fills the cell
+      ctx.translate(sx, footY); // feet here → body centres on the square
       ctx.scale(us, us);
       ctx.translate(-e.x, -e.y);
       try { drawUnit(ctx, e, time, 0); } catch { /* never let one unit kill the frame */ }
@@ -487,12 +506,12 @@ export class WarbandScreen {
       if (setup && star >= 2 && !lifted) {
         for (let s = 0; s < star; s++) {
           ctx.fillStyle = starGlow[Math.min(2, star - 1)];
-          ctx.beginPath(); ctx.arc(sx - (star - 1) * 4 + s * 8, sy - cellH * 0.34, 2.4, 0, Math.PI * 2); ctx.fill();
+          ctx.beginPath(); ctx.arc(sx - (star - 1) * 4 + s * 8, sy - cellH * 0.28, 2.4, 0, Math.PI * 2); ctx.fill();
         }
       }
       const frac = Math.max(0, Math.min(1, e.hp / e.maxHp));
       if (!setup && frac < 1) {
-        const barW = cellW * 0.5, barH = 3.5, byy = sy - cellH * 0.34;
+        const barW = cellW * 0.5, barH = 3.5, byy = sy - cellH * 0.26;
         ctx.fillStyle = "rgba(0,0,0,0.78)"; ctx.fillRect(sx - barW / 2 - 1, byy - 1, barW + 2, barH + 2);
         ctx.fillStyle = e.team === 0 ? "#5ad06a" : "#e0564a";
         ctx.fillRect(sx - barW / 2, byy, barW * frac, barH);
@@ -570,5 +589,96 @@ export class WarbandScreen {
     ctx.restore();
     ctx.strokeStyle = bright ? "#a8771e" : "#544622"; ctx.lineWidth = 1; ctx.beginPath(); ctx.arc(cx, cy, 7.5, 0, Math.PI * 2); ctx.stroke();
     ui.text(String(n), cx, cy + 4, { align: "center", size: 11, bold: true, color: bright ? "#5a3e08" : "#3a3018" });
+  }
+
+  /** A distinct procedural glyph per relic, drawn centred at (cx,cy), half-size s. */
+  private itemIcon(ctx: CanvasRenderingContext2D, cx: number, cy: number, s: number, it: Item) {
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.lineJoin = "round"; ctx.lineCap = "round";
+    ctx.fillStyle = it.color; ctx.strokeStyle = "rgba(0,0,0,0.55)"; ctx.lineWidth = Math.max(1, s * 0.12);
+    const h = s;
+    switch (it.id) {
+      case "whetstone": // sword
+        ctx.beginPath();
+        ctx.moveTo(0, -h); ctx.lineTo(h * 0.22, -h * 0.2); ctx.lineTo(h * 0.22, h * 0.32);
+        ctx.lineTo(-h * 0.22, h * 0.32); ctx.lineTo(-h * 0.22, -h * 0.2); ctx.closePath(); ctx.fill(); ctx.stroke();
+        ctx.fillStyle = "#caa56a"; ctx.beginPath(); ctx.rect(-h * 0.55, h * 0.3, h * 1.1, h * 0.18); ctx.fill(); ctx.stroke();
+        ctx.fillStyle = "#6a4a2a"; ctx.beginPath(); ctx.rect(-h * 0.12, h * 0.48, h * 0.24, h * 0.42); ctx.fill(); ctx.stroke();
+        break;
+      case "greatmail": // shield
+        ctx.beginPath();
+        ctx.moveTo(0, -h); ctx.lineTo(h * 0.8, -h * 0.55); ctx.lineTo(h * 0.8, h * 0.2);
+        ctx.quadraticCurveTo(h * 0.8, h * 0.92, 0, h);
+        ctx.quadraticCurveTo(-h * 0.8, h * 0.92, -h * 0.8, h * 0.2);
+        ctx.lineTo(-h * 0.8, -h * 0.55); ctx.closePath(); ctx.fill(); ctx.stroke();
+        ctx.strokeStyle = "rgba(0,0,0,0.4)"; ctx.lineWidth = s * 0.16;
+        ctx.beginPath(); ctx.moveTo(0, -h * 0.5); ctx.lineTo(0, h * 0.6); ctx.moveTo(-h * 0.5, -h * 0.05); ctx.lineTo(h * 0.5, -h * 0.05); ctx.stroke();
+        break;
+      case "warhorn": // drinking horn (crescent)
+        ctx.beginPath();
+        ctx.arc(h * 0.35, h * 0.35, h * 1.0, Math.PI * 1.02, Math.PI * 1.72, false);
+        ctx.arc(h * 0.35, h * 0.35, h * 0.5, Math.PI * 1.72, Math.PI * 1.02, true);
+        ctx.closePath(); ctx.fill(); ctx.stroke();
+        break;
+      case "swiftboots": // lightning bolt
+        ctx.beginPath();
+        ctx.moveTo(h * 0.2, -h); ctx.lineTo(-h * 0.5, h * 0.12); ctx.lineTo(-h * 0.05, h * 0.12);
+        ctx.lineTo(-h * 0.25, h); ctx.lineTo(h * 0.55, -h * 0.2); ctx.lineTo(h * 0.05, -h * 0.2);
+        ctx.closePath(); ctx.fill(); ctx.stroke();
+        break;
+      case "giantsbelt": // belt + buckle
+        ctx.beginPath(); ctx.rect(-h, -h * 0.32, h * 2, h * 0.64); ctx.fill(); ctx.stroke();
+        ctx.fillStyle = "#caa56a"; ctx.beginPath(); ctx.rect(-h * 0.32, -h * 0.46, h * 0.64, h * 0.92); ctx.fill(); ctx.stroke();
+        ctx.strokeStyle = "rgba(0,0,0,0.5)"; ctx.lineWidth = s * 0.12; ctx.beginPath(); ctx.rect(-h * 0.15, -h * 0.24, h * 0.3, h * 0.48); ctx.stroke();
+        break;
+      case "warbanner": // banner on a pole
+        ctx.strokeStyle = "#6a4a2a"; ctx.lineWidth = s * 0.18;
+        ctx.beginPath(); ctx.moveTo(-h * 0.55, -h); ctx.lineTo(-h * 0.55, h); ctx.stroke();
+        ctx.fillStyle = it.color; ctx.strokeStyle = "rgba(0,0,0,0.55)"; ctx.lineWidth = Math.max(1, s * 0.1);
+        ctx.beginPath();
+        ctx.moveTo(-h * 0.55, -h * 0.9); ctx.lineTo(h * 0.78, -h * 0.9); ctx.lineTo(h * 0.46, -h * 0.3);
+        ctx.lineTo(h * 0.78, h * 0.3); ctx.lineTo(-h * 0.55, h * 0.3); ctx.closePath(); ctx.fill(); ctx.stroke();
+        break;
+      default:
+        ctx.beginPath(); ctx.arc(0, 0, h * 0.7, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  /** Human-readable benefit lines for a relic's buff. */
+  private buffLines(b: Buff): string[] {
+    const out: string[] = [];
+    if (b.atk) out.push(`+${b.atk} Attack`);
+    if (b.atkPct) out.push(`+${b.atkPct}% Attack`);
+    if (b.armor) out.push(`+${b.armor} Armour`);
+    if (b.hp) out.push(`+${b.hp} Max HP`);
+    if (b.hpPct) out.push(`+${b.hpPct}% Max HP`);
+    if (b.speedPct) out.push(`+${b.speedPct}% Move Speed`);
+    return out;
+  }
+
+  /** The relic hover tooltip — name, icon and exact benefits. Drawn last, on top. */
+  private drawItemTip(W: number, H: number) {
+    if (!this.itemTip) return;
+    const ctx = ui.ctx;
+    const it = ITEMS[this.itemTip.id];
+    if (!it) return;
+    const lines = this.buffLines(it.buff);
+    const pw = 196, ph = 46 + lines.length * 17 + 16;
+    let px = this.itemTip.x, py = this.itemTip.y;
+    if (px + pw > W - 4) px = Math.max(4, this.itemTip.x - pw - 56);
+    if (py + ph > H - 4) py = H - ph - 4;
+    ctx.save();
+    ctx.shadowColor = "rgba(0,0,0,0.6)"; ctx.shadowBlur = 16; ctx.shadowOffsetY = 4;
+    ctx.fillStyle = "rgba(18,14,9,0.98)"; this.roundRect(ctx, px, py, pw, ph, 9); ctx.fill();
+    ctx.restore();
+    ctx.strokeStyle = withAlpha(it.color, 0.95); ctx.lineWidth = 1.5; this.roundRect(ctx, px + 0.75, py + 0.75, pw - 1.5, ph - 1.5, 9); ctx.stroke();
+    this.itemIcon(ctx, px + 20, py + 22, 13, it);
+    ui.text(it.name, px + 40, py + 20, { size: 15, bold: true, color: it.color, font: "Georgia, serif" });
+    ui.text("Relic", px + 40, py + 34, { size: 10, color: "#9a917b" });
+    let ly = py + 58;
+    for (const ln of lines) { ui.text("◆ " + ln, px + 14, ly, { size: 12.5, bold: true, color: "#e7ddc4" }); ly += 17; }
+    ui.text("Equip onto a unit · up to 3 each", px + 14, ly + 4, { size: 10, color: "#8a8278" });
   }
 }
