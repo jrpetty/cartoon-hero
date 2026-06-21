@@ -5,6 +5,7 @@
 // real, watchable combat sim (sim/autobattle.ts → LiveBattle).
 
 import { ui } from "./ui";
+import { isMouseDown } from "./screens";
 import { PAL, withAlpha } from "../render/palette";
 import { drawUnit, setTeamColorResolver } from "../render/draw";
 import { Kind } from "../sim/types";
@@ -26,7 +27,16 @@ export class WarbandScreen {
   private battleSig = "";
   private stepAccum = 0;
   private lastTime = 0;
-  private heldPiece = -1; // piece index "picked up" for placement, or -1
+  // Drag/click placement state.
+  private heldPiece = -1;        // piece index "picked up" (for placement or selling), or -1
+  private heldFromBoard = false; // true if it was lifted off a board cell (so it can be re-placed)
+  private wasDown = false;       // pointer-held last frame (for press-edge detection)
+  private pressEdge = false;     // pointer went down this frame
+  private grabbedThisPress = false;
+  private movedSincePress = false;
+  private pressX = 0;
+  private pressY = 0;
+  private sellBox = { x: 0, y: 0, w: 0, h: 0 }; // last frame's sell-box rect
 
   draw(W: number, H: number, time: number, run: WarbandRun): "exit" | null {
     const ctx = ui.ctx;
@@ -35,6 +45,12 @@ export class WarbandScreen {
 
     const dt = this.lastTime ? Math.min(0.1, time - this.lastTime) : 0;
     this.lastTime = time;
+
+    // Pointer press/drag tracking (for grab-and-drop placement + selling).
+    const down = isMouseDown();
+    this.pressEdge = down && !this.wasDown;
+    if (this.pressEdge) { this.pressX = ui.mx; this.pressY = ui.my; this.movedSincePress = false; this.grabbedThisPress = false; }
+    if (down && (Math.abs(ui.mx - this.pressX) > 5 || Math.abs(ui.my - this.pressY) > 5)) this.movedSincePress = true;
 
     let action: "exit" | null = null;
 
@@ -145,22 +161,29 @@ export class WarbandScreen {
       } else this.selectedItem = -1;
     }
 
+    // Bench = your reserve (non-deployed) pieces. Pick one up to drag it into
+    // the Sell box, or click it with a relic selected to equip.
     const order = run.pieces.map((_, i) => i).sort((a, b) =>
       run.pieces[b].star - run.pieces[a].star || (UNIT_TIER[run.pieces[b].type] ?? 0) - (UNIT_TIER[run.pieces[a].type] ?? 0));
     const deployedSet = new Set(order.slice(0, run.deployCount()));
+    const reserve = run.pieces.map((_, i) => i).filter((i) => !deployedSet.has(i));
     const cardW = 78;
     const cardH = benchH - 6;
-    run.pieces.forEach((p, i) => {
-      const cx = boardX + i * (cardW + 6);
+    reserve.forEach((i, k) => {
+      const cx = boardX + k * (cardW + 6);
       if (cx + cardW > W - 16) return; // overflow guard (rare; bench is wide)
-      this.pieceCard(cx, benchY + 14, cardW, cardH, p, deployedSet.has(i), () => {
-        if (run.phase !== "shop") return;
-        if (this.selectedItem >= 0 && this.selectedItem < run.itemStash.length) {
-          if (run.equipItem(this.selectedItem, i)) this.selectedItem = -1;
-        } else run.sell(i);
-      });
+      this.pieceCard(cx, benchY + 14, cardW, cardH, run.pieces[i], false, this.heldPiece === i);
+      const over = ui.mx >= cx && ui.mx <= cx + cardW && ui.my >= benchY + 14 && ui.my <= benchY + 14 + cardH;
+      if (run.phase === "shop" && over && !ui.pointerConsumed) {
+        const equipping = this.selectedItem >= 0 && this.selectedItem < run.itemStash.length;
+        if (equipping && ui.clicked) { ui.pointerConsumed = true; if (run.equipItem(this.selectedItem, i)) this.selectedItem = -1; }
+        else if (!equipping && this.pressEdge && this.heldPiece < 0) {
+          this.heldPiece = i; this.heldFromBoard = false; this.grabbedThisPress = true; ui.pointerConsumed = true;
+        }
+      }
     });
     if (run.pieces.length === 0) ui.text("Buy units from the shop below…", boardX, benchY + 40, { size: 13, color: "#9a917b" });
+    else if (reserve.length === 0) ui.text("(every unit is deployed — buy more or level up for a bigger board)", boardX, benchY + 40, { size: 12, color: "#6f6a5c" });
 
     // ---- shop / actions (bottom) ----
     const shopY = shopTop;
@@ -215,6 +238,19 @@ export class WarbandScreen {
       if (ui.button("Back to Menu", W / 2 - 110, H / 2 + 30, 220, 48, { accent: true, size: 18 })) action = "exit";
     }
 
+    // ---- held unit rides the cursor ----
+    if (run.phase === "shop" && this.heldPiece >= 0 && this.heldPiece < run.pieces.length) {
+      const p = run.pieces[this.heldPiece];
+      const cwd = 92, chd = 28;
+      const cxp = Math.min(ui.mx + 14, W - cwd - 6); // keep the label on-screen near edges
+      const cyp = Math.min(ui.my + 6, H - chd - 6);
+      ctx.fillStyle = "rgba(20,16,9,0.96)"; ctx.fillRect(cxp, cyp, cwd, chd);
+      ctx.strokeStyle = "#ffd24a"; ctx.lineWidth = 1.5; ctx.strokeRect(cxp + 0.5, cyp + 0.5, cwd - 1, chd - 1);
+      ui.text(`${shortName(p.type)} ${stars(p.star)}`, cxp + cwd / 2, cyp + 18, { align: "center", size: 12, bold: true, color: "#ffe9b0" });
+    }
+    if (run.phase !== "shop") this.heldPiece = -1; // never carry a held unit out of setup
+    this.wasDown = down;
+
     return action;
   }
 
@@ -262,39 +298,77 @@ export class WarbandScreen {
     const mapY = (wy: number) => y + (wy - worldTop) * syk;
     const us = (cellH * 0.62) / TILE; // unit fits comfortably inside a cell
 
-    // ---- placement interaction (setup only) ----
-    const deployment = setup ? run.deployment() : [];
-    if (setup) {
-      const hovC = Math.floor((ui.mx - x) / cellW);
-      const hovR = Math.floor((ui.my - y) / cellH);
-      const inPlayer = ui.mx >= x && ui.mx < x + w && ui.my >= y && ui.my < y + h && hovC >= 0 && hovC <= 4 && hovR >= 0 && hovR <= 9;
-      // Highlight the held unit's cell, then the hovered cell.
-      const held = deployment.find((d) => d.index === this.heldPiece);
-      if (held) {
-        ctx.strokeStyle = "#ffd24a"; ctx.lineWidth = 2.5;
-        ctx.strokeRect(x + held.col * cellW + 2, y + held.row * cellH + 2, cellW - 4, cellH - 4);
-      }
-      if (inPlayer) {
-        ctx.fillStyle = withAlpha(this.heldPiece >= 0 ? "#ffd24a" : "#cfe0ff", 0.16);
-        ctx.fillRect(x + hovC * cellW + 1, y + hovR * cellH + 1, cellW - 2, cellH - 2);
-      }
-      if (ui.clicked && !ui.pointerConsumed) {
-        if (inPlayer) {
-          ui.pointerConsumed = true;
-          const occ = deployment.find((d) => d.col === hovC && d.row === hovR);
-          if (this.heldPiece >= 0) { run.place(this.heldPiece, hovC, hovR); this.heldPiece = -1; }
-          else if (occ) this.heldPiece = occ.index;
-        } else this.heldPiece = -1;
-      }
-    }
-
     // ---- enemy fog (setup) ----
     if (setup) {
       ctx.fillStyle = "rgba(8,5,3,0.66)";
       ctx.fillRect(x + w / 2 + 1.5, y + 1.5, w / 2 - 3, h - 3);
-      ui.text("🔒 Enemy warband hidden", x + w * 0.75, y + h / 2 - 8, { align: "center", size: 15, bold: true, color: "#caa" });
-      ui.text("revealed when the battle begins", x + w * 0.75, y + h / 2 + 12, { align: "center", size: 12, color: "#8a8278" });
-      ui.text(this.heldPiece >= 0 ? "Click a cell to place the unit" : "Click a unit, then a cell, to position your warband",
+      ui.text("🔒 Enemy warband hidden", x + w * 0.74, y + 30, { align: "center", size: 15, bold: true, color: "#caa" });
+      ui.text("revealed when the battle begins", x + w * 0.74, y + 50, { align: "center", size: 12, color: "#8a8278" });
+    }
+
+    // ---- placement + sell interaction (setup only) ----
+    const deployment = setup ? run.deployment() : [];
+    let heldEntityId = -1;
+    if (setup) {
+      const hovC = Math.floor((ui.mx - x) / cellW);
+      const hovR = Math.floor((ui.my - y) / cellH);
+      const inPlayer = ui.mx >= x && ui.mx < x + w && ui.my >= y && ui.my < y + h && hovC >= 0 && hovC <= 4 && hovR >= 0 && hovR <= 9;
+      const equipping = this.selectedItem >= 0 && this.selectedItem < run.itemStash.length;
+
+      // Sell box, bottom-right corner of the board.
+      const sbW = 156, sbH = 66;
+      this.sellBox = { x: x + w - sbW - 14, y: y + h - sbH - 14, w: sbW, h: sbH };
+      const overSell = ui.mx >= this.sellBox.x && ui.mx <= this.sellBox.x + sbW && ui.my >= this.sellBox.y && ui.my <= this.sellBox.y + sbH;
+      const heldObj = this.heldPiece >= 0 ? run.pieces[this.heldPiece] : null;
+      const hot = overSell && this.heldPiece >= 0;
+      ctx.fillStyle = hot ? "rgba(210,70,58,0.55)" : "rgba(70,24,18,0.5)";
+      ctx.fillRect(this.sellBox.x, this.sellBox.y, sbW, sbH);
+      ctx.strokeStyle = hot ? "#ff7a68" : "#a8463c"; ctx.lineWidth = 2;
+      ctx.setLineDash([6, 4]); ctx.strokeRect(this.sellBox.x + 1, this.sellBox.y + 1, sbW - 2, sbH - 2); ctx.setLineDash([]);
+      ui.text("🗑 SELL", this.sellBox.x + sbW / 2, this.sellBox.y + 26, { align: "center", size: 15, bold: true, color: "#f0c0b6" });
+      ui.text(heldObj ? `drop to sell  +${run.cost(heldObj.type) * heldObj.star}g` : "drag a unit here",
+        this.sellBox.x + sbW / 2, this.sellBox.y + 46, { align: "center", size: 11, color: "#e0b0a6" });
+
+      // Grab a board unit on press (when nothing held and not equipping a relic).
+      if (this.pressEdge && this.heldPiece < 0 && inPlayer && !equipping && !ui.pointerConsumed) {
+        const occ = deployment.find((d) => d.col === hovC && d.row === hovR);
+        if (occ) { this.heldPiece = occ.index; this.heldFromBoard = true; this.grabbedThisPress = true; ui.pointerConsumed = true; }
+      }
+      // Equip a selected relic by clicking a board unit.
+      if (ui.clicked && inPlayer && equipping && !ui.pointerConsumed) {
+        const occ = deployment.find((d) => d.col === hovC && d.row === hovR);
+        if (occ) { ui.pointerConsumed = true; if (run.equipItem(this.selectedItem, occ.index)) this.selectedItem = -1; }
+      }
+
+      // Highlights: the held unit's cell + the hovered target cell.
+      const heldDep = deployment.find((d) => d.index === this.heldPiece);
+      if (heldDep) {
+        ctx.strokeStyle = "#ffd24a"; ctx.lineWidth = 2.5;
+        ctx.strokeRect(x + heldDep.col * cellW + 2, y + heldDep.row * cellH + 2, cellW - 4, cellH - 4);
+        // Dim the lifted unit on the board (it rides the cursor instead).
+        const players = b.world.entities.filter((e) => e.alive && e.kind === Kind.Unit && e.type !== "villager" && e.team === 0).sort((p, q) => p.id - q.id);
+        const k = deployment.findIndex((d) => d.index === this.heldPiece);
+        if (k >= 0 && players[k]) heldEntityId = players[k].id;
+      }
+      if (inPlayer && this.heldPiece >= 0) {
+        ctx.fillStyle = withAlpha("#ffd24a", 0.18);
+        ctx.fillRect(x + hovC * cellW + 1, y + hovR * cellH + 1, cellW - 2, cellH - 2);
+      }
+
+      // Resolve a release: sell / place / swap / keep-armed / put-down / cancel.
+      if (ui.clicked && this.heldPiece >= 0 && !ui.pointerConsumed) {
+        if (overSell) { run.sell(this.heldPiece); this.heldPiece = -1; ui.pointerConsumed = true; }
+        else if (inPlayer && this.heldFromBoard) {
+          ui.pointerConsumed = true;
+          const sameCell = heldDep && heldDep.col === hovC && heldDep.row === hovR;
+          if (sameCell && !this.movedSincePress && this.grabbedThisPress) { /* just picked up → keep armed */ }
+          else if (sameCell && !this.movedSincePress) this.heldPiece = -1; // clicked its own cell again → put down
+          else { run.place(this.heldPiece, hovC, hovR); this.heldPiece = -1; }
+        } else this.heldPiece = -1; // dropped off-board (or a bench unit, which can't be placed) → cancel
+      }
+
+      ui.text(this.heldPiece >= 0 ? "Drop on a cell to place · drop on 🗑 to sell · swap by dropping on another unit"
+        : "Click/drag a unit, then a cell, to position it — drag to 🗑 to sell",
         x + w * 0.25, y + h - 12, { align: "center", size: 12, color: this.heldPiece >= 0 ? "#ffd24a" : "#9a917b" });
     }
 
@@ -308,6 +382,7 @@ export class WarbandScreen {
     for (const e of ents) {
       const sx = mapX(e.x), sy = mapY(e.y);
       ctx.save();
+      ctx.globalAlpha = e.id === heldEntityId ? 0.3 : 1; // lifted unit rides the cursor
       ctx.translate(sx, sy + cellH * 0.06); // feet near cell centre, body fills the cell
       ctx.scale(us, us);
       ctx.translate(-e.x, -e.y);
@@ -330,13 +405,14 @@ export class WarbandScreen {
     return `${run.round}:${run.pendingSeed}:${board}`;
   }
 
-  private pieceCard(x: number, y: number, w: number, h: number, p: Piece, deployed: boolean, onClick: () => void) {
+  private pieceCard(x: number, y: number, w: number, h: number, p: Piece, deployed: boolean, held = false) {
     const ctx = ui.ctx;
     const tier = UNIT_TIER[p.type] ?? 1;
     const hover = ui.mx >= x && ui.mx <= x + w && ui.my >= y && ui.my <= y + h;
-    ctx.fillStyle = deployed ? "rgba(40,34,20,0.95)" : "rgba(18,14,9,0.85)";
+    ctx.globalAlpha = held ? 0.4 : 1; // a lifted unit dims on its bench slot
+    ctx.fillStyle = deployed ? "rgba(40,34,20,0.95)" : hover ? "rgba(30,24,15,0.95)" : "rgba(18,14,9,0.85)";
     ctx.fillRect(x, y, w, h);
-    ctx.strokeStyle = withAlpha(TIER_COLOR[tier], deployed ? 1 : 0.5);
+    ctx.strokeStyle = withAlpha(TIER_COLOR[tier], deployed ? 1 : hover ? 0.85 : 0.5);
     ctx.lineWidth = deployed ? 2 : 1;
     ctx.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1);
     ui.text(shortName(p.type), x + w / 2, y + 18, { align: "center", size: 12, bold: true, color: "#e7ddc4" });
@@ -347,7 +423,7 @@ export class WarbandScreen {
       ctx.fillRect(ix, y + h - 9, 8, 6);
       ix += 10;
     }
-    if (hover && ui.clicked && !ui.pointerConsumed) { ui.pointerConsumed = true; onClick(); }
+    ctx.globalAlpha = 1;
   }
 
   private shopCard(x: number, y: number, w: number, h: number, type: string, affordable: boolean, onClick: () => void) {

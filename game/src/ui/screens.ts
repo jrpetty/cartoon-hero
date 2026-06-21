@@ -189,7 +189,7 @@ let mouseDown = false;
 export function setMouseDown(d: boolean) {
   mouseDown = d;
 }
-function isMouseDown() {
+export function isMouseDown() {
   return mouseDown;
 }
 
