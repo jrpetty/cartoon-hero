@@ -10,6 +10,7 @@ import { Kind, Stance, Team, EntityId } from "./types";
 import { generateMap } from "../maps/generator";
 import { UNITS } from "../content/units";
 import { SIM_HZ } from "../content/balance";
+import { activeTraits, applyBuff, traitsOf, ActiveTrait } from "./traits";
 
 export interface UnitStack {
   type: string;
@@ -33,11 +34,21 @@ function spawnArmy(w: World, stacks: UnitStack[], team: Team, side: number): Ent
   const cx = w.worldW / 2;
   const cy = w.worldH / 2;
   const ids: EntityId[] = [];
+  // Active synergies for this side's composition (by distinct deployed types).
+  const traits = activeTraits([...new Set(stacks.map((s) => s.type))]);
+  const buffByType = new Map<string, ActiveTrait[]>();
   let i = 0;
   for (const s of stacks) {
     if (!UNITS[s.type]) continue;
     const star = Math.max(1, Math.min(3, s.star ?? 1));
     const mult = STAR_MULT[star];
+    // Which active traits buff this unit type.
+    let myTraits = buffByType.get(s.type);
+    if (!myTraits) {
+      const mine = new Set(traitsOf(s.type).map((t) => t.id));
+      myTraits = traits.filter((at) => mine.has(at.trait.id) && at.tier);
+      buffByType.set(s.type, myTraits);
+    }
     for (let k = 0; k < s.count; k++) {
       const x = cx + side * 170 + (i % 4) * 16 * side;
       const y = cy - 50 + Math.floor(i / 4) * 18;
@@ -47,6 +58,7 @@ function spawnArmy(w: World, stacks: UnitStack[], team: Team, side: number): Ent
         u.hp = u.maxHp;
         u.attack = Math.round(u.attack * mult);
       }
+      for (const at of myTraits) if (at.tier) applyBuff(u, at.tier.buff);
       u.stance = Stance.Aggressive; // hunt — no economy, just fight
       u.variantRarity = star - 1; // a visual tier glow if rendered
       ids.push(u.id);

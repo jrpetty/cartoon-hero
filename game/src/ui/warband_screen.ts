@@ -6,6 +6,7 @@ import { ui } from "./ui";
 import { PAL, withAlpha } from "../render/palette";
 import { UNITS } from "../content/units";
 import { WarbandRun, UNIT_TIER, Piece } from "../sim/warband";
+import { traitsOf } from "../sim/traits";
 
 const TIER_COLOR = ["#888888", "#9aa8b4", "#4caf50", "#3a78d8", "#9b5cf0", "#e0a020"];
 const shortName = (type: string) => (UNITS[type]?.name ?? type).split(" ")[0];
@@ -48,6 +49,24 @@ export class WarbandScreen {
       });
       ui.bar(sx + 110, sy + 9, 82, 9, Math.max(0, s.life) / 100, s.alive ? "#7df2a9" : "#5a554d");
       sy += h + 3;
+    }
+
+    // ---- synergies ----
+    sy += 12;
+    ui.text("Synergies", sx, sy, { size: 14, bold: true, color: PAL.uiAccent });
+    sy += 16;
+    const traits = run.activeTraits();
+    if (!traits.length) ui.text("— none active —", sx, sy + 6, { size: 11, color: "#6f6a5c" });
+    for (const at of traits) {
+      const th = 30;
+      ctx.fillStyle = withAlpha(at.trait.color, 0.14);
+      ctx.fillRect(sx, sy, 200, th);
+      ctx.fillStyle = at.trait.color;
+      ctx.fillRect(sx, sy, 3, th);
+      ui.text(`${at.trait.name}`, sx + 10, sy + 13, { size: 12, bold: true, color: at.trait.color });
+      ui.text(`×${at.count}`, sx + 192, sy + 13, { size: 12, align: "right", color: "#e7ddc4" });
+      ui.text(at.tier?.label ?? "", sx + 10, sy + 26, { size: 10, color: "#cabfa4" });
+      sy += th + 3;
     }
 
     // ---- your board ----
@@ -140,7 +159,14 @@ export class WarbandScreen {
     ctx.strokeStyle = withAlpha(TIER_COLOR[tier], 0.9);
     ctx.lineWidth = 2;
     ctx.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1);
-    ui.text(shortName(type), x + w / 2, y + 26, { align: "center", size: 14, bold: true, color: affordable ? "#e7ddc4" : "#6f6a5c" });
+    ui.text(shortName(type), x + w / 2, y + 22, { align: "center", size: 14, bold: true, color: affordable ? "#e7ddc4" : "#6f6a5c" });
+    // Trait tags (so you can draft toward synergies).
+    const tt = traitsOf(type).slice(0, 2);
+    let txx = x + 8;
+    for (const tr of tt) {
+      ui.text(tr.name, txx, y + 40, { size: 9.5, color: tr.color });
+      txx += tr.name.length * 5.6 + 8;
+    }
     ui.text(`Tier ${tier}`, x + 8, y + h - 10, { size: 10, color: TIER_COLOR[tier] });
     ui.text(`${tier}g`, x + w - 8, y + h - 10, { align: "right", size: 13, bold: true, color: affordable ? "#ffd24a" : "#7a6a3a" });
     if (hover && affordable && ui.clicked && !ui.pointerConsumed) { ui.pointerConsumed = true; onClick(); }

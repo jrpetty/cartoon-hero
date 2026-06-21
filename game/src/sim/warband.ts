@@ -7,6 +7,7 @@
 import { RNG } from "../engine/rng";
 import { UNITS } from "../content/units";
 import { resolveBattle, UnitStack } from "./autobattle";
+import { activeTraits, ActiveTrait } from "./traits";
 
 /** Shop tier (1 cheap/weak … 5 rare/strong); buying costs the tier in gold. */
 export const UNIT_TIER: Record<string, number> = {
@@ -239,6 +240,11 @@ export class WarbandRun {
       ...this.opponents.map((o) => ({ name: o.name, life: o.life, alive: o.alive, you: false })),
     ];
     return all.sort((a, b) => Number(b.alive) - Number(a.alive) || b.life - a.life);
+  }
+
+  /** Active synergies on your currently-deployed warband (for the screen). */
+  activeTraits(): ActiveTrait[] {
+    return activeTraits([...new Set(this.boardStacks().map((s) => s.type))]);
   }
 
   /** Placement (1 = winner) once the run is over. */
