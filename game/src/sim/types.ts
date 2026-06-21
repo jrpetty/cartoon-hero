@@ -79,6 +79,14 @@ export const enum OrderKind {
   Hold = 8,
 }
 
+/** Combat posture — how a unit reacts to enemies on its own. */
+export const enum Stance {
+  Aggressive = 0, // hunt down any enemy in sight, then seek the next
+  Defensive = 1, // engage nearby threats but return to post afterwards (default)
+  StandGround = 2, // fire on what's in range, never move to chase
+  Passive = 3, // hold fire — only attack when explicitly ordered
+}
+
 export interface Order {
   kind: OrderKind;
   tx: number; // target world position x
@@ -131,6 +139,7 @@ export interface Entity {
 
   // Orders
   order: Order;
+  stance: Stance; // combat posture (units)
   path: number[] | null; // flattened [x0,y0,x1,y1,...] waypoints in world space
   pathIndex: number;
   repathCooldown: number;

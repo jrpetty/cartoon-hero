@@ -3,7 +3,7 @@
 // interface — the HUD never mutates the world directly.
 
 import { World, FOG_UNSEEN } from "../sim/world";
-import { BuildState, Entity, Kind, Team } from "../sim/types";
+import { BuildState, Entity, Kind, Stance, Team } from "../sim/types";
 import { Camera } from "../engine/camera";
 import { UNITS } from "../content/units";
 import { ABILITIES } from "../content/abilities";
@@ -32,6 +32,7 @@ export interface MatchController {
   trade(action: "sell_wood" | "sell_food" | "buy_wood" | "buy_food"): void;
   stopSelection(): void;
   holdSelection(): void;
+  setStance(stance: Stance): void;
   setAttackMoveMode(): void;
   garrisonSelection(): void;
   useAbility(): void;
@@ -430,7 +431,6 @@ export class HUD {
 
     if (combatUnits.length > 0) {
       place("Stop", () => ctrl.stopSelection(), { tooltip: ["Stop (S)"] });
-      place("Hold", () => ctrl.holdSelection(), { tooltip: ["Hold position (H)", "Units won't chase."] });
       place("Atk Move", () => ctrl.setAttackMoveMode(), {
         accent: true,
         tooltip: ["Attack-move (A)", "March and engage anything hostile on the way."],
@@ -438,6 +438,19 @@ export class HUD {
       place("Garrison", () => ctrl.garrisonSelection(), {
         tooltip: ["Garrison (G)", "Tuck units into the nearest building for cover + extra arrows."],
       });
+      // Combat stance — highlight the selection's prevailing posture (cycle with Y).
+      const counts = [0, 0, 0, 0];
+      for (const u of combatUnits) counts[u.stance]++;
+      const cur = counts.indexOf(Math.max(...counts));
+      const stances: [string, Stance, string][] = [
+        ["Aggr", Stance.Aggressive, "Aggressive — chase down any enemy in sight, then seek the next."],
+        ["Def", Stance.Defensive, "Defensive — engage nearby threats, then return to post."],
+        ["Stand", Stance.StandGround, "Stand Ground — fire on anything in range, never move to chase."],
+        ["No Atk", Stance.Passive, "Passive — hold fire; only fight when you order it."],
+      ];
+      for (const [lbl, st, tip] of stances) {
+        place(lbl, () => ctrl.setStance(st), { accent: cur === st, size: 10, tooltip: [`${lbl} stance (Y to cycle)`, tip] });
+      }
       // Signature ability for whichever ability-carrying type is selected.
       const abilityUnit = combatUnits.find((e) => ABILITIES[e.type]);
       if (abilityUnit) {

@@ -3,7 +3,7 @@
 // sim loop, input routing and the meta-progression loop around each match.
 
 import { World, WorldEvent } from "./sim/world";
-import { BuildState, Entity, EntityId, Kind, MAX_TEAMS, OrderKind, Team } from "./sim/types";
+import { BuildState, Entity, EntityId, Kind, MAX_TEAMS, OrderKind, Stance, Team } from "./sim/types";
 import { UNITS } from "./content/units";
 import { ABILITIES } from "./content/abilities";
 import { BUILDINGS } from "./content/buildings";
@@ -208,6 +208,7 @@ class App {
       this.hud.buildCategory = null;
     }
     if (k === "g") this.garrisonSelected();
+    if (k === "y") this.cycleStance();
     if (k === ".") this.selectIdleVillager();
     if (k === ",") this.selectAllArmy();
     if (k === "c") this.armCommanderPower();
@@ -241,6 +242,16 @@ class App {
    * otherwise the nearest friendly building with free space. Any unit can
    * garrison — villagers included — so they can take cover from a raid.
    */
+  /** Y — cycle the selected units' combat stance. */
+  cycleStance() {
+    const units = this.playerSelection().filter((e) => e.kind === Kind.Unit);
+    if (!units.length) return;
+    const next = (((units[0].stance as number) + 1) % 4) as Stance;
+    this.dispatch({ t: "stance", team: this.me, ids: units.map((e) => e.id), stance: next });
+    this.hud.addAlert(`Stance: ${["⚔ Aggressive", "🛡 Defensive", "⚑ Stand Ground", "✋ Passive"][next]}`);
+    audio.play("command");
+  }
+
   garrisonSelected() {
     if (!this.world) return;
     const sel = this.playerSelection();
@@ -535,6 +546,12 @@ class App {
     },
     holdSelection: () => {
       this.dispatch({ t: "hold", team: this.me, ids: this.playerSelection().map((e) => e.id) });
+      audio.play("command");
+    },
+    setStance: (stance) => {
+      const ids = this.playerSelection().filter((e) => e.kind === Kind.Unit).map((e) => e.id);
+      if (!ids.length) return;
+      this.dispatch({ t: "stance", team: this.me, ids, stance });
       audio.play("command");
     },
     setAttackMoveMode: () => {

@@ -7,7 +7,7 @@
 // is simulated — so all clients stay in perfect sync from the same seed.
 
 import { World } from "./world";
-import { EntityId, Team } from "./types";
+import { EntityId, Stance, Team } from "./types";
 
 export type Command =
   | { t: "move"; team: Team; ids: EntityId[]; x: number; y: number; queue: boolean; attackMove: boolean; formation?: boolean }
@@ -16,6 +16,7 @@ export type Command =
   | { t: "build"; team: Team; ids: EntityId[]; building: EntityId; queue: boolean }
   | { t: "stop"; team: Team; ids: EntityId[] }
   | { t: "hold"; team: Team; ids: EntityId[] }
+  | { t: "stance"; team: Team; ids: EntityId[]; stance: Stance }
   | { t: "ability"; team: Team; ids: EntityId[] }
   | { t: "place"; team: Team; building: string; x: number; y: number; builders: EntityId[] }
   | { t: "train"; team: Team; buildingId: EntityId; unit: string }
@@ -58,6 +59,7 @@ export function applyCommand(world: World, c: Command): void {
     case "build": world.issueBuildRepair(owned(world, c.team, c.ids), c.building, c.queue); break;
     case "stop": world.issueStop(owned(world, c.team, c.ids)); break;
     case "hold": world.issueHold(owned(world, c.team, c.ids)); break;
+    case "stance": world.setStance(owned(world, c.team, c.ids), c.stance); break;
     case "ability": world.useAbility(owned(world, c.team, c.ids)); break;
     case "place": {
       // Atomic: place the foundation and assign the chosen builders in one step,

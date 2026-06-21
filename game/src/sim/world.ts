@@ -14,6 +14,7 @@ import {
   OrderKind,
   ResourceBag,
   ResourceKind,
+  Stance,
   Team,
 } from "./types";
 import { UNITS, UnitDef } from "../content/units";
@@ -146,6 +147,7 @@ export function makeEntity(): Entity {
     attack: 0, range: 0, attackCooldown: 0, attackInterval: 1,
     armor: 0, pierceArmor: 0, armorClass: ArmorClass.Infantry, visionRange: 100,
     order: { kind: OrderKind.Idle, tx: 0, ty: 0, target: -1 },
+    stance: Stance.Defensive,
     path: null, pathIndex: 0, repathCooldown: 0,
     carry: 0, carryKind: null, gatherCooldown: 0,
     amount: 0,
@@ -678,7 +680,22 @@ export class World {
       const e = this.byId.get(id);
       if (!e || !e.alive) continue;
       e.order = { kind: OrderKind.Hold, tx: e.x, ty: e.y, target: -1 };
+      e.stance = Stance.StandGround;
       e.path = null;
+    }
+  }
+
+  /** Set the combat stance of the given units (Aggressive/Defensive/StandGround/Passive). */
+  setStance(ids: EntityId[], stance: Stance) {
+    for (const id of ids) {
+      const e = this.byId.get(id);
+      if (!e || !e.alive || e.kind !== Kind.Unit) continue;
+      e.stance = stance;
+      // Switching off Stand Ground/Passive while idle lets a held unit re-engage;
+      // switching to Passive drops any auto-acquired fight so it truly holds fire.
+      if (stance === Stance.Passive && e.order.kind === OrderKind.Attack && (e.order.queue?.length ?? 0) === 0) {
+        e.order = { kind: OrderKind.Idle, tx: e.x, ty: e.y, target: -1 };
+      }
     }
   }
 
@@ -1377,6 +1394,10 @@ export class World {
           this.emit("sword", target.x, target.y, e.team);
         }
       }
+    } else if (e.stance === Stance.StandGround) {
+      // Hold the line: don't chase a target that has stepped out of reach.
+      e.vx = e.vy = 0;
+      this.finishOrder(e);
     } else {
       this.stepMove(e, def, true);
       // stepMove may finish the order on arrival; re-target next tick.
@@ -1618,17 +1639,24 @@ export class World {
     return a;
   }
 
-  private autoAcquire(e: Entity, def: UnitDef, hold: boolean) {
+  private autoAcquire(e: Entity, def: UnitDef, holdOrder: boolean) {
     if (def.attack <= 0) return;
     if (this.tickCount % 5 !== e.id % 5) return;
-    // Idle units always answer an attacker; hold units only scan their post.
-    let enemy = hold ? null : this.retaliationTarget(e);
+    // Passive units hold fire entirely (only attack on explicit command).
+    if (e.stance === Stance.Passive) return;
+    // Stand Ground (stance or an explicit Hold order): only what's in range, no
+    // chase and no retaliation pursuit.
+    const standGround = holdOrder || e.stance === Stance.StandGround;
+    let enemy = standGround ? null : this.retaliationTarget(e);
     if (!enemy) {
-      const scanRange = hold ? Math.max(e.range + 20, 60) : e.visionRange * 0.85;
+      const scanRange = standGround ? Math.max(e.range + 20, 60) : e.visionRange * 0.85;
       enemy = this.findEnemyInRange(e, scanRange);
     }
     if (enemy) {
-      const home: Order | null = hold ? null : { kind: OrderKind.Move, tx: e.x, ty: e.y, target: -1 };
+      // Defensive returns to its post after the fight; Aggressive hunts on (no
+      // home order, so it re-acquires the next foe); Stand Ground stays put.
+      const home: Order | null = e.stance === Stance.Defensive && !standGround
+        ? { kind: OrderKind.Move, tx: e.x, ty: e.y, target: -1 } : null;
       e.order = {
         kind: OrderKind.Attack,
         tx: enemy.x,
