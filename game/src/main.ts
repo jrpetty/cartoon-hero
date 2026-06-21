@@ -14,6 +14,7 @@ import { generateMap } from "./maps/generator";
 import { SkirmishAI } from "./ai/skirmish_ai";
 import { DIFFICULTIES } from "./ai/difficulty";
 import { Camera } from "./engine/camera";
+import { wallLinePoints as computeWallLine } from "./engine/wallline";
 import { Input } from "./engine/input";
 import { Particles } from "./engine/particles";
 import { audio } from "./engine/audio";
@@ -575,21 +576,7 @@ class App {
 
   /** Snapped, de-duplicated tile centres along a drag, for wall painting/preview. */
   wallLinePoints(wx0: number, wy0: number, wx1: number, wy1: number): { x: number; y: number }[] {
-    const steps = Math.max(0, Math.round(Math.hypot(wx1 - wx0, wy1 - wy0) / TILE));
-    const out: { x: number; y: number }[] = [];
-    const seen = new Set<string>();
-    for (let i = 0; i <= steps; i++) {
-      const t = steps === 0 ? 0 : i / steps;
-      const wx = wx0 + (wx1 - wx0) * t;
-      const wy = wy0 + (wy1 - wy0) * t;
-      const cx = Math.round(wx / TILE);
-      const cy = Math.round(wy / TILE);
-      const key = `${cx},${cy}`;
-      if (seen.has(key)) continue;
-      seen.add(key);
-      out.push({ x: cx * TILE + TILE / 2, y: cy * TILE + TILE / 2 });
-    }
-    return out;
+    return computeWallLine(wx0, wy0, wx1, wy1, TILE);
   }
 
   /** Funnel every player action through here: queued for lockstep in a net game,
