@@ -70,6 +70,23 @@ describe("Warband Tactics run engine", () => {
     expect(foeLifeAfter <= foeLifeBefore).toBe(true);
   });
 
+  it("opponents run the same economy and field a warband that grows over rounds", () => {
+    const run = new WarbandRun(3);
+    const sizes: number[] = [];
+    // Buy a couple of units so the player survives a while, then march through rounds.
+    run.gold = 50;
+    run.shop = ["spearman", "spearman", "militia", "archer", "knight"];
+    run.buy(0); run.buy(2); run.buy(3);
+    for (let r = 0; r < 10 && run.phase !== "over"; r++) {
+      sizes.push(run.pendingOpp.length); // the upcoming opponent's deployed board
+      run.fight();
+      if (run.phase === "result") run.next();
+    }
+    // The opponent always brings a warband, and it scales up as its economy levels.
+    expect(sizes[0]).toBeGreaterThanOrEqual(1);
+    expect(Math.max(...sizes)).toBeGreaterThan(sizes[0]);
+  });
+
   it("a full auto-played run always terminates with a win or loss", () => {
     const run = new WarbandRun(99);
     let guard = 0;

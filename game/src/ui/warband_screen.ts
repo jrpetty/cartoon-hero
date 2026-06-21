@@ -8,6 +8,7 @@ import { ui } from "./ui";
 import { PAL, withAlpha } from "../render/palette";
 import { drawUnit, setTeamColorResolver } from "../render/draw";
 import { Kind } from "../sim/types";
+import { TILE } from "../content/balance";
 import { UNITS } from "../content/units";
 import { WarbandRun, UNIT_TIER, Piece } from "../sim/warband";
 import { LiveBattle } from "../sim/autobattle";
@@ -122,7 +123,7 @@ export class WarbandScreen {
     ui.text(`Your Warband  ·  deploying top ${run.deployCount()}`, boardX, 80, { size: 14, bold: true, color: PAL.uiAccent });
     ui.text(`vs ${run.pendingFoeName()}`, boardX + boardW, 80, { size: 13, bold: true, align: "right", color: "#e0786a" });
 
-    this.drawBoard(boardX, boardY, boardW, boardH, time, dt);
+    this.drawBoard(boardX, boardY, boardW, boardH, time, dt, run.phase === "shop");
 
     // ---- bench (your pieces) + relic tray ----
     const benchY = boardBottom + 8;
@@ -221,8 +222,9 @@ export class WarbandScreen {
     return action;
   }
 
-  /** The tiled arena + the live (or preview) battle rendered on top of it. */
-  private drawBoard(x: number, y: number, w: number, h: number, time: number, dt: number) {
+  /** The tiled arena. In setup it shows your placement (enemy hidden); once the
+   *  fight starts it reveals and renders the live, animated battle. */
+  private drawBoard(x: number, y: number, w: number, h: number, time: number, dt: number, setup: boolean) {
     const ctx = ui.ctx;
     ctx.fillStyle = "#0c0a06";
     ctx.fillRect(x - 2, y - 2, w + 4, h + 4);
@@ -240,7 +242,6 @@ export class WarbandScreen {
         ctx.fillRect(tx, ty, tw + 1, tlh + 1);
       }
     }
-    // Grid lines + centre divider + frame.
     ctx.strokeStyle = "rgba(0,0,0,0.22)"; ctx.lineWidth = 1;
     ctx.beginPath();
     for (let c = 1; c < cols; c++) { ctx.moveTo(x + c * tw, y); ctx.lineTo(x + c * tw, y + h); }
@@ -252,35 +253,84 @@ export class WarbandScreen {
     ctx.strokeRect(x + 1.5, y + 1.5, w - 3, h - 3);
 
     if (!this.battle) return;
-    const b = this.battle;
+    if (setup) this.drawSetup(x, y, w, h, time);
+    else this.drawLiveBattle(x, y, w, h, time, dt);
+  }
+
+  /** Setup phase: your deployed units, one per square on your half, enemy hidden. */
+  private drawSetup(x: number, y: number, w: number, h: number, time: number) {
+    const ctx = ui.ctx;
+    // Enemy half is fogged until the battle begins.
+    ctx.fillStyle = "rgba(8,5,3,0.62)";
+    ctx.fillRect(x + w / 2 + 1.5, y + 1.5, w / 2 - 3, h - 3);
+    ui.text("🔒 Enemy warband hidden", x + w * 0.75, y + h / 2 - 8, { align: "center", size: 15, bold: true, color: "#caa" });
+    ui.text("revealed when the battle begins", x + w * 0.75, y + h / 2 + 12, { align: "center", size: 12, color: "#8a8278" });
+
+    const players = this.battle!.world.entities
+      .filter((e) => e.alive && e.kind === Kind.Unit && e.team === 0)
+      .sort((p, q) => p.id - q.id); // stable deploy order (strongest first)
+    if (!players.length) return;
+
+    // Lay them out one-per-cell on the left half, front rank nearest the centre.
+    const n = players.length;
+    const rowsN = Math.min(4, Math.max(1, Math.ceil(n / 4)));
+    const colsN = Math.max(1, Math.ceil(n / rowsN));
+    const regionW = w * 0.46;
+    const cellW = regionW / colsN;
+    const cellH = (h - 24) / rowsN;
+    const us = Math.min(cellW, cellH) / (TILE * 1.05); // big models
+    const rightEdge = x + w / 2 - 14; // front column hugs the divider
+
+    setTeamColorResolver(null);
+    players.forEach((e, i) => {
+      const col = Math.floor(i / rowsN); // 0 = front (nearest centre)
+      const row = i % rowsN;
+      const rowsInCol = col === colsN - 1 ? n - col * rowsN : rowsN;
+      const cellCX = rightEdge - (col + 0.5) * cellW;
+      const cellCY = y + h / 2 + (row - (rowsInCol - 1) / 2) * cellH;
+      // Placement square.
+      ctx.fillStyle = withAlpha("#3a78d8", 0.10);
+      ctx.fillRect(cellCX - cellW / 2 + 3, cellCY - cellH / 2 + 3, cellW - 6, cellH - 6);
+      ctx.strokeStyle = withAlpha("#5a86c8", 0.5); ctx.lineWidth = 1.5;
+      ctx.strokeRect(cellCX - cellW / 2 + 3, cellCY - cellH / 2 + 3, cellW - 6, cellH - 6);
+      // The unit, centred in its square (feet a touch below middle).
+      ctx.save();
+      ctx.beginPath(); ctx.rect(cellCX - cellW / 2, cellCY - cellH / 2, cellW, cellH); ctx.clip();
+      ctx.translate(cellCX, cellCY + cellH * 0.30);
+      ctx.scale(us, us);
+      ctx.translate(-e.x, -e.y);
+      try { drawUnit(ctx, e, time, 0); } catch { /* keep the frame alive */ }
+      ctx.restore();
+    });
+  }
+
+  /** Battle phase: render the live sim with an adaptive camera that keeps the
+   *  action framed and the units large as the fight moves and thins. */
+  private drawLiveBattle(x: number, y: number, w: number, h: number, time: number, dt: number) {
+    const ctx = ui.ctx;
+    const b = this.battle!;
     const ents = b.world.entities
       .filter((e) => e.alive && e.kind === Kind.Unit)
       .sort((p, q) => p.y - q.y);
 
-    // Adaptive camera: frame the live units' bounding box and fill the board
-    // with them, so units stay large and centred as the fight moves and thins.
-    // Smoothed over time to avoid jitter when units die or shuffle.
-    let tCX = b.cx, tCY = b.cy, tScale = 2.2;
+    let tCX = b.cx, tCY = b.cy, tScale = 2.4;
     if (ents.length) {
       let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
       for (const e of ents) { minX = Math.min(minX, e.x); maxX = Math.max(maxX, e.x); minY = Math.min(minY, e.y); maxY = Math.max(maxY, e.y); }
-      // Sprites are anchored at the feet and rise upward, so extend the box up
-      // to cover the bodies — keeps the army vertically centred, not floating high.
+      // Sprites anchor at the feet and rise, so extend the box up to cover bodies.
       const top = minY - 38, bottom = maxY + 10;
-      const bw = (maxX - minX) + 90 * 2;
-      const bh = (bottom - top) + 30 * 2;
+      const bw = (maxX - minX) + 70 * 2;
+      const bh = (bottom - top) + 24 * 2;
       tCX = (minX + maxX) / 2;
       tCY = (top + bottom) / 2;
-      tScale = Math.max(1.4, Math.min(3.2, Math.min(w / bw, h / bh)));
+      tScale = Math.max(1.6, Math.min(3.8, Math.min(w / bw, h / bh)));
     }
     if (this.viewScale === 0) { this.viewCX = tCX; this.viewCY = tCY; this.viewScale = tScale; }
-    const k = Math.min(1, dt * 3.5); // smoothing toward the target frame
+    const k = Math.min(1, dt * 3.5);
     this.viewCX += (tCX - this.viewCX) * k;
     this.viewCY += (tCY - this.viewCY) * k;
     this.viewScale += (tScale - this.viewScale) * k;
 
-    // Render units with the full animated unit renderer (walk cycles, attack
-    // swings, team colours, star glow) into the framed board.
     setTeamColorResolver(null);
     ctx.save();
     ctx.beginPath(); ctx.rect(x, y, w, h); ctx.clip();

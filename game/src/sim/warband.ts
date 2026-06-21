@@ -42,7 +42,47 @@ const MAX_LEVEL = 9;
 export interface Piece { type: string; star: number; items: string[]; } // star 1..3
 export interface Opponent { id: number; name: string; life: number; alive: boolean; }
 
+/** An AI opponent's hidden economy — identical rules to the player's. */
+interface FoeBrain { gold: number; level: number; xp: number; pieces: Piece[]; rng: RNG; }
+
 const NAMES = ["Ironclad", "Crimson", "Verdant", "Stormcrow", "Ashveil", "Goldhand", "Nightfall"];
+
+/** Roll one shop unit at the given level odds (shared by player + opponents). */
+function rollUnit(odds: number[], rng: RNG): string | null {
+  let roll = rng.range(0, 100);
+  let tier = 1;
+  for (let t = 0; t < 5; t++) { if (roll < odds[t]) { tier = t + 1; break; } roll -= odds[t]; }
+  const pool = TIER_UNITS[tier];
+  return pool.length ? pool[rng.int(0, pool.length - 1)] : null;
+}
+
+/** Combine any 3 same type+star into one of the next star (shared by all warbands). */
+function mergeBoard(pieces: Piece[], stash: string[]) {
+  for (let star = 1; star <= 2; star++) {
+    let changed = true;
+    while (changed) {
+      changed = false;
+      const counts: Record<string, number> = {};
+      for (const p of pieces) if (p.star === star) counts[p.type] = (counts[p.type] ?? 0) + 1;
+      for (const [type, n] of Object.entries(counts)) {
+        if (n >= 3) {
+          let removed = 0;
+          const carried: string[] = [];
+          for (let i = pieces.length - 1; i >= 0 && removed < 3; i--) {
+            if (pieces[i].type === type && pieces[i].star === star) {
+              carried.push(...pieces[i].items); // the upgrade inherits the components' relics
+              pieces.splice(i, 1);
+              removed++;
+            }
+          }
+          pieces.push({ type, star: star + 1, items: carried.slice(0, MAX_ITEMS) });
+          stash.push(...carried.slice(MAX_ITEMS)); // overflow relics go back to the stash
+          changed = true;
+        }
+      }
+    }
+  }
+}
 
 export class WarbandRun {
   private rng: RNG;
@@ -62,19 +102,23 @@ export class WarbandRun {
   // The round's matchup, fixed when the shop opens so the on-board preview shows
   // the real upcoming enemy and the live fight uses the same deterministic seed.
   pendingSeed = 0;
-  pendingOpp: UnitStack[] = [];
+  pendingOpp: ArenaUnit[] = [];
   private pendingFoe: Opponent | null = null;
+  private foeBrains: FoeBrain[] = []; // each opponent's hidden economy
 
   constructor(seed = (Math.random() * 1e9) | 0) {
     this.rng = new RNG(seed);
     this.opponents = NAMES.map((name, id) => ({ id, name, life: 100, alive: true }));
+    // Every opponent runs the exact same economy as the player, from the same
+    // starting point (2 gold, level 1, empty board), on its own seeded stream.
+    this.foeBrains = this.opponents.map((o) => ({ gold: 2, level: 1, xp: 0, pieces: [], rng: this.rng.fork(o.id + 1) }));
     this.startRound();
   }
 
   // ---- economy / shop -------------------------------------------------------
-  // You field more than your raw level so early rounds aren't a lonely 1-v-many:
-  // a small fixed bonus on top of level, climbing as you tech up.
-  private boardCap(): number { return Math.min(12, this.level + 2); }
+  // You field exactly your level — levelling up is what unlocks another board
+  // slot, so teching is a real tradeoff against buying/rerolling.
+  private boardCap(): number { return this.level; }
 
   /** How many pieces deploy this round (for the screen's "deploying top N"). */
   deployCount(): number { return this.boardCap(); }
@@ -82,13 +126,7 @@ export class WarbandRun {
   private rollShop() {
     const odds = TIER_ODDS[Math.min(this.level, MAX_LEVEL) - 1];
     this.shop = [];
-    for (let i = 0; i < SHOP_SIZE; i++) {
-      let roll = this.rng.range(0, 100);
-      let tier = 1;
-      for (let t = 0; t < 5; t++) { if (roll < odds[t]) { tier = t + 1; break; } roll -= odds[t]; }
-      const pool = TIER_UNITS[tier];
-      this.shop.push(pool.length ? pool[this.rng.int(0, pool.length - 1)] : null);
-    }
+    for (let i = 0; i < SHOP_SIZE; i++) this.shop.push(rollUnit(odds, this.rng));
   }
 
   reroll(): boolean {
@@ -131,33 +169,7 @@ export class WarbandRun {
   }
 
   /** Combine any 3 same type+star into one of the next star. */
-  private merge() {
-    for (let star = 1; star <= 2; star++) {
-      let changed = true;
-      while (changed) {
-        changed = false;
-        const counts: Record<string, number> = {};
-        for (const p of this.pieces) if (p.star === star) counts[p.type] = (counts[p.type] ?? 0) + 1;
-        for (const [type, n] of Object.entries(counts)) {
-          if (n >= 3) {
-            let removed = 0;
-            const carried: string[] = [];
-            for (let i = this.pieces.length - 1; i >= 0 && removed < 3; i--) {
-              if (this.pieces[i].type === type && this.pieces[i].star === star) {
-                carried.push(...this.pieces[i].items); // the upgrade inherits the components' relics
-                this.pieces.splice(i, 1);
-                removed++;
-              }
-            }
-            const keep = carried.slice(0, MAX_ITEMS);
-            this.itemStash.push(...carried.slice(MAX_ITEMS)); // overflow relics go back to the stash
-            this.pieces.push({ type, star: star + 1, items: keep });
-            changed = true;
-          }
-        }
-      }
-    }
-  }
+  private merge() { mergeBoard(this.pieces, this.itemStash); }
 
   /** Equip a stashed relic onto a piece (max 3 per unit). */
   equipItem(stashIndex: number, pieceIndex: number): boolean {
@@ -210,39 +222,56 @@ export class WarbandRun {
     // A relic every few rounds — equip it to build a carry.
     if (this.round % 3 === 2) this.itemStash.push(ITEM_IDS[this.rng.int(0, ITEM_IDS.length - 1)]);
     this.rollShop();
+    // Every living opponent runs its economy for the round (same rules as you).
+    for (const o of this.opponents) if (o.alive) this.stepFoe(this.foeBrains[o.id]);
     // Lock in this round's opponent + battle seed now, so the board preview and
     // the live fight face the same warband.
     const foes = this.livingFoes();
     this.pendingFoe = foes.length ? foes[this.round % foes.length] : null;
     this.pendingSeed = this.rng.int(1, 1e9);
-    this.pendingOpp = this.opponentStacks(this.pendingSeed);
+    this.pendingOpp = this.pendingFoe ? this.foeBoard(this.foeBrains[this.pendingFoe.id]) : [];
     this.phase = "shop";
   }
 
   /** Name of the warband you'll face this round (for the board's enemy banner). */
   pendingFoeName(): string { return this.pendingFoe?.name ?? "—"; }
 
-  /** Build an opponent warband that scales with the round (procedural for now). */
-  private opponentStacks(seed: number): UnitStack[] {
-    const r = new RNG(seed);
-    const budget = 3 + this.round * 2.4; // grows each round
-    const lvl = Math.min(MAX_LEVEL, 1 + Math.floor(this.round * 0.8));
-    const odds = TIER_ODDS[lvl - 1];
-    const stacks: UnitStack[] = [];
-    let spent = 0;
+  /**
+   * Advance one opponent's economy a round, by the same rules the player plays:
+   * identical income + interest, the same level odds, buy and merge. A simple
+   * greedy drafter — techs up when flush, then spends down to a small reserve.
+   */
+  private stepFoe(b: FoeBrain) {
+    b.gold += 5 + Math.min(5, Math.floor(b.gold / 10)); // base + interest (same formula)
+    // A sensible level curve to climb toward (mirrors a player following a guide).
+    const targetLevel = Math.min(MAX_LEVEL, 1 + Math.ceil(this.round / 2));
+    // Spend the round's gold: lean toward levelling up to the curve, otherwise
+    // buy and merge from a same-odds shop, until the gold runs out.
     let guard = 0;
-    while (spent < budget && guard++ < 40) {
-      let roll = r.range(0, 100);
-      let tier = 1;
-      for (let t = 0; t < 5; t++) { if (roll < odds[t]) { tier = t + 1; break; } roll -= odds[t]; }
-      const pool = TIER_UNITS[tier];
-      if (!pool.length) continue;
-      const type = pool[r.int(0, pool.length - 1)];
-      const star = r.range(0, 1) < Math.min(0.4, this.round * 0.05) ? 2 : 1;
-      stacks.push({ type, count: 1, star });
-      spent += tier * star;
+    while (b.gold >= 1 && guard++ < 80) {
+      const wantsLevel = b.level < targetLevel && b.gold >= XP_BUY + 1;
+      if (wantsLevel && b.rng.bool(0.5)) {
+        b.gold -= XP_BUY; b.xp += XP_BUY;
+        while (b.level < MAX_LEVEL && b.xp >= XP_TO_LEVEL[b.level + 1]) b.level++;
+        continue;
+      }
+      const odds = TIER_ODDS[Math.min(b.level, MAX_LEVEL) - 1];
+      const type = rollUnit(odds, b.rng);
+      if (!type) continue;
+      if (b.gold < UNIT_TIER[type]) break;
+      b.gold -= UNIT_TIER[type];
+      b.pieces.push({ type, star: 1, items: [] });
+      mergeBoard(b.pieces, []); // opponents don't field relics
     }
-    return stacks.length ? stacks : [{ type: "militia", count: 2, star: 1 }];
+  }
+
+  /** An opponent's deployed warband — its strongest pieces, same cap as yours. */
+  private foeBoard(b: FoeBrain): ArenaUnit[] {
+    const cap = b.level; // same rule the player plays by
+    return [...b.pieces]
+      .sort((p, q) => q.star - p.star || (UNIT_TIER[q.type] ?? 0) - (UNIT_TIER[p.type] ?? 0))
+      .slice(0, cap)
+      .map((p) => ({ type: p.type, star: p.star }));
   }
 
   private livingFoes(): Opponent[] { return this.opponents.filter((o) => o.alive); }
