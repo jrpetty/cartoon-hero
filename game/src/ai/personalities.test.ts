@@ -52,6 +52,20 @@ describe("AI population growth", () => {
     expect(BUILDINGS.house.popProvided).toBe(10);
   });
 
+  it("secures resources with camps and transitions to a farm economy", () => {
+    const w = new World(42);
+    w.init(generateMap("open_plains", 42, 2), [{}, {}], [1, 1]);
+    const ai = new SkirmishAI(w, Team.Enemy, DIFFICULTIES.warlord);
+    for (let i = 0; i < SIM_HZ * 60 * 13; i++) { w.tick(); ai.update(SIM_DT); w.drainEvents(); }
+    const blds = w.entitiesOf(Team.Enemy, Kind.Building);
+    const count = (t: string) => blds.filter((e) => e.type === t).length;
+    // Went out onto the map to secure wood/gold…
+    expect(count("lumber_camp")).toBeGreaterThanOrEqual(1);
+    expect(count("mill")).toBeGreaterThanOrEqual(1);
+    // …and transitioned onto farms for a sustainable late-game food supply.
+    expect(count("farm")).toBeGreaterThanOrEqual(3);
+  }, 60000);
+
   it("doesn't stay pop-blocked — builds houses ahead of the curve", () => {
     const w = new World(99);
     w.init(generateMap("open_plains", 99, 2), [{}, {}], [1, 1]);

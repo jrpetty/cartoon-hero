@@ -661,45 +661,65 @@ export class SkirmishAI {
 
   private maybeBuildCamps(base: Entity) {
     const p = this.world.player(this.team);
-    if (p.resources.wood < 110) return;
-    const camps: [string, string, ResourceKind][] = [
-      ["tree", "lumber_camp", ResourceKind.Wood],
-      ["gold_mine", "mining_camp", ResourceKind.Gold],
+    if (p.resources.wood < 100) return;
+    const vil = this.myUnits("villager").length;
+    const camps: [string, string, ResourceKind, number][] = [
+      ["tree", "lumber_camp", ResourceKind.Wood, Math.min(5, 2 + Math.floor(vil / 12))],
+      ["gold_mine", "mining_camp", ResourceKind.Gold, Math.min(3, 1 + Math.floor(vil / 16))],
     ];
-    for (const [resType, campType, kind] of camps) {
-      const node = this.nearestResource(resType, base.x, base.y);
-      if (!node) continue;
-      const drop = this.world.findNearestDropoff(this.team, node.x, node.y, kind);
-      const dropDist = drop ? dist(drop.x, drop.y, node.x, node.y) : Infinity;
-      if (dropDist > TILE * 7) {
-        const camp = this.placeNear(campType, node.x, node.y, 1.5, 3.5);
-        if (camp) {
-          this.assignBuilder(camp);
-          return; // one camp per cycle
-        }
+    for (const [resType, campType, kind, cap] of camps) {
+      if (this.myBuildings(campType, false).length >= cap) continue; // don't blanket the map
+      // Go out onto the map: find the nearest resource node of this type that
+      // isn't yet served by a drop-off, and plant a camp there. As patches near
+      // base deplete the AI keeps pushing camps out to secure new ground.
+      let best: Entity | null = null;
+      let bestD = Infinity;
+      for (const e of this.world.entities) {
+        if (!e.alive || e.kind !== Kind.Resource || e.type !== resType || e.amount <= 0) continue;
+        const d = dist(e.x, e.y, base.x, base.y);
+        if (d >= bestD || d > TILE * 42) continue; // keep expansion within reach
+        const drop = this.world.findNearestDropoff(this.team, e.x, e.y, kind);
+        const dropDist = drop ? dist(drop.x, drop.y, e.x, e.y) : Infinity;
+        if (dropDist > TILE * 6) { best = e; bestD = d; }
+      }
+      if (best) {
+        const camp = this.placeNear(campType, best.x, best.y, 1.5, 3.5);
+        if (camp) { this.assignBuilder(camp); return; } // one camp per cycle
       }
     }
   }
 
   private maybeBuildFarms(base: Entity, villagerCount: number) {
     const p = this.world.player(this.team);
-    const berriesLeft = this.world.entities.some(
-      (e) => e.alive && e.kind === Kind.Resource && e.type === "berries" && e.amount > 0 &&
-        dist(e.x, e.y, base.x, base.y) < TILE * 16,
-    );
-    const farmTarget = berriesLeft ? 2 : Math.max(3, Math.floor(villagerCount / 4));
-    const farms = this.myBuildings("farm", false).length;
-    if (farms < farmTarget && p.resources.wood > 120) {
-      const mill = this.myBuildings("mill")[0];
-      const cx = mill ? mill.x : base.x;
-      const cy = mill ? mill.y : base.y;
-      const farm = this.placeNear("farm", cx, cy, 2, 6);
-      if (farm) this.assignBuilder(farm);
+    // How much berry food is still within reach of base.
+    let berryFood = 0;
+    for (const e of this.world.entities) {
+      if (e.alive && e.kind === Kind.Resource && e.type === "berries" && e.amount > 0 &&
+          dist(e.x, e.y, base.x, base.y) < TILE * 18) berryFood += e.amount;
     }
-    // A mill makes farm eco compact.
-    if (!berriesLeft && this.myBuildings("mill", false).length === 0 && p.resources.wood > 200) {
+    const lowBerries = berryFood < 700;
+
+    // A mill anchors a compact farm economy — build it once the eco is rolling
+    // or the berries are thinning, so the transition is ready.
+    if (this.myBuildings("mill", false).length === 0 && p.age >= 1 && p.resources.wood > 150 &&
+        (lowBerries || villagerCount >= 12)) {
       const mill = this.placeNear("mill", base.x, base.y, 3, 6);
-      if (mill) this.assignBuilder(mill);
+      if (mill) { this.assignBuilder(mill); return; }
+    }
+
+    // Farm transition: farms are an *infinite* food source, so the AI must move
+    // onto them for the late game. Ramp toward ~one farm per 3 villagers once the
+    // berries thin out or we hit Castle Age — building a couple at a time so the
+    // transition actually keeps up with a growing population.
+    const transitioning = lowBerries || p.age >= 2;
+    const farmTarget = transitioning ? Math.min(24, Math.max(3, Math.ceil(villagerCount / 3))) : 0;
+    const mill = this.myBuildings("mill")[0];
+    const cx = mill ? mill.x : base.x;
+    const cy = mill ? mill.y : base.y;
+    for (let n = 0; n < 2; n++) {
+      if (this.myBuildings("farm", false).length >= farmTarget || p.resources.wood <= 80) break;
+      const farm = this.placeNear("farm", cx, cy, 2, 6);
+      if (farm) this.assignBuilder(farm); else break;
     }
   }
 
