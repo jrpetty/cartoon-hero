@@ -6,7 +6,7 @@
 
 import { RNG } from "../engine/rng";
 import { UNITS } from "../content/units";
-import { resolveBattle, UnitStack, ArenaUnit } from "./autobattle";
+import { resolveBattle, UnitStack, ArenaUnit, BattleResult } from "./autobattle";
 import { activeTraits, ActiveTrait } from "./traits";
 import { ITEM_IDS, MAX_ITEMS } from "./items";
 
@@ -56,9 +56,14 @@ export class WarbandRun {
   itemStash: string[] = []; // unequipped relics
   shop: (string | null)[] = [];
   opponents: Opponent[] = [];
-  phase: "shop" | "result" | "over" = "shop";
+  phase: "shop" | "battle" | "result" | "over" = "shop";
   outcome: "win" | "loss" | null = null;
   lastResult: { won: boolean; foe: string; youLeft: number; foeLeft: number; dmg: number } | null = null;
+  // The round's matchup, fixed when the shop opens so the on-board preview shows
+  // the real upcoming enemy and the live fight uses the same deterministic seed.
+  pendingSeed = 0;
+  pendingOpp: UnitStack[] = [];
+  private pendingFoe: Opponent | null = null;
 
   constructor(seed = (Math.random() * 1e9) | 0) {
     this.rng = new RNG(seed);
@@ -67,7 +72,12 @@ export class WarbandRun {
   }
 
   // ---- economy / shop -------------------------------------------------------
-  private boardCap(): number { return this.level; }
+  // You field more than your raw level so early rounds aren't a lonely 1-v-many:
+  // a small fixed bonus on top of level, climbing as you tech up.
+  private boardCap(): number { return Math.min(12, this.level + 2); }
+
+  /** How many pieces deploy this round (for the screen's "deploying top N"). */
+  deployCount(): number { return this.boardCap(); }
 
   private rollShop() {
     const odds = TIER_ODDS[Math.min(this.level, MAX_LEVEL) - 1];
@@ -200,8 +210,17 @@ export class WarbandRun {
     // A relic every few rounds — equip it to build a carry.
     if (this.round % 3 === 2) this.itemStash.push(ITEM_IDS[this.rng.int(0, ITEM_IDS.length - 1)]);
     this.rollShop();
+    // Lock in this round's opponent + battle seed now, so the board preview and
+    // the live fight face the same warband.
+    const foes = this.livingFoes();
+    this.pendingFoe = foes.length ? foes[this.round % foes.length] : null;
+    this.pendingSeed = this.rng.int(1, 1e9);
+    this.pendingOpp = this.opponentStacks(this.pendingSeed);
     this.phase = "shop";
   }
+
+  /** Name of the warband you'll face this round (for the board's enemy banner). */
+  pendingFoeName(): string { return this.pendingFoe?.name ?? "—"; }
 
   /** Build an opponent warband that scales with the round (procedural for now). */
   private opponentStacks(seed: number): UnitStack[] {
@@ -228,18 +247,34 @@ export class WarbandRun {
 
   private livingFoes(): Opponent[] { return this.opponents.filter((o) => o.alive); }
 
-  /** Resolve this round's fight, apply life damage and eliminations. */
+  /** Resolve this round's fight instantly (headless — tests, AI, auto-play). */
   fight(): void {
     if (this.phase !== "shop") return;
-    const foes = this.livingFoes();
-    if (!foes.length) { this.outcome = "win"; this.phase = "over"; return; }
-    const foe = foes[this.round % foes.length];
-    const seed = this.rng.int(1, 1e9);
-    const res = resolveBattle(this.boardUnits(), this.opponentStacks(seed), seed);
+    if (!this.pendingFoe) { this.outcome = "win"; this.phase = "over"; return; }
+    this.applyOutcome(resolveBattle(this.boardUnits(), this.pendingOpp, this.pendingSeed));
+  }
+
+  /** Begin the watchable version of the fight (the screen renders + steps it). */
+  beginFight(): boolean {
+    if (this.phase !== "shop") return false;
+    if (!this.pendingFoe) { this.outcome = "win"; this.phase = "over"; return false; }
+    this.phase = "battle";
+    return true;
+  }
+
+  /** Hand back the live battle's verdict to apply life damage + eliminations. */
+  finishFight(res: BattleResult): void {
+    if (this.phase !== "battle") return;
+    this.applyOutcome(res);
+  }
+
+  /** Apply a battle result: damage, streak, off-screen thinning, win/lose check. */
+  private applyOutcome(res: BattleResult): void {
+    const foe = this.pendingFoe;
+    if (!foe) { this.outcome = "win"; this.phase = "over"; return; }
     const won = res.winner === "A";
     const dmg = won ? 0 : 3 + res.powerB * 2; // lose → take damage scaled by enemy survivors
     if (won) {
-      // Damage the opponent we beat.
       foe.life -= 3 + res.powerA * 2;
       if (foe.life <= 0) { foe.life = 0; foe.alive = false; }
       this.streak = Math.max(1, this.streak + 1);

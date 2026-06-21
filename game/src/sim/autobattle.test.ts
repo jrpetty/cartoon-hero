@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { resolveBattle, UnitStack } from "./autobattle";
+import { resolveBattle, UnitStack, LiveBattle } from "./autobattle";
 
 describe("Auto-battle resolver (Warband Tactics core)", () => {
   it("a clearly stronger composition wins and is deterministic", () => {
@@ -41,5 +41,41 @@ describe("Auto-battle resolver (Warband Tactics core)", () => {
       if (r.winner === "A") spearWins++;
     }
     expect(spearWins).toBeGreaterThanOrEqual(4);
+  });
+});
+
+describe("LiveBattle (the watchable fight)", () => {
+  const a: UnitStack[] = [{ type: "knight", count: 5 }];
+  const b: UnitStack[] = [{ type: "militia", count: 6 }];
+
+  const runToEnd = (seed: number, batch: number) => {
+    const lb = new LiveBattle(a, b, seed);
+    lb.begin();
+    let guard = 0;
+    while (!lb.done && guard++ < 5000) lb.step(batch);
+    return lb;
+  };
+
+  it("plays out to a verdict and reports survivors", () => {
+    const lb = runToEnd(42, 1);
+    expect(lb.done).toBe(true);
+    expect(["A", "B", "draw"]).toContain(lb.result().winner);
+    expect(lb.ticks).toBeGreaterThan(0);
+  });
+
+  it("is deterministic regardless of how the steps are batched", () => {
+    const r1 = runToEnd(7, 1).result();
+    const r2 = runToEnd(7, 3).result();
+    const r3 = runToEnd(7, 11).result();
+    expect(r1).toEqual(r2);
+    expect(r2).toEqual(r3);
+  });
+
+  it("doesn't advance before begin() (a static board preview)", () => {
+    const lb = new LiveBattle(a, b, 1);
+    const before = lb.world.entities.filter((e) => e.alive).length;
+    lb.step(20); // no-op until begin()
+    expect(lb.ticks).toBe(0);
+    expect(lb.world.entities.filter((e) => e.alive).length).toBe(before);
   });
 });
