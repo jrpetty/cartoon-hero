@@ -187,7 +187,7 @@ export class WarbandScreen {
     }
 
     // ---- board title + enemy banner ----
-    ui.text(`Your Warband  ·  deploying top ${run.deployCount()}`, boardX, 80, { size: 14, bold: true, color: PAL.uiAccent });
+    ui.text(`Your Warband  ·  ${run.deployedCount()} / ${run.deployCount()} deployed`, boardX, 80, { size: 14, bold: true, color: PAL.uiAccent });
     ui.text(`vs ${run.pendingFoeName()}`, boardX + boardW, 80, { size: 13, bold: true, align: "right", color: "#e0786a" });
 
     this.drawBoard(boardX, boardY, boardW, boardH, time, dt, run);
@@ -199,12 +199,9 @@ export class WarbandScreen {
       ui.text("Relic ready — click a unit to equip it", boardX + 52, benchY - 2, { size: 12, bold: true, color: "#ffd24a" });
     } else if (this.selectedItem >= run.itemStash.length) this.selectedItem = -1;
 
-    // Bench = your reserve (non-deployed) pieces. Pick one up to drag it into
-    // the Sell box, or click it with a relic selected to equip.
-    const order = run.pieces.map((_, i) => i).sort((a, b) =>
-      run.pieces[b].star - run.pieces[a].star || (UNIT_TIER[run.pieces[b].type] ?? 0) - (UNIT_TIER[run.pieces[a].type] ?? 0));
-    const deployedSet = new Set(order.slice(0, run.deployCount()));
-    const reserve = run.pieces.map((_, i) => i).filter((i) => !deployedSet.has(i));
+    // Bench = your reserve (non-deployed) pieces. Drag one onto the board to
+    // field it, into the Sell box to sell it, or click with a relic to equip.
+    const reserve = run.pieces.map((_, i) => i).filter((i) => !run.pieces[i].deployed);
     const cardW = 78;
     const cardH = benchH - 6;
     reserve.forEach((i, k) => {
@@ -447,7 +444,7 @@ export class WarbandScreen {
         ctx.fillRect(x + hovC * cellW + 1, y + hovR * cellH + 1, cellW - 2, cellH - 2);
       }
 
-      // Resolve a release: sell / place / swap / keep-armed / put-down / cancel.
+      // Resolve a release: sell / place / field / swap / keep-armed / cancel.
       if (ui.clicked && this.heldPiece >= 0 && !ui.pointerConsumed) {
         if (overSell) { if (run.sell(this.heldPiece)) audio.play("coin"); this.heldPiece = -1; ui.pointerConsumed = true; }
         else if (inPlayer && this.heldFromBoard) {
@@ -456,11 +453,18 @@ export class WarbandScreen {
           if (sameCell && !this.movedSincePress && this.grabbedThisPress) { /* just picked up → keep armed */ }
           else if (sameCell && !this.movedSincePress) this.heldPiece = -1; // clicked its own cell again → put down
           else { run.place(this.heldPiece, hovC, hovR); audio.play("command"); this.heldPiece = -1; }
-        } else this.heldPiece = -1; // dropped off-board (or a bench unit, which can't be placed) → cancel
+        } else if (inPlayer) {
+          // A reserve (bench) unit dropped on the board → field it there.
+          ui.pointerConsumed = true;
+          if (run.place(this.heldPiece, hovC, hovR)) audio.play("command");
+          this.heldPiece = -1;
+        } else if (this.grabbedThisPress && !this.movedSincePress) {
+          /* just clicked to pick it up off the bench → keep it armed for a click-to-place */
+        } else this.heldPiece = -1; // dropped on nothing → cancel
       }
 
-      ui.text(this.heldPiece >= 0 ? "Drop on a cell to place · drop on 🗑 to sell · swap by dropping on another unit"
-        : "Click/drag a unit, then a cell, to position it — drag to 🗑 to sell",
+      ui.text(this.heldPiece >= 0 ? "Drop on a cell to place/field · drop on another unit to swap · drop on 🗑 to sell"
+        : "Drag a reserve onto the board to field it · click a unit then a cell to move · drag to 🗑 to sell",
         x + w * 0.25, y + h - 12, { align: "center", size: 12, color: this.heldPiece >= 0 ? "#ffd24a" : "#9a917b" });
     }
 

@@ -95,6 +95,25 @@ describe("Warband Tactics run engine", () => {
     expect(run.place(dep[0].index, 0, 10)).toBe(false);
   });
 
+  it("fields a reserve unit from the bench onto the board", () => {
+    const run = new WarbandRun(4);
+    run.gold = 99; run.level = 2; // board cap = 2
+    // Buy 4 distinct units → 2 auto-deploy (cap), 2 sit on the bench.
+    run.shop = ["knight", "archer", "spearman", "militia", "raider"];
+    run.buy(0); run.buy(1); run.buy(2); run.buy(3);
+    expect(run.deployedCount()).toBe(2);
+    const deployed = new Set(run.deployment().map((d) => d.index));
+    const benchIdx = run.pieces.findIndex((_, i) => !deployed.has(i));
+    expect(benchIdx).toBeGreaterThanOrEqual(0);
+    expect(run.pieces[benchIdx].deployed).toBeFalsy();
+    // Drop the bench unit on an empty cell while the board is full → it fields,
+    // and the weakest deployed unit is bumped to the bench. Count stays at cap.
+    expect(run.place(benchIdx, 4, 0)).toBe(true);
+    expect(run.pieces[benchIdx].deployed).toBe(true);
+    expect(run.deployedCount()).toBe(2);
+    expect(run.deployment().some((d) => d.index === benchIdx)).toBe(true);
+  });
+
   it("opponents run the same economy and field a warband that grows over rounds", () => {
     const run = new WarbandRun(3);
     const sizes: number[] = [];

@@ -39,7 +39,7 @@ const REROLL_COST = 2;
 const XP_BUY = 4; // gold → +4 xp
 const MAX_LEVEL = 9;
 
-export interface Piece { type: string; star: number; items: string[]; col?: number; row?: number; } // star 1..3, col/row = board cell
+export interface Piece { type: string; star: number; items: string[]; col?: number; row?: number; deployed?: boolean; } // on the board if deployed
 export interface Opponent { id: number; name: string; life: number; alive: boolean; }
 
 // Default fill order for auto-placing un-positioned units: front rank first
@@ -149,6 +149,7 @@ export class WarbandRun {
     this.gold -= XP_BUY;
     this.xp += XP_BUY;
     while (this.level < MAX_LEVEL && this.xp >= XP_TO_LEVEL[this.level + 1]) this.level++;
+    this.reconcile(); // bigger board → pull up reserves
     return true;
   }
 
@@ -164,6 +165,7 @@ export class WarbandRun {
     this.shop[slot] = null;
     this.pieces.push({ type, star: 1, items: [] });
     this.merge();
+    this.reconcile(); // auto-field it if the board has a free slot
     return true;
   }
 
@@ -173,6 +175,7 @@ export class WarbandRun {
     const p = this.pieces[index];
     this.gold += this.cost(p.type) * p.star;
     this.pieces.splice(index, 1);
+    this.reconcile(); // selling a board unit pulls up a reserve
     return true;
   }
 
@@ -189,23 +192,43 @@ export class WarbandRun {
     return true;
   }
 
-  /** Indices of the pieces that deploy this round (strongest `level`). */
-  private deployedIndices(): number[] {
-    return this.pieces.map((_, i) => i)
-      .sort((a, b) => this.pieces[b].star - this.pieces[a].star ||
-        (UNIT_TIER[this.pieces[b].type] ?? 0) - (UNIT_TIER[this.pieces[a].type] ?? 0) ||
-        this.pieces[b].items.length - this.pieces[a].items.length)
-      .slice(0, this.boardCap());
+  /** Sort key: strongest pieces first (star, then tier, then relics). */
+  private stronger(a: number, b: number): number {
+    return this.pieces[b].star - this.pieces[a].star ||
+      (UNIT_TIER[this.pieces[b].type] ?? 0) - (UNIT_TIER[this.pieces[a].type] ?? 0) ||
+      this.pieces[b].items.length - this.pieces[a].items.length;
   }
 
-  /** Deployed units (with relics + board cell) for the battle resolver. Any
-   *  un-positioned unit is auto-placed into the next free front-rank cell. */
-  boardUnits(): ArenaUnit[] {
-    const idx = this.deployedIndices();
+  /** Indices of the pieces currently on the board, strongest first. */
+  private deployedIndices(): number[] {
+    return this.pieces.map((_, i) => i).filter((i) => this.pieces[i].deployed).sort((a, b) => this.stronger(a, b));
+  }
+
+  /**
+   * Keep the board legal & full: trim past the cap (weakest benched), auto-fill
+   * empty slots with your strongest reserves, and give every deployed piece a
+   * cell. Manual placements stay put — auto-fill only ever fills empty slots, so
+   * benching a unit by swapping a reserve in is never undone.
+   */
+  private reconcile() {
+    const cap = this.boardCap();
+    let deployed = this.pieces.map((_, i) => i).filter((i) => this.pieces[i].deployed);
+    // Over cap (e.g. after a level is somehow lower): bench the weakest.
+    if (deployed.length > cap) {
+      deployed.sort((a, b) => this.stronger(b, a)); // weakest first
+      for (const i of deployed.slice(0, deployed.length - cap)) { const p = this.pieces[i]; p.deployed = false; p.col = p.row = undefined; }
+    }
+    // Auto-fill empty slots with the strongest reserves.
+    let count = this.pieces.filter((p) => p.deployed).length;
+    if (count < cap) {
+      const bench = this.pieces.map((_, i) => i).filter((i) => !this.pieces[i].deployed).sort((a, b) => this.stronger(a, b));
+      for (const i of bench) { if (count >= cap) break; this.pieces[i].deployed = true; count++; }
+    }
+    // Assign a cell to every deployed piece that lacks one (front rank first).
     const used = new Set<string>();
-    for (const i of idx) { const p = this.pieces[i]; if (p.col != null && p.row != null) used.add(`${p.col},${p.row}`); }
+    for (const p of this.pieces) if (p.deployed && p.col != null && p.row != null) used.add(`${p.col},${p.row}`);
     let ai = 0;
-    for (const i of idx) {
+    for (const i of this.deployedIndices()) {
       const p = this.pieces[i];
       if (p.col == null || p.row == null) {
         while (ai < PLAYER_CELLS.length && used.has(`${PLAYER_CELLS[ai].c},${PLAYER_CELLS[ai].r}`)) ai++;
@@ -213,7 +236,12 @@ export class WarbandRun {
         p.col = cell.c; p.row = cell.r; used.add(`${cell.c},${cell.r}`); ai++;
       }
     }
-    return idx.map((i) => {
+  }
+
+  /** Deployed units (with relics + board cell) for the battle resolver. */
+  boardUnits(): ArenaUnit[] {
+    this.reconcile();
+    return this.deployedIndices().map((i) => {
       const p = this.pieces[i];
       return { type: p.type, star: p.star, items: p.items, col: p.col, row: p.row };
     });
@@ -221,22 +249,41 @@ export class WarbandRun {
 
   /** The deployed pieces with their board cells (for the placement UI). */
   deployment(): { index: number; type: string; star: number; col: number; row: number }[] {
-    this.boardUnits(); // ensure every deployed piece has a cell assigned
+    this.reconcile();
     return this.deployedIndices().map((i) => {
       const p = this.pieces[i];
       return { index: i, type: p.type, star: p.star, col: p.col!, row: p.row! };
     });
   }
 
-  /** Move a piece to a board cell on your half (0..4 × 0..9). Swaps if taken. */
+  /** How many pieces are on the board right now (≤ deployCount()). */
+  deployedCount(): number { return this.pieces.filter((p) => p.deployed).length; }
+
+  /**
+   * Move/field a piece onto a board cell on your half (cols 0..4, rows 0..9).
+   * A deployed piece repositions (swapping cells with any occupant). A bench
+   * piece is fielded: it swaps in for the occupant, fills a free slot, or — if
+   * the board is already full — bumps your weakest deployed unit to the bench.
+   */
   place(index: number, col: number, row: number): boolean {
     if (this.phase !== "shop") return false;
     if (col < 0 || col > 4 || row < 0 || row > 9) return false;
     const p = this.pieces[index];
     if (!p) return false;
-    const occ = this.pieces.find((q, qi) => qi !== index && q.col === col && q.row === row);
-    if (occ) { occ.col = p.col; occ.row = p.row; } // swap cells
-    p.col = col; p.row = row;
+    const occ = this.pieces.find((q, qi) => qi !== index && q.deployed && q.col === col && q.row === row);
+    if (p.deployed) {
+      if (occ) { occ.col = p.col; occ.row = p.row; } // swap cells
+      p.col = col; p.row = row;
+      return true;
+    }
+    // Fielding a bench unit.
+    if (occ) { occ.deployed = false; occ.col = occ.row = undefined; }
+    else if (this.deployedCount() >= this.boardCap()) {
+      const weakest = this.deployedIndices().pop(); // strongest-first → last is weakest
+      if (weakest == null || weakest === index) return false;
+      const w = this.pieces[weakest]; w.deployed = false; w.col = w.row = undefined;
+    }
+    p.deployed = true; p.col = col; p.row = row;
     return true;
   }
 
