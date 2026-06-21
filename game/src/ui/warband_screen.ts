@@ -267,7 +267,7 @@ export class WarbandScreen {
     ui.text("revealed when the battle begins", x + w * 0.75, y + h / 2 + 12, { align: "center", size: 12, color: "#8a8278" });
 
     const players = this.battle!.world.entities
-      .filter((e) => e.alive && e.kind === Kind.Unit && e.team === 0)
+      .filter((e) => e.alive && e.kind === Kind.Unit && e.team === 0 && e.type !== "villager")
       .sort((p, q) => p.id - q.id); // stable deploy order (strongest first)
     if (!players.length) return;
 
@@ -278,7 +278,7 @@ export class WarbandScreen {
     const regionW = w * 0.46;
     const cellW = regionW / colsN;
     const cellH = (h - 24) / rowsN;
-    const us = Math.min(cellW, cellH) / (TILE * 1.05); // big models
+    const us = Math.min(cellW, cellH) / (TILE * 3.15); // sized to ~1/3 of a cell
     const rightEdge = x + w / 2 - 14; // front column hugs the divider
 
     setTeamColorResolver(null);
@@ -296,7 +296,7 @@ export class WarbandScreen {
       // The unit, centred in its square (feet a touch below middle).
       ctx.save();
       ctx.beginPath(); ctx.rect(cellCX - cellW / 2, cellCY - cellH / 2, cellW, cellH); ctx.clip();
-      ctx.translate(cellCX, cellCY + cellH * 0.30);
+      ctx.translate(cellCX, cellCY + TILE * 0.55 * us); // feet just below centre → body centred
       ctx.scale(us, us);
       ctx.translate(-e.x, -e.y);
       try { drawUnit(ctx, e, time, 0); } catch { /* keep the frame alive */ }
@@ -310,7 +310,7 @@ export class WarbandScreen {
     const ctx = ui.ctx;
     const b = this.battle!;
     const ents = b.world.entities
-      .filter((e) => e.alive && e.kind === Kind.Unit)
+      .filter((e) => e.alive && e.kind === Kind.Unit && e.type !== "villager")
       .sort((p, q) => p.y - q.y);
 
     let tCX = b.cx, tCY = b.cy, tScale = 2.4;
