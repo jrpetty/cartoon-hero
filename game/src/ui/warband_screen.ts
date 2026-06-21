@@ -260,7 +260,7 @@ export class WarbandScreen {
     const syk = h / (GRID_ROWS * GRID_CELL);
     const mapX = (wx: number) => x + (wx - worldLeft) * sxk;
     const mapY = (wy: number) => y + (wy - worldTop) * syk;
-    const us = (cellH * 0.82) / TILE; // unit drawn ~80% of a cell tall
+    const us = (cellH * 0.62) / TILE; // unit fits comfortably inside a cell
 
     // ---- placement interaction (setup only) ----
     const deployment = setup ? run.deployment() : [];
@@ -308,7 +308,7 @@ export class WarbandScreen {
     for (const e of ents) {
       const sx = mapX(e.x), sy = mapY(e.y);
       ctx.save();
-      ctx.translate(sx, sy + cellH * 0.20); // feet a touch below cell centre
+      ctx.translate(sx, sy + cellH * 0.06); // feet near cell centre, body fills the cell
       ctx.scale(us, us);
       ctx.translate(-e.x, -e.y);
       try { drawUnit(ctx, e, time, 0); } catch { /* never let one unit kill the frame */ }
