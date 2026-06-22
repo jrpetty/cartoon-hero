@@ -10,7 +10,7 @@ import { WarbandFx } from "./warband_fx";
 import { audio } from "../engine/audio";
 import { PAL, withAlpha } from "../render/palette";
 import { drawUnit, setTeamColorResolver } from "../render/draw";
-import { Kind } from "../sim/types";
+import { Kind, Entity } from "../sim/types";
 import { TILE } from "../content/balance";
 import { UNITS } from "../content/units";
 import { WarbandRun, UNIT_TIER, Piece } from "../sim/warband";
@@ -45,6 +45,7 @@ export class WarbandScreen {
   private prevPhase = "shop";
   private itemTip: { id: string; x: number; y: number } | null = null;
   private unitTip: { p: Piece; x: number; y: number } | null = null;
+  private liveTip: { e: Entity; x: number; y: number } | null = null; // hovered unit mid-fight
 
   draw(W: number, H: number, time: number, run: WarbandRun): "exit" | null {
     const ctx = ui.ctx;
@@ -289,6 +290,7 @@ export class WarbandScreen {
     if (run.phase !== "shop") this.heldPiece = -1; // never carry a held unit out of setup
     this.drawItemTip(W, H);
     this.drawUnitTip(W, H);
+    this.drawLiveTip(W, H);
     this.wasDown = down;
 
     return action;
@@ -507,6 +509,8 @@ export class WarbandScreen {
     const sh = this.fx.shake;
     if (sh > 0.1) ctx.translate((Math.random() * 2 - 1) * sh, (Math.random() * 2 - 1) * sh);
     const starGlow = ["#9aa8b4", "#cfe0ff", "#ffd24a"]; // 1★ / 2★ / 3★
+    if (!setup) this.liveTip = null; // recomputed each frame from the hovered unit
+    let hoverDist = Infinity;
     for (const e of ents) {
       const cell = cellByEnt.get(e.id);
       const sx = cell ? x + (cell.col + 0.5) * cellW : mapX(e.x);
@@ -557,11 +561,17 @@ export class WarbandScreen {
         }
       }
       const frac = Math.max(0, Math.min(1, e.hp / e.maxHp));
-      if (!setup && frac < 1) {
+      if (!setup) {
+        // Always-on health bar during the fight (team-coloured), so you can read
+        // every unit's health live.
         const barW = cellW * 0.5, barH = 3.5, byy = sy - cellH * 0.26;
         ctx.fillStyle = "rgba(0,0,0,0.78)"; ctx.fillRect(sx - barW / 2 - 1, byy - 1, barW + 2, barH + 2);
+        ctx.fillStyle = "rgba(0,0,0,0.45)"; ctx.fillRect(sx - barW / 2, byy, barW, barH);
         ctx.fillStyle = e.team === 0 ? "#5ad06a" : "#e0564a";
         ctx.fillRect(sx - barW / 2, byy, barW * frac, barH);
+        // Track the unit nearest the cursor for a live hover readout.
+        const d = Math.hypot(ui.mx - sx, ui.my - sy);
+        if (d < hoverDist && d < cellH * 0.8) { hoverDist = d; this.liveTip = { e, x: sx + cellW * 0.4, y: sy - cellH * 0.6 }; }
       }
       // Ability charge bar (battle only) for units with a signature ability.
       if (!setup && ABILITIES[e.type] && e.type !== "villager") {
@@ -877,4 +887,40 @@ export class WarbandScreen {
 
   /** Truncate a string to a max length with an ellipsis. */
   private clip(s: string, n: number): string { return s.length > n ? s.slice(0, n - 1) + "…" : s; }
+
+  /** Live readout for a unit hovered during the fight: current HP, attack,
+   *  armour and ability charge — its real, in-the-moment combat state. */
+  private drawLiveTip(W: number, H: number) {
+    if (!this.liveTip || !this.battle) return;
+    const e = this.liveTip.e;
+    if (!e.alive) { this.liveTip = null; return; }
+    const ctx = ui.ctx;
+    const name = UNITS[e.type]?.name ?? e.type;
+    const ab = ABILITIES[e.type] && e.type !== "villager" ? ABILITIES[e.type] : undefined;
+    const charge = e.abilityActive > 0 ? 1 : ab ? Math.max(0, Math.min(1, this.battle.chargeOf(e.id))) : 0;
+    const pw = 172, ph = ab ? 92 : 70;
+    let px = this.liveTip.x, py = this.liveTip.y;
+    if (px + pw > W - 4) px = Math.max(4, px - pw - 28);
+    py = Math.max(4, Math.min(py, H - ph - 4));
+    const teamCol = e.team === 0 ? "#7fb0e8" : "#e88a7f";
+    ctx.save();
+    ctx.shadowColor = "rgba(0,0,0,0.6)"; ctx.shadowBlur = 13; ctx.shadowOffsetY = 3;
+    ctx.fillStyle = "rgba(18,14,9,0.97)"; this.roundRect(ctx, px, py, pw, ph, 8); ctx.fill();
+    ctx.restore();
+    ctx.strokeStyle = teamCol; ctx.lineWidth = 1.5; this.roundRect(ctx, px + 0.75, py + 0.75, pw - 1.5, ph - 1.5, 8); ctx.stroke();
+    ui.text(name, px + 12, py + 17, { size: 13, bold: true, color: "#f2e8d0" });
+    ui.text(e.team === 0 ? "yours" : "enemy", px + pw - 12, py + 17, { align: "right", size: 9.5, color: teamCol });
+    const frac = Math.max(0, e.hp / e.maxHp);
+    const bx = px + 12, by = py + 25, bw = pw - 24, bh = 9;
+    ctx.fillStyle = "rgba(0,0,0,0.6)"; ctx.fillRect(bx, by, bw, bh);
+    ctx.fillStyle = frac > 0.5 ? "#5ad06a" : frac > 0.25 ? "#ffd24a" : "#e0564a"; ctx.fillRect(bx, by, bw * frac, bh);
+    ui.text(`${Math.max(0, Math.round(e.hp))} / ${Math.round(e.maxHp)} HP`, px + pw / 2, by + bh + 10, { align: "center", size: 10, bold: true, color: "#e7ddc4" });
+    ui.text(`ATK ${Math.round(e.attack)}`, px + 12, py + 62, { size: 11, bold: true, color: "#ffce6a" });
+    ui.text(`ARM ${e.armor}`, px + 92, py + 62, { size: 11, bold: true, color: "#cfe0ff" });
+    if (ab) {
+      ui.text(ab.name, px + 12, py + 78, { size: 10, color: ab.color });
+      ctx.fillStyle = "rgba(0,0,0,0.6)"; ctx.fillRect(px + 12, py + 82, pw - 24, 4);
+      ctx.fillStyle = e.abilityActive > 0 ? "#fff" : withAlpha(ab.color, 0.9); ctx.fillRect(px + 12, py + 82, (pw - 24) * charge, 4);
+    }
+  }
 }
