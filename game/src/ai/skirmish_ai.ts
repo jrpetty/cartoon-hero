@@ -287,7 +287,8 @@ export class SkirmishAI {
     return assaulting >= 5;
   }
 
-  /** Plant a Town Center at the villagers' centre of mass (nomad / rebuild). */
+  /** Plant a Town Center. Picks the best nearby spot with access to wood, gold
+   *  AND food (the nomad-settling aim) rather than just the villagers' centroid. */
   private foundTownCenter(p: ReturnType<World["player"]>) {
     if (this.myBuildings("town_center", false).length > 0) return; // already founding
     const vills = this.myUnits("villager");
@@ -297,8 +298,56 @@ export class SkirmishAI {
     for (const v of vills) { cx += v.x; cy += v.y; }
     cx /= vills.length;
     cy /= vills.length;
-    const tc = this.placeNear("town_center", cx, cy, 0, 4);
+    const spot = this.bestSettleSpot(cx, cy);
+    const tc = this.placeNear("town_center", spot.x, spot.y, 0, 3) ?? this.placeNear("town_center", cx, cy, 0, 5);
     if (tc) this.assignBuilder(tc, Math.min(3, vills.length));
+  }
+
+  /**
+   * Scout for the best base site near (cx,cy): score candidate spots by how close
+   * the nearest wood, gold and food are — rewarding a site that reaches all three
+   * (and minimising its worst resource), lightly penalising distance travelled.
+   */
+  private bestSettleSpot(cx: number, cy: number): { x: number; y: number } {
+    const trees: Entity[] = [];
+    const golds: Entity[] = [];
+    const foods: Entity[] = [];
+    for (const e of this.world.entities) {
+      if (!e.alive || e.kind !== Kind.Resource || e.amount <= 0) continue;
+      if (e.type === "tree") trees.push(e);
+      else if (e.type === "gold_mine") golds.push(e);
+      else if (e.type === "berries") foods.push(e);
+    }
+    const CAP = 60 * TILE; // treat "no resource of this kind nearby" as this far
+    const nearest = (arr: Entity[], x: number, y: number) => {
+      let m = CAP;
+      for (const e of arr) { const d = Math.hypot(e.x - x, e.y - y); if (d < m) m = d; }
+      return m;
+    };
+    const score = (x: number, y: number) => {
+      const dW = nearest(trees, x, y), dG = nearest(golds, x, y), dF = nearest(foods, x, y);
+      const distHome = Math.hypot(x - cx, y - cy);
+      // Lower is better → negate. Penalise the worst resource hardest so a site
+      // that reaches all three beats one hugging a single resource.
+      return -(dW + dG * 1.15 + dF) - 0.7 * Math.max(dW, dG, dF) - 0.4 * distHome;
+    };
+    // Candidates: the centroid, a coarse grid around it, and points beside each
+    // gold vein (gold is the scarce anchor — settle by it if wood/food are close).
+    const cands: { x: number; y: number }[] = [{ x: cx, y: cy }];
+    for (let gx = -6; gx <= 6; gx += 2) for (let gy = -6; gy <= 6; gy += 2) cands.push({ x: cx + gx * 5 * TILE, y: cy + gy * 5 * TILE });
+    for (const g of golds) {
+      if (Math.hypot(g.x - cx, g.y - cy) > 44 * TILE) continue;
+      for (const a of [0, Math.PI / 2, Math.PI, -Math.PI / 2]) cands.push({ x: g.x + Math.cos(a) * 5 * TILE, y: g.y + Math.sin(a) * 5 * TILE });
+    }
+    const margin = 6 * TILE;
+    let best = cands[0];
+    let bestScore = -Infinity;
+    for (const c of cands) {
+      if (c.x < margin || c.y < margin || c.x > this.world.worldW - margin || c.y > this.world.worldH - margin) continue;
+      const s = score(c.x, c.y);
+      if (s > bestScore) { bestScore = s; best = c; }
+    }
+    return best;
   }
 
   /** Cost of the next age the AI is ready to research, or null if not ready. */

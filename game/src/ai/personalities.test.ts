@@ -4,7 +4,7 @@ import { Team, Kind, OrderKind } from "../sim/types";
 import { generateMap } from "../maps/generator";
 import { SkirmishAI, armyTargetPriority } from "./skirmish_ai";
 import { DIFFICULTIES, DIFFICULTY_IDS } from "./difficulty";
-import { SIM_DT, SIM_HZ } from "../content/balance";
+import { SIM_DT, SIM_HZ, TILE } from "../content/balance";
 import { BUILDINGS } from "../content/buildings";
 
 describe("Difficulty tiers", () => {
@@ -51,6 +51,33 @@ describe("AI population growth", () => {
   it("a house provides 10 population", () => {
     expect(BUILDINGS.house.popProvided).toBe(10);
   });
+
+  it("in a nomad start, the AI settles its base near wood, gold and food", () => {
+    const w = new World(3);
+    w.init(generateMap("open_plains", 3, 2), [{}, {}], [1, 1], [0, 1], undefined, true); // nomad: no starting TC
+    const ai = new SkirmishAI(w, Team.Enemy, DIFFICULTIES.lord);
+    let placed = false;
+    for (let i = 0; i < SIM_HZ * 120 && !placed; i++) {
+      w.tick(); ai.update(SIM_DT); w.drainEvents();
+      placed = w.entitiesOf(Team.Enemy, Kind.Building).some((b) => b.type === "town_center");
+    }
+    const tc = w.entitiesOf(Team.Enemy, Kind.Building).find((b) => b.type === "town_center");
+    expect(tc).toBeTruthy();
+    const nearTiles = (type: string) => {
+      let m = Infinity;
+      for (const e of w.entities) {
+        if (e.alive && e.kind === Kind.Resource && e.type === type && e.amount > 0) {
+          m = Math.min(m, Math.hypot(e.x - tc!.x, e.y - tc!.y));
+        }
+      }
+      return m / TILE;
+    };
+    // It scouted a site within reach of all three core resources, not just where
+    // the villagers happened to stand.
+    expect(nearTiles("tree")).toBeLessThanOrEqual(14);
+    expect(nearTiles("gold_mine")).toBeLessThanOrEqual(14);
+    expect(nearTiles("berries")).toBeLessThanOrEqual(14);
+  }, 60000);
 
   it("secures resources with camps and transitions to a farm economy", () => {
     const w = new World(42);
