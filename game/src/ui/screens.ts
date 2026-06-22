@@ -22,7 +22,8 @@ import { Particles } from "../engine/particles";
 export interface SkirmishConfig {
   presetId: string;
   seed: number;
-  difficulty: string;
+  difficulty: string; // default AI personality, applied to any unset bot slot
+  aiDifficulties: string[]; // per-bot personality by team index (1..players-1)
   fairMode: boolean;
   players: number; // 2 = 1v1, 4 = FFA or 2v2
   allied: boolean; // true = 2v2 teams (you + ally vs two foes)
@@ -200,6 +201,7 @@ export class SetupScreen {
     presetId: "open_plains",
     seed: randomSeed(),
     difficulty: "knight",
+    aiDifficulties: [],
     fairMode: false,
     players: 2,
     allied: false,
@@ -246,8 +248,8 @@ export class SetupScreen {
     }
     y += panelH + 12;
 
-    // Seed + difficulty row.
-    ui.panel(x0, y, colW, 86);
+    // Seed + AI personality row (with per-bot overrides).
+    ui.panel(x0, y, colW, 132);
     ui.text("Seed", x0 + 16, y + 22, { size: 16, bold: true, color: PAL.uiAccent });
     ui.text(String(this.config.seed), x0 + 16, y + 50, { size: 14, color: "#bdb49a" });
     if (ui.button("🎲 New Seed", x0 + 16, y + 60, 110, 20, { size: 11 })) {
@@ -255,7 +257,8 @@ export class SetupScreen {
       audio.play("ui");
     }
 
-    ui.text("Enemy Commander", x0 + 210, y + 22, { size: 16, bold: true, color: PAL.uiAccent });
+    ui.text("AI Personality", x0 + 210, y + 22, { size: 16, bold: true, color: PAL.uiAccent });
+    ui.text("sets all bots", x0 + 330, y + 22, { size: 11, color: "#8a8278" });
     const gapD = 10;
     const dw = (colW - 226 - 16 - 36 - gapD * (DIFFICULTY_IDS.length - 1)) / DIFFICULTY_IDS.length;
     for (let i = 0; i < DIFFICULTY_IDS.length; i++) {
@@ -268,10 +271,13 @@ export class SetupScreen {
         })
       ) {
         this.config.difficulty = d.id;
+        this.config.aiDifficulties = []; // re-apply this personality to every bot
         audio.play("ui");
       }
     }
-    y += 98;
+    // Per-bot overrides — a chip per opponent; click to cycle its personality.
+    this.drawBotChips(x0 + 16, y + 96, colW - 32);
+    y += 144;
 
     // Players (2–8) + team format.
     ui.panel(x0, y, colW, 96);
@@ -371,6 +377,31 @@ export class SetupScreen {
     if (ui.button("👁 Watch", x0 + colW - 360, y, 130, 44, { size: 15, tooltip: ["Spectate an AI vs AI battle", "All sides are AI — sit back and watch."] })) action = "spectate";
     if (ui.button("⚔  To Battle!", x0 + colW - 220, y, 220, 44, { accent: true, size: 18 })) action = "start";
     return action;
+  }
+
+  /** One chip per opponent bot; click to cycle just that bot's personality. */
+  private drawBotChips(x: number, y: number, w: number) {
+    const bots = Math.max(0, this.config.players - 1);
+    ui.text("Per-bot", x, y + 5, { size: 12, bold: true, color: PAL.uiAccent });
+    if (bots <= 0) return;
+    const cur = (t: number) => this.config.aiDifficulties[t] ?? this.config.difficulty;
+    const startX = x + 62;
+    const chipW = Math.min(150, Math.max(78, (w - 62) / bots - 6));
+    for (let t = 1; t <= bots; t++) {
+      const cx = startX + (t - 1) * (chipW + 6);
+      if (cx + chipW > x + w) break; // overflow guard for big lobbies
+      const d = DIFFICULTIES[cur(t)];
+      const overridden = this.config.aiDifficulties[t] != null && this.config.aiDifficulties[t] !== this.config.difficulty;
+      if (ui.button(`${t + 1}· ${d.name}`, cx, y - 4, chipW, 26, {
+        accent: overridden, size: 11, tooltip: [`Bot ${t + 1}: ${d.name}`, "Click to cycle this bot's personality.", d.desc],
+      })) {
+        const i = DIFFICULTY_IDS.indexOf(cur(t));
+        const next = DIFFICULTY_IDS[(i + 1) % DIFFICULTY_IDS.length];
+        while (this.config.aiDifficulties.length <= t) this.config.aiDifficulties.push(this.config.difficulty);
+        this.config.aiDifficulties[t] = next;
+        audio.play("ui");
+      }
+    }
   }
 }
 

@@ -816,7 +816,7 @@ export class WarbandScreen {
     const bonuses = Object.entries(def.bonus).map(([cls, amt]) => `+${amt} vs ${cls}`);
 
     const pw = 244;
-    let ph = 50 + 40; // header + stat block
+    let ph = 50 + 56; // header + stat block (incl. RATE + DPS)
     if (bonuses.length) ph += 18;
     if (ab) ph += 34;
     ph += 8 + (relics.length ? relics.length * 30 : 16);
@@ -835,17 +835,22 @@ export class WarbandScreen {
     let y = py + 50;
     const div = () => { ctx.strokeStyle = "rgba(255,255,255,0.08)"; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(px + 10, y); ctx.lineTo(px + pw - 10, y); ctx.stroke(); };
     div();
-    // Stat block: HP / ATK on one row, ARM / RNG / SPD on the next.
+    // Stat block. RATE = attacks/sec; DPS ≈ attack × rate (before enemy armour).
+    const rate = def.attackInterval > 0 ? 1 / def.attackInterval : 0;
+    const dps = Math.round(st.attack * rate);
     const statCell = (label: string, val: string, sx: number, sy: number, col: string) => {
       ui.text(label, sx, sy, { size: 9.5, color: "#8a8278" });
-      ui.text(val, sx + 30, sy, { size: 12.5, bold: true, color: col });
+      ui.text(val, sx + 32, sy, { size: 12.5, bold: true, color: col });
     };
     statCell("HP", String(st.maxHp), px + 16, y + 16, "#7df2a9");
-    statCell("ATK", String(st.attack), px + 130, y + 16, "#ffce6a");
+    statCell("ATK", String(st.attack), px + 92, y + 16, "#ffce6a");
+    statCell("RATE", rate.toFixed(2) + "/s", px + 162, y + 16, "#e7ddc4");
     statCell("ARM", String(st.armor), px + 16, y + 33, "#cfe0ff");
-    statCell("RNG", def.range > 0 ? String(def.range) : "melee", px + 96, y + 33, "#e7ddc4");
-    statCell("SPD", String(st.speed), px + 178, y + 33, "#e7ddc4");
-    y += 40;
+    statCell("RNG", def.range > 0 ? String(def.range) : "melee", px + 92, y + 33, "#e7ddc4");
+    statCell("SPD", String(st.speed), px + 162, y + 33, "#e7ddc4");
+    ui.text(`DPS ≈ ${dps}`, px + 16, y + 50, { size: 10.5, bold: true, color: "#ffb47a" });
+    ui.text(`(${st.attack} dmg every ${def.attackInterval.toFixed(1)}s)`, px + 78, y + 50, { size: 9.5, color: "#8a8278" });
+    y += 56;
     if (bonuses.length) {
       div(); ui.text("⚔ " + bonuses.join("  "), px + 14, y + 13, { size: 11, bold: true, color: "#ffb47a" }); y += 18;
     }

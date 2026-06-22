@@ -130,6 +130,7 @@ class App {
   sfxCooldown = new Map<string, number>();
   time = 0;
   showDamageNumbers = true;
+  private fps = 60; // smoothed frames-per-second for the optional overlay
   private smokeTimer = 0;
   private accumulator = 0;
   private lastFrame = performance.now();
@@ -339,6 +340,8 @@ class App {
 
   startMatch(config: SkirmishConfig) {
     this.config = config;
+    // Each bot can run a different personality; fall back to the default.
+    const diffFor = (t: number) => DIFFICULTIES[config.aiDifficulties?.[t] ?? config.difficulty] ?? DIFFICULTIES[config.difficulty];
     const diff = DIFFICULTIES[config.difficulty];
     const mode = config.mode ?? "conquest";
     // Survival is co-op: the chosen player count is your side (all allied), and
@@ -359,7 +362,7 @@ class App {
     const boonLoadouts: { id: string; rarity: number; age: number }[][] = [config.fairMode ? [] : this.profile.equippedBoonPlan()];
     for (let t = 1; t < numPlayers; t++) {
       loadouts.push(this.profile.matchLoadout(true));
-      econMults.push(diff.econMult);
+      econMults.push(t === hordeTeam ? diff.econMult : diffFor(t).econMult);
       commanders.push(COMMANDER_IDS[Math.floor(Math.random() * COMMANDER_IDS.length)]);
       boonLoadouts.push([]);
     }
@@ -368,7 +371,7 @@ class App {
     this.ais = [];
     for (let t = 1; t < numPlayers; t++) {
       if (t === hordeTeam) continue; // the horde has no brain — the sim spawns its waves
-      this.ais.push(new SkirmishAI(world, t as Team, diff));
+      this.ais.push(new SkirmishAI(world, t as Team, diffFor(t)));
     }
     this.renderer.prepare(map);
     this.weather.configure(map.seed, map.name);
@@ -461,7 +464,7 @@ class App {
    */
   startSpectate(config: SkirmishConfig) {
     this.config = config;
-    const diff = DIFFICULTIES[config.difficulty];
+    const diffFor = (t: number) => DIFFICULTIES[config.aiDifficulties?.[t] ?? config.difficulty] ?? DIFFICULTIES[config.difficulty];
     const mode = config.mode ?? "conquest";
     // Mirror startMatch's mode setup so Watch mode honours KotH / Regicide /
     // Survival (previously spectate always fell back to Conquest).
@@ -478,7 +481,7 @@ class App {
     const commanders: string[] = [];
     for (let t = 0; t < numPlayers; t++) {
       loadouts.push(this.profile.matchLoadout(true)); // fair, all-Common loadouts
-      econMults.push(diff.econMult);
+      econMults.push(t === hordeTeam ? 1 : diffFor(t).econMult);
       commanders.push(COMMANDER_IDS[Math.floor(Math.random() * COMMANDER_IDS.length)]);
     }
     world.init(map, loadouts, econMults, alliances, commanders, config.nomad, undefined, mode);
@@ -487,7 +490,7 @@ class App {
     this.ais = [];
     for (let t = 0; t < numPlayers; t++) {
       if (t === hordeTeam) continue; // the horde is sim-driven, no brain
-      this.ais.push(new SkirmishAI(world, t as Team, diff));
+      this.ais.push(new SkirmishAI(world, t as Team, diffFor(t)));
     }
     this.renderer.prepare(map);
     this.weather.configure(map.seed, map.name);
@@ -511,7 +514,7 @@ class App {
     this.endNet();
     this.me = Team.Player;
     this.state = "match";
-    this.hud.addAlert(`👁 Spectating — ${map.name}, ${numPlayers} AI ${diff.name}s. Sit back.`);
+    this.hud.addAlert(`👁 Spectating — ${map.name}, ${numPlayers} AI combatants. Sit back.`);
     audio.play("complete");
   }
 
@@ -1127,6 +1130,8 @@ class App {
     this.lastFrame = now;
     dt = Math.min(dt, 0.1);
     this.time += dt;
+    // Smoothed FPS (EMA) for the optional on-screen counter.
+    if (dt > 0) this.fps += (1 / dt - this.fps) * 0.1;
 
     const W = this.canvas.width;
     const H = this.canvas.height;
@@ -1212,11 +1217,32 @@ class App {
       ui.flushTooltip(W, H);
     }
 
+    // Optional FPS overlay, drawn on top of everything in every state.
+    if (this.settings.showFps) this.drawFps(W);
+
     // Clear frame input flags.
     this.frameClick = null;
     this.frameDouble = null;
     this.frameRight = null;
     this.frameDragEnd = null;
+  }
+
+  /** Small live FPS readout, top-centre, colour-coded by smoothness. */
+  private drawFps(W: number) {
+    const ctx = this.renderer.ctx;
+    const fps = Math.max(0, Math.round(this.fps));
+    const col = fps >= 55 ? "#7df2a9" : fps >= 30 ? "#ffd24a" : "#e0564a";
+    const txt = `${fps} FPS`;
+    ctx.save();
+    ctx.font = "bold 13px ui-monospace, SFMono-Regular, monospace";
+    const tw = ctx.measureText(txt).width;
+    const w = tw + 16, h = 20, x = W / 2 - w / 2, y = 4;
+    ctx.fillStyle = "rgba(8,6,3,0.72)";
+    ctx.fillRect(x, y, w, h);
+    ctx.strokeStyle = "rgba(255,255,255,0.12)"; ctx.lineWidth = 1; ctx.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1);
+    ctx.fillStyle = col; ctx.textBaseline = "middle"; ctx.textAlign = "center";
+    ctx.fillText(txt, W / 2, y + h / 2 + 1);
+    ctx.restore();
   }
 
   matchFrame(dt: number, W: number, H: number) {

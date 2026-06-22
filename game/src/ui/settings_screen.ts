@@ -85,6 +85,7 @@ export class SettingsScreen {
     s.reduceEffects = this.toggle(lx, y, colW - 44, "Reduce effects (faster 8v8)", s.reduceEffects); y += 40;
     s.weather = this.toggle(lx, y, colW - 44, "Weather effects", s.weather); y += 40;
     s.colorblind = this.toggle(lx, y, colW - 44, "Colorblind team colors", s.colorblind); y += 40;
+    s.showFps = this.toggle(lx, y, colW - 44, "Show FPS counter", s.showFps); y += 40;
 
     // ----- right column: Controls reference -----
     ui.panel(xR, top, colW, 470, { light: true });

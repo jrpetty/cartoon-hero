@@ -12,6 +12,7 @@ export interface Settings {
   reduceEffects: boolean; // thin out particles on weaker machines / big 8v8s
   colorblind: boolean; // high-contrast team palette
   weather: boolean; // atmospheric rain/snow/overcast overlay
+  showFps: boolean; // live FPS counter overlay
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -25,6 +26,7 @@ export const DEFAULT_SETTINGS: Settings = {
   reduceEffects: false,
   colorblind: false,
   weather: true,
+  showFps: false,
 };
 
 const KEY = "bb_settings";
