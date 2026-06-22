@@ -51,9 +51,18 @@ const ENEMY_CELLS: { c: number; r: number }[] = [];
 for (const c of [5, 6, 7, 8, 9]) for (const r of ROW_ORDER) ENEMY_CELLS.push({ c, r });
 
 /** An AI opponent's hidden economy — identical rules to the player's. */
-interface FoeBrain { gold: number; level: number; xp: number; pieces: Piece[]; rng: RNG; }
+interface FoeBrain { gold: number; level: number; xp: number; pieces: Piece[]; rng: RNG; favored: string[]; }
 
 const NAMES = ["Ironclad", "Crimson", "Verdant", "Stormcrow", "Ashveil", "Goldhand", "Nightfall"];
+
+/** An opponent's "comp identity": a few core types it drafts toward, so its
+ *  board concentrates into star-ups and synergies instead of a random spread. */
+function pickFavored(rng: RNG): string[] {
+  const out: string[] = [];
+  const pick = (tier: number) => { const pool = TIER_UNITS[tier]; if (pool.length) out.push(pool[rng.int(0, pool.length - 1)]); };
+  pick(1); pick(1); pick(2); pick(3); // two cheap cores to spam-merge + a couple of carries
+  return [...new Set(out)];
+}
 
 /** Roll one shop unit at the given level odds (shared by player + opponents). */
 function rollUnit(odds: number[], rng: RNG): string | null {
@@ -119,7 +128,10 @@ export class WarbandRun {
     this.opponents = NAMES.map((name, id) => ({ id, name, life: 100, alive: true }));
     // Every opponent runs the exact same economy as the player, from the same
     // starting point (2 gold, level 1, empty board), on its own seeded stream.
-    this.foeBrains = this.opponents.map((o) => ({ gold: 2, level: 1, xp: 0, pieces: [], rng: this.rng.fork(o.id + 1) }));
+    this.foeBrains = this.opponents.map((o) => {
+      const rng = this.rng.fork(o.id + 1);
+      return { gold: 2, level: 1, xp: 0, pieces: [], rng, favored: pickFavored(rng) };
+    });
     this.startRound();
   }
 
@@ -327,34 +339,60 @@ export class WarbandRun {
 
   /**
    * Advance one opponent's economy a round, by the same rules the player plays:
-   * identical income + interest, the same level odds, buy and merge. A simple
-   * greedy drafter — techs up when flush, then spends down to a small reserve.
+   * identical income + interest, the same shop odds, level/buy/merge — but as a
+   * *competent* drafter. It banks gold for interest (the real economy engine),
+   * levels toward a curve, concentrates buys into its favoured comp so it hits
+   * 2★/3★ star-ups and synergies, rerolls to dig for copies, and equips the
+   * relics it earns onto its carry. That lets it scale roughly as fast as you.
    */
   private stepFoe(b: FoeBrain) {
     b.gold += 5 + Math.min(5, Math.floor(b.gold / 10)); // base + interest (same formula)
-    // A sensible level curve to climb toward (mirrors a player following a guide).
-    const targetLevel = Math.min(MAX_LEVEL, 1 + Math.ceil(this.round / 2));
-    // Spend the round's gold: lean toward levelling up to the curve, otherwise
-    // buy and merge from a same-odds shop, until the gold runs out.
+    if (this.round % 3 === 2) this.equipFoeRelic(b); // a relic every few rounds, like you
+    const targetLevel = Math.min(MAX_LEVEL, 1 + Math.floor(this.round * 0.7));
+    // Bank toward the max-interest breakpoint as the game goes — early rounds it
+    // spends freely to build a board; later it keeps gold working for interest
+    // and only buys upgrades / rerolls down to the reserve.
+    const reserve = Math.min(50, Math.max(0, (this.round - 2) * 8));
+    let rerolls = 2 + Math.floor(this.round / 2);
     let guard = 0;
-    while (b.gold >= 1 && guard++ < 80) {
-      const wantsLevel = b.level < targetLevel && b.gold >= XP_BUY + 1;
-      if (wantsLevel && b.rng.bool(0.5)) {
+    while (guard++ < 160) {
+      // Tech toward the curve when it can afford to and stay above reserve.
+      if (b.level < targetLevel && b.gold - XP_BUY >= reserve) {
         b.gold -= XP_BUY; b.xp += XP_BUY;
         while (b.level < MAX_LEVEL && b.xp >= XP_TO_LEVEL[b.level + 1]) b.level++;
         continue;
       }
       const odds = TIER_ODDS[Math.min(b.level, MAX_LEVEL) - 1];
-      const type = rollUnit(odds, b.rng);
-      if (!type) continue;
-      if (b.gold < UNIT_TIER[type]) break;
-      b.gold -= UNIT_TIER[type];
-      b.pieces.push({ type, star: 1, items: [] });
-      mergeBoard(b.pieces, []); // opponents don't field relics
+      const needBodies = b.pieces.length < b.level + 1; // fill a board first
+      let bought = false;
+      for (let s = 0; s < SHOP_SIZE; s++) {
+        const type = rollUnit(odds, b.rng);
+        if (!type) continue;
+        const c = UNIT_TIER[type];
+        if (b.gold - c < reserve) continue;
+        const owned = b.pieces.filter((p) => p.type === type && p.star < 3).length;
+        // Buy if it fills out a thin board, belongs to the comp, or completes a merge.
+        if (!(needBodies || b.favored.includes(type) || owned >= 1)) continue;
+        b.gold -= c; b.pieces.push({ type, star: 1, items: [] }); mergeBoard(b.pieces, []);
+        bought = true;
+      }
+      if (!bought) {
+        if (rerolls > 0 && b.gold - REROLL_COST >= reserve) { b.gold -= REROLL_COST; rerolls--; continue; }
+        break; // nothing worth buying and out of rerolls → bank the rest for interest
+      }
     }
   }
 
-  /** An opponent's deployed warband — its strongest pieces on its own half. */
+  /** Earn + equip a relic onto an opponent's strongest unit (carry-building). */
+  private equipFoeRelic(b: FoeBrain) {
+    const id = ITEM_IDS[b.rng.int(0, ITEM_IDS.length - 1)];
+    const target = [...b.pieces]
+      .sort((p, q) => q.star - p.star || (UNIT_TIER[q.type] ?? 0) - (UNIT_TIER[p.type] ?? 0))
+      .find((p) => p.items.length < MAX_ITEMS);
+    if (target) target.items.push(id);
+  }
+
+  /** An opponent's deployed warband — its strongest pieces (with relics) on its half. */
   private foeBoard(b: FoeBrain): ArenaUnit[] {
     const cap = b.level; // same rule the player plays by
     return [...b.pieces]
@@ -362,7 +400,7 @@ export class WarbandRun {
       .slice(0, cap)
       .map((p, i) => {
         const cell = ENEMY_CELLS[Math.min(i, ENEMY_CELLS.length - 1)];
-        return { type: p.type, star: p.star, col: cell.c, row: cell.r };
+        return { type: p.type, star: p.star, items: p.items, col: cell.c, row: cell.r };
       });
   }
 

@@ -114,21 +114,27 @@ describe("Warband Tactics run engine", () => {
     expect(run.deployment().some((d) => d.index === benchIdx)).toBe(true);
   });
 
-  it("opponents run the same economy and field a warband that grows over rounds", () => {
+  it("opponents run the same economy and field a warband that grows + stars up", () => {
     const run = new WarbandRun(3);
     const sizes: number[] = [];
+    let sawStarUp = false;
+    let sawRelic = false;
     // Buy a couple of units so the player survives a while, then march through rounds.
     run.gold = 50;
     run.shop = ["spearman", "spearman", "militia", "archer", "knight"];
     run.buy(0); run.buy(2); run.buy(3);
-    for (let r = 0; r < 10 && run.phase !== "over"; r++) {
+    for (let r = 0; r < 14 && run.phase !== "over"; r++) {
       sizes.push(run.pendingOpp.length); // the upcoming opponent's deployed board
+      if (run.pendingOpp.some((u) => (u.star ?? 1) >= 2)) sawStarUp = true;
+      if (run.pendingOpp.some((u) => (u.items ?? []).length > 0)) sawRelic = true;
       run.fight();
       if (run.phase === "result") run.next();
     }
-    // The opponent always brings a warband, and it scales up as its economy levels.
+    // The opponent always brings a warband, scales up, hits star-ups and fields relics.
     expect(sizes[0]).toBeGreaterThanOrEqual(1);
     expect(Math.max(...sizes)).toBeGreaterThan(sizes[0]);
+    expect(sawStarUp).toBe(true);
+    expect(sawRelic).toBe(true);
   });
 
   it("a full auto-played run always terminates with a win or loss", () => {
