@@ -16,9 +16,11 @@ import { UNITS } from "../content/units";
 import { WarbandRun, UNIT_TIER, Piece } from "../sim/warband";
 import { LiveBattle, GRID_COLS, GRID_ROWS, GRID_CELL } from "../sim/autobattle";
 import { traitsOf, Buff } from "../sim/traits";
-import { ITEMS, Item } from "../sim/items";
+import { ITEMS, Item, applyItems } from "../sim/items";
+import { ABILITIES } from "../content/abilities";
 
 const TIER_COLOR = ["#888888", "#9aa8b4", "#4caf50", "#3a78d8", "#9b5cf0", "#e0a020"];
+const STAR_MULT = [1, 1, 1.8, 3.2]; // hp/attack multiplier by star (matches the battle sim)
 const shortName = (type: string) => (UNITS[type]?.name ?? type).split(" ")[0];
 const stars = (n: number) => "★".repeat(n);
 const BATTLE_SPEED = 2; // sim-time multiplier while watching a fight
@@ -232,7 +234,7 @@ export class WarbandScreen {
       run.shop.forEach((type, i) => {
         const cx = bx + i * (sw + 8);
         const cy = shopY + 14;
-        if (type) this.shopCard(cx, cy, sw, 70, type, run.gold >= run.cost(type), () => { if (run.buy(i)) audio.play("coin"); });
+        if (type) this.shopCard(cx, cy, sw, 70, type, run.gold >= run.cost(type), run.poolCount(type), () => { if (run.buy(i)) audio.play("coin"); });
         else { ctx.fillStyle = "rgba(0,0,0,0.25)"; ctx.fillRect(cx, cy, sw, 70); }
       });
       const rxx = bx + 5 * (120 + 8) + 8;
@@ -561,6 +563,15 @@ export class WarbandScreen {
         ctx.fillStyle = e.team === 0 ? "#5ad06a" : "#e0564a";
         ctx.fillRect(sx - barW / 2, byy, barW * frac, barH);
       }
+      // Ability charge bar (battle only) for units with a signature ability.
+      if (!setup && ABILITIES[e.type] && e.type !== "villager") {
+        const ab = ABILITIES[e.type];
+        const charge = e.abilityActive > 0 ? 1 : Math.max(0, Math.min(1, b.chargeOf(e.id)));
+        const barW = cellW * 0.5, barH = 2.5, byy = sy - cellH * 0.26 + 5;
+        ctx.fillStyle = "rgba(0,0,0,0.7)"; ctx.fillRect(sx - barW / 2 - 1, byy - 1, barW + 2, barH + 2);
+        ctx.fillStyle = e.abilityActive > 0 ? "#fff" : withAlpha(ab.color, 0.95);
+        ctx.fillRect(sx - barW / 2, byy, barW * charge, barH);
+      }
     }
     // Combat FX (sparks + floating damage) on top of the units.
     this.fx.draw(ctx, mapX, mapY, (sxk + syk) / 2);
@@ -599,7 +610,7 @@ export class WarbandScreen {
     if (hover && this.heldPiece < 0) this.unitTip = { p, x: x + w + 6, y: y - 70 };
   }
 
-  private shopCard(x: number, y: number, w: number, h: number, type: string, affordable: boolean, onClick: () => void) {
+  private shopCard(x: number, y: number, w: number, h: number, type: string, affordable: boolean, poolLeft: number, onClick: () => void) {
     const ctx = ui.ctx;
     const tier = UNIT_TIER[type] ?? 1;
     const col = TIER_COLOR[tier];
@@ -623,8 +634,11 @@ export class WarbandScreen {
     let txx = x + 10;
     for (const tr of tt) { ui.text(tr.name, txx, y + oy + 44, { size: 9.5, color: affordable ? tr.color : withAlpha(tr.color, 0.5) }); txx += tr.name.length * 5.6 + 8; }
     ui.text(`Tier ${tier}`, x + 10, y + oy + h - 10, { size: 10, color: withAlpha(col, affordable ? 1 : 0.5) });
+    // Copies left in the shared lobby pool.
+    ui.text(`${poolLeft} left`, x + w / 2, y + oy + h - 10, { align: "center", size: 9.5, color: poolLeft <= 3 ? "#e0786a" : "#8a8278" });
     // Gold coin with the cost.
     this.coin(ctx, x + w - 18, y + oy + h - 13, tier, affordable);
+    if (hover) this.unitTip = { p: { type, star: 1, items: [] }, x: x + w + 6, y: y - 150 };
     if (hover && affordable && ui.clicked && !ui.pointerConsumed) { ui.pointerConsumed = true; onClick(); }
   }
 
@@ -783,15 +797,29 @@ export class WarbandScreen {
     ui.text("Equip onto a unit · up to 3 each", px + 14, ly + 4, { size: 10, color: "#8a8278" });
   }
 
-  /** Hover tooltip for a unit: its tier, star and the relics it has equipped. */
+  /** Hover inspector for a unit: its tier, star, live combat stats, counter
+   *  bonuses, signature ability and equipped relics. */
   private drawUnitTip(W: number, H: number) {
     if (!this.unitTip) return;
     const ctx = ui.ctx;
     const p = this.unitTip.p;
-    const relics = p.items.map((id) => ITEMS[id]).filter(Boolean) as Item[];
+    const def = UNITS[p.type];
+    if (!def) return;
     const tier = UNIT_TIER[p.type] ?? 1;
-    const rowH = 32;
-    const pw = 228, ph = 46 + Math.max(1, relics.length) * rowH + 8;
+    const relics = p.items.map((id) => ITEMS[id]).filter(Boolean) as Item[];
+    const ab = ABILITIES[p.type];
+    // Effective stats = base × star, then relics (synergies add more in a fight).
+    const sm = STAR_MULT[p.star] ?? 1;
+    const st = { maxHp: Math.round(def.hp * sm), hp: 0, attack: Math.round(def.attack * sm), armor: def.armor, speed: def.speed };
+    st.hp = st.maxHp;
+    applyItems(st, p.items);
+    const bonuses = Object.entries(def.bonus).map(([cls, amt]) => `+${amt} vs ${cls}`);
+
+    const pw = 244;
+    let ph = 50 + 40; // header + stat block
+    if (bonuses.length) ph += 18;
+    if (ab) ph += 34;
+    ph += 8 + (relics.length ? relics.length * 30 : 16);
     let px = this.unitTip.x, py = this.unitTip.y;
     if (px + pw > W - 4) px = Math.max(4, px - pw - 90);
     py = Math.max(4, Math.min(py, H - ph - 4));
@@ -800,20 +828,48 @@ export class WarbandScreen {
     ctx.fillStyle = "rgba(18,14,9,0.98)"; this.roundRect(ctx, px, py, pw, ph, 9); ctx.fill();
     ctx.restore();
     ctx.strokeStyle = withAlpha(TIER_COLOR[tier], 0.95); ctx.lineWidth = 1.5; this.roundRect(ctx, px + 0.75, py + 0.75, pw - 1.5, ph - 1.5, 9); ctx.stroke();
-    ui.text(shortName(p.type), px + 14, py + 21, { size: 15, bold: true, color: "#f2e8d0", font: "Georgia, serif" });
+    // Header.
+    ui.text(UNITS[p.type]?.name ?? p.type, px + 14, py + 21, { size: 15, bold: true, color: "#f2e8d0", font: "Georgia, serif" });
     ui.text(stars(p.star), px + 14, py + 37, { size: 13, color: p.star >= 3 ? "#ffd24a" : p.star === 2 ? "#cfe0ff" : "#9a917b" });
     ui.text(`Tier ${tier}`, px + pw - 14, py + 21, { align: "right", size: 11, color: TIER_COLOR[tier] });
-    ui.text(`Relics ${relics.length}/3`, px + pw - 14, py + 37, { align: "right", size: 10, color: "#9a917b" });
-    ctx.strokeStyle = "rgba(255,255,255,0.08)"; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(px + 10, py + 44); ctx.lineTo(px + pw - 10, py + 44); ctx.stroke();
-    let ly = py + 50;
-    if (!relics.length) { ui.text("No relics equipped", px + 14, ly + 12, { size: 12, color: "#8a8278" }); return; }
+    let y = py + 50;
+    const div = () => { ctx.strokeStyle = "rgba(255,255,255,0.08)"; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(px + 10, y); ctx.lineTo(px + pw - 10, y); ctx.stroke(); };
+    div();
+    // Stat block: HP / ATK on one row, ARM / RNG / SPD on the next.
+    const statCell = (label: string, val: string, sx: number, sy: number, col: string) => {
+      ui.text(label, sx, sy, { size: 9.5, color: "#8a8278" });
+      ui.text(val, sx + 30, sy, { size: 12.5, bold: true, color: col });
+    };
+    statCell("HP", String(st.maxHp), px + 16, y + 16, "#7df2a9");
+    statCell("ATK", String(st.attack), px + 130, y + 16, "#ffce6a");
+    statCell("ARM", String(st.armor), px + 16, y + 33, "#cfe0ff");
+    statCell("RNG", def.range > 0 ? String(def.range) : "melee", px + 96, y + 33, "#e7ddc4");
+    statCell("SPD", String(st.speed), px + 178, y + 33, "#e7ddc4");
+    y += 40;
+    if (bonuses.length) {
+      div(); ui.text("⚔ " + bonuses.join("  "), px + 14, y + 13, { size: 11, bold: true, color: "#ffb47a" }); y += 18;
+    }
+    if (ab) {
+      div();
+      ui.text(ab.name, px + 14, y + 13, { size: 12, bold: true, color: ab.color });
+      ui.text("ability — charges in battle", px + pw - 14, y + 13, { align: "right", size: 9, color: "#8a8278" });
+      ui.text(this.clip(ab.desc, 42), px + 14, y + 27, { size: 9.5, color: "#cabfa4" });
+      y += 34;
+    }
+    div(); y += 8;
+    ui.text(`Relics ${relics.length}/3`, px + 14, y - 0, { size: 10, color: "#9a917b" });
+    if (!relics.length) { ui.text("— none equipped —", px + 70, y, { size: 10, color: "#8a8278" }); return; }
+    y += 6;
     for (const it of relics) {
-      ctx.fillStyle = "rgba(8,6,3,0.9)"; ctx.beginPath(); ctx.arc(px + 24, ly + 13, 11, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = "rgba(8,6,3,0.9)"; ctx.beginPath(); ctx.arc(px + 22, y + 11, 10, 0, Math.PI * 2); ctx.fill();
       ctx.strokeStyle = it.color; ctx.lineWidth = 1; ctx.stroke();
-      this.itemIcon(ctx, px + 24, ly + 13, 7.5, it);
-      ui.text(it.name, px + 44, ly + 9, { size: 12.5, bold: true, color: it.color });
-      ui.text(it.desc, px + 44, ly + 24, { size: 11, color: "#cabfa4" });
-      ly += rowH;
+      this.itemIcon(ctx, px + 22, y + 11, 7, it);
+      ui.text(it.name, px + 40, y + 8, { size: 11.5, bold: true, color: it.color });
+      ui.text(it.desc, px + 40, y + 21, { size: 10, color: "#cabfa4" });
+      y += 30;
     }
   }
+
+  /** Truncate a string to a max length with an ellipsis. */
+  private clip(s: string, n: number): string { return s.length > n ? s.slice(0, n - 1) + "…" : s; }
 }

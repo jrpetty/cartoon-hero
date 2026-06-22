@@ -71,6 +71,20 @@ describe("LiveBattle (the watchable fight)", () => {
     expect(r2).toEqual(r3);
   });
 
+  it("units charge and cast their signature abilities during the fight", () => {
+    const army = [{ type: "knight", star: 2 }, { type: "knight", star: 1 }, { type: "archer", star: 1 }, { type: "militia", star: 1 }];
+    const foe = [{ type: "militia", star: 1 }, { type: "spearman", star: 1 }, { type: "archer", star: 1 }, { type: "knight", star: 1 }];
+    const lb = new LiveBattle(army, foe, 42);
+    lb.begin();
+    let casts = 0, guard = 0;
+    while (!lb.done && guard++ < 4000) {
+      lb.step(1);
+      for (const ev of lb.fxEvents) if (ev.kind === "ability") casts++;
+      lb.fxEvents.length = 0;
+    }
+    expect(casts).toBeGreaterThan(0); // abilities fire in the live battle
+  });
+
   it("doesn't advance before begin() (a static board preview)", () => {
     const lb = new LiveBattle(a, b, 1);
     const before = lb.world.entities.filter((e) => e.alive).length;

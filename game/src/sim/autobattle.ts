@@ -9,9 +9,10 @@ import { World, WorldEvent } from "./world";
 import { Kind, Stance, Team, EntityId } from "./types";
 import { generateMap } from "../maps/generator";
 import { UNITS } from "../content/units";
-import { SIM_HZ } from "../content/balance";
+import { SIM_HZ, SIM_DT } from "../content/balance";
 import { activeTraits, applyBuff, traitsOf, ActiveTrait } from "./traits";
 import { applyItems } from "./items";
+import { ABILITIES } from "../content/abilities";
 
 export interface UnitStack {
   type: string;
@@ -185,6 +186,7 @@ export class LiveBattle {
   private idsB: EntityId[];
   private maxTicks: number;
   private _result: BattleResult | null = null;
+  private mana = new Map<EntityId, number>(); // 0..1 ability charge per unit
 
   constructor(a: (UnitStack | ArenaUnit)[], b: (UnitStack | ArenaUnit)[], seed = 1, maxSeconds = 30) {
     const map = generateMap("open_plains", seed, 2);
@@ -214,6 +216,7 @@ export class LiveBattle {
     if (!this.started || this.done) return;
     for (let k = 0; k < ticks && !this.done; k++) {
       this.world.tick();
+      this.tickAbilities(); // charge + auto-cast signature abilities (per tick → deterministic)
       for (const ev of this.world.drainEvents()) { if (this.fxEvents.length < 256) this.fxEvents.push(ev); }
       this.ticks++;
       if (this.ticks % 5 === 0 || this.ticks >= this.maxTicks) {
@@ -223,6 +226,30 @@ export class LiveBattle {
       }
     }
   }
+
+  /**
+   * Units with a signature ability build "mana" as the fight goes and cast it
+   * when full — faster for higher-star units. After a cast the long sim cooldown
+   * is cleared so the charge meter (not the cooldown) paces repeat casts.
+   */
+  private tickAbilities() {
+    for (const e of this.world.entities) {
+      if (!e.alive || e.kind !== Kind.Unit || !ABILITIES[e.type] || e.type === "villager") continue;
+      if (e.abilityActive > 0) continue; // mid-cast: let the buff run before recharging
+      const star = (e.variantRarity ?? 0) + 1;
+      const chargeTime = Math.max(2.4, 5 - (star - 1) * 1.2); // 1★ 5s · 2★ 3.8s · 3★ 2.6s
+      let m = (this.mana.get(e.id) ?? 0) + SIM_DT / chargeTime;
+      if (m >= 1) {
+        this.world.useAbility([e.id]);
+        e.abilityCooldown = 0; // let mana, not the 20s+ cooldown, gate the next cast
+        m = 0;
+      }
+      this.mana.set(e.id, m);
+    }
+  }
+
+  /** Current ability charge (0..1) for a unit, for the charge-bar render. */
+  chargeOf(id: EntityId): number { return this.mana.get(id) ?? 0; }
 
   private finish(): void {
     if (this._result) return;

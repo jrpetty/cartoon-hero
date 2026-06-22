@@ -21,6 +21,10 @@ export const UNIT_TIER: Record<string, number> = {
 const TIER_UNITS: string[][] = [[], [], [], [], [], []]; // index by tier
 for (const [type, tier] of Object.entries(UNIT_TIER)) if (UNITS[type]) TIER_UNITS[tier].push(type);
 
+/** Copies of each unit type in the shared lobby pool, by tier (1..5). Cheaper
+ *  units are plentiful; carries are scarce — so contesting a comp is real. */
+const POOL_SIZE = [0, 29, 22, 16, 12, 10];
+
 /** Per-shop appearance odds (%) of each tier, indexed by player level (1..9). */
 const TIER_ODDS: number[][] = [
   [100, 0, 0, 0, 0],
@@ -62,15 +66,6 @@ function pickFavored(rng: RNG): string[] {
   const pick = (tier: number) => { const pool = TIER_UNITS[tier]; if (pool.length) out.push(pool[rng.int(0, pool.length - 1)]); };
   pick(1); pick(1); pick(2); pick(3); // two cheap cores to spam-merge + a couple of carries
   return [...new Set(out)];
-}
-
-/** Roll one shop unit at the given level odds (shared by player + opponents). */
-function rollUnit(odds: number[], rng: RNG): string | null {
-  let roll = rng.range(0, 100);
-  let tier = 1;
-  for (let t = 0; t < 5; t++) { if (roll < odds[t]) { tier = t + 1; break; } roll -= odds[t]; }
-  const pool = TIER_UNITS[tier];
-  return pool.length ? pool[rng.int(0, pool.length - 1)] : null;
 }
 
 /** Combine any 3 same type+star into one of the next star (shared by all warbands). */
@@ -122,9 +117,11 @@ export class WarbandRun {
   pendingOpp: ArenaUnit[] = [];
   private pendingFoe: Opponent | null = null;
   private foeBrains: FoeBrain[] = []; // each opponent's hidden economy
+  private pool: Record<string, number> = {}; // shared lobby unit pool (you + foes draw from it)
 
   constructor(seed = (Math.random() * 1e9) | 0) {
     this.rng = new RNG(seed);
+    for (const [type, tier] of Object.entries(UNIT_TIER)) if (UNITS[type]) this.pool[type] = POOL_SIZE[tier] ?? 12;
     this.opponents = NAMES.map((name, id) => ({ id, name, life: 100, alive: true }));
     // Every opponent runs the exact same economy as the player, from the same
     // starting point (2 gold, level 1, empty board), on its own seeded stream.
@@ -146,8 +143,29 @@ export class WarbandRun {
   private rollShop() {
     const odds = TIER_ODDS[Math.min(this.level, MAX_LEVEL) - 1];
     this.shop = [];
-    for (let i = 0; i < SHOP_SIZE; i++) this.shop.push(rollUnit(odds, this.rng));
+    for (let i = 0; i < SHOP_SIZE; i++) this.shop.push(this.rollFromPool(odds, this.rng));
   }
+
+  /** Roll a shop unit from the shared pool: pick a tier by odds, then a type
+   *  weighted by how many copies remain (depleted types appear less). */
+  private rollFromPool(odds: number[], rng: RNG): string | null {
+    let roll = rng.range(0, 100);
+    let tier = 1;
+    for (let t = 0; t < 5; t++) { if (roll < odds[t]) { tier = t + 1; break; } roll -= odds[t]; }
+    const avail = TIER_UNITS[tier].filter((type) => (this.pool[type] ?? 0) > 0);
+    if (!avail.length) return null;
+    let total = 0; for (const type of avail) total += this.pool[type];
+    let pick = rng.range(0, total);
+    for (const type of avail) { pick -= this.pool[type]; if (pick < 0) return type; }
+    return avail[avail.length - 1];
+  }
+
+  /** Copies of a unit type left in the shared pool (for the shop UI / reads). */
+  poolCount(type: string): number { return this.pool[type] ?? 0; }
+
+  /** Take a copy from the pool when acquired; refund (star-weighted) on sale. */
+  private takeFromPool(type: string) { this.pool[type] = Math.max(0, (this.pool[type] ?? 0) - 1); }
+  private refundToPool(type: string, star: number) { this.pool[type] = (this.pool[type] ?? 0) + Math.pow(3, star - 1); }
 
   reroll(): boolean {
     if (this.phase !== "shop" || this.gold < REROLL_COST) return false;
@@ -175,6 +193,7 @@ export class WarbandRun {
     if (this.gold < c) return false;
     this.gold -= c;
     this.shop[slot] = null;
+    this.takeFromPool(type); // claim the copy from the shared pool
     this.pieces.push({ type, star: 1, items: [] });
     this.merge();
     this.reconcile(); // auto-field it if the board has a free slot
@@ -186,6 +205,7 @@ export class WarbandRun {
     if (this.phase !== "shop" || index < 0 || index >= this.pieces.length) return false;
     const p = this.pieces[index];
     this.gold += this.cost(p.type) * p.star;
+    this.refundToPool(p.type, p.star); // its copies return to the shared pool
     this.pieces.splice(index, 1);
     this.reconcile(); // selling a board unit pulls up a reserve
     return true;
@@ -366,14 +386,14 @@ export class WarbandRun {
       const needBodies = b.pieces.length < b.level + 1; // fill a board first
       let bought = false;
       for (let s = 0; s < SHOP_SIZE; s++) {
-        const type = rollUnit(odds, b.rng);
+        const type = this.rollFromPool(odds, b.rng); // draws from the shared lobby pool
         if (!type) continue;
         const c = UNIT_TIER[type];
         if (b.gold - c < reserve) continue;
         const owned = b.pieces.filter((p) => p.type === type && p.star < 3).length;
         // Buy if it fills out a thin board, belongs to the comp, or completes a merge.
         if (!(needBodies || b.favored.includes(type) || owned >= 1)) continue;
-        b.gold -= c; b.pieces.push({ type, star: 1, items: [] }); mergeBoard(b.pieces, []);
+        b.gold -= c; this.takeFromPool(type); b.pieces.push({ type, star: 1, items: [] }); mergeBoard(b.pieces, []);
         bought = true;
       }
       if (!bought) {

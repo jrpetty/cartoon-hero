@@ -95,6 +95,19 @@ describe("Warband Tactics run engine", () => {
     expect(run.place(dep[0].index, 0, 10)).toBe(false);
   });
 
+  it("shares a finite unit pool — buying depletes it, selling refunds copies", () => {
+    const run = new WarbandRun(2);
+    run.gold = 99;
+    const before = run.poolCount("militia");
+    run.shop = ["militia", "militia", "militia", "militia", "militia"];
+    run.buy(0); run.buy(1);
+    expect(run.poolCount("militia")).toBe(before - 2); // two copies taken
+    // Sell a 1-star → one copy returns to the pool.
+    const idx = run.pieces.findIndex((p) => p.type === "militia" && p.star === 1);
+    run.sell(idx);
+    expect(run.poolCount("militia")).toBe(before - 1);
+  });
+
   it("fields a reserve unit from the bench onto the board", () => {
     const run = new WarbandRun(4);
     run.gold = 99; run.level = 2; // board cap = 2

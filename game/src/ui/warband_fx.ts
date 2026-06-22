@@ -6,6 +6,7 @@
 import { WorldEvent } from "../sim/world";
 import { Team } from "../sim/types";
 import { audio } from "../engine/audio";
+import { ABILITIES } from "../content/abilities";
 
 interface Spark { x: number; y: number; vx: number; vy: number; life: number; max: number; size: number; color: string; grav: number; glow: boolean; }
 interface DmgText { x: number; y: number; vy: number; life: number; max: number; text: string; color: string; size: number; }
@@ -45,6 +46,14 @@ export class WarbandFx {
           this.burst(ev.x, ev.y - 6, 8, "#3a2f22", 60, 0.8, 3, 80);
           this.shake = Math.min(9, this.shake + 2.4);
           this.sound("death", 0.08);
+          break;
+        }
+        case "ability": {
+          // A bright signature-ability cast: a ring of sparks in the ability colour.
+          const col = Object.values(ABILITIES).find((a) => a.id === ev.data)?.color ?? "#ffe9a8";
+          this.burst(ev.x, ev.y - 8, 18, col, 120, 0.8, 3, 30);
+          this.shake = Math.min(7, this.shake + 1.5);
+          this.sound("complete", 0.12);
           break;
         }
       }
