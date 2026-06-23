@@ -143,6 +143,8 @@ class App {
     this.input = new Input(this.canvas);
     this.resize();
     window.addEventListener("resize", () => this.resize());
+    window.addEventListener("orientationchange", () => setTimeout(() => this.resize(), 80));
+    window.visualViewport?.addEventListener("resize", () => this.resize()); // mobile toolbar show/hide
     this.wireInput();
     this.applySettings();
     // Load any Meshy-baked sprites (no-op if none generated yet); procedural art
@@ -152,9 +154,26 @@ class App {
   }
 
   resize() {
-    this.canvas.width = window.innerWidth;
-    this.canvas.height = window.innerHeight;
-    this.camera.setViewport(this.canvas.width, this.canvas.height);
+    const vw = Math.max(1, window.innerWidth);
+    const vh = Math.max(1, window.innerHeight);
+    const aspect = vw / vh;
+    const DESIGN = 760; // the UI's design space on its short axis
+    let cw = vw, ch = vh;
+    // On small / mobile screens the fixed-layout UI needs more room than the
+    // device gives it, so render at a virtual resolution (short side = DESIGN)
+    // and CSS-scale the canvas down to fit. Input is mapped back accordingly.
+    if (Math.min(vw, vh) < DESIGN) {
+      if (aspect >= 1) { ch = DESIGN; cw = Math.round(DESIGN * aspect); }
+      else { cw = DESIGN; ch = Math.round(DESIGN / aspect); }
+      this.canvas.style.width = vw + "px";
+      this.canvas.style.height = vh + "px";
+    } else {
+      this.canvas.style.width = "";
+      this.canvas.style.height = "";
+    }
+    this.canvas.width = cw;
+    this.canvas.height = ch;
+    this.camera.setViewport(cw, ch);
   }
 
   // ----------------------------------------------------------- input wiring --
@@ -173,11 +192,22 @@ class App {
     };
     this.input.onDragEnd = (box) => {
       this.frameDragEnd = { x0: box.x0, y0: box.y0, x1: box.x1, y1: box.y1 };
+      // Outside a match, screens are tap/drag UIs (no box-select), so a drag's
+      // release should also count as a click at the end point — that's what makes
+      // touch (and mouse) drag-and-drop in Warband Tactics resolve on release.
+      if (this.state !== "match") this.frameClick = { x: box.x1, y: box.y1 };
     };
     this.input.onWheel = (x, y, delta) => {
       if (this.state === "match") {
         this.camera.zoomAt(x, y, delta > 0 ? 0.88 : 1.14);
       }
+    };
+    // Two-finger gestures: pan + pinch-zoom the match camera.
+    this.input.onPan = (dx, dy) => {
+      if (this.state === "match") this.camera.pan(-dx / this.camera.zoom, -dy / this.camera.zoom);
+    };
+    this.input.onPinch = (cx, cy, factor) => {
+      if (this.state === "match") this.camera.zoomAt(cx, cy, factor);
     };
     this.input.onKeyDown = (key) => this.handleKey(key);
   }
@@ -1138,6 +1168,7 @@ class App {
     const ctx = this.renderer.ctx;
 
     setMouseDown(this.input.leftDown);
+    this.input.longPressRight = this.state === "match"; // long-press → right-click only in a match
     ui.begin(ctx, {
       mx: this.input.mx,
       my: this.input.my,
@@ -1219,6 +1250,8 @@ class App {
 
     // Optional FPS overlay, drawn on top of everything in every state.
     if (this.settings.showFps) this.drawFps(W);
+    // On a phone held in portrait, nudge to landscape — the UI is landscape-first.
+    if (this.input.usingTouch && H > W * 1.05) this.drawRotatePrompt(W, H);
 
     // Clear frame input flags.
     this.frameClick = null;
@@ -1243,6 +1276,29 @@ class App {
     ctx.fillStyle = col; ctx.textBaseline = "middle"; ctx.textAlign = "center";
     ctx.fillText(txt, W / 2, y + h / 2 + 1);
     ctx.restore();
+  }
+
+  /** Full-screen "rotate to landscape" overlay for portrait phones. */
+  private drawRotatePrompt(W: number, H: number) {
+    const ctx = this.renderer.ctx;
+    ctx.save();
+    ctx.fillStyle = "rgba(8,6,3,0.94)"; ctx.fillRect(0, 0, W, H);
+    const cx = W / 2, cy = H / 2 - 30;
+    const t = this.time * 1.6;
+    const wob = Math.sin(t) * 0.35 - 0.4; // gentle rotate wobble
+    ctx.translate(cx, cy); ctx.rotate(wob);
+    const pw = 78, ph = 140;
+    ctx.fillStyle = "#1c150e"; ctx.strokeStyle = "#caa56a"; ctx.lineWidth = 4;
+    ctx.beginPath();
+    (ctx as any).roundRect ? (ctx as any).roundRect(-pw / 2, -ph / 2, pw, ph, 12) : ctx.rect(-pw / 2, -ph / 2, pw, ph);
+    ctx.fill(); ctx.stroke();
+    ctx.fillStyle = "#3a78d8"; ctx.fillRect(-pw / 2 + 8, -ph / 2 + 16, pw - 16, ph - 32);
+    ctx.restore();
+    ctx.fillStyle = "#ffe9b0";
+    ctx.font = "bold 30px Georgia, serif"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    ctx.fillText("↻ Rotate your device", cx, cy + 96);
+    ctx.fillStyle = "#d8cdb4"; ctx.font = "16px system-ui, sans-serif";
+    ctx.fillText("Banner & Blade plays in landscape.", cx, cy + 126);
   }
 
   matchFrame(dt: number, W: number, H: number) {
@@ -1323,8 +1379,8 @@ class App {
       if (this.input.isDown("ArrowDown")) dy += 1;
       if (this.input.isDown("ArrowLeft")) dx -= 1;
       if (this.input.isDown("d") || this.input.isDown("ArrowRight")) dx += 1;
-      // edge scroll (only when enabled and the mouse is inside the window)
-      if (this.settings.edgeScroll && this.input.mx >= 0 && this.input.my >= 0) {
+      // edge scroll (only with a real mouse, when enabled and inside the window)
+      if (this.settings.edgeScroll && !this.input.usingTouch && this.input.mx >= 0 && this.input.my >= 0) {
         if (this.input.mx < edge) dx -= 1;
         if (this.input.mx > W - edge) dx += 1;
         if (this.input.my < edge) dy -= 1;
