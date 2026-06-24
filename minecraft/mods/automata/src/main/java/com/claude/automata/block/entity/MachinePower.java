@@ -24,7 +24,7 @@ public final class MachinePower {
 	public static boolean draw(World world, BlockPos pos, int amount) {
 		for (Direction dir : Direction.values()) {
 			BlockEntity be = world.getBlockEntity(pos.offset(dir));
-			if (be instanceof GeneratorBlockEntity dynamo && dynamo.extractEnergy(amount)) {
+			if (be instanceof PowerSource source && source.extractEnergy(amount)) {
 				return true;
 			}
 		}

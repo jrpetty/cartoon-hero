@@ -169,6 +169,15 @@ write_png(BASE / "block/router.png",
 # Item Sorter: steel body with a purple sorting core.
 write_png(BASE / "block/sorter.png",
           machine_tile(16, 16, STEEL, STEEL_DK, (150, 90, 200, 255)), 16, 16)
+# Solar Array: dark frame with blue photovoltaic cells.
+write_png(BASE / "block/solar_array.png",
+          machine_tile(16, 16, (40, 50, 80, 255), (20, 24, 36, 255), (60, 120, 210, 255)), 16, 16)
+# Thermal Generator: steel body with a molten lava vent.
+write_png(BASE / "block/thermal_generator.png",
+          generator_face(16, 16, STEEL_DK, (40, 44, 50, 255), (240, 140, 40, 255)), 16, 16)
+# Capacitor Bank: steel body with a blue charge core.
+write_png(BASE / "block/capacitor.png",
+          machine_tile(16, 16, STEEL, STEEL_DK, (80, 120, 230, 255)), 16, 16)
 write_png(BASE / "item/iron_gear.png", gear(16, 16, STEEL, STEEL_DK), 16, 16)
 write_png(BASE / "item/machine_frame.png", frame(16, 16, STEEL, STEEL_DK), 16, 16)
 write_png(BASE / "item/ash.png",

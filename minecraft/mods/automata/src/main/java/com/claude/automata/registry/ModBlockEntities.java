@@ -6,10 +6,13 @@ import com.claude.automata.block.entity.CrusherBlockEntity;
 import com.claude.automata.block.entity.FabricatorBlockEntity;
 import com.claude.automata.block.entity.ForgeCoreBlockEntity;
 import com.claude.automata.block.entity.GeneratorBlockEntity;
+import com.claude.automata.block.entity.CapacitorBlockEntity;
 import com.claude.automata.block.entity.MinerBlockEntity;
 import com.claude.automata.block.entity.RouterBlockEntity;
 import com.claude.automata.block.entity.SawmillBlockEntity;
+import com.claude.automata.block.entity.SolarArrayBlockEntity;
 import com.claude.automata.block.entity.SorterBlockEntity;
+import com.claude.automata.block.entity.ThermalGeneratorBlockEntity;
 import net.minecraft.block.entity.BlockEntityType;
 import net.minecraft.registry.Registries;
 import net.minecraft.registry.Registry;
@@ -63,6 +66,21 @@ public final class ModBlockEntities {
 			Registries.BLOCK_ENTITY_TYPE,
 			Identifier.of(Automata.MOD_ID, "sorter"),
 			BlockEntityType.Builder.create(SorterBlockEntity::new, ModBlocks.SORTER).build());
+
+	public static final BlockEntityType<SolarArrayBlockEntity> SOLAR_ARRAY = Registry.register(
+			Registries.BLOCK_ENTITY_TYPE,
+			Identifier.of(Automata.MOD_ID, "solar_array"),
+			BlockEntityType.Builder.create(SolarArrayBlockEntity::new, ModBlocks.SOLAR_ARRAY).build());
+
+	public static final BlockEntityType<ThermalGeneratorBlockEntity> THERMAL_GENERATOR = Registry.register(
+			Registries.BLOCK_ENTITY_TYPE,
+			Identifier.of(Automata.MOD_ID, "thermal_generator"),
+			BlockEntityType.Builder.create(ThermalGeneratorBlockEntity::new, ModBlocks.THERMAL_GENERATOR).build());
+
+	public static final BlockEntityType<CapacitorBlockEntity> CAPACITOR = Registry.register(
+			Registries.BLOCK_ENTITY_TYPE,
+			Identifier.of(Automata.MOD_ID, "capacitor"),
+			BlockEntityType.Builder.create(CapacitorBlockEntity::new, ModBlocks.CAPACITOR).build());
 
 	public static void register() {
 		Automata.LOGGER.info("[Automata] Registering block entities.");

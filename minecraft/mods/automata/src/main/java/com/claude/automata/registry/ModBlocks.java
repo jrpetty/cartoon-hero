@@ -1,6 +1,7 @@
 package com.claude.automata.registry;
 
 import com.claude.automata.Automata;
+import com.claude.automata.block.CapacitorBlock;
 import com.claude.automata.block.CollectorBlock;
 import com.claude.automata.block.CrusherBlock;
 import com.claude.automata.block.FabricatorBlock;
@@ -9,7 +10,9 @@ import com.claude.automata.block.GeneratorBlock;
 import com.claude.automata.block.MinerBlock;
 import com.claude.automata.block.RouterBlock;
 import com.claude.automata.block.SawmillBlock;
+import com.claude.automata.block.SolarArrayBlock;
 import com.claude.automata.block.SorterBlock;
+import com.claude.automata.block.ThermalGeneratorBlock;
 import net.minecraft.block.AbstractBlock;
 import net.minecraft.block.Block;
 import net.minecraft.block.MapColor;
@@ -89,6 +92,28 @@ public final class ModBlocks {
 	public static final Block SORTER = register("sorter",
 			new SorterBlock(AbstractBlock.Settings.create()
 					.mapColor(MapColor.PURPLE)
+					.strength(3.0f, 6.0f)
+					.requiresTool()
+					.sounds(BlockSoundGroup.METAL)));
+
+	public static final Block SOLAR_ARRAY = register("solar_array",
+			new SolarArrayBlock(AbstractBlock.Settings.create()
+					.mapColor(MapColor.BLACK)
+					.strength(2.5f, 6.0f)
+					.requiresTool()
+					.sounds(BlockSoundGroup.GLASS)));
+
+	public static final Block THERMAL_GENERATOR = register("thermal_generator",
+			new ThermalGeneratorBlock(AbstractBlock.Settings.create()
+					.mapColor(MapColor.ORANGE)
+					.strength(3.5f, 6.0f)
+					.requiresTool()
+					.luminance(state -> 10)
+					.sounds(BlockSoundGroup.METAL)));
+
+	public static final Block CAPACITOR = register("capacitor",
+			new CapacitorBlock(AbstractBlock.Settings.create()
+					.mapColor(MapColor.BLUE)
 					.strength(3.0f, 6.0f)
 					.requiresTool()
 					.sounds(BlockSoundGroup.METAL)));

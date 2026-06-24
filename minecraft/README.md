@@ -36,6 +36,9 @@ hoppers and chests, production is hands-free. Before that, you interact by hand:
 | Machine | Replaces | What it does |
 |---------|----------|--------------|
 | **Combustion Dynamo** | — (new) | Burns fuel (coal, logs, blaze rods…) from its **intake** to fill an energy buffer, and emits **Ash** from its **outtake** as a byproduct. Powers adjacent machines. |
+| **Thermal Generator** | — (new) | Burns **lava buckets** for a large, long-lasting power supply, returning the empty bucket. A late-game alternative to the Dynamo. |
+| **Solar Array** | — (new) | Passive, fuel-free power in **daylight** with a clear view of the sky. Output drops in rain and stops at night. |
+| **Capacitor Bank** | — (new) | Stores a large energy buffer, smoothing supply through fuel gaps. It pulls from adjacent sources and supplies adjacent machines, so chaining them also **relays power** one block further. |
 | **Forge Core** | Furnace | Auto-smelts ores, raw metals, sand, stone, food and logs — **but only while an adjacent Dynamo is supplying power**. No power, no smelting. |
 | **Fabricator** | Crafting table | Auto-assembles components, machines, the items the disabled crafting table used to make (chest, hopper, bucket), and the Pulsar Multi-Tool. Runs unpowered, but ~5× faster next to a powered Dynamo. |
 | **Crusher** | — (new) | Grinds ores and raw metals into **two dust** each; a Forge Core then smelts dust back into ingots, so a Crusher → Forge line **doubles every ore**. Also cobblestone→gravel→sand. Slow by hand, ~5× faster powered. |
@@ -81,12 +84,13 @@ moves more per tick when an adjacent Dynamo powers it.
 
 ### Power
 
-The **Combustion Dynamo** is the power source. It consumes one fuel item at a
-time from its intake slot, converting it to energy in an internal buffer, and
-periodically drops **Ash** into its outtake slot (smelt 4 Ash in the Fabricator
-for black dye). Any Forge Core or Fabricator placed **directly adjacent** to a
-Dynamo draws from its buffer. This is why fuel matters: smelting is no longer
-free — it runs on power the Dynamo makes from the fuel you feed it.
+Power comes from any **power source** — the **Combustion Dynamo** (burns fuel,
+emits Ash), the **Thermal Generator** (burns lava buckets), or the **Solar
+Array** (free daytime power). Any machine placed **directly adjacent** to a
+source draws from its buffer. A **Capacitor Bank** both stores energy and
+relays it, so you can chain capacitors to reach machines a bit further away (and
+ride out the night on solar). This is why fuel matters: smelting is no longer
+free — it runs on the power your sources make.
 
 The vanilla crafting table and furnace recipes are **disabled** (via a datapack
 override that points them at an unobtainable item), so the machines are the way

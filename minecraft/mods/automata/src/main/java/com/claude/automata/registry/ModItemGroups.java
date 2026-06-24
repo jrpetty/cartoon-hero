@@ -35,6 +35,9 @@ public final class ModItemGroups {
 			entries.add(ModBlocks.FABRICATOR);
 			entries.add(ModBlocks.FORGE_CORE);
 			entries.add(ModBlocks.GENERATOR);
+			entries.add(ModBlocks.THERMAL_GENERATOR);
+			entries.add(ModBlocks.SOLAR_ARRAY);
+			entries.add(ModBlocks.CAPACITOR);
 			entries.add(ModBlocks.CRUSHER);
 			entries.add(ModBlocks.SAWMILL);
 			entries.add(ModBlocks.MINER);

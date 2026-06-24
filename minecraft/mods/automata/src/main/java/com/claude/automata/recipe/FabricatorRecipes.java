@@ -82,6 +82,9 @@ public final class FabricatorRecipes {
 		// The Forge Core and Dynamo need no iron, so they can be made before you can smelt.
 		add(ModBlocks.FORGE_CORE.asItem(), 1, Items.COBBLESTONE, 8, Items.COAL, 1);
 		add(ModBlocks.GENERATOR.asItem(), 1, Items.COBBLESTONE, 8, Items.REDSTONE, 1);
+		add(ModBlocks.THERMAL_GENERATOR.asItem(), 1, ModItems.MACHINE_FRAME, 1, Items.IRON_INGOT, 4, Items.BUCKET, 1);
+		add(ModBlocks.SOLAR_ARRAY.asItem(), 1, Items.GLASS, 4, Items.REDSTONE, 2, ModItems.IRON_GEAR, 1);
+		add(ModBlocks.CAPACITOR.asItem(), 1, ModItems.MACHINE_FRAME, 1, Items.REDSTONE, 4, ModItems.COPPER_DUST, 2);
 		add(ModBlocks.FABRICATOR.asItem(), 1, ModItems.MACHINE_FRAME, 1, Items.COBBLESTONE, 4);
 		add(ModBlocks.CRUSHER.asItem(), 1, ModItems.MACHINE_FRAME, 1, ModItems.IRON_GEAR, 2);
 		add(ModBlocks.SAWMILL.asItem(), 1, ModItems.MACHINE_FRAME, 1, ModItems.IRON_GEAR, 1, Items.IRON_INGOT, 1);

@@ -9,6 +9,9 @@
 		"automata:miner",
 		"automata:collector",
 		"automata:router",
-		"automata:sorter"
+		"automata:sorter",
+		"automata:solar_array",
+		"automata:thermal_generator",
+		"automata:capacitor"
 	]
 }

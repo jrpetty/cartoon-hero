@@ -20,7 +20,7 @@ import net.minecraft.world.World;
  * into the output every {@value #ASH_INTERVAL} ticks. Adjacent Forge Cores and
  * Fabricators pull energy from the buffer via {@link MachinePower}.
  */
-public class GeneratorBlockEntity extends MachineBlockEntity {
+public class GeneratorBlockEntity extends MachineBlockEntity implements PowerSource {
 	private static final int FUEL_SLOT = 0;
 	private static final int OUTPUT_SLOT = 1;
 	private static final int[] INPUTS = {FUEL_SLOT};
