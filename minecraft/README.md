@@ -43,6 +43,8 @@ hoppers and chests, production is hands-free. Before that, you interact by hand:
 | **Fabricator** | Crafting table | Auto-assembles components, machines, the items the disabled crafting table used to make (chest, hopper, bucket), and the Pulsar Multi-Tool. Runs unpowered, but ~5× faster next to a powered Dynamo. |
 | **Crusher** | — (new) | Grinds ores and raw metals into **two dust** each; a Forge Core then smelts dust back into ingots, so a Crusher → Forge line **doubles every ore**. Also cobblestone→gravel→sand. Slow by hand, ~5× faster powered. |
 | **Sawmill** | — (new) | Turns one log into **six planks** (vs four by hand). Slow by hand, ~5× faster powered. |
+| **Recycler** | — (new) | Melts unwanted iron/gold tools and armor back into **nuggets** (at a loss). Slow by hand, faster powered. |
+| **Fluid Pump** | — (new) | Fills empty buckets from a water/lava **source directly below it**, bridging fluids into the item network. Water is left in place; lava is consumed. Feeds farms and the Thermal Generator. |
 | **Auto-Miner** | — (new) | Drills the column straight beneath it, collecting ore/stone drops into its output (then onward via hoppers). Stops at bedrock. Slow by hand, ~5× faster powered. |
 | **Item Collector** | — (new) | Vacuums up dropped items in a radius into its output slots — the glue for tree/mob farms and Auto-Miner overflow. Radius 2 by hand, 5 when powered. |
 | **Logistics Router** | — (new) | Pulls items from an adjacent inventory and sends them to linked inventories **anywhere**, with an item filter and round-robin balancing. Replaces long hopper chains. Slow by hand, faster powered. |

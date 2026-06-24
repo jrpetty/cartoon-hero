@@ -7,7 +7,9 @@ import com.claude.automata.block.entity.FabricatorBlockEntity;
 import com.claude.automata.block.entity.ForgeCoreBlockEntity;
 import com.claude.automata.block.entity.GeneratorBlockEntity;
 import com.claude.automata.block.entity.CapacitorBlockEntity;
+import com.claude.automata.block.entity.FluidPumpBlockEntity;
 import com.claude.automata.block.entity.MinerBlockEntity;
+import com.claude.automata.block.entity.RecyclerBlockEntity;
 import com.claude.automata.block.entity.RouterBlockEntity;
 import com.claude.automata.block.entity.SawmillBlockEntity;
 import com.claude.automata.block.entity.SolarArrayBlockEntity;
@@ -81,6 +83,16 @@ public final class ModBlockEntities {
 			Registries.BLOCK_ENTITY_TYPE,
 			Identifier.of(Automata.MOD_ID, "capacitor"),
 			BlockEntityType.Builder.create(CapacitorBlockEntity::new, ModBlocks.CAPACITOR).build());
+
+	public static final BlockEntityType<RecyclerBlockEntity> RECYCLER = Registry.register(
+			Registries.BLOCK_ENTITY_TYPE,
+			Identifier.of(Automata.MOD_ID, "recycler"),
+			BlockEntityType.Builder.create(RecyclerBlockEntity::new, ModBlocks.RECYCLER).build());
+
+	public static final BlockEntityType<FluidPumpBlockEntity> FLUID_PUMP = Registry.register(
+			Registries.BLOCK_ENTITY_TYPE,
+			Identifier.of(Automata.MOD_ID, "fluid_pump"),
+			BlockEntityType.Builder.create(FluidPumpBlockEntity::new, ModBlocks.FLUID_PUMP).build());
 
 	public static void register() {
 		Automata.LOGGER.info("[Automata] Registering block entities.");

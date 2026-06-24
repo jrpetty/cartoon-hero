@@ -88,6 +88,8 @@ public final class FabricatorRecipes {
 		add(ModBlocks.FABRICATOR.asItem(), 1, ModItems.MACHINE_FRAME, 1, Items.COBBLESTONE, 4);
 		add(ModBlocks.CRUSHER.asItem(), 1, ModItems.MACHINE_FRAME, 1, ModItems.IRON_GEAR, 2);
 		add(ModBlocks.SAWMILL.asItem(), 1, ModItems.MACHINE_FRAME, 1, ModItems.IRON_GEAR, 1, Items.IRON_INGOT, 1);
+		add(ModBlocks.RECYCLER.asItem(), 1, ModItems.MACHINE_FRAME, 1, ModItems.IRON_GEAR, 2, Items.REDSTONE, 1);
+		add(ModBlocks.FLUID_PUMP.asItem(), 1, ModItems.MACHINE_FRAME, 1, Items.BUCKET, 1, ModItems.IRON_GEAR, 2);
 		add(ModBlocks.MINER.asItem(), 1, ModItems.MACHINE_FRAME, 1, Items.IRON_INGOT, 4);
 		add(ModBlocks.COLLECTOR.asItem(), 1, ModItems.MACHINE_FRAME, 1, Items.HOPPER, 1, ModItems.IRON_GEAR, 1);
 		add(ModBlocks.ROUTER.asItem(), 1, ModItems.MACHINE_FRAME, 1, Items.HOPPER, 1, Items.REDSTONE, 2);

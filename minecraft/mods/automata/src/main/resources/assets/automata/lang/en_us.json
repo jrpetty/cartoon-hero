@@ -10,6 +10,8 @@
 	"block.automata.sawmill": "Sawmill",
 	"block.automata.miner": "Auto-Miner",
 	"block.automata.collector": "Item Collector",
+	"block.automata.recycler": "Recycler",
+	"block.automata.fluid_pump": "Fluid Pump",
 	"block.automata.router": "Logistics Router",
 	"block.automata.sorter": "Item Sorter",
 	"item.automata.iron_gear": "Iron Gear",

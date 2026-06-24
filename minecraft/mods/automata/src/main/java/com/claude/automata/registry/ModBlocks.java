@@ -5,9 +5,11 @@ import com.claude.automata.block.CapacitorBlock;
 import com.claude.automata.block.CollectorBlock;
 import com.claude.automata.block.CrusherBlock;
 import com.claude.automata.block.FabricatorBlock;
+import com.claude.automata.block.FluidPumpBlock;
 import com.claude.automata.block.ForgeCoreBlock;
 import com.claude.automata.block.GeneratorBlock;
 import com.claude.automata.block.MinerBlock;
+import com.claude.automata.block.RecyclerBlock;
 import com.claude.automata.block.RouterBlock;
 import com.claude.automata.block.SawmillBlock;
 import com.claude.automata.block.SolarArrayBlock;
@@ -114,6 +116,20 @@ public final class ModBlocks {
 	public static final Block CAPACITOR = register("capacitor",
 			new CapacitorBlock(AbstractBlock.Settings.create()
 					.mapColor(MapColor.BLUE)
+					.strength(3.0f, 6.0f)
+					.requiresTool()
+					.sounds(BlockSoundGroup.METAL)));
+
+	public static final Block RECYCLER = register("recycler",
+			new RecyclerBlock(AbstractBlock.Settings.create()
+					.mapColor(MapColor.RED)
+					.strength(3.0f, 6.0f)
+					.requiresTool()
+					.sounds(BlockSoundGroup.METAL)));
+
+	public static final Block FLUID_PUMP = register("fluid_pump",
+			new FluidPumpBlock(AbstractBlock.Settings.create()
+					.mapColor(MapColor.CYAN)
 					.strength(3.0f, 6.0f)
 					.requiresTool()
 					.sounds(BlockSoundGroup.METAL)));

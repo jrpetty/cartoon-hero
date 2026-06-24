@@ -12,6 +12,8 @@
 		"automata:sorter",
 		"automata:solar_array",
 		"automata:thermal_generator",
-		"automata:capacitor"
+		"automata:capacitor",
+		"automata:recycler",
+		"automata:fluid_pump"
 	]
 }

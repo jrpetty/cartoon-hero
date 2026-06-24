@@ -40,8 +40,10 @@ public final class ModItemGroups {
 			entries.add(ModBlocks.CAPACITOR);
 			entries.add(ModBlocks.CRUSHER);
 			entries.add(ModBlocks.SAWMILL);
+			entries.add(ModBlocks.RECYCLER);
 			entries.add(ModBlocks.MINER);
 			entries.add(ModBlocks.COLLECTOR);
+			entries.add(ModBlocks.FLUID_PUMP);
 			entries.add(ModBlocks.ROUTER);
 			entries.add(ModBlocks.SORTER);
 			entries.add(ModItems.LOGISTICS_WRENCH);
