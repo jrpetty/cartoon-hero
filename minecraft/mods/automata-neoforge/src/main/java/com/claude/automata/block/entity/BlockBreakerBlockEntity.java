@@ -51,10 +51,11 @@ public class BlockBreakerBlockEntity extends OutputMachineBlockEntity {
 		if (world instanceof ServerLevel serverWorld) {
 			List<ItemStack> drops = Block.getDrops(targetState, serverWorld, target, null, null,
 					new ItemStack(Items.NETHERITE_PICKAXE));
-			world.destroyBlock(target, false);
+			world.destroyBlock(target, false); // PORT-NOTE: Yarn breakBlock(pos, drop) -> Mojmap destroyBlock(pos, dropBlock)
 			for (ItemStack drop : drops) {
 				ItemStack leftover = addOutput(drop);
 				if (!leftover.isEmpty()) {
+					// PORT-NOTE: Yarn ItemScatterer.spawn -> Mojmap Containers.dropItemStack
 					Containers.dropItemStack(world, pos.getX(), pos.getY() + 1, pos.getZ(), leftover);
 				}
 			}

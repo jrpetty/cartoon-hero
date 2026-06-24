@@ -59,6 +59,7 @@ public class SentryBlockEntity extends net.minecraft.world.level.block.entity.Bl
 		}
 		if (target != null) {
 			target.hurt(serverWorld.damageSources().magic(), DAMAGE);
+			// PORT-NOTE: Yarn SoundEvents.BLOCK_BEACON_POWER_SELECT -> Mojmap SoundEvents.BEACON_POWER_SELECT
 			serverWorld.playSound(null, pos, net.minecraft.sounds.SoundEvents.BEACON_POWER_SELECT,
 					net.minecraft.sounds.SoundSource.BLOCKS, 0.4f, 1.8f);
 		}
