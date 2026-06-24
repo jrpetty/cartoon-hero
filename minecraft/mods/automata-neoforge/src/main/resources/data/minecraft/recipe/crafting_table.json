@@ -1,0 +1,14 @@
+{
+	"__comment": "Automata disables the vanilla crafting table. This override requires an unobtainable item, so the recipe can never be crafted. Build a Fabricator instead.",
+	"type": "minecraft:crafting_shapeless",
+	"category": "misc",
+	"ingredients": [
+		{
+			"item": "automata:locked_component"
+		}
+	],
+	"result": {
+		"id": "minecraft:crafting_table",
+		"count": 1
+	}
+}

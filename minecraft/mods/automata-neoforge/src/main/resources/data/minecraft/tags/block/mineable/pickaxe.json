@@ -1,0 +1,33 @@
+{
+	"replace": false,
+	"values": [
+		"automata:fabricator",
+		"automata:forge_core",
+		"automata:generator",
+		"automata:crusher",
+		"automata:sawmill",
+		"automata:miner",
+		"automata:collector",
+		"automata:router",
+		"automata:sorter",
+		"automata:solar_array",
+		"automata:thermal_generator",
+		"automata:capacitor",
+		"automata:recycler",
+		"automata:fluid_pump",
+		"automata:conveyor",
+		"automata:drawer",
+		"automata:void_hatch",
+		"automata:conduit",
+		"automata:pylon",
+		"automata:circuit_assembler",
+		"automata:block_breaker",
+		"automata:block_placer",
+		"automata:xp_collector",
+		"automata:harvester",
+		"automata:tree_farm",
+		"automata:sentry",
+		"automata:rancher",
+		"automata:drone_bay"
+	]
+}

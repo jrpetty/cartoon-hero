@@ -1,0 +1,44 @@
+plugins {
+	id 'net.neoforged.moddev' version '2.0.78'
+}
+
+version = project.mod_version
+group = project.maven_group
+
+base {
+	archivesName = project.archives_base_name
+}
+
+neoForge {
+	version = project.neo_version
+
+	mods {
+		automata {
+			sourceSet sourceSets.main
+		}
+	}
+}
+
+repositories {
+	mavenCentral()
+}
+
+tasks.withType(JavaCompile).configureEach {
+	it.options.release = 21
+}
+
+java {
+	sourceCompatibility = JavaVersion.VERSION_21
+	targetCompatibility = JavaVersion.VERSION_21
+}
+
+processResources {
+	def replaceProperties = [
+		mod_version: project.mod_version,
+		neo_version: project.neo_version
+	]
+	inputs.properties replaceProperties
+	filesMatching('META-INF/neoforge.mods.toml') {
+		expand replaceProperties
+	}
+}

@@ -1,0 +1,21 @@
+{
+	"parent": "block/block",
+	"textures": {
+		"belt": "automata:block/conveyor",
+		"particle": "automata:block/conveyor"
+	},
+	"elements": [
+		{
+			"from": [0, 0, 0],
+			"to": [16, 4, 16],
+			"faces": {
+				"down":  { "texture": "#belt", "cullface": "down" },
+				"up":    { "texture": "#belt" },
+				"north": { "texture": "#belt" },
+				"south": { "texture": "#belt" },
+				"west":  { "texture": "#belt" },
+				"east":  { "texture": "#belt" }
+			}
+		}
+	]
+}

@@ -1,0 +1,43 @@
+name: Build Automata (NeoForge)
+
+on:
+  push:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Build the NeoForge mod
+        working-directory: minecraft/mods/automata-neoforge
+        run: ./gradlew --no-daemon build --stacktrace
+
+      - name: Upload built NeoForge jar
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: automata-neoforge
+          path: minecraft/mods/automata-neoforge/build/libs/*.jar
+          if-no-files-found: error
+
+      - name: Publish jar to a GitHub Release
+        if: success() && github.ref == 'refs/heads/claude/minecraft-claude-mods-server-oyne7q'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: automata-neoforge-latest
+          name: Automata — NeoForge (latest build)
+          body: >
+            Automata for NeoForge (Minecraft 1.21.1). Requires NeoForge 21.1.x.
+            Drop this jar into your NeoForge mods/ folder. Built from commit ${{ github.sha }}.
+          files: minecraft/mods/automata-neoforge/build/libs/*.jar

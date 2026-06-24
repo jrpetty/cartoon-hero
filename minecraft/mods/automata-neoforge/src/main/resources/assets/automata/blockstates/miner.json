@@ -1,0 +1,7 @@
+{
+	"variants": {
+		"": {
+			"model": "automata:block/miner"
+		}
+	}
+}

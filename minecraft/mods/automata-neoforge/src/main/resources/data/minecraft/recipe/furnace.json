@@ -1,0 +1,14 @@
+{
+	"__comment": "Automata disables the vanilla furnace. This override requires an unobtainable item, so the recipe can never be crafted. Build a Forge Core instead.",
+	"type": "minecraft:crafting_shapeless",
+	"category": "misc",
+	"ingredients": [
+		{
+			"item": "automata:locked_component"
+		}
+	],
+	"result": {
+		"id": "minecraft:furnace",
+		"count": 1
+	}
+}

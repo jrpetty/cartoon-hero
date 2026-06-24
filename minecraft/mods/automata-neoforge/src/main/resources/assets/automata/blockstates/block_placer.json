@@ -1,0 +1,8 @@
+{
+	"variants": {
+		"facing=north": { "model": "automata:block/block_placer" },
+		"facing=east":  { "model": "automata:block/block_placer", "y": 90 },
+		"facing=south": { "model": "automata:block/block_placer", "y": 180 },
+		"facing=west":  { "model": "automata:block/block_placer", "y": 270 }
+	}
+}
