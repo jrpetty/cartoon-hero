@@ -1,9 +1,11 @@
 package com.claude.automata.registry;
 
 import com.claude.automata.Automata;
+import com.claude.automata.block.CrusherBlock;
 import com.claude.automata.block.FabricatorBlock;
 import com.claude.automata.block.ForgeCoreBlock;
 import com.claude.automata.block.GeneratorBlock;
+import com.claude.automata.block.SawmillBlock;
 import net.minecraft.block.AbstractBlock;
 import net.minecraft.block.Block;
 import net.minecraft.block.MapColor;
@@ -43,6 +45,20 @@ public final class ModBlocks {
 					.strength(3.5f, 6.0f)
 					.requiresTool()
 					.luminance(state -> 7)
+					.sounds(BlockSoundGroup.METAL)));
+
+	public static final Block CRUSHER = register("crusher",
+			new CrusherBlock(AbstractBlock.Settings.create()
+					.mapColor(MapColor.GRAY)
+					.strength(3.0f, 6.0f)
+					.requiresTool()
+					.sounds(BlockSoundGroup.METAL)));
+
+	public static final Block SAWMILL = register("sawmill",
+			new SawmillBlock(AbstractBlock.Settings.create()
+					.mapColor(MapColor.BROWN)
+					.strength(3.0f, 6.0f)
+					.requiresTool()
 					.sounds(BlockSoundGroup.METAL)));
 
 	private static Block register(String name, Block block) {

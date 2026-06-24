@@ -1,9 +1,11 @@
 package com.claude.automata.registry;
 
 import com.claude.automata.Automata;
+import com.claude.automata.block.entity.CrusherBlockEntity;
 import com.claude.automata.block.entity.FabricatorBlockEntity;
 import com.claude.automata.block.entity.ForgeCoreBlockEntity;
 import com.claude.automata.block.entity.GeneratorBlockEntity;
+import com.claude.automata.block.entity.SawmillBlockEntity;
 import net.minecraft.block.entity.BlockEntityType;
 import net.minecraft.registry.Registries;
 import net.minecraft.registry.Registry;
@@ -27,6 +29,16 @@ public final class ModBlockEntities {
 			Registries.BLOCK_ENTITY_TYPE,
 			Identifier.of(Automata.MOD_ID, "generator"),
 			BlockEntityType.Builder.create(GeneratorBlockEntity::new, ModBlocks.GENERATOR).build());
+
+	public static final BlockEntityType<CrusherBlockEntity> CRUSHER = Registry.register(
+			Registries.BLOCK_ENTITY_TYPE,
+			Identifier.of(Automata.MOD_ID, "crusher"),
+			BlockEntityType.Builder.create(CrusherBlockEntity::new, ModBlocks.CRUSHER).build());
+
+	public static final BlockEntityType<SawmillBlockEntity> SAWMILL = Registry.register(
+			Registries.BLOCK_ENTITY_TYPE,
+			Identifier.of(Automata.MOD_ID, "sawmill"),
+			BlockEntityType.Builder.create(SawmillBlockEntity::new, ModBlocks.SAWMILL).build());
 
 	public static void register() {
 		Automata.LOGGER.info("[Automata] Registering block entities.");

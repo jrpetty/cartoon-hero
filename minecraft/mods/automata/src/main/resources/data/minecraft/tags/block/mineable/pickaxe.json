@@ -3,6 +3,8 @@
 	"values": [
 		"automata:fabricator",
 		"automata:forge_core",
-		"automata:generator"
+		"automata:generator",
+		"automata:crusher",
+		"automata:sawmill"
 	]
 }

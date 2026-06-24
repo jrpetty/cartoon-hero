@@ -153,10 +153,21 @@ write_png(BASE / "block/forge_core.png",
           machine_tile(16, 16, STEEL_DK, (40, 44, 50, 255), EMBER), 16, 16)
 write_png(BASE / "block/generator.png",
           generator_face(16, 16, (90, 70, 55, 255), (45, 34, 26, 255), EMBER), 16, 16)
+# Crusher: heavy steel with a dark grinding aperture. Sawmill: wood body with a steel blade band.
+write_png(BASE / "block/crusher.png",
+          generator_face(16, 16, STEEL, STEEL_DK, (35, 38, 44, 255)), 16, 16)
+write_png(BASE / "block/sawmill.png",
+          machine_tile(16, 16, WOOD, (90, 64, 38, 255), STEEL), 16, 16)
 write_png(BASE / "item/iron_gear.png", gear(16, 16, STEEL, STEEL_DK), 16, 16)
 write_png(BASE / "item/machine_frame.png", frame(16, 16, STEEL, STEEL_DK), 16, 16)
 write_png(BASE / "item/ash.png",
           speckle(16, 16, (110, 110, 114, 255), (170, 170, 174, 255), (70, 70, 74, 255)), 16, 16)
+write_png(BASE / "item/iron_dust.png",
+          speckle(16, 16, (150, 152, 158, 255), (195, 197, 202, 255), (96, 98, 104, 255)), 16, 16)
+write_png(BASE / "item/gold_dust.png",
+          speckle(16, 16, (224, 188, 70, 255), (255, 226, 120, 255), (170, 130, 40, 255)), 16, 16)
+write_png(BASE / "item/copper_dust.png",
+          speckle(16, 16, (200, 116, 80, 255), (236, 150, 110, 255), (150, 78, 50, 255)), 16, 16)
 write_png(BASE / "item/pulsar_multitool.png",
           multitool(16, 16, ORANGE, WOOD, ORANGE_DK), 16, 16)
 

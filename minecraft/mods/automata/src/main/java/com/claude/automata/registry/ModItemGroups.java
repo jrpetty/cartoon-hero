@@ -35,9 +35,14 @@ public final class ModItemGroups {
 			entries.add(ModBlocks.FABRICATOR);
 			entries.add(ModBlocks.FORGE_CORE);
 			entries.add(ModBlocks.GENERATOR);
+			entries.add(ModBlocks.CRUSHER);
+			entries.add(ModBlocks.SAWMILL);
 			entries.add(ModItems.IRON_GEAR);
 			entries.add(ModItems.MACHINE_FRAME);
 			entries.add(ModItems.ASH);
+			entries.add(ModItems.IRON_DUST);
+			entries.add(ModItems.GOLD_DUST);
+			entries.add(ModItems.COPPER_DUST);
 			entries.add(ModItems.PULSAR_MULTITOOL);
 		});
 	}

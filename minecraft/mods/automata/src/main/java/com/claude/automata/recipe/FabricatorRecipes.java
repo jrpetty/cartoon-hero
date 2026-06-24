@@ -83,6 +83,8 @@ public final class FabricatorRecipes {
 		add(ModBlocks.FORGE_CORE.asItem(), 1, Items.COBBLESTONE, 8, Items.COAL, 1);
 		add(ModBlocks.GENERATOR.asItem(), 1, Items.COBBLESTONE, 8, Items.REDSTONE, 1);
 		add(ModBlocks.FABRICATOR.asItem(), 1, ModItems.MACHINE_FRAME, 1, Items.COBBLESTONE, 4);
+		add(ModBlocks.CRUSHER.asItem(), 1, ModItems.MACHINE_FRAME, 1, ModItems.IRON_GEAR, 2);
+		add(ModBlocks.SAWMILL.asItem(), 1, ModItems.MACHINE_FRAME, 1, ModItems.IRON_GEAR, 1, Items.IRON_INGOT, 1);
 
 		// --- Use for the Ash byproduct ---
 		add(Items.BLACK_DYE, 1, ModItems.ASH, 4);

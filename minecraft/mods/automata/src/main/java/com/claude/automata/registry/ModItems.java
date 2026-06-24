@@ -28,6 +28,11 @@ public final class ModItems {
 	// Byproduct emitted by the Combustion Dynamo while it burns fuel.
 	public static final Item ASH = register("ash", new Item(new Item.Settings()));
 
+	// Crushed ore dust from the Crusher — smelt in a Forge Core for ore doubling.
+	public static final Item IRON_DUST = register("iron_dust", new Item(new Item.Settings()));
+	public static final Item GOLD_DUST = register("gold_dust", new Item(new Item.Settings()));
+	public static final Item COPPER_DUST = register("copper_dust", new Item(new Item.Settings()));
+
 	/**
 	 * The Pulsar Multi-Tool — one tool that mines like a pickaxe, axe, shovel and
 	 * hoe at the same time. A deliberate simplification of vanilla's tool zoo.

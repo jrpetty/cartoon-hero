@@ -23,6 +23,11 @@ public final class SmeltingRecipes {
 	}
 
 	static {
+		// Crushed dust from the Crusher (completes the ore-doubling loop).
+		add(com.claude.automata.registry.ModItems.IRON_DUST, Items.IRON_INGOT);
+		add(com.claude.automata.registry.ModItems.GOLD_DUST, Items.GOLD_INGOT);
+		add(com.claude.automata.registry.ModItems.COPPER_DUST, Items.COPPER_INGOT);
+
 		// Ores and raw metals.
 		add(Items.RAW_IRON, Items.IRON_INGOT);
 		add(Items.IRON_ORE, Items.IRON_INGOT);

@@ -38,6 +38,11 @@ hoppers and chests, production is hands-free. Before that, you interact by hand:
 | **Combustion Dynamo** | — (new) | Burns fuel (coal, logs, blaze rods…) from its **intake** to fill an energy buffer, and emits **Ash** from its **outtake** as a byproduct. Powers adjacent machines. |
 | **Forge Core** | Furnace | Auto-smelts ores, raw metals, sand, stone, food and logs — **but only while an adjacent Dynamo is supplying power**. No power, no smelting. |
 | **Fabricator** | Crafting table | Auto-assembles components, machines, the items the disabled crafting table used to make (chest, hopper, bucket), and the Pulsar Multi-Tool. Runs unpowered, but ~5× faster next to a powered Dynamo. |
+| **Crusher** | — (new) | Grinds ores and raw metals into **two dust** each; a Forge Core then smelts dust back into ingots, so a Crusher → Forge line **doubles every ore**. Also cobblestone→gravel→sand. Slow by hand, ~5× faster powered. |
+| **Sawmill** | — (new) | Turns one log into **six planks** (vs four by hand). Slow by hand, ~5× faster powered. |
+
+The Crusher and Sawmill share Automata's signature rhythm: they work unpowered
+but slowly, and run several times faster when an adjacent Dynamo supplies power.
 
 ### Power
 
@@ -84,11 +89,17 @@ pattern.)
 | Forge Core | 8 cobblestone + 1 coal |
 | Combustion Dynamo | 8 cobblestone + 1 redstone |
 | Fabricator | 1 machine frame + 4 cobblestone |
+| Crusher | 1 machine frame + 2 iron gears |
+| Sawmill | 1 machine frame + 1 iron gear + 1 iron ingot |
 | Chest | 8 oak planks |
 | Hopper | 5 iron ingots + 1 chest |
 | Bucket | 3 iron ingots |
 | Black Dye | 4 ash |
 | **Pulsar Multi-Tool** | 1 machine frame + 2 iron ingots |
+
+**Ore doubling:** crush raw iron (or an iron ore block) into 2 Iron Dust, then
+smelt the dust in a Forge Core for 2 iron ingots — double what direct smelting
+gives. Same for gold and copper.
 
 The **Pulsar Multi-Tool** is one tool that mines like a pickaxe, axe, shovel and
 hoe at once (iron tier) — a deliberate simplification of vanilla's tool zoo.
