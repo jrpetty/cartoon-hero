@@ -4,6 +4,9 @@ on:
   push:
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -26,3 +29,18 @@ jobs:
           name: automata-mod
           path: minecraft/mods/automata/build/libs/*.jar
           if-no-files-found: error
+
+      # Publish the jar to a permanent Release page so it can be downloaded
+      # directly (no Actions-artifact digging, no expiry). Updates the same
+      # rolling "automata-latest" tag on every push to the dev branch.
+      - name: Publish jar to a GitHub Release
+        if: github.ref == 'refs/heads/claude/minecraft-claude-mods-server-oyne7q'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: automata-latest
+          name: Automata (latest build)
+          body: >
+            Automata — a Fabric 1.21.1 mod. Requires Fabric Loader and
+            Fabric API 0.105.0+1.21.1. Drop this jar (plus Fabric API) into
+            your mods/ folder. Built from commit ${{ github.sha }}.
+          files: minecraft/mods/automata/build/libs/*.jar
