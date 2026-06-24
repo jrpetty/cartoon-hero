@@ -158,6 +158,22 @@ def hazard(w, h, a, b):
     return px
 
 
+def round_blob(w, h, fill, outline, bg=(0, 0, 0, 0)):
+    """A filled gem/blob centred in the tile (for item icons)."""
+    cx, cy, r = (w - 1) / 2, (h - 1) / 2, w * 0.42
+    px = []
+    for y in range(h):
+        for x in range(w):
+            d = ((x - cx) ** 2 + (y - cy) ** 2) ** 0.5
+            if d <= r - 1:
+                px.append(fill)
+            elif d <= r:
+                px.append(outline)
+            else:
+                px.append(bg)
+    return px
+
+
 def multitool(w, h, head, handle, dark, bg=(0, 0, 0, 0)):
     """A diagonal tool: metal head top-left, handle to bottom-right."""
     px = []
@@ -218,6 +234,11 @@ write_png(BASE / "block/recycler.png",
           generator_face(16, 16, (130, 70, 60, 255), (70, 34, 30, 255), (210, 200, 200, 255)), 16, 16)
 write_png(BASE / "block/fluid_pump.png",
           machine_tile(16, 16, (70, 150, 160, 255), (35, 80, 90, 255), (160, 220, 230, 255)), 16, 16)
+# XP Collector: green emitter. XP Shard item: glowing green gem.
+write_png(BASE / "block/xp_collector.png",
+          generator_face(16, 16, (60, 130, 70, 255), (30, 70, 40, 255), (140, 240, 150, 255)), 16, 16)
+write_png(BASE / "item/xp_shard.png",
+          round_blob(16, 16, (120, 230, 120, 255), (40, 120, 50, 255)), 16, 16)
 # Block Breaker: steel with a dark breaking face. Block Placer: steel with a bright placing face.
 write_png(BASE / "block/block_breaker.png",
           generator_face(16, 16, STEEL, STEEL_DK, (40, 40, 44, 255)), 16, 16)

@@ -16,6 +16,8 @@
 	"block.automata.block_placer": "Block Placer",
 	"block.automata.miner": "Auto-Miner",
 	"block.automata.collector": "Item Collector",
+	"block.automata.xp_collector": "XP Collector",
+	"item.automata.xp_shard": "XP Shard",
 	"block.automata.recycler": "Recycler",
 	"block.automata.fluid_pump": "Fluid Pump",
 	"block.automata.router": "Logistics Router",

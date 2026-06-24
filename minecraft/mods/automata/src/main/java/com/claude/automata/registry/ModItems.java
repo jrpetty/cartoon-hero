@@ -44,6 +44,10 @@ public final class ModItems {
 	// Advanced component that gates higher-tier machines, made in the Circuit Assembler.
 	public static final Item LOGIC_CIRCUIT = register("logic_circuit", new Item(new Item.Settings()));
 
+	// Bottled experience from the XP Collector; right-click to cash in.
+	public static final Item XP_SHARD = register("xp_shard",
+			new com.claude.automata.item.XpShardItem(new Item.Settings()));
+
 	/**
 	 * The Pulsar Multi-Tool — one tool that mines like a pickaxe, axe, shovel and
 	 * hoe at the same time. A deliberate simplification of vanilla's tool zoo.

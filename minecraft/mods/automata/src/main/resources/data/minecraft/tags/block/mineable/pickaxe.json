@@ -22,6 +22,7 @@
 		"automata:pylon",
 		"automata:circuit_assembler",
 		"automata:block_breaker",
-		"automata:block_placer"
+		"automata:block_placer",
+		"automata:xp_collector"
 	]
 }

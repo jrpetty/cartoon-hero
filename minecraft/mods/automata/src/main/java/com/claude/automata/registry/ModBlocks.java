@@ -23,6 +23,7 @@ import com.claude.automata.block.SolarArrayBlock;
 import com.claude.automata.block.SorterBlock;
 import com.claude.automata.block.ThermalGeneratorBlock;
 import com.claude.automata.block.VoidBlock;
+import com.claude.automata.block.XpCollectorBlock;
 import net.minecraft.block.AbstractBlock;
 import net.minecraft.block.Block;
 import net.minecraft.block.MapColor;
@@ -181,6 +182,14 @@ public final class ModBlocks {
 					.mapColor(MapColor.GRAY)
 					.strength(3.5f, 6.0f)
 					.requiresTool()
+					.sounds(BlockSoundGroup.METAL)));
+
+	public static final Block XP_COLLECTOR = register("xp_collector",
+			new XpCollectorBlock(AbstractBlock.Settings.create()
+					.mapColor(MapColor.LIME)
+					.strength(3.0f, 6.0f)
+					.requiresTool()
+					.luminance(state -> 7)
 					.sounds(BlockSoundGroup.METAL)));
 
 	public static final Block CONDUIT = register("conduit",

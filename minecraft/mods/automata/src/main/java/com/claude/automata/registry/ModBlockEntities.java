@@ -23,6 +23,7 @@ import com.claude.automata.block.entity.SolarArrayBlockEntity;
 import com.claude.automata.block.entity.SorterBlockEntity;
 import com.claude.automata.block.entity.ThermalGeneratorBlockEntity;
 import com.claude.automata.block.entity.VoidBlockEntity;
+import com.claude.automata.block.entity.XpCollectorBlockEntity;
 import net.minecraft.block.entity.BlockEntityType;
 import net.minecraft.registry.Registries;
 import net.minecraft.registry.Registry;
@@ -121,6 +122,11 @@ public final class ModBlockEntities {
 			Registries.BLOCK_ENTITY_TYPE,
 			Identifier.of(Automata.MOD_ID, "conduit"),
 			BlockEntityType.Builder.create(ConduitBlockEntity::new, ModBlocks.CONDUIT).build());
+
+	public static final BlockEntityType<XpCollectorBlockEntity> XP_COLLECTOR = Registry.register(
+			Registries.BLOCK_ENTITY_TYPE,
+			Identifier.of(Automata.MOD_ID, "xp_collector"),
+			BlockEntityType.Builder.create(XpCollectorBlockEntity::new, ModBlocks.XP_COLLECTOR).build());
 
 	public static final BlockEntityType<PylonBlockEntity> PYLON = Registry.register(
 			Registries.BLOCK_ENTITY_TYPE,
