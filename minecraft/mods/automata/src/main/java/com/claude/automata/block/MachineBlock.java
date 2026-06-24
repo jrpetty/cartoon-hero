@@ -39,9 +39,18 @@ public abstract class MachineBlock extends BlockWithEntity {
 		if (world.isClient) {
 			return ItemActionResult.SUCCESS;
 		}
-		if (world.getBlockEntity(pos) instanceof MachineBlockEntity machine
-				&& machine.insertFromPlayer(player, hand, stack)) {
-			return ItemActionResult.SUCCESS;
+		if (world.getBlockEntity(pos) instanceof MachineBlockEntity machine) {
+			// Installing an upgrade module takes priority over loading it as input.
+			if (machine.usesUpgrades() && machine.installUpgrade(stack.getItem())) {
+				stack.decrement(1);
+				player.sendMessage(net.minecraft.text.Text.literal("Installed upgrade ("
+						+ machine.getSpeedUpgrades() + " speed, " + machine.getEfficiencyUpgrades()
+						+ " efficiency).").formatted(net.minecraft.util.Formatting.GREEN), false);
+				return ItemActionResult.SUCCESS;
+			}
+			if (machine.insertFromPlayer(player, hand, stack)) {
+				return ItemActionResult.SUCCESS;
+			}
 		}
 		return ItemActionResult.PASS_TO_DEFAULT_BLOCK_INTERACTION;
 	}
@@ -53,7 +62,14 @@ public abstract class MachineBlock extends BlockWithEntity {
 			return ActionResult.SUCCESS;
 		}
 		if (world.getBlockEntity(pos) instanceof MachineBlockEntity machine) {
-			machine.extractToPlayer(player);
+			// Sneak to pop installed upgrades back out; otherwise pull the output.
+			if (player.isSneaking() && machine.usesUpgrades()) {
+				for (ItemStack module : machine.removeUpgrades()) {
+					player.getInventory().offerOrDrop(module);
+				}
+			} else {
+				machine.extractToPlayer(player);
+			}
 			return ActionResult.SUCCESS;
 		}
 		return ActionResult.PASS;
@@ -64,6 +80,9 @@ public abstract class MachineBlock extends BlockWithEntity {
 		if (!state.isOf(newState.getBlock())) {
 			if (world.getBlockEntity(pos) instanceof MachineBlockEntity machine) {
 				ItemScatterer.spawn(world, pos, machine);
+				for (ItemStack module : machine.removeUpgrades()) {
+					ItemScatterer.spawn(world, pos.getX(), pos.getY(), pos.getZ(), module);
+				}
 				world.updateComparators(pos, this);
 			}
 			super.onStateReplaced(state, world, pos, newState, moved);

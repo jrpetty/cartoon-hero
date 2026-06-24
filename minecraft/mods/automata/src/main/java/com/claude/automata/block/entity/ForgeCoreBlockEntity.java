@@ -30,6 +30,11 @@ public class ForgeCoreBlockEntity extends MachineBlockEntity {
 	}
 
 	@Override
+	public boolean usesUpgrades() {
+		return true;
+	}
+
+	@Override
 	protected int[] inputSlots() {
 		return INPUTS;
 	}
@@ -64,11 +69,11 @@ public class ForgeCoreBlockEntity extends MachineBlockEntity {
 		}
 
 		// Requires power: stall (keeping progress) until an adjacent Dynamo can supply it.
-		if (!MachinePower.draw(world, pos, ENERGY_PER_TICK)) {
+		if (!MachinePower.draw(world, pos, reduceEnergy(ENERGY_PER_TICK))) {
 			return;
 		}
 
-		progress++;
+		progress += speedStep(1);
 		if (progress >= maxProgress()) {
 			progress = 0;
 			input.decrement(1);

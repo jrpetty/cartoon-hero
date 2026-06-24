@@ -57,6 +57,19 @@ The processing and gathering machines share Automata's signature rhythm: they
 work unpowered but slowly, and run several times faster (or reach further) when
 an adjacent Dynamo supplies power.
 
+### Upgrade modules
+
+Processing machines (Forge Core, Fabricator, Crusher, Sawmill, Recycler) accept
+up to three of each **upgrade module**, installed by **right-clicking the
+machine** with the module:
+
+- **Speed Upgrade** — +1× processing speed per module (so 3 = 4× faster).
+- **Efficiency Upgrade** — −25% energy cost per module.
+
+Sneak-right-click the machine empty-handed to pop the modules back out; they
+also drop when the machine is broken. (A visual machine GUI with progress and
+energy bars is planned as a follow-up.)
+
 ### Automating the world
 
 The endgame is a base that runs itself. A self-feeding resource line looks like:

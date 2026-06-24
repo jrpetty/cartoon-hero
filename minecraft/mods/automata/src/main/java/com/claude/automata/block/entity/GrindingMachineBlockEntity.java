@@ -32,6 +32,11 @@ public abstract class GrindingMachineBlockEntity extends MachineBlockEntity {
 		super(type, pos, state, 2);
 	}
 
+	@Override
+	public boolean usesUpgrades() {
+		return true;
+	}
+
 	/** Unpowered ticks per operation; a powered machine advances {@value #POWERED_STEP}x faster. */
 	protected abstract int baseTicks();
 
@@ -72,8 +77,8 @@ public abstract class GrindingMachineBlockEntity extends MachineBlockEntity {
 			return;
 		}
 
-		int step = MachinePower.draw(world, pos, ENERGY_PER_TICK) ? POWERED_STEP : 1;
-		progress += step;
+		int base = MachinePower.draw(world, pos, reduceEnergy(ENERGY_PER_TICK)) ? POWERED_STEP : 1;
+		progress += speedStep(base);
 		if (progress >= maxProgress()) {
 			progress = 0;
 			input.decrement(1);

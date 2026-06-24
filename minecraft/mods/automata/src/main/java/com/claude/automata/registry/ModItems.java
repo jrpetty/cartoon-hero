@@ -37,6 +37,10 @@ public final class ModItems {
 	public static final Item LOGISTICS_WRENCH = register("logistics_wrench",
 			new Item(new Item.Settings().maxCount(1)));
 
+	// Upgrade modules — right-click a machine to install (up to 3 of each).
+	public static final Item SPEED_UPGRADE = register("speed_upgrade", new Item(new Item.Settings()));
+	public static final Item EFFICIENCY_UPGRADE = register("efficiency_upgrade", new Item(new Item.Settings()));
+
 	/**
 	 * The Pulsar Multi-Tool — one tool that mines like a pickaxe, axe, shovel and
 	 * hoe at the same time. A deliberate simplification of vanilla's tool zoo.

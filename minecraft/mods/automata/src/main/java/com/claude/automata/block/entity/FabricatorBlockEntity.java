@@ -34,6 +34,11 @@ public class FabricatorBlockEntity extends MachineBlockEntity {
 	}
 
 	@Override
+	public boolean usesUpgrades() {
+		return true;
+	}
+
+	@Override
 	protected int[] inputSlots() {
 		return INPUTS;
 	}
@@ -65,8 +70,8 @@ public class FabricatorBlockEntity extends MachineBlockEntity {
 		}
 
 		// Runs unpowered at 1x; an adjacent Dynamo accelerates it.
-		int step = MachinePower.draw(world, pos, ENERGY_PER_TICK) ? POWERED_STEP : 1;
-		progress += step;
+		int base = MachinePower.draw(world, pos, reduceEnergy(ENERGY_PER_TICK)) ? POWERED_STEP : 1;
+		progress += speedStep(base);
 		if (progress >= maxProgress()) {
 			progress = 0;
 			consume(recipe.ingredients);

@@ -103,6 +103,10 @@ public final class FabricatorRecipes {
 		// --- Logistics tool ---
 		add(ModItems.LOGISTICS_WRENCH, 1, ModItems.IRON_GEAR, 1, Items.IRON_INGOT, 1);
 
+		// --- Upgrade modules ---
+		add(ModItems.SPEED_UPGRADE, 1, ModItems.IRON_GEAR, 2, Items.REDSTONE, 2, Items.SUGAR, 1);
+		add(ModItems.EFFICIENCY_UPGRADE, 1, ModItems.IRON_GEAR, 2, Items.REDSTONE, 2, ModItems.GOLD_DUST, 1);
+
 		// --- Use for the Ash byproduct ---
 		add(Items.BLACK_DYE, 1, ModItems.ASH, 4);
 

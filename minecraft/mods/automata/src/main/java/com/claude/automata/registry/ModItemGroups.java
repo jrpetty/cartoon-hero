@@ -52,6 +52,8 @@ public final class ModItemGroups {
 			entries.add(ModBlocks.SORTER);
 			entries.add(ModBlocks.VOID);
 			entries.add(ModItems.LOGISTICS_WRENCH);
+			entries.add(ModItems.SPEED_UPGRADE);
+			entries.add(ModItems.EFFICIENCY_UPGRADE);
 			entries.add(ModItems.IRON_GEAR);
 			entries.add(ModItems.MACHINE_FRAME);
 			entries.add(ModItems.ASH);

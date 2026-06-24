@@ -29,8 +29,11 @@ import net.minecraft.world.World;
  * per-tick processing in {@link #tick(World, BlockPos, BlockState)}.
  */
 public abstract class MachineBlockEntity extends BlockEntity implements SidedInventory {
+	public static final int MAX_UPGRADES = 3;
 	protected final DefaultedList<ItemStack> inventory;
 	protected int progress = 0;
+	protected int speedUpgrades = 0;
+	protected int efficiencyUpgrades = 0;
 
 	protected MachineBlockEntity(BlockEntityType<?> type, BlockPos pos, BlockState state, int size) {
 		super(type, pos, state);
@@ -53,6 +56,65 @@ public abstract class MachineBlockEntity extends BlockEntity implements SidedInv
 
 	/** Called every server tick for a placed machine. */
 	public abstract void tick(World world, BlockPos pos, BlockState state);
+
+	// ---- Upgrade modules ----
+
+	/** Whether this machine benefits from upgrade modules (processing machines do). */
+	public boolean usesUpgrades() {
+		return false;
+	}
+
+	/** Install a Speed/Efficiency module. Returns true if it was accepted. */
+	public boolean installUpgrade(Item item) {
+		if (!usesUpgrades()) {
+			return false;
+		}
+		if (item == com.claude.automata.registry.ModItems.SPEED_UPGRADE && speedUpgrades < MAX_UPGRADES) {
+			speedUpgrades++;
+			markDirty();
+			return true;
+		}
+		if (item == com.claude.automata.registry.ModItems.EFFICIENCY_UPGRADE && efficiencyUpgrades < MAX_UPGRADES) {
+			efficiencyUpgrades++;
+			markDirty();
+			return true;
+		}
+		return false;
+	}
+
+	/** Pop all installed modules back out as items, resetting the machine to base. */
+	public java.util.List<ItemStack> removeUpgrades() {
+		java.util.List<ItemStack> out = new java.util.ArrayList<>();
+		if (speedUpgrades > 0) {
+			out.add(new ItemStack(com.claude.automata.registry.ModItems.SPEED_UPGRADE, speedUpgrades));
+		}
+		if (efficiencyUpgrades > 0) {
+			out.add(new ItemStack(com.claude.automata.registry.ModItems.EFFICIENCY_UPGRADE, efficiencyUpgrades));
+		}
+		speedUpgrades = 0;
+		efficiencyUpgrades = 0;
+		markDirty();
+		return out;
+	}
+
+	public int getSpeedUpgrades() {
+		return speedUpgrades;
+	}
+
+	public int getEfficiencyUpgrades() {
+		return efficiencyUpgrades;
+	}
+
+	/** Progress added per active tick: +1 per speed module. */
+	protected int speedStep(int base) {
+		return base * (1 + speedUpgrades);
+	}
+
+	/** Energy cost reduced by 25% per efficiency module (never below 1). */
+	protected int reduceEnergy(int base) {
+		int reduced = base - (base * efficiencyUpgrades) / 4;
+		return Math.max(1, reduced);
+	}
 
 	// ---- Helpers shared by subclasses ----
 
@@ -211,6 +273,8 @@ public abstract class MachineBlockEntity extends BlockEntity implements SidedInv
 		super.writeNbt(nbt, registries);
 		Inventories.writeNbt(nbt, inventory, registries);
 		nbt.putInt("Progress", progress);
+		nbt.putInt("SpeedUpgrades", speedUpgrades);
+		nbt.putInt("EfficiencyUpgrades", efficiencyUpgrades);
 	}
 
 	@Override
@@ -218,5 +282,7 @@ public abstract class MachineBlockEntity extends BlockEntity implements SidedInv
 		super.readNbt(nbt, registries);
 		Inventories.readNbt(nbt, inventory, registries);
 		progress = nbt.getInt("Progress");
+		speedUpgrades = nbt.getInt("SpeedUpgrades");
+		efficiencyUpgrades = nbt.getInt("EfficiencyUpgrades");
 	}
 }
