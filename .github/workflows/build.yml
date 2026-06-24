@@ -19,3 +19,10 @@ jobs:
       - name: Build the mod
         working-directory: minecraft/mods/automata
         run: ./gradlew --no-daemon build --stacktrace
+
+      - name: Upload built mod jar
+        uses: actions/upload-artifact@v4
+        with:
+          name: automata-mod
+          path: minecraft/mods/automata/build/libs/*.jar
+          if-no-files-found: error
