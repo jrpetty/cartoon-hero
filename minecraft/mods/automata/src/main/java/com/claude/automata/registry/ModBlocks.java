@@ -1,6 +1,8 @@
 package com.claude.automata.registry;
 
 import com.claude.automata.Automata;
+import com.claude.automata.block.BlockBreakerBlock;
+import com.claude.automata.block.BlockPlacerBlock;
 import com.claude.automata.block.CapacitorBlock;
 import com.claude.automata.block.CircuitAssemblerBlock;
 import com.claude.automata.block.CollectorBlock;
@@ -164,6 +166,20 @@ public final class ModBlocks {
 			new VoidBlock(AbstractBlock.Settings.create()
 					.mapColor(MapColor.BLACK)
 					.strength(3.0f, 6.0f)
+					.requiresTool()
+					.sounds(BlockSoundGroup.METAL)));
+
+	public static final Block BLOCK_BREAKER = register("block_breaker",
+			new BlockBreakerBlock(AbstractBlock.Settings.create()
+					.mapColor(MapColor.GRAY)
+					.strength(3.5f, 6.0f)
+					.requiresTool()
+					.sounds(BlockSoundGroup.METAL)));
+
+	public static final Block BLOCK_PLACER = register("block_placer",
+			new BlockPlacerBlock(AbstractBlock.Settings.create()
+					.mapColor(MapColor.GRAY)
+					.strength(3.5f, 6.0f)
 					.requiresTool()
 					.sounds(BlockSoundGroup.METAL)));
 

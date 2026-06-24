@@ -20,6 +20,8 @@
 		"automata:void_hatch",
 		"automata:conduit",
 		"automata:pylon",
-		"automata:circuit_assembler"
+		"automata:circuit_assembler",
+		"automata:block_breaker",
+		"automata:block_placer"
 	]
 }

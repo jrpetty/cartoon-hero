@@ -1,0 +1,8 @@
+{
+	"variants": {
+		"facing=north": { "model": "automata:block/block_breaker" },
+		"facing=east":  { "model": "automata:block/block_breaker", "y": 90 },
+		"facing=south": { "model": "automata:block/block_breaker", "y": 180 },
+		"facing=west":  { "model": "automata:block/block_breaker", "y": 270 }
+	}
+}

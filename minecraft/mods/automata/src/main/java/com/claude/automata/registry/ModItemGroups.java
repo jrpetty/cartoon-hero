@@ -47,6 +47,8 @@ public final class ModItemGroups {
 			entries.add(ModBlocks.RECYCLER);
 			entries.add(ModBlocks.MINER);
 			entries.add(ModBlocks.COLLECTOR);
+			entries.add(ModBlocks.BLOCK_BREAKER);
+			entries.add(ModBlocks.BLOCK_PLACER);
 			entries.add(ModBlocks.FLUID_PUMP);
 			entries.add(ModBlocks.CONVEYOR);
 			entries.add(ModBlocks.DRAWER);

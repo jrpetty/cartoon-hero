@@ -6,6 +6,8 @@ import com.claude.automata.block.entity.CrusherBlockEntity;
 import com.claude.automata.block.entity.FabricatorBlockEntity;
 import com.claude.automata.block.entity.ForgeCoreBlockEntity;
 import com.claude.automata.block.entity.GeneratorBlockEntity;
+import com.claude.automata.block.entity.BlockBreakerBlockEntity;
+import com.claude.automata.block.entity.BlockPlacerBlockEntity;
 import com.claude.automata.block.entity.CapacitorBlockEntity;
 import com.claude.automata.block.entity.CircuitAssemblerBlockEntity;
 import com.claude.automata.block.entity.ConduitBlockEntity;
@@ -124,6 +126,16 @@ public final class ModBlockEntities {
 			Registries.BLOCK_ENTITY_TYPE,
 			Identifier.of(Automata.MOD_ID, "pylon"),
 			BlockEntityType.Builder.create(PylonBlockEntity::new, ModBlocks.PYLON).build());
+
+	public static final BlockEntityType<BlockBreakerBlockEntity> BLOCK_BREAKER = Registry.register(
+			Registries.BLOCK_ENTITY_TYPE,
+			Identifier.of(Automata.MOD_ID, "block_breaker"),
+			BlockEntityType.Builder.create(BlockBreakerBlockEntity::new, ModBlocks.BLOCK_BREAKER).build());
+
+	public static final BlockEntityType<BlockPlacerBlockEntity> BLOCK_PLACER = Registry.register(
+			Registries.BLOCK_ENTITY_TYPE,
+			Identifier.of(Automata.MOD_ID, "block_placer"),
+			BlockEntityType.Builder.create(BlockPlacerBlockEntity::new, ModBlocks.BLOCK_PLACER).build());
 
 	public static final BlockEntityType<CircuitAssemblerBlockEntity> CIRCUIT_ASSEMBLER = Registry.register(
 			Registries.BLOCK_ENTITY_TYPE,

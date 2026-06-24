@@ -218,6 +218,11 @@ write_png(BASE / "block/recycler.png",
           generator_face(16, 16, (130, 70, 60, 255), (70, 34, 30, 255), (210, 200, 200, 255)), 16, 16)
 write_png(BASE / "block/fluid_pump.png",
           machine_tile(16, 16, (70, 150, 160, 255), (35, 80, 90, 255), (160, 220, 230, 255)), 16, 16)
+# Block Breaker: steel with a dark breaking face. Block Placer: steel with a bright placing face.
+write_png(BASE / "block/block_breaker.png",
+          generator_face(16, 16, STEEL, STEEL_DK, (40, 40, 44, 255)), 16, 16)
+write_png(BASE / "block/block_placer.png",
+          generator_face(16, 16, STEEL, STEEL_DK, (120, 200, 120, 255)), 16, 16)
 # Auto-Miner: steel body with a dark downward drill aperture. Collector: a glassy blue intake.
 write_png(BASE / "block/miner.png",
           generator_face(16, 16, STEEL_DK, (38, 42, 48, 255), (150, 150, 156, 255)), 16, 16)

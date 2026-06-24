@@ -12,6 +12,8 @@
 	"block.automata.pylon": "Power Pylon",
 	"block.automata.crusher": "Crusher",
 	"block.automata.sawmill": "Sawmill",
+	"block.automata.block_breaker": "Block Breaker",
+	"block.automata.block_placer": "Block Placer",
 	"block.automata.miner": "Auto-Miner",
 	"block.automata.collector": "Item Collector",
 	"block.automata.recycler": "Recycler",
