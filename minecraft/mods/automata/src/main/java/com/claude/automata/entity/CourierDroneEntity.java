@@ -13,6 +13,7 @@ import net.minecraft.item.ItemStack;
 import net.minecraft.nbt.NbtCompound;
 import net.minecraft.nbt.NbtElement;
 import net.minecraft.nbt.NbtList;
+import net.minecraft.server.world.ServerWorld;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.Direction;
 import net.minecraft.util.math.Vec3d;
@@ -33,6 +34,12 @@ public class CourierDroneEntity extends Entity {
 	private int cruiseY = 220;
 	private int phase = PHASE_ASCEND;
 	private final List<ItemStack> payload = new ArrayList<>();
+
+	// Keep the drone's own chunk loaded as it flies so it never stalls over
+	// unloaded terrain; the loaded "bubble" follows it and is released as it moves.
+	private boolean hasForcedChunk = false;
+	private int forcedChunkX;
+	private int forcedChunkZ;
 
 	public CourierDroneEntity(EntityType<?> type, World world) {
 		super(type, world);
@@ -102,6 +109,39 @@ public class CourierDroneEntity extends Entity {
 			Vec3d step = diff.normalize().multiply(Math.min(SPEED, dist));
 			setPosition(here.x + step.x, here.y + step.y, here.z + step.z);
 		}
+		updateForcedChunk();
+	}
+
+	/** Force-load the chunk the drone currently occupies, releasing the previous one. */
+	private void updateForcedChunk() {
+		if (!(getWorld() instanceof ServerWorld serverWorld)) {
+			return;
+		}
+		int cx = getBlockX() >> 4;
+		int cz = getBlockZ() >> 4;
+		if (hasForcedChunk && cx == forcedChunkX && cz == forcedChunkZ) {
+			return;
+		}
+		if (hasForcedChunk) {
+			serverWorld.setChunkForced(forcedChunkX, forcedChunkZ, false);
+		}
+		serverWorld.setChunkForced(cx, cz, true);
+		forcedChunkX = cx;
+		forcedChunkZ = cz;
+		hasForcedChunk = true;
+	}
+
+	private void releaseForcedChunk() {
+		if (hasForcedChunk && getWorld() instanceof ServerWorld serverWorld) {
+			serverWorld.setChunkForced(forcedChunkX, forcedChunkZ, false);
+		}
+		hasForcedChunk = false;
+	}
+
+	@Override
+	public void remove(RemovalReason reason) {
+		releaseForcedChunk();
+		super.remove(reason);
 	}
 
 	private void deliver() {
