@@ -1,10 +1,12 @@
 package com.claude.automata.registry;
 
 import com.claude.automata.Automata;
+import com.claude.automata.block.CollectorBlock;
 import com.claude.automata.block.CrusherBlock;
 import com.claude.automata.block.FabricatorBlock;
 import com.claude.automata.block.ForgeCoreBlock;
 import com.claude.automata.block.GeneratorBlock;
+import com.claude.automata.block.MinerBlock;
 import com.claude.automata.block.SawmillBlock;
 import net.minecraft.block.AbstractBlock;
 import net.minecraft.block.Block;
@@ -57,6 +59,20 @@ public final class ModBlocks {
 	public static final Block SAWMILL = register("sawmill",
 			new SawmillBlock(AbstractBlock.Settings.create()
 					.mapColor(MapColor.BROWN)
+					.strength(3.0f, 6.0f)
+					.requiresTool()
+					.sounds(BlockSoundGroup.METAL)));
+
+	public static final Block MINER = register("miner",
+			new MinerBlock(AbstractBlock.Settings.create()
+					.mapColor(MapColor.LIGHT_GRAY)
+					.strength(4.0f, 6.0f)
+					.requiresTool()
+					.sounds(BlockSoundGroup.METAL)));
+
+	public static final Block COLLECTOR = register("collector",
+			new CollectorBlock(AbstractBlock.Settings.create()
+					.mapColor(MapColor.LIGHT_BLUE)
 					.strength(3.0f, 6.0f)
 					.requiresTool()
 					.sounds(BlockSoundGroup.METAL)));

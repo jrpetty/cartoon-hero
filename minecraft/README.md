@@ -40,9 +40,28 @@ hoppers and chests, production is hands-free. Before that, you interact by hand:
 | **Fabricator** | Crafting table | Auto-assembles components, machines, the items the disabled crafting table used to make (chest, hopper, bucket), and the Pulsar Multi-Tool. Runs unpowered, but ~5× faster next to a powered Dynamo. |
 | **Crusher** | — (new) | Grinds ores and raw metals into **two dust** each; a Forge Core then smelts dust back into ingots, so a Crusher → Forge line **doubles every ore**. Also cobblestone→gravel→sand. Slow by hand, ~5× faster powered. |
 | **Sawmill** | — (new) | Turns one log into **six planks** (vs four by hand). Slow by hand, ~5× faster powered. |
+| **Auto-Miner** | — (new) | Drills the column straight beneath it, collecting ore/stone drops into its output (then onward via hoppers). Stops at bedrock. Slow by hand, ~5× faster powered. |
+| **Item Collector** | — (new) | Vacuums up dropped items in a radius into its output slots — the glue for tree/mob farms and Auto-Miner overflow. Radius 2 by hand, 5 when powered. |
 
-The Crusher and Sawmill share Automata's signature rhythm: they work unpowered
-but slowly, and run several times faster when an adjacent Dynamo supplies power.
+The processing and gathering machines share Automata's signature rhythm: they
+work unpowered but slowly, and run several times faster (or reach further) when
+an adjacent Dynamo supplies power.
+
+### Automating the world
+
+The endgame is a base that runs itself. A self-feeding resource line looks like:
+
+```
+Auto-Miner ─(hopper)→ Crusher ─(hopper)→ Forge Core ─(hopper)→ chest
+     │                   │                   │
+     └───────────── Combustion Dynamos power each machine ─────────┘
+```
+
+Drop an **Auto-Miner** on a column, hopper its output into a **Crusher**, hopper
+that into a **Forge Core**, and hopper the ingots into a chest — every machine
+flanked by a fuel-fed **Dynamo**. Add **Item Collectors** under tree farms or mob
+grinders to pull drops into the same network. Once it's wired, you only ever
+refill fuel.
 
 ### Power
 

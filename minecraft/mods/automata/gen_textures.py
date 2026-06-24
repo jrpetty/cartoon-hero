@@ -158,6 +158,11 @@ write_png(BASE / "block/crusher.png",
           generator_face(16, 16, STEEL, STEEL_DK, (35, 38, 44, 255)), 16, 16)
 write_png(BASE / "block/sawmill.png",
           machine_tile(16, 16, WOOD, (90, 64, 38, 255), STEEL), 16, 16)
+# Auto-Miner: steel body with a dark downward drill aperture. Collector: a glassy blue intake.
+write_png(BASE / "block/miner.png",
+          generator_face(16, 16, STEEL_DK, (38, 42, 48, 255), (150, 150, 156, 255)), 16, 16)
+write_png(BASE / "block/collector.png",
+          machine_tile(16, 16, (90, 150, 190, 255), (45, 80, 110, 255), (170, 220, 245, 255)), 16, 16)
 write_png(BASE / "item/iron_gear.png", gear(16, 16, STEEL, STEEL_DK), 16, 16)
 write_png(BASE / "item/machine_frame.png", frame(16, 16, STEEL, STEEL_DK), 16, 16)
 write_png(BASE / "item/ash.png",

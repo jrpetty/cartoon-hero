@@ -37,6 +37,8 @@ public final class ModItemGroups {
 			entries.add(ModBlocks.GENERATOR);
 			entries.add(ModBlocks.CRUSHER);
 			entries.add(ModBlocks.SAWMILL);
+			entries.add(ModBlocks.MINER);
+			entries.add(ModBlocks.COLLECTOR);
 			entries.add(ModItems.IRON_GEAR);
 			entries.add(ModItems.MACHINE_FRAME);
 			entries.add(ModItems.ASH);

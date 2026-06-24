@@ -5,6 +5,8 @@
 		"automata:forge_core",
 		"automata:generator",
 		"automata:crusher",
-		"automata:sawmill"
+		"automata:sawmill",
+		"automata:miner",
+		"automata:collector"
 	]
 }

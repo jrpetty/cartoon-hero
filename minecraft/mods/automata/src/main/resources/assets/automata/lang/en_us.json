@@ -5,6 +5,8 @@
 	"block.automata.generator": "Combustion Dynamo",
 	"block.automata.crusher": "Crusher",
 	"block.automata.sawmill": "Sawmill",
+	"block.automata.miner": "Auto-Miner",
+	"block.automata.collector": "Item Collector",
 	"item.automata.iron_gear": "Iron Gear",
 	"item.automata.machine_frame": "Machine Frame",
 	"item.automata.ash": "Ash",
