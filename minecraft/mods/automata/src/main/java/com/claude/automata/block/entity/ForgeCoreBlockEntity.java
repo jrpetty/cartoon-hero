@@ -12,13 +12,17 @@ import net.minecraft.world.World;
  * The Forge Core — an auto-smelter that replaces the furnace.
  *
  * <p>Slot 0 is the input (top / sides for hoppers); slot 1 is the output
- * (bottom for hoppers). It needs no fuel: it builds heat passively and smelts
- * one item every {@value #SMELT_TICKS} ticks.
+ * (bottom for hoppers). It does not burn fuel directly: it requires
+ * <em>power</em> drawn from an adjacent Combustion Dynamo. With no powered
+ * Dynamo next to it, smelting stalls (and resumes where it left off once power
+ * returns). A fully powered Forge Core smelts one item every
+ * {@value #SMELT_TICKS} ticks.
  */
 public class ForgeCoreBlockEntity extends MachineBlockEntity {
 	private static final int INPUT_SLOT = 0;
 	private static final int OUTPUT_SLOT = 1;
-	private static final int SMELT_TICKS = 200;
+	private static final int SMELT_TICKS = 100;
+	private static final int ENERGY_PER_TICK = 10;
 	private static final int[] INPUTS = {INPUT_SLOT};
 
 	public ForgeCoreBlockEntity(BlockPos pos, BlockState state) {
@@ -56,6 +60,11 @@ public class ForgeCoreBlockEntity extends MachineBlockEntity {
 		Item result = SmeltingRecipes.result(input.getItem());
 		if (result == null || !canAcceptOutput(result, 1)) {
 			progress = 0;
+			return;
+		}
+
+		// Requires power: stall (keeping progress) until an adjacent Dynamo can supply it.
+		if (!MachinePower.draw(world, pos, ENERGY_PER_TICK)) {
 			return;
 		}
 

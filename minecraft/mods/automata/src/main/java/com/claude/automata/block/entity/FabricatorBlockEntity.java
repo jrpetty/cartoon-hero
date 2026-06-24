@@ -15,12 +15,18 @@ import net.minecraft.world.World;
  *
  * <p>Slots 0-8 are inputs (top / sides for hoppers); slot 9 is the output
  * (bottom for hoppers). When the loaded inputs exactly match a
- * {@link FabricatorRecipes} entry, it assembles the result every
- * {@value #ASSEMBLE_TICKS} ticks and consumes the ingredients.
+ * {@link FabricatorRecipes} entry, it assembles the result and consumes the
+ * ingredients.
+ *
+ * <p>Unlike the Forge Core, the Fabricator runs without power (so it can build
+ * the first Dynamo) — but it assembles {@value #POWERED_STEP}x faster when an
+ * adjacent Combustion Dynamo can supply energy.
  */
 public class FabricatorBlockEntity extends MachineBlockEntity {
 	private static final int OUTPUT_SLOT = 9;
-	private static final int ASSEMBLE_TICKS = 100;
+	private static final int ASSEMBLE_TICKS = 200;
+	private static final int POWERED_STEP = 5;
+	private static final int ENERGY_PER_TICK = 10;
 	private static final int[] INPUTS = {0, 1, 2, 3, 4, 5, 6, 7, 8};
 
 	public FabricatorBlockEntity(BlockPos pos, BlockState state) {
@@ -58,7 +64,9 @@ public class FabricatorBlockEntity extends MachineBlockEntity {
 			return;
 		}
 
-		progress++;
+		// Runs unpowered at 1x; an adjacent Dynamo accelerates it.
+		int step = MachinePower.draw(world, pos, ENERGY_PER_TICK) ? POWERED_STEP : 1;
+		progress += step;
 		if (progress >= maxProgress()) {
 			progress = 0;
 			consume(recipe.ingredients);

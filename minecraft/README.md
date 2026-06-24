@@ -24,9 +24,9 @@ minecraft/
     └── start.sh          # Launches the server
 ```
 
-## The two machines
+## The machines
 
-Both are block entities. They accept items from **hoppers** on the top and
+All three are block entities. They accept items from **hoppers** on the top and
 sides and push finished goods to a **hopper** on the bottom — so once you have
 hoppers and chests, production is hands-free. Before that, you interact by hand:
 
@@ -35,8 +35,18 @@ hoppers and chests, production is hands-free. Before that, you interact by hand:
 
 | Machine | Replaces | What it does |
 |---------|----------|--------------|
-| **Forge Core** | Furnace | Auto-smelts ores, raw metals, sand, stone, food and logs. No fuel — it builds heat passively and smelts one item every ~10s. |
-| **Fabricator** | Crafting table | Auto-assembles components, machines, the items the disabled crafting table used to make (chest, hopper, bucket), and the Pulsar Multi-Tool. |
+| **Combustion Dynamo** | — (new) | Burns fuel (coal, logs, blaze rods…) from its **intake** to fill an energy buffer, and emits **Ash** from its **outtake** as a byproduct. Powers adjacent machines. |
+| **Forge Core** | Furnace | Auto-smelts ores, raw metals, sand, stone, food and logs — **but only while an adjacent Dynamo is supplying power**. No power, no smelting. |
+| **Fabricator** | Crafting table | Auto-assembles components, machines, the items the disabled crafting table used to make (chest, hopper, bucket), and the Pulsar Multi-Tool. Runs unpowered, but ~5× faster next to a powered Dynamo. |
+
+### Power
+
+The **Combustion Dynamo** is the power source. It consumes one fuel item at a
+time from its intake slot, converting it to energy in an internal buffer, and
+periodically drops **Ash** into its outtake slot (smelt 4 Ash in the Fabricator
+for black dye). Any Forge Core or Fabricator placed **directly adjacent** to a
+Dynamo draws from its buffer. This is why fuel matters: smelting is no longer
+free — it runs on power the Dynamo makes from the fuel you feed it.
 
 The vanilla crafting table and furnace recipes are **disabled** (via a datapack
 override that points them at an unobtainable item), so the machines are the way
@@ -45,15 +55,21 @@ torches — and for the one bootstrap recipe below.
 
 ## How a game starts (the manual twist)
 
-1. Punch a tree for **logs**, mine **stone** for cobblestone, grab some **coal**.
+1. Punch a tree for **logs**, mine **stone** for cobblestone, grab some **coal**
+   and a little **redstone**.
 2. In your 2×2 inventory grid, craft a **Fabricator**: two logs on top, two
    cobblestone on the bottom.
-3. Place the Fabricator. Hand-feed it **8 cobblestone + 1 coal** → it builds a
-   **Forge Core**. Now you can smelt.
-4. Smelt raw iron in the Forge Core. Feed iron into the Fabricator to make
-   **Iron Gears → Machine Frames**, and then **Chests** and **Hoppers**.
-5. Wire hoppers + chests into the machines. Congratulations — you now have
-   automated smelting and assembly, and the game becomes about designing flows.
+3. Place the Fabricator (it runs unpowered, just slowly). Hand-feed it to build a
+   **Combustion Dynamo** (8 cobblestone + 1 redstone) and a **Forge Core**
+   (8 cobblestone + 1 coal).
+4. Place the Forge Core **next to** the Dynamo. Feed the Dynamo some coal — it
+   starts generating power, and the Forge Core can now smelt your raw iron.
+5. Feed iron into the Fabricator to make **Iron Gears → Machine Frames**, then
+   **Chests** and **Hoppers**. Park a Dynamo next to the Fabricator too for a
+   big speed boost.
+6. Wire hoppers + chests into the machines. Congratulations — you now have
+   powered, automated smelting and assembly, and the game becomes about
+   designing flows (and keeping the Dynamos fed).
 
 ### The Fabricator recipe book
 
@@ -66,10 +82,12 @@ pattern.)
 | Iron Gear | 4 iron ingots |
 | Machine Frame | 4 iron ingots + 2 iron gears |
 | Forge Core | 8 cobblestone + 1 coal |
+| Combustion Dynamo | 8 cobblestone + 1 redstone |
 | Fabricator | 1 machine frame + 4 cobblestone |
 | Chest | 8 oak planks |
 | Hopper | 5 iron ingots + 1 chest |
 | Bucket | 3 iron ingots |
+| Black Dye | 4 ash |
 | **Pulsar Multi-Tool** | 1 machine frame + 2 iron ingots |
 
 The **Pulsar Multi-Tool** is one tool that mines like a pickaxe, axe, shovel and

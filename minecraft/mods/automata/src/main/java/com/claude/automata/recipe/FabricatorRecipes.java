@@ -79,9 +79,13 @@ public final class FabricatorRecipes {
 		add(ModItems.MACHINE_FRAME, 1, Items.IRON_INGOT, 4, ModItems.IRON_GEAR, 2);
 
 		// --- Machines (so you can build more) ---
-		// Forge Core needs no iron, so it can be made before you can smelt.
+		// The Forge Core and Dynamo need no iron, so they can be made before you can smelt.
 		add(ModBlocks.FORGE_CORE.asItem(), 1, Items.COBBLESTONE, 8, Items.COAL, 1);
+		add(ModBlocks.GENERATOR.asItem(), 1, Items.COBBLESTONE, 8, Items.REDSTONE, 1);
 		add(ModBlocks.FABRICATOR.asItem(), 1, ModItems.MACHINE_FRAME, 1, Items.COBBLESTONE, 4);
+
+		// --- Use for the Ash byproduct ---
+		add(Items.BLACK_DYE, 1, ModItems.ASH, 4);
 
 		// --- Automation unlocks (locked behind the disabled crafting table) ---
 		add(Items.CHEST, 1, Items.OAK_PLANKS, 8);

@@ -3,6 +3,7 @@ package com.claude.automata.registry;
 import com.claude.automata.Automata;
 import com.claude.automata.block.entity.FabricatorBlockEntity;
 import com.claude.automata.block.entity.ForgeCoreBlockEntity;
+import com.claude.automata.block.entity.GeneratorBlockEntity;
 import net.minecraft.block.entity.BlockEntityType;
 import net.minecraft.registry.Registries;
 import net.minecraft.registry.Registry;
@@ -21,6 +22,11 @@ public final class ModBlockEntities {
 			Registries.BLOCK_ENTITY_TYPE,
 			Identifier.of(Automata.MOD_ID, "forge_core"),
 			BlockEntityType.Builder.create(ForgeCoreBlockEntity::new, ModBlocks.FORGE_CORE).build());
+
+	public static final BlockEntityType<GeneratorBlockEntity> GENERATOR = Registry.register(
+			Registries.BLOCK_ENTITY_TYPE,
+			Identifier.of(Automata.MOD_ID, "generator"),
+			BlockEntityType.Builder.create(GeneratorBlockEntity::new, ModBlocks.GENERATOR).build());
 
 	public static void register() {
 		Automata.LOGGER.info("[Automata] Registering block entities.");

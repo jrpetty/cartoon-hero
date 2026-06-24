@@ -2,8 +2,10 @@
 	"itemGroup.automata.automata": "Automata",
 	"block.automata.fabricator": "Fabricator",
 	"block.automata.forge_core": "Forge Core",
+	"block.automata.generator": "Combustion Dynamo",
 	"item.automata.iron_gear": "Iron Gear",
 	"item.automata.machine_frame": "Machine Frame",
+	"item.automata.ash": "Ash",
 	"item.automata.pulsar_multitool": "Pulsar Multi-Tool",
 	"item.automata.locked_component": "Locked Component"
 }

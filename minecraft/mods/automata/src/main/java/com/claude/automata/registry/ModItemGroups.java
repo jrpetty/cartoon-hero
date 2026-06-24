@@ -34,8 +34,10 @@ public final class ModItemGroups {
 		ItemGroupEvents.modifyEntriesEvent(AUTOMATA_GROUP_KEY).register(entries -> {
 			entries.add(ModBlocks.FABRICATOR);
 			entries.add(ModBlocks.FORGE_CORE);
+			entries.add(ModBlocks.GENERATOR);
 			entries.add(ModItems.IRON_GEAR);
 			entries.add(ModItems.MACHINE_FRAME);
+			entries.add(ModItems.ASH);
 			entries.add(ModItems.PULSAR_MULTITOOL);
 		});
 	}

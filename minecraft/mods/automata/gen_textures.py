@@ -86,6 +86,40 @@ def frame(w, h, metal, dark, bg=(0, 0, 0, 0)):
     return px
 
 
+def speckle(w, h, base, light, dark):
+    """A grainy, ash-like fill (deterministic, no RNG)."""
+    px = []
+    for y in range(h):
+        for x in range(w):
+            n = (x * 7 + y * 13 + x * y) % 5
+            if n == 0:
+                px.append(light)
+            elif n == 1:
+                px.append(dark)
+            else:
+                px.append(base)
+    return px
+
+
+def generator_face(w, h, body, dark, vent):
+    """A machine face with a glowing combustion vent in the middle."""
+    px = []
+    for y in range(h):
+        for x in range(w):
+            edge = x == 0 or y == 0 or x == w - 1 or y == h - 1
+            vent_zone = 5 <= x < w - 5 and 6 <= y < h - 3
+            grill = vent_zone and (y % 2 == 0)
+            if edge:
+                px.append(dark)
+            elif grill:
+                px.append(dark)
+            elif vent_zone:
+                px.append(vent)
+            else:
+                px.append(body)
+    return px
+
+
 def multitool(w, h, head, handle, dark, bg=(0, 0, 0, 0)):
     """A diagonal tool: metal head top-left, handle to bottom-right."""
     px = []
@@ -117,8 +151,12 @@ write_png(BASE / "block/fabricator.png",
           machine_tile(16, 16, STEEL, STEEL_DK, ORANGE), 16, 16)
 write_png(BASE / "block/forge_core.png",
           machine_tile(16, 16, STEEL_DK, (40, 44, 50, 255), EMBER), 16, 16)
+write_png(BASE / "block/generator.png",
+          generator_face(16, 16, (90, 70, 55, 255), (45, 34, 26, 255), EMBER), 16, 16)
 write_png(BASE / "item/iron_gear.png", gear(16, 16, STEEL, STEEL_DK), 16, 16)
 write_png(BASE / "item/machine_frame.png", frame(16, 16, STEEL, STEEL_DK), 16, 16)
+write_png(BASE / "item/ash.png",
+          speckle(16, 16, (110, 110, 114, 255), (170, 170, 174, 255), (70, 70, 74, 255)), 16, 16)
 write_png(BASE / "item/pulsar_multitool.png",
           multitool(16, 16, ORANGE, WOOD, ORANGE_DK), 16, 16)
 

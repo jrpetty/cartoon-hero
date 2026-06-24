@@ -25,6 +25,9 @@ public final class ModItems {
 	public static final Item IRON_GEAR = register("iron_gear", new Item(new Item.Settings()));
 	public static final Item MACHINE_FRAME = register("machine_frame", new Item(new Item.Settings()));
 
+	// Byproduct emitted by the Combustion Dynamo while it burns fuel.
+	public static final Item ASH = register("ash", new Item(new Item.Settings()));
+
 	/**
 	 * The Pulsar Multi-Tool — one tool that mines like a pickaxe, axe, shovel and
 	 * hoe at the same time. A deliberate simplification of vanilla's tool zoo.

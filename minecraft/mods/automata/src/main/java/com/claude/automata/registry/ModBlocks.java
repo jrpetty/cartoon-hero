@@ -3,6 +3,7 @@ package com.claude.automata.registry;
 import com.claude.automata.Automata;
 import com.claude.automata.block.FabricatorBlock;
 import com.claude.automata.block.ForgeCoreBlock;
+import com.claude.automata.block.GeneratorBlock;
 import net.minecraft.block.AbstractBlock;
 import net.minecraft.block.Block;
 import net.minecraft.block.MapColor;
@@ -35,6 +36,14 @@ public final class ModBlocks {
 					.requiresTool()
 					.luminance(state -> 13)
 					.sounds(BlockSoundGroup.STONE)));
+
+	public static final Block GENERATOR = register("generator",
+			new GeneratorBlock(AbstractBlock.Settings.create()
+					.mapColor(MapColor.BROWN)
+					.strength(3.5f, 6.0f)
+					.requiresTool()
+					.luminance(state -> 7)
+					.sounds(BlockSoundGroup.METAL)));
 
 	private static Block register(String name, Block block) {
 		Identifier id = Identifier.of(Automata.MOD_ID, name);
