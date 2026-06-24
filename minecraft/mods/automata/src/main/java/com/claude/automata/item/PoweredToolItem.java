@@ -38,11 +38,6 @@ public class PoweredToolItem extends MiningToolItem {
 	}
 
 	@Override
-	public float getMiningSpeedMultiplier(ItemStack stack, BlockState state) {
-		return energy(stack) >= costPerBlock ? super.getMiningSpeedMultiplier(stack, state) : 1.0f;
-	}
-
-	@Override
 	public boolean postMine(ItemStack stack, World world, BlockState state, BlockPos pos, LivingEntity miner) {
 		if (!world.isClient && state.getHardness(world, pos) != 0.0f) {
 			int current = energy(stack);
