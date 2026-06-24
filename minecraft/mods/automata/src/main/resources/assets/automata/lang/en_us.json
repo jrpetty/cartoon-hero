@@ -7,12 +7,14 @@
 	"block.automata.sawmill": "Sawmill",
 	"block.automata.miner": "Auto-Miner",
 	"block.automata.collector": "Item Collector",
+	"block.automata.router": "Logistics Router",
 	"item.automata.iron_gear": "Iron Gear",
 	"item.automata.machine_frame": "Machine Frame",
 	"item.automata.ash": "Ash",
 	"item.automata.iron_dust": "Iron Dust",
 	"item.automata.gold_dust": "Gold Dust",
 	"item.automata.copper_dust": "Copper Dust",
+	"item.automata.logistics_wrench": "Logistics Wrench",
 	"item.automata.pulsar_multitool": "Pulsar Multi-Tool",
 	"item.automata.locked_component": "Locked Component"
 }

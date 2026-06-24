@@ -42,6 +42,7 @@ hoppers and chests, production is hands-free. Before that, you interact by hand:
 | **Sawmill** | — (new) | Turns one log into **six planks** (vs four by hand). Slow by hand, ~5× faster powered. |
 | **Auto-Miner** | — (new) | Drills the column straight beneath it, collecting ore/stone drops into its output (then onward via hoppers). Stops at bedrock. Slow by hand, ~5× faster powered. |
 | **Item Collector** | — (new) | Vacuums up dropped items in a radius into its output slots — the glue for tree/mob farms and Auto-Miner overflow. Radius 2 by hand, 5 when powered. |
+| **Logistics Router** | — (new) | Pulls items from an adjacent inventory and sends them to linked inventories **anywhere**, with an item filter and round-robin balancing. Replaces long hopper chains. Slow by hand, faster powered. |
 
 The processing and gathering machines share Automata's signature rhythm: they
 work unpowered but slowly, and run several times faster (or reach further) when
@@ -62,6 +63,20 @@ that into a **Forge Core**, and hopper the ingots into a chest — every machine
 flanked by a fuel-fed **Dynamo**. Add **Item Collectors** under tree farms or mob
 grinders to pull drops into the same network. Once it's wired, you only ever
 refill fuel.
+
+For longer distances, skip the hopper chains and use the **Logistics Router**
+with the **Logistics Wrench**:
+
+1. Place a Router touching the inventory you want to pull *from*.
+2. Hold the Wrench and right-click the Router to select it.
+3. Right-click any chests/machines (anywhere) with the Wrench to add them as
+   destinations.
+4. Right-click the Router with an item to add it to the filter (only those
+   items are sent; empty filter = send everything). Sneak-right-click empty-
+   handed to clear; right-click empty-handed to see its status.
+
+The Router distributes round-robin across destinations and, like every machine,
+moves more per tick when an adjacent Dynamo powers it.
 
 ### Power
 

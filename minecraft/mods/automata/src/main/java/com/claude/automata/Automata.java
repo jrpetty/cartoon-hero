@@ -1,11 +1,16 @@
 package com.claude.automata;
 
+import com.claude.automata.block.entity.RouterBlockEntity;
+import com.claude.automata.logistics.InventoryTransfer;
 import com.claude.automata.registry.ModBlockEntities;
 import com.claude.automata.registry.ModBlocks;
 import com.claude.automata.registry.ModItemGroups;
 import com.claude.automata.registry.ModItems;
 import net.fabricmc.api.ModInitializer;
+import net.fabricmc.fabric.api.event.player.UseBlockCallback;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents;
+import net.minecraft.util.ActionResult;
+import net.minecraft.util.math.BlockPos;
 import net.minecraft.text.Text;
 import net.minecraft.util.Formatting;
 import org.slf4j.Logger;
@@ -41,6 +46,31 @@ public class Automata implements ModInitializer {
 		ModBlocks.register();
 		ModBlockEntities.register();
 		ModItemGroups.register();
+
+		// Logistics Wrench: link the selected Router to the inventory you click.
+		UseBlockCallback.EVENT.register((player, world, hand, hit) -> {
+			if (world.isClient || !player.getStackInHand(hand).isOf(ModItems.LOGISTICS_WRENCH)) {
+				return ActionResult.PASS;
+			}
+			BlockPos pos = hit.getBlockPos();
+			// Let the router block itself handle wrench clicks (selection).
+			if (world.getBlockEntity(pos) instanceof RouterBlockEntity) {
+				return ActionResult.PASS;
+			}
+			if (InventoryTransfer.inventoryAt(world, pos) == null) {
+				return ActionResult.PASS;
+			}
+			BlockPos selected = RouterBlockEntity.getSelection(player.getUuid());
+			if (selected != null && world.getBlockEntity(selected) instanceof RouterBlockEntity router) {
+				int count = router.addDestination(pos);
+				player.sendMessage(Text.literal("Linked destination (" + count + " total).")
+						.formatted(Formatting.GREEN), false);
+				return ActionResult.SUCCESS;
+			}
+			player.sendMessage(Text.literal("Select a Router with the wrench first.")
+					.formatted(Formatting.RED), false);
+			return ActionResult.SUCCESS;
+		});
 
 		ServerPlayConnectionEvents.JOIN.register((handler, sender, server) -> {
 			handler.player.sendMessage(Text.literal(

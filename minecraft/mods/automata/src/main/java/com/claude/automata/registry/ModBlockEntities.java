@@ -7,6 +7,7 @@ import com.claude.automata.block.entity.FabricatorBlockEntity;
 import com.claude.automata.block.entity.ForgeCoreBlockEntity;
 import com.claude.automata.block.entity.GeneratorBlockEntity;
 import com.claude.automata.block.entity.MinerBlockEntity;
+import com.claude.automata.block.entity.RouterBlockEntity;
 import com.claude.automata.block.entity.SawmillBlockEntity;
 import net.minecraft.block.entity.BlockEntityType;
 import net.minecraft.registry.Registries;
@@ -51,6 +52,11 @@ public final class ModBlockEntities {
 			Registries.BLOCK_ENTITY_TYPE,
 			Identifier.of(Automata.MOD_ID, "collector"),
 			BlockEntityType.Builder.create(CollectorBlockEntity::new, ModBlocks.COLLECTOR).build());
+
+	public static final BlockEntityType<RouterBlockEntity> ROUTER = Registry.register(
+			Registries.BLOCK_ENTITY_TYPE,
+			Identifier.of(Automata.MOD_ID, "router"),
+			BlockEntityType.Builder.create(RouterBlockEntity::new, ModBlocks.ROUTER).build());
 
 	public static void register() {
 		Automata.LOGGER.info("[Automata] Registering block entities.");

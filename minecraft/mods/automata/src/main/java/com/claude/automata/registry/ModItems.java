@@ -33,6 +33,10 @@ public final class ModItems {
 	public static final Item GOLD_DUST = register("gold_dust", new Item(new Item.Settings()));
 	public static final Item COPPER_DUST = register("copper_dust", new Item(new Item.Settings()));
 
+	// Used to link Logistics Routers to destination inventories.
+	public static final Item LOGISTICS_WRENCH = register("logistics_wrench",
+			new Item(new Item.Settings().maxCount(1)));
+
 	/**
 	 * The Pulsar Multi-Tool — one tool that mines like a pickaxe, axe, shovel and
 	 * hoe at the same time. A deliberate simplification of vanilla's tool zoo.

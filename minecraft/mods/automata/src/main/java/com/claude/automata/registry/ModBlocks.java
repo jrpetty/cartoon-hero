@@ -7,6 +7,7 @@ import com.claude.automata.block.FabricatorBlock;
 import com.claude.automata.block.ForgeCoreBlock;
 import com.claude.automata.block.GeneratorBlock;
 import com.claude.automata.block.MinerBlock;
+import com.claude.automata.block.RouterBlock;
 import com.claude.automata.block.SawmillBlock;
 import net.minecraft.block.AbstractBlock;
 import net.minecraft.block.Block;
@@ -73,6 +74,13 @@ public final class ModBlocks {
 	public static final Block COLLECTOR = register("collector",
 			new CollectorBlock(AbstractBlock.Settings.create()
 					.mapColor(MapColor.LIGHT_BLUE)
+					.strength(3.0f, 6.0f)
+					.requiresTool()
+					.sounds(BlockSoundGroup.METAL)));
+
+	public static final Block ROUTER = register("router",
+			new RouterBlock(AbstractBlock.Settings.create()
+					.mapColor(MapColor.GREEN)
 					.strength(3.0f, 6.0f)
 					.requiresTool()
 					.sounds(BlockSoundGroup.METAL)));

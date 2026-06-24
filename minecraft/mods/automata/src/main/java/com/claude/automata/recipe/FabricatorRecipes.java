@@ -87,6 +87,10 @@ public final class FabricatorRecipes {
 		add(ModBlocks.SAWMILL.asItem(), 1, ModItems.MACHINE_FRAME, 1, ModItems.IRON_GEAR, 1, Items.IRON_INGOT, 1);
 		add(ModBlocks.MINER.asItem(), 1, ModItems.MACHINE_FRAME, 1, Items.IRON_INGOT, 4);
 		add(ModBlocks.COLLECTOR.asItem(), 1, ModItems.MACHINE_FRAME, 1, Items.HOPPER, 1, ModItems.IRON_GEAR, 1);
+		add(ModBlocks.ROUTER.asItem(), 1, ModItems.MACHINE_FRAME, 1, Items.HOPPER, 1, Items.REDSTONE, 2);
+
+		// --- Logistics tool ---
+		add(ModItems.LOGISTICS_WRENCH, 1, ModItems.IRON_GEAR, 1, Items.IRON_INGOT, 1);
 
 		// --- Use for the Ash byproduct ---
 		add(Items.BLACK_DYE, 1, ModItems.ASH, 4);
