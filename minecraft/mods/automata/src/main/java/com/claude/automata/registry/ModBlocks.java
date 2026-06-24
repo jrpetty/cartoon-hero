@@ -9,6 +9,7 @@ import com.claude.automata.block.GeneratorBlock;
 import com.claude.automata.block.MinerBlock;
 import com.claude.automata.block.RouterBlock;
 import com.claude.automata.block.SawmillBlock;
+import com.claude.automata.block.SorterBlock;
 import net.minecraft.block.AbstractBlock;
 import net.minecraft.block.Block;
 import net.minecraft.block.MapColor;
@@ -81,6 +82,13 @@ public final class ModBlocks {
 	public static final Block ROUTER = register("router",
 			new RouterBlock(AbstractBlock.Settings.create()
 					.mapColor(MapColor.GREEN)
+					.strength(3.0f, 6.0f)
+					.requiresTool()
+					.sounds(BlockSoundGroup.METAL)));
+
+	public static final Block SORTER = register("sorter",
+			new SorterBlock(AbstractBlock.Settings.create()
+					.mapColor(MapColor.PURPLE)
 					.strength(3.0f, 6.0f)
 					.requiresTool()
 					.sounds(BlockSoundGroup.METAL)));

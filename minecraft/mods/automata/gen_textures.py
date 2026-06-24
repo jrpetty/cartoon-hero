@@ -166,6 +166,9 @@ write_png(BASE / "block/collector.png",
 # Logistics Router: steel body with a green routing core.
 write_png(BASE / "block/router.png",
           machine_tile(16, 16, STEEL, STEEL_DK, (70, 190, 110, 255)), 16, 16)
+# Item Sorter: steel body with a purple sorting core.
+write_png(BASE / "block/sorter.png",
+          machine_tile(16, 16, STEEL, STEEL_DK, (150, 90, 200, 255)), 16, 16)
 write_png(BASE / "item/iron_gear.png", gear(16, 16, STEEL, STEEL_DK), 16, 16)
 write_png(BASE / "item/machine_frame.png", frame(16, 16, STEEL, STEEL_DK), 16, 16)
 write_png(BASE / "item/ash.png",

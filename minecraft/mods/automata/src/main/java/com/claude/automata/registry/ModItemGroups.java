@@ -40,6 +40,7 @@ public final class ModItemGroups {
 			entries.add(ModBlocks.MINER);
 			entries.add(ModBlocks.COLLECTOR);
 			entries.add(ModBlocks.ROUTER);
+			entries.add(ModBlocks.SORTER);
 			entries.add(ModItems.LOGISTICS_WRENCH);
 			entries.add(ModItems.IRON_GEAR);
 			entries.add(ModItems.MACHINE_FRAME);

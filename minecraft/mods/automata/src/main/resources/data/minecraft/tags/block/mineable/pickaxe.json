@@ -8,6 +8,7 @@
 		"automata:sawmill",
 		"automata:miner",
 		"automata:collector",
-		"automata:router"
+		"automata:router",
+		"automata:sorter"
 	]
 }

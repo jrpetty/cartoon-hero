@@ -43,6 +43,7 @@ hoppers and chests, production is hands-free. Before that, you interact by hand:
 | **Auto-Miner** | — (new) | Drills the column straight beneath it, collecting ore/stone drops into its output (then onward via hoppers). Stops at bedrock. Slow by hand, ~5× faster powered. |
 | **Item Collector** | — (new) | Vacuums up dropped items in a radius into its output slots — the glue for tree/mob farms and Auto-Miner overflow. Radius 2 by hand, 5 when powered. |
 | **Logistics Router** | — (new) | Pulls items from an adjacent inventory and sends them to linked inventories **anywhere**, with an item filter and round-robin balancing. Replaces long hopper chains. Slow by hand, faster powered. |
+| **Item Sorter** | — (new) | Items in the **top**; matched items out the **bottom** (sorted), everything else out the **sides** (reject). Right-click with an item to add it to the sort list. Chain sorters to split a mixed stream into labeled chests. Slow by hand, faster powered. |
 
 The processing and gathering machines share Automata's signature rhythm: they
 work unpowered but slowly, and run several times faster (or reach further) when
