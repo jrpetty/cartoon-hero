@@ -55,6 +55,8 @@ public final class ModItemGroups {
 			entries.add(ModBlocks.ROUTER);
 			entries.add(ModBlocks.SORTER);
 			entries.add(ModBlocks.VOID);
+			entries.add(ModBlocks.HARVESTER);
+			entries.add(ModBlocks.TREE_FARM);
 			entries.add(ModBlocks.XP_COLLECTOR);
 			entries.add(ModItems.XP_SHARD);
 			entries.add(ModItems.LOGISTICS_WRENCH);

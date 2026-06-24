@@ -234,6 +234,11 @@ write_png(BASE / "block/recycler.png",
           generator_face(16, 16, (130, 70, 60, 255), (70, 34, 30, 255), (210, 200, 200, 255)), 16, 16)
 write_png(BASE / "block/fluid_pump.png",
           machine_tile(16, 16, (70, 150, 160, 255), (35, 80, 90, 255), (160, 220, 230, 255)), 16, 16)
+# Harvester: green machine with a blade. Tree Farm: brown/green machine.
+write_png(BASE / "block/harvester.png",
+          machine_tile(16, 16, (90, 160, 80, 255), (50, 100, 45, 255), (200, 220, 120, 255)), 16, 16)
+write_png(BASE / "block/tree_farm.png",
+          machine_tile(16, 16, (110, 90, 55, 255), (70, 55, 32, 255), (90, 170, 80, 255)), 16, 16)
 # XP Collector: green emitter. XP Shard item: glowing green gem.
 write_png(BASE / "block/xp_collector.png",
           generator_face(16, 16, (60, 130, 70, 255), (30, 70, 40, 255), (140, 240, 150, 255)), 16, 16)

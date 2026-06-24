@@ -6,6 +6,8 @@ import com.claude.automata.block.entity.CrusherBlockEntity;
 import com.claude.automata.block.entity.FabricatorBlockEntity;
 import com.claude.automata.block.entity.ForgeCoreBlockEntity;
 import com.claude.automata.block.entity.GeneratorBlockEntity;
+import com.claude.automata.block.entity.HarvesterBlockEntity;
+import com.claude.automata.block.entity.TreeFarmBlockEntity;
 import com.claude.automata.block.entity.BlockBreakerBlockEntity;
 import com.claude.automata.block.entity.BlockPlacerBlockEntity;
 import com.claude.automata.block.entity.CapacitorBlockEntity;
@@ -122,6 +124,16 @@ public final class ModBlockEntities {
 			Registries.BLOCK_ENTITY_TYPE,
 			Identifier.of(Automata.MOD_ID, "conduit"),
 			BlockEntityType.Builder.create(ConduitBlockEntity::new, ModBlocks.CONDUIT).build());
+
+	public static final BlockEntityType<HarvesterBlockEntity> HARVESTER = Registry.register(
+			Registries.BLOCK_ENTITY_TYPE,
+			Identifier.of(Automata.MOD_ID, "harvester"),
+			BlockEntityType.Builder.create(HarvesterBlockEntity::new, ModBlocks.HARVESTER).build());
+
+	public static final BlockEntityType<TreeFarmBlockEntity> TREE_FARM = Registry.register(
+			Registries.BLOCK_ENTITY_TYPE,
+			Identifier.of(Automata.MOD_ID, "tree_farm"),
+			BlockEntityType.Builder.create(TreeFarmBlockEntity::new, ModBlocks.TREE_FARM).build());
 
 	public static final BlockEntityType<XpCollectorBlockEntity> XP_COLLECTOR = Registry.register(
 			Registries.BLOCK_ENTITY_TYPE,

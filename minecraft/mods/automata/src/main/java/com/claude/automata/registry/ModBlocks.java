@@ -14,6 +14,7 @@ import com.claude.automata.block.FabricatorBlock;
 import com.claude.automata.block.FluidPumpBlock;
 import com.claude.automata.block.ForgeCoreBlock;
 import com.claude.automata.block.GeneratorBlock;
+import com.claude.automata.block.HarvesterBlock;
 import com.claude.automata.block.MinerBlock;
 import com.claude.automata.block.PylonBlock;
 import com.claude.automata.block.RecyclerBlock;
@@ -22,6 +23,7 @@ import com.claude.automata.block.SawmillBlock;
 import com.claude.automata.block.SolarArrayBlock;
 import com.claude.automata.block.SorterBlock;
 import com.claude.automata.block.ThermalGeneratorBlock;
+import com.claude.automata.block.TreeFarmBlock;
 import com.claude.automata.block.VoidBlock;
 import com.claude.automata.block.XpCollectorBlock;
 import net.minecraft.block.AbstractBlock;
@@ -181,6 +183,20 @@ public final class ModBlocks {
 			new BlockPlacerBlock(AbstractBlock.Settings.create()
 					.mapColor(MapColor.GRAY)
 					.strength(3.5f, 6.0f)
+					.requiresTool()
+					.sounds(BlockSoundGroup.METAL)));
+
+	public static final Block HARVESTER = register("harvester",
+			new HarvesterBlock(AbstractBlock.Settings.create()
+					.mapColor(MapColor.LIME)
+					.strength(3.0f, 6.0f)
+					.requiresTool()
+					.sounds(BlockSoundGroup.METAL)));
+
+	public static final Block TREE_FARM = register("tree_farm",
+			new TreeFarmBlock(AbstractBlock.Settings.create()
+					.mapColor(MapColor.GREEN)
+					.strength(3.0f, 6.0f)
 					.requiresTool()
 					.sounds(BlockSoundGroup.METAL)));
 
