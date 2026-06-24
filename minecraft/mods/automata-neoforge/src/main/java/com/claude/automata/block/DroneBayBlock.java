@@ -97,7 +97,7 @@ public class DroneBayBlock extends MachineBlock implements EntityBlock {
 	}
 
 	@Override
-	protected InteractionResult useWithoutItem(BlockState state, Level world, BlockPos pos, Player player, BlockHitResult hit) {
+	public InteractionResult useWithoutItem(BlockState state, Level world, BlockPos pos, Player player, BlockHitResult hit) {
 		if (world.isClientSide) {
 			return InteractionResult.SUCCESS;
 		}

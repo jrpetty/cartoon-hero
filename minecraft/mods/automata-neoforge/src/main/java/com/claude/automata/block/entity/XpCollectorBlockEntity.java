@@ -53,7 +53,7 @@ public class XpCollectorBlockEntity extends OutputMachineBlockEntity {
 
 		// Crystallise stored experience into shards while there is room.
 		while (storedXp >= XpShardItem.XP_VALUE && hasEmptySlot()) {
-			addOutput(new net.minecraft.world.item.ItemStack(ModItems.XP_SHARD));
+			addOutput(new net.minecraft.world.item.ItemStack(ModItems.XP_SHARD.get()));
 			storedXp -= XpShardItem.XP_VALUE;
 			changed = true;
 		}

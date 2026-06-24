@@ -28,7 +28,7 @@ public final class ModEntities {
 			"courier_drone",
 			() -> EntityType.Builder.<CourierDroneEntity>of(CourierDroneEntity::new, MobCategory.MISC)
 					.sized(0.6f, 0.6f)
-					.build(COURIER_DRONE_KEY));
+					.build("courier_drone"));
 
 	public static void register(IEventBus modEventBus) {
 		Automata.LOGGER.info("[Automata] Registering entities.");
