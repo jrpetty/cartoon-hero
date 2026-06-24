@@ -1,0 +1,21 @@
+{
+	"type": "minecraft:crafting_shaped",
+	"category": "building",
+	"pattern": [
+		" g ",
+		"gcg",
+		" g "
+	],
+	"key": {
+		"g": {
+			"item": "minecraft:glowstone_dust"
+		},
+		"c": {
+			"item": "claudecraft:claude_core"
+		}
+	},
+	"result": {
+		"id": "claudecraft:glowing_claude_lamp",
+		"count": 1
+	}
+}

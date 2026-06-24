@@ -1,0 +1,7 @@
+{
+	"variants": {
+		"": {
+			"model": "claudecraft:block/claude_block"
+		}
+	}
+}

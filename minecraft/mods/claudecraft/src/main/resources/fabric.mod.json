@@ -1,0 +1,28 @@
+{
+	"schemaVersion": 1,
+	"id": "claudecraft",
+	"version": "${version}",
+	"name": "ClaudeCraft",
+	"description": "A Fabric mod made entirely in Claude. Adds custom items, blocks, a creative tab, and a /claude command.",
+	"authors": [
+		"Claude"
+	],
+	"contact": {
+		"homepage": "https://github.com/jrpetty/cartoon-hero",
+		"sources": "https://github.com/jrpetty/cartoon-hero"
+	},
+	"license": "MIT",
+	"icon": "assets/claudecraft/icon.png",
+	"environment": "*",
+	"entrypoints": {
+		"main": [
+			"com.claude.claudecraft.ClaudeCraft"
+		]
+	},
+	"depends": {
+		"fabricloader": ">=0.16.5",
+		"minecraft": "~1.21.1",
+		"java": ">=21",
+		"fabric-api": "*"
+	}
+}
