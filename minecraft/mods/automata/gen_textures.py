@@ -283,6 +283,11 @@ write_png(BASE / "item/pulsar_multitool.png",
           multitool(16, 16, ORANGE, WOOD, ORANGE_DK), 16, 16)
 write_png(BASE / "item/logistics_wrench.png",
           multitool(16, 16, (70, 190, 110, 255), STEEL, (40, 120, 70, 255)), 16, 16)
+# Powered Drill: cyan-headed tool. Portable Charger: a blue battery.
+write_png(BASE / "item/powered_drill.png",
+          multitool(16, 16, (90, 200, 235, 255), STEEL, (40, 110, 150, 255)), 16, 16)
+write_png(BASE / "item/portable_charger.png",
+          drawer_face(16, 16, (50, 70, 110, 255), (25, 36, 60, 255), (120, 210, 240, 255)), 16, 16)
 # Upgrade modules: gear-shaped circuit chips.
 write_png(BASE / "item/speed_upgrade.png", gear(16, 16, (90, 200, 235, 255), (40, 110, 150, 255)), 16, 16)
 write_png(BASE / "item/efficiency_upgrade.png", gear(16, 16, (235, 205, 90, 255), (150, 120, 40, 255)), 16, 16)

@@ -37,5 +37,7 @@
 	"item.automata.pulsar_multitool": "Pulsar Multi-Tool",
 	"item.automata.locked_component": "Locked Component",
 	"block.automata.harvester": "Harvester",
-	"block.automata.tree_farm": "Tree Farm"
+	"block.automata.tree_farm": "Tree Farm",
+	"item.automata.powered_drill": "Powered Drill",
+	"item.automata.portable_charger": "Portable Charger"
 }

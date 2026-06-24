@@ -69,6 +69,8 @@ public final class ModItemGroups {
 			entries.add(ModItems.GOLD_DUST);
 			entries.add(ModItems.COPPER_DUST);
 			entries.add(ModItems.PULSAR_MULTITOOL);
+			entries.add(ModItems.POWERED_DRILL);
+			entries.add(ModItems.PORTABLE_CHARGER);
 		});
 	}
 }

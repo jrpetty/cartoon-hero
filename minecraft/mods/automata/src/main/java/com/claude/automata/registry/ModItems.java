@@ -48,6 +48,15 @@ public final class ModItems {
 	public static final Item XP_SHARD = register("xp_shard",
 			new com.claude.automata.item.XpShardItem(new Item.Settings()));
 
+	// A carried battery: charge from power blocks, auto-feeds powered tools.
+	public static final Item PORTABLE_CHARGER = register("portable_charger",
+			new com.claude.automata.item.PortableChargerItem(200000, new Item.Settings().maxCount(1)));
+
+	// A drill that runs on charge instead of durability (mines the multitool blocks).
+	public static final Item POWERED_DRILL = register("powered_drill",
+			new com.claude.automata.item.PoweredToolItem(ToolMaterials.IRON, MULTITOOL_MINEABLE, 3.0f, -2.6f,
+					20000, 20, new Item.Settings().maxCount(1)));
+
 	/**
 	 * The Pulsar Multi-Tool — one tool that mines like a pickaxe, axe, shovel and
 	 * hoe at the same time. A deliberate simplification of vanilla's tool zoo.

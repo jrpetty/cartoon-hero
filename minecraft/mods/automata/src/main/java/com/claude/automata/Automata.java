@@ -4,6 +4,7 @@ import com.claude.automata.block.entity.RouterBlockEntity;
 import com.claude.automata.logistics.InventoryTransfer;
 import com.claude.automata.registry.ModBlockEntities;
 import com.claude.automata.registry.ModBlocks;
+import com.claude.automata.registry.ModComponents;
 import com.claude.automata.registry.ModItemGroups;
 import com.claude.automata.registry.ModItems;
 import com.claude.automata.screen.ModScreenHandlers;
@@ -43,6 +44,7 @@ public class Automata implements ModInitializer {
 	public void onInitialize() {
 		LOGGER.info("[Automata] Booting the assembly line — mods made in Claude.");
 
+		ModComponents.register();
 		ModItems.register();
 		ModBlocks.register();
 		ModBlockEntities.register();

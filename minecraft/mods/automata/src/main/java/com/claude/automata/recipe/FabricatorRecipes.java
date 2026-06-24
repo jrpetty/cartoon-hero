@@ -123,6 +123,10 @@ public final class FabricatorRecipes {
 
 		// --- The reimagined tool ---
 		add(ModItems.PULSAR_MULTITOOL, 1, ModItems.MACHINE_FRAME, 1, Items.IRON_INGOT, 2);
+
+		// --- Charged gear (gated behind the Logic Circuit) ---
+		add(ModItems.POWERED_DRILL, 1, ModItems.MACHINE_FRAME, 1, ModItems.LOGIC_CIRCUIT, 1, Items.IRON_INGOT, 2);
+		add(ModItems.PORTABLE_CHARGER, 1, ModItems.LOGIC_CIRCUIT, 1, ModItems.COPPER_DUST, 2, Items.REDSTONE, 4);
 	}
 
 	/**
