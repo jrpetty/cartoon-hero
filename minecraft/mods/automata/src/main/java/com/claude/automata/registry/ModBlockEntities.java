@@ -7,10 +7,12 @@ import com.claude.automata.block.entity.FabricatorBlockEntity;
 import com.claude.automata.block.entity.ForgeCoreBlockEntity;
 import com.claude.automata.block.entity.GeneratorBlockEntity;
 import com.claude.automata.block.entity.CapacitorBlockEntity;
+import com.claude.automata.block.entity.ConduitBlockEntity;
 import com.claude.automata.block.entity.ConveyorBlockEntity;
 import com.claude.automata.block.entity.DrawerBlockEntity;
 import com.claude.automata.block.entity.FluidPumpBlockEntity;
 import com.claude.automata.block.entity.MinerBlockEntity;
+import com.claude.automata.block.entity.PylonBlockEntity;
 import com.claude.automata.block.entity.RecyclerBlockEntity;
 import com.claude.automata.block.entity.RouterBlockEntity;
 import com.claude.automata.block.entity.SawmillBlockEntity;
@@ -111,6 +113,16 @@ public final class ModBlockEntities {
 			Registries.BLOCK_ENTITY_TYPE,
 			Identifier.of(Automata.MOD_ID, "void_hatch"),
 			BlockEntityType.Builder.create(VoidBlockEntity::new, ModBlocks.VOID).build());
+
+	public static final BlockEntityType<ConduitBlockEntity> CONDUIT = Registry.register(
+			Registries.BLOCK_ENTITY_TYPE,
+			Identifier.of(Automata.MOD_ID, "conduit"),
+			BlockEntityType.Builder.create(ConduitBlockEntity::new, ModBlocks.CONDUIT).build());
+
+	public static final BlockEntityType<PylonBlockEntity> PYLON = Registry.register(
+			Registries.BLOCK_ENTITY_TYPE,
+			Identifier.of(Automata.MOD_ID, "pylon"),
+			BlockEntityType.Builder.create(PylonBlockEntity::new, ModBlocks.PYLON).build());
 
 	public static void register() {
 		Automata.LOGGER.info("[Automata] Registering block entities.");

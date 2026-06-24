@@ -92,10 +92,20 @@ moves more per tick when an adjacent Dynamo powers it.
 Power comes from any **power source** — the **Combustion Dynamo** (burns fuel,
 emits Ash), the **Thermal Generator** (burns lava buckets), or the **Solar
 Array** (free daytime power). Any machine placed **directly adjacent** to a
-source draws from its buffer. A **Capacitor Bank** both stores energy and
-relays it, so you can chain capacitors to reach machines a bit further away (and
-ride out the night on solar). This is why fuel matters: smelting is no longer
-free — it runs on the power your sources make.
+source draws from its buffer.
+
+To carry power further than face-to-face, use the network blocks:
+
+- **Power Conduit** — a cheap cable; a line of conduits relays power one block
+  at a time, so a generator can feed machines across the room.
+- **Capacitor Bank** — a big buffer that smooths fuel gaps (and also relays).
+- **Power Pylon** — a "post" that beams power to other pylons **wirelessly over
+  any distance**. Link two with the Logistics Wrench (click one to select it,
+  click the other to send power to it); put one by your generators and one by a
+  remote outpost. Sneak-wrench-click to clear a pylon's links.
+
+This is why fuel matters: smelting is no longer free — it runs on the power your
+sources make and your network delivers.
 
 The vanilla crafting table and furnace recipes are **disabled** (via a datapack
 override that points them at an unobtainable item), so the machines are the way

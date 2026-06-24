@@ -38,6 +38,8 @@ public final class ModItemGroups {
 			entries.add(ModBlocks.THERMAL_GENERATOR);
 			entries.add(ModBlocks.SOLAR_ARRAY);
 			entries.add(ModBlocks.CAPACITOR);
+			entries.add(ModBlocks.CONDUIT);
+			entries.add(ModBlocks.PYLON);
 			entries.add(ModBlocks.CRUSHER);
 			entries.add(ModBlocks.SAWMILL);
 			entries.add(ModBlocks.RECYCLER);

@@ -1,0 +1,8 @@
+{
+	"parent": "block/block",
+	"textures": { "core": "automata:block/conduit", "particle": "automata:block/conduit" },
+	"elements": [ { "from": [5,5,5], "to": [11,11,11], "faces": {
+		"down": {"texture":"#core"}, "up":{"texture":"#core"},
+		"north":{"texture":"#core"}, "south":{"texture":"#core"},
+		"west":{"texture":"#core"}, "east":{"texture":"#core"} } } ]
+}

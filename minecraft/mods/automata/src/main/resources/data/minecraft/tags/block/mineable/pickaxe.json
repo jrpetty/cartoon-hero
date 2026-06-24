@@ -17,6 +17,8 @@
 		"automata:fluid_pump",
 		"automata:conveyor",
 		"automata:drawer",
-		"automata:void_hatch"
+		"automata:void_hatch",
+		"automata:conduit",
+		"automata:pylon"
 	]
 }

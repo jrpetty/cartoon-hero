@@ -196,6 +196,11 @@ write_png(BASE / "block/crusher.png",
           generator_face(16, 16, STEEL, STEEL_DK, (35, 38, 44, 255)), 16, 16)
 write_png(BASE / "block/sawmill.png",
           machine_tile(16, 16, WOOD, (90, 64, 38, 255), STEEL), 16, 16)
+# Power Conduit: orange cable core. Power Pylon: blue emitter with a bright core.
+write_png(BASE / "block/conduit.png",
+          machine_tile(16, 16, (200, 120, 60, 255), (120, 70, 35, 255), (240, 170, 90, 255)), 16, 16)
+write_png(BASE / "block/pylon.png",
+          generator_face(16, 16, (60, 90, 130, 255), (30, 46, 70, 255), (120, 200, 240, 255)), 16, 16)
 # Conveyor belt with direction chevrons; Drawer with a readout window; Void hazard stripes.
 write_png(BASE / "block/conveyor.png",
           belt(16, 16, (60, 64, 70, 255), (40, 43, 48, 255), (235, 205, 70, 255)), 16, 16)

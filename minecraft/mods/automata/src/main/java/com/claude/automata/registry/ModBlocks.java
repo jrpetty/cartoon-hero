@@ -3,6 +3,7 @@ package com.claude.automata.registry;
 import com.claude.automata.Automata;
 import com.claude.automata.block.CapacitorBlock;
 import com.claude.automata.block.CollectorBlock;
+import com.claude.automata.block.ConduitBlock;
 import com.claude.automata.block.ConveyorBlock;
 import com.claude.automata.block.CrusherBlock;
 import com.claude.automata.block.DrawerBlock;
@@ -11,6 +12,7 @@ import com.claude.automata.block.FluidPumpBlock;
 import com.claude.automata.block.ForgeCoreBlock;
 import com.claude.automata.block.GeneratorBlock;
 import com.claude.automata.block.MinerBlock;
+import com.claude.automata.block.PylonBlock;
 import com.claude.automata.block.RecyclerBlock;
 import com.claude.automata.block.RouterBlock;
 import com.claude.automata.block.SawmillBlock;
@@ -155,6 +157,21 @@ public final class ModBlocks {
 					.mapColor(MapColor.BLACK)
 					.strength(3.0f, 6.0f)
 					.requiresTool()
+					.sounds(BlockSoundGroup.METAL)));
+
+	public static final Block CONDUIT = register("conduit",
+			new ConduitBlock(AbstractBlock.Settings.create()
+					.mapColor(MapColor.ORANGE)
+					.strength(1.0f)
+					.sounds(BlockSoundGroup.METAL)
+					.nonOpaque()));
+
+	public static final Block PYLON = register("pylon",
+			new PylonBlock(AbstractBlock.Settings.create()
+					.mapColor(MapColor.LIGHT_BLUE)
+					.strength(3.0f, 6.0f)
+					.requiresTool()
+					.luminance(state -> 6)
 					.sounds(BlockSoundGroup.METAL)));
 
 	private static Block register(String name, Block block) {

@@ -6,6 +6,8 @@
 	"block.automata.thermal_generator": "Thermal Generator",
 	"block.automata.solar_array": "Solar Array",
 	"block.automata.capacitor": "Capacitor Bank",
+	"block.automata.conduit": "Power Conduit",
+	"block.automata.pylon": "Power Pylon",
 	"block.automata.crusher": "Crusher",
 	"block.automata.sawmill": "Sawmill",
 	"block.automata.miner": "Auto-Miner",

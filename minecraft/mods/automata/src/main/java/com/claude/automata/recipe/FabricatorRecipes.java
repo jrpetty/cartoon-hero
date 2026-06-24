@@ -85,6 +85,8 @@ public final class FabricatorRecipes {
 		add(ModBlocks.THERMAL_GENERATOR.asItem(), 1, ModItems.MACHINE_FRAME, 1, Items.IRON_INGOT, 4, Items.BUCKET, 1);
 		add(ModBlocks.SOLAR_ARRAY.asItem(), 1, Items.GLASS, 4, Items.REDSTONE, 2, ModItems.IRON_GEAR, 1);
 		add(ModBlocks.CAPACITOR.asItem(), 1, ModItems.MACHINE_FRAME, 1, Items.REDSTONE, 4, ModItems.COPPER_DUST, 2);
+		add(ModBlocks.CONDUIT.asItem(), 8, Items.COPPER_INGOT, 1, Items.REDSTONE, 2);
+		add(ModBlocks.PYLON.asItem(), 1, ModItems.MACHINE_FRAME, 1, Items.COPPER_INGOT, 2, Items.REDSTONE, 2);
 		add(ModBlocks.FABRICATOR.asItem(), 1, ModItems.MACHINE_FRAME, 1, Items.COBBLESTONE, 4);
 		add(ModBlocks.CRUSHER.asItem(), 1, ModItems.MACHINE_FRAME, 1, ModItems.IRON_GEAR, 2);
 		add(ModBlocks.SAWMILL.asItem(), 1, ModItems.MACHINE_FRAME, 1, ModItems.IRON_GEAR, 1, Items.IRON_INGOT, 1);
