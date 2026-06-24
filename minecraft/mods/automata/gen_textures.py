@@ -259,6 +259,9 @@ write_png(BASE / "block/miner.png",
           generator_face(16, 16, STEEL_DK, (38, 42, 48, 255), (150, 150, 156, 255)), 16, 16)
 write_png(BASE / "block/collector.png",
           machine_tile(16, 16, (90, 150, 190, 255), (45, 80, 110, 255), (170, 220, 245, 255)), 16, 16)
+# Drone Bay: cyan landing pad with a launch ring.
+write_png(BASE / "block/drone_bay.png",
+          generator_face(16, 16, (60, 120, 130, 255), (30, 64, 70, 255), (150, 230, 240, 255)), 16, 16)
 # Logistics Router: steel body with a green routing core.
 write_png(BASE / "block/router.png",
           machine_tile(16, 16, STEEL, STEEL_DK, (70, 190, 110, 255)), 16, 16)

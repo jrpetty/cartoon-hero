@@ -59,6 +59,7 @@ hoppers and chests, production is hands-free. Before that, you interact by hand:
 | **Rancher** | — (new) | Breeds penned animals with feed and culls the excess for drops. |
 | **XP Collector** | — (new) | Vacuums experience orbs into **XP Shards** (right-click a shard for 7 XP). |
 | **Sentry** | — (new) | Powered turret that zaps the nearest hostile mob in range. |
+| **Drone Bay** | — (new) | Dispatches a flying **Courier Drone** entity that physically ferries its contents to a linked bay. Link two bays with the Logistics Wrench. |
 
 New tools/items: **Logic Circuit**, **XP Shard**, **Powered Drill** (runs on charge, never wears out), **Portable Charger** (carries energy and auto-tops-up powered tools — right-click a power block to fill it).
 

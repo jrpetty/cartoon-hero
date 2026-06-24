@@ -52,6 +52,7 @@ public final class ModItemGroups {
 			entries.add(ModBlocks.FLUID_PUMP);
 			entries.add(ModBlocks.CONVEYOR);
 			entries.add(ModBlocks.DRAWER);
+			entries.add(ModBlocks.DRONE_BAY);
 			entries.add(ModBlocks.ROUTER);
 			entries.add(ModBlocks.SORTER);
 			entries.add(ModBlocks.VOID);

@@ -103,6 +103,7 @@ public final class FabricatorRecipes {
 		add(ModBlocks.SENTRY.asItem(), 1, ModItems.MACHINE_FRAME, 1, ModItems.LOGIC_CIRCUIT, 1, Items.IRON_INGOT, 2);
 		add(ModBlocks.TREE_FARM.asItem(), 1, ModItems.MACHINE_FRAME, 1, ModItems.IRON_GEAR, 1, Items.OAK_LOG, 2);
 		add(ModBlocks.ROUTER.asItem(), 1, ModItems.MACHINE_FRAME, 1, Items.HOPPER, 1, Items.REDSTONE, 2);
+		add(ModBlocks.DRONE_BAY.asItem(), 1, ModItems.MACHINE_FRAME, 1, ModItems.LOGIC_CIRCUIT, 1, Items.HOPPER, 1);
 		add(ModBlocks.SORTER.asItem(), 1, ModItems.MACHINE_FRAME, 1, Items.HOPPER, 2, Items.REDSTONE, 1);
 		add(ModBlocks.CONVEYOR.asItem(), 4, Items.IRON_INGOT, 1, Items.REDSTONE, 1);
 		add(ModBlocks.DRAWER.asItem(), 1, ModItems.MACHINE_FRAME, 1, Items.CHEST, 1, Items.GLASS, 1);

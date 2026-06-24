@@ -27,6 +27,7 @@
 		"automata:harvester",
 		"automata:tree_farm",
 		"automata:sentry",
-		"automata:rancher"
+		"automata:rancher",
+		"automata:drone_bay"
 	]
 }

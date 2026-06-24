@@ -41,5 +41,7 @@
 	"item.automata.powered_drill": "Powered Drill",
 	"item.automata.portable_charger": "Portable Charger",
 	"block.automata.sentry": "Sentry",
-	"block.automata.rancher": "Rancher"
+	"block.automata.rancher": "Rancher",
+	"block.automata.drone_bay": "Drone Bay",
+	"entity.automata.courier_drone": "Courier Drone"
 }

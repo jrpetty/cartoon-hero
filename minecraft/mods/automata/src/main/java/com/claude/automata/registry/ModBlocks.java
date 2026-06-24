@@ -10,6 +10,7 @@ import com.claude.automata.block.ConduitBlock;
 import com.claude.automata.block.ConveyorBlock;
 import com.claude.automata.block.CrusherBlock;
 import com.claude.automata.block.DrawerBlock;
+import com.claude.automata.block.DroneBayBlock;
 import com.claude.automata.block.FabricatorBlock;
 import com.claude.automata.block.FluidPumpBlock;
 import com.claude.automata.block.ForgeCoreBlock;
@@ -213,6 +214,13 @@ public final class ModBlocks {
 	public static final Block RANCHER = register("rancher",
 			new RancherBlock(AbstractBlock.Settings.create()
 					.mapColor(MapColor.PINK)
+					.strength(3.0f, 6.0f)
+					.requiresTool()
+					.sounds(BlockSoundGroup.METAL)));
+
+	public static final Block DRONE_BAY = register("drone_bay",
+			new DroneBayBlock(AbstractBlock.Settings.create()
+					.mapColor(MapColor.CYAN)
 					.strength(3.0f, 6.0f)
 					.requiresTool()
 					.sounds(BlockSoundGroup.METAL)));

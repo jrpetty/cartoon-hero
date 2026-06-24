@@ -15,6 +15,7 @@ import com.claude.automata.block.entity.CircuitAssemblerBlockEntity;
 import com.claude.automata.block.entity.ConduitBlockEntity;
 import com.claude.automata.block.entity.ConveyorBlockEntity;
 import com.claude.automata.block.entity.DrawerBlockEntity;
+import com.claude.automata.block.entity.DroneBayBlockEntity;
 import com.claude.automata.block.entity.FluidPumpBlockEntity;
 import com.claude.automata.block.entity.MinerBlockEntity;
 import com.claude.automata.block.entity.PylonBlockEntity;
@@ -146,6 +147,11 @@ public final class ModBlockEntities {
 			Registries.BLOCK_ENTITY_TYPE,
 			Identifier.of(Automata.MOD_ID, "tree_farm"),
 			BlockEntityType.Builder.create(TreeFarmBlockEntity::new, ModBlocks.TREE_FARM).build());
+
+	public static final BlockEntityType<DroneBayBlockEntity> DRONE_BAY = Registry.register(
+			Registries.BLOCK_ENTITY_TYPE,
+			Identifier.of(Automata.MOD_ID, "drone_bay"),
+			BlockEntityType.Builder.create(DroneBayBlockEntity::new, ModBlocks.DRONE_BAY).build());
 
 	public static final BlockEntityType<XpCollectorBlockEntity> XP_COLLECTOR = Registry.register(
 			Registries.BLOCK_ENTITY_TYPE,
