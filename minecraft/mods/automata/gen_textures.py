@@ -234,6 +234,11 @@ write_png(BASE / "block/recycler.png",
           generator_face(16, 16, (130, 70, 60, 255), (70, 34, 30, 255), (210, 200, 200, 255)), 16, 16)
 write_png(BASE / "block/fluid_pump.png",
           machine_tile(16, 16, (70, 150, 160, 255), (35, 80, 90, 255), (160, 220, 230, 255)), 16, 16)
+# Sentry: red turret with a glowing eye. Rancher: pink machine.
+write_png(BASE / "block/sentry.png",
+          generator_face(16, 16, STEEL_DK, (40, 44, 50, 255), (240, 70, 60, 255)), 16, 16)
+write_png(BASE / "block/rancher.png",
+          machine_tile(16, 16, (200, 150, 170, 255), (140, 90, 110, 255), (240, 210, 220, 255)), 16, 16)
 # Harvester: green machine with a blade. Tree Farm: brown/green machine.
 write_png(BASE / "block/harvester.png",
           machine_tile(16, 16, (90, 160, 80, 255), (50, 100, 45, 255), (200, 220, 120, 255)), 16, 16)

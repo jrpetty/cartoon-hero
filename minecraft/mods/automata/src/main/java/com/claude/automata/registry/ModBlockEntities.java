@@ -20,8 +20,10 @@ import com.claude.automata.block.entity.MinerBlockEntity;
 import com.claude.automata.block.entity.PylonBlockEntity;
 import com.claude.automata.block.entity.RecyclerBlockEntity;
 import com.claude.automata.block.entity.RouterBlockEntity;
+import com.claude.automata.block.entity.RancherBlockEntity;
 import com.claude.automata.block.entity.SawmillBlockEntity;
 import com.claude.automata.block.entity.SolarArrayBlockEntity;
+import com.claude.automata.block.entity.SentryBlockEntity;
 import com.claude.automata.block.entity.SorterBlockEntity;
 import com.claude.automata.block.entity.ThermalGeneratorBlockEntity;
 import com.claude.automata.block.entity.VoidBlockEntity;
@@ -124,6 +126,16 @@ public final class ModBlockEntities {
 			Registries.BLOCK_ENTITY_TYPE,
 			Identifier.of(Automata.MOD_ID, "conduit"),
 			BlockEntityType.Builder.create(ConduitBlockEntity::new, ModBlocks.CONDUIT).build());
+
+	public static final BlockEntityType<SentryBlockEntity> SENTRY = Registry.register(
+			Registries.BLOCK_ENTITY_TYPE,
+			Identifier.of(Automata.MOD_ID, "sentry"),
+			BlockEntityType.Builder.create(SentryBlockEntity::new, ModBlocks.SENTRY).build());
+
+	public static final BlockEntityType<RancherBlockEntity> RANCHER = Registry.register(
+			Registries.BLOCK_ENTITY_TYPE,
+			Identifier.of(Automata.MOD_ID, "rancher"),
+			BlockEntityType.Builder.create(RancherBlockEntity::new, ModBlocks.RANCHER).build());
 
 	public static final BlockEntityType<HarvesterBlockEntity> HARVESTER = Registry.register(
 			Registries.BLOCK_ENTITY_TYPE,

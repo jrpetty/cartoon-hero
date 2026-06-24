@@ -52,6 +52,15 @@ hoppers and chests, production is hands-free. Before that, you interact by hand:
 | **Conveyor Belt** | — (new) | A flat, directional block that carries **items, mobs and players** in the direction it faces. Place it facing the way you want things to travel and chain them into lines. Needs no power. |
 | **Mass Storage Drawer** | — (new) | Holds a huge stack (up to 4096) of a **single** item type, bound to the first item it receives. Hopper-compatible; right-click for a readout, with an item to deposit, empty-handed to withdraw. |
 | **Void Hatch** | — (new) | Destroys any item inserted (hopper or hand), so overflow lines never back up. |
+| **Circuit Assembler** | — (new) | Four-input machine that builds **Logic Circuits**, the component gating higher-tier machines. |
+| **Block Breaker / Placer** | — (new) | Directional primitives: break the block they face (drops to output) or place one from their input. |
+| **Harvester** | — (new) | Reaps mature crops in a 9×9 area and replants them. |
+| **Tree Farm** | — (new) | Plants saplings on surrounding dirt and chops the grown logs. |
+| **Rancher** | — (new) | Breeds penned animals with feed and culls the excess for drops. |
+| **XP Collector** | — (new) | Vacuums experience orbs into **XP Shards** (right-click a shard for 7 XP). |
+| **Sentry** | — (new) | Powered turret that zaps the nearest hostile mob in range. |
+
+New tools/items: **Logic Circuit**, **XP Shard**, **Powered Drill** (runs on charge, never wears out), **Portable Charger** (carries energy and auto-tops-up powered tools — right-click a power block to fill it).
 
 The processing and gathering machines share Automata's signature rhythm: they
 work unpowered but slowly, and run several times faster (or reach further) when

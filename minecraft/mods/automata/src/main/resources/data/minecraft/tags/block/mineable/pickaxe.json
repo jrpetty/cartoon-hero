@@ -25,6 +25,8 @@
 		"automata:block_placer",
 		"automata:xp_collector",
 		"automata:harvester",
-		"automata:tree_farm"
+		"automata:tree_farm",
+		"automata:sentry",
+		"automata:rancher"
 	]
 }

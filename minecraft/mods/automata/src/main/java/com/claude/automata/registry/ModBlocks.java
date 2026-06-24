@@ -19,8 +19,10 @@ import com.claude.automata.block.MinerBlock;
 import com.claude.automata.block.PylonBlock;
 import com.claude.automata.block.RecyclerBlock;
 import com.claude.automata.block.RouterBlock;
+import com.claude.automata.block.RancherBlock;
 import com.claude.automata.block.SawmillBlock;
 import com.claude.automata.block.SolarArrayBlock;
+import com.claude.automata.block.SentryBlock;
 import com.claude.automata.block.SorterBlock;
 import com.claude.automata.block.ThermalGeneratorBlock;
 import com.claude.automata.block.TreeFarmBlock;
@@ -196,6 +198,21 @@ public final class ModBlocks {
 	public static final Block TREE_FARM = register("tree_farm",
 			new TreeFarmBlock(AbstractBlock.Settings.create()
 					.mapColor(MapColor.GREEN)
+					.strength(3.0f, 6.0f)
+					.requiresTool()
+					.sounds(BlockSoundGroup.METAL)));
+
+	public static final Block SENTRY = register("sentry",
+			new SentryBlock(AbstractBlock.Settings.create()
+					.mapColor(MapColor.RED)
+					.strength(3.5f, 6.0f)
+					.requiresTool()
+					.luminance(state -> 5)
+					.sounds(BlockSoundGroup.METAL)));
+
+	public static final Block RANCHER = register("rancher",
+			new RancherBlock(AbstractBlock.Settings.create()
+					.mapColor(MapColor.PINK)
 					.strength(3.0f, 6.0f)
 					.requiresTool()
 					.sounds(BlockSoundGroup.METAL)));
