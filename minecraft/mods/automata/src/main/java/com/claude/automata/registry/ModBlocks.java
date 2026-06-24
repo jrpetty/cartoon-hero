@@ -3,7 +3,9 @@ package com.claude.automata.registry;
 import com.claude.automata.Automata;
 import com.claude.automata.block.CapacitorBlock;
 import com.claude.automata.block.CollectorBlock;
+import com.claude.automata.block.ConveyorBlock;
 import com.claude.automata.block.CrusherBlock;
+import com.claude.automata.block.DrawerBlock;
 import com.claude.automata.block.FabricatorBlock;
 import com.claude.automata.block.FluidPumpBlock;
 import com.claude.automata.block.ForgeCoreBlock;
@@ -15,6 +17,7 @@ import com.claude.automata.block.SawmillBlock;
 import com.claude.automata.block.SolarArrayBlock;
 import com.claude.automata.block.SorterBlock;
 import com.claude.automata.block.ThermalGeneratorBlock;
+import com.claude.automata.block.VoidBlock;
 import net.minecraft.block.AbstractBlock;
 import net.minecraft.block.Block;
 import net.minecraft.block.MapColor;
@@ -130,6 +133,26 @@ public final class ModBlocks {
 	public static final Block FLUID_PUMP = register("fluid_pump",
 			new FluidPumpBlock(AbstractBlock.Settings.create()
 					.mapColor(MapColor.CYAN)
+					.strength(3.0f, 6.0f)
+					.requiresTool()
+					.sounds(BlockSoundGroup.METAL)));
+
+	public static final Block CONVEYOR = register("conveyor",
+			new ConveyorBlock(AbstractBlock.Settings.create()
+					.mapColor(MapColor.GRAY)
+					.strength(1.5f)
+					.sounds(BlockSoundGroup.METAL)
+					.nonOpaque()));
+
+	public static final Block DRAWER = register("drawer",
+			new DrawerBlock(AbstractBlock.Settings.create()
+					.mapColor(MapColor.BROWN)
+					.strength(2.5f)
+					.sounds(BlockSoundGroup.WOOD)));
+
+	public static final Block VOID = register("void_hatch",
+			new VoidBlock(AbstractBlock.Settings.create()
+					.mapColor(MapColor.BLACK)
 					.strength(3.0f, 6.0f)
 					.requiresTool()
 					.sounds(BlockSoundGroup.METAL)));

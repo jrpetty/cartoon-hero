@@ -14,6 +14,9 @@
 		"automata:thermal_generator",
 		"automata:capacitor",
 		"automata:recycler",
-		"automata:fluid_pump"
+		"automata:fluid_pump",
+		"automata:conveyor",
+		"automata:drawer",
+		"automata:void_hatch"
 	]
 }

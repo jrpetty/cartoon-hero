@@ -120,6 +120,44 @@ def generator_face(w, h, body, dark, vent):
     return px
 
 
+def belt(w, h, base, dark, arrow):
+    """A conveyor surface with chevrons pointing toward -Z (top of texture)."""
+    px = []
+    for y in range(h):
+        for x in range(w):
+            # horizontal tread lines
+            c = base if (y % 4 != 0) else dark
+            # two chevrons pointing up
+            for cy in (4, 10):
+                if abs(x - 8) == (y - cy) and 0 <= (y - cy) <= 4:
+                    c = arrow
+            px.append(c)
+    return px
+
+
+def drawer_face(w, h, wood, dark, glass):
+    """A wooden drawer with a glass readout window in the centre."""
+    px = []
+    for y in range(h):
+        for x in range(w):
+            if x == 0 or y == 0 or x == w - 1 or y == h - 1:
+                px.append(dark)
+            elif 4 <= x < w - 4 and 5 <= y < h - 5:
+                px.append(glass)
+            else:
+                px.append(wood)
+    return px
+
+
+def hazard(w, h, a, b):
+    """Diagonal hazard stripes (for the void hatch)."""
+    px = []
+    for y in range(h):
+        for x in range(w):
+            px.append(a if ((x + y) // 3) % 2 == 0 else b)
+    return px
+
+
 def multitool(w, h, head, handle, dark, bg=(0, 0, 0, 0)):
     """A diagonal tool: metal head top-left, handle to bottom-right."""
     px = []
@@ -158,6 +196,13 @@ write_png(BASE / "block/crusher.png",
           generator_face(16, 16, STEEL, STEEL_DK, (35, 38, 44, 255)), 16, 16)
 write_png(BASE / "block/sawmill.png",
           machine_tile(16, 16, WOOD, (90, 64, 38, 255), STEEL), 16, 16)
+# Conveyor belt with direction chevrons; Drawer with a readout window; Void hazard stripes.
+write_png(BASE / "block/conveyor.png",
+          belt(16, 16, (60, 64, 70, 255), (40, 43, 48, 255), (235, 205, 70, 255)), 16, 16)
+write_png(BASE / "block/drawer.png",
+          drawer_face(16, 16, (140, 100, 60, 255), (90, 64, 38, 255), (120, 200, 220, 255)), 16, 16)
+write_png(BASE / "block/void_hatch.png",
+          hazard(16, 16, (30, 30, 34, 255), (210, 60, 60, 255)), 16, 16)
 # Recycler: red-tinted grinder. Fluid Pump: cyan body with a fluid port.
 write_png(BASE / "block/recycler.png",
           generator_face(16, 16, (130, 70, 60, 255), (70, 34, 30, 255), (210, 200, 200, 255)), 16, 16)

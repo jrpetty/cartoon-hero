@@ -7,6 +7,8 @@ import com.claude.automata.block.entity.FabricatorBlockEntity;
 import com.claude.automata.block.entity.ForgeCoreBlockEntity;
 import com.claude.automata.block.entity.GeneratorBlockEntity;
 import com.claude.automata.block.entity.CapacitorBlockEntity;
+import com.claude.automata.block.entity.ConveyorBlockEntity;
+import com.claude.automata.block.entity.DrawerBlockEntity;
 import com.claude.automata.block.entity.FluidPumpBlockEntity;
 import com.claude.automata.block.entity.MinerBlockEntity;
 import com.claude.automata.block.entity.RecyclerBlockEntity;
@@ -15,6 +17,7 @@ import com.claude.automata.block.entity.SawmillBlockEntity;
 import com.claude.automata.block.entity.SolarArrayBlockEntity;
 import com.claude.automata.block.entity.SorterBlockEntity;
 import com.claude.automata.block.entity.ThermalGeneratorBlockEntity;
+import com.claude.automata.block.entity.VoidBlockEntity;
 import net.minecraft.block.entity.BlockEntityType;
 import net.minecraft.registry.Registries;
 import net.minecraft.registry.Registry;
@@ -93,6 +96,21 @@ public final class ModBlockEntities {
 			Registries.BLOCK_ENTITY_TYPE,
 			Identifier.of(Automata.MOD_ID, "fluid_pump"),
 			BlockEntityType.Builder.create(FluidPumpBlockEntity::new, ModBlocks.FLUID_PUMP).build());
+
+	public static final BlockEntityType<ConveyorBlockEntity> CONVEYOR = Registry.register(
+			Registries.BLOCK_ENTITY_TYPE,
+			Identifier.of(Automata.MOD_ID, "conveyor"),
+			BlockEntityType.Builder.create(ConveyorBlockEntity::new, ModBlocks.CONVEYOR).build());
+
+	public static final BlockEntityType<DrawerBlockEntity> DRAWER = Registry.register(
+			Registries.BLOCK_ENTITY_TYPE,
+			Identifier.of(Automata.MOD_ID, "drawer"),
+			BlockEntityType.Builder.create(DrawerBlockEntity::new, ModBlocks.DRAWER).build());
+
+	public static final BlockEntityType<VoidBlockEntity> VOID = Registry.register(
+			Registries.BLOCK_ENTITY_TYPE,
+			Identifier.of(Automata.MOD_ID, "void_hatch"),
+			BlockEntityType.Builder.create(VoidBlockEntity::new, ModBlocks.VOID).build());
 
 	public static void register() {
 		Automata.LOGGER.info("[Automata] Registering block entities.");

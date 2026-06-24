@@ -49,6 +49,9 @@ hoppers and chests, production is hands-free. Before that, you interact by hand:
 | **Item Collector** | — (new) | Vacuums up dropped items in a radius into its output slots — the glue for tree/mob farms and Auto-Miner overflow. Radius 2 by hand, 5 when powered. |
 | **Logistics Router** | — (new) | Pulls items from an adjacent inventory and sends them to linked inventories **anywhere**, with an item filter and round-robin balancing. Replaces long hopper chains. Slow by hand, faster powered. |
 | **Item Sorter** | — (new) | Items in the **top**; matched items out the **bottom** (sorted), everything else out the **sides** (reject). Right-click with an item to add it to the sort list. Chain sorters to split a mixed stream into labeled chests. Slow by hand, faster powered. |
+| **Conveyor Belt** | — (new) | A flat, directional block that carries **items, mobs and players** in the direction it faces. Place it facing the way you want things to travel and chain them into lines. Needs no power. |
+| **Mass Storage Drawer** | — (new) | Holds a huge stack (up to 4096) of a **single** item type, bound to the first item it receives. Hopper-compatible; right-click for a readout, with an item to deposit, empty-handed to withdraw. |
+| **Void Hatch** | — (new) | Destroys any item inserted (hopper or hand), so overflow lines never back up. |
 
 The processing and gathering machines share Automata's signature rhythm: they
 work unpowered but slowly, and run several times faster (or reach further) when

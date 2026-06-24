@@ -1,0 +1,8 @@
+{
+	"variants": {
+		"facing=north": { "model": "automata:block/conveyor" },
+		"facing=east":  { "model": "automata:block/conveyor", "y": 90 },
+		"facing=south": { "model": "automata:block/conveyor", "y": 180 },
+		"facing=west":  { "model": "automata:block/conveyor", "y": 270 }
+	}
+}
