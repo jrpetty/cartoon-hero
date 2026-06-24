@@ -48,6 +48,10 @@ public abstract class MachineBlock extends BlockWithEntity {
 						+ " efficiency).").formatted(net.minecraft.util.Formatting.GREEN), false);
 				return ItemActionResult.SUCCESS;
 			}
+			if (machine.hasScreen() && player instanceof net.minecraft.server.network.ServerPlayerEntity serverPlayer) {
+				serverPlayer.openHandledScreen(machine);
+				return ItemActionResult.SUCCESS;
+			}
 			if (machine.insertFromPlayer(player, hand, stack)) {
 				return ItemActionResult.SUCCESS;
 			}
@@ -62,11 +66,13 @@ public abstract class MachineBlock extends BlockWithEntity {
 			return ActionResult.SUCCESS;
 		}
 		if (world.getBlockEntity(pos) instanceof MachineBlockEntity machine) {
-			// Sneak to pop installed upgrades back out; otherwise pull the output.
+			// Sneak pops installed upgrades; a screen machine opens its GUI; others pull output.
 			if (player.isSneaking() && machine.usesUpgrades()) {
 				for (ItemStack module : machine.removeUpgrades()) {
 					player.getInventory().offerOrDrop(module);
 				}
+			} else if (machine.hasScreen() && player instanceof net.minecraft.server.network.ServerPlayerEntity serverPlayer) {
+				serverPlayer.openHandledScreen(machine);
 			} else {
 				machine.extractToPlayer(player);
 			}

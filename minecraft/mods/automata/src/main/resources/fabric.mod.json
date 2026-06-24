@@ -17,6 +17,9 @@
 	"entrypoints": {
 		"main": [
 			"com.claude.automata.Automata"
+		],
+		"client": [
+			"com.claude.automata.client.AutomataClient"
 		]
 	},
 	"depends": {

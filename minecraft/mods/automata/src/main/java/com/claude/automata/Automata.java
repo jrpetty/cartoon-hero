@@ -6,6 +6,7 @@ import com.claude.automata.registry.ModBlockEntities;
 import com.claude.automata.registry.ModBlocks;
 import com.claude.automata.registry.ModItemGroups;
 import com.claude.automata.registry.ModItems;
+import com.claude.automata.screen.ModScreenHandlers;
 import net.fabricmc.api.ModInitializer;
 import net.fabricmc.fabric.api.event.player.UseBlockCallback;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents;
@@ -45,6 +46,7 @@ public class Automata implements ModInitializer {
 		ModItems.register();
 		ModBlocks.register();
 		ModBlockEntities.register();
+		ModScreenHandlers.register();
 		ModItemGroups.register();
 
 		// Logistics Wrench: link the selected Router to the inventory you click.

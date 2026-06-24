@@ -251,6 +251,65 @@ write_png(BASE / "item/logistics_wrench.png",
 write_png(BASE / "item/speed_upgrade.png", gear(16, 16, (90, 200, 235, 255), (40, 110, 150, 255)), 16, 16)
 write_png(BASE / "item/efficiency_upgrade.png", gear(16, 16, (235, 205, 90, 255), (150, 120, 40, 255)), 16, 16)
 
+# ---- Machine GUI (256x256): container background + progress-arrow strip ----
+def gen_machine_gui():
+    w = h = 256
+    img = [(0, 0, 0, 0)] * (w * h)
+
+    def px(x, y, c):
+        if 0 <= x < w and 0 <= y < h:
+            img[y * w + x] = c
+
+    def rect(x0, y0, x1, y1, c):
+        for yy in range(y0, y1):
+            for xx in range(x0, x1):
+                px(xx, yy, c)
+
+    panel = (198, 198, 198, 255)
+    light = (255, 255, 255, 255)
+    dark = (85, 85, 85, 255)
+    slot_bg = (139, 139, 139, 255)
+
+    bw, bh = 176, 166
+    # Main panel with a bevelled border.
+    rect(0, 0, bw, bh, panel)
+    rect(0, 0, bw, 1, light)
+    rect(0, 0, 1, bh, light)
+    rect(0, bh - 1, bw, bh, dark)
+    rect(bw - 1, 0, bw, bh, dark)
+
+    def slot(sx, sy):
+        rect(sx, sy, sx + 18, sy + 18, dark)
+        rect(sx + 1, sy + 1, sx + 17, sy + 17, slot_bg)
+
+    slot(55, 34)   # input  (addSlot 56,35)
+    slot(115, 34)  # output (addSlot 116,35)
+    for row in range(3):
+        for col in range(9):
+            slot(7 + col * 18, 83 + row * 18)
+    for col in range(9):
+        slot(7 + col * 18, 141)
+
+    def arrow_mask(ax, ay):
+        if 0 <= ax <= 15 and 6 <= ay <= 10:
+            return True
+        if 16 <= ax <= 23 and abs(ay - 8) <= (23 - ax):
+            return True
+        return False
+
+    # Empty arrow on the panel, filled arrow strip at u=176.
+    for ay in range(17):
+        for ax in range(24):
+            if arrow_mask(ax, ay):
+                px(79 + ax, 34 + ay, (160, 160, 160, 255))
+                px(176 + ax, 0 + ay, (230, 150, 60, 255))
+
+    out = Path(__file__).parent / "src/main/resources/assets/automata/textures/gui/machine.png"
+    write_png(out, img, w, h)
+
+
+gen_machine_gui()
+
 # 128x128 mod icon — an orange-to-steel gradient with a gear stamped in.
 icon = []
 g = gear(128, 128, (235, 235, 240, 255), (180, 120, 90, 255), bg=None)

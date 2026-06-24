@@ -67,8 +67,12 @@ machine** with the module:
 - **Efficiency Upgrade** — −25% energy cost per module.
 
 Sneak-right-click the machine empty-handed to pop the modules back out; they
-also drop when the machine is broken. (A visual machine GUI with progress and
-energy bars is planned as a follow-up.)
+also drop when the machine is broken.
+
+**Machine GUI:** right-clicking a single-input/single-output processing machine
+(Forge Core, Crusher, Sawmill, Recycler) opens a screen with its input slot,
+output slot, and a progress arrow that fills as it works — install modules by
+right-clicking with them, or open the screen to move items by hand.
 
 ### Automating the world
 

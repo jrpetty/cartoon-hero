@@ -1,20 +1,28 @@
 package com.claude.automata.block.entity;
 
+import com.claude.automata.screen.MachineScreenHandler;
+import net.fabricmc.fabric.api.screenhandler.v1.ExtendedScreenHandlerFactory;
 import net.minecraft.block.BlockState;
 import net.minecraft.block.entity.BlockEntity;
 import net.minecraft.block.entity.BlockEntityType;
 import net.minecraft.entity.player.PlayerEntity;
+import net.minecraft.entity.player.PlayerInventory;
 import net.minecraft.inventory.Inventories;
 import net.minecraft.inventory.SidedInventory;
 import net.minecraft.item.Item;
 import net.minecraft.item.ItemStack;
 import net.minecraft.nbt.NbtCompound;
 import net.minecraft.registry.RegistryWrapper;
+import net.minecraft.screen.PropertyDelegate;
+import net.minecraft.screen.ScreenHandler;
+import net.minecraft.server.network.ServerPlayerEntity;
+import net.minecraft.text.Text;
 import net.minecraft.util.Hand;
 import net.minecraft.util.collection.DefaultedList;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.Direction;
 import net.minecraft.world.World;
+import org.jetbrains.annotations.Nullable;
 
 /**
  * Shared behaviour for Automata's machines.
@@ -28,12 +36,33 @@ import net.minecraft.world.World;
  * <p>Subclasses define the slot layout, what counts as valid input, and the
  * per-tick processing in {@link #tick(World, BlockPos, BlockState)}.
  */
-public abstract class MachineBlockEntity extends BlockEntity implements SidedInventory {
+public abstract class MachineBlockEntity extends BlockEntity
+		implements SidedInventory, ExtendedScreenHandlerFactory<BlockPos> {
 	public static final int MAX_UPGRADES = 3;
 	protected final DefaultedList<ItemStack> inventory;
 	protected int progress = 0;
 	protected int speedUpgrades = 0;
 	protected int efficiencyUpgrades = 0;
+
+	/** Syncs progress (0) and the per-operation max (1) to an open screen. */
+	private final PropertyDelegate propertyDelegate = new PropertyDelegate() {
+		@Override
+		public int get(int index) {
+			return index == 0 ? progress : maxProgress();
+		}
+
+		@Override
+		public void set(int index, int value) {
+			if (index == 0) {
+				progress = value;
+			}
+		}
+
+		@Override
+		public int size() {
+			return 2;
+		}
+	};
 
 	protected MachineBlockEntity(BlockEntityType<?> type, BlockPos pos, BlockState state, int size) {
 		super(type, pos, state);
@@ -62,6 +91,33 @@ public abstract class MachineBlockEntity extends BlockEntity implements SidedInv
 	/** Whether this machine benefits from upgrade modules (processing machines do). */
 	public boolean usesUpgrades() {
 		return false;
+	}
+
+	/** Whether right-clicking opens a screen (the single-IO processing machines). */
+	public boolean hasScreen() {
+		return false;
+	}
+
+	public PropertyDelegate getPropertyDelegate() {
+		return propertyDelegate;
+	}
+
+	// ---- ExtendedScreenHandlerFactory ----
+
+	@Override
+	public BlockPos getScreenOpeningData(ServerPlayerEntity player) {
+		return pos;
+	}
+
+	@Override
+	public Text getDisplayName() {
+		return Text.translatable(getCachedState().getBlock().getTranslationKey());
+	}
+
+	@Nullable
+	@Override
+	public ScreenHandler createMenu(int syncId, PlayerInventory playerInventory, PlayerEntity player) {
+		return new MachineScreenHandler(syncId, playerInventory, pos);
 	}
 
 	/** Install a Speed/Efficiency module. Returns true if it was accepted. */

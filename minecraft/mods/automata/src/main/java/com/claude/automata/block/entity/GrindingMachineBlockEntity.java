@@ -37,6 +37,11 @@ public abstract class GrindingMachineBlockEntity extends MachineBlockEntity {
 		return true;
 	}
 
+	@Override
+	public boolean hasScreen() {
+		return true;
+	}
+
 	/** Unpowered ticks per operation; a powered machine advances {@value #POWERED_STEP}x faster. */
 	protected abstract int baseTicks();
 

@@ -35,6 +35,11 @@ public class ForgeCoreBlockEntity extends MachineBlockEntity {
 	}
 
 	@Override
+	public boolean hasScreen() {
+		return true;
+	}
+
+	@Override
 	protected int[] inputSlots() {
 		return INPUTS;
 	}
