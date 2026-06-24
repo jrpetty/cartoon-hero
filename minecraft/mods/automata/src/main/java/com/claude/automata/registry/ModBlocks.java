@@ -2,6 +2,7 @@ package com.claude.automata.registry;
 
 import com.claude.automata.Automata;
 import com.claude.automata.block.CapacitorBlock;
+import com.claude.automata.block.CircuitAssemblerBlock;
 import com.claude.automata.block.CollectorBlock;
 import com.claude.automata.block.ConduitBlock;
 import com.claude.automata.block.ConveyorBlock;
@@ -37,6 +38,13 @@ import net.minecraft.util.Identifier;
 public final class ModBlocks {
 	private ModBlocks() {
 	}
+
+	public static final Block CIRCUIT_ASSEMBLER = register("circuit_assembler",
+			new CircuitAssemblerBlock(AbstractBlock.Settings.create()
+					.mapColor(MapColor.LIME)
+					.strength(2.5f, 6.0f)
+					.requiresTool()
+					.sounds(BlockSoundGroup.METAL)));
 
 	public static final Block FABRICATOR = register("fabricator",
 			new FabricatorBlock(AbstractBlock.Settings.create()

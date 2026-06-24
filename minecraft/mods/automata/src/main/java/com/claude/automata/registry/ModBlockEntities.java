@@ -7,6 +7,7 @@ import com.claude.automata.block.entity.FabricatorBlockEntity;
 import com.claude.automata.block.entity.ForgeCoreBlockEntity;
 import com.claude.automata.block.entity.GeneratorBlockEntity;
 import com.claude.automata.block.entity.CapacitorBlockEntity;
+import com.claude.automata.block.entity.CircuitAssemblerBlockEntity;
 import com.claude.automata.block.entity.ConduitBlockEntity;
 import com.claude.automata.block.entity.ConveyorBlockEntity;
 import com.claude.automata.block.entity.DrawerBlockEntity;
@@ -123,6 +124,11 @@ public final class ModBlockEntities {
 			Registries.BLOCK_ENTITY_TYPE,
 			Identifier.of(Automata.MOD_ID, "pylon"),
 			BlockEntityType.Builder.create(PylonBlockEntity::new, ModBlocks.PYLON).build());
+
+	public static final BlockEntityType<CircuitAssemblerBlockEntity> CIRCUIT_ASSEMBLER = Registry.register(
+			Registries.BLOCK_ENTITY_TYPE,
+			Identifier.of(Automata.MOD_ID, "circuit_assembler"),
+			BlockEntityType.Builder.create(CircuitAssemblerBlockEntity::new, ModBlocks.CIRCUIT_ASSEMBLER).build());
 
 	public static void register() {
 		Automata.LOGGER.info("[Automata] Registering block entities.");

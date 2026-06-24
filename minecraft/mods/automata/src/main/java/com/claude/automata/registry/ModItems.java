@@ -41,6 +41,9 @@ public final class ModItems {
 	public static final Item SPEED_UPGRADE = register("speed_upgrade", new Item(new Item.Settings()));
 	public static final Item EFFICIENCY_UPGRADE = register("efficiency_upgrade", new Item(new Item.Settings()));
 
+	// Advanced component that gates higher-tier machines, made in the Circuit Assembler.
+	public static final Item LOGIC_CIRCUIT = register("logic_circuit", new Item(new Item.Settings()));
+
 	/**
 	 * The Pulsar Multi-Tool — one tool that mines like a pickaxe, axe, shovel and
 	 * hoe at the same time. A deliberate simplification of vanilla's tool zoo.

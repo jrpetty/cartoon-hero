@@ -33,6 +33,8 @@ public final class ModItemGroups {
 
 		ItemGroupEvents.modifyEntriesEvent(AUTOMATA_GROUP_KEY).register(entries -> {
 			entries.add(ModBlocks.FABRICATOR);
+			entries.add(ModBlocks.CIRCUIT_ASSEMBLER);
+			entries.add(ModItems.LOGIC_CIRCUIT);
 			entries.add(ModBlocks.FORGE_CORE);
 			entries.add(ModBlocks.GENERATOR);
 			entries.add(ModBlocks.THERMAL_GENERATOR);

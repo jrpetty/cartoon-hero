@@ -1,6 +1,8 @@
 {
 	"itemGroup.automata.automata": "Automata",
 	"block.automata.fabricator": "Fabricator",
+	"block.automata.circuit_assembler": "Circuit Assembler",
+	"item.automata.logic_circuit": "Logic Circuit",
 	"block.automata.forge_core": "Forge Core",
 	"block.automata.generator": "Combustion Dynamo",
 	"block.automata.thermal_generator": "Thermal Generator",

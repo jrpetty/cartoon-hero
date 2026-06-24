@@ -196,6 +196,11 @@ write_png(BASE / "block/crusher.png",
           generator_face(16, 16, STEEL, STEEL_DK, (35, 38, 44, 255)), 16, 16)
 write_png(BASE / "block/sawmill.png",
           machine_tile(16, 16, WOOD, (90, 64, 38, 255), STEEL), 16, 16)
+# Circuit Assembler: green board with traces. Logic Circuit item: green chip.
+write_png(BASE / "block/circuit_assembler.png",
+          machine_tile(16, 16, (40, 120, 70, 255), (20, 70, 40, 255), (210, 200, 120, 255)), 16, 16)
+write_png(BASE / "item/logic_circuit.png",
+          machine_tile(16, 16, (50, 140, 80, 255), (25, 80, 45, 255), (220, 200, 110, 255)), 16, 16)
 # Power Conduit: orange cable core. Power Pylon: blue emitter with a bright core.
 write_png(BASE / "block/conduit.png",
           machine_tile(16, 16, (200, 120, 60, 255), (120, 70, 35, 255), (240, 170, 90, 255)), 16, 16)

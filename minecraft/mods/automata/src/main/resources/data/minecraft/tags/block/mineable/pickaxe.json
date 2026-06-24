@@ -19,6 +19,7 @@
 		"automata:drawer",
 		"automata:void_hatch",
 		"automata:conduit",
-		"automata:pylon"
+		"automata:pylon",
+		"automata:circuit_assembler"
 	]
 }
