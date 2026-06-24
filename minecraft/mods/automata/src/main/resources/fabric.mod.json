@@ -1,0 +1,28 @@
+{
+	"schemaVersion": 1,
+	"id": "automata",
+	"version": "${version}",
+	"name": "Automata",
+	"description": "Reimagines Minecraft's core loop: the crafting table and furnace are replaced by self-running machines (Fabricator and Forge Core) you automate with hoppers. Made in Claude.",
+	"authors": [
+		"Claude"
+	],
+	"contact": {
+		"homepage": "https://github.com/jrpetty/cartoon-hero",
+		"sources": "https://github.com/jrpetty/cartoon-hero"
+	},
+	"license": "MIT",
+	"icon": "assets/automata/icon.png",
+	"environment": "*",
+	"entrypoints": {
+		"main": [
+			"com.claude.automata.Automata"
+		]
+	},
+	"depends": {
+		"fabricloader": ">=0.16.5",
+		"minecraft": "~1.21.1",
+		"java": ">=21",
+		"fabric-api": "*"
+	}
+}

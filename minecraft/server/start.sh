@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# start.sh — Launch the ClaudeCraft Fabric server.
+# start.sh — Launch the Automata Fabric server.
 #
 # Run ./setup.sh first. You must accept the Minecraft EULA before the server
 # will start (see the message setup.sh prints, or edit eula.txt to eula=true).

@@ -1,0 +1,7 @@
+{
+	"replace": false,
+	"values": [
+		"automata:fabricator",
+		"automata:forge_core"
+	]
+}

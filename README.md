@@ -2,12 +2,13 @@
 
 This project provides a minimal FastAPI backend and simple interface for tracking a FIFA-style league season, players and match results.
 
-## ClaudeCraft Minecraft server
+## Automata Minecraft server
 
-This repo also hosts **ClaudeCraft**, a Minecraft (Fabric 1.21.1) server that
-runs only mods written from scratch by Claude. See
-[`minecraft/README.md`](minecraft/README.md) for the mod, build, and server
-setup instructions.
+This repo also hosts **Automata**, a Minecraft (Fabric 1.21.1) server that runs
+only a mod written from scratch by Claude. It reimagines the core loop: the
+crafting table and furnace are replaced by self-running machines you automate
+with hoppers. See [`minecraft/README.md`](minecraft/README.md) for the design,
+build, and server setup instructions.
 
 ## Development
 

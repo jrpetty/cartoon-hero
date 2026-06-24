@@ -1,0 +1,20 @@
+{
+	"type": "minecraft:crafting_shaped",
+	"category": "building",
+	"pattern": [
+		"LL",
+		"CC"
+	],
+	"key": {
+		"L": {
+			"tag": "minecraft:logs"
+		},
+		"C": {
+			"item": "minecraft:cobblestone"
+		}
+	},
+	"result": {
+		"id": "automata:fabricator",
+		"count": 1
+	}
+}

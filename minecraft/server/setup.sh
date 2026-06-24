@@ -3,7 +3,7 @@
 # setup.sh — Provision a Minecraft server that runs ONLY mods made in Claude.
 #
 # It will:
-#   1. Build the ClaudeCraft mod from source (../mods/claudecraft).
+#   1. Build the Automata mod from source (../mods/automata).
 #   2. Download the Fabric server launcher for the target Minecraft version.
 #   3. Download Fabric API (the one runtime dependency the mod needs).
 #   4. Install the built mod + Fabric API into ./mods.
@@ -14,28 +14,28 @@
 # Usage:  ./setup.sh
 set -euo pipefail
 
-# ---- Versions (keep in sync with mods/claudecraft/gradle.properties) ----
+# ---- Versions (keep in sync with mods/automata/gradle.properties) ----
 MINECRAFT_VERSION="1.21.1"
 FABRIC_LOADER_VERSION="0.16.5"
 FABRIC_INSTALLER_VERSION="1.0.1"
 FABRIC_API_VERSION="0.105.0+1.21.1"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-MOD_DIR="$SCRIPT_DIR/../mods/claudecraft"
+MOD_DIR="$SCRIPT_DIR/../mods/automata"
 SERVER_DIR="$SCRIPT_DIR"
 MODS_TARGET="$SERVER_DIR/mods"
 
-echo "==> ClaudeCraft server setup"
+echo "==> Automata server setup"
 echo "    Minecraft   : $MINECRAFT_VERSION"
 echo "    Fabric loader: $FABRIC_LOADER_VERSION"
 echo "    Fabric API  : $FABRIC_API_VERSION"
 echo
 
 # ---- 1. Build the mod ----
-echo "==> Building ClaudeCraft mod..."
+echo "==> Building Automata mod..."
 (cd "$MOD_DIR" && ./gradlew --no-daemon build)
 
-BUILT_JAR="$(find "$MOD_DIR/build/libs" -maxdepth 1 -name 'claudecraft-*.jar' \
+BUILT_JAR="$(find "$MOD_DIR/build/libs" -maxdepth 1 -name 'automata-*.jar' \
 	! -name '*-sources.jar' | head -n1)"
 if [[ -z "$BUILT_JAR" ]]; then
 	echo "ERROR: could not find built mod jar in $MOD_DIR/build/libs" >&2
@@ -57,8 +57,8 @@ echo "==> Downloading Fabric API..."
 curl -fL --retry 4 -o "$FABRIC_API_JAR" "$FABRIC_API_URL"
 
 # ---- 4. Install the built mod ----
-echo "==> Installing ClaudeCraft into mods/..."
-rm -f "$MODS_TARGET"/claudecraft-*.jar
+echo "==> Installing Automata into mods/..."
+rm -f "$MODS_TARGET"/automata-*.jar
 cp "$BUILT_JAR" "$MODS_TARGET/"
 
 # ---- 5. server.properties (created once; not overwritten) ----
