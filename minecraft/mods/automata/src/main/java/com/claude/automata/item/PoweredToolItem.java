@@ -23,7 +23,8 @@ public class PoweredToolItem extends MiningToolItem {
 
 	public PoweredToolItem(ToolMaterial material, TagKey<Block> effectiveBlocks, float attackDamage,
 			float attackSpeed, int maxEnergy, int costPerBlock, Settings settings) {
-		super(material, effectiveBlocks, attackDamage, attackSpeed, settings);
+		super(material, effectiveBlocks,
+				settings.attributeModifiers(createAttributeModifiers(material, attackDamage, attackSpeed)));
 		this.maxEnergy = maxEnergy;
 		this.costPerBlock = costPerBlock;
 	}

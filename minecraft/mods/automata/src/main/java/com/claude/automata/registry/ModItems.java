@@ -69,8 +69,9 @@ public final class ModItems {
 	 * hoe at the same time. A deliberate simplification of vanilla's tool zoo.
 	 */
 	public static final Item PULSAR_MULTITOOL = register("pulsar_multitool",
-			new MiningToolItem(ToolMaterials.IRON, MULTITOOL_MINEABLE, 2.0f, -2.4f,
-					new Item.Settings().maxDamage(750)));
+			new MiningToolItem(ToolMaterials.IRON, MULTITOOL_MINEABLE,
+					new Item.Settings().maxDamage(750).attributeModifiers(
+							MiningToolItem.createAttributeModifiers(ToolMaterials.IRON, 2.0f, -2.4f))));
 
 	/**
 	 * A locked component with no recipe and no creative-tab entry. It exists only

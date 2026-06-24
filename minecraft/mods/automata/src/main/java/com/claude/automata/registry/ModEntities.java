@@ -2,7 +2,6 @@ package com.claude.automata.registry;
 
 import com.claude.automata.Automata;
 import com.claude.automata.entity.CourierDroneEntity;
-import net.minecraft.entity.EntityDimensions;
 import net.minecraft.entity.EntityType;
 import net.minecraft.entity.SpawnGroup;
 import net.minecraft.registry.Registries;
@@ -25,7 +24,7 @@ public final class ModEntities {
 	public static final EntityType<CourierDroneEntity> COURIER_DRONE = Registry.register(
 			Registries.ENTITY_TYPE, COURIER_DRONE_KEY,
 			EntityType.Builder.<CourierDroneEntity>create(CourierDroneEntity::new, SpawnGroup.MISC)
-					.dimensions(EntityDimensions.fixed(0.6f, 0.6f))
+					.dimensions(0.6f, 0.6f)
 					.build(COURIER_DRONE_KEY));
 
 	public static void register() {
