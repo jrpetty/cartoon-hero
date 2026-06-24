@@ -296,6 +296,13 @@ write_png(BASE / "item/powered_drill.png",
           multitool(16, 16, (90, 200, 235, 255), STEEL, (40, 110, 150, 255)), 16, 16)
 write_png(BASE / "item/portable_charger.png",
           drawer_face(16, 16, (50, 70, 110, 255), (25, 36, 60, 255), (120, 210, 240, 255)), 16, 16)
+# Drone batteries: tiered cells (copper / gold / diamond accents).
+write_png(BASE / "item/drone_battery.png",
+          drawer_face(16, 16, (70, 90, 80, 255), (35, 50, 42, 255), (200, 120, 80, 255)), 16, 16)
+write_png(BASE / "item/drone_battery_advanced.png",
+          drawer_face(16, 16, (70, 90, 80, 255), (35, 50, 42, 255), (235, 205, 90, 255)), 16, 16)
+write_png(BASE / "item/drone_battery_elite.png",
+          drawer_face(16, 16, (70, 90, 80, 255), (35, 50, 42, 255), (110, 230, 220, 255)), 16, 16)
 # Upgrade modules: gear-shaped circuit chips.
 write_png(BASE / "item/speed_upgrade.png", gear(16, 16, (90, 200, 235, 255), (40, 110, 150, 255)), 16, 16)
 write_png(BASE / "item/efficiency_upgrade.png", gear(16, 16, (235, 205, 90, 255), (150, 120, 40, 255)), 16, 16)

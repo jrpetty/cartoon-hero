@@ -43,5 +43,8 @@
 	"block.automata.sentry": "Sentry",
 	"block.automata.rancher": "Rancher",
 	"block.automata.drone_bay": "Drone Bay",
-	"entity.automata.courier_drone": "Courier Drone"
+	"entity.automata.courier_drone": "Courier Drone",
+	"item.automata.drone_battery": "Drone Battery",
+	"item.automata.drone_battery_advanced": "Advanced Drone Battery",
+	"item.automata.drone_battery_elite": "Elite Drone Battery"
 }

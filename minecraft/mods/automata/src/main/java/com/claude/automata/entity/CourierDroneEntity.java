@@ -19,14 +19,19 @@ import net.minecraft.util.math.Vec3d;
 import net.minecraft.world.World;
 
 /**
- * A Courier Drone — a small flying entity dispatched by a Drone Bay to ferry a
- * payload of items to a destination bay, deposit them, and despawn. It flies in
- * a straight line (no clip, no gravity) toward its target.
+ * A Courier Drone — a flying cargo entity dispatched by a Drone Bay. It climbs
+ * to a cruise altitude (set at the bay), flies over the terrain to the
+ * destination bay, then descends, deposits its payload, and despawns.
  */
 public class CourierDroneEntity extends Entity {
-	private static final double SPEED = 0.35;
+	private static final double SPEED = 0.6;
+	private static final int PHASE_ASCEND = 0;
+	private static final int PHASE_CRUISE = 1;
+	private static final int PHASE_DESCEND = 2;
 
 	private BlockPos targetPos;
+	private int cruiseY = 220;
+	private int phase = PHASE_ASCEND;
 	private final List<ItemStack> payload = new ArrayList<>();
 
 	public CourierDroneEntity(EntityType<?> type, World world) {
@@ -35,8 +40,10 @@ public class CourierDroneEntity extends Entity {
 		setNoGravity(true);
 	}
 
-	public void setMission(BlockPos target, List<ItemStack> items) {
+	public void setMission(BlockPos target, int cruiseAltitude, List<ItemStack> items) {
 		this.targetPos = target.toImmutable();
+		this.cruiseY = Math.min(cruiseAltitude, getWorld().getTopY() - 2);
+		this.phase = PHASE_ASCEND;
 		payload.clear();
 		for (ItemStack stack : items) {
 			if (!stack.isEmpty()) {
@@ -47,7 +54,6 @@ public class CourierDroneEntity extends Entity {
 
 	@Override
 	protected void initDataTracker(DataTracker.Builder builder) {
-		// No synced data — the client renders a generic drone at the tracked position.
 	}
 
 	@Override
@@ -61,17 +67,41 @@ public class CourierDroneEntity extends Entity {
 			return;
 		}
 
-		Vec3d goal = Vec3d.ofCenter(targetPos).add(0, 0.6, 0);
 		Vec3d here = getPos();
+		double destX = targetPos.getX() + 0.5;
+		double destZ = targetPos.getZ() + 0.5;
+		Vec3d goal;
+
+		switch (phase) {
+			case PHASE_ASCEND -> {
+				goal = new Vec3d(here.x, cruiseY, here.z);
+				if (here.y >= cruiseY - 0.5) {
+					phase = PHASE_CRUISE;
+				}
+			}
+			case PHASE_CRUISE -> {
+				goal = new Vec3d(destX, cruiseY, destZ);
+				double horiz = Math.hypot(here.x - destX, here.z - destZ);
+				if (horiz < 0.8) {
+					phase = PHASE_DESCEND;
+				}
+			}
+			default -> {
+				goal = new Vec3d(destX, targetPos.getY() + 0.6, destZ);
+				if (here.distanceTo(goal) < 0.8) {
+					deliver();
+					discard();
+					return;
+				}
+			}
+		}
+
 		Vec3d diff = goal.subtract(here);
 		double dist = diff.length();
-		if (dist < 0.8) {
-			deliver();
-			discard();
-			return;
+		if (dist > 1.0e-4) {
+			Vec3d step = diff.normalize().multiply(Math.min(SPEED, dist));
+			setPosition(here.x + step.x, here.y + step.y, here.z + step.z);
 		}
-		Vec3d step = diff.normalize().multiply(Math.min(SPEED, dist));
-		setPosition(here.x + step.x, here.y + step.y, here.z + step.z);
 	}
 
 	private void deliver() {
@@ -91,6 +121,8 @@ public class CourierDroneEntity extends Entity {
 	@Override
 	protected void readCustomDataFromNbt(NbtCompound nbt) {
 		targetPos = nbt.contains("Target") ? BlockPos.fromLong(nbt.getLong("Target")) : null;
+		cruiseY = nbt.getInt("CruiseY");
+		phase = nbt.getInt("Phase");
 		payload.clear();
 		NbtList list = nbt.getList("Payload", NbtElement.COMPOUND_TYPE);
 		for (int i = 0; i < list.size(); i++) {
@@ -103,6 +135,8 @@ public class CourierDroneEntity extends Entity {
 		if (targetPos != null) {
 			nbt.putLong("Target", targetPos.asLong());
 		}
+		nbt.putInt("CruiseY", cruiseY);
+		nbt.putInt("Phase", phase);
 		NbtList list = new NbtList();
 		for (ItemStack stack : payload) {
 			if (!stack.isEmpty()) {
@@ -112,11 +146,10 @@ public class CourierDroneEntity extends Entity {
 		nbt.put("Payload", list);
 	}
 
-	/** Convenience factory used by the Drone Bay. */
-	public static CourierDroneEntity create(World world, Vec3d pos, BlockPos target, List<ItemStack> items) {
+	public static CourierDroneEntity create(World world, Vec3d pos, BlockPos target, int cruiseY, List<ItemStack> items) {
 		CourierDroneEntity drone = new CourierDroneEntity(ModEntities.COURIER_DRONE, world);
 		drone.setPosition(pos.x, pos.y, pos.z);
-		drone.setMission(target, items);
+		drone.setMission(target, cruiseY, items);
 		return drone;
 	}
 }

@@ -130,6 +130,10 @@ public final class FabricatorRecipes {
 		// --- Charged gear (gated behind the Logic Circuit) ---
 		add(ModItems.POWERED_DRILL, 1, ModItems.MACHINE_FRAME, 1, ModItems.LOGIC_CIRCUIT, 1, Items.IRON_INGOT, 2);
 		add(ModItems.PORTABLE_CHARGER, 1, ModItems.LOGIC_CIRCUIT, 1, ModItems.COPPER_DUST, 2, Items.REDSTONE, 4);
+		// --- Drone Bay batteries (range tiers) ---
+		add(ModItems.DRONE_BATTERY, 1, Items.COPPER_INGOT, 2, Items.REDSTONE, 2, ModItems.LOGIC_CIRCUIT, 1);
+		add(ModItems.DRONE_BATTERY_ADVANCED, 1, Items.GOLD_INGOT, 2, Items.REDSTONE, 4, ModItems.LOGIC_CIRCUIT, 1);
+		add(ModItems.DRONE_BATTERY_ELITE, 1, Items.DIAMOND, 1, Items.REDSTONE, 4, ModItems.LOGIC_CIRCUIT, 2);
 	}
 
 	/**

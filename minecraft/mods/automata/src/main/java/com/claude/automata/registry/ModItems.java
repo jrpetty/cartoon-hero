@@ -57,6 +57,13 @@ public final class ModItems {
 			new com.claude.automata.item.PoweredToolItem(ToolMaterials.IRON, MULTITOOL_MINEABLE, 3.0f, -2.6f,
 					20000, 20, new Item.Settings().maxCount(1)));
 
+	// Drone Bay batteries — set the drone's range. Install by right-clicking the bay.
+	public static final Item DRONE_BATTERY = register("drone_battery", new Item(new Item.Settings().maxCount(1)));
+	public static final Item DRONE_BATTERY_ADVANCED =
+			register("drone_battery_advanced", new Item(new Item.Settings().maxCount(1)));
+	public static final Item DRONE_BATTERY_ELITE =
+			register("drone_battery_elite", new Item(new Item.Settings().maxCount(1)));
+
 	/**
 	 * The Pulsar Multi-Tool — one tool that mines like a pickaxe, axe, shovel and
 	 * hoe at the same time. A deliberate simplification of vanilla's tool zoo.

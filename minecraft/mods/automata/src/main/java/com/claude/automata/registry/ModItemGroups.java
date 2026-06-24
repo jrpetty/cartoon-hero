@@ -74,6 +74,9 @@ public final class ModItemGroups {
 			entries.add(ModItems.PULSAR_MULTITOOL);
 			entries.add(ModItems.POWERED_DRILL);
 			entries.add(ModItems.PORTABLE_CHARGER);
+			entries.add(ModItems.DRONE_BATTERY);
+			entries.add(ModItems.DRONE_BATTERY_ADVANCED);
+			entries.add(ModItems.DRONE_BATTERY_ELITE);
 		});
 	}
 }
