@@ -25,7 +25,7 @@ public final class ModEntities {
 			Registries.ENTITY_TYPE, COURIER_DRONE_KEY,
 			EntityType.Builder.<CourierDroneEntity>create(CourierDroneEntity::new, SpawnGroup.MISC)
 					.dimensions(0.6f, 0.6f)
-					.build(COURIER_DRONE_KEY));
+					.build("courier_drone"));
 
 	public static void register() {
 		Automata.LOGGER.info("[Automata] Registering entities.");
