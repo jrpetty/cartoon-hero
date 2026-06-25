@@ -43,6 +43,21 @@ export function openPreview(site) {
   }
 }
 
+/* Publish to a live, shareable URL via the backend. Returns {id, url, qr}.
+ * Reuses the site's previous publish id so the link stays stable. */
+export async function publishSite(site) {
+  const html = renderDocument(site);
+  const res = await fetch("/api/publish", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ html, name: site.meta.businessName, id: site._publishId || null }),
+  });
+  if (!res.ok) throw new Error("Publish failed (" + res.status + ")");
+  const data = await res.json();
+  site._publishId = data.id; // remember for stable re-publishing
+  return data;
+}
+
 export async function copyHtml(site) {
   const doc = renderDocument(site);
   try {
