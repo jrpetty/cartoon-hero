@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PitchSite — build a client's website live, on the call</title>
+<meta name="description" content="Describe a business in plain English and instantly generate a clean, ready-to-ship one-page website. Built for sales calls.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%E2%9A%A1%3C/text%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap">
+<link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+
+<div class="topbar">
+  <div class="brand"><span class="dot">⚡</span> PitchSite <small>live website builder</small></div>
+  <div class="topbar__project"><input id="project-name" placeholder="Untitled project" aria-label="Project name"></div>
+  <div class="topbar__spacer"></div>
+  <div class="statuschip local" id="status-chip"><span class="led"></span><span>Checking…</span></div>
+  <button class="tbtn" id="act-new" title="New blank project">＋ New</button>
+  <button class="tbtn" id="act-sample" title="Load example">Example</button>
+  <button class="tbtn" id="act-open">Open</button>
+  <button class="tbtn" id="act-save">Save</button>
+  <div class="menu" id="export-menu">
+    <button class="tbtn tbtn--primary" id="export-btn">Export ▾</button>
+    <div class="menu__pop">
+      <button id="act-export-html">⬇️ Download website (.html)</button>
+      <button id="act-open-tab">🔍 Open full preview in new tab</button>
+      <button id="act-copy">📋 Copy site HTML</button>
+      <hr>
+      <button id="act-export-json">💾 Save project file (.json)</button>
+      <button id="act-import">📂 Import project file…</button>
+    </div>
+  </div>
+</div>
+
+<div class="workspace">
+  <!-- LEFT: editor -->
+  <aside class="panel">
+    <div class="prompt" id="prompt">
+      <h2>🎤 Describe the business</h2>
+      <p class="hint">Paste your sales-call notes. Name, trade, tone, phone, even image links — it builds the whole page.</p>
+      <textarea id="prompt-text" placeholder="e.g. Cosy family-run Italian restaurant in Soho, open since 1985. Warm and traditional. Phone 020 7123 4567. Wants a menu, reviews and a booking button."></textarea>
+      <div class="prompt__row">
+        <button class="tbtn tbtn--primary" id="gen-btn">✨ Generate site</button>
+      </div>
+      <div class="chips">
+        <button class="chip" data-prompt="Family-run plumbing & heating company, 15 years experience, 24/7 emergency callouts, Gas Safe registered. Friendly and reliable. Phone 0800 123 456.">Plumber</button>
+        <button class="chip" data-prompt="Modern hair salon and barber in the city centre. Stylish, premium feel. Online booking, expert colour and cuts. Walk-ins welcome.">Salon</button>
+        <button class="chip" data-prompt="Boutique gym and personal training studio. Bold and motivating. Group classes, 1-to-1 coaching, first class free.">Gym</button>
+        <button class="chip" data-prompt="Independent accountancy practice for small businesses. Trustworthy and professional. Free first consultation.">Accountant</button>
+        <button class="chip" data-prompt="Cosy artisan coffee shop and bakery. Warm, welcoming, locally sourced. All-day brunch.">Café</button>
+      </div>
+      <div class="gen-notes" id="gen-notes"></div>
+    </div>
+    <div class="sections" id="sections"></div>
+  </aside>
+
+  <!-- RIGHT: preview -->
+  <section class="preview">
+    <div class="preview__bar">
+      <div class="devices">
+        <button data-dev="desktop" class="active">🖥 Desktop</button>
+        <button data-dev="tablet">📱 Tablet</button>
+        <button data-dev="mobile">📲 Mobile</button>
+      </div>
+      <div class="url" id="preview-url">live preview · updates as you type</div>
+      <button class="tbtn" id="mobile-toggle" title="Toggle panel/preview">⇄</button>
+    </div>
+    <div class="preview__stage">
+      <div class="frame-wrap desktop" id="frame-wrap">
+        <iframe id="preview-frame" title="Website preview"></iframe>
+      </div>
+    </div>
+  </section>
+</div>
+
+<div class="modal" id="modal">
+  <div class="modal__card">
+    <div class="modal__head"><h3>Saved projects</h3><button class="iconbtn" id="modal-close">✕</button></div>
+    <div class="modal__body" id="modal-body"></div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script type="module" src="js/main.js"></script>
+</body>
+</html>
