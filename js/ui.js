@@ -8,6 +8,7 @@ import {
 import { THEMES, THEME_KEYS, resolveTheme } from "./themes.js";
 import { renderDocument, SECTION_LABELS } from "./render.js";
 import { generate, probeBackend, getHealth } from "./ai.js";
+import { STOCK, STOCK_KEYS, suggestCategory, photosFor } from "./stock.js";
 import { exportHtml, exportProject, openPreview, copyHtml, publishSite } from "./export.js";
 
 let site = sampleSite();
@@ -145,13 +146,15 @@ function imageField(label, path) {
     file.value = "";
   });
   const upload = el("button", { class: "iconbtn", title: "Upload image", text: "⬆", onclick: () => file.click() });
+  const suggest = el("button", { class: "iconbtn", title: "Suggest a stock photo", text: "💡", onclick: () =>
+    openStockPicker((url) => { set(path, url); input.value = url; input.disabled = false; paintThumb(); schedulePreview(); }) });
   const clear = el("button", { class: "iconbtn danger", title: "Remove image", text: "✕", onclick: () => {
     set(path, ""); input.value = ""; input.disabled = false; paintThumb(); schedulePreview();
   }});
   paintThumb();
   return el("div", { class: "field" }, [
     el("label", { text: label }),
-    el("div", { class: "imgrow" }, [input, upload, clear, file]),
+    el("div", { class: "imgrow" }, [input, suggest, upload, clear, file]),
     thumb,
   ]);
 }
@@ -235,13 +238,15 @@ function itemImageField(item, key, label) {
     file.value = "";
   });
   const upload = el("button", { class: "iconbtn", title: "Upload", text: "⬆", onclick: () => file.click() });
+  const suggest = el("button", { class: "iconbtn", title: "Suggest a stock photo", text: "💡", onclick: () =>
+    openStockPicker((url) => { item[key] = url; input.value = url; input.disabled = false; paint(); schedulePreview(); }) });
   const clear = el("button", { class: "iconbtn danger", title: "Remove", text: "✕", onclick: () => {
     item[key] = ""; input.value = ""; input.disabled = false; paint(); schedulePreview();
   }});
   paint();
   return el("div", { class: "field" }, [
     el("label", { text: label }),
-    el("div", { class: "imgrow" }, [input, upload, clear, file]),
+    el("div", { class: "imgrow" }, [input, suggest, upload, clear, file]),
     thumb,
   ]);
 }
@@ -639,7 +644,9 @@ function galleryUpload() {
     if (added) { site.gallery.enabled = true; buildSections(); schedulePreview(); toast(`Added ${added} image${added > 1 ? "s" : ""} ✅`); }
   });
   const btn = el("button", { class: "addbtn", text: "⬆ Upload photos from this device", onclick: () => file.click() });
-  return el("div", { class: "field" }, [btn, file]);
+  const suggest = el("button", { class: "addbtn", text: "💡 Add suggested stock photos", onclick: () =>
+    openStockPicker((url) => { site.gallery.images.push(url); site.gallery.enabled = true; buildSections(); schedulePreview(); }, { multi: true }) });
+  return el("div", { class: "field" }, [btn, suggest, file]);
 }
 
 /* string-array element editor */
@@ -830,6 +837,41 @@ async function handlePublish() {
 }
 function closePubModal() { document.getElementById("pub-modal").classList.remove("open"); }
 
+/* ---------- stock photo picker ---------- */
+function openStockPicker(onPick, { multi = false } = {}) {
+  const modal = document.getElementById("stock-modal");
+  const body = document.getElementById("stock-body");
+  let cat = suggestCategory(site.meta.industry || site.meta.businessName || "");
+  const grid = el("div", { class: "stock-grid" });
+  const paint = () => {
+    grid.innerHTML = "";
+    photosFor(cat).forEach((url) => {
+      const cell = el("button", { class: "stock-cell", title: "Use this photo", onclick: () => {
+        onPick(url);
+        toast("Photo added 🖼️");
+        if (!multi) closeStockModal();
+      }});
+      cell.style.backgroundImage = `url("${url}")`;
+      grid.appendChild(cell);
+    });
+  };
+  const sel = el("select", { class: "stock-cat" });
+  STOCK_KEYS.forEach((k) => {
+    const o = el("option", { value: k, text: STOCK[k].label });
+    if (k === cat) o.selected = true;
+    sel.appendChild(o);
+  });
+  sel.addEventListener("change", () => { cat = sel.value; paint(); });
+  body.innerHTML = "";
+  body.appendChild(el("p", { class: "pub-lead", text: "Royalty-free photos to use when your client has none to hand. Pick a category, then click a photo." }));
+  body.appendChild(el("div", { class: "field" }, [el("label", { text: "Category" }), sel]));
+  body.appendChild(grid);
+  if (multi) body.appendChild(el("p", { class: "pub-qrhint", text: "Click several — they'll all be added. Close when done." }));
+  paint();
+  modal.classList.add("open");
+}
+function closeStockModal() { document.getElementById("stock-modal").classList.remove("open"); }
+
 function saveProject() {
   const def = site.meta.businessName || "Untitled";
   const name = prompt("Save project as:", def);
@@ -899,6 +941,8 @@ function wireTopbar() {
   document.getElementById("act-publish").onclick = handlePublish;
   document.getElementById("pub-close").onclick = closePubModal;
   document.getElementById("pub-modal").addEventListener("click", (e) => { if (e.target.id === "pub-modal") closePubModal(); });
+  document.getElementById("stock-close").onclick = closeStockModal;
+  document.getElementById("stock-modal").addEventListener("click", (e) => { if (e.target.id === "stock-modal") closeStockModal(); });
 
   // dropdown menu
   const menu = document.getElementById("export-menu");
