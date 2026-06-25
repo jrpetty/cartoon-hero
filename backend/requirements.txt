@@ -1,0 +1,8 @@
+fastapi>=0.110
+uvicorn[standard]>=0.27
+pydantic>=2.6
+# Optional — only needed for real Claude generation (set ANTHROPIC_API_KEY):
+anthropic>=0.39
+# Test-only:
+httpx>=0.27
+pytest>=8.0
