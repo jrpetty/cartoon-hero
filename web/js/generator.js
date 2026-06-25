@@ -243,6 +243,22 @@ export function generateLocally(prompt) {
 
   site.reviews.items = SAMPLE_REVIEWS.map(([quote, author, role]) => ({ quote, author, role, rating: 5 }));
 
+  // "How it works" — a sensible default journey for service businesses
+  site.process.enabled = true;
+  site.process.subtitle = "Working with us is simple.";
+  site.process.steps = [
+    { title: "Get in touch", description: "Tell us what you need — we'll give honest advice straight away." },
+    { title: "Clear quote", description: "An upfront, fixed price agreed before any work begins." },
+    { title: "We deliver", description: "Done properly, on time, and backed by our guarantee." },
+  ];
+
+  // floating contact buttons — high-converting for local businesses
+  if (contacts.phone) {
+    site.floating.enabled = true;
+    site.floating.call = true;
+    site.floating.whatsapp = contacts.phone.replace(/[^\d]/g, "");
+  }
+
   site.stats.enabled = true;
   site.stats.items = [
     { value: "100%", label: "Recommend us" },

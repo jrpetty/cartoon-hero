@@ -22,6 +22,7 @@ export function emptySite() {
       favicon: "🌐",
     },
     nav: { enabled: true, ctaText: "Get in touch", sticky: true },
+    announce: { enabled: false, text: "", linkText: "", link: "" },
     hero: {
       eyebrow: "",
       headline: "",
@@ -31,9 +32,10 @@ export function emptySite() {
       secondaryText: "",
       secondaryLink: "",
       image: "",
+      video: "",
       badges: [],
     },
-    trust: { enabled: false, title: "", logos: [] },
+    trust: { enabled: false, title: "Trusted by", logos: [] },
     about: {
       enabled: true,
       title: "About us",
@@ -42,8 +44,12 @@ export function emptySite() {
       points: [],
     },
     stats: { enabled: false, items: [] },
+    process: { enabled: false, title: "How it works", subtitle: "", steps: [] },
     services: { enabled: true, title: "What we do", subtitle: "", items: [] },
+    beforeafter: { enabled: false, title: "See the difference", subtitle: "", pairs: [] },
     gallery: { enabled: false, title: "Our work", images: [] },
+    video: { enabled: false, title: "Take a look", subtitle: "", url: "" },
+    team: { enabled: false, title: "Meet the team", subtitle: "", members: [] },
     reviews: { enabled: true, title: "What our customers say", items: [] },
     pricing: { enabled: false, title: "Pricing", subtitle: "", plans: [] },
     faq: { enabled: false, title: "Frequently asked questions", items: [] },
@@ -64,8 +70,12 @@ export function emptySite() {
       hours: [],
       mapQuery: "",
       formEnabled: true,
+      bookingUrl: "",
       social: { facebook: "", instagram: "", twitter: "", linkedin: "", tiktok: "" },
     },
+    floating: { enabled: false, whatsapp: "", call: false, backToTop: true },
+    consent: { enabled: false, text: "We use cookies to improve your experience.", buttonText: "Got it" },
+    integrations: { ga4: "", metaPixel: "" },
     footer: { text: "", showCredit: true },
     seo: { description: "", keywords: "", ogImage: "" },
   };
@@ -128,6 +138,30 @@ export function sampleSite() {
     { day: "Sunday", hours: "Emergencies only" },
   ];
   s.cta.body = "Tell us what's wrong and we'll give you a clear, fixed price — usually within the hour.";
+  s.announce.enabled = true;
+  s.announce.text = "❄️ Winter boiler service offer — 15% off this month";
+  s.announce.linkText = "Claim offer";
+  s.announce.link = "#contact";
+  s.process.enabled = true;
+  s.process.subtitle = "Getting sorted couldn't be simpler.";
+  s.process.steps = [
+    { title: "Call or message", description: "Tell us what's wrong — we'll give honest advice straight away." },
+    { title: "Fixed-price quote", description: "A clear price agreed before any work begins. No surprises." },
+    { title: "We fix it", description: "On time, tidy, and guaranteed for 12 months." },
+  ];
+  s.beforeafter.enabled = true;
+  s.beforeafter.subtitle = "Drag the slider to see our work.";
+  s.beforeafter.pairs = [
+    {
+      label: "Bathroom renovation",
+      before: "https://images.unsplash.com/photo-1584622650111-993a426fbf0a?auto=format&fit=crop&w=900&q=80",
+      after: "https://images.unsplash.com/photo-1620626011761-996317b8d101?auto=format&fit=crop&w=900&q=80",
+    },
+  ];
+  s.floating.enabled = true;
+  s.floating.whatsapp = "447700900123";
+  s.floating.call = true;
+  s.floating.backToTop = true;
   s.footer.text = "";
   return s;
 }

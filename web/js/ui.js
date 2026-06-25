@@ -121,6 +121,14 @@ function toggleSwitch(path, onToggle) {
   return sw;
 }
 
+/* inline checkbox bound to a boolean path */
+function checkField(path, label) {
+  const cb = el("input", { type: "checkbox" });
+  cb.checked = !!get(path);
+  cb.addEventListener("change", () => { set(path, cb.checked); schedulePreview(); });
+  return el("label", { class: "field", style: "display:flex;align-items:center;gap:8px;flex-direction:row" }, [cb, label]);
+}
+
 /* ---------- repeatable list ---------- */
 /* itemSchema: function(item, index) -> array of field DOM nodes
  * makeItem: function() -> new blank item */
@@ -151,6 +159,41 @@ function repeatable(path, itemSchema, makeItem, addLabel, itemLabel = "Item") {
   function remove(i) { get(path).splice(i, 1); render(); schedulePreview(); }
   render();
   return wrap;
+}
+
+/* image control bound to an array item's property (URL or upload) */
+function itemImageField(item, key, label) {
+  const isData = (v) => typeof v === "string" && v.startsWith("data:");
+  const input = el("input", { type: "url", placeholder: "https://…/photo.jpg or upload →" });
+  if (isData(item[key])) { input.value = "(uploaded image)"; input.disabled = true; }
+  else input.value = item[key] ?? "";
+  const thumb = el("div", { class: "imgthumb" });
+  const paint = () => {
+    const v = item[key];
+    thumb.style.backgroundImage = v ? `url("${(v + "").replace(/"/g, '\\"')}")` : "";
+    thumb.classList.toggle("empty", !v);
+    thumb.textContent = v ? "" : "no image";
+  };
+  input.addEventListener("input", () => { item[key] = input.value; paint(); schedulePreview(); });
+  const file = el("input", { type: "file", accept: "image/*", style: "display:none" });
+  file.addEventListener("change", async () => {
+    if (!file.files[0]) return;
+    try {
+      const data = await readImage(file.files[0]);
+      item[key] = data; input.value = "(uploaded image)"; input.disabled = true; paint(); schedulePreview(); toast("Image embedded ✅");
+    } catch (e) { toast(e.message); }
+    file.value = "";
+  });
+  const upload = el("button", { class: "iconbtn", title: "Upload", text: "⬆", onclick: () => file.click() });
+  const clear = el("button", { class: "iconbtn danger", title: "Remove", text: "✕", onclick: () => {
+    item[key] = ""; input.value = ""; input.disabled = false; paint(); schedulePreview();
+  }});
+  paint();
+  return el("div", { class: "field" }, [
+    el("label", { text: label }),
+    el("div", { class: "imgrow" }, [input, upload, clear, file]),
+    thumb,
+  ]);
 }
 
 /* item field bound to array element property */
@@ -247,6 +290,15 @@ function buildSections() {
     accentRow(),
   ], { toggle: false, open: true }));
 
+  // Announcement bar
+  host.appendChild(section("📢", "Announcement bar", "announce", [
+    textField("Message", "announce.text", { placeholder: "20% off this month!" }),
+    rowFields(
+      textField("Link text", "announce.linkText", { placeholder: "Claim offer" }),
+      textField("Link", "announce.link", { placeholder: "#contact" }),
+    ),
+  ]));
+
   // Hero
   host.appendChild(section("🚀", "Hero (top of page)", null, [
     textField("Eyebrow (small label)", "hero.eyebrow", { placeholder: "Trusted since 2009" }),
@@ -261,6 +313,7 @@ function buildSections() {
       textField("Secondary button link", "hero.secondaryLink", { placeholder: "tel:0800…" }),
     ),
     imageField("Hero image", "hero.image"),
+    textField("Hero video (YouTube/Vimeo/MP4 — replaces image)", "hero.video", { placeholder: "https://youtu.be/…" }),
     el("div", { class: "field" }, [
       el("label", { text: "Trust badges" }),
       repeatable("hero.badges", (item, i) => {
@@ -269,6 +322,15 @@ function buildSections() {
       }, () => "", "Add badge", "Badge"),
     ]),
   ], { toggle: false }));
+
+  // Trust / logos bar
+  host.appendChild(section("🤝", "Trust / logos bar", "trust", [
+    textField("Title", "trust.title", { placeholder: "Trusted by" }),
+    repeatable("trust.logos", (item) => [
+      itemField(item, "name", "Name (used if no logo)", { placeholder: "Which? Trusted Trader" }),
+      itemImageField(item, "img", "Logo image"),
+    ], () => ({ name: "", img: "" }), "Add logo", "Logo"),
+  ]));
 
   // Stats
   host.appendChild(section("📊", "Stats bar", "stats", [
@@ -291,6 +353,16 @@ function buildSections() {
     ]),
   ]));
 
+  // Process
+  host.appendChild(section("🪜", "How it works (steps)", "process", [
+    textField("Section title", "process.title", { placeholder: "How it works" }),
+    textField("Subtitle", "process.subtitle"),
+    repeatable("process.steps", (item) => [
+      itemField(item, "title", "Step title", { placeholder: "Get in touch" }),
+      itemField(item, "description", "Description", { area: true }),
+    ], () => ({ title: "", description: "" }), "Add step", "Step"),
+  ]));
+
   // Services
   host.appendChild(section("🧰", "Services", "services", [
     textField("Section title", "services.title", { placeholder: "What we do" }),
@@ -304,6 +376,17 @@ function buildSections() {
     ], () => ({ icon: "✅", title: "", description: "" }), "Add service", "Service"),
   ]));
 
+  // Before / After
+  host.appendChild(section("↔️", "Before / after slider", "beforeafter", [
+    textField("Section title", "beforeafter.title", { placeholder: "See the difference" }),
+    textField("Subtitle", "beforeafter.subtitle"),
+    repeatable("beforeafter.pairs", (item) => [
+      itemField(item, "label", "Caption", { placeholder: "Bathroom renovation" }),
+      itemImageField(item, "before", "Before image"),
+      itemImageField(item, "after", "After image"),
+    ], () => ({ label: "", before: "", after: "" }), "Add before/after pair", "Pair"),
+  ]));
+
   // Gallery
   host.appendChild(section("🖼️", "Gallery", "gallery", [
     textField("Section title", "gallery.title", { placeholder: "Our work" }),
@@ -312,6 +395,13 @@ function buildSections() {
       el("label", { text: "Image URLs" }),
       repeatable("gallery.images", (item, i) => [stringListField("gallery.images", i, "Image URL")], () => "", "Add image", "Image"),
     ]),
+  ]));
+
+  // Video
+  host.appendChild(section("🎬", "Video", "video", [
+    textField("Section title", "video.title", { placeholder: "Take a look" }),
+    textField("Subtitle", "video.subtitle"),
+    textField("Video URL (YouTube / Vimeo / MP4)", "video.url", { placeholder: "https://youtu.be/…" }),
   ]));
 
   // Reviews
@@ -325,6 +415,20 @@ function buildSections() {
       ),
       ratingField(item),
     ], () => ({ quote: "", author: "", role: "", rating: 5 }), "Add review", "Review"),
+  ]));
+
+  // Team
+  host.appendChild(section("👥", "Team", "team", [
+    textField("Section title", "team.title", { placeholder: "Meet the team" }),
+    textField("Subtitle", "team.subtitle"),
+    repeatable("team.members", (item) => [
+      rowFields(
+        itemField(item, "name", "Name", { placeholder: "Jane Doe" }),
+        itemField(item, "role", "Role", { placeholder: "Lead engineer" }),
+      ),
+      itemField(item, "bio", "Short bio", { area: true }),
+      itemImageField(item, "photo", "Photo"),
+    ], () => ({ name: "", role: "", bio: "", photo: "" }), "Add team member", "Member"),
   ]));
 
   // Pricing
@@ -377,6 +481,7 @@ function buildSections() {
     ),
     textField("Address", "contact.address"),
     textField("Map search (place / postcode)", "contact.mapQuery", { placeholder: "10 High St, City" }),
+    textField("Booking link (Calendly etc.)", "contact.bookingUrl", { placeholder: "https://calendly.com/…" }),
     el("div", { class: "field" }, [
       el("label", { text: "Opening hours" }),
       repeatable("contact.hours", (item) => [
@@ -397,6 +502,23 @@ function buildSections() {
       socialField("linkedin", "LinkedIn"),
     ),
   ]));
+
+  // Site features (floating buttons, consent, analytics)
+  host.appendChild(section("✨", "Site features", null, [
+    el("div", { class: "field" }, [el("label", { text: "Floating buttons" })]),
+    checkField("floating.enabled", "Show floating buttons"),
+    textField("WhatsApp number (with country code)", "floating.whatsapp", { placeholder: "447700900123" }),
+    checkField("floating.call", "Show click-to-call button (uses contact phone)"),
+    checkField("floating.backToTop", "Show back-to-top button"),
+    el("div", { class: "field" }, [el("label", { text: "Cookie consent banner" })]),
+    checkField("consent.enabled", "Show cookie banner"),
+    textField("Banner text", "consent.text"),
+    el("div", { class: "field" }, [el("label", { text: "Analytics & pixels" })]),
+    rowFields(
+      textField("Google Analytics ID", "integrations.ga4", { placeholder: "G-XXXXXXX" }),
+      textField("Meta Pixel ID", "integrations.metaPixel", { placeholder: "123456789" }),
+    ),
+  ], { toggle: false }));
 
   // SEO & footer
   host.appendChild(section("🔍", "SEO & footer", null, [

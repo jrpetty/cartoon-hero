@@ -76,6 +76,37 @@ ok(!du.includes("data:text/html"), "blocks non-image data URIs");
 ok(du.includes('href="#main" class="ps-skip"'), "includes skip-to-content link");
 ok(du.includes('id="main"'), "main landmark present");
 
+console.log("new sections & features:");
+const f = sampleSite();
+f.trust.enabled = true; f.trust.logos = [{ name: "Which? Trusted", img: "" }, { name: "", img: "https://x/logo.png" }];
+f.video.enabled = true; f.video.url = "https://youtu.be/dQw4w9WgXcQ";
+f.team.enabled = true; f.team.members = [{ name: "Jane", role: "Boss", bio: "Hi", photo: "" }];
+f.consent.enabled = true;
+f.integrations.ga4 = "G-ABC123"; f.integrations.metaPixel = "123456789012";
+f.contact.bookingUrl = "https://calendly.com/test";
+const fd = renderDocument(f);
+ok(fd.includes('id="ps-announce"'), "announcement bar renders");
+ok(fd.includes('ps-step__num'), "process steps render");
+ok(fd.includes('data-ba') && fd.includes("ps-ba__range"), "before/after slider renders");
+ok(fd.includes("youtube-nocookie.com/embed/dQw4w9WgXcQ"), "youtube video embeds with correct id");
+ok(fd.includes("ps-trust__row"), "trust/logos bar renders");
+ok(fd.includes('class="ps-member'), "team renders");
+ok(fd.includes("wa.me/447700900123"), "whatsapp floating button");
+ok(fd.includes('href="tel:'), "click-to-call present");
+ok(fd.includes('id="ps-top"'), "back-to-top button");
+ok(fd.includes('id="ps-consent"'), "cookie consent renders");
+ok(fd.includes("googletagmanager.com/gtag/js?id=G-ABC123"), "GA4 injected");
+ok(fd.includes("fbq('init','123456789012')"), "meta pixel injected");
+ok(fd.includes("📅 Book an appointment") && fd.includes("calendly.com/test"), "booking button renders");
+
+// vimeo + mp4 + bad analytics id
+const v = emptySite(); v.meta.businessName = "V"; v.hero.video = "https://vimeo.com/123456";
+ok(renderDocument(v).includes("player.vimeo.com/video/123456"), "vimeo embeds");
+v.hero.video = "https://cdn.example.com/clip.mp4";
+ok(renderDocument(v).includes("<video"), "mp4 uses <video>");
+const bad = emptySite(); bad.meta.businessName = "B"; bad.integrations.ga4 = "not-an-id; alert(1)";
+ok(!renderDocument(bad).includes("gtag"), "rejects malformed GA id (no injection)");
+
 console.log("");
 if (failures) { console.error(`${failures} check(s) FAILED`); process.exit(1); }
 console.log("All smoke checks passed ✅");
