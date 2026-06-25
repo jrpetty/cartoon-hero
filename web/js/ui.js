@@ -7,8 +7,8 @@ import {
 } from "./state.js";
 import { THEMES, THEME_KEYS, resolveTheme } from "./themes.js";
 import { renderDocument } from "./render.js";
-import { generate, probeBackend } from "./ai.js";
-import { exportHtml, exportProject, openPreview, copyHtml } from "./export.js";
+import { generate, probeBackend, getHealth } from "./ai.js";
+import { exportHtml, exportProject, openPreview, copyHtml, publishSite } from "./export.js";
 
 let site = sampleSite();
 let device = "desktop";
@@ -693,6 +693,44 @@ function openProjectsModal() {
 }
 function closeModal() { document.getElementById("modal").classList.remove("open"); }
 
+async function handlePublish() {
+  const health = getHealth();
+  if (!health || !health.publish) {
+    toast("Start the backend (python app.py) to publish a live link");
+    return;
+  }
+  const modal = document.getElementById("pub-modal");
+  const body = document.getElementById("pub-body");
+  modal.classList.add("open");
+  body.innerHTML = '<div class="pub-loading"><span class="spinner"></span> Publishing your site…</div>';
+  try {
+    const { url, qr } = await publishSite(site);
+    saveLocal(site); // persist the publish id
+    body.innerHTML = "";
+    body.appendChild(el("p", { class: "pub-lead", text: "Your site is live 🎉 Share this link or let your client scan the code:" }));
+    const link = el("a", { class: "pub-url", href: url, target: "_blank", rel: "noopener", text: url });
+    const copyBtn = el("button", { class: "tbtn tbtn--primary", text: "📋 Copy link", onclick: async () => {
+      try { await navigator.clipboard.writeText(url); toast("Link copied 📋"); } catch { toast("Copy failed"); }
+    }});
+    const openBtn = el("button", { class: "tbtn", text: "↗ Open", onclick: () => window.open(url, "_blank") });
+    const rePub = el("button", { class: "tbtn", text: "🔄 Re-publish changes", onclick: handlePublish });
+    body.appendChild(el("div", { class: "pub-linkrow" }, [link]));
+    body.appendChild(el("div", { class: "pub-actions" }, [copyBtn, openBtn, rePub]));
+    if (qr) {
+      body.appendChild(el("div", { class: "pub-qr" }, [
+        el("img", { src: qr, alt: "QR code to open the site", width: 200, height: 200 }),
+        el("p", { class: "pub-qrhint", text: "📱 Scan with a phone camera to open it instantly" }),
+      ]));
+    } else {
+      body.appendChild(el("p", { class: "pub-qrhint", text: "Install the optional 'segno' package to show a scannable QR code." }));
+    }
+  } catch (e) {
+    body.innerHTML = "";
+    body.appendChild(el("p", { class: "pub-lead", text: "Couldn't publish: " + e.message }));
+  }
+}
+function closePubModal() { document.getElementById("pub-modal").classList.remove("open"); }
+
 function saveProject() {
   const def = site.meta.businessName || "Untitled";
   const name = prompt("Save project as:", def);
@@ -757,6 +795,9 @@ function wireTopbar() {
   document.getElementById("act-export-json").onclick = () => { exportProject(site); toast("Downloaded project file ⬇️"); };
   document.getElementById("act-open-tab").onclick = () => openPreview(site);
   document.getElementById("act-copy").onclick = async () => { toast((await copyHtml(site)) ? "HTML copied 📋" : "Copy failed"); };
+  document.getElementById("act-publish").onclick = handlePublish;
+  document.getElementById("pub-close").onclick = closePubModal;
+  document.getElementById("pub-modal").addEventListener("click", (e) => { if (e.target.id === "pub-modal") closePubModal(); });
 
   // dropdown menu
   const menu = document.getElementById("export-menu");

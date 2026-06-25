@@ -68,3 +68,44 @@ def test_static_index_served():
     r = client.get("/")
     assert r.status_code == 200
     assert "PitchSite" in r.text
+
+
+SITE_HTML = "<!doctype html><html><head><title>T</title></head><body>hi</body></html>"
+
+
+def test_health_reports_publish():
+    r = client.get("/api/health").json()
+    assert r["publish"] is True
+    assert "qr" in r
+
+
+def test_publish_rejects_non_html():
+    r = client.post("/api/publish", json={"html": "just text"})
+    assert r.status_code == 400
+
+
+def test_publish_and_serve_roundtrip():
+    r = client.post("/api/publish", json={"html": SITE_HTML, "name": "Acme Cafe"})
+    assert r.status_code == 200
+    data = r.json()
+    assert data["id"].startswith("acme-cafe-")
+    assert data["url"].endswith("/s/" + data["id"])
+    # QR present because segno is installed in the test env
+    assert data["qr"] and data["qr"].startswith("data:image/png")
+    served = client.get("/s/" + data["id"])
+    assert served.status_code == 200
+    assert "hi" in served.text
+
+
+def test_publish_reuses_id_for_stable_link():
+    first = client.post("/api/publish", json={"html": SITE_HTML, "name": "Shop"}).json()
+    again = client.post("/api/publish", json={"html": SITE_HTML, "id": first["id"]}).json()
+    assert again["id"] == first["id"]
+
+
+def test_serve_unknown_returns_404():
+    assert client.get("/s/does-not-exist-123").status_code == 404
+
+
+def test_serve_rejects_bad_id():
+    assert client.get("/s/..%2f..%2fetc").status_code == 404

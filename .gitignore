@@ -1,3 +1,6 @@
 __pycache__/
 data.db
+backend/published/
+.pytest_cache/
+node_modules/
 

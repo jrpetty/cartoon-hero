@@ -38,6 +38,12 @@ them, adjust live, and send it over.
   pricing, FAQ, CTA band, contact (with map, opening hours, social, form), SEO.
 - 🖼️ **Image upload _or_ URL** — uploads are embedded as data URIs so exports
   stay portable.
+- 🌐 **Publish to a live link + QR code** (backend): one click mints a
+  shareable URL and a scannable QR so the client can open the site on their
+  phone _during the call_. Re-publishing keeps the same link.
+- 📢 **Conversion kit**: announcement bar, trust/logos bar, "how it works"
+  steps, before/after slider, video, team, floating WhatsApp/call buttons,
+  cookie-consent banner, Calendly booking button, GA4 + Meta Pixel.
 - 💾 **Save / open / import / export** projects (local library + JSON files).
 - 📤 **Export**: download `.html`, open full preview in a new tab, or copy HTML.
 - ♿ **Accessible & robust**: semantic markup, skip link, keyboard-friendly
@@ -75,8 +81,9 @@ Configure the model with `PITCHSITE_MODEL` (default `claude-sonnet-4-6`).
 1. Type or paste what the prospect tells you into the prompt box → **Generate**.
 2. The site appears in the live preview. Refine any field on the left.
 3. Upload their logo and a few photos, switch theme/accent to taste.
-4. **Export → Open full preview** to show it full-screen, then
-   **Download website (.html)** to send it over.
+4. **Export → Publish** to mint a live link + QR — the client scans it and
+   sees their site on their own phone, on the call. Then **Download
+   website (.html)** or re-publish edits to the same link afterwards.
 
 ## Project layout
 

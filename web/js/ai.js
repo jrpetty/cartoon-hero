@@ -7,6 +7,11 @@ import { generateLocally } from "./generator.js";
 import { normalize } from "./state.js";
 
 let backendAvailable = null; // null = unknown, true/false once probed
+let lastHealth = { ok: false, ai: false, publish: false, qr: false };
+
+export function getHealth() {
+  return lastHealth;
+}
 
 export async function probeBackend() {
   try {
@@ -14,10 +19,12 @@ export async function probeBackend() {
     const data = await res.json();
     // only treat the backend as a generation source when an AI key is present
     backendAvailable = !!(data.ok && data.ai);
-    return { ...data, available: !!data.ok };
+    lastHealth = { available: !!data.ok, ...data };
+    return lastHealth;
   } catch {
     backendAvailable = false;
-    return { ok: false, available: false, ai: false };
+    lastHealth = { ok: false, available: false, ai: false, publish: false, qr: false };
+    return lastHealth;
   }
 }
 
