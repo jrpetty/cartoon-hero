@@ -89,6 +89,9 @@ a { color: var(--b-accent); }
 .prompt textarea:focus { outline: none; border-color: var(--b-accent); }
 .prompt__row { display: flex; gap: 8px; margin-top: 10px; align-items: center; }
 .prompt__row .tbtn--primary { flex: 1; justify-content: center; padding: 11px; }
+.prompt__improve { margin-top: 8px; }
+.prompt__improve #improve-btn { flex: 1; justify-content: center; }
+.tone-select { background: var(--b-bg); border: 1px solid var(--b-line); border-radius: 9px; color: var(--b-ink); padding: 8px 10px; font-size: .82rem; max-width: 150px; }
 .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
 .chip { font-size: .74rem; color: var(--b-muted); background: var(--b-panel-2); border: 1px solid var(--b-line); padding: 5px 10px; border-radius: 99px; }
 .chip:hover { border-color: var(--b-accent); color: var(--b-ink); }
