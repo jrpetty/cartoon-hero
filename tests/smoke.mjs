@@ -107,6 +107,15 @@ ok(renderDocument(v).includes("<video"), "mp4 uses <video>");
 const bad = emptySite(); bad.meta.businessName = "B"; bad.integrations.ga4 = "not-an-id; alert(1)";
 ok(!renderDocument(bad).includes("gtag"), "rejects malformed GA id (no injection)");
 
+console.log("section reordering:");
+const r1 = sampleSite();
+const def = renderDocument(r1);
+ok(def.indexOf('id="about"') < def.indexOf('id="contact"'), "default order: about before contact");
+const r2 = normalize({ ...sampleSite(), layout: { order: ["contact", "about"] } });
+const reordered = renderDocument(r2);
+ok(reordered.indexOf('id="contact"') < reordered.indexOf('id="about"'), "custom order moves contact before about");
+ok(reordered.includes('id="services"'), "missing sections still appended");
+
 console.log("");
 if (failures) { console.error(`${failures} check(s) FAILED`); process.exit(1); }
 console.log("All smoke checks passed ✅");

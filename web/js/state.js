@@ -3,6 +3,7 @@
  * source of truth for the preview, the exporter and local autosave. */
 
 import { THEME_KEYS } from "./themes.js";
+import { SECTION_ORDER } from "./render.js";
 
 const STORAGE_KEY = "pitchsite.project.v1";
 const LIST_KEY = "pitchsite.projects.v1";
@@ -76,6 +77,7 @@ export function emptySite() {
     floating: { enabled: false, whatsapp: "", call: false, backToTop: true },
     consent: { enabled: false, text: "We use cookies to improve your experience.", buttonText: "Got it" },
     integrations: { ga4: "", metaPixel: "" },
+    layout: { order: [...SECTION_ORDER] },
     footer: { text: "", showCredit: true },
     seo: { description: "", keywords: "", ogImage: "" },
   };
@@ -172,6 +174,11 @@ export function normalize(obj) {
   const base = emptySite();
   const merged = deepMerge(base, obj || {});
   if (!THEME_KEYS.includes(merged.meta.theme)) merged.meta.theme = "aurora";
+  // reconcile section order: keep known/unique, append any missing
+  const seen = [];
+  for (const k of merged.layout.order || []) if (SECTION_ORDER.includes(k) && !seen.includes(k)) seen.push(k);
+  for (const k of SECTION_ORDER) if (!seen.includes(k)) seen.push(k);
+  merged.layout.order = seen;
   return merged;
 }
 
