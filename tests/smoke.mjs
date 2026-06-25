@@ -107,6 +107,16 @@ ok(renderDocument(v).includes("<video"), "mp4 uses <video>");
 const bad = emptySite(); bad.meta.businessName = "B"; bad.integrations.ga4 = "not-an-id; alert(1)";
 ok(!renderDocument(bad).includes("gtag"), "rejects malformed GA id (no injection)");
 
+console.log("structured data (SEO):");
+const ldDoc = renderDocument(sampleSite());
+const m = ldDoc.match(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/);
+ok(!!m, "json-ld script present");
+let ld = null;
+try { ld = JSON.parse(m[1]); } catch (e) { /* leave null */ }
+ok(ld && ld["@type"] === "LocalBusiness", "json-ld is valid parseable LocalBusiness");
+ok(ld && ld.aggregateRating && ld.aggregateRating.reviewCount === 3, "json-ld includes aggregate rating from reviews");
+ok(ld && ld.name === "Northside Plumbing & Heating", "json-ld preserves spaces in name");
+
 console.log("section reordering:");
 const r1 = sampleSite();
 const def = renderDocument(r1);

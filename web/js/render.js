@@ -501,6 +501,29 @@ function consentHtml(site) {
   </div>`;
 }
 
+/* schema.org LocalBusiness structured data — helps local SEO & rich results */
+function jsonLdHtml(site) {
+  if (!has(site.meta.businessName)) return "";
+  const data = { "@context": "https://schema.org", "@type": "LocalBusiness", name: site.meta.businessName };
+  const desc = site.seo.description || site.hero.subheadline;
+  if (has(desc)) data.description = desc;
+  if (has(site.contact.phone)) data.telephone = site.contact.phone;
+  if (has(site.contact.email)) data.email = site.contact.email;
+  if (has(site.contact.address)) data.address = { "@type": "PostalAddress", streetAddress: site.contact.address };
+  const img = site.hero.image || site.seo.ogImage;
+  if (has(img) && /^https?:/i.test(img)) data.image = img;
+  const hours = (site.contact.hours || []).filter((h) => has(h.day) && has(h.hours));
+  if (hours.length) data.openingHours = hours.map((h) => `${h.day} ${h.hours}`);
+  const reviews = (site.reviews.items || []).filter((r) => has(r.quote));
+  if (site.reviews.enabled && reviews.length) {
+    const avg = reviews.reduce((n, r) => n + (r.rating || 5), 0) / reviews.length;
+    data.aggregateRating = { "@type": "AggregateRating", ratingValue: avg.toFixed(1), reviewCount: reviews.length };
+  }
+  // escape </script and U+2028/2029 to keep the inline JSON safe
+  const json = JSON.stringify(data).replace(/</g, "\\u003c").replace(/\u2028/g, "\\u2028").replace(/\u2029/g, "\\u2029");
+  return `<script type="application/ld+json">${json}</script>`;
+}
+
 function analyticsHtml(site) {
   const out = [];
   const ga = (site.integrations.ga4 || "").trim();
@@ -580,6 +603,7 @@ ${has(og) ? `<meta property="og:image" content="${attr(safeUrl(og))}">` : ""}
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="${attr(theme.fontset.googleHref)}">
 <style>${css}</style>
+${jsonLdHtml(site)}
 ${analyticsHtml(site)}
 </head>
 <body class="${theme.dark ? "ps-dark" : ""}">
