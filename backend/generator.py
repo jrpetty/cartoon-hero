@@ -89,3 +89,36 @@ def generate_with_claude(prompt: str, current: Optional[Dict[str, Any]] = None) 
     )
     text = "".join(block.text for block in resp.content if getattr(block, "type", "") == "text")
     return _extract_json(text)
+
+
+IMPROVE_SYSTEM = (
+    "You are a senior conversion copywriter. You are given a one-page website as a "
+    "JSON object. Improve only the human-readable marketing copy — headlines, "
+    "sub-headlines, eyebrow, about text and points, service titles/descriptions, "
+    "process steps, CTA, review wording and section titles — to be more compelling, "
+    "specific and benefit-led, in British English. Apply the requested tone.\n"
+    "CRITICAL RULES: Return the FULL JSON object with the EXACT same keys and "
+    "structure. Do NOT change: any phone numbers, emails, addresses, URLs, image "
+    "values, the 'theme'/'accentColor', any 'enabled' booleans, or 'layout.order'. "
+    "Keep arrays the same length. Return ONLY the JSON, no prose or fences."
+)
+
+
+def improve_with_claude(site: Dict[str, Any], instruction: str = "") -> Dict[str, Any]:
+    """Rewrite the copy of an existing site. Raises on failure (caller falls back)."""
+    import anthropic
+
+    client = anthropic.Anthropic()
+    tone = instruction.strip() or "clearer, warmer and more persuasive"
+    user_msg = (
+        f"Requested tone: {tone}\n\nCurrent website JSON:\n{json.dumps(site, ensure_ascii=False)}\n\n"
+        "Return the improved website JSON."
+    )
+    resp = client.messages.create(
+        model=DEFAULT_MODEL,
+        max_tokens=4096,
+        system=IMPROVE_SYSTEM,
+        messages=[{"role": "user", "content": user_msg}],
+    )
+    text = "".join(block.text for block in resp.content if getattr(block, "type", "") == "text")
+    return _extract_json(text)

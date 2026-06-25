@@ -46,6 +46,26 @@ def test_generate_with_mocked_claude(monkeypatch):
     assert data["site"]["meta"]["businessName"] == "Test Co"
 
 
+def test_rewrite_requires_ai(monkeypatch):
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    r = client.post("/api/rewrite", json={"site": {"meta": {"businessName": "X"}}})
+    assert r.status_code == 501
+
+
+def test_rewrite_rejects_empty_site():
+    r = client.post("/api/rewrite", json={"site": {}})
+    assert r.status_code == 400
+
+
+def test_rewrite_with_mocked_claude(monkeypatch):
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
+    improved = {"meta": {"businessName": "X"}, "hero": {"headline": "Better headline"}}
+    monkeypatch.setattr(appmod, "improve_with_claude", lambda s, i="": improved)
+    r = client.post("/api/rewrite", json={"site": {"meta": {"businessName": "X"}}, "instruction": "friendlier"})
+    assert r.status_code == 200
+    assert r.json()["site"]["hero"]["headline"] == "Better headline"
+
+
 def test_generate_handles_claude_failure(monkeypatch):
     monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
 

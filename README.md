@@ -36,8 +36,15 @@ them, adjust live, and send it over.
   (desktop / tablet / mobile).
 - 🧩 **Full section kit**: hero, stats, about, services, gallery, reviews,
   pricing, FAQ, CTA band, contact (with map, opening hours, social, form), SEO.
-- 🖼️ **Image upload _or_ URL** — uploads are embedded as data URIs so exports
-  stay portable.
+- 🖼️ **Image upload, URL, _or_ curated stock photos** — a 💡 picker offers
+  royalty-free, industry-matched photos when the client has none; uploads are
+  embedded as data URIs so exports stay portable.
+- ✨ **AI "Improve copy"** (backend): rewrite all wording in a chosen tone
+  (friendlier / premium / concise / persuasive…) while keeping structure,
+  contacts and images intact.
+- ↩️ **Undo / redo** (Ctrl/Cmd+Z) and **drag-to-reorder** page sections.
+- 🔎 **SEO built in**: meta + Open Graph tags and `LocalBusiness` JSON-LD
+  structured data (with star rating) for rich Google results.
 - 🌐 **Publish to a live link + QR code** (backend): one click mints a
   shareable URL and a scannable QR so the client can open the site on their
   phone _during the call_. Re-publishing keeps the same link.

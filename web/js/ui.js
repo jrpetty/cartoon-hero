@@ -7,7 +7,7 @@ import {
 } from "./state.js";
 import { THEMES, THEME_KEYS, resolveTheme } from "./themes.js";
 import { renderDocument, SECTION_LABELS } from "./render.js";
-import { generate, probeBackend, getHealth } from "./ai.js";
+import { generate, probeBackend, getHealth, improveCopy } from "./ai.js";
 import { STOCK, STOCK_KEYS, suggestCategory, photosFor } from "./stock.js";
 import { exportHtml, exportProject, openPreview, copyHtml, publishSite } from "./export.js";
 
@@ -758,6 +758,32 @@ async function handleGenerate() {
   }
 }
 
+async function handleImprove() {
+  const health = getHealth();
+  if (!health || !health.ai) {
+    toast("Connect Claude (backend + API key) to improve copy with AI");
+    return;
+  }
+  const tone = document.getElementById("tone-select").value;
+  const btn = document.getElementById("improve-btn");
+  const wrap = document.getElementById("prompt");
+  wrap.classList.add("busy");
+  btn.innerHTML = '<span class="spinner"></span> Improving…';
+  try {
+    const { site: improved } = await improveCopy(site, tone);
+    site = improved;
+    refreshAll();
+    snapshotNow();
+    saveLocal(site);
+    toast("Copy improved with Claude ✨");
+  } catch (e) {
+    toast(e.message === "needs_ai" ? "Needs an API key on the backend" : "Couldn't improve copy — try again");
+  } finally {
+    wrap.classList.remove("busy");
+    btn.innerHTML = "✨ Improve copy";
+  }
+}
+
 function newProject() {
   if (!confirm("Start a new blank project? Unsaved changes to the current one will be lost.")) return;
   site = emptySite();
@@ -956,6 +982,7 @@ function wireTopbar() {
 
 function wirePrompt() {
   document.getElementById("gen-btn").onclick = handleGenerate;
+  document.getElementById("improve-btn").onclick = handleImprove;
   document.getElementById("prompt-text").addEventListener("keydown", (e) => {
     if ((e.metaKey || e.ctrlKey) && e.key === "Enter") handleGenerate();
   });

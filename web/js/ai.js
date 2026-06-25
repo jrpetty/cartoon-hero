@@ -50,3 +50,18 @@ export async function generate(prompt, { current } = {}) {
   }
   return { site: generateLocally(prompt), source: "local" };
 }
+
+/* Improve the copy of the current site via Claude. Requires the backend +
+ * an API key. Returns { site } or throws (caller shows a message). */
+export async function improveCopy(site, instruction) {
+  const res = await fetch("/api/rewrite", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ site, instruction }),
+  });
+  if (res.status === 501) throw new Error("needs_ai");
+  if (!res.ok) throw new Error("rewrite_failed");
+  const data = await res.json();
+  if (!data || !data.site) throw new Error("rewrite_failed");
+  return { site: normalize(data.site), source: data.source || "claude" };
+}

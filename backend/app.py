@@ -18,7 +18,7 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from generator import ai_enabled, generate_with_claude
+from generator import ai_enabled, generate_with_claude, improve_with_claude
 
 WEB_DIR = Path(__file__).resolve().parent.parent / "web"
 PUBLISH_DIR = Path(__file__).resolve().parent / "published"
@@ -39,6 +39,11 @@ def _qr_data_uri(url: str) -> str | None:
 class GenerateRequest(BaseModel):
     prompt: str
     current: dict | None = None
+
+
+class RewriteRequest(BaseModel):
+    site: dict
+    instruction: str | None = None
 
 
 class PublishRequest(BaseModel):
@@ -70,6 +75,19 @@ def generate(req: GenerateRequest):
         return {"site": site, "source": "claude"}
     except Exception as exc:  # noqa: BLE001 — surface as fallback signal
         return JSONResponse({"error": f"generation_failed: {exc}"}, status_code=502)
+
+
+@app.post("/api/rewrite")
+def rewrite(req: RewriteRequest):
+    if not req.site:
+        return JSONResponse({"error": "empty site"}, status_code=400)
+    if not ai_enabled():
+        return JSONResponse({"error": "ai_unavailable"}, status_code=501)
+    try:
+        site = improve_with_claude(req.site, req.instruction or "")
+        return {"site": site, "source": "claude"}
+    except Exception as exc:  # noqa: BLE001
+        return JSONResponse({"error": f"rewrite_failed: {exc}"}, status_code=502)
 
 
 def _slug(name: str | None) -> str:
