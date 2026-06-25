@@ -6,13 +6,63 @@ import {
   listProjects, saveProjectAs, deleteProject,
 } from "./state.js";
 import { THEMES, THEME_KEYS, resolveTheme } from "./themes.js";
-import { renderDocument } from "./render.js";
+import { renderDocument, SECTION_LABELS } from "./render.js";
 import { generate, probeBackend, getHealth } from "./ai.js";
 import { exportHtml, exportProject, openPreview, copyHtml, publishSite } from "./export.js";
 
 let site = sampleSite();
 let device = "desktop";
 let previewTimer = null;
+let snapTimer = null;
+
+/* ---------- undo / redo history ---------- */
+let history = [];
+let hidx = -1;
+
+function snapshotNow() {
+  const json = JSON.stringify(site);
+  if (history[hidx] === json) return;
+  history = history.slice(0, hidx + 1);
+  history.push(json);
+  if (history.length > 80) history.shift();
+  hidx = history.length - 1;
+  updateHistoryButtons();
+}
+function scheduleSnapshot() {
+  clearTimeout(snapTimer);
+  snapTimer = setTimeout(snapshotNow, 600);
+}
+function resetHistory() {
+  history = [JSON.stringify(site)];
+  hidx = 0;
+  updateHistoryButtons();
+}
+function undo() {
+  clearTimeout(snapTimer);
+  if (hidx <= 0) return;
+  hidx--;
+  site = normalize(JSON.parse(history[hidx]));
+  refreshAll();
+  saveLocal(site);
+  updateHistoryButtons();
+  toast("Undo");
+}
+function redo() {
+  clearTimeout(snapTimer);
+  if (hidx >= history.length - 1) return;
+  hidx++;
+  site = normalize(JSON.parse(history[hidx]));
+  refreshAll();
+  saveLocal(site);
+  updateHistoryButtons();
+  toast("Redo");
+}
+function updateHistoryButtons() {
+  const u = document.getElementById("act-undo");
+  const r = document.getElementById("act-redo");
+  if (u) u.disabled = hidx <= 0;
+  if (r) r.disabled = hidx >= history.length - 1;
+}
 
 /* ---------- tiny DOM helper ---------- */
 function el(tag, props = {}, kids = []) {
@@ -268,6 +318,49 @@ function accentRow() {
   ]);
 }
 
+/* ---------- page layout reorder ---------- */
+function layoutEditor() {
+  const list = el("div", { class: "layout-list" });
+  let dragKey = null;
+  const render = () => {
+    list.innerHTML = "";
+    site.layout.order.forEach((key, i) => {
+      const enabled = site[key] && site[key].enabled;
+      const row = el("div", { class: "layout-row" + (enabled ? "" : " is-off"), draggable: "true", "data-key": key }, [
+        el("span", { class: "grip", text: "⠿" }),
+        el("span", { class: "layout-row__name", text: SECTION_LABELS[key] || key }),
+        el("span", { class: "layout-row__state", text: enabled ? "on" : "off" }),
+        el("button", { class: "iconbtn", title: "Up", text: "↑", onclick: () => mv(i, -1) }),
+        el("button", { class: "iconbtn", title: "Down", text: "↓", onclick: () => mv(i, 1) }),
+      ]);
+      row.addEventListener("dragstart", () => { dragKey = key; row.classList.add("dragging"); });
+      row.addEventListener("dragend", () => { dragKey = null; row.classList.remove("dragging"); list.querySelectorAll(".dragover").forEach((r) => r.classList.remove("dragover")); });
+      row.addEventListener("dragover", (e) => { e.preventDefault(); row.classList.add("dragover"); });
+      row.addEventListener("dragleave", () => row.classList.remove("dragover"));
+      row.addEventListener("drop", (e) => {
+        e.preventDefault();
+        row.classList.remove("dragover");
+        if (!dragKey || dragKey === key) return;
+        const order = site.layout.order;
+        order.splice(order.indexOf(dragKey), 1);
+        order.splice(order.indexOf(key), 0, dragKey);
+        render(); schedulePreview();
+      });
+      list.appendChild(row);
+    });
+  };
+  const mv = (i, d) => {
+    const o = site.layout.order; const j = i + d;
+    if (j < 0 || j >= o.length) return;
+    [o[i], o[j]] = [o[j], o[i]]; render(); schedulePreview();
+  };
+  render();
+  return el("div", { class: "field" }, [
+    el("label", { text: "Drag rows (or use arrows) to reorder the page. Hero always stays at the top." }),
+    list,
+  ]);
+}
+
 /* ---------- build the whole panel ---------- */
 function buildSections() {
   const host = document.getElementById("sections");
@@ -298,6 +391,11 @@ function buildSections() {
       textField("Link", "announce.link", { placeholder: "#contact" }),
     ),
   ]));
+
+  // Page layout (reorder sections)
+  host.appendChild(section("🧱", "Page layout (drag to reorder)", null, [
+    layoutEditor(),
+  ], { toggle: false }));
 
   // Hero
   host.appendChild(section("🚀", "Hero (top of page)", null, [
@@ -595,6 +693,7 @@ function socialField(key, label) {
 function schedulePreview() {
   clearTimeout(previewTimer);
   previewTimer = setTimeout(() => { renderPreview(); saveLocal(site); }, 180);
+  scheduleSnapshot();
 }
 
 function renderPreview() {
@@ -765,7 +864,9 @@ export async function mountApp() {
   wireTopbar();
   wirePrompt();
   wirePreviewBar();
+  wireKeyboard();
   refreshAll();
+  resetHistory();
 
   // backend status
   const status = await probeBackend();
@@ -816,6 +917,21 @@ function wirePrompt() {
   });
   document.querySelectorAll(".chip").forEach((c) => {
     c.addEventListener("click", () => { document.getElementById("prompt-text").value = c.dataset.prompt; });
+  });
+}
+
+function wireKeyboard() {
+  document.getElementById("act-undo").onclick = undo;
+  document.getElementById("act-redo").onclick = redo;
+  document.addEventListener("keydown", (e) => {
+    const mod = e.metaKey || e.ctrlKey;
+    if (!mod || e.key.toLowerCase() !== "z" && e.key.toLowerCase() !== "y") return;
+    const t = e.target;
+    const editing = t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable);
+    if (editing) return; // let native text undo work inside fields
+    e.preventDefault();
+    if (e.key.toLowerCase() === "y" || (e.key.toLowerCase() === "z" && e.shiftKey)) redo();
+    else undo();
   });
 }
 

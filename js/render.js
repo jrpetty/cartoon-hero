@@ -529,6 +529,34 @@ function footerHtml(site) {
   </footer>`;
 }
 
+/* ---------- ordered content sections ---------- */
+/* Hero is always first; these are the reorderable content sections. */
+export const SECTION_ORDER = [
+  "trust", "stats", "about", "process", "services", "beforeafter",
+  "gallery", "video", "team", "reviews", "pricing", "faq", "cta", "contact",
+];
+
+export const SECTION_LABELS = {
+  trust: "Trust / logos", stats: "Stats bar", about: "About", process: "How it works",
+  services: "Services", beforeafter: "Before / after", gallery: "Gallery", video: "Video",
+  team: "Team", reviews: "Reviews", pricing: "Pricing", faq: "FAQ", cta: "CTA band", contact: "Contact",
+};
+
+const RENDERERS = {
+  trust: trustHtml, stats: statsHtml, about: aboutHtml, process: processHtml,
+  services: servicesHtml, beforeafter: beforeAfterHtml, gallery: galleryHtml,
+  video: videoHtml, team: teamHtml, reviews: reviewsHtml, pricing: pricingHtml,
+  faq: faqHtml, cta: ctaHtml, contact: contactHtml,
+};
+
+function orderedSections(site) {
+  const wanted = (site.layout && Array.isArray(site.layout.order) && site.layout.order) || SECTION_ORDER;
+  const keys = [];
+  for (const k of wanted) if (RENDERERS[k] && !keys.includes(k)) keys.push(k);
+  for (const k of SECTION_ORDER) if (!keys.includes(k)) keys.push(k); // append any missing
+  return keys.map((k) => RENDERERS[k](site)).join("\n");
+}
+
 /* ---------- document ---------- */
 export function renderDocument(site) {
   const theme = resolveTheme(site.meta.theme, site.meta.accentColor);
@@ -560,20 +588,7 @@ ${announceHtml(site)}
 ${navHtml(site)}
 <main id="main">
 ${heroHtml(site, theme)}
-${trustHtml(site)}
-${statsHtml(site)}
-${aboutHtml(site)}
-${processHtml(site)}
-${servicesHtml(site)}
-${beforeAfterHtml(site)}
-${galleryHtml(site)}
-${videoHtml(site)}
-${teamHtml(site)}
-${reviewsHtml(site)}
-${pricingHtml(site)}
-${faqHtml(site)}
-${ctaHtml(site)}
-${contactHtml(site)}
+${orderedSections(site)}
 </main>
 ${footerHtml(site)}
 ${floatingHtml(site)}
