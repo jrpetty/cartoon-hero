@@ -77,6 +77,42 @@ def test_generate_handles_claude_failure(monkeypatch):
     assert r.status_code == 502
 
 
+def _install_fake_anthropic(monkeypatch, reply_text):
+    """Inject a stand-in `anthropic` SDK so we can exercise the real generator
+    function bodies (response parsing + JSON extraction) without a live key."""
+    import sys
+    import types
+
+    class _Block:
+        type = "text"
+        def __init__(self, t): self.text = t
+
+    class _Resp:
+        def __init__(self, t): self.content = [_Block(t)]
+
+    class _Messages:
+        def create(self, **kwargs): return _Resp(reply_text)
+
+    class _Client:
+        def __init__(self, *a, **k): self.messages = _Messages()
+
+    fake = types.ModuleType("anthropic")
+    fake.Anthropic = _Client
+    monkeypatch.setitem(sys.modules, "anthropic", fake)
+
+
+def test_generate_with_claude_parses_fenced_reply(monkeypatch):
+    _install_fake_anthropic(monkeypatch, '```json\n{"meta": {"businessName": "Real Co", "theme": "aurora"}}\n```')
+    out = gen.generate_with_claude("a real business brief")
+    assert out["meta"]["businessName"] == "Real Co"
+
+
+def test_improve_with_claude_parses_reply(monkeypatch):
+    _install_fake_anthropic(monkeypatch, 'Sure! {"meta": {"businessName": "Real Co"}, "hero": {"headline": "Punchier"}} done')
+    out = gen.improve_with_claude({"meta": {"businessName": "Real Co"}}, "more persuasive")
+    assert out["hero"]["headline"] == "Punchier"
+
+
 def test_extract_json_tolerates_fences():
     obj = gen._extract_json('```json\n{"a": 1}\n```')
     assert obj == {"a": 1}
