@@ -32,8 +32,9 @@ else — health lives on Farming.
 
 | System | What it does |
 | --- | --- |
+| **Active abilities** | **Frenzy** (Combat, `R`) — a short Strength+Speed burst on a cooldown. **Leap** (Acrobatics, `V`) — a forward/upward dash with a safe landing. Both level-gated + cooldown-balanced. |
 | **Level-up feedback** | Chat line, sound, on-screen **title**, and particles. |
-| **Skills GUI** | A full screen with every skill + XP bars — open with **`K`** or `/voxelia menu`. |
+| **Skills GUI** | Character level, every skill + XP bars, and ability keybinds — open with **`K`** or `/voxelia menu`. |
 | **HUD** | Corner overlay with per-skill XP bars; position is configurable (anchor + offset). |
 | **Quests** | A multi-step advancement chain that walks you through the skills. |
 | **Leaderboard** | `/voxelia top <skill>` ranks online players. |
@@ -50,6 +51,14 @@ else — health lives on Farming.
 | `/voxelia hud` | client | Toggle the HUD |
 | `/voxelia hudpos <corner>` | client | Move the HUD (`top_left`/`top_right`/`bottom_left`/`bottom_right`) |
 | `/voxelia rewards` | client | Print what each skill level grants |
+
+### Keybinds (rebindable in Options → Controls)
+
+| Key | Action |
+| --- | --- |
+| `K` | Open the Skills menu |
+| `R` | **Frenzy** (Combat ability) |
+| `V` | **Leap** (Acrobatics ability) |
 
 The server is authoritative: it owns skill XP, combat resolution, and perks, and
 pushes a `SkillsSyncPayload` to each client, which only renders the HUD/GUI.
