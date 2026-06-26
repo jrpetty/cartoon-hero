@@ -1,0 +1,46 @@
+name: Build NeoForge mod
+
+# Builds the Voxelia MMO NeoForge mod into a .jar on GitHub's runners, which
+# (unlike the authoring sandbox) can reach the NeoForge + Mojang Maven repos.
+# The resulting jar is uploaded as a downloadable build artifact.
+
+on:
+  push:
+    paths:
+      - 'mc-mod/**'
+      - '.github/workflows/build-mod.yml'
+  pull_request:
+    paths:
+      - 'mc-mod/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Make gradlew executable
+        run: chmod +x ./gradlew
+        working-directory: mc-mod
+
+      - name: Build
+        run: ./gradlew build --no-daemon --stacktrace
+        working-directory: mc-mod
+
+      - name: Upload mod jar
+        uses: actions/upload-artifact@v4
+        with:
+          name: voxelia-mmo-jar
+          path: mc-mod/build/libs/*.jar
+          if-no-files-found: error
