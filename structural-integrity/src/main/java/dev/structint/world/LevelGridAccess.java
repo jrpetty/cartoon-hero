@@ -69,7 +69,7 @@ public final class LevelGridAccess implements GridAccess {
         if (BlockClassifier.isFoundation(state)) {
             return CellRole.ANCHOR;
         }
-        if (!BlockClassifier.isFullSolid(state, level, cursor)) {
+        if (!BlockClassifier.isLoadBearing(state, level, cursor)) {
             return CellRole.EMPTY;
         }
         boolean managed = Config.ONLY_PLAYER_PLACED.get()

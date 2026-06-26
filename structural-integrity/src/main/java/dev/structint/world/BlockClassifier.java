@@ -2,7 +2,10 @@ package dev.structint.world;
 
 import dev.structint.Config;
 import net.minecraft.core.BlockPos;
+import net.minecraft.tags.BlockTags;
 import net.minecraft.world.level.BlockGetter;
+import net.minecraft.world.level.block.SlabBlock;
+import net.minecraft.world.level.block.StairBlock;
 import net.minecraft.world.level.block.state.BlockState;
 
 /**
@@ -15,19 +18,26 @@ import net.minecraft.world.level.block.state.BlockState;
 public final class BlockClassifier {
 
     /**
-     * A "full solid block" is our gate for participating in the system at all. Decorations
-     * (torches, fences, panes, slabs, …) are not full cubes, so they are invisible to the
-     * rules — exactly the non-structural behaviour the design asks for.
+     * Whether a block bears structural load and so participates in the system. This is the gate
+     * for being managed, being an anchor, and being a structural cell.
+     *
+     * <p>Load-bearing shapes are: full cubes (stone, planks, concrete, double slabs, …) <b>and</b>
+     * slabs and stairs — half-blocks still hold a build together, so a slab bridge or a stair
+     * staircase obeys the same span rules. Genuine decorations (torches, fences, panes, walls,
+     * carpets) are neither full cubes nor slabs/stairs, so they stay invisible to the rules.
      */
-    public static boolean isFullSolid(BlockState state, BlockGetter level, BlockPos pos) {
+    public static boolean isLoadBearing(BlockState state, BlockGetter level, BlockPos pos) {
         if (state.isAir()) {
-            return false;
-        }
-        if (!state.getFluidState().isEmpty()) {
             return false;
         }
         if (state.is(StructuralTags.EXEMPT)) {
             return false;
+        }
+        if (isSlabOrStairs(state)) {
+            return true; // slabs/stairs bear load (even when waterlogged)
+        }
+        if (!state.getFluidState().isEmpty()) {
+            return false; // exclude fluid source blocks
         }
         return state.isCollisionShapeFullBlock(level, pos);
     }
@@ -36,34 +46,28 @@ public final class BlockClassifier {
         return state.is(StructuralTags.FOUNDATIONS);
     }
 
-    /**
-     * The span of a block, used both to gate "is this even a structural block we should manage
-     * when placed" and to feed the solver. Returns -1 for blocks that should not be managed.
-     */
-    public static int spanOf(BlockState state) {
-        if (state.is(StructuralTags.STRUCTURAL_METAL)) {
-            return Config.SPAN_METAL.get();
-        }
-        if (state.is(StructuralTags.STRUCTURAL_REINFORCED)) {
-            return Config.SPAN_REINFORCED.get();
-        }
-        if (state.is(StructuralTags.STRUCTURAL_STONE)) {
-            return Config.SPAN_STONE.get();
-        }
-        if (state.is(StructuralTags.STRUCTURAL_WOOD)) {
-            return Config.SPAN_WOOD.get();
-        }
-        if (state.is(StructuralTags.STRUCTURAL_DIRT)) {
-            return Config.SPAN_DIRT.get();
-        }
-        // Any other full solid block a player places is generic: weak but still load-bearing.
-        return Config.SPAN_GENERIC.get();
+    private static boolean isSlabOrStairs(BlockState state) {
+        return state.getBlock() instanceof SlabBlock || state.getBlock() instanceof StairBlock;
+    }
+
+    private static boolean isWoodenShape(BlockState state) {
+        return state.is(BlockTags.WOODEN_SLABS) || state.is(BlockTags.WOODEN_STAIRS);
     }
 
     /**
-     * The span of a block <em>only if</em> it is explicitly classified by a structural tag.
-     * Returns {@code null} for everything else, so tooltips are shown for recognized building
-     * materials (and our own blocks) rather than spamming every full block in the game.
+     * Resolves the material span for a block. Explicit structural tags win (so a pack can place a
+     * block in any tier); otherwise slabs/stairs are classified by material (wooden → wood,
+     * anything else → stone); everything else load-bearing is generic.
+     */
+    public static int spanOf(BlockState state) {
+        Integer tagged = taggedSpan(state);
+        return tagged != null ? tagged : Config.SPAN_GENERIC.get();
+    }
+
+    /**
+     * The span of a block <em>if</em> it is a recognized structural material (by tag, or as a
+     * slab/stair). Returns {@code null} for unclassified blocks, so tooltips appear for real
+     * building materials rather than spamming every full block in the game.
      */
     public static Integer taggedSpan(BlockState state) {
         if (state.is(StructuralTags.STRUCTURAL_METAL)) {
@@ -80,6 +84,9 @@ public final class BlockClassifier {
         }
         if (state.is(StructuralTags.STRUCTURAL_DIRT)) {
             return Config.SPAN_DIRT.get();
+        }
+        if (isSlabOrStairs(state)) {
+            return isWoodenShape(state) ? Config.SPAN_WOOD.get() : Config.SPAN_STONE.get();
         }
         return null;
     }

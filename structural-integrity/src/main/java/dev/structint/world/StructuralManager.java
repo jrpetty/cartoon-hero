@@ -48,7 +48,7 @@ public final class StructuralManager {
         // Foundations are anchors, never managed structural blocks.
         if (BlockClassifier.isFoundation(state)) {
             StructuralData.setManaged(level, pos, false);
-        } else if (BlockClassifier.isFullSolid(state, level, pos)) {
+        } else if (BlockClassifier.isLoadBearing(state, level, pos)) {
             StructuralData.setManaged(level, pos, true);
         }
         // Re-checking the placed position's cluster catches an over-reaching placement that
@@ -109,7 +109,7 @@ public final class StructuralManager {
                 continue;
             }
             BlockState state = level.getBlockState(cursor);
-            if (!BlockClassifier.isFullSolid(state, level, cursor)
+            if (!BlockClassifier.isLoadBearing(state, level, cursor)
                     || BlockClassifier.isFoundation(state)) {
                 continue;
             }

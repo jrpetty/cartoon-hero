@@ -23,6 +23,10 @@ clarity over realism*, *predictability over simulation*, and *local logic over g
   | Reinforced (concrete, Reinforced Beam) | 12 |
   | Metal (iron/netherite/copper, Heavy Girder) | 20 |
 
+  Slabs and stairs count too: they bear load and obey the same span rules (wooden ones use the
+  wood span, all others the stone span). Only genuine decorations — torches, fences, panes, walls,
+  carpets — are ignored.
+
 - Every building material's item tooltip shows its **strength tier** (Very weak → Extreme) and
   **max unsupported span**, so you can judge a block before you build with it.
 - The three custom blocks are **craftable** (Foundation Anchor, Reinforced Beam, Heavy Girder).
