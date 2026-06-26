@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Voxelia — Browser MMO</title>
+  <link rel="stylesheet" href="/client/css/style.css" />
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js"
+    }
+  }
+  </script>
+</head>
+<body>
+  <!-- Login / start screen -->
+  <div id="login" class="overlay">
+    <div class="panel">
+      <h1>VOXELIA</h1>
+      <p class="tag">A browser-based Minecraft MMO</p>
+      <input id="nameInput" maxlength="16" placeholder="Your adventurer name" autocomplete="off" />
+      <button id="playBtn">Enter the World</button>
+      <div class="controls-hint">
+        <strong>Controls</strong>
+        <span>WASD move • Space jump • Mouse look</span>
+        <span>Left click: break / attack • Right click: place</span>
+        <span>1–9 select hotbar • Enter to chat • Esc release mouse</span>
+      </div>
+      <div id="connStatus" class="conn">connecting…</div>
+    </div>
+  </div>
+
+  <!-- In-game HUD -->
+  <div id="hud" class="hidden">
+    <div id="crosshair">+</div>
+
+    <!-- top-left: vitals -->
+    <div id="vitals">
+      <div class="bar health"><div id="healthFill"></div><span id="healthText">20 / 20</span></div>
+      <div class="charlevel">Lv <span id="charLevel">1</span> <span id="charName"></span></div>
+    </div>
+
+    <!-- top-right: online + leaderboard -->
+    <div id="sidepanel">
+      <div class="online">Online: <span id="onlineCount">1</span></div>
+      <div class="leaders">
+        <div class="leaders-title">⚔ Combat Leaders</div>
+        <ol id="leaderList"></ol>
+      </div>
+    </div>
+
+    <!-- left: skills -->
+    <div id="skills"></div>
+
+    <!-- right: quest tracker -->
+    <div id="questbox">
+      <div class="quest-title">Quest</div>
+      <div id="questName">—</div>
+      <div id="questDesc" class="quest-desc"></div>
+      <div class="bar quest"><div id="questFill"></div><span id="questText"></span></div>
+    </div>
+
+    <!-- bottom: hotbar -->
+    <div id="hotbar"></div>
+
+    <!-- chat -->
+    <div id="chat">
+      <div id="chatLog"></div>
+      <input id="chatInput" class="hidden" maxlength="200" placeholder="Press Enter to send…" />
+    </div>
+
+    <!-- minimap -->
+    <canvas id="minimap" width="140" height="140"></canvas>
+
+    <!-- toast -->
+    <div id="toast"></div>
+  </div>
+
+  <script type="module" src="/client/js/main.js"></script>
+</body>
+</html>
