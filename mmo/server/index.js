@@ -78,16 +78,31 @@ function youPayload(p) {
   };
 }
 
-function streamChunks(ws, p) {
+// Schedule (don't blast) the chunks around a player. Sending all ~80 chunks in
+// one synchronous burst overflows the socket buffer and stalls the stream, so
+// chunks are queued nearest-first and drained a few per tick with backpressure.
+function enqueueChunks(p) {
   const pcx = Math.floor(p.x / CHUNK), pcz = Math.floor(p.z / CHUNK);
+  const added = [];
   for (let dx = -VIEW; dx <= VIEW; dx++) {
     for (let dz = -VIEW; dz <= VIEW; dz++) {
-      const cx = pcx + dx, cz = pcz + dz;
-      const key = `${cx},${cz}`;
+      const cx = pcx + dx, cz = pcz + dz, key = `${cx},${cz}`;
       if (p.sentChunks.has(key)) continue;
-      p.sentChunks.add(key);
-      send(ws, { t: S.CHUNK, cx, cz, data: world.chunkData(cx, cz) });
+      p.sentChunks.add(key);                 // mark scheduled
+      added.push([cx, cz, dx * dx + dz * dz]);
     }
+  }
+  added.sort((a, b) => a[2] - b[2]);         // nearest first
+  for (const [cx, cz] of added) p.chunkQueue.push(`${cx},${cz}`);
+}
+
+function drainChunks(ws, p, max) {
+  let sent = 0;
+  while (sent < max && p.chunkQueue.length) {
+    if (ws.bufferedAmount > (1 << 20)) break; // ~1MB in-flight cap
+    const [cx, cz] = p.chunkQueue.shift().split(',').map(Number);
+    send(ws, { t: S.CHUNK, cx, cz, data: world.chunkData(cx, cz) });
+    sent++;
   }
 }
 
@@ -119,8 +134,9 @@ wss.on('connection', (ws) => {
           you: { x: player.x, y: player.y, z: player.z },
           blocks: BLOCKS,
         });
-        streamChunks(ws, player);
         send(ws, youPayload(player));
+        enqueueChunks(player);
+        drainChunks(ws, player, 9);   // small immediate burst so spawn has ground
         broadcast({ t: S.CHAT, from: 'Server', kind: 'system', msg: `${player.name} joined the world` });
         // seed some mobs near spawn
         for (let i = 0; i < 6; i++) mobs.spawnNear(player.x, player.z);
@@ -133,7 +149,7 @@ wss.on('connection', (ws) => {
           player.x = m.x; player.y = m.y; player.z = m.z;
           player.yaw = m.yaw || 0; player.pitch = m.pitch || 0;
           player.lastSeen = Date.now();
-          streamChunks(ws, player);
+          enqueueChunks(player);   // schedule any newly-visible chunks; drained in the game loop
         }
         break;
       }
@@ -243,6 +259,7 @@ setInterval(() => {
 
   // mob melee: if a mob is adjacent to a player, chip its HP on a cooldown
   for (const p of playerList) {
+    if (mobs.inSafeZone(p.x, p.z)) continue; // safe hub: no mob damage
     const cd = mobAttackCooldown.get(p.id) || 0;
     if (cd > 0) { mobAttackCooldown.set(p.id, cd - 1); continue; }
     for (const mob of mobs.mobs.values()) {
@@ -269,9 +286,10 @@ setInterval(() => {
     mobs: mobs.publicView(),
   });
 
-  // push individual stat updates to anyone whose stats changed
+  // push individual stat updates + drain queued chunks (paced, backpressured)
   for (const [ws, p] of clients) {
     if (p.dirty) { send(ws, youPayload(p)); p.dirty = false; }
+    if (p.chunkQueue.length) drainChunks(ws, p, 6);
   }
 }, TICK_MS);
 

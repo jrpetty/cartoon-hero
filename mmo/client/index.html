@@ -5,10 +5,12 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Voxelia — Browser MMO</title>
   <link rel="stylesheet" href="/client/css/style.css" />
+  <!-- Three.js is vendored locally (client/vendor) so the game is fully
+       self-contained: no CDN, works offline. -->
   <script type="importmap">
   {
     "imports": {
-      "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js"
+      "three": "/client/vendor/three.module.js"
     }
   }
   </script>
@@ -20,7 +22,7 @@
       <h1>VOXELIA</h1>
       <p class="tag">A browser-based Minecraft MMO</p>
       <input id="nameInput" maxlength="16" placeholder="Your adventurer name" autocomplete="off" />
-      <button id="playBtn">Enter the World</button>
+      <button id="playBtn" disabled>Connecting…</button>
       <div class="controls-hint">
         <strong>Controls</strong>
         <span>WASD move • Space jump • Mouse look</span>

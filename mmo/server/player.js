@@ -33,7 +33,8 @@ export function createPlayer(name) {
     hotbarSlot: 0,
     questIndex: 0,
     questProgress: 0,
-    sentChunks: new Set(),    // "cx,cz" chunks already streamed to this client
+    sentChunks: new Set(),    // "cx,cz" chunks already streamed/scheduled
+    chunkQueue: [],           // "cx,cz" chunks waiting to be sent (paced)
     lastSeen: Date.now(),
     dirty: true,              // stats changed -> resend to client
   };

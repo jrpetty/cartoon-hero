@@ -46,6 +46,13 @@ export class Player {
     // clamp dt so a tab-switch hitch can't fling the player through terrain
     dt = Math.min(dt, 0.05);
 
+    // don't apply physics until the ground beneath us has streamed in, else we
+    // fall through not-yet-loaded chunks
+    if (!this.world.hasChunkAt(this.pos.x, this.pos.z)) {
+      this.syncCamera();
+      return;
+    }
+
     // desired horizontal movement in yaw space
     const fwd = (this.keys['KeyW'] ? 1 : 0) - (this.keys['KeyS'] ? 1 : 0);
     const str = (this.keys['KeyD'] ? 1 : 0) - (this.keys['KeyA'] ? 1 : 0);
@@ -84,7 +91,10 @@ export class Player {
     // void fallback
     if (this.pos.y < -20) { this.pos.set(0.5, 60, 0.5); this.vel.set(0, 0, 0); }
 
-    // sync camera
+    this.syncCamera();
+  }
+
+  syncCamera() {
     this.cam.position.set(this.pos.x, this.pos.y + EYE, this.pos.z);
     this.cam.rotation.set(0, 0, 0, 'YXZ');
     this.cam.rotateY(this.yaw);

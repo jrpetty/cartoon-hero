@@ -5,19 +5,26 @@
 let nextMobId = 1;
 
 export class MobManager {
-  constructor(world, cap = 24) {
+  constructor(world, cap = 24, safeRadius = 14) {
     this.world = world;
     this.mobs = new Map();   // id -> mob
     this.cap = cap;
+    this.safeRadius = safeRadius; // no spawns/damage within this of origin (safe hub)
+  }
+
+  // is a world point inside the protected spawn hub?
+  inSafeZone(x, z) {
+    return (x * x + z * z) < this.safeRadius * this.safeRadius;
   }
 
   spawnNear(x, z) {
     if (this.mobs.size >= this.cap) return null;
     // pick a spot a few blocks from (x, z)
     const ang = (nextMobId * 2.399963); // golden-angle scatter, deterministic
-    const dist = 6 + (nextMobId % 6);
+    const dist = 8 + (nextMobId % 8);
     const mx = Math.round(x + Math.cos(ang) * dist);
     const mz = Math.round(z + Math.sin(ang) * dist);
+    if (this.inSafeZone(mx, mz)) return null;  // keep the hub clear
     const my = this.world.surfaceY(mx, mz);
     if (my > 62) return null;
     const mob = {

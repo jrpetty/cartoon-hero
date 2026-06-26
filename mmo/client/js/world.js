@@ -47,6 +47,11 @@ export class VoxelWorld {
     if (c && !c._queued) { c.dirty = true; c._queued = true; this.dirtyQueue.push(c); }
   }
 
+  hasChunkAt(x, z) {
+    const cx = Math.floor(x / this.CH), cz = Math.floor(z / this.CH);
+    return this.chunks.has(this.key(cx, cz));
+  }
+
   // world block lookup across chunk boundaries; unloaded => treated as air(0)
   getBlock(x, y, z) {
     if (y < 0 || y >= this.H) return 0;

@@ -55,8 +55,19 @@ function initScene() {
 }
 
 // ----------------------------------------------------------- networking
-net.on('open', () => setConn('connected', 'ok'));
-net.on('close', () => setConn('disconnected — reload to retry', 'err'));
+// Enable the Play button only once the module has loaded AND the socket is
+// open — guarantees the click handler is attached and join() will be delivered.
+net.on('open', () => {
+  setConn('connected — ready to play', 'ok');
+  const btn = document.getElementById('playBtn');
+  btn.disabled = false;
+  btn.textContent = 'Enter the World';
+});
+net.on('close', () => {
+  setConn('disconnected — reload to retry', 'err');
+  const btn = document.getElementById('playBtn');
+  if (!started) { btn.disabled = true; btn.textContent = 'Disconnected'; }
+});
 net.on('error', () => setConn('connection error', 'err'));
 
 net.on('welcome', (m) => {
@@ -221,7 +232,7 @@ function loop() {
 
 // ----------------------------------------------------------- start
 function start() {
-  if (started) return;
+  if (started || !net.ready) return; // ignore clicks before the socket is ready
   const name = document.getElementById('nameInput').value.trim() || 'Adventurer';
   net.join(name);
   document.getElementById('login').classList.add('hidden');
