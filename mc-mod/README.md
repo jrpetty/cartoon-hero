@@ -53,14 +53,19 @@ Drop that into the `mods/` folder of a Minecraft **1.21.1** instance running
 ./gradlew runServer    # launches a dev server
 ```
 
-> ⚠️ **Build environment note.** This project was authored in a sandbox whose
+### Download a pre-built jar (CI)
+
+Every push builds the mod on GitHub Actions and uploads the jar. Grab it from the
+latest green run of **[Build NeoForge mod](../../actions/workflows/build-mod.yml)**
+→ **Artifacts → `voxelia-mmo-jar`** (no local toolchain needed).
+
+> ℹ️ **Build environment note.** This project was authored in a sandbox whose
 > network policy **blocks `maven.neoforged.net` and `libraries.minecraft.net`
-> (HTTP 403)**, so the final `./gradlew build` could not be run here — Gradle
-> fails at `:createMinecraftArtifacts` resolving `net.neoforged:neoform-runtime`.
-> The project is otherwise complete; build it on any machine with normal internet
-> access (or allow those two hosts in the sandbox's egress policy) and the jar
-> is produced. Everything that does not need those repos (Gradle config, wrapper,
-> JSON data, mod metadata) was validated here.
+> (HTTP 403)**, so the final `./gradlew build` could not run *there* (Gradle
+> fails at `:createMinecraftArtifacts`). It builds cleanly anywhere with normal
+> network access — **verified green on GitHub Actions**, which compiles against
+> the real NeoForge 21.1 API and uploads the jar artifact. Build locally with
+> `./gradlew build`, or just download the CI artifact above.
 
 ## Retargeting another Minecraft / NeoForge version
 
