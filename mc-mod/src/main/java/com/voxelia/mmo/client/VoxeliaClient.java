@@ -1,8 +1,8 @@
 package com.voxelia.mmo.client;
 
 import com.voxelia.mmo.VoxeliaMMO;
-import net.minecraft.client.gui.VanillaGuiLayers;
 import net.minecraft.resources.ResourceLocation;
+import net.neoforged.neoforge.client.gui.VanillaGuiLayers;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;

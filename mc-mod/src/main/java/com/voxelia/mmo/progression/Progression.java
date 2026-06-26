@@ -38,6 +38,6 @@ public final class Progression {
             .append(Component.literal(skill.display() + " reached level " + level + "!")
                 .withStyle(ChatFormatting.YELLOW)));
         player.level().playSound(null, player.blockPosition(),
-            SoundEvents.PLAYER_LEVELUP.value(), SoundSource.PLAYERS, 1.0f, 1.2f);
+            SoundEvents.PLAYER_LEVELUP, SoundSource.PLAYERS, 1.0f, 1.2f);
     }
 }
