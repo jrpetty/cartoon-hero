@@ -12,6 +12,9 @@ on:
       - '.github/workflows/build-mod.yml'
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -31,9 +34,22 @@ jobs:
       - name: Build with Gradle
         run: gradle build --no-daemon --stacktrace
 
-      - name: Upload mod jar
+      - name: Upload mod jar (Actions artifact)
         uses: actions/upload-artifact@v4
         with:
           name: structural-integrity-jar
           path: structural-integrity/build/libs/*.jar
           if-no-files-found: error
+
+      # Publish the raw .jar as a Release asset so it has a permanent, one-click
+      # direct download URL (no zip wrapper, no Actions login needed).
+      - name: Publish jar to a GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: mod-v1.0.0
+          name: Structural Integrity 1.0.0
+          body: |
+            NeoForge mod for Minecraft 1.21.1. Install the NeoForge 21.1.x loader,
+            then drop the jar below into your `mods/` folder.
+          files: structural-integrity/build/libs/*.jar
+          make_latest: true
