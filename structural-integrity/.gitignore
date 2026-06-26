@@ -1,0 +1,17 @@
+# Build output
+build/
+out/
+.gradle/
+run/
+runs/
+
+# IDE
+*.iml
+.idea/
+.classpath
+.project
+.settings/
+bin/
+
+# Gradle wrapper jar is intentionally not committed here; run `gradle wrapper` to generate it.
+gradle/wrapper/gradle-wrapper.jar

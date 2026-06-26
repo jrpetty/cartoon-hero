@@ -1,0 +1,6 @@
+{
+  "itemGroup.structint": "Structural Integrity",
+  "block.structint.foundation_anchor": "Foundation Anchor",
+  "block.structint.reinforced_beam": "Reinforced Beam",
+  "block.structint.heavy_girder": "Heavy Girder"
+}

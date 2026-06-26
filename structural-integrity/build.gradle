@@ -1,0 +1,58 @@
+plugins {
+    id 'net.neoforged.moddev' version '2.0.78'
+}
+
+version = project.findProperty('mod_version') ?: '1.0.0'
+group = 'dev.structint'
+
+base {
+    archivesName = 'structural-integrity'
+}
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(21)
+    }
+    // The dev.structint.core package has no Minecraft dependency, so it can also be compiled
+    // and tested in complete isolation (see CoreSelfTest). Nothing here breaks that.
+}
+
+repositories {
+    mavenCentral()
+}
+
+neoForge {
+    // NeoForge for Minecraft 1.21.1. Bump to taste; see https://projects.neoforged.net/neoforged/neoforge
+    version = project.findProperty('neoforge_version') ?: '21.1.77'
+
+    runs {
+        client {
+            client()
+        }
+        server {
+            server()
+        }
+        gameTestServer {
+            type = 'gameTestServer'
+        }
+    }
+
+    mods {
+        structint {
+            sourceSet sourceSets.main
+        }
+    }
+}
+
+dependencies {
+    testImplementation platform('org.junit:junit-bom:5.10.2')
+    testImplementation 'org.junit.jupiter:junit-jupiter'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+test {
+    useJUnitPlatform()
+    testLogging {
+        events 'passed', 'skipped', 'failed'
+    }
+}
