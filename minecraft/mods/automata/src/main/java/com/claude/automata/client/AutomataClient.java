@@ -5,6 +5,7 @@ import com.claude.automata.screen.ModScreenHandlers;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
+import net.fabricmc.fabric.api.client.rendering.v1.EntityModelLayerRegistry;
 import net.fabricmc.fabric.api.client.rendering.v1.EntityRendererRegistry;
 import net.minecraft.client.gui.screen.ingame.HandledScreens;
 
@@ -17,6 +18,7 @@ public class AutomataClient implements ClientModInitializer {
 	@Override
 	public void onInitializeClient() {
 		HandledScreens.register(ModScreenHandlers.MACHINE, MachineScreen::new);
+		EntityModelLayerRegistry.registerModelLayer(CourierDroneModel.LAYER, CourierDroneModel::getTexturedModelData);
 		EntityRendererRegistry.register(ModEntities.COURIER_DRONE, CourierDroneRenderer::new);
 	}
 }

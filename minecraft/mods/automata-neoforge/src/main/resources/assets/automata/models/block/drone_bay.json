@@ -1,1 +1,1 @@
-{ "parent": "minecraft:block/cube_all", "textures": { "all": "automata:block/drone_bay" } }
+{ "parent": "minecraft:block/cube_bottom_top", "textures": { "top": "automata:block/drone_bay_top", "side": "automata:block/drone_bay", "bottom": "automata:block/drone_bay_bottom" } }

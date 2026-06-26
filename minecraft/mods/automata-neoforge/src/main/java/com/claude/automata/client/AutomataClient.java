@@ -27,4 +27,9 @@ public class AutomataClient {
 	public static void onRegisterRenderers(EntityRenderersEvent.RegisterRenderers event) {
 		event.registerEntityRenderer(ModEntities.COURIER_DRONE.get(), CourierDroneRenderer::new);
 	}
+
+	@SubscribeEvent
+	public static void onRegisterLayerDefinitions(EntityRenderersEvent.RegisterLayerDefinitions event) {
+		event.registerLayerDefinition(CourierDroneModel.LAYER, CourierDroneModel::createBodyLayer);
+	}
 }

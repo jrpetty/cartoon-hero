@@ -1,29 +1,32 @@
 package com.claude.automata.client;
 
 import com.claude.automata.entity.CourierDroneEntity;
-import com.claude.automata.registry.ModItems;
 import com.mojang.blaze3d.vertex.PoseStack;
-import net.minecraft.client.Minecraft;
+import com.mojang.blaze3d.vertex.VertexConsumer;
+import com.mojang.math.Axis;
 import net.minecraft.client.renderer.MultiBufferSource;
+import net.minecraft.client.renderer.RenderType;
 import net.minecraft.client.renderer.entity.EntityRenderer;
 import net.minecraft.client.renderer.entity.EntityRendererProvider;
 import net.minecraft.client.renderer.texture.OverlayTexture;
 import net.minecraft.resources.ResourceLocation;
-import net.minecraft.world.item.ItemDisplayContext;
-import net.minecraft.world.item.ItemStack;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.api.distmarker.OnlyIn;
 
 /**
- * Renders a Courier Drone as a small floating machine component, bobbing as it
- * flies. Purely client-side.
+ * Renders a Courier Drone as a small floating quadcopter that bobs gently as it
+ * flies, with its four rotors spinning. Purely client-side.
  */
 @OnlyIn(Dist.CLIENT)
 public class CourierDroneRenderer extends EntityRenderer<CourierDroneEntity> {
-	private static final ResourceLocation TEXTURE = ResourceLocation.withDefaultNamespace("textures/entity/experience_orb.png");
+	private static final ResourceLocation TEXTURE =
+			ResourceLocation.fromNamespaceAndPath("automata", "textures/entity/courier_drone.png");
+
+	private final CourierDroneModel model;
 
 	public CourierDroneRenderer(EntityRendererProvider.Context context) {
 		super(context);
+		this.model = new CourierDroneModel(context.bakeLayer(CourierDroneModel.LAYER));
 	}
 
 	@Override
@@ -35,12 +38,17 @@ public class CourierDroneRenderer extends EntityRenderer<CourierDroneEntity> {
 	public void render(CourierDroneEntity entity, float yaw, float tickDelta, PoseStack matrices,
 			MultiBufferSource vertexConsumers, int light) {
 		matrices.pushPose();
-		float bob = (float) Math.sin((entity.tickCount + tickDelta) * 0.2f) * 0.08f;
+		float age = entity.tickCount + tickDelta;
+		float bob = (float) Math.sin(age * 0.2F) * 0.08F;
 		matrices.translate(0.0, 0.3 + bob, 0.0);
-		matrices.scale(0.7f, 0.7f, 0.7f);
-		ItemStack stack = new ItemStack(ModItems.MACHINE_FRAME.get());
-		Minecraft.getInstance().getItemRenderer().renderStatic(stack, ItemDisplayContext.GROUND, light,
-				OverlayTexture.NO_OVERLAY, matrices, vertexConsumers, entity.level(), 0);
+		matrices.scale(0.6F, 0.6F, 0.6F);
+		// Minecraft entity models are built in an inverted space; flip 180deg about
+		// X (and translate down) so the box model renders upright.
+		matrices.mulPose(Axis.XP.rotationDegrees(180.0F));
+		matrices.translate(0.0, -1.5, 0.0);
+		model.setupAnim(entity, 0.0F, 0.0F, age, 0.0F, 0.0F);
+		VertexConsumer vc = vertexConsumers.getBuffer(RenderType.entityCutoutNoCull(TEXTURE));
+		model.renderToBuffer(matrices, vc, light, OverlayTexture.NO_OVERLAY, 0xFFFFFFFF);
 		matrices.popPose();
 		super.render(entity, yaw, tickDelta, matrices, vertexConsumers, light);
 	}
