@@ -137,7 +137,7 @@ cantilever it can still support. A block is **stable iff some path gives it reac
 reach(anchor)            = CAP            // natural terrain & foundations: effectively infinite
 support flows along two edge types, from any already-supported cell S with reach r:
 
-  vertical (cell directly ABOVE S):       reach = span(above)        // resting on a column → full reset
+  vertical (cell directly ABOVE S):       reach = r                  // resting on a column → INHERIT, no reset
   horizontal (4 cells beside S):          reach = min(r, span(side)) - 1   // cantilever, costs 1 per step
 
   (there is deliberately NO downward edge: nothing is held up by the block above it)
@@ -176,8 +176,11 @@ Why this satisfies the design:
   from whichever wall is nearer; remove one wall and the near half still stands. Removing an
   intermediate block never collapses a structure that still has another valid load path. This is
   explicitly **not** single-path connectivity failure.
-- **Vertical load & pillars.** The vertical edge resets reach to full, so a column of any height
-  transfers load straight to the ground.
+- **Vertical load & pillars.** A block inherits the reach of the block beneath it, so a column
+  rooted on the ground carries the anchor's full reach straight up — pillars of any height stand.
+  Because it *inherits* rather than *resets*, the tip of a maxed-out cantilever (reach 0) cannot
+  act as a fresh anchor: stepping up one block off it buys no new span, so the "staircase" cheese
+  is closed. A genuine ground pillar at the new spot still grants a full fresh span.
 - **Deterministic.** The result is the unique fixed point of a monotone relaxation — independent
   of iteration order, tie-breaks, or which block was touched.
 
@@ -218,7 +221,8 @@ Complexity per edit: `O(region · log region)`, with `region ≤ maxRegionNodes`
 - **Classification via data tags** (`structint:structural_wood`, `…_stone`, `…_reinforced`,
   `…_metal`, `…_dirt`, `foundations`, `exempt`) so packs can reclassify without code.
 - **Collapse via vanilla** `FallingBlockEntity.fall(...)` — reuses the gravity Minecraft already
-  ships. No custom physics.
+  ships. No custom physics. Collapse-spawned falling blocks are flagged (entity attachment) and,
+  on landing (`EntityLeaveLevelEvent`), re-marked as player-managed so piles stay in the system.
 
 ---
 

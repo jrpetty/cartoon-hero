@@ -19,10 +19,14 @@ import java.util.Set;
  * kinds of edge:
  *
  * <ul>
- *   <li><b>Vertical (resting on a support).</b> A structural block sitting directly on top
- *       of any supported block is a pillar resting on its base: its reach <em>resets</em> to
- *       its own material's full span. This is what lets pillars rise to any height and what
- *       transfers vertical load straight down to the ground.</li>
+ *   <li><b>Vertical (resting on a support).</b> A structural block sitting directly on top of
+ *       another block <em>inherits that block's remaining reach</em> — it does not reset. A
+ *       pillar rooted on the ground carries the anchor's effectively-infinite reach (CAP)
+ *       straight up, so pillars rise to any height and transfer load to the ground. But the tip
+ *       of a maxed-out cantilever has reach 0, so stepping up one block off it inherits 0 and
+ *       buys you nothing — closing the "staircase" exploit where each step-up refreshed the
+ *       full horizontal budget. You only get a fresh full span by standing on real vertical
+ *       support down to the ground.</li>
  *   <li><b>Horizontal (cantilevering outward).</b> Stepping sideways from a supported block
  *       with reach {@code r} into a structural neighbour costs one block of span. The
  *       neighbour's reach becomes {@code min(r, neighbour.maxSpan) - 1}: it can never exceed
@@ -111,10 +115,12 @@ public final class SupportSolver {
                 continue; // stale queue entry, already finalised at a higher reach
             }
 
-            // Vertical edge: the block resting directly on top of this one gets a full reset.
+            // Vertical edge: the block resting directly on top of this one INHERITS this
+            // block's remaining reach (no reset). Ground pillars carry CAP upward; a cantilever
+            // tip carries 0, so stepping up off it grants no fresh span.
             long up = PackedPos.offset(pos, 0, 1, 0);
             if (grid.roleAt(up) == CellRole.STRUCTURAL) {
-                relax(up, grid.maxSpanAt(up), best, frontier);
+                relax(up, reach, best, frontier);
             }
 
             // Horizontal edges: cantilever outward, paying one block of span per step.

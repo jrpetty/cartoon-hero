@@ -146,6 +146,19 @@ class SupportSolverTest {
     }
 
     @Test
+    void stepUpDoesNotResetSpan() {
+        // Ground pillar + wood beam (span 4) out to the tip at x=4; then try to "staircase".
+        Grid g = new Grid().anchor(0, 0, 0).pillar(0, 1, 5, Material.WOOD.maxSpan());
+        g.beam(1, 4, 5, Material.WOOD.maxSpan());
+        g.block(4, 6, 0, Material.WOOD.maxSpan());
+        for (int x = 5; x <= 9; x++) g.block(x, 6, 0, Material.WOOD.maxSpan());
+        StructuralEngine e = engine(g);
+        assertTrue(e.isSupported(PackedPos.of(4, 6, 0)), "one block may rest on the tip");
+        assertFalse(e.isSupported(PackedPos.of(5, 6, 0)), "cantilever cannot continue past a tip step-up");
+        assertFalse(e.isSupported(PackedPos.of(9, 6, 0)), "old exploit tail falls");
+    }
+
+    @Test
     void overBudgetStructureIsTreatedAsStable() {
         // A region cap of 3 forces the flood to bail; bail = treat as stable (fail-safe).
         Grid g = new Grid();

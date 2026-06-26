@@ -1,10 +1,13 @@
 package dev.structint.event;
 
 import dev.structint.StructuralIntegrityMod;
+import dev.structint.world.ModAttachments;
 import dev.structint.world.StructuralManager;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.entity.item.FallingBlockEntity;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
+import net.neoforged.neoforge.event.entity.EntityLeaveLevelEvent;
 import net.neoforged.neoforge.event.level.BlockEvent;
 import net.neoforged.neoforge.event.level.LevelEvent;
 import net.neoforged.neoforge.event.tick.LevelTickEvent;
@@ -46,6 +49,22 @@ public final class StructuralEventHandler {
         if (event.getLevel() instanceof ServerLevel level) {
             StructuralManager.tick(level);
         }
+    }
+
+    @SubscribeEvent
+    public static void onFallingBlockLanded(EntityLeaveLevelEvent event) {
+        if (!(event.getLevel() instanceof ServerLevel level)) {
+            return;
+        }
+        if (!(event.getEntity() instanceof FallingBlockEntity falling)) {
+            return;
+        }
+        if (!falling.getData(ModAttachments.FROM_COLLAPSE.get())) {
+            return; // not one of ours (a normal sand/gravel fall)
+        }
+        // The entity removes itself in the same tick it places its block, so the block is present
+        // now. Re-mark it as player-managed at its resting position.
+        StructuralManager.onCollapsedBlockLanded(level, falling.blockPosition(), falling.getBlockState());
     }
 
     @SubscribeEvent

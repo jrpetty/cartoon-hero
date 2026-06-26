@@ -123,7 +123,25 @@ public final class StructuralManager {
         // Turn it into a vanilla falling block: it drops, lands, and either settles as ground
         // or breaks into an item. No custom physics, no debris — just the vanilla gravity we
         // already trust. Removal of the source block is handled by fall().
-        FallingBlockEntity.fall(level, pos, state);
+        FallingBlockEntity entity = FallingBlockEntity.fall(level, pos, state);
+        if (entity != null) {
+            // Tag it so we can re-mark the block as player-managed when it lands (see below).
+            entity.setData(ModAttachments.FROM_COLLAPSE.get(), Boolean.TRUE);
+        }
+    }
+
+    /**
+     * Called when a collapse-spawned falling block lands and re-forms into a block. Without this,
+     * the landed block would be untracked and treated as natural terrain — letting players farm
+     * free anchors by deliberately collapsing structures. We re-mark it as player-managed (so it
+     * stays in the system) and re-check it (it is resting on something, so it stays put).
+     */
+    public static void onCollapsedBlockLanded(ServerLevel level, BlockPos pos, BlockState expected) {
+        if (level.getBlockState(pos) != expected) {
+            return; // it broke into an item or merged elsewhere — nothing landed here
+        }
+        StructuralData.setManaged(level, pos, true);
+        state(level).enqueueChange(pos.asLong());
     }
 
     private static StructuralEngine newEngine(ServerLevel level) {

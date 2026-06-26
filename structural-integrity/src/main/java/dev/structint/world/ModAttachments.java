@@ -19,6 +19,16 @@ public final class ModAttachments {
                             .serialize(ManagedBlocks.CODEC)
                             .build());
 
+    /**
+     * Transient flag on a {@code FallingBlockEntity} that the structural system spawned. When
+     * such an entity lands, the block it places is re-marked as player-managed so collapse piles
+     * stay part of the structural system instead of becoming free natural anchors. Not
+     * serialized — falling blocks are short-lived and resolve well within a tick or two.
+     */
+    public static final Supplier<AttachmentType<Boolean>> FROM_COLLAPSE =
+            ATTACHMENT_TYPES.register("from_collapse", () ->
+                    AttachmentType.builder(() -> Boolean.FALSE).build());
+
     private ModAttachments() {
     }
 }

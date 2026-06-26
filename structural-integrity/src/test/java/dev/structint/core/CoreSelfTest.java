@@ -88,6 +88,7 @@ public final class CoreSelfTest {
         testWeakLinkLimitsBeam();
         testArchKeepsCrownUp();
         testOnlyUnsupportedTailCollapses();
+        testStepUpDoesNotResetSpan();
 
         System.out.println();
         if (failures == 0) {
@@ -219,6 +220,25 @@ public final class CoreSelfTest {
         g.beamX(0, 6, 3, 0, Material.STONE.maxSpan());
         StructuralEngine e = engine(g);
         check(e.isSupported(PackedPos.of(3, 3, 0)), "arch crown is supported");
+    }
+
+    private static void testStepUpDoesNotResetSpan() {
+        System.out.println("stepping up off a cantilever tip does NOT refresh the span (no staircase exploit)");
+        // Ground pillar to y=5, wood beam (span 4) out to x=4 (the tip, reach 0).
+        FakeGrid g = new FakeGrid().anchor(0, 0, 0).pillarY(0, 1, 5, 0, Material.WOOD.maxSpan());
+        g.beamX(1, 4, 5, 0, Material.WOOD.maxSpan());
+        // Attempt the exploit: step up at the tip and continue the cantilever at y=6.
+        g.structural(4, 6, 0, Material.WOOD.maxSpan());
+        g.beamX(5, 9, 6, 0, Material.WOOD.maxSpan());
+        StructuralEngine e = engine(g);
+        check(e.isSupported(PackedPos.of(4, 5, 0)), "the tip itself is still supported");
+        check(e.isSupported(PackedPos.of(4, 6, 0)), "one block may rest on the tip");
+        check(!e.isSupported(PackedPos.of(5, 6, 0)), "but the cantilever cannot continue (x=5,y=6 falls)");
+        check(!e.isSupported(PackedPos.of(9, 6, 0)), "the old exploit tail (x=9,y=6) falls");
+        // Sanity: a real ground pillar at the new spot WOULD support a fresh span.
+        FakeGrid g2 = new FakeGrid().anchor(10, 0, 0).pillarY(10, 1, 6, 0, Material.WOOD.maxSpan());
+        g2.beamX(11, 14, 6, 0, Material.WOOD.maxSpan());
+        check(engine(g2).isSupported(PackedPos.of(14, 6, 0)), "a genuine ground pillar still grants full span");
     }
 
     private static void testOnlyUnsupportedTailCollapses() {
