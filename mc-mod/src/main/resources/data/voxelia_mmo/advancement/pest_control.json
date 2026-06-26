@@ -1,0 +1,16 @@
+{
+  "parent": "voxelia_mmo:pick_of_the_litter",
+  "display": {
+    "icon": { "id": "minecraft:rotten_flesh" },
+    "title": { "translate": "advancements.voxelia_mmo.pest_control.title" },
+    "description": { "translate": "advancements.voxelia_mmo.pest_control.description" },
+    "show_toast": true,
+    "announce_to_chat": true
+  },
+  "criteria": {
+    "kill": {
+      "trigger": "minecraft:player_killed_entity"
+    }
+  },
+  "requirements": [["kill"]]
+}

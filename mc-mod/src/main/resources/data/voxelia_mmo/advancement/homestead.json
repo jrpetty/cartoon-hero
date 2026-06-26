@@ -1,0 +1,17 @@
+{
+  "parent": "voxelia_mmo:pest_control",
+  "display": {
+    "icon": { "id": "minecraft:wheat" },
+    "title": { "translate": "advancements.voxelia_mmo.homestead.title" },
+    "description": { "translate": "advancements.voxelia_mmo.homestead.description" },
+    "show_toast": true,
+    "announce_to_chat": true
+  },
+  "criteria": {
+    "wheat": {
+      "trigger": "minecraft:inventory_changed",
+      "conditions": { "items": [ { "items": "minecraft:wheat" } ] }
+    }
+  },
+  "requirements": [["wheat"]]
+}

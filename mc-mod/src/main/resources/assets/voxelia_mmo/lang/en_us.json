@@ -1,0 +1,17 @@
+{
+  "voxelia_mmo.skill.mining": "Mining",
+  "voxelia_mmo.skill.foraging": "Foraging",
+  "voxelia_mmo.skill.combat": "Combat",
+  "voxelia_mmo.skill.farming": "Farming",
+
+  "advancements.voxelia_mmo.root.title": "Voxelia MMO",
+  "advancements.voxelia_mmo.root.description": "Begin your adventure — gather, fight, and level up.",
+  "advancements.voxelia_mmo.first_cut.title": "First Cut",
+  "advancements.voxelia_mmo.first_cut.description": "Chop your first logs to train Foraging.",
+  "advancements.voxelia_mmo.pick_of_the_litter.title": "Pick of the Litter",
+  "advancements.voxelia_mmo.pick_of_the_litter.description": "Mine cobblestone to train Mining.",
+  "advancements.voxelia_mmo.pest_control.title": "Pest Control",
+  "advancements.voxelia_mmo.pest_control.description": "Defeat a hostile mob to train Combat.",
+  "advancements.voxelia_mmo.homestead.title": "Homestead",
+  "advancements.voxelia_mmo.homestead.description": "Harvest wheat to train Farming."
+}

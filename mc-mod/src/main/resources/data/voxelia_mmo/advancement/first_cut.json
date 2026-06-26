@@ -1,0 +1,17 @@
+{
+  "parent": "voxelia_mmo:root",
+  "display": {
+    "icon": { "id": "minecraft:oak_log" },
+    "title": { "translate": "advancements.voxelia_mmo.first_cut.title" },
+    "description": { "translate": "advancements.voxelia_mmo.first_cut.description" },
+    "show_toast": true,
+    "announce_to_chat": true
+  },
+  "criteria": {
+    "logs": {
+      "trigger": "minecraft:inventory_changed",
+      "conditions": { "items": [ { "items": "#minecraft:logs" } ] }
+    }
+  },
+  "requirements": [["logs"]]
+}

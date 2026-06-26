@@ -1,0 +1,17 @@
+{
+  "parent": "voxelia_mmo:first_cut",
+  "display": {
+    "icon": { "id": "minecraft:cobblestone" },
+    "title": { "translate": "advancements.voxelia_mmo.pick_of_the_litter.title" },
+    "description": { "translate": "advancements.voxelia_mmo.pick_of_the_litter.description" },
+    "show_toast": true,
+    "announce_to_chat": true
+  },
+  "criteria": {
+    "cobble": {
+      "trigger": "minecraft:inventory_changed",
+      "conditions": { "items": [ { "items": "minecraft:cobblestone" } ] }
+    }
+  },
+  "requirements": [["cobble"]]
+}

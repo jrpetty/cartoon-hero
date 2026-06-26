@@ -1,0 +1,14 @@
+{
+  "display": {
+    "icon": { "id": "minecraft:diamond_sword" },
+    "title": { "translate": "advancements.voxelia_mmo.root.title" },
+    "description": { "translate": "advancements.voxelia_mmo.root.description" },
+    "background": "minecraft:textures/gui/advancements/backgrounds/adventure.png",
+    "show_toast": false,
+    "announce_to_chat": false
+  },
+  "criteria": {
+    "tick": { "trigger": "minecraft:tick" }
+  },
+  "requirements": [["tick"]]
+}
