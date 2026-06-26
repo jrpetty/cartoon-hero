@@ -1,0 +1,39 @@
+name: Build Structural Integrity mod
+
+# Builds the NeoForge mod jar on GitHub's runners (which can reach maven.neoforged.net)
+# and publishes it as a downloadable artifact. Runs on pushes that touch the mod, and can
+# be triggered manually from the Actions tab.
+on:
+  push:
+    branches:
+      - 'claude/minecraft-structural-integrity-tnpa66'
+    paths:
+      - 'structural-integrity/**'
+      - '.github/workflows/build-mod.yml'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: structural-integrity
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Build with Gradle
+        run: gradle build --no-daemon --stacktrace
+
+      - name: Upload mod jar
+        uses: actions/upload-artifact@v4
+        with:
+          name: structural-integrity-jar
+          path: structural-integrity/build/libs/*.jar
+          if-no-files-found: error
