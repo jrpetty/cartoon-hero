@@ -15,18 +15,44 @@ NeoForge instead of a custom engine.
 
 ## Features
 
-| System | What it does | How |
-| --- | --- | --- |
-| **Skills** | Mining, Foraging, Combat, Farming — each with its own XP and level (1–50). | Data attachment on the player (persisted + copied on death). |
-| **XP gains** | Breaking logs/leaves → Foraging; crops → Farming; pickaxe blocks/ores → Mining; killing mobs → Combat. | Vanilla event hooks (`BlockEvent.BreakEvent`, `LivingDeathEvent`). |
-| **Level-up scaling** | Combat → max health & attack damage; Mining → armor; Foraging → move speed; Farming → luck. | Idempotent attribute modifiers, re-applied on level-up/login/respawn. |
-| **Skills HUD** | Top-left overlay showing each skill's level and progress to next. | Client GUI layer (`RegisterGuiLayersEvent`), fed by a synced packet. |
-| **Quests** | A 4-step advancement chain (First Cut → Pick of the Litter → Pest Control → Homestead). | Data-pack advancements. |
-| **Commands** | `/voxelia skills` (view), `/voxelia grant <skill> <amount>` (op). | Brigadier via `RegisterCommandsEvent`. |
-| **Config** | `xpMultiplier`, `showHud`. | `config/voxelia_mmo-common.toml`. |
+**Six skills**, each leveling **1 → 100** with its own XP, stored as a persisted
+player data attachment (copied on death):
 
-The server is authoritative: it owns skill XP and combat resolution and pushes a
-`SkillsSyncPayload` to each client, which only renders the HUD.
+| Skill | Trains from | Per-level reward | Milestone perk |
+| --- | --- | --- | --- |
+| **Mining** | ores / stone | block-break speed + **Fortune** on ores | **Haste** (lv 25+, holding a pickaxe), **Telekinesis** auto-pickup (lv 100) |
+| **Foraging** | logs / leaves | block-break speed + **Fortune** on wood | — |
+| **Combat** | killing mobs | +attack damage (~+10 at 100) | **life steal** on kills |
+| **Farming** | harvesting crops | +max health (~doubles HP at 100) | — |
+| **Acrobatics** | taking fall damage | **dodge** chance 0.6%/lvl → 60% at 100 | softer landings (fall-damage reduction) |
+| **Fishing** | catching with a rod | +luck & faster bites while fishing | **treasure** catches |
+
+Fortune never applies with Silk Touch (no dupes). Combat level also scales nothing
+else — health lives on Farming.
+
+| System | What it does |
+| --- | --- |
+| **Level-up feedback** | Chat line, sound, on-screen **title**, and particles. |
+| **Skills GUI** | A full screen with every skill + XP bars — open with **`K`** or `/voxelia menu`. |
+| **HUD** | Corner overlay with per-skill XP bars; position is configurable (anchor + offset). |
+| **Quests** | A multi-step advancement chain that walks you through the skills. |
+| **Leaderboard** | `/voxelia top <skill>` ranks online players. |
+| **Config** | Every XP rate and reward coefficient is tunable in `config/voxelia_mmo-common.toml`; HUD prefs in `voxelia_mmo-client.toml`. |
+
+### Commands
+
+| Command | Side | Purpose |
+| --- | --- | --- |
+| `/voxelia skills` | server | View your levels and XP |
+| `/voxelia top <skill>` | server | Leaderboard of online players |
+| `/voxelia grant <skill> <amount>` | server (op) | Grant XP |
+| `/voxelia menu` | client | Open the Skills GUI |
+| `/voxelia hud` | client | Toggle the HUD |
+| `/voxelia hudpos <corner>` | client | Move the HUD (`top_left`/`top_right`/`bottom_left`/`bottom_right`) |
+| `/voxelia rewards` | client | Print what each skill level grants |
+
+The server is authoritative: it owns skill XP, combat resolution, and perks, and
+pushes a `SkillsSyncPayload` to each client, which only renders the HUD/GUI.
 
 ## Build the jar
 

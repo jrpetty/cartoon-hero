@@ -1,0 +1,16 @@
+{
+  "parent": "voxelia_mmo:homestead",
+  "display": {
+    "icon": { "id": "minecraft:fishing_rod" },
+    "title": { "translate": "advancements.voxelia_mmo.gone_fishing.title" },
+    "description": { "translate": "advancements.voxelia_mmo.gone_fishing.description" },
+    "show_toast": true,
+    "announce_to_chat": true
+  },
+  "criteria": {
+    "catch": {
+      "trigger": "minecraft:fishing_rod_hooked"
+    }
+  },
+  "requirements": [["catch"]]
+}

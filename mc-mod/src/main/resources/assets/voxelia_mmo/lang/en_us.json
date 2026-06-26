@@ -18,5 +18,7 @@
   "advancements.voxelia_mmo.pest_control.title": "Pest Control",
   "advancements.voxelia_mmo.pest_control.description": "Defeat a hostile mob to train Combat.",
   "advancements.voxelia_mmo.homestead.title": "Homestead",
-  "advancements.voxelia_mmo.homestead.description": "Harvest wheat to train Farming."
+  "advancements.voxelia_mmo.homestead.description": "Harvest wheat to train Farming.",
+  "advancements.voxelia_mmo.gone_fishing.title": "Gone Fishing",
+  "advancements.voxelia_mmo.gone_fishing.description": "Reel in a catch to train Fishing."
 }
