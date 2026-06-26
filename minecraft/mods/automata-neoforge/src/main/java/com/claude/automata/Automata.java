@@ -81,8 +81,12 @@ public class Automata {
 				return;
 			}
 			BlockPos pos = event.getPos();
-			// Let the router block itself handle wrench clicks (selection).
-			if (world.getBlockEntity(pos) instanceof RouterBlockEntity) {
+			// Let the Router and the Drone Bay handle their own wrench clicks
+			// (router selection / drone-bay linking) rather than treating them as
+			// router destinations.
+			net.minecraft.world.level.block.entity.BlockEntity clicked = world.getBlockEntity(pos);
+			if (clicked instanceof RouterBlockEntity
+					|| clicked instanceof com.claude.automata.block.entity.DroneBayBlockEntity) {
 				return;
 			}
 			if (InventoryTransfer.inventoryAt(world, pos) == null) {
