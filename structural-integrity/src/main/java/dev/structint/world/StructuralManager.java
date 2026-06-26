@@ -120,9 +120,17 @@ public final class StructuralManager {
 
     private static void collapse(ServerLevel level, BlockPos pos, BlockState state) {
         StructuralData.setManaged(level, pos, false);
-        // Turn it into a vanilla falling block: it drops, lands, and either settles as ground
-        // or breaks into an item. No custom physics, no debris — just the vanilla gravity we
-        // already trust. Removal of the source block is handled by fall().
+
+        // Blocks with a block entity (chests, furnaces, shulker boxes, hoppers, signs, …) must
+        // NOT become falling entities — that can void their contents. Drop them properly instead.
+        if (state.hasBlockEntity()) {
+            level.destroyBlock(pos, true);
+            return;
+        }
+
+        // Everything else turns into a vanilla falling block: it drops, lands, and either settles
+        // as ground or breaks into an item. No custom physics, no debris — just the vanilla
+        // gravity we already trust. Removal of the source block is handled by fall().
         FallingBlockEntity entity = FallingBlockEntity.fall(level, pos, state);
         if (entity != null) {
             // Tag it so we can re-mark the block as player-managed when it lands (see below).

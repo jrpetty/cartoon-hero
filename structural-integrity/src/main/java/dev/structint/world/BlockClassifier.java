@@ -4,6 +4,7 @@ import dev.structint.Config;
 import net.minecraft.core.BlockPos;
 import net.minecraft.tags.BlockTags;
 import net.minecraft.world.level.BlockGetter;
+import net.minecraft.world.level.block.LiquidBlock;
 import net.minecraft.world.level.block.SlabBlock;
 import net.minecraft.world.level.block.StairBlock;
 import net.minecraft.world.level.block.state.BlockState;
@@ -18,28 +19,25 @@ import net.minecraft.world.level.block.state.BlockState;
 public final class BlockClassifier {
 
     /**
-     * Whether a block bears structural load and so participates in the system. This is the gate
-     * for being managed, being an anchor, and being a structural cell.
+     * Whether a block participates in the system. This is the gate for being managed, being an
+     * anchor, and being a structural cell.
      *
-     * <p>Load-bearing shapes are: full cubes (stone, planks, concrete, double slabs, …) <b>and</b>
-     * slabs and stairs — half-blocks still hold a build together, so a slab bridge or a stair
-     * staircase obeys the same span rules. Genuine decorations (torches, fences, panes, walls,
-     * carpets) are neither full cubes nor slabs/stairs, so they stay invisible to the rules.
+     * <p><b>Every</b> block participates — full cubes, slabs, stairs, walls, fences, panes, bars,
+     * chains, trapdoors, torches, carpets, plants, redstone, signs, … — so any player-placed block
+     * must trace a valid load path or it falls. The only things excluded are air, fluids (water
+     * and lava), and an explicit {@code structint:exempt} tag (the small escape hatch for special
+     * blocks like scaffolding). The {@code level}/{@code pos} parameters are retained for API
+     * stability and possible future shape-aware rules.
      */
+    @SuppressWarnings("unused")
     public static boolean isLoadBearing(BlockState state, BlockGetter level, BlockPos pos) {
         if (state.isAir()) {
             return false;
         }
-        if (state.is(StructuralTags.EXEMPT)) {
-            return false;
+        if (state.getBlock() instanceof LiquidBlock) {
+            return false; // water/lava are not structural
         }
-        if (isSlabOrStairs(state)) {
-            return true; // slabs/stairs bear load (even when waterlogged)
-        }
-        if (!state.getFluidState().isEmpty()) {
-            return false; // exclude fluid source blocks
-        }
-        return state.isCollisionShapeFullBlock(level, pos);
+        return !state.is(StructuralTags.EXEMPT);
     }
 
     public static boolean isFoundation(BlockState state) {

@@ -23,9 +23,11 @@ clarity over realism*, *predictability over simulation*, and *local logic over g
   | Reinforced (concrete, Reinforced Beam) | 12 |
   | Metal (iron/netherite/copper, Heavy Girder) | 20 |
 
-  Slabs and stairs count too: they bear load and obey the same span rules (wooden ones use the
-  wood span, all others the stone span). Only genuine decorations — torches, fences, panes, walls,
-  carpets — are ignored.
+  **Every** block you place is subject to the rules — full blocks, slabs, stairs, walls, fences,
+  panes, bars, chains, trapdoors, torches, carpets, plants, redstone, signs, everything. Wooden
+  slabs/stairs use the wood span and other slabs/stairs the stone span; anything without a more
+  specific material is "generic" (span 2). The only exclusions are air, fluids (water/lava), and
+  blocks tagged `structint:exempt` (the small escape hatch, e.g. scaffolding).
 
 - Every building material's item tooltip shows its **strength tier** (Very weak → Extreme) and
   **max unsupported span**, so you can judge a block before you build with it.
@@ -84,7 +86,7 @@ play, and what's its span?"*
 **`ManagedBlocks` (per-chunk attachment).** A `LongOpenHashSet` of packed positions that a player
 placed. It is the single source of truth for natural-vs-player:
 
-> *Any full solid block that is **not** in its chunk's managed set is natural terrain → an anchor.*
+> *Any participating block that is **not** in its chunk's managed set is natural terrain → an anchor.*
 
 Because it is a **chunk `AttachmentType`**, it serializes and unloads with the chunk for free —
 no global save data, nothing to scan. This is what keeps the system chunk-local.
@@ -107,8 +109,8 @@ The check is deferred to the next level tick (on a *break*, the block is still p
 event; deferring lets us re-evaluate a settled world and batch bursts of edits).
 
 **On place:**
-1. If it's a Foundation → clear managed (it's an anchor). Else if it's a full solid block → mark
-   it managed.
+1. If it's a Foundation → clear managed (it's an anchor). Else if it participates (anything but
+   air/fluid/exempt) → mark it managed.
 2. Enqueue its position as a pending change. (Placing usually *adds* support; the one case that
    matters is a block placed too far out — it must immediately fall.)
 
@@ -227,6 +229,8 @@ Complexity per edit: `O(region · log region)`, with `region ≤ maxRegionNodes`
 - **Collapse via vanilla** `FallingBlockEntity.fall(...)` — reuses the gravity Minecraft already
   ships. No custom physics. Collapse-spawned falling blocks are flagged (entity attachment) and,
   on landing (`EntityLeaveLevelEvent`), re-marked as player-managed so piles stay in the system.
+  Blocks with a block entity (chests, furnaces, shulker boxes, signs, …) are dropped via
+  `destroyBlock` instead of a falling entity, so their contents are never voided.
 
 ---
 
