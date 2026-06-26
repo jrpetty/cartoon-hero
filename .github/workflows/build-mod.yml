@@ -15,7 +15,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   build:
@@ -38,9 +38,24 @@ jobs:
         run: ./gradlew build --no-daemon --stacktrace
         working-directory: mc-mod
 
-      - name: Upload mod jar
+      - name: Upload mod jar (artifact)
         uses: actions/upload-artifact@v4
         with:
           name: voxelia-mmo-jar
           path: mc-mod/build/libs/*.jar
           if-no-files-found: error
+
+      # Publish the jar to a rolling pre-release so it has a permanent,
+      # login-free download link: /releases/tag/voxelia-mod-latest
+      - name: Publish to release
+        if: github.ref == 'refs/heads/claude/minecraft-mmo-research-1fgn7x'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: voxelia-mod-latest
+          name: Voxelia MMO (latest build)
+          prerelease: true
+          body: >
+            Automated build of the Voxelia MMO NeoForge mod
+            (Minecraft 1.21.1 / NeoForge 21.1). Drop the jar into your
+            instance's mods/ folder.
+          files: mc-mod/build/libs/*.jar
