@@ -7,6 +7,7 @@ import com.voxelia.mmo.config.VoxeliaClientConfig;
 import com.voxelia.mmo.config.VoxeliaClientConfig.Anchor;
 import com.voxelia.mmo.config.VoxeliaConfig;
 import net.minecraft.ChatFormatting;
+import net.minecraft.client.Minecraft;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
 import net.minecraft.network.chat.Component;
@@ -32,12 +33,18 @@ public final class VoxeliaClientCommands {
     public static void onRegister(RegisterClientCommandsEvent event) {
         event.getDispatcher().register(
             Commands.literal("voxelia")
+                .then(Commands.literal("menu").executes(VoxeliaClientCommands::openMenu))
                 .then(Commands.literal("hud").executes(VoxeliaClientCommands::toggleHud))
                 .then(Commands.literal("hudpos")
                     .then(Commands.argument("corner", StringArgumentType.word())
                         .executes(VoxeliaClientCommands::setCorner)))
                 .then(Commands.literal("rewards").executes(VoxeliaClientCommands::rewards))
         );
+    }
+
+    private static int openMenu(CommandContext<CommandSourceStack> ctx) {
+        Minecraft.getInstance().execute(() -> Minecraft.getInstance().setScreen(new SkillsScreen()));
+        return 1;
     }
 
     private static int toggleHud(CommandContext<CommandSourceStack> ctx) {

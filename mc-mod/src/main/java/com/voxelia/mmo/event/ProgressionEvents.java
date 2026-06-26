@@ -4,6 +4,7 @@ import com.voxelia.mmo.VoxeliaMMO;
 import com.voxelia.mmo.network.VoxeliaNetwork;
 import com.voxelia.mmo.progression.Progression;
 import com.voxelia.mmo.progression.SkillEffects;
+import com.voxelia.mmo.registry.VoxeliaAttachments;
 import com.voxelia.mmo.skill.Skill;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.tags.BlockTags;
@@ -47,6 +48,11 @@ public final class ProgressionEvents {
         int base = (int) Math.max(2, Math.ceil(victim.getMaxHealth() / 2.0));
         if (victim instanceof Enemy) base += 4; // hostile bonus
         Progression.grant(player, Skill.COMBAT, base);
+
+        // Life steal perk: heal on kill, scaled by Combat level.
+        int combatLevel = player.getData(VoxeliaAttachments.PLAYER_SKILLS.get()).getLevel(Skill.COMBAT);
+        float heal = (float) (combatLevel * com.voxelia.mmo.config.VoxeliaConfig.combatLifeStealPerLevel());
+        if (heal > 0) player.heal(heal);
     }
 
     @SubscribeEvent

@@ -6,7 +6,12 @@ import com.voxelia.mmo.registry.VoxeliaAttachments;
 import com.voxelia.mmo.skill.PlayerSkills;
 import com.voxelia.mmo.skill.Skill;
 import net.minecraft.ChatFormatting;
+import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.network.chat.Component;
+import net.minecraft.network.protocol.game.ClientboundSetSubtitleTextPacket;
+import net.minecraft.network.protocol.game.ClientboundSetTitleTextPacket;
+import net.minecraft.network.protocol.game.ClientboundSetTitlesAnimationPacket;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
@@ -39,5 +44,19 @@ public final class Progression {
                 .withStyle(ChatFormatting.YELLOW)));
         player.level().playSound(null, player.blockPosition(),
             SoundEvents.PLAYER_LEVELUP, SoundSource.PLAYERS, 1.0f, 1.2f);
+
+        // on-screen title
+        player.connection.send(new ClientboundSetTitlesAnimationPacket(5, 30, 8));
+        player.connection.send(new ClientboundSetTitleTextPacket(
+            Component.literal("Level Up!").withStyle(ChatFormatting.GOLD)));
+        player.connection.send(new ClientboundSetSubtitleTextPacket(
+            Component.literal(skill.display() + " " + level)
+                .withStyle(style -> style.withColor(skill.color()))));
+
+        // celebratory particles
+        if (player.level() instanceof ServerLevel sl) {
+            sl.sendParticles(ParticleTypes.HAPPY_VILLAGER,
+                player.getX(), player.getY() + 1.0, player.getZ(), 24, 0.5, 0.7, 0.5, 0.05);
+        }
     }
 }

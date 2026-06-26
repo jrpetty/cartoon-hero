@@ -32,6 +32,9 @@ public final class VoxeliaCommands {
                     .then(Commands.argument("skill", StringArgumentType.word())
                         .then(Commands.argument("amount", IntegerArgumentType.integer(1))
                             .executes(VoxeliaCommands::grant))))
+                .then(Commands.literal("top")
+                    .then(Commands.argument("skill", StringArgumentType.word())
+                        .executes(VoxeliaCommands::top)))
         );
     }
 
@@ -63,6 +66,31 @@ public final class VoxeliaCommands {
         Progression.grant(player, skill, amount);
         ctx.getSource().sendSuccess(() -> Component.literal(
             "Granted " + amount + " " + skill.display() + " XP."), true);
+        return 1;
+    }
+
+    private static int top(CommandContext<CommandSourceStack> ctx) {
+        String skillId = StringArgumentType.getString(ctx, "skill");
+        Skill skill = Skill.byId(skillId);
+        if (skill == null) {
+            ctx.getSource().sendFailure(Component.literal(
+                "Unknown skill '" + skillId + "'. Use: mining, foraging, combat, farming, acrobatics, fishing."));
+            return 0;
+        }
+        var players = new java.util.ArrayList<>(ctx.getSource().getServer().getPlayerList().getPlayers());
+        players.sort((a, b) -> Integer.compare(
+            b.getData(VoxeliaAttachments.PLAYER_SKILLS.get()).getLevel(skill),
+            a.getData(VoxeliaAttachments.PLAYER_SKILLS.get()).getLevel(skill)));
+        ctx.getSource().sendSuccess(() -> Component.literal(
+            "=== Top " + skill.display() + " ===").withStyle(ChatFormatting.GOLD), false);
+        int shown = Math.min(10, players.size());
+        for (int i = 0; i < shown; i++) {
+            ServerPlayer p = players.get(i);
+            int lvl = p.getData(VoxeliaAttachments.PLAYER_SKILLS.get()).getLevel(skill);
+            int rank = i + 1;
+            ctx.getSource().sendSuccess(() -> Component.literal(
+                rank + ". " + p.getGameProfile().getName() + " — level " + lvl), false);
+        }
         return 1;
     }
 }

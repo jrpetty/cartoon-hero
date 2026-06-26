@@ -6,6 +6,9 @@
   "voxelia_mmo.skill.acrobatics": "Acrobatics",
   "voxelia_mmo.skill.fishing": "Fishing",
 
+  "key.categories.voxelia_mmo": "Voxelia MMO",
+  "key.voxelia_mmo.menu": "Open Skills Menu",
+
   "advancements.voxelia_mmo.root.title": "Voxelia MMO",
   "advancements.voxelia_mmo.root.description": "Begin your adventure — gather, fight, and level up.",
   "advancements.voxelia_mmo.first_cut.title": "First Cut",

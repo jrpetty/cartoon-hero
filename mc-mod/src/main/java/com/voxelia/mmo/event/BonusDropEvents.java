@@ -33,32 +33,39 @@ public final class BonusDropEvents {
     public static void onBlockDrops(BlockDropsEvent event) {
         if (!(event.getBreaker() instanceof ServerPlayer player)) return;
         BlockState state = event.getState();
+        var skills = player.getData(VoxeliaAttachments.PLAYER_SKILLS.get());
 
-        Skill skill;
-        double perLevel;
+        // --- Fortune-style bonus drops on ores (Mining) and wood (Foraging) ---
+        Skill skill = null;
+        double perLevel = 0;
         if (state.is(BlockTags.LOGS) || state.is(BlockTags.LEAVES)) {
             skill = Skill.FORAGING;
             perLevel = VoxeliaConfig.foragingFortunePerLevel();
         } else if (state.is(Tags.Blocks.ORES)) {
             skill = Skill.MINING;
             perLevel = VoxeliaConfig.miningFortunePerLevel();
-        } else {
-            return;
+        }
+        if (skill != null && perLevel > 0 && !hasSilkTouch(event.getLevel(), event.getTool())) {
+            double factor = perLevel * skills.getLevel(skill);
+            for (ItemEntity entity : event.getDrops()) {
+                ItemStack stack = entity.getItem();
+                if (stack.isEmpty()) continue;
+                double bonus = stack.getCount() * factor;
+                int extra = (int) Math.floor(bonus);
+                if (player.getRandom().nextDouble() < (bonus - extra)) extra++;
+                if (extra > 0) stack.grow(extra);
+            }
         }
 
-        if (hasSilkTouch(event.getLevel(), event.getTool())) return;
-
-        int level = player.getData(VoxeliaAttachments.PLAYER_SKILLS.get()).getLevel(skill);
-        double factor = perLevel * level; // e.g. 0.01 * level -> +100% (2x) at level 100
-        if (factor <= 0) return;
-
-        for (ItemEntity entity : event.getDrops()) {
-            ItemStack stack = entity.getItem();
-            if (stack.isEmpty()) continue;
-            double bonus = stack.getCount() * factor;
-            int extra = (int) Math.floor(bonus);
-            if (player.getRandom().nextDouble() < (bonus - extra)) extra++;
-            if (extra > 0) stack.grow(extra);
+        // --- Telekinesis: high Mining sends every mined drop to your inventory ---
+        int teleLevel = VoxeliaConfig.telekinesisLevel();
+        if (teleLevel > 0 && skills.getLevel(Skill.MINING) >= teleLevel) {
+            for (ItemEntity entity : event.getDrops()) {
+                ItemStack stack = entity.getItem();
+                if (stack.isEmpty()) continue;
+                player.getInventory().add(stack); // mutates stack to the leftover
+                if (stack.isEmpty()) entity.discard();
+            }
         }
     }
 

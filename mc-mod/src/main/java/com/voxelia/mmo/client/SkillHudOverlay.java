@@ -10,10 +10,10 @@ import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.LayeredDraw;
 import net.minecraft.network.chat.Component;
 
-/** Skills HUD: one line per skill, placed in a configurable screen corner. */
+/** Skills HUD: one line + XP bar per skill, placed in a configurable corner. */
 public final class SkillHudOverlay implements LayeredDraw.Layer {
     public static final SkillHudOverlay INSTANCE = new SkillHudOverlay();
-    private static final int LINE_H = 10;
+    private static final int LINE_H = 14;
     private static final int BLOCK_W = 120;
 
     private SkillHudOverlay() {}
@@ -38,17 +38,23 @@ public final class SkillHudOverlay implements LayeredDraw.Layer {
 
         graphics.drawString(mc.font,
             Component.literal("Skills").withStyle(s -> s.withColor(0xFFCE54)), x, y, 0xFFFFFF);
-        y += LINE_H + 1;
+        y += 11;
 
         for (Skill skill : Skill.values()) {
             int xp = ClientSkillData.xp(skill);
             int level = SkillCurve.levelForXp(xp);
             int into = SkillCurve.xpIntoLevel(xp);
             int span = SkillCurve.xpToNext(xp);
-            String line = span > 0
-                ? skill.display() + " " + level + "  " + into + "/" + span
-                : skill.display() + " " + level + "  MAX";
-            graphics.drawString(mc.font, line, x, y, 0xFF000000 | skill.color());
+            int color = 0xFF000000 | skill.color();
+
+            String line = span > 0 ? skill.display() + " " + level : skill.display() + " " + level + " MAX";
+            graphics.drawString(mc.font, line, x, y, color);
+
+            // thin XP bar under the label
+            int barW = BLOCK_W - 4, barH = 2, barY = y + 9;
+            graphics.fill(x, barY, x + barW, barY + barH, 0x80000000);
+            float frac = span > 0 ? (float) into / span : 1f;
+            graphics.fill(x, barY, x + (int) (barW * frac), barY + barH, color);
             y += LINE_H;
         }
     }

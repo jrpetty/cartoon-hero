@@ -22,6 +22,11 @@ public final class VoxeliaConfig {
     private static final ModConfigSpec.DoubleValue ACRO_DODGE;
     private static final ModConfigSpec.DoubleValue FISHING_LUCK_MAX;
     private static final ModConfigSpec.DoubleValue FISHING_SPEED_MAX;
+    private static final ModConfigSpec.DoubleValue COMBAT_LIFESTEAL;
+    private static final ModConfigSpec.DoubleValue ACRO_FALL_REDUCTION;
+    private static final ModConfigSpec.DoubleValue FISHING_TREASURE_MAX;
+    private static final ModConfigSpec.IntValue MINING_HASTE_LEVEL;
+    private static final ModConfigSpec.IntValue TELEKINESIS_LEVEL;
 
     static {
         ModConfigSpec.Builder b = new ModConfigSpec.Builder();
@@ -47,8 +52,21 @@ public final class VoxeliaConfig {
             .defineInRange("fishingLuckMax", 4.0, 0.0, 100.0);
         FISHING_SPEED_MAX = b.comment("Fishing: maximum bite-speed multiplier at max level (2.0 => twice as fast).")
             .defineInRange("fishingSpeedMax", 2.0, 1.0, 10.0);
-
         b.pop();
+
+        b.comment("Milestone perks.").push("perks");
+        COMBAT_LIFESTEAL = b.comment("Combat: health healed on a kill, per Combat level (0.05 => +5 HP at level 100).")
+            .defineInRange("combatLifeStealPerLevel", 0.05, 0.0, 10.0);
+        ACRO_FALL_REDUCTION = b.comment("Acrobatics: fall damage reduced per level (0.009 => ~90% softer landings at level 100). XP is still earned on the full fall.")
+            .defineInRange("acrobaticsFallReductionPerLevel", 0.009, 0.0, 0.01);
+        FISHING_TREASURE_MAX = b.comment("Fishing: maximum chance of a treasure bonus on a catch, at max level.")
+            .defineInRange("fishingTreasureChanceMax", 0.5, 0.0, 1.0);
+        MINING_HASTE_LEVEL = b.comment("Mining: level at which holding a pickaxe grants Haste (0 disables).")
+            .defineInRange("miningHasteLevel", 25, 0, 100);
+        TELEKINESIS_LEVEL = b.comment("Mining: level at which mined drops go straight to your inventory (0 disables).")
+            .defineInRange("telekinesisLevel", 100, 0, 100);
+        b.pop();
+
         SPEC = b.build();
     }
 
@@ -62,4 +80,9 @@ public final class VoxeliaConfig {
     public static double acrobaticsDodgePerLevel(){ return ACRO_DODGE.get(); }
     public static double fishingLuckMax()      { return FISHING_LUCK_MAX.get(); }
     public static double fishingSpeedMax()     { return FISHING_SPEED_MAX.get(); }
+    public static double combatLifeStealPerLevel() { return COMBAT_LIFESTEAL.get(); }
+    public static double acrobaticsFallReductionPerLevel() { return ACRO_FALL_REDUCTION.get(); }
+    public static double fishingTreasureChanceMax() { return FISHING_TREASURE_MAX.get(); }
+    public static int miningHasteLevel()       { return MINING_HASTE_LEVEL.get(); }
+    public static int telekinesisLevel()       { return TELEKINESIS_LEVEL.get(); }
 }
