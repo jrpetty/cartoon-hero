@@ -14,7 +14,9 @@ public final class SkillsScreen extends Screen {
 
     @Override
     public void render(GuiGraphics g, int mouseX, int mouseY, float partialTick) {
-        this.renderBackground(g, mouseX, mouseY, partialTick);
+        // A flat dimmed backdrop instead of super.renderBackground(), which
+        // applies vanilla's heavy blur to the whole game view behind the screen.
+        g.fill(0, 0, this.width, this.height, 0xB0101418);
 
         int w = 280;
         int rowH = 26;
