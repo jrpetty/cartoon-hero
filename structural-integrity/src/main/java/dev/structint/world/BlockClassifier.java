@@ -60,6 +60,30 @@ public final class BlockClassifier {
         return Config.SPAN_GENERIC.get();
     }
 
+    /**
+     * The span of a block <em>only if</em> it is explicitly classified by a structural tag.
+     * Returns {@code null} for everything else, so tooltips are shown for recognized building
+     * materials (and our own blocks) rather than spamming every full block in the game.
+     */
+    public static Integer taggedSpan(BlockState state) {
+        if (state.is(StructuralTags.STRUCTURAL_METAL)) {
+            return Config.SPAN_METAL.get();
+        }
+        if (state.is(StructuralTags.STRUCTURAL_REINFORCED)) {
+            return Config.SPAN_REINFORCED.get();
+        }
+        if (state.is(StructuralTags.STRUCTURAL_STONE)) {
+            return Config.SPAN_STONE.get();
+        }
+        if (state.is(StructuralTags.STRUCTURAL_WOOD)) {
+            return Config.SPAN_WOOD.get();
+        }
+        if (state.is(StructuralTags.STRUCTURAL_DIRT)) {
+            return Config.SPAN_DIRT.get();
+        }
+        return null;
+    }
+
     private BlockClassifier() {
     }
 }

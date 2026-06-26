@@ -23,6 +23,9 @@ clarity over realism*, *predictability over simulation*, and *local logic over g
   | Reinforced (concrete, Reinforced Beam) | 12 |
   | Metal (iron/netherite/copper, Heavy Girder) | 20 |
 
+- Every building material's item tooltip shows its **strength tier** (Very weak → Extreme) and
+  **max unsupported span**, so you can judge a block before you build with it.
+- The three custom blocks are **craftable** (Foundation Anchor, Reinforced Beam, Heavy Girder).
 - Build **pillars** under long floors, **buttresses** against walls, **arches** across gaps.
 - A roof carried by two walls survives losing one wall, as long as the other is within span.
 - Overreach falls as a normal vanilla **falling block** — it drops, lands, and piles up. No
@@ -249,6 +252,14 @@ under `gradle test` via `SupportSolverTest`.
 6. Place a Foundation Anchor on a riverbed and build a tower on it — rooted and stable.
 
 ---
+
+## 7a. Crafting
+
+| Block | Recipe | Yields |
+|---|---|---|
+| Foundation Anchor | ring of 8 Smooth Stone around 1 Iron Ingot | 4 |
+| Reinforced Beam | 6 Stone Bricks (top+bottom rows) + 3 Iron Ingots (middle) | 3 |
+| Heavy Girder | 8 Iron Ingots around 1 Reinforced Beam | 2 |
 
 ## 8. Tuning
 
