@@ -44,10 +44,27 @@ final class LevelStructuralState {
         }
     }
 
-    long pollCollapse() {
-        long pos = collapseQueue.dequeueLong();
+    /**
+     * Cancel a pending collapse a block has regained support for. The position is dropped from
+     * the active set but its (now-stale) FIFO entry is skipped lazily on poll, so this is O(1).
+     */
+    void cancelCollapse(long pos) {
         collapseSet.remove(pos);
-        return pos;
+    }
+
+    /** Dequeue the next FIFO entry. May be a stale (cancelled) entry — check {@link #claimCollapse}. */
+    long dequeueCollapse() {
+        return collapseQueue.dequeueLong();
+    }
+
+    /** @return true if the position was still an active collapse (and claims it); false if cancelled. */
+    boolean claimCollapse(long pos) {
+        return collapseSet.remove(pos);
+    }
+
+    void clearCollapses() {
+        collapseQueue.clear();
+        collapseSet.clear();
     }
 
     boolean hasCollapses() {

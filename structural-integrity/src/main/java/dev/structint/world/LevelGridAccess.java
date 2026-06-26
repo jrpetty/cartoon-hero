@@ -72,10 +72,13 @@ public final class LevelGridAccess implements GridAccess {
         if (!BlockClassifier.isLoadBearing(state, level, cursor)) {
             return CellRole.EMPTY;
         }
-        boolean managed = Config.ONLY_PLAYER_PLACED.get()
-                ? StructuralData.isManaged(level, cursor)
-                : true; // when the toggle is off, every full block is in the system
-        return managed ? CellRole.STRUCTURAL : CellRole.ANCHOR;
+        boolean managed = !Config.ONLY_PLAYER_PLACED.get() || StructuralData.isManaged(level, cursor);
+        if (managed) {
+            return CellRole.STRUCTURAL; // player-placed (or all-blocks mode): subject to the rules
+        }
+        // Natural terrain: an anchor only if it is genuinely solid ground, so natural grass,
+        // flowers, vines, snow, torches, etc. don't become free infinite-reach anchors.
+        return BlockClassifier.isSturdySupport(state, level, cursor) ? CellRole.ANCHOR : CellRole.EMPTY;
     }
 
     @Override

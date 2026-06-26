@@ -7,8 +7,10 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.item.FallingBlockEntity;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
+import net.minecraft.core.BlockPos;
 import net.neoforged.neoforge.event.entity.EntityLeaveLevelEvent;
 import net.neoforged.neoforge.event.level.BlockEvent;
+import net.neoforged.neoforge.event.level.ExplosionEvent;
 import net.neoforged.neoforge.event.level.LevelEvent;
 import net.neoforged.neoforge.event.tick.LevelTickEvent;
 
@@ -48,6 +50,18 @@ public final class StructuralEventHandler {
     public static void onLevelTick(LevelTickEvent.Post event) {
         if (event.getLevel() instanceof ServerLevel level) {
             StructuralManager.tick(level);
+        }
+    }
+
+    @SubscribeEvent
+    public static void onExplosion(ExplosionEvent.Detonate event) {
+        if (!(event.getLevel() instanceof ServerLevel level)) {
+            return;
+        }
+        // Explosions remove blocks without firing BreakEvent. Re-check every affected position so
+        // a support blown out by TNT/a creeper collapses what it was holding, just like mining it.
+        for (BlockPos pos : event.getAffectedBlocks()) {
+            StructuralManager.onBlockRemoved(level, pos);
         }
     }
 

@@ -22,11 +22,50 @@ public final class StructuralEngine {
     private final GridAccess grid;
     private final SupportSolver solver;
     private final int maxRegionNodes;
+    private boolean lastFloodOverBudget;
 
     public StructuralEngine(GridAccess grid, int cap, int maxRegionNodes) {
         this.grid = grid;
         this.solver = new SupportSolver(grid, cap);
         this.maxRegionNodes = maxRegionNodes;
+    }
+
+    /** Whether the most recent flood bailed because the cluster exceeded {@code maxRegionNodes}. */
+    public boolean lastFloodOverBudget() {
+        return lastFloodOverBudget;
+    }
+
+    /** Result of a full local evaluation: the doomed and the safe blocks of one cluster. */
+    public static final class Evaluation {
+        public final Set<Long> unsupported;
+        public final Set<Long> stable;
+        public final boolean overBudget;
+
+        Evaluation(Set<Long> unsupported, Set<Long> stable, boolean overBudget) {
+            this.unsupported = unsupported;
+            this.stable = stable;
+            this.overBudget = overBudget;
+        }
+    }
+
+    /**
+     * Floods and solves the cluster around {@code origin} once, returning both the blocks that
+     * should collapse and the blocks that are confirmed stable. Callers use the stable set to
+     * cancel any previously-queued collapse a player has since propped back up.
+     */
+    public Evaluation evaluate(long origin) {
+        Set<Long> region = floodRegion(origin);
+        if (region.isEmpty()) {
+            return new Evaluation(Collections.emptySet(), Collections.emptySet(), lastFloodOverBudget);
+        }
+        Set<Long> stable = solver.solve(region);
+        Set<Long> unsupported = new HashSet<>();
+        for (long pos : region) {
+            if (!stable.contains(pos)) {
+                unsupported.add(pos);
+            }
+        }
+        return new Evaluation(unsupported, stable, false);
     }
 
     /**
@@ -39,6 +78,7 @@ public final class StructuralEngine {
      *         An empty set means there is nothing structural to worry about here.
      */
     public Set<Long> floodRegion(long origin) {
+        lastFloodOverBudget = false;
         Set<Long> region = new HashSet<>();
         Deque<Long> queue = new ArrayDeque<>();
 
@@ -66,7 +106,9 @@ public final class StructuralEngine {
                         // Budget hit: this structure is larger than we will analyse in one
                         // pass. Bail out and report "nothing unstable" rather than risk a
                         // false mass-collapse from an artificially truncated region. The
-                        // caller treats an over-budget flood as a no-op (fail-safe).
+                        // caller treats an over-budget flood as a no-op (fail-safe) and can
+                        // surface it via lastFloodOverBudget().
+                        lastFloodOverBudget = true;
                         return Collections.emptySet();
                     }
                     region.add(n);

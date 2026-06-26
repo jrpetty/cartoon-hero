@@ -89,6 +89,8 @@ public final class CoreSelfTest {
         testArchKeepsCrownUp();
         testOnlyUnsupportedTailCollapses();
         testStepUpDoesNotResetSpan();
+        testEvaluateSplitsStableAndUnsupported();
+        testEvaluateFlagsOverBudget();
 
         System.out.println();
         if (failures == 0) {
@@ -239,6 +241,38 @@ public final class CoreSelfTest {
         FakeGrid g2 = new FakeGrid().anchor(10, 0, 0).pillarY(10, 1, 6, 0, Material.WOOD.maxSpan());
         g2.beamX(11, 14, 6, 0, Material.WOOD.maxSpan());
         check(engine(g2).isSupported(PackedPos.of(14, 6, 0)), "a genuine ground pillar still grants full span");
+    }
+
+    private static void testEvaluateSplitsStableAndUnsupported() {
+        System.out.println("evaluate() returns the complete stable AND unsupported split for cancellation");
+        FakeGrid g = new FakeGrid();
+        for (int y = 0; y <= 5; y++) {
+            g.anchor(0, y, 0);
+        }
+        g.beamX(1, 8, 5, 0, Material.WOOD.maxSpan()); // span 4: x=1..4 stable, x=5..8 doomed
+        StructuralEngine.Evaluation ev = engine(g).evaluate(PackedPos.of(8, 5, 0));
+        check(!ev.overBudget, "not over budget");
+        for (int x = 1; x <= 4; x++) {
+            check(ev.stable.contains(PackedPos.of(x, 5, 0)), "x=" + x + " reported stable");
+            check(!ev.unsupported.contains(PackedPos.of(x, 5, 0)), "x=" + x + " not in unsupported");
+        }
+        for (int x = 5; x <= 8; x++) {
+            check(ev.unsupported.contains(PackedPos.of(x, 5, 0)), "x=" + x + " reported unsupported");
+            check(!ev.stable.contains(PackedPos.of(x, 5, 0)), "x=" + x + " not in stable");
+        }
+    }
+
+    private static void testEvaluateFlagsOverBudget() {
+        System.out.println("evaluate() flags an over-budget cluster instead of silently no-opping");
+        FakeGrid g = new FakeGrid();
+        for (int y = 0; y <= 5; y++) {
+            g.anchor(0, y, 0);
+        }
+        g.beamX(1, 20, 5, 0, Material.WOOD.maxSpan());
+        StructuralEngine.Evaluation ev =
+                new StructuralEngine(g, SupportSolver.DEFAULT_CAP, 3).evaluate(PackedPos.of(20, 5, 0));
+        check(ev.overBudget, "overBudget flag is set");
+        check(ev.unsupported.isEmpty(), "over-budget evaluation collapses nothing (fail-safe)");
     }
 
     private static void testOnlyUnsupportedTailCollapses() {

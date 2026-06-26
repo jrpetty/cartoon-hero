@@ -48,6 +48,30 @@ public final class BlockClassifier {
         return state.getBlock() instanceof SlabBlock || state.getBlock() instanceof StairBlock;
     }
 
+    /**
+     * Whether a <em>natural</em> (non-player) block may act as a terrain anchor. Only genuinely
+     * solid ground qualifies — full cubes, slabs and stairs. This keeps natural grass, flowers,
+     * vines, snow layers, torches, etc. from becoming free infinite-reach anchors that hold up
+     * player builds, while player-placed versions of those blocks still participate as structural.
+     */
+    public static boolean isSturdySupport(BlockState state, BlockGetter level, BlockPos pos) {
+        return isSlabOrStairs(state) || state.isCollisionShapeFullBlock(level, pos);
+    }
+
+    /**
+     * Whether a collapsing block may safely become a vanilla {@code FallingBlockEntity}. Only
+     * single-cell, self-contained shapes (full cubes, slabs, stairs) without a block entity
+     * qualify; everything else — doors/beds/tall plants (multi-cell), torches/carpets/rails/etc.
+     * (can't survive a free fall), and containers/signs (block entities) — is dropped in place
+     * instead, so nothing is voided, duplicated, or left as a corrupt half-block.
+     */
+    public static boolean canFallAsEntity(BlockState state, BlockGetter level, BlockPos pos) {
+        if (state.hasBlockEntity()) {
+            return false;
+        }
+        return isSlabOrStairs(state) || state.isCollisionShapeFullBlock(level, pos);
+    }
+
     private static boolean isWoodenShape(BlockState state) {
         return state.is(BlockTags.WOODEN_SLABS) || state.is(BlockTags.WOODEN_STAIRS);
     }

@@ -159,6 +159,29 @@ class SupportSolverTest {
     }
 
     @Test
+    void evaluateSplitsStableAndUnsupported() {
+        Grid g = new Grid();
+        for (int y = 0; y <= 5; y++) g.anchor(0, y, 0);
+        g.beam(1, 8, 5, Material.WOOD.maxSpan());
+        StructuralEngine.Evaluation ev = engine(g).evaluate(PackedPos.of(8, 5, 0));
+        assertFalse(ev.overBudget);
+        assertTrue(ev.stable.contains(PackedPos.of(4, 5, 0)));
+        assertTrue(ev.unsupported.contains(PackedPos.of(5, 5, 0)));
+        assertFalse(ev.stable.contains(PackedPos.of(5, 5, 0)));
+    }
+
+    @Test
+    void evaluateFlagsOverBudget() {
+        Grid g = new Grid();
+        for (int y = 0; y <= 5; y++) g.anchor(0, y, 0);
+        g.beam(1, 20, 5, Material.WOOD.maxSpan());
+        StructuralEngine.Evaluation ev =
+                new StructuralEngine(g, SupportSolver.DEFAULT_CAP, 3).evaluate(PackedPos.of(20, 5, 0));
+        assertTrue(ev.overBudget);
+        assertTrue(ev.unsupported.isEmpty());
+    }
+
+    @Test
     void overBudgetStructureIsTreatedAsStable() {
         // A region cap of 3 forces the flood to bail; bail = treat as stable (fail-safe).
         Grid g = new Grid();

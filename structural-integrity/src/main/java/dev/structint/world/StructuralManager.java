@@ -1,6 +1,7 @@
 package dev.structint.world;
 
 import dev.structint.Config;
+import dev.structint.StructuralIntegrityMod;
 import dev.structint.core.PackedPos;
 import dev.structint.core.StructuralEngine;
 import net.minecraft.core.BlockPos;
@@ -10,7 +11,6 @@ import net.minecraft.world.level.block.state.BlockState;
 
 import java.util.IdentityHashMap;
 import java.util.Map;
-import java.util.Set;
 
 /**
  * Orchestrates the whole runtime: receives block-edit notifications, schedules local stability
@@ -79,35 +79,45 @@ public final class StructuralManager {
 
     private static void processChanges(ServerLevel level, LevelStructuralState st) {
         int budget = Config.CHANGE_BUDGET_PER_TICK.get();
+        // One engine for the whole change phase: the world is not mutated here (collapses run
+        // afterwards), so its per-pass role/state cache is valid and shared across origins.
         StructuralEngine engine = newEngine(level);
         while (budget-- > 0 && st.hasChanges()) {
             long origin = st.pollChange();
-            Set<Long> unsupported = engine.findUnsupported(origin);
-            for (long pos : unsupported) {
+            StructuralEngine.Evaluation ev = engine.evaluate(origin);
+            if (ev.overBudget) {
+                StructuralIntegrityMod.LOGGER.debug(
+                        "structint: structure near {} exceeds maxRegionNodes ({}); treated as stable",
+                        PackedPos.toString(origin), Config.MAX_REGION_NODES.get());
+            }
+            for (long pos : ev.unsupported) {
                 st.enqueueCollapse(pos);
+            }
+            // A block the player has since propped back up: cancel its pending collapse.
+            for (long pos : ev.stable) {
+                st.cancelCollapse(pos);
             }
         }
     }
 
     private static void processCollapses(ServerLevel level, LevelStructuralState st) {
         if (!Config.ENABLE_COLLAPSE.get()) {
-            // Drop the queue; we still tracked state, we just don't drop blocks.
-            while (st.hasCollapses()) {
-                st.pollCollapse();
-            }
+            st.clearCollapses(); // we still track state, we just never drop blocks
             return;
         }
         int budget = Config.COLLAPSE_BUDGET_PER_TICK.get();
         BlockPos.MutableBlockPos cursor = new BlockPos.MutableBlockPos();
-        while (budget-- > 0 && st.hasCollapses()) {
-            long packed = st.pollCollapse();
+        while (budget > 0 && st.hasCollapses()) {
+            long packed = st.dequeueCollapse();
+            if (!st.claimCollapse(packed)) {
+                continue; // a stale FIFO entry for a collapse that was cancelled — skip, no cost
+            }
             cursor.set(PackedPos.x(packed), PackedPos.y(packed), PackedPos.z(packed));
 
-            // Re-verify against the current world: the block may have been removed already, or a
-            // player may have propped it up since it was queued. Fresh engine = post-mutation view.
-            if (!newEngine(level).findUnsupported(packed).contains(packed)) {
-                continue;
-            }
+            // No re-flood needed: the change-phase solve already produced the COMPLETE unsupported
+            // set (removing unsupported blocks can never re-stabilise others), and any block a
+            // player re-supported was cancelled in processChanges. Just confirm it is still a
+            // collapsible block (not already gone, not a foundation).
             BlockState state = level.getBlockState(cursor);
             if (!BlockClassifier.isLoadBearing(state, level, cursor)
                     || BlockClassifier.isFoundation(state)) {
@@ -115,26 +125,28 @@ public final class StructuralManager {
             }
 
             collapse(level, cursor.immutable(), state);
+            budget--;
         }
     }
 
     private static void collapse(ServerLevel level, BlockPos pos, BlockState state) {
         StructuralData.setManaged(level, pos, false);
 
-        // Blocks with a block entity (chests, furnaces, shulker boxes, hoppers, signs, …) must
-        // NOT become falling entities — that can void their contents. Drop them properly instead.
-        if (state.hasBlockEntity()) {
+        if (BlockClassifier.canFallAsEntity(state, level, pos)) {
+            // A single-cell, self-contained block: animate a vanilla falling block. It drops,
+            // lands, and either settles as ground or breaks into an item. Removal of the source
+            // block is handled by fall().
+            FallingBlockEntity entity = FallingBlockEntity.fall(level, pos, state);
+            if (entity != null) {
+                // Tag it so we can re-mark the block as player-managed when it lands (see below).
+                entity.setData(ModAttachments.FROM_COLLAPSE.get(), Boolean.TRUE);
+            }
+        } else {
+            // Multi-cell blocks (doors/beds/tall plants), attachment blocks (torches, carpets,
+            // rails, …) and block-entity blocks (chests, signs, …) can't fall as a single entity
+            // without being voided, duplicated, or left as a corrupt half. Drop them in place
+            // instead — vanilla removes the whole object and drops its items/contents once.
             level.destroyBlock(pos, true);
-            return;
-        }
-
-        // Everything else turns into a vanilla falling block: it drops, lands, and either settles
-        // as ground or breaks into an item. No custom physics, no debris — just the vanilla
-        // gravity we already trust. Removal of the source block is handled by fall().
-        FallingBlockEntity entity = FallingBlockEntity.fall(level, pos, state);
-        if (entity != null) {
-            // Tag it so we can re-mark the block as player-managed when it lands (see below).
-            entity.setData(ModAttachments.FROM_COLLAPSE.get(), Boolean.TRUE);
         }
     }
 
@@ -145,6 +157,9 @@ public final class StructuralManager {
      * stays in the system) and re-check it (it is resting on something, so it stays put).
      */
     public static void onCollapsedBlockLanded(ServerLevel level, BlockPos pos, BlockState expected) {
+        if (!StructuralData.isChunkLoaded(level, pos)) {
+            return; // entity left via chunk-unload/dimension-change, not a real landing
+        }
         if (level.getBlockState(pos) != expected) {
             return; // it broke into an item or merged elsewhere — nothing landed here
         }

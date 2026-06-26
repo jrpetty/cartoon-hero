@@ -282,7 +282,26 @@ material spans, the support cap, `maxRegionNodes`, and the two per-tick budgets.
 
 ## 9. Known boundaries / future work
 
-- Removal hooks cover player place/break (the primary design driver) and programmatic collapse.
-  Piston pushes, explosions, and fluid-driven removals are not yet wired (easy follow-ups: hook
-  the corresponding NeoForge events and enqueue the affected positions).
+Hardened after an adversarial audit of the "every block is structural" change. Fixed: safe
+collapse routing (multi-cell doors/beds/plants, attachment blocks, and containers drop in place
+instead of becoming corrupt/voided falling entities); natural non-solid blocks (grass, flowers,
+vines, snow) no longer act as free infinite anchors; collapse re-solve is O(cluster) per tick
+instead of O(cluster·collapses) with proper cancellation when a player re-supports a block;
+explosions now propagate collapse; the over-budget fail-safe is logged; the collapse flag survives
+save/unload.
+
+Remaining boundaries (documented, lower-impact, want in-world testing before changing):
+
+- **Removal paths without a break event.** Pistons, fluid wash-away, fire, leaf decay, `/setblock`
+  and `/fill`, and mob griefing don't fire `BlockEvent.BreakEvent`, so a support removed that way
+  may not immediately propagate a collapse (player break and explosions do). Piston-moved blocks
+  also keep their managed flag at the old position. Future work: `PistonEvent` migration and a
+  scoped fluid/fire hook.
+- **Programmatic placement** (`/setblock`, structures, other mods) isn't marked player-managed, so
+  it reads as natural terrain (stable). Fine for map-makers; a `/fill` build won't obey the rules.
+- **`onlyPlayerPlaced=false`** is an expert/experimental mode — with every block structural it can
+  tear down natural overhangs and cave ceilings. Leave it `true` (the default) for normal play.
+- **Performance.** Work is bounded by `maxRegionNodes` and the per-tick budgets; the solver still
+  uses boxed `long` keys (clusters are capped, so this is minor). A very large connected build can
+  exceed `maxRegionNodes` and is then treated as stable (logged at debug).
 - Weight/load accumulation is intentionally absent — span is the single, predictable knob.

@@ -1,5 +1,6 @@
 package dev.structint.world;
 
+import com.mojang.serialization.Codec;
 import dev.structint.StructuralIntegrityMod;
 import net.neoforged.neoforge.attachment.AttachmentType;
 import net.neoforged.neoforge.registries.DeferredRegister;
@@ -27,7 +28,9 @@ public final class ModAttachments {
      */
     public static final Supplier<AttachmentType<Boolean>> FROM_COLLAPSE =
             ATTACHMENT_TYPES.register("from_collapse", () ->
-                    AttachmentType.builder(() -> Boolean.FALSE).build());
+                    AttachmentType.builder(() -> Boolean.FALSE)
+                            .serialize(Codec.BOOL) // survive save/unload so airborne piles re-mark
+                            .build());
 
     private ModAttachments() {
     }

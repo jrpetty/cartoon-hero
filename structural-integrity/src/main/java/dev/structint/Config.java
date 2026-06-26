@@ -40,7 +40,11 @@ public final class Config {
                 .define("enableCollapse", true);
         ONLY_PLAYER_PLACED = b
                 .comment("When true, only blocks a player placed are subject to the rules;",
-                        "natural terrain is always stable. Strongly recommended.")
+                        "natural terrain is always stable. Strongly recommended — leave this true.",
+                        "WARNING: setting it false makes ALL natural terrain collapsible too, which",
+                        "with the 'every block is structural' rule will tear down unsupported",
+                        "overhangs, cave ceilings and floating islands across loaded chunks. Expert/",
+                        "experimental only.")
                 .define("onlyPlayerPlaced", true);
         b.pop();
 
