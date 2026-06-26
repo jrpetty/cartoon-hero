@@ -29,6 +29,11 @@ neoForge {
         mappingsVersion = "${parchment_mappings_version}"
     }
 
+    // Widen a couple of vanilla fields (see META-INF/accesstransformer.cfg).
+    accessTransformers {
+        from('src/main/resources/META-INF/accesstransformer.cfg')
+    }
+
     // Generated run configurations: `./gradlew runClient` / `runServer`.
     runs {
         client {

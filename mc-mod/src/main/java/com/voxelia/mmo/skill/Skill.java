@@ -10,7 +10,9 @@ public enum Skill implements StringRepresentable {
     MINING("mining", 0xBDBDBD),
     FORAGING("foraging", 0x81C784),
     COMBAT("combat", 0xEF5350),
-    FARMING("farming", 0xFFD54F);
+    FARMING("farming", 0xFFD54F),
+    ACROBATICS("acrobatics", 0x4FC3F7),
+    FISHING("fishing", 0x4DD0E1);
 
     public static final Codec<Skill> CODEC = StringRepresentable.fromEnum(Skill::values);
 

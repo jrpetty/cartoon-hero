@@ -2,7 +2,7 @@ package com.voxelia.mmo.skill;
 
 /** Shared XP curve. Classic exponential: total XP to reach level n. */
 public final class SkillCurve {
-    public static final int MAX_LEVEL = 50;
+    public static final int MAX_LEVEL = 100;
 
     private SkillCurve() {}
 

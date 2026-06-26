@@ -1,6 +1,7 @@
 package com.voxelia.mmo;
 
 import com.mojang.logging.LogUtils;
+import com.voxelia.mmo.config.VoxeliaClientConfig;
 import com.voxelia.mmo.config.VoxeliaConfig;
 import com.voxelia.mmo.registry.VoxeliaAttachments;
 import net.neoforged.bus.api.IEventBus;
@@ -23,6 +24,7 @@ public final class VoxeliaMMO {
     public VoxeliaMMO(IEventBus modBus, ModContainer container) {
         VoxeliaAttachments.ATTACHMENTS.register(modBus);
         container.registerConfig(ModConfig.Type.COMMON, VoxeliaConfig.SPEC);
+        container.registerConfig(ModConfig.Type.CLIENT, VoxeliaClientConfig.SPEC);
         LOGGER.info("[Voxelia MMO] initialised");
     }
 }

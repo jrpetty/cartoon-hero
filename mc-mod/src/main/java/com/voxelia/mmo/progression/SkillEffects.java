@@ -1,6 +1,7 @@
 package com.voxelia.mmo.progression;
 
 import com.voxelia.mmo.VoxeliaMMO;
+import com.voxelia.mmo.config.VoxeliaConfig;
 import com.voxelia.mmo.registry.VoxeliaAttachments;
 import com.voxelia.mmo.skill.PlayerSkills;
 import com.voxelia.mmo.skill.Skill;
@@ -13,18 +14,23 @@ import net.minecraft.world.entity.ai.attributes.AttributeModifier;
 import net.minecraft.world.entity.ai.attributes.Attributes;
 
 /**
- * Translates skill levels into persistent attribute modifiers. Idempotent:
- * re-applying replaces the previous modifiers (keyed by stable ResourceLocation
- * ids), so it is safe to call on every level-up, login, and respawn.
+ * Translates the always-on skills into persistent attribute modifiers:
+ *   Combat   -> attack damage
+ *   Farming  -> max health
+ *   Mining   -> block break speed
+ *   Foraging -> block break speed
+ * (Acrobatics' dodge and Fishing's perks are handled live in AbilityEvents.)
+ *
+ * Idempotent: modifiers are keyed by stable ids, so re-applying replaces them.
+ * Called on level-up, login, and respawn.
  */
 public final class SkillEffects {
     private SkillEffects() {}
 
-    private static final ResourceLocation HEALTH_ID = id("combat_health");
-    private static final ResourceLocation DAMAGE_ID = id("combat_damage");
-    private static final ResourceLocation ARMOR_ID  = id("mining_armor");
-    private static final ResourceLocation SPEED_ID  = id("foraging_speed");
-    private static final ResourceLocation LUCK_ID   = id("farming_luck");
+    private static final ResourceLocation DAMAGE_ID        = id("combat_damage");
+    private static final ResourceLocation HEALTH_ID        = id("farming_health");
+    private static final ResourceLocation MINING_SPEED_ID  = id("mining_speed");
+    private static final ResourceLocation FORAGING_SPEED_ID = id("foraging_speed");
 
     private static ResourceLocation id(String path) {
         return ResourceLocation.fromNamespaceAndPath(VoxeliaMMO.MOD_ID, path);
@@ -33,15 +39,18 @@ public final class SkillEffects {
     public static void apply(ServerPlayer player) {
         PlayerSkills s = player.getData(VoxeliaAttachments.PLAYER_SKILLS.get());
         int combat   = s.getLevel(Skill.COMBAT) - 1;
+        int farming  = s.getLevel(Skill.FARMING) - 1;
         int mining   = s.getLevel(Skill.MINING) - 1;
         int foraging = s.getLevel(Skill.FORAGING) - 1;
-        int farming  = s.getLevel(Skill.FARMING) - 1;
 
-        set(player, Attributes.MAX_HEALTH,    HEALTH_ID, combat * 0.4,    AttributeModifier.Operation.ADD_VALUE);
-        set(player, Attributes.ATTACK_DAMAGE, DAMAGE_ID, combat * 0.25,   AttributeModifier.Operation.ADD_VALUE);
-        set(player, Attributes.ARMOR,         ARMOR_ID,  mining * 0.2,    AttributeModifier.Operation.ADD_VALUE);
-        set(player, Attributes.MOVEMENT_SPEED, SPEED_ID, foraging * 0.002, AttributeModifier.Operation.ADD_MULTIPLIED_BASE);
-        set(player, Attributes.LUCK,          LUCK_ID,   farming * 0.05,  AttributeModifier.Operation.ADD_VALUE);
+        set(player, Attributes.ATTACK_DAMAGE, DAMAGE_ID,
+            combat * VoxeliaConfig.combatDamagePerLevel(), AttributeModifier.Operation.ADD_VALUE);
+        set(player, Attributes.MAX_HEALTH, HEALTH_ID,
+            farming * VoxeliaConfig.farmingHealthPerLevel(), AttributeModifier.Operation.ADD_VALUE);
+        set(player, Attributes.BLOCK_BREAK_SPEED, MINING_SPEED_ID,
+            mining * VoxeliaConfig.miningSpeedPerLevel(), AttributeModifier.Operation.ADD_MULTIPLIED_BASE);
+        set(player, Attributes.BLOCK_BREAK_SPEED, FORAGING_SPEED_ID,
+            foraging * VoxeliaConfig.foragingSpeedPerLevel(), AttributeModifier.Operation.ADD_MULTIPLIED_BASE);
 
         if (player.getHealth() > player.getMaxHealth()) {
             player.setHealth(player.getMaxHealth());
