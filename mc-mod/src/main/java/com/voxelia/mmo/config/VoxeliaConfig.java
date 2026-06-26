@@ -27,6 +27,10 @@ public final class VoxeliaConfig {
     private static final ModConfigSpec.DoubleValue FISHING_TREASURE_MAX;
     private static final ModConfigSpec.IntValue MINING_HASTE_LEVEL;
     private static final ModConfigSpec.IntValue TELEKINESIS_LEVEL;
+    private static final ModConfigSpec.IntValue FRENZY_LEVEL;
+    private static final ModConfigSpec.IntValue FRENZY_COOLDOWN;
+    private static final ModConfigSpec.IntValue LEAP_LEVEL;
+    private static final ModConfigSpec.IntValue LEAP_COOLDOWN;
 
     static {
         ModConfigSpec.Builder b = new ModConfigSpec.Builder();
@@ -67,6 +71,17 @@ public final class VoxeliaConfig {
             .defineInRange("telekinesisLevel", 100, 0, 100);
         b.pop();
 
+        b.comment("Active abilities (keybinds, balanced by cooldowns).").push("abilities");
+        FRENZY_LEVEL = b.comment("Combat level that unlocks Frenzy (a short Strength + Speed burst). 0 disables.")
+            .defineInRange("frenzyLevel", 20, 0, 100);
+        FRENZY_COOLDOWN = b.comment("Frenzy cooldown in seconds.")
+            .defineInRange("frenzyCooldownSeconds", 50, 1, 3600);
+        LEAP_LEVEL = b.comment("Acrobatics level that unlocks Leap (a forward/upward dash with a safe landing). 0 disables.")
+            .defineInRange("leapLevel", 15, 0, 100);
+        LEAP_COOLDOWN = b.comment("Leap cooldown in seconds.")
+            .defineInRange("leapCooldownSeconds", 6, 1, 3600);
+        b.pop();
+
         SPEC = b.build();
     }
 
@@ -85,4 +100,8 @@ public final class VoxeliaConfig {
     public static double fishingTreasureChanceMax() { return FISHING_TREASURE_MAX.get(); }
     public static int miningHasteLevel()       { return MINING_HASTE_LEVEL.get(); }
     public static int telekinesisLevel()       { return TELEKINESIS_LEVEL.get(); }
+    public static int frenzyLevel()            { return FRENZY_LEVEL.get(); }
+    public static int frenzyCooldownSeconds()  { return FRENZY_COOLDOWN.get(); }
+    public static int leapLevel()              { return LEAP_LEVEL.get(); }
+    public static int leapCooldownSeconds()    { return LEAP_COOLDOWN.get(); }
 }

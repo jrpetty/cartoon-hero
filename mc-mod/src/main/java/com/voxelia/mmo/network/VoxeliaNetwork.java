@@ -22,6 +22,10 @@ public final class VoxeliaNetwork {
             SkillsSyncPayload.TYPE,
             SkillsSyncPayload.STREAM_CODEC,
             SkillsSyncPayload::handle);
+        registrar.playToServer(
+            AbilityPacket.TYPE,
+            AbilityPacket.STREAM_CODEC,
+            AbilityPacket::handle);
     }
 
     public static void syncTo(ServerPlayer player) {

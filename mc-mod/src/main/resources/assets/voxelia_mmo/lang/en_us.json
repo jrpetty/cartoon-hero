@@ -8,6 +8,8 @@
 
   "key.categories.voxelia_mmo": "Voxelia MMO",
   "key.voxelia_mmo.menu": "Open Skills Menu",
+  "key.voxelia_mmo.frenzy": "Ability: Frenzy (Combat)",
+  "key.voxelia_mmo.leap": "Ability: Leap (Acrobatics)",
 
   "advancements.voxelia_mmo.root.title": "Voxelia MMO",
   "advancements.voxelia_mmo.root.description": "Begin your adventure — gather, fight, and level up.",
