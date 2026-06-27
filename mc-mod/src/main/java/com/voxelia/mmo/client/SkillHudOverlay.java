@@ -58,10 +58,19 @@ public final class SkillHudOverlay implements LayeredDraw.Layer {
             y += LINE_H;
         }
 
-        // selected ability indicator
+        // selected ability + cooldown indicator
+        int sel = ClientAbilities.selected();
+        long remTicks = ClientAbilities.cooldownRemainingTicks(sel);
+        boolean ready = remTicks <= 0;
         String key = VoxeliaKeys.USE_ABILITY.getTranslatedKeyMessage().getString();
-        graphics.drawString(mc.font,
-            "▶ " + ClientAbilities.selectedSkill().abilityName() + " [" + key + "]",
-            x, y + 2, 0xFF89C7FF);
+        String name = ClientAbilities.selectedSkill().abilityName();
+        String label = "▶ " + name + " [" + key + "]" + (ready ? "" : "  " + (remTicks / 20 + 1) + "s");
+        graphics.drawString(mc.font, label, x, y + 2, ready ? 0xFF89C7FF : 0xFF8893A0);
+        if (!ready) {
+            int barW = BLOCK_W - 4, barH = 2, barY = y + 12;
+            graphics.fill(x, barY, x + barW, barY + barH, 0x80000000);
+            float frac = 1f - ClientAbilities.cooldownFraction(sel); // refills as it readies
+            graphics.fill(x, barY, x + (int) (barW * frac), barY + barH, 0xFF89C7FF);
+        }
     }
 }

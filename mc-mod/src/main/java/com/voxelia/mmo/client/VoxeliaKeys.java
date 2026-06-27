@@ -47,6 +47,7 @@ public final class VoxeliaKeys {
 
         @SubscribeEvent
         public static void onClientTick(ClientTickEvent.Post event) {
+            ClientAbilities.clientTick();
             Player player = Minecraft.getInstance().player;
             if (player == null) return;
 

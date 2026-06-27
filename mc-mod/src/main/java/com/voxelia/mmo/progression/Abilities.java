@@ -1,10 +1,12 @@
 package com.voxelia.mmo.progression;
 
 import com.voxelia.mmo.config.VoxeliaConfig;
+import com.voxelia.mmo.network.AbilityCooldownPacket;
 import com.voxelia.mmo.registry.VoxeliaAttachments;
 import com.voxelia.mmo.skill.Skill;
 import net.minecraft.ChatFormatting;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
@@ -19,6 +21,7 @@ import net.minecraft.world.item.BoneMealItem;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.phys.Vec3;
+import net.neoforged.neoforge.network.PacketDistributor;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -67,7 +70,11 @@ public final class Abilities {
             return;
         }
         if (effect.getAsBoolean()) {
-            cd(p)[slot] = p.level().getGameTime() + cooldown * 20L;
+            int durationTicks = cooldown * 20;
+            cd(p)[slot] = p.level().getGameTime() + durationTicks;
+            PacketDistributor.sendToPlayer(p, new AbilityCooldownPacket(slot, durationTicks));
+            p.serverLevel().sendParticles(ParticleTypes.ENCHANT,
+                p.getX(), p.getY() + 1.0, p.getZ(), 14, 0.4, 0.7, 0.4, 0.05);
         }
     }
 
