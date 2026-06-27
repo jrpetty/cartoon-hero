@@ -40,6 +40,14 @@ public final class PlayerSkills {
         xp.merge(s, Math.max(0, amount), Integer::sum);
     }
 
+    /** Reduce every skill's XP by a fraction (death penalty). pct in [0,1]. */
+    public void loseFraction(double pct) {
+        double keep = Math.max(0.0, 1.0 - pct);
+        for (Skill s : Skill.values()) {
+            xp.put(s, (int) Math.floor(getXp(s) * keep));
+        }
+    }
+
     public int totalLevels() {
         int sum = 0;
         for (Skill s : Skill.values()) sum += getLevel(s);

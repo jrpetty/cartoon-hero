@@ -39,6 +39,7 @@ public final class VoxeliaConfig {
     private static final ModConfigSpec.IntValue TELEKINESIS_LEVEL;
     private static final ModConfigSpec.IntValue LAST_STAND_LEVEL;
     private static final ModConfigSpec.IntValue COOKING_FEAST_LEVEL;
+    private static final ModConfigSpec.DoubleValue DEATH_XP_LOSS;
 
     // active abilities (original six)
     private static final ModConfigSpec.IntValue FRENZY_LEVEL;
@@ -109,6 +110,8 @@ public final class VoxeliaConfig {
             .defineInRange("lastStandLevel", 20, 0, 100);
         COOKING_FEAST_LEVEL = b.comment("Cooking: level that unlocks Well Fed — a short regeneration after eating (0 disables).")
             .defineInRange("cookingWellFedLevel", 20, 0, 100);
+        DEATH_XP_LOSS = b.comment("Fraction of EVERY skill's XP lost on death (0.0 = keep everything, 0.1 = lose 10%, can drop levels).")
+            .defineInRange("deathXpLossPercent", 0.05, 0.0, 1.0);
         b.pop();
 
         b.comment("Active abilities for the original six skills (cooldown-balanced).").push("abilities");
@@ -154,6 +157,7 @@ public final class VoxeliaConfig {
     public static int telekinesisLevel()       { return TELEKINESIS_LEVEL.get(); }
     public static int lastStandLevel()         { return LAST_STAND_LEVEL.get(); }
     public static int cookingWellFedLevel()    { return COOKING_FEAST_LEVEL.get(); }
+    public static double deathXpLossPercent()  { return DEATH_XP_LOSS.get(); }
 
     public static int frenzyLevel()            { return FRENZY_LEVEL.get(); }
     public static int frenzyCooldownSeconds()  { return FRENZY_COOLDOWN.get(); }

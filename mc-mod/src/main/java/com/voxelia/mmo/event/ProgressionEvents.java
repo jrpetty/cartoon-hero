@@ -1,10 +1,12 @@
 package com.voxelia.mmo.event;
 
 import com.voxelia.mmo.VoxeliaMMO;
+import com.voxelia.mmo.config.VoxeliaConfig;
 import com.voxelia.mmo.network.VoxeliaNetwork;
 import com.voxelia.mmo.progression.Progression;
 import com.voxelia.mmo.progression.SkillEffects;
 import com.voxelia.mmo.registry.VoxeliaAttachments;
+import com.voxelia.mmo.skill.PlayerSkills;
 import com.voxelia.mmo.skill.Skill;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.tags.BlockTags;
@@ -72,4 +74,20 @@ public final class ProgressionEvents {
             VoxeliaNetwork.syncTo(player);
         }
     }
+
+    /** Apply the configured skill-XP death penalty when a player respawns after dying. */
+    @SubscribeEvent
+    public static void onClone(PlayerEvent.Clone event) {
+        if (!event.isWasDeath()) return;
+        double pct = VoxeliaConfig.deathXpLossPercent();
+        if (pct <= 0) return;
+        if (!(event.getEntity() instanceof ServerPlayer newPlayer)) return;
+
+        PlayerSkills original = event.getOriginal().getData(VoxeliaAttachments.PLAYER_SKILLS.get());
+        PlayerSkills reduced = PlayerSkills.fromMap(original.toMap());
+        reduced.loseFraction(pct);
+        newPlayer.setData(VoxeliaAttachments.PLAYER_SKILLS.get(), reduced);
+        // SkillEffects + sync happen in onRespawn, which fires after Clone.
+    }
 }
+
