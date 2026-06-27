@@ -31,6 +31,14 @@ public final class VoxeliaConfig {
     private static final ModConfigSpec.IntValue FRENZY_COOLDOWN;
     private static final ModConfigSpec.IntValue LEAP_LEVEL;
     private static final ModConfigSpec.IntValue LEAP_COOLDOWN;
+    private static final ModConfigSpec.IntValue FOCUS_LEVEL;
+    private static final ModConfigSpec.IntValue FOCUS_COOLDOWN;
+    private static final ModConfigSpec.IntValue OVERGROWTH_LEVEL;
+    private static final ModConfigSpec.IntValue OVERGROWTH_COOLDOWN;
+    private static final ModConfigSpec.IntValue MEAL_LEVEL;
+    private static final ModConfigSpec.IntValue MEAL_COOLDOWN;
+    private static final ModConfigSpec.IntValue REEL_LEVEL;
+    private static final ModConfigSpec.IntValue REEL_COOLDOWN;
 
     static {
         ModConfigSpec.Builder b = new ModConfigSpec.Builder();
@@ -80,6 +88,22 @@ public final class VoxeliaConfig {
             .defineInRange("leapLevel", 15, 0, 100);
         LEAP_COOLDOWN = b.comment("Leap cooldown in seconds.")
             .defineInRange("leapCooldownSeconds", 6, 1, 3600);
+        FOCUS_LEVEL = b.comment("Mining level that unlocks Miner's Focus (Haste + Night Vision). 0 disables.")
+            .defineInRange("minersFocusLevel", 20, 0, 100);
+        FOCUS_COOLDOWN = b.comment("Miner's Focus cooldown in seconds.")
+            .defineInRange("minersFocusCooldownSeconds", 60, 1, 3600);
+        OVERGROWTH_LEVEL = b.comment("Foraging level that unlocks Overgrowth (bonemeals nearby plants). 0 disables.")
+            .defineInRange("overgrowthLevel", 25, 0, 100);
+        OVERGROWTH_COOLDOWN = b.comment("Overgrowth cooldown in seconds.")
+            .defineInRange("overgrowthCooldownSeconds", 45, 1, 3600);
+        MEAL_LEVEL = b.comment("Farming level that unlocks Hearty Meal (Regeneration + Saturation). 0 disables.")
+            .defineInRange("heartyMealLevel", 20, 0, 100);
+        MEAL_COOLDOWN = b.comment("Hearty Meal cooldown in seconds.")
+            .defineInRange("heartyMealCooldownSeconds", 60, 1, 3600);
+        REEL_LEVEL = b.comment("Fishing level that unlocks Reel (yanks your hooked target, or pulls you to the bobber). 0 disables.")
+            .defineInRange("reelLevel", 15, 0, 100);
+        REEL_COOLDOWN = b.comment("Reel cooldown in seconds.")
+            .defineInRange("reelCooldownSeconds", 8, 1, 3600);
         b.pop();
 
         SPEC = b.build();
@@ -104,4 +128,12 @@ public final class VoxeliaConfig {
     public static int frenzyCooldownSeconds()  { return FRENZY_COOLDOWN.get(); }
     public static int leapLevel()              { return LEAP_LEVEL.get(); }
     public static int leapCooldownSeconds()    { return LEAP_COOLDOWN.get(); }
+    public static int minersFocusLevel()       { return FOCUS_LEVEL.get(); }
+    public static int minersFocusCooldownSeconds() { return FOCUS_COOLDOWN.get(); }
+    public static int overgrowthLevel()        { return OVERGROWTH_LEVEL.get(); }
+    public static int overgrowthCooldownSeconds() { return OVERGROWTH_COOLDOWN.get(); }
+    public static int heartyMealLevel()        { return MEAL_LEVEL.get(); }
+    public static int heartyMealCooldownSeconds() { return MEAL_COOLDOWN.get(); }
+    public static int reelLevel()              { return REEL_LEVEL.get(); }
+    public static int reelCooldownSeconds()    { return REEL_COOLDOWN.get(); }
 }

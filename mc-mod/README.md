@@ -32,7 +32,7 @@ else — health lives on Farming.
 
 | System | What it does |
 | --- | --- |
-| **Active abilities** | **Frenzy** (Combat, `R`) — a short Strength+Speed burst on a cooldown. **Leap** (Acrobatics, `V`) — a forward/upward dash with a safe landing. Both level-gated + cooldown-balanced. |
+| **Active abilities** | One per skill — **cycle** the selected one (`G`) and **use** it (`R`). Miner's Focus (Haste+Night Vision), Overgrowth (bonemeal nearby), Frenzy (Strength+Speed), Hearty Meal (Regen+Saturation), Leap (dash), Reel (yank your hook). All level-gated + cooldown-balanced. |
 | **Level-up feedback** | Chat line, sound, on-screen **title**, and particles. |
 | **Skills GUI** | Character level, every skill + XP bars, and ability keybinds — open with **`K`** or `/voxelia menu`. |
 | **HUD** | Corner overlay with per-skill XP bars; position is configurable (anchor + offset). |
@@ -57,8 +57,12 @@ else — health lives on Farming.
 | Key | Action |
 | --- | --- |
 | `K` | Open the Skills menu |
-| `R` | **Frenzy** (Combat ability) |
-| `V` | **Leap** (Acrobatics ability) |
+| `G` | Cycle the selected ability |
+| `R` | Use the selected ability |
+
+Each skill has one signature ability (Mining → Miner's Focus, Foraging →
+Overgrowth, Combat → Frenzy, Farming → Hearty Meal, Acrobatics → Leap,
+Fishing → Reel). The HUD and Skills menu show which is selected.
 
 The server is authoritative: it owns skill XP, combat resolution, and perks, and
 pushes a `SkillsSyncPayload` to each client, which only renders the HUD/GUI.

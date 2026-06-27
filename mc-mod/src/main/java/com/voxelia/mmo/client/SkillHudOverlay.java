@@ -24,7 +24,7 @@ public final class SkillHudOverlay implements LayeredDraw.Layer {
         if (mc.player == null || mc.options.hideGui || !VoxeliaClientConfig.showHud()) return;
         if (!ClientSkillData.hasData()) return;
 
-        int lines = Skill.values().length + 1; // +1 for the title
+        int lines = Skill.values().length + 2; // title + ability line
         int blockH = lines * LINE_H + 2;
 
         Anchor anchor = VoxeliaClientConfig.anchor();
@@ -57,5 +57,11 @@ public final class SkillHudOverlay implements LayeredDraw.Layer {
             graphics.fill(x, barY, x + (int) (barW * frac), barY + barH, color);
             y += LINE_H;
         }
+
+        // selected ability indicator
+        String key = VoxeliaKeys.USE_ABILITY.getTranslatedKeyMessage().getString();
+        graphics.drawString(mc.font,
+            "▶ " + ClientAbilities.selectedSkill().abilityName() + " [" + key + "]",
+            x, y + 2, 0xFF89C7FF);
     }
 }

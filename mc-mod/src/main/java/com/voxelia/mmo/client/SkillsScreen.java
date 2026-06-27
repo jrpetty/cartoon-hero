@@ -35,6 +35,7 @@ public final class SkillsScreen extends Screen {
         g.drawCenteredString(this.font, "Character Level " + charLevel + "  •  " + total + " total levels",
             this.width / 2, y + 28, 0xFFB0C4D4);
 
+        Skill selected = ClientAbilities.selectedSkill();
         int ry = y + headerH;
         for (Skill skill : Skill.values()) {
             int xp = ClientSkillData.xp(skill);
@@ -42,9 +43,12 @@ public final class SkillsScreen extends Screen {
             int into = SkillCurve.xpIntoLevel(xp);
             int span = SkillCurve.xpToNext(xp);
             int color = 0xFF000000 | skill.color();
+            boolean sel = skill == selected;
 
-            g.drawString(this.font, skill.display(), x + 12, ry, color);
-            g.drawString(this.font, "Lv " + level, x + w - 52, ry, 0xFFFFFFFF);
+            if (sel) g.fill(x + 4, ry - 2, x + w - 4, ry + rowH - 4, 0x2089C7FF);
+            g.drawString(this.font, (sel ? "▶ " : "  ") + skill.display(), x + 8, ry, color);
+            g.drawString(this.font, skill.abilityName(), x + 120, ry, 0xFF89C7FF);
+            g.drawString(this.font, "Lv " + level, x + w - 50, ry, 0xFFFFFFFF);
 
             int barX = x + 12, barW = w - 24, barY = ry + 12, barH = 6;
             g.fill(barX, barY, barX + barW, barY + barH, 0xFF000000);
@@ -55,10 +59,10 @@ public final class SkillsScreen extends Screen {
             ry += rowH;
         }
 
-        String frenzyKey = VoxeliaKeys.FRENZY.getTranslatedKeyMessage().getString();
-        String leapKey = VoxeliaKeys.LEAP.getTranslatedKeyMessage().getString();
+        String useKey = VoxeliaKeys.USE_ABILITY.getTranslatedKeyMessage().getString();
+        String cycleKey = VoxeliaKeys.CYCLE_ABILITY.getTranslatedKeyMessage().getString();
         g.drawCenteredString(this.font,
-            "Abilities — Frenzy [" + frenzyKey + "]   Leap [" + leapKey + "]",
+            "Use [" + useKey + "]   Cycle [" + cycleKey + "]   —   Selected: " + selected.abilityName(),
             this.width / 2, y + h - 16, 0xFF89C7FF);
 
         super.render(g, mouseX, mouseY, partialTick);
