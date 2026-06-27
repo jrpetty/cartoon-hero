@@ -36,6 +36,8 @@ public final class ProgressionEvents {
             Progression.grant(player, Skill.FORAGING, 6);
         } else if (state.is(BlockTags.CROPS)) {
             Progression.grant(player, Skill.FARMING, 5);
+        } else if (state.is(BlockTags.MINEABLE_WITH_SHOVEL)) {
+            Progression.grant(player, Skill.EXCAVATION, 5);
         } else if (state.is(BlockTags.MINEABLE_WITH_PICKAXE)) {
             Progression.grant(player, Skill.MINING, state.is(Tags.Blocks.ORES) ? 12 : 5);
         }

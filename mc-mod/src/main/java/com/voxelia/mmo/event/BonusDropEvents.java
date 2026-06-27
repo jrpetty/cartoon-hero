@@ -44,6 +44,9 @@ public final class BonusDropEvents {
         } else if (state.is(Tags.Blocks.ORES)) {
             skill = Skill.MINING;
             perLevel = VoxeliaConfig.miningFortunePerLevel();
+        } else if (state.is(BlockTags.MINEABLE_WITH_SHOVEL)) {
+            skill = Skill.EXCAVATION;
+            perLevel = VoxeliaConfig.excavationFortunePerLevel();
         }
         if (skill != null && perLevel > 0 && !hasSilkTouch(event.getLevel(), event.getTool())) {
             double factor = perLevel * skills.getLevel(skill);

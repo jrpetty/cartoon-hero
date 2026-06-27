@@ -70,6 +70,11 @@ public final class AbilityEvents {
                     player.getX(), player.getY() + 1.0, player.getZ(), 8, 0.3, 0.4, 0.3, 0.01);
             }
         }
+
+        // Defense trains from actually taking a hit.
+        if (!event.isCanceled()) {
+            Progression.grant(player, Skill.DEFENSE, Math.min(20, Math.max(1, (int) Math.ceil(event.getAmount()))));
+        }
     }
 
     @SubscribeEvent
@@ -126,6 +131,16 @@ public final class AbilityEvents {
             if (mining >= hasteLevel) {
                 int amplifier = Math.min(2, (mining - hasteLevel) / 25);
                 player.addEffect(new MobEffectInstance(MobEffects.DIG_SPEED, 60, amplifier, true, false, false));
+            }
+        }
+
+        // --- Defense "Last Stand": Resistance while badly hurt ---
+        int lastStand = VoxeliaConfig.lastStandLevel();
+        if (lastStand > 0) {
+            int defense = skills.getLevel(Skill.DEFENSE);
+            if (defense >= lastStand && player.getHealth() <= player.getMaxHealth() * 0.35f) {
+                int amplifier = Math.min(2, (defense - lastStand) / 30);
+                player.addEffect(new MobEffectInstance(MobEffects.DAMAGE_RESISTANCE, 40, amplifier, true, false, false));
             }
         }
     }

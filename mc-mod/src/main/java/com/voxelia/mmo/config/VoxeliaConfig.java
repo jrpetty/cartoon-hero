@@ -3,30 +3,44 @@ package com.voxelia.mmo.config;
 import net.neoforged.neoforge.common.ModConfigSpec;
 
 /**
- * Common (server-authoritative) config: XP rate and every per-level reward
- * coefficient, so balance is fully tunable without editing code.
- * Lives in config/voxelia_mmo-common.toml.
+ * Common (server-authoritative) config: XP rate, per-level reward coefficients,
+ * milestone perks, and the original six skills' active-ability tuning. The newer
+ * skills (Excavation, Defense, Cooking, Alchemy, Archery) are passive.
  */
 public final class VoxeliaConfig {
     private VoxeliaConfig() {}
 
     public static final ModConfigSpec SPEC;
 
+    // rewards
     private static final ModConfigSpec.DoubleValue XP_MULTIPLIER;
     private static final ModConfigSpec.DoubleValue COMBAT_DAMAGE;
     private static final ModConfigSpec.DoubleValue FARMING_HEALTH;
     private static final ModConfigSpec.DoubleValue MINING_SPEED;
     private static final ModConfigSpec.DoubleValue FORAGING_SPEED;
+    private static final ModConfigSpec.DoubleValue EXCAV_SPEED;
     private static final ModConfigSpec.DoubleValue MINING_FORTUNE;
     private static final ModConfigSpec.DoubleValue FORAGING_FORTUNE;
+    private static final ModConfigSpec.DoubleValue EXCAV_FORTUNE;
     private static final ModConfigSpec.DoubleValue ACRO_DODGE;
     private static final ModConfigSpec.DoubleValue FISHING_LUCK_MAX;
     private static final ModConfigSpec.DoubleValue FISHING_SPEED_MAX;
+    private static final ModConfigSpec.DoubleValue DEF_ARMOR;
+    private static final ModConfigSpec.DoubleValue DEF_TOUGH;
+    private static final ModConfigSpec.DoubleValue DEF_KB;
+    private static final ModConfigSpec.DoubleValue ALCH_DURATION;
+    private static final ModConfigSpec.DoubleValue ARCHERY_POWER;
+
+    // perks
     private static final ModConfigSpec.DoubleValue COMBAT_LIFESTEAL;
     private static final ModConfigSpec.DoubleValue ACRO_FALL_REDUCTION;
     private static final ModConfigSpec.DoubleValue FISHING_TREASURE_MAX;
     private static final ModConfigSpec.IntValue MINING_HASTE_LEVEL;
     private static final ModConfigSpec.IntValue TELEKINESIS_LEVEL;
+    private static final ModConfigSpec.IntValue LAST_STAND_LEVEL;
+    private static final ModConfigSpec.IntValue COOKING_FEAST_LEVEL;
+
+    // active abilities (original six)
     private static final ModConfigSpec.IntValue FRENZY_LEVEL;
     private static final ModConfigSpec.IntValue FRENZY_COOLDOWN;
     private static final ModConfigSpec.IntValue LEAP_LEVEL;
@@ -42,68 +56,74 @@ public final class VoxeliaConfig {
 
     static {
         ModConfigSpec.Builder b = new ModConfigSpec.Builder();
-        b.comment("Voxelia MMO — XP and per-level reward tuning (max level 100).").push("rewards");
 
+        b.comment("XP and per-level reward tuning (max level 100).").push("rewards");
         XP_MULTIPLIER = b.comment("Global multiplier applied to all skill XP gains.")
             .defineInRange("xpMultiplier", 1.0, 0.0, 1000.0);
-        COMBAT_DAMAGE = b.comment("Combat: bonus attack damage per level (0.1 => +~10 at level 100).")
+        COMBAT_DAMAGE = b.comment("Combat: bonus attack damage per level.")
             .defineInRange("combatDamagePerLevel", 0.1, 0.0, 100.0);
-        FARMING_HEALTH = b.comment("Farming: bonus max health (HP) per level (0.2 => +1 heart per 5 levels, ~doubles HP at 100).")
+        FARMING_HEALTH = b.comment("Farming: bonus max health (HP) per level.")
             .defineInRange("farmingHealthPerLevel", 0.2, 0.0, 100.0);
-        MINING_SPEED = b.comment("Mining: block-break-speed bonus per level as a fraction (0.005 => +0.5%/level).")
+        MINING_SPEED = b.comment("Mining: block-break-speed bonus per level (fraction).")
             .defineInRange("miningSpeedPerLevel", 0.005, 0.0, 10.0);
-        FORAGING_SPEED = b.comment("Foraging: block-break-speed bonus per level as a fraction.")
+        FORAGING_SPEED = b.comment("Foraging: block-break-speed bonus per level (fraction).")
             .defineInRange("foragingSpeedPerLevel", 0.005, 0.0, 10.0);
-        MINING_FORTUNE = b.comment("Mining: Fortune bonus-drop factor per level on ores (0.01 => +1%/level, ~2x at 100). Never applies with Silk Touch.")
+        EXCAV_SPEED = b.comment("Excavation: block-break-speed bonus per level (fraction).")
+            .defineInRange("excavationSpeedPerLevel", 0.005, 0.0, 10.0);
+        MINING_FORTUNE = b.comment("Mining: Fortune factor per level on ores (no Silk Touch).")
             .defineInRange("miningFortunePerLevel", 0.01, 0.0, 10.0);
-        FORAGING_FORTUNE = b.comment("Foraging: Fortune bonus-drop factor per level on logs/leaves. Never applies with Silk Touch.")
+        FORAGING_FORTUNE = b.comment("Foraging: Fortune factor per level on logs/leaves (no Silk Touch).")
             .defineInRange("foragingFortunePerLevel", 0.01, 0.0, 10.0);
-        ACRO_DODGE = b.comment("Acrobatics: dodge chance per level (0.006 => +0.6%/level, 60% at level 100).")
+        EXCAV_FORTUNE = b.comment("Excavation: Fortune factor per level on shovel blocks (no Silk Touch).")
+            .defineInRange("excavationFortunePerLevel", 0.01, 0.0, 10.0);
+        ACRO_DODGE = b.comment("Acrobatics: dodge chance per level (0.006 => 60% at 100).")
             .defineInRange("acrobaticsDodgePerLevel", 0.006, 0.0, 0.01);
-        FISHING_LUCK_MAX = b.comment("Fishing: maximum bonus luck (applied only while a line is in the water) at max level.")
+        FISHING_LUCK_MAX = b.comment("Fishing: max bonus luck (while fishing) at max level.")
             .defineInRange("fishingLuckMax", 4.0, 0.0, 100.0);
-        FISHING_SPEED_MAX = b.comment("Fishing: maximum bite-speed multiplier at max level (2.0 => twice as fast).")
+        FISHING_SPEED_MAX = b.comment("Fishing: max bite-speed multiplier at max level.")
             .defineInRange("fishingSpeedMax", 2.0, 1.0, 10.0);
+        DEF_ARMOR = b.comment("Defense: bonus armor per level.")
+            .defineInRange("defenseArmorPerLevel", 0.12, 0.0, 100.0);
+        DEF_TOUGH = b.comment("Defense: bonus armor toughness per level.")
+            .defineInRange("defenseToughnessPerLevel", 0.08, 0.0, 100.0);
+        DEF_KB = b.comment("Defense: bonus knockback resistance per level.")
+            .defineInRange("defenseKnockbackResistPerLevel", 0.003, 0.0, 0.01);
+        ALCH_DURATION = b.comment("Alchemy: beneficial-effect duration extension per level on finishing a potion (0.005 => +50% at 100).")
+            .defineInRange("alchemyDurationPerLevel", 0.005, 0.0, 1.0);
+        ARCHERY_POWER = b.comment("Archery: Power Shot bonus damage per level on fully-drawn (critical) arrows (0.06 => +6 at 100).")
+            .defineInRange("archeryPowerShotPerLevel", 0.06, 0.0, 10.0);
         b.pop();
 
-        b.comment("Milestone perks.").push("perks");
-        COMBAT_LIFESTEAL = b.comment("Combat: health healed on a kill, per Combat level (0.05 => +5 HP at level 100).")
+        b.comment("Milestone & conditional perks.").push("perks");
+        COMBAT_LIFESTEAL = b.comment("Combat: health healed on a kill, per level.")
             .defineInRange("combatLifeStealPerLevel", 0.05, 0.0, 10.0);
-        ACRO_FALL_REDUCTION = b.comment("Acrobatics: fall damage reduced per level (0.009 => ~90% softer landings at level 100). XP is still earned on the full fall.")
+        ACRO_FALL_REDUCTION = b.comment("Acrobatics: fall damage reduced per level.")
             .defineInRange("acrobaticsFallReductionPerLevel", 0.009, 0.0, 0.01);
-        FISHING_TREASURE_MAX = b.comment("Fishing: maximum chance of a treasure bonus on a catch, at max level.")
+        FISHING_TREASURE_MAX = b.comment("Fishing: max treasure-bonus chance per catch at max level.")
             .defineInRange("fishingTreasureChanceMax", 0.5, 0.0, 1.0);
         MINING_HASTE_LEVEL = b.comment("Mining: level at which holding a pickaxe grants Haste (0 disables).")
             .defineInRange("miningHasteLevel", 25, 0, 100);
-        TELEKINESIS_LEVEL = b.comment("Mining: level at which mined drops go straight to your inventory (0 disables).")
+        TELEKINESIS_LEVEL = b.comment("Mining: level at which mined drops go to your inventory (0 disables).")
             .defineInRange("telekinesisLevel", 100, 0, 100);
+        LAST_STAND_LEVEL = b.comment("Defense: level that unlocks Last Stand — Resistance while below 35% health (0 disables).")
+            .defineInRange("lastStandLevel", 20, 0, 100);
+        COOKING_FEAST_LEVEL = b.comment("Cooking: level that unlocks Well Fed — a short regeneration after eating (0 disables).")
+            .defineInRange("cookingWellFedLevel", 20, 0, 100);
         b.pop();
 
-        b.comment("Active abilities (keybinds, balanced by cooldowns).").push("abilities");
-        FRENZY_LEVEL = b.comment("Combat level that unlocks Frenzy (a short Strength + Speed burst). 0 disables.")
-            .defineInRange("frenzyLevel", 20, 0, 100);
-        FRENZY_COOLDOWN = b.comment("Frenzy cooldown in seconds.")
-            .defineInRange("frenzyCooldownSeconds", 50, 1, 3600);
-        LEAP_LEVEL = b.comment("Acrobatics level that unlocks Leap (a forward/upward dash with a safe landing). 0 disables.")
-            .defineInRange("leapLevel", 15, 0, 100);
-        LEAP_COOLDOWN = b.comment("Leap cooldown in seconds.")
-            .defineInRange("leapCooldownSeconds", 6, 1, 3600);
-        FOCUS_LEVEL = b.comment("Mining level that unlocks Miner's Focus (Haste + Night Vision). 0 disables.")
-            .defineInRange("minersFocusLevel", 20, 0, 100);
-        FOCUS_COOLDOWN = b.comment("Miner's Focus cooldown in seconds.")
-            .defineInRange("minersFocusCooldownSeconds", 60, 1, 3600);
-        OVERGROWTH_LEVEL = b.comment("Foraging level that unlocks Overgrowth (bonemeals nearby plants). 0 disables.")
-            .defineInRange("overgrowthLevel", 25, 0, 100);
-        OVERGROWTH_COOLDOWN = b.comment("Overgrowth cooldown in seconds.")
-            .defineInRange("overgrowthCooldownSeconds", 45, 1, 3600);
-        MEAL_LEVEL = b.comment("Farming level that unlocks Hearty Meal (Regeneration + Saturation). 0 disables.")
-            .defineInRange("heartyMealLevel", 20, 0, 100);
-        MEAL_COOLDOWN = b.comment("Hearty Meal cooldown in seconds.")
-            .defineInRange("heartyMealCooldownSeconds", 60, 1, 3600);
-        REEL_LEVEL = b.comment("Fishing level that unlocks Reel (yanks your hooked target, or pulls you to the bobber). 0 disables.")
-            .defineInRange("reelLevel", 15, 0, 100);
-        REEL_COOLDOWN = b.comment("Reel cooldown in seconds.")
-            .defineInRange("reelCooldownSeconds", 8, 1, 3600);
+        b.comment("Active abilities for the original six skills (cooldown-balanced).").push("abilities");
+        FRENZY_LEVEL = b.comment("Combat: Frenzy unlock level (0 disables).").defineInRange("frenzyLevel", 20, 0, 100);
+        FRENZY_COOLDOWN = b.comment("Frenzy cooldown (seconds).").defineInRange("frenzyCooldownSeconds", 50, 1, 3600);
+        LEAP_LEVEL = b.comment("Acrobatics: Leap unlock level (0 disables).").defineInRange("leapLevel", 15, 0, 100);
+        LEAP_COOLDOWN = b.comment("Leap cooldown (seconds).").defineInRange("leapCooldownSeconds", 6, 1, 3600);
+        FOCUS_LEVEL = b.comment("Mining: Miner's Focus unlock level (0 disables).").defineInRange("minersFocusLevel", 20, 0, 100);
+        FOCUS_COOLDOWN = b.comment("Miner's Focus cooldown (seconds).").defineInRange("minersFocusCooldownSeconds", 60, 1, 3600);
+        OVERGROWTH_LEVEL = b.comment("Foraging: Overgrowth unlock level (0 disables).").defineInRange("overgrowthLevel", 25, 0, 100);
+        OVERGROWTH_COOLDOWN = b.comment("Overgrowth cooldown (seconds).").defineInRange("overgrowthCooldownSeconds", 45, 1, 3600);
+        MEAL_LEVEL = b.comment("Farming: Hearty Meal unlock level (0 disables).").defineInRange("heartyMealLevel", 20, 0, 100);
+        MEAL_COOLDOWN = b.comment("Hearty Meal cooldown (seconds).").defineInRange("heartyMealCooldownSeconds", 60, 1, 3600);
+        REEL_LEVEL = b.comment("Fishing: Reel unlock level (0 disables).").defineInRange("reelLevel", 15, 0, 100);
+        REEL_COOLDOWN = b.comment("Reel cooldown (seconds).").defineInRange("reelCooldownSeconds", 8, 1, 3600);
         b.pop();
 
         SPEC = b.build();
@@ -114,16 +134,27 @@ public final class VoxeliaConfig {
     public static double farmingHealthPerLevel(){ return FARMING_HEALTH.get(); }
     public static double miningSpeedPerLevel() { return MINING_SPEED.get(); }
     public static double foragingSpeedPerLevel(){ return FORAGING_SPEED.get(); }
+    public static double excavationSpeedPerLevel(){ return EXCAV_SPEED.get(); }
     public static double miningFortunePerLevel(){ return MINING_FORTUNE.get(); }
     public static double foragingFortunePerLevel(){ return FORAGING_FORTUNE.get(); }
+    public static double excavationFortunePerLevel(){ return EXCAV_FORTUNE.get(); }
     public static double acrobaticsDodgePerLevel(){ return ACRO_DODGE.get(); }
     public static double fishingLuckMax()      { return FISHING_LUCK_MAX.get(); }
     public static double fishingSpeedMax()     { return FISHING_SPEED_MAX.get(); }
+    public static double defenseArmorPerLevel(){ return DEF_ARMOR.get(); }
+    public static double defenseToughnessPerLevel(){ return DEF_TOUGH.get(); }
+    public static double defenseKnockbackResistPerLevel(){ return DEF_KB.get(); }
+    public static double alchemyDurationPerLevel(){ return ALCH_DURATION.get(); }
+    public static double archeryPowerShotPerLevel(){ return ARCHERY_POWER.get(); }
+
     public static double combatLifeStealPerLevel() { return COMBAT_LIFESTEAL.get(); }
     public static double acrobaticsFallReductionPerLevel() { return ACRO_FALL_REDUCTION.get(); }
     public static double fishingTreasureChanceMax() { return FISHING_TREASURE_MAX.get(); }
     public static int miningHasteLevel()       { return MINING_HASTE_LEVEL.get(); }
     public static int telekinesisLevel()       { return TELEKINESIS_LEVEL.get(); }
+    public static int lastStandLevel()         { return LAST_STAND_LEVEL.get(); }
+    public static int cookingWellFedLevel()    { return COOKING_FEAST_LEVEL.get(); }
+
     public static int frenzyLevel()            { return FRENZY_LEVEL.get(); }
     public static int frenzyCooldownSeconds()  { return FRENZY_COOLDOWN.get(); }
     public static int leapLevel()              { return LEAP_LEVEL.get(); }

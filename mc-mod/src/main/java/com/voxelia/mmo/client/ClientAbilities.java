@@ -18,7 +18,11 @@ public final class ClientAbilities {
     public static Skill selectedSkill() { return Skill.values()[selected]; }
 
     public static void cycle(int dir) {
-        selected = ((selected + dir) % COUNT + COUNT) % COUNT;
+        // advance to the next skill that actually has an active ability
+        for (int i = 0; i < COUNT; i++) {
+            selected = ((selected + dir) % COUNT + COUNT) % COUNT;
+            if (Skill.values()[selected].active()) return;
+        }
     }
 
     public static void clientTick() { clientTick++; }

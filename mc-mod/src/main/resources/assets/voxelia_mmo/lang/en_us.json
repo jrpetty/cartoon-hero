@@ -5,6 +5,11 @@
   "voxelia_mmo.skill.farming": "Farming",
   "voxelia_mmo.skill.acrobatics": "Acrobatics",
   "voxelia_mmo.skill.fishing": "Fishing",
+  "voxelia_mmo.skill.excavation": "Excavation",
+  "voxelia_mmo.skill.defense": "Defense",
+  "voxelia_mmo.skill.cooking": "Cooking",
+  "voxelia_mmo.skill.alchemy": "Alchemy",
+  "voxelia_mmo.skill.archery": "Archery",
 
   "key.categories.voxelia_mmo": "Voxelia MMO",
   "key.voxelia_mmo.menu": "Open Skills Menu",

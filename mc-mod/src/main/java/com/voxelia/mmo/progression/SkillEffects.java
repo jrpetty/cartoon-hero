@@ -31,6 +31,10 @@ public final class SkillEffects {
     private static final ResourceLocation HEALTH_ID        = id("farming_health");
     private static final ResourceLocation MINING_SPEED_ID  = id("mining_speed");
     private static final ResourceLocation FORAGING_SPEED_ID = id("foraging_speed");
+    private static final ResourceLocation EXCAV_SPEED_ID   = id("excavation_speed");
+    private static final ResourceLocation DEF_ARMOR_ID     = id("defense_armor");
+    private static final ResourceLocation DEF_TOUGH_ID     = id("defense_toughness");
+    private static final ResourceLocation DEF_KB_ID        = id("defense_knockback");
 
     private static ResourceLocation id(String path) {
         return ResourceLocation.fromNamespaceAndPath(VoxeliaMMO.MOD_ID, path);
@@ -42,6 +46,8 @@ public final class SkillEffects {
         int farming  = s.getLevel(Skill.FARMING) - 1;
         int mining   = s.getLevel(Skill.MINING) - 1;
         int foraging = s.getLevel(Skill.FORAGING) - 1;
+        int excav    = s.getLevel(Skill.EXCAVATION) - 1;
+        int defense  = s.getLevel(Skill.DEFENSE) - 1;
 
         set(player, Attributes.ATTACK_DAMAGE, DAMAGE_ID,
             combat * VoxeliaConfig.combatDamagePerLevel(), AttributeModifier.Operation.ADD_VALUE);
@@ -51,6 +57,14 @@ public final class SkillEffects {
             mining * VoxeliaConfig.miningSpeedPerLevel(), AttributeModifier.Operation.ADD_MULTIPLIED_BASE);
         set(player, Attributes.BLOCK_BREAK_SPEED, FORAGING_SPEED_ID,
             foraging * VoxeliaConfig.foragingSpeedPerLevel(), AttributeModifier.Operation.ADD_MULTIPLIED_BASE);
+        set(player, Attributes.BLOCK_BREAK_SPEED, EXCAV_SPEED_ID,
+            excav * VoxeliaConfig.excavationSpeedPerLevel(), AttributeModifier.Operation.ADD_MULTIPLIED_BASE);
+        set(player, Attributes.ARMOR, DEF_ARMOR_ID,
+            defense * VoxeliaConfig.defenseArmorPerLevel(), AttributeModifier.Operation.ADD_VALUE);
+        set(player, Attributes.ARMOR_TOUGHNESS, DEF_TOUGH_ID,
+            defense * VoxeliaConfig.defenseToughnessPerLevel(), AttributeModifier.Operation.ADD_VALUE);
+        set(player, Attributes.KNOCKBACK_RESISTANCE, DEF_KB_ID,
+            defense * VoxeliaConfig.defenseKnockbackResistPerLevel(), AttributeModifier.Operation.ADD_VALUE);
 
         if (player.getHealth() > player.getMaxHealth()) {
             player.setHealth(player.getMaxHealth());
