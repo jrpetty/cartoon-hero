@@ -8,17 +8,17 @@ import java.util.Locale;
 /** The progression disciplines. {@code color} is the HUD text color; {@code abilityName} is the signature active ability. */
 public enum Skill implements StringRepresentable {
     // Original six: active (keybind) abilities. New ones: passive signatures.
-    MINING("mining", 0xBDBDBD, "Miner's Focus", true),
-    FORAGING("foraging", 0x81C784, "Overgrowth", true),
-    COMBAT("combat", 0xEF5350, "Frenzy", true),
-    FARMING("farming", 0xFFD54F, "Hearty Meal", true),
-    ACROBATICS("acrobatics", 0x4FC3F7, "Leap", true),
-    FISHING("fishing", 0x4DD0E1, "Reel", true),
-    EXCAVATION("excavation", 0xC8A064, "Prospector", false),
-    DEFENSE("defense", 0x90A4AE, "Last Stand", false),
-    COOKING("cooking", 0xFF8A65, "Well Fed", false),
-    ALCHEMY("alchemy", 0xBA68C8, "Lingering", false),
-    ARCHERY("archery", 0x8D6E63, "Power Shot", false);
+    MINING("mining", 0xBDBDBD, "Miner's Focus", true, "Miner"),
+    FORAGING("foraging", 0x81C784, "Overgrowth", true, "Forager"),
+    COMBAT("combat", 0xEF5350, "Frenzy", true, "Warrior"),
+    FARMING("farming", 0xFFD54F, "Hearty Meal", true, "Farmer"),
+    ACROBATICS("acrobatics", 0x4FC3F7, "Leap", true, "Acrobat"),
+    FISHING("fishing", 0x4DD0E1, "Reel", true, "Angler"),
+    EXCAVATION("excavation", 0xC8A064, "Prospector", false, "Excavator"),
+    DEFENSE("defense", 0x90A4AE, "Last Stand", false, "Guardian"),
+    COOKING("cooking", 0xFF8A65, "Well Fed", false, "Chef"),
+    ALCHEMY("alchemy", 0xBA68C8, "Lingering", false, "Alchemist"),
+    ARCHERY("archery", 0x8D6E63, "Power Shot", false, "Marksman");
 
     public static final Codec<Skill> CODEC = StringRepresentable.fromEnum(Skill::values);
 
@@ -26,12 +26,14 @@ public enum Skill implements StringRepresentable {
     private final int color;
     private final String abilityName;
     private final boolean active;
+    private final String noun;
 
-    Skill(String id, int color, String abilityName, boolean active) {
+    Skill(String id, int color, String abilityName, boolean active, String noun) {
         this.id = id;
         this.color = color;
         this.abilityName = abilityName;
         this.active = active;
+        this.noun = noun;
     }
 
     public String id() { return id; }
@@ -43,6 +45,9 @@ public enum Skill implements StringRepresentable {
 
     /** True if the ability is a keybind-activated ability; false for passive perks. */
     public boolean active() { return active; }
+
+    /** The title noun for this discipline (e.g. "Miner", "Warrior"). */
+    public String noun() { return noun; }
 
     public String display() {
         return id.substring(0, 1).toUpperCase(Locale.ROOT) + id.substring(1);

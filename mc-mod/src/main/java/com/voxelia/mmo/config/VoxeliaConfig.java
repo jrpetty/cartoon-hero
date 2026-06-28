@@ -40,6 +40,11 @@ public final class VoxeliaConfig {
     private static final ModConfigSpec.IntValue LAST_STAND_LEVEL;
     private static final ModConfigSpec.IntValue COOKING_FEAST_LEVEL;
     private static final ModConfigSpec.DoubleValue DEATH_XP_LOSS;
+    private static final ModConfigSpec.IntValue MASTERY_KILLS_PER_TIER;
+    private static final ModConfigSpec.IntValue MASTERY_MAX_TIER;
+    private static final ModConfigSpec.DoubleValue MASTERY_DAMAGE_PER_TIER;
+    private static final ModConfigSpec.DoubleValue MASTERY_LOOT_PER_TIER;
+    private static final ModConfigSpec.BooleanValue SHOW_CHAT_TITLE;
 
     // active abilities (original six)
     private static final ModConfigSpec.IntValue FRENZY_LEVEL;
@@ -114,6 +119,22 @@ public final class VoxeliaConfig {
             .defineInRange("deathXpLossPercent", 0.05, 0.0, 1.0);
         b.pop();
 
+        b.comment("Mob Mastery / Bestiary — repeatedly killing a mob type grants a bonus vs that type.").push("mastery");
+        MASTERY_KILLS_PER_TIER = b.comment("Kills of a mob type needed per mastery tier.")
+            .defineInRange("killsPerTier", 50, 1, 100000);
+        MASTERY_MAX_TIER = b.comment("Maximum mastery tier per mob type.")
+            .defineInRange("maxTier", 10, 0, 1000);
+        MASTERY_DAMAGE_PER_TIER = b.comment("Bonus damage vs a mastered type per tier (0.02 = +2%/tier).")
+            .defineInRange("damagePerTier", 0.02, 0.0, 10.0);
+        MASTERY_LOOT_PER_TIER = b.comment("Chance per tier to double a drop from a mastered type (0.03 = +3%/tier).")
+            .defineInRange("lootChancePerTier", 0.03, 0.0, 1.0);
+        b.pop();
+
+        b.comment("Social / display.").push("social");
+        SHOW_CHAT_TITLE = b.comment("Prefix chat with the player's level + title, e.g. [Lv 42 • Master Miner].")
+            .define("showChatTitle", true);
+        b.pop();
+
         b.comment("Active abilities for the original six skills (cooldown-balanced).").push("abilities");
         FRENZY_LEVEL = b.comment("Combat: Frenzy unlock level (0 disables).").defineInRange("frenzyLevel", 20, 0, 100);
         FRENZY_COOLDOWN = b.comment("Frenzy cooldown (seconds).").defineInRange("frenzyCooldownSeconds", 50, 1, 3600);
@@ -158,6 +179,11 @@ public final class VoxeliaConfig {
     public static int lastStandLevel()         { return LAST_STAND_LEVEL.get(); }
     public static int cookingWellFedLevel()    { return COOKING_FEAST_LEVEL.get(); }
     public static double deathXpLossPercent()  { return DEATH_XP_LOSS.get(); }
+    public static int masteryKillsPerTier()    { return MASTERY_KILLS_PER_TIER.get(); }
+    public static int masteryMaxTier()         { return MASTERY_MAX_TIER.get(); }
+    public static double masteryDamagePerTier(){ return MASTERY_DAMAGE_PER_TIER.get(); }
+    public static double masteryLootChancePerTier(){ return MASTERY_LOOT_PER_TIER.get(); }
+    public static boolean showChatTitle()      { return SHOW_CHAT_TITLE.get(); }
 
     public static int frenzyLevel()            { return FRENZY_LEVEL.get(); }
     public static int frenzyCooldownSeconds()  { return FRENZY_COOLDOWN.get(); }

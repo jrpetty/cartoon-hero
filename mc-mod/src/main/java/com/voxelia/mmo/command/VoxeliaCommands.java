@@ -30,6 +30,7 @@ public final class VoxeliaCommands {
             Commands.literal("voxelia")
                 .then(Commands.literal("skills").executes(VoxeliaCommands::showSkills))
                 .then(Commands.literal("stats").executes(VoxeliaCommands::stats))
+                .then(Commands.literal("bestiary").executes(VoxeliaCommands::bestiary))
                 .then(Commands.literal("grant")
                     .requires(src -> src.hasPermission(2))
                     .then(Commands.argument("skill", StringArgumentType.word())
@@ -87,6 +88,35 @@ public final class VoxeliaCommands {
             src.sendSuccess(() -> Component.literal(
                 String.format(java.util.Locale.ROOT, "On death you lose %.0f%% of each skill's XP.", loss * 100))
                 .withStyle(ChatFormatting.RED), false);
+        }
+        return 1;
+    }
+
+    private static int bestiary(CommandContext<CommandSourceStack> ctx) {
+        ServerPlayer player = ctx.getSource().getPlayer();
+        if (player == null) return 0;
+        CommandSourceStack src = ctx.getSource();
+        com.voxelia.mmo.skill.MobMastery mastery = player.getData(VoxeliaAttachments.MOB_MASTERY.get());
+
+        var entries = new java.util.ArrayList<>(mastery.kills().entrySet());
+        entries.sort((a, b) -> Integer.compare(b.getValue(), a.getValue()));
+
+        src.sendSuccess(() -> Component.literal("=== Bestiary ===").withStyle(ChatFormatting.GOLD), false);
+        if (entries.isEmpty()) {
+            src.sendSuccess(() -> Component.literal("No kills recorded yet.").withStyle(ChatFormatting.GRAY), false);
+            return 1;
+        }
+        double dmgPerTier = com.voxelia.mmo.config.VoxeliaConfig.masteryDamagePerTier();
+        int shown = Math.min(15, entries.size());
+        for (int i = 0; i < shown; i++) {
+            var entry = entries.get(i);
+            String key = entry.getKey();
+            String name = key.contains(":") ? key.substring(key.indexOf(':') + 1) : key;
+            int kills = entry.getValue();
+            int tier = mastery.tier(key);
+            String line = String.format(java.util.Locale.ROOT, "%s — %d kills (tier %d, +%.0f%% dmg)",
+                name, kills, tier, tier * dmgPerTier * 100);
+            src.sendSuccess(() -> Component.literal(line).withStyle(ChatFormatting.GRAY), false);
         }
         return 1;
     }

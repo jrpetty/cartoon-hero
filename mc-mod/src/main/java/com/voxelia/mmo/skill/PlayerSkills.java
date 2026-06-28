@@ -54,6 +54,19 @@ public final class PlayerSkills {
         return sum;
     }
 
+    public int totalXp() {
+        int sum = 0;
+        for (Skill s : Skill.values()) sum += getXp(s);
+        return sum;
+    }
+
+    /** The skill with the highest level (ties resolve to enum order). */
+    public Skill highest() {
+        Skill best = Skill.values()[0];
+        for (Skill s : Skill.values()) if (getLevel(s) > getLevel(best)) best = s;
+        return best;
+    }
+
     /** Headline character level = average skill level (min 1). */
     public int characterLevel() {
         return Math.max(1, Math.round(totalLevels() / (float) Skill.values().length));

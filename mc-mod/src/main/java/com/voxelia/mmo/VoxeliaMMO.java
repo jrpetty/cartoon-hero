@@ -4,10 +4,12 @@ import com.mojang.logging.LogUtils;
 import com.voxelia.mmo.config.VoxeliaClientConfig;
 import com.voxelia.mmo.config.VoxeliaConfig;
 import com.voxelia.mmo.registry.VoxeliaAttachments;
+import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.fml.ModContainer;
 import net.neoforged.fml.common.Mod;
 import net.neoforged.fml.config.ModConfig;
+import net.neoforged.fml.loading.FMLEnvironment;
 import org.slf4j.Logger;
 
 /**
@@ -25,6 +27,10 @@ public final class VoxeliaMMO {
         VoxeliaAttachments.ATTACHMENTS.register(modBus);
         container.registerConfig(ModConfig.Type.COMMON, VoxeliaConfig.SPEC);
         container.registerConfig(ModConfig.Type.CLIENT, VoxeliaClientConfig.SPEC);
+        // In-game config screen (client only — class is loaded lazily here).
+        if (FMLEnvironment.dist == Dist.CLIENT) {
+            com.voxelia.mmo.client.VoxeliaConfigScreen.register(container);
+        }
         LOGGER.info("[Voxelia MMO] initialised");
     }
 }

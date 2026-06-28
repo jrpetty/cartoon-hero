@@ -8,6 +8,8 @@ import com.voxelia.mmo.progression.SkillEffects;
 import com.voxelia.mmo.registry.VoxeliaAttachments;
 import com.voxelia.mmo.skill.PlayerSkills;
 import com.voxelia.mmo.skill.Skill;
+import net.minecraft.ChatFormatting;
+import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.tags.BlockTags;
 import net.minecraft.world.entity.LivingEntity;
@@ -20,6 +22,10 @@ import net.neoforged.neoforge.event.entity.living.LivingDeathEvent;
 import net.neoforged.neoforge.event.entity.player.PlayerEvent;
 import net.neoforged.neoforge.event.level.BlockEvent;
 
+import java.util.HashMap;
+import java.util.Map;
+import java.util.UUID;
+
 /**
  * Hooks vanilla gameplay events to skill XP (server side, game event bus):
  * breaking blocks -> Mining/Foraging/Farming, killing mobs -> Combat. Also
@@ -28,6 +34,9 @@ import net.neoforged.neoforge.event.level.BlockEvent;
 @EventBusSubscriber(modid = VoxeliaMMO.MOD_ID)
 public final class ProgressionEvents {
     private ProgressionEvents() {}
+
+    // XP lost on the last death, surfaced to the player once they respawn.
+    private static final Map<UUID, Integer> PENDING_DEATH_LOSS = new HashMap<>();
 
     @SubscribeEvent
     public static void onBlockBreak(BlockEvent.BreakEvent event) {
@@ -72,6 +81,13 @@ public final class ProgressionEvents {
         if (event.getEntity() instanceof ServerPlayer player) {
             SkillEffects.apply(player);
             VoxeliaNetwork.syncTo(player);
+            Integer lost = PENDING_DEATH_LOSS.remove(player.getUUID());
+            if (lost != null && lost > 0) {
+                player.sendSystemMessage(Component.literal("")
+                    .append(Component.literal("[Voxelia] ").withStyle(ChatFormatting.GOLD))
+                    .append(Component.literal("You lost " + lost + " skill XP on death.")
+                        .withStyle(ChatFormatting.RED)));
+            }
         }
     }
 
@@ -87,7 +103,10 @@ public final class ProgressionEvents {
         PlayerSkills reduced = PlayerSkills.fromMap(original.toMap());
         reduced.loseFraction(pct);
         newPlayer.setData(VoxeliaAttachments.PLAYER_SKILLS.get(), reduced);
-        // SkillEffects + sync happen in onRespawn, which fires after Clone.
+
+        int lost = original.totalXp() - reduced.totalXp();
+        if (lost > 0) PENDING_DEATH_LOSS.put(newPlayer.getUUID(), lost);
+        // SkillEffects + sync + the message happen in onRespawn, which fires after Clone.
     }
 }
 

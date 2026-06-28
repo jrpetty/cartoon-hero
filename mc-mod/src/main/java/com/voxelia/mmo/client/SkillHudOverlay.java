@@ -36,6 +36,12 @@ public final class SkillHudOverlay implements LayeredDraw.Layer {
         int x = left ? ox : graphics.guiWidth() - ox - BLOCK_W;
         int y = top ? oy : graphics.guiHeight() - oy - blockH;
 
+        // scoreboard-style background panel
+        if (VoxeliaClientConfig.hudPanel()) {
+            graphics.fill(x - 4, y - 4, x + BLOCK_W, y + blockH, 0xB0101418);
+            graphics.fill(x - 4, y - 4, x + BLOCK_W, y + 8, 0xC01D2733); // title bar
+        }
+
         graphics.drawString(mc.font,
             Component.literal("Skills").withStyle(s -> s.withColor(0xFFCE54)), x, y, 0xFFFFFF);
         y += 11;
