@@ -3,6 +3,7 @@ package com.voxelia.mmo.event;
 import com.voxelia.mmo.VoxeliaMMO;
 import com.voxelia.mmo.config.VoxeliaConfig;
 import com.voxelia.mmo.progression.Progression;
+import com.voxelia.mmo.progression.TalentLogic;
 import com.voxelia.mmo.registry.VoxeliaAttachments;
 import com.voxelia.mmo.skill.PlayerSkills;
 import com.voxelia.mmo.skill.Skill;
@@ -22,7 +23,6 @@ import net.minecraft.world.effect.MobEffects;
 import net.minecraft.world.entity.ai.attributes.AttributeInstance;
 import net.minecraft.world.entity.ai.attributes.AttributeModifier;
 import net.minecraft.world.entity.ai.attributes.Attributes;
-import net.minecraft.world.entity.projectile.FishingHook;
 import net.minecraft.world.item.PickaxeItem;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
@@ -33,7 +33,7 @@ import net.neoforged.neoforge.event.tick.PlayerTickEvent;
 /**
  * The "active" skills + perks, handled live on the server game bus:
  *   Acrobatics — trains from fall damage; dodge chance + softer landings.
- *   Fishing    — trains from catches; bonus luck, faster bites, treasure.
+ *   Fishing    — trains from catches; bonus luck and treasure.
  *   Mining     — Haste while holding a pickaxe past a milestone.
  */
 @EventBusSubscriber(modid = VoxeliaMMO.MOD_ID)
@@ -49,17 +49,19 @@ public final class AbilityEvents {
         var source = event.getSource();
         int acro = player.getData(VoxeliaAttachments.PLAYER_SKILLS.get()).getLevel(Skill.ACROBATICS);
 
+        double acroMastery = TalentLogic.masteryMultiplier(player, Skill.ACROBATICS);
+
         // Fall damage trains Acrobatics (always, on the full amount) and is softened, not dodged.
         if (source.is(DamageTypes.FALL)) {
             Progression.grant(player, Skill.ACROBATICS, Math.max(2, (int) Math.ceil(event.getAmount() * 2.0)));
-            double reduction = Math.min(0.95, acro * VoxeliaConfig.acrobaticsFallReductionPerLevel());
+            double reduction = Math.min(0.95, acro * VoxeliaConfig.acrobaticsFallReductionPerLevel() * acroMastery);
             if (reduction > 0) event.setAmount((float) (event.getAmount() * (1.0 - reduction)));
             return;
         }
         // Never dodge unavoidable damage (void, /kill, etc.).
         if (source.is(DamageTypeTags.BYPASSES_INVULNERABILITY)) return;
 
-        double dodge = Math.min(0.95, acro * VoxeliaConfig.acrobaticsDodgePerLevel());
+        double dodge = Math.min(0.95, acro * VoxeliaConfig.acrobaticsDodgePerLevel() * acroMastery);
         if (dodge > 0 && player.getRandom().nextDouble() < dodge) {
             event.setCanceled(true);
             player.displayClientMessage(Component.literal("Dodged!").withStyle(ChatFormatting.AQUA), true);
@@ -83,7 +85,8 @@ public final class AbilityEvents {
         Progression.grant(player, Skill.FISHING, 10);
 
         int level = player.getData(VoxeliaAttachments.PLAYER_SKILLS.get()).getLevel(Skill.FISHING);
-        double chance = Math.min(VoxeliaConfig.fishingTreasureChanceMax(), level / 200.0);
+        double chance = Math.min(VoxeliaConfig.fishingTreasureChanceMax(),
+            level / 200.0 * TalentLogic.masteryMultiplier(player, Skill.FISHING));
         if (chance > 0 && player.getRandom().nextDouble() < chance) {
             Progression.grant(player, Skill.FISHING, 15); // treasure: bonus XP
             player.giveExperiencePoints(8);
@@ -105,7 +108,8 @@ public final class AbilityEvents {
         AttributeInstance luck = player.getAttribute(Attributes.LUCK);
         if (luck != null) {
             if (isFishing && fishing > 1) {
-                double value = VoxeliaConfig.fishingLuckMax() * t;
+                double value = VoxeliaConfig.fishingLuckMax() * t
+                    * TalentLogic.masteryMultiplier(player, Skill.FISHING);
                 AttributeModifier existing = luck.getModifier(FISHING_LUCK_ID);
                 if (existing == null || existing.amount() != value) {
                     luck.removeModifier(FISHING_LUCK_ID);
@@ -114,13 +118,6 @@ public final class AbilityEvents {
                 }
             } else if (luck.getModifier(FISHING_LUCK_ID) != null) {
                 luck.removeModifier(FISHING_LUCK_ID);
-            }
-        }
-
-        FishingHook hook = player.fishing;
-        if (hook != null && fishing > 1 && hook.timeUntilLured > 0) {
-            if (player.getRandom().nextDouble() < (VoxeliaConfig.fishingSpeedMax() - 1.0) * t) {
-                hook.timeUntilLured = Math.max(0, hook.timeUntilLured - 1);
             }
         }
 

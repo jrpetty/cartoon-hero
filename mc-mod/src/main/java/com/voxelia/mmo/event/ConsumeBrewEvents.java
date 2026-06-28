@@ -3,6 +3,7 @@ package com.voxelia.mmo.event;
 import com.voxelia.mmo.VoxeliaMMO;
 import com.voxelia.mmo.config.VoxeliaConfig;
 import com.voxelia.mmo.progression.Progression;
+import com.voxelia.mmo.progression.TalentLogic;
 import com.voxelia.mmo.registry.VoxeliaAttachments;
 import com.voxelia.mmo.skill.Skill;
 import net.minecraft.core.component.DataComponents;
@@ -49,7 +50,8 @@ public final class ConsumeBrewEvents {
         if (stack.getItem() instanceof PotionItem) {
             Progression.grant(player, Skill.ALCHEMY, 6);
             int alchemy = player.getData(VoxeliaAttachments.PLAYER_SKILLS.get()).getLevel(Skill.ALCHEMY);
-            double factor = 1.0 + alchemy * VoxeliaConfig.alchemyDurationPerLevel();
+            double factor = 1.0 + alchemy * VoxeliaConfig.alchemyDurationPerLevel()
+                * TalentLogic.masteryMultiplier(player, Skill.ALCHEMY);
             if (factor > 1.0) {
                 for (MobEffectInstance effect : new ArrayList<>(player.getActiveEffects())) {
                     if (effect.getEffect().value().getCategory() != MobEffectCategory.BENEFICIAL) continue;

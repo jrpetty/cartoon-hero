@@ -83,7 +83,7 @@ public final class VoxeliaCommands {
             int into = SkillCurve.xpIntoLevel(xp);
             int span = SkillCurve.xpToNext(xp);
             String progress = span > 0 ? into + "/" + span + " xp" : "MAX";
-            String desc = SkillStats.describe(s, level);
+            String desc = SkillStats.describe(player, s, level);
             String tag = s.active() ? " [active: " + s.abilityName() + "]" : " [passive: " + s.abilityName() + "]";
             src.sendSuccess(() -> Component.literal("")
                 .append(Component.literal(s.display() + " ").withStyle(style -> style.withColor(s.color())))

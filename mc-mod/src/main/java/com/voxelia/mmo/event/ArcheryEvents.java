@@ -3,6 +3,7 @@ package com.voxelia.mmo.event;
 import com.voxelia.mmo.VoxeliaMMO;
 import com.voxelia.mmo.config.VoxeliaConfig;
 import com.voxelia.mmo.progression.Progression;
+import com.voxelia.mmo.progression.TalentLogic;
 import com.voxelia.mmo.registry.VoxeliaAttachments;
 import com.voxelia.mmo.skill.Skill;
 import net.minecraft.server.level.ServerPlayer;
@@ -30,7 +31,8 @@ public final class ArcheryEvents {
 
         // Power Shot: extra damage on a fully-drawn shot.
         if (arrow.isCritArrow()) {
-            double bonus = level * VoxeliaConfig.archeryPowerShotPerLevel();
+            double bonus = level * VoxeliaConfig.archeryPowerShotPerLevel()
+                * TalentLogic.masteryMultiplier(shooter, Skill.ARCHERY);
             if (bonus > 0) event.setAmount((float) (event.getAmount() + bonus));
         }
 

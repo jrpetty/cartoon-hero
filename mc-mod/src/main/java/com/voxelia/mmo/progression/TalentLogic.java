@@ -44,8 +44,11 @@ public final class TalentLogic {
         return 1.0 + rank(p, skill, TalentType.PRODIGY) * VoxeliaConfig.prodigyXpPerRank();
     }
 
-    /** Effective Mastery rank (× global scale) used to size attribute bonuses. */
-    public static double mastery(ServerPlayer p, Skill skill) {
-        return rank(p, skill, TalentType.MASTERY) * VoxeliaConfig.talentMasteryScale();
+    /**
+     * Multiplier the skill's signature stat is scaled by from its Mastery ranks.
+     * 1.0 at rank 0, growing by masteryPercentPerRank each rank.
+     */
+    public static double masteryMultiplier(ServerPlayer p, Skill skill) {
+        return 1.0 + rank(p, skill, TalentType.MASTERY) * VoxeliaConfig.masteryPercentPerRank();
     }
 }

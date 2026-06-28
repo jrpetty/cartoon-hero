@@ -4,9 +4,6 @@ loaderVersion = "${loader_version_range}"
 license = "${mod_license}"
 issueTrackerURL = "https://github.com/jrpetty/cartoon-hero/issues"
 
-[[accessTransformers]]
-file = "accesstransformer.cfg"
-
 [[mods]]
 modId = "${mod_id}"
 version = "${mod_version}"

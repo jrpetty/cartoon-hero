@@ -36,11 +36,6 @@ public final class SkillEffects {
     private static final ResourceLocation DEF_ARMOR_ID     = id("defense_armor");
     private static final ResourceLocation DEF_TOUGH_ID     = id("defense_toughness");
     private static final ResourceLocation DEF_KB_ID        = id("defense_knockback");
-    private static final ResourceLocation ACRO_MASTERY_ID  = id("acrobatics_mastery_speed");
-    private static final ResourceLocation FISH_MASTERY_ID  = id("fishing_mastery_luck");
-    private static final ResourceLocation ARCH_MASTERY_ID  = id("archery_mastery_damage");
-    private static final ResourceLocation COOK_MASTERY_ID  = id("cooking_mastery_health");
-    private static final ResourceLocation ALCH_MASTERY_ID  = id("alchemy_mastery_luck");
     private static final ResourceLocation VITALITY_ID      = id("talent_vitality");
     private static final ResourceLocation SWIFTNESS_ID     = id("talent_swiftness");
     private static final ResourceLocation TOUGHNESS_ID     = id("talent_toughness");
@@ -59,42 +54,32 @@ public final class SkillEffects {
         int excav    = s.getLevel(Skill.EXCAVATION) - 1;
         int defense  = s.getLevel(Skill.DEFENSE) - 1;
 
-        // Mastery talent ranks (× global scale) add on top of the per-level bonus.
-        double mCombat = TalentLogic.mastery(player, Skill.COMBAT);
-        double mFarming = TalentLogic.mastery(player, Skill.FARMING);
-        double mMining = TalentLogic.mastery(player, Skill.MINING);
-        double mForaging = TalentLogic.mastery(player, Skill.FORAGING);
-        double mExcav = TalentLogic.mastery(player, Skill.EXCAVATION);
-        double mDefense = TalentLogic.mastery(player, Skill.DEFENSE);
+        // Mastery scales each skill's signature stat (the same stat shown in /voxelia stats).
+        double xCombat = TalentLogic.masteryMultiplier(player, Skill.COMBAT);
+        double xFarming = TalentLogic.masteryMultiplier(player, Skill.FARMING);
+        double xMining = TalentLogic.masteryMultiplier(player, Skill.MINING);
+        double xForaging = TalentLogic.masteryMultiplier(player, Skill.FORAGING);
+        double xExcav = TalentLogic.masteryMultiplier(player, Skill.EXCAVATION);
+        double xDefense = TalentLogic.masteryMultiplier(player, Skill.DEFENSE);
 
         set(player, Attributes.ATTACK_DAMAGE, DAMAGE_ID,
-            combat * VoxeliaConfig.combatDamagePerLevel() + mCombat * 0.3, AttributeModifier.Operation.ADD_VALUE);
+            combat * VoxeliaConfig.combatDamagePerLevel() * xCombat, AttributeModifier.Operation.ADD_VALUE);
         set(player, Attributes.MAX_HEALTH, HEALTH_ID,
-            farming * VoxeliaConfig.farmingHealthPerLevel() + mFarming * 0.5, AttributeModifier.Operation.ADD_VALUE);
+            farming * VoxeliaConfig.farmingHealthPerLevel() * xFarming, AttributeModifier.Operation.ADD_VALUE);
         set(player, Attributes.BLOCK_BREAK_SPEED, MINING_SPEED_ID,
-            mining * VoxeliaConfig.miningSpeedPerLevel() + mMining * 0.02, AttributeModifier.Operation.ADD_MULTIPLIED_BASE);
+            mining * VoxeliaConfig.miningSpeedPerLevel() * xMining, AttributeModifier.Operation.ADD_MULTIPLIED_BASE);
         set(player, Attributes.BLOCK_BREAK_SPEED, FORAGING_SPEED_ID,
-            foraging * VoxeliaConfig.foragingSpeedPerLevel() + mForaging * 0.02, AttributeModifier.Operation.ADD_MULTIPLIED_BASE);
+            foraging * VoxeliaConfig.foragingSpeedPerLevel() * xForaging, AttributeModifier.Operation.ADD_MULTIPLIED_BASE);
         set(player, Attributes.BLOCK_BREAK_SPEED, EXCAV_SPEED_ID,
-            excav * VoxeliaConfig.excavationSpeedPerLevel() + mExcav * 0.02, AttributeModifier.Operation.ADD_MULTIPLIED_BASE);
+            excav * VoxeliaConfig.excavationSpeedPerLevel() * xExcav, AttributeModifier.Operation.ADD_MULTIPLIED_BASE);
         set(player, Attributes.ARMOR, DEF_ARMOR_ID,
-            defense * VoxeliaConfig.defenseArmorPerLevel() + mDefense * 0.4, AttributeModifier.Operation.ADD_VALUE);
+            defense * VoxeliaConfig.defenseArmorPerLevel() * xDefense, AttributeModifier.Operation.ADD_VALUE);
         set(player, Attributes.ARMOR_TOUGHNESS, DEF_TOUGH_ID,
-            defense * VoxeliaConfig.defenseToughnessPerLevel(), AttributeModifier.Operation.ADD_VALUE);
+            defense * VoxeliaConfig.defenseToughnessPerLevel() * xDefense, AttributeModifier.Operation.ADD_VALUE);
         set(player, Attributes.KNOCKBACK_RESISTANCE, DEF_KB_ID,
-            defense * VoxeliaConfig.defenseKnockbackResistPerLevel(), AttributeModifier.Operation.ADD_VALUE);
-
-        // Mastery for the passive skills maps onto a fitting attribute.
-        set(player, Attributes.MOVEMENT_SPEED, ACRO_MASTERY_ID,
-            TalentLogic.mastery(player, Skill.ACROBATICS) * 0.005, AttributeModifier.Operation.ADD_MULTIPLIED_BASE);
-        set(player, Attributes.LUCK, FISH_MASTERY_ID,
-            TalentLogic.mastery(player, Skill.FISHING) * 0.2, AttributeModifier.Operation.ADD_VALUE);
-        set(player, Attributes.ATTACK_DAMAGE, ARCH_MASTERY_ID,
-            TalentLogic.mastery(player, Skill.ARCHERY) * 0.2, AttributeModifier.Operation.ADD_VALUE);
-        set(player, Attributes.MAX_HEALTH, COOK_MASTERY_ID,
-            TalentLogic.mastery(player, Skill.COOKING) * 0.4, AttributeModifier.Operation.ADD_VALUE);
-        set(player, Attributes.LUCK, ALCH_MASTERY_ID,
-            TalentLogic.mastery(player, Skill.ALCHEMY) * 0.2, AttributeModifier.Operation.ADD_VALUE);
+            defense * VoxeliaConfig.defenseKnockbackResistPerLevel() * xDefense, AttributeModifier.Operation.ADD_VALUE);
+        // (Acrobatics, Fishing, Archery, Alchemy mastery scale their event-based
+        //  signature stats directly in their handlers — see AbilityEvents etc.)
 
         // Universal talents are summed across every skill.
         double scale = VoxeliaConfig.talentMasteryScale();
