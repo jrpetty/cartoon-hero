@@ -42,6 +42,9 @@ public final class SkillEffects {
     private static final ResourceLocation COOK_MASTERY_ID  = id("cooking_mastery_health");
     private static final ResourceLocation ALCH_MASTERY_ID  = id("alchemy_mastery_luck");
     private static final ResourceLocation VITALITY_ID      = id("talent_vitality");
+    private static final ResourceLocation SWIFTNESS_ID     = id("talent_swiftness");
+    private static final ResourceLocation TOUGHNESS_ID     = id("talent_toughness");
+    private static final ResourceLocation FORTUNE_ID       = id("talent_fortune");
 
     private static ResourceLocation id(String path) {
         return ResourceLocation.fromNamespaceAndPath(VoxeliaMMO.MOD_ID, path);
@@ -93,11 +96,19 @@ public final class SkillEffects {
         set(player, Attributes.LUCK, ALCH_MASTERY_ID,
             TalentLogic.mastery(player, Skill.ALCHEMY) * 0.2, AttributeModifier.Operation.ADD_VALUE);
 
-        // Vitality talents (summed across every skill) -> bonus max health.
-        double vitality = 0;
-        for (Skill sk : Skill.values()) vitality += TalentLogic.rank(player, sk, TalentType.VITALITY);
-        set(player, Attributes.MAX_HEALTH, VITALITY_ID,
-            vitality * 0.3 * VoxeliaConfig.talentMasteryScale(), AttributeModifier.Operation.ADD_VALUE);
+        // Universal talents are summed across every skill.
+        double scale = VoxeliaConfig.talentMasteryScale();
+        double vitality = 0, swiftness = 0, toughness = 0, fortune = 0;
+        for (Skill sk : Skill.values()) {
+            vitality  += TalentLogic.rank(player, sk, TalentType.VITALITY);
+            swiftness += TalentLogic.rank(player, sk, TalentType.SWIFTNESS);
+            toughness += TalentLogic.rank(player, sk, TalentType.TOUGHNESS);
+            fortune   += TalentLogic.rank(player, sk, TalentType.FORTUNE);
+        }
+        set(player, Attributes.MAX_HEALTH, VITALITY_ID, vitality * 0.3 * scale, AttributeModifier.Operation.ADD_VALUE);
+        set(player, Attributes.MOVEMENT_SPEED, SWIFTNESS_ID, swiftness * 0.003 * scale, AttributeModifier.Operation.ADD_MULTIPLIED_BASE);
+        set(player, Attributes.ARMOR, TOUGHNESS_ID, toughness * 0.25 * scale, AttributeModifier.Operation.ADD_VALUE);
+        set(player, Attributes.LUCK, FORTUNE_ID, fortune * 0.15 * scale, AttributeModifier.Operation.ADD_VALUE);
 
         if (player.getHealth() > player.getMaxHealth()) {
             player.setHealth(player.getMaxHealth());
