@@ -167,6 +167,7 @@ public final class VoxeliaCommands {
         }
         SkillEffects.apply(player);
         VoxeliaNetwork.syncTo(player);
+        VoxeliaNetwork.syncTalents(player);
         int newRank = TalentLogic.rank(player, skill, type);
         ctx.getSource().sendSuccess(() -> Component.literal(
             skill.display() + " " + type.display() + " is now rank " + newRank + ".")
@@ -180,6 +181,7 @@ public final class VoxeliaCommands {
         TalentLogic.reset(player);
         SkillEffects.apply(player);
         VoxeliaNetwork.syncTo(player);
+        VoxeliaNetwork.syncTalents(player);
         ctx.getSource().sendSuccess(() -> Component.literal("All talent points refunded.")
             .withStyle(ChatFormatting.YELLOW), false);
         return 1;

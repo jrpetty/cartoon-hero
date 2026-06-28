@@ -3,7 +3,8 @@ package com.voxelia.mmo.skill;
 /** The talent branches available on every skill. */
 public enum TalentType {
     PRODIGY("prodigy", "Prodigy", "More XP gained in this skill"),
-    MASTERY("mastery", "Mastery", "Strengthens this skill's main bonus");
+    MASTERY("mastery", "Mastery", "Strengthens this skill's main bonus"),
+    VITALITY("vitality", "Vitality", "Bonus max health");
 
     private final String id;
     private final String display;

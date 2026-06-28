@@ -73,6 +73,7 @@ public final class ProgressionEvents {
         if (event.getEntity() instanceof ServerPlayer player) {
             SkillEffects.apply(player);
             VoxeliaNetwork.syncTo(player);
+            VoxeliaNetwork.syncTalents(player);
         }
     }
 
@@ -81,6 +82,7 @@ public final class ProgressionEvents {
         if (event.getEntity() instanceof ServerPlayer player) {
             SkillEffects.apply(player);
             VoxeliaNetwork.syncTo(player);
+            VoxeliaNetwork.syncTalents(player);
             Integer lost = PENDING_DEATH_LOSS.remove(player.getUUID());
             if (lost != null && lost > 0) {
                 player.sendSystemMessage(Component.literal("")

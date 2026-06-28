@@ -5,6 +5,7 @@ import com.voxelia.mmo.config.VoxeliaConfig;
 import com.voxelia.mmo.registry.VoxeliaAttachments;
 import com.voxelia.mmo.skill.PlayerSkills;
 import com.voxelia.mmo.skill.Skill;
+import com.voxelia.mmo.skill.TalentType;
 import net.minecraft.core.Holder;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerPlayer;
@@ -40,6 +41,7 @@ public final class SkillEffects {
     private static final ResourceLocation ARCH_MASTERY_ID  = id("archery_mastery_damage");
     private static final ResourceLocation COOK_MASTERY_ID  = id("cooking_mastery_health");
     private static final ResourceLocation ALCH_MASTERY_ID  = id("alchemy_mastery_luck");
+    private static final ResourceLocation VITALITY_ID      = id("talent_vitality");
 
     private static ResourceLocation id(String path) {
         return ResourceLocation.fromNamespaceAndPath(VoxeliaMMO.MOD_ID, path);
@@ -90,6 +92,12 @@ public final class SkillEffects {
             TalentLogic.mastery(player, Skill.COOKING) * 0.4, AttributeModifier.Operation.ADD_VALUE);
         set(player, Attributes.LUCK, ALCH_MASTERY_ID,
             TalentLogic.mastery(player, Skill.ALCHEMY) * 0.2, AttributeModifier.Operation.ADD_VALUE);
+
+        // Vitality talents (summed across every skill) -> bonus max health.
+        double vitality = 0;
+        for (Skill sk : Skill.values()) vitality += TalentLogic.rank(player, sk, TalentType.VITALITY);
+        set(player, Attributes.MAX_HEALTH, VITALITY_ID,
+            vitality * 0.3 * VoxeliaConfig.talentMasteryScale(), AttributeModifier.Operation.ADD_VALUE);
 
         if (player.getHealth() > player.getMaxHealth()) {
             player.setHealth(player.getMaxHealth());

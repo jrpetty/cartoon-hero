@@ -28,6 +28,8 @@ public final class VoxeliaKeys {
         "key.voxelia_mmo.ability", InputConstants.Type.KEYSYM, GLFW.GLFW_KEY_R, CATEGORY);
     public static final KeyMapping CYCLE_ABILITY = new KeyMapping(
         "key.voxelia_mmo.cycle", InputConstants.Type.KEYSYM, GLFW.GLFW_KEY_G, CATEGORY);
+    public static final KeyMapping OPEN_TALENTS = new KeyMapping(
+        "key.voxelia_mmo.talents", InputConstants.Type.KEYSYM, GLFW.GLFW_KEY_N, CATEGORY);
 
     @EventBusSubscriber(modid = VoxeliaMMO.MOD_ID, bus = EventBusSubscriber.Bus.MOD, value = Dist.CLIENT)
     public static final class ModBus {
@@ -38,6 +40,7 @@ public final class VoxeliaKeys {
             event.register(OPEN_MENU);
             event.register(USE_ABILITY);
             event.register(CYCLE_ABILITY);
+            event.register(OPEN_TALENTS);
         }
     }
 
@@ -53,6 +56,7 @@ public final class VoxeliaKeys {
 
             if (Minecraft.getInstance().screen == null) {
                 while (OPEN_MENU.consumeClick()) Minecraft.getInstance().setScreen(new SkillsScreen());
+                while (OPEN_TALENTS.consumeClick()) Minecraft.getInstance().setScreen(new TalentScreen());
             }
             while (CYCLE_ABILITY.consumeClick()) {
                 ClientAbilities.cycle(1);
