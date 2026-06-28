@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 1,
+  "id": "desirepaths",
+  "version": "${version}",
+  "name": "Desire Paths",
+  "description": "The ground remembers where you walk. Routes you travel often compact into dirt paths; routes you abandon are reclaimed by grass over time. Purely emergent — no items, no UI.",
+  "authors": [
+    "jrpetty"
+  ],
+  "contact": {
+    "homepage": "https://github.com/jrpetty/cartoon-hero",
+    "sources": "https://github.com/jrpetty/cartoon-hero",
+    "issues": "https://github.com/jrpetty/cartoon-hero/issues"
+  },
+  "license": "MIT",
+  "environment": "*",
+  "entrypoints": {
+    "main": [
+      "com.desirepaths.DesirePaths"
+    ]
+  },
+  "depends": {
+    "fabricloader": ">=0.16.5",
+    "minecraft": "~1.21.1",
+    "java": ">=21",
+    "fabric-api": "*"
+  }
+}
