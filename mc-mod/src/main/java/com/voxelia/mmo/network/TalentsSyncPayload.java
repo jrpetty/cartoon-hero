@@ -13,7 +13,7 @@ import net.neoforged.neoforge.network.handling.IPayloadContext;
 import java.util.Map;
 
 /** Server -> client: the player's talent ranks (+ rules) for the talent GUI. */
-public record TalentsSyncPayload(Map<String, Integer> ranks, int maxRank, int pointsPerLevel)
+public record TalentsSyncPayload(Map<String, Integer> ranks, int maxRank, int levelsPerPoint)
         implements CustomPacketPayload {
 
     public static final Type<TalentsSyncPayload> TYPE =
@@ -23,13 +23,13 @@ public record TalentsSyncPayload(Map<String, Integer> ranks, int maxRank, int po
         StreamCodec.composite(
             ByteBufCodecs.fromCodec(Codec.unboundedMap(Codec.STRING, Codec.INT)), TalentsSyncPayload::ranks,
             ByteBufCodecs.VAR_INT, TalentsSyncPayload::maxRank,
-            ByteBufCodecs.VAR_INT, TalentsSyncPayload::pointsPerLevel,
+            ByteBufCodecs.VAR_INT, TalentsSyncPayload::levelsPerPoint,
             TalentsSyncPayload::new);
 
     @Override
     public Type<? extends CustomPacketPayload> type() { return TYPE; }
 
     public static void handle(TalentsSyncPayload payload, IPayloadContext context) {
-        context.enqueueWork(() -> ClientTalents.update(payload.ranks(), payload.maxRank(), payload.pointsPerLevel()));
+        context.enqueueWork(() -> ClientTalents.update(payload.ranks(), payload.maxRank(), payload.levelsPerPoint()));
     }
 }

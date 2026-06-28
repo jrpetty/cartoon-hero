@@ -15,10 +15,10 @@ public final class TalentLogic {
         return p.getData(VoxeliaAttachments.PLAYER_TALENTS.get()).getRank(skill, type);
     }
 
-    /** Points earned (per skill level) minus points already spent in that skill. */
+    /** Points earned (1 per N skill levels) minus points already spent in that skill. */
     public static int pointsAvailable(ServerPlayer p, Skill skill) {
         int level = p.getData(VoxeliaAttachments.PLAYER_SKILLS.get()).getLevel(skill);
-        int earned = Math.max(0, level - 1) * VoxeliaConfig.talentPointsPerLevel();
+        int earned = level / VoxeliaConfig.talentLevelsPerPoint();
         int spent = p.getData(VoxeliaAttachments.PLAYER_TALENTS.get()).spentIn(skill);
         return earned - spent;
     }

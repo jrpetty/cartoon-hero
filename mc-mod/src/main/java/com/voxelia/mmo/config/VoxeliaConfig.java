@@ -46,7 +46,7 @@ public final class VoxeliaConfig {
     private static final ModConfigSpec.DoubleValue MASTERY_LOOT_PER_TIER;
     private static final ModConfigSpec.BooleanValue SHOW_CHAT_TITLE;
     private static final ModConfigSpec.IntValue TALENT_MAX_RANK;
-    private static final ModConfigSpec.IntValue TALENT_POINTS_PER_LEVEL;
+    private static final ModConfigSpec.IntValue TALENT_LEVELS_PER_POINT;
     private static final ModConfigSpec.DoubleValue PRODIGY_XP_PER_RANK;
     private static final ModConfigSpec.DoubleValue TALENT_MASTERY_SCALE;
 
@@ -140,8 +140,8 @@ public final class VoxeliaConfig {
         b.pop();
 
         b.comment("Talent tree — spend points (earned per skill level) on Prodigy (XP) or Mastery (power).").push("talents");
-        TALENT_POINTS_PER_LEVEL = b.comment("Talent points earned per skill level.")
-            .defineInRange("pointsPerLevel", 1, 0, 100);
+        TALENT_LEVELS_PER_POINT = b.comment("Skill levels needed per talent point (8 = 1 point every 8 levels).")
+            .defineInRange("levelsPerPoint", 8, 1, 1000);
         TALENT_MAX_RANK = b.comment("Maximum rank per talent.")
             .defineInRange("maxRank", 5, 1, 100);
         PRODIGY_XP_PER_RANK = b.comment("Prodigy: extra XP gain per rank (0.08 = +8%/rank).")
@@ -200,7 +200,7 @@ public final class VoxeliaConfig {
     public static double masteryLootChancePerTier(){ return MASTERY_LOOT_PER_TIER.get(); }
     public static boolean showChatTitle()      { return SHOW_CHAT_TITLE.get(); }
     public static int talentMaxRank()          { return TALENT_MAX_RANK.get(); }
-    public static int talentPointsPerLevel()   { return TALENT_POINTS_PER_LEVEL.get(); }
+    public static int talentLevelsPerPoint()   { return TALENT_LEVELS_PER_POINT.get(); }
     public static double prodigyXpPerRank()    { return PRODIGY_XP_PER_RANK.get(); }
     public static double talentMasteryScale()  { return TALENT_MASTERY_SCALE.get(); }
 

@@ -39,7 +39,7 @@ public final class VoxeliaNetwork {
     public static void syncTalents(ServerPlayer player) {
         PlayerTalents talents = player.getData(VoxeliaAttachments.PLAYER_TALENTS.get());
         PacketDistributor.sendToPlayer(player, new TalentsSyncPayload(
-            talents.ranks(), VoxeliaConfig.talentMaxRank(), VoxeliaConfig.talentPointsPerLevel()));
+            talents.ranks(), VoxeliaConfig.talentMaxRank(), VoxeliaConfig.talentLevelsPerPoint()));
     }
 
     /** Handle a GUI talent purchase from the client. */

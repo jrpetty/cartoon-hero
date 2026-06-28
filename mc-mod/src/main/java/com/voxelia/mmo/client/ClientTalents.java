@@ -13,12 +13,12 @@ public final class ClientTalents {
 
     private static Map<String, Integer> ranks = new HashMap<>();
     private static int maxRank = 5;
-    private static int pointsPerLevel = 1;
+    private static int levelsPerPoint = 8;
 
-    public static void update(Map<String, Integer> newRanks, int newMaxRank, int newPointsPerLevel) {
+    public static void update(Map<String, Integer> newRanks, int newMaxRank, int newLevelsPerPoint) {
         ranks = new HashMap<>(newRanks);
         maxRank = newMaxRank;
-        pointsPerLevel = newPointsPerLevel;
+        levelsPerPoint = Math.max(1, newLevelsPerPoint);
     }
 
     public static int maxRank() { return maxRank; }
@@ -35,6 +35,6 @@ public final class ClientTalents {
 
     public static int available(Skill skill) {
         int level = ClientSkillData.level(skill);
-        return Math.max(0, level - 1) * pointsPerLevel - spentIn(skill);
+        return level / levelsPerPoint - spentIn(skill);
     }
 }
