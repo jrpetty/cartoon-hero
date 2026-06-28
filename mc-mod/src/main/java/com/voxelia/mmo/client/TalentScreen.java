@@ -135,4 +135,8 @@ public final class TalentScreen extends Screen {
 
     @Override
     public boolean isPauseScreen() { return false; }
+
+    // Disable the vanilla menu blur so the game stays crisp behind the panel.
+    @Override
+    protected void renderBlurredBackground(float partialTick) {}
 }

@@ -70,4 +70,8 @@ public final class SkillsScreen extends Screen {
     public boolean isPauseScreen() {
         return false;
     }
+
+    // Disable the vanilla menu blur so the game stays crisp behind the panel.
+    @Override
+    protected void renderBlurredBackground(float partialTick) {}
 }
