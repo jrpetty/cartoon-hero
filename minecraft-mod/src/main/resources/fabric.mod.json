@@ -1,0 +1,29 @@
+{
+  "schemaVersion": 1,
+  "id": "cartoonhero",
+  "version": "${version}",
+  "name": "Cartoon Hero",
+  "description": "Become a cartoon hero! Adds the Hero Emblem (a super-power burst on right-click) and glowing Cartoon Bricks.",
+  "authors": [
+    "jrpetty"
+  ],
+  "contact": {
+    "homepage": "https://github.com/jrpetty/cartoon-hero",
+    "sources": "https://github.com/jrpetty/cartoon-hero",
+    "issues": "https://github.com/jrpetty/cartoon-hero/issues"
+  },
+  "license": "MIT",
+  "icon": "assets/cartoonhero/icon.png",
+  "environment": "*",
+  "entrypoints": {
+    "main": [
+      "com.cartoonhero.CartoonHero"
+    ]
+  },
+  "depends": {
+    "fabricloader": ">=0.16.5",
+    "minecraft": "~1.21.1",
+    "java": ">=21",
+    "fabric-api": "*"
+  }
+}

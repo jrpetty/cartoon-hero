@@ -1,0 +1,24 @@
+# Gradle
+.gradle/
+build/
+out/
+classes/
+
+# Eclipse
+*.launch
+
+# IntelliJ
+*.iml
+*.ipr
+*.iws
+.idea/
+
+# macOS
+*.DS_Store
+
+# Fabric / Loom
+run/
+.fabric/
+
+# Keep the Gradle wrapper jar tracked (do NOT ignore it):
+!gradle/wrapper/gradle-wrapper.jar
