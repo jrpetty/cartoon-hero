@@ -81,6 +81,11 @@ public final class VoxeliaClientCommands {
         line(src, "Foraging",   "+" + pct(VoxeliaConfig.foragingSpeedPerLevel()) + " break speed, +" + pct(VoxeliaConfig.foragingFortunePerLevel()) + " Fortune on wood (no Silk Touch)");
         line(src, "Acrobatics", "+" + pct(VoxeliaConfig.acrobaticsDodgePerLevel()) + " dodge chance (trains from fall damage)");
         line(src, "Fishing",    "up to +" + VoxeliaConfig.fishingLuckMax() + " luck & " + VoxeliaConfig.fishingSpeedMax() + "x bite speed at level 100");
+        line(src, "Excavation", "+" + pct(VoxeliaConfig.excavationSpeedPerLevel()) + " dig speed, +" + pct(VoxeliaConfig.excavationFortunePerLevel()) + " Fortune on shovel blocks");
+        line(src, "Defense",    "+" + VoxeliaConfig.defenseArmorPerLevel() + " armor & +" + VoxeliaConfig.defenseToughnessPerLevel() + " toughness per level; Last Stand when low HP");
+        line(src, "Cooking",    "bonus saturation + Well Fed regen after eating (trains from eating)");
+        line(src, "Alchemy",    "+" + pct(VoxeliaConfig.alchemyDurationPerLevel()) + " potion duration per level (trains from brewing)");
+        line(src, "Archery",    "+" + VoxeliaConfig.archeryPowerShotPerLevel() + " Power Shot damage per level on fully-drawn arrows");
         return 1;
     }
 
