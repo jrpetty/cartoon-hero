@@ -3,6 +3,7 @@ package com.voxelia.mmo.registry;
 import com.voxelia.mmo.VoxeliaMMO;
 import com.voxelia.mmo.skill.MobMastery;
 import com.voxelia.mmo.skill.PlayerSkills;
+import com.voxelia.mmo.skill.PlayerTalents;
 import net.neoforged.neoforge.attachment.AttachmentType;
 import net.neoforged.neoforge.registries.DeferredRegister;
 import net.neoforged.neoforge.registries.NeoForgeRegistries;
@@ -27,6 +28,13 @@ public final class VoxeliaAttachments {
         ATTACHMENTS.register("mob_mastery", () ->
             AttachmentType.builder(MobMastery::new)
                 .serialize(MobMastery.CODEC)
+                .copyOnDeath()
+                .build());
+
+    public static final Supplier<AttachmentType<PlayerTalents>> PLAYER_TALENTS =
+        ATTACHMENTS.register("player_talents", () ->
+            AttachmentType.builder(PlayerTalents::new)
+                .serialize(PlayerTalents.CODEC)
                 .copyOnDeath()
                 .build());
 }

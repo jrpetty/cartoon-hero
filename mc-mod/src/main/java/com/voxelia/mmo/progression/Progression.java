@@ -22,7 +22,8 @@ public final class Progression {
 
     public static void grant(ServerPlayer player, Skill skill, int baseXp) {
         if (baseXp <= 0) return;
-        int amount = Math.max(1, (int) Math.round(baseXp * VoxeliaConfig.xpMultiplier()));
+        double mult = VoxeliaConfig.xpMultiplier() * TalentLogic.prodigyMultiplier(player, skill);
+        int amount = Math.max(1, (int) Math.round(baseXp * mult));
 
         PlayerSkills skills = player.getData(VoxeliaAttachments.PLAYER_SKILLS.get());
         int before = skills.getLevel(skill);

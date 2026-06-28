@@ -4,12 +4,16 @@ import com.mojang.brigadier.arguments.IntegerArgumentType;
 import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.context.CommandContext;
 import com.voxelia.mmo.VoxeliaMMO;
+import com.voxelia.mmo.network.VoxeliaNetwork;
 import com.voxelia.mmo.progression.Progression;
+import com.voxelia.mmo.progression.SkillEffects;
 import com.voxelia.mmo.progression.SkillStats;
+import com.voxelia.mmo.progression.TalentLogic;
 import com.voxelia.mmo.registry.VoxeliaAttachments;
 import com.voxelia.mmo.skill.PlayerSkills;
 import com.voxelia.mmo.skill.Skill;
 import com.voxelia.mmo.skill.SkillCurve;
+import com.voxelia.mmo.skill.TalentType;
 import net.minecraft.ChatFormatting;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
@@ -31,6 +35,12 @@ public final class VoxeliaCommands {
                 .then(Commands.literal("skills").executes(VoxeliaCommands::showSkills))
                 .then(Commands.literal("stats").executes(VoxeliaCommands::stats))
                 .then(Commands.literal("bestiary").executes(VoxeliaCommands::bestiary))
+                .then(Commands.literal("talents").executes(VoxeliaCommands::showTalents))
+                .then(Commands.literal("talent")
+                    .then(Commands.literal("reset").executes(VoxeliaCommands::resetTalents))
+                    .then(Commands.argument("skill", StringArgumentType.word())
+                        .then(Commands.argument("talent", StringArgumentType.word())
+                            .executes(VoxeliaCommands::spendTalent))))
                 .then(Commands.literal("grant")
                     .requires(src -> src.hasPermission(2))
                     .then(Commands.argument("skill", StringArgumentType.word())
@@ -118,6 +128,60 @@ public final class VoxeliaCommands {
                 name, kills, tier, tier * dmgPerTier * 100);
             src.sendSuccess(() -> Component.literal(line).withStyle(ChatFormatting.GRAY), false);
         }
+        return 1;
+    }
+
+    private static int showTalents(CommandContext<CommandSourceStack> ctx) {
+        ServerPlayer player = ctx.getSource().getPlayer();
+        if (player == null) return 0;
+        CommandSourceStack src = ctx.getSource();
+        int max = com.voxelia.mmo.config.VoxeliaConfig.talentMaxRank();
+        src.sendSuccess(() -> Component.literal("=== Talents (max rank " + max + ") ===")
+            .withStyle(ChatFormatting.GOLD), false);
+        for (Skill s : Skill.values()) {
+            int available = TalentLogic.pointsAvailable(player, s);
+            int prodigy = TalentLogic.rank(player, s, TalentType.PRODIGY);
+            int mastery = TalentLogic.rank(player, s, TalentType.MASTERY);
+            String line = String.format("%s — %d pts  |  Prodigy %d/%d, Mastery %d/%d",
+                s.display(), available, prodigy, max, mastery, max);
+            src.sendSuccess(() -> Component.literal(line)
+                .withStyle(style -> style.withColor(s.color())), false);
+        }
+        src.sendSuccess(() -> Component.literal("Spend with /voxelia talent <skill> <prodigy|mastery>")
+            .withStyle(ChatFormatting.GRAY), false);
+        return 1;
+    }
+
+    private static int spendTalent(CommandContext<CommandSourceStack> ctx) {
+        ServerPlayer player = ctx.getSource().getPlayer();
+        if (player == null) return 0;
+        Skill skill = Skill.byId(StringArgumentType.getString(ctx, "skill"));
+        TalentType type = TalentType.byId(StringArgumentType.getString(ctx, "talent"));
+        if (skill == null || type == null) {
+            ctx.getSource().sendFailure(Component.literal("Usage: /voxelia talent <skill> <prodigy|mastery>"));
+            return 0;
+        }
+        if (!TalentLogic.spend(player, skill, type)) {
+            ctx.getSource().sendFailure(Component.literal("Can't spend there (no points or max rank reached)."));
+            return 0;
+        }
+        SkillEffects.apply(player);
+        VoxeliaNetwork.syncTo(player);
+        int newRank = TalentLogic.rank(player, skill, type);
+        ctx.getSource().sendSuccess(() -> Component.literal(
+            skill.display() + " " + type.display() + " is now rank " + newRank + ".")
+            .withStyle(ChatFormatting.GREEN), false);
+        return 1;
+    }
+
+    private static int resetTalents(CommandContext<CommandSourceStack> ctx) {
+        ServerPlayer player = ctx.getSource().getPlayer();
+        if (player == null) return 0;
+        TalentLogic.reset(player);
+        SkillEffects.apply(player);
+        VoxeliaNetwork.syncTo(player);
+        ctx.getSource().sendSuccess(() -> Component.literal("All talent points refunded.")
+            .withStyle(ChatFormatting.YELLOW), false);
         return 1;
     }
 

@@ -45,6 +45,10 @@ public final class VoxeliaConfig {
     private static final ModConfigSpec.DoubleValue MASTERY_DAMAGE_PER_TIER;
     private static final ModConfigSpec.DoubleValue MASTERY_LOOT_PER_TIER;
     private static final ModConfigSpec.BooleanValue SHOW_CHAT_TITLE;
+    private static final ModConfigSpec.IntValue TALENT_MAX_RANK;
+    private static final ModConfigSpec.IntValue TALENT_POINTS_PER_LEVEL;
+    private static final ModConfigSpec.DoubleValue PRODIGY_XP_PER_RANK;
+    private static final ModConfigSpec.DoubleValue TALENT_MASTERY_SCALE;
 
     // active abilities (original six)
     private static final ModConfigSpec.IntValue FRENZY_LEVEL;
@@ -135,6 +139,17 @@ public final class VoxeliaConfig {
             .define("showChatTitle", true);
         b.pop();
 
+        b.comment("Talent tree — spend points (earned per skill level) on Prodigy (XP) or Mastery (power).").push("talents");
+        TALENT_POINTS_PER_LEVEL = b.comment("Talent points earned per skill level.")
+            .defineInRange("pointsPerLevel", 1, 0, 100);
+        TALENT_MAX_RANK = b.comment("Maximum rank per talent.")
+            .defineInRange("maxRank", 5, 1, 100);
+        PRODIGY_XP_PER_RANK = b.comment("Prodigy: extra XP gain per rank (0.08 = +8%/rank).")
+            .defineInRange("prodigyXpPerRank", 0.08, 0.0, 10.0);
+        TALENT_MASTERY_SCALE = b.comment("Global multiplier on all Mastery bonuses (tune the whole branch at once).")
+            .defineInRange("masteryScale", 1.0, 0.0, 100.0);
+        b.pop();
+
         b.comment("Active abilities for the original six skills (cooldown-balanced).").push("abilities");
         FRENZY_LEVEL = b.comment("Combat: Frenzy unlock level (0 disables).").defineInRange("frenzyLevel", 20, 0, 100);
         FRENZY_COOLDOWN = b.comment("Frenzy cooldown (seconds).").defineInRange("frenzyCooldownSeconds", 50, 1, 3600);
@@ -184,6 +199,10 @@ public final class VoxeliaConfig {
     public static double masteryDamagePerTier(){ return MASTERY_DAMAGE_PER_TIER.get(); }
     public static double masteryLootChancePerTier(){ return MASTERY_LOOT_PER_TIER.get(); }
     public static boolean showChatTitle()      { return SHOW_CHAT_TITLE.get(); }
+    public static int talentMaxRank()          { return TALENT_MAX_RANK.get(); }
+    public static int talentPointsPerLevel()   { return TALENT_POINTS_PER_LEVEL.get(); }
+    public static double prodigyXpPerRank()    { return PRODIGY_XP_PER_RANK.get(); }
+    public static double talentMasteryScale()  { return TALENT_MASTERY_SCALE.get(); }
 
     public static int frenzyLevel()            { return FRENZY_LEVEL.get(); }
     public static int frenzyCooldownSeconds()  { return FRENZY_COOLDOWN.get(); }
