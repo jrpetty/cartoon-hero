@@ -14,9 +14,7 @@ public final class SkillsScreen extends Screen {
 
     @Override
     public void render(GuiGraphics g, int mouseX, int mouseY, float partialTick) {
-        // Flat dimmed backdrop (no vanilla blur).
-        g.fill(0, 0, this.width, this.height, 0xB0101418);
-
+        // No full-screen backdrop — the live game shows through; only the panel is drawn.
         int w = 290;
         int rowH = 26;
         int headerH = 46;

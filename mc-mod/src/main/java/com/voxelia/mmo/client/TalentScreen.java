@@ -31,7 +31,7 @@ public final class TalentScreen extends Screen {
 
     @Override
     public void render(GuiGraphics g, int mouseX, int mouseY, float partialTick) {
-        g.fill(0, 0, this.width, this.height, 0xB0101418);
+        // No full-screen backdrop — the live game shows through; only the panel is drawn.
         cells.clear();
 
         int rows = Skill.values().length;
