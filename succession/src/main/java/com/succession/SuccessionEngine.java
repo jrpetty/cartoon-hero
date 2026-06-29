@@ -3,6 +3,7 @@ package com.succession;
 import net.minecraft.block.Block;
 import net.minecraft.block.BlockState;
 import net.minecraft.block.Blocks;
+import net.minecraft.registry.tag.BiomeTags;
 import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.server.world.ServerWorld;
 import net.minecraft.util.math.BlockPos;
@@ -103,7 +104,9 @@ public class SuccessionEngine {
         int roll = random.nextInt(100);
         BlockState plant;
         if (roll < 3) {
-            plant = Blocks.OAK_SAPLING.getDefaultState();
+            BlockState sapling = saplingFor(world, pos);
+            // Some biomes (e.g. badlands) are too dry for trees — sprout grass instead.
+            plant = (sapling != null) ? sapling : Blocks.SHORT_GRASS.getDefaultState();
         } else if (roll < 13) {
             plant = FLOWERS[random.nextInt(FLOWERS.length)].getDefaultState();
         } else if (roll < 28) {
@@ -115,5 +118,23 @@ public class SuccessionEngine {
         if (plant.canPlaceAt(world, up)) {
             world.setBlockState(up, plant);
         }
+    }
+
+    /** Pick a sapling that suits the biome, or null if the biome shouldn't grow trees. */
+    private BlockState saplingFor(ServerWorld world, BlockPos pos) {
+        var biome = world.getBiome(pos);
+        if (biome.isIn(BiomeTags.IS_TAIGA)) {
+            return Blocks.SPRUCE_SAPLING.getDefaultState();
+        }
+        if (biome.isIn(BiomeTags.IS_JUNGLE)) {
+            return Blocks.JUNGLE_SAPLING.getDefaultState();
+        }
+        if (biome.isIn(BiomeTags.IS_SAVANNA)) {
+            return Blocks.ACACIA_SAPLING.getDefaultState();
+        }
+        if (biome.isIn(BiomeTags.IS_BADLANDS)) {
+            return null;
+        }
+        return Blocks.OAK_SAPLING.getDefaultState();
     }
 }
