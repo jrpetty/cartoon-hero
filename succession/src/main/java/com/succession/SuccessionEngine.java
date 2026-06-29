@@ -70,7 +70,7 @@ public class SuccessionEngine {
 
     /** Bare dirt greens over when lit and bordered by existing grass. */
     private void spreadGrass(ServerWorld world, BlockPos pos) {
-        if (world.getLightLevel(pos.up()) < LIGHT_MIN) {
+        if (world.getBaseLightLevel(pos.up(), 0) < LIGHT_MIN) {
             return;
         }
         if (!hasGrassNeighbor(world, pos)) {
@@ -93,7 +93,7 @@ public class SuccessionEngine {
     /** Lit grass sprouts plants, and occasionally a sapling that will grow into a tree. */
     private void vegetate(ServerWorld world, BlockPos pos, Random random) {
         BlockPos up = pos.up();
-        if (!world.getBlockState(up).isAir() || world.getLightLevel(up) < LIGHT_MIN) {
+        if (!world.getBlockState(up).isAir() || world.getBaseLightLevel(up, 0) < LIGHT_MIN) {
             return;
         }
         if (random.nextInt(VEGETATE_CHANCE) != 0) {
