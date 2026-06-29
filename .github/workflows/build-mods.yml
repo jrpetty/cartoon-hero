@@ -13,7 +13,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   build:
@@ -53,3 +53,30 @@ jobs:
             ${{ matrix.mod }}/build/libs/*.jar
             !${{ matrix.mod }}/build/libs/*-sources.jar
           if-no-files-found: error
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    name: Publish jars to a release
+    steps:
+      - name: Download all built jars
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Collect jars
+        run: |
+          mkdir -p release
+          find artifacts -name '*.jar' ! -name '*-sources.jar' -exec cp {} release/ \;
+          ls -l release
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: mods-latest
+          name: Minecraft Mods (latest build)
+          body: |
+            Built automatically from the latest commit on the development branch.
+            Drop a jar into your `.minecraft/mods` folder (Minecraft 1.21.1, Fabric Loader + Fabric API).
+          files: release/*.jar
+          fail_on_unmatched_files: true
