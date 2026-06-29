@@ -1,0 +1,55 @@
+name: Build Mods
+
+on:
+  push:
+    branches:
+      - claude/minecraft-best-mods-7td78r
+    paths:
+      - "minecraft-mod/**"
+      - "desire-paths/**"
+      - "grappling-hook/**"
+      - "succession/**"
+      - ".github/workflows/build-mods.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        mod:
+          - minecraft-mod
+          - desire-paths
+          - grappling-hook
+          - succession
+    name: Build ${{ matrix.mod }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Make gradlew executable
+        working-directory: ${{ matrix.mod }}
+        run: chmod +x ./gradlew
+
+      - name: Build
+        working-directory: ${{ matrix.mod }}
+        run: ./gradlew build --no-daemon --stacktrace
+
+      - name: Upload mod jar
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.mod }}
+          path: |
+            ${{ matrix.mod }}/build/libs/*.jar
+            !${{ matrix.mod }}/build/libs/*-sources.jar
+          if-no-files-found: error
