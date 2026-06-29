@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 1,
+  "id": "succession",
+  "version": "${version}",
+  "name": "Succession",
+  "description": "Abandoned cleared land slowly heals: bare dirt greens over, grass sprouts flowers and ferns, saplings take root and grow into trees. The wild reclaims what you leave behind. Purely emergent — no items, no UI.",
+  "authors": [
+    "jrpetty"
+  ],
+  "contact": {
+    "homepage": "https://github.com/jrpetty/cartoon-hero",
+    "sources": "https://github.com/jrpetty/cartoon-hero",
+    "issues": "https://github.com/jrpetty/cartoon-hero/issues"
+  },
+  "license": "MIT",
+  "environment": "*",
+  "entrypoints": {
+    "main": [
+      "com.succession.SuccessionMod"
+    ]
+  },
+  "depends": {
+    "fabricloader": ">=0.16.5",
+    "minecraft": "~1.21.1",
+    "java": ">=21",
+    "fabric-api": "*"
+  }
+}
