@@ -1,0 +1,79 @@
+name: Build NeoForge Mods
+
+on:
+  push:
+    branches:
+      - claude/minecraft-best-mods-7td78r
+    paths:
+      - "neoforge/**"
+      - ".github/workflows/build-neoforge.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        mod:
+          - cartoon-hero
+          - desire-paths
+          - grappling-hook
+          - succession
+    name: Build ${{ matrix.mod }} (NeoForge)
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Make gradlew executable
+        working-directory: neoforge/${{ matrix.mod }}
+        run: chmod +x ./gradlew
+
+      - name: Build
+        working-directory: neoforge/${{ matrix.mod }}
+        run: ./gradlew build --no-daemon --stacktrace
+
+      - name: Upload mod jar
+        uses: actions/upload-artifact@v4
+        with:
+          name: neoforge-${{ matrix.mod }}
+          path: |
+            neoforge/${{ matrix.mod }}/build/libs/*.jar
+            !neoforge/${{ matrix.mod }}/build/libs/*-sources.jar
+          if-no-files-found: error
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    name: Publish NeoForge jars to a release
+    steps:
+      - name: Download all built jars
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Collect jars
+        run: |
+          mkdir -p release
+          find artifacts -name '*.jar' ! -name '*-sources.jar' -exec cp {} release/ \;
+          ls -l release
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: neoforge-latest
+          name: Minecraft Mods — NeoForge (latest build)
+          body: |
+            NeoForge builds for Minecraft 1.21.1.
+            Drop a jar into your `.minecraft/mods` folder (NeoForge loader installed).
+          files: release/*.jar
+          fail_on_unmatched_files: true
