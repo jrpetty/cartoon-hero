@@ -37,7 +37,7 @@ public class GrapplingHookItem extends Item {
     }
 
     @Override
-    public int getUseDuration(ItemStack stack) {
+    public int getUseDuration(ItemStack stack, LivingEntity entity) {
         return 72000; // keep "drawing" until released, like a bow
     }
 
@@ -57,7 +57,7 @@ public class GrapplingHookItem extends Item {
             return;
         }
 
-        int ticksUsed = getUseDuration(stack) - timeLeft;
+        int ticksUsed = getUseDuration(stack, entity) - timeLeft;
         double charge = Mth.clamp(ticksUsed / (double) GrappleConfig.chargeTicks, 0.0, 1.0);
         double reach = Mth.lerp(charge, GrappleConfig.minRange, GrappleConfig.maxRange);
 
