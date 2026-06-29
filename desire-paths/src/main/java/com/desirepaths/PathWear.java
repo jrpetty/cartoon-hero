@@ -1,8 +1,10 @@
 package com.desirepaths;
 
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 import net.minecraft.block.BlockState;
@@ -16,40 +18,42 @@ import net.minecraft.world.World;
 /**
  * The core "the ground remembers you" logic.
  *
- * <p>Wear progression as a block is walked on:
- * <pre>grass_block → coarse_dirt → dirt_path</pre>
- * Reclaim (no traffic for a while) walks it back the other way:
- * <pre>dirt_path → coarse_dirt → grass_block</pre>
+ * <pre>
+ *   grass_block -> coarse_dirt -> dirt_path      (wear)
+ *   dirt_path -> coarse_dirt -> grass_block       (reclaim)
+ * </pre>
  *
- * <p>State is kept in memory per dimension. Partial step-progress is not saved
- * across a restart, but the actual block changes are — so paths persist; only
- * the in-flight counter resets.
+ * <p>Only blocks the mod itself wore down are tracked, so naturally-generated
+ * coarse dirt and vanilla dirt paths (e.g. in villages) are never rewritten.
+ * Partial step-progress is timestamped and periodically pruned so the tracking
+ * maps can't grow without bound on a long-running server.
  */
 public class PathWear {
 
-    /** Footsteps needed on a block before it advances to the next stage. */
     private static final int STEPS_PER_STAGE = 12;
-    /** Ticks with no footstep before a block reclaims one stage (~1 in-game day). */
     private static final long RECLAIM_AFTER_TICKS = 24_000L;
-    /** How often (ticks) to run the reclaim sweep. */
     private static final long RECLAIM_SWEEP_INTERVAL = 600L;
-    /** Cap on reclaim mutations per sweep, to bound work. */
     private static final int RECLAIM_MAX_PER_SWEEP = 64;
 
-    /** Per-dimension wear state. */
+    /** Accumulated footsteps toward the next stage, plus when last touched. */
+    private static final class Progress {
+        int count;
+        long touched;
+    }
+
     private static final class WorldState {
-        /** Block this player most recently counted a footstep on (de-dupes standing still). */
         final Map<UUID, BlockPos> lastPlayerPos = new HashMap<>();
-        /** Accumulated footsteps toward the next stage, per block. */
-        final Map<BlockPos, Integer> progress = new HashMap<>();
-        /** Last game-time a worn block (coarse_dirt / dirt_path) saw a footstep. */
+        final Map<BlockPos, Progress> progress = new HashMap<>();
         final Map<BlockPos, Long> lastStep = new HashMap<>();
+        /** Blocks this mod wore down — only these are eligible to wear further or reclaim. */
+        final Set<BlockPos> modWorn = new HashSet<>();
     }
 
     private final Map<RegistryKey<World>, WorldState> worlds = new HashMap<>();
 
     public void onWorldTick(ServerWorld world) {
         WorldState st = worlds.computeIfAbsent(world.getRegistryKey(), k -> new WorldState());
+        long now = world.getTime();
 
         for (ServerPlayerEntity player : world.getPlayers()) {
             if (player.isSpectator() || !player.isOnGround()) {
@@ -59,45 +63,58 @@ public class PathWear {
             BlockPos below = player.getBlockPos().down();
             BlockPos last = st.lastPlayerPos.get(player.getUuid());
             if (below.equals(last)) {
-                continue; // same block as last footstep — don't count standing still
+                continue;
             }
             st.lastPlayerPos.put(player.getUuid(), below);
 
             BlockState state = world.getBlockState(below);
+            // Grass can always start a path; coarse_dirt/dirt_path only continue one we made.
+            boolean canWear = state.isOf(Blocks.GRASS_BLOCK)
+                    || (state.isOf(Blocks.COARSE_DIRT) && st.modWorn.contains(below));
 
-            if (state.isOf(Blocks.GRASS_BLOCK) || state.isOf(Blocks.COARSE_DIRT)) {
-                int steps = st.progress.merge(below, 1, Integer::sum);
-                if (steps >= STEPS_PER_STAGE) {
-                    advance(world, below, state);
+            if (canWear) {
+                Progress p = st.progress.computeIfAbsent(below, k -> new Progress());
+                p.count++;
+                p.touched = now;
+                if (p.count >= STEPS_PER_STAGE) {
+                    advance(world, below, state, st);
                     st.progress.remove(below);
-                    st.lastStep.put(below, world.getTime());
+                    st.lastStep.put(below, now);
                 }
-            } else if (state.isOf(Blocks.DIRT_PATH)) {
-                // Fully worn already — just keep it from reclaiming while in use.
-                st.lastStep.put(below, world.getTime());
+            } else if (state.isOf(Blocks.DIRT_PATH) && st.modWorn.contains(below)) {
+                st.lastStep.put(below, now); // keep our own path from reclaiming while in use
             } else {
-                // Not a wearable surface; drop any stale partial progress.
                 st.progress.remove(below);
             }
         }
 
-        if (world.getTime() % RECLAIM_SWEEP_INTERVAL == 0L) {
-            reclaim(world, st);
+        if (now % RECLAIM_SWEEP_INTERVAL == 0L) {
+            pruneProgress(st, now);
+            reclaim(world, st, now);
         }
     }
 
-    /** Advance a block one stage toward a packed path. */
-    private void advance(ServerWorld world, BlockPos pos, BlockState state) {
+    private void advance(ServerWorld world, BlockPos pos, BlockState state, WorldState st) {
         if (state.isOf(Blocks.GRASS_BLOCK)) {
             world.setBlockState(pos, Blocks.COARSE_DIRT.getDefaultState());
+            st.modWorn.add(pos);
         } else if (state.isOf(Blocks.COARSE_DIRT)) {
             world.setBlockState(pos, Blocks.DIRT_PATH.getDefaultState());
+            st.modWorn.add(pos);
         }
     }
 
-    /** Walk unused worn blocks back toward grass. */
-    private void reclaim(ServerWorld world, WorldState st) {
-        long now = world.getTime();
+    /** Drop partial-progress entries for blocks no one has stepped on in a long time. */
+    private void pruneProgress(WorldState st, long now) {
+        Iterator<Map.Entry<BlockPos, Progress>> it = st.progress.entrySet().iterator();
+        while (it.hasNext()) {
+            if (now - it.next().getValue().touched >= RECLAIM_AFTER_TICKS) {
+                it.remove();
+            }
+        }
+    }
+
+    private void reclaim(ServerWorld world, WorldState st, long now) {
         int mutations = 0;
 
         Iterator<Map.Entry<BlockPos, Long>> it = st.lastStep.entrySet().iterator();
@@ -112,16 +129,17 @@ public class PathWear {
 
             if (cur.isOf(Blocks.DIRT_PATH)) {
                 world.setBlockState(pos, Blocks.COARSE_DIRT.getDefaultState());
-                entry.setValue(now); // wait another full period before the next step back
+                entry.setValue(now);
                 mutations++;
             } else if (cur.isOf(Blocks.COARSE_DIRT)) {
                 world.setBlockState(pos, Blocks.GRASS_BLOCK.getDefaultState());
                 st.progress.remove(pos);
-                it.remove(); // fully reclaimed — stop tracking
+                st.modWorn.remove(pos);
+                it.remove();
                 mutations++;
             } else {
-                // Block was changed by something else; stop tracking it.
                 st.progress.remove(pos);
+                st.modWorn.remove(pos);
                 it.remove();
             }
         }

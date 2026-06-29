@@ -6,6 +6,7 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.tags.BiomeTags;
 import net.minecraft.util.RandomSource;
+import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
@@ -33,6 +34,9 @@ public class SuccessionEngine {
     };
 
     public void onWorldTick(ServerLevel level) {
+        if (level.dimension() != Level.OVERWORLD) {
+            return; // surface recovery only makes sense under the open sky
+        }
         if (level.getGameTime() % INTERVAL != 0L) {
             return;
         }

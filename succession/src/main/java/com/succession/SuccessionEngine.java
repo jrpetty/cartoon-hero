@@ -9,6 +9,7 @@ import net.minecraft.server.world.ServerWorld;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.Direction;
 import net.minecraft.util.math.random.Random;
+import net.minecraft.world.World;
 
 /**
  * The succession simulation.
@@ -44,6 +45,9 @@ public class SuccessionEngine {
     };
 
     public void onWorldTick(ServerWorld world) {
+        if (world.getRegistryKey() != World.OVERWORLD) {
+            return; // surface recovery only makes sense under the open sky
+        }
         if (world.getTime() % INTERVAL != 0L) {
             return;
         }
