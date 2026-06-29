@@ -1,43 +1,58 @@
 # Grappling Hook
 
 A standalone [Fabric](https://fabricmc.net/) mod for **Minecraft 1.21.1** that adds
-one classic item: a **Grappling Hook**.
+a **charge-and-release** grappling hook.
 
 ## What it does
 
-Hold the hook and **right-click** while aiming at a block. The mod casts a ray from
-your eyes; if it hits a block within **32 blocks**, you're flung toward the impact
-point. Pull speed scales with distance (capped so long shots stay sane), with a
-small upward boost so you arc *over* ledges instead of face-planting the wall —
-and fall damage from the swing is cancelled.
+Hold **right-click** to draw the hook like a bow, then release to fire:
 
-Great for crossing ravines, scaling cliffs, and bailing out of a bad situation.
+- A quick **tap** casts a short line and grapples only a short distance.
+- Holding for the full **2-second charge** reaches the maximum range.
+- On release it "casts" toward the block you're aiming at — playing the fishing
+  bobber throw/retrieve sounds and drawing a particle line to the anchor — then
+  yanks you there with a small upward boost (and cancels the fall damage from
+  the swing).
+- After each grapple there's a short **cooldown**, so it can't be spammed.
 
-## Tuning
+If your charge isn't enough to reach the block you're aiming at, the cast falls
+short and nothing happens — charge longer for distant anchors.
 
-Constants live at the top of
-[`GrapplingHookItem.java`](src/main/java/com/grapplinghook/GrapplingHookItem.java):
+## Configuration
 
-| Constant | Default | Meaning |
+On first launch the mod writes **`config/grapplinghook.properties`**. Edit it and
+restart to tune:
+
+| Key | Default | Meaning |
 | --- | --- | --- |
-| `MAX_RANGE` | `32.0` | Reach of the hook, in blocks |
-| `PULL_FACTOR` | `0.28` | How hard pull speed scales with distance |
-| `MAX_PULL_SPEED` | `2.6` | Speed cap so long shots don't over-fling |
-| `UPWARD_BOOST` | `0.30` | Extra lift added to every pull |
-| `COOLDOWN_TICKS` | `8` | Ticks between uses |
+| `chargeTicks` | `40` | Ticks of charge for full power (20 ticks = 1 second) |
+| `minRange` | `8.0` | Reach of a quick tap (blocks) |
+| `maxRange` | `40.0` | Reach of a full charge (blocks) |
+| `pullSpeedFactor` | `0.30` | How hard pull speed scales with distance |
+| `maxPullSpeed` | `3.0` | Hard cap on launch speed |
+| `upwardBoost` | `0.30` | Extra lift added to every pull |
+| `cooldownTicks` | `20` | Cooldown after a grapple (20 ticks = 1 second) |
+
+## Crafting
+
+Iron ingots + string:
+
+```
+ II
+ IS
+S
+```
 
 ## Build & run
 
-> ⚠️ The first build downloads Minecraft / Yarn / Fabric API from
-> `maven.fabricmc.net` and `piston-meta.mojang.com`, so it needs network access to
-> those hosts. It was scaffolded in a sandbox where they were blocked, so the
-> gradle build was **not** run here — run it on your own machine.
+> ⚠️ The first build downloads Minecraft / Yarn / Fabric API, so it needs network
+> access to `maven.fabricmc.net` and `piston-meta.mojang.com`.
 
-Requirements: **JDK 21**, plus Fabric Loader + [Fabric API](https://modrinth.com/mod/fabric-api).
+Requirements: **JDK 21**, Fabric Loader + [Fabric API](https://modrinth.com/mod/fabric-api).
 
 ```bash
 cd grappling-hook
-./gradlew runClient   # launch the game with the mod loaded
+./gradlew runClient
 ./gradlew build       # -> build/libs/grappling-hook-1.0.0.jar
 ```
 
@@ -45,7 +60,6 @@ The hook appears in the **Tools & Utilities** creative tab.
 
 ## Ideas for v2
 
-- A visible rope/chain rendered between you and the anchor (needs client rendering).
-- Continuous reel-in while held, instead of a single yank.
-- Durability and a crafting recipe.
-- A max-swing arc that preserves momentum for true Spider-Man swinging.
+- A fully *rendered* rope between you and the anchor (needs a client renderer +
+  a thrown hook entity); the current cast is represented with a particle line.
+- Reeling in while held, and detaching mid-swing to preserve momentum.

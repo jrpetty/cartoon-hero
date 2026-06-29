@@ -27,9 +27,11 @@ public class GrapplingHookMod implements ModInitializer {
 
     @Override
     public void onInitialize() {
+        GrappleConfig.load();
+
         // Show up in the vanilla Tools & Utilities creative tab.
         ItemGroupEvents.modifyEntriesEvent(ItemGroups.TOOLS).register(entries -> entries.add(GRAPPLING_HOOK));
 
-        LOGGER.info("Grappling Hook ready — aim high.");
+        LOGGER.info("Grappling Hook ready — charge up and aim high.");
     }
 }

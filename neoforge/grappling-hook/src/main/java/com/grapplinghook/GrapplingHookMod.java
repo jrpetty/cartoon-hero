@@ -18,6 +18,7 @@ public class GrapplingHookMod {
             () -> new GrapplingHookItem(new Item.Properties().stacksTo(1)));
 
     public GrapplingHookMod(IEventBus modBus) {
+        GrappleConfig.load();
         ITEMS.register(modBus);
         modBus.addListener(this::addCreative);
     }
