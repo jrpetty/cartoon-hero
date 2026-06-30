@@ -4,7 +4,9 @@ import net.minecraft.world.item.CreativeModeTabs;
 import net.minecraft.world.item.Item;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.fml.common.Mod;
+import net.neoforged.neoforge.common.NeoForge;
 import net.neoforged.neoforge.event.BuildCreativeModeTabContentsEvent;
+import net.neoforged.neoforge.event.tick.ServerTickEvent;
 import net.neoforged.neoforge.registries.DeferredItem;
 import net.neoforged.neoforge.registries.DeferredRegister;
 
@@ -21,6 +23,8 @@ public class GrapplingHookMod {
         GrappleConfig.load();
         ITEMS.register(modBus);
         modBus.addListener(this::addCreative);
+        // Drive the per-tick reel/swing for active grapples.
+        NeoForge.EVENT_BUS.addListener((ServerTickEvent.Post event) -> GrappleManager.tick(event.getServer()));
     }
 
     private void addCreative(BuildCreativeModeTabContentsEvent event) {

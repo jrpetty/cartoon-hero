@@ -1,6 +1,7 @@
 package com.grapplinghook;
 
 import net.fabricmc.api.ModInitializer;
+import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
 import net.fabricmc.fabric.api.itemgroup.v1.ItemGroupEvents;
 import net.minecraft.item.Item;
 import net.minecraft.item.ItemGroups;
@@ -28,6 +29,9 @@ public class GrapplingHookMod implements ModInitializer {
     @Override
     public void onInitialize() {
         GrappleConfig.load();
+
+        // Drive the per-tick reel/swing for active grapples.
+        ServerTickEvents.END_SERVER_TICK.register(GrappleManager::tick);
 
         // Show up in the vanilla Tools & Utilities creative tab.
         ItemGroupEvents.modifyEntriesEvent(ItemGroups.TOOLS).register(entries -> entries.add(GRAPPLING_HOOK));
