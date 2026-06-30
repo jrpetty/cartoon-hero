@@ -60,7 +60,7 @@ public class RopeArrowItem extends Item {
                 return InteractionResultHolder.pass(stack);
             }
         }
-        return InteractionResultHolder.success(stack, level.isClientSide());
+        return InteractionResultHolder.sidedSuccess(stack, level.isClientSide());
     }
 
     private static int placeRope(Level level, BlockPos top, Direction wallSide) {

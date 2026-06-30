@@ -54,6 +54,6 @@ public class LightArrowItem extends Item {
                     SoundEvents.ARROW_HIT, SoundSource.PLAYERS, 0.8F, 1.4F);
             player.getCooldowns().addCooldown(this, 10);
         }
-        return InteractionResultHolder.success(stack, level.isClientSide());
+        return InteractionResultHolder.sidedSuccess(stack, level.isClientSide());
     }
 }
