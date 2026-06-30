@@ -7,6 +7,7 @@ import net.minecraft.entity.LivingEntity;
 import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.item.Item;
 import net.minecraft.item.ItemStack;
+import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.server.world.ServerWorld;
 import net.minecraft.sound.SoundCategory;
 import net.minecraft.sound.SoundEvents;
@@ -61,7 +62,7 @@ public class GrapplingHookItem extends Item {
     @Override
     public void onStoppedUsing(ItemStack stack, World world, LivingEntity userEntity, int remainingUseTicks) {
         if (world.isClient()
-                || !(userEntity instanceof PlayerEntity player)
+                || !(userEntity instanceof ServerPlayerEntity player)
                 || !(world instanceof ServerWorld serverWorld)) {
             return;
         }

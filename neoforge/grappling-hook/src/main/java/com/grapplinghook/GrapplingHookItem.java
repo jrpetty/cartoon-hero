@@ -3,6 +3,7 @@ package com.grapplinghook;
 import java.util.Optional;
 
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.util.Mth;
@@ -61,7 +62,7 @@ public class GrapplingHookItem extends Item {
     @Override
     public void releaseUsing(ItemStack stack, Level level, LivingEntity entity, int timeLeft) {
         if (level.isClientSide()
-                || !(entity instanceof Player player)
+                || !(entity instanceof ServerPlayer player)
                 || !(level instanceof ServerLevel serverLevel)) {
             return;
         }
