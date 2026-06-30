@@ -9,6 +9,7 @@ on:
       - "desire-paths/**"
       - "grappling-hook/**"
       - "succession/**"
+      - "gadgets/**"
       - ".github/workflows/build-mods.yml"
   workflow_dispatch:
 
@@ -26,6 +27,7 @@ jobs:
           - desire-paths
           - grappling-hook
           - succession
+          - gadgets
     name: Build ${{ matrix.mod }}
     steps:
       - name: Checkout
