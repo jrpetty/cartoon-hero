@@ -1,0 +1,59 @@
+package com.gadgets;
+
+import net.minecraft.core.BlockPos;
+import net.minecraft.sounds.SoundEvents;
+import net.minecraft.sounds.SoundSource;
+import net.minecraft.world.InteractionHand;
+import net.minecraft.world.InteractionResultHolder;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.item.Item;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.level.ClipContext;
+import net.minecraft.world.level.Level;
+import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.phys.BlockHitResult;
+import net.minecraft.world.phys.HitResult;
+import net.minecraft.world.phys.Vec3;
+
+/**
+ * Right-click while aiming to "fire" light: a glowstone block is planted on the
+ * surface you hit. Light up a cave from the entrance.
+ */
+public class LightArrowItem extends Item {
+    private static final double RANGE = 32.0;
+
+    public LightArrowItem(Properties properties) {
+        super(properties);
+    }
+
+    @Override
+    public InteractionResultHolder<ItemStack> use(Level level, Player player, InteractionHand hand) {
+        ItemStack stack = player.getItemInHand(hand);
+
+        Vec3 start = player.getEyePosition(1.0F);
+        Vec3 end = start.add(player.getViewVector(1.0F).scale(RANGE));
+        BlockHitResult hit = level.clip(new ClipContext(
+                start, end, ClipContext.Block.OUTLINE, ClipContext.Fluid.NONE, player));
+
+        if (hit.getType() != HitResult.Type.BLOCK) {
+            return InteractionResultHolder.pass(stack);
+        }
+
+        BlockPos place = hit.getBlockPos().relative(hit.getDirection());
+        if (!level.isClientSide()) {
+            BlockState existing = level.getBlockState(place);
+            if (!existing.isAir() && !existing.canBeReplaced()) {
+                return InteractionResultHolder.pass(stack);
+            }
+            level.setBlockAndUpdate(place, Blocks.GLOWSTONE.defaultBlockState());
+            if (!player.getAbilities().instabuild) {
+                stack.shrink(1);
+            }
+            level.playSound(null, player.getX(), player.getY(), player.getZ(),
+                    SoundEvents.ARROW_HIT, SoundSource.PLAYERS, 0.8F, 1.4F);
+            player.getCooldowns().addCooldown(this, 10);
+        }
+        return InteractionResultHolder.success(stack, level.isClientSide());
+    }
+}

@@ -23,6 +23,7 @@ jobs:
           - desire-paths
           - grappling-hook
           - succession
+          - gadgets
     name: Build ${{ matrix.mod }} (NeoForge)
     steps:
       - name: Checkout
