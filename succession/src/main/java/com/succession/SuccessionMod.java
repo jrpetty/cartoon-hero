@@ -2,6 +2,8 @@ package com.succession;
 
 import net.fabricmc.api.ModInitializer;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
+import net.fabricmc.fabric.api.event.player.PlayerBlockBreakEvents;
+import net.minecraft.server.world.ServerWorld;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -22,6 +24,13 @@ public class SuccessionMod implements ModInitializer {
     public void onInitialize() {
         SuccessionEngine engine = new SuccessionEngine();
         ServerTickEvents.END_WORLD_TICK.register(engine::onWorldTick);
+
+        // Fell a tree and a sapling or two takes root where it stood.
+        PlayerBlockBreakEvents.AFTER.register((world, player, pos, state, blockEntity) -> {
+            if (world instanceof ServerWorld serverWorld) {
+                TreeReplanter.onLogBroken(serverWorld, pos, state);
+            }
+        });
 
         LOGGER.info("Succession initialized — the wild is patient.");
     }
