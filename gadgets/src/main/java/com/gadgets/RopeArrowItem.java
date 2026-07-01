@@ -3,6 +3,7 @@ package com.gadgets;
 import net.minecraft.entity.LivingEntity;
 import net.minecraft.entity.projectile.PersistentProjectileEntity;
 import net.minecraft.item.ArrowItem;
+import net.minecraft.item.Item;
 import net.minecraft.item.ItemStack;
 import net.minecraft.world.World;
 import org.jetbrains.annotations.Nullable;
@@ -12,7 +13,7 @@ import org.jetbrains.annotations.Nullable;
  * a free column of climbable rope straight down (see {@link RopeArrowEntity}).
  */
 public class RopeArrowItem extends ArrowItem {
-    public RopeArrowItem(Settings settings) {
+    public RopeArrowItem(Item.Settings settings) {
         super(settings);
     }
 
