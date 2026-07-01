@@ -5,5 +5,6 @@
   "block.gadgets.filter_hopper": "Filter Hopper",
   "message.gadgets.filter_set": "Filter set to %s",
   "message.gadgets.filter_cleared": "Filter cleared",
-  "block.gadgets.rope": "Rope"
+  "block.gadgets.rope": "Rope",
+  "itemgroup.gadgets.gadgets": "Gadgets"
 }

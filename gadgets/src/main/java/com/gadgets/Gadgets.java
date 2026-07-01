@@ -1,6 +1,7 @@
 package com.gadgets;
 
 import net.fabricmc.api.ModInitializer;
+import net.fabricmc.fabric.api.itemgroup.v1.FabricItemGroup;
 import net.fabricmc.fabric.api.itemgroup.v1.ItemGroupEvents;
 import net.fabricmc.fabric.api.object.builder.v1.block.entity.FabricBlockEntityTypeBuilder;
 import net.minecraft.block.AbstractBlock;
@@ -8,16 +9,20 @@ import net.minecraft.block.Block;
 import net.minecraft.block.entity.BlockEntityType;
 import net.minecraft.item.BlockItem;
 import net.minecraft.item.Item;
-import net.minecraft.item.ItemGroups;
+import net.minecraft.item.ItemGroup;
+import net.minecraft.item.ItemStack;
 import net.minecraft.registry.Registries;
 import net.minecraft.registry.Registry;
+import net.minecraft.registry.RegistryKey;
+import net.minecraft.registry.RegistryKeys;
 import net.minecraft.sound.BlockSoundGroup;
+import net.minecraft.text.Text;
 import net.minecraft.util.Identifier;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * Gadgets — Rope Arrow, Light Arrow, Player Sensor, Filter Hopper.
+ * Gadgets — Rope Arrow, Light Arrow, Rope, Player Sensor, Filter Hopper.
  */
 public class Gadgets implements ModInitializer {
     public static final String MOD_ID = "gadgets";
@@ -37,6 +42,13 @@ public class Gadgets implements ModInitializer {
             new FilterHopperBlock(AbstractBlock.Settings.create()
                     .strength(3.0F).requiresTool().sounds(BlockSoundGroup.METAL)));
 
+    public static final RegistryKey<ItemGroup> GADGETS_GROUP_KEY =
+            RegistryKey.of(RegistryKeys.ITEM_GROUP, Identifier.of(MOD_ID, "gadgets"));
+    public static final ItemGroup GADGETS_GROUP = FabricItemGroup.builder()
+            .icon(() -> new ItemStack(PLAYER_SENSOR))
+            .displayName(Text.translatable("itemgroup.gadgets.gadgets"))
+            .build();
+
     public static BlockEntityType<PlayerSensorBlockEntity> PLAYER_SENSOR_BE;
     public static BlockEntityType<FilterHopperBlockEntity> FILTER_HOPPER_BE;
 
@@ -47,12 +59,11 @@ public class Gadgets implements ModInitializer {
         FILTER_HOPPER_BE = Registry.register(Registries.BLOCK_ENTITY_TYPE, Identifier.of(MOD_ID, "filter_hopper"),
                 FabricBlockEntityTypeBuilder.create(FilterHopperBlockEntity::new, FILTER_HOPPER).build());
 
-        ItemGroupEvents.modifyEntriesEvent(ItemGroups.TOOLS).register(entries -> {
+        Registry.register(Registries.ITEM_GROUP, GADGETS_GROUP_KEY, GADGETS_GROUP);
+        ItemGroupEvents.modifyEntriesEvent(GADGETS_GROUP_KEY).register(entries -> {
             entries.add(ROPE_ARROW);
             entries.add(LIGHT_ARROW);
             entries.add(ROPE);
-        });
-        ItemGroupEvents.modifyEntriesEvent(ItemGroups.REDSTONE).register(entries -> {
             entries.add(PLAYER_SENSOR);
             entries.add(FILTER_HOPPER);
         });

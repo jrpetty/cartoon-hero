@@ -3,15 +3,16 @@ package com.gadgets;
 import java.util.function.Supplier;
 
 import net.minecraft.core.registries.Registries;
-import net.minecraft.world.item.CreativeModeTabs;
+import net.minecraft.network.chat.Component;
+import net.minecraft.world.item.CreativeModeTab;
 import net.minecraft.world.item.Item;
+import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.SoundType;
 import net.minecraft.world.level.block.entity.BlockEntityType;
 import net.minecraft.world.level.block.state.BlockBehaviour;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.fml.common.Mod;
-import net.neoforged.neoforge.event.BuildCreativeModeTabContentsEvent;
 import net.neoforged.neoforge.registries.DeferredBlock;
 import net.neoforged.neoforge.registries.DeferredItem;
 import net.neoforged.neoforge.registries.DeferredRegister;
@@ -24,6 +25,8 @@ public class Gadgets {
     public static final DeferredRegister.Blocks BLOCKS = DeferredRegister.createBlocks(MODID);
     public static final DeferredRegister<BlockEntityType<?>> BLOCK_ENTITIES =
             DeferredRegister.create(Registries.BLOCK_ENTITY_TYPE, MODID);
+    public static final DeferredRegister<CreativeModeTab> CREATIVE_TABS =
+            DeferredRegister.create(Registries.CREATIVE_MODE_TAB, MODID);
 
     public static final DeferredItem<Item> ROPE_ARROW =
             ITEMS.register("rope_arrow", () -> new RopeArrowItem(new Item.Properties()));
@@ -52,21 +55,23 @@ public class Gadgets {
             BLOCK_ENTITIES.register("filter_hopper",
                     () -> BlockEntityType.Builder.of(FilterHopperBlockEntity::new, FILTER_HOPPER.get()).build(null));
 
+    public static final Supplier<CreativeModeTab> GADGETS_TAB = CREATIVE_TABS.register("gadgets",
+            () -> CreativeModeTab.builder()
+                    .title(Component.translatable("itemgroup.gadgets.gadgets"))
+                    .icon(() -> new ItemStack(PLAYER_SENSOR.get()))
+                    .displayItems((params, output) -> {
+                        output.accept(ROPE_ARROW.get());
+                        output.accept(LIGHT_ARROW.get());
+                        output.accept(ROPE_ITEM.get());
+                        output.accept(PLAYER_SENSOR_ITEM.get());
+                        output.accept(FILTER_HOPPER_ITEM.get());
+                    })
+                    .build());
+
     public Gadgets(IEventBus modBus) {
         ITEMS.register(modBus);
         BLOCKS.register(modBus);
         BLOCK_ENTITIES.register(modBus);
-        modBus.addListener(this::addCreative);
-    }
-
-    private void addCreative(BuildCreativeModeTabContentsEvent event) {
-        if (event.getTabKey() == CreativeModeTabs.TOOLS_AND_UTILITIES) {
-            event.accept(ROPE_ARROW);
-            event.accept(LIGHT_ARROW);
-            event.accept(ROPE_ITEM);
-        } else if (event.getTabKey() == CreativeModeTabs.REDSTONE_BLOCKS) {
-            event.accept(PLAYER_SENSOR_ITEM);
-            event.accept(FILTER_HOPPER_ITEM);
-        }
+        CREATIVE_TABS.register(modBus);
     }
 }
