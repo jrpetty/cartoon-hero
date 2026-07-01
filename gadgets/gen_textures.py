@@ -128,3 +128,21 @@ LIGHT = [
 light_pal = {".": CLEAR, "s": C(120, 120, 130),
              "G": C(255, 220, 90), "Y": C(255, 240, 160), "W": C(255, 255, 235)}
 write_png(os.path.join(BASE, "item", "light_arrow.png"), grid(LIGHT, light_pal))
+
+# --- Rope block: braided brown, fully opaque (no cutout needed) ---
+DARK = (96, 62, 30, 255)
+MID = (132, 90, 46, 255)
+LIGHT = (168, 120, 66, 255)
+rope_rows = []
+for y in range(16):
+    row = []
+    for x in range(16):
+        band = (x + y) % 6
+        if band < 2:
+            row.append(LIGHT)
+        elif band < 4:
+            row.append(MID)
+        else:
+            row.append(DARK)
+    rope_rows.append(row)
+write_png(os.path.join(BASE, "block", "rope.png"), rope_rows)

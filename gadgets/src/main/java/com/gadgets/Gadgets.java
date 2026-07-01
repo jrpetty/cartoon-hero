@@ -26,6 +26,10 @@ public class Gadgets implements ModInitializer {
     public static final Item ROPE_ARROW = register("rope_arrow", new RopeArrowItem(new Item.Settings()));
     public static final Item LIGHT_ARROW = register("light_arrow", new LightArrowItem(new Item.Settings()));
 
+    public static final Block ROPE = registerBlock("rope",
+            new RopeBlock(AbstractBlock.Settings.create()
+                    .noCollision().strength(0.2F).sounds(BlockSoundGroup.WOOL).nonOpaque()));
+
     public static final Block PLAYER_SENSOR = registerBlock("player_sensor",
             new PlayerSensorBlock(AbstractBlock.Settings.create()
                     .strength(1.5F).requiresTool().sounds(BlockSoundGroup.METAL)));
@@ -46,6 +50,7 @@ public class Gadgets implements ModInitializer {
         ItemGroupEvents.modifyEntriesEvent(ItemGroups.TOOLS).register(entries -> {
             entries.add(ROPE_ARROW);
             entries.add(LIGHT_ARROW);
+            entries.add(ROPE);
         });
         ItemGroupEvents.modifyEntriesEvent(ItemGroups.REDSTONE).register(entries -> {
             entries.add(PLAYER_SENSOR);

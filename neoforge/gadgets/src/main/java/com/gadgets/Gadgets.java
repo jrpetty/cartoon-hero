@@ -30,6 +30,11 @@ public class Gadgets {
     public static final DeferredItem<Item> LIGHT_ARROW =
             ITEMS.register("light_arrow", () -> new LightArrowItem(new Item.Properties()));
 
+    public static final DeferredBlock<Block> ROPE = BLOCKS.register("rope",
+            () -> new RopeBlock(BlockBehaviour.Properties.of()
+                    .noCollission().strength(0.2F).sound(SoundType.WOOL).noOcclusion()));
+    public static final DeferredItem<?> ROPE_ITEM = ITEMS.registerSimpleBlockItem("rope", ROPE);
+
     public static final DeferredBlock<Block> PLAYER_SENSOR = BLOCKS.register("player_sensor",
             () -> new PlayerSensorBlock(BlockBehaviour.Properties.of()
                     .strength(1.5F).requiresCorrectToolForDrops().sound(SoundType.METAL)));
@@ -58,6 +63,7 @@ public class Gadgets {
         if (event.getTabKey() == CreativeModeTabs.TOOLS_AND_UTILITIES) {
             event.accept(ROPE_ARROW);
             event.accept(LIGHT_ARROW);
+            event.accept(ROPE_ITEM);
         } else if (event.getTabKey() == CreativeModeTabs.REDSTONE_BLOCKS) {
             event.accept(PLAYER_SENSOR_ITEM);
             event.accept(FILTER_HOPPER_ITEM);

@@ -11,16 +11,14 @@ import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.ClipContext;
 import net.minecraft.world.level.Level;
-import net.minecraft.world.level.block.Blocks;
-import net.minecraft.world.level.block.LadderBlock;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.HitResult;
 import net.minecraft.world.phys.Vec3;
 
 /**
- * Right-click while aiming at a wall to "fire" a rope: a column of ladders
- * trails down the wall face from the impact point.
+ * Right-click while aiming to "fire" a rope: a free-hanging column of climbable
+ * rope trails straight down from the impact point.
  */
 public class RopeArrowItem extends Item {
     private static final double RANGE = 24.0;
@@ -43,12 +41,12 @@ public class RopeArrowItem extends Item {
             return InteractionResultHolder.pass(stack);
         }
         Direction side = hit.getDirection();
-        if (side.getAxis().isVertical()) {
-            return InteractionResultHolder.pass(stack);
+        if (side == Direction.UP) {
+            return InteractionResultHolder.pass(stack); // don't hang a rope off the top of a floor
         }
 
         if (!level.isClientSide()) {
-            int placed = placeRope(level, hit.getBlockPos().relative(side), side);
+            int placed = placeRope(level, hit.getBlockPos().relative(side));
             if (placed > 0) {
                 if (!player.getAbilities().instabuild) {
                     stack.shrink(1);
@@ -63,20 +61,16 @@ public class RopeArrowItem extends Item {
         return InteractionResultHolder.sidedSuccess(stack, level.isClientSide());
     }
 
-    private static int placeRope(Level level, BlockPos top, Direction wallSide) {
-        BlockState ladder = Blocks.LADDER.defaultBlockState().setValue(LadderBlock.FACING, wallSide);
+    private static int placeRope(Level level, BlockPos top) {
+        BlockState rope = Gadgets.ROPE.get().defaultBlockState();
         BlockPos.MutableBlockPos pos = top.mutable();
         int placed = 0;
         for (int i = 0; i < MAX_LENGTH; i++) {
             BlockState here = level.getBlockState(pos);
             if (!here.isAir() && !here.canBeReplaced()) {
-                break;
+                break; // rope hangs down until it meets something
             }
-            BlockPos wall = pos.relative(wallSide.getOpposite());
-            if (!level.getBlockState(wall).isFaceSturdy(level, wall, wallSide)) {
-                break;
-            }
-            level.setBlockAndUpdate(pos, ladder);
+            level.setBlockAndUpdate(pos, rope);
             placed++;
             pos.move(Direction.DOWN);
         }
