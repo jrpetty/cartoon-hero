@@ -1,7 +1,7 @@
 {
   "item.gadgets.rope_arrow": "Rope Arrow",
   "item.gadgets.light_arrow": "Light Arrow",
-  "block.gadgets.player_sensor": "Player Sensor",
+  "block.gadgets.player_sensor": "Entity Sensor",
   "block.gadgets.filter_hopper": "Filter Hopper",
   "message.gadgets.filter_set": "Filter set to %s",
   "message.gadgets.filter_cleared": "Filter cleared",

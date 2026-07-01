@@ -12,7 +12,8 @@
   "license": "MIT",
   "environment": "*",
   "entrypoints": {
-    "main": ["com.gadgets.Gadgets"]
+    "main": ["com.gadgets.Gadgets"],
+    "client": ["com.gadgets.GadgetsClient"]
   },
   "depends": {
     "fabricloader": ">=0.16.5",

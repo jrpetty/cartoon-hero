@@ -1,18 +1,76 @@
 package com.gadgets;
 
+import java.util.function.Predicate;
+
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.HolderLookup;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.animal.Animal;
+import net.minecraft.world.entity.monster.Monster;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.phys.AABB;
 
+/**
+ * Emits a full redstone signal while a matching entity is within range. The
+ * target is tunable: point it at players, monsters, animals, all living things,
+ * or a single mob type (via a spawn egg). See {@link PlayerSensorBlock}.
+ */
 public class PlayerSensorBlockEntity extends BlockEntity {
     private static final double RADIUS = 8.0;
     private static final int INTERVAL = 10;
 
+    /** Built-in modes cycled with an empty hand. */
+    public static final String PLAYERS = "players";
+    public static final String MONSTERS = "monsters";
+    public static final String ANIMALS = "animals";
+    public static final String ALL = "all";
+
+    /** One of the mode constants above, or a mob type id like "minecraft:creeper". */
+    private String target = PLAYERS;
+
     public PlayerSensorBlockEntity(BlockPos pos, BlockState state) {
         super(Gadgets.PLAYER_SENSOR_BE.get(), pos, state);
+    }
+
+    public String getTarget() {
+        return target;
+    }
+
+    public void setTarget(String target) {
+        this.target = target;
+        setChanged();
+        if (level != null) {
+            level.sendBlockUpdated(worldPosition, getBlockState(), getBlockState(), Block.UPDATE_ALL);
+        }
+    }
+
+    /** Cycle through the four built-in modes. */
+    public String cycleMode() {
+        String next = switch (target) {
+            case PLAYERS -> MONSTERS;
+            case MONSTERS -> ANIMALS;
+            case ANIMALS -> ALL;
+            default -> PLAYERS;
+        };
+        setTarget(next);
+        return next;
+    }
+
+    private Predicate<Entity> predicate() {
+        return switch (target) {
+            case PLAYERS -> e -> e instanceof Player p && !p.isSpectator();
+            case MONSTERS -> e -> e instanceof Monster;
+            case ANIMALS -> e -> e instanceof Animal;
+            case ALL -> e -> e instanceof LivingEntity && !e.isSpectator();
+            default -> e -> EntityType.getKey(e.getType()).toString().equals(target);
+        };
     }
 
     public static void tick(Level level, BlockPos pos, BlockState state, PlayerSensorBlockEntity be) {
@@ -20,18 +78,25 @@ public class PlayerSensorBlockEntity extends BlockEntity {
             return;
         }
 
-        double cx = pos.getX() + 0.5, cy = pos.getY() + 0.5, cz = pos.getZ() + 0.5;
-        double radiusSq = RADIUS * RADIUS;
-        boolean found = false;
-        for (Player player : level.players()) {
-            if (!player.isSpectator() && player.distanceToSqr(cx, cy, cz) <= radiusSq) {
-                found = true;
-                break;
-            }
-        }
+        AABB area = new AABB(pos).inflate(RADIUS);
+        boolean found = !level.getEntitiesOfClass(Entity.class, area, be.predicate()).isEmpty();
 
         if (state.getValue(PlayerSensorBlock.POWERED) != found) {
             level.setBlock(pos, state.setValue(PlayerSensorBlock.POWERED, found), Block.UPDATE_ALL);
+        }
+    }
+
+    @Override
+    protected void saveAdditional(CompoundTag tag, HolderLookup.Provider registries) {
+        super.saveAdditional(tag, registries);
+        tag.putString("Target", target);
+    }
+
+    @Override
+    protected void loadAdditional(CompoundTag tag, HolderLookup.Provider registries) {
+        super.loadAdditional(tag, registries);
+        if (tag.contains("Target")) {
+            target = tag.getString("Target");
         }
     }
 }

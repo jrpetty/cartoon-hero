@@ -7,6 +7,8 @@ import net.fabricmc.fabric.api.object.builder.v1.block.entity.FabricBlockEntityT
 import net.minecraft.block.AbstractBlock;
 import net.minecraft.block.Block;
 import net.minecraft.block.entity.BlockEntityType;
+import net.minecraft.entity.EntityType;
+import net.minecraft.entity.SpawnGroup;
 import net.minecraft.item.BlockItem;
 import net.minecraft.item.Item;
 import net.minecraft.item.ItemGroup;
@@ -48,6 +50,11 @@ public class Gadgets implements ModInitializer {
             .icon(() -> new ItemStack(PLAYER_SENSOR))
             .displayName(Text.translatable("itemgroup.gadgets.gadgets"))
             .build();
+
+    public static final EntityType<RopeArrowEntity> ROPE_ARROW_ENTITY = Registry.register(
+            Registries.ENTITY_TYPE, Identifier.of(MOD_ID, "rope_arrow"),
+            EntityType.Builder.<RopeArrowEntity>create(RopeArrowEntity::new, SpawnGroup.MISC)
+                    .dimensions(0.5f, 0.5f).maxTrackingRange(64).build("rope_arrow"));
 
     public static BlockEntityType<PlayerSensorBlockEntity> PLAYER_SENSOR_BE;
     public static BlockEntityType<FilterHopperBlockEntity> FILTER_HOPPER_BE;
