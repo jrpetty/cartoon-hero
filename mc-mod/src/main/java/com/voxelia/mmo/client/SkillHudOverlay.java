@@ -10,6 +10,7 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.LayeredDraw;
 
+import java.util.Arrays;
 import java.util.Locale;
 
 /**
@@ -35,12 +36,16 @@ public final class SkillHudOverlay implements LayeredDraw.Layer {
     public void render(GuiGraphics graphics, DeltaTracker delta) {
         Minecraft mc = Minecraft.getInstance();
         if (mc.player == null || mc.options.hideGui || !VoxeliaClientConfig.showHud()) return;
-        if (!ClientSkillData.hasData()) return;
+        if (!ClientSkillData.hasData()) {
+            seeded = false; // re-seed on the next world/character (no ghost flashes)
+            return;
+        }
 
         long now = Util.getMillis();
         Skill[] all = Skill.values();
         if (!seeded) { // don't flash everything on login
             for (Skill s : all) lastXp[s.ordinal()] = ClientSkillData.xp(s);
+            Arrays.fill(flashUntil, 0L);
             seeded = true;
         }
 
@@ -79,8 +84,10 @@ public final class SkillHudOverlay implements LayeredDraw.Layer {
                 if (xp > lastXp[i]) { // gained: flash the row (accumulate rapid gains)
                     lastGain[i] = (xp - lastXp[i]) + (now < flashUntil[i] ? lastGain[i] : 0);
                     flashUntil[i] = now + FLASH_MS;
+                } else {
+                    flashUntil[i] = 0; // loss (death penalty): kill any running gain flash
                 }
-                lastXp[i] = xp; // losses (death penalty) update silently
+                lastXp[i] = xp;
             }
             boolean flash = now < flashUntil[i];
 
@@ -89,9 +96,13 @@ public final class SkillHudOverlay implements LayeredDraw.Layer {
             if (i == sel && skill.active()) graphics.fill(x - 4, y, x - 2, y + 8, VoxeliaUi.LINK);
             graphics.drawString(mc.font, skill.display(), x + 2, y, VoxeliaUi.TEXT);
 
-            String val = flash ? "+" + lastGain[i] : (span > 0 ? String.valueOf(level) : "MAX");
-            int valColor = flash ? VoxeliaUi.GOOD : (span > 0 ? 0xFFFFFFFF : VoxeliaUi.GOOD);
-            graphics.drawString(mc.font, val, x + BLOCK_W - 6 - mc.font.width(val), y, valColor);
+            String val = span > 0 ? String.valueOf(level) : "MAX";
+            int valX = x + BLOCK_W - 6 - mc.font.width(val);
+            graphics.drawString(mc.font, val, valX, y, span > 0 ? 0xFFFFFFFF : VoxeliaUi.GOOD);
+            if (flash) { // gain shown next to the level, so level-ups stay visible
+                String gain = "+" + lastGain[i];
+                graphics.drawString(mc.font, gain, valX - 3 - mc.font.width(gain), y, VoxeliaUi.GOOD);
+            }
 
             // thin XP bar under the label
             int barW = BLOCK_W - 8, barY = y + 9;
