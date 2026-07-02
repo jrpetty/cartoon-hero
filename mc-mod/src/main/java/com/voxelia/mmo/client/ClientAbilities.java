@@ -17,6 +17,11 @@ public final class ClientAbilities {
 
     public static Skill selectedSkill() { return Skill.values()[selected]; }
 
+    /** Directly select a skill's active ability (client-side; used by the Skills screen). */
+    public static void select(Skill s) {
+        if (s.active()) selected = s.ordinal();
+    }
+
     public static void cycle(int dir) {
         // advance to the next skill that actually has an active ability
         for (int i = 0; i < COUNT; i++) {
