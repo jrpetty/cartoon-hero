@@ -5,7 +5,6 @@ import com.voxelia.mmo.config.VoxeliaConfig;
 import com.voxelia.mmo.registry.VoxeliaAttachments;
 import com.voxelia.mmo.skill.PlayerSkills;
 import com.voxelia.mmo.skill.Skill;
-import com.voxelia.mmo.skill.TalentType;
 import net.minecraft.core.Holder;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerPlayer;
@@ -54,13 +53,13 @@ public final class SkillEffects {
         int excav    = s.getLevel(Skill.EXCAVATION) - 1;
         int defense  = s.getLevel(Skill.DEFENSE) - 1;
 
-        // Mastery scales each skill's signature stat (the same stat shown in /voxelia stats).
-        double xCombat = TalentLogic.masteryMultiplier(player, Skill.COMBAT);
-        double xFarming = TalentLogic.masteryMultiplier(player, Skill.FARMING);
-        double xMining = TalentLogic.masteryMultiplier(player, Skill.MINING);
-        double xForaging = TalentLogic.masteryMultiplier(player, Skill.FORAGING);
-        double xExcav = TalentLogic.masteryMultiplier(player, Skill.EXCAVATION);
-        double xDefense = TalentLogic.masteryMultiplier(player, Skill.DEFENSE);
+        // A skill's signature talent scales its signature stat (the same stat shown in /voxelia stats).
+        double xCombat = TalentLogic.signatureBonus(player, Skill.COMBAT);
+        double xFarming = TalentLogic.signatureBonus(player, Skill.FARMING);
+        double xMining = TalentLogic.signatureBonus(player, Skill.MINING);
+        double xForaging = TalentLogic.signatureBonus(player, Skill.FORAGING);
+        double xExcav = TalentLogic.signatureBonus(player, Skill.EXCAVATION);
+        double xDefense = TalentLogic.signatureBonus(player, Skill.DEFENSE);
 
         set(player, Attributes.ATTACK_DAMAGE, DAMAGE_ID,
             combat * VoxeliaConfig.combatDamagePerLevel() * xCombat, AttributeModifier.Operation.ADD_VALUE);
@@ -78,22 +77,14 @@ public final class SkillEffects {
             defense * VoxeliaConfig.defenseToughnessPerLevel() * xDefense, AttributeModifier.Operation.ADD_VALUE);
         set(player, Attributes.KNOCKBACK_RESISTANCE, DEF_KB_ID,
             defense * VoxeliaConfig.defenseKnockbackResistPerLevel() * xDefense, AttributeModifier.Operation.ADD_VALUE);
-        // (Acrobatics, Fishing, Archery, Alchemy mastery scale their event-based
+        // (Acrobatics, Fishing, Archery, Alchemy talents scale their event-based
         //  signature stats directly in their handlers — see AbilityEvents etc.)
 
-        // Universal talents are summed across every skill.
-        double scale = VoxeliaConfig.talentMasteryScale();
-        double vitality = 0, swiftness = 0, toughness = 0, fortune = 0;
-        for (Skill sk : Skill.values()) {
-            vitality  += TalentLogic.rank(player, sk, TalentType.VITALITY);
-            swiftness += TalentLogic.rank(player, sk, TalentType.SWIFTNESS);
-            toughness += TalentLogic.rank(player, sk, TalentType.TOUGHNESS);
-            fortune   += TalentLogic.rank(player, sk, TalentType.FORTUNE);
-        }
-        set(player, Attributes.MAX_HEALTH, VITALITY_ID, vitality * 0.3 * scale, AttributeModifier.Operation.ADD_VALUE);
-        set(player, Attributes.MOVEMENT_SPEED, SWIFTNESS_ID, swiftness * 0.003 * scale, AttributeModifier.Operation.ADD_MULTIPLIED_BASE);
-        set(player, Attributes.ARMOR, TOUGHNESS_ID, toughness * 0.25 * scale, AttributeModifier.Operation.ADD_VALUE);
-        set(player, Attributes.LUCK, FORTUNE_ID, fortune * 0.15 * scale, AttributeModifier.Operation.ADD_VALUE);
+        // Strip the retired universal-talent modifiers from returning players' saves.
+        set(player, Attributes.MAX_HEALTH, VITALITY_ID, 0, AttributeModifier.Operation.ADD_VALUE);
+        set(player, Attributes.MOVEMENT_SPEED, SWIFTNESS_ID, 0, AttributeModifier.Operation.ADD_MULTIPLIED_BASE);
+        set(player, Attributes.ARMOR, TOUGHNESS_ID, 0, AttributeModifier.Operation.ADD_VALUE);
+        set(player, Attributes.LUCK, FORTUNE_ID, 0, AttributeModifier.Operation.ADD_VALUE);
 
         if (player.getHealth() > player.getMaxHealth()) {
             player.setHealth(player.getMaxHealth());

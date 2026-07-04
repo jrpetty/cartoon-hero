@@ -17,19 +17,20 @@ public final class SkillStats {
 
     public static String describe(ServerPlayer player, Skill skill, int level) {
         int lm1 = level - 1;
-        double m = TalentLogic.masteryMultiplier(player, skill);
+        double m = TalentLogic.signatureBonus(player, skill);
+        double fort = TalentLogic.fortuneBonus(player, skill);
         return switch (skill) {
             case MINING -> String.format(Locale.ROOT, "+%.1f%% break speed, +%.0f%% Fortune on ores%s%s",
                 VoxeliaConfig.miningSpeedPerLevel() * lm1 * 100 * m,
-                VoxeliaConfig.miningFortunePerLevel() * level * 100,
+                VoxeliaConfig.miningFortunePerLevel() * level * 100 * fort,
                 unlocked(VoxeliaConfig.miningHasteLevel(), level) ? ", Haste w/ pickaxe" : "",
                 unlocked(VoxeliaConfig.telekinesisLevel(), level) ? ", Telekinesis" : "");
             case FORAGING -> String.format(Locale.ROOT, "+%.1f%% break speed, +%.0f%% Fortune on wood",
                 VoxeliaConfig.foragingSpeedPerLevel() * lm1 * 100 * m,
-                VoxeliaConfig.foragingFortunePerLevel() * level * 100);
+                VoxeliaConfig.foragingFortunePerLevel() * level * 100 * fort);
             case COMBAT -> String.format(Locale.ROOT, "+%.1f attack damage, +%.1f heal per kill",
                 VoxeliaConfig.combatDamagePerLevel() * lm1 * m,
-                VoxeliaConfig.combatLifeStealPerLevel() * level);
+                VoxeliaConfig.combatLifeStealPerLevel() * level * TalentLogic.lifestealBonus(player, skill));
             case FARMING -> String.format(Locale.ROOT, "+%.1f max health (%.1f hearts)",
                 VoxeliaConfig.farmingHealthPerLevel() * lm1 * m,
                 VoxeliaConfig.farmingHealthPerLevel() * lm1 * m / 2.0);
@@ -38,10 +39,11 @@ public final class SkillStats {
                 Math.min(95, VoxeliaConfig.acrobaticsFallReductionPerLevel() * level * 100 * m));
             case FISHING -> String.format(Locale.ROOT, "+%.1f luck, %.0f%% treasure (while fishing)",
                 VoxeliaConfig.fishingLuckMax() * (level - 1) / 99.0 * m,
-                Math.min(VoxeliaConfig.fishingTreasureChanceMax(), level / 200.0 * m) * 100);
+                Math.min(VoxeliaConfig.fishingTreasureChanceMax(),
+                    level / 200.0 * TalentLogic.treasureBonus(player, skill)) * 100);
             case EXCAVATION -> String.format(Locale.ROOT, "+%.1f%% dig speed, +%.0f%% Fortune on shovel blocks",
                 VoxeliaConfig.excavationSpeedPerLevel() * lm1 * 100 * m,
-                VoxeliaConfig.excavationFortunePerLevel() * level * 100);
+                VoxeliaConfig.excavationFortunePerLevel() * level * 100 * fort);
             case DEFENSE -> String.format(Locale.ROOT, "+%.1f armor, +%.1f toughness, +%.2f kb-resist%s",
                 VoxeliaConfig.defenseArmorPerLevel() * lm1 * m,
                 VoxeliaConfig.defenseToughnessPerLevel() * lm1 * m,

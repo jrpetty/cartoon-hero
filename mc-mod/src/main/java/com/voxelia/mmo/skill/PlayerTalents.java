@@ -6,8 +6,8 @@ import java.util.HashMap;
 import java.util.Map;
 
 /**
- * A player's allocated talent ranks, keyed by "<skillId>.<talentId>". Stored as
- * a data attachment; persisted and copied on death.
+ * A player's allocated talent ranks, keyed by the talent's stable id. Stored as a
+ * data attachment; persisted and copied on death.
  */
 public final class PlayerTalents {
 
@@ -24,23 +24,20 @@ public final class PlayerTalents {
         return t;
     }
 
-    public static String key(Skill skill, TalentType type) {
-        return skill.id() + "." + type.id();
-    }
-
     public Map<String, Integer> ranks() { return ranks; }
 
-    public int getRank(Skill skill, TalentType type) {
-        return ranks.getOrDefault(key(skill, type), 0);
+    public int getRank(Talent talent) {
+        return ranks.getOrDefault(talent.id(), 0);
     }
 
-    public void setRank(Skill skill, TalentType type, int rank) {
-        ranks.put(key(skill, type), Math.max(0, rank));
+    public void setRank(Talent talent, int rank) {
+        ranks.put(talent.id(), Math.max(0, rank));
     }
 
+    /** Points spent across all of a skill's talents. */
     public int spentIn(Skill skill) {
         int sum = 0;
-        for (TalentType t : TalentType.values()) sum += getRank(skill, t);
+        for (Talent t : Talent.forSkill(skill)) sum += getRank(t);
         return sum;
     }
 

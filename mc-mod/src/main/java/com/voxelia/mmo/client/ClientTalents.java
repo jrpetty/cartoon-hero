@@ -1,8 +1,7 @@
 package com.voxelia.mmo.client;
 
-import com.voxelia.mmo.skill.PlayerTalents;
 import com.voxelia.mmo.skill.Skill;
-import com.voxelia.mmo.skill.TalentType;
+import com.voxelia.mmo.skill.Talent;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -23,13 +22,13 @@ public final class ClientTalents {
 
     public static int maxRank() { return maxRank; }
 
-    public static int rank(Skill skill, TalentType type) {
-        return ranks.getOrDefault(PlayerTalents.key(skill, type), 0);
+    public static int rank(Talent talent) {
+        return ranks.getOrDefault(talent.id(), 0);
     }
 
     public static int spentIn(Skill skill) {
         int sum = 0;
-        for (TalentType t : TalentType.values()) sum += rank(skill, t);
+        for (Talent t : Talent.forSkill(skill)) sum += rank(t);
         return sum;
     }
 

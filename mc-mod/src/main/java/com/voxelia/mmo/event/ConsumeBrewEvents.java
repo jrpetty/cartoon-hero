@@ -41,8 +41,9 @@ public final class ConsumeBrewEvents {
             int wellFed = VoxeliaConfig.cookingWellFedLevel();
             if (wellFed > 0 && cooking >= wellFed) {
                 int amp = Math.min(3, (cooking - wellFed) / 25);
+                int regenTicks = (int) (80 * TalentLogic.signatureBonus(player, Skill.COOKING));
                 player.addEffect(new MobEffectInstance(MobEffects.SATURATION, 1, amp, false, false, false));
-                player.addEffect(new MobEffectInstance(MobEffects.REGENERATION, 80, 0, false, false, true));
+                player.addEffect(new MobEffectInstance(MobEffects.REGENERATION, regenTicks, 0, false, false, true));
             }
         }
 
@@ -51,7 +52,7 @@ public final class ConsumeBrewEvents {
             Progression.grant(player, Skill.ALCHEMY, 6);
             int alchemy = player.getData(VoxeliaAttachments.PLAYER_SKILLS.get()).getLevel(Skill.ALCHEMY);
             double factor = 1.0 + alchemy * VoxeliaConfig.alchemyDurationPerLevel()
-                * TalentLogic.masteryMultiplier(player, Skill.ALCHEMY);
+                * TalentLogic.signatureBonus(player, Skill.ALCHEMY);
             if (factor > 1.0) {
                 for (MobEffectInstance effect : new ArrayList<>(player.getActiveEffects())) {
                     if (effect.getEffect().value().getCategory() != MobEffectCategory.BENEFICIAL) continue;

@@ -62,9 +62,10 @@ public final class ProgressionEvents {
         if (victim instanceof Enemy) base += 4; // hostile bonus
         Progression.grant(player, Skill.COMBAT, base);
 
-        // Life steal perk: heal on kill, scaled by Combat level.
+        // Life steal perk: heal on kill, scaled by Combat level and the Bloodthirst talent.
         int combatLevel = player.getData(VoxeliaAttachments.PLAYER_SKILLS.get()).getLevel(Skill.COMBAT);
-        float heal = (float) (combatLevel * com.voxelia.mmo.config.VoxeliaConfig.combatLifeStealPerLevel());
+        float heal = (float) (combatLevel * com.voxelia.mmo.config.VoxeliaConfig.combatLifeStealPerLevel()
+            * com.voxelia.mmo.progression.TalentLogic.lifestealBonus(player, Skill.COMBAT));
         if (heal > 0) player.heal(heal);
     }
 

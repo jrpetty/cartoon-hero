@@ -49,7 +49,8 @@ public final class BonusDropEvents {
             perLevel = VoxeliaConfig.excavationFortunePerLevel();
         }
         if (skill != null && perLevel > 0 && !hasSilkTouch(event.getLevel(), event.getTool())) {
-            double factor = perLevel * skills.getLevel(skill);
+            double factor = perLevel * skills.getLevel(skill)
+                * com.voxelia.mmo.progression.TalentLogic.fortuneBonus(player, skill);
             for (ItemEntity entity : event.getDrops()) {
                 ItemStack stack = entity.getItem();
                 if (stack.isEmpty()) continue;

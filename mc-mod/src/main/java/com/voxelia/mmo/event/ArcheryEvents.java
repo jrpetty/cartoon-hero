@@ -32,7 +32,7 @@ public final class ArcheryEvents {
         // Power Shot: extra damage on a fully-drawn shot.
         if (arrow.isCritArrow()) {
             double bonus = level * VoxeliaConfig.archeryPowerShotPerLevel()
-                * TalentLogic.masteryMultiplier(shooter, Skill.ARCHERY);
+                * TalentLogic.signatureBonus(shooter, Skill.ARCHERY);
             if (bonus > 0) event.setAmount((float) (event.getAmount() + bonus));
         }
 

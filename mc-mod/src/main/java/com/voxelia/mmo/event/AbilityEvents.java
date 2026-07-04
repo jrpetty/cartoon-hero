@@ -49,19 +49,19 @@ public final class AbilityEvents {
         var source = event.getSource();
         int acro = player.getData(VoxeliaAttachments.PLAYER_SKILLS.get()).getLevel(Skill.ACROBATICS);
 
-        double acroMastery = TalentLogic.masteryMultiplier(player, Skill.ACROBATICS);
-
         // Fall damage trains Acrobatics (always, on the full amount) and is softened, not dodged.
         if (source.is(DamageTypes.FALL)) {
             Progression.grant(player, Skill.ACROBATICS, Math.max(2, (int) Math.ceil(event.getAmount() * 2.0)));
-            double reduction = Math.min(0.95, acro * VoxeliaConfig.acrobaticsFallReductionPerLevel() * acroMastery);
+            double reduction = Math.min(0.95, acro * VoxeliaConfig.acrobaticsFallReductionPerLevel()
+                * TalentLogic.fallBonus(player, Skill.ACROBATICS));
             if (reduction > 0) event.setAmount((float) (event.getAmount() * (1.0 - reduction)));
             return;
         }
         // Never dodge unavoidable damage (void, /kill, etc.).
         if (source.is(DamageTypeTags.BYPASSES_INVULNERABILITY)) return;
 
-        double dodge = Math.min(0.95, acro * VoxeliaConfig.acrobaticsDodgePerLevel() * acroMastery);
+        double dodge = Math.min(0.95, acro * VoxeliaConfig.acrobaticsDodgePerLevel()
+            * TalentLogic.signatureBonus(player, Skill.ACROBATICS));
         if (dodge > 0 && player.getRandom().nextDouble() < dodge) {
             event.setCanceled(true);
             player.displayClientMessage(Component.literal("Dodged!").withStyle(ChatFormatting.AQUA), true);
@@ -86,7 +86,7 @@ public final class AbilityEvents {
 
         int level = player.getData(VoxeliaAttachments.PLAYER_SKILLS.get()).getLevel(Skill.FISHING);
         double chance = Math.min(VoxeliaConfig.fishingTreasureChanceMax(),
-            level / 200.0 * TalentLogic.masteryMultiplier(player, Skill.FISHING));
+            level / 200.0 * TalentLogic.treasureBonus(player, Skill.FISHING));
         if (chance > 0 && player.getRandom().nextDouble() < chance) {
             Progression.grant(player, Skill.FISHING, 15); // treasure: bonus XP
             player.giveExperiencePoints(8);
@@ -109,7 +109,7 @@ public final class AbilityEvents {
         if (luck != null) {
             if (isFishing && fishing > 1) {
                 double value = VoxeliaConfig.fishingLuckMax() * t
-                    * TalentLogic.masteryMultiplier(player, Skill.FISHING);
+                    * TalentLogic.signatureBonus(player, Skill.FISHING);
                 AttributeModifier existing = luck.getModifier(FISHING_LUCK_ID);
                 if (existing == null || existing.amount() != value) {
                     luck.removeModifier(FISHING_LUCK_ID);

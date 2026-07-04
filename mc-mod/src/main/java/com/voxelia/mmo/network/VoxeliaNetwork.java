@@ -7,8 +7,7 @@ import com.voxelia.mmo.progression.TalentLogic;
 import com.voxelia.mmo.registry.VoxeliaAttachments;
 import com.voxelia.mmo.skill.PlayerSkills;
 import com.voxelia.mmo.skill.PlayerTalents;
-import com.voxelia.mmo.skill.Skill;
-import com.voxelia.mmo.skill.TalentType;
+import com.voxelia.mmo.skill.Talent;
 import net.minecraft.server.level.ServerPlayer;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
@@ -43,12 +42,10 @@ public final class VoxeliaNetwork {
     }
 
     /** Handle a GUI talent purchase from the client. */
-    public static void handleSpendTalent(ServerPlayer player, int skillOrdinal, int talentOrdinal) {
-        Skill[] skills = Skill.values();
-        TalentType[] types = TalentType.values();
-        if (skillOrdinal < 0 || skillOrdinal >= skills.length) return;
-        if (talentOrdinal < 0 || talentOrdinal >= types.length) return;
-        if (TalentLogic.spend(player, skills[skillOrdinal], types[talentOrdinal])) {
+    public static void handleSpendTalent(ServerPlayer player, int talentOrdinal) {
+        Talent[] talents = Talent.values();
+        if (talentOrdinal < 0 || talentOrdinal >= talents.length) return;
+        if (TalentLogic.spend(player, talents[talentOrdinal])) {
             SkillEffects.apply(player);
             syncTo(player);
             syncTalents(player);

@@ -4,15 +4,15 @@ import com.voxelia.mmo.config.VoxeliaConfig;
 import com.voxelia.mmo.registry.VoxeliaAttachments;
 import com.voxelia.mmo.skill.PlayerTalents;
 import com.voxelia.mmo.skill.Skill;
-import com.voxelia.mmo.skill.TalentType;
+import com.voxelia.mmo.skill.Talent;
 import net.minecraft.server.level.ServerPlayer;
 
-/** Talent points, spending, and the multipliers the rest of the mod reads. */
+/** Talent points, spending, and the per-category multipliers the rest of the mod reads. */
 public final class TalentLogic {
     private TalentLogic() {}
 
-    public static int rank(ServerPlayer p, Skill skill, TalentType type) {
-        return p.getData(VoxeliaAttachments.PLAYER_TALENTS.get()).getRank(skill, type);
+    public static int rank(ServerPlayer p, Talent talent) {
+        return p.getData(VoxeliaAttachments.PLAYER_TALENTS.get()).getRank(talent);
     }
 
     /** Points earned (1 per N skill levels) minus points already spent in that skill. */
@@ -24,11 +24,11 @@ public final class TalentLogic {
     }
 
     /** Try to spend one point into a talent. Returns true on success. */
-    public static boolean spend(ServerPlayer p, Skill skill, TalentType type) {
+    public static boolean spend(ServerPlayer p, Talent talent) {
         PlayerTalents talents = p.getData(VoxeliaAttachments.PLAYER_TALENTS.get());
-        if (talents.getRank(skill, type) >= VoxeliaConfig.talentMaxRank()) return false;
-        if (pointsAvailable(p, skill) <= 0) return false;
-        talents.setRank(skill, type, talents.getRank(skill, type) + 1);
+        if (talents.getRank(talent) >= VoxeliaConfig.talentMaxRank()) return false;
+        if (pointsAvailable(p, talent.skill()) <= 0) return false;
+        talents.setRank(talent, talents.getRank(talent) + 1);
         p.setData(VoxeliaAttachments.PLAYER_TALENTS.get(), talents);
         return true;
     }
@@ -39,16 +39,16 @@ public final class TalentLogic {
         p.setData(VoxeliaAttachments.PLAYER_TALENTS.get(), talents);
     }
 
-    /** XP gain multiplier for a skill from its Prodigy ranks. */
-    public static double prodigyMultiplier(ServerPlayer p, Skill skill) {
-        return 1.0 + rank(p, skill, TalentType.PRODIGY) * VoxeliaConfig.prodigyXpPerRank();
+    /** Multiplier (1.0 = none) from the skill's talent in the given category. */
+    public static double bonus(ServerPlayer p, Skill skill, Talent.Category category) {
+        Talent t = Talent.of(skill, category);
+        return t == null ? 1.0 : t.multiplierAt(rank(p, t));
     }
 
-    /**
-     * Multiplier the skill's signature stat is scaled by from its Mastery ranks.
-     * 1.0 at rank 0, growing by masteryPercentPerRank each rank.
-     */
-    public static double masteryMultiplier(ServerPlayer p, Skill skill) {
-        return 1.0 + rank(p, skill, TalentType.MASTERY) * VoxeliaConfig.masteryPercentPerRank();
-    }
+    public static double xpBonus(ServerPlayer p, Skill skill)        { return bonus(p, skill, Talent.Category.XP); }
+    public static double signatureBonus(ServerPlayer p, Skill skill) { return bonus(p, skill, Talent.Category.SIGNATURE); }
+    public static double fortuneBonus(ServerPlayer p, Skill skill)   { return bonus(p, skill, Talent.Category.FORTUNE); }
+    public static double lifestealBonus(ServerPlayer p, Skill skill) { return bonus(p, skill, Talent.Category.LIFESTEAL); }
+    public static double fallBonus(ServerPlayer p, Skill skill)      { return bonus(p, skill, Talent.Category.FALL); }
+    public static double treasureBonus(ServerPlayer p, Skill skill)  { return bonus(p, skill, Talent.Category.TREASURE); }
 }

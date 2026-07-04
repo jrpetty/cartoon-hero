@@ -13,7 +13,6 @@ import com.voxelia.mmo.registry.VoxeliaAttachments;
 import com.voxelia.mmo.skill.PlayerSkills;
 import com.voxelia.mmo.skill.Skill;
 import com.voxelia.mmo.skill.SkillCurve;
-import com.voxelia.mmo.skill.TalentType;
 import net.minecraft.ChatFormatting;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
@@ -38,9 +37,8 @@ public final class VoxeliaCommands {
                 .then(Commands.literal("talents").executes(VoxeliaCommands::showTalents))
                 .then(Commands.literal("talent")
                     .then(Commands.literal("reset").executes(VoxeliaCommands::resetTalents))
-                    .then(Commands.argument("skill", StringArgumentType.word())
-                        .then(Commands.argument("talent", StringArgumentType.word())
-                            .executes(VoxeliaCommands::spendTalent))))
+                    .then(Commands.argument("talent", StringArgumentType.word())
+                        .executes(VoxeliaCommands::spendTalent)))
                 .then(Commands.literal("grant")
                     .requires(src -> src.hasPermission(2))
                     .then(Commands.argument("skill", StringArgumentType.word())
@@ -140,14 +138,18 @@ public final class VoxeliaCommands {
             .withStyle(ChatFormatting.GOLD), false);
         for (Skill s : Skill.values()) {
             int available = TalentLogic.pointsAvailable(player, s);
-            int prodigy = TalentLogic.rank(player, s, TalentType.PRODIGY);
-            int mastery = TalentLogic.rank(player, s, TalentType.MASTERY);
-            String line = String.format("%s — %d pts  |  Prodigy %d/%d, Mastery %d/%d",
-                s.display(), available, prodigy, max, mastery, max);
+            StringBuilder sb = new StringBuilder(String.format("%s — %d pts  |  ", s.display(), available));
+            var talents = com.voxelia.mmo.skill.Talent.forSkill(s);
+            for (int i = 0; i < talents.size(); i++) {
+                var t = talents.get(i);
+                sb.append(t.display()).append(' ').append(TalentLogic.rank(player, t)).append('/').append(max);
+                if (i < talents.size() - 1) sb.append(", ");
+            }
+            String line = sb.toString();
             src.sendSuccess(() -> Component.literal(line)
                 .withStyle(style -> style.withColor(s.color())), false);
         }
-        src.sendSuccess(() -> Component.literal("Spend with /voxelia talent <skill> <prodigy|mastery>")
+        src.sendSuccess(() -> Component.literal("Spend with /voxelia talent <talentId> (e.g. mining_prospector)")
             .withStyle(ChatFormatting.GRAY), false);
         return 1;
     }
@@ -155,22 +157,23 @@ public final class VoxeliaCommands {
     private static int spendTalent(CommandContext<CommandSourceStack> ctx) {
         ServerPlayer player = ctx.getSource().getPlayer();
         if (player == null) return 0;
-        Skill skill = Skill.byId(StringArgumentType.getString(ctx, "skill"));
-        TalentType type = TalentType.byId(StringArgumentType.getString(ctx, "talent"));
-        if (skill == null || type == null) {
-            ctx.getSource().sendFailure(Component.literal("Usage: /voxelia talent <skill> <prodigy|mastery>"));
+        com.voxelia.mmo.skill.Talent talent =
+            com.voxelia.mmo.skill.Talent.byId(StringArgumentType.getString(ctx, "talent"));
+        if (talent == null) {
+            ctx.getSource().sendFailure(Component.literal(
+                "Unknown talent. Use /voxelia talents to list them (e.g. mining_prospector)."));
             return 0;
         }
-        if (!TalentLogic.spend(player, skill, type)) {
+        if (!TalentLogic.spend(player, talent)) {
             ctx.getSource().sendFailure(Component.literal("Can't spend there (no points or max rank reached)."));
             return 0;
         }
         SkillEffects.apply(player);
         VoxeliaNetwork.syncTo(player);
         VoxeliaNetwork.syncTalents(player);
-        int newRank = TalentLogic.rank(player, skill, type);
+        int newRank = TalentLogic.rank(player, talent);
         ctx.getSource().sendSuccess(() -> Component.literal(
-            skill.display() + " " + type.display() + " is now rank " + newRank + ".")
+            talent.skill().display() + " " + talent.display() + " is now rank " + newRank + ".")
             .withStyle(ChatFormatting.GREEN), false);
         return 1;
     }
