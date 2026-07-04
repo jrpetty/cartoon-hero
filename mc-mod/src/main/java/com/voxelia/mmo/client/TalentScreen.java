@@ -28,8 +28,9 @@ public final class TalentScreen extends Screen {
     private static final int GAP = 6;
     private static final int RIGHT_W = 232;
     private static final int PANEL_W = PAD + SKILL_W + GAP + RIGHT_W + PAD;
-    private static final int CARD_H = 30;
+    private static final int CARD_H = 32;
     private static final int CARD_GAP = 4;
+    private static final int BADGE_W = 24;
 
     private static Skill selectedSkill = Skill.MINING;
 
@@ -84,10 +85,7 @@ public final class TalentScreen extends Screen {
             g.drawString(this.font, s.display(), lx + 7, ry + 3, sel ? 0xFFFFFFFF : color);
 
             int pts = ClientTalents.available(s);
-            if (pts > 0) {
-                String badge = String.valueOf(pts);
-                g.drawString(this.font, badge, lx + SKILL_W - 5 - this.font.width(badge), ry + 3, VoxeliaUi.GOOD);
-            }
+            if (pts > 0) pill(g, lx + SKILL_W - 3, ry + 2, String.valueOf(pts), 0x6EE86E, true);
             SkillRow row = new SkillRow(lx, ry, lx + SKILL_W, ry + SKILL_ROW_H, s);
             skillRows.add(row);
             if (over) hoveredSkill = row;
@@ -100,27 +98,35 @@ public final class TalentScreen extends Screen {
         // ── Right: selected skill's talents ─────────────────────────────────
         int rx = x + PAD + SKILL_W + GAP;
         int available = ClientTalents.available(selectedSkill);
-        g.drawString(this.font, selectedSkill.display() + " Talents",
-            rx, contentTop, 0xFF000000 | selectedSkill.color());
-        String ptsLabel = available + " pt" + (available == 1 ? "" : "s");
-        g.drawString(this.font, ptsLabel, rx + RIGHT_W - this.font.width(ptsLabel), contentTop,
-            available > 0 ? VoxeliaUi.GOOD : VoxeliaUi.DISABLED);
-
         int max = ClientTalents.maxRank();
         List<Talent> talents = Talent.forSkill(selectedSkill);
+
+        // Header: skill name (left) + a points pill and ranks-spent count (right).
+        g.drawString(this.font, selectedSkill.display().toUpperCase(java.util.Locale.ROOT),
+            rx, contentTop, 0xFF000000 | selectedSkill.color());
+        int spent = 0, capped = talents.size() * max;
+        for (Talent t : talents) spent += ClientTalents.rank(t);
+        String spentLabel = spent + "/" + capped;
+        int pillRight = rx + RIGHT_W;
+        int pillLeft = pill(g, pillRight, contentTop - 1,
+            available + (available == 1 ? " point" : " points"),
+            available > 0 ? 0x6EE86E : 0x59636E, available > 0);
+        g.drawString(this.font, spentLabel, pillLeft - 6 - this.font.width(spentLabel), contentTop, VoxeliaUi.MUTED);
+
         Card hoveredCard = null;
         int cardsTop = contentTop + 14;
         for (int i = 0; i < talents.size(); i++) {
             Talent t = talents.get(i);
+            int cat = 0xFF000000 | t.category().color();
             int cy = cardsTop + i * (CARD_H + CARD_GAP);
             int rank = ClientTalents.rank(t);
             boolean canBuy = available > 0 && rank < max;
             boolean maxed = rank >= max;
             boolean over = mouseX >= rx && mouseX < rx + RIGHT_W && mouseY >= cy && mouseY < cy + CARD_H;
 
-            int bg = canBuy ? 0xC01E3326 : (maxed ? 0xC0332C1A : 0xC01A222C);
+            int bg = canBuy ? 0xC01E3326 : (maxed ? 0xC0332C1A : 0xC0161C25);
             g.fill(rx, cy, rx + RIGHT_W, cy + CARD_H, over ? VoxeliaUi.brighten(bg, 22) : bg);
-            g.fill(rx, cy, rx + 3, cy + CARD_H, 0xFF000000 | selectedSkill.color());
+            g.fill(rx, cy, rx + 3, cy + CARD_H, cat); // category accent
             if (canBuy) { // breathing green edge invites the click
                 int a = 0x50 + (int) (0x60 * VoxeliaUi.pulse());
                 int glow = (a << 24) | 0x6EE86E;
@@ -128,26 +134,34 @@ public final class TalentScreen extends Screen {
                 g.fill(rx, cy + CARD_H - 1, rx + RIGHT_W, cy + CARD_H, glow);
             }
 
+            // category badge (colored chip with the short code)
+            int bx = rx + 7, by = cy + (CARD_H - 20) / 2;
+            g.fill(bx, by, bx + BADGE_W, by + 20, cat);
+            g.fill(bx, by, bx + BADGE_W, by + 1, 0x50FFFFFF);
+            g.fill(bx, by + 19, bx + BADGE_W, by + 20, 0x40000000);
+            g.drawCenteredString(this.font, t.code(), bx + BADGE_W / 2, by + 6, 0xFF14181C);
+
+            int tx = bx + BADGE_W + 6;
             // line 1: name + rank
-            g.drawString(this.font, t.display(), rx + 8, cy + 2, maxed ? VoxeliaUi.GOLD : 0xFFFFFFFF);
+            g.drawString(this.font, t.display(), tx, cy + 3, maxed ? VoxeliaUi.GOLD : 0xFFFFFFFF);
             String rankStr = rank + "/" + max;
-            g.drawString(this.font, rankStr, rx + RIGHT_W - 6 - this.font.width(rankStr), cy + 2,
+            g.drawString(this.font, rankStr, rx + RIGHT_W - 6 - this.font.width(rankStr), cy + 3,
                 maxed ? VoxeliaUi.GOLD : VoxeliaUi.MUTED);
 
             // line 2: current concrete bonus (left, trimmed to the pip block) + rank pips (right)
             int pipBlockW = max >= 1 && max <= 10 ? max * 6 + (max - 1) * 2 : 0;
-            int line2W = RIGHT_W - 8 - pipBlockW - 10;
-            g.drawString(this.font, trim(rank > 0 ? t.bonusText(rank) : "No bonus yet", line2W), rx + 8, cy + 11,
-                rank > 0 ? VoxeliaUi.LINK : VoxeliaUi.DISABLED);
-            drawPipsRight(g, rx + RIGHT_W - 6, cy + 12, rank, max, 0xFF000000 | selectedSkill.color());
+            int line2W = rx + RIGHT_W - 6 - pipBlockW - 6 - tx;
+            g.drawString(this.font, trim(rank > 0 ? t.bonusText(rank) : "No bonus yet", line2W), tx, cy + 13,
+                rank > 0 ? cat : VoxeliaUi.DISABLED);
+            drawPipsRight(g, rx + RIGHT_W - 6, cy + 14, rank, max, cat);
 
             // line 3: what the next point buys
             String next;
             int nextColor;
             if (maxed) { next = "Maxed out"; nextColor = VoxeliaUi.GOLD; }
-            else if (canBuy) { next = "Click: " + t.bonusText(rank + 1) + "  (" + t.perRankText() + ")"; nextColor = VoxeliaUi.GOOD; }
-            else { next = "Next: " + t.bonusText(rank + 1) + "  (need a point)"; nextColor = VoxeliaUi.DISABLED; }
-            g.drawString(this.font, trim(next, RIGHT_W - 12), rx + 8, cy + 20, nextColor);
+            else if (canBuy) { next = "Click to raise: " + t.bonusText(rank + 1); nextColor = VoxeliaUi.GOOD; }
+            else { next = "Next: " + t.bonusText(rank + 1) + " · need a point"; nextColor = VoxeliaUi.DISABLED; }
+            g.drawString(this.font, trim(next, rx + RIGHT_W - 6 - tx), tx, cy + 22, nextColor);
 
             Card card = new Card(rx, cy, rx + RIGHT_W, cy + CARD_H, t);
             cards.add(card);
@@ -167,6 +181,24 @@ public final class TalentScreen extends Screen {
                 Component.literal(ClientTalents.available(hoveredSkill.skill) + " point(s) to spend")
                     .withStyle(ChatFormatting.GREEN)), mouseX, mouseY);
         }
+    }
+
+    /** A small rounded pill ending at {@code xRight}; returns its left edge x. */
+    private int pill(GuiGraphics g, int xRight, int y, String text, int rgb, boolean filled) {
+        int w = this.font.width(text) + 8;
+        int x = xRight - w;
+        int col = 0xFF000000 | rgb;
+        if (filled) {
+            g.fill(x + 1, y, xRight - 1, y + 11, col);
+            g.fill(x, y + 1, x + 1, y + 10, col);
+            g.fill(xRight - 1, y + 1, xRight, y + 10, col);
+            g.fill(x + 1, y, xRight - 1, y + 1, 0x50FFFFFF);
+            g.drawString(this.font, text, x + 4, y + 2, 0xFF14181C);
+        } else {
+            g.fill(x + 1, y, xRight - 1, y + 11, 0x30FFFFFF);
+            g.drawString(this.font, text, x + 4, y + 2, col);
+        }
+        return x;
     }
 
     /** Rank pips whose right edge ends at {@code xRight}. */

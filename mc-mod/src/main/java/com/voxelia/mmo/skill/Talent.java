@@ -154,14 +154,20 @@ public enum Talent {
      */
     public enum Category {
         // multiplier / live-handler talents (read via TalentLogic.bonus)
-        SIGNATURE(true), FORTUNE(true), XP(true), LIFESTEAL(true), FALL(true), TREASURE(true),
+        SIGNATURE(true, 0xFFB84D), FORTUNE(true, 0x6ECF57), XP(true, 0x59C7FF), LIFESTEAL(true, 0xE0555F),
+        FALL(true, 0x8FD3FF), TREASURE(true, 0xFFD24D),
         // attribute talents (applied in SkillEffects)
-        SPEED(true), ATTACK_SPEED(true), SUBMERGE(true), SWEEP(true), KB_RESIST(true),
-        HEALTH(false), REACH(false), LUCK(false), ARMOR(false), STEP(false), SAFEFALL(false), OXYGEN(false);
+        SPEED(true, 0x4FE3C0), ATTACK_SPEED(true, 0xFF8A5C), SUBMERGE(true, 0x4FB6E3), SWEEP(true, 0xC08CFF),
+        KB_RESIST(true, 0x9FB0C4),
+        HEALTH(false, 0xFF7A9C), REACH(false, 0xA0E060), LUCK(false, 0xC7E86E), ARMOR(false, 0xB0BAC7),
+        STEP(false, 0xD2B48C), SAFEFALL(false, 0x9BD1FF), OXYGEN(false, 0x66E0E0);
 
         private final boolean percent;
-        Category(boolean percent) { this.percent = percent; }
+        private final int color;
+        Category(boolean percent, int color) { this.percent = percent; this.color = color; }
         public boolean isPercent() { return percent; }
+        /** RGB accent colour for this category (badge/pips). */
+        public int color() { return color; }
     }
 
     private final Skill skill;
