@@ -85,8 +85,8 @@ public enum Talent {
         "Level Farming faster."),
 
     // ── Defense ──────────────────────────────────────────────────────────────
-    DEFENSE_IRONCLAD  (Skill.DEFENSE,  "Ironclad",     "ARM", Category.SIGNATURE, 0.05, "armor, toughness & knockback resist",
-        "All of Defense's protective bonuses grow."),
+    DEFENSE_IRONCLAD  (Skill.DEFENSE,  "Ironclad",     "ARM", Category.SIGNATURE, 0.05, "armor & toughness",
+        "All of Defense's protective bonuses grow (armor, toughness, knockback resist)."),
     DEFENSE_FORTITUDE (Skill.DEFENSE,  "Fortitude",    "VIT", Category.HEALTH,    1.00, "max health",
         "A flat boost to your maximum health."),
     DEFENSE_PRODIGY   (Skill.DEFENSE,  "Prodigy",      "XP",  Category.XP,        0.08, "Defense XP",

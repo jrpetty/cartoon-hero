@@ -130,8 +130,10 @@ public final class TalentScreen extends Screen {
             g.drawString(this.font, rankStr, rx + RIGHT_W - 6 - this.font.width(rankStr), cy + 3,
                 maxed ? VoxeliaUi.GOLD : VoxeliaUi.MUTED);
 
-            // line 2: current concrete bonus (left) + rank pips (right)
-            g.drawString(this.font, rank > 0 ? t.bonusText(rank) : "No bonus yet", rx + 8, cy + 14,
+            // line 2: current concrete bonus (left, trimmed to the pip block) + rank pips (right)
+            int pipBlockW = max >= 1 && max <= 10 ? max * 6 + (max - 1) * 2 : 0;
+            int line2W = RIGHT_W - 8 - pipBlockW - 10;
+            g.drawString(this.font, trim(rank > 0 ? t.bonusText(rank) : "No bonus yet", line2W), rx + 8, cy + 14,
                 rank > 0 ? VoxeliaUi.LINK : VoxeliaUi.DISABLED);
             drawPipsRight(g, rx + RIGHT_W - 6, cy + 15, rank, max, 0xFF000000 | selectedSkill.color());
 
