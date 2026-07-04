@@ -95,6 +95,13 @@ public final class SkillEffects {
                     set(player, Attributes.ENTITY_INTERACTION_RANGE, id(t.id()), v, AttributeModifier.Operation.ADD_VALUE);
                 }
                 case LUCK -> set(player, Attributes.LUCK, id(t.id()), v, AttributeModifier.Operation.ADD_VALUE);
+                case ARMOR -> set(player, Attributes.ARMOR, id(t.id()), v, AttributeModifier.Operation.ADD_VALUE);
+                case KB_RESIST -> set(player, Attributes.KNOCKBACK_RESISTANCE, id(t.id()), v, AttributeModifier.Operation.ADD_VALUE);
+                case STEP -> set(player, Attributes.STEP_HEIGHT, id(t.id()), v, AttributeModifier.Operation.ADD_VALUE);
+                case SAFEFALL -> set(player, Attributes.SAFE_FALL_DISTANCE, id(t.id()), v, AttributeModifier.Operation.ADD_VALUE);
+                case OXYGEN -> set(player, Attributes.OXYGEN_BONUS, id(t.id()), v, AttributeModifier.Operation.ADD_VALUE);
+                case SUBMERGE -> set(player, Attributes.SUBMERGED_MINING_SPEED, id(t.id()), v, AttributeModifier.Operation.ADD_MULTIPLIED_BASE);
+                case SWEEP -> set(player, Attributes.SWEEPING_DAMAGE_RATIO, id(t.id()), v, AttributeModifier.Operation.ADD_VALUE);
                 default -> { /* percent multiplier talents are read live by their handlers */ }
             }
         }
