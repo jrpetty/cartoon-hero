@@ -24,7 +24,7 @@ public enum Talent {
     MINING_REACH      (Skill.MINING, "Deepreach",   "RCH", Category.REACH,     0.15, "reach",
         "Break blocks from farther away."),
     MINING_AQUA       (Skill.MINING, "Aquaminer",   "AQA", Category.SUBMERGE,  0.20, "underwater mining speed",
-        "Mine at full speed even underwater."),
+        "Mine much faster underwater."),
     MINING_PRODIGY    (Skill.MINING, "Prodigy",     "XP",  Category.XP,        0.08, "Mining XP",
         "Level Mining faster."),
 
@@ -48,7 +48,7 @@ public enum Talent {
     EXCAVATION_REACH  (Skill.EXCAVATION, "Earthmover","RCH", Category.REACH,     0.15, "reach",
         "Dig blocks from farther away."),
     EXCAVATION_AQUA   (Skill.EXCAVATION, "Sandhog",   "AQA", Category.SUBMERGE,  0.20, "underwater dig speed",
-        "Dig at full speed even underwater."),
+        "Dig much faster underwater."),
     EXCAVATION_PRODIGY(Skill.EXCAVATION, "Prodigy",   "XP",  Category.XP,        0.08, "Excavation XP",
         "Level Excavation faster."),
 
