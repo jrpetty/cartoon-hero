@@ -28,7 +28,7 @@ public final class TalentScreen extends Screen {
     private static final int GAP = 6;
     private static final int RIGHT_W = 232;
     private static final int PANEL_W = PAD + SKILL_W + GAP + RIGHT_W + PAD;
-    private static final int CARD_H = 46;
+    private static final int CARD_H = 33;
     private static final int CARD_GAP = 4;
 
     private static Skill selectedSkill = Skill.MINING;
@@ -125,17 +125,15 @@ public final class TalentScreen extends Screen {
             }
 
             // line 1: name + rank
-            g.drawString(this.font, t.display(), rx + 8, cy + 4, maxed ? VoxeliaUi.GOLD : 0xFFFFFFFF);
+            g.drawString(this.font, t.display(), rx + 8, cy + 3, maxed ? VoxeliaUi.GOLD : 0xFFFFFFFF);
             String rankStr = rank + "/" + max;
-            g.drawString(this.font, rankStr, rx + RIGHT_W - 6 - this.font.width(rankStr), cy + 4,
+            g.drawString(this.font, rankStr, rx + RIGHT_W - 6 - this.font.width(rankStr), cy + 3,
                 maxed ? VoxeliaUi.GOLD : VoxeliaUi.MUTED);
 
-            // pips
-            drawPips(g, rx + 8, cy + 15, rank, max);
-
-            // line 2: current concrete bonus
-            g.drawString(this.font, rank > 0 ? t.bonusText(rank) : "No bonus yet", rx + 8, cy + 24,
+            // line 2: current concrete bonus (left) + rank pips (right)
+            g.drawString(this.font, rank > 0 ? t.bonusText(rank) : "No bonus yet", rx + 8, cy + 14,
                 rank > 0 ? VoxeliaUi.LINK : VoxeliaUi.DISABLED);
+            drawPipsRight(g, rx + RIGHT_W - 6, cy + 15, rank, max, 0xFF000000 | selectedSkill.color());
 
             // line 3: what the next point buys
             String next;
@@ -143,7 +141,7 @@ public final class TalentScreen extends Screen {
             if (maxed) { next = "Maxed out"; nextColor = VoxeliaUi.GOLD; }
             else if (canBuy) { next = "Click: " + t.bonusText(rank + 1) + "  (" + t.perRankText() + ")"; nextColor = VoxeliaUi.GOOD; }
             else { next = "Next: " + t.bonusText(rank + 1) + "  (need a point)"; nextColor = VoxeliaUi.DISABLED; }
-            g.drawString(this.font, trim(next, RIGHT_W - 12), rx + 8, cy + 35, nextColor);
+            g.drawString(this.font, trim(next, RIGHT_W - 12), rx + 8, cy + 23, nextColor);
 
             Card card = new Card(rx, cy, rx + RIGHT_W, cy + CARD_H, t);
             cards.add(card);
@@ -165,13 +163,15 @@ public final class TalentScreen extends Screen {
         }
     }
 
-    private void drawPips(GuiGraphics g, int x, int y, int rank, int max) {
+    /** Rank pips whose right edge ends at {@code xRight}. */
+    private void drawPipsRight(GuiGraphics g, int xRight, int y, int rank, int max, int fillColor) {
         if (max < 1 || max > 10) return;
-        int pw = 8, gap = 2;
+        int pw = 6, gap = 2;
+        int x = xRight - (max * pw + (max - 1) * gap);
         for (int p = 0; p < max; p++) {
             int px = x + p * (pw + gap);
             if (p < rank) {
-                g.fill(px, y, px + pw, y + 5, 0xFF000000 | selectedSkill.color());
+                g.fill(px, y, px + pw, y + 5, fillColor);
                 g.fill(px, y, px + pw, y + 1, 0x60FFFFFF);
             } else {
                 g.fill(px, y, px + pw, y + 5, 0xFF10161D);

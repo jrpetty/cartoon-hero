@@ -5,6 +5,7 @@ import com.voxelia.mmo.config.VoxeliaConfig;
 import com.voxelia.mmo.registry.VoxeliaAttachments;
 import com.voxelia.mmo.skill.PlayerSkills;
 import com.voxelia.mmo.skill.Skill;
+import com.voxelia.mmo.skill.Talent;
 import net.minecraft.core.Holder;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerPlayer;
@@ -79,6 +80,24 @@ public final class SkillEffects {
             defense * VoxeliaConfig.defenseKnockbackResistPerLevel() * xDefense, AttributeModifier.Operation.ADD_VALUE);
         // (Acrobatics, Fishing, Archery, Alchemy talents scale their event-based
         //  signature stats directly in their handlers — see AbilityEvents etc.)
+
+        // Flat attribute talents (Vitality, Fleetfoot, Deepreach, Juggernaut, Sea Fortune, …).
+        // Each is keyed by its own talent id so they stack per-skill and are idempotent.
+        for (Talent t : Talent.values()) {
+            int r = TalentLogic.rank(player, t);
+            double v = t.flatAt(r);
+            switch (t.category()) {
+                case HEALTH -> set(player, Attributes.MAX_HEALTH, id(t.id()), v, AttributeModifier.Operation.ADD_VALUE);
+                case SPEED -> set(player, Attributes.MOVEMENT_SPEED, id(t.id()), v, AttributeModifier.Operation.ADD_MULTIPLIED_BASE);
+                case ATTACK_SPEED -> set(player, Attributes.ATTACK_SPEED, id(t.id()), v, AttributeModifier.Operation.ADD_MULTIPLIED_BASE);
+                case REACH -> {
+                    set(player, Attributes.BLOCK_INTERACTION_RANGE, id(t.id()), v, AttributeModifier.Operation.ADD_VALUE);
+                    set(player, Attributes.ENTITY_INTERACTION_RANGE, id(t.id()), v, AttributeModifier.Operation.ADD_VALUE);
+                }
+                case LUCK -> set(player, Attributes.LUCK, id(t.id()), v, AttributeModifier.Operation.ADD_VALUE);
+                default -> { /* percent multiplier talents are read live by their handlers */ }
+            }
+        }
 
         // Strip the retired universal-talent modifiers from returning players' saves.
         set(player, Attributes.MAX_HEALTH, VITALITY_ID, 0, AttributeModifier.Operation.ADD_VALUE);
