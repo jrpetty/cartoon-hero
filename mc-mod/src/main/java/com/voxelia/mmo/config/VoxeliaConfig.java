@@ -124,8 +124,8 @@ public final class VoxeliaConfig {
             .defineInRange("lastStandLevel", 20, 0, 100);
         COOKING_FEAST_LEVEL = b.comment("Cooking: level that unlocks Well Fed — a short regeneration after eating (0 disables).")
             .defineInRange("cookingWellFedLevel", 20, 0, 100);
-        DEATH_XP_LOSS = b.comment("Fraction of EVERY skill's XP lost on death (0.0 = keep everything, 0.1 = lose 10%, can drop levels).")
-            .defineInRange("deathXpLossPercent", 0.05, 0.0, 1.0);
+        DEATH_XP_LOSS = b.comment("Fraction of EVERY skill's XP lost on death (0.0 = keep everything, 0.2 = lose 20%, can drop levels).")
+            .defineInRange("deathXpLossPercent", 0.20, 0.0, 1.0);
         b.pop();
 
         b.comment("Mob Mastery / Bestiary — repeatedly killing a mob type grants a bonus vs that type.").push("mastery");
@@ -165,7 +165,7 @@ public final class VoxeliaConfig {
         MEAL_LEVEL = b.comment("Farming: Hearty Meal unlock level (0 disables).").defineInRange("heartyMealLevel", 20, 0, 100);
         MEAL_COOLDOWN = b.comment("Hearty Meal cooldown (seconds).").defineInRange("heartyMealCooldownSeconds", 60, 1, 3600);
         MAELSTROM_LEVEL = b.comment("Fishing: Maelstrom unlock level (0 disables).").defineInRange("maelstromLevel", 15, 0, 100);
-        MAELSTROM_COOLDOWN = b.comment("Maelstrom cooldown (seconds).").defineInRange("maelstromCooldownSeconds", 45, 1, 3600);
+        MAELSTROM_COOLDOWN = b.comment("Maelstrom cooldown (seconds).").defineInRange("maelstromCooldownSeconds", 90, 1, 3600);
         EXCAVATE_LEVEL = b.comment("Excavation: Excavate (mass-dig) unlock level (0 disables).").defineInRange("excavateLevel", 30, 0, 100);
         EXCAVATE_COOLDOWN = b.comment("Excavate cooldown (seconds).").defineInRange("excavateCooldownSeconds", 180, 1, 3600);
         BULWARK_LEVEL = b.comment("Defense: Bulwark (deflect) unlock level (0 disables).").defineInRange("bulwarkLevel", 30, 0, 100);
