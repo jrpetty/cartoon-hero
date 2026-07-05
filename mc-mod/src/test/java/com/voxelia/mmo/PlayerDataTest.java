@@ -8,9 +8,23 @@ import com.voxelia.mmo.skill.Talent;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /** The plain per-player data holders behave correctly (no game runtime needed). */
 class PlayerDataTest {
+
+    @Test
+    void deathPenaltyDropsLevelsNotJustXp() {
+        PlayerSkills ps = new PlayerSkills();
+        ps.addXp(Skill.MINING, SkillCurve.xpForLevel(20)); // sit exactly at level 20
+        assertEquals(20, ps.getLevel(Skill.MINING));
+
+        ps.loseFraction(0.20); // the 20% death penalty
+
+        assertTrue(ps.getXp(Skill.MINING) < SkillCurve.xpForLevel(20), "xp must drop");
+        assertTrue(ps.getLevel(Skill.MINING) < 20,
+            "losing 20% xp must actually drop the level, not just the bar");
+    }
 
     @Test
     void freshSkillsStartAtLevelOne() {
