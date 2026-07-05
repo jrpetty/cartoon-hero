@@ -60,6 +60,16 @@ public final class VoxeliaConfig {
     private static final ModConfigSpec.IntValue MEAL_COOLDOWN;
     private static final ModConfigSpec.IntValue REEL_LEVEL;
     private static final ModConfigSpec.IntValue REEL_COOLDOWN;
+    private static final ModConfigSpec.IntValue EXCAVATE_LEVEL;
+    private static final ModConfigSpec.IntValue EXCAVATE_COOLDOWN;
+    private static final ModConfigSpec.IntValue BULWARK_LEVEL;
+    private static final ModConfigSpec.IntValue BULWARK_COOLDOWN;
+    private static final ModConfigSpec.IntValue FEAST_LEVEL;
+    private static final ModConfigSpec.IntValue FEAST_COOLDOWN;
+    private static final ModConfigSpec.IntValue PANACEA_LEVEL;
+    private static final ModConfigSpec.IntValue PANACEA_COOLDOWN;
+    private static final ModConfigSpec.IntValue VOLLEY_LEVEL;
+    private static final ModConfigSpec.IntValue VOLLEY_COOLDOWN;
 
     static {
         ModConfigSpec.Builder b = new ModConfigSpec.Builder();
@@ -142,7 +152,8 @@ public final class VoxeliaConfig {
             .defineInRange("maxRank", 5, 1, 100);
         b.pop();
 
-        b.comment("Active abilities for the original six skills (cooldown-balanced).").push("abilities");
+        b.comment("Active keybind abilities (cooldown-balanced). The newer skills' 'ultimates' are "
+            + "powerful but sit on long cooldowns.").push("abilities");
         FRENZY_LEVEL = b.comment("Combat: Frenzy unlock level (0 disables).").defineInRange("frenzyLevel", 20, 0, 100);
         FRENZY_COOLDOWN = b.comment("Frenzy cooldown (seconds).").defineInRange("frenzyCooldownSeconds", 50, 1, 3600);
         LEAP_LEVEL = b.comment("Acrobatics: Leap unlock level (0 disables).").defineInRange("leapLevel", 15, 0, 100);
@@ -155,6 +166,16 @@ public final class VoxeliaConfig {
         MEAL_COOLDOWN = b.comment("Hearty Meal cooldown (seconds).").defineInRange("heartyMealCooldownSeconds", 60, 1, 3600);
         REEL_LEVEL = b.comment("Fishing: Reel unlock level (0 disables).").defineInRange("reelLevel", 15, 0, 100);
         REEL_COOLDOWN = b.comment("Reel cooldown (seconds).").defineInRange("reelCooldownSeconds", 8, 1, 3600);
+        EXCAVATE_LEVEL = b.comment("Excavation: Excavate (mass-dig) unlock level (0 disables).").defineInRange("excavateLevel", 30, 0, 100);
+        EXCAVATE_COOLDOWN = b.comment("Excavate cooldown (seconds).").defineInRange("excavateCooldownSeconds", 180, 1, 3600);
+        BULWARK_LEVEL = b.comment("Defense: Bulwark (deflect) unlock level (0 disables).").defineInRange("bulwarkLevel", 30, 0, 100);
+        BULWARK_COOLDOWN = b.comment("Bulwark cooldown (seconds) — a powerful 5s deflect, so a long cooldown.").defineInRange("bulwarkCooldownSeconds", 300, 1, 3600);
+        FEAST_LEVEL = b.comment("Cooking: Feast (full heal) unlock level (0 disables).").defineInRange("feastLevel", 30, 0, 100);
+        FEAST_COOLDOWN = b.comment("Feast cooldown (seconds).").defineInRange("feastCooldownSeconds", 180, 1, 3600);
+        PANACEA_LEVEL = b.comment("Alchemy: Panacea (cleanse + ward) unlock level (0 disables).").defineInRange("panaceaLevel", 30, 0, 100);
+        PANACEA_COOLDOWN = b.comment("Panacea cooldown (seconds).").defineInRange("panaceaCooldownSeconds", 180, 1, 3600);
+        VOLLEY_LEVEL = b.comment("Archery: Volley (arrow fan) unlock level (0 disables).").defineInRange("volleyLevel", 30, 0, 100);
+        VOLLEY_COOLDOWN = b.comment("Volley cooldown (seconds).").defineInRange("volleyCooldownSeconds", 150, 1, 3600);
         b.pop();
 
         SPEC = b.build();
@@ -205,4 +226,14 @@ public final class VoxeliaConfig {
     public static int heartyMealCooldownSeconds() { return MEAL_COOLDOWN.get(); }
     public static int reelLevel()              { return REEL_LEVEL.get(); }
     public static int reelCooldownSeconds()    { return REEL_COOLDOWN.get(); }
+    public static int excavateLevel()          { return EXCAVATE_LEVEL.get(); }
+    public static int excavateCooldownSeconds(){ return EXCAVATE_COOLDOWN.get(); }
+    public static int bulwarkLevel()           { return BULWARK_LEVEL.get(); }
+    public static int bulwarkCooldownSeconds() { return BULWARK_COOLDOWN.get(); }
+    public static int feastLevel()             { return FEAST_LEVEL.get(); }
+    public static int feastCooldownSeconds()   { return FEAST_COOLDOWN.get(); }
+    public static int panaceaLevel()           { return PANACEA_LEVEL.get(); }
+    public static int panaceaCooldownSeconds() { return PANACEA_COOLDOWN.get(); }
+    public static int volleyLevel()            { return VOLLEY_LEVEL.get(); }
+    public static int volleyCooldownSeconds()  { return VOLLEY_COOLDOWN.get(); }
 }

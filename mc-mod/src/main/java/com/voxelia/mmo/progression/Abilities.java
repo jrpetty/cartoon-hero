@@ -13,16 +13,22 @@ import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.sounds.SoundEvent;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
+import net.minecraft.tags.BlockTags;
+import net.minecraft.world.effect.MobEffectCategory;
 import net.minecraft.world.effect.MobEffectInstance;
 import net.minecraft.world.effect.MobEffects;
 import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.projectile.AbstractArrow;
+import net.minecraft.world.entity.projectile.Arrow;
 import net.minecraft.world.entity.projectile.FishingHook;
 import net.minecraft.world.item.BoneMealItem;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
+import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.Vec3;
 import net.neoforged.neoforge.network.PacketDistributor;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
@@ -37,6 +43,14 @@ public final class Abilities {
 
     // playerUUID -> next-allowed game time, one slot per skill ordinal
     private static final Map<UUID, long[]> COOLDOWNS = new HashMap<>();
+    // playerUUID -> game time until which Defense's Bulwark deflect is active
+    private static final Map<UUID, Long> BULWARK_UNTIL = new HashMap<>();
+
+    /** True while the player's Bulwark deflect window is open (read by the damage handler). */
+    public static boolean isBulwarkActive(ServerPlayer p) {
+        Long until = BULWARK_UNTIL.get(p.getUUID());
+        return until != null && until > p.level().getGameTime();
+    }
 
     public static void trigger(ServerPlayer p, int skillOrdinal) {
         Skill[] all = Skill.values();
@@ -48,6 +62,11 @@ public final class Abilities {
             case FARMING    -> cast(p, Skill.FARMING, VoxeliaConfig.heartyMealLevel(), VoxeliaConfig.heartyMealCooldownSeconds(), () -> heartyMeal(p));
             case ACROBATICS -> cast(p, Skill.ACROBATICS, VoxeliaConfig.leapLevel(), VoxeliaConfig.leapCooldownSeconds(), () -> leap(p));
             case FISHING    -> cast(p, Skill.FISHING, VoxeliaConfig.reelLevel(), VoxeliaConfig.reelCooldownSeconds(), () -> reel(p));
+            case EXCAVATION -> cast(p, Skill.EXCAVATION, VoxeliaConfig.excavateLevel(), VoxeliaConfig.excavateCooldownSeconds(), () -> excavate(p));
+            case DEFENSE    -> cast(p, Skill.DEFENSE, VoxeliaConfig.bulwarkLevel(), VoxeliaConfig.bulwarkCooldownSeconds(), () -> bulwark(p));
+            case COOKING    -> cast(p, Skill.COOKING, VoxeliaConfig.feastLevel(), VoxeliaConfig.feastCooldownSeconds(), () -> feast(p));
+            case ALCHEMY    -> cast(p, Skill.ALCHEMY, VoxeliaConfig.panaceaLevel(), VoxeliaConfig.panaceaCooldownSeconds(), () -> panacea(p));
+            case ARCHERY    -> cast(p, Skill.ARCHERY, VoxeliaConfig.volleyLevel(), VoxeliaConfig.volleyCooldownSeconds(), () -> volley(p));
         }
     }
 
@@ -149,5 +168,69 @@ public final class Abilities {
             p.fallDistance = 0.0f;
         }
         return announce(p, "Reel", ChatFormatting.AQUA, SoundEvents.FISHING_BOBBER_RETRIEVE, 1.4f);
+    }
+
+    // ---- ultimates for the newer skills (powerful, long cooldowns) ----
+
+    /** Excavation: instantly clear the shovel-mineable blocks around you (drops included). */
+    private static boolean excavate(ServerPlayer p) {
+        ServerLevel level = p.serverLevel();
+        BlockPos center = p.blockPosition();
+        int radius = 3, broken = 0, cap = 120;
+        for (BlockPos pos : BlockPos.betweenClosed(center.offset(-radius, -radius, -radius),
+                center.offset(radius, radius, radius))) {
+            if (broken >= cap) break;
+            BlockState st = level.getBlockState(pos);
+            if (st.isAir() || !st.is(BlockTags.MINEABLE_WITH_SHOVEL)) continue;
+            if (st.getDestroySpeed(level, pos) < 0) continue; // unbreakable (bedrock, etc.)
+            if (level.destroyBlock(pos.immutable(), true, p)) broken++;
+        }
+        if (broken == 0) {
+            p.displayClientMessage(Component.literal("Nothing to excavate here").withStyle(ChatFormatting.GRAY), true);
+            return false;
+        }
+        return announce(p, "Excavate", ChatFormatting.GOLD, SoundEvents.SHOVEL_FLATTEN, 0.8f);
+    }
+
+    /** Defense: a 5-second deflect — take almost no damage and reflect the blow (see AbilityEvents). */
+    private static boolean bulwark(ServerPlayer p) {
+        BULWARK_UNTIL.put(p.getUUID(), p.level().getGameTime() + 100L); // 5 seconds
+        p.addEffect(new MobEffectInstance(MobEffects.MOVEMENT_SLOWDOWN, 100, 1, false, true, true)); // planted
+        return announce(p, "Bulwark", ChatFormatting.AQUA, SoundEvents.ANVIL_LAND, 0.8f);
+    }
+
+    /** Cooking: a full heal, refilled hunger, and a short regen + absorption. */
+    private static boolean feast(ServerPlayer p) {
+        p.heal(p.getMaxHealth());
+        p.addEffect(new MobEffectInstance(MobEffects.SATURATION, 60, 4, false, false, true));  // refill hunger
+        p.addEffect(new MobEffectInstance(MobEffects.REGENERATION, 100, 1, false, true, true));
+        p.addEffect(new MobEffectInstance(MobEffects.ABSORPTION, 300, 1, false, true, true));   // +4 hearts, 15s
+        return announce(p, "Feast", ChatFormatting.GOLD, SoundEvents.PLAYER_BURP, 1.0f);
+    }
+
+    /** Alchemy: cleanse every harmful effect and ward yourself briefly. */
+    private static boolean panacea(ServerPlayer p) {
+        for (MobEffectInstance e : new ArrayList<>(p.getActiveEffects())) {
+            if (e.getEffect().value().getCategory() == MobEffectCategory.HARMFUL) p.removeEffect(e.getEffect());
+        }
+        p.addEffect(new MobEffectInstance(MobEffects.REGENERATION, 100, 1, false, true, true));
+        p.addEffect(new MobEffectInstance(MobEffects.DAMAGE_RESISTANCE, 160, 1, false, true, true)); // Resistance II, 8s
+        p.addEffect(new MobEffectInstance(MobEffects.FIRE_RESISTANCE, 600, 0, false, true, true));
+        return announce(p, "Panacea", ChatFormatting.LIGHT_PURPLE, SoundEvents.BREWING_STAND_BREW, 1.4f);
+    }
+
+    /** Archery: loose a fan of seven arrows in the direction you're facing. */
+    private static boolean volley(ServerPlayer p) {
+        ServerLevel level = p.serverLevel();
+        int count = 7;
+        for (int i = 0; i < count; i++) {
+            float spread = (i - count / 2) * 8.0f; // -24° .. +24°
+            Arrow arrow = new Arrow(level, p, new ItemStack(Items.ARROW), null);
+            arrow.shootFromRotation(p, p.getXRot(), p.getYRot() + spread, 0.0f, 3.0f, 0.5f);
+            arrow.setBaseDamage(6.0);
+            arrow.pickup = AbstractArrow.Pickup.DISALLOWED; // no free-arrow farming
+            level.addFreshEntity(arrow);
+        }
+        return announce(p, "Volley", ChatFormatting.DARK_GREEN, SoundEvents.ARROW_SHOOT, 1.0f);
     }
 }

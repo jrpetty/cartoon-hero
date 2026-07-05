@@ -2,6 +2,7 @@ package com.voxelia.mmo.event;
 
 import com.voxelia.mmo.VoxeliaMMO;
 import com.voxelia.mmo.config.VoxeliaConfig;
+import com.voxelia.mmo.progression.Abilities;
 import com.voxelia.mmo.progression.Progression;
 import com.voxelia.mmo.progression.TalentLogic;
 import com.voxelia.mmo.registry.VoxeliaAttachments;
@@ -16,6 +17,7 @@ import net.minecraft.tags.DamageTypeTags;
 import net.minecraft.world.damagesource.DamageTypes;
 import net.minecraft.world.effect.MobEffectInstance;
 import net.minecraft.world.effect.MobEffects;
+import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.ai.attributes.AttributeInstance;
 import net.minecraft.world.entity.ai.attributes.AttributeModifier;
 import net.minecraft.world.entity.ai.attributes.Attributes;
@@ -55,6 +57,16 @@ public final class AbilityEvents {
         }
         // Unavoidable damage (void, /kill, etc.) doesn't train Defense.
         if (source.is(DamageTypeTags.BYPASSES_INVULNERABILITY)) return;
+
+        // Defense "Bulwark" ultimate: for its window, reflect the blow and shrug off most of it.
+        // Skip THORNS so a reflected hit can't bounce back and forth.
+        if (Abilities.isBulwarkActive(player) && !source.is(DamageTypes.THORNS)) {
+            float amt = event.getAmount();
+            if (source.getEntity() instanceof LivingEntity attacker && attacker != player) {
+                attacker.hurt(player.damageSources().thorns(player), amt);
+            }
+            event.setAmount(amt * 0.1f);
+        }
 
         // Defense trains from actually taking a hit.
         Progression.grant(player, Skill.DEFENSE, Math.min(20, Math.max(1, (int) Math.ceil(event.getAmount()))));
