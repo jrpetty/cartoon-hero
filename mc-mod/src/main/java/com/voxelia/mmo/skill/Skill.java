@@ -14,7 +14,7 @@ public enum Skill implements StringRepresentable {
     COMBAT("combat", 0xEF5350, "Frenzy", true, "Warrior"),
     FARMING("farming", 0xFFD54F, "Hearty Meal", true, "Farmer"),
     ACROBATICS("acrobatics", 0x4FC3F7, "Leap", true, "Acrobat"),
-    FISHING("fishing", 0x4DD0E1, "Reel", true, "Angler"),
+    FISHING("fishing", 0x4DD0E1, "Maelstrom", true, "Angler"),
     EXCAVATION("excavation", 0xC8A064, "Excavate", true, "Excavator"),
     DEFENSE("defense", 0x90A4AE, "Bulwark", true, "Guardian"),
     COOKING("cooking", 0xFF8A65, "Feast", true, "Chef"),

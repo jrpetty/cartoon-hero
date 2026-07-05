@@ -58,8 +58,8 @@ public final class VoxeliaConfig {
     private static final ModConfigSpec.IntValue OVERGROWTH_COOLDOWN;
     private static final ModConfigSpec.IntValue MEAL_LEVEL;
     private static final ModConfigSpec.IntValue MEAL_COOLDOWN;
-    private static final ModConfigSpec.IntValue REEL_LEVEL;
-    private static final ModConfigSpec.IntValue REEL_COOLDOWN;
+    private static final ModConfigSpec.IntValue MAELSTROM_LEVEL;
+    private static final ModConfigSpec.IntValue MAELSTROM_COOLDOWN;
     private static final ModConfigSpec.IntValue EXCAVATE_LEVEL;
     private static final ModConfigSpec.IntValue EXCAVATE_COOLDOWN;
     private static final ModConfigSpec.IntValue BULWARK_LEVEL;
@@ -164,8 +164,8 @@ public final class VoxeliaConfig {
         OVERGROWTH_COOLDOWN = b.comment("Overgrowth cooldown (seconds).").defineInRange("overgrowthCooldownSeconds", 45, 1, 3600);
         MEAL_LEVEL = b.comment("Farming: Hearty Meal unlock level (0 disables).").defineInRange("heartyMealLevel", 20, 0, 100);
         MEAL_COOLDOWN = b.comment("Hearty Meal cooldown (seconds).").defineInRange("heartyMealCooldownSeconds", 60, 1, 3600);
-        REEL_LEVEL = b.comment("Fishing: Reel unlock level (0 disables).").defineInRange("reelLevel", 15, 0, 100);
-        REEL_COOLDOWN = b.comment("Reel cooldown (seconds).").defineInRange("reelCooldownSeconds", 8, 1, 3600);
+        MAELSTROM_LEVEL = b.comment("Fishing: Maelstrom unlock level (0 disables).").defineInRange("maelstromLevel", 15, 0, 100);
+        MAELSTROM_COOLDOWN = b.comment("Maelstrom cooldown (seconds).").defineInRange("maelstromCooldownSeconds", 45, 1, 3600);
         EXCAVATE_LEVEL = b.comment("Excavation: Excavate (mass-dig) unlock level (0 disables).").defineInRange("excavateLevel", 30, 0, 100);
         EXCAVATE_COOLDOWN = b.comment("Excavate cooldown (seconds).").defineInRange("excavateCooldownSeconds", 180, 1, 3600);
         BULWARK_LEVEL = b.comment("Defense: Bulwark (deflect) unlock level (0 disables).").defineInRange("bulwarkLevel", 30, 0, 100);
@@ -224,8 +224,8 @@ public final class VoxeliaConfig {
     public static int overgrowthCooldownSeconds() { return OVERGROWTH_COOLDOWN.get(); }
     public static int heartyMealLevel()        { return MEAL_LEVEL.get(); }
     public static int heartyMealCooldownSeconds() { return MEAL_COOLDOWN.get(); }
-    public static int reelLevel()              { return REEL_LEVEL.get(); }
-    public static int reelCooldownSeconds()    { return REEL_COOLDOWN.get(); }
+    public static int maelstromLevel()         { return MAELSTROM_LEVEL.get(); }
+    public static int maelstromCooldownSeconds(){ return MAELSTROM_COOLDOWN.get(); }
     public static int excavateLevel()          { return EXCAVATE_LEVEL.get(); }
     public static int excavateCooldownSeconds(){ return EXCAVATE_COOLDOWN.get(); }
     public static int bulwarkLevel()           { return BULWARK_LEVEL.get(); }

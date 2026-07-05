@@ -17,10 +17,9 @@ import net.minecraft.tags.BlockTags;
 import net.minecraft.world.effect.MobEffectCategory;
 import net.minecraft.world.effect.MobEffectInstance;
 import net.minecraft.world.effect.MobEffects;
-import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.projectile.AbstractArrow;
 import net.minecraft.world.entity.projectile.Arrow;
-import net.minecraft.world.entity.projectile.FishingHook;
 import net.minecraft.world.item.BoneMealItem;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
@@ -61,7 +60,7 @@ public final class Abilities {
             case COMBAT     -> cast(p, Skill.COMBAT, VoxeliaConfig.frenzyLevel(), VoxeliaConfig.frenzyCooldownSeconds(), () -> frenzy(p));
             case FARMING    -> cast(p, Skill.FARMING, VoxeliaConfig.heartyMealLevel(), VoxeliaConfig.heartyMealCooldownSeconds(), () -> heartyMeal(p));
             case ACROBATICS -> cast(p, Skill.ACROBATICS, VoxeliaConfig.leapLevel(), VoxeliaConfig.leapCooldownSeconds(), () -> leap(p));
-            case FISHING    -> cast(p, Skill.FISHING, VoxeliaConfig.reelLevel(), VoxeliaConfig.reelCooldownSeconds(), () -> reel(p));
+            case FISHING    -> cast(p, Skill.FISHING, VoxeliaConfig.maelstromLevel(), VoxeliaConfig.maelstromCooldownSeconds(), () -> maelstrom(p));
             case EXCAVATION -> cast(p, Skill.EXCAVATION, VoxeliaConfig.excavateLevel(), VoxeliaConfig.excavateCooldownSeconds(), () -> excavate(p));
             case DEFENSE    -> cast(p, Skill.DEFENSE, VoxeliaConfig.bulwarkLevel(), VoxeliaConfig.bulwarkCooldownSeconds(), () -> bulwark(p));
             case COOKING    -> cast(p, Skill.COOKING, VoxeliaConfig.feastLevel(), VoxeliaConfig.feastCooldownSeconds(), () -> feast(p));
@@ -150,24 +149,28 @@ public final class Abilities {
         return announce(p, "Leap", ChatFormatting.AQUA, SoundEvents.PHANTOM_FLAP, 1.5f);
     }
 
-    private static boolean reel(ServerPlayer p) {
-        FishingHook hook = p.fishing;
-        if (hook == null) {
-            p.displayClientMessage(Component.literal("Cast a line first").withStyle(ChatFormatting.GRAY), true);
+    /** Fishing: a whirlpool that drags every nearby creature toward you and slows them. */
+    private static boolean maelstrom(ServerPlayer p) {
+        ServerLevel level = p.serverLevel();
+        double radius = 10.0;
+        var targets = level.getEntitiesOfClass(LivingEntity.class, p.getBoundingBox().inflate(radius),
+            e -> e != p && e.isAlive() && !e.isSpectator());
+        if (targets.isEmpty()) {
+            p.displayClientMessage(Component.literal("No creatures caught in the current").withStyle(ChatFormatting.GRAY), true);
             return false;
         }
-        Entity hooked = hook.getHookedIn();
-        if (hooked != null) {
-            Vec3 pull = p.position().subtract(hooked.position()).normalize().scale(1.2);
-            hooked.setDeltaMovement(pull.x, pull.y + 0.3, pull.z);
-            hooked.hurtMarked = true;
-        } else {
-            Vec3 pull = hook.position().subtract(p.position()).normalize().scale(0.9);
-            p.setDeltaMovement(pull.x, pull.y + 0.3, pull.z);
-            p.hurtMarked = true;
-            p.fallDistance = 0.0f;
+        for (LivingEntity e : targets) {
+            Vec3 toPlayer = p.position().subtract(e.position());
+            double dist = toPlayer.length();
+            if (dist < 0.1) continue;
+            Vec3 vel = toPlayer.normalize().scale(Math.min(1.4, 0.4 + dist * 0.11));
+            e.setDeltaMovement(vel.x, Math.max(0.25, vel.y + 0.25), vel.z);
+            e.hurtMarked = true; // sync the pull to clients (matters for players too)
+            e.addEffect(new MobEffectInstance(MobEffects.MOVEMENT_SLOWDOWN, 60, 1, false, true, true));
         }
-        return announce(p, "Reel", ChatFormatting.AQUA, SoundEvents.FISHING_BOBBER_RETRIEVE, 1.4f);
+        level.sendParticles(ParticleTypes.BUBBLE, p.getX(), p.getY() + 0.2, p.getZ(),
+            60, radius / 2.0, 0.4, radius / 2.0, 0.1);
+        return announce(p, "Maelstrom", ChatFormatting.AQUA, SoundEvents.FISHING_BOBBER_RETRIEVE, 0.7f);
     }
 
     // ---- ultimates for the newer skills (powerful, long cooldowns) ----
