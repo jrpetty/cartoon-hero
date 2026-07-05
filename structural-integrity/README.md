@@ -305,3 +305,50 @@ Remaining boundaries (documented, lower-impact, want in-world testing before cha
   uses boxed `long` keys (clusters are capped, so this is minor). A very large connected build can
   exceed `maxRegionNodes` and is then treated as stable (logged at debug).
 - Weight/load accumulation is intentionally absent — span is the single, predictable knob.
+
+## 10. Roadmap — candidate features
+
+A backlog of novel, on-theme ideas that reuse the span/load-path math (not yet built). Each stays
+deterministic, local, and gameplay-rule-first.
+
+**New load-graph primitives (blocks)**
+- **Keystone** — a span-1 block that promotes to a full anchor the moment it gets support from two
+  opposing sides within span; completing an arch makes the structure "set." (Monotone → still a
+  deterministic fixpoint.) ⭐ high-impact, self-contained.
+- **Diode beam** — conducts reach one direction only; lets you deliberately starve a wing.
+- **Load splitter** — one strong feed in, three fixed modest branches out (a routing hub).
+- **Support relay** — transmits load only while redstone-powered: switchable bridges, drop-floors.
+- **Curing concrete** — placed weak, ramps a tier at a time only while continuously supported
+  ("scaffold a span, let it cure, pull the scaffold").
+
+**Anchors & load as economy**
+- **Finite-reach anchors** — foundations grant a *number* (Stake 8, Foundation 64, Bedrock ∞)
+  instead of infinite CAP. One-line change to the Dijkstra seed; big design space. ⭐
+- **Span permits** — a consumable that raises a *chunk's* allowed span tier (area license, not
+  block ownership).
+
+**Failure as a designed tool**
+- **Sacrificial strut ("fuse")** — pre-mark blocks the solver drops first; authored controlled failure.
+- **Keystone demolition** — a charge that reads out how many blocks depend on this one (solver diff
+  with it as air) as a redstone signal, then pulls exactly that span on command.
+
+**Span-literate threats**
+- **Sapper mobs** — mine your lowest-reach load-bearing block (the keystone), then re-query.
+- **Undermine burrowers** — eat the natural ground anchor beneath a pillar's feet.
+- **Overload-by-crowd** — mobs crowd a cantilever; each on a block applies a flat −1 span, so a
+  horde drops the bridge from under itself. (Occupancy is an integer modifier, not weight.)
+
+**Solver as a side-channel**
+- **Spawn-proof by suspension** — maxed cantilever tips (reach 0) read as precarious → no mob spawns.
+- **Structure-validated multiblocks** — a machine powers on only because it genuinely stands as one
+  load path (any shape); switches off when a buttress is mined.
+- **Public solver API + datapack rulesets** — reloadable span JSON plus `isSupported` /
+  `remainingReachAt` and a "support flipped" event for other mods/maps.
+
+**Environment as a span input**
+- **Snow load** — each snow layer subtracts a flat integer from a block's span (the disciplined,
+  non-accumulating way to admit "load from above"); a seasonal roof-upkeep loop.
+- **Mineshaft integrity** — apply the cantilever rule to *mined-out* ceilings: player-dug tunnels
+  wider than the ceiling's span cave in unless timbered. Integrity governs removal, not just building.
+- **Pre-stressed ruins / donated anchors** — worldgen structures born at reach 0 (stable until
+  disturbed) and mid-air/cliff foundation features to bridge off during exploration.
