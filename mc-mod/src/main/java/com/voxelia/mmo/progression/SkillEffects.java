@@ -20,7 +20,7 @@ import net.minecraft.world.entity.ai.attributes.Attributes;
  *   Farming  -> max health
  *   Mining   -> block break speed
  *   Foraging -> block break speed
- * (Acrobatics' dodge and Fishing's perks are handled live in AbilityEvents.)
+ * (Fishing's perks and Acrobatics' fall softening are handled live in AbilityEvents.)
  *
  * Idempotent: modifiers are keyed by stable ids, so re-applying replaces them.
  * Called on level-up, login, and respawn.
@@ -36,6 +36,7 @@ public final class SkillEffects {
     private static final ResourceLocation DEF_ARMOR_ID     = id("defense_armor");
     private static final ResourceLocation DEF_TOUGH_ID     = id("defense_toughness");
     private static final ResourceLocation DEF_KB_ID        = id("defense_knockback");
+    private static final ResourceLocation ACRO_JUMP_ID     = id("acrobatics_jump");
     private static final ResourceLocation VITALITY_ID      = id("talent_vitality");
     private static final ResourceLocation SWIFTNESS_ID     = id("talent_swiftness");
     private static final ResourceLocation TOUGHNESS_ID     = id("talent_toughness");
@@ -53,6 +54,7 @@ public final class SkillEffects {
         int foraging = s.getLevel(Skill.FORAGING) - 1;
         int excav    = s.getLevel(Skill.EXCAVATION) - 1;
         int defense  = s.getLevel(Skill.DEFENSE) - 1;
+        int acro     = s.getLevel(Skill.ACROBATICS) - 1;
 
         // A skill's signature talent scales its signature stat (the same stat shown in /voxelia stats).
         double xCombat = TalentLogic.signatureBonus(player, Skill.COMBAT);
@@ -61,6 +63,7 @@ public final class SkillEffects {
         double xForaging = TalentLogic.signatureBonus(player, Skill.FORAGING);
         double xExcav = TalentLogic.signatureBonus(player, Skill.EXCAVATION);
         double xDefense = TalentLogic.signatureBonus(player, Skill.DEFENSE);
+        double xAcro = TalentLogic.signatureBonus(player, Skill.ACROBATICS);
 
         set(player, Attributes.ATTACK_DAMAGE, DAMAGE_ID,
             combat * VoxeliaConfig.combatDamagePerLevel() * xCombat, AttributeModifier.Operation.ADD_VALUE);
@@ -78,7 +81,9 @@ public final class SkillEffects {
             defense * VoxeliaConfig.defenseToughnessPerLevel() * xDefense, AttributeModifier.Operation.ADD_VALUE);
         set(player, Attributes.KNOCKBACK_RESISTANCE, DEF_KB_ID,
             defense * VoxeliaConfig.defenseKnockbackResistPerLevel() * xDefense, AttributeModifier.Operation.ADD_VALUE);
-        // (Acrobatics, Fishing, Archery, Alchemy talents scale their event-based
+        set(player, Attributes.JUMP_STRENGTH, ACRO_JUMP_ID,
+            acro * VoxeliaConfig.acrobaticsJumpPerLevel() * xAcro, AttributeModifier.Operation.ADD_VALUE);
+        // (Fishing, Archery, Alchemy, Cooking talents scale their event-based
         //  signature stats directly in their handlers — see AbilityEvents etc.)
 
         // Flat attribute talents (Vitality, Fleetfoot, Deepreach, Juggernaut, Sea Fortune, …).

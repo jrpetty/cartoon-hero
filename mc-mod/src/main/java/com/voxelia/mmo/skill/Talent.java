@@ -65,8 +65,8 @@ public enum Talent {
         "Level Combat faster."),
 
     // ── Acrobatics ───────────────────────────────────────────────────────────
-    ACROBATICS_EVASION(Skill.ACROBATICS, "Evasion", "DGE", Category.SIGNATURE, 0.05, "dodge chance",
-        "Dodge attacks more often."),
+    ACROBATICS_SPRINGSTEP(Skill.ACROBATICS, "Springstep", "JMP", Category.SIGNATURE, 0.05, "jump height",
+        "Leap higher with every step."),
     ACROBATICS_FEATHERFALL(Skill.ACROBATICS, "Featherfall", "FTH", Category.FALL, 0.06, "fall damage reduction",
         "Take less fall damage."),
     ACROBATICS_FLEETFOOT(Skill.ACROBATICS, "Fleetfoot","MOV", Category.SPEED,   0.02, "movement speed",

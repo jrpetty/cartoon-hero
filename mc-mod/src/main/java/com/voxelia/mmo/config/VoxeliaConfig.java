@@ -22,7 +22,7 @@ public final class VoxeliaConfig {
     private static final ModConfigSpec.DoubleValue MINING_FORTUNE;
     private static final ModConfigSpec.DoubleValue FORAGING_FORTUNE;
     private static final ModConfigSpec.DoubleValue EXCAV_FORTUNE;
-    private static final ModConfigSpec.DoubleValue ACRO_DODGE;
+    private static final ModConfigSpec.DoubleValue ACRO_JUMP;
     private static final ModConfigSpec.DoubleValue FISHING_LUCK_MAX;
     private static final ModConfigSpec.DoubleValue DEF_ARMOR;
     private static final ModConfigSpec.DoubleValue DEF_TOUGH;
@@ -83,8 +83,8 @@ public final class VoxeliaConfig {
             .defineInRange("foragingFortunePerLevel", 0.01, 0.0, 10.0);
         EXCAV_FORTUNE = b.comment("Excavation: Fortune factor per level on shovel blocks (no Silk Touch).")
             .defineInRange("excavationFortunePerLevel", 0.01, 0.0, 10.0);
-        ACRO_DODGE = b.comment("Acrobatics: dodge chance per level (0.006 => 60% at 100).")
-            .defineInRange("acrobaticsDodgePerLevel", 0.006, 0.0, 0.01);
+        ACRO_JUMP = b.comment("Acrobatics: bonus jump strength per level (0.0006 => about +14% jump strength at level 100, base 0.42).")
+            .defineInRange("acrobaticsJumpPerLevel", 0.0006, 0.0, 0.02);
         FISHING_LUCK_MAX = b.comment("Fishing: max bonus luck (while fishing) at max level.")
             .defineInRange("fishingLuckMax", 4.0, 0.0, 100.0);
         DEF_ARMOR = b.comment("Defense: bonus armor per level.")
@@ -169,7 +169,7 @@ public final class VoxeliaConfig {
     public static double miningFortunePerLevel(){ return MINING_FORTUNE.get(); }
     public static double foragingFortunePerLevel(){ return FORAGING_FORTUNE.get(); }
     public static double excavationFortunePerLevel(){ return EXCAV_FORTUNE.get(); }
-    public static double acrobaticsDodgePerLevel(){ return ACRO_DODGE.get(); }
+    public static double acrobaticsJumpPerLevel(){ return ACRO_JUMP.get(); }
     public static double fishingLuckMax()      { return FISHING_LUCK_MAX.get(); }
     public static double defenseArmorPerLevel(){ return DEF_ARMOR.get(); }
     public static double defenseToughnessPerLevel(){ return DEF_TOUGH.get(); }

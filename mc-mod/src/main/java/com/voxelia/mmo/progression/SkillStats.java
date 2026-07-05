@@ -34,8 +34,8 @@ public final class SkillStats {
             case FARMING -> String.format(Locale.ROOT, "+%.1f max health (%.1f hearts)",
                 VoxeliaConfig.farmingHealthPerLevel() * lm1 * m,
                 VoxeliaConfig.farmingHealthPerLevel() * lm1 * m / 2.0);
-            case ACROBATICS -> String.format(Locale.ROOT, "%.0f%% dodge, %.0f%% fall reduction",
-                Math.min(95, VoxeliaConfig.acrobaticsDodgePerLevel() * level * 100 * m),
+            case ACROBATICS -> String.format(Locale.ROOT, "+%.0f%% jump height, %.0f%% fall reduction",
+                VoxeliaConfig.acrobaticsJumpPerLevel() * lm1 / 0.42 * 100 * m,
                 Math.min(95, VoxeliaConfig.acrobaticsFallReductionPerLevel() * level * 100
                     * TalentLogic.fallBonus(player, skill)));
             case FISHING -> String.format(Locale.ROOT, "+%.1f luck, %.0f%% treasure (while fishing)",
