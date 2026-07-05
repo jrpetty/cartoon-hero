@@ -45,10 +45,24 @@ neoForge {
             sourceSet sourceSets.main
         }
     }
+
+    // JUnit unit tests with a bootstrapped Minecraft classpath (`./gradlew test`,
+    // also run as part of `build`). Verifies the mod's pure logic and that its
+    // data attachments round-trip through their codecs.
+    unitTest {
+        enable()
+        testedMod = mods."${mod_id}"
+    }
 }
 
 dependencies {
     // NeoForge + Minecraft are provided by the moddev plugin; add library deps here.
+    testImplementation 'org.junit.jupiter:junit-jupiter:5.10.2'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+test {
+    useJUnitPlatform()
 }
 
 // ---- Expand mod metadata templates (neoforge.mods.toml, pack.mcmeta) ----
