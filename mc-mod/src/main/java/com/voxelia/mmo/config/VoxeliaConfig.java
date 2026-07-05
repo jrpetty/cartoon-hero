@@ -171,7 +171,7 @@ public final class VoxeliaConfig {
         BULWARK_LEVEL = b.comment("Defense: Bulwark (deflect) unlock level (0 disables).").defineInRange("bulwarkLevel", 30, 0, 100);
         BULWARK_COOLDOWN = b.comment("Bulwark cooldown (seconds) — a powerful 5s deflect, so a long cooldown.").defineInRange("bulwarkCooldownSeconds", 300, 1, 3600);
         FEAST_LEVEL = b.comment("Cooking: Feast (full heal) unlock level (0 disables).").defineInRange("feastLevel", 30, 0, 100);
-        FEAST_COOLDOWN = b.comment("Feast cooldown (seconds).").defineInRange("feastCooldownSeconds", 180, 1, 3600);
+        FEAST_COOLDOWN = b.comment("Feast cooldown (seconds) — a full heal, so a long 10-minute cooldown.").defineInRange("feastCooldownSeconds", 600, 1, 3600);
         PANACEA_LEVEL = b.comment("Alchemy: Panacea (cleanse + ward) unlock level (0 disables).").defineInRange("panaceaLevel", 30, 0, 100);
         PANACEA_COOLDOWN = b.comment("Panacea cooldown (seconds).").defineInRange("panaceaCooldownSeconds", 180, 1, 3600);
         VOLLEY_LEVEL = b.comment("Archery: Volley (arrow fan) unlock level (0 disables).").defineInRange("volleyLevel", 30, 0, 100);
