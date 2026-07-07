@@ -3,6 +3,7 @@ package com.voxelia.mmo.network;
 import com.mojang.serialization.Codec;
 import com.voxelia.mmo.VoxeliaMMO;
 import com.voxelia.mmo.client.ClientTalents;
+import io.netty.buffer.ByteBuf;
 import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.codec.ByteBufCodecs;
 import net.minecraft.network.codec.StreamCodec;
@@ -20,7 +21,7 @@ public record TalentsSyncPayload(Map<String, Integer> ranks, int maxRank, int le
     public static final Type<TalentsSyncPayload> TYPE =
         new Type<>(ResourceLocation.fromNamespaceAndPath(VoxeliaMMO.MOD_ID, "talents_sync"));
 
-    private static final StreamCodec<RegistryFriendlyByteBuf, Map<String, Integer>> MAP_CODEC =
+    private static final StreamCodec<ByteBuf, Map<String, Integer>> MAP_CODEC =
         ByteBufCodecs.fromCodec(Codec.unboundedMap(Codec.STRING, Codec.INT));
 
     public static final StreamCodec<RegistryFriendlyByteBuf, TalentsSyncPayload> STREAM_CODEC =
