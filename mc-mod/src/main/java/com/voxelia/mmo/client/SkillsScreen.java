@@ -140,6 +140,8 @@ public final class SkillsScreen extends Screen {
             tip.add(Component.literal(total + " total skill levels").withStyle(ChatFormatting.WHITE));
             tip.add(Component.literal("Highest: " + top.display() + " Lv " + ClientSkillData.level(top))
                 .withStyle(ChatFormatting.GRAY));
+            tip.add(Component.literal("Click for full profile [" + keyName(VoxeliaKeys.OPEN_PROFILE) + "]")
+                .withStyle(ChatFormatting.GREEN));
             g.renderComponentTooltip(this.font, tip, mouseX, mouseY);
         }
     }
@@ -197,6 +199,10 @@ public final class SkillsScreen extends Screen {
                 return true;
             }
             if (in(tabSkills, mouseX, mouseY)) return true;
+            if (in(charCard, mouseX, mouseY)) {
+                Minecraft.getInstance().setScreen(new ProfileScreen());
+                return true;
+            }
             for (Card c : cards) {
                 if (mouseX >= c.x1 && mouseX < c.x2 && mouseY >= c.y1 && mouseY < c.y2) {
                     if (c.skill.active()) ClientAbilities.select(c.skill);

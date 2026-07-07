@@ -15,6 +15,7 @@ public final class VoxeliaClientConfig {
 
     private static final ModConfigSpec.BooleanValue SHOW_HUD;
     private static final ModConfigSpec.BooleanValue HUD_PANEL;
+    private static final ModConfigSpec.BooleanValue SHOW_SIDEBAR;
     private static final ModConfigSpec.EnumValue<Anchor> ANCHOR;
     private static final ModConfigSpec.IntValue OFFSET_X;
     private static final ModConfigSpec.IntValue OFFSET_Y;
@@ -26,6 +27,8 @@ public final class VoxeliaClientConfig {
             .define("showHud", true);
         HUD_PANEL = b.comment("Draw a scoreboard-style background panel behind the HUD.")
             .define("hudPanel", true);
+        SHOW_SIDEBAR = b.comment("Show the scoreboard-style skill sidebar on the right (toggle with /voxelia sidebar).")
+            .define("showSidebar", false);
         ANCHOR = b.comment("Which screen corner the HUD anchors to.")
             .defineEnum("anchor", Anchor.TOP_LEFT);
         OFFSET_X = b.comment("Horizontal offset in pixels from the anchored corner.")
@@ -39,6 +42,8 @@ public final class VoxeliaClientConfig {
     public static boolean showHud() { return SHOW_HUD.get(); }
     public static void setShowHud(boolean v) { SHOW_HUD.set(v); }
     public static boolean hudPanel() { return HUD_PANEL.get(); }
+    public static boolean showSidebar() { return SHOW_SIDEBAR.get(); }
+    public static void setShowSidebar(boolean v) { SHOW_SIDEBAR.set(v); }
     public static Anchor anchor() { return ANCHOR.get(); }
     public static void setAnchor(Anchor a) { ANCHOR.set(a); }
     public static int offsetX() { return OFFSET_X.get(); }

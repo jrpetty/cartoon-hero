@@ -19,5 +19,14 @@ public final class VoxeliaClient {
             VanillaGuiLayers.HOTBAR,
             ResourceLocation.fromNamespaceAndPath(VoxeliaMMO.MOD_ID, "skills_hud"),
             SkillHudOverlay.INSTANCE);
+        event.registerAbove(
+            VanillaGuiLayers.HOTBAR,
+            ResourceLocation.fromNamespaceAndPath(VoxeliaMMO.MOD_ID, "skill_sidebar"),
+            SkillSidebarOverlay.INSTANCE);
+        // Draw the prestige flourish above the chat so it truly owns the screen.
+        event.registerAbove(
+            VanillaGuiLayers.CHAT,
+            ResourceLocation.fromNamespaceAndPath(VoxeliaMMO.MOD_ID, "prestige_celebrate"),
+            PrestigeCelebrationOverlay.INSTANCE);
     }
 }

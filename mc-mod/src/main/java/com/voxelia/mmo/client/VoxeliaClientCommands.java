@@ -34,7 +34,9 @@ public final class VoxeliaClientCommands {
         event.getDispatcher().register(
             Commands.literal("voxelia")
                 .then(Commands.literal("menu").executes(VoxeliaClientCommands::openMenu))
+                .then(Commands.literal("profile").executes(VoxeliaClientCommands::openProfile))
                 .then(Commands.literal("hud").executes(VoxeliaClientCommands::toggleHud))
+                .then(Commands.literal("sidebar").executes(VoxeliaClientCommands::toggleSidebar))
                 .then(Commands.literal("hudpos")
                     .then(Commands.argument("corner", StringArgumentType.word())
                         .executes(VoxeliaClientCommands::setCorner)))
@@ -47,10 +49,23 @@ public final class VoxeliaClientCommands {
         return 1;
     }
 
+    private static int openProfile(CommandContext<CommandSourceStack> ctx) {
+        Minecraft.getInstance().execute(() -> Minecraft.getInstance().setScreen(new ProfileScreen()));
+        return 1;
+    }
+
     private static int toggleHud(CommandContext<CommandSourceStack> ctx) {
         boolean now = !VoxeliaClientConfig.showHud();
         VoxeliaClientConfig.setShowHud(now);
         ctx.getSource().sendSuccess(() -> Component.literal("Skills HUD " + (now ? "shown" : "hidden"))
+            .withStyle(ChatFormatting.YELLOW), false);
+        return 1;
+    }
+
+    private static int toggleSidebar(CommandContext<CommandSourceStack> ctx) {
+        boolean now = !VoxeliaClientConfig.showSidebar();
+        VoxeliaClientConfig.setShowSidebar(now);
+        ctx.getSource().sendSuccess(() -> Component.literal("Skill sidebar " + (now ? "shown" : "hidden"))
             .withStyle(ChatFormatting.YELLOW), false);
         return 1;
     }
