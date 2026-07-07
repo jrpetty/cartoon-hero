@@ -15,12 +15,13 @@ public final class TalentLogic {
         return p.getData(VoxeliaAttachments.PLAYER_TALENTS.get()).getRank(talent);
     }
 
-    /** Points earned (1 per N skill levels) minus points already spent in that skill. */
+    /** Points earned (1 per N skill levels, plus prestige bonus) minus points already spent. */
     public static int pointsAvailable(ServerPlayer p, Skill skill) {
         int level = p.getData(VoxeliaAttachments.PLAYER_SKILLS.get()).getLevel(skill);
         int earned = level / VoxeliaConfig.talentLevelsPerPoint();
+        int prestige = PrestigeLogic.bonusPoints(p, skill); // extra points from prestiging, given at once
         int spent = p.getData(VoxeliaAttachments.PLAYER_TALENTS.get()).spentIn(skill);
-        return earned - spent;
+        return earned + prestige - spent;
     }
 
     /** Try to spend one point into a talent. Returns true on success. */

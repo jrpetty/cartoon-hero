@@ -3,6 +3,7 @@ package com.voxelia.mmo.event;
 import com.voxelia.mmo.VoxeliaMMO;
 import com.voxelia.mmo.config.VoxeliaConfig;
 import com.voxelia.mmo.registry.VoxeliaAttachments;
+import com.voxelia.mmo.skill.PlayerPrestige;
 import com.voxelia.mmo.skill.PlayerSkills;
 import net.minecraft.ChatFormatting;
 import net.minecraft.network.chat.Component;
@@ -28,8 +29,11 @@ public final class ChatTitleEvents {
         int level = skills.characterLevel();
         String title = rank(level) + " " + skills.highest().noun();
 
+        int stars = player.getData(VoxeliaAttachments.PLAYER_PRESTIGE.get()).total();
+        String prestigeStars = stars > 0 ? " " + "✦".repeat(Math.min(stars, 5)) : "";
+
         Component formatted = Component.literal("")
-            .append(Component.literal("[Lv " + level + " • " + title + "] ").withStyle(ChatFormatting.GOLD))
+            .append(Component.literal("[Lv " + level + " • " + title + prestigeStars + "] ").withStyle(ChatFormatting.GOLD))
             .append(Component.literal(player.getGameProfile().getName()).withStyle(ChatFormatting.WHITE))
             .append(Component.literal(": ").withStyle(ChatFormatting.GRAY))
             .append(event.getMessage());

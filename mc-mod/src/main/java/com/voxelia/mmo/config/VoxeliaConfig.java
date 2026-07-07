@@ -46,6 +46,9 @@ public final class VoxeliaConfig {
     private static final ModConfigSpec.BooleanValue SHOW_CHAT_TITLE;
     private static final ModConfigSpec.IntValue TALENT_MAX_RANK;
     private static final ModConfigSpec.IntValue TALENT_LEVELS_PER_POINT;
+    private static final ModConfigSpec.BooleanValue PRESTIGE_ENABLED;
+    private static final ModConfigSpec.IntValue PRESTIGE_MAX;
+    private static final ModConfigSpec.IntValue PRESTIGE_POINTS;
 
     // active abilities (original six)
     private static final ModConfigSpec.IntValue FRENZY_LEVEL;
@@ -152,6 +155,16 @@ public final class VoxeliaConfig {
             .defineInRange("maxRank", 5, 1, 100);
         b.pop();
 
+        b.comment("Prestige — at max level a skill can be prestiged: it resets to level 1 (and its "
+            + "talents), and grants a permanent extra talent point in that skill, given at once.").push("prestige");
+        PRESTIGE_ENABLED = b.comment("Whether skills can be prestiged at max level.")
+            .define("enabled", true);
+        PRESTIGE_MAX = b.comment("Maximum number of times a single skill can be prestiged.")
+            .defineInRange("maxPrestige", 3, 0, 100);
+        PRESTIGE_POINTS = b.comment("Extra talent points granted per prestige in that skill.")
+            .defineInRange("pointsPerPrestige", 1, 0, 100);
+        b.pop();
+
         b.comment("Active keybind abilities (cooldown-balanced). The newer skills' 'ultimates' are "
             + "powerful but sit on long cooldowns.").push("abilities");
         FRENZY_LEVEL = b.comment("Combat: Frenzy unlock level (0 disables).").defineInRange("frenzyLevel", 20, 0, 100);
@@ -213,6 +226,9 @@ public final class VoxeliaConfig {
     public static boolean showChatTitle()      { return SHOW_CHAT_TITLE.get(); }
     public static int talentMaxRank()          { return TALENT_MAX_RANK.get(); }
     public static int talentLevelsPerPoint()   { return TALENT_LEVELS_PER_POINT.get(); }
+    public static boolean prestigeEnabled()    { return PRESTIGE_ENABLED.get(); }
+    public static int prestigeMax()            { return PRESTIGE_MAX.get(); }
+    public static int prestigePointsPerPrestige(){ return PRESTIGE_POINTS.get(); }
 
     public static int frenzyLevel()            { return FRENZY_LEVEL.get(); }
     public static int frenzyCooldownSeconds()  { return FRENZY_COOLDOWN.get(); }

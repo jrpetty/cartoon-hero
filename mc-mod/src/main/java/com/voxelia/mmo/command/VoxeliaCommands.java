@@ -5,6 +5,7 @@ import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.context.CommandContext;
 import com.voxelia.mmo.VoxeliaMMO;
 import com.voxelia.mmo.network.VoxeliaNetwork;
+import com.voxelia.mmo.progression.PrestigeLogic;
 import com.voxelia.mmo.progression.Progression;
 import com.voxelia.mmo.progression.SkillEffects;
 import com.voxelia.mmo.progression.SkillStats;
@@ -39,6 +40,9 @@ public final class VoxeliaCommands {
                     .then(Commands.literal("reset").executes(VoxeliaCommands::resetTalents))
                     .then(Commands.argument("talent", StringArgumentType.word())
                         .executes(VoxeliaCommands::spendTalent)))
+                .then(Commands.literal("prestige")
+                    .then(Commands.argument("skill", StringArgumentType.word())
+                        .executes(VoxeliaCommands::prestige)))
                 .then(Commands.literal("grant")
                     .requires(src -> src.hasPermission(2))
                     .then(Commands.argument("skill", StringArgumentType.word())
@@ -187,6 +191,33 @@ public final class VoxeliaCommands {
         VoxeliaNetwork.syncTalents(player);
         ctx.getSource().sendSuccess(() -> Component.literal("All talent points refunded.")
             .withStyle(ChatFormatting.YELLOW), false);
+        return 1;
+    }
+
+    private static int prestige(CommandContext<CommandSourceStack> ctx) {
+        ServerPlayer player = ctx.getSource().getPlayer();
+        if (player == null) return 0;
+        Skill skill = Skill.byId(StringArgumentType.getString(ctx, "skill"));
+        if (skill == null) {
+            ctx.getSource().sendFailure(Component.literal("Unknown skill. Use its id, e.g. combat, mining, fishing."));
+            return 0;
+        }
+        if (!com.voxelia.mmo.config.VoxeliaConfig.prestigeEnabled()) {
+            ctx.getSource().sendFailure(Component.literal("Prestige is disabled on this server."));
+            return 0;
+        }
+        int level = player.getData(VoxeliaAttachments.PLAYER_SKILLS.get()).getLevel(skill);
+        if (level < SkillCurve.MAX_LEVEL) {
+            ctx.getSource().sendFailure(Component.literal(skill.display() + " must reach level "
+                + SkillCurve.MAX_LEVEL + " to prestige (currently " + level + ")."));
+            return 0;
+        }
+        if (PrestigeLogic.count(player, skill) >= com.voxelia.mmo.config.VoxeliaConfig.prestigeMax()) {
+            ctx.getSource().sendFailure(Component.literal(skill.display() + " is already at max prestige ("
+                + com.voxelia.mmo.config.VoxeliaConfig.prestigeMax() + ")."));
+            return 0;
+        }
+        VoxeliaNetwork.handlePrestige(player, skill.ordinal()); // performs the prestige + message + sync
         return 1;
     }
 

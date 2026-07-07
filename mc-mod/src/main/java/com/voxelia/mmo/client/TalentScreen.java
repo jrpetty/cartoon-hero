@@ -1,7 +1,9 @@
 package com.voxelia.mmo.client;
 
+import com.voxelia.mmo.network.PrestigePacket;
 import com.voxelia.mmo.network.SpendTalentPacket;
 import com.voxelia.mmo.skill.Skill;
+import com.voxelia.mmo.skill.SkillCurve;
 import com.voxelia.mmo.skill.Talent;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.Minecraft;
@@ -40,6 +42,8 @@ public final class TalentScreen extends Screen {
     private final List<Card> cards = new ArrayList<>();
     private int[] tabSkills = new int[4];
     private int[] tabTalents = new int[4];
+    private int[] prestigeBtn = new int[4];
+    private boolean prestigeReady = false;
 
     public TalentScreen() {
         super(Component.literal("Talents"));
@@ -83,6 +87,12 @@ public final class TalentScreen extends Screen {
             else if (over) g.fill(lx, ry, lx + SKILL_W, ry + SKILL_ROW_H - 1, 0x14FFFFFF);
             g.fill(lx, ry, lx + 3, ry + SKILL_ROW_H - 1, color);
             g.drawString(this.font, s.display(), lx + 7, ry + 3, sel ? 0xFFFFFFFF : color);
+
+            int pres = ClientTalents.prestige(s);
+            if (pres > 0) { // gold prestige stars right after the name
+                g.drawString(this.font, "✦".repeat(Math.min(pres, 3)),
+                    lx + 8 + this.font.width(s.display()), ry + 3, VoxeliaUi.GOLD);
+            }
 
             int pts = ClientTalents.available(s);
             if (pts > 0) pill(g, lx + SKILL_W - 3, ry + 2, String.valueOf(pts), 0x6EE86E, true);
@@ -168,14 +178,44 @@ public final class TalentScreen extends Screen {
             if (over) hoveredCard = card;
         }
 
-        VoxeliaUi.footer(g, x, y + h - FOOTER_H, PANEL_W, FOOTER_H);
-        g.drawCenteredString(this.font, "Pick a skill, click a talent to spend  •  /voxelia talent reset to refund",
-            x + PANEL_W / 2, y + h - FOOTER_H + 3, VoxeliaUi.MUTED);
+        // Footer: normally a hint; a Prestige button once the selected skill is maxed.
+        int footY = y + h - FOOTER_H;
+        VoxeliaUi.footer(g, x, footY, PANEL_W, FOOTER_H);
+        int prestige = ClientTalents.prestige(selectedSkill);
+        boolean atMax = ClientSkillData.level(selectedSkill) >= SkillCurve.MAX_LEVEL;
+        prestigeReady = atMax && prestige < ClientTalents.prestigeMax();
+        boolean overPrestige = false;
+        if (prestigeReady) {
+            String label = "✦ PRESTIGE " + selectedSkill.display() + " ✦";
+            int lw = this.font.width(label) + 14;
+            int bx = x + (PANEL_W - lw) / 2;
+            int by = footY + 1;
+            overPrestige = mouseX >= bx && mouseX < bx + lw && mouseY >= by && mouseY < by + 12;
+            int base = 0xFF7A34A8;
+            g.fill(bx, by, bx + lw, by + 12, overPrestige ? VoxeliaUi.brighten(base, 34) : base);
+            g.fill(bx, by, bx + lw, by + 1, 0x60FFFFFF);
+            g.drawCenteredString(this.font, label, x + PANEL_W / 2, by + 2, 0xFFFFFFFF);
+            prestigeBtn = new int[]{bx, by, bx + lw, by + 12};
+        } else {
+            prestigeBtn = new int[]{0, 0, 0, 0};
+            String hint = (atMax && prestige > 0)
+                ? "✦ " + selectedSkill.display() + " fully prestiged (" + prestige + ")"
+                : "Pick a skill, click a talent to spend  •  /voxelia talent reset to refund";
+            g.drawCenteredString(this.font, hint, x + PANEL_W / 2, footY + 3,
+                (atMax && prestige > 0) ? VoxeliaUi.GOLD : VoxeliaUi.MUTED);
+        }
 
         super.render(g, mouseX, mouseY, partialTick);
 
         if (hoveredCard != null) renderCardTooltip(g, hoveredCard.talent, max, mouseX, mouseY);
-        else if (hoveredSkill != null && hoveredSkill.skill != selectedSkill) {
+        else if (overPrestige) {
+            g.renderComponentTooltip(this.font, List.of(
+                Component.literal("Prestige " + selectedSkill.display()).withStyle(ChatFormatting.LIGHT_PURPLE),
+                Component.literal("Resets it to level 1 and refunds its talents,").withStyle(ChatFormatting.GRAY),
+                Component.literal("but grants a permanent extra talent point.").withStyle(ChatFormatting.GRAY),
+                Component.literal("Prestige " + prestige + " → " + (prestige + 1)).withStyle(ChatFormatting.WHITE)),
+                mouseX, mouseY);
+        } else if (hoveredSkill != null && hoveredSkill.skill != selectedSkill) {
             g.renderComponentTooltip(this.font, List.of(
                 Component.literal(hoveredSkill.skill.display()).withStyle(ChatFormatting.GOLD),
                 Component.literal(ClientTalents.available(hoveredSkill.skill) + " point(s) to spend")
@@ -260,6 +300,10 @@ public final class TalentScreen extends Screen {
                 return true;
             }
             if (in(tabTalents, mouseX, mouseY)) return true;
+            if (prestigeReady && in(prestigeBtn, mouseX, mouseY)) {
+                PacketDistributor.sendToServer(new PrestigePacket(selectedSkill.ordinal()));
+                return true;
+            }
             for (SkillRow r : skillRows) {
                 if (mouseX >= r.x1 && mouseX < r.x2 && mouseY >= r.y1 && mouseY < r.y2) {
                     selectedSkill = r.skill;

@@ -6,24 +6,38 @@ import com.voxelia.mmo.skill.Talent;
 import java.util.HashMap;
 import java.util.Map;
 
-/** Client-side cache of talent ranks + rules, fed by TalentsSyncPayload. */
+/** Client-side cache of talent ranks, prestige, + rules, fed by TalentsSyncPayload. */
 public final class ClientTalents {
     private ClientTalents() {}
 
     private static Map<String, Integer> ranks = new HashMap<>();
+    private static Map<String, Integer> prestige = new HashMap<>();
     private static int maxRank = 5;
     private static int levelsPerPoint = 8;
+    private static int pointsPerPrestige = 1;
+    private static int prestigeMax = 3;
 
-    public static void update(Map<String, Integer> newRanks, int newMaxRank, int newLevelsPerPoint) {
+    public static void update(Map<String, Integer> newRanks, int newMaxRank, int newLevelsPerPoint,
+                              Map<String, Integer> newPrestige, int newPointsPerPrestige, int newPrestigeMax) {
         ranks = new HashMap<>(newRanks);
+        prestige = new HashMap<>(newPrestige);
         maxRank = newMaxRank;
         levelsPerPoint = Math.max(1, newLevelsPerPoint);
+        pointsPerPrestige = newPointsPerPrestige;
+        prestigeMax = newPrestigeMax;
     }
 
     public static int maxRank() { return maxRank; }
 
+    public static int prestigeMax() { return prestigeMax; }
+
     public static int rank(Talent talent) {
         return ranks.getOrDefault(talent.id(), 0);
+    }
+
+    /** How many times this skill has been prestiged. */
+    public static int prestige(Skill skill) {
+        return prestige.getOrDefault(skill.id(), 0);
     }
 
     public static int spentIn(Skill skill) {
@@ -34,6 +48,6 @@ public final class ClientTalents {
 
     public static int available(Skill skill) {
         int level = ClientSkillData.level(skill);
-        return level / levelsPerPoint - spentIn(skill);
+        return level / levelsPerPoint + prestige(skill) * pointsPerPrestige - spentIn(skill);
     }
 }
