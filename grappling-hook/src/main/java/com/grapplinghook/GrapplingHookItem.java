@@ -29,8 +29,8 @@ import net.minecraft.world.World;
  *   <li>Hold to draw (bow-style): tap = short reach, full {@link GrappleConfig#chargeTicks}
  *       charge = max reach.</li>
  *   <li>Aim at a <b>mob</b> → it's yanked toward you.</li>
- *   <li>Aim at a <b>block</b> → you're reeled toward it, preserving momentum so
- *       you swing. Sneak to detach mid-swing.</li>
+ *   <li>Aim at a <b>block</b> → you're launched toward it with a single pull;
+ *       charge sets the power. Momentum carries you — no reeling in.</li>
  * </ul>
  */
 public class GrapplingHookItem extends Item {
@@ -99,13 +99,15 @@ public class GrapplingHookItem extends Item {
             return; // out of reach / missed
         }
 
+        // One-shot launch toward the grapple point — a single pull in that
+        // direction; momentum then carries you. No reeling, no snap-back.
         Vec3d anchor = blockHit.getPos();
         Vec3d dir = anchor.subtract(player.getPos()).normalize();
-        player.setVelocity(dir.multiply(GrappleConfig.launchSpeed).add(0.0, GrappleConfig.upwardBoost, 0.0));
+        double launch = MathHelper.lerp(charge, GrappleConfig.minLaunchSpeed, GrappleConfig.maxLaunchSpeed);
+        player.setVelocity(dir.multiply(launch).add(0.0, GrappleConfig.upwardBoost, 0.0));
         player.velocityModified = true;
         player.fallDistance = 0.0F;
 
-        GrappleManager.start(player, anchor);
         GrappleManager.drawRope(serverWorld, start, anchor);
         player.getItemCooldownManager().set(this, GrappleConfig.cooldownTicks);
     }

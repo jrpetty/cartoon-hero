@@ -1,83 +1,17 @@
 package com.grapplinghook;
 
-import java.util.HashMap;
-import java.util.Iterator;
-import java.util.Map;
-import java.util.UUID;
-
 import net.minecraft.particle.ParticleTypes;
-import net.minecraft.server.MinecraftServer;
-import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.server.world.ServerWorld;
 import net.minecraft.util.math.MathHelper;
 import net.minecraft.util.math.Vec3d;
 
 /**
- * Tracks active block grapples and reels each player toward their anchor a bit
- * every tick, preserving momentum so you swing. Ends on arrival, timeout, sneak
- * (detach, keep momentum), death, or disconnect.
+ * Visual helper for the grappling hook: draws the rope as a line of particles
+ * from the player to the grapple point at the moment of firing.
  */
 public final class GrappleManager {
 
-    private static final class Reel {
-        final Vec3d anchor;
-        int ticks;
-
-        Reel(Vec3d anchor, int ticks) {
-            this.anchor = anchor;
-            this.ticks = ticks;
-        }
-    }
-
-    private static final Map<UUID, Reel> REELS = new HashMap<>();
-
     private GrappleManager() {}
-
-    /** Begin reeling a player toward a block anchor. */
-    public static void start(ServerPlayerEntity player, Vec3d anchor) {
-        REELS.put(player.getUuid(), new Reel(anchor, GrappleConfig.reelDurationTicks));
-    }
-
-    public static void tick(MinecraftServer server) {
-        if (REELS.isEmpty()) {
-            return;
-        }
-        Iterator<Map.Entry<UUID, Reel>> it = REELS.entrySet().iterator();
-        while (it.hasNext()) {
-            Map.Entry<UUID, Reel> entry = it.next();
-            ServerPlayerEntity player = server.getPlayerManager().getPlayer(entry.getKey());
-            Reel reel = entry.getValue();
-
-            if (player == null || !player.isAlive() || player.isRemoved() || player.isSneaking()) {
-                it.remove();
-                continue; // detach (sneak/death/leave) — momentum is preserved
-            }
-
-            Vec3d toAnchor = reel.anchor.subtract(player.getPos());
-            double distance = toAnchor.length();
-            if (distance < GrappleConfig.arriveDistance || reel.ticks-- <= 0) {
-                it.remove();
-                continue;
-            }
-
-            Vec3d dir = toAnchor.normalize();
-            Vec3d velocity = player.getVelocity()
-                    .add(dir.multiply(GrappleConfig.reelAcceleration))
-                    .add(0.0, 0.05, 0.0); // gently fight gravity so the swing holds
-            double speed = velocity.length();
-            if (speed > GrappleConfig.reelMaxSpeed) {
-                velocity = velocity.multiply(GrappleConfig.reelMaxSpeed / speed);
-            }
-
-            player.setVelocity(velocity);
-            player.velocityModified = true;
-            player.fallDistance = 0.0F;
-
-            if (player.getWorld() instanceof ServerWorld world) {
-                drawRope(world, player.getEyePos(), reel.anchor);
-            }
-        }
-    }
 
     /** A line of particles from the player to the anchor — the visible tether. */
     public static void drawRope(ServerWorld world, Vec3d from, Vec3d to) {

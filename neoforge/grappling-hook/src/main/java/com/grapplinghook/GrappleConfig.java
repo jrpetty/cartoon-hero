@@ -24,13 +24,10 @@ public final class GrappleConfig {
     public static double maxRange = 40.0;
     public static int cooldownTicks = 20;
 
-    // --- block grapple: swing & reel ---
-    public static double launchSpeed = 0.6;
-    public static double upwardBoost = 0.30;
-    public static double reelAcceleration = 0.12;
-    public static double reelMaxSpeed = 1.6;
-    public static int reelDurationTicks = 40;
-    public static double arriveDistance = 2.0;
+    // --- block grapple: directional launch ---
+    public static double minLaunchSpeed = 0.8;
+    public static double maxLaunchSpeed = 2.0;
+    public static double upwardBoost = 0.35;
 
     // --- entity grapple ---
     public static boolean grappleEntities = true;
@@ -53,12 +50,9 @@ public final class GrappleConfig {
         minRange           = parseDouble(p, "minRange", minRange);
         maxRange           = parseDouble(p, "maxRange", maxRange);
         cooldownTicks      = parseInt(p, "cooldownTicks", cooldownTicks);
-        launchSpeed        = parseDouble(p, "launchSpeed", launchSpeed);
+        minLaunchSpeed     = parseDouble(p, "minLaunchSpeed", minLaunchSpeed);
+        maxLaunchSpeed     = parseDouble(p, "maxLaunchSpeed", maxLaunchSpeed);
         upwardBoost        = parseDouble(p, "upwardBoost", upwardBoost);
-        reelAcceleration   = parseDouble(p, "reelAcceleration", reelAcceleration);
-        reelMaxSpeed       = parseDouble(p, "reelMaxSpeed", reelMaxSpeed);
-        reelDurationTicks  = parseInt(p, "reelDurationTicks", reelDurationTicks);
-        arriveDistance     = parseDouble(p, "arriveDistance", arriveDistance);
         grappleEntities    = parseBoolean(p, "grappleEntities", grappleEntities);
         entityPullFactor   = parseDouble(p, "entityPullFactor", entityPullFactor);
         entityMaxPullSpeed = parseDouble(p, "entityMaxPullSpeed", entityMaxPullSpeed);
@@ -71,12 +65,9 @@ public final class GrappleConfig {
         p.setProperty("minRange", Double.toString(minRange));
         p.setProperty("maxRange", Double.toString(maxRange));
         p.setProperty("cooldownTicks", Integer.toString(cooldownTicks));
-        p.setProperty("launchSpeed", Double.toString(launchSpeed));
+        p.setProperty("minLaunchSpeed", Double.toString(minLaunchSpeed));
+        p.setProperty("maxLaunchSpeed", Double.toString(maxLaunchSpeed));
         p.setProperty("upwardBoost", Double.toString(upwardBoost));
-        p.setProperty("reelAcceleration", Double.toString(reelAcceleration));
-        p.setProperty("reelMaxSpeed", Double.toString(reelMaxSpeed));
-        p.setProperty("reelDurationTicks", Integer.toString(reelDurationTicks));
-        p.setProperty("arriveDistance", Double.toString(arriveDistance));
         p.setProperty("grappleEntities", Boolean.toString(grappleEntities));
         p.setProperty("entityPullFactor", Double.toString(entityPullFactor));
         p.setProperty("entityMaxPullSpeed", Double.toString(entityMaxPullSpeed));
@@ -85,8 +76,8 @@ public final class GrappleConfig {
                 Files.createDirectories(path.getParent());
             }
             try (Writer w = Files.newBufferedWriter(path)) {
-                p.store(w, "Grappling Hook config. Block grapple = swing & reel toward the anchor; "
-                        + "aiming at a mob (grappleEntities) yanks it toward you. Sneak to detach mid-swing.");
+                p.store(w, "Grappling Hook config. Block grapple = a single charge-scaled launch toward the "
+                        + "aimed point (no reeling); aiming at a mob (grappleEntities) yanks it toward you.");
             }
         } catch (IOException e) {
             LOG.warn("[grapplinghook] Could not write config", e);
