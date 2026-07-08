@@ -1,71 +1,101 @@
 # Voxelia MMO — NeoForge mod
 
-A **NeoForge mod for Minecraft Java Edition** that adds an MMO progression layer:
-per-skill XP and levels, level-up stat scaling, a skills HUD, a quest/advancement
-chain, and commands. Builds to a standard mod **`.jar`** via Gradle.
+A **NeoForge mod for Minecraft Java Edition** that adds a complete MMO
+progression layer: **11 skills** with XP and levels, per-skill **talent trees**,
+**active abilities** with cooldowns, **prestige** at level 100, a **death XP
+penalty**, and a full set of UI surfaces (skills screen, talent tree, character
+profile, corner HUD, scoreboard sidebar). Builds to a standard mod **`.jar`**
+via Gradle.
 
 - **Minecraft:** 1.21.1
 - **NeoForge:** 21.1.x (default `21.1.172`)
 - **Java:** 21
 - **Loader:** `javafml`
 
-It is the "real Minecraft" counterpart to the browser prototype in [`../mmo`](../mmo):
-same MMO design (skills, XP economy, quests, combat), implemented natively against
-NeoForge instead of a custom engine.
+## The 11 skills
 
-## Features
+Every skill levels **1 → 100** on its own XP curve, stored as a persisted player
+data attachment (kept on death). Each has passive per-level rewards **and** a
+signature active ability (select with `G`, fire with `R`).
 
-**Six skills**, each leveling **1 → 100** with its own XP, stored as a persisted
-player data attachment (copied on death):
-
-| Skill | Trains from | Per-level reward | Milestone perk |
+| Skill | Trains from | Per-level rewards | Ability (cooldown) |
 | --- | --- | --- | --- |
-| **Mining** | ores / stone | block-break speed + **Fortune** on ores | **Haste** (lv 25+, holding a pickaxe), **Telekinesis** auto-pickup (lv 100) |
-| **Foraging** | logs / leaves | block-break speed + **Fortune** on wood | — |
-| **Combat** | killing mobs | +attack damage (~+10 at 100) | **life steal** on kills |
-| **Farming** | harvesting crops | +max health (~doubles HP at 100) | — |
-| **Acrobatics** | taking fall damage | **dodge** chance 0.6%/lvl → 60% at 100 | softer landings (fall-damage reduction) |
-| **Fishing** | catching with a rod | +luck & faster bites while fishing | **treasure** catches |
+| **Mining** | stone & ores | break speed, Fortune on ores | Miner's Focus — Haste + Night Vision (60s) |
+| **Foraging** | logs & leaves | break speed, Fortune on wood | Overgrowth — bonemeal burst around you (45s) |
+| **Combat** | killing mobs | attack damage, life steal on kills | Frenzy — Strength + Speed (50s) |
+| **Farming** | harvesting crops | max health | Hearty Meal — Regen + Saturation (60s) |
+| **Acrobatics** | fall damage | higher jumps, softer landings | Leap — dash (6s) |
+| **Fishing** | catching fish | luck, treasure catches | Maelstrom — whirlpool that drags mobs in (90s) |
+| **Excavation** | shovel blocks | dig speed, Fortune on shovel blocks | Excavate — mass-dig burst (180s) |
+| **Defense** | taking damage | armor + toughness, Last Stand at low HP | Bulwark — deflect damage for a few seconds (300s) |
+| **Cooking** | eating & cooking | saturation, Well Fed regen | Feast — party-wide feast buff (600s) |
+| **Alchemy** | brewing | potion duration | Panacea — cleanse + resist (180s) |
+| **Archery** | bow & crossbow hits | Power Shot damage on full draws | Volley — arrow storm (150s) |
 
-Fortune never applies with Silk Touch (no dupes). Combat level also scales nothing
-else — health lives on Farming.
+Fortune never applies with Silk Touch (no dupes). Abilities are deliberately
+**powerful but long-cooldown** — ultimates, not spam buttons.
+
+## Progression systems
 
 | System | What it does |
 | --- | --- |
-| **Active abilities** | One per skill — **cycle** the selected one (`G`) and **use** it (`R`). Miner's Focus (Haste+Night Vision), Overgrowth (bonemeal nearby), Frenzy (Strength+Speed), Hearty Meal (Regen+Saturation), Leap (dash), Reel (yank your hook). All level-gated + cooldown-balanced. |
-| **Level-up feedback** | Chat line, sound, on-screen **title**, and particles. |
-| **Skills GUI** | Character level, every skill + XP bars, and ability keybinds — open with **`K`** or `/voxelia menu`. |
-| **HUD** | Corner overlay with per-skill XP bars; position is configurable (anchor + offset). |
-| **Quests** | A multi-step advancement chain that walks you through the skills. |
-| **Leaderboard** | `/voxelia top <skill>` ranks online players. |
-| **Config** | Every XP rate and reward coefficient is tunable in `config/voxelia_mmo-common.toml`; HUD prefs in `voxelia_mmo-client.toml`. |
+| **Talents** | Each skill has its own 5-talent tree (max rank 5 each). You earn **1 talent point per 8 levels** in that skill — 12 points by level 100. Spend them on the Talent screen (`N`). `/voxelia talent reset` refunds everything. |
+| **Prestige** | At level 100 a skill can be **prestiged** (button on the Talent screen — takes **two clicks**, no accidents — or `/voxelia prestige <skill>`): it resets to level 1, its talents refund, and you gain **+1 permanent talent point** for that skill, granted immediately (13/14/15 possible points at Prestige 1/2/3, cap 3). Prestige stars (✦) show on every surface and in your chat title, a full-screen celebration + particles/sound plays, and the server gets one gold announcement line. |
+| **Death penalty** | Dying costs **20% of every skill's XP** (config). Levels genuinely drop — the respawn message tells you what you lost. |
+| **Character level & titles** | Your character level is the average of all skills. Chat shows `[Lv 42 • Master Miner ✦✦] Name`, ranked Novice → Grandmaster. |
+| **Level-up feedback** | Chat line, sound, on-screen title, particles, and a "+XP" flash on the HUD. |
 
-### Commands
+The server is authoritative for everything: XP, talents, prestige, abilities and
+cooldowns are validated server-side; clients only render.
+
+## UI surfaces
+
+| Surface | Open with | Shows |
+| --- | --- | --- |
+| **Skills screen** | `K` / `/voxelia menu` | Card per skill with XP bars + tooltips; click a card to select its ability; Character card opens the profile |
+| **Talent screen** | `N` | Skill list (with prestige stars + unspent-point pills), the selected skill's 5 talents, and the Prestige button when eligible |
+| **Character profile** | `P` / `/voxelia profile` | Best skill, total prestiges, XP earned, playtime, deaths, mob kills |
+| **Corner HUD** | `/voxelia hud`, corner via `/voxelia hudpos` | Per-skill levels + XP bars, prestige stars, selected ability with live cooldown |
+| **Sidebar** | `J` / `/voxelia sidebar` (off by default) | Vanilla-scoreboard-style list of all skill levels + Character line |
+
+New players (zero XP) get a one-line pointer to `K`/`N`/`P` on first login.
+
+## Commands
 
 | Command | Side | Purpose |
 | --- | --- | --- |
-| `/voxelia skills` | server | View your levels and XP |
+| `/voxelia skills` | server | Your levels and XP |
+| `/voxelia stats` | server | Combat/progression stats |
+| `/voxelia bestiary` | server | Mob-mastery kill tallies |
+| `/voxelia talents` | server | Your talent ranks |
+| `/voxelia talent reset` | server | Refund all talent points |
+| `/voxelia prestige <skill>` | server | Prestige a level-100 skill |
 | `/voxelia top <skill>` | server | Leaderboard of online players |
 | `/voxelia grant <skill> <amount>` | server (op) | Grant XP |
-| `/voxelia menu` | client | Open the Skills GUI |
-| `/voxelia hud` | client | Toggle the HUD |
+| `/voxelia menu` / `profile` | client | Open the Skills / Profile screens |
+| `/voxelia hud` / `sidebar` | client | Toggle the HUD / sidebar |
 | `/voxelia hudpos <corner>` | client | Move the HUD (`top_left`/`top_right`/`bottom_left`/`bottom_right`) |
-| `/voxelia rewards` | client | Print what each skill level grants |
+| `/voxelia rewards` | client | Print what each skill grants |
 
-### Keybinds (rebindable in Options → Controls)
+## Keybinds (rebindable in Options → Controls)
 
 | Key | Action |
 | --- | --- |
-| `K` | Open the Skills menu |
-| `G` | Cycle the selected ability |
-| `R` | Use the selected ability |
+| `K` | Skills menu |
+| `N` | Talent tree |
+| `P` | Character profile |
+| `R` | Use selected ability |
+| `G` | Cycle selected ability |
+| `J` | Toggle skill sidebar |
 
-Each skill has one signature ability (Mining → Miner's Focus, Foraging →
-Overgrowth, Combat → Frenzy, Farming → Hearty Meal, Acrobatics → Leap,
-Fishing → Reel). The HUD and Skills menu show which is selected.
+## Config
 
-The server is authoritative: it owns skill XP, combat resolution, and perks, and
-pushes a `SkillsSyncPayload` to each client, which only renders the HUD/GUI.
+- **`config/voxelia_mmo-common.toml`** — every XP rate and reward coefficient,
+  talent rules (`levelsPerPoint`, `maxRank`), prestige rules (`enabled`,
+  `maxPrestige`, `pointsPerPrestige`), every ability cooldown, and the death
+  penalty (`deathXpLossPercent`).
+- **`config/voxelia_mmo-client.toml`** — HUD visibility/panel/corner/offsets and
+  the sidebar toggle.
 
 ## Build the jar
 
@@ -76,13 +106,14 @@ cd mc-mod
 ./gradlew build
 ```
 
+`./gradlew build` also runs the JUnit test suite (game-bootstrapped unit tests).
 The mod jar is produced at:
 
 ```
-build/libs/voxelia_mmo-neoforge-1.21.1-0.1.0.jar
+build/libs/voxelia_mmo-neoforge-1.21.1-1.0.0.jar
 ```
 
-Drop that into the `mods/` folder of a Minecraft **1.21.1** instance running
+Drop it into the `mods/` folder of a Minecraft **1.21.1** instance running
 **NeoForge 21.1.x** (client and/or server).
 
 ### Run it in a dev environment
@@ -94,17 +125,15 @@ Drop that into the `mods/` folder of a Minecraft **1.21.1** instance running
 
 ### Download a pre-built jar (CI)
 
-Every push builds the mod on GitHub Actions and uploads the jar. Grab it from the
-latest green run of **[Build NeoForge mod](../../actions/workflows/build-mod.yml)**
-→ **Artifacts → `voxelia-mmo-jar`** (no local toolchain needed).
+Every push builds and tests the mod on GitHub Actions and publishes the jar to
+the rolling **`voxelia-mod-latest`** release, plus an artifact on the run page
+of **[Build NeoForge mod](../../actions/workflows/build-mod.yml)**.
 
 > ℹ️ **Build environment note.** This project was authored in a sandbox whose
 > network policy **blocks `maven.neoforged.net` and `libraries.minecraft.net`
-> (HTTP 403)**, so the final `./gradlew build` could not run *there* (Gradle
-> fails at `:createMinecraftArtifacts`). It builds cleanly anywhere with normal
-> network access — **verified green on GitHub Actions**, which compiles against
-> the real NeoForge 21.1 API and uploads the jar artifact. Build locally with
-> `./gradlew build`, or just download the CI artifact above.
+> (HTTP 403)**, so `./gradlew build` could not run *there*. It builds cleanly
+> anywhere with normal network access — **verified green on GitHub Actions**,
+> which compiles against the real NeoForge 21.1 API.
 
 ## Retargeting another Minecraft / NeoForge version
 
@@ -118,20 +147,19 @@ larger MC jumps may need small source updates.
 mc-mod/
 ├── build.gradle / settings.gradle / gradle.properties   ModDevGradle build
 ├── gradlew / gradlew.bat / gradle/wrapper/              Gradle wrapper
-└── src/main/
-    ├── java/com/voxelia/mmo/
+└── src/
+    ├── main/java/com/voxelia/mmo/
     │   ├── VoxeliaMMO.java                 @Mod entry point
-    │   ├── skill/        Skill, SkillCurve, PlayerSkills
-    │   ├── registry/     VoxeliaAttachments (player data attachment)
-    │   ├── progression/  Progression (award XP), SkillEffects (stat scaling)
-    │   ├── event/        ProgressionEvents (XP from gameplay)
-    │   ├── network/      SkillsSyncPayload, VoxeliaNetwork
+    │   ├── skill/        Skill, SkillCurve, PlayerSkills, PlayerTalents, PlayerPrestige, Talent
+    │   ├── registry/     VoxeliaAttachments, VoxeliaEntityAttributes
+    │   ├── progression/  Progression, SkillEffects, TalentLogic, PrestigeLogic, Abilities
+    │   ├── event/        ProgressionEvents, ChatTitleEvents, BonusDropEvents, ...
+    │   ├── network/      payloads + VoxeliaNetwork (server-authoritative sync)
     │   ├── command/      VoxeliaCommands
-    │   ├── config/       VoxeliaConfig
-    │   └── client/       ClientSkillData, SkillHudOverlay, VoxeliaClient
-    ├── templates/META-INF/neoforge.mods.toml            (expanded at build)
-    └── resources/
-        ├── pack.mcmeta
-        ├── assets/voxelia_mmo/lang/en_us.json
-        └── data/voxelia_mmo/advancement/*.json          quest chain
+    │   ├── config/       VoxeliaConfig, VoxeliaClientConfig
+    │   └── client/       screens (Skills/Talent/Profile), HUD, sidebar,
+    │                     prestige celebration, keybinds, client caches
+    ├── main/templates/META-INF/neoforge.mods.toml       (expanded at build)
+    ├── main/resources/   pack.mcmeta, lang, advancements
+    └── test/java/        JUnit tests (skill curve, talents, prestige, death penalty)
 ```
