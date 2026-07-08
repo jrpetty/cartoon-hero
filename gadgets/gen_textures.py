@@ -146,3 +146,72 @@ for y in range(16):
             row.append(DARK)
     rope_rows.append(row)
 write_png(os.path.join(BASE, "block", "rope.png"), rope_rows)
+
+# --- Redstone Transmitter block: dark metal with a red antenna broadcasting up ---
+TX = [
+    "MMMMMMMMMMMMMMMM",
+    "MddddddddddddddM",
+    "Md....r..r....dM",
+    "Md.....rr.....dM",
+    "Md..r..rr..r..dM",
+    "Md...r.rr.r...dM",
+    "Md....rrrr....dM",
+    "Md.....rr.....dM",
+    "Md.....rr.....dM",
+    "Md.....rr.....dM",
+    "Md....RRRR....dM",
+    "Md....RRRR....dM",
+    "MddddddddddddddM",
+    "MMMMMMMMMMMMMMMM",
+    "MMMMMMMMMMMMMMMM",
+    "MMMMMMMMMMMMMMMM",
+]
+tx_pal = {"M": C(40, 42, 48), "d": C(70, 74, 82), ".": C(55, 58, 66),
+          "r": C(220, 60, 60), "R": C(150, 30, 30)}
+write_png(os.path.join(BASE, "block", "redstone_transmitter.png"), grid(TX, tx_pal))
+
+# --- Redstone Receiver block: dark metal with a red dish catching a signal ---
+RX = [
+    "MMMMMMMMMMMMMMMM",
+    "MddddddddddddddM",
+    "Md....RRRR....dM",
+    "Md....RRRR....dM",
+    "Md.....rr.....dM",
+    "Md.....rr.....dM",
+    "Md.....rr.....dM",
+    "Md....rrrr....dM",
+    "Md...r.rr.r...dM",
+    "Md..r..rr..r..dM",
+    "Md.....rr.....dM",
+    "Md....r..r....dM",
+    "MddddddddddddddM",
+    "MMMMMMMMMMMMMMMM",
+    "MMMMMMMMMMMMMMMM",
+    "MMMMMMMMMMMMMMMM",
+]
+rx_pal = {"M": C(40, 42, 48), "d": C(70, 74, 82), ".": C(55, 58, 66),
+          "r": C(220, 60, 60), "R": C(150, 30, 30)}
+write_png(os.path.join(BASE, "block", "redstone_receiver.png"), grid(RX, rx_pal))
+
+# --- Redstone Linker item: a tuning wand with a glowing red tip ---
+LINK = [
+    "................",
+    "............ggg.",
+    "...........gRRRg",
+    "...........gRrRg",
+    "...........gRRRg",
+    "............ggg.",
+    "..........gg....",
+    ".........gg.....",
+    "........gg......",
+    ".......hh.......",
+    "......hh........",
+    ".....hh.........",
+    "....hh..........",
+    "...hh...........",
+    "..hh............",
+    ".h..............",
+]
+link_pal = {".": CLEAR, "g": C(90, 96, 105), "h": C(120, 84, 44),
+            "R": C(220, 60, 60), "r": C(255, 170, 170)}
+write_png(os.path.join(BASE, "item", "redstone_linker.png"), grid(LINK, link_pal))

@@ -6,5 +6,8 @@
   "message.gadgets.filter_set": "Filter set to %s",
   "message.gadgets.filter_cleared": "Filter cleared",
   "block.gadgets.rope": "Rope",
+  "block.gadgets.redstone_transmitter": "Redstone Transmitter",
+  "block.gadgets.redstone_receiver": "Redstone Receiver",
+  "item.gadgets.redstone_linker": "Redstone Linker",
   "itemgroup.gadgets.gadgets": "Gadgets"
 }

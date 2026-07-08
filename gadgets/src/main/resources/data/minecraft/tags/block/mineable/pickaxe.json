@@ -1,1 +1,1 @@
-{ "replace": false, "values": [ "gadgets:player_sensor", "gadgets:filter_hopper" ] }
+{ "replace": false, "values": [ "gadgets:player_sensor", "gadgets:filter_hopper", "gadgets:redstone_transmitter", "gadgets:redstone_receiver" ] }

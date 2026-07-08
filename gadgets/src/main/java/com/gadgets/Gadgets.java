@@ -1,6 +1,7 @@
 package com.gadgets;
 
 import net.fabricmc.api.ModInitializer;
+import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
 import net.fabricmc.fabric.api.itemgroup.v1.FabricItemGroup;
 import net.fabricmc.fabric.api.itemgroup.v1.ItemGroupEvents;
 import net.fabricmc.fabric.api.object.builder.v1.block.entity.FabricBlockEntityTypeBuilder;
@@ -44,6 +45,16 @@ public class Gadgets implements ModInitializer {
             new FilterHopperBlock(AbstractBlock.Settings.create()
                     .strength(3.0F).requiresTool().sounds(BlockSoundGroup.METAL)));
 
+    public static final Block REDSTONE_TRANSMITTER = registerBlock("redstone_transmitter",
+            new RedstoneTransmitterBlock(AbstractBlock.Settings.create()
+                    .strength(1.5F).requiresTool().sounds(BlockSoundGroup.METAL)));
+    public static final Block REDSTONE_RECEIVER = registerBlock("redstone_receiver",
+            new RedstoneReceiverBlock(AbstractBlock.Settings.create()
+                    .strength(1.5F).requiresTool().sounds(BlockSoundGroup.METAL)));
+
+    public static final Item REDSTONE_LINKER = register("redstone_linker",
+            new RedstoneLinkerItem(new Item.Settings().maxCount(1)));
+
     public static final RegistryKey<ItemGroup> GADGETS_GROUP_KEY =
             RegistryKey.of(RegistryKeys.ITEM_GROUP, Identifier.of(MOD_ID, "gadgets"));
     public static final ItemGroup GADGETS_GROUP = FabricItemGroup.builder()
@@ -58,6 +69,8 @@ public class Gadgets implements ModInitializer {
 
     public static BlockEntityType<PlayerSensorBlockEntity> PLAYER_SENSOR_BE;
     public static BlockEntityType<FilterHopperBlockEntity> FILTER_HOPPER_BE;
+    public static BlockEntityType<RedstoneTransmitterBlockEntity> REDSTONE_TRANSMITTER_BE;
+    public static BlockEntityType<RedstoneReceiverBlockEntity> REDSTONE_RECEIVER_BE;
 
     @Override
     public void onInitialize() {
@@ -65,6 +78,10 @@ public class Gadgets implements ModInitializer {
                 FabricBlockEntityTypeBuilder.create(PlayerSensorBlockEntity::new, PLAYER_SENSOR).build());
         FILTER_HOPPER_BE = Registry.register(Registries.BLOCK_ENTITY_TYPE, Identifier.of(MOD_ID, "filter_hopper"),
                 FabricBlockEntityTypeBuilder.create(FilterHopperBlockEntity::new, FILTER_HOPPER).build());
+        REDSTONE_TRANSMITTER_BE = Registry.register(Registries.BLOCK_ENTITY_TYPE, Identifier.of(MOD_ID, "redstone_transmitter"),
+                FabricBlockEntityTypeBuilder.create(RedstoneTransmitterBlockEntity::new, REDSTONE_TRANSMITTER).build());
+        REDSTONE_RECEIVER_BE = Registry.register(Registries.BLOCK_ENTITY_TYPE, Identifier.of(MOD_ID, "redstone_receiver"),
+                FabricBlockEntityTypeBuilder.create(RedstoneReceiverBlockEntity::new, REDSTONE_RECEIVER).build());
 
         Registry.register(Registries.ITEM_GROUP, GADGETS_GROUP_KEY, GADGETS_GROUP);
         ItemGroupEvents.modifyEntriesEvent(GADGETS_GROUP_KEY).register(entries -> {
@@ -73,7 +90,14 @@ public class Gadgets implements ModInitializer {
             entries.add(ROPE);
             entries.add(PLAYER_SENSOR);
             entries.add(FILTER_HOPPER);
+            entries.add(REDSTONE_TRANSMITTER);
+            entries.add(REDSTONE_RECEIVER);
+            entries.add(REDSTONE_LINKER);
         });
+
+        // Wireless redstone signals are transient — drop them when the server stops
+        // so they never leak into the next world loaded in the same session.
+        ServerLifecycleEvents.SERVER_STOPPED.register(server -> WirelessNetwork.clear());
 
         LOGGER.info("Gadgets loaded.");
     }

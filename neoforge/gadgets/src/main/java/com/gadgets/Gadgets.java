@@ -15,6 +15,8 @@ import net.minecraft.world.level.block.entity.BlockEntityType;
 import net.minecraft.world.level.block.state.BlockBehaviour;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.fml.common.Mod;
+import net.neoforged.neoforge.common.NeoForge;
+import net.neoforged.neoforge.event.server.ServerStoppedEvent;
 import net.neoforged.neoforge.registries.DeferredBlock;
 import net.neoforged.neoforge.registries.DeferredItem;
 import net.neoforged.neoforge.registries.DeferredRegister;
@@ -52,9 +54,19 @@ public class Gadgets {
     public static final DeferredBlock<Block> FILTER_HOPPER = BLOCKS.register("filter_hopper",
             () -> new FilterHopperBlock(BlockBehaviour.Properties.of()
                     .strength(3.0F).requiresCorrectToolForDrops().sound(SoundType.METAL)));
+    public static final DeferredBlock<Block> REDSTONE_TRANSMITTER = BLOCKS.register("redstone_transmitter",
+            () -> new RedstoneTransmitterBlock(BlockBehaviour.Properties.of()
+                    .strength(1.5F).requiresCorrectToolForDrops().sound(SoundType.METAL)));
+    public static final DeferredBlock<Block> REDSTONE_RECEIVER = BLOCKS.register("redstone_receiver",
+            () -> new RedstoneReceiverBlock(BlockBehaviour.Properties.of()
+                    .strength(1.5F).requiresCorrectToolForDrops().sound(SoundType.METAL)));
 
     public static final DeferredItem<?> PLAYER_SENSOR_ITEM = ITEMS.registerSimpleBlockItem("player_sensor", PLAYER_SENSOR);
     public static final DeferredItem<?> FILTER_HOPPER_ITEM = ITEMS.registerSimpleBlockItem("filter_hopper", FILTER_HOPPER);
+    public static final DeferredItem<?> REDSTONE_TRANSMITTER_ITEM = ITEMS.registerSimpleBlockItem("redstone_transmitter", REDSTONE_TRANSMITTER);
+    public static final DeferredItem<?> REDSTONE_RECEIVER_ITEM = ITEMS.registerSimpleBlockItem("redstone_receiver", REDSTONE_RECEIVER);
+    public static final DeferredItem<Item> REDSTONE_LINKER =
+            ITEMS.register("redstone_linker", () -> new RedstoneLinkerItem(new Item.Properties().stacksTo(1)));
 
     public static final Supplier<BlockEntityType<PlayerSensorBlockEntity>> PLAYER_SENSOR_BE =
             BLOCK_ENTITIES.register("player_sensor",
@@ -62,6 +74,12 @@ public class Gadgets {
     public static final Supplier<BlockEntityType<FilterHopperBlockEntity>> FILTER_HOPPER_BE =
             BLOCK_ENTITIES.register("filter_hopper",
                     () -> BlockEntityType.Builder.of(FilterHopperBlockEntity::new, FILTER_HOPPER.get()).build(null));
+    public static final Supplier<BlockEntityType<RedstoneTransmitterBlockEntity>> REDSTONE_TRANSMITTER_BE =
+            BLOCK_ENTITIES.register("redstone_transmitter",
+                    () -> BlockEntityType.Builder.of(RedstoneTransmitterBlockEntity::new, REDSTONE_TRANSMITTER.get()).build(null));
+    public static final Supplier<BlockEntityType<RedstoneReceiverBlockEntity>> REDSTONE_RECEIVER_BE =
+            BLOCK_ENTITIES.register("redstone_receiver",
+                    () -> BlockEntityType.Builder.of(RedstoneReceiverBlockEntity::new, REDSTONE_RECEIVER.get()).build(null));
 
     public static final Supplier<CreativeModeTab> GADGETS_TAB = CREATIVE_TABS.register("gadgets",
             () -> CreativeModeTab.builder()
@@ -73,6 +91,9 @@ public class Gadgets {
                         output.accept(ROPE_ITEM.get());
                         output.accept(PLAYER_SENSOR_ITEM.get());
                         output.accept(FILTER_HOPPER_ITEM.get());
+                        output.accept(REDSTONE_TRANSMITTER_ITEM.get());
+                        output.accept(REDSTONE_RECEIVER_ITEM.get());
+                        output.accept(REDSTONE_LINKER.get());
                     })
                     .build());
 
@@ -82,5 +103,9 @@ public class Gadgets {
         BLOCK_ENTITIES.register(modBus);
         CREATIVE_TABS.register(modBus);
         ENTITIES.register(modBus);
+
+        // Wireless redstone signals are transient — drop them when the server stops
+        // so they never leak into the next world loaded in the same session.
+        NeoForge.EVENT_BUS.addListener((ServerStoppedEvent event) -> WirelessNetwork.clear());
     }
 }
