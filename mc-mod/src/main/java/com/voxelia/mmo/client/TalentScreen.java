@@ -44,6 +44,8 @@ public final class TalentScreen extends Screen {
     private int[] tabTalents = new int[4];
     private int[] prestigeBtn = new int[4];
     private boolean prestigeReady = false;
+    // Prestige takes two clicks: the first arms the button, the second confirms.
+    private boolean prestigeArmed = false;
 
     public TalentScreen() {
         super(Component.literal("Talents"));
@@ -184,14 +186,17 @@ public final class TalentScreen extends Screen {
         int prestige = ClientTalents.prestige(selectedSkill);
         boolean atMax = ClientSkillData.level(selectedSkill) >= SkillCurve.MAX_LEVEL;
         prestigeReady = atMax && prestige < ClientTalents.prestigeMax();
+        if (!prestigeReady) prestigeArmed = false;
         boolean overPrestige = false;
         if (prestigeReady) {
-            String label = "✦ PRESTIGE " + selectedSkill.display() + " ✦";
+            String label = prestigeArmed
+                ? "CLICK AGAIN — RESET " + selectedSkill.display().toUpperCase(java.util.Locale.ROOT) + " TO LV 1"
+                : "✦ PRESTIGE " + selectedSkill.display() + " ✦";
             int lw = this.font.width(label) + 14;
             int bx = x + (PANEL_W - lw) / 2;
             int by = footY + 1;
             overPrestige = mouseX >= bx && mouseX < bx + lw && mouseY >= by && mouseY < by + 12;
-            int base = 0xFF7A34A8;
+            int base = prestigeArmed ? 0xFFA33636 : 0xFF7A34A8;
             g.fill(bx, by, bx + lw, by + 12, overPrestige ? VoxeliaUi.brighten(base, 34) : base);
             g.fill(bx, by, bx + lw, by + 1, 0x60FFFFFF);
             g.drawCenteredString(this.font, label, x + PANEL_W / 2, by + 2, 0xFFFFFFFF);
@@ -213,7 +218,10 @@ public final class TalentScreen extends Screen {
                 Component.literal("Prestige " + selectedSkill.display()).withStyle(ChatFormatting.LIGHT_PURPLE),
                 Component.literal("Resets it to level 1 and refunds its talents,").withStyle(ChatFormatting.GRAY),
                 Component.literal("but grants a permanent extra talent point.").withStyle(ChatFormatting.GRAY),
-                Component.literal("Prestige " + prestige + " → " + (prestige + 1)).withStyle(ChatFormatting.WHITE)),
+                Component.literal("Prestige " + prestige + " → " + (prestige + 1)).withStyle(ChatFormatting.WHITE),
+                prestigeArmed
+                    ? Component.literal("Click again to confirm.").withStyle(ChatFormatting.RED)
+                    : Component.literal("Takes two clicks — no accidents.").withStyle(ChatFormatting.DARK_GRAY)),
                 mouseX, mouseY);
         } else if (hoveredSkill != null && hoveredSkill.skill != selectedSkill) {
             g.renderComponentTooltip(this.font, List.of(
@@ -295,13 +303,20 @@ public final class TalentScreen extends Screen {
     @Override
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
         if (button == 0) {
+            boolean onPrestigeBtn = prestigeReady && in(prestigeBtn, mouseX, mouseY);
+            if (!onPrestigeBtn) prestigeArmed = false; // clicking anywhere else disarms
             if (in(tabSkills, mouseX, mouseY)) {
                 Minecraft.getInstance().setScreen(new SkillsScreen());
                 return true;
             }
             if (in(tabTalents, mouseX, mouseY)) return true;
-            if (prestigeReady && in(prestigeBtn, mouseX, mouseY)) {
-                PacketDistributor.sendToServer(new PrestigePacket(selectedSkill.ordinal()));
+            if (onPrestigeBtn) {
+                if (prestigeArmed) {
+                    PacketDistributor.sendToServer(new PrestigePacket(selectedSkill.ordinal()));
+                    prestigeArmed = false;
+                } else {
+                    prestigeArmed = true;
+                }
                 return true;
             }
             for (SkillRow r : skillRows) {

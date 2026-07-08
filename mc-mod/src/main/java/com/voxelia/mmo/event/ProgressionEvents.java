@@ -75,6 +75,20 @@ public final class ProgressionEvents {
             SkillEffects.apply(player);
             VoxeliaNetwork.syncTo(player);
             VoxeliaNetwork.syncTalents(player);
+
+            // First steps: one welcome line until the player has earned any XP.
+            if (player.getData(VoxeliaAttachments.PLAYER_SKILLS.get()).totalXp() == 0) {
+                player.sendSystemMessage(Component.literal("")
+                    .append(Component.literal("[Voxelia] ").withStyle(ChatFormatting.GOLD))
+                    .append(Component.literal("Everything you do trains a skill. Press ")
+                        .withStyle(ChatFormatting.GRAY))
+                    .append(Component.literal("K").withStyle(ChatFormatting.AQUA))
+                    .append(Component.literal(" for skills, ").withStyle(ChatFormatting.GRAY))
+                    .append(Component.literal("N").withStyle(ChatFormatting.AQUA))
+                    .append(Component.literal(" for talents, ").withStyle(ChatFormatting.GRAY))
+                    .append(Component.literal("P").withStyle(ChatFormatting.AQUA))
+                    .append(Component.literal(" for your profile.").withStyle(ChatFormatting.GRAY)));
+            }
         }
     }
 

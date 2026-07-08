@@ -14,6 +14,7 @@ import com.voxelia.mmo.skill.Talent;
 import net.minecraft.ChatFormatting;
 import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.network.chat.Component;
+import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.sounds.SoundEvents;
@@ -99,6 +100,20 @@ public final class VoxeliaNetwork {
     /** The prestige flourish: client-side celebration overlay + an in-world particle/sound burst. */
     private static void celebratePrestige(ServerPlayer player, Skill skill, int newCount) {
         PacketDistributor.sendToPlayer(player, new PrestigeCelebrationPacket(skill.ordinal(), newCount));
+
+        // One tasteful gold line to everyone else on the server — shared glory, no spam.
+        MinecraftServer server = player.getServer();
+        if (server != null) {
+            Component announce = Component.literal("")
+                .append(Component.literal("✦ ").withStyle(ChatFormatting.GOLD))
+                .append(Component.literal(player.getGameProfile().getName()).withStyle(ChatFormatting.WHITE))
+                .append(Component.literal(" ascended " + skill.display() + " — Prestige " + newCount + " ✦")
+                    .withStyle(ChatFormatting.GOLD));
+            for (ServerPlayer other : server.getPlayerList().getPlayers()) {
+                if (other != player) other.sendSystemMessage(announce);
+            }
+        }
+
         if (player.level() instanceof ServerLevel level) {
             double x = player.getX(), y = player.getY() + 1.0, z = player.getZ();
             level.sendParticles(ParticleTypes.TOTEM_OF_UNDYING, x, y, z, 90, 0.6, 1.0, 0.6, 0.35);
