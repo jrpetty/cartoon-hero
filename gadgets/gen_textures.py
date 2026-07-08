@@ -215,3 +215,73 @@ LINK = [
 link_pal = {".": CLEAR, "g": C(90, 96, 105), "h": C(120, 84, 44),
             "R": C(220, 60, 60), "r": C(255, 170, 170)}
 write_png(os.path.join(BASE, "item", "redstone_linker.png"), grid(LINK, link_pal))
+
+# --- Display Pedestal block: pale carved stone plinth ---
+PED = [
+    "pppppppppppppppp",
+    "pPPPPPPPPPPPPPPp",
+    "pP............Pp",
+    "pP.pppppppppp.Pp"[:16],
+    "pP.p........p.Pp"[:16],
+    "pP.p.qqqqqq.p.Pp"[:16],
+    "pP.p.q....q.p.Pp"[:16],
+    "pP.p.q....q.p.Pp"[:16],
+    "pP.p.q....q.p.Pp"[:16],
+    "pP.p.qqqqqq.p.Pp"[:16],
+    "pP.p........p.Pp"[:16],
+    "pP.pppppppppp.Pp"[:16],
+    "pP............Pp",
+    "pPPPPPPPPPPPPPPp",
+    "pppppppppppppppp",
+    "pppppppppppppppp",
+]
+PED = [(r + "p" * 16)[:16] for r in PED]
+ped_pal = {"p": C(150, 150, 158), "P": C(120, 120, 128),
+           ".": C(170, 170, 178), "q": C(100, 100, 110)}
+write_png(os.path.join(BASE, "block", "display_pedestal.png"), grid(PED, ped_pal))
+
+# --- Item Sender block: dark metal with a blue up-arrow (items out) ---
+SEND = [
+    "MMMMMMMMMMMMMMMM",
+    "MddddddddddddddM",
+    "Md.....bb.....dM",
+    "Md....bbbb....dM",
+    "Md...bbbbbb...dM",
+    "Md..bbbbbbbb..dM",
+    "Md.bbb.bb.bbb.dM",
+    "Md.b...bb...b.dM",
+    "Md.....bb.....dM",
+    "Md.....bb.....dM",
+    "Md.....bb.....dM",
+    "Md.....bb.....dM",
+    "MddddddddddddddM",
+    "MMMMMMMMMMMMMMMM",
+    "MMMMMMMMMMMMMMMM",
+    "MMMMMMMMMMMMMMMM",
+]
+send_pal = {"M": C(40, 42, 48), "d": C(70, 74, 82), ".": C(55, 58, 66),
+            "b": C(90, 160, 230)}
+write_png(os.path.join(BASE, "block", "item_sender.png"), grid(SEND, send_pal))
+
+# --- Item Receiver block: dark metal with a blue down-arrow (items in) ---
+RECV = [
+    "MMMMMMMMMMMMMMMM",
+    "MddddddddddddddM",
+    "Md.....bb.....dM",
+    "Md.....bb.....dM",
+    "Md.....bb.....dM",
+    "Md.....bb.....dM",
+    "Md.b...bb...b.dM",
+    "Md.bbb.bb.bbb.dM",
+    "Md..bbbbbbbb..dM",
+    "Md...bbbbbb...dM",
+    "Md....bbbb....dM",
+    "Md.....bb.....dM",
+    "MddddddddddddddM",
+    "MMMMMMMMMMMMMMMM",
+    "MMMMMMMMMMMMMMMM",
+    "MMMMMMMMMMMMMMMM",
+]
+recv_pal = {"M": C(40, 42, 48), "d": C(70, 74, 82), ".": C(55, 58, 66),
+            "b": C(90, 160, 230)}
+write_png(os.path.join(BASE, "block", "item_receiver.png"), grid(RECV, recv_pal))

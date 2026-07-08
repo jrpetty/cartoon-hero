@@ -55,6 +55,16 @@ public class Gadgets implements ModInitializer {
     public static final Item REDSTONE_LINKER = register("redstone_linker",
             new RedstoneLinkerItem(new Item.Settings().maxCount(1)));
 
+    public static final Block DISPLAY_PEDESTAL = registerBlock("display_pedestal",
+            new DisplayPedestalBlock(AbstractBlock.Settings.create()
+                    .strength(1.0F).sounds(BlockSoundGroup.STONE).nonOpaque()));
+    public static final Block ITEM_SENDER = registerBlock("item_sender",
+            new ItemSenderBlock(AbstractBlock.Settings.create()
+                    .strength(1.5F).requiresTool().sounds(BlockSoundGroup.METAL)));
+    public static final Block ITEM_RECEIVER = registerBlock("item_receiver",
+            new ItemReceiverBlock(AbstractBlock.Settings.create()
+                    .strength(1.5F).requiresTool().sounds(BlockSoundGroup.METAL)));
+
     public static final RegistryKey<ItemGroup> GADGETS_GROUP_KEY =
             RegistryKey.of(RegistryKeys.ITEM_GROUP, Identifier.of(MOD_ID, "gadgets"));
     public static final ItemGroup GADGETS_GROUP = FabricItemGroup.builder()
@@ -71,6 +81,9 @@ public class Gadgets implements ModInitializer {
     public static BlockEntityType<FilterHopperBlockEntity> FILTER_HOPPER_BE;
     public static BlockEntityType<RedstoneTransmitterBlockEntity> REDSTONE_TRANSMITTER_BE;
     public static BlockEntityType<RedstoneReceiverBlockEntity> REDSTONE_RECEIVER_BE;
+    public static BlockEntityType<DisplayPedestalBlockEntity> DISPLAY_PEDESTAL_BE;
+    public static BlockEntityType<ItemSenderBlockEntity> ITEM_SENDER_BE;
+    public static BlockEntityType<ItemReceiverBlockEntity> ITEM_RECEIVER_BE;
 
     @Override
     public void onInitialize() {
@@ -82,6 +95,12 @@ public class Gadgets implements ModInitializer {
                 FabricBlockEntityTypeBuilder.create(RedstoneTransmitterBlockEntity::new, REDSTONE_TRANSMITTER).build());
         REDSTONE_RECEIVER_BE = Registry.register(Registries.BLOCK_ENTITY_TYPE, Identifier.of(MOD_ID, "redstone_receiver"),
                 FabricBlockEntityTypeBuilder.create(RedstoneReceiverBlockEntity::new, REDSTONE_RECEIVER).build());
+        DISPLAY_PEDESTAL_BE = Registry.register(Registries.BLOCK_ENTITY_TYPE, Identifier.of(MOD_ID, "display_pedestal"),
+                FabricBlockEntityTypeBuilder.create(DisplayPedestalBlockEntity::new, DISPLAY_PEDESTAL).build());
+        ITEM_SENDER_BE = Registry.register(Registries.BLOCK_ENTITY_TYPE, Identifier.of(MOD_ID, "item_sender"),
+                FabricBlockEntityTypeBuilder.create(ItemSenderBlockEntity::new, ITEM_SENDER).build());
+        ITEM_RECEIVER_BE = Registry.register(Registries.BLOCK_ENTITY_TYPE, Identifier.of(MOD_ID, "item_receiver"),
+                FabricBlockEntityTypeBuilder.create(ItemReceiverBlockEntity::new, ITEM_RECEIVER).build());
 
         Registry.register(Registries.ITEM_GROUP, GADGETS_GROUP_KEY, GADGETS_GROUP);
         ItemGroupEvents.modifyEntriesEvent(GADGETS_GROUP_KEY).register(entries -> {
@@ -93,11 +112,17 @@ public class Gadgets implements ModInitializer {
             entries.add(REDSTONE_TRANSMITTER);
             entries.add(REDSTONE_RECEIVER);
             entries.add(REDSTONE_LINKER);
+            entries.add(DISPLAY_PEDESTAL);
+            entries.add(ITEM_SENDER);
+            entries.add(ITEM_RECEIVER);
         });
 
         // Wireless redstone signals are transient — drop them when the server stops
         // so they never leak into the next world loaded in the same session.
-        ServerLifecycleEvents.SERVER_STOPPED.register(server -> WirelessNetwork.clear());
+        ServerLifecycleEvents.SERVER_STOPPED.register(server -> {
+            WirelessNetwork.clear();
+            ItemNetwork.clear();
+        });
 
         LOGGER.info("Gadgets loaded.");
     }

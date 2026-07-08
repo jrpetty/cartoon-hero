@@ -9,5 +9,8 @@
   "block.gadgets.redstone_transmitter": "Redstone Transmitter",
   "block.gadgets.redstone_receiver": "Redstone Receiver",
   "item.gadgets.redstone_linker": "Redstone Linker",
+  "block.gadgets.display_pedestal": "Display Pedestal",
+  "block.gadgets.item_sender": "Item Sender",
+  "block.gadgets.item_receiver": "Item Receiver",
   "itemgroup.gadgets.gadgets": "Gadgets"
 }
