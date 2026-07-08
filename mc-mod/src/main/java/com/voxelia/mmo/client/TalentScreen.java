@@ -214,10 +214,12 @@ public final class TalentScreen extends Screen {
 
         if (hoveredCard != null) renderCardTooltip(g, hoveredCard.talent, max, mouseX, mouseY);
         else if (overPrestige) {
+            int perPrestige = ClientTalents.pointsPerPrestige();
             g.renderComponentTooltip(this.font, List.of(
                 Component.literal("Prestige " + selectedSkill.display()).withStyle(ChatFormatting.LIGHT_PURPLE),
                 Component.literal("Resets it to level 1 and refunds its talents,").withStyle(ChatFormatting.GRAY),
-                Component.literal("but grants a permanent extra talent point.").withStyle(ChatFormatting.GRAY),
+                Component.literal("but grants " + perPrestige + " permanent extra talent point"
+                    + (perPrestige == 1 ? "" : "s") + ".").withStyle(ChatFormatting.GRAY),
                 Component.literal("Prestige " + prestige + " → " + (prestige + 1)).withStyle(ChatFormatting.WHITE),
                 prestigeArmed
                     ? Component.literal("Click again to confirm.").withStyle(ChatFormatting.RED)

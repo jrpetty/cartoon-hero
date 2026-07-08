@@ -156,13 +156,13 @@ public final class VoxeliaConfig {
         b.pop();
 
         b.comment("Prestige — at max level a skill can be prestiged: it resets to level 1 (and its "
-            + "talents), and grants a permanent extra talent point in that skill, given at once.").push("prestige");
+            + "talents), and grants permanent extra talent points in that skill, given at once.").push("prestige");
         PRESTIGE_ENABLED = b.comment("Whether skills can be prestiged at max level.")
             .define("enabled", true);
         PRESTIGE_MAX = b.comment("Maximum number of times a single skill can be prestiged.")
             .defineInRange("maxPrestige", 3, 0, 100);
         PRESTIGE_POINTS = b.comment("Extra talent points granted per prestige in that skill.")
-            .defineInRange("pointsPerPrestige", 1, 0, 100);
+            .defineInRange("pointsPerPrestige", 2, 0, 100);
         b.pop();
 
         b.comment("Active keybind abilities (cooldown-balanced). The newer skills' 'ultimates' are "

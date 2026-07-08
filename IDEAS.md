@@ -8,7 +8,7 @@ committed to a timeline — it's a backlog to pull from later.
 ## ✅ SHIPPED: Prestige / Ascension
 
 Built and live: per-skill prestige at level 100 (resets the skill + its talents,
-grants +1 permanent talent point per prestige, capped at 3), with prestige stars
+grants +2 permanent talent points per prestige, capped at 3), with prestige stars
 on every surface, a two-click confirm button, a full-screen celebration +
 particles/sound, and a server-wide announcement. Original design notes kept
 below for reference.

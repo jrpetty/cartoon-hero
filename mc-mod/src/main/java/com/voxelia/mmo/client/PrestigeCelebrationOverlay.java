@@ -97,7 +97,8 @@ public final class PrestigeCelebrationOverlay implements LayeredDraw.Layer {
             cx, cy + 24, (ta << 24) | gold);
         int subA = Math.max(0, Math.min(255, (int) (alpha * 210)));
         if (subA > 8) {
-            g.drawCenteredString(mc.font, "back to Level 1  ·  +1 talent point",
+            int pts = ClientTalents.pointsPerPrestige();
+            g.drawCenteredString(mc.font, "back to Level 1  ·  +" + pts + " talent point" + (pts == 1 ? "" : "s"),
                 cx, cy + 38, (subA << 24) | (VoxeliaUi.TEXT & 0xFFFFFF));
         }
     }

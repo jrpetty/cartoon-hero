@@ -40,7 +40,7 @@ Fortune never applies with Silk Touch (no dupes). Abilities are deliberately
 | System | What it does |
 | --- | --- |
 | **Talents** | Each skill has its own 5-talent tree (max rank 5 each). You earn **1 talent point per 8 levels** in that skill — 12 points by level 100. Spend them on the Talent screen (`N`). `/voxelia talent reset` refunds everything. |
-| **Prestige** | At level 100 a skill can be **prestiged** (button on the Talent screen — takes **two clicks**, no accidents — or `/voxelia prestige <skill>`): it resets to level 1, its talents refund, and you gain **+1 permanent talent point** for that skill, granted immediately (13/14/15 possible points at Prestige 1/2/3, cap 3). Prestige stars (✦) show on every surface and in your chat title, a full-screen celebration + particles/sound plays, and the server gets one gold announcement line. |
+| **Prestige** | At level 100 a skill can be **prestiged** (button on the Talent screen — takes **two clicks**, no accidents — or `/voxelia prestige <skill>`): it resets to level 1, its talents refund, and you gain **+2 permanent talent points** for that skill, granted immediately (14/16/18 possible points at Prestige 1/2/3, cap 3). Prestige stars (✦) show on every surface and in your chat title, a full-screen celebration + particles/sound plays, and the server gets one gold announcement line. |
 | **Death penalty** | Dying costs **20% of every skill's XP** (config). Levels genuinely drop — the respawn message tells you what you lost. |
 | **Character level & titles** | Your character level is the average of all skills. Chat shows `[Lv 42 • Master Miner ✦✦] Name`, ranked Novice → Grandmaster. |
 | **Level-up feedback** | Chat line, sound, on-screen title, particles, and a "+XP" flash on the HUD. |

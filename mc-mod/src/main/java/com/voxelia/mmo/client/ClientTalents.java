@@ -31,6 +31,9 @@ public final class ClientTalents {
 
     public static int prestigeMax() { return prestigeMax; }
 
+    /** Extra talent points each prestige grants (synced from server config). */
+    public static int pointsPerPrestige() { return pointsPerPrestige; }
+
     public static int rank(Talent talent) {
         return ranks.getOrDefault(talent.id(), 0);
     }
