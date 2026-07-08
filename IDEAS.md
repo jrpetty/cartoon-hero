@@ -5,7 +5,13 @@ committed to a timeline — it's a backlog to pull from later.
 
 ---
 
-## 🥇 On deck: Prestige / Ascension  ← the one we want to look into
+## ✅ SHIPPED: Prestige / Ascension
+
+Built and live: per-skill prestige at level 100 (resets the skill + its talents,
+grants +1 permanent talent point per prestige, capped at 3), with prestige stars
+on every surface, a two-click confirm button, a full-screen celebration +
+particles/sound, and a server-wide announcement. Original design notes kept
+below for reference.
 
 **Goal:** give the mod a real endgame. Right now a skill caps at level 100 and
 then XP is wasted; Prestige turns "max level" into a milestone, not a dead end.
@@ -66,8 +72,7 @@ vs. real power creep — tune the bonus so it's meaningful but not broken.
 - **Beastmastery / tameable pets** — a companion that levels and fights/gathers.
 
 ### Content & world
-- **Vein-miner / tree-feller** — break a whole vein/tree at once (level- or
-  talent-gated). High QoL, universally loved.
+- ~~Vein-miner / tree-feller~~ — **rejected** (decided against it for this mod).
 - **Roguelike skill dungeons** — a portal to a level-scaled dungeon for loot/essence.
 - **Shrines / totems** — placeable, buff a skill in a radius (great for co-op bases).
 - **World events** — Blood Moon (danger + XP), Harvest Festival (farming boost),
@@ -86,8 +91,9 @@ vs. real power creep — tune the bonus so it's meaningful but not broken.
 - **Currency + shop** — earn "skill marks", spend at a vendor for tokens/boosts/cosmetics.
 
 ### Feel & QoL
-- **Character profile screen** (playtime, deaths, best skill, totals).
+- ~~Character profile screen~~ — **shipped** (`/voxelia profile` / P key).
+- ~~Scoreboard sidebar toggle~~ — **shipped** (`/voxelia sidebar` / J key).
 - **Rested XP** — bonus XP for a while after logging back in.
-- **Scoreboard sidebar** toggle showing all skill levels.
+- **Milestone rewards** — a small one-time bonus at skill level 25/50/75.
 - **Gravestones** — recover your dropped items from a grave.
 - **Titles & particle auras**, per-skill level-up sounds, nameplate skill badges.
