@@ -65,6 +65,10 @@ public class Gadgets implements ModInitializer {
             new ItemReceiverBlock(AbstractBlock.Settings.create()
                     .strength(1.5F).requiresTool().sounds(BlockSoundGroup.METAL)));
 
+    public static final Block DRAIN = registerBlock("drain",
+            new DrainBlock(AbstractBlock.Settings.create()
+                    .strength(2.0F).requiresTool().sounds(BlockSoundGroup.METAL).nonOpaque()));
+
     public static final RegistryKey<ItemGroup> GADGETS_GROUP_KEY =
             RegistryKey.of(RegistryKeys.ITEM_GROUP, Identifier.of(MOD_ID, "gadgets"));
     public static final ItemGroup GADGETS_GROUP = FabricItemGroup.builder()
@@ -84,6 +88,7 @@ public class Gadgets implements ModInitializer {
     public static BlockEntityType<DisplayPedestalBlockEntity> DISPLAY_PEDESTAL_BE;
     public static BlockEntityType<ItemSenderBlockEntity> ITEM_SENDER_BE;
     public static BlockEntityType<ItemReceiverBlockEntity> ITEM_RECEIVER_BE;
+    public static BlockEntityType<DrainBlockEntity> DRAIN_BE;
 
     @Override
     public void onInitialize() {
@@ -101,6 +106,8 @@ public class Gadgets implements ModInitializer {
                 FabricBlockEntityTypeBuilder.create(ItemSenderBlockEntity::new, ITEM_SENDER).build());
         ITEM_RECEIVER_BE = Registry.register(Registries.BLOCK_ENTITY_TYPE, Identifier.of(MOD_ID, "item_receiver"),
                 FabricBlockEntityTypeBuilder.create(ItemReceiverBlockEntity::new, ITEM_RECEIVER).build());
+        DRAIN_BE = Registry.register(Registries.BLOCK_ENTITY_TYPE, Identifier.of(MOD_ID, "drain"),
+                FabricBlockEntityTypeBuilder.create(DrainBlockEntity::new, DRAIN).build());
 
         Registry.register(Registries.ITEM_GROUP, GADGETS_GROUP_KEY, GADGETS_GROUP);
         ItemGroupEvents.modifyEntriesEvent(GADGETS_GROUP_KEY).register(entries -> {
@@ -115,6 +122,7 @@ public class Gadgets implements ModInitializer {
             entries.add(DISPLAY_PEDESTAL);
             entries.add(ITEM_SENDER);
             entries.add(ITEM_RECEIVER);
+            entries.add(DRAIN);
         });
 
         // Wireless redstone signals are transient — drop them when the server stops

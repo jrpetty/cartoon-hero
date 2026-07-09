@@ -1,6 +1,7 @@
 package com.gadgets;
 
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
@@ -16,15 +17,20 @@ import net.minecraft.world.phys.BlockHitResult;
 import org.jetbrains.annotations.Nullable;
 
 /**
- * A plinth that showcases a single item floating and slowly rotating above it.
+ * A glass display case that showcases a single item floating inside it.
  *
- * <p>Right-click with an item to place it; right-click again with an item to
- * cycle the display size; right-click empty-handed to cycle the spin speed;
- * sneak + right-click empty-handed to take the item back.
+ * <ul>
+ *   <li>Right-click with an item (case empty) → put it on display.</li>
+ *   <li>Right-click the <b>top</b> with an item (case occupied) → cycle spin:
+ *       Off → Slow → Medium → Fast.</li>
+ *   <li>Right-click a <b>side</b> with an item (case occupied) → cycle size.</li>
+ *   <li>Right-click with an <b>empty hand</b> → take the item back.</li>
+ *   <li>It is also a one-slot inventory: hoppers and Item Receivers can load it.</li>
+ * </ul>
  */
 public class DisplayPedestalBlock extends Block implements EntityBlock {
     private static final String[] SCALE_NAMES = {"Small", "Medium", "Large"};
-    private static final String[] SPIN_NAMES = {"Slow", "Medium", "Fast"};
+    private static final String[] SPIN_NAMES = {"Off", "Slow", "Medium", "Fast"};
 
     public DisplayPedestalBlock(Properties properties) {
         super(properties);
@@ -51,10 +57,15 @@ public class DisplayPedestalBlock extends Block implements EntityBlock {
             }
             return ItemInteractionResult.sidedSuccess(level.isClientSide());
         }
-        // Pedestal already occupied: poking it with an item resizes the display.
+        // Occupied: top face tunes the spin, sides tune the size.
         if (!level.isClientSide()) {
-            int s = be.cycleScale();
-            player.displayClientMessage(Component.literal("Display size: " + SCALE_NAMES[s]), true);
+            if (hit.getDirection() == Direction.UP) {
+                int s = be.cycleSpin();
+                player.displayClientMessage(Component.literal("Spin: " + SPIN_NAMES[s]), true);
+            } else {
+                int s = be.cycleScale();
+                player.displayClientMessage(Component.literal("Display size: " + SCALE_NAMES[s]), true);
+            }
         }
         return ItemInteractionResult.sidedSuccess(level.isClientSide());
     }
@@ -65,14 +76,9 @@ public class DisplayPedestalBlock extends Block implements EntityBlock {
             return InteractionResult.PASS;
         }
         if (!level.isClientSide()) {
-            if (player.isShiftKeyDown()) {
-                ItemStack taken = be.removeDisplayed();
-                if (!player.getInventory().add(taken)) {
-                    player.drop(taken, false);
-                }
-            } else {
-                int s = be.cycleSpin();
-                player.displayClientMessage(Component.literal("Spin speed: " + SPIN_NAMES[s]), true);
+            ItemStack taken = be.removeDisplayed();
+            if (!player.getInventory().add(taken)) {
+                player.drop(taken, false);
             }
         }
         return InteractionResult.sidedSuccess(level.isClientSide());

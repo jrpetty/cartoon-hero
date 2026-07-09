@@ -1,0 +1,4 @@
+{ "variants": {
+  "disguised=false": { "model": "gadgets:block/drain" },
+  "disguised=true":  { "model": "gadgets:block/drain_disguised" }
+} }

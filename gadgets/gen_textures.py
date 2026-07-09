@@ -285,3 +285,150 @@ RECV = [
 recv_pal = {"M": C(40, 42, 48), "d": C(70, 74, 82), ".": C(55, 58, 66),
             "b": C(90, 160, 230)}
 write_png(os.path.join(BASE, "block", "item_receiver.png"), grid(RECV, recv_pal))
+
+# ============ v2 art: richer detail, gold-riveted steel frames ============
+K2 = C(25, 26, 30)      # near-black frame
+S2 = C(140, 146, 158)   # light steel
+m2 = C(80, 85, 96)      # mid steel
+d2 = C(52, 55, 64)      # dark inset
+g2 = C(222, 178, 62)    # gold rivet
+r2 = C(205, 55, 45)     # red
+R2 = C(245, 95, 70)     # bright red
+W2 = C(255, 220, 190)   # white-hot core
+b2 = C(66, 135, 220)    # blue
+B2 = C(125, 195, 255)   # bright blue
+
+def fix16(rows):
+    return [(r + "." * 16)[:16] for r in rows]
+
+# --- Redstone Transmitter v2: glowing gem with radiating rays + antenna base ---
+TX2 = fix16([
+    "KKKKKKKKKKKKKKKK",
+    "KgSSSSSSSSSSSSgK",
+    "KSmmmmmmmmmmmmSK",
+    "KSm....rr....mSK",
+    "KSm..r.rr.r..mSK",
+    "KSm.r..rr..r.mSK",
+    "KSm...RRRR...mSK",
+    "KSm..RRWWRR..mSK",
+    "KSm..RRWWRR..mSK",
+    "KSm...RRRR...mSK",
+    "KSm..........mSK",
+    "KSm..dddddd..mSK",
+    "KSm.dKKKKKKd.mSK",
+    "KSmmmmmmmmmmmmSK",
+    "KgSSSSSSSSSSSSgK",
+    "KKKKKKKKKKKKKKKK",
+])
+pal2 = {".": d2, "K": K2, "S": S2, "m": m2, "d": C(40, 42, 50), "g": g2,
+        "r": r2, "R": R2, "W": W2, "b": b2, "B": B2}
+write_png(os.path.join(BASE, "block", "redstone_transmitter.png"), grid(TX2, pal2))
+
+# --- Redstone Receiver v2: gem inside a receiving ring, feed line below ---
+RX2 = fix16([
+    "KKKKKKKKKKKKKKKK",
+    "KgSSSSSSSSSSSSgK",
+    "KSmmmmmmmmmmmmSK",
+    "KSm...dddd...mSK",
+    "KSm..d....d..mSK",
+    "KSm.d.RRRR.d.mSK",
+    "KSm.d.RWWR.d.mSK",
+    "KSm.d.RWWR.d.mSK",
+    "KSm.d.RRRR.d.mSK",
+    "KSm..d....d..mSK",
+    "KSm...dddd...mSK",
+    "KSm....rr....mSK",
+    "KSm....rr....mSK",
+    "KSmmmmmmmmmmmmSK",
+    "KgSSSSSSSSSSSSgK",
+    "KKKKKKKKKKKKKKKK",
+])
+write_png(os.path.join(BASE, "block", "redstone_receiver.png"), grid(RX2, pal2))
+
+# --- Item Sender v2: bold blue up-arrow on brushed steel ---
+SEND2 = fix16([
+    "KKKKKKKKKKKKKKKK",
+    "KgSSSSSSSSSSSSgK",
+    "KSmmmmmmmmmmmmSK",
+    "KSm....BB....mSK",
+    "KSm...BBBB...mSK",
+    "KSm..BBBBBB..mSK",
+    "KSm.BBBBBBBB.mSK",
+    "KSm....bb....mSK",
+    "KSm....bb....mSK",
+    "KSm....bb....mSK",
+    "KSm....bb....mSK",
+    "KSm...dbbd...mSK",
+    "KSm..dddddd..mSK",
+    "KSmmmmmmmmmmmmSK",
+    "KgSSSSSSSSSSSSgK",
+    "KKKKKKKKKKKKKKKK",
+])
+write_png(os.path.join(BASE, "block", "item_sender.png"), grid(SEND2, pal2))
+
+# --- Item Receiver v2: bold blue down-arrow ---
+RECV2 = fix16([
+    "KKKKKKKKKKKKKKKK",
+    "KgSSSSSSSSSSSSgK",
+    "KSmmmmmmmmmmmmSK",
+    "KSm..dddddd..mSK",
+    "KSm...dbbd...mSK",
+    "KSm....bb....mSK",
+    "KSm....bb....mSK",
+    "KSm....bb....mSK",
+    "KSm....bb....mSK",
+    "KSm.BBBBBBBB.mSK",
+    "KSm..BBBBBB..mSK",
+    "KSm...BBBB...mSK",
+    "KSm....BB....mSK",
+    "KSmmmmmmmmmmmmSK",
+    "KgSSSSSSSSSSSSgK",
+    "KKKKKKKKKKKKKKKK",
+])
+write_png(os.path.join(BASE, "block", "item_receiver.png"), grid(RECV2, pal2))
+
+# --- Pedestal base: white marble with veins and a gold border ---
+PED_PAL = {"g": C(212, 172, 70), "w": C(236, 233, 226), "W": C(248, 246, 240), "v": C(203, 198, 188)}
+PED2 = fix16([
+    "gggggggggggggggg",
+    "gwwwwwWwwwwvwwwg",
+    "gwWwwwwwvwwwwwwg",
+    "gwwwwvwwwwwwWwwg",
+    "gwwvwwwwWwwwwvwg",
+    "gwWwwwwvwwwwwwwg",
+    "gwwwwwwwwvwwWwwg",
+    "gwvwwWwwwwwwwwvg",
+    "gwwwwwwvwwWwwwwg",
+    "gwwWwwwwwwwwvwwg",
+    "gwvwwwvwwWwwwwwg",
+    "gwwwwWwwwwwwvwwg",
+    "gwWwwwwwvwwwwWwg",
+    "gwwwvwwwwwWwwwwg",
+    "gwwwwwWwwwwwvwwg",
+    "gggggggggggggggg",
+])
+# fix16 pads with "." — replace any pad with marble
+PED2 = [row.replace(".", "w") for row in PED2]
+write_png(os.path.join(BASE, "block", "pedestal_base.png"), grid(PED2, PED_PAL))
+
+# --- Drain: dark steel grate with slits and gold rivets ---
+DR_PAL = {"K": C(30, 32, 36), "m": C(110, 116, 126), "g": C(222, 178, 62), "_": C(12, 12, 14)}
+DRAIN2 = [
+    "KKKKKKKKKKKKKKKK",
+    "KgmmmmmmmmmmmmgK",
+    "KmmmmmmmmmmmmmmK",
+    "Kmm__mm__mm__mmK",
+    "Kmm__mm__mm__mmK",
+    "Kmm__mm__mm__mmK",
+    "Kmm__mm__mm__mmK",
+    "KmmmmmmmmmmmmmmK",
+    "KmmmmmmmmmmmmmmK",
+    "Kmm__mm__mm__mmK",
+    "Kmm__mm__mm__mmK",
+    "Kmm__mm__mm__mmK",
+    "Kmm__mm__mm__mmK",
+    "KmmmmmmmmmmmmmmK",
+    "KgmmmmmmmmmmmmgK",
+    "KKKKKKKKKKKKKKKK",
+]
+write_png(os.path.join(BASE, "block", "drain.png"), grid(DRAIN2, DR_PAL))

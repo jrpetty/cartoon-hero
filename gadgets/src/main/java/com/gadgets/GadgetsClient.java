@@ -1,17 +1,22 @@
 package com.gadgets;
 
 import net.fabricmc.api.ClientModInitializer;
+import net.fabricmc.fabric.api.blockrenderlayer.v1.BlockRenderLayerMap;
 import net.fabricmc.fabric.api.client.rendering.v1.EntityRendererRegistry;
+import net.minecraft.client.render.RenderLayer;
 import net.minecraft.client.render.block.entity.BlockEntityRendererFactories;
 
 /**
- * Client-side setup: registers the Rope Arrow projectile renderer and the
- * Display Pedestal block-entity renderer.
+ * Client-side setup: projectile/block-entity renderers and render layers.
  */
 public class GadgetsClient implements ClientModInitializer {
     @Override
     public void onInitializeClient() {
         EntityRendererRegistry.register(Gadgets.ROPE_ARROW_ENTITY, RopeArrowRenderer::new);
         BlockEntityRendererFactories.register(Gadgets.DISPLAY_PEDESTAL_BE, DisplayPedestalRenderer::new);
+        BlockEntityRendererFactories.register(Gadgets.DRAIN_BE, DrainRenderer::new);
+
+        // The display case's glass panes have transparent pixels.
+        BlockRenderLayerMap.INSTANCE.putBlock(Gadgets.DISPLAY_PEDESTAL, RenderLayer.getCutout());
     }
 }

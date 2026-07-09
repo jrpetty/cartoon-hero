@@ -12,19 +12,25 @@ import net.minecraft.util.Hand;
 import net.minecraft.util.ItemActionResult;
 import net.minecraft.util.hit.BlockHitResult;
 import net.minecraft.util.math.BlockPos;
+import net.minecraft.util.math.Direction;
 import net.minecraft.world.World;
 import org.jetbrains.annotations.Nullable;
 
 /**
- * A plinth that showcases a single item floating and slowly rotating above it.
+ * A glass display case that showcases a single item floating inside it.
  *
- * <p>Right-click with an item to place it; right-click again with an item to
- * cycle the display size; right-click empty-handed to cycle the spin speed;
- * sneak + right-click empty-handed to take the item back.
+ * <ul>
+ *   <li>Right-click with an item (case empty) → put it on display.</li>
+ *   <li>Right-click the <b>top</b> with an item (case occupied) → cycle spin:
+ *       Off → Slow → Medium → Fast.</li>
+ *   <li>Right-click a <b>side</b> with an item (case occupied) → cycle size.</li>
+ *   <li>Right-click with an <b>empty hand</b> → take the item back.</li>
+ *   <li>It is also a one-slot inventory: hoppers and Item Receivers can load it.</li>
+ * </ul>
  */
 public class DisplayPedestalBlock extends Block implements BlockEntityProvider {
     private static final String[] SCALE_NAMES = {"Small", "Medium", "Large"};
-    private static final String[] SPIN_NAMES = {"Slow", "Medium", "Fast"};
+    private static final String[] SPIN_NAMES = {"Off", "Slow", "Medium", "Fast"};
 
     public DisplayPedestalBlock(Settings settings) {
         super(settings);
@@ -51,10 +57,15 @@ public class DisplayPedestalBlock extends Block implements BlockEntityProvider {
             }
             return ItemActionResult.SUCCESS;
         }
-        // Pedestal already occupied: poking it with an item resizes the display.
+        // Occupied: top face tunes the spin, sides tune the size.
         if (!world.isClient()) {
-            int s = be.cycleScale();
-            player.sendMessage(Text.literal("Display size: " + SCALE_NAMES[s]), true);
+            if (hit.getSide() == Direction.UP) {
+                int s = be.cycleSpin();
+                player.sendMessage(Text.literal("Spin: " + SPIN_NAMES[s]), true);
+            } else {
+                int s = be.cycleScale();
+                player.sendMessage(Text.literal("Display size: " + SCALE_NAMES[s]), true);
+            }
         }
         return ItemActionResult.SUCCESS;
     }
@@ -65,12 +76,7 @@ public class DisplayPedestalBlock extends Block implements BlockEntityProvider {
             return ActionResult.PASS;
         }
         if (!world.isClient()) {
-            if (player.isSneaking()) {
-                player.giveItemStack(be.removeDisplayed());
-            } else {
-                int s = be.cycleSpin();
-                player.sendMessage(Text.literal("Spin speed: " + SPIN_NAMES[s]), true);
-            }
+            player.giveItemStack(be.removeDisplayed());
         }
         return ActionResult.success(world.isClient());
     }

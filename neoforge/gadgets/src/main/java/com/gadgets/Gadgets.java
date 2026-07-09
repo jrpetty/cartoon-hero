@@ -78,9 +78,14 @@ public class Gadgets {
             () -> new ItemReceiverBlock(BlockBehaviour.Properties.of()
                     .strength(1.5F).requiresCorrectToolForDrops().sound(SoundType.METAL)));
 
+    public static final DeferredBlock<Block> DRAIN = BLOCKS.register("drain",
+            () -> new DrainBlock(BlockBehaviour.Properties.of()
+                    .strength(2.0F).requiresCorrectToolForDrops().sound(SoundType.METAL).noOcclusion()));
+
     public static final DeferredItem<?> DISPLAY_PEDESTAL_ITEM = ITEMS.registerSimpleBlockItem("display_pedestal", DISPLAY_PEDESTAL);
     public static final DeferredItem<?> ITEM_SENDER_ITEM = ITEMS.registerSimpleBlockItem("item_sender", ITEM_SENDER);
     public static final DeferredItem<?> ITEM_RECEIVER_ITEM = ITEMS.registerSimpleBlockItem("item_receiver", ITEM_RECEIVER);
+    public static final DeferredItem<?> DRAIN_ITEM = ITEMS.registerSimpleBlockItem("drain", DRAIN);
 
     public static final Supplier<BlockEntityType<PlayerSensorBlockEntity>> PLAYER_SENSOR_BE =
             BLOCK_ENTITIES.register("player_sensor",
@@ -103,6 +108,9 @@ public class Gadgets {
     public static final Supplier<BlockEntityType<ItemReceiverBlockEntity>> ITEM_RECEIVER_BE =
             BLOCK_ENTITIES.register("item_receiver",
                     () -> BlockEntityType.Builder.of(ItemReceiverBlockEntity::new, ITEM_RECEIVER.get()).build(null));
+    public static final Supplier<BlockEntityType<DrainBlockEntity>> DRAIN_BE =
+            BLOCK_ENTITIES.register("drain",
+                    () -> BlockEntityType.Builder.of(DrainBlockEntity::new, DRAIN.get()).build(null));
 
     public static final Supplier<CreativeModeTab> GADGETS_TAB = CREATIVE_TABS.register("gadgets",
             () -> CreativeModeTab.builder()
@@ -120,6 +128,7 @@ public class Gadgets {
                         output.accept(DISPLAY_PEDESTAL_ITEM.get());
                         output.accept(ITEM_SENDER_ITEM.get());
                         output.accept(ITEM_RECEIVER_ITEM.get());
+                        output.accept(DRAIN_ITEM.get());
                     })
                     .build());
 

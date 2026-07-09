@@ -11,8 +11,11 @@ import net.minecraft.world.item.ItemDisplayContext;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
 
-/** Draws the pedestal's item floating above it, bobbing and rotating. */
+/** Draws the case's item floating inside it, gently bobbing and (optionally) rotating. */
 public class DisplayPedestalRenderer implements BlockEntityRenderer<DisplayPedestalBlockEntity> {
+    /** Degrees per tick for spin settings Off/Slow/Medium/Fast. */
+    private static final float[] SPIN_SPEED = {0.0F, 1.5F, 4.0F, 8.0F};
+
     private final ItemRenderer itemRenderer;
 
     public DisplayPedestalRenderer(BlockEntityRendererProvider.Context ctx) {
@@ -29,12 +32,13 @@ public class DisplayPedestalRenderer implements BlockEntityRenderer<DisplayPedes
         Level level = be.getLevel();
         double time = (level != null ? level.getGameTime() : 0L) + partialTick;
 
-        float bob = (float) (Math.sin(time * 0.1) * 0.05) + 0.05F;
-        float angle = (float) ((time * (2.0 + be.getSpin() * 3.0)) % 360.0);
-        float scale = 0.5F + be.getScale() * 0.35F;
+        int spin = Math.min(Math.max(be.getSpin(), 0), SPIN_SPEED.length - 1);
+        float bob = (float) (Math.sin(time * 0.08) * 0.03);
+        float angle = spin == 0 ? 0.0F : (float) ((time * SPIN_SPEED[spin]) % 360.0);
+        float scale = 0.35F + be.getScale() * 0.225F;
 
         pose.pushPose();
-        pose.translate(0.5, 1.2 + bob, 0.5);
+        pose.translate(0.5, 0.5 + bob, 0.5);
         pose.mulPose(Axis.YP.rotationDegrees(angle));
         pose.scale(scale, scale, scale);
         itemRenderer.renderStatic(stack, ItemDisplayContext.GROUND, light, OverlayTexture.NO_OVERLAY,
