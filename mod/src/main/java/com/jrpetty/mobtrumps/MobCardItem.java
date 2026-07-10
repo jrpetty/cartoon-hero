@@ -4,11 +4,16 @@ import com.jrpetty.mobtrumps.game.MobCard;
 import com.jrpetty.mobtrumps.game.MobCards;
 import com.jrpetty.mobtrumps.game.Stat;
 import com.jrpetty.mobtrumps.game.Tier;
+import com.jrpetty.mobtrumps.client.ClientHooks;
 import net.minecraft.ChatFormatting;
 import net.minecraft.network.chat.Component;
+import net.minecraft.world.InteractionHand;
+import net.minecraft.world.InteractionResultHolder;
+import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.TooltipFlag;
+import net.minecraft.world.level.Level;
 
 import java.util.List;
 
@@ -32,6 +37,16 @@ public class MobCardItem extends Item {
     /** The card this stack represents, or null for a blank card. */
     public static MobCard cardOf(ItemStack stack) {
         return MobCards.byId(stack.get(ModItems.MOB_ID.get()));
+    }
+
+    @Override
+    public InteractionResultHolder<ItemStack> use(Level level, Player player, InteractionHand hand) {
+        ItemStack stack = player.getItemInHand(hand);
+        MobCard card = cardOf(stack);
+        if (card != null && level.isClientSide) {
+            ClientHooks.openCardScreen(card);
+        }
+        return InteractionResultHolder.sidedSuccess(stack, level.isClientSide);
     }
 
     @Override
@@ -64,6 +79,7 @@ public class MobCardItem extends Item {
                     .append(Component.literal(String.valueOf(card.stat(stat)))
                             .withStyle(ChatFormatting.WHITE)));
         }
+        tooltip.add(Component.literal("Right-click to view the card").withStyle(ChatFormatting.DARK_GRAY));
         super.appendHoverText(stack, context, tooltip, flag);
     }
 

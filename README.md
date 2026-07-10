@@ -25,6 +25,8 @@ In game:
 - **Mob Card Pack** item — craft with 3 paper + 1 emerald, right-click to pull
   5 rarity-weighted mob cards (all 81 collectable, legendaries have a foil glint)
 - Card tooltips show all six stats; names are coloured by collector tier
+- Right-click a card to open a full Top Trumps style card view — kraft
+  border, the live 3D mob as the portrait, stat table and total rating
 - `/mobtrumps battle [deck_size]` — start a Top Trumps battle against the CPU,
   played through clickable chat buttons; winning awards a free card pack
 - `/mobtrumps play <stat>`, `/mobtrumps next`, `/mobtrumps forfeit`
