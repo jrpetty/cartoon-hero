@@ -3,7 +3,34 @@
 This project provides a minimal FastAPI backend and simple interface for tracking a FIFA-style league season, players and match results.
 
 It also includes **Mob Trumps** — a Top Trumps / Pokémon TCG Pocket style
-battle system for collectable Minecraft creature cards.
+battle system for collectable Minecraft creature cards, in two forms:
+
+1. a **NeoForge Minecraft mod** (Minecraft 1.21.1) in [`mod/`](mod/) — the main deliverable
+2. a FastAPI + browser prototype (below) used to design the card stats and rules
+
+## NeoForge mod (`mod/`)
+
+Build the jar (requires Java 21; Gradle is fetched by the wrapper):
+
+```bash
+cd mod
+./gradlew build     # jar lands in mod/build/libs/mobtrumps-1.0.0.jar
+```
+
+Drop the jar into your `mods/` folder on a NeoForge 21.1.x (Minecraft 1.21.1)
+client or server.
+
+In game:
+
+- **Mob Card Pack** item — craft with 3 paper + 1 emerald, right-click to pull
+  5 rarity-weighted mob cards (all 81 collectable, legendaries have a foil glint)
+- Card tooltips show all six stats; names are coloured by collector tier
+- `/mobtrumps battle [deck_size]` — start a Top Trumps battle against the CPU,
+  played through clickable chat buttons; winning awards a free card pack
+- `/mobtrumps play <stat>`, `/mobtrumps next`, `/mobtrumps forfeit`
+- Creative tab "Mob Trumps" contains every card
+
+Dev runs: `./gradlew runClient` / `./gradlew runServer`.
 
 ## Mob Trumps
 

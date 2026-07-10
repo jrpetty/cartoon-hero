@@ -1,0 +1,28 @@
+modLoader = "javafml"
+loaderVersion = "[4,)"
+license = "MIT"
+
+[[mods]]
+modId = "mobtrumps"
+version = "${mod_version}"
+displayName = "Mob Trumps"
+description = '''
+Top Trumps style collectable card battles for every Minecraft mob.
+Craft card packs, collect all 81 mob cards and battle the CPU with
+/mobtrumps battle. Stats: Health, Attack, Size, Speed, Farmable, Rarity.
+'''
+authors = "jrpetty"
+
+[[dependencies.mobtrumps]]
+modId = "neoforge"
+type = "required"
+versionRange = "[21.1.0,)"
+ordering = "NONE"
+side = "BOTH"
+
+[[dependencies.mobtrumps]]
+modId = "minecraft"
+type = "required"
+versionRange = "[1.21.1,1.22)"
+ordering = "NONE"
+side = "BOTH"
