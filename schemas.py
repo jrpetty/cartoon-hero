@@ -1,5 +1,5 @@
-from pydantic import BaseModel
-from typing import List
+from pydantic import BaseModel, Field
+from typing import List, Optional
 
 
 class PlayerCreate(BaseModel):
@@ -31,3 +31,46 @@ class Season(BaseModel):
 
 class PlayerList(BaseModel):
     players: List[Player]
+
+
+# --- Minecraft mob card battle system ---
+
+class Card(BaseModel):
+    name: str
+    health: int
+    attack: int
+    size: int
+    speed: int
+    farmable: int
+    rarity: int
+    tier: str
+
+
+class BattleCreate(BaseModel):
+    deck_size: int = Field(default=30, ge=4, le=81)
+
+
+class BattleMove(BaseModel):
+    stat: Optional[str] = None  # required on the player's turn
+
+
+class RoundResult(BaseModel):
+    round: int
+    chooser: str
+    stat: str
+    player_card: Card
+    cpu_card: Card
+    result: str  # 'player', 'cpu' or 'tie'
+
+
+class BattleState(BaseModel):
+    id: str
+    round: int
+    turn: str
+    finished: bool
+    winner: Optional[str] = None
+    player_deck_count: int
+    cpu_deck_count: int
+    pot_count: int
+    player_card: Optional[Card] = None
+    last_round: Optional[RoundResult] = None
