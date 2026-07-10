@@ -34,8 +34,11 @@ clarity over realism*, *predictability over simulation*, and *local logic over g
 - The three custom blocks are **craftable** (Foundation Anchor, Reinforced Beam, Heavy Girder).
 - Build **pillars** under long floors, **buttresses** against walls, **arches** across gaps.
 - A roof carried by two walls survives losing one wall, as long as the other is within span.
+- A failing block **creaks and sheds dust** for a moment (configurable delay, default 0.75s)
+  before it drops — failures are seen and heard, not instant.
 - Overreach falls as a normal vanilla **falling block** — it drops, lands, and piles up. No
   debris, no ragdolls, no chunk-wide cascades.
+- Localized in **11 languages** (EN, ES, FR, DE, IT, PT-BR, RU, ZH-CN, JA, KO, PL).
 - Place the **Foundation Anchor** to root a structure anywhere (e.g. a bridge pier on a riverbed).
 
 ---

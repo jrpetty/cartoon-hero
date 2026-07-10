@@ -5,8 +5,12 @@ import dev.structint.StructuralIntegrityMod;
 import dev.structint.core.PackedPos;
 import dev.structint.core.StructuralEngine;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.particles.BlockParticleOption;
+import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.entity.item.FallingBlockEntity;
+import net.minecraft.world.level.block.SoundType;
 import net.minecraft.world.level.block.state.BlockState;
 
 import java.util.IdentityHashMap;
@@ -90,8 +94,12 @@ public final class StructuralManager {
                         "structint: structure near {} exceeds maxRegionNodes ({}); treated as stable",
                         PackedPos.toString(origin), Config.MAX_REGION_NODES.get());
             }
+            long readyAt = level.getGameTime() + Config.COLLAPSE_WARN_DELAY_TICKS.get();
             for (long pos : ev.unsupported) {
-                st.enqueueCollapse(pos);
+                if (st.enqueueCollapse(pos, readyAt)) {
+                    // Newly doomed: creak now, fall after the warning window.
+                    warn(level, pos);
+                }
             }
             // A block the player has since propped back up: cancel its pending collapse.
             for (long pos : ev.stable) {
@@ -106,12 +114,18 @@ public final class StructuralManager {
             return;
         }
         int budget = Config.COLLAPSE_BUDGET_PER_TICK.get();
+        long now = level.getGameTime();
         BlockPos.MutableBlockPos cursor = new BlockPos.MutableBlockPos();
         while (budget > 0 && st.hasCollapses()) {
-            long packed = st.dequeueCollapse();
-            if (!st.claimCollapse(packed)) {
-                continue; // a stale FIFO entry for a collapse that was cancelled — skip, no cost
+            long packed = st.peekCollapse();
+            if (!st.isActiveCollapse(packed)) {
+                st.dropCollapseHead(); // stale entry for a collapse that was cancelled — discard
+                continue;
             }
+            if (st.readyAt(packed) > now) {
+                break; // head is still in its warning window; uniform delay ⇒ nothing after is ready
+            }
+            st.dropCollapseHead();
             cursor.set(PackedPos.x(packed), PackedPos.y(packed), PackedPos.z(packed));
 
             // No re-flood needed: the change-phase solve already produced the COMPLETE unsupported
@@ -127,6 +141,28 @@ public final class StructuralManager {
             collapse(level, cursor.immutable(), state);
             budget--;
         }
+    }
+
+    /**
+     * The "creak" warning played the moment a block is first judged unsupported, before it falls:
+     * a muffled version of the block's own break sound plus a puff of its crumbling texture, so a
+     * failure is seen and heard a beat before it happens rather than blinking out of existence.
+     */
+    private static void warn(ServerLevel level, long packed) {
+        if (!Config.COLLAPSE_WARNING_EFFECTS.get()) {
+            return;
+        }
+        BlockPos pos = new BlockPos(PackedPos.x(packed), PackedPos.y(packed), PackedPos.z(packed));
+        BlockState state = level.getBlockState(pos);
+        if (state.isAir()) {
+            return;
+        }
+        SoundType sound = state.getSoundType();
+        level.playSound(null, pos, sound.getHitSound(), SoundSource.BLOCKS,
+                Math.max(0.35F, sound.getVolume() * 0.6F), sound.getPitch() * 0.7F);
+        level.sendParticles(new BlockParticleOption(ParticleTypes.BLOCK, state),
+                pos.getX() + 0.5, pos.getY() + 0.5, pos.getZ() + 0.5,
+                6, 0.3, 0.3, 0.3, 0.0);
     }
 
     private static void collapse(ServerLevel level, BlockPos pos, BlockState state) {

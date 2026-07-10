@@ -15,6 +15,8 @@ public final class Config {
     // --- behaviour ----------------------------------------------------------------------
     public static final ModConfigSpec.BooleanValue ENABLE_COLLAPSE;
     public static final ModConfigSpec.BooleanValue ONLY_PLAYER_PLACED;
+    public static final ModConfigSpec.BooleanValue COLLAPSE_WARNING_EFFECTS;
+    public static final ModConfigSpec.IntValue COLLAPSE_WARN_DELAY_TICKS;
 
     // --- material spans -----------------------------------------------------------------
     public static final ModConfigSpec.IntValue SPAN_DIRT;
@@ -46,6 +48,14 @@ public final class Config {
                         "overhangs, cave ceilings and floating islands across loaded chunks. Expert/",
                         "experimental only.")
                 .define("onlyPlayerPlaced", true);
+        COLLAPSE_WARNING_EFFECTS = b
+                .comment("Play a 'creak' sound and a puff of crumbling particles the moment a block",
+                        "is judged unsupported, a beat before it actually falls.")
+                .define("collapseWarningEffects", true);
+        COLLAPSE_WARN_DELAY_TICKS = b
+                .comment("Ticks between the warning and the fall (20 ticks = 1 second). 0 = fall as",
+                        "soon as it is processed (the warning still plays).")
+                .defineInRange("collapseWarnDelayTicks", 15, 0, 200);
         b.pop();
 
         b.push("spans");

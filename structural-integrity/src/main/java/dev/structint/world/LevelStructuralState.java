@@ -1,5 +1,6 @@
 package dev.structint.world;
 
+import it.unimi.dsi.fastutil.longs.Long2LongOpenHashMap;
 import it.unimi.dsi.fastutil.longs.LongArrayFIFOQueue;
 import it.unimi.dsi.fastutil.longs.LongOpenHashSet;
 
@@ -12,7 +13,11 @@ import it.unimi.dsi.fastutil.longs.LongOpenHashSet;
  *   <li>{@code collapseQueue} — positions already proven unsupported, waiting to fall.</li>
  * </ol>
  *
- * Each queue is paired with a membership set so the same position is never enqueued twice.
+ * Each queue is paired with a membership set so the same position is never enqueued twice. A
+ * doomed block also carries a {@code readyAt} game-time: the tick it may actually fall, giving a
+ * short "creak" warning window between the first sign of failure and the collapse itself. Because
+ * that delay is uniform, FIFO insertion order equals ready order, so the head of the queue is
+ * always the next block due to fall.
  */
 final class LevelStructuralState {
 
@@ -21,6 +26,11 @@ final class LevelStructuralState {
 
     final LongArrayFIFOQueue collapseQueue = new LongArrayFIFOQueue();
     final LongOpenHashSet collapseSet = new LongOpenHashSet();
+    final Long2LongOpenHashMap collapseReadyAt = new Long2LongOpenHashMap();
+
+    LevelStructuralState() {
+        collapseReadyAt.defaultReturnValue(0L);
+    }
 
     void enqueueChange(long pos) {
         if (pendingSet.add(pos)) {
@@ -38,10 +48,14 @@ final class LevelStructuralState {
         return !pendingChanges.isEmpty();
     }
 
-    void enqueueCollapse(long pos) {
+    /** @return true if the position was newly queued (so the caller should play the warning). */
+    boolean enqueueCollapse(long pos, long readyAt) {
         if (collapseSet.add(pos)) {
             collapseQueue.enqueue(pos);
+            collapseReadyAt.put(pos, readyAt);
+            return true;
         }
+        return false;
     }
 
     /**
@@ -52,23 +66,34 @@ final class LevelStructuralState {
         collapseSet.remove(pos);
     }
 
-    /** Dequeue the next FIFO entry. May be a stale (cancelled) entry — check {@link #claimCollapse}. */
-    long dequeueCollapse() {
-        return collapseQueue.dequeueLong();
+    boolean hasCollapses() {
+        return !collapseQueue.isEmpty();
     }
 
-    /** @return true if the position was still an active collapse (and claims it); false if cancelled. */
-    boolean claimCollapse(long pos) {
-        return collapseSet.remove(pos);
+    /** Peek the head of the FIFO without removing it. */
+    long peekCollapse() {
+        return collapseQueue.firstLong();
+    }
+
+    boolean isActiveCollapse(long pos) {
+        return collapseSet.contains(pos);
+    }
+
+    long readyAt(long pos) {
+        return collapseReadyAt.get(pos);
+    }
+
+    /** Remove and forget the head entry (whether it was collapsed or was a stale/cancelled entry). */
+    void dropCollapseHead() {
+        long pos = collapseQueue.dequeueLong();
+        collapseSet.remove(pos);
+        collapseReadyAt.remove(pos);
     }
 
     void clearCollapses() {
         collapseQueue.clear();
         collapseSet.clear();
-    }
-
-    boolean hasCollapses() {
-        return !collapseQueue.isEmpty();
+        collapseReadyAt.clear();
     }
 
     boolean idle() {

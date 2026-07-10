@@ -7,12 +7,16 @@ issueTrackerURL = "https://github.com/jrpetty/cartoon-hero/issues"
 modId = "structint"
 version = "1.0.0"
 displayName = "Structural Integrity"
-authors = "cartoon-hero"
+authors = "jrpetty"
+credits = "Built with Claude Code"
+displayURL = "https://github.com/jrpetty/cartoon-hero"
+logoFile = "logo.png"
 description = '''
 A lightweight, deterministic structural-integrity gameplay system for NeoForge.
 Player-built blocks must trace a valid load path back to natural ground or a foundation,
 within their material's span, or they fall. Pillars, buttresses and arches matter.
-This is a building-rule system, not a physics simulator.
+Blocks creak and shed dust before they drop. This is a building-rule system,
+not a physics simulator.
 '''
 
 [[dependencies.structint]]
