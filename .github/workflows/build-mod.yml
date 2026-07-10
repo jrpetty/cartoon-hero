@@ -1,0 +1,47 @@
+name: Build Mob Trumps mod
+
+on:
+  push:
+    branches:
+      - claude/minecraft-card-battle-system-xmu0iu
+      - master
+    paths:
+      - 'mod/**'
+      - '.github/workflows/build-mod.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Build mod jar
+        working-directory: mod
+        run: ./gradlew --no-daemon build
+
+      - name: Upload jar artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: mobtrumps-jar
+          path: mod/build/libs/*.jar
+
+      - name: Publish jar as release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG=mob-trumps-latest
+          gh release delete "$TAG" --yes || true
+          git push origin ":refs/tags/$TAG" || true
+          gh release create "$TAG" mod/build/libs/mobtrumps-*.jar \
+            --target "$GITHUB_SHA" \
+            --title "Mob Trumps mod (latest build)" \
+            --notes "NeoForge 21.1.x / Minecraft 1.21.1. Download the jar below and drop it into your mods/ folder."

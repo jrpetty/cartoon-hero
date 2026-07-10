@@ -195,7 +195,7 @@ public final class BattleCommands {
         } else {
             player.sendSystemMessage(Component.literal("The CPU holds the pick... ")
                     .withStyle(ChatFormatting.GRAY)
-                    .append(button("[Continue ▶]", "/mobtrumps next",
+                    .append(button("[Continue >]", "/mobtrumps next",
                             ChatFormatting.GREEN, "See the CPU's move")));
         }
     }
