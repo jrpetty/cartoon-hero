@@ -1,38 +1,35 @@
 package com.jrpetty.mobtrumps.client;
 
-import com.jrpetty.mobtrumps.MobCardItem;
 import com.jrpetty.mobtrumps.game.MobCard;
 import com.jrpetty.mobtrumps.game.MobCards;
-import com.jrpetty.mobtrumps.game.Stat;
-import net.minecraft.ChatFormatting;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.client.resources.sounds.SimpleSoundInstance;
 import net.minecraft.network.chat.Component;
-import net.minecraft.world.item.ItemStack;
+import net.minecraft.sounds.SoundEvents;
+import net.minecraft.world.entity.LivingEntity;
 
-import java.util.ArrayList;
-import java.util.List;
+import java.util.HashMap;
+import java.util.Map;
 
 /**
- * The collection book: a 9x9 grid of all 81 mob cards. Collected cards show
- * the card item in a tier-coloured slot; missing ones are dark "?" slots.
- * Clicking a collected card opens its full Top Trumps card view.
+ * The collection binder: pages of full Top Trumps cards. Collected mobs
+ * show their complete card with the live 3D portrait; unfound mobs lie
+ * face down. Flip pages with the arrows, arrow keys or the scroll wheel;
+ * click a card to enlarge it.
  */
 public class CollectionBookScreen extends Screen {
 
-    private static final int COLS = 9;
-    private static final int CELL = 20;
-    private static final int GRID_W = COLS * CELL;
+    private static final float CARD_SCALE = 0.52f;
 
-    private static final int KRAFT = 0xFF9A7B54;
-    private static final int KRAFT_DARK = 0xFF5F4A32;
-    private static final int FACE = 0xFFFAF6EC;
-    private static final int INK = 0xFF35281A;
-    private static final int SLOT_EMPTY = 0xFF4A4038;
-    private static final int BAR_BG = 0xFF6B5B43;
-    private static final int BAR_FILL = 0xFF55A82F;
+    private final Map<String, LivingEntity> entityCache = new HashMap<>();
+    private int page;
 
-    private final List<ItemStack> cardStacks = new ArrayList<>();
+    private int cols, rows, perPage, pageCount;
+    private int cellW, cellH, gridX, gridY;
+    private int panelX, panelY, panelW, panelH;
+    private int prevX, prevY, nextX, nextY;
+    private static final int ARROW_W = 18, ARROW_H = 14;
 
     public CollectionBookScreen() {
         super(Component.literal("Mob Collection"));
@@ -46,103 +43,134 @@ public class CollectionBookScreen extends Screen {
     @Override
     protected void init() {
         super.init();
-        if (cardStacks.isEmpty()) {
-            for (MobCard card : MobCards.ALL) {
-                cardStacks.add(MobCardItem.stackOf(card));
-            }
-        }
-    }
+        cellW = Math.round(CardRenderer.CARD_W * CARD_SCALE) + 12;
+        cellH = Math.round(CardRenderer.CARD_H * CARD_SCALE) + 12;
+        cols = Math.max(1, Math.min(4, (width - 70) / cellW));
+        rows = Math.max(1, Math.min(3, (height - 96) / cellH));
+        perPage = cols * rows;
+        pageCount = (MobCards.ALL.size() + perPage - 1) / perPage;
+        page = Math.max(0, Math.min(page, pageCount - 1));
 
-    private int panelX() {
-        return (width - (GRID_W + 24)) / 2;
-    }
+        panelW = cols * cellW + 28;
+        panelH = 46 + rows * cellH + 24;
+        panelX = (width - panelW) / 2;
+        panelY = Math.max(8, (height - panelH) / 2);
+        gridX = panelX + 14;
+        gridY = panelY + 44;
 
-    private int panelY() {
-        return (height - (COLS * CELL + 52)) / 2;
+        int arrowY = panelY + panelH - 20;
+        prevX = panelX + 12;
+        prevY = arrowY;
+        nextX = panelX + panelW - 12 - ARROW_W;
+        nextY = arrowY;
     }
 
     @Override
     public void render(GuiGraphics g, int mouseX, int mouseY, float partialTick) {
         super.render(g, mouseX, mouseY, partialTick);
-        int px = panelX(), py = panelY();
-        int panelW = GRID_W + 24, panelH = COLS * CELL + 52;
 
-        g.fill(px - 2, py - 2, px + panelW + 2, py + panelH + 2, KRAFT_DARK);
-        g.fill(px, py, px + panelW, py + panelH, KRAFT);
-        g.fill(px + 6, py + 6, px + panelW - 6, py + panelH - 6, FACE);
+        // kraft binder with cream page face and gold corner studs
+        g.fill(panelX - 3, panelY - 3, panelX + panelW + 3, panelY + panelH + 3, CardRenderer.KRAFT_DARK);
+        g.fill(panelX, panelY, panelX + panelW, panelY + panelH, CardRenderer.KRAFT);
+        g.fill(panelX + 6, panelY + 6, panelX + panelW - 6, panelY + panelH - 6, CardRenderer.FACE);
+        for (int[] c : new int[][]{{panelX + 3, panelY + 3}, {panelX + panelW - 6, panelY + 3},
+                {panelX + 3, panelY + panelH - 6}, {panelX + panelW - 6, panelY + panelH - 6}}) {
+            g.fill(c[0], c[1], c[0] + 3, c[1] + 3, 0xFFF3E2A7);
+        }
 
-        String titleText = "MOB COLLECTION";
-        g.drawString(font, titleText, px + (panelW - font.width(titleText)) / 2, py + 12, INK, false);
-        String progress = ClientCollection.count() + " / " + MobCards.ALL.size();
-        g.drawString(font, progress, px + (panelW - font.width(progress)) / 2, py + 23, KRAFT_DARK, false);
+        // header: title, progress count and bar
+        var pose = g.pose();
+        pose.pushPose();
+        pose.translate(panelX + panelW / 2f, panelY + 12f, 0);
+        pose.scale(1.4f, 1.4f, 1f);
+        String title = "MOB COLLECTION";
+        g.drawString(font, title, -font.width(title) / 2, 0, CardRenderer.INK, false);
+        pose.popPose();
 
-        // progress bar
-        int barX = px + 12, barY = py + 33, barW = panelW - 24;
-        g.fill(barX, barY, barX + barW, barY + 3, BAR_BG);
-        int fillW = (int) (barW * (ClientCollection.count() / (float) MobCards.ALL.size()));
+        int total = MobCards.ALL.size();
+        int have = ClientCollection.count();
+        String progress = have + " / " + total + " collected";
+        g.drawString(font, progress, panelX + (panelW - font.width(progress)) / 2,
+                panelY + 27, CardRenderer.KRAFT_DARK, false);
+
+        int barX = panelX + 14, barY = panelY + 38, barW = panelW - 28;
+        g.fill(barX - 1, barY - 1, barX + barW + 1, barY + 4, CardRenderer.KRAFT_DARK);
+        g.fill(barX, barY, barX + barW, barY + 3, 0xFF8A755A);
+        int fillW = (int) (barW * (have / (float) total));
         if (fillW > 0) {
-            g.fill(barX, barY, barX + fillW, barY + 3, BAR_FILL);
+            g.fill(barX, barY, barX + fillW, barY + 3, 0xFF55A82F);
         }
 
-        int gridX = px + 12, gridY = py + 40;
-        MobCard hovered = null;
-        boolean hoveredCollected = false;
-
-        for (int i = 0; i < MobCards.ALL.size(); i++) {
+        // the cards of this page
+        int start = page * perPage;
+        for (int i = start; i < Math.min(start + perPage, total); i++) {
             MobCard card = MobCards.ALL.get(i);
-            int cx = gridX + (i % COLS) * CELL;
-            int cy = gridY + (i / COLS) * CELL;
-            boolean collected = ClientCollection.has(card.id());
+            int slot = i - start;
+            int cx = gridX + (slot % cols) * cellW + 8;
+            int cy = gridY + (slot / cols) * cellH + 8;
+            int cw = Math.round(CardRenderer.CARD_W * CARD_SCALE);
+            int ch = Math.round(CardRenderer.CARD_H * CARD_SCALE);
 
-            if (collected) {
-                g.fill(cx, cy, cx + CELL - 2, cy + CELL - 2, tierColor(card));
-                g.renderItem(cardStacks.get(i), cx + 1, cy + 1);
+            g.fill(cx + 2, cy + 3, cx + cw + 4, cy + ch + 5, 0x44000000); // shadow
+
+            boolean hovered = mouseX >= cx && mouseX < cx + cw && mouseY >= cy && mouseY < cy + ch;
+            if (ClientCollection.has(card.id())) {
+                LivingEntity mob = CardRenderer.portraitEntity(minecraft, card, entityCache);
+                CardRenderer.renderCard(g, font, card, cx, cy, CARD_SCALE, mouseX, mouseY, mob);
+                if (hovered) {
+                    g.renderOutline(cx - 2, cy - 2, cw + 4, ch + 4, 0xFFF9D849);
+                }
             } else {
-                g.fill(cx, cy, cx + CELL - 2, cy + CELL - 2, SLOT_EMPTY);
-                g.drawString(font, "?", cx + 7, cy + 5, 0xFF8B8074, false);
-            }
-
-            if (mouseX >= cx && mouseX < cx + CELL - 2 && mouseY >= cy && mouseY < cy + CELL - 2) {
-                hovered = card;
-                hoveredCollected = collected;
-                g.renderOutline(cx - 1, cy - 1, CELL, CELL, 0xFFFFFFFF);
+                CardRenderer.renderBack(g, font, cx, cy, CARD_SCALE);
+                if (hovered) {
+                    g.renderOutline(cx - 2, cy - 2, cw + 4, ch + 4, 0x66FFFFFF);
+                }
             }
         }
 
-        if (hovered != null) {
-            g.renderComponentTooltip(font, tooltipFor(hovered, hoveredCollected), mouseX, mouseY);
-        }
+        // footer: page arrows and indicator
+        drawArrow(g, prevX, prevY, "<", page > 0, mouseX, mouseY);
+        drawArrow(g, nextX, nextY, ">", page < pageCount - 1, mouseX, mouseY);
+        String pageText = "Page " + (page + 1) + " / " + pageCount;
+        g.drawString(font, pageText, panelX + (panelW - font.width(pageText)) / 2,
+                panelY + panelH - 17, CardRenderer.KRAFT_DARK, false);
+
+        String hint = "Click a card to enlarge · scroll or use arrow keys to flip pages";
+        g.drawString(font, hint, (width - font.width(hint)) / 2,
+                panelY + panelH + 8, 0xFFAAAAAA, true);
     }
 
-    private List<Component> tooltipFor(MobCard card, boolean collected) {
-        List<Component> lines = new ArrayList<>();
-        if (!collected) {
-            lines.add(Component.literal("???").withStyle(ChatFormatting.DARK_GRAY));
-            lines.add(Component.literal("Open packs to find this mob.").withStyle(ChatFormatting.GRAY));
-            return lines;
-        }
-        lines.add(Component.literal(card.displayName())
-                .withStyle(MobCardItem.tierColor(card.tier()), ChatFormatting.BOLD));
-        lines.add(Component.literal("★ " + card.tier().label() + " ★")
-                .withStyle(MobCardItem.tierColor(card.tier()), ChatFormatting.ITALIC));
-        for (Stat stat : Stat.values()) {
-            lines.add(Component.literal(stat.label + ": ").withStyle(MobCardItem.statColor(stat))
-                    .append(Component.literal(String.valueOf(card.stat(stat)))
-                            .withStyle(ChatFormatting.WHITE)));
-        }
-        lines.add(Component.literal("Click to view the card").withStyle(ChatFormatting.DARK_GRAY));
-        return lines;
+    private void drawArrow(GuiGraphics g, int x, int y, String glyph, boolean enabled,
+                           int mouseX, int mouseY) {
+        boolean hovered = enabled && mouseX >= x && mouseX < x + ARROW_W
+                && mouseY >= y && mouseY < y + ARROW_H;
+        g.fill(x, y, x + ARROW_W, y + ARROW_H, enabled
+                ? (hovered ? 0xFFB99465 : CardRenderer.KRAFT) : 0xFFCEC3AF);
+        g.renderOutline(x, y, ARROW_W, ARROW_H, CardRenderer.KRAFT_DARK);
+        int color = enabled ? CardRenderer.INK : 0xFF9A9083;
+        g.drawString(font, glyph, x + (ARROW_W - font.width(glyph)) / 2, y + 3, color, false);
     }
 
     @Override
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
         if (button == 0) {
-            int gridX = panelX() + 12, gridY = panelY() + 40;
-            for (int i = 0; i < MobCards.ALL.size(); i++) {
+            if (inRect(mouseX, mouseY, prevX, prevY) && page > 0) {
+                flip(-1);
+                return true;
+            }
+            if (inRect(mouseX, mouseY, nextX, nextY) && page < pageCount - 1) {
+                flip(1);
+                return true;
+            }
+            int start = page * perPage;
+            for (int i = start; i < Math.min(start + perPage, MobCards.ALL.size()); i++) {
                 MobCard card = MobCards.ALL.get(i);
-                int cx = gridX + (i % COLS) * CELL;
-                int cy = gridY + (i / COLS) * CELL;
-                if (mouseX >= cx && mouseX < cx + CELL - 2 && mouseY >= cy && mouseY < cy + CELL - 2
+                int slot = i - start;
+                int cx = gridX + (slot % cols) * cellW + 8;
+                int cy = gridY + (slot / cols) * cellH + 8;
+                int cw = Math.round(CardRenderer.CARD_W * CARD_SCALE);
+                int ch = Math.round(CardRenderer.CARD_H * CARD_SCALE);
+                if (mouseX >= cx && mouseX < cx + cw && mouseY >= cy && mouseY < cy + ch
                         && ClientCollection.has(card.id()) && minecraft != null) {
                     minecraft.setScreen(new MobCardScreen(card, this));
                     return true;
@@ -152,13 +180,41 @@ public class CollectionBookScreen extends Screen {
         return super.mouseClicked(mouseX, mouseY, button);
     }
 
-    private int tierColor(MobCard card) {
-        return switch (card.tier()) {
-            case COMMON -> 0xFFB9B2A6;
-            case UNCOMMON -> 0xFFA9D49B;
-            case RARE -> 0xFF9CCBE0;
-            case EPIC -> 0xFFC7A8E8;
-            case LEGENDARY -> 0xFFEBD38A;
-        };
+    private boolean inRect(double mx, double my, int x, int y) {
+        return mx >= x && mx < x + ARROW_W && my >= y && my < y + ARROW_H;
+    }
+
+    @Override
+    public boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {
+        if (scrollY < 0 && page < pageCount - 1) {
+            flip(1);
+            return true;
+        }
+        if (scrollY > 0 && page > 0) {
+            flip(-1);
+            return true;
+        }
+        return super.mouseScrolled(mouseX, mouseY, scrollX, scrollY);
+    }
+
+    @Override
+    public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
+        if (keyCode == 263 && page > 0) { // left arrow
+            flip(-1);
+            return true;
+        }
+        if (keyCode == 262 && page < pageCount - 1) { // right arrow
+            flip(1);
+            return true;
+        }
+        return super.keyPressed(keyCode, scanCode, modifiers);
+    }
+
+    private void flip(int direction) {
+        page += direction;
+        if (minecraft != null) {
+            minecraft.getSoundManager().play(
+                    SimpleSoundInstance.forUI(SoundEvents.BOOK_PAGE_TURN, 1.0F));
+        }
     }
 }

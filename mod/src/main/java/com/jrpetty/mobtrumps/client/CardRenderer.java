@@ -1,0 +1,200 @@
+package com.jrpetty.mobtrumps.client;
+
+import com.jrpetty.mobtrumps.game.MobCard;
+import com.jrpetty.mobtrumps.game.MobCards;
+import com.jrpetty.mobtrumps.game.Stat;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.Font;
+import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.screens.inventory.InventoryScreen;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.LivingEntity;
+
+import java.util.Locale;
+import java.util.Map;
+
+/**
+ * Draws a full Top Trumps style mob card at any position and scale, so the
+ * single-card screen and the collection book pages stay pixel-identical.
+ * All card-local coordinates live in a 170x236 space.
+ */
+public final class CardRenderer {
+
+    public static final int CARD_W = 170;
+    public static final int CARD_H = 236;
+
+    public static final int KRAFT = 0xFF9A7B54;
+    public static final int KRAFT_DARK = 0xFF5F4A32;
+    public static final int KRAFT_BACK = 0xFF7A5F3E;
+    public static final int FACE = 0xFFFAF6EC;
+    public static final int INK = 0xFF35281A;
+    private static final int ROW_BLUE = 0xFFCFE9F6;
+    private static final int ROW_GREEN = 0xFFD8EECD;
+    private static final int ROW_GOLD = 0xFFF3E2A7;
+    private static final int LABEL_BLUE = 0xFF1C4B6B;
+    private static final int LABEL_GREEN = 0xFF2C5E2E;
+    private static final int PORTRAIT_TOP = 0xFFCFE4F2;
+    private static final int PORTRAIT_BOTTOM = 0xFFE8F2D9;
+    private static final int FACT_BG = 0xFFEDE3CE;
+    private static final int BACK_DOT = 0xFF6A5236;
+    private static final int BACK_TEXT = 0xFFD8C9A8;
+
+    private static final int ROW_H = 13;
+
+    private CardRenderer() {
+    }
+
+    /** Draw the front of a card. Pass the mob for the live portrait, or null. */
+    public static void renderCard(GuiGraphics g, Font font, MobCard card, int x, int y,
+                                  float scale, int mouseX, int mouseY, LivingEntity mob) {
+        var pose = g.pose();
+        pose.pushPose();
+        pose.translate(x, y, 0);
+        pose.scale(scale, scale, 1f);
+
+        g.fill(-2, -2, CARD_W + 2, CARD_H + 2, KRAFT_DARK);
+        g.fill(0, 0, CARD_W, CARD_H, KRAFT);
+        g.fill(6, 6, CARD_W - 6, CARD_H - 6, FACE);
+
+        // name, 1.5x, centred
+        pose.pushPose();
+        pose.translate(CARD_W / 2f, 11f, 0);
+        pose.scale(1.5f, 1.5f, 1f);
+        String name = card.displayName();
+        g.drawString(font, name, -font.width(name) / 2, 0, INK, false);
+        pose.popPose();
+
+        // tier line in print-friendly ink
+        String tier = "★ " + card.tier().label() + " ★";
+        g.drawString(font, tier, (CARD_W - font.width(tier)) / 2, 27, tierPrintColor(card), false);
+
+        // portrait backdrop (the mob itself is drawn later in screen space)
+        g.fillGradient(12, 38, CARD_W - 12, 116, PORTRAIT_TOP, PORTRAIT_BOTTOM);
+        g.renderOutline(11, 37, CARD_W - 22 + 2, 116 - 38 + 2, KRAFT_DARK);
+
+        // stat table
+        int rowY = 121;
+        int total = 0;
+        Stat[] stats = Stat.values();
+        for (int i = 0; i < stats.length; i++) {
+            Stat stat = stats[i];
+            total += card.stat(stat);
+            boolean blue = i % 2 == 0;
+            drawRow(g, font, rowY, blue ? ROW_BLUE : ROW_GREEN, blue ? LABEL_BLUE : LABEL_GREEN,
+                    stat.label.toUpperCase(Locale.ROOT), card.stat(stat));
+            rowY += ROW_H;
+        }
+        drawRow(g, font, rowY, ROW_GOLD, INK, "MOB RATING", total);
+        rowY += ROW_H;
+
+        // fact file strip
+        g.fill(12, rowY + 3, CARD_W - 12, CARD_H - 9, FACT_BG);
+        g.renderOutline(11, rowY + 2, CARD_W - 22 + 2, CARD_H - 9 - rowY - 3 + 2, KRAFT_DARK);
+        String fact = "Card " + (MobCards.ALL.indexOf(card) + 1) + " of " + MobCards.ALL.size()
+                + " · Mob Trumps";
+        g.drawString(font, fact, (CARD_W - font.width(fact)) / 2, rowY + 6, KRAFT_DARK, false);
+
+        pose.popPose();
+
+        // the live mob, rendered in screen space so its scissor box stays true
+        if (mob != null) {
+            int px1 = x + Math.round(13 * scale);
+            int py1 = y + Math.round(39 * scale);
+            int px2 = x + Math.round((CARD_W - 13) * scale);
+            int py2 = y + Math.round(115 * scale);
+            int entityScale = Math.max(4, Math.round(
+                    Math.min(34f, 46f / Math.max(1.4f, mob.getBbHeight())) * scale));
+            try {
+                InventoryScreen.renderEntityInInventoryFollowsMouse(
+                        g, px1, py1, px2, py2, entityScale, 0.0625F, mouseX, mouseY, mob);
+            } catch (Exception ignored) {
+                // a misbehaving renderer must not crash the UI
+            }
+        }
+    }
+
+    /** Draw the back of a card — used for mobs not yet collected. */
+    public static void renderBack(GuiGraphics g, Font font, int x, int y, float scale) {
+        var pose = g.pose();
+        pose.pushPose();
+        pose.translate(x, y, 0);
+        pose.scale(scale, scale, 1f);
+
+        g.fill(-2, -2, CARD_W + 2, CARD_H + 2, KRAFT_DARK);
+        g.fill(0, 0, CARD_W, CARD_H, KRAFT);
+        g.fill(6, 6, CARD_W - 6, CARD_H - 6, KRAFT_BACK);
+        g.renderOutline(10, 10, CARD_W - 20, CARD_H - 20, KRAFT_DARK);
+
+        // quilted dot pattern
+        for (int py = 18; py < CARD_H - 20; py += 14) {
+            for (int px = 18 + ((py / 14) % 2) * 7; px < CARD_W - 20; px += 14) {
+                g.fill(px, py, px + 3, py + 3, BACK_DOT);
+            }
+        }
+
+        // central medallion with a big question mark
+        g.fill(60, 86, CARD_W - 60, 136, KRAFT_DARK);
+        g.fill(63, 89, CARD_W - 63, 133, FACE);
+        pose.pushPose();
+        pose.translate(CARD_W / 2f, 98f, 0);
+        pose.scale(3f, 3f, 1f);
+        g.drawString(font, "?", -font.width("?") / 2, 0, KRAFT_DARK, false);
+        pose.popPose();
+
+        String label = "MOB TRUMPS";
+        g.drawString(font, label, (CARD_W - font.width(label)) / 2, 210, BACK_TEXT, false);
+
+        pose.popPose();
+    }
+
+    /** Chat colours glow on dark backgrounds but wash out on the cream card
+     *  face, so the printed tier line uses darker ink versions of them. */
+    public static int tierPrintColor(MobCard card) {
+        return switch (card.tier()) {
+            case COMMON -> 0xFF6B6B6B;
+            case UNCOMMON -> 0xFF3D8B3D;
+            case RARE -> 0xFF1C7FA8;
+            case EPIC -> 0xFF8746C9;
+            case LEGENDARY -> 0xFFA67C00;
+        };
+    }
+
+    /** Fetch (and cache) a client-side mob to pose for a card's portrait. */
+    public static LivingEntity portraitEntity(Minecraft minecraft, MobCard card,
+                                              Map<String, LivingEntity> cache) {
+        if (cache.containsKey(card.id())) {
+            return cache.get(card.id());
+        }
+        LivingEntity result = null;
+        if (minecraft != null && minecraft.level != null) {
+            // sulfur cube has no vanilla entity; borrow its magma cousin
+            String entityId = card.id().equals("sulfur_cube") ? "magma_cube" : card.id();
+            EntityType<?> type = BuiltInRegistries.ENTITY_TYPE
+                    .getOptional(ResourceLocation.withDefaultNamespace(entityId))
+                    .orElse(null);
+            if (type != null) {
+                try {
+                    Entity entity = type.create(minecraft.level);
+                    if (entity instanceof LivingEntity living) {
+                        result = living;
+                    }
+                } catch (Exception ignored) {
+                    // no portrait is better than no card
+                }
+            }
+        }
+        cache.put(card.id(), result);
+        return result;
+    }
+
+    private static void drawRow(GuiGraphics g, Font font, int rowY, int bg, int labelColor,
+                                String label, int value) {
+        g.fill(12, rowY, CARD_W - 12, rowY + ROW_H - 1, bg);
+        g.drawString(font, label, 16, rowY + 3, labelColor, false);
+        String v = String.valueOf(value);
+        g.drawString(font, v, CARD_W - 16 - font.width(v), rowY + 3, INK, false);
+    }
+}
