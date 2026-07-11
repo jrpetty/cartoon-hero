@@ -43,8 +43,13 @@ public class MobCardItem extends Item {
     public InteractionResultHolder<ItemStack> use(Level level, Player player, InteractionHand hand) {
         ItemStack stack = player.getItemInHand(hand);
         MobCard card = cardOf(stack);
-        if (card != null && level.isClientSide) {
-            ClientHooks.openCardScreen(card);
+        if (card != null) {
+            if (level.isClientSide) {
+                ClientHooks.openCardScreen(card);
+            } else if (player instanceof net.minecraft.server.level.ServerPlayer serverPlayer) {
+                // inspecting a card registers it in the collection book
+                CollectionTracker.record(serverPlayer, card.id());
+            }
         }
         return InteractionResultHolder.sidedSuccess(stack, level.isClientSide);
     }

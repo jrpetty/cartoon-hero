@@ -8,6 +8,7 @@ import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResultHolder;
+import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
@@ -48,11 +49,17 @@ public class CardPackItem extends Item {
             if (!player.getInventory().add(cardStack)) {
                 player.drop(cardStack, false);
             }
-            player.displayClientMessage(Component.literal("  + ").withStyle(ChatFormatting.DARK_GRAY)
+            boolean newlyCollected = player instanceof ServerPlayer serverPlayer
+                    && CollectionTracker.record(serverPlayer, card.id());
+            var line = Component.literal("  + ").withStyle(ChatFormatting.DARK_GRAY)
                     .append(Component.literal(card.displayName())
                             .withStyle(MobCardItem.tierColor(card.tier())))
                     .append(Component.literal(" [" + card.tier().label() + "]")
-                            .withStyle(ChatFormatting.GRAY)), false);
+                            .withStyle(ChatFormatting.GRAY));
+            if (newlyCollected) {
+                line.append(Component.literal(" NEW!").withStyle(ChatFormatting.GOLD, ChatFormatting.BOLD));
+            }
+            player.displayClientMessage(line, false);
         }
         level.playSound(null, player.getX(), player.getY(), player.getZ(),
                 SoundEvents.PLAYER_LEVELUP, SoundSource.PLAYERS, 0.6F, 1.4F);

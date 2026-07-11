@@ -15,4 +15,8 @@ public final class ClientHooks {
     public static void openCardScreen(MobCard card) {
         Minecraft.getInstance().setScreen(new MobCardScreen(card));
     }
+
+    public static void openCollectionBook() {
+        Minecraft.getInstance().setScreen(new CollectionBookScreen());
+    }
 }

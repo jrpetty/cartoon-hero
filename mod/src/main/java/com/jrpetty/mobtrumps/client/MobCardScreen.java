@@ -41,12 +41,27 @@ public class MobCardScreen extends Screen {
     private static final int ROW_H = 13;
 
     private final MobCard card;
+    private final Screen parent;
     private LivingEntity portrait;
     private boolean portraitResolved;
 
     public MobCardScreen(MobCard card) {
+        this(card, null);
+    }
+
+    public MobCardScreen(MobCard card, Screen parent) {
         super(Component.literal(card.displayName()));
         this.card = card;
+        this.parent = parent;
+    }
+
+    @Override
+    public void onClose() {
+        if (parent != null && minecraft != null) {
+            minecraft.setScreen(parent);
+        } else {
+            super.onClose();
+        }
     }
 
     @Override
