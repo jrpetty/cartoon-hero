@@ -1,5 +1,6 @@
 package com.jrpetty.mobtrumps;
 
+import com.jrpetty.mobtrumps.advancement.ModTriggers;
 import net.minecraft.server.level.ServerPlayer;
 import net.neoforged.neoforge.network.PacketDistributor;
 
@@ -29,6 +30,9 @@ public final class CollectionTracker {
         }
         if (changed) {
             sync(player);
+            ModTriggers.COLLECTION.get().trigger(player,
+                    player.getData(ModAttachments.COLLECTED.get()).size(),
+                    player.getData(ModAttachments.COLLECTED_FOIL.get()).size());
         }
         return isNew;
     }
@@ -46,9 +50,18 @@ public final class CollectionTracker {
         return true;
     }
 
+    /** Re-evaluate all Mob Trumps advancement triggers for a player (on login). */
+    public static void revalidate(ServerPlayer player) {
+        ModTriggers.COLLECTION.get().trigger(player,
+                player.getData(ModAttachments.COLLECTED.get()).size(),
+                player.getData(ModAttachments.COLLECTED_FOIL.get()).size());
+        ModTriggers.DUEL_WIN.get().trigger(player, player.getData(ModAttachments.DUEL_WINS.get()));
+    }
+
     public static void addDuelWin(ServerPlayer player) {
-        player.setData(ModAttachments.DUEL_WINS.get(),
-                player.getData(ModAttachments.DUEL_WINS.get()) + 1);
+        int wins = player.getData(ModAttachments.DUEL_WINS.get()) + 1;
+        player.setData(ModAttachments.DUEL_WINS.get(), wins);
+        ModTriggers.DUEL_WIN.get().trigger(player, wins);
     }
 
     /** Push the player's collection to their client for the book screen. */

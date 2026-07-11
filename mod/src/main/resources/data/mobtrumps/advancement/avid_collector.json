@@ -1,0 +1,35 @@
+{
+  "parent": "mobtrumps:collector",
+  "display": {
+    "icon": {
+      "id": "mobtrumps:mob_card"
+    },
+    "title": {
+      "text": "Avid Collector"
+    },
+    "description": {
+      "text": "Collect 40 different mob cards"
+    },
+    "frame": "goal",
+    "show_toast": true,
+    "announce_to_chat": true,
+    "hidden": false
+  },
+  "criteria": {
+    "c": {
+      "trigger": "mobtrumps:collection",
+      "conditions": {
+        "count": 40,
+        "foil": false
+      }
+    }
+  },
+  "requirements": [
+    [
+      "c"
+    ]
+  ],
+  "rewards": {
+    "experience": 50
+  }
+}

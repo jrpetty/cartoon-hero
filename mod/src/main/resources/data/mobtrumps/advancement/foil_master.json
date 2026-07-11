@@ -1,0 +1,35 @@
+{
+  "parent": "mobtrumps:foil_finder",
+  "display": {
+    "icon": {
+      "id": "mobtrumps:collection_book"
+    },
+    "title": {
+      "text": "Full Holo Binder"
+    },
+    "description": {
+      "text": "Collect all 81 cards as holographic foils"
+    },
+    "frame": "challenge",
+    "show_toast": true,
+    "announce_to_chat": true,
+    "hidden": true
+  },
+  "criteria": {
+    "c": {
+      "trigger": "mobtrumps:collection",
+      "conditions": {
+        "count": 81,
+        "foil": true
+      }
+    }
+  },
+  "requirements": [
+    [
+      "c"
+    ]
+  ],
+  "rewards": {
+    "experience": 500
+  }
+}

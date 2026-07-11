@@ -1,0 +1,35 @@
+{
+  "parent": "mobtrumps:avid_collector",
+  "display": {
+    "icon": {
+      "id": "mobtrumps:collection_book"
+    },
+    "title": {
+      "text": "Gotta Catalogue 'Em All"
+    },
+    "description": {
+      "text": "Collect all 81 mob cards"
+    },
+    "frame": "challenge",
+    "show_toast": true,
+    "announce_to_chat": true,
+    "hidden": false
+  },
+  "criteria": {
+    "c": {
+      "trigger": "mobtrumps:collection",
+      "conditions": {
+        "count": 81,
+        "foil": false
+      }
+    }
+  },
+  "requirements": [
+    [
+      "c"
+    ]
+  ],
+  "rewards": {
+    "experience": 200
+  }
+}

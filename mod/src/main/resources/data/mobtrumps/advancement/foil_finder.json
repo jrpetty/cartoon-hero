@@ -1,0 +1,35 @@
+{
+  "parent": "mobtrumps:root",
+  "display": {
+    "icon": {
+      "id": "mobtrumps:card_pack"
+    },
+    "title": {
+      "text": "Shiny!"
+    },
+    "description": {
+      "text": "Pull your first holographic foil card"
+    },
+    "frame": "task",
+    "show_toast": true,
+    "announce_to_chat": true,
+    "hidden": false
+  },
+  "criteria": {
+    "c": {
+      "trigger": "mobtrumps:collection",
+      "conditions": {
+        "count": 1,
+        "foil": true
+      }
+    }
+  },
+  "requirements": [
+    [
+      "c"
+    ]
+  ],
+  "rewards": {
+    "experience": 30
+  }
+}

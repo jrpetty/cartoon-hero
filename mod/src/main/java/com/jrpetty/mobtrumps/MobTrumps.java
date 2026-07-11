@@ -1,5 +1,6 @@
 package com.jrpetty.mobtrumps;
 
+import com.jrpetty.mobtrumps.advancement.ModTriggers;
 import net.minecraft.server.level.ServerPlayer;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.fml.ModContainer;
@@ -17,12 +18,14 @@ public class MobTrumps {
         ModItems.DATA_COMPONENTS.register(modEventBus);
         ModItems.CREATIVE_MODE_TABS.register(modEventBus);
         ModAttachments.ATTACHMENTS.register(modEventBus);
+        ModTriggers.TRIGGERS.register(modEventBus);
         modEventBus.addListener(ModNetworking::register);
 
         NeoForge.EVENT_BUS.addListener(BattleCommands::onRegisterCommands);
         NeoForge.EVENT_BUS.addListener((PlayerEvent.PlayerLoggedInEvent event) -> {
             if (event.getEntity() instanceof ServerPlayer player) {
                 CollectionTracker.sync(player);
+                CollectionTracker.revalidate(player);
             }
         });
         NeoForge.EVENT_BUS.addListener((PlayerEvent.PlayerRespawnEvent event) -> {

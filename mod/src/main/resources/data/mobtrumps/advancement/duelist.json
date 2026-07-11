@@ -1,0 +1,34 @@
+{
+  "parent": "mobtrumps:root",
+  "display": {
+    "icon": {
+      "id": "mobtrumps:mob_card"
+    },
+    "title": {
+      "text": "First Blood"
+    },
+    "description": {
+      "text": "Win your first Mob Trumps duel"
+    },
+    "frame": "task",
+    "show_toast": true,
+    "announce_to_chat": true,
+    "hidden": false
+  },
+  "criteria": {
+    "c": {
+      "trigger": "mobtrumps:duel_win",
+      "conditions": {
+        "count": 1
+      }
+    }
+  },
+  "requirements": [
+    [
+      "c"
+    ]
+  ],
+  "rewards": {
+    "experience": 20
+  }
+}

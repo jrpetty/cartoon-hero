@@ -42,6 +42,10 @@ In game:
 - `/mobtrumps play <stat>`, `/mobtrumps next`, `/mobtrumps forfeit`
 - Creative tab "Mob Trumps" contains every card
 
+- **Advancements** — a Mob Trumps tab tracks milestones: first card, 10 /
+  40 / all 81 collected, your first foil (and the hidden all-foils goal),
+  and duel wins.
+
 Dev runs: `./gradlew runClient` / `./gradlew runServer`.
 
 ## Mob Trumps
