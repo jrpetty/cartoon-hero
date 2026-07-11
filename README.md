@@ -39,6 +39,8 @@ In game:
   Collection is saved with your player and survives death
 - `/mobtrumps battle [deck_size]` — start a Top Trumps battle against the CPU,
   played through clickable chat buttons; winning awards a free card pack
+- `/mobtrumps duel <player>` — challenge another player to a PvP duel (they get
+  clickable Accept/Decline); both pick stats via chat, the winner takes a pack
 - `/mobtrumps play <stat>`, `/mobtrumps next`, `/mobtrumps forfeit`
 - Creative tab "Mob Trumps" contains every card
 

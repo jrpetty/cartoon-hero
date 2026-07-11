@@ -9,6 +9,7 @@ import com.mojang.brigadier.exceptions.CommandSyntaxException;
 import net.minecraft.ChatFormatting;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
+import net.minecraft.commands.arguments.EntityArgument;
 import net.minecraft.network.chat.ClickEvent;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.HoverEvent;
@@ -25,12 +26,14 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ThreadLocalRandom;
 
 /**
- * The /mobtrumps command: chat-driven Top Trumps battles against the CPU.
+ * The /mobtrumps command: chat-driven Top Trumps battles.
  *
- *   /mobtrumps battle [deck_size]  - start a battle (default 20 cards)
+ *   /mobtrumps battle [deck_size]  - start a battle vs the CPU (default 20 cards)
+ *   /mobtrumps duel <player>       - challenge another player to a duel
+ *   /mobtrumps duel accept|decline - answer a challenge (clickable)
  *   /mobtrumps play <stat>         - pick a stat on your turn (clickable)
  *   /mobtrumps next                - let the CPU take its pick (clickable)
- *   /mobtrumps forfeit             - give up the current battle
+ *   /mobtrumps forfeit             - give up the current battle or duel
  */
 public final class BattleCommands {
 
@@ -60,7 +63,16 @@ public final class BattleCommands {
                 .then(Commands.literal("next")
                         .executes(ctx -> cpuTurn(ctx.getSource())))
                 .then(Commands.literal("forfeit")
-                        .executes(ctx -> forfeit(ctx.getSource()))));
+                        .executes(ctx -> forfeit(ctx.getSource())))
+                .then(Commands.literal("duel")
+                        .then(Commands.literal("accept")
+                                .executes(ctx -> DuelManager.accept(ctx.getSource().getPlayerOrException())))
+                        .then(Commands.literal("decline")
+                                .executes(ctx -> DuelManager.decline(ctx.getSource().getPlayerOrException())))
+                        .then(Commands.argument("player", EntityArgument.player())
+                                .executes(ctx -> DuelManager.challenge(
+                                        ctx.getSource().getPlayerOrException(),
+                                        EntityArgument.getPlayer(ctx, "player"))))));
     }
 
     // --- command handlers ---
@@ -82,6 +94,9 @@ public final class BattleCommands {
 
     private static int play(CommandSourceStack source, String statKey) throws CommandSyntaxException {
         ServerPlayer player = source.getPlayerOrException();
+        if (DuelManager.isInDuel(player)) {
+            return DuelManager.play(player, statKey);
+        }
         Battle battle = BATTLES.get(player.getUUID());
         if (battle == null || battle.isFinished()) {
             return noBattle(player);
@@ -119,6 +134,9 @@ public final class BattleCommands {
 
     private static int forfeit(CommandSourceStack source) throws CommandSyntaxException {
         ServerPlayer player = source.getPlayerOrException();
+        if (DuelManager.isInDuel(player)) {
+            return DuelManager.forfeit(player);
+        }
         if (BATTLES.remove(player.getUUID()) == null) {
             return noBattle(player);
         }
@@ -228,7 +246,7 @@ public final class BattleCommands {
 
     // --- chat component helpers ---
 
-    private static Component button(String label, String command, ChatFormatting color, String hover) {
+    static Component button(String label, String command, ChatFormatting color, String hover) {
         return Component.literal(label).withStyle(style -> style
                 .withColor(color)
                 .withBold(true)
@@ -237,7 +255,7 @@ public final class BattleCommands {
     }
 
     /** Card name coloured by tier; hovering shows the full stat block. */
-    private static Component cardName(MobCard card) {
+    static Component cardName(MobCard card) {
         MutableComponent stats = Component.literal(card.displayName())
                 .withStyle(MobCardItem.tierColor(card.tier()), ChatFormatting.BOLD)
                 .append(Component.literal("\n★ " + card.tier().label() + " ★")
@@ -255,7 +273,7 @@ public final class BattleCommands {
                         .withHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT, stats)));
     }
 
-    private static Component statValue(Stat stat, int value) {
+    static Component statValue(Stat stat, int value) {
         return Component.literal(" (" + stat.shortLabel + " " + value + ")")
                 .withStyle(MobCardItem.statColor(stat));
     }

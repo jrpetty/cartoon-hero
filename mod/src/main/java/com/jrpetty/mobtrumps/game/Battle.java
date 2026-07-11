@@ -74,6 +74,11 @@ public final class Battle {
         return playerDeck.peekFirst();
     }
 
+    /** The CPU/opponent's current top card (used to prompt a human opponent). */
+    public MobCard cpuTopCard() {
+        return cpuDeck.peekFirst();
+    }
+
     /** Play one round with the stat picked by whoever holds the turn. */
     public RoundResult playRound(Stat stat) {
         if (finished) throw new IllegalStateException("battle is already finished");
