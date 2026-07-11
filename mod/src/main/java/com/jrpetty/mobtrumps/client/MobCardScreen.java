@@ -1,6 +1,5 @@
 package com.jrpetty.mobtrumps.client;
 
-import com.jrpetty.mobtrumps.MobCardItem;
 import com.jrpetty.mobtrumps.game.MobCard;
 import com.jrpetty.mobtrumps.game.MobCards;
 import com.jrpetty.mobtrumps.game.Stat;
@@ -77,8 +76,7 @@ public class MobCardScreen extends Screen {
 
         // tier line
         String tier = "★ " + card.tier().label() + " ★";
-        int tierColor = 0xFF000000 | tierRgb();
-        g.drawString(font, tier, x + (CARD_W - font.width(tier)) / 2, y + 27, tierColor, false);
+        g.drawString(font, tier, x + (CARD_W - font.width(tier)) / 2, y + 27, tierPrintColor(), false);
 
         // portrait: the live mob, rendered into a sky-to-grass box
         int px1 = x + 12, py1 = y + 38, px2 = x + CARD_W - 12, py2 = y + 116;
@@ -131,9 +129,16 @@ public class MobCardScreen extends Screen {
         g.drawString(font, v, cardX + CARD_W - 16 - font.width(v), rowY + 3, INK, false);
     }
 
-    private int tierRgb() {
-        Integer rgb = MobCardItem.tierColor(card.tier()).getColor();
-        return rgb == null ? 0x555555 : rgb;
+    /** Chat colours glow on dark backgrounds but wash out on the cream card
+     *  face, so the printed tier line uses darker ink versions of them. */
+    private int tierPrintColor() {
+        return switch (card.tier()) {
+            case COMMON -> 0xFF6B6B6B;
+            case UNCOMMON -> 0xFF3D8B3D;
+            case RARE -> 0xFF1C7FA8;
+            case EPIC -> 0xFF8746C9;
+            case LEGENDARY -> 0xFFA67C00;
+        };
     }
 
     /** Lazily spawn a client-side copy of the mob to pose for the portrait. */
