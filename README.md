@@ -42,6 +42,10 @@ In game:
 - `/mobtrumps duel <player>` — challenge another player to a PvP duel (they get
   clickable Accept/Decline); both pick stats via chat, the winner takes a pack
 - `/mobtrumps play <stat>`, `/mobtrumps next`, `/mobtrumps forfeit`
+- `/mobtrumps` on its own opens a clickable hub menu
+- Juice: legendary/foil pulls burst particles in-world and sparkles on the
+  reveal screen; cards ease in with a rarity halo and a shine sweep; battle
+  rounds play win/lose sound cues; the reveal ends on a summary panel
 - Creative tab "Mob Trumps" contains every card
 
 - **Advancements** — a Mob Trumps tab tracks milestones: first card, 10 /

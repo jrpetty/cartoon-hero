@@ -45,6 +45,7 @@ public final class BattleCommands {
 
     public static void onRegisterCommands(RegisterCommandsEvent event) {
         event.getDispatcher().register(Commands.literal("mobtrumps")
+                .executes(ctx -> menu(ctx.getSource().getPlayerOrException()))
                 .then(Commands.literal("battle")
                         .executes(ctx -> startBattle(ctx.getSource(), DEFAULT_DECK))
                         .then(Commands.argument("deck_size", IntegerArgumentType.integer(4, 80))
@@ -76,6 +77,26 @@ public final class BattleCommands {
     }
 
     // --- command handlers ---
+
+    private static int menu(ServerPlayer player) {
+        player.sendSystemMessage(Component.literal("✦ MOB TRUMPS ✦")
+                .withStyle(ChatFormatting.GOLD, ChatFormatting.BOLD));
+        player.sendSystemMessage(Component.literal("Collect all 81 mob cards and battle with them.")
+                .withStyle(ChatFormatting.GRAY));
+        player.sendSystemMessage(Component.literal("  ")
+                .append(button("[Battle the CPU]", "/mobtrumps battle", ChatFormatting.GREEN,
+                        "Start a solo Top Trumps battle"))
+                .append(Component.literal("  "))
+                .append(button("[Forfeit]", "/mobtrumps forfeit", ChatFormatting.RED,
+                        "Give up your current game")));
+        player.sendSystemMessage(Component.literal("  To duel a friend: ")
+                .withStyle(ChatFormatting.GRAY)
+                .append(Component.literal("/mobtrumps duel <player>").withStyle(ChatFormatting.AQUA)));
+        player.sendSystemMessage(Component.literal("  Craft a Card Pack (3 paper + emerald) and a "
+                        + "Collection Book (book + emerald), then right-click them.")
+                .withStyle(ChatFormatting.DARK_GRAY));
+        return 1;
+    }
 
     private static int startBattle(CommandSourceStack source, int deckSize) throws CommandSyntaxException {
         ServerPlayer player = source.getPlayerOrException();
@@ -173,12 +194,21 @@ public final class BattleCommands {
         player.sendSystemMessage(reveal);
 
         switch (result.winner()) {
-            case PLAYER -> player.sendSystemMessage(Component.literal("You take the round!")
-                    .withStyle(ChatFormatting.GREEN, ChatFormatting.BOLD));
-            case CPU -> player.sendSystemMessage(Component.literal("The CPU takes the round.")
-                    .withStyle(ChatFormatting.RED, ChatFormatting.BOLD));
-            case NONE -> player.sendSystemMessage(Component.literal("Tie! Both cards go into the pot.")
-                    .withStyle(ChatFormatting.YELLOW, ChatFormatting.BOLD));
+            case PLAYER -> {
+                player.sendSystemMessage(Component.literal("You take the round!")
+                        .withStyle(ChatFormatting.GREEN, ChatFormatting.BOLD));
+                roundSound(player, 1.3F);
+            }
+            case CPU -> {
+                player.sendSystemMessage(Component.literal("The CPU takes the round.")
+                        .withStyle(ChatFormatting.RED, ChatFormatting.BOLD));
+                roundSound(player, 0.7F);
+            }
+            case NONE -> {
+                player.sendSystemMessage(Component.literal("Tie! Both cards go into the pot.")
+                        .withStyle(ChatFormatting.YELLOW, ChatFormatting.BOLD));
+                roundSound(player, 1.0F);
+            }
         }
 
         if (battle.isFinished()) {
@@ -242,6 +272,10 @@ public final class BattleCommands {
                 .withStyle(ChatFormatting.GRAY)
                 .append(button("[Battle!]", "/mobtrumps battle", ChatFormatting.GREEN,
                         "Start a new Mob Trumps battle")));
+    }
+
+    private static void roundSound(ServerPlayer player, float pitch) {
+        player.playNotifySound(SoundEvents.NOTE_BLOCK_PLING.value(), SoundSource.PLAYERS, 0.6F, pitch);
     }
 
     // --- chat component helpers ---

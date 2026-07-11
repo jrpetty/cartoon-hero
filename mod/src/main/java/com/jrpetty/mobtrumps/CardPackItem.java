@@ -50,9 +50,11 @@ public class CardPackItem extends Item {
         List<PackOpenedPayload.Pull> results = new ArrayList<>();
         boolean anyFoil = false;
 
+        boolean anyLegendary = false;
         for (MobCard card : pulls) {
             boolean foil = random.nextFloat() < FOIL_CHANCE;
             anyFoil |= foil;
+            anyLegendary |= card.tier() == com.jrpetty.mobtrumps.game.Tier.LEGENDARY;
             ItemStack cardStack = MobCardItem.stackOf(card, foil);
             if (!player.getInventory().add(cardStack)) {
                 player.drop(cardStack, false);
@@ -67,9 +69,20 @@ public class CardPackItem extends Item {
             PacketDistributor.sendToPlayer(serverPlayer, new PackOpenedPayload(results));
         }
 
+        boolean special = anyFoil || anyLegendary;
         level.playSound(null, player.getX(), player.getY(), player.getZ(),
-                anyFoil ? SoundEvents.UI_TOAST_CHALLENGE_COMPLETE : SoundEvents.PLAYER_LEVELUP,
-                SoundSource.PLAYERS, 0.6F, anyFoil ? 1.0F : 1.4F);
+                special ? SoundEvents.UI_TOAST_CHALLENGE_COMPLETE : SoundEvents.PLAYER_LEVELUP,
+                SoundSource.PLAYERS, 0.7F, special ? 1.0F : 1.4F);
+        if (special && player instanceof ServerPlayer serverPlayer) {
+            var sl = serverPlayer.serverLevel();
+            double px = player.getX(), py = player.getY() + 1.1, pz = player.getZ();
+            sl.sendParticles(net.minecraft.core.particles.ParticleTypes.TOTEM_OF_UNDYING,
+                    px, py, pz, 60, 0.5, 0.6, 0.5, 0.15);
+            sl.sendParticles(net.minecraft.core.particles.ParticleTypes.END_ROD,
+                    px, py, pz, 25, 0.4, 0.5, 0.4, 0.05);
+            level.playSound(null, px, py, pz, SoundEvents.FIREWORK_ROCKET_TWINKLE,
+                    SoundSource.PLAYERS, 1.0F, 1.0F);
+        }
         return InteractionResultHolder.sidedSuccess(pack, false);
     }
 

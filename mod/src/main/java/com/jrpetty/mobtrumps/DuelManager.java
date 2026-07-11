@@ -210,6 +210,17 @@ public final class DuelManager {
         sendBoth(duel, reveal);
         sendBoth(duel, outcome);
 
+        if (result.winner() == Battle.Side.PLAYER) {
+            roundSound(duel.challenger, 1.3F);
+            roundSound(duel.target, 0.7F);
+        } else if (result.winner() == Battle.Side.CPU) {
+            roundSound(duel.challenger, 0.7F);
+            roundSound(duel.target, 1.3F);
+        } else {
+            roundSound(duel.challenger, 1.0F);
+            roundSound(duel.target, 1.0F);
+        }
+
         if (duel.battle.isFinished()) {
             Battle.Side winSide = duel.battle.getWinner();
             if (winSide == Battle.Side.NONE) {
@@ -286,6 +297,10 @@ public final class DuelManager {
     private static void sendBoth(Duel duel, Component message) {
         duel.challenger.sendSystemMessage(message);
         duel.target.sendSystemMessage(message);
+    }
+
+    private static void roundSound(ServerPlayer player, float pitch) {
+        player.playNotifySound(SoundEvents.NOTE_BLOCK_PLING.value(), SoundSource.PLAYERS, 0.6F, pitch);
     }
 
     private static String name(ServerPlayer player) {
