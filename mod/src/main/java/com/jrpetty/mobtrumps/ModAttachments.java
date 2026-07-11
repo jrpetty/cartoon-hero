@@ -20,6 +20,20 @@ public final class ModAttachments {
                     .copyOnDeath()
                     .build());
 
+    /** Card ids this player has collected as a holographic foil. */
+    public static final Supplier<AttachmentType<List<String>>> COLLECTED_FOIL =
+            ATTACHMENTS.register("collected_foil", () -> AttachmentType.<List<String>>builder(() -> List.of())
+                    .serialize(Codec.STRING.listOf())
+                    .copyOnDeath()
+                    .build());
+
+    /** How many mob duels this player has won. */
+    public static final Supplier<AttachmentType<Integer>> DUEL_WINS =
+            ATTACHMENTS.register("duel_wins", () -> AttachmentType.<Integer>builder(() -> 0)
+                    .serialize(Codec.INT)
+                    .copyOnDeath()
+                    .build());
+
     private ModAttachments() {
     }
 }

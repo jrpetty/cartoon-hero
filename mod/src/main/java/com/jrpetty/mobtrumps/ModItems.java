@@ -30,6 +30,13 @@ public final class ModItems {
                     .networkSynchronized(ByteBufCodecs.STRING_UTF8)
                     .build());
 
+    /** Data component marking a card as a rare holographic foil variant. */
+    public static final DeferredHolder<DataComponentType<?>, DataComponentType<Boolean>> FOIL =
+            DATA_COMPONENTS.register("foil", () -> DataComponentType.<Boolean>builder()
+                    .persistent(Codec.BOOL)
+                    .networkSynchronized(ByteBufCodecs.BOOL)
+                    .build());
+
     public static final DeferredItem<MobCardItem> MOB_CARD =
             ITEMS.register("mob_card", () -> new MobCardItem(new Item.Properties()));
     public static final DeferredItem<CardPackItem> CARD_PACK =

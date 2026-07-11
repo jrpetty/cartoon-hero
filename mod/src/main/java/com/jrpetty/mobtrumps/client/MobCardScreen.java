@@ -17,16 +17,22 @@ public class MobCardScreen extends Screen {
 
     private final MobCard card;
     private final Screen parent;
+    private final boolean foil;
     private final Map<String, LivingEntity> entityCache = new HashMap<>();
 
     public MobCardScreen(MobCard card) {
-        this(card, null);
+        this(card, null, false);
     }
 
     public MobCardScreen(MobCard card, Screen parent) {
+        this(card, parent, false);
+    }
+
+    public MobCardScreen(MobCard card, Screen parent, boolean foil) {
         super(Component.literal(card.displayName()));
         this.card = card;
         this.parent = parent;
+        this.foil = foil;
     }
 
     @Override
@@ -53,7 +59,7 @@ public class MobCardScreen extends Screen {
         g.fill(x + 4, y + 6, x + CardRenderer.CARD_W + 8, y + CardRenderer.CARD_H + 10, 0x66000000);
 
         LivingEntity mob = CardRenderer.portraitEntity(minecraft, card, entityCache);
-        CardRenderer.renderCard(g, font, card, x, y, 1f, mouseX, mouseY, mob);
+        CardRenderer.renderCard(g, font, card, x, y, 1f, mouseX, mouseY, mob, foil);
 
         String hint = parent != null ? "Press ESC to return to the book" : "Press ESC to close";
         g.drawString(font, hint, (width - font.width(hint)) / 2,

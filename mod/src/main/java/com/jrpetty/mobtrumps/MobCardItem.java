@@ -29,8 +29,15 @@ public class MobCardItem extends Item {
     }
 
     public static ItemStack stackOf(MobCard card) {
+        return stackOf(card, false);
+    }
+
+    public static ItemStack stackOf(MobCard card, boolean foil) {
         ItemStack stack = new ItemStack(ModItems.MOB_CARD.get());
         stack.set(ModItems.MOB_ID.get(), card.id());
+        if (foil) {
+            stack.set(ModItems.FOIL.get(), true);
+        }
         return stack;
     }
 
@@ -39,16 +46,21 @@ public class MobCardItem extends Item {
         return MobCards.byId(stack.get(ModItems.MOB_ID.get()));
     }
 
+    /** Whether this card is a rare holographic foil variant. */
+    public static boolean isFoilCard(ItemStack stack) {
+        return Boolean.TRUE.equals(stack.get(ModItems.FOIL.get()));
+    }
+
     @Override
     public InteractionResultHolder<ItemStack> use(Level level, Player player, InteractionHand hand) {
         ItemStack stack = player.getItemInHand(hand);
         MobCard card = cardOf(stack);
         if (card != null) {
             if (level.isClientSide) {
-                ClientHooks.openCardScreen(card);
+                ClientHooks.openCardScreen(card, isFoilCard(stack));
             } else if (player instanceof net.minecraft.server.level.ServerPlayer serverPlayer) {
                 // inspecting a card registers it in the collection book
-                CollectionTracker.record(serverPlayer, card.id());
+                CollectionTracker.record(serverPlayer, card.id(), isFoilCard(stack));
             }
         }
         return InteractionResultHolder.sidedSuccess(stack, level.isClientSide);
@@ -60,13 +72,19 @@ public class MobCardItem extends Item {
         if (card == null) {
             return super.getName(stack);
         }
-        return Component.literal(card.displayName()).withStyle(tierColor(card.tier()));
+        Component name = Component.literal(card.displayName()).withStyle(tierColor(card.tier()));
+        if (isFoilCard(stack)) {
+            return Component.literal("✦ ").withStyle(ChatFormatting.WHITE)
+                    .append(name)
+                    .append(Component.literal(" ✦").withStyle(ChatFormatting.WHITE));
+        }
+        return name;
     }
 
     @Override
     public boolean isFoil(ItemStack stack) {
         MobCard card = cardOf(stack);
-        return card != null && card.tier() == Tier.LEGENDARY;
+        return isFoilCard(stack) || (card != null && card.tier() == Tier.LEGENDARY);
     }
 
     @Override
@@ -79,6 +97,10 @@ public class MobCardItem extends Item {
         }
         tooltip.add(Component.literal("★ " + card.tier().label() + " ★")
                 .withStyle(tierColor(card.tier()), ChatFormatting.ITALIC));
+        if (isFoilCard(stack)) {
+            tooltip.add(Component.literal("✦ Holographic Foil ✦")
+                    .withStyle(ChatFormatting.WHITE, ChatFormatting.BOLD));
+        }
         for (Stat stat : Stat.values()) {
             tooltip.add(Component.literal(stat.label + ": ").withStyle(statColor(stat))
                     .append(Component.literal(String.valueOf(card.stat(stat)))

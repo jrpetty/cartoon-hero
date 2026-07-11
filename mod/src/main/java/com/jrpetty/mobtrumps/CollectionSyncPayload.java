@@ -8,16 +8,19 @@ import net.minecraft.resources.ResourceLocation;
 
 import java.util.List;
 
-/** Server -> client: the full set of card ids the player has collected. */
-public record CollectionSyncPayload(List<String> collected) implements CustomPacketPayload {
+/** Server -> client: the card ids the player has collected, plus foils. */
+public record CollectionSyncPayload(List<String> collected, List<String> foils)
+        implements CustomPacketPayload {
 
     public static final CustomPacketPayload.Type<CollectionSyncPayload> TYPE =
             new CustomPacketPayload.Type<>(
                     ResourceLocation.fromNamespaceAndPath(MobTrumps.MODID, "collection_sync"));
 
     public static final StreamCodec<ByteBuf, CollectionSyncPayload> STREAM_CODEC =
-            ByteBufCodecs.STRING_UTF8.apply(ByteBufCodecs.list())
-                    .map(CollectionSyncPayload::new, CollectionSyncPayload::collected);
+            StreamCodec.composite(
+                    ByteBufCodecs.STRING_UTF8.apply(ByteBufCodecs.list()), CollectionSyncPayload::collected,
+                    ByteBufCodecs.STRING_UTF8.apply(ByteBufCodecs.list()), CollectionSyncPayload::foils,
+                    CollectionSyncPayload::new);
 
     @Override
     public Type<? extends CustomPacketPayload> type() {

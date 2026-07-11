@@ -13,10 +13,20 @@ public final class ClientHooks {
     }
 
     public static void openCardScreen(MobCard card) {
-        Minecraft.getInstance().setScreen(new MobCardScreen(card));
+        openCardScreen(card, false);
+    }
+
+    public static void openCardScreen(MobCard card, boolean foil) {
+        Minecraft.getInstance().setScreen(new MobCardScreen(card, null, foil));
     }
 
     public static void openCollectionBook() {
         Minecraft.getInstance().setScreen(new CollectionBookScreen());
+    }
+
+    public static void openPackReveal(java.util.List<com.jrpetty.mobtrumps.PackOpenedPayload.Pull> pulls) {
+        if (!pulls.isEmpty()) {
+            Minecraft.getInstance().setScreen(new PackRevealScreen(pulls));
+        }
     }
 }

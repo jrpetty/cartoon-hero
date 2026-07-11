@@ -50,6 +50,12 @@ public final class CardRenderer {
     /** Draw the front of a card. Pass the mob for the live portrait, or null. */
     public static void renderCard(GuiGraphics g, Font font, MobCard card, int x, int y,
                                   float scale, int mouseX, int mouseY, LivingEntity mob) {
+        renderCard(g, font, card, x, y, scale, mouseX, mouseY, mob, false);
+    }
+
+    /** Draw the front of a card, optionally with the holographic foil sheen. */
+    public static void renderCard(GuiGraphics g, Font font, MobCard card, int x, int y,
+                                  float scale, int mouseX, int mouseY, LivingEntity mob, boolean foil) {
         var pose = g.pose();
         pose.pushPose();
         pose.translate(x, y, 0);
@@ -96,6 +102,20 @@ public final class CardRenderer {
         String fact = "Card " + (MobCards.ordinal(card.id()) + 1) + " of " + MobCards.ALL.size()
                 + " · Mob Trumps";
         drawCenteredFit(g, font, fact, CARD_W / 2f, rowY + 5, CARD_W - 28, KRAFT_DARK);
+
+        // holographic foil sheen: shifting rainbow diagonal bands over the face
+        if (foil) {
+            long t = System.currentTimeMillis();
+            float phase = (t % 3200L) / 3200f;
+            for (int by = 8; by < CARD_H - 8; by += 3) {
+                float h = ((by / (float) CARD_H) + phase) % 1f;
+                int band = 0x22000000 | (hsvToRgb(h, 0.6f, 1f) & 0x00FFFFFF);
+                g.fill(8, by, CARD_W - 8, by + 2, band);
+            }
+            // bright sweeping highlight
+            int sweep = 8 + (int) (phase * (CARD_W - 16));
+            g.fill(Math.max(8, sweep - 3), 8, Math.min(CARD_W - 8, sweep + 3), CARD_H - 8, 0x33FFFFFF);
+        }
 
         pose.popPose();
 
@@ -188,6 +208,23 @@ public final class CardRenderer {
         }
         cache.put(card.id(), result);
         return result;
+    }
+
+    /** Minimal HSV→packed-RGB (0xRRGGBB) for the foil rainbow. */
+    private static int hsvToRgb(float h, float s, float v) {
+        int i = (int) (h * 6f);
+        float f = h * 6f - i;
+        float p = v * (1 - s), q = v * (1 - f * s), t = v * (1 - (1 - f) * s);
+        float r, g, b;
+        switch (i % 6) {
+            case 0 -> { r = v; g = t; b = p; }
+            case 1 -> { r = q; g = v; b = p; }
+            case 2 -> { r = p; g = v; b = t; }
+            case 3 -> { r = p; g = q; b = v; }
+            case 4 -> { r = t; g = p; b = v; }
+            default -> { r = v; g = p; b = q; }
+        }
+        return ((int) (r * 255) << 16) | ((int) (g * 255) << 8) | (int) (b * 255);
     }
 
     /** Draw text centred on centerX, shrinking it to fit maxWidth if needed. */

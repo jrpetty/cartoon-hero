@@ -89,7 +89,9 @@ public class CollectionBookScreen extends Screen {
 
         int total = MobCards.ALL.size();
         int have = ClientCollection.count();
-        String progress = have + " / " + total + " collected";
+        int foils = ClientCollection.foilCount();
+        String progress = have + " / " + total + " collected"
+                + (foils > 0 ? "   ✦ " + foils + " foil" : "");
         g.drawString(font, progress, panelX + (panelW - font.width(progress)) / 2,
                 panelY + 27, CardRenderer.KRAFT_DARK, false);
 
@@ -116,7 +118,8 @@ public class CollectionBookScreen extends Screen {
             boolean hovered = mouseX >= cx && mouseX < cx + cw && mouseY >= cy && mouseY < cy + ch;
             if (ClientCollection.has(card.id())) {
                 LivingEntity mob = CardRenderer.portraitEntity(minecraft, card, entityCache);
-                CardRenderer.renderCard(g, font, card, cx, cy, CARD_SCALE, mouseX, mouseY, mob);
+                boolean foil = ClientCollection.hasFoil(card.id());
+                CardRenderer.renderCard(g, font, card, cx, cy, CARD_SCALE, mouseX, mouseY, mob, foil);
                 if (hovered) {
                     g.renderOutline(cx - 2, cy - 2, cw + 4, ch + 4, 0xFFF9D849);
                 }
@@ -172,7 +175,7 @@ public class CollectionBookScreen extends Screen {
                 int ch = Math.round(CardRenderer.CARD_H * CARD_SCALE);
                 if (mouseX >= cx && mouseX < cx + cw && mouseY >= cy && mouseY < cy + ch
                         && ClientCollection.has(card.id()) && minecraft != null) {
-                    minecraft.setScreen(new MobCardScreen(card, this));
+                    minecraft.setScreen(new MobCardScreen(card, this, ClientCollection.hasFoil(card.id())));
                     return true;
                 }
             }

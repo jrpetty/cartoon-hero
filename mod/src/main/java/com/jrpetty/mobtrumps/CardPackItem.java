@@ -14,7 +14,9 @@ import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.TooltipFlag;
 import net.minecraft.world.level.Level;
+import net.neoforged.neoforge.network.PacketDistributor;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ThreadLocalRandom;
 
@@ -25,6 +27,8 @@ import java.util.concurrent.ThreadLocalRandom;
 public class CardPackItem extends Item {
 
     public static final int CARDS_PER_PACK = 5;
+    /** Chance for any given pull to come out as a holographic foil. */
+    public static final float FOIL_CHANCE = 0.09F;
 
     public CardPackItem(Properties properties) {
         super(properties);
@@ -41,28 +45,31 @@ public class CardPackItem extends Item {
             pack.shrink(1);
         }
 
-        List<MobCard> pulls = MobCards.openPack(CARDS_PER_PACK, ThreadLocalRandom.current());
-        player.displayClientMessage(Component.literal("You rip open a card pack...")
-                .withStyle(ChatFormatting.YELLOW), false);
+        var random = ThreadLocalRandom.current();
+        List<MobCard> pulls = MobCards.openPack(CARDS_PER_PACK, random);
+        List<PackOpenedPayload.Pull> results = new ArrayList<>();
+        boolean anyFoil = false;
+
         for (MobCard card : pulls) {
-            ItemStack cardStack = MobCardItem.stackOf(card);
+            boolean foil = random.nextFloat() < FOIL_CHANCE;
+            anyFoil |= foil;
+            ItemStack cardStack = MobCardItem.stackOf(card, foil);
             if (!player.getInventory().add(cardStack)) {
                 player.drop(cardStack, false);
             }
             boolean newlyCollected = player instanceof ServerPlayer serverPlayer
-                    && CollectionTracker.record(serverPlayer, card.id());
-            var line = Component.literal("  + ").withStyle(ChatFormatting.DARK_GRAY)
-                    .append(Component.literal(card.displayName())
-                            .withStyle(MobCardItem.tierColor(card.tier())))
-                    .append(Component.literal(" [" + card.tier().label() + "]")
-                            .withStyle(ChatFormatting.GRAY));
-            if (newlyCollected) {
-                line.append(Component.literal(" NEW!").withStyle(ChatFormatting.GOLD, ChatFormatting.BOLD));
-            }
-            player.displayClientMessage(line, false);
+                    && CollectionTracker.record(serverPlayer, card.id(), foil);
+            results.add(new PackOpenedPayload.Pull(card.id(), foil, newlyCollected));
         }
+
+        if (player instanceof ServerPlayer serverPlayer) {
+            // drive the animated reveal screen on the opener's client
+            PacketDistributor.sendToPlayer(serverPlayer, new PackOpenedPayload(results));
+        }
+
         level.playSound(null, player.getX(), player.getY(), player.getZ(),
-                SoundEvents.PLAYER_LEVELUP, SoundSource.PLAYERS, 0.6F, 1.4F);
+                anyFoil ? SoundEvents.UI_TOAST_CHALLENGE_COMPLETE : SoundEvents.PLAYER_LEVELUP,
+                SoundSource.PLAYERS, 0.6F, anyFoil ? 1.0F : 1.4F);
         return InteractionResultHolder.sidedSuccess(pack, false);
     }
 
