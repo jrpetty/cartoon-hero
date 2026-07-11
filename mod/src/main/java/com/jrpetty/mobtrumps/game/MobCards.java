@@ -2,6 +2,7 @@ package com.jrpetty.mobtrumps.game;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -12,6 +13,7 @@ import java.util.random.RandomGenerator;
 public final class MobCards {
 
     private static final Map<String, MobCard> BY_ID = new LinkedHashMap<>();
+    private static final Map<String, Integer> ORDINALS = new HashMap<>();
     public static final List<MobCard> ALL;
 
     private static void card(String id, String name, int health, int attack,
@@ -103,6 +105,9 @@ public final class MobCards {
         card("zoglin", "Zoglin", 6, 6, 4, 5, 6, 4);
 
         ALL = List.copyOf(BY_ID.values());
+        for (int i = 0; i < ALL.size(); i++) {
+            ORDINALS.put(ALL.get(i).id(), i);
+        }
     }
 
     private MobCards() {
@@ -112,6 +117,12 @@ public final class MobCards {
     public static MobCard byId(String id) {
         if (id == null) return null;
         return BY_ID.get(id.toLowerCase(Locale.ROOT));
+    }
+
+    /** Position of a card in the collection (0-based), or -1 if unknown. */
+    public static int ordinal(String id) {
+        if (id == null) return -1;
+        return ORDINALS.getOrDefault(id.toLowerCase(Locale.ROOT), -1);
     }
 
     /**

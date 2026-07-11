@@ -22,8 +22,11 @@ client or server.
 
 In game:
 
+- **Mob Card** item — every one of the 81 mobs has its own inventory icon
+  (a mini trading card with the mob's portrait), so a stack of cards reads
+  at a glance without opening them; legendaries have a foil glint
 - **Mob Card Pack** item — craft with 3 paper + 1 emerald, right-click to pull
-  5 rarity-weighted mob cards (all 81 collectable, legendaries have a foil glint)
+  5 rarity-weighted mob cards (all 81 collectable)
 - Card tooltips show all six stats; names are coloured by collector tier
 - Right-click a card to open a full Top Trumps style card view — kraft
   border, the live 3D mob as the portrait, stat table and total rating

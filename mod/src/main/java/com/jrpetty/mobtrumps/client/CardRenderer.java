@@ -73,7 +73,7 @@ public final class CardRenderer {
 
         // portrait backdrop (the mob itself is drawn later in screen space)
         g.fillGradient(12, 38, CARD_W - 12, 116, PORTRAIT_TOP, PORTRAIT_BOTTOM);
-        g.renderOutline(11, 37, CARD_W - 22 + 2, 116 - 38 + 2, KRAFT_DARK);
+        g.renderOutline(11, 37, CARD_W - 22, 116 - 38 + 2, KRAFT_DARK);
 
         // stat table
         int rowY = 121;
@@ -92,10 +92,10 @@ public final class CardRenderer {
 
         // fact file strip
         g.fill(12, rowY + 3, CARD_W - 12, CARD_H - 9, FACT_BG);
-        g.renderOutline(11, rowY + 2, CARD_W - 22 + 2, CARD_H - 9 - rowY - 3 + 2, KRAFT_DARK);
-        String fact = "Card " + (MobCards.ALL.indexOf(card) + 1) + " of " + MobCards.ALL.size()
+        g.renderOutline(11, rowY + 2, CARD_W - 22, CARD_H - 9 - rowY - 3 + 2, KRAFT_DARK);
+        String fact = "Card " + (MobCards.ordinal(card.id()) + 1) + " of " + MobCards.ALL.size()
                 + " · Mob Trumps";
-        g.drawString(font, fact, (CARD_W - font.width(fact)) / 2, rowY + 6, KRAFT_DARK, false);
+        drawCenteredFit(g, font, fact, CARD_W / 2f, rowY + 5, CARD_W - 28, KRAFT_DARK);
 
         pose.popPose();
 
@@ -188,6 +188,23 @@ public final class CardRenderer {
         }
         cache.put(card.id(), result);
         return result;
+    }
+
+    /** Draw text centred on centerX, shrinking it to fit maxWidth if needed. */
+    private static void drawCenteredFit(GuiGraphics g, Font font, String text, float centerX,
+                                        int y, int maxWidth, int color) {
+        int w = font.width(text);
+        if (w <= maxWidth) {
+            g.drawString(font, text, Math.round(centerX - w / 2f), y, color, false);
+            return;
+        }
+        float scale = maxWidth / (float) w;
+        var pose = g.pose();
+        pose.pushPose();
+        pose.translate(centerX, y + (font.lineHeight * (1 - scale)) / 2f, 0);
+        pose.scale(scale, scale, 1f);
+        g.drawString(font, text, -w / 2, 0, color, false);
+        pose.popPose();
     }
 
     private static void drawRow(GuiGraphics g, Font font, int rowY, int bg, int labelColor,

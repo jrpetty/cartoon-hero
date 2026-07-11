@@ -2,5 +2,493 @@
   "parent": "minecraft:item/generated",
   "textures": {
     "layer0": "mobtrumps:item/mob_card"
-  }
+  },
+  "overrides": [
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 0
+      },
+      "model": "mobtrumps:item/card/allay"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 1
+      },
+      "model": "mobtrumps:item/card/armadillo"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 2
+      },
+      "model": "mobtrumps:item/card/axolotl"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 3
+      },
+      "model": "mobtrumps:item/card/bat"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 4
+      },
+      "model": "mobtrumps:item/card/bee"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 5
+      },
+      "model": "mobtrumps:item/card/blaze"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 6
+      },
+      "model": "mobtrumps:item/card/bogged"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 7
+      },
+      "model": "mobtrumps:item/card/breeze"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 8
+      },
+      "model": "mobtrumps:item/card/camel"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 9
+      },
+      "model": "mobtrumps:item/card/cat"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 10
+      },
+      "model": "mobtrumps:item/card/cave_spider"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 11
+      },
+      "model": "mobtrumps:item/card/chicken"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 12
+      },
+      "model": "mobtrumps:item/card/cod"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 13
+      },
+      "model": "mobtrumps:item/card/cow"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 14
+      },
+      "model": "mobtrumps:item/card/creaking"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 15
+      },
+      "model": "mobtrumps:item/card/creeper"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 16
+      },
+      "model": "mobtrumps:item/card/dolphin"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 17
+      },
+      "model": "mobtrumps:item/card/donkey"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 18
+      },
+      "model": "mobtrumps:item/card/drowned"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 19
+      },
+      "model": "mobtrumps:item/card/elder_guardian"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 20
+      },
+      "model": "mobtrumps:item/card/ender_dragon"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 21
+      },
+      "model": "mobtrumps:item/card/enderman"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 22
+      },
+      "model": "mobtrumps:item/card/endermite"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 23
+      },
+      "model": "mobtrumps:item/card/evoker"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 24
+      },
+      "model": "mobtrumps:item/card/fox"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 25
+      },
+      "model": "mobtrumps:item/card/frog"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 26
+      },
+      "model": "mobtrumps:item/card/ghast"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 27
+      },
+      "model": "mobtrumps:item/card/glow_squid"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 28
+      },
+      "model": "mobtrumps:item/card/goat"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 29
+      },
+      "model": "mobtrumps:item/card/guardian"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 30
+      },
+      "model": "mobtrumps:item/card/hoglin"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 31
+      },
+      "model": "mobtrumps:item/card/horse"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 32
+      },
+      "model": "mobtrumps:item/card/husk"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 33
+      },
+      "model": "mobtrumps:item/card/iron_golem"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 34
+      },
+      "model": "mobtrumps:item/card/llama"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 35
+      },
+      "model": "mobtrumps:item/card/magma_cube"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 36
+      },
+      "model": "mobtrumps:item/card/mooshroom"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 37
+      },
+      "model": "mobtrumps:item/card/mule"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 38
+      },
+      "model": "mobtrumps:item/card/ocelot"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 39
+      },
+      "model": "mobtrumps:item/card/panda"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 40
+      },
+      "model": "mobtrumps:item/card/parrot"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 41
+      },
+      "model": "mobtrumps:item/card/phantom"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 42
+      },
+      "model": "mobtrumps:item/card/pig"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 43
+      },
+      "model": "mobtrumps:item/card/piglin"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 44
+      },
+      "model": "mobtrumps:item/card/piglin_brute"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 45
+      },
+      "model": "mobtrumps:item/card/pillager"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 46
+      },
+      "model": "mobtrumps:item/card/polar_bear"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 47
+      },
+      "model": "mobtrumps:item/card/pufferfish"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 48
+      },
+      "model": "mobtrumps:item/card/rabbit"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 49
+      },
+      "model": "mobtrumps:item/card/ravager"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 50
+      },
+      "model": "mobtrumps:item/card/salmon"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 51
+      },
+      "model": "mobtrumps:item/card/sheep"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 52
+      },
+      "model": "mobtrumps:item/card/shulker"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 53
+      },
+      "model": "mobtrumps:item/card/silverfish"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 54
+      },
+      "model": "mobtrumps:item/card/skeleton"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 55
+      },
+      "model": "mobtrumps:item/card/skeleton_horse"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 56
+      },
+      "model": "mobtrumps:item/card/slime"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 57
+      },
+      "model": "mobtrumps:item/card/sniffer"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 58
+      },
+      "model": "mobtrumps:item/card/snow_golem"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 59
+      },
+      "model": "mobtrumps:item/card/spider"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 60
+      },
+      "model": "mobtrumps:item/card/squid"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 61
+      },
+      "model": "mobtrumps:item/card/stray"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 62
+      },
+      "model": "mobtrumps:item/card/strider"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 63
+      },
+      "model": "mobtrumps:item/card/sulfur_cube"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 64
+      },
+      "model": "mobtrumps:item/card/tadpole"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 65
+      },
+      "model": "mobtrumps:item/card/trader_llama"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 66
+      },
+      "model": "mobtrumps:item/card/tropical_fish"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 67
+      },
+      "model": "mobtrumps:item/card/turtle"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 68
+      },
+      "model": "mobtrumps:item/card/vex"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 69
+      },
+      "model": "mobtrumps:item/card/villager"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 70
+      },
+      "model": "mobtrumps:item/card/vindicator"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 71
+      },
+      "model": "mobtrumps:item/card/wandering_trader"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 72
+      },
+      "model": "mobtrumps:item/card/warden"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 73
+      },
+      "model": "mobtrumps:item/card/witch"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 74
+      },
+      "model": "mobtrumps:item/card/wither"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 75
+      },
+      "model": "mobtrumps:item/card/wither_skeleton"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 76
+      },
+      "model": "mobtrumps:item/card/wolf"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 77
+      },
+      "model": "mobtrumps:item/card/zombie"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 78
+      },
+      "model": "mobtrumps:item/card/zombie_villager"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 79
+      },
+      "model": "mobtrumps:item/card/zombified_piglin"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 80
+      },
+      "model": "mobtrumps:item/card/zoglin"
+    }
+  ]
 }
