@@ -99,7 +99,7 @@ public class CardPackItem extends Item {
         tooltip.add(Component.literal("Right-click to pull " + CARDS_PER_PACK + " mob cards.")
                 .withStyle(ChatFormatting.GRAY));
         if (packType != PackType.STANDARD) {
-            tooltip.add(Component.literal(themeLabel() + " · better odds for rare cards")
+            tooltip.add(Component.literal(themeLabel() + " · no common filler")
                     .withStyle(ChatFormatting.LIGHT_PURPLE));
         }
         super.appendHoverText(stack, context, tooltip, flag);

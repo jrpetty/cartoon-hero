@@ -10,18 +10,19 @@ public enum PackType {
 
     STANDARD(0.09f, 0.0, (String[]) null),
 
-    // themed pools, odds tilted toward the rarer cards (never guaranteed):
-    // a Nether pack ~reliably gives rare Nether mobs, ~39% shot at the Wither;
-    // a Boss pack is stacked with tough mobs, ~52% shot at a true legendary.
-    NETHER(0.12f, 0.40,
+    // Themed pools drawn at normal spawn odds (bias 0). The packs are special
+    // because their pool has no common filler, not because they force rares —
+    // legendaries stay uncommon. Measured: Nether ~10% shot at the Wither;
+    // Boss ~20% at a true legendary (vs ~15% from a standard pack).
+    NETHER(0.12f, 0.0,
             "blaze", "ghast", "hoglin", "magma_cube", "piglin", "piglin_brute",
             "strider", "wither", "wither_skeleton", "zoglin", "zombified_piglin"),
 
-    BOSS(0.15f, 0.20,
-            "warden", "wither", "ender_dragon", "elder_guardian", "evoker",
+    BOSS(0.15f, 0.0,
+            "warden", "wither", "ender_dragon", "elder_guardian",
             "ravager", "vindicator", "guardian", "piglin_brute", "zoglin", "creaking",
             "breeze", "panda", "polar_bear", "blaze", "iron_golem", "pillager", "witch",
-            "enderman", "wither_skeleton", "ghast", "hoglin", "stray", "husk", "bogged");
+            "enderman", "wither_skeleton", "ghast", "stray", "bogged", "hoglin", "husk");
 
     public final float foilChance;
     /** 0 = normal odds, 1 = fully favours the rarest cards in the pool. */
