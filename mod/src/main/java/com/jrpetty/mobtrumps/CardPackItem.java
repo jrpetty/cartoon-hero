@@ -53,7 +53,7 @@ public class CardPackItem extends Item {
         }
 
         var random = ThreadLocalRandom.current();
-        List<MobCard> pulls = MobCards.openPack(packType.pool(), CARDS_PER_PACK, packType.guarantee, random);
+        List<MobCard> pulls = MobCards.openPack(packType.pool(), CARDS_PER_PACK, packType.bias, random);
         List<PackOpenedPayload.Pull> results = new ArrayList<>();
         boolean anyFoil = false;
 
@@ -98,9 +98,8 @@ public class CardPackItem extends Item {
                                 List<Component> tooltip, TooltipFlag flag) {
         tooltip.add(Component.literal("Right-click to pull " + CARDS_PER_PACK + " mob cards.")
                 .withStyle(ChatFormatting.GRAY));
-        if (packType.guarantee != null) {
-            tooltip.add(Component.literal("Guaranteed " + packType.guarantee.label()
-                            + "+ · " + themeLabel())
+        if (packType != PackType.STANDARD) {
+            tooltip.add(Component.literal(themeLabel() + " · better odds for rare cards")
                     .withStyle(ChatFormatting.LIGHT_PURPLE));
         }
         super.appendHoverText(stack, context, tooltip, flag);
@@ -109,8 +108,8 @@ public class CardPackItem extends Item {
     private String themeLabel() {
         return switch (packType) {
             case NETHER -> "Nether mobs";
-            case BOSS -> "bosses & brutes";
-            default -> "all mobs";
+            case BOSS -> "Bosses & brutes";
+            default -> "All mobs";
         };
     }
 }

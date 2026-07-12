@@ -54,8 +54,10 @@ In game:
 - `/mobtrumps foil` — press 4 duplicate copies of a card into 1 holographic foil
 - The **Wandering Trader** now sells Mob Card Packs for emeralds
 - **Special packs** — a **Nether Pack** (craft: 3 paper + blaze powder +
-  emerald; Nether-mob pool, guaranteed Rare+) and a **Boss Pack** (3 paper +
-  diamond + emerald; boss pool, guaranteed Epic+), both with higher foil odds
+  emerald; Nether-mob pool, odds tilted toward rarer cards) and a **Boss Pack**
+  (3 paper + diamond + emerald; tough-mob pool, ~½ chance at a legendary), both
+  with higher foil odds. Nothing is guaranteed — the premium packs just roll
+  from a better-stacked bag
 - **Ranked ladder** — duels update an Elo rating stored server-wide (persisted,
   offline players included); `/mobtrumps top` shows the standings and your rank
 - `/mobtrumps play <stat>`, `/mobtrumps next`, `/mobtrumps forfeit`

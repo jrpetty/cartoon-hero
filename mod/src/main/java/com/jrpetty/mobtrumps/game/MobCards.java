@@ -130,49 +130,35 @@ public final class MobCards {
      * mob is ten times more likely to be pulled than a rarity 1 legendary.
      */
     public static List<MobCard> openPack(int count, RandomGenerator random) {
-        return openPack(ALL, count, null, random);
+        return openPack(ALL, count, 0.0, random);
     }
 
     /**
-     * Draw {@code count} distinct cards from {@code source}, weighted by spawn
-     * rarity. If {@code guarantee} is non-null, at least one pull is of that
-     * collector tier or better (a lower-tier pull is swapped out to ensure it).
+     * Draw {@code count} distinct cards from {@code source}. {@code bias} in
+     * [0,1] tilts the odds toward rarer cards: 0 is normal spawn weighting,
+     * 1 fully favours the rarest. Nothing is guaranteed — premium packs just
+     * roll from a better-stacked bag.
      */
-    public static List<MobCard> openPack(List<MobCard> source, int count, Tier guarantee,
+    public static List<MobCard> openPack(List<MobCard> source, int count, double bias,
                                          RandomGenerator random) {
         List<MobCard> from = (source == null || source.isEmpty()) ? ALL : source;
         count = Math.max(1, Math.min(count, from.size()));
         List<MobCard> pool = new ArrayList<>(from);
         List<MobCard> pulls = new ArrayList<>(count);
         for (int i = 0; i < count; i++) {
-            drawWeighted(pool, pulls, random);
-        }
-
-        if (guarantee != null && pulls.stream().noneMatch(c -> meetsTier(c, guarantee))) {
-            // pull a guaranteed high-rarity card that isn't already in the pack
-            List<MobCard> high = new ArrayList<>();
-            for (MobCard c : from) {
-                if (meetsTier(c, guarantee) && !pulls.contains(c)) high.add(c);
-            }
-            if (!high.isEmpty()) {
-                MobCard swap = high.get(random.nextInt(high.size()));
-                // replace the lowest-tier (most common) pull
-                int worst = 0;
-                for (int i = 1; i < pulls.size(); i++) {
-                    if (pulls.get(i).tier().ordinal() < pulls.get(worst).tier().ordinal()) worst = i;
-                }
-                pulls.set(worst, swap);
-            }
+            drawWeighted(pool, pulls, bias, random);
         }
         return pulls;
     }
 
-    private static void drawWeighted(List<MobCard> pool, List<MobCard> out, RandomGenerator random) {
+    private static void drawWeighted(List<MobCard> pool, List<MobCard> out, double bias,
+                                     RandomGenerator random) {
         if (pool.isEmpty()) return;
-        int totalWeight = pool.stream().mapToInt(MobCard::rarity).sum();
-        int roll = random.nextInt(Math.max(1, totalWeight));
+        double total = 0;
+        for (MobCard c : pool) total += weight(c, bias);
+        double roll = random.nextDouble() * total;
         for (int j = 0; j < pool.size(); j++) {
-            roll -= pool.get(j).rarity();
+            roll -= weight(pool.get(j), bias);
             if (roll < 0) {
                 out.add(pool.remove(j));
                 return;
@@ -181,17 +167,14 @@ public final class MobCards {
         out.add(pool.remove(pool.size() - 1));
     }
 
-    private static boolean meetsTier(MobCard c, Tier guarantee) {
-        return c.tier().ordinal() >= guarantee.ordinal();
-    }
-
-    /** Cards whose collector tier is {@code tier} or better. */
-    public static List<MobCard> tierAtLeast(Tier tier) {
-        List<MobCard> out = new ArrayList<>();
-        for (MobCard c : ALL) {
-            if (c.tier().ordinal() >= tier.ordinal()) out.add(c);
-        }
-        return out;
+    /**
+     * Draw weight for a card: a blend of its spawn rarity (favouring commons)
+     * and its inverse (favouring the rare collector tiers), by {@code bias}.
+     */
+    private static double weight(MobCard c, double bias) {
+        double common = c.rarity();          // 10 = everywhere
+        double rare = 11 - c.rarity();        // 10 = legendary
+        return Math.max(0.2, common * (1 - bias) + rare * bias);
     }
 
     /** Look up several cards by id, skipping any unknown ones. */
