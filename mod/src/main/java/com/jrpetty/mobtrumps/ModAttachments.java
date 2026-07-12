@@ -41,6 +41,13 @@ public final class ModAttachments {
                     .copyOnDeath()
                     .build());
 
+    /** Mob ids whose foil variant is chosen as the "top of the pile" in the book. */
+    public static final Supplier<AttachmentType<List<String>>> DISPLAY_FOIL =
+            ATTACHMENTS.register("display_foil", () -> AttachmentType.<List<String>>builder(() -> List.of())
+                    .serialize(Codec.STRING.listOf())
+                    .copyOnDeath()
+                    .build());
+
     private ModAttachments() {
     }
 }

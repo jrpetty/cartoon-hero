@@ -15,7 +15,7 @@ public final class ModNetworking {
         registrar.playToClient(CollectionSyncPayload.TYPE, CollectionSyncPayload.STREAM_CODEC,
                 (payload, context) -> context.enqueueWork(
                         () -> ClientCollection.set(payload.collected(), payload.foils(),
-                                payload.duelWins(), payload.deck())));
+                                payload.duelWins(), payload.deck(), payload.displayFoil())));
         registrar.playToClient(PackOpenedPayload.TYPE, PackOpenedPayload.STREAM_CODEC,
                 (payload, context) -> context.enqueueWork(
                         () -> ClientHooks.openPackReveal(payload.pulls())));
@@ -23,6 +23,12 @@ public final class ModNetworking {
                 (payload, context) -> context.enqueueWork(() -> {
                     if (context.player() instanceof net.minecraft.server.level.ServerPlayer sp) {
                         DeckManager.saveDeck(sp, payload.deck());
+                    }
+                }));
+        registrar.playToServer(SetDisplayPayload.TYPE, SetDisplayPayload.STREAM_CODEC,
+                (payload, context) -> context.enqueueWork(() -> {
+                    if (context.player() instanceof net.minecraft.server.level.ServerPlayer sp) {
+                        CollectionTracker.setDisplayFoil(sp, payload.mobId(), payload.foil());
                     }
                 }));
     }

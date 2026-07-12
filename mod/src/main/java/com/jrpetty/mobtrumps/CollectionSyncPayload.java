@@ -8,9 +8,10 @@ import net.minecraft.resources.ResourceLocation;
 
 import java.util.List;
 
-/** Server -> client: collected cards, foils, duel wins, and the saved deck. */
+/** Server -> client: collected cards, foils, duel wins, deck, and display picks. */
 public record CollectionSyncPayload(List<String> collected, List<String> foils, int duelWins,
-                                    List<String> deck) implements CustomPacketPayload {
+                                    List<String> deck, List<String> displayFoil)
+        implements CustomPacketPayload {
 
     public static final CustomPacketPayload.Type<CollectionSyncPayload> TYPE =
             new CustomPacketPayload.Type<>(
@@ -22,6 +23,7 @@ public record CollectionSyncPayload(List<String> collected, List<String> foils, 
                     ByteBufCodecs.STRING_UTF8.apply(ByteBufCodecs.list()), CollectionSyncPayload::foils,
                     ByteBufCodecs.VAR_INT, CollectionSyncPayload::duelWins,
                     ByteBufCodecs.STRING_UTF8.apply(ByteBufCodecs.list()), CollectionSyncPayload::deck,
+                    ByteBufCodecs.STRING_UTF8.apply(ByteBufCodecs.list()), CollectionSyncPayload::displayFoil,
                     CollectionSyncPayload::new);
 
     @Override

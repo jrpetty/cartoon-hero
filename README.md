@@ -34,13 +34,14 @@ In game:
 - Card tooltips show all six stats; names are coloured by collector tier
 - Right-click a card to open a full Top Trumps style card view — kraft
   border, the live 3D mob as the portrait, stat table and total rating
-- **Mob Collection Book** (craft: book + emerald) — a paginated binder
-  showing the full Top Trumps card of every mob you've collected (live
-  3D portraits included); unfound mobs lie face down. Search by name,
-  filter (all / owned / missing / foil), sort (number / name / tier /
-  rating), and open a stats page (collection %, foils, duel wins,
-  per-tier breakdown). Click a card to enlarge it. Collection is saved
-  with your player and survives death
+- **Mob Collection Book** (craft: book + emerald) — an open two-page
+  binder with a 3x3 grid of full Top Trumps cards on each page (live 3D
+  portraits); unfound mobs lie face down. Search by name, filter (all /
+  owned / missing / foil), sort (number / name / tier / rating), and a
+  stats page (collection %, foils, duel wins, per-tier). A ✦ tab marks
+  mobs you own in more than one variant — click one to open the variant
+  picker and choose which (normal or holographic foil) sits on top of the
+  pile. Saved with your player and survives death
 - `/mobtrumps battle [deck_size]` — start a Top Trumps battle against the CPU,
   played through clickable chat buttons; winning awards a free card pack
 - **Deck builder** — open the Collection Book → **Deck** to pick up to 16 cards
