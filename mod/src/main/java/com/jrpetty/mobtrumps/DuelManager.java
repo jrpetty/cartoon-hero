@@ -37,18 +37,24 @@ public final class DuelManager {
     private DuelManager() {
     }
 
-    private record Pending(UUID challenger, long expiresAt) {
+    private record Pending(UUID challenger, long expiresAt, ItemStack wager) {
     }
 
     private static final class Duel {
         final ServerPlayer challenger; // PLAYER side
         final ServerPlayer target;     // CPU side
         final Battle battle;
+        ItemStack challengerWager = ItemStack.EMPTY;
+        ItemStack targetWager = ItemStack.EMPTY;
 
         Duel(ServerPlayer challenger, ServerPlayer target, Battle battle) {
             this.challenger = challenger;
             this.target = target;
             this.battle = battle;
+        }
+
+        boolean isWager() {
+            return !challengerWager.isEmpty();
         }
 
         ServerPlayer forSide(Battle.Side side) {
@@ -67,6 +73,10 @@ public final class DuelManager {
     // --- challenge lifecycle ---
 
     public static int challenge(ServerPlayer challenger, ServerPlayer target) {
+        return challenge(challenger, target, false);
+    }
+
+    public static int challenge(ServerPlayer challenger, ServerPlayer target, boolean wager) {
         if (challenger.getUUID().equals(target.getUUID())) {
             challenger.sendSystemMessage(err("You can't duel yourself."));
             return 0;
@@ -75,13 +85,35 @@ public final class DuelManager {
             challenger.sendSystemMessage(err("Someone is already in a duel."));
             return 0;
         }
-        PENDING.put(target.getUUID(),
-                new Pending(challenger.getUUID(), System.currentTimeMillis() + CHALLENGE_TTL_MS));
 
+        ItemStack stake = ItemStack.EMPTY;
+        if (wager) {
+            ItemStack held = challenger.getMainHandItem();
+            if (MobCardItem.cardOf(held) == null) {
+                challenger.sendSystemMessage(err("Hold the mob card you want to wager."));
+                return 0;
+            }
+            stake = held.copyWithCount(1);
+            held.shrink(1); // escrow it
+        }
+
+        PENDING.put(target.getUUID(),
+                new Pending(challenger.getUUID(), System.currentTimeMillis() + CHALLENGE_TTL_MS, stake));
+
+        Component wagerNote = stake.isEmpty() ? Component.empty()
+                : Component.literal(" wagering ").withStyle(ChatFormatting.GRAY)
+                        .append(stake.getHoverName());
         challenger.sendSystemMessage(Component.literal("Challenge sent to " + name(target) + ".")
-                .withStyle(ChatFormatting.GREEN));
-        target.sendSystemMessage(Component.literal(name(challenger) + " challenges you to a Mob Trumps duel! ")
+                .withStyle(ChatFormatting.GREEN).append(wagerNote));
+        target.sendSystemMessage(Component.literal(name(challenger)
+                        + (stake.isEmpty() ? " challenges you to a Mob Trumps duel! "
+                                           : " challenges you to a WAGER duel! "))
                 .withStyle(ChatFormatting.GOLD)
+                .append(stake.isEmpty() ? Component.empty()
+                        : Component.literal("They stake ").withStyle(ChatFormatting.GRAY)
+                                .append(stake.getHoverName())
+                                .append(Component.literal(" — hold a card to match. ")
+                                        .withStyle(ChatFormatting.GRAY)))
                 .append(BattleCommands.button("[Accept]", "/mobtrumps duel accept",
                         ChatFormatting.GREEN, "Accept the duel"))
                 .append(Component.literal(" "))
@@ -92,22 +124,43 @@ public final class DuelManager {
 
     public static int accept(ServerPlayer target) {
         Pending pending = PENDING.remove(target.getUUID());
-        if (pending == null || pending.expiresAt() < System.currentTimeMillis()) {
+        if (pending == null) {
             target.sendSystemMessage(err("You have no pending duel challenge."));
             return 0;
         }
         ServerPlayer challenger = target.serverLevel().getServer().getPlayerList().getPlayer(pending.challenger());
+        if (pending.expiresAt() < System.currentTimeMillis()) {
+            target.sendSystemMessage(err("That duel challenge has expired."));
+            returnStake(challenger, pending.wager());
+            return 0;
+        }
         if (challenger == null) {
             target.sendSystemMessage(err("The challenger is no longer online."));
             return 0;
         }
         if (isInDuel(challenger) || isInDuel(target)) {
             target.sendSystemMessage(err("Someone is already in a duel."));
+            returnStake(challenger, pending.wager());
             return 0;
+        }
+
+        ItemStack targetStake = ItemStack.EMPTY;
+        if (!pending.wager().isEmpty()) {
+            ItemStack held = target.getMainHandItem();
+            if (MobCardItem.cardOf(held) == null) {
+                target.sendSystemMessage(err("Hold a mob card to match the wager, then accept."));
+                // keep the challenge alive so they can grab a card and retry
+                PENDING.put(target.getUUID(), pending);
+                return 0;
+            }
+            targetStake = held.copyWithCount(1);
+            held.shrink(1);
         }
 
         Battle battle = new Battle(DECK_SIZE, ThreadLocalRandom.current());
         Duel duel = new Duel(challenger, target, battle);
+        duel.challengerWager = pending.wager();
+        duel.targetWager = targetStake;
         ACTIVE.put(challenger.getUUID(), duel);
         ACTIVE.put(target.getUUID(), duel);
 
@@ -126,12 +179,20 @@ public final class DuelManager {
             return 0;
         }
         ServerPlayer challenger = target.serverLevel().getServer().getPlayerList().getPlayer(pending.challenger());
+        returnStake(challenger, pending.wager());
         if (challenger != null) {
             challenger.sendSystemMessage(Component.literal(name(target) + " declined the duel.")
                     .withStyle(ChatFormatting.RED));
         }
         target.sendSystemMessage(Component.literal("Duel declined.").withStyle(ChatFormatting.GRAY));
         return 1;
+    }
+
+    /** Return an escrowed wager card to its owner (drops if inventory is full). */
+    private static void returnStake(ServerPlayer owner, ItemStack stake) {
+        if (owner != null && stake != null && !stake.isEmpty()) {
+            CardActions.give(owner, stake);
+        }
     }
 
     // --- in-duel play ---
@@ -169,13 +230,37 @@ public final class DuelManager {
     }
 
     public static void handleLogout(ServerPlayer player) {
-        PENDING.remove(player.getUUID());
+        // pending challenge TO this player: return the challenger's stake
+        Pending incoming = PENDING.remove(player.getUUID());
+        if (incoming != null) {
+            ServerPlayer challenger = player.serverLevel().getServer()
+                    .getPlayerList().getPlayer(incoming.challenger());
+            returnStake(challenger, incoming.wager());
+        }
+        // pending challenge FROM this player: cancel it, drop their stake at their feet
+        PENDING.entrySet().removeIf(e -> {
+            if (e.getValue().challenger().equals(player.getUUID())) {
+                if (!e.getValue().wager().isEmpty()) player.drop(e.getValue().wager(), false);
+                return true;
+            }
+            return false;
+        });
+
         Duel duel = ACTIVE.get(player.getUUID());
         if (duel != null) {
             ServerPlayer other = duel.other(player);
             clear(duel);
-            other.sendSystemMessage(Component.literal(name(player) + " left — the duel is over.")
-                    .withStyle(ChatFormatting.YELLOW));
+            if (duel.isWager()) {
+                // leaving forfeits the pot to the player who stayed
+                returnStake(other, duel.challengerWager);
+                returnStake(other, duel.targetWager);
+                other.sendSystemMessage(Component.literal(name(player)
+                                + " left — you win the wagered cards!")
+                        .withStyle(ChatFormatting.GOLD, ChatFormatting.BOLD));
+            } else {
+                other.sendSystemMessage(Component.literal(name(player) + " left — the duel is over.")
+                        .withStyle(ChatFormatting.YELLOW));
+            }
         }
     }
 
@@ -266,9 +351,13 @@ public final class DuelManager {
 
     private static void endDuel(Duel duel, ServerPlayer winner, ServerPlayer loser, boolean forfeit) {
         clear(duel);
+        boolean wager = duel.isWager();
         if (winner == null) {
             sendBoth(duel, Component.literal("The duel is a draw — the pot swallowed everything.")
                     .withStyle(ChatFormatting.YELLOW, ChatFormatting.BOLD));
+            // draws return each stake to its owner
+            returnStake(duel.challenger, duel.challengerWager);
+            returnStake(duel.target, duel.targetWager);
             return;
         }
         if (forfeit) {
@@ -279,12 +368,24 @@ public final class DuelManager {
                     .withStyle(ChatFormatting.GOLD, ChatFormatting.BOLD));
         }
         CollectionTracker.addDuelWin(winner);
-        ItemStack reward = new ItemStack(ModItems.CARD_PACK.get());
-        if (!winner.getInventory().add(reward)) {
-            winner.drop(reward, false);
+
+        if (wager) {
+            // winner takes both wagered cards
+            returnStake(winner, duel.challengerWager);
+            returnStake(winner, duel.targetWager);
+            winner.sendSystemMessage(Component.literal("You win the wagered cards!")
+                    .withStyle(ChatFormatting.GOLD));
+            for (var stake : new ItemStack[]{duel.challengerWager, duel.targetWager}) {
+                if (winner instanceof ServerPlayer sp && MobCardItem.cardOf(stake) != null) {
+                    CollectionTracker.record(sp, MobCardItem.cardOf(stake).id(), MobCardItem.isFoilCard(stake));
+                }
+            }
+        } else {
+            ItemStack reward = new ItemStack(ModItems.CARD_PACK.get());
+            CardActions.give(winner, reward);
+            winner.sendSystemMessage(Component.literal("Reward: 1 Mob Card Pack")
+                    .withStyle(ChatFormatting.YELLOW));
         }
-        winner.sendSystemMessage(Component.literal("Reward: 1 Mob Card Pack")
-                .withStyle(ChatFormatting.YELLOW));
         winner.serverLevel().playSound(null, winner.getX(), winner.getY(), winner.getZ(),
                 SoundEvents.UI_TOAST_CHALLENGE_COMPLETE, SoundSource.PLAYERS, 0.8F, 1.0F);
     }

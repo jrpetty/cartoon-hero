@@ -36,7 +36,13 @@ public class MobTrumps {
         NeoForge.EVENT_BUS.addListener((PlayerEvent.PlayerLoggedOutEvent event) -> {
             if (event.getEntity() instanceof ServerPlayer player) {
                 DuelManager.handleLogout(player);
+                TradeManager.handleLogout(player);
             }
         });
+        NeoForge.EVENT_BUS.addListener((net.neoforged.neoforge.event.village.WandererTradesEvent event) ->
+                event.getGenericTrades().add((entity, random) -> new net.minecraft.world.item.trading.MerchantOffer(
+                        new net.minecraft.world.item.trading.ItemCost(net.minecraft.world.item.Items.EMERALD, 6),
+                        new net.minecraft.world.item.ItemStack(ModItems.CARD_PACK.get()),
+                        5, 3, 0.05F)));
     }
 }

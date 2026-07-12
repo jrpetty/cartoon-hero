@@ -75,10 +75,55 @@ public final class BattleCommands {
                         .then(Commands.argument("player", EntityArgument.player())
                                 .executes(ctx -> DuelManager.challenge(
                                         ctx.getSource().getPlayerOrException(),
-                                        EntityArgument.getPlayer(ctx, "player"))))));
+                                        EntityArgument.getPlayer(ctx, "player")))
+                                .then(Commands.literal("wager")
+                                        .executes(ctx -> DuelManager.challenge(
+                                                ctx.getSource().getPlayerOrException(),
+                                                EntityArgument.getPlayer(ctx, "player"), true)))))
+                .then(Commands.literal("trade")
+                        .then(Commands.literal("accept")
+                                .executes(ctx -> TradeManager.accept(ctx.getSource().getPlayerOrException())))
+                        .then(Commands.literal("decline")
+                                .executes(ctx -> TradeManager.decline(ctx.getSource().getPlayerOrException())))
+                        .then(Commands.argument("player", EntityArgument.player())
+                                .executes(ctx -> TradeManager.offer(
+                                        ctx.getSource().getPlayerOrException(),
+                                        EntityArgument.getPlayer(ctx, "player")))))
+                .then(Commands.literal("foil")
+                        .executes(ctx -> combineFoil(ctx.getSource()))));
     }
 
     // --- command handlers ---
+
+    private static final int FOIL_COST = 4;
+
+    private static int combineFoil(CommandSourceStack source) throws CommandSyntaxException {
+        ServerPlayer player = source.getPlayerOrException();
+        var held = player.getMainHandItem();
+        var card = MobCardItem.cardOf(held);
+        if (card == null || MobCardItem.isFoilCard(held)) {
+            player.sendSystemMessage(Component.literal(
+                            "Hold a non-foil mob card. " + FOIL_COST + " copies combine into 1 holographic foil.")
+                    .withStyle(ChatFormatting.RED));
+            return 0;
+        }
+        int have = CardActions.count(player, card.id(), false);
+        if (have < FOIL_COST) {
+            player.sendSystemMessage(Component.literal("You need " + FOIL_COST + " copies of "
+                            + card.displayName() + " to press a foil (you have " + have + ").")
+                    .withStyle(ChatFormatting.RED));
+            return 0;
+        }
+        CardActions.remove(player, card.id(), false, FOIL_COST);
+        var foil = MobCardItem.stackOf(card, true);
+        CardActions.give(player, foil);
+        CollectionTracker.record(player, card.id(), true);
+        player.sendSystemMessage(Component.literal("✦ Pressed " + FOIL_COST + " " + card.displayName()
+                        + " cards into a holographic foil! ✦").withStyle(ChatFormatting.WHITE, ChatFormatting.BOLD));
+        player.serverLevel().playSound(null, player.getX(), player.getY(), player.getZ(),
+                SoundEvents.UI_TOAST_CHALLENGE_COMPLETE, SoundSource.PLAYERS, 0.8F, 1.3F);
+        return 1;
+    }
 
     private static int menu(ServerPlayer player) {
         player.sendSystemMessage(Component.literal("✦ MOB TRUMPS ✦")
@@ -91,9 +136,19 @@ public final class BattleCommands {
                 .append(Component.literal("  "))
                 .append(button("[Forfeit]", "/mobtrumps forfeit", ChatFormatting.RED,
                         "Give up your current game")));
-        player.sendSystemMessage(Component.literal("  To duel a friend: ")
+        player.sendSystemMessage(Component.literal("  Duel a friend: ")
                 .withStyle(ChatFormatting.GRAY)
-                .append(Component.literal("/mobtrumps duel <player>").withStyle(ChatFormatting.AQUA)));
+                .append(Component.literal("/mobtrumps duel <player> [wager]").withStyle(ChatFormatting.AQUA)));
+        player.sendSystemMessage(Component.literal("  Trade / combine: ")
+                .withStyle(ChatFormatting.GRAY)
+                .append(Component.literal("/mobtrumps trade <player>").withStyle(ChatFormatting.AQUA))
+                .append(Component.literal("  ·  ").withStyle(ChatFormatting.DARK_GRAY))
+                .append(Component.literal("/mobtrumps foil").withStyle(ChatFormatting.AQUA))
+                .append(Component.literal(" (4 dupes → 1 foil)").withStyle(ChatFormatting.DARK_GRAY)));
+        player.sendSystemMessage(Component.literal("  Build a deck: ")
+                .withStyle(ChatFormatting.GRAY)
+                .append(Component.literal("Collection Book → Deck, then /mobtrumps battle deck")
+                        .withStyle(ChatFormatting.DARK_GRAY)));
         player.sendSystemMessage(Component.literal("  Craft a Card Pack (3 paper + emerald) and a "
                         + "Collection Book (book + emerald), then right-click them.")
                 .withStyle(ChatFormatting.DARK_GRAY));

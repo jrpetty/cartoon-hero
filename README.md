@@ -44,8 +44,12 @@ In game:
 - **Deck builder** — open the Collection Book → **Deck** to pick up to 16 cards
   you own into a custom deck, then `/mobtrumps battle deck` to fight the CPU
   with your own hand
-- `/mobtrumps duel <player>` — challenge another player to a PvP duel (they get
-  clickable Accept/Decline); both pick stats via chat, the winner takes a pack
+- `/mobtrumps duel <player> [wager]` — challenge a player to a PvP duel; add
+  `wager` while holding a card to bet it (both stake a card, winner takes both)
+- `/mobtrumps trade <player>` — offer your held card; they hold one and accept
+  to swap 1-for-1
+- `/mobtrumps foil` — press 4 duplicate copies of a card into 1 holographic foil
+- The **Wandering Trader** now sells Mob Card Packs for emeralds
 - `/mobtrumps play <stat>`, `/mobtrumps next`, `/mobtrumps forfeit`
 - `/mobtrumps` on its own opens a clickable hub menu
 - Juice: legendary/foil pulls burst particles in-world and sparkles on the
