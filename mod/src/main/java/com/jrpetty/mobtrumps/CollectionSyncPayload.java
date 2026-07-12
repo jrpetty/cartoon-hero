@@ -8,8 +8,8 @@ import net.minecraft.resources.ResourceLocation;
 
 import java.util.List;
 
-/** Server -> client: the card ids the player has collected, plus foils. */
-public record CollectionSyncPayload(List<String> collected, List<String> foils)
+/** Server -> client: the card ids the player has collected, plus foils and duel wins. */
+public record CollectionSyncPayload(List<String> collected, List<String> foils, int duelWins)
         implements CustomPacketPayload {
 
     public static final CustomPacketPayload.Type<CollectionSyncPayload> TYPE =
@@ -20,6 +20,7 @@ public record CollectionSyncPayload(List<String> collected, List<String> foils)
             StreamCodec.composite(
                     ByteBufCodecs.STRING_UTF8.apply(ByteBufCodecs.list()), CollectionSyncPayload::collected,
                     ByteBufCodecs.STRING_UTF8.apply(ByteBufCodecs.list()), CollectionSyncPayload::foils,
+                    ByteBufCodecs.VAR_INT, CollectionSyncPayload::duelWins,
                     CollectionSyncPayload::new);
 
     @Override

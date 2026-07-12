@@ -62,12 +62,14 @@ public final class CollectionTracker {
         int wins = player.getData(ModAttachments.DUEL_WINS.get()) + 1;
         player.setData(ModAttachments.DUEL_WINS.get(), wins);
         ModTriggers.DUEL_WIN.get().trigger(player, wins);
+        sync(player);
     }
 
     /** Push the player's collection to their client for the book screen. */
     public static void sync(ServerPlayer player) {
         PacketDistributor.sendToPlayer(player, new CollectionSyncPayload(
                 player.getData(ModAttachments.COLLECTED.get()),
-                player.getData(ModAttachments.COLLECTED_FOIL.get())));
+                player.getData(ModAttachments.COLLECTED_FOIL.get()),
+                player.getData(ModAttachments.DUEL_WINS.get())));
     }
 }

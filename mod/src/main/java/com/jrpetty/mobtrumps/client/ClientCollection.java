@@ -11,13 +11,19 @@ public final class ClientCollection {
 
     private static volatile Set<String> collected = Set.of();
     private static volatile Set<String> foils = Set.of();
+    private static volatile int duelWins = 0;
 
     private ClientCollection() {
     }
 
-    public static void set(List<String> ids, List<String> foilIds) {
+    public static void set(List<String> ids, List<String> foilIds, int wins) {
         collected = Set.copyOf(ids);
         foils = Set.copyOf(foilIds);
+        duelWins = wins;
+    }
+
+    public static int duelWins() {
+        return duelWins;
     }
 
     public static boolean has(String cardId) {

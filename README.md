@@ -34,9 +34,11 @@ In game:
   border, the live 3D mob as the portrait, stat table and total rating
 - **Mob Collection Book** (craft: book + emerald) — a paginated binder
   showing the full Top Trumps card of every mob you've collected (live
-  3D portraits included); unfound mobs lie face down. Flip pages with
-  the arrows, arrow keys or scroll wheel; click a card to enlarge it.
-  Collection is saved with your player and survives death
+  3D portraits included); unfound mobs lie face down. Search by name,
+  filter (all / owned / missing / foil), sort (number / name / tier /
+  rating), and open a stats page (collection %, foils, duel wins,
+  per-tier breakdown). Click a card to enlarge it. Collection is saved
+  with your player and survives death
 - `/mobtrumps battle [deck_size]` — start a Top Trumps battle against the CPU,
   played through clickable chat buttons; winning awards a free card pack
 - `/mobtrumps duel <player>` — challenge another player to a PvP duel (they get
