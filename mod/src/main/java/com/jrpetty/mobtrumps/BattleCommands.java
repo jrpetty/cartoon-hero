@@ -79,7 +79,13 @@ public final class BattleCommands {
                                 .then(Commands.literal("wager")
                                         .executes(ctx -> DuelManager.challenge(
                                                 ctx.getSource().getPlayerOrException(),
-                                                EntityArgument.getPlayer(ctx, "player"), true)))))
+                                                EntityArgument.getPlayer(ctx, "player"), true)))
+                                .then(Commands.literal("bet")
+                                        .then(Commands.argument("emeralds", IntegerArgumentType.integer(1, 4096))
+                                                .executes(ctx -> DuelManager.challengeBet(
+                                                        ctx.getSource().getPlayerOrException(),
+                                                        EntityArgument.getPlayer(ctx, "player"),
+                                                        IntegerArgumentType.getInteger(ctx, "emeralds")))))))
                 .then(Commands.literal("trade")
                         .then(Commands.literal("accept")
                                 .executes(ctx -> TradeManager.accept(ctx.getSource().getPlayerOrException())))
@@ -91,6 +97,8 @@ public final class BattleCommands {
                                         EntityArgument.getPlayer(ctx, "player")))))
                 .then(Commands.literal("foil")
                         .executes(ctx -> combineFoil(ctx.getSource())))
+                .then(Commands.literal("daily")
+                        .executes(ctx -> DailyReward.claim(ctx.getSource().getPlayerOrException())))
                 .then(Commands.literal("top")
                         .executes(ctx -> leaderboard(ctx.getSource()))));
     }
@@ -174,7 +182,15 @@ public final class BattleCommands {
                         "Give up your current game")));
         player.sendSystemMessage(Component.literal("  Duel a friend: ")
                 .withStyle(ChatFormatting.GRAY)
-                .append(Component.literal("/mobtrumps duel <player> [wager]").withStyle(ChatFormatting.AQUA)));
+                .append(Component.literal("/mobtrumps duel <player>").withStyle(ChatFormatting.AQUA))
+                .append(Component.literal(" — add ").withStyle(ChatFormatting.DARK_GRAY))
+                .append(Component.literal("wager").withStyle(ChatFormatting.AQUA))
+                .append(Component.literal(" (stake a card) or ").withStyle(ChatFormatting.DARK_GRAY))
+                .append(Component.literal("bet <emeralds>").withStyle(ChatFormatting.GREEN))
+                .append(Component.literal(" (winner takes the pot)").withStyle(ChatFormatting.DARK_GRAY)));
+        player.sendSystemMessage(Component.literal("  ")
+                .append(button("[Claim daily pack]", "/mobtrumps daily", ChatFormatting.GOLD,
+                        "Claim your free daily Mob Card Pack")));
         player.sendSystemMessage(Component.literal("  Trade / combine: ")
                 .withStyle(ChatFormatting.GRAY)
                 .append(Component.literal("/mobtrumps trade <player>").withStyle(ChatFormatting.AQUA))
@@ -207,6 +223,7 @@ public final class BattleCommands {
                         "The deck is dealt: " + battle.playerCardCount() + " cards each. "
                         + "Higher stat wins the round; win every card to win the battle!")
                 .withStyle(ChatFormatting.GRAY));
+        shuffleSound(player);
         promptRound(player, battle);
         return 1;
     }
@@ -227,6 +244,7 @@ public final class BattleCommands {
         player.sendSystemMessage(Component.literal("Your " + battle.playerCardCount()
                         + "-card deck vs a random CPU deck. Higher stat wins!")
                 .withStyle(ChatFormatting.GRAY));
+        shuffleSound(player);
         promptRound(player, battle);
         return 1;
     }
@@ -394,6 +412,13 @@ public final class BattleCommands {
 
     private static void roundSound(ServerPlayer player, float pitch) {
         player.playNotifySound(SoundEvents.NOTE_BLOCK_PLING.value(), SoundSource.PLAYERS, 0.6F, pitch);
+    }
+
+    /** A quick riffle of paper "flicks" to sell the deck being shuffled and dealt. */
+    static void shuffleSound(ServerPlayer player) {
+        player.playNotifySound(SoundEvents.BOOK_PAGE_TURN, SoundSource.PLAYERS, 0.9F, 0.9F);
+        player.playNotifySound(SoundEvents.BOOK_PAGE_TURN, SoundSource.PLAYERS, 0.7F, 1.2F);
+        player.playNotifySound(SoundEvents.BAMBOO_HIT, SoundSource.PLAYERS, 0.4F, 1.6F);
     }
 
     // --- chat component helpers ---

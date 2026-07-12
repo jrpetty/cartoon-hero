@@ -10,6 +10,7 @@ import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
 
 import java.util.Map;
 import java.util.UUID;
@@ -37,7 +38,7 @@ public final class DuelManager {
     private DuelManager() {
     }
 
-    private record Pending(UUID challenger, long expiresAt, ItemStack wager) {
+    private record Pending(UUID challenger, long expiresAt, ItemStack wager, int bet) {
     }
 
     private static final class Duel {
@@ -46,6 +47,8 @@ public final class DuelManager {
         final Battle battle;
         ItemStack challengerWager = ItemStack.EMPTY;
         ItemStack targetWager = ItemStack.EMPTY;
+        int challengerBet = 0;
+        int targetBet = 0;
 
         Duel(ServerPlayer challenger, ServerPlayer target, Battle battle) {
             this.challenger = challenger;
@@ -54,7 +57,7 @@ public final class DuelManager {
         }
 
         boolean isWager() {
-            return !challengerWager.isEmpty();
+            return !challengerWager.isEmpty() || challengerBet > 0;
         }
 
         ServerPlayer forSide(Battle.Side side) {
@@ -98,7 +101,7 @@ public final class DuelManager {
         }
 
         PENDING.put(target.getUUID(),
-                new Pending(challenger.getUUID(), System.currentTimeMillis() + CHALLENGE_TTL_MS, stake));
+                new Pending(challenger.getUUID(), System.currentTimeMillis() + CHALLENGE_TTL_MS, stake, 0));
 
         Component wagerNote = stake.isEmpty() ? Component.empty()
                 : Component.literal(" wagering ").withStyle(ChatFormatting.GRAY)
@@ -122,6 +125,47 @@ public final class DuelManager {
         return 1;
     }
 
+    /** Challenge with an emerald wager: both players stake {@code bet} emeralds; winner takes the pot. */
+    public static int challengeBet(ServerPlayer challenger, ServerPlayer target, int bet) {
+        if (challenger.getUUID().equals(target.getUUID())) {
+            challenger.sendSystemMessage(err("You can't duel yourself."));
+            return 0;
+        }
+        if (isInDuel(challenger) || isInDuel(target)) {
+            challenger.sendSystemMessage(err("Someone is already in a duel."));
+            return 0;
+        }
+        if (bet <= 0) {
+            challenger.sendSystemMessage(err("The bet must be at least 1 emerald."));
+            return 0;
+        }
+        if (countEmeralds(challenger) < bet) {
+            challenger.sendSystemMessage(err("You need " + bet + " emeralds to stake that bet (you have "
+                    + countEmeralds(challenger) + ")."));
+            return 0;
+        }
+        takeEmeralds(challenger, bet); // escrow
+
+        PENDING.put(target.getUUID(),
+                new Pending(challenger.getUUID(), System.currentTimeMillis() + CHALLENGE_TTL_MS,
+                        ItemStack.EMPTY, bet));
+
+        challenger.sendSystemMessage(Component.literal("Challenge sent to " + name(target) + " — staking ")
+                .withStyle(ChatFormatting.GREEN)
+                .append(emeralds(bet)));
+        target.sendSystemMessage(Component.literal(name(challenger) + " challenges you to a WAGER duel! ")
+                .withStyle(ChatFormatting.GOLD)
+                .append(Component.literal("They bet ").withStyle(ChatFormatting.GRAY))
+                .append(emeralds(bet))
+                .append(Component.literal(" — match it to accept. ").withStyle(ChatFormatting.GRAY))
+                .append(BattleCommands.button("[Accept]", "/mobtrumps duel accept",
+                        ChatFormatting.GREEN, "Match the bet and duel"))
+                .append(Component.literal(" "))
+                .append(BattleCommands.button("[Decline]", "/mobtrumps duel decline",
+                        ChatFormatting.RED, "Decline the duel")));
+        return 1;
+    }
+
     public static int accept(ServerPlayer target) {
         Pending pending = PENDING.remove(target.getUUID());
         if (pending == null) {
@@ -132,6 +176,7 @@ public final class DuelManager {
         if (pending.expiresAt() < System.currentTimeMillis()) {
             target.sendSystemMessage(err("That duel challenge has expired."));
             returnStake(challenger, pending.wager());
+            returnBet(challenger, pending.bet());
             return 0;
         }
         if (challenger == null) {
@@ -141,6 +186,7 @@ public final class DuelManager {
         if (isInDuel(challenger) || isInDuel(target)) {
             target.sendSystemMessage(err("Someone is already in a duel."));
             returnStake(challenger, pending.wager());
+            returnBet(challenger, pending.bet());
             return 0;
         }
 
@@ -157,10 +203,25 @@ public final class DuelManager {
             held.shrink(1);
         }
 
+        int targetBet = 0;
+        if (pending.bet() > 0) {
+            if (countEmeralds(target) < pending.bet()) {
+                target.sendSystemMessage(err("You need " + pending.bet()
+                        + " emeralds to match the bet (you have " + countEmeralds(target) + ")."));
+                // keep the challenge alive so they can gather emeralds and retry
+                PENDING.put(target.getUUID(), pending);
+                return 0;
+            }
+            takeEmeralds(target, pending.bet());
+            targetBet = pending.bet();
+        }
+
         Battle battle = new Battle(DECK_SIZE, ThreadLocalRandom.current());
         Duel duel = new Duel(challenger, target, battle);
         duel.challengerWager = pending.wager();
         duel.targetWager = targetStake;
+        duel.challengerBet = pending.bet();
+        duel.targetBet = targetBet;
         ACTIVE.put(challenger.getUUID(), duel);
         ACTIVE.put(target.getUUID(), duel);
 
@@ -168,6 +229,8 @@ public final class DuelManager {
                 + " vs " + name(target) + " ===").withStyle(ChatFormatting.GOLD, ChatFormatting.BOLD);
         challenger.sendSystemMessage(intro);
         target.sendSystemMessage(intro);
+        BattleCommands.shuffleSound(challenger);
+        BattleCommands.shuffleSound(target);
         promptTurn(duel);
         return 1;
     }
@@ -180,6 +243,7 @@ public final class DuelManager {
         }
         ServerPlayer challenger = target.serverLevel().getServer().getPlayerList().getPlayer(pending.challenger());
         returnStake(challenger, pending.wager());
+        returnBet(challenger, pending.bet());
         if (challenger != null) {
             challenger.sendSystemMessage(Component.literal(name(target) + " declined the duel.")
                     .withStyle(ChatFormatting.RED));
@@ -193,6 +257,56 @@ public final class DuelManager {
         if (owner != null && stake != null && !stake.isEmpty()) {
             CardActions.give(owner, stake);
         }
+    }
+
+    /** Return escrowed emeralds to their owner (drops any that don't fit). */
+    private static void returnBet(ServerPlayer owner, int amount) {
+        if (owner != null && amount > 0) {
+            giveEmeralds(owner, amount);
+        }
+    }
+
+    private static int countEmeralds(ServerPlayer player) {
+        int total = 0;
+        var inv = player.getInventory();
+        for (int i = 0; i < inv.getContainerSize(); i++) {
+            ItemStack stack = inv.getItem(i);
+            if (stack.is(Items.EMERALD)) total += stack.getCount();
+        }
+        return total;
+    }
+
+    /** Remove up to {@code amount} emeralds from the player's inventory. */
+    private static void takeEmeralds(ServerPlayer player, int amount) {
+        int remaining = amount;
+        var inv = player.getInventory();
+        for (int i = 0; i < inv.getContainerSize() && remaining > 0; i++) {
+            ItemStack stack = inv.getItem(i);
+            if (stack.is(Items.EMERALD)) {
+                int take = Math.min(remaining, stack.getCount());
+                stack.shrink(take);
+                remaining -= take;
+            }
+        }
+    }
+
+    /** Give emeralds to the player, dropping any that don't fit. */
+    private static void giveEmeralds(ServerPlayer player, int amount) {
+        int remaining = amount;
+        while (remaining > 0) {
+            int stackSize = Math.min(64, remaining);
+            ItemStack stack = new ItemStack(Items.EMERALD, stackSize);
+            if (!player.getInventory().add(stack)) {
+                player.drop(stack, false);
+            }
+            remaining -= stackSize;
+        }
+    }
+
+    /** An emerald-count component with the emerald's green colour. */
+    private static Component emeralds(int amount) {
+        return Component.literal(amount + (amount == 1 ? " emerald" : " emeralds"))
+                .withStyle(ChatFormatting.GREEN);
     }
 
     // --- in-duel play ---
@@ -237,10 +351,11 @@ public final class DuelManager {
                     .getPlayerList().getPlayer(incoming.challenger());
             returnStake(challenger, incoming.wager());
         }
-        // pending challenge FROM this player: cancel it, drop their stake at their feet
+        // pending challenge FROM this player: cancel it, hand back their stake
         PENDING.entrySet().removeIf(e -> {
             if (e.getValue().challenger().equals(player.getUUID())) {
                 if (!e.getValue().wager().isEmpty()) player.drop(e.getValue().wager(), false);
+                if (e.getValue().bet() > 0) giveEmeralds(player, e.getValue().bet());
                 return true;
             }
             return false;
@@ -256,8 +371,10 @@ public final class DuelManager {
             if (duel.isWager()) {
                 returnStake(other, duel.challengerWager);
                 returnStake(other, duel.targetWager);
+                int pot = duel.challengerBet + duel.targetBet;
+                if (pot > 0) giveEmeralds(other, pot);
                 other.sendSystemMessage(Component.literal(name(player)
-                                + " left — you win the wagered cards!")
+                                + " left — you win the pot!")
                         .withStyle(ChatFormatting.GOLD, ChatFormatting.BOLD));
             } else {
                 other.sendSystemMessage(Component.literal(name(player) + " left — you win by default.")
@@ -355,11 +472,13 @@ public final class DuelManager {
         clear(duel);
         boolean wager = duel.isWager();
         if (winner == null) {
-            sendBoth(duel, Component.literal("The duel is a draw — the pot swallowed everything.")
+            sendBoth(duel, Component.literal("The duel is a draw — every stake is returned.")
                     .withStyle(ChatFormatting.YELLOW, ChatFormatting.BOLD));
             // draws return each stake to its owner
             returnStake(duel.challenger, duel.challengerWager);
             returnStake(duel.target, duel.targetWager);
+            returnBet(duel.challenger, duel.challengerBet);
+            returnBet(duel.target, duel.targetBet);
             return;
         }
         if (forfeit) {
@@ -374,14 +493,25 @@ public final class DuelManager {
 
         if (wager) {
             // winner takes both wagered cards
-            returnStake(winner, duel.challengerWager);
-            returnStake(winner, duel.targetWager);
-            winner.sendSystemMessage(Component.literal("You win the wagered cards!")
-                    .withStyle(ChatFormatting.GOLD));
-            for (var stake : new ItemStack[]{duel.challengerWager, duel.targetWager}) {
-                if (winner instanceof ServerPlayer sp && MobCardItem.cardOf(stake) != null) {
-                    CollectionTracker.record(sp, MobCardItem.cardOf(stake).id(), MobCardItem.isFoilCard(stake));
+            if (!duel.challengerWager.isEmpty() || !duel.targetWager.isEmpty()) {
+                returnStake(winner, duel.challengerWager);
+                returnStake(winner, duel.targetWager);
+                winner.sendSystemMessage(Component.literal("You win the wagered cards!")
+                        .withStyle(ChatFormatting.GOLD));
+                for (var stake : new ItemStack[]{duel.challengerWager, duel.targetWager}) {
+                    if (MobCardItem.cardOf(stake) != null) {
+                        CollectionTracker.record(winner, MobCardItem.cardOf(stake).id(),
+                                MobCardItem.isFoilCard(stake));
+                    }
                 }
+            }
+            // winner takes the whole emerald pot
+            int pot = duel.challengerBet + duel.targetBet;
+            if (pot > 0) {
+                giveEmeralds(winner, pot);
+                winner.sendSystemMessage(Component.literal("You win the pot of ")
+                        .withStyle(ChatFormatting.GOLD).append(emeralds(pot)).append(Component.literal("!")
+                                .withStyle(ChatFormatting.GOLD)));
             }
         } else {
             ItemStack reward = new ItemStack(ModItems.CARD_PACK.get());

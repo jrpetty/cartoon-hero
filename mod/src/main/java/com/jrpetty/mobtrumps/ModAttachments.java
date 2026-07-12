@@ -48,6 +48,13 @@ public final class ModAttachments {
                     .copyOnDeath()
                     .build());
 
+    /** Epoch millis when this player last claimed their free daily pack. */
+    public static final Supplier<AttachmentType<Long>> LAST_DAILY =
+            ATTACHMENTS.register("last_daily", () -> AttachmentType.<Long>builder(() -> 0L)
+                    .serialize(Codec.LONG)
+                    .copyOnDeath()
+                    .build());
+
     private ModAttachments() {
     }
 }

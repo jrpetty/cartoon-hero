@@ -52,14 +52,20 @@ public class CardPackItem extends Item {
             pack.shrink(1);
         }
 
+        // a quick paper "rip" as the pack tears open
+        level.playSound(null, player.getX(), player.getY(), player.getZ(),
+                SoundEvents.BAMBOO_HIT, SoundSource.PLAYERS, 0.7F, 1.4F);
+
         var random = ThreadLocalRandom.current();
-        List<MobCard> pulls = MobCards.openPack(packType.pool(), CARDS_PER_PACK, packType.bias, random);
+        int count = Config.CARDS_PER_PACK.get();
+        double foilChance = packType.foilChance * Config.FOIL_MULTIPLIER.get();
+        List<MobCard> pulls = MobCards.openPack(packType.pool(), count, packType.bias, random);
         List<PackOpenedPayload.Pull> results = new ArrayList<>();
         boolean anyFoil = false;
 
         boolean anyLegendary = false;
         for (MobCard card : pulls) {
-            boolean foil = random.nextFloat() < packType.foilChance;
+            boolean foil = random.nextFloat() < foilChance;
             anyFoil |= foil;
             anyLegendary |= card.tier() == Tier.LEGENDARY;
             ItemStack cardStack = MobCardItem.stackOf(card, foil);

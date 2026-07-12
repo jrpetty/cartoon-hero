@@ -12,10 +12,18 @@ import java.util.Set;
 /** Server-side storage and validation of each player's custom battle deck. */
 public final class DeckManager {
 
-    public static final int MAX_DECK = 16;
+    public static final int MAX_DECK = 16; // client-side fallback cap
     public static final int MIN_DECK = 4;
 
     private DeckManager() {
+    }
+
+    private static int maxDeck() {
+        try {
+            return Config.DECK_MAX.get();
+        } catch (IllegalStateException notLoaded) {
+            return MAX_DECK; // config not loaded yet (e.g. client before join)
+        }
     }
 
     /** Save a validated deck: known, collected, distinct mobs, capped at MAX_DECK. */
@@ -27,7 +35,7 @@ public final class DeckManager {
             String key = id == null ? "" : id.toLowerCase(java.util.Locale.ROOT);
             if (MobCards.byId(key) != null && collected.contains(key) && seen.add(key)) {
                 clean.add(key);
-                if (clean.size() >= MAX_DECK) break;
+                if (clean.size() >= maxDeck()) break;
             }
         }
         player.setData(ModAttachments.DECK.get(), List.copyOf(clean));

@@ -47,8 +47,13 @@ In game:
 - **Deck builder** — open the Collection Book → **Deck** to pick up to 16 cards
   you own into a custom deck, then `/mobtrumps battle deck` to fight the CPU
   with your own hand
-- `/mobtrumps duel <player> [wager]` — challenge a player to a PvP duel; add
-  `wager` while holding a card to bet it (both stake a card, winner takes both)
+- `/mobtrumps duel <player>` — challenge a player to a PvP duel. Add
+  `wager` while holding a card to bet it (both stake a card, winner takes both),
+  or `bet <emeralds>` to gamble money — both players escrow the same number of
+  emeralds and the winner takes the whole pot (stakes are refunded on a draw,
+  decline, timeout or logout)
+- `/mobtrumps daily` — claim a **free daily Mob Card Pack** (you're nudged with
+  a clickable button on login when it's ready; cooldown is configurable)
 - `/mobtrumps trade <player>` — offer your held card; they hold one and accept
   to swap 1-for-1
 - `/mobtrumps foil` — press 4 duplicate copies of a card into 1 holographic foil
@@ -70,6 +75,9 @@ In game:
 - **Advancements** — a Mob Trumps tab tracks milestones: first card, 10 /
   40 / all 81 collected, your first foil (and the hidden all-foils goal),
   and duel wins.
+- **Config file** (`config/mobtrumps-common.toml`) — admins can tune cards per
+  pack, the foil-chance multiplier, max deck size, the daily-pack cooldown, and
+  whether the Wandering Trader stocks packs, without editing code.
 
 Dev runs: `./gradlew runClient` / `./gradlew runServer`.
 

@@ -5,6 +5,7 @@ import net.minecraft.server.level.ServerPlayer;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.fml.ModContainer;
 import net.neoforged.fml.common.Mod;
+import net.neoforged.fml.config.ModConfig;
 import net.neoforged.neoforge.common.NeoForge;
 import net.neoforged.neoforge.event.entity.player.PlayerEvent;
 
@@ -21,11 +22,14 @@ public class MobTrumps {
         ModTriggers.TRIGGERS.register(modEventBus);
         modEventBus.addListener(ModNetworking::register);
 
+        modContainer.registerConfig(ModConfig.Type.COMMON, Config.SPEC);
+
         NeoForge.EVENT_BUS.addListener(BattleCommands::onRegisterCommands);
         NeoForge.EVENT_BUS.addListener((PlayerEvent.PlayerLoggedInEvent event) -> {
             if (event.getEntity() instanceof ServerPlayer player) {
                 CollectionTracker.sync(player);
                 CollectionTracker.revalidate(player);
+                DailyReward.notifyOnLogin(player);
             }
         });
         NeoForge.EVENT_BUS.addListener((PlayerEvent.PlayerRespawnEvent event) -> {
@@ -39,10 +43,13 @@ public class MobTrumps {
                 TradeManager.handleLogout(player);
             }
         });
-        NeoForge.EVENT_BUS.addListener((net.neoforged.neoforge.event.village.WandererTradesEvent event) ->
+        NeoForge.EVENT_BUS.addListener((net.neoforged.neoforge.event.village.WandererTradesEvent event) -> {
+            if (Config.WANDERING_TRADER_PACKS.get()) {
                 event.getGenericTrades().add((entity, random) -> new net.minecraft.world.item.trading.MerchantOffer(
                         new net.minecraft.world.item.trading.ItemCost(net.minecraft.world.item.Items.EMERALD, 6),
                         new net.minecraft.world.item.ItemStack(ModItems.CARD_PACK.get()),
-                        5, 3, 0.05F)));
+                        5, 3, 0.05F));
+            }
+        });
     }
 }
