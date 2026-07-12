@@ -14,6 +14,8 @@ public final class ClientCollection {
     private static volatile int duelWins = 0;
     private static volatile List<String> deck = List.of();
     private static volatile Set<String> displayFoil = Set.of();
+    private static volatile Set<String> stored = Set.of();
+    private static volatile Set<String> storedFoil = Set.of();
 
     private ClientCollection() {
     }
@@ -25,6 +27,25 @@ public final class ClientCollection {
         duelWins = wins;
         deck = List.copyOf(deckIds);
         displayFoil = Set.copyOf(displayFoilIds);
+    }
+
+    public static void setStorage(List<String> storedIds, List<String> storedFoilIds) {
+        stored = Set.copyOf(storedIds);
+        storedFoil = Set.copyOf(storedFoilIds);
+    }
+
+    /** Whether this mob's card (of the given variant) is filed in the book. */
+    public static boolean isStored(String cardId, boolean foil) {
+        return (foil ? storedFoil : stored).contains(cardId);
+    }
+
+    /** Whether any variant of this mob is filed in the book. */
+    public static boolean isStored(String cardId) {
+        return stored.contains(cardId) || storedFoil.contains(cardId);
+    }
+
+    public static int storedCount() {
+        return stored.size() + storedFoil.size();
     }
 
     /** Whether the chosen top-of-pile variant for this mob is its foil. */

@@ -28,6 +28,7 @@ public class MobTrumps {
         NeoForge.EVENT_BUS.addListener((PlayerEvent.PlayerLoggedInEvent event) -> {
             if (event.getEntity() instanceof ServerPlayer player) {
                 CollectionTracker.sync(player);
+                BinderStorage.sync(player);
                 CollectionTracker.revalidate(player);
                 DailyReward.notifyOnLogin(player);
             }

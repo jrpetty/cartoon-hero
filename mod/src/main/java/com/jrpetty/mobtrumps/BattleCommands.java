@@ -99,6 +99,10 @@ public final class BattleCommands {
                         .executes(ctx -> combineFoil(ctx.getSource())))
                 .then(Commands.literal("daily")
                         .executes(ctx -> DailyReward.claim(ctx.getSource().getPlayerOrException())))
+                .then(Commands.literal("store")
+                        .executes(ctx -> BinderStorage.depositAll(ctx.getSource().getPlayerOrException())))
+                .then(Commands.literal("withdraw")
+                        .executes(ctx -> BinderStorage.withdrawAll(ctx.getSource().getPlayerOrException())))
                 .then(Commands.literal("top")
                         .executes(ctx -> leaderboard(ctx.getSource()))));
     }
@@ -201,6 +205,13 @@ public final class BattleCommands {
                 .withStyle(ChatFormatting.GRAY)
                 .append(Component.literal("Collection Book → Deck, then /mobtrumps battle deck")
                         .withStyle(ChatFormatting.DARK_GRAY)));
+        player.sendSystemMessage(Component.literal("  Tidy up: ")
+                .withStyle(ChatFormatting.GRAY)
+                .append(button("[Store cards]", "/mobtrumps store", ChatFormatting.AQUA,
+                        "File one of each loose card into your Collection Book"))
+                .append(Component.literal("  ·  ").withStyle(ChatFormatting.DARK_GRAY))
+                .append(Component.literal("/mobtrumps withdraw").withStyle(ChatFormatting.AQUA))
+                .append(Component.literal(" empties the book back out").withStyle(ChatFormatting.DARK_GRAY)));
         player.sendSystemMessage(Component.literal("  ")
                 .append(button("[Ranked leaderboard]", "/mobtrumps top", ChatFormatting.GOLD,
                         "See the server's top duelists"))

@@ -38,10 +38,16 @@ In game:
   binder with a 3x3 grid of full Top Trumps cards on each page (live 3D
   portraits); unfound mobs lie face down. Search by name, filter (all /
   owned / missing / foil), sort (number / name / tier / rating), and a
-  stats page (collection %, foils, duel wins, per-tier). A ✦ tab marks
-  mobs you own in more than one variant — click one to open the variant
-  picker and choose which (normal or holographic foil) sits on top of the
-  pile. Saved with your player and survives death
+  stats page (collection %, foils, filed-in-book, duel wins, per-tier). A ✦
+  tab marks mobs you own in more than one variant — click one to open the
+  variant picker and choose which (normal or holographic foil) sits on top
+  of the pile. Saved with your player and survives death
+- **Physical card storage** — the book is also a binder: hit **Store** (or
+  `/mobtrumps store`) to file one of each loose card away, freeing up
+  inventory slots while keeping spare duplicates for trading and foil-pressing.
+  Filed cards get a green corner tab; shift-click one to take a copy back out,
+  or `/mobtrumps withdraw` to empty the book. The binder is saved with your
+  player and survives death
 - `/mobtrumps battle [deck_size]` — start a Top Trumps battle against the CPU,
   played through clickable chat buttons; winning awards a free card pack
 - **Deck builder** — open the Collection Book → **Deck** to pick up to 16 cards

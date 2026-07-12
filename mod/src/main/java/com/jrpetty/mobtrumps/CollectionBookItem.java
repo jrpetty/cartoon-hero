@@ -33,7 +33,9 @@ public class CollectionBookItem extends Item {
                                 List<Component> tooltip, TooltipFlag flag) {
         tooltip.add(Component.literal("Track all 81 mob cards you've collected.")
                 .withStyle(ChatFormatting.GRAY));
-        tooltip.add(Component.literal("Opening packs and viewing cards registers them.")
+        tooltip.add(Component.literal("File loose cards away to keep your inventory tidy —")
+                .withStyle(ChatFormatting.DARK_GRAY));
+        tooltip.add(Component.literal("open it and hit Store, or /mobtrumps store.")
                 .withStyle(ChatFormatting.DARK_GRAY));
         super.appendHoverText(stack, context, tooltip, flag);
     }

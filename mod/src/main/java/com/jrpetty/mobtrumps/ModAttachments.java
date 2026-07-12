@@ -55,6 +55,20 @@ public final class ModAttachments {
                     .copyOnDeath()
                     .build());
 
+    /** Mob ids whose (normal) card is physically stored inside the collection book. */
+    public static final Supplier<AttachmentType<List<String>>> STORED =
+            ATTACHMENTS.register("stored", () -> AttachmentType.<List<String>>builder(() -> List.of())
+                    .serialize(Codec.STRING.listOf())
+                    .copyOnDeath()
+                    .build());
+
+    /** Mob ids whose foil card is physically stored inside the collection book. */
+    public static final Supplier<AttachmentType<List<String>>> STORED_FOIL =
+            ATTACHMENTS.register("stored_foil", () -> AttachmentType.<List<String>>builder(() -> List.of())
+                    .serialize(Codec.STRING.listOf())
+                    .copyOnDeath()
+                    .build());
+
     private ModAttachments() {
     }
 }

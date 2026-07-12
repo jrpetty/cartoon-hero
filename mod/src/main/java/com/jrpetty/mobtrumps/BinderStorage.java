@@ -1,0 +1,129 @@
+package com.jrpetty.mobtrumps;
+
+import com.jrpetty.mobtrumps.game.MobCard;
+import net.minecraft.ChatFormatting;
+import net.minecraft.network.chat.Component;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.sounds.SoundEvents;
+import net.minecraft.sounds.SoundSource;
+import net.minecraft.world.item.ItemStack;
+import net.neoforged.neoforge.network.PacketDistributor;
+
+import java.util.ArrayList;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Set;
+
+/**
+ * Physical card storage inside the Collection Book. The book holds one of each
+ * card type; depositing vacuums loose singles out of the inventory to keep it
+ * tidy, leaving spare duplicates behind for trading and foil-pressing.
+ */
+public final class BinderStorage {
+
+    private BinderStorage() {
+    }
+
+    /** Whether a mob's normal card is filed in the book. */
+    public static boolean isStored(ServerPlayer player, String mobId, boolean foil) {
+        return player.getData(foil ? ModAttachments.STORED_FOIL.get() : ModAttachments.STORED.get())
+                .contains(mobId);
+    }
+
+    /**
+     * File one of every loose card type into the book. A type already in the
+     * book is skipped, so spare duplicates stay in the inventory.
+     */
+    public static int depositAll(ServerPlayer player) {
+        Set<String> stored = new LinkedHashSet<>(player.getData(ModAttachments.STORED.get()));
+        Set<String> storedFoil = new LinkedHashSet<>(player.getData(ModAttachments.STORED_FOIL.get()));
+
+        int deposited = 0;
+        var inv = player.getInventory();
+        for (int i = 0; i < inv.getContainerSize(); i++) {
+            ItemStack s = inv.getItem(i);
+            MobCard card = MobCardItem.cardOf(s);
+            if (card == null) continue;
+            boolean foil = MobCardItem.isFoilCard(s);
+            Set<String> target = foil ? storedFoil : stored;
+            if (target.add(card.id())) {
+                s.shrink(1); // pull exactly one copy into the book
+                deposited++;
+            }
+        }
+
+        if (deposited > 0) {
+            player.setData(ModAttachments.STORED.get(), List.copyOf(stored));
+            player.setData(ModAttachments.STORED_FOIL.get(), List.copyOf(storedFoil));
+            // filing a card also records it as collected
+            for (String id : stored) CollectionTracker.record(player, id, false);
+            for (String id : storedFoil) CollectionTracker.record(player, id, true);
+            sync(player);
+            player.sendSystemMessage(Component.literal("Filed " + deposited + " card"
+                            + (deposited == 1 ? "" : "s") + " into your Collection Book.")
+                    .withStyle(ChatFormatting.GREEN));
+            player.serverLevel().playSound(null, player.getX(), player.getY(), player.getZ(),
+                    SoundEvents.BOOK_PAGE_TURN, SoundSource.PLAYERS, 0.9F, 1.1F);
+        } else {
+            player.sendSystemMessage(Component.literal(
+                            "No loose cards to file — your book already has one of each you're carrying.")
+                    .withStyle(ChatFormatting.GRAY));
+        }
+        return deposited;
+    }
+
+    /** Take a single stored card back out of the book as an item. */
+    public static boolean withdraw(ServerPlayer player, String mobId, boolean foil) {
+        MobCard card = com.jrpetty.mobtrumps.game.MobCards.byId(mobId);
+        if (card == null) return false;
+        var attachment = foil ? ModAttachments.STORED_FOIL.get() : ModAttachments.STORED.get();
+        List<String> current = player.getData(attachment);
+        if (!current.contains(mobId)) return false;
+
+        List<String> next = new ArrayList<>(current);
+        next.remove(mobId);
+        player.setData(attachment, List.copyOf(next));
+        CardActions.give(player, MobCardItem.stackOf(card, foil));
+        sync(player);
+        player.sendSystemMessage(Component.literal("Took " + (foil ? "a foil " : "")
+                        + card.displayName() + " out of your book.")
+                .withStyle(ChatFormatting.YELLOW));
+        player.serverLevel().playSound(null, player.getX(), player.getY(), player.getZ(),
+                SoundEvents.BOOK_PAGE_TURN, SoundSource.PLAYERS, 0.7F, 1.3F);
+        return true;
+    }
+
+    /** Empty the whole binder back into the inventory. */
+    public static int withdrawAll(ServerPlayer player) {
+        List<String> stored = player.getData(ModAttachments.STORED.get());
+        List<String> storedFoil = player.getData(ModAttachments.STORED_FOIL.get());
+        int taken = 0;
+        for (String id : stored) {
+            MobCard card = com.jrpetty.mobtrumps.game.MobCards.byId(id);
+            if (card != null) { CardActions.give(player, MobCardItem.stackOf(card, false)); taken++; }
+        }
+        for (String id : storedFoil) {
+            MobCard card = com.jrpetty.mobtrumps.game.MobCards.byId(id);
+            if (card != null) { CardActions.give(player, MobCardItem.stackOf(card, true)); taken++; }
+        }
+        player.setData(ModAttachments.STORED.get(), List.of());
+        player.setData(ModAttachments.STORED_FOIL.get(), List.of());
+        sync(player);
+        if (taken > 0) {
+            player.sendSystemMessage(Component.literal("Emptied your book — " + taken
+                            + " card" + (taken == 1 ? "" : "s") + " back in your inventory.")
+                    .withStyle(ChatFormatting.YELLOW));
+        } else {
+            player.sendSystemMessage(Component.literal("Your book has no cards filed in it.")
+                    .withStyle(ChatFormatting.GRAY));
+        }
+        return taken;
+    }
+
+    /** Push the binder contents to the player's client for the book screen. */
+    public static void sync(ServerPlayer player) {
+        PacketDistributor.sendToPlayer(player, new StorageSyncPayload(
+                player.getData(ModAttachments.STORED.get()),
+                player.getData(ModAttachments.STORED_FOIL.get())));
+    }
+}

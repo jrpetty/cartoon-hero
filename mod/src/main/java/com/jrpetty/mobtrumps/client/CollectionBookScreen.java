@@ -2,6 +2,7 @@ package com.jrpetty.mobtrumps.client;
 
 import com.jrpetty.mobtrumps.MobCardItem;
 import com.jrpetty.mobtrumps.SetDisplayPayload;
+import com.jrpetty.mobtrumps.StorageActionPayload;
 import com.jrpetty.mobtrumps.game.MobCard;
 import com.jrpetty.mobtrumps.game.MobCards;
 import com.jrpetty.mobtrumps.game.Stat;
@@ -120,7 +121,10 @@ public class CollectionBookScreen extends Screen {
         int sortX = statsX - sortW - 4;
         chips.add(new Chip("sort", sortX, y, sortW, 12));
         int deckW = font.width("Deck") + 8;
-        chips.add(new Chip("deck", sortX - deckW - 4, y, deckW, 12));
+        int deckX = sortX - deckW - 4;
+        chips.add(new Chip("deck", deckX, y, deckW, 12));
+        int storeW = font.width("Store") + 8;
+        chips.add(new Chip("store", deckX - storeW - 4, y, storeW, 12));
     }
 
     private void rebuild() {
@@ -232,6 +236,11 @@ public class CollectionBookScreen extends Screen {
                     g.fill(cx + cw - 6, cy - 3, cx + cw + 2, cy + 4, CardRenderer.KRAFT_DARK);
                     g.fill(cx + cw - 8, cy - 1, cx + cw, cy + 6, 0xFFF3E2A7);
                 }
+                // a green "filed in binder" tab on the bottom-left corner
+                if (ClientCollection.isStored(card.id())) {
+                    g.fill(cx - 2, cy + ch - 4, cx + 6, cy + ch + 3, CardRenderer.KRAFT_DARK);
+                    g.fill(cx - 1, cy + ch - 3, cx + 5, cy + ch + 2, 0xFF55A82F);
+                }
                 if (hovered) g.renderOutline(cx - 2, cy - 2, cw + 4, ch + 4, 0xFFF9D849);
             } else {
                 CardRenderer.renderBack(g, font, cx, cy, CARD_SCALE);
@@ -245,7 +254,7 @@ public class CollectionBookScreen extends Screen {
         g.drawString(font, pageText, panelX + (panelW - font.width(pageText)) / 2, panelY + panelH - 17,
                 CardRenderer.KRAFT_DARK, false);
 
-        String hint = "Click a card to view it · a ✦ tab means you own more than one variant";
+        String hint = "Click a card to view it · Store files loose cards away · shift-click a green-tabbed card to take one out";
         g.drawString(font, hint, (width - font.width(hint)) / 2, panelY + panelH + 8, 0xFFAAAAAA, true);
 
         if (pickerMob != null) renderPicker(g, mouseX, mouseY);
@@ -309,7 +318,7 @@ public class CollectionBookScreen extends Screen {
     }
 
     private void renderStats(GuiGraphics g) {
-        int pw = 220, ph = 150;
+        int pw = 220, ph = 164;
         int px = (width - pw) / 2, py = (height - ph) / 2;
         g.fill(0, 0, width, height, 0x99000000);
         g.fill(px - 3, py - 3, px + pw + 3, py + ph + 3, CardRenderer.KRAFT_DARK);
@@ -323,6 +332,7 @@ public class CollectionBookScreen extends Screen {
         int y = py + 30;
         statLine(g, px + 14, valX, y, "Collected", have + " / " + total + "  (" + pct + "%)"); y += 12;
         statLine(g, px + 14, valX, y, "Holographic foils", ClientCollection.foilCount() + " / " + total); y += 12;
+        statLine(g, px + 14, valX, y, "Filed in book", String.valueOf(ClientCollection.storedCount())); y += 12;
         statLine(g, px + 14, valX, y, "Duel wins", String.valueOf(ClientCollection.duelWins())); y += 16;
         for (Tier t : new Tier[]{Tier.LEGENDARY, Tier.EPIC, Tier.RARE, Tier.UNCOMMON, Tier.COMMON}) {
             int tt = 0, th = 0;
@@ -347,7 +357,7 @@ public class CollectionBookScreen extends Screen {
         for (Chip chip : chips) {
             boolean active = switch (chip.key()) {
                 case "stats" -> statsOpen;
-                case "sort", "deck" -> false;
+                case "sort", "deck", "store" -> false;
                 default -> chip.key().equals("f_" + filter.name());
             };
             boolean hover = chip.hit(mouseX, mouseY);
@@ -358,6 +368,7 @@ public class CollectionBookScreen extends Screen {
                 case "stats" -> "Stats";
                 case "sort" -> "Sort: " + sort.label;
                 case "deck" -> "Deck";
+                case "store" -> "Store";
                 default -> Filter.valueOf(chip.key().substring(2)).label;
             };
             g.drawString(font, label, chip.x() + 4, chip.y() + 2, active ? 0xFFFFFFFF : CardRenderer.INK, false);
@@ -394,6 +405,9 @@ public class CollectionBookScreen extends Screen {
                 int[] p = slotPos(s);
                 if (mouseX >= p[0] && mouseX < p[0] + cw && mouseY >= p[1] && mouseY < p[1] + ch
                         && ClientCollection.has(card.id())) {
+                    if (hasShiftDown() && withdrawOne(card.id())) {
+                        return true;
+                    }
                     if (ClientCollection.variantCount(card.id()) > 1) {
                         pickerMob = card.id();
                         clickSound();
@@ -431,6 +445,21 @@ public class CollectionBookScreen extends Screen {
         }
     }
 
+    /** Shift-click withdraw: take the displayed variant (or whichever is filed) out of the book. */
+    private boolean withdrawOne(String mobId) {
+        boolean foil = ClientCollection.displayedIsFoil(mobId);
+        if (!ClientCollection.isStored(mobId, foil)) {
+            // fall back to the other variant if the displayed one isn't filed
+            foil = !foil;
+        }
+        if (!ClientCollection.isStored(mobId, foil)) {
+            return false;
+        }
+        PacketDistributor.sendToServer(StorageActionPayload.withdraw(mobId, foil));
+        clickSound();
+        return true;
+    }
+
     private void choose(String mobId, boolean foil) {
         PacketDistributor.sendToServer(new SetDisplayPayload(mobId, foil));
         if (minecraft != null) {
@@ -444,6 +473,7 @@ public class CollectionBookScreen extends Screen {
         switch (key) {
             case "stats" -> statsOpen = true;
             case "deck" -> { if (minecraft != null) minecraft.setScreen(new DeckBuilderScreen(this)); }
+            case "store" -> PacketDistributor.sendToServer(StorageActionPayload.depositAll());
             case "sort" -> { sort = Sort.values()[(sort.ordinal() + 1) % Sort.values().length]; layoutChips(); rebuild(); }
             default -> { filter = Filter.valueOf(key.substring(2)); spread = 0; rebuild(); }
         }

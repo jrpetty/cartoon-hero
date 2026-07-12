@@ -31,5 +31,18 @@ public final class ModNetworking {
                         CollectionTracker.setDisplayFoil(sp, payload.mobId(), payload.foil());
                     }
                 }));
+        registrar.playToClient(StorageSyncPayload.TYPE, StorageSyncPayload.STREAM_CODEC,
+                (payload, context) -> context.enqueueWork(
+                        () -> ClientCollection.setStorage(payload.stored(), payload.storedFoil())));
+        registrar.playToServer(StorageActionPayload.TYPE, StorageActionPayload.STREAM_CODEC,
+                (payload, context) -> context.enqueueWork(() -> {
+                    if (context.player() instanceof net.minecraft.server.level.ServerPlayer sp) {
+                        switch (payload.action()) {
+                            case StorageActionPayload.DEPOSIT_ALL -> BinderStorage.depositAll(sp);
+                            case StorageActionPayload.WITHDRAW -> BinderStorage.withdraw(sp, payload.mobId(), payload.foil());
+                            default -> { }
+                        }
+                    }
+                }));
     }
 }
