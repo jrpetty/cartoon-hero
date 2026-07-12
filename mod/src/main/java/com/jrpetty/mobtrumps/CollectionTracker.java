@@ -70,6 +70,7 @@ public final class CollectionTracker {
         PacketDistributor.sendToPlayer(player, new CollectionSyncPayload(
                 player.getData(ModAttachments.COLLECTED.get()),
                 player.getData(ModAttachments.COLLECTED_FOIL.get()),
-                player.getData(ModAttachments.DUEL_WINS.get())));
+                player.getData(ModAttachments.DUEL_WINS.get()),
+                player.getData(ModAttachments.DECK.get())));
     }
 }

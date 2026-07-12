@@ -116,7 +116,10 @@ public class CollectionBookScreen extends Screen {
         chips.add(new Chip("stats", statsX, y, statsW, 12));
         String sortLabel = "Sort: " + sort.label;
         int sortW = font.width(sortLabel) + 8;
-        chips.add(new Chip("sort", statsX - sortW - 4, y, sortW, 12));
+        int sortX = statsX - sortW - 4;
+        chips.add(new Chip("sort", sortX, y, sortW, 12));
+        int deckW = font.width("Deck") + 8;
+        chips.add(new Chip("deck", sortX - deckW - 4, y, deckW, 12));
     }
 
     private void rebuild() {
@@ -234,7 +237,7 @@ public class CollectionBookScreen extends Screen {
         for (Chip chip : chips) {
             boolean active = switch (chip.key()) {
                 case "stats" -> statsOpen;
-                case "sort" -> false;
+                case "sort", "deck" -> false;
                 default -> chip.key().equals("f_" + filter.name());
             };
             boolean hover = chip.hit(mouseX, mouseY);
@@ -244,6 +247,7 @@ public class CollectionBookScreen extends Screen {
             String label = switch (chip.key()) {
                 case "stats" -> "Stats";
                 case "sort" -> "Sort: " + sort.label;
+                case "deck" -> "Deck";
                 default -> Filter.valueOf(chip.key().substring(2)).label;
             };
             g.drawString(font, label, chip.x() + 4, chip.y() + 2,
@@ -348,6 +352,8 @@ public class CollectionBookScreen extends Screen {
     private void onChip(String key) {
         if (key.equals("stats")) {
             statsOpen = true;
+        } else if (key.equals("deck")) {
+            if (minecraft != null) minecraft.setScreen(new DeckBuilderScreen(this));
         } else if (key.equals("sort")) {
             sort = Sort.values()[(sort.ordinal() + 1) % Sort.values().length];
             layoutChips();

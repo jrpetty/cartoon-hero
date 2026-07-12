@@ -48,6 +48,8 @@ public final class BattleCommands {
                 .executes(ctx -> menu(ctx.getSource().getPlayerOrException()))
                 .then(Commands.literal("battle")
                         .executes(ctx -> startBattle(ctx.getSource(), DEFAULT_DECK))
+                        .then(Commands.literal("deck")
+                                .executes(ctx -> startDeckBattle(ctx.getSource())))
                         .then(Commands.argument("deck_size", IntegerArgumentType.integer(4, 80))
                                 .executes(ctx -> startBattle(ctx.getSource(),
                                         IntegerArgumentType.getInteger(ctx, "deck_size")))))
@@ -108,6 +110,26 @@ public final class BattleCommands {
         player.sendSystemMessage(Component.literal(
                         "The deck is dealt: " + battle.playerCardCount() + " cards each. "
                         + "Higher stat wins the round; win every card to win the battle!")
+                .withStyle(ChatFormatting.GRAY));
+        promptRound(player, battle);
+        return 1;
+    }
+
+    private static int startDeckBattle(CommandSourceStack source) throws CommandSyntaxException {
+        ServerPlayer player = source.getPlayerOrException();
+        var deck = DeckManager.deckCards(player);
+        if (deck.size() < DeckManager.MIN_DECK) {
+            player.sendSystemMessage(Component.literal("Build a deck of at least "
+                            + DeckManager.MIN_DECK + " cards first (open your Collection Book → Deck).")
+                    .withStyle(ChatFormatting.RED));
+            return 0;
+        }
+        Battle battle = new Battle(deck, java.util.List.of(), ThreadLocalRandom.current());
+        BATTLES.put(player.getUUID(), battle);
+        player.sendSystemMessage(Component.literal("=== MOB TRUMPS: YOUR DECK ===")
+                .withStyle(ChatFormatting.GREEN, ChatFormatting.BOLD));
+        player.sendSystemMessage(Component.literal("Your " + battle.playerCardCount()
+                        + "-card deck vs a random CPU deck. Higher stat wins!")
                 .withStyle(ChatFormatting.GRAY));
         promptRound(player, battle);
         return 1;

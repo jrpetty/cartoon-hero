@@ -12,14 +12,20 @@ public final class ClientCollection {
     private static volatile Set<String> collected = Set.of();
     private static volatile Set<String> foils = Set.of();
     private static volatile int duelWins = 0;
+    private static volatile List<String> deck = List.of();
 
     private ClientCollection() {
     }
 
-    public static void set(List<String> ids, List<String> foilIds, int wins) {
+    public static void set(List<String> ids, List<String> foilIds, int wins, List<String> deckIds) {
         collected = Set.copyOf(ids);
         foils = Set.copyOf(foilIds);
         duelWins = wins;
+        deck = List.copyOf(deckIds);
+    }
+
+    public static List<String> deck() {
+        return deck;
     }
 
     public static int duelWins() {

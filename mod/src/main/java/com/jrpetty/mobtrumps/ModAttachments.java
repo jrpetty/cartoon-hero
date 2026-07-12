@@ -34,6 +34,13 @@ public final class ModAttachments {
                     .copyOnDeath()
                     .build());
 
+    /** The player's custom battle deck (mob ids). Empty means "use a random deck". */
+    public static final Supplier<AttachmentType<List<String>>> DECK =
+            ATTACHMENTS.register("deck", () -> AttachmentType.<List<String>>builder(() -> List.of())
+                    .serialize(Codec.STRING.listOf())
+                    .copyOnDeath()
+                    .build());
+
     private ModAttachments() {
     }
 }

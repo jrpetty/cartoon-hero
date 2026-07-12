@@ -2,6 +2,7 @@ package com.jrpetty.mobtrumps.game;
 
 import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Deque;
 import java.util.List;
 import java.util.random.RandomGenerator;
@@ -39,6 +40,23 @@ public final class Battle {
         for (int i = 0; i < deck.size(); i++) {
             (i < deck.size() / 2 ? playerDeck : cpuDeck).addLast(deck.get(i));
         }
+    }
+
+    /**
+     * Deal explicit hands to each side (used for deck-builder battles and
+     * deck-vs-deck duels). Both hands are shuffled; if one side is empty it
+     * is filled with a random hand matching the other's size.
+     */
+    public Battle(List<MobCard> playerHand, List<MobCard> cpuHand, RandomGenerator random) {
+        List<MobCard> p = new ArrayList<>(playerHand);
+        List<MobCard> c = new ArrayList<>(cpuHand);
+        int size = Math.max(2, Math.max(p.size(), c.size()));
+        if (p.isEmpty()) p = MobCards.shuffledDeck(size, random);
+        if (c.isEmpty()) c = MobCards.shuffledDeck(size, random);
+        Collections.shuffle(p, java.util.Random.from(random));
+        Collections.shuffle(c, java.util.Random.from(random));
+        playerDeck.addAll(p);
+        cpuDeck.addAll(c);
     }
 
     public boolean isFinished() {
