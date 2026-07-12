@@ -53,6 +53,11 @@ In game:
   to swap 1-for-1
 - `/mobtrumps foil` — press 4 duplicate copies of a card into 1 holographic foil
 - The **Wandering Trader** now sells Mob Card Packs for emeralds
+- **Special packs** — a **Nether Pack** (craft: 3 paper + blaze powder +
+  emerald; Nether-mob pool, guaranteed Rare+) and a **Boss Pack** (3 paper +
+  diamond + emerald; boss pool, guaranteed Epic+), both with higher foil odds
+- **Ranked ladder** — duels update an Elo rating stored server-wide (persisted,
+  offline players included); `/mobtrumps top` shows the standings and your rank
 - `/mobtrumps play <stat>`, `/mobtrumps next`, `/mobtrumps forfeit`
 - `/mobtrumps` on its own opens a clickable hub menu
 - Juice: legendary/foil pulls burst particles in-world and sparkles on the

@@ -130,21 +130,78 @@ public final class MobCards {
      * mob is ten times more likely to be pulled than a rarity 1 legendary.
      */
     public static List<MobCard> openPack(int count, RandomGenerator random) {
-        count = Math.max(1, Math.min(count, ALL.size()));
-        List<MobCard> pool = new ArrayList<>(ALL);
+        return openPack(ALL, count, null, random);
+    }
+
+    /**
+     * Draw {@code count} distinct cards from {@code source}, weighted by spawn
+     * rarity. If {@code guarantee} is non-null, at least one pull is of that
+     * collector tier or better (a lower-tier pull is swapped out to ensure it).
+     */
+    public static List<MobCard> openPack(List<MobCard> source, int count, Tier guarantee,
+                                         RandomGenerator random) {
+        List<MobCard> from = (source == null || source.isEmpty()) ? ALL : source;
+        count = Math.max(1, Math.min(count, from.size()));
+        List<MobCard> pool = new ArrayList<>(from);
         List<MobCard> pulls = new ArrayList<>(count);
         for (int i = 0; i < count; i++) {
-            int totalWeight = pool.stream().mapToInt(MobCard::rarity).sum();
-            int roll = random.nextInt(totalWeight);
-            for (int j = 0; j < pool.size(); j++) {
-                roll -= pool.get(j).rarity();
-                if (roll < 0) {
-                    pulls.add(pool.remove(j));
-                    break;
+            drawWeighted(pool, pulls, random);
+        }
+
+        if (guarantee != null && pulls.stream().noneMatch(c -> meetsTier(c, guarantee))) {
+            // pull a guaranteed high-rarity card that isn't already in the pack
+            List<MobCard> high = new ArrayList<>();
+            for (MobCard c : from) {
+                if (meetsTier(c, guarantee) && !pulls.contains(c)) high.add(c);
+            }
+            if (!high.isEmpty()) {
+                MobCard swap = high.get(random.nextInt(high.size()));
+                // replace the lowest-tier (most common) pull
+                int worst = 0;
+                for (int i = 1; i < pulls.size(); i++) {
+                    if (pulls.get(i).tier().ordinal() < pulls.get(worst).tier().ordinal()) worst = i;
                 }
+                pulls.set(worst, swap);
             }
         }
         return pulls;
+    }
+
+    private static void drawWeighted(List<MobCard> pool, List<MobCard> out, RandomGenerator random) {
+        if (pool.isEmpty()) return;
+        int totalWeight = pool.stream().mapToInt(MobCard::rarity).sum();
+        int roll = random.nextInt(Math.max(1, totalWeight));
+        for (int j = 0; j < pool.size(); j++) {
+            roll -= pool.get(j).rarity();
+            if (roll < 0) {
+                out.add(pool.remove(j));
+                return;
+            }
+        }
+        out.add(pool.remove(pool.size() - 1));
+    }
+
+    private static boolean meetsTier(MobCard c, Tier guarantee) {
+        return c.tier().ordinal() >= guarantee.ordinal();
+    }
+
+    /** Cards whose collector tier is {@code tier} or better. */
+    public static List<MobCard> tierAtLeast(Tier tier) {
+        List<MobCard> out = new ArrayList<>();
+        for (MobCard c : ALL) {
+            if (c.tier().ordinal() >= tier.ordinal()) out.add(c);
+        }
+        return out;
+    }
+
+    /** Look up several cards by id, skipping any unknown ones. */
+    public static List<MobCard> byIds(String... ids) {
+        List<MobCard> out = new ArrayList<>();
+        for (String id : ids) {
+            MobCard c = byId(id);
+            if (c != null) out.add(c);
+        }
+        return out;
     }
 
     /** A shuffled deck of {@code size} distinct cards. */

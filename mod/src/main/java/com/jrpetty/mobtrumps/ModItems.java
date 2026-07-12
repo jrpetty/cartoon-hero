@@ -41,6 +41,12 @@ public final class ModItems {
             ITEMS.register("mob_card", () -> new MobCardItem(new Item.Properties()));
     public static final DeferredItem<CardPackItem> CARD_PACK =
             ITEMS.register("card_pack", () -> new CardPackItem(new Item.Properties()));
+    public static final DeferredItem<CardPackItem> NETHER_PACK =
+            ITEMS.register("nether_pack", () -> new CardPackItem(new Item.Properties(),
+                    com.jrpetty.mobtrumps.game.PackType.NETHER));
+    public static final DeferredItem<CardPackItem> BOSS_PACK =
+            ITEMS.register("boss_pack", () -> new CardPackItem(new Item.Properties(),
+                    com.jrpetty.mobtrumps.game.PackType.BOSS));
     public static final DeferredItem<CollectionBookItem> COLLECTION_BOOK =
             ITEMS.register("collection_book", () -> new CollectionBookItem(new Item.Properties()));
 
@@ -50,6 +56,8 @@ public final class ModItems {
                     .icon(() -> new ItemStack(CARD_PACK.get()))
                     .displayItems((parameters, output) -> {
                         output.accept(CARD_PACK.get());
+                        output.accept(NETHER_PACK.get());
+                        output.accept(BOSS_PACK.get());
                         output.accept(COLLECTION_BOOK.get());
                         for (MobCard card : MobCards.ALL) {
                             output.accept(MobCardItem.stackOf(card));

@@ -250,15 +250,17 @@ public final class DuelManager {
         if (duel != null) {
             ServerPlayer other = duel.other(player);
             clear(duel);
+            // leaving counts as a ranked loss for the quitter
+            CollectionTracker.addDuelWin(other);
+            applyRanked(other, player);
             if (duel.isWager()) {
-                // leaving forfeits the pot to the player who stayed
                 returnStake(other, duel.challengerWager);
                 returnStake(other, duel.targetWager);
                 other.sendSystemMessage(Component.literal(name(player)
                                 + " left — you win the wagered cards!")
                         .withStyle(ChatFormatting.GOLD, ChatFormatting.BOLD));
             } else {
-                other.sendSystemMessage(Component.literal(name(player) + " left — the duel is over.")
+                other.sendSystemMessage(Component.literal(name(player) + " left — you win by default.")
                         .withStyle(ChatFormatting.YELLOW));
             }
         }
@@ -368,6 +370,7 @@ public final class DuelManager {
                     .withStyle(ChatFormatting.GOLD, ChatFormatting.BOLD));
         }
         CollectionTracker.addDuelWin(winner);
+        applyRanked(winner, loser);
 
         if (wager) {
             // winner takes both wagered cards
@@ -388,6 +391,17 @@ public final class DuelManager {
         }
         winner.serverLevel().playSound(null, winner.getX(), winner.getY(), winner.getZ(),
                 SoundEvents.UI_TOAST_CHALLENGE_COMPLETE, SoundSource.PLAYERS, 0.8F, 1.0F);
+    }
+
+    /** Update ranked standings and tell both players their new rating. */
+    private static void applyRanked(ServerPlayer winner, ServerPlayer loser) {
+        if (winner == null || loser == null) return;
+        Leaderboard board = Leaderboard.get(winner.serverLevel().getServer());
+        int[] ratings = board.recordDuel(winner, loser);
+        winner.sendSystemMessage(Component.literal("Rating: " + ratings[0]
+                + " (rank #" + board.rankOf(winner.getUUID()) + ")").withStyle(ChatFormatting.AQUA));
+        loser.sendSystemMessage(Component.literal("Rating: " + ratings[1]
+                + " (rank #" + board.rankOf(loser.getUUID()) + ")").withStyle(ChatFormatting.GRAY));
     }
 
     private static void clear(Duel duel) {

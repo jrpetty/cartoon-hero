@@ -2,6 +2,8 @@ package com.jrpetty.mobtrumps;
 
 import com.jrpetty.mobtrumps.game.MobCard;
 import com.jrpetty.mobtrumps.game.MobCards;
+import com.jrpetty.mobtrumps.game.PackType;
+import com.jrpetty.mobtrumps.game.Tier;
 import net.minecraft.ChatFormatting;
 import net.minecraft.network.chat.Component;
 import net.minecraft.sounds.SoundEvents;
@@ -27,11 +29,16 @@ import java.util.concurrent.ThreadLocalRandom;
 public class CardPackItem extends Item {
 
     public static final int CARDS_PER_PACK = 5;
-    /** Chance for any given pull to come out as a holographic foil. */
-    public static final float FOIL_CHANCE = 0.09F;
+
+    private final PackType packType;
 
     public CardPackItem(Properties properties) {
+        this(properties, PackType.STANDARD);
+    }
+
+    public CardPackItem(Properties properties, PackType packType) {
         super(properties);
+        this.packType = packType;
     }
 
     @Override
@@ -46,15 +53,15 @@ public class CardPackItem extends Item {
         }
 
         var random = ThreadLocalRandom.current();
-        List<MobCard> pulls = MobCards.openPack(CARDS_PER_PACK, random);
+        List<MobCard> pulls = MobCards.openPack(packType.pool(), CARDS_PER_PACK, packType.guarantee, random);
         List<PackOpenedPayload.Pull> results = new ArrayList<>();
         boolean anyFoil = false;
 
         boolean anyLegendary = false;
         for (MobCard card : pulls) {
-            boolean foil = random.nextFloat() < FOIL_CHANCE;
+            boolean foil = random.nextFloat() < packType.foilChance;
             anyFoil |= foil;
-            anyLegendary |= card.tier() == com.jrpetty.mobtrumps.game.Tier.LEGENDARY;
+            anyLegendary |= card.tier() == Tier.LEGENDARY;
             ItemStack cardStack = MobCardItem.stackOf(card, foil);
             if (!player.getInventory().add(cardStack)) {
                 player.drop(cardStack, false);
@@ -91,6 +98,19 @@ public class CardPackItem extends Item {
                                 List<Component> tooltip, TooltipFlag flag) {
         tooltip.add(Component.literal("Right-click to pull " + CARDS_PER_PACK + " mob cards.")
                 .withStyle(ChatFormatting.GRAY));
+        if (packType.guarantee != null) {
+            tooltip.add(Component.literal("Guaranteed " + packType.guarantee.label()
+                            + "+ · " + themeLabel())
+                    .withStyle(ChatFormatting.LIGHT_PURPLE));
+        }
         super.appendHoverText(stack, context, tooltip, flag);
+    }
+
+    private String themeLabel() {
+        return switch (packType) {
+            case NETHER -> "Nether mobs";
+            case BOSS -> "bosses & brutes";
+            default -> "all mobs";
+        };
     }
 }

@@ -90,7 +90,43 @@ public final class BattleCommands {
                                         ctx.getSource().getPlayerOrException(),
                                         EntityArgument.getPlayer(ctx, "player")))))
                 .then(Commands.literal("foil")
-                        .executes(ctx -> combineFoil(ctx.getSource()))));
+                        .executes(ctx -> combineFoil(ctx.getSource())))
+                .then(Commands.literal("top")
+                        .executes(ctx -> leaderboard(ctx.getSource()))));
+    }
+
+    private static int leaderboard(CommandSourceStack source) throws CommandSyntaxException {
+        ServerPlayer player = source.getPlayerOrException();
+        Leaderboard board = Leaderboard.get(player.serverLevel().getServer());
+        var top = board.top(10);
+        player.sendSystemMessage(Component.literal("═══ MOB TRUMPS · RANKED ═══")
+                .withStyle(ChatFormatting.GOLD, ChatFormatting.BOLD));
+        if (top.isEmpty()) {
+            player.sendSystemMessage(Component.literal("No duels played yet. Challenge someone!")
+                    .withStyle(ChatFormatting.GRAY));
+            return 1;
+        }
+        int rank = 1;
+        for (Leaderboard.Entry e : top) {
+            ChatFormatting color = rank == 1 ? ChatFormatting.GOLD
+                    : rank == 2 ? ChatFormatting.GRAY : rank == 3 ? ChatFormatting.DARK_RED
+                    : ChatFormatting.WHITE;
+            player.sendSystemMessage(Component.literal(String.format(" %2d. ", rank))
+                    .withStyle(ChatFormatting.DARK_GRAY)
+                    .append(Component.literal(e.name()).withStyle(color))
+                    .append(Component.literal("  " + e.rating()).withStyle(ChatFormatting.AQUA))
+                    .append(Component.literal("  (" + e.wins() + "W " + e.losses() + "L)")
+                            .withStyle(ChatFormatting.DARK_GRAY)));
+            rank++;
+        }
+        int myRank = board.rankOf(player.getUUID());
+        Leaderboard.Entry me = board.entry(player.getUUID());
+        if (me != null) {
+            player.sendSystemMessage(Component.literal("You: rank #" + myRank + " · " + me.rating()
+                            + " (" + me.wins() + "W " + me.losses() + "L)")
+                    .withStyle(ChatFormatting.GREEN));
+        }
+        return 1;
     }
 
     // --- command handlers ---
@@ -148,6 +184,11 @@ public final class BattleCommands {
         player.sendSystemMessage(Component.literal("  Build a deck: ")
                 .withStyle(ChatFormatting.GRAY)
                 .append(Component.literal("Collection Book → Deck, then /mobtrumps battle deck")
+                        .withStyle(ChatFormatting.DARK_GRAY)));
+        player.sendSystemMessage(Component.literal("  ")
+                .append(button("[Ranked leaderboard]", "/mobtrumps top", ChatFormatting.GOLD,
+                        "See the server's top duelists"))
+                .append(Component.literal("  ·  Craft Nether & Boss packs for guaranteed rarity")
                         .withStyle(ChatFormatting.DARK_GRAY)));
         player.sendSystemMessage(Component.literal("  Craft a Card Pack (3 paper + emerald) and a "
                         + "Collection Book (book + emerald), then right-click them.")
