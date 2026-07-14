@@ -126,6 +126,22 @@ public final class MobCards {
     }
 
     /**
+     * Odds that {@code value} on {@code stat} beats a random card from the whole
+     * set (ties count as half a win). A smart CPU leads with the stat that gives
+     * it the best chance, not merely its highest raw number.
+     */
+    public static double winOdds(Stat stat, int value) {
+        int below = 0;
+        int equal = 0;
+        for (MobCard c : ALL) {
+            int v = c.stat(stat);
+            if (v < value) below++;
+            else if (v == value) equal++;
+        }
+        return (below + equal / 2.0) / ALL.size();
+    }
+
+    /**
      * Draw {@code count} distinct cards weighted by spawn rarity: a rarity 10
      * mob is ten times more likely to be pulled than a rarity 1 legendary.
      */

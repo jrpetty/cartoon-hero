@@ -28,12 +28,15 @@ public final class Battle {
     private final Deque<MobCard> playerDeck = new ArrayDeque<>();
     private final Deque<MobCard> cpuDeck = new ArrayDeque<>();
     private final List<MobCard> pot = new ArrayList<>();
+    private final RandomGenerator random;
+    private Difficulty difficulty = Difficulty.NORMAL;
     private Side turn = Side.PLAYER;
     private int round = 0;
     private boolean finished = false;
     private Side winner = Side.NONE;
 
     public Battle(int deckSize, RandomGenerator random) {
+        this.random = random;
         deckSize = Math.max(4, Math.min(deckSize, MobCards.ALL.size()));
         if (deckSize % 2 != 0) deckSize--;
         List<MobCard> deck = MobCards.shuffledDeck(deckSize, random);
@@ -48,6 +51,7 @@ public final class Battle {
      * is filled with a random hand matching the other's size.
      */
     public Battle(List<MobCard> playerHand, List<MobCard> cpuHand, RandomGenerator random) {
+        this.random = random;
         List<MobCard> p = new ArrayList<>(playerHand);
         List<MobCard> c = new ArrayList<>(cpuHand);
         int size = Math.max(2, Math.max(p.size(), c.size()));
@@ -132,10 +136,48 @@ public final class Battle {
         return new RoundResult(round, chooser, stat, playerCard, cpuCard, roundWinner);
     }
 
-    /** The stat the CPU will pick on its turn: its top card's strongest. */
+    public void setDifficulty(Difficulty difficulty) {
+        if (difficulty != null) this.difficulty = difficulty;
+    }
+
+    public Difficulty getDifficulty() {
+        return difficulty;
+    }
+
+    /** The stat the CPU will pick on its turn, according to the difficulty. */
     public Stat cpuChoice() {
         MobCard top = cpuDeck.peekFirst();
-        return top == null ? Stat.HEALTH : top.bestStat();
+        if (top == null) return Stat.HEALTH;
+        return switch (difficulty) {
+            case EASY -> Stat.values()[random.nextInt(Stat.values().length)];
+            case NORMAL -> top.bestStat();
+            case HARD -> hardChoice(top);
+        };
+    }
+
+    /** Lead with the stat that has the best odds of beating a random card, with a little bluff. */
+    private Stat hardChoice(MobCard top) {
+        Stat best = Stat.HEALTH;
+        Stat second = Stat.HEALTH;
+        double bestOdds = -1;
+        double secondOdds = -1;
+        for (Stat s : Stat.values()) {
+            double odds = MobCards.winOdds(s, top.stat(s));
+            if (odds > bestOdds) {
+                second = best;
+                secondOdds = bestOdds;
+                best = s;
+                bestOdds = odds;
+            } else if (odds > secondOdds) {
+                second = s;
+                secondOdds = odds;
+            }
+        }
+        // if the runner-up is nearly as strong, occasionally bluff with it so a human can't read the CPU
+        if (secondOdds >= 0 && bestOdds - secondOdds < 0.15 && random.nextDouble() < 0.25) {
+            return second;
+        }
+        return best;
     }
 
     private void checkEnd() {

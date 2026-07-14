@@ -56,6 +56,11 @@ In game:
 - **Deck builder** — open the Collection Book → **Deck** to pick up to 16 cards
   you own into a custom deck, then `/mobtrumps battle deck` to fight the CPU
   with your own hand. Any card whose holo you've unlocked is played **boosted**
+- **CPU difficulty** — `/mobtrumps battle [deck] easy|normal|hard`. Easy plays
+  randomly; Normal leads with its strongest stat; Hard picks the stat with the
+  best odds against the whole card pool and bluffs so you can't read it
+- **Deck codes** — `/mobtrumps export` gives a short shareable code for your
+  deck (click to copy); `/mobtrumps import <code>` loads a friend's
 - `/mobtrumps duel <player>` — challenge a player to a PvP duel. Add
   `wager` while holding a card to bet it (both stake a card, winner takes both),
   or `bet <emeralds>` to gamble money — both players escrow the same number of

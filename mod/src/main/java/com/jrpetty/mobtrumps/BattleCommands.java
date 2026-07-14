@@ -1,6 +1,7 @@
 package com.jrpetty.mobtrumps;
 
 import com.jrpetty.mobtrumps.game.Battle;
+import com.jrpetty.mobtrumps.game.Difficulty;
 import com.jrpetty.mobtrumps.game.MobCard;
 import com.jrpetty.mobtrumps.game.Stat;
 import com.mojang.brigadier.arguments.IntegerArgumentType;
@@ -47,12 +48,33 @@ public final class BattleCommands {
         event.getDispatcher().register(Commands.literal("mobtrumps")
                 .executes(ctx -> menu(ctx.getSource().getPlayerOrException()))
                 .then(Commands.literal("battle")
-                        .executes(ctx -> startBattle(ctx.getSource(), DEFAULT_DECK))
+                        .executes(ctx -> startBattle(ctx.getSource(), DEFAULT_DECK, Difficulty.NORMAL))
                         .then(Commands.literal("deck")
-                                .executes(ctx -> startDeckBattle(ctx.getSource())))
+                                .executes(ctx -> startDeckBattle(ctx.getSource(), Difficulty.NORMAL))
+                                .then(Commands.literal("easy")
+                                        .executes(ctx -> startDeckBattle(ctx.getSource(), Difficulty.EASY)))
+                                .then(Commands.literal("normal")
+                                        .executes(ctx -> startDeckBattle(ctx.getSource(), Difficulty.NORMAL)))
+                                .then(Commands.literal("hard")
+                                        .executes(ctx -> startDeckBattle(ctx.getSource(), Difficulty.HARD))))
+                        .then(Commands.literal("easy")
+                                .executes(ctx -> startBattle(ctx.getSource(), DEFAULT_DECK, Difficulty.EASY)))
+                        .then(Commands.literal("normal")
+                                .executes(ctx -> startBattle(ctx.getSource(), DEFAULT_DECK, Difficulty.NORMAL)))
+                        .then(Commands.literal("hard")
+                                .executes(ctx -> startBattle(ctx.getSource(), DEFAULT_DECK, Difficulty.HARD)))
                         .then(Commands.argument("deck_size", IntegerArgumentType.integer(4, 80))
                                 .executes(ctx -> startBattle(ctx.getSource(),
-                                        IntegerArgumentType.getInteger(ctx, "deck_size")))))
+                                        IntegerArgumentType.getInteger(ctx, "deck_size"), Difficulty.NORMAL))
+                                .then(Commands.literal("easy")
+                                        .executes(ctx -> startBattle(ctx.getSource(),
+                                                IntegerArgumentType.getInteger(ctx, "deck_size"), Difficulty.EASY)))
+                                .then(Commands.literal("normal")
+                                        .executes(ctx -> startBattle(ctx.getSource(),
+                                                IntegerArgumentType.getInteger(ctx, "deck_size"), Difficulty.NORMAL)))
+                                .then(Commands.literal("hard")
+                                        .executes(ctx -> startBattle(ctx.getSource(),
+                                                IntegerArgumentType.getInteger(ctx, "deck_size"), Difficulty.HARD)))))
                 .then(Commands.literal("play")
                         .then(Commands.argument("stat", StringArgumentType.word())
                                 .suggests((ctx, builder) -> {
@@ -130,6 +152,12 @@ public final class BattleCommands {
                         .executes(ctx -> BinderStorage.depositAll(ctx.getSource().getPlayerOrException())))
                 .then(Commands.literal("withdraw")
                         .executes(ctx -> BinderStorage.withdrawAll(ctx.getSource().getPlayerOrException())))
+                .then(Commands.literal("export")
+                        .executes(ctx -> exportDeck(ctx.getSource().getPlayerOrException())))
+                .then(Commands.literal("import")
+                        .then(Commands.argument("code", StringArgumentType.greedyString())
+                                .executes(ctx -> importDeck(ctx.getSource().getPlayerOrException(),
+                                        StringArgumentType.getString(ctx, "code")))))
                 .then(Commands.literal("top")
                         .executes(ctx -> leaderboard(ctx.getSource()))));
     }
@@ -200,6 +228,42 @@ public final class BattleCommands {
         return 1;
     }
 
+    private static int exportDeck(ServerPlayer player) {
+        var deck = player.getData(ModAttachments.DECK.get());
+        if (deck.isEmpty()) {
+            player.sendSystemMessage(Component.literal(
+                            "Your deck is empty — build one in the Collection Book first.")
+                    .withStyle(ChatFormatting.RED));
+            return 0;
+        }
+        String code = DeckCodes.encode(deck);
+        player.sendSystemMessage(Component.literal("Deck code (click to copy): ")
+                .withStyle(ChatFormatting.GRAY)
+                .append(Component.literal(code).withStyle(style -> style
+                        .withColor(ChatFormatting.AQUA).withUnderlined(true)
+                        .withClickEvent(new ClickEvent(ClickEvent.Action.COPY_TO_CLIPBOARD, code))
+                        .withHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT,
+                                Component.literal("Copy to clipboard"))))));
+        player.sendSystemMessage(Component.literal("Share it; a friend imports with /mobtrumps import <code>")
+                .withStyle(ChatFormatting.DARK_GRAY));
+        return 1;
+    }
+
+    private static int importDeck(ServerPlayer player, String code) {
+        var ids = DeckCodes.decode(code);
+        if (ids == null || ids.isEmpty()) {
+            player.sendSystemMessage(Component.literal("That deck code is invalid.")
+                    .withStyle(ChatFormatting.RED));
+            return 0;
+        }
+        DeckManager.saveDeck(player, ids);
+        int owned = DeckManager.deckCards(player).size();
+        player.sendSystemMessage(Component.literal("Imported deck — " + owned + " of " + ids.size()
+                        + " cards are ones you own and are now in your deck.")
+                .withStyle(ChatFormatting.GREEN));
+        return 1;
+    }
+
     private static int menu(ServerPlayer player) {
         player.sendSystemMessage(Component.literal("✦ MOB TRUMPS ✦")
                 .withStyle(ChatFormatting.GOLD, ChatFormatting.BOLD));
@@ -240,6 +304,13 @@ public final class BattleCommands {
                 .withStyle(ChatFormatting.GRAY)
                 .append(Component.literal("Collection Book → Deck, then /mobtrumps battle deck")
                         .withStyle(ChatFormatting.DARK_GRAY)));
+        player.sendSystemMessage(Component.literal("  CPU difficulty: ")
+                .withStyle(ChatFormatting.GRAY)
+                .append(Component.literal("/mobtrumps battle easy|normal|hard").withStyle(ChatFormatting.AQUA))
+                .append(Component.literal("  ·  Share decks: ").withStyle(ChatFormatting.DARK_GRAY))
+                .append(Component.literal("/mobtrumps export").withStyle(ChatFormatting.AQUA))
+                .append(Component.literal(" / ").withStyle(ChatFormatting.DARK_GRAY))
+                .append(Component.literal("import <code>").withStyle(ChatFormatting.AQUA)));
         player.sendSystemMessage(Component.literal("  Tidy up: ")
                 .withStyle(ChatFormatting.GRAY)
                 .append(button("[Store cards]", "/mobtrumps store", ChatFormatting.AQUA,
@@ -256,12 +327,14 @@ public final class BattleCommands {
         return 1;
     }
 
-    private static int startBattle(CommandSourceStack source, int deckSize) throws CommandSyntaxException {
+    private static int startBattle(CommandSourceStack source, int deckSize, Difficulty difficulty)
+            throws CommandSyntaxException {
         ServerPlayer player = source.getPlayerOrException();
         Battle battle = new Battle(deckSize, ThreadLocalRandom.current());
+        battle.setDifficulty(difficulty);
         BATTLES.put(player.getUUID(), battle);
 
-        player.sendSystemMessage(Component.literal("=== MOB TRUMPS ===")
+        player.sendSystemMessage(Component.literal("=== MOB TRUMPS · " + difficulty.label() + " CPU ===")
                 .withStyle(ChatFormatting.GREEN, ChatFormatting.BOLD));
         player.sendSystemMessage(Component.literal(
                         "The deck is dealt: " + battle.playerCardCount() + " cards each. "
@@ -272,7 +345,8 @@ public final class BattleCommands {
         return 1;
     }
 
-    private static int startDeckBattle(CommandSourceStack source) throws CommandSyntaxException {
+    private static int startDeckBattle(CommandSourceStack source, Difficulty difficulty)
+            throws CommandSyntaxException {
         ServerPlayer player = source.getPlayerOrException();
         var deck = DeckManager.deckCards(player);
         if (deck.size() < DeckManager.MIN_DECK) {
@@ -282,9 +356,10 @@ public final class BattleCommands {
             return 0;
         }
         Battle battle = new Battle(deck, java.util.List.of(), ThreadLocalRandom.current());
+        battle.setDifficulty(difficulty);
         BATTLES.put(player.getUUID(), battle);
-        player.sendSystemMessage(Component.literal("=== MOB TRUMPS: YOUR DECK ===")
-                .withStyle(ChatFormatting.GREEN, ChatFormatting.BOLD));
+        player.sendSystemMessage(Component.literal("=== MOB TRUMPS: YOUR DECK · " + difficulty.label()
+                        + " CPU ===").withStyle(ChatFormatting.GREEN, ChatFormatting.BOLD));
         player.sendSystemMessage(Component.literal("Your " + battle.playerCardCount()
                         + "-card deck vs a random CPU deck. Higher stat wins!")
                 .withStyle(ChatFormatting.GRAY));
