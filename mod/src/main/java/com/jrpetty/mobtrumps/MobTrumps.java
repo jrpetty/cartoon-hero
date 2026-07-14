@@ -45,6 +45,7 @@ public class MobTrumps {
                 DuelManager.handleLogout(player);
                 TradeManager.handleLogout(player);
                 DraftManager.handleLogout(player);
+                TournamentManager.handleLogout(player);
             }
         });
     }

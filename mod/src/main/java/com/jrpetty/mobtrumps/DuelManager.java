@@ -774,6 +774,7 @@ public final class DuelManager {
         CollectionTracker.addDuelWin(winner);
         applyRanked(winner, loser);
         StatsTracker.recordLossTo(loser, name(winner));
+        TournamentManager.onDuelResult(winner, loser);
 
         if (wager) {
             // winner takes both wagered cards

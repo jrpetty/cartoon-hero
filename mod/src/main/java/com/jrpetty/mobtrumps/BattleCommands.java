@@ -201,6 +201,26 @@ public final class BattleCommands {
                         .executes(ctx -> StatsTracker.dashboard(ctx.getSource().getPlayerOrException())))
                 .then(Commands.literal("profile")
                         .executes(ctx -> StatsTracker.profile(ctx.getSource().getPlayerOrException())))
+                .then(Commands.literal("quests")
+                        .executes(ctx -> QuestManager.show(ctx.getSource().getPlayerOrException())))
+                .then(Commands.literal("quest")
+                        .then(Commands.literal("claim")
+                                .then(Commands.argument("slot", IntegerArgumentType.integer(0, 2))
+                                        .executes(ctx -> QuestManager.claim(
+                                                ctx.getSource().getPlayerOrException(),
+                                                IntegerArgumentType.getInteger(ctx, "slot"))))))
+                .then(Commands.literal("tournament")
+                        .then(Commands.literal("open")
+                                .then(Commands.argument("fee", IntegerArgumentType.integer(0, 1024))
+                                        .executes(ctx -> TournamentManager.open(
+                                                ctx.getSource().getPlayerOrException(),
+                                                IntegerArgumentType.getInteger(ctx, "fee")))))
+                        .then(Commands.literal("join")
+                                .executes(ctx -> TournamentManager.join(ctx.getSource().getPlayerOrException())))
+                        .then(Commands.literal("start")
+                                .executes(ctx -> TournamentManager.start(ctx.getSource().getPlayerOrException())))
+                        .then(Commands.literal("status")
+                                .executes(ctx -> TournamentManager.status(ctx.getSource().getPlayerOrException()))))
                 .then(Commands.literal("top")
                         .executes(ctx -> leaderboard(ctx.getSource()))));
     }
@@ -404,6 +424,12 @@ public final class BattleCommands {
                 .withStyle(ChatFormatting.GRAY)
                 .append(Component.literal("Collection Book → Deck, then /mobtrumps battle deck")
                         .withStyle(ChatFormatting.DARK_GRAY)));
+        player.sendSystemMessage(Component.literal("  ")
+                .append(button("[Daily quests]", "/mobtrumps quests", ChatFormatting.GREEN,
+                        "Three fresh challenges every day, paid in emeralds"))
+                .append(Component.literal("  "))
+                .append(button("[Tournament]", "/mobtrumps tournament status", ChatFormatting.GOLD,
+                        "Server-wide bracket — winner takes the pot")));
         player.sendSystemMessage(Component.literal("  Draft mode: ")
                 .withStyle(ChatFormatting.GRAY)
                 .append(Component.literal("/mobtrumps draft <player>").withStyle(ChatFormatting.AQUA))

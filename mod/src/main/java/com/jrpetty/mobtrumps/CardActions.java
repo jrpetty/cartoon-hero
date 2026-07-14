@@ -46,4 +46,14 @@ public final class CardActions {
             player.drop(stack, false);
         }
     }
+
+    /** Give emeralds in full stacks, dropping any that don't fit. */
+    public static void giveEmeralds(ServerPlayer player, int amount) {
+        int remaining = amount;
+        while (remaining > 0) {
+            int stackSize = Math.min(64, remaining);
+            give(player, new ItemStack(net.minecraft.world.item.Items.EMERALD, stackSize));
+            remaining -= stackSize;
+        }
+    }
 }

@@ -85,6 +85,14 @@ public final class ModAttachments {
                     .copyOnDeath()
                     .build());
 
+    /** Daily quest state: day stamp, rolled quest ids, metric baselines, claim flags. */
+    public static final Supplier<AttachmentType<Map<String, Integer>>> QUEST_STATE =
+            ATTACHMENTS.register("quest_state",
+                    () -> AttachmentType.<Map<String, Integer>>builder(() -> Map.of())
+                    .serialize(Codec.unboundedMap(Codec.STRING, Codec.INT))
+                    .copyOnDeath()
+                    .build());
+
     /** Free-form play counters ("pick_attack", "loss_Steve", "battles", ...) for the stats page. */
     public static final Supplier<AttachmentType<Map<String, Integer>>> PLAY_STATS =
             ATTACHMENTS.register("play_stats",
