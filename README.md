@@ -61,6 +61,12 @@ In game:
   or `bet <emeralds>` to gamble money — both players escrow the same number of
   emeralds and the winner takes the whole pot (stakes are refunded on a draw,
   decline, timeout or logout)
+- **Quick match & spectating** — `/mobtrumps queue` auto-pairs you with any
+  other waiting player; `/mobtrumps watch <player>` lets you follow a live duel
+  in chat and place an emerald **side bet** on either duelist (pari-mutuel —
+  backers of the winner split the pool). `/mobtrumps rematch` re-challenges your
+  last opponent, `/mobtrumps emote <gg|nice|close|oops|gl|wow>` taunts mid-duel,
+  and a 45-second **turn timer** auto-plays anyone who stalls
 - `/mobtrumps trade <player>` — offer your held card; they hold one and accept
   to swap 1-for-1
 - `/mobtrumps foil` — press 4 duplicate copies of a card into 1 holographic foil

@@ -26,6 +26,8 @@ public class MobTrumps {
 
         NeoForge.EVENT_BUS.addListener(BattleCommands::onRegisterCommands);
         NeoForge.EVENT_BUS.addListener(MobDrops::onLivingDrops);
+        NeoForge.EVENT_BUS.addListener((net.neoforged.neoforge.event.tick.ServerTickEvent.Post event) ->
+                DuelManager.tickTimers(event.getServer()));
         NeoForge.EVENT_BUS.addListener((PlayerEvent.PlayerLoggedInEvent event) -> {
             if (event.getEntity() instanceof ServerPlayer player) {
                 CollectionTracker.sync(player);

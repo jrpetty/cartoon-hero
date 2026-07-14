@@ -6,13 +6,16 @@ import com.jrpetty.mobtrumps.game.Stat;
 import net.minecraft.ChatFormatting;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
+import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 
+import java.util.HashSet;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ThreadLocalRandom;
@@ -29,16 +32,30 @@ public final class DuelManager {
 
     private static final int DECK_SIZE = 20;
     private static final long CHALLENGE_TTL_MS = 60_000L;
+    /** How long a player has to pick before their turn is auto-played. */
+    private static final long TURN_MS = 45_000L;
 
     /** target UUID -> pending challenge from a challenger. */
     private static final Map<UUID, Pending> PENDING = new ConcurrentHashMap<>();
     /** player UUID -> the duel they are in (both players map to the same duel). */
     private static final Map<UUID, Duel> ACTIVE = new ConcurrentHashMap<>();
+    /** spectator UUID -> the duel they are watching. */
+    private static final Map<UUID, Duel> SPECTATING = new ConcurrentHashMap<>();
+    /** players waiting to be auto-matched into a duel. */
+    private static final Set<UUID> QUEUE = ConcurrentHashMap.newKeySet();
+    /** player UUID -> their most recent opponent, for /mobtrumps rematch. */
+    private static final Map<UUID, LastFoe> LAST_FOE = new ConcurrentHashMap<>();
 
     private DuelManager() {
     }
 
     private record Pending(UUID challenger, long expiresAt, ItemStack wager, int bet) {
+    }
+
+    private record LastFoe(UUID id, String name) {
+    }
+
+    private record SideBet(UUID on, int amount) {
     }
 
     private static final class Duel {
@@ -49,6 +66,10 @@ public final class DuelManager {
         ItemStack targetWager = ItemStack.EMPTY;
         int challengerBet = 0;
         int targetBet = 0;
+        final Set<UUID> spectators = ConcurrentHashMap.newKeySet();
+        final Map<UUID, SideBet> sideBets = new ConcurrentHashMap<>();
+        long turnDeadline = Long.MAX_VALUE;
+        boolean warned = false;
 
         Duel(ServerPlayer challenger, ServerPlayer target, Battle battle) {
             this.challenger = challenger;
@@ -216,23 +237,34 @@ public final class DuelManager {
             targetBet = pending.bet();
         }
 
+        startDuel(challenger, target, pending.wager(), targetStake, pending.bet(), targetBet);
+        return 1;
+    }
+
+    /** Create and kick off a duel between two players once any stakes are escrowed. */
+    private static void startDuel(ServerPlayer challenger, ServerPlayer target,
+                                  ItemStack chWager, ItemStack tgWager, int chBet, int tgBet) {
+        QUEUE.remove(challenger.getUUID());
+        QUEUE.remove(target.getUUID());
         Battle battle = new Battle(DECK_SIZE, ThreadLocalRandom.current());
         Duel duel = new Duel(challenger, target, battle);
-        duel.challengerWager = pending.wager();
-        duel.targetWager = targetStake;
-        duel.challengerBet = pending.bet();
-        duel.targetBet = targetBet;
+        duel.challengerWager = chWager;
+        duel.targetWager = tgWager;
+        duel.challengerBet = chBet;
+        duel.targetBet = tgBet;
         ACTIVE.put(challenger.getUUID(), duel);
         ACTIVE.put(target.getUUID(), duel);
+        LAST_FOE.put(challenger.getUUID(), new LastFoe(target.getUUID(), name(target)));
+        LAST_FOE.put(target.getUUID(), new LastFoe(challenger.getUUID(), name(challenger)));
 
         MutableComponent intro = Component.literal("=== DUEL: " + name(challenger)
                 + " vs " + name(target) + " ===").withStyle(ChatFormatting.GOLD, ChatFormatting.BOLD);
         challenger.sendSystemMessage(intro);
         target.sendSystemMessage(intro);
+        sendBoth(duel, emoteBar());
         BattleCommands.shuffleSound(challenger);
         BattleCommands.shuffleSound(target);
         promptTurn(duel);
-        return 1;
     }
 
     public static int decline(ServerPlayer target) {
@@ -344,6 +376,14 @@ public final class DuelManager {
     }
 
     public static void handleLogout(ServerPlayer player) {
+        QUEUE.remove(player.getUUID());
+        // if they were spectating, stop and refund any side bet
+        Duel watched = SPECTATING.remove(player.getUUID());
+        if (watched != null) {
+            watched.spectators.remove(player.getUUID());
+            SideBet bet = watched.sideBets.remove(player.getUUID());
+            if (bet != null) giveEmeralds(player, bet.amount());
+        }
         // pending challenge TO this player: return the challenger's stake
         Pending incoming = PENDING.remove(player.getUUID());
         if (incoming != null) {
@@ -364,6 +404,7 @@ public final class DuelManager {
         Duel duel = ACTIVE.get(player.getUUID());
         if (duel != null) {
             ServerPlayer other = duel.other(player);
+            settleSideBets(duel, other);
             clear(duel);
             // leaving counts as a ranked loss for the quitter
             CollectionTracker.addDuelWin(other);
@@ -381,6 +422,218 @@ public final class DuelManager {
                         .withStyle(ChatFormatting.YELLOW));
             }
         }
+    }
+
+    // --- matchmaking / spectating / emotes / rematch ---
+
+    /** Join the auto-match queue, pairing instantly if someone else is waiting. */
+    public static int queue(ServerPlayer player) {
+        if (isInDuel(player)) {
+            player.sendSystemMessage(err("Finish your current duel first."));
+            return 0;
+        }
+        if (QUEUE.contains(player.getUUID())) {
+            player.sendSystemMessage(Component.literal("You're already queued. ")
+                    .withStyle(ChatFormatting.GRAY)
+                    .append(BattleCommands.button("[Leave]", "/mobtrumps queue leave",
+                            ChatFormatting.RED, "Leave the matchmaking queue")));
+            return 0;
+        }
+        MinecraftServer server = player.getServer();
+        for (UUID id : QUEUE) {
+            ServerPlayer other = server == null ? null : server.getPlayerList().getPlayer(id);
+            if (other != null && !other.getUUID().equals(player.getUUID()) && !isInDuel(other)) {
+                QUEUE.remove(id);
+                Component found = Component.literal("Match found — duel starting!")
+                        .withStyle(ChatFormatting.GREEN);
+                player.sendSystemMessage(found);
+                other.sendSystemMessage(found);
+                startDuel(other, player, ItemStack.EMPTY, ItemStack.EMPTY, 0, 0);
+                return 1;
+            }
+        }
+        QUEUE.add(player.getUUID());
+        player.sendSystemMessage(Component.literal("Searching for an opponent... ")
+                .withStyle(ChatFormatting.AQUA)
+                .append(BattleCommands.button("[Leave]", "/mobtrumps queue leave",
+                        ChatFormatting.RED, "Leave the matchmaking queue")));
+        return 1;
+    }
+
+    public static int leaveQueue(ServerPlayer player) {
+        if (QUEUE.remove(player.getUUID())) {
+            player.sendSystemMessage(Component.literal("Left the duel queue.").withStyle(ChatFormatting.GRAY));
+        } else {
+            player.sendSystemMessage(err("You're not in the queue."));
+        }
+        return 1;
+    }
+
+    /** Re-challenge your most recent opponent. */
+    public static int rematch(ServerPlayer player) {
+        if (isInDuel(player)) {
+            player.sendSystemMessage(err("You're already in a duel."));
+            return 0;
+        }
+        LastFoe foe = LAST_FOE.get(player.getUUID());
+        if (foe == null) {
+            player.sendSystemMessage(err("You have no recent opponent to rematch."));
+            return 0;
+        }
+        MinecraftServer server = player.getServer();
+        ServerPlayer other = server == null ? null : server.getPlayerList().getPlayer(foe.id());
+        if (other == null) {
+            player.sendSystemMessage(err(foe.name() + " is offline."));
+            return 0;
+        }
+        return challenge(player, other);
+    }
+
+    public static int watch(ServerPlayer viewer, ServerPlayer duelist) {
+        if (isInDuel(viewer)) {
+            viewer.sendSystemMessage(err("You can't spectate while in your own duel."));
+            return 0;
+        }
+        Duel duel = ACTIVE.get(duelist.getUUID());
+        if (duel == null) {
+            viewer.sendSystemMessage(err(name(duelist) + " isn't in a duel right now."));
+            return 0;
+        }
+        Duel previous = SPECTATING.get(viewer.getUUID());
+        if (previous != null && previous != duel) {
+            previous.spectators.remove(viewer.getUUID());
+        }
+        duel.spectators.add(viewer.getUUID());
+        SPECTATING.put(viewer.getUUID(), duel);
+        viewer.sendSystemMessage(Component.literal("Now spectating " + name(duel.challenger)
+                        + " vs " + name(duel.target) + ". ").withStyle(ChatFormatting.GREEN)
+                .append(BattleCommands.button("[Stop]", "/mobtrumps unwatch",
+                        ChatFormatting.RED, "Stop spectating")));
+        viewer.sendSystemMessage(Component.literal("Side bet 5 emeralds: ").withStyle(ChatFormatting.GRAY)
+                .append(BattleCommands.button("[on " + name(duel.challenger) + "]",
+                        "/mobtrumps sidebet " + name(duel.challenger) + " 5", ChatFormatting.GOLD,
+                        "Bet 5 emeralds on " + name(duel.challenger)))
+                .append(Component.literal(" "))
+                .append(BattleCommands.button("[on " + name(duel.target) + "]",
+                        "/mobtrumps sidebet " + name(duel.target) + " 5", ChatFormatting.GOLD,
+                        "Bet 5 emeralds on " + name(duel.target))));
+        return 1;
+    }
+
+    public static int unwatch(ServerPlayer viewer) {
+        Duel duel = SPECTATING.remove(viewer.getUUID());
+        if (duel == null) {
+            viewer.sendSystemMessage(err("You're not spectating anything."));
+            return 0;
+        }
+        duel.spectators.remove(viewer.getUUID());
+        SideBet bet = duel.sideBets.remove(viewer.getUUID());
+        if (bet != null) {
+            giveEmeralds(viewer, bet.amount());
+            viewer.sendSystemMessage(Component.literal("Stopped spectating — side bet refunded.")
+                    .withStyle(ChatFormatting.GRAY));
+        } else {
+            viewer.sendSystemMessage(Component.literal("Stopped spectating.").withStyle(ChatFormatting.GRAY));
+        }
+        return 1;
+    }
+
+    public static int sideBet(ServerPlayer viewer, ServerPlayer on, int amount) {
+        Duel duel = SPECTATING.get(viewer.getUUID());
+        if (duel == null) {
+            viewer.sendSystemMessage(err("Watch a duel first: /mobtrumps watch <player>."));
+            return 0;
+        }
+        boolean valid = on.getUUID().equals(duel.challenger.getUUID())
+                || on.getUUID().equals(duel.target.getUUID());
+        if (!valid) {
+            viewer.sendSystemMessage(err("You can only bet on one of the two duelists."));
+            return 0;
+        }
+        if (duel.sideBets.containsKey(viewer.getUUID())) {
+            viewer.sendSystemMessage(err("You already have a side bet on this duel."));
+            return 0;
+        }
+        if (amount <= 0) {
+            viewer.sendSystemMessage(err("Bet at least 1 emerald."));
+            return 0;
+        }
+        if (countEmeralds(viewer) < amount) {
+            viewer.sendSystemMessage(err("You need " + amount + " emeralds."));
+            return 0;
+        }
+        takeEmeralds(viewer, amount);
+        duel.sideBets.put(viewer.getUUID(), new SideBet(on.getUUID(), amount));
+        sendBoth(duel, Component.literal(name(viewer) + " bet ").withStyle(ChatFormatting.LIGHT_PURPLE)
+                .append(emeralds(amount))
+                .append(Component.literal(" on " + name(on) + "!").withStyle(ChatFormatting.LIGHT_PURPLE)));
+        return 1;
+    }
+
+    public static int emote(ServerPlayer player, String key) {
+        Duel duel = ACTIVE.get(player.getUUID());
+        if (duel == null) {
+            player.sendSystemMessage(err("Emotes are for during a duel."));
+            return 0;
+        }
+        String text = switch (key.toLowerCase(java.util.Locale.ROOT)) {
+            case "gg" -> "gg!";
+            case "nice" -> "Nice one!";
+            case "close" -> "So close!";
+            case "oops" -> "Oops...";
+            case "gl" -> "Good luck!";
+            case "wow" -> "Wow!";
+            default -> null;
+        };
+        if (text == null) {
+            player.sendSystemMessage(err("Unknown emote. Try: gg, nice, close, oops, gl, wow."));
+            return 0;
+        }
+        sendBoth(duel, Component.literal(name(player) + ": ").withStyle(ChatFormatting.YELLOW)
+                .append(Component.literal(text).withStyle(ChatFormatting.WHITE)));
+        return 1;
+    }
+
+    private static Component emoteBar() {
+        MutableComponent bar = Component.literal("Emotes: ").withStyle(ChatFormatting.DARK_GRAY);
+        for (String k : new String[]{"gg", "nice", "close", "oops", "gl", "wow"}) {
+            bar.append(BattleCommands.button("[" + k + "]", "/mobtrumps emote " + k,
+                    ChatFormatting.YELLOW, "Say \"" + k + "\""));
+            bar.append(Component.literal(" "));
+        }
+        return bar;
+    }
+
+    /** Auto-play any duel whose per-turn timer has expired (called every server tick). */
+    public static void tickTimers(MinecraftServer server) {
+        if (ACTIVE.isEmpty()) return;
+        long now = System.currentTimeMillis();
+        Set<Duel> seen = new HashSet<>();
+        for (Duel duel : ACTIVE.values()) {
+            if (!seen.add(duel) || duel.battle.isFinished()) continue;
+            long left = duel.turnDeadline - now;
+            if (left <= 0) {
+                autoPlay(duel);
+            } else if (!duel.warned && left <= 10_000L) {
+                duel.warned = true;
+                duel.forSide(duel.battle.getTurn()).sendSystemMessage(
+                        Component.literal("10 seconds to pick, or your turn is auto-played!")
+                                .withStyle(ChatFormatting.RED));
+            }
+        }
+    }
+
+    private static void autoPlay(Duel duel) {
+        Battle.Side turn = duel.battle.getTurn();
+        MobCard top = turn == Battle.Side.PLAYER ? duel.battle.playerTopCard() : duel.battle.cpuTopCard();
+        if (top == null) {
+            duel.turnDeadline = Long.MAX_VALUE;
+            return;
+        }
+        Stat stat = top.bestStat();
+        sendBoth(duel, Component.literal(name(duel.forSide(turn)) + " ran out of time — auto-playing "
+                + stat.label + ".").withStyle(ChatFormatting.RED));
+        resolveRound(duel, stat);
     }
 
     // --- round flow ---
@@ -466,9 +719,14 @@ public final class DuelManager {
         chooser.sendSystemMessage(picks);
         waiter.sendSystemMessage(Component.literal("Waiting for " + name(chooser) + " to pick...")
                 .withStyle(ChatFormatting.GRAY));
+        sendSpectators(duel, Component.literal(name(chooser) + " is choosing a stat...")
+                .withStyle(ChatFormatting.DARK_GRAY));
+        duel.turnDeadline = System.currentTimeMillis() + TURN_MS;
+        duel.warned = false;
     }
 
     private static void endDuel(Duel duel, ServerPlayer winner, ServerPlayer loser, boolean forfeit) {
+        settleSideBets(duel, winner);
         clear(duel);
         boolean wager = duel.isWager();
         if (winner == null) {
@@ -479,6 +737,7 @@ public final class DuelManager {
             returnStake(duel.target, duel.targetWager);
             returnBet(duel.challenger, duel.challengerBet);
             returnBet(duel.target, duel.targetBet);
+            sendRematchPrompt(duel);
             return;
         }
         if (forfeit) {
@@ -520,6 +779,15 @@ public final class DuelManager {
         }
         winner.serverLevel().playSound(null, winner.getX(), winner.getY(), winner.getZ(),
                 SoundEvents.UI_TOAST_CHALLENGE_COMPLETE, SoundSource.PLAYERS, 0.8F, 1.0F);
+        sendRematchPrompt(duel);
+    }
+
+    private static void sendRematchPrompt(Duel duel) {
+        Component prompt = Component.literal("Play again? ").withStyle(ChatFormatting.GRAY)
+                .append(BattleCommands.button("[Rematch]", "/mobtrumps rematch",
+                        ChatFormatting.GREEN, "Re-challenge your last opponent"));
+        duel.challenger.sendSystemMessage(prompt);
+        duel.target.sendSystemMessage(prompt);
     }
 
     /** Update ranked standings and tell both players their new rating. */
@@ -536,11 +804,64 @@ public final class DuelManager {
     private static void clear(Duel duel) {
         ACTIVE.remove(duel.challenger.getUUID());
         ACTIVE.remove(duel.target.getUUID());
+        duel.turnDeadline = Long.MAX_VALUE;
+        for (UUID id : duel.spectators) {
+            SPECTATING.remove(id);
+        }
+        duel.spectators.clear();
+    }
+
+    /** Pay out spectator side bets pari-mutuel: winners split the whole pool. */
+    private static void settleSideBets(Duel duel, ServerPlayer winner) {
+        if (duel.sideBets.isEmpty()) return;
+        MinecraftServer server = duel.challenger.getServer();
+        UUID winnerId = winner == null ? null : winner.getUUID();
+        int pool = 0;
+        int winningStake = 0;
+        for (SideBet bet : duel.sideBets.values()) {
+            pool += bet.amount();
+            if (winnerId != null && bet.on().equals(winnerId)) winningStake += bet.amount();
+        }
+        boolean noMarket = winnerId == null || winningStake == 0;
+        for (Map.Entry<UUID, SideBet> e : duel.sideBets.entrySet()) {
+            ServerPlayer better = server == null ? null : server.getPlayerList().getPlayer(e.getKey());
+            SideBet bet = e.getValue();
+            if (noMarket) {
+                if (better != null) {
+                    giveEmeralds(better, bet.amount());
+                    better.sendSystemMessage(Component.literal("Side bet refunded (no winning market).")
+                            .withStyle(ChatFormatting.GRAY));
+                }
+            } else if (bet.on().equals(winnerId)) {
+                int payout = (int) Math.round((double) bet.amount() / winningStake * pool);
+                if (better != null) {
+                    giveEmeralds(better, payout);
+                    better.sendSystemMessage(Component.literal("Your side bet won ")
+                            .withStyle(ChatFormatting.GOLD).append(emeralds(payout))
+                            .append(Component.literal("!").withStyle(ChatFormatting.GOLD)));
+                }
+            } else if (better != null) {
+                better.sendSystemMessage(Component.literal("Your side bet lost.")
+                        .withStyle(ChatFormatting.RED));
+            }
+        }
+        duel.sideBets.clear();
     }
 
     private static void sendBoth(Duel duel, Component message) {
         duel.challenger.sendSystemMessage(message);
         duel.target.sendSystemMessage(message);
+        sendSpectators(duel, message);
+    }
+
+    private static void sendSpectators(Duel duel, Component message) {
+        if (duel.spectators.isEmpty()) return;
+        MinecraftServer server = duel.challenger.getServer();
+        if (server == null) return;
+        for (UUID id : duel.spectators) {
+            ServerPlayer sp = server.getPlayerList().getPlayer(id);
+            if (sp != null) sp.sendSystemMessage(message);
+        }
     }
 
     private static void roundSound(ServerPlayer player, float pitch) {

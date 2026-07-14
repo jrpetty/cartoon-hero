@@ -95,6 +95,35 @@ public final class BattleCommands {
                                 .executes(ctx -> TradeManager.offer(
                                         ctx.getSource().getPlayerOrException(),
                                         EntityArgument.getPlayer(ctx, "player")))))
+                .then(Commands.literal("queue")
+                        .executes(ctx -> DuelManager.queue(ctx.getSource().getPlayerOrException()))
+                        .then(Commands.literal("leave")
+                                .executes(ctx -> DuelManager.leaveQueue(ctx.getSource().getPlayerOrException()))))
+                .then(Commands.literal("rematch")
+                        .executes(ctx -> DuelManager.rematch(ctx.getSource().getPlayerOrException())))
+                .then(Commands.literal("watch")
+                        .then(Commands.argument("player", EntityArgument.player())
+                                .executes(ctx -> DuelManager.watch(ctx.getSource().getPlayerOrException(),
+                                        EntityArgument.getPlayer(ctx, "player")))))
+                .then(Commands.literal("unwatch")
+                        .executes(ctx -> DuelManager.unwatch(ctx.getSource().getPlayerOrException())))
+                .then(Commands.literal("sidebet")
+                        .then(Commands.argument("player", EntityArgument.player())
+                                .then(Commands.argument("emeralds", IntegerArgumentType.integer(1, 4096))
+                                        .executes(ctx -> DuelManager.sideBet(
+                                                ctx.getSource().getPlayerOrException(),
+                                                EntityArgument.getPlayer(ctx, "player"),
+                                                IntegerArgumentType.getInteger(ctx, "emeralds"))))))
+                .then(Commands.literal("emote")
+                        .then(Commands.argument("emote", StringArgumentType.word())
+                                .suggests((ctx, b) -> {
+                                    for (String s : new String[]{"gg", "nice", "close", "oops", "gl", "wow"}) {
+                                        b.suggest(s);
+                                    }
+                                    return b.buildFuture();
+                                })
+                                .executes(ctx -> DuelManager.emote(ctx.getSource().getPlayerOrException(),
+                                        StringArgumentType.getString(ctx, "emote")))))
                 .then(Commands.literal("foil")
                         .executes(ctx -> combineFoil(ctx.getSource())))
                 .then(Commands.literal("store")
@@ -190,6 +219,12 @@ public final class BattleCommands {
                 .append(Component.literal(" (stake a card) or ").withStyle(ChatFormatting.DARK_GRAY))
                 .append(Component.literal("bet <emeralds>").withStyle(ChatFormatting.GREEN))
                 .append(Component.literal(" (winner takes the pot)").withStyle(ChatFormatting.DARK_GRAY)));
+        player.sendSystemMessage(Component.literal("  ")
+                .append(button("[Quick match]", "/mobtrumps queue", ChatFormatting.GREEN,
+                        "Auto-match against another waiting player"))
+                .append(Component.literal("  ·  Spectate: ").withStyle(ChatFormatting.DARK_GRAY))
+                .append(Component.literal("/mobtrumps watch <player>").withStyle(ChatFormatting.AQUA))
+                .append(Component.literal(" (with side bets)").withStyle(ChatFormatting.DARK_GRAY)));
         player.sendSystemMessage(Component.literal("  Collect cards by hunting: ")
                 .withStyle(ChatFormatting.GRAY)
                 .append(Component.literal("every mob you kill drops its card. Kill enough of one "
