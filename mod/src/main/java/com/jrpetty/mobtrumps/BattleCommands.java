@@ -152,6 +152,29 @@ public final class BattleCommands {
                         .executes(ctx -> BinderStorage.depositAll(ctx.getSource().getPlayerOrException())))
                 .then(Commands.literal("withdraw")
                         .executes(ctx -> BinderStorage.withdrawAll(ctx.getSource().getPlayerOrException())))
+                .then(Commands.literal("deck")
+                        .then(Commands.literal("save")
+                                .then(Commands.argument("name", StringArgumentType.word())
+                                        .executes(ctx -> deckSave(ctx.getSource().getPlayerOrException(),
+                                                StringArgumentType.getString(ctx, "name")))))
+                        .then(Commands.literal("load")
+                                .then(Commands.argument("name", StringArgumentType.word())
+                                        .suggests((ctx, b) -> {
+                                            try {
+                                                DeckManager.slots(ctx.getSource().getPlayerOrException())
+                                                        .keySet().forEach(b::suggest);
+                                            } catch (CommandSyntaxException ignored) {
+                                            }
+                                            return b.buildFuture();
+                                        })
+                                        .executes(ctx -> deckLoad(ctx.getSource().getPlayerOrException(),
+                                                StringArgumentType.getString(ctx, "name")))))
+                        .then(Commands.literal("delete")
+                                .then(Commands.argument("name", StringArgumentType.word())
+                                        .executes(ctx -> deckDelete(ctx.getSource().getPlayerOrException(),
+                                                StringArgumentType.getString(ctx, "name")))))
+                        .then(Commands.literal("list")
+                                .executes(ctx -> deckList(ctx.getSource().getPlayerOrException()))))
                 .then(Commands.literal("export")
                         .executes(ctx -> exportDeck(ctx.getSource().getPlayerOrException())))
                 .then(Commands.literal("import")
@@ -160,6 +183,10 @@ public final class BattleCommands {
                                         StringArgumentType.getString(ctx, "code")))))
                 .then(Commands.literal("guide")
                         .executes(ctx -> GuideBook.give(ctx.getSource().getPlayerOrException())))
+                .then(Commands.literal("stats")
+                        .executes(ctx -> StatsTracker.dashboard(ctx.getSource().getPlayerOrException())))
+                .then(Commands.literal("profile")
+                        .executes(ctx -> StatsTracker.profile(ctx.getSource().getPlayerOrException())))
                 .then(Commands.literal("top")
                         .executes(ctx -> leaderboard(ctx.getSource()))));
     }
@@ -227,6 +254,63 @@ public final class BattleCommands {
                         + " cards into a holographic foil! ✦").withStyle(ChatFormatting.WHITE, ChatFormatting.BOLD));
         player.serverLevel().playSound(null, player.getX(), player.getY(), player.getZ(),
                 SoundEvents.UI_TOAST_CHALLENGE_COMPLETE, SoundSource.PLAYERS, 0.8F, 1.3F);
+        return 1;
+    }
+
+    private static int deckSave(ServerPlayer player, String name) {
+        if (DeckManager.saveSlot(player, name)) {
+            player.sendSystemMessage(Component.literal("Saved your active deck as \"" + name + "\".")
+                    .withStyle(ChatFormatting.GREEN));
+            return 1;
+        }
+        player.sendSystemMessage(Component.literal("Couldn't save: your active deck is empty, the name is "
+                        + "invalid, or you already have " + DeckManager.MAX_SLOTS + " saved decks.")
+                .withStyle(ChatFormatting.RED));
+        return 0;
+    }
+
+    private static int deckLoad(ServerPlayer player, String name) {
+        if (DeckManager.loadSlot(player, name)) {
+            int size = DeckManager.deckCards(player).size();
+            player.sendSystemMessage(Component.literal("Loaded deck \"" + name + "\" ("
+                            + size + " cards you own).").withStyle(ChatFormatting.GREEN));
+            return 1;
+        }
+        player.sendSystemMessage(Component.literal("No saved deck called \"" + name + "\".")
+                .withStyle(ChatFormatting.RED));
+        return 0;
+    }
+
+    private static int deckDelete(ServerPlayer player, String name) {
+        if (DeckManager.deleteSlot(player, name)) {
+            player.sendSystemMessage(Component.literal("Deleted deck \"" + name + "\".")
+                    .withStyle(ChatFormatting.YELLOW));
+            return 1;
+        }
+        player.sendSystemMessage(Component.literal("No saved deck called \"" + name + "\".")
+                .withStyle(ChatFormatting.RED));
+        return 0;
+    }
+
+    private static int deckList(ServerPlayer player) {
+        var slots = DeckManager.slots(player);
+        if (slots.isEmpty()) {
+            player.sendSystemMessage(Component.literal(
+                            "No saved decks. Build one in the Collection Book, then /mobtrumps deck save <name>.")
+                    .withStyle(ChatFormatting.GRAY));
+            return 1;
+        }
+        player.sendSystemMessage(Component.literal("Saved decks (" + slots.size() + "/"
+                + DeckManager.MAX_SLOTS + "):").withStyle(ChatFormatting.GOLD));
+        for (var e : slots.entrySet()) {
+            player.sendSystemMessage(Component.literal("  " + e.getKey() + " — " + e.getValue().size()
+                            + " cards ").withStyle(ChatFormatting.GRAY)
+                    .append(button("[Load]", "/mobtrumps deck load " + e.getKey(),
+                            ChatFormatting.GREEN, "Make this your active deck"))
+                    .append(Component.literal(" "))
+                    .append(button("[X]", "/mobtrumps deck delete " + e.getKey(),
+                            ChatFormatting.RED, "Delete this deck")));
+        }
         return 1;
     }
 
@@ -306,6 +390,14 @@ public final class BattleCommands {
                 .withStyle(ChatFormatting.GRAY)
                 .append(Component.literal("Collection Book → Deck, then /mobtrumps battle deck")
                         .withStyle(ChatFormatting.DARK_GRAY)));
+        player.sendSystemMessage(Component.literal("  ")
+                .append(button("[My stats]", "/mobtrumps stats", ChatFormatting.AQUA,
+                        "Your win rate, favourite stat and nemesis"))
+                .append(Component.literal("  "))
+                .append(button("[My profile card]", "/mobtrumps profile", ChatFormatting.LIGHT_PURPLE,
+                        "You, as a Top Trumps card"))
+                .append(Component.literal("  ·  Deck slots: ").withStyle(ChatFormatting.DARK_GRAY))
+                .append(Component.literal("/mobtrumps deck save|load|list").withStyle(ChatFormatting.AQUA)));
         player.sendSystemMessage(Component.literal("  CPU difficulty: ")
                 .withStyle(ChatFormatting.GRAY)
                 .append(Component.literal("/mobtrumps battle easy|normal|hard").withStyle(ChatFormatting.AQUA))
@@ -394,6 +486,7 @@ public final class BattleCommands {
                     .withStyle(ChatFormatting.RED));
             return 0;
         }
+        StatsTracker.recordPick(player, stat);
         resolveRound(player, battle, stat);
         return 1;
     }
@@ -514,6 +607,7 @@ public final class BattleCommands {
             case PLAYER -> {
                 player.sendSystemMessage(Component.literal("VICTORY! You hold every card!")
                         .withStyle(ChatFormatting.GOLD, ChatFormatting.BOLD));
+                StatsTracker.bump(player, "battle_wins");
                 ItemStack reward = new ItemStack(net.minecraft.world.item.Items.EMERALD, 3);
                 if (!player.getInventory().add(reward)) {
                     player.drop(reward, false);

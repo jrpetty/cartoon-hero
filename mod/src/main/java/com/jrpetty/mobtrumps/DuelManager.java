@@ -361,6 +361,7 @@ public final class DuelManager {
             player.sendSystemMessage(err("Unknown stat '" + statKey + "'."));
             return 0;
         }
+        StatsTracker.recordPick(player, stat);
         resolveRound(duel, stat);
         return 1;
     }
@@ -749,6 +750,7 @@ public final class DuelManager {
         }
         CollectionTracker.addDuelWin(winner);
         applyRanked(winner, loser);
+        StatsTracker.recordLossTo(loser, name(winner));
 
         if (wager) {
             // winner takes both wagered cards

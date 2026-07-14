@@ -77,6 +77,22 @@ public final class ModAttachments {
                     .copyOnDeath()
                     .build());
 
+    /** Named saved decks (deck name -> mob ids), beyond the active DECK. */
+    public static final Supplier<AttachmentType<Map<String, List<String>>>> SAVED_DECKS =
+            ATTACHMENTS.register("saved_decks",
+                    () -> AttachmentType.<Map<String, List<String>>>builder(() -> Map.of())
+                    .serialize(Codec.unboundedMap(Codec.STRING, Codec.STRING.listOf()))
+                    .copyOnDeath()
+                    .build());
+
+    /** Free-form play counters ("pick_attack", "loss_Steve", "battles", ...) for the stats page. */
+    public static final Supplier<AttachmentType<Map<String, Integer>>> PLAY_STATS =
+            ATTACHMENTS.register("play_stats",
+                    () -> AttachmentType.<Map<String, Integer>>builder(() -> Map.of())
+                    .serialize(Codec.unboundedMap(Codec.STRING, Codec.INT))
+                    .copyOnDeath()
+                    .build());
+
     private ModAttachments() {
     }
 }
