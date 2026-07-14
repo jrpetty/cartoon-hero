@@ -158,6 +158,8 @@ public final class BattleCommands {
                         .then(Commands.argument("code", StringArgumentType.greedyString())
                                 .executes(ctx -> importDeck(ctx.getSource().getPlayerOrException(),
                                         StringArgumentType.getString(ctx, "code")))))
+                .then(Commands.literal("guide")
+                        .executes(ctx -> GuideBook.give(ctx.getSource().getPlayerOrException())))
                 .then(Commands.literal("top")
                         .executes(ctx -> leaderboard(ctx.getSource()))));
     }
@@ -320,7 +322,10 @@ public final class BattleCommands {
                 .append(Component.literal(" empties the book back out").withStyle(ChatFormatting.DARK_GRAY)));
         player.sendSystemMessage(Component.literal("  ")
                 .append(button("[Ranked leaderboard]", "/mobtrumps top", ChatFormatting.GOLD,
-                        "See the server's top duelists")));
+                        "See the server's top duelists"))
+                .append(Component.literal("  "))
+                .append(button("[How to play]", "/mobtrumps guide", ChatFormatting.AQUA,
+                        "Get the Mob Trumps guide book")));
         player.sendSystemMessage(Component.literal("  Craft a Collection Book (book + emerald) to "
                         + "track and store your cards.")
                 .withStyle(ChatFormatting.DARK_GRAY));

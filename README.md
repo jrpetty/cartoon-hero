@@ -80,6 +80,8 @@ In game:
   offline players included); `/mobtrumps top` shows the standings and your rank
 - `/mobtrumps play <stat>`, `/mobtrumps next`, `/mobtrumps forfeit`
 - `/mobtrumps` on its own opens a clickable hub menu
+- `/mobtrumps guide` — get a written **How to Play** book covering collecting,
+  holographics, battling, duels, spectating and decks
 - Juice: unlocking a holo bursts particles in-world; cards ease in with a
   rarity halo and a shine sweep; battle rounds play win/lose sound cues
 - Creative tab "Mob Trumps" contains every card (normal and holographic)
