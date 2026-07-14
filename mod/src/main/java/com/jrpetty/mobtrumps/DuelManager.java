@@ -49,7 +49,7 @@ public final class DuelManager {
     private DuelManager() {
     }
 
-    private record Pending(UUID challenger, long expiresAt, ItemStack wager, int bet) {
+    private record Pending(UUID challenger, long expiresAt, ItemStack wager, int bet, int bestOf) {
     }
 
     private record LastFoe(UUID id, String name) {
@@ -61,20 +61,33 @@ public final class DuelManager {
     private static final class Duel {
         final ServerPlayer challenger; // PLAYER side
         final ServerPlayer target;     // CPU side
-        final Battle battle;
+        Battle battle;
         ItemStack challengerWager = ItemStack.EMPTY;
         ItemStack targetWager = ItemStack.EMPTY;
         int challengerBet = 0;
         int targetBet = 0;
+        final int bestOf;            // 1, 3 or 5 games per match
+        int challengerGames = 0;     // games won so far in a best-of series
+        int targetGames = 0;
         final Set<UUID> spectators = ConcurrentHashMap.newKeySet();
         final Map<UUID, SideBet> sideBets = new ConcurrentHashMap<>();
         long turnDeadline = Long.MAX_VALUE;
         boolean warned = false;
 
-        Duel(ServerPlayer challenger, ServerPlayer target, Battle battle) {
+        Duel(ServerPlayer challenger, ServerPlayer target, Battle battle, int bestOf) {
             this.challenger = challenger;
             this.target = target;
             this.battle = battle;
+            this.bestOf = bestOf;
+        }
+
+        /** Games needed to win the match (2 for bo3, 3 for bo5, 1 for a single). */
+        int gamesToWin() {
+            return bestOf / 2 + 1;
+        }
+
+        boolean isSeries() {
+            return bestOf > 1;
         }
 
         boolean isWager() {
@@ -97,10 +110,16 @@ public final class DuelManager {
     // --- challenge lifecycle ---
 
     public static int challenge(ServerPlayer challenger, ServerPlayer target) {
-        return challenge(challenger, target, false);
+        return challenge(challenger, target, false, 1);
     }
 
     public static int challenge(ServerPlayer challenger, ServerPlayer target, boolean wager) {
+        return challenge(challenger, target, wager, 1);
+    }
+
+    /** Challenge with an explicit best-of series length (1, 3 or 5). */
+    public static int challenge(ServerPlayer challenger, ServerPlayer target, boolean wager, int bestOf) {
+        bestOf = normalizeBestOf(bestOf);
         if (challenger.getUUID().equals(target.getUUID())) {
             challenger.sendSystemMessage(err("You can't duel yourself."));
             return 0;
@@ -122,16 +141,18 @@ public final class DuelManager {
         }
 
         PENDING.put(target.getUUID(),
-                new Pending(challenger.getUUID(), System.currentTimeMillis() + CHALLENGE_TTL_MS, stake, 0));
+                new Pending(challenger.getUUID(), System.currentTimeMillis() + CHALLENGE_TTL_MS, stake, 0, bestOf));
 
-        Component wagerNote = stake.isEmpty() ? Component.empty()
+        String series = bestOf > 1 ? " (best of " + bestOf + ")" : "";
+        Component wagerNote = stake.isEmpty() ? Component.literal(series).withStyle(ChatFormatting.AQUA)
                 : Component.literal(" wagering ").withStyle(ChatFormatting.GRAY)
-                        .append(stake.getHoverName());
+                        .append(stake.getHoverName()).append(Component.literal(series)
+                                .withStyle(ChatFormatting.AQUA));
         challenger.sendSystemMessage(Component.literal("Challenge sent to " + name(target) + ".")
                 .withStyle(ChatFormatting.GREEN).append(wagerNote));
         target.sendSystemMessage(Component.literal(name(challenger)
-                        + (stake.isEmpty() ? " challenges you to a Mob Trumps duel! "
-                                           : " challenges you to a WAGER duel! "))
+                        + (stake.isEmpty() ? " challenges you to a Mob Trumps duel" + series + "! "
+                                           : " challenges you to a WAGER duel" + series + "! "))
                 .withStyle(ChatFormatting.GOLD)
                 .append(stake.isEmpty() ? Component.empty()
                         : Component.literal("They stake ").withStyle(ChatFormatting.GRAY)
@@ -169,7 +190,7 @@ public final class DuelManager {
 
         PENDING.put(target.getUUID(),
                 new Pending(challenger.getUUID(), System.currentTimeMillis() + CHALLENGE_TTL_MS,
-                        ItemStack.EMPTY, bet));
+                        ItemStack.EMPTY, bet, 1));
 
         challenger.sendSystemMessage(Component.literal("Challenge sent to " + name(target) + " — staking ")
                 .withStyle(ChatFormatting.GREEN)
@@ -237,17 +258,22 @@ public final class DuelManager {
             targetBet = pending.bet();
         }
 
-        startDuel(challenger, target, pending.wager(), targetStake, pending.bet(), targetBet);
+        startDuel(challenger, target, pending.wager(), targetStake, pending.bet(), targetBet,
+                pending.bestOf());
         return 1;
+    }
+
+    private static int normalizeBestOf(int bestOf) {
+        return (bestOf == 3 || bestOf == 5) ? bestOf : 1;
     }
 
     /** Create and kick off a duel between two players once any stakes are escrowed. */
     private static void startDuel(ServerPlayer challenger, ServerPlayer target,
-                                  ItemStack chWager, ItemStack tgWager, int chBet, int tgBet) {
+                                  ItemStack chWager, ItemStack tgWager, int chBet, int tgBet, int bestOf) {
         QUEUE.remove(challenger.getUUID());
         QUEUE.remove(target.getUUID());
         Battle battle = new Battle(DECK_SIZE, ThreadLocalRandom.current());
-        Duel duel = new Duel(challenger, target, battle);
+        Duel duel = new Duel(challenger, target, battle, normalizeBestOf(bestOf));
         duel.challengerWager = chWager;
         duel.targetWager = tgWager;
         duel.challengerBet = chBet;
@@ -257,10 +283,15 @@ public final class DuelManager {
         LAST_FOE.put(challenger.getUUID(), new LastFoe(target.getUUID(), name(target)));
         LAST_FOE.put(target.getUUID(), new LastFoe(challenger.getUUID(), name(challenger)));
 
+        String series = duel.isSeries() ? " (best of " + duel.bestOf + ")" : "";
         MutableComponent intro = Component.literal("=== DUEL: " + name(challenger)
-                + " vs " + name(target) + " ===").withStyle(ChatFormatting.GOLD, ChatFormatting.BOLD);
+                + " vs " + name(target) + series + " ===").withStyle(ChatFormatting.GOLD, ChatFormatting.BOLD);
         challenger.sendSystemMessage(intro);
         target.sendSystemMessage(intro);
+        if (duel.isSeries()) {
+            sendBoth(duel, Component.literal("First to " + duel.gamesToWin() + " games wins the match.")
+                    .withStyle(ChatFormatting.AQUA));
+        }
         sendBoth(duel, emoteBar());
         BattleCommands.shuffleSound(challenger);
         BattleCommands.shuffleSound(target);
@@ -275,7 +306,7 @@ public final class DuelManager {
         QUEUE.remove(a.getUUID());
         QUEUE.remove(b.getUUID());
         Battle battle = new Battle(handA, handB, ThreadLocalRandom.current());
-        Duel duel = new Duel(a, b, battle);
+        Duel duel = new Duel(a, b, battle, 1);
         ACTIVE.put(a.getUUID(), duel);
         ACTIVE.put(b.getUUID(), duel);
         LAST_FOE.put(a.getUUID(), new LastFoe(b.getUUID(), name(b)));
@@ -472,7 +503,7 @@ public final class DuelManager {
                         .withStyle(ChatFormatting.GREEN);
                 player.sendSystemMessage(found);
                 other.sendSystemMessage(found);
-                startDuel(other, player, ItemStack.EMPTY, ItemStack.EMPTY, 0, 0);
+                startDuel(other, player, ItemStack.EMPTY, ItemStack.EMPTY, 0, 0, 1);
                 return 1;
             }
         }
@@ -703,16 +734,62 @@ public final class DuelManager {
         }
 
         if (duel.battle.isFinished()) {
-            Battle.Side winSide = duel.battle.getWinner();
+            finishGame(duel);
+        } else {
+            promptTurn(duel);
+        }
+    }
+
+    /** One game (a full Battle) has ended. For a series, tally it and deal the next
+     *  game until someone reaches the games needed; otherwise end the match. */
+    private static void finishGame(Duel duel) {
+        Battle.Side winSide = duel.battle.getWinner();
+
+        if (!duel.isSeries()) {
             if (winSide == Battle.Side.NONE) {
                 endDuel(duel, null, null, false);
             } else {
                 endDuel(duel, duel.forSide(winSide), duel.forSide(winSide == Battle.Side.PLAYER
                         ? Battle.Side.CPU : Battle.Side.PLAYER), false);
             }
-        } else {
-            promptTurn(duel);
+            return;
         }
+
+        // --- best-of series ---
+        if (winSide == Battle.Side.NONE) {
+            sendBoth(duel, Component.literal("Game drawn — it doesn't count. Re-dealing...")
+                    .withStyle(ChatFormatting.YELLOW));
+            dealNextGame(duel);
+            return;
+        }
+        ServerPlayer gameWinner = duel.forSide(winSide);
+        if (winSide == Battle.Side.PLAYER) duel.challengerGames++; else duel.targetGames++;
+
+        sendBoth(duel, Component.literal(name(gameWinner) + " wins the game! Series: ")
+                .withStyle(ChatFormatting.GOLD, ChatFormatting.BOLD)
+                .append(Component.literal(name(duel.challenger) + " " + duel.challengerGames
+                        + " - " + duel.targetGames + " " + name(duel.target))
+                        .withStyle(ChatFormatting.AQUA)));
+
+        int need = duel.gamesToWin();
+        if (duel.challengerGames >= need) {
+            endDuel(duel, duel.challenger, duel.target, false);
+        } else if (duel.targetGames >= need) {
+            endDuel(duel, duel.target, duel.challenger, false);
+        } else {
+            dealNextGame(duel);
+        }
+    }
+
+    /** Deal a fresh game within an ongoing best-of series. */
+    private static void dealNextGame(Duel duel) {
+        int gameNo = duel.challengerGames + duel.targetGames + 1;
+        duel.battle = new Battle(DECK_SIZE, ThreadLocalRandom.current());
+        sendBoth(duel, Component.literal("--- Game " + gameNo + " of up to " + duel.bestOf + " ---")
+                .withStyle(ChatFormatting.GOLD));
+        BattleCommands.shuffleSound(duel.challenger);
+        BattleCommands.shuffleSound(duel.target);
+        promptTurn(duel);
     }
 
     private static void promptTurn(Duel duel) {

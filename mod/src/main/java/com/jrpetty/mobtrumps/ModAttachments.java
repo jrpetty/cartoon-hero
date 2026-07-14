@@ -49,13 +49,6 @@ public final class ModAttachments {
                     .copyOnDeath()
                     .build());
 
-    /** Epoch millis when this player last claimed their free daily pack. */
-    public static final Supplier<AttachmentType<Long>> LAST_DAILY =
-            ATTACHMENTS.register("last_daily", () -> AttachmentType.<Long>builder(() -> 0L)
-                    .serialize(Codec.LONG)
-                    .copyOnDeath()
-                    .build());
-
     /** Mob ids whose (normal) card is physically stored inside the collection book. */
     public static final Supplier<AttachmentType<List<String>>> STORED =
             ATTACHMENTS.register("stored", () -> AttachmentType.<List<String>>builder(() -> List.of())

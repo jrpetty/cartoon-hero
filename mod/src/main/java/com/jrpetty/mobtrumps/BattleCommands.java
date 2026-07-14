@@ -107,7 +107,15 @@ public final class BattleCommands {
                                                 .executes(ctx -> DuelManager.challengeBet(
                                                         ctx.getSource().getPlayerOrException(),
                                                         EntityArgument.getPlayer(ctx, "player"),
-                                                        IntegerArgumentType.getInteger(ctx, "emeralds")))))))
+                                                        IntegerArgumentType.getInteger(ctx, "emeralds")))))
+                                .then(Commands.literal("bo3")
+                                        .executes(ctx -> DuelManager.challenge(
+                                                ctx.getSource().getPlayerOrException(),
+                                                EntityArgument.getPlayer(ctx, "player"), false, 3)))
+                                .then(Commands.literal("bo5")
+                                        .executes(ctx -> DuelManager.challenge(
+                                                ctx.getSource().getPlayerOrException(),
+                                                EntityArgument.getPlayer(ctx, "player"), false, 5)))))
                 .then(Commands.literal("trade")
                         .then(Commands.literal("accept")
                                 .executes(ctx -> TradeManager.accept(ctx.getSource().getPlayerOrException())))
@@ -402,7 +410,11 @@ public final class BattleCommands {
                 .append(Component.literal("wager").withStyle(ChatFormatting.AQUA))
                 .append(Component.literal(" (stake a card) or ").withStyle(ChatFormatting.DARK_GRAY))
                 .append(Component.literal("bet <emeralds>").withStyle(ChatFormatting.GREEN))
-                .append(Component.literal(" (winner takes the pot)").withStyle(ChatFormatting.DARK_GRAY)));
+                .append(Component.literal(" (winner takes the pot), or ").withStyle(ChatFormatting.DARK_GRAY))
+                .append(Component.literal("bo3").withStyle(ChatFormatting.AQUA))
+                .append(Component.literal("/").withStyle(ChatFormatting.DARK_GRAY))
+                .append(Component.literal("bo5").withStyle(ChatFormatting.AQUA))
+                .append(Component.literal(" (best-of series)").withStyle(ChatFormatting.DARK_GRAY)));
         player.sendSystemMessage(Component.literal("  ")
                 .append(button("[Quick match]", "/mobtrumps queue", ChatFormatting.GREEN,
                         "Auto-match against another waiting player"))
