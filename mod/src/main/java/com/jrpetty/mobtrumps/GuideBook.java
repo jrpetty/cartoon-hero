@@ -40,14 +40,15 @@ public final class GuideBook {
             """
             §l§6Holographics§r
 
-            A holo card gets a fixed boost, the same for everyone:
+            A holo boosts what that mob is §oknown for§r — every card gets:
 
-            §a+1 Health§r
-            §c+2 Attack§r
-            §b+1 Speed§r
-            (each capped at 10)
+            §c+2§r on its speciality stat
+            §a+1§r on its next three defining stats
+            (+5 total, capped at 10 each)
 
-            Press 4 duplicate cards into a foil with §e/mobtrumps foil§r.""",
+            A Creeper's holo hits harder; a Chicken's farms better. Everyone's holo of a card is identical.
+
+            Press 4 duplicates into a foil with §e/mobtrumps foil§r.""",
 
             """
             §l§6Battling the CPU§r

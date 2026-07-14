@@ -31,9 +31,13 @@ In game:
 - **Holographic cards, earned by hunting** — kill enough of one mob to unlock
   its **holographic** version, tracked with an action-bar progress counter.
   Thresholds scale with how common the mob is: **100** kills for a common mob,
-  **75** uncommon, **25** rare, **10** epic, **5** legendary. A holo card carries
-  a fixed, fair combat boost — **+1 Health, +2 Attack, +1 Speed** (capped at 10) —
-  identical for everyone who earns it, so no one gets a card no one else can
+  **75** uncommon, **25** rare, **10** epic, **5** legendary. A holo's boost is
+  shaped by what that mob is known for: **+2 on its speciality stat** (Attack for
+  a Creeper, Speed for a swift mob, Farmable for livestock) and **+1 on its next
+  three defining stats** — +5 total, never more, stats capped at 10, rarity never
+  touched. The boost is derived purely from the card itself, so everyone who
+  earns a holo gets exactly the same upgraded card and no one gets a card no
+  one else can
 - Card tooltips show all six stats; names are coloured by collector tier
 - Right-click a card to open a full Top Trumps style card view — kraft
   border, the live 3D mob as the portrait, stat table and total rating,

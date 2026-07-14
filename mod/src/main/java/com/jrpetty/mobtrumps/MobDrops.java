@@ -52,7 +52,7 @@ public final class MobDrops {
             CollectionTracker.record(killer, id, true);
             killer.sendSystemMessage(Component.literal("✦ HOLOGRAPHIC UNLOCKED: " + card.displayName()
                             + "! ✦").withStyle(ChatFormatting.LIGHT_PURPLE, ChatFormatting.BOLD));
-            killer.sendSystemMessage(Component.literal("Its holo card is boosted: +1 Health, +2 Attack, +1 Speed.")
+            killer.sendSystemMessage(Component.literal("Its holo card is boosted: " + boostSummary(card) + ".")
                     .withStyle(ChatFormatting.GRAY));
             killer.serverLevel().playSound(null, killer.getX(), killer.getY(), killer.getZ(),
                     SoundEvents.UI_TOAST_CHALLENGE_COMPLETE, SoundSource.PLAYERS, 0.8F, 1.2F);
@@ -67,6 +67,23 @@ public final class MobDrops {
     }
 
     /** Increment and persist this player's kill count for a mob; returns the new total. */
+    /** "+2 Attack, +1 Health, +1 Speed, +1 Size" — the real diff for this card's holo. */
+    private static String boostSummary(com.jrpetty.mobtrumps.game.MobCard card) {
+        var foil = card.foilVersion();
+        StringBuilder out = new StringBuilder();
+        // biggest gains first so the speciality leads the sentence
+        var stats = new java.util.ArrayList<>(java.util.List.of(com.jrpetty.mobtrumps.game.Stat.values()));
+        stats.sort((a, b) -> Integer.compare(
+                foil.stat(b) - card.stat(b), foil.stat(a) - card.stat(a)));
+        for (var stat : stats) {
+            int gain = foil.stat(stat) - card.stat(stat);
+            if (gain <= 0) continue;
+            if (out.length() > 0) out.append(", ");
+            out.append("+").append(gain).append(" ").append(stat.label);
+        }
+        return out.length() == 0 ? "already maxed out" : out.toString();
+    }
+
     private static int bumpKills(ServerPlayer player, String id) {
         Map<String, Integer> counts = new HashMap<>(player.getData(ModAttachments.KILLS.get()));
         int next = counts.getOrDefault(id, 0) + 1;
