@@ -36,7 +36,8 @@ In game:
   identical for everyone who earns it, so no one gets a card no one else can
 - Card tooltips show all six stats; names are coloured by collector tier
 - Right-click a card to open a full Top Trumps style card view — kraft
-  border, the live 3D mob as the portrait, stat table and total rating
+  border, the live 3D mob as the portrait, stat table and total rating,
+  plus a flavour line and a real Minecraft **fun fact** for every mob
 - **Mob Collection Book** (craft: book + emerald) — an open two-page
   binder with a 3x3 grid of full Top Trumps cards on each page (live 3D
   portraits); unfound mobs lie face down. Search by name, filter (all /

@@ -1,7 +1,9 @@
 package com.jrpetty.mobtrumps.client;
 
+import com.jrpetty.mobtrumps.game.CardLore;
 import com.jrpetty.mobtrumps.game.MobCard;
 import com.jrpetty.mobtrumps.game.Tier;
+import net.minecraft.ChatFormatting;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
@@ -111,9 +113,23 @@ public class MobCardScreen extends Screen {
         }
         pose.popPose();
 
+        // lore: a flavour line and a real Minecraft fact, wrapped under the card
+        CardLore.Lore lore = CardLore.of(card.id());
+        int loreW = w + 60;
+        int ly = y + h + 12;
+        for (var line : font.split(Component.literal(lore.flavor())
+                .withStyle(ChatFormatting.ITALIC), loreW)) {
+            g.drawCenteredString(font, line, cx, ly, 0xFFE8C56A);
+            ly += 10;
+        }
+        ly += 3;
+        for (var line : font.split(Component.literal("Did you know? " + lore.fact()), loreW)) {
+            g.drawCenteredString(font, line, cx, ly, 0xFF9AA0A6);
+            ly += 10;
+        }
+
         String hint = parent != null ? "Press ESC to return to the book" : "Press ESC to close";
-        g.drawString(font, hint, (width - font.width(hint)) / 2,
-                y + h + 12, 0xFFAAAAAA, true);
+        g.drawString(font, hint, (width - font.width(hint)) / 2, ly + 4, 0xFF787878, true);
     }
 
     private int tierGlow(Tier tier, boolean isFoil) {
