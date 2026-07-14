@@ -97,8 +97,6 @@ public final class BattleCommands {
                                         EntityArgument.getPlayer(ctx, "player")))))
                 .then(Commands.literal("foil")
                         .executes(ctx -> combineFoil(ctx.getSource())))
-                .then(Commands.literal("daily")
-                        .executes(ctx -> DailyReward.claim(ctx.getSource().getPlayerOrException())))
                 .then(Commands.literal("store")
                         .executes(ctx -> BinderStorage.depositAll(ctx.getSource().getPlayerOrException())))
                 .then(Commands.literal("withdraw")
@@ -192,9 +190,11 @@ public final class BattleCommands {
                 .append(Component.literal(" (stake a card) or ").withStyle(ChatFormatting.DARK_GRAY))
                 .append(Component.literal("bet <emeralds>").withStyle(ChatFormatting.GREEN))
                 .append(Component.literal(" (winner takes the pot)").withStyle(ChatFormatting.DARK_GRAY)));
-        player.sendSystemMessage(Component.literal("  ")
-                .append(button("[Claim daily pack]", "/mobtrumps daily", ChatFormatting.GOLD,
-                        "Claim your free daily Mob Card Pack")));
+        player.sendSystemMessage(Component.literal("  Collect cards by hunting: ")
+                .withStyle(ChatFormatting.GRAY)
+                .append(Component.literal("every mob you kill drops its card. Kill enough of one "
+                                + "mob to unlock its boosted holographic!")
+                        .withStyle(ChatFormatting.DARK_GRAY)));
         player.sendSystemMessage(Component.literal("  Trade / combine: ")
                 .withStyle(ChatFormatting.GRAY)
                 .append(Component.literal("/mobtrumps trade <player>").withStyle(ChatFormatting.AQUA))
@@ -214,11 +214,9 @@ public final class BattleCommands {
                 .append(Component.literal(" empties the book back out").withStyle(ChatFormatting.DARK_GRAY)));
         player.sendSystemMessage(Component.literal("  ")
                 .append(button("[Ranked leaderboard]", "/mobtrumps top", ChatFormatting.GOLD,
-                        "See the server's top duelists"))
-                .append(Component.literal("  ·  Craft Nether & Boss packs for guaranteed rarity")
-                        .withStyle(ChatFormatting.DARK_GRAY)));
-        player.sendSystemMessage(Component.literal("  Craft a Card Pack (3 paper + emerald) and a "
-                        + "Collection Book (book + emerald), then right-click them.")
+                        "See the server's top duelists")));
+        player.sendSystemMessage(Component.literal("  Craft a Collection Book (book + emerald) to "
+                        + "track and store your cards.")
                 .withStyle(ChatFormatting.DARK_GRAY));
         return 1;
     }
@@ -401,11 +399,11 @@ public final class BattleCommands {
             case PLAYER -> {
                 player.sendSystemMessage(Component.literal("VICTORY! You hold every card!")
                         .withStyle(ChatFormatting.GOLD, ChatFormatting.BOLD));
-                ItemStack reward = new ItemStack(ModItems.CARD_PACK.get());
+                ItemStack reward = new ItemStack(net.minecraft.world.item.Items.EMERALD, 3);
                 if (!player.getInventory().add(reward)) {
                     player.drop(reward, false);
                 }
-                player.sendSystemMessage(Component.literal("Reward: 1 Mob Card Pack")
+                player.sendSystemMessage(Component.literal("Reward: 3 emeralds")
                         .withStyle(ChatFormatting.YELLOW));
                 player.serverLevel().playSound(null, player.getX(), player.getY(), player.getZ(),
                         SoundEvents.UI_TOAST_CHALLENGE_COMPLETE, SoundSource.PLAYERS, 0.8F, 1.0F);

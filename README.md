@@ -25,12 +25,15 @@ In game:
 - **Mob Card** item — every one of the 81 mobs has its own inventory icon
   (a mini trading card with the mob's portrait), so a stack of cards reads
   at a glance without opening them; legendaries have a foil glint
-- **Mob Card Pack** item — craft with 3 paper + 1 emerald, right-click to open
-  a **scrollable unboxing**: your 5 pulls fan out face-down and flip up as you
-  scroll through them (wheel / ← → / on-screen arrows), with a rarity chime,
-  sparkle bursts and a glow on legendaries/foils, then a summary. Scroll back
-  and forth to admire the whole pack. ~9% of pulls are rare **holographic
-  foils** with an animated rainbow sheen, tracked separately in the collection
+- **Cards drop from mobs** — kill any mob and it drops **its own card** 100% of
+  the time, right alongside its normal loot. The whole overworld (and Nether,
+  and End) is your card hunt — no packs, no crafting, just play
+- **Holographic cards, earned by hunting** — kill enough of one mob to unlock
+  its **holographic** version, tracked with an action-bar progress counter.
+  Thresholds scale with how common the mob is: **100** kills for a common mob,
+  **75** uncommon, **25** rare, **10** epic, **5** legendary. A holo card carries
+  a fixed, fair combat boost — **+1 Health, +2 Attack, +1 Speed** (capped at 10) —
+  identical for everyone who earns it, so no one gets a card no one else can
 - Card tooltips show all six stats; names are coloured by collector tier
 - Right-click a card to open a full Top Trumps style card view — kraft
   border, the live 3D mob as the portrait, stat table and total rating
@@ -49,41 +52,31 @@ In game:
   or `/mobtrumps withdraw` to empty the book. The binder is saved with your
   player and survives death
 - `/mobtrumps battle [deck_size]` — start a Top Trumps battle against the CPU,
-  played through clickable chat buttons; winning awards a free card pack
+  played through clickable chat buttons; winning awards emeralds
 - **Deck builder** — open the Collection Book → **Deck** to pick up to 16 cards
   you own into a custom deck, then `/mobtrumps battle deck` to fight the CPU
-  with your own hand
+  with your own hand. Any card whose holo you've unlocked is played **boosted**
 - `/mobtrumps duel <player>` — challenge a player to a PvP duel. Add
   `wager` while holding a card to bet it (both stake a card, winner takes both),
   or `bet <emeralds>` to gamble money — both players escrow the same number of
   emeralds and the winner takes the whole pot (stakes are refunded on a draw,
   decline, timeout or logout)
-- `/mobtrumps daily` — claim a **free daily Mob Card Pack** (you're nudged with
-  a clickable button on login when it's ready; cooldown is configurable)
 - `/mobtrumps trade <player>` — offer your held card; they hold one and accept
   to swap 1-for-1
 - `/mobtrumps foil` — press 4 duplicate copies of a card into 1 holographic foil
-- The **Wandering Trader** now sells Mob Card Packs for emeralds
-- **Special packs** — a **Nether Pack** (craft: 3 paper + blaze powder +
-  emerald; Nether-mob pool) and a **Boss Pack** (3 paper + diamond + emerald;
-  tough-mob pool), both with higher foil odds. They draw at normal rarity odds
-  from a pool with **no common filler**, so cards are better on average but
-  legendaries stay uncommon (~20% per Boss pack, ~10% Wither per Nether pack)
 - **Ranked ladder** — duels update an Elo rating stored server-wide (persisted,
   offline players included); `/mobtrumps top` shows the standings and your rank
 - `/mobtrumps play <stat>`, `/mobtrumps next`, `/mobtrumps forfeit`
 - `/mobtrumps` on its own opens a clickable hub menu
-- Juice: legendary/foil pulls burst particles in-world and sparkles on the
-  reveal screen; cards ease in with a rarity halo and a shine sweep; battle
-  rounds play win/lose sound cues; the reveal ends on a summary panel
-- Creative tab "Mob Trumps" contains every card
+- Juice: unlocking a holo bursts particles in-world; cards ease in with a
+  rarity halo and a shine sweep; battle rounds play win/lose sound cues
+- Creative tab "Mob Trumps" contains every card (normal and holographic)
 
 - **Advancements** — a Mob Trumps tab tracks milestones: first card, 10 /
   40 / all 81 collected, your first foil (and the hidden all-foils goal),
   and duel wins.
-- **Config file** (`config/mobtrumps-common.toml`) — admins can tune cards per
-  pack, the foil-chance multiplier, max deck size, the daily-pack cooldown, and
-  whether the Wandering Trader stocks packs, without editing code.
+- **Config file** (`config/mobtrumps-common.toml`) — admins can tune max deck
+  size (and other knobs) without editing code.
 
 Dev runs: `./gradlew runClient` / `./gradlew runServer`.
 

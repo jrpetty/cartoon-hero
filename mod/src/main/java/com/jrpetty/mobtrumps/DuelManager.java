@@ -514,9 +514,8 @@ public final class DuelManager {
                                 .withStyle(ChatFormatting.GOLD)));
             }
         } else {
-            ItemStack reward = new ItemStack(ModItems.CARD_PACK.get());
-            CardActions.give(winner, reward);
-            winner.sendSystemMessage(Component.literal("Reward: 1 Mob Card Pack")
+            giveEmeralds(winner, 3);
+            winner.sendSystemMessage(Component.literal("Reward: 3 emeralds")
                     .withStyle(ChatFormatting.YELLOW));
         }
         winner.serverLevel().playSound(null, winner.getX(), winner.getY(), winner.getZ(),

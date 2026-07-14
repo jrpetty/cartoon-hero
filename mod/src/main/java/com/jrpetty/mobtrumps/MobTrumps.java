@@ -25,12 +25,12 @@ public class MobTrumps {
         modContainer.registerConfig(ModConfig.Type.COMMON, Config.SPEC);
 
         NeoForge.EVENT_BUS.addListener(BattleCommands::onRegisterCommands);
+        NeoForge.EVENT_BUS.addListener(MobDrops::onLivingDrops);
         NeoForge.EVENT_BUS.addListener((PlayerEvent.PlayerLoggedInEvent event) -> {
             if (event.getEntity() instanceof ServerPlayer player) {
                 CollectionTracker.sync(player);
                 BinderStorage.sync(player);
                 CollectionTracker.revalidate(player);
-                DailyReward.notifyOnLogin(player);
             }
         });
         NeoForge.EVENT_BUS.addListener((PlayerEvent.PlayerRespawnEvent event) -> {
@@ -42,14 +42,6 @@ public class MobTrumps {
             if (event.getEntity() instanceof ServerPlayer player) {
                 DuelManager.handleLogout(player);
                 TradeManager.handleLogout(player);
-            }
-        });
-        NeoForge.EVENT_BUS.addListener((net.neoforged.neoforge.event.village.WandererTradesEvent event) -> {
-            if (Config.WANDERING_TRADER_PACKS.get()) {
-                event.getGenericTrades().add((entity, random) -> new net.minecraft.world.item.trading.MerchantOffer(
-                        new net.minecraft.world.item.trading.ItemCost(net.minecraft.world.item.Items.EMERALD, 6),
-                        new net.minecraft.world.item.ItemStack(ModItems.CARD_PACK.get()),
-                        5, 3, 0.05F));
             }
         });
     }

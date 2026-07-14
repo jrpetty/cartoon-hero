@@ -53,14 +53,13 @@ public final class ModItems {
     public static final DeferredHolder<CreativeModeTab, CreativeModeTab> TAB =
             CREATIVE_MODE_TABS.register("mobtrumps", () -> CreativeModeTab.builder()
                     .title(Component.translatable("itemGroup.mobtrumps"))
-                    .icon(() -> new ItemStack(CARD_PACK.get()))
+                    .icon(() -> new ItemStack(COLLECTION_BOOK.get()))
                     .displayItems((parameters, output) -> {
-                        output.accept(CARD_PACK.get());
-                        output.accept(NETHER_PACK.get());
-                        output.accept(BOSS_PACK.get());
                         output.accept(COLLECTION_BOOK.get());
+                        // cards are earned by hunting mobs; every card is shown here for reference
                         for (MobCard card : MobCards.ALL) {
                             output.accept(MobCardItem.stackOf(card));
+                            output.accept(MobCardItem.stackOf(card, true));
                         }
                     })
                     .build());

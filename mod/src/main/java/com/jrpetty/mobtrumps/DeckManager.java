@@ -42,14 +42,18 @@ public final class DeckManager {
         CollectionTracker.sync(player);
     }
 
-    /** The player's deck as cards, dropping any they no longer own. */
+    /**
+     * The player's deck as cards, dropping any they no longer own. Cards whose
+     * holographic the player has unlocked are played in their boosted form.
+     */
     public static List<MobCard> deckCards(ServerPlayer player) {
         Set<String> collected = new LinkedHashSet<>(player.getData(ModAttachments.COLLECTED.get()));
+        Set<String> foils = new LinkedHashSet<>(player.getData(ModAttachments.COLLECTED_FOIL.get()));
         List<MobCard> cards = new ArrayList<>();
         for (String id : player.getData(ModAttachments.DECK.get())) {
             if (collected.contains(id)) {
                 MobCard card = MobCards.byId(id);
-                if (card != null) cards.add(card);
+                if (card != null) cards.add(foils.contains(id) ? card.foilVersion() : card);
             }
         }
         return cards;

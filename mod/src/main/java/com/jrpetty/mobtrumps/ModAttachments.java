@@ -6,6 +6,7 @@ import net.neoforged.neoforge.registries.DeferredRegister;
 import net.neoforged.neoforge.registries.NeoForgeRegistries;
 
 import java.util.List;
+import java.util.Map;
 import java.util.function.Supplier;
 
 public final class ModAttachments {
@@ -66,6 +67,13 @@ public final class ModAttachments {
     public static final Supplier<AttachmentType<List<String>>> STORED_FOIL =
             ATTACHMENTS.register("stored_foil", () -> AttachmentType.<List<String>>builder(() -> List.of())
                     .serialize(Codec.STRING.listOf())
+                    .copyOnDeath()
+                    .build());
+
+    /** How many of each mob this player has killed (mob id -> kill count), toward holo unlocks. */
+    public static final Supplier<AttachmentType<Map<String, Integer>>> KILLS =
+            ATTACHMENTS.register("kills", () -> AttachmentType.<Map<String, Integer>>builder(() -> Map.of())
+                    .serialize(Codec.unboundedMap(Codec.STRING, Codec.INT))
                     .copyOnDeath()
                     .build());
 

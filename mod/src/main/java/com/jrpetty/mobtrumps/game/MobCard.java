@@ -18,6 +18,21 @@ public record MobCard(String id, String displayName, int health, int attack,
         };
     }
 
+    /**
+     * The holographic version of this card. Earning a card's holo (by killing
+     * enough of that mob) grants a fixed, fair combat boost that is identical
+     * for every card in the set: +1 Health, +2 Attack, +1 Speed (each capped
+     * at 10). Everyone who unlocks a given holo gets exactly the same card.
+     */
+    public MobCard foilVersion() {
+        return new MobCard(id, displayName,
+                Math.min(10, health + 1),
+                Math.min(10, attack + 2),
+                size,
+                Math.min(10, speed + 1),
+                farmable, rarity);
+    }
+
     /** Collector tier derived from spawn rarity (low rarity = rarer card). */
     public Tier tier() {
         if (rarity <= 2) return Tier.LEGENDARY;
