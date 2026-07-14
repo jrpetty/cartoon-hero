@@ -183,6 +183,20 @@ public final class BattleCommands {
                                         StringArgumentType.getString(ctx, "code")))))
                 .then(Commands.literal("guide")
                         .executes(ctx -> GuideBook.give(ctx.getSource().getPlayerOrException())))
+                .then(Commands.literal("draft")
+                        .then(Commands.literal("accept")
+                                .executes(ctx -> DraftManager.accept(ctx.getSource().getPlayerOrException())))
+                        .then(Commands.literal("decline")
+                                .executes(ctx -> DraftManager.decline(ctx.getSource().getPlayerOrException())))
+                        .then(Commands.argument("player", EntityArgument.player())
+                                .executes(ctx -> DraftManager.invite(
+                                        ctx.getSource().getPlayerOrException(),
+                                        EntityArgument.getPlayer(ctx, "player")))))
+                .then(Commands.literal("pick")
+                        .then(Commands.argument("mob_id", StringArgumentType.word())
+                                .executes(ctx -> DraftManager.pick(
+                                        ctx.getSource().getPlayerOrException(),
+                                        StringArgumentType.getString(ctx, "mob_id")))))
                 .then(Commands.literal("stats")
                         .executes(ctx -> StatsTracker.dashboard(ctx.getSource().getPlayerOrException())))
                 .then(Commands.literal("profile")
@@ -389,6 +403,11 @@ public final class BattleCommands {
         player.sendSystemMessage(Component.literal("  Build a deck: ")
                 .withStyle(ChatFormatting.GRAY)
                 .append(Component.literal("Collection Book → Deck, then /mobtrumps battle deck")
+                        .withStyle(ChatFormatting.DARK_GRAY)));
+        player.sendSystemMessage(Component.literal("  Draft mode: ")
+                .withStyle(ChatFormatting.GRAY)
+                .append(Component.literal("/mobtrumps draft <player>").withStyle(ChatFormatting.AQUA))
+                .append(Component.literal(" — take turns picking a shared pool, then duel")
                         .withStyle(ChatFormatting.DARK_GRAY)));
         player.sendSystemMessage(Component.literal("  ")
                 .append(button("[My stats]", "/mobtrumps stats", ChatFormatting.AQUA,

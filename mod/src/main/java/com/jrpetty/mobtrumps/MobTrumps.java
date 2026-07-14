@@ -44,6 +44,7 @@ public class MobTrumps {
             if (event.getEntity() instanceof ServerPlayer player) {
                 DuelManager.handleLogout(player);
                 TradeManager.handleLogout(player);
+                DraftManager.handleLogout(player);
             }
         });
     }

@@ -267,6 +267,29 @@ public final class DuelManager {
         promptTurn(duel);
     }
 
+    /** Start a duel with pre-drafted hands (no wagers) — used by draft mode. */
+    public static void startDraftDuel(ServerPlayer a, ServerPlayer b,
+                                      java.util.List<com.jrpetty.mobtrumps.game.MobCard> handA,
+                                      java.util.List<com.jrpetty.mobtrumps.game.MobCard> handB) {
+        if (isInDuel(a) || isInDuel(b)) return;
+        QUEUE.remove(a.getUUID());
+        QUEUE.remove(b.getUUID());
+        Battle battle = new Battle(handA, handB, ThreadLocalRandom.current());
+        Duel duel = new Duel(a, b, battle);
+        ACTIVE.put(a.getUUID(), duel);
+        ACTIVE.put(b.getUUID(), duel);
+        LAST_FOE.put(a.getUUID(), new LastFoe(b.getUUID(), name(b)));
+        LAST_FOE.put(b.getUUID(), new LastFoe(a.getUUID(), name(a)));
+        MutableComponent intro = Component.literal("=== DRAFT DUEL: " + name(a)
+                + " vs " + name(b) + " ===").withStyle(ChatFormatting.GOLD, ChatFormatting.BOLD);
+        a.sendSystemMessage(intro);
+        b.sendSystemMessage(intro);
+        sendBoth(duel, emoteBar());
+        BattleCommands.shuffleSound(a);
+        BattleCommands.shuffleSound(b);
+        promptTurn(duel);
+    }
+
     public static int decline(ServerPlayer target) {
         Pending pending = PENDING.remove(target.getUUID());
         if (pending == null) {

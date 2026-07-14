@@ -56,6 +56,17 @@ public final class CardRenderer {
     /** Draw the front of a card, optionally with the holographic foil sheen. */
     public static void renderCard(GuiGraphics g, Font font, MobCard card, int x, int y,
                                   float scale, int mouseX, int mouseY, LivingEntity mob, boolean foil) {
+        renderCard(g, font, card, x, y, scale, mouseX, mouseY, mob, foil, true);
+    }
+
+    /**
+     * Draw the front of a card. When {@code followMouse} is false the portrait
+     * mob poses straight ahead instead of tracking the cursor — used for book
+     * grid cards so only the hovered card comes alive.
+     */
+    public static void renderCard(GuiGraphics g, Font font, MobCard card, int x, int y,
+                                  float scale, int mouseX, int mouseY, LivingEntity mob,
+                                  boolean foil, boolean followMouse) {
         var pose = g.pose();
         pose.pushPose();
         pose.translate(x, y, 0);
@@ -127,9 +138,12 @@ public final class CardRenderer {
             int py2 = y + Math.round(115 * scale);
             int entityScale = Math.max(4, Math.round(
                     Math.min(34f, 46f / Math.max(1.4f, mob.getBbHeight())) * scale));
+            // an idle mob gazes at its own portrait centre instead of the cursor
+            int lookX = followMouse ? mouseX : (px1 + px2) / 2;
+            int lookY = followMouse ? mouseY : (py1 + py2) / 2 - Math.round(10 * scale);
             try {
                 InventoryScreen.renderEntityInInventoryFollowsMouse(
-                        g, px1, py1, px2, py2, entityScale, 0.0625F, mouseX, mouseY, mob);
+                        g, px1, py1, px2, py2, entityScale, 0.0625F, lookX, lookY, mob);
             } catch (Exception ignored) {
                 // a misbehaving renderer must not crash the UI
             }

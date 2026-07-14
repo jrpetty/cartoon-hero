@@ -226,11 +226,18 @@ public class CollectionBookScreen extends Screen {
             int[] p = slotPos(s);
             int cx = p[0], cy = p[1];
             g.fill(cx + 2, cy + 3, cx + cw + 4, cy + ch + 5, 0x44000000);
-            boolean hovered = mouseX >= cx && mouseX < cx + cw && mouseY >= cy && mouseY < cy + ch;
+            boolean overlayOpen = pickerMob != null || statsOpen;
+            boolean hovered = !overlayOpen
+                    && mouseX >= cx && mouseX < cx + cw && mouseY >= cy && mouseY < cy + ch;
             if (ClientCollection.has(card.id())) {
-                LivingEntity mob = CardRenderer.portraitEntity(minecraft, card, entityCache);
+                // while an overlay is open, skip grid mobs entirely — their 3D
+                // depth writes would poke through the panel drawn on top
+                LivingEntity mob = overlayOpen ? null
+                        : CardRenderer.portraitEntity(minecraft, card, entityCache);
                 boolean foil = ClientCollection.displayedIsFoil(card.id());
-                CardRenderer.renderCard(g, font, card, cx, cy, CARD_SCALE, mouseX, mouseY, mob, foil);
+                // only the hovered card comes alive and follows the cursor
+                CardRenderer.renderCard(g, font, card, cx, cy, CARD_SCALE,
+                        mouseX, mouseY, mob, foil, hovered);
                 // a small stack tab if more than one variant is owned
                 if (ClientCollection.variantCount(card.id()) > 1) {
                     g.fill(cx + cw - 6, cy - 3, cx + cw + 2, cy + 4, CardRenderer.KRAFT_DARK);
@@ -241,7 +248,10 @@ public class CollectionBookScreen extends Screen {
                     g.fill(cx - 2, cy + ch - 4, cx + 6, cy + ch + 3, CardRenderer.KRAFT_DARK);
                     g.fill(cx - 1, cy + ch - 3, cx + 5, cy + ch + 2, 0xFF55A82F);
                 }
-                if (hovered) g.renderOutline(cx - 2, cy - 2, cw + 4, ch + 4, 0xFFF9D849);
+                if (hovered) {
+                    g.renderOutline(cx - 2, cy - 2, cw + 4, ch + 4, 0xFFF9D849);
+                    g.renderOutline(cx - 3, cy - 3, cw + 6, ch + 6, 0x66F9D849);
+                }
             } else {
                 CardRenderer.renderBack(g, font, cx, cy, CARD_SCALE);
                 if (hovered) g.renderOutline(cx - 2, cy - 2, cw + 4, ch + 4, 0x66FFFFFF);
