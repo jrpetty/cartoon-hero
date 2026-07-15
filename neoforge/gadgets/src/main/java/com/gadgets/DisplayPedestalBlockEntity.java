@@ -120,12 +120,14 @@ public class DisplayPedestalBlockEntity extends BlockEntity implements WorldlyCo
 
     @Override
     public boolean canPlaceItem(int slot, ItemStack stack) {
-        return isColumnOwner() && displayed.isEmpty();
+        return groupEmpty();
     }
 
-    /** Only the bottom-most pedestal of a stacked column accepts items. */
-    private boolean isColumnOwner() {
-        return level == null || !(level.getBlockState(worldPosition.below()).getBlock() instanceof DisplayPedestalBlock);
+    /** True when no pedestal in this block's group is already displaying something. */
+    private boolean groupEmpty() {
+        return level == null
+                ? displayed.isEmpty()
+                : DisplayPedestalBlock.holder(level, worldPosition) == null;
     }
 
     @Override

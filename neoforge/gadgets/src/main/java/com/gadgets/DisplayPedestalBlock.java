@@ -1,9 +1,10 @@
 package com.gadgets;
 
-import net.minecraft.world.level.block.state.properties.BooleanProperty;
-import net.minecraft.world.level.block.state.StateDefinition;
-import net.minecraft.world.level.LevelAccessor;
-import net.minecraft.world.item.context.BlockPlaceContext;
+import java.util.ArrayDeque;
+import java.util.Deque;
+import java.util.HashSet;
+import java.util.Set;
+
 import net.minecraft.ChatFormatting;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
@@ -13,6 +14,7 @@ import net.minecraft.world.InteractionResult;
 import net.minecraft.world.ItemInteractionResult;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.level.BlockGetter;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.EntityBlock;
@@ -22,64 +24,23 @@ import net.minecraft.world.phys.BlockHitResult;
 import org.jetbrains.annotations.Nullable;
 
 /**
- * A glass display case that showcases a single item floating inside it.
+ * A solid marble-and-gold base that showcases an item floating above it. Place
+ * bases side by side (up to a filled 3×3) and they act as one big platform: the
+ * item sits in the exact centre and grows to match.
  *
  * <ul>
- *   <li>Right-click with an item (case empty) → put it on display.</li>
- *   <li>Right-click the <b>top</b> with an item (case occupied) → cycle spin:
- *       Off → Slow → Medium → Fast.</li>
- *   <li>Right-click a <b>side</b> with an item (case occupied) → cycle size.</li>
- *   <li>Right-click with an <b>empty hand</b> → take the item back.</li>
- *   <li>It is also a one-slot inventory: hoppers and Item Receivers can load it.</li>
+ *   <li>Right-click with an item (group empty) → set it on display.</li>
+ *   <li>Right-click the <b>top</b> with an item → cycle spin: Off/Slow/Med/Fast.</li>
+ *   <li>Right-click a <b>side</b> with an item → cycle size.</li>
+ *   <li>Right-click empty-handed → take the item back.</li>
  * </ul>
  */
 public class DisplayPedestalBlock extends Block implements EntityBlock {
     private static final String[] SCALE_NAMES = {"Small", "Medium", "Large"};
     private static final String[] SPIN_NAMES = {"Off", "Slow", "Medium", "Fast"};
 
-    public static final BooleanProperty HAS_UP = BooleanProperty.create("has_up");
-    public static final BooleanProperty HAS_DOWN = BooleanProperty.create("has_down");
-
     public DisplayPedestalBlock(Properties properties) {
         super(properties);
-        registerDefaultState(getStateDefinition().any().setValue(HAS_UP, false).setValue(HAS_DOWN, false));
-    }
-
-    @Override
-    protected void createBlockStateDefinition(StateDefinition.Builder<Block, BlockState> builder) {
-        builder.add(HAS_UP, HAS_DOWN);
-    }
-
-    @Nullable
-    @Override
-    public BlockState getStateForPlacement(BlockPlaceContext ctx) {
-        Level level = ctx.getLevel();
-        BlockPos pos = ctx.getClickedPos();
-        return defaultBlockState()
-                .setValue(HAS_UP, level.getBlockState(pos.above()).getBlock() instanceof DisplayPedestalBlock)
-                .setValue(HAS_DOWN, level.getBlockState(pos.below()).getBlock() instanceof DisplayPedestalBlock);
-    }
-
-    @Override
-    protected BlockState updateShape(BlockState state, Direction direction, BlockState neighborState,
-                                     LevelAccessor level, BlockPos pos, BlockPos neighborPos) {
-        if (direction == Direction.UP) {
-            return state.setValue(HAS_UP, neighborState.getBlock() instanceof DisplayPedestalBlock);
-        }
-        if (direction == Direction.DOWN) {
-            return state.setValue(HAS_DOWN, neighborState.getBlock() instanceof DisplayPedestalBlock);
-        }
-        return super.updateShape(state, direction, neighborState, level, pos, neighborPos);
-    }
-
-    /** The bottom-most pedestal of a stacked column owns the displayed item. */
-    @Nullable
-    private DisplayPedestalBlockEntity owner(Level level, BlockPos pos) {
-        BlockPos.MutableBlockPos p = pos.mutable();
-        for (int i = 0; i < 8 && level.getBlockState(p.below()).getBlock() instanceof DisplayPedestalBlock; i++) {
-            p.move(Direction.DOWN);
-        }
-        return level.getBlockEntity(p) instanceof DisplayPedestalBlockEntity be ? be : null;
     }
 
     @Nullable
@@ -88,16 +49,70 @@ public class DisplayPedestalBlock extends Block implements EntityBlock {
         return new DisplayPedestalBlockEntity(pos, state);
     }
 
+    /**
+     * The bounds {@code {minX, minZ, maxX, maxZ}} of the filled-rectangle group of
+     * connected pedestals (at most 3×3) that {@code pos} belongs to. Anything
+     * bigger or non-rectangular collapses to just this block (a 1×1 group).
+     */
+    public static int[] groupBounds(BlockGetter level, BlockPos pos) {
+        int minX = pos.getX(), maxX = pos.getX(), minZ = pos.getZ(), maxZ = pos.getZ();
+        Set<Long> seen = new HashSet<>();
+        Deque<BlockPos> stack = new ArrayDeque<>();
+        stack.push(pos);
+        seen.add(pos.asLong());
+        int count = 0;
+        while (!stack.isEmpty()) {
+            BlockPos p = stack.pop();
+            count++;
+            minX = Math.min(minX, p.getX());
+            maxX = Math.max(maxX, p.getX());
+            minZ = Math.min(minZ, p.getZ());
+            maxZ = Math.max(maxZ, p.getZ());
+            if (maxX - minX > 2 || maxZ - minZ > 2) {
+                return solo(pos);
+            }
+            for (Direction d : Direction.Plane.HORIZONTAL) {
+                BlockPos n = p.relative(d);
+                if (seen.add(n.asLong()) && level.getBlockState(n).getBlock() instanceof DisplayPedestalBlock) {
+                    stack.push(n);
+                }
+            }
+        }
+        int w = maxX - minX + 1, dp = maxZ - minZ + 1;
+        return count == w * dp ? new int[]{minX, minZ, maxX, maxZ} : solo(pos);
+    }
+
+    private static int[] solo(BlockPos pos) {
+        return new int[]{pos.getX(), pos.getZ(), pos.getX(), pos.getZ()};
+    }
+
+    /** The one pedestal in {@code pos}'s group that currently holds an item, or null. */
+    @Nullable
+    public static DisplayPedestalBlockEntity holder(BlockGetter level, BlockPos pos) {
+        int[] g = groupBounds(level, pos);
+        int y = pos.getY();
+        BlockPos.MutableBlockPos p = new BlockPos.MutableBlockPos();
+        for (int x = g[0]; x <= g[2]; x++) {
+            for (int z = g[1]; z <= g[3]; z++) {
+                if (level.getBlockEntity(p.set(x, y, z)) instanceof DisplayPedestalBlockEntity be
+                        && !be.getDisplayed().isEmpty()) {
+                    return be;
+                }
+            }
+        }
+        return null;
+    }
+
     @Override
     protected ItemInteractionResult useItemOn(ItemStack stack, BlockState state, Level level, BlockPos pos,
                                               Player player, InteractionHand hand, BlockHitResult hit) {
-        DisplayPedestalBlockEntity be = owner(level, pos);
-        if (be == null) {
+        if (!(level.getBlockEntity(pos) instanceof DisplayPedestalBlockEntity clicked)) {
             return ItemInteractionResult.PASS_TO_DEFAULT_BLOCK_INTERACTION;
         }
-        if (be.getDisplayed().isEmpty()) {
+        DisplayPedestalBlockEntity held = holder(level, pos);
+        if (held == null) {
             if (!level.isClientSide()) {
-                be.setDisplayed(stack.copyWithCount(1));
+                clicked.setDisplayed(stack.copyWithCount(1));
                 if (!player.getAbilities().instabuild) {
                     stack.shrink(1);
                 }
@@ -107,10 +122,10 @@ public class DisplayPedestalBlock extends Block implements EntityBlock {
         // Occupied: top face tunes the spin, sides tune the size.
         if (!level.isClientSide()) {
             if (hit.getDirection() == Direction.UP) {
-                int s = be.cycleSpin();
+                int s = held.cycleSpin();
                 player.displayClientMessage(Component.literal("Spin: " + SPIN_NAMES[s]).withStyle(ChatFormatting.GOLD), true);
             } else {
-                int s = be.cycleScale();
+                int s = held.cycleScale();
                 player.displayClientMessage(Component.literal("Display size: " + SCALE_NAMES[s]).withStyle(ChatFormatting.GOLD), true);
             }
         }
@@ -119,12 +134,15 @@ public class DisplayPedestalBlock extends Block implements EntityBlock {
 
     @Override
     protected InteractionResult useWithoutItem(BlockState state, Level level, BlockPos pos, Player player, BlockHitResult hit) {
-        DisplayPedestalBlockEntity be = owner(level, pos);
-        if (be == null || be.getDisplayed().isEmpty()) {
+        if (!(level.getBlockEntity(pos) instanceof DisplayPedestalBlockEntity)) {
+            return InteractionResult.PASS;
+        }
+        DisplayPedestalBlockEntity held = holder(level, pos);
+        if (held == null) {
             return InteractionResult.PASS;
         }
         if (!level.isClientSide()) {
-            ItemStack taken = be.removeDisplayed();
+            ItemStack taken = held.removeDisplayed();
             if (!player.getInventory().add(taken)) {
                 player.drop(taken, false);
             }

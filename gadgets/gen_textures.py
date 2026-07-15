@@ -526,3 +526,57 @@ RXF = fix16([
     "KKKKKKKKKKKKKKKK",
 ]) 
 write_png(os.path.join(BASE, "block", "redstone_receiver_front.png"), grid(RXF, pal2))
+
+# ============ redesigned Display Pedestal: solid marble+gold base ============
+_MB_L = C(238, 235, 228)   # marble light
+_MB_M = C(214, 210, 201)   # marble mid
+_MB_V = C(196, 191, 181)   # marble vein
+_GOLD = C(214, 172, 66)    # gold
+_GOLD_D = C(166, 128, 44)  # gold dark
+_GOLD_L = C(244, 212, 120) # gold light
+
+def _ped_top():
+    rows = []
+    cx, cy = 7.5, 7.5
+    for y in range(16):
+        row = []
+        for x in range(16):
+            d = ((x - cx) ** 2 + (y - cy) ** 2) ** 0.5
+            if d < 1.8:
+                c = _GOLD_L                      # inlaid centre where the item sits
+            elif d < 2.6:
+                c = _GOLD
+            elif 4.2 <= d <= 5.4:
+                c = _GOLD                        # medallion ring
+            elif 5.4 < d <= 6.0:
+                c = _GOLD_D
+            else:
+                c = _MB_V if ((x * 3 + y * 5) % 13 < 2) else (_MB_M if ((x + y) % 7 == 0) else _MB_L)
+            # gold corner pips
+            if (x, y) in [(1,1),(14,1),(1,14),(14,14),(2,1),(1,2),(13,1),(14,2),(1,13),(2,14),(14,13),(13,14)]:
+                c = _GOLD
+            row.append(c)
+        rows.append(row)
+    return rows
+
+def _ped_side():
+    rows = []
+    for y in range(16):
+        row = []
+        for x in range(16):
+            if y in (0, 15):
+                c = _GOLD_D
+            elif y in (1, 2, 13, 14):
+                c = _GOLD if (x % 4 != 0) else _GOLD_L
+            else:
+                c = _MB_V if ((x * 7 + y * 3) % 11 < 2) else (_MB_M if ((x * 2 + y) % 9 == 0) else _MB_L)
+            row.append(c)
+        rows.append(row)
+    return rows
+
+def _ped_bottom():
+    return [[_MB_M if ((x + y) % 5 == 0) else _MB_L for x in range(16)] for y in range(16)]
+
+write_png(os.path.join(BASE, "block", "pedestal_top.png"), _ped_top())
+write_png(os.path.join(BASE, "block", "pedestal_side.png"), _ped_side())
+write_png(os.path.join(BASE, "block", "pedestal_bottom.png"), _ped_bottom())

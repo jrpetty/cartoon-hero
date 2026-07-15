@@ -1,10 +1,10 @@
 package com.gadgets;
 
-import net.minecraft.world.WorldAccess;
-import net.minecraft.state.property.BooleanProperty;
-import net.minecraft.state.StateManager;
-import net.minecraft.item.ItemPlacementContext;
-import net.minecraft.util.Formatting;
+import java.util.ArrayDeque;
+import java.util.Deque;
+import java.util.HashSet;
+import java.util.Set;
+
 import net.minecraft.block.Block;
 import net.minecraft.block.BlockEntityProvider;
 import net.minecraft.block.BlockState;
@@ -13,73 +13,34 @@ import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.item.ItemStack;
 import net.minecraft.text.Text;
 import net.minecraft.util.ActionResult;
+import net.minecraft.util.Formatting;
 import net.minecraft.util.Hand;
 import net.minecraft.util.ItemActionResult;
 import net.minecraft.util.hit.BlockHitResult;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.Direction;
+import net.minecraft.world.BlockView;
 import net.minecraft.world.World;
 import org.jetbrains.annotations.Nullable;
 
 /**
- * A glass display case that showcases a single item floating inside it.
+ * A solid marble-and-gold base that showcases an item floating above it. Place
+ * bases side by side (up to a filled 3×3) and they act as one big platform: the
+ * item sits in the exact centre and grows to match.
  *
  * <ul>
- *   <li>Right-click with an item (case empty) → put it on display.</li>
- *   <li>Right-click the <b>top</b> with an item (case occupied) → cycle spin:
- *       Off → Slow → Medium → Fast.</li>
- *   <li>Right-click a <b>side</b> with an item (case occupied) → cycle size.</li>
- *   <li>Right-click with an <b>empty hand</b> → take the item back.</li>
- *   <li>It is also a one-slot inventory: hoppers and Item Receivers can load it.</li>
+ *   <li>Right-click with an item (group empty) → set it on display.</li>
+ *   <li>Right-click the <b>top</b> with an item → cycle spin: Off/Slow/Med/Fast.</li>
+ *   <li>Right-click a <b>side</b> with an item → cycle size.</li>
+ *   <li>Right-click empty-handed → take the item back.</li>
  * </ul>
  */
 public class DisplayPedestalBlock extends Block implements BlockEntityProvider {
     private static final String[] SCALE_NAMES = {"Small", "Medium", "Large"};
     private static final String[] SPIN_NAMES = {"Off", "Slow", "Medium", "Fast"};
 
-    public static final BooleanProperty HAS_UP = BooleanProperty.of("has_up");
-    public static final BooleanProperty HAS_DOWN = BooleanProperty.of("has_down");
-
     public DisplayPedestalBlock(Settings settings) {
         super(settings);
-        setDefaultState(getStateManager().getDefaultState().with(HAS_UP, false).with(HAS_DOWN, false));
-    }
-
-    @Override
-    protected void appendProperties(StateManager.Builder<Block, BlockState> builder) {
-        builder.add(HAS_UP, HAS_DOWN);
-    }
-
-    @Nullable
-    @Override
-    public BlockState getPlacementState(ItemPlacementContext ctx) {
-        World world = ctx.getWorld();
-        BlockPos pos = ctx.getBlockPos();
-        return getDefaultState()
-                .with(HAS_UP, world.getBlockState(pos.up()).getBlock() instanceof DisplayPedestalBlock)
-                .with(HAS_DOWN, world.getBlockState(pos.down()).getBlock() instanceof DisplayPedestalBlock);
-    }
-
-    @Override
-    protected BlockState getStateForNeighborUpdate(BlockState state, Direction direction, BlockState neighborState,
-                                                   WorldAccess world, BlockPos pos, BlockPos neighborPos) {
-        if (direction == Direction.UP) {
-            return state.with(HAS_UP, neighborState.getBlock() instanceof DisplayPedestalBlock);
-        }
-        if (direction == Direction.DOWN) {
-            return state.with(HAS_DOWN, neighborState.getBlock() instanceof DisplayPedestalBlock);
-        }
-        return super.getStateForNeighborUpdate(state, direction, neighborState, world, pos, neighborPos);
-    }
-
-    /** The bottom-most pedestal of a stacked column owns the displayed item. */
-    @Nullable
-    private DisplayPedestalBlockEntity owner(World world, BlockPos pos) {
-        BlockPos.Mutable p = pos.mutableCopy();
-        for (int i = 0; i < 8 && world.getBlockState(p.down()).getBlock() instanceof DisplayPedestalBlock; i++) {
-            p.move(Direction.DOWN);
-        }
-        return world.getBlockEntity(p) instanceof DisplayPedestalBlockEntity be ? be : null;
     }
 
     @Nullable
@@ -88,16 +49,71 @@ public class DisplayPedestalBlock extends Block implements BlockEntityProvider {
         return new DisplayPedestalBlockEntity(pos, state);
     }
 
+    /**
+     * The bounds {@code {minX, minZ, maxX, maxZ}} of the filled-rectangle group of
+     * connected pedestals (at most 3×3) that {@code pos} belongs to. Anything
+     * bigger or non-rectangular collapses to just this block (a 1×1 group).
+     */
+    public static int[] groupBounds(BlockView world, BlockPos pos) {
+        int y = pos.getY();
+        int minX = pos.getX(), maxX = pos.getX(), minZ = pos.getZ(), maxZ = pos.getZ();
+        Set<Long> seen = new HashSet<>();
+        Deque<BlockPos> stack = new ArrayDeque<>();
+        stack.push(pos);
+        seen.add(pos.asLong());
+        int count = 0;
+        while (!stack.isEmpty()) {
+            BlockPos p = stack.pop();
+            count++;
+            minX = Math.min(minX, p.getX());
+            maxX = Math.max(maxX, p.getX());
+            minZ = Math.min(minZ, p.getZ());
+            maxZ = Math.max(maxZ, p.getZ());
+            if (maxX - minX > 2 || maxZ - minZ > 2) {
+                return solo(pos);
+            }
+            for (Direction d : Direction.Type.HORIZONTAL) {
+                BlockPos n = p.offset(d);
+                if (seen.add(n.asLong()) && world.getBlockState(n).getBlock() instanceof DisplayPedestalBlock) {
+                    stack.push(n);
+                }
+            }
+        }
+        int w = maxX - minX + 1, dp = maxZ - minZ + 1;
+        return count == w * dp ? new int[]{minX, minZ, maxX, maxZ} : solo(pos);
+    }
+
+    private static int[] solo(BlockPos pos) {
+        return new int[]{pos.getX(), pos.getZ(), pos.getX(), pos.getZ()};
+    }
+
+    /** The one pedestal in {@code pos}'s group that currently holds an item, or null. */
+    @Nullable
+    public static DisplayPedestalBlockEntity holder(BlockView world, BlockPos pos) {
+        int[] g = groupBounds(world, pos);
+        int y = pos.getY();
+        BlockPos.Mutable p = new BlockPos.Mutable();
+        for (int x = g[0]; x <= g[2]; x++) {
+            for (int z = g[1]; z <= g[3]; z++) {
+                if (world.getBlockEntity(p.set(x, y, z)) instanceof DisplayPedestalBlockEntity be
+                        && !be.getDisplayed().isEmpty()) {
+                    return be;
+                }
+            }
+        }
+        return null;
+    }
+
     @Override
     protected ItemActionResult onUseWithItem(ItemStack stack, BlockState state, World world, BlockPos pos,
                                              PlayerEntity player, Hand hand, BlockHitResult hit) {
-        DisplayPedestalBlockEntity be = owner(world, pos);
-        if (be == null) {
+        if (!(world.getBlockEntity(pos) instanceof DisplayPedestalBlockEntity clicked)) {
             return ItemActionResult.PASS_TO_DEFAULT_BLOCK_INTERACTION;
         }
-        if (be.getDisplayed().isEmpty()) {
+        DisplayPedestalBlockEntity held = holder(world, pos);
+        if (held == null) {
             if (!world.isClient()) {
-                be.setDisplayed(stack.copyWithCount(1));
+                clicked.setDisplayed(stack.copyWithCount(1));
                 if (!player.getAbilities().creativeMode) {
                     stack.decrement(1);
                 }
@@ -107,10 +123,10 @@ public class DisplayPedestalBlock extends Block implements BlockEntityProvider {
         // Occupied: top face tunes the spin, sides tune the size.
         if (!world.isClient()) {
             if (hit.getSide() == Direction.UP) {
-                int s = be.cycleSpin();
+                int s = held.cycleSpin();
                 player.sendMessage(Text.literal("Spin: " + SPIN_NAMES[s]).formatted(Formatting.GOLD), true);
             } else {
-                int s = be.cycleScale();
+                int s = held.cycleScale();
                 player.sendMessage(Text.literal("Display size: " + SCALE_NAMES[s]).formatted(Formatting.GOLD), true);
             }
         }
@@ -119,12 +135,15 @@ public class DisplayPedestalBlock extends Block implements BlockEntityProvider {
 
     @Override
     protected ActionResult onUse(BlockState state, World world, BlockPos pos, PlayerEntity player, BlockHitResult hit) {
-        DisplayPedestalBlockEntity be = owner(world, pos);
-        if (be == null || be.getDisplayed().isEmpty()) {
+        if (!(world.getBlockEntity(pos) instanceof DisplayPedestalBlockEntity)) {
+            return ActionResult.PASS;
+        }
+        DisplayPedestalBlockEntity held = holder(world, pos);
+        if (held == null) {
             return ActionResult.PASS;
         }
         if (!world.isClient()) {
-            player.giveItemStack(be.removeDisplayed());
+            player.giveItemStack(held.removeDisplayed());
         }
         return ActionResult.success(world.isClient());
     }

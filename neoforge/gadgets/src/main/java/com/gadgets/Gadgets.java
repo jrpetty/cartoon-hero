@@ -75,7 +75,7 @@ public class Gadgets {
 
     public static final DeferredBlock<Block> DISPLAY_PEDESTAL = BLOCKS.register("display_pedestal",
             () -> new DisplayPedestalBlock(BlockBehaviour.Properties.of()
-                    .strength(1.0F).sound(SoundType.STONE).noOcclusion()));
+                    .strength(1.0F).sound(SoundType.STONE)));
     public static final DeferredBlock<Block> ITEM_SENDER = BLOCKS.register("item_sender",
             () -> new ItemSenderBlock(BlockBehaviour.Properties.of()
                     .strength(1.5F).requiresCorrectToolForDrops().sound(SoundType.METAL)));

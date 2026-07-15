@@ -34,7 +34,7 @@
   "tip.gadgets.redstone_linker.1": "Right-click: copy a channel",
   "tip.gadgets.redstone_linker.2": "Sneak + right-click: paste it",
   "tip.gadgets.redstone_linker.3": "On gates: paste fills input A, then B",
-  "tip.gadgets.display_pedestal.1": "Showcases an item in a glass case",
+  "tip.gadgets.display_pedestal.1": "Sets an item floating above the base",
   "tip.gadgets.display_pedestal.2": "Item on top: spin · on side: size",
   "tip.gadgets.display_pedestal.3": "Empty hand: take it back",
   "tip.gadgets.item_sender.1": "Teleports items from the inventory above",
@@ -51,5 +51,5 @@
   "tip.gadgets.alarm.2": "Spawn egg or empty hand to tune",
   "tip.gadgets.wireless_remote.1": "Right-click: pulse the channel",
   "tip.gadgets.wireless_remote.2": "Sneak + right-click a block: bind it",
-  "tip.gadgets.display_pedestal.4": "Stack two for a double-height case"
+  "tip.gadgets.display_pedestal.4": "Place side by side up to 3×3"
 }

@@ -1,6 +1,1 @@
-{ "variants": {
-  "has_up=false,has_down=false": { "model": "gadgets:block/display_pedestal" },
-  "has_up=true,has_down=false":  { "model": "gadgets:block/display_pedestal_bottom" },
-  "has_up=false,has_down=true":  { "model": "gadgets:block/display_pedestal_top" },
-  "has_up=true,has_down=true":   { "model": "gadgets:block/display_pedestal_middle" }
-} }
+{ "variants": { "": { "model": "gadgets:block/display_pedestal" } } }

@@ -122,12 +122,14 @@ public class DisplayPedestalBlockEntity extends BlockEntity implements SidedInve
 
     @Override
     public boolean isValid(int slot, ItemStack stack) {
-        return isColumnOwner() && displayed.isEmpty();
+        return groupEmpty();
     }
 
-    /** Only the bottom-most pedestal of a stacked column accepts items. */
-    private boolean isColumnOwner() {
-        return world == null || !(world.getBlockState(pos.down()).getBlock() instanceof DisplayPedestalBlock);
+    /** True when no pedestal in this block's group is already displaying something. */
+    private boolean groupEmpty() {
+        return world == null
+                ? displayed.isEmpty()
+                : DisplayPedestalBlock.holder(world, pos) == null;
     }
 
     @Override
