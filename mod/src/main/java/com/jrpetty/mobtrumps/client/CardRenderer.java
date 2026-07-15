@@ -149,12 +149,6 @@ public final class CardRenderer {
             int half = 2 + lvl;
             g.fill(Math.max(8, sweep - half), 8, Math.min(CARD_W - 8, sweep + half), CARD_H - 8,
                     0x00FFFFFF | sweepA);
-            // a shimmering inner frame that intensifies with level
-            int frameA = (0x40 + lvl * 0x28) << 24;
-            int frame = 0x00FFFFFF | frameA;
-            int glint = (int) (Math.abs(Math.sin(t / 380.0)) * 0x30) << 24;
-            g.renderOutline(6, 6, CARD_W - 12, CARD_H - 12, frame);
-            g.renderOutline(7, 7, CARD_W - 14, CARD_H - 14, 0x00FFFFFF | glint);
         }
 
         // HOLO badge with a pip per level, top-left corner
