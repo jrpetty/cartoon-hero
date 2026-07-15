@@ -63,9 +63,15 @@ public class DrainBlock extends Block implements EntityBlock {
     @Override
     protected ItemInteractionResult useItemOn(ItemStack stack, BlockState state, Level level, BlockPos pos,
                                               Player player, InteractionHand hand, BlockHitResult hit) {
-        if (!(stack.getItem() instanceof BlockItem)
-                || !(level.getBlockEntity(pos) instanceof DrainBlockEntity be)
-                || !be.getDisguise().isEmpty()) {
+        if (!(level.getBlockEntity(pos) instanceof DrainBlockEntity be)) {
+            return ItemInteractionResult.PASS_TO_DEFAULT_BLOCK_INTERACTION;
+        }
+        if (!be.getDisguise().isEmpty()) {
+            // Already disguised: place the held block normally instead of falling
+            // through to the empty-hand disguise-removal interaction.
+            return ItemInteractionResult.SKIP_DEFAULT_BLOCK_INTERACTION;
+        }
+        if (!(stack.getItem() instanceof BlockItem)) {
             return ItemInteractionResult.PASS_TO_DEFAULT_BLOCK_INTERACTION;
         }
         if (!level.isClientSide()) {
@@ -73,7 +79,7 @@ public class DrainBlock extends Block implements EntityBlock {
             if (!player.getAbilities().instabuild) {
                 stack.shrink(1);
             }
-            player.displayClientMessage(Component.literal("Drain disguised as " + stack.getHoverName().getString()).withStyle(ChatFormatting.GREEN), true);
+            player.displayClientMessage(Component.literal("Drain disguised as " + be.getDisguise().getHoverName().getString()).withStyle(ChatFormatting.GREEN), true);
         }
         return ItemInteractionResult.sidedSuccess(level.isClientSide());
     }

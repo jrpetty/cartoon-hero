@@ -1,6 +1,8 @@
 package com.gadgets;
 
+import net.minecraft.core.Direction;
 import net.minecraft.world.Container;
+import net.minecraft.world.WorldlyContainer;
 import net.minecraft.world.item.ItemStack;
 
 /** Moves items between two vanilla containers, one at a time, respecting stacking and slot validity. */
@@ -25,6 +27,9 @@ public final class ItemTransfer {
             if (stack.isEmpty()) {
                 continue;
             }
+            if (from instanceof WorldlyContainer sided && !sided.canTakeItemThroughFace(i, stack, Direction.DOWN)) {
+                continue; // respect containers that forbid automated extraction
+            }
             while (!stack.isEmpty() && moved < max && insertOne(to, stack)) {
                 stack.shrink(1);
                 moved++;
@@ -43,7 +48,8 @@ public final class ItemTransfer {
         for (int i = 0; i < size; i++) {
             ItemStack dst = to.getItem(i);
             if (!dst.isEmpty() && ItemStack.isSameItemSameComponents(dst, src)
-                    && dst.getCount() < Math.min(dst.getMaxStackSize(), to.getMaxStackSize())) {
+                    && dst.getCount() < Math.min(dst.getMaxStackSize(), to.getMaxStackSize())
+                    && to.canPlaceItem(i, src)) {
                 dst.grow(1);
                 to.setItem(i, dst);
                 return true;

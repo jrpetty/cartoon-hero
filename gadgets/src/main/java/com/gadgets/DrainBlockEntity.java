@@ -52,7 +52,9 @@ public class DrainBlockEntity extends BlockEntity implements SidedInventory {
             target.move(Direction.DOWN);
         }
         BlockState landing = world.getBlockState(target);
-        if (landing.isAir() || landing.isReplaceable()) {
+        // Only land in air or replaceables with no fluid — never overwrite (delete)
+        // an existing water/lava source below.
+        if (landing.isAir() || (landing.isReplaceable() && landing.getFluidState().isEmpty())) {
             world.setBlockState(target, above);
         }
         world.setBlockState(up, Blocks.AIR.getDefaultState());

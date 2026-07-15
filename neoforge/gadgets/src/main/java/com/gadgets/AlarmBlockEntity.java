@@ -81,11 +81,13 @@ public class AlarmBlockEntity extends BlockEntity {
         AABB area = new AABB(pos).inflate(DETECT_RADIUS);
         boolean present = !level.getEntitiesOfClass(Entity.class, area, be.predicate()).isEmpty();
 
-        if (present && !be.wasPresent && level.getGameTime() - be.lastAlarm >= REARM_TICKS) {
+        boolean fired = present && !be.wasPresent && level.getGameTime() - be.lastAlarm >= REARM_TICKS;
+        if (fired) {
             be.lastAlarm = level.getGameTime();
             be.trigger(level, pos);
         }
-        be.wasPresent = present;
+        // An edge suppressed by the re-arm delay stays armed instead of being swallowed.
+        be.wasPresent = present && (be.wasPresent || fired);
     }
 
     private void trigger(Level level, BlockPos pos) {
@@ -104,6 +106,8 @@ public class AlarmBlockEntity extends BlockEntity {
     protected void saveAdditional(CompoundTag tag, HolderLookup.Provider registries) {
         super.saveAdditional(tag, registries);
         tag.putString("Target", target);
+        tag.putBoolean("WasPresent", wasPresent);
+        tag.putLong("LastAlarm", lastAlarm);
     }
 
     @Override
@@ -112,5 +116,7 @@ public class AlarmBlockEntity extends BlockEntity {
         if (tag.contains("Target")) {
             target = tag.getString("Target");
         }
+        wasPresent = tag.getBoolean("WasPresent");
+        lastAlarm = tag.contains("LastAlarm") ? tag.getLong("LastAlarm") : -1000L;
     }
 }

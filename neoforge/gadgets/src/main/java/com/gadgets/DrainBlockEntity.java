@@ -50,7 +50,9 @@ public class DrainBlockEntity extends BlockEntity implements WorldlyContainer {
             target.move(Direction.DOWN);
         }
         BlockState landing = level.getBlockState(target);
-        if (landing.isAir() || landing.canBeReplaced()) {
+        // Only land in air or replaceables with no fluid — never overwrite (delete)
+        // an existing water/lava source below.
+        if (landing.isAir() || (landing.canBeReplaced() && landing.getFluidState().isEmpty())) {
             level.setBlockAndUpdate(target, above);
         }
         level.setBlockAndUpdate(up, Blocks.AIR.defaultBlockState());

@@ -60,9 +60,15 @@ public class DrainBlock extends Block implements BlockEntityProvider {
     @Override
     protected ItemActionResult onUseWithItem(ItemStack stack, BlockState state, World world, BlockPos pos,
                                              PlayerEntity player, Hand hand, BlockHitResult hit) {
-        if (!(stack.getItem() instanceof BlockItem)
-                || !(world.getBlockEntity(pos) instanceof DrainBlockEntity be)
-                || !be.getDisguise().isEmpty()) {
+        if (!(world.getBlockEntity(pos) instanceof DrainBlockEntity be)) {
+            return ItemActionResult.PASS_TO_DEFAULT_BLOCK_INTERACTION;
+        }
+        if (!be.getDisguise().isEmpty()) {
+            // Already disguised: place the held block normally instead of falling
+            // through to the empty-hand disguise-removal interaction.
+            return ItemActionResult.SKIP_DEFAULT_BLOCK_INTERACTION;
+        }
+        if (!(stack.getItem() instanceof BlockItem)) {
             return ItemActionResult.PASS_TO_DEFAULT_BLOCK_INTERACTION;
         }
         if (!world.isClient()) {
@@ -70,7 +76,7 @@ public class DrainBlock extends Block implements BlockEntityProvider {
             if (!player.getAbilities().creativeMode) {
                 stack.decrement(1);
             }
-            player.sendMessage(Text.literal("Drain disguised as " + stack.getName().getString()).formatted(Formatting.GREEN), true);
+            player.sendMessage(Text.literal("Drain disguised as " + be.getDisguise().getName().getString()).formatted(Formatting.GREEN), true);
         }
         return ItemActionResult.SUCCESS;
     }

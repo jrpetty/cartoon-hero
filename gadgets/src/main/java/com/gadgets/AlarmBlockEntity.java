@@ -81,11 +81,13 @@ public class AlarmBlockEntity extends BlockEntity {
         Box area = new Box(pos).expand(DETECT_RADIUS);
         boolean present = !world.getEntitiesByClass(Entity.class, area, be.predicate()).isEmpty();
 
-        if (present && !be.wasPresent && world.getTime() - be.lastAlarm >= REARM_TICKS) {
+        boolean fired = present && !be.wasPresent && world.getTime() - be.lastAlarm >= REARM_TICKS;
+        if (fired) {
             be.lastAlarm = world.getTime();
             be.trigger(world, pos);
         }
-        be.wasPresent = present;
+        // An edge suppressed by the re-arm delay stays armed instead of being swallowed.
+        be.wasPresent = present && (be.wasPresent || fired);
     }
 
     private void trigger(World world, BlockPos pos) {
@@ -104,6 +106,8 @@ public class AlarmBlockEntity extends BlockEntity {
     protected void writeNbt(NbtCompound nbt, RegistryWrapper.WrapperLookup registries) {
         super.writeNbt(nbt, registries);
         nbt.putString("Target", target);
+        nbt.putBoolean("WasPresent", wasPresent);
+        nbt.putLong("LastAlarm", lastAlarm);
     }
 
     @Override
@@ -112,5 +116,7 @@ public class AlarmBlockEntity extends BlockEntity {
         if (nbt.contains("Target")) {
             target = nbt.getString("Target");
         }
+        wasPresent = nbt.getBoolean("WasPresent");
+        lastAlarm = nbt.contains("LastAlarm") ? nbt.getLong("LastAlarm") : -1000L;
     }
 }
