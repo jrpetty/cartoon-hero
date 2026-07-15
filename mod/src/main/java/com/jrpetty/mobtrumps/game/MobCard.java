@@ -120,6 +120,11 @@ public record MobCard(String id, String displayName, int health, int attack,
         };
     }
 
+    /** The themed group this mob belongs to (Farm, Undead, Nether, ...). */
+    public Category category() {
+        return MobCategories.of(id);
+    }
+
     /** Collector tier derived from spawn rarity (low rarity = rarer card). */
     public Tier tier() {
         if (rarity <= 2) return Tier.LEGENDARY;

@@ -339,8 +339,20 @@ public class CollectionBookScreen extends Screen {
         g.drawCenteredString(font, displayed ? label + "  ★" : label, cx + cw / 2, cy + ch + 4, lc);
     }
 
+    private int categoriesComplete() {
+        int done = 0;
+        for (com.jrpetty.mobtrumps.game.Category cat : com.jrpetty.mobtrumps.game.Category.values()) {
+            boolean all = true;
+            for (String id : com.jrpetty.mobtrumps.game.MobCategories.members(cat)) {
+                if (!ClientCollection.has(id)) { all = false; break; }
+            }
+            if (all) done++;
+        }
+        return done;
+    }
+
     private void renderStats(GuiGraphics g) {
-        int pw = 220, ph = 164;
+        int pw = 220, ph = 176;
         int px = (width - pw) / 2, py = (height - ph) / 2;
         g.fill(0, 0, width, height, 0x99000000);
         g.fill(px - 3, py - 3, px + pw + 3, py + ph + 3, CardRenderer.KRAFT_DARK);
@@ -355,7 +367,9 @@ public class CollectionBookScreen extends Screen {
         statLine(g, px + 14, valX, y, "Collected", have + " / " + total + "  (" + pct + "%)"); y += 12;
         statLine(g, px + 14, valX, y, "Holographic foils", ClientCollection.foilCount() + " / " + total); y += 12;
         statLine(g, px + 14, valX, y, "Filed in book", String.valueOf(ClientCollection.storedCount())); y += 12;
-        statLine(g, px + 14, valX, y, "Duel wins", String.valueOf(ClientCollection.duelWins())); y += 16;
+        statLine(g, px + 14, valX, y, "Duel wins", String.valueOf(ClientCollection.duelWins())); y += 12;
+        statLine(g, px + 14, valX, y, "Categories done", categoriesComplete() + " / "
+                + com.jrpetty.mobtrumps.game.Category.values().length); y += 16;
         for (Tier t : new Tier[]{Tier.LEGENDARY, Tier.EPIC, Tier.RARE, Tier.UNCOMMON, Tier.COMMON}) {
             int tt = 0, th = 0;
             for (MobCard c : MobCards.ALL) {

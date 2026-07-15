@@ -191,6 +191,8 @@ public final class BattleCommands {
                                         StringArgumentType.getString(ctx, "code")))))
                 .then(Commands.literal("guide")
                         .executes(ctx -> GuideBook.give(ctx.getSource().getPlayerOrException())))
+                .then(Commands.literal("categories")
+                        .executes(ctx -> categories(ctx.getSource().getPlayerOrException())))
                 .then(Commands.literal("draft")
                         .then(Commands.literal("accept")
                                 .executes(ctx -> DraftManager.accept(ctx.getSource().getPlayerOrException())))
@@ -241,6 +243,45 @@ public final class BattleCommands {
                                             .endSeason(p.serverLevel().getServer());
                                     return 1;
                                 }))));
+    }
+
+    private static int categories(ServerPlayer player) {
+        var collected = player.getData(ModAttachments.COLLECTED.get());
+        player.sendSystemMessage(Component.literal("═══ MOB CATEGORIES ═══")
+                .withStyle(ChatFormatting.AQUA, ChatFormatting.BOLD));
+        int done = 0;
+        for (com.jrpetty.mobtrumps.game.Category cat : com.jrpetty.mobtrumps.game.Category.values()) {
+            var members = com.jrpetty.mobtrumps.game.MobCategories.members(cat);
+            int have = 0;
+            for (String id : members) if (collected.contains(id)) have++;
+            boolean complete = have == members.size();
+            boolean claimed = CategoryRewards.isClaimed(player, cat);
+            if (complete) done++;
+
+            var reward = com.jrpetty.mobtrumps.game.CategoryReward.of(cat);
+            String stars = "★".repeat(cat.difficulty());
+            String status = claimed ? "  ✔ claimed" : complete ? "  ✦ COMPLETE!" : "";
+            MutableComponent line = Component.literal(String.format("  %-19s ", cat.label()))
+                    .withStyle(net.minecraft.network.chat.Style.EMPTY.withColor(
+                            net.minecraft.network.chat.TextColor.fromRgb(cat.accent() & 0xFFFFFF)));
+            line.append(Component.literal(have + "/" + members.size() + " " + stars)
+                    .withStyle(complete ? ChatFormatting.GREEN : ChatFormatting.GRAY));
+            if (!status.isEmpty()) {
+                line.append(Component.literal(status).withStyle(
+                        claimed ? ChatFormatting.DARK_GREEN : ChatFormatting.GOLD));
+            }
+            player.sendSystemMessage(line);
+            String armor = reward.armor().name().charAt(0)
+                    + reward.armor().name().substring(1).toLowerCase(java.util.Locale.ROOT);
+            player.sendSystemMessage(Component.literal("      Reward: " + reward.diamond()
+                            + " Diamonds, " + reward.iron() + " Iron, " + reward.gold()
+                            + " Gold, + a random enchanted " + armor + " piece")
+                    .withStyle(ChatFormatting.DARK_GRAY));
+        }
+        player.sendSystemMessage(Component.literal("  Completed " + done + " / "
+                        + com.jrpetty.mobtrumps.game.Category.values().length + " categories.")
+                .withStyle(ChatFormatting.GRAY));
+        return 1;
     }
 
     private static int season(CommandSourceStack source) throws CommandSyntaxException {

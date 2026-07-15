@@ -34,6 +34,10 @@ public final class CollectionTracker {
                 changed |= addTo(player, ModAttachments.DISPLAY_FOIL.get(), cardId);
             }
         }
+        if (isNew) {
+            // a newly-collected mob may have completed its category
+            CategoryRewards.checkAndAward(player);
+        }
         if (changed) {
             sync(player);
             ModTriggers.COLLECTION.get().trigger(player,

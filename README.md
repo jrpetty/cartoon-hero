@@ -43,7 +43,19 @@ In game:
   boosted stats with a green **+N** tag and a **HOLO** badge (a pip per tier),
   and every card view — the collection book, deck builder, card view, item
   tooltip, wall display — **updates live** the moment you cross a milestone
-- Card tooltips show all six stats; names are coloured by collector tier
+- **Mob categories & set rewards** — every one of the 81 mobs belongs to one
+  of ten themed categories: **Farm Animals, Wild Creatures, Villagers & Golems,
+  Aquatic, Undead, Overworld Monsters, The End, Nether, Illagers** and **Bosses**.
+  Each card wears a **background painted for its category** — a sunny barn for
+  farm animals, a deep-ocean scene for aquatic, lava and netherrack for the
+  Nether, a starry void for the End, a gold-flecked arena for bosses, and so on.
+  Collect **every** mob in a category and you're paid a one-time haul that scales
+  with how hard the set is: diamonds, iron and gold plus a **randomly-enchanted
+  armour piece** (iron for the easy sets, diamond for the hard ones, netherite
+  for the Bosses) — the armour is rolled like an enchanting table, so it ranges
+  from junk to jackpot. `/mobtrumps categories` shows every category's progress,
+  difficulty and reward. Admins can toggle the rewards or scale them in the config
+- Card tooltips show all six stats and the mob's category; names are coloured by collector tier
 - Right-click a card to open a full Top Trumps style card view — kraft
   border, the live 3D mob as the portrait, stat table and total rating,
   plus a flavour line and a real Minecraft **fun fact** for every mob
@@ -133,7 +145,9 @@ In game:
   40 / all 81 collected, your first foil (and the hidden all-foils goal),
   and duel wins.
 - **Config file** (`config/mobtrumps-common.toml`) — admins can tune max deck
-  size (and other knobs) without editing code.
+  size, ranked season length, and the **category completion rewards**
+  (`categoryRewardsEnabled` to turn them off, `categoryRewardMultiplier` to scale
+  the diamond/iron/gold amounts) without editing code.
 
 Dev runs: `./gradlew runClient` / `./gradlew runServer`.
 

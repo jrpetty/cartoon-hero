@@ -77,6 +77,13 @@ public final class ModAttachments {
                     .copyOnDeath()
                     .build());
 
+    /** Category names whose completion reward this player has already claimed. */
+    public static final Supplier<AttachmentType<List<String>>> CLAIMED_CATEGORIES =
+            ATTACHMENTS.register("claimed_categories", () -> AttachmentType.<List<String>>builder(() -> List.of())
+                    .serialize(Codec.STRING.listOf())
+                    .copyOnDeath()
+                    .build());
+
     /** Named saved decks (deck name -> mob ids), beyond the active DECK. */
     public static final Supplier<AttachmentType<Map<String, List<String>>>> SAVED_DECKS =
             ATTACHMENTS.register("saved_decks",

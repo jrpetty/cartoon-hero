@@ -103,8 +103,9 @@ public final class CardRenderer {
         String tier = "★ " + card.tier().label() + " ★";
         g.drawString(font, tier, (CARD_W - font.width(tier)) / 2, 27, tierPrintColor(card), false);
 
-        // portrait backdrop (the mob itself is drawn later in screen space)
-        g.fillGradient(12, 38, CARD_W - 12, 116, PORTRAIT_TOP, PORTRAIT_BOTTOM);
+        // portrait backdrop: a scene themed to the mob's category (the mob
+        // itself is drawn later in screen space, on top of this)
+        CardBackground.draw(g, card.category(), 12, 38, CARD_W - 12, 116);
         g.renderOutline(11, 37, CARD_W - 22, 116 - 38 + 2, KRAFT_DARK);
 
         // stat table — boosted values with a green +N tag on upgraded stats
@@ -126,8 +127,8 @@ public final class CardRenderer {
         // fact file strip
         g.fill(12, rowY + 3, CARD_W - 12, CARD_H - 9, FACT_BG);
         g.renderOutline(11, rowY + 2, CARD_W - 22, CARD_H - 9 - rowY - 3 + 2, KRAFT_DARK);
-        String fact = "Card " + (MobCards.ordinal(card.id()) + 1) + " of " + MobCards.ALL.size()
-                + " · Mob Trumps";
+        String cat = card.category() == null ? "Mob Trumps" : card.category().label();
+        String fact = cat + "  ·  " + (MobCards.ordinal(card.id()) + 1) + " / " + MobCards.ALL.size();
         drawCenteredFit(g, font, fact, CARD_W / 2f, rowY + 5, CARD_W - 28, KRAFT_DARK);
 
         // holographic foil sheen: shifting rainbow bands + sweep, richer per level

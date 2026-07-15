@@ -15,6 +15,8 @@ public final class Config {
     public static final ModConfigSpec.DoubleValue FOIL_MULTIPLIER;
     public static final ModConfigSpec.IntValue DECK_MAX;
     public static final ModConfigSpec.IntValue SEASON_DAYS;
+    public static final ModConfigSpec.BooleanValue CATEGORY_REWARDS;
+    public static final ModConfigSpec.DoubleValue CATEGORY_REWARD_MULTIPLIER;
 
     static {
         ModConfigSpec.Builder b = new ModConfigSpec.Builder();
@@ -34,6 +36,15 @@ public final class Config {
         b.push("ranked");
         SEASON_DAYS = b.comment("Length of a ranked season in real days before ratings soft-reset.")
                 .defineInRange("seasonDays", 7, 1, 90);
+        b.pop();
+
+        b.push("categories");
+        CATEGORY_REWARDS = b.comment("Award a one-time loot haul (diamonds/iron/gold + a random",
+                        "enchanted armour piece) for collecting every mob in a category.")
+                .define("categoryRewardsEnabled", true);
+        CATEGORY_REWARD_MULTIPLIER = b.comment("Scales the material amounts in every category reward",
+                        "(1.0 = default; 2.0 = double the diamonds/iron/gold). Armour tier is unaffected.")
+                .defineInRange("categoryRewardMultiplier", 1.0, 0.0, 10.0);
         b.pop();
 
         SPEC = b.build();

@@ -97,6 +97,11 @@ public class MobCardItem extends Item {
         }
         tooltip.add(Component.literal("★ " + card.tier().label() + " ★")
                 .withStyle(tierColor(card.tier()), ChatFormatting.ITALIC));
+        if (card.category() != null) {
+            tooltip.add(Component.literal(card.category().label()).withStyle(
+                    net.minecraft.network.chat.Style.EMPTY.withColor(
+                            net.minecraft.network.chat.TextColor.fromRgb(card.category().accent() & 0xFFFFFF))));
+        }
         boolean foil = isFoilCard(stack);
         // a holographic card shows its boosted stats; +N marks the lift
         MobCard shown = foil ? card.foilVersion() : card;
