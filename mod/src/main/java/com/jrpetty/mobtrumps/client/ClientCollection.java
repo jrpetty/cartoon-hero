@@ -1,5 +1,8 @@
 package com.jrpetty.mobtrumps.client;
 
+import com.jrpetty.mobtrumps.game.MobCard;
+import com.jrpetty.mobtrumps.game.MobCards;
+
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -35,6 +38,21 @@ public final class ClientCollection {
     /** How many of this mob the player has killed — i.e. cards collected of it. */
     public static int killCount(String cardId) {
         return kills.getOrDefault(cardId, 0);
+    }
+
+    /** The kill-derived upgrade level (0-3) this mob's card has reached. */
+    public static int upgradeLevel(String cardId) {
+        MobCard card = MobCards.byId(cardId);
+        return card == null ? 0 : card.tier().upgradeLevel(killCount(cardId));
+    }
+
+    /**
+     * The level a card should render at: 0 for the plain "normal" variant, or
+     * the full kill-earned level (at least 1) for the holographic variant, so
+     * a foil always shows its boost even before the first kill milestone.
+     */
+    public static int displayLevel(String cardId, boolean foil) {
+        return foil ? Math.max(1, upgradeLevel(cardId)) : 0;
     }
 
     public static void setStorage(List<String> storedIds, List<String> storedFoilIds) {

@@ -43,42 +43,77 @@ public final class MobDrops {
         CollectionTracker.record(killer, id, false);
 
         int kills = bumpKills(killer, id);
-        int threshold = card.tier().foilKillThreshold();
+        var tier = card.tier();
+        int prevLevel = tier.upgradeLevel(kills - 1);
+        int level = tier.upgradeLevel(kills);
         boolean alreadyFoil = killer.getData(ModAttachments.COLLECTED_FOIL.get()).contains(id);
 
-        if (!alreadyFoil && kills >= threshold) {
-            // holographic unlocked — drop the foil and celebrate
-            event.getDrops().add(cardDrop(dead, MobCardItem.stackOf(card, true)));
-            CollectionTracker.record(killer, id, true);
-            killer.sendSystemMessage(Component.literal("✦ HOLOGRAPHIC UNLOCKED: " + card.displayName()
-                            + "! ✦").withStyle(ChatFormatting.LIGHT_PURPLE, ChatFormatting.BOLD));
-            killer.sendSystemMessage(Component.literal("Its holo card is boosted: " + boostSummary(card) + ".")
-                    .withStyle(ChatFormatting.GRAY));
-            killer.serverLevel().playSound(null, killer.getX(), killer.getY(), killer.getZ(),
-                    SoundEvents.UI_TOAST_CHALLENGE_COMPLETE, SoundSource.PLAYERS, 0.8F, 1.2F);
-            killer.serverLevel().sendParticles(ParticleTypes.TOTEM_OF_UNDYING,
-                    killer.getX(), killer.getY() + 1.0, killer.getZ(), 40, 0.5, 0.6, 0.5, 0.2);
-        } else if (!alreadyFoil) {
-            // quiet progress nudge on the action bar
-            killer.displayClientMessage(Component.literal(card.displayName() + " holo: "
-                            + kills + " / " + threshold + " kills")
+        if (level > prevLevel) {
+            // a milestone was just crossed — celebrate the upgrade
+            MobCard from = card.upgraded(prevLevel);
+            MobCard to = card.upgraded(level);
+            if (level == 1 && !alreadyFoil) {
+                // first milestone: the holographic drops as a physical card
+                event.getDrops().add(cardDrop(dead, MobCardItem.stackOf(card, true)));
+                CollectionTracker.record(killer, id, true);
+                killer.sendSystemMessage(Component.literal("✦ HOLOGRAPHIC UNLOCKED: " + card.displayName()
+                                + "! ✦").withStyle(ChatFormatting.LIGHT_PURPLE, ChatFormatting.BOLD));
+            } else if (level >= 2) {
+                // higher tiers upgrade the card you already own, in-place
+                killer.sendSystemMessage(Component.literal("★ CARD UPGRADED: " + card.displayName()
+                                + " reached " + holoLabel(level) + "! ★")
+                        .withStyle(ChatFormatting.GOLD, ChatFormatting.BOLD));
+            }
+            if (level >= 1) {
+                killer.sendSystemMessage(Component.literal("Now boosted: " + boostSummary(from, to) + ".")
+                        .withStyle(ChatFormatting.GRAY));
+                celebrate(killer, level);
+            }
+        } else if (level < tier.maxLevel()) {
+            // quiet progress nudge on the action bar toward the next milestone
+            int next = tier.nextMilestone(kills);
+            String label = level == 0 ? "holo" : holoLabel(level + 1);
+            killer.displayClientMessage(Component.literal(card.displayName() + " " + label + ": "
+                            + kills + " / " + next + " kills")
                     .withStyle(ChatFormatting.DARK_PURPLE), true);
         }
         // push the updated kill count so the book and scanner show it live
         CollectionTracker.sync(killer);
     }
 
-    /** Increment and persist this player's kill count for a mob; returns the new total. */
-    /** "+2 Attack, +1 Health, +1 Speed, +1 Size" — the real diff for this card's holo. */
-    private static String boostSummary(com.jrpetty.mobtrumps.game.MobCard card) {
-        var foil = card.foilVersion();
+    /** "Holo" / "Holo II" / "Holo III" for upgrade levels 1-3. */
+    private static String holoLabel(int level) {
+        return switch (level) {
+            case 1 -> "Holo";
+            case 2 -> "Holo II";
+            case 3 -> "Holo III";
+            default -> "Holo +" + level;
+        };
+    }
+
+    /** Sound + particle burst for a milestone, richer at higher tiers. */
+    private static void celebrate(ServerPlayer killer, int level) {
+        float pitch = 1.0F + level * 0.15F;
+        killer.serverLevel().playSound(null, killer.getX(), killer.getY(), killer.getZ(),
+                SoundEvents.UI_TOAST_CHALLENGE_COMPLETE, SoundSource.PLAYERS, 0.8F, pitch);
+        killer.serverLevel().sendParticles(ParticleTypes.TOTEM_OF_UNDYING,
+                killer.getX(), killer.getY() + 1.0, killer.getZ(), 30 + level * 20, 0.5, 0.6, 0.5, 0.2);
+        if (level >= 2) {
+            killer.serverLevel().sendParticles(ParticleTypes.END_ROD,
+                    killer.getX(), killer.getY() + 1.0, killer.getZ(), level * 15, 0.5, 0.7, 0.5, 0.05);
+        }
+    }
+
+    /** "+2 Attack, +1 Health, +1 Speed, +1 Size" — the real diff between two card levels. */
+    private static String boostSummary(com.jrpetty.mobtrumps.game.MobCard from,
+                                       com.jrpetty.mobtrumps.game.MobCard to) {
         StringBuilder out = new StringBuilder();
         // biggest gains first so the speciality leads the sentence
         var stats = new java.util.ArrayList<>(java.util.List.of(com.jrpetty.mobtrumps.game.Stat.values()));
         stats.sort((a, b) -> Integer.compare(
-                foil.stat(b) - card.stat(b), foil.stat(a) - card.stat(a)));
+                to.stat(b) - from.stat(b), to.stat(a) - from.stat(a)));
         for (var stat : stats) {
-            int gain = foil.stat(stat) - card.stat(stat);
+            int gain = to.stat(stat) - from.stat(stat);
             if (gain <= 0) continue;
             if (out.length() > 0) out.append(", ");
             out.append("+").append(gain).append(" ").append(stat.label);

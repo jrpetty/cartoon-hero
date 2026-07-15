@@ -62,9 +62,11 @@ public class CardDisplayRenderer implements BlockEntityRenderer<CardDisplayBlock
             pose.scale(s, -s, s);
             Matrix4f mtx = pose.last().pose();
 
+            // a holographic display projects the boosted card
+            MobCard shown = foil ? card.foilVersion() : card;
             int tierCol = argb(MobCardItem.tierColor(card.tier()));
             int total = 0;
-            for (Stat st : Stat.values()) total += card.stat(st);
+            for (Stat st : Stat.values()) total += shown.stat(st);
 
             // --- header: name (auto-fit) + tier line ---
             String name = card.displayName();
@@ -84,12 +86,16 @@ public class CardDisplayRenderer implements BlockEntityRenderer<CardDisplayBlock
                 Stat st = stats[i];
                 float y = rowTop + i * rowStep;
                 int col = argb(MobCardItem.statColor(st));
-                int value = card.stat(st);
+                int value = shown.stat(st);
+                int gain = value - card.stat(st);
                 text(st.label.toUpperCase(java.util.Locale.ROOT), -50f, y, col, mtx, buffers);
                 // value bar: track then filled portion (0..10 -> 40px)
                 bar(buffers, mtx, 6f, y - 1f, 46f, y + 7f, 0xC0141821);
                 bar(buffers, mtx, 6f, y - 1f, 6f + value * 4f, y + 7f, col);
-                right(String.valueOf(value), 52f, y, 0xFFFFFFFF, mtx, buffers);
+                right(String.valueOf(value), 52f, y, gain > 0 ? 0xFF6BE87A : 0xFFFFFFFF, mtx, buffers);
+                if (gain > 0) {
+                    text("+" + gain, 54f, y, 0xFF3FCB5A, mtx, buffers);
+                }
             }
 
             // --- total rating footer ---

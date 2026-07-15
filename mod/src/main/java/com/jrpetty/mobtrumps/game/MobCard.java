@@ -23,26 +23,41 @@ public record MobCard(String id, String displayName, int health, int attack,
             {Stat.HEALTH, Stat.ATTACK, Stat.SIZE, Stat.SPEED, Stat.FARMABLE};
 
     /**
-     * The holographic version of this card. Each card's holo boost is shaped
-     * by what that mob is known for: +2 lands on its speciality (its highest
-     * boostable stat — Attack for a Creeper, Farmable for a Chicken, Speed
-     * for a Horse) and +1 on each of its next three defining stats, for +5
-     * total, never more. Stats cap at 10; capped points flow down the same
-     * ranking so no card wastes its boost. The ranking is derived only from
-     * the card itself, so everyone who unlocks a holo gets exactly the same
-     * upgraded card.
+     * This card upgraded {@code level} times (0 = base, 1 = holographic, up to
+     * the tier's {@link Tier#maxLevel()}). Each upgrade is shaped by what the
+     * mob is known for: +2 lands on its speciality (its highest boostable stat
+     * — Attack for a Creeper, Farmable for a Chicken) and +1 on each of its
+     * next three defining stats, for +5 per level, never more. Stats cap at 10
+     * and capped points flow down the same ranking so no boost is wasted. The
+     * result is derived only from the card itself, so everyone who reaches a
+     * given level gets exactly the same upgraded card.
      */
+    public MobCard upgraded(int level) {
+        if (level <= 0) {
+            return this;
+        }
+        int[] cur = {health, attack, size, speed, farmable};
+        for (int n = 0; n < level; n++) {
+            cur = boostOnce(cur);
+        }
+        return new MobCard(id, displayName, cur[0], cur[1], cur[2], cur[3], cur[4], rarity);
+    }
+
+    /** The holographic (level 1) version of this card. */
     public MobCard foilVersion() {
-        // rank boostable stats by this card's values, ties in enum order
+        return upgraded(1);
+    }
+
+    /** Apply one +5 speciality-shaped boost to a stat array, capped at 10. */
+    private static int[] boostOnce(int[] base) {
+        int[] boosted = base.clone();
+        // rank boostable stats by current value, ties in enum order
         Stat[] ranked = BOOSTABLE.clone();
-        java.util.Arrays.sort(ranked, (a, b) -> Integer.compare(stat(b), stat(a)));
+        java.util.Arrays.sort(ranked, (a, b) -> Integer.compare(boosted[boostIndex(b)], boosted[boostIndex(a)]));
 
-        int[] boosted = {health, attack, size, speed, farmable};
         int budget = 5;
-
         // the speciality's +2 goes to the best-ranked stat with room for the
-        // FULL +2 (a stat sitting at 9 or 10 passes it down the ranking, so
-        // every holo lands its promised +2 somewhere it counts)
+        // FULL +2 (a stat at 9 or 10 passes it down so the +2 always lands)
         int specIdx = -1;
         for (Stat s : ranked) {
             int i = boostIndex(s);
@@ -54,7 +69,6 @@ public record MobCard(String id, String displayName, int health, int attack,
             }
         }
         if (specIdx < 0) {
-            // freak case: every boostable stat is 9+ — take what fits
             for (Stat s : ranked) {
                 int i = boostIndex(s);
                 int add = Math.min(2, 10 - boosted[i]);
@@ -67,9 +81,10 @@ public record MobCard(String id, String displayName, int health, int attack,
             }
         }
         // spread the rest as +1s down the ranking; the first pass skips the
-        // speciality, later passes soak up points that capped stats rejected
+        // speciality, later passes soak up points that capped stats rejected so
+        // no boost is wasted while any boostable stat still has room
         int pass = 0;
-        while (budget > 0 && pass < 3) {
+        while (budget > 0) {
             boolean spent = false;
             for (Stat s : ranked) {
                 if (budget <= 0) break;
@@ -81,12 +96,17 @@ public record MobCard(String id, String displayName, int health, int attack,
                     spent = true;
                 }
             }
-            if (!spent && pass > 0) break; // everything is capped
+            if (!spent && pass > 0) break; // everything with room is capped
             pass++;
         }
+        return boosted;
+    }
 
-        return new MobCard(id, displayName,
-                boosted[0], boosted[1], boosted[2], boosted[3], boosted[4], rarity);
+    /** The effective card for a holder: upgraded to their kill level, and at
+     *  least level 1 if they hold the holographic. */
+    public MobCard effective(boolean foil, int kills) {
+        int level = Math.max(foil ? 1 : 0, tier().upgradeLevel(kills));
+        return upgraded(level);
     }
 
     private static int boostIndex(Stat stat) {

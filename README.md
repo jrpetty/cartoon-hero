@@ -29,15 +29,20 @@ In game:
   the time, right alongside its normal loot. The whole overworld (and Nether,
   and End) is your card hunt — no packs, no crafting, just play
 - **Holographic cards, earned by hunting** — kill enough of one mob to unlock
-  its **holographic** version, tracked with an action-bar progress counter.
-  Thresholds scale with how common the mob is: **100** kills for a common mob,
-  **75** uncommon, **25** rare, **10** epic, **5** legendary. A holo's boost is
-  shaped by what that mob is known for: **+2 on its speciality stat** (Attack for
-  a Creeper, Speed for a swift mob, Farmable for livestock) and **+1 on its next
-  three defining stats** — +5 total, never more, stats capped at 10, rarity never
-  touched. The boost is derived purely from the card itself, so everyone who
-  earns a holo gets exactly the same upgraded card and no one gets a card no
-  one else can
+  its **holographic** version, tracked with an action-bar progress counter, then
+  keep hunting to push it through **three upgrade tiers**. Each mob has three
+  kill milestones on the same 1× / 2.5× / 5× curve, scaled by how common it is:
+  a **common** mob upgrades at **100 / 250 / 500** kills, **uncommon** at
+  75 / 190 / 375, **rare** at 25 / 65 / 125, **epic** at 10 / 25 / 50 and
+  **legendary** at 5 / 15 / 25. Every milestone stacks another boost shaped by
+  what that mob is known for: **+2 on its speciality stat** (Attack for a Creeper,
+  Speed for a swift mob, Farmable for livestock) and **+1 on its next three
+  defining stats** — +5 per tier, never more, stats capped at 10, rarity never
+  touched. Each upgrade is derived purely from the card itself, so everyone who
+  reaches a given tier gets exactly the same upgraded card. Cards show their
+  boosted stats with a green **+N** tag and a **HOLO** badge (a pip per tier),
+  and every card view — the collection book, deck builder, card view, item
+  tooltip, wall display — **updates live** the moment you cross a milestone
 - Card tooltips show all six stats; names are coloured by collector tier
 - Right-click a card to open a full Top Trumps style card view — kraft
   border, the live 3D mob as the portrait, stat table and total rating,
@@ -61,6 +66,7 @@ In game:
 - **Deck builder** — open the Collection Book → **Deck** to pick up to 16 cards
   you own into a custom deck, then `/mobtrumps battle deck` to fight the CPU
   with your own hand. Any card whose holo you've unlocked is played **boosted**
+  to whatever upgrade tier your kill count has earned it
 - **CPU difficulty** — `/mobtrumps battle [deck] easy|normal|hard`. Easy plays
   randomly; Normal leads with its strongest stat; Hard picks the stat with the
   best odds against the whole card pool and bluffs so you can't read it

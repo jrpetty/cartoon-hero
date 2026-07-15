@@ -89,11 +89,13 @@ public final class DeckManager {
     public static List<MobCard> deckCards(ServerPlayer player) {
         Set<String> collected = new LinkedHashSet<>(player.getData(ModAttachments.COLLECTED.get()));
         Set<String> foils = new LinkedHashSet<>(player.getData(ModAttachments.COLLECTED_FOIL.get()));
+        java.util.Map<String, Integer> kills = player.getData(ModAttachments.KILLS.get());
         List<MobCard> cards = new ArrayList<>();
         for (String id : player.getData(ModAttachments.DECK.get())) {
             if (collected.contains(id)) {
                 MobCard card = MobCards.byId(id);
-                if (card != null) cards.add(foils.contains(id) ? card.foilVersion() : card);
+                // a card whose holo you own plays at your full kill-earned level
+                if (card != null) cards.add(card.effective(foils.contains(id), kills.getOrDefault(id, 0)));
             }
         }
         return cards;

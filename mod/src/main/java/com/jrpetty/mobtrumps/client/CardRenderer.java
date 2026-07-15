@@ -41,6 +41,8 @@ public final class CardRenderer {
     private static final int FACT_BG = 0xFFEDE3CE;
     private static final int BACK_DOT = 0xFF6A5236;
     private static final int BACK_TEXT = 0xFFD8C9A8;
+    private static final int BOOST_INK = 0xFF1E7A32;   // boosted stat value on the cream face
+    private static final int BOOST_GREEN = 0xFF35B34A;  // the "+N" tag
 
     private static final int ROW_H = 13;
 
@@ -67,6 +69,19 @@ public final class CardRenderer {
     public static void renderCard(GuiGraphics g, Font font, MobCard card, int x, int y,
                                   float scale, int mouseX, int mouseY, LivingEntity mob,
                                   boolean foil, boolean followMouse) {
+        renderCard(g, font, card, foil ? 1 : 0, x, y, scale, mouseX, mouseY, mob, foil, followMouse);
+    }
+
+    /**
+     * Draw the front of a card at a given upgrade {@code level} (0 = base card,
+     * 1 = holographic, up to 3). The stat table shows the boosted values with a
+     * green "+N" tag on every stat the upgrade lifted, a HOLO badge with a pip
+     * per level, and a foil sheen whose richness scales with the level.
+     */
+    public static void renderCard(GuiGraphics g, Font font, MobCard baseCard, int level, int x, int y,
+                                  float scale, int mouseX, int mouseY, LivingEntity mob,
+                                  boolean foil, boolean followMouse) {
+        MobCard card = baseCard.upgraded(level);
         var pose = g.pose();
         pose.pushPose();
         pose.translate(x, y, 0);
@@ -92,19 +107,20 @@ public final class CardRenderer {
         g.fillGradient(12, 38, CARD_W - 12, 116, PORTRAIT_TOP, PORTRAIT_BOTTOM);
         g.renderOutline(11, 37, CARD_W - 22, 116 - 38 + 2, KRAFT_DARK);
 
-        // stat table
+        // stat table — boosted values with a green +N tag on upgraded stats
         int rowY = 121;
         int total = 0;
         Stat[] stats = Stat.values();
         for (int i = 0; i < stats.length; i++) {
             Stat stat = stats[i];
-            total += card.stat(stat);
+            int value = card.stat(stat);
+            total += value;
             boolean blue = i % 2 == 0;
             drawRow(g, font, rowY, blue ? ROW_BLUE : ROW_GREEN, blue ? LABEL_BLUE : LABEL_GREEN,
-                    stat.label.toUpperCase(Locale.ROOT), card.stat(stat));
+                    stat.label.toUpperCase(Locale.ROOT), value, value - baseCard.stat(stat));
             rowY += ROW_H;
         }
-        drawRow(g, font, rowY, ROW_GOLD, INK, "MOB RATING", total);
+        drawRow(g, font, rowY, ROW_GOLD, INK, "MOB RATING", total, 0);
         rowY += ROW_H;
 
         // fact file strip
@@ -114,18 +130,36 @@ public final class CardRenderer {
                 + " · Mob Trumps";
         drawCenteredFit(g, font, fact, CARD_W / 2f, rowY + 5, CARD_W - 28, KRAFT_DARK);
 
-        // holographic foil sheen: shifting rainbow diagonal bands over the face
-        if (foil) {
+        // holographic foil sheen: shifting rainbow bands + sweep, richer per level
+        if (foil || level > 0) {
+            int lvl = Math.max(1, level);
             long t = System.currentTimeMillis();
-            float phase = (t % 3200L) / 3200f;
+            long period = Math.max(1400L, 3200L - (lvl - 1) * 700L);
+            float phase = (t % period) / (float) period;
+            int bandAlpha = 0x1C + lvl * 0x10; // 0x2C / 0x3C / 0x4C
+            float sat = Math.min(1f, 0.55f + lvl * 0.15f);
             for (int by = 8; by < CARD_H - 8; by += 3) {
                 float h = ((by / (float) CARD_H) + phase) % 1f;
-                int band = 0x22000000 | (hsvToRgb(h, 0.6f, 1f) & 0x00FFFFFF);
+                int band = (bandAlpha << 24) | (hsvToRgb(h, sat, 1f) & 0x00FFFFFF);
                 g.fill(8, by, CARD_W - 8, by + 2, band);
             }
-            // bright sweeping highlight
+            // bright sweeping highlight, brighter at higher levels
             int sweep = 8 + (int) (phase * (CARD_W - 16));
-            g.fill(Math.max(8, sweep - 3), 8, Math.min(CARD_W - 8, sweep + 3), CARD_H - 8, 0x33FFFFFF);
+            int sweepA = (0x2A + lvl * 0x10) << 24;
+            int half = 2 + lvl;
+            g.fill(Math.max(8, sweep - half), 8, Math.min(CARD_W - 8, sweep + half), CARD_H - 8,
+                    0x00FFFFFF | sweepA);
+            // a shimmering inner frame that intensifies with level
+            int frameA = (0x40 + lvl * 0x28) << 24;
+            int frame = 0x00FFFFFF | frameA;
+            int glint = (int) (Math.abs(Math.sin(t / 380.0)) * 0x30) << 24;
+            g.renderOutline(6, 6, CARD_W - 12, CARD_H - 12, frame);
+            g.renderOutline(7, 7, CARD_W - 14, CARD_H - 14, 0x00FFFFFF | glint);
+        }
+
+        // HOLO badge with a pip per level, top-left corner
+        if (level > 0) {
+            drawLevelBadge(g, font, level);
         }
 
         pose.popPose();
@@ -259,10 +293,41 @@ public final class CardRenderer {
     }
 
     private static void drawRow(GuiGraphics g, Font font, int rowY, int bg, int labelColor,
-                                String label, int value) {
+                                String label, int value, int delta) {
         g.fill(12, rowY, CARD_W - 12, rowY + ROW_H - 1, bg);
         g.drawString(font, label, 16, rowY + 3, labelColor, false);
         String v = String.valueOf(value);
-        g.drawString(font, v, CARD_W - 16 - font.width(v), rowY + 3, INK, false);
+        int vx = CARD_W - 16 - font.width(v);
+        g.drawString(font, v, vx, rowY + 3, delta > 0 ? BOOST_INK : INK, false);
+        if (delta > 0) {
+            // a small green "+N" tag just left of the boosted value
+            String d = "+" + delta;
+            float ds = 0.75f;
+            int dw = Math.round(font.width(d) * ds);
+            var pose = g.pose();
+            pose.pushPose();
+            pose.translate(vx - dw - 3f, rowY + 3.5f, 0);
+            pose.scale(ds, ds, 1f);
+            g.drawString(font, d, 0, 0, BOOST_GREEN, false);
+            pose.popPose();
+        }
+    }
+
+    /** A compact "HOLO" pill with a gold pip per upgrade level, drawn top-left. */
+    private static void drawLevelBadge(GuiGraphics g, Font font, int level) {
+        String label = "HOLO";
+        int pad = 3;
+        int lw = font.width(label);
+        int bw = pad * 2 + lw + 3 + level * 4;
+        int bx = 9, by = 9, bh = 11;
+        g.fill(bx - 1, by - 1, bx + bw + 1, by + bh + 1, 0xFF1B0E24);
+        g.fillGradient(bx, by, bx + bw, by + bh, 0xFF5B2C87, 0xFF33184D);
+        g.fill(bx, by, bx + bw, by + 1, 0xFFB98BF0);
+        g.drawString(font, label, bx + pad, by + 2, 0xFFF1DEFF, false);
+        for (int i = 0; i < level; i++) {
+            int dx = bx + pad + lw + 2 + i * 4;
+            g.fill(dx, by + 3, dx + 3, by + bh - 3, 0xFFFFD54A);
+            g.fill(dx, by + 3, dx + 3, by + 4, 0xFFFFF0B0);
+        }
     }
 }

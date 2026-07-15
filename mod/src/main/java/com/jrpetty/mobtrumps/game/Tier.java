@@ -16,16 +16,45 @@ public enum Tier {
     }
 
     /**
-     * How many of this mob you must kill to unlock its holographic card.
-     * Rarer mobs are harder to find, so they need fewer kills.
+     * Kill milestones that upgrade this mob's card. Reaching the first unlocks
+     * the holographic (upgrade level 1); each later milestone bumps the level
+     * again (up to 3), stacking another stat boost. Rarer mobs are harder to
+     * find, so they need fewer kills — but every rarity follows the same
+     * 1x / 2.5x / 5x curve as common's 100 / 250 / 500.
      */
-    public int foilKillThreshold() {
+    public int[] milestones() {
         return switch (this) {
-            case COMMON -> 100;
-            case UNCOMMON -> 75;
-            case RARE -> 25;
-            case EPIC -> 10;
-            case LEGENDARY -> 5;
+            case COMMON -> new int[]{100, 250, 500};
+            case UNCOMMON -> new int[]{75, 190, 375};
+            case RARE -> new int[]{25, 65, 125};
+            case EPIC -> new int[]{10, 25, 50};
+            case LEGENDARY -> new int[]{5, 15, 25};
         };
+    }
+
+    /** How many milestones {@code kills} has passed: the card's upgrade level (0-3). */
+    public int upgradeLevel(int kills) {
+        int level = 0;
+        for (int m : milestones()) {
+            if (kills >= m) level++;
+        }
+        return level;
+    }
+
+    public int maxLevel() {
+        return milestones().length;
+    }
+
+    /** Kills needed to unlock the holographic (the first milestone). */
+    public int foilKillThreshold() {
+        return milestones()[0];
+    }
+
+    /** The next milestone above {@code kills}, or -1 if already maxed. */
+    public int nextMilestone(int kills) {
+        for (int m : milestones()) {
+            if (kills < m) return m;
+        }
+        return -1;
     }
 }

@@ -235,8 +235,9 @@ public class CollectionBookScreen extends Screen {
                 LivingEntity mob = overlayOpen ? null
                         : CardRenderer.portraitEntity(minecraft, card, entityCache);
                 boolean foil = ClientCollection.displayedIsFoil(card.id());
+                int level = ClientCollection.displayLevel(card.id(), foil);
                 // only the hovered card comes alive and follows the cursor
-                CardRenderer.renderCard(g, font, card, cx, cy, CARD_SCALE,
+                CardRenderer.renderCard(g, font, card, level, cx, cy, CARD_SCALE,
                         mouseX, mouseY, mob, foil, hovered);
                 // a small stack tab if more than one variant is owned
                 if (ClientCollection.variantCount(card.id()) > 1) {
@@ -326,7 +327,8 @@ public class CollectionBookScreen extends Screen {
                              boolean displayed, String label, int mouseX, int mouseY) {
         int cx = r[0], cy = r[1], cw = r[2], ch = r[3];
         boolean hover = mouseX >= cx && mouseX < cx + cw && mouseY >= cy && mouseY < cy + ch;
-        CardRenderer.renderCard(g, font, card, cx, cy, 0.5f, mouseX, mouseY, mob, foil);
+        int level = ClientCollection.displayLevel(card.id(), foil);
+        CardRenderer.renderCard(g, font, card, level, cx, cy, 0.5f, mouseX, mouseY, mob, foil, true);
         if (displayed) {
             g.renderOutline(cx - 2, cy - 2, cw + 4, ch + 4, 0xFF55E06A);
             g.renderOutline(cx - 1, cy - 1, cw + 2, ch + 2, 0xFF55E06A);

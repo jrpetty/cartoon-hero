@@ -126,8 +126,10 @@ public class DeckBuilderScreen extends Screen {
 
             g.fill(cx + 2, cy + 3, cx + cw + 3, cy + ch + 4, 0x44000000);
             LivingEntity mob = CardRenderer.portraitEntity(minecraft, card, entityCache);
-            CardRenderer.renderCard(g, font, card, cx, cy, CARD_SCALE, mouseX, mouseY,
-                    mob, ClientCollection.hasFoil(card.id()));
+            boolean foil = ClientCollection.hasFoil(card.id());
+            int level = ClientCollection.displayLevel(card.id(), foil);
+            CardRenderer.renderCard(g, font, card, level, cx, cy, CARD_SCALE, mouseX, mouseY,
+                    mob, foil, false);
             if (inDeck) {
                 g.renderOutline(cx - 2, cy - 2, cw + 4, ch + 4, 0xFF55E06A);
                 g.renderOutline(cx - 1, cy - 1, cw + 2, ch + 2, 0xFF55E06A);

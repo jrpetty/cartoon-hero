@@ -97,14 +97,24 @@ public class MobCardItem extends Item {
         }
         tooltip.add(Component.literal("★ " + card.tier().label() + " ★")
                 .withStyle(tierColor(card.tier()), ChatFormatting.ITALIC));
-        if (isFoilCard(stack)) {
+        boolean foil = isFoilCard(stack);
+        // a holographic card shows its boosted stats; +N marks the lift
+        MobCard shown = foil ? card.foilVersion() : card;
+        if (foil) {
             tooltip.add(Component.literal("✦ Holographic Foil ✦")
                     .withStyle(ChatFormatting.WHITE, ChatFormatting.BOLD));
         }
         for (Stat stat : Stat.values()) {
-            tooltip.add(Component.literal(stat.label + ": ").withStyle(statColor(stat))
-                    .append(Component.literal(String.valueOf(card.stat(stat)))
-                            .withStyle(ChatFormatting.WHITE)));
+            int value = shown.stat(stat);
+            int gain = value - card.stat(stat);
+            Component line = Component.literal(stat.label + ": ").withStyle(statColor(stat))
+                    .append(Component.literal(String.valueOf(value))
+                            .withStyle(gain > 0 ? ChatFormatting.GREEN : ChatFormatting.WHITE));
+            if (gain > 0) {
+                line = line.copy().append(Component.literal(" (+" + gain + ")")
+                        .withStyle(ChatFormatting.DARK_GREEN));
+            }
+            tooltip.add(line);
         }
         tooltip.add(Component.literal("Right-click to view the card").withStyle(ChatFormatting.DARK_GRAY));
         super.appendHoverText(stack, context, tooltip, flag);

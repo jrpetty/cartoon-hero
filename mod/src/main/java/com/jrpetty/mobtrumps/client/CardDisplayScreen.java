@@ -124,7 +124,8 @@ public class CardDisplayScreen extends Screen {
             g.fill(cx - 2, cy - 2, cx + cellW + 2, cy + cellH + 2, hover ? 0xFF20242C : PANEL);
             LivingEntity mob = CardRenderer.portraitEntity(minecraft, card, entityCache);
             boolean foilPreview = hasShiftDown() && ClientCollection.hasFoil(card.id());
-            CardRenderer.renderCard(g, font, card, cx, cy, SCALE, mouseX, mouseY, mob, foilPreview, false);
+            int level = ClientCollection.displayLevel(card.id(), foilPreview);
+            CardRenderer.renderCard(g, font, card, level, cx, cy, SCALE, mouseX, mouseY, mob, foilPreview, false);
             if (ClientCollection.hasFoil(card.id())) {
                 g.fill(cx + cellW - 6, cy + 1, cx + cellW - 1, cy + 6, FOIL_ACCENT);
             }

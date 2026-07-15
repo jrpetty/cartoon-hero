@@ -98,7 +98,8 @@ public class MobCardScreen extends Screen {
 
         g.fill(x + 4, y + 6, x + w + 8, y + h + 10, 0x66000000); // shadow
         LivingEntity mob = CardRenderer.portraitEntity(minecraft, card, entityCache);
-        CardRenderer.renderCard(g, font, card, x, y, 1f, mouseX, mouseY, mob, foil);
+        int level = ClientCollection.displayLevel(card.id(), foil);
+        CardRenderer.renderCard(g, font, card, level, x, y, 1f, mouseX, mouseY, mob, foil, true);
 
         // one-time shine sweep across the card on open
         if (elapsed < SHINE_MS) {
@@ -113,15 +114,24 @@ public class MobCardScreen extends Screen {
         }
         pose.popPose();
 
-        // how many of this mob you've collected (and holo progress)
+        // how many of this mob you've collected + milestone / upgrade progress
         int have = ClientCollection.killCount(card.id());
-        int threshold = card.tier().foilKillThreshold();
-        boolean holo = ClientCollection.hasFoil(card.id());
-        String collectedText = have == 0 ? "Not collected yet"
-                : "Collected x" + have + (holo ? "  ·  holo unlocked"
-                        : "  ·  holo at " + threshold + " (" + Math.min(have, threshold) + "/" + threshold + ")");
-        int collectedColor = holo ? 0xFFC77BFF : have > 0 ? 0xFF7BE38A : 0xFFB9BFC9;
-        g.drawCenteredString(font, collectedText, cx, y + h + 6, collectedColor);
+        Tier tier = card.tier();
+        int lvl = tier.upgradeLevel(have);
+        int next = tier.nextMilestone(have);
+        String progress;
+        if (have == 0) {
+            progress = "Not collected yet";
+        } else if (lvl == 0) {
+            progress = "Collected x" + have + "  ·  holo at " + next + " (" + have + "/" + next + ")";
+        } else if (next > 0) {
+            progress = "Collected x" + have + "  ·  " + holoLabel(lvl)
+                    + "  ·  next tier at " + next + " (" + have + "/" + next + ")";
+        } else {
+            progress = "Collected x" + have + "  ·  " + holoLabel(lvl) + "  ·  fully upgraded ★";
+        }
+        int collectedColor = lvl > 0 ? 0xFFC77BFF : have > 0 ? 0xFF7BE38A : 0xFFB9BFC9;
+        g.drawCenteredString(font, progress, cx, y + h + 6, collectedColor);
 
         // lore: a flavour line and a real Minecraft fact, wrapped under the card
         CardLore.Lore lore = CardLore.of(card.id());
@@ -140,6 +150,16 @@ public class MobCardScreen extends Screen {
 
         String hint = parent != null ? "Press ESC to return to the book" : "Press ESC to close";
         g.drawString(font, hint, (width - font.width(hint)) / 2, ly + 4, 0xFF787878, true);
+    }
+
+    /** "Holo" / "Holo II" / "Holo III" for upgrade levels 1-3. */
+    static String holoLabel(int level) {
+        return switch (level) {
+            case 1 -> "Holo";
+            case 2 -> "Holo II";
+            case 3 -> "Holo III";
+            default -> "Holo +" + level;
+        };
     }
 
     private int tierGlow(Tier tier, boolean isFoil) {
