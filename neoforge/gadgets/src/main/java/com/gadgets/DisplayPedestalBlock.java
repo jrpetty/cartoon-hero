@@ -1,5 +1,9 @@
 package com.gadgets;
 
+import net.minecraft.world.level.block.state.properties.BooleanProperty;
+import net.minecraft.world.level.block.state.StateDefinition;
+import net.minecraft.world.level.LevelAccessor;
+import net.minecraft.world.item.context.BlockPlaceContext;
 import net.minecraft.ChatFormatting;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
@@ -33,8 +37,49 @@ public class DisplayPedestalBlock extends Block implements EntityBlock {
     private static final String[] SCALE_NAMES = {"Small", "Medium", "Large"};
     private static final String[] SPIN_NAMES = {"Off", "Slow", "Medium", "Fast"};
 
+    public static final BooleanProperty HAS_UP = BooleanProperty.create("has_up");
+    public static final BooleanProperty HAS_DOWN = BooleanProperty.create("has_down");
+
     public DisplayPedestalBlock(Properties properties) {
         super(properties);
+        registerDefaultState(getStateDefinition().any().setValue(HAS_UP, false).setValue(HAS_DOWN, false));
+    }
+
+    @Override
+    protected void createBlockStateDefinition(StateDefinition.Builder<Block, BlockState> builder) {
+        builder.add(HAS_UP, HAS_DOWN);
+    }
+
+    @Nullable
+    @Override
+    public BlockState getStateForPlacement(BlockPlaceContext ctx) {
+        Level level = ctx.getLevel();
+        BlockPos pos = ctx.getClickedPos();
+        return defaultBlockState()
+                .setValue(HAS_UP, level.getBlockState(pos.above()).getBlock() instanceof DisplayPedestalBlock)
+                .setValue(HAS_DOWN, level.getBlockState(pos.below()).getBlock() instanceof DisplayPedestalBlock);
+    }
+
+    @Override
+    protected BlockState updateShape(BlockState state, Direction direction, BlockState neighborState,
+                                     LevelAccessor level, BlockPos pos, BlockPos neighborPos) {
+        if (direction == Direction.UP) {
+            return state.setValue(HAS_UP, neighborState.getBlock() instanceof DisplayPedestalBlock);
+        }
+        if (direction == Direction.DOWN) {
+            return state.setValue(HAS_DOWN, neighborState.getBlock() instanceof DisplayPedestalBlock);
+        }
+        return super.updateShape(state, direction, neighborState, level, pos, neighborPos);
+    }
+
+    /** The bottom-most pedestal of a stacked column owns the displayed item. */
+    @Nullable
+    private DisplayPedestalBlockEntity owner(Level level, BlockPos pos) {
+        BlockPos.MutableBlockPos p = pos.mutable();
+        for (int i = 0; i < 8 && level.getBlockState(p.below()).getBlock() instanceof DisplayPedestalBlock; i++) {
+            p.move(Direction.DOWN);
+        }
+        return level.getBlockEntity(p) instanceof DisplayPedestalBlockEntity be ? be : null;
     }
 
     @Nullable
@@ -46,7 +91,8 @@ public class DisplayPedestalBlock extends Block implements EntityBlock {
     @Override
     protected ItemInteractionResult useItemOn(ItemStack stack, BlockState state, Level level, BlockPos pos,
                                               Player player, InteractionHand hand, BlockHitResult hit) {
-        if (!(level.getBlockEntity(pos) instanceof DisplayPedestalBlockEntity be)) {
+        DisplayPedestalBlockEntity be = owner(level, pos);
+        if (be == null) {
             return ItemInteractionResult.PASS_TO_DEFAULT_BLOCK_INTERACTION;
         }
         if (be.getDisplayed().isEmpty()) {
@@ -73,7 +119,8 @@ public class DisplayPedestalBlock extends Block implements EntityBlock {
 
     @Override
     protected InteractionResult useWithoutItem(BlockState state, Level level, BlockPos pos, Player player, BlockHitResult hit) {
-        if (!(level.getBlockEntity(pos) instanceof DisplayPedestalBlockEntity be) || be.getDisplayed().isEmpty()) {
+        DisplayPedestalBlockEntity be = owner(level, pos);
+        if (be == null || be.getDisplayed().isEmpty()) {
             return InteractionResult.PASS;
         }
         if (!level.isClientSide()) {

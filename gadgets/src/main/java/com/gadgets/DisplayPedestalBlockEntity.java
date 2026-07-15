@@ -122,7 +122,12 @@ public class DisplayPedestalBlockEntity extends BlockEntity implements SidedInve
 
     @Override
     public boolean isValid(int slot, ItemStack stack) {
-        return displayed.isEmpty();
+        return isColumnOwner() && displayed.isEmpty();
+    }
+
+    /** Only the bottom-most pedestal of a stacked column accepts items. */
+    private boolean isColumnOwner() {
+        return world == null || !(world.getBlockState(pos.down()).getBlock() instanceof DisplayPedestalBlock);
     }
 
     @Override
@@ -143,7 +148,7 @@ public class DisplayPedestalBlockEntity extends BlockEntity implements SidedInve
 
     @Override
     public boolean canInsert(int slot, ItemStack stack, @Nullable Direction dir) {
-        return displayed.isEmpty();
+        return isValid(slot, stack);
     }
 
     @Override

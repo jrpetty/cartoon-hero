@@ -32,13 +32,29 @@ public class DisplayPedestalRenderer implements BlockEntityRenderer<DisplayPedes
         World world = be.getWorld();
         double time = (world != null ? world.getTime() : 0L) + tickDelta;
 
+        // Stacked pedestals form one tall case: the bottom block owns the item and
+        // centers it over the whole column, scaled up to fill the extra room.
+        int height = 1;
+        boolean ownsColumn = true;
+        if (world != null) {
+            if (world.getBlockState(be.getPos().down()).getBlock() instanceof DisplayPedestalBlock) {
+                ownsColumn = false;
+            } else {
+                while (height < 8 && world.getBlockState(be.getPos().up(height)).getBlock() instanceof DisplayPedestalBlock) {
+                    height++;
+                }
+            }
+        }
+        float centerY = ownsColumn ? height * 0.5F : 0.5F;
+        float sizeMul = ownsColumn ? 1.0F + 0.7F * (height - 1) : 1.0F;
+
         int spin = Math.min(Math.max(be.getSpin(), 0), SPIN_SPEED.length - 1);
         float bob = (float) (Math.sin(time * 0.08) * 0.03);
         float angle = spin == 0 ? 0.0F : (float) ((time * SPIN_SPEED[spin]) % 360.0);
-        float scale = 0.35F + be.getScale() * 0.225F;
+        float scale = (0.35F + be.getScale() * 0.225F) * sizeMul;
 
         matrices.push();
-        matrices.translate(0.5, 0.5 + bob, 0.5);
+        matrices.translate(0.5, centerY + bob, 0.5);
         matrices.multiply(RotationAxis.POSITIVE_Y.rotationDegrees(angle));
         matrices.scale(scale, scale, scale);
         itemRenderer.renderItem(stack, ModelTransformationMode.GROUND, light, OverlayTexture.DEFAULT_UV,

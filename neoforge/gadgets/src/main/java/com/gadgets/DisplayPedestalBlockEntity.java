@@ -120,7 +120,12 @@ public class DisplayPedestalBlockEntity extends BlockEntity implements WorldlyCo
 
     @Override
     public boolean canPlaceItem(int slot, ItemStack stack) {
-        return displayed.isEmpty();
+        return isColumnOwner() && displayed.isEmpty();
+    }
+
+    /** Only the bottom-most pedestal of a stacked column accepts items. */
+    private boolean isColumnOwner() {
+        return level == null || !(level.getBlockState(worldPosition.below()).getBlock() instanceof DisplayPedestalBlock);
     }
 
     @Override
@@ -141,7 +146,7 @@ public class DisplayPedestalBlockEntity extends BlockEntity implements WorldlyCo
 
     @Override
     public boolean canPlaceItemThroughFace(int slot, ItemStack stack, @Nullable Direction dir) {
-        return displayed.isEmpty();
+        return canPlaceItem(slot, stack);
     }
 
     @Override
