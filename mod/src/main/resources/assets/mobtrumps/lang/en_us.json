@@ -4,5 +4,7 @@
   "item.mobtrumps.nether_pack": "Nether Pack",
   "item.mobtrumps.boss_pack": "Boss Pack",
   "item.mobtrumps.collection_book": "Mob Collection Book",
+  "block.mobtrumps.dueling_table": "Dueling Table",
+  "block.mobtrumps.card_display": "Card Display",
   "itemGroup.mobtrumps": "Mob Trumps"
 }

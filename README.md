@@ -70,7 +70,14 @@ In game:
   `wager` while holding a card to bet it (both stake a card, winner takes both),
   or `bet <emeralds>` to gamble money — both players escrow the same number of
   emeralds and the winner takes the whole pot (stakes are refunded on a draw,
-  decline, timeout or logout)
+  decline, timeout or logout). Add `bo3` or `bo5` for a **best-of series** —
+  the deck is re-dealt each game and the first to win the majority takes the match
+- **Dueling Table** (craft: 3 crafting tables + 2 paper + emerald) — a placeable
+  block so duels are discoverable without commands: right-click to take a seat,
+  and when a second player right-clicks it a best-of-3 duel begins between you
+- **Card Display** (craft: item frame + emerald) — a thin wall frame; right-click
+  it holding a mob card to mount it face-out for your base, right-click empty-handed
+  to take it back. Show off your rarest holo on the wall
 - **Quick match & spectating** — `/mobtrumps queue` auto-pairs you with any
   other waiting player; `/mobtrumps watch <player>` lets you follow a live duel
   in chat and place an emerald **side bet** on either duelist (pari-mutuel —

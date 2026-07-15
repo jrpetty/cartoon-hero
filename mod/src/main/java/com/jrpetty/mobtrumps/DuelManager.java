@@ -267,6 +267,16 @@ public final class DuelManager {
         return (bestOf == 3 || bestOf == 5) ? bestOf : 1;
     }
 
+    /** Start an unwagered best-of-3 duel from a dueling table block. */
+    public static void startFromTable(ServerPlayer challenger, ServerPlayer target) {
+        if (isInDuel(challenger) || isInDuel(target)) {
+            target.sendSystemMessage(err(name(isInDuel(challenger) ? challenger : target)
+                    + " is already in a duel."));
+            return;
+        }
+        startDuel(challenger, target, ItemStack.EMPTY, ItemStack.EMPTY, 0, 0, 3);
+    }
+
     /** Create and kick off a duel between two players once any stakes are escrowed. */
     private static void startDuel(ServerPlayer challenger, ServerPlayer target,
                                   ItemStack chWager, ItemStack tgWager, int chBet, int tgBet, int bestOf) {

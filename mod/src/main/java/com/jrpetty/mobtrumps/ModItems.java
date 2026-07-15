@@ -56,6 +56,8 @@ public final class ModItems {
                     .icon(() -> new ItemStack(COLLECTION_BOOK.get()))
                     .displayItems((parameters, output) -> {
                         output.accept(COLLECTION_BOOK.get());
+                        output.accept(ModBlocks.DUELING_TABLE.get());
+                        output.accept(ModBlocks.CARD_DISPLAY.get());
                         // cards are earned by hunting mobs; every card is shown here for reference
                         for (MobCard card : MobCards.ALL) {
                             output.accept(MobCardItem.stackOf(card));

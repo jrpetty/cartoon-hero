@@ -1,0 +1,8 @@
+{
+  "variants": {
+    "facing=north": { "model": "mobtrumps:block/card_display" },
+    "facing=east":  { "model": "mobtrumps:block/card_display", "y": 90 },
+    "facing=south": { "model": "mobtrumps:block/card_display", "y": 180 },
+    "facing=west":  { "model": "mobtrumps:block/card_display", "y": 270 }
+  }
+}

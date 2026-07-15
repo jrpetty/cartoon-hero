@@ -18,6 +18,7 @@ public class MobTrumps {
         ModItems.ITEMS.register(modEventBus);
         ModItems.DATA_COMPONENTS.register(modEventBus);
         ModItems.CREATIVE_MODE_TABS.register(modEventBus);
+        ModBlocks.register(modEventBus);
         ModAttachments.ATTACHMENTS.register(modEventBus);
         ModTriggers.TRIGGERS.register(modEventBus);
         modEventBus.addListener(ModNetworking::register);
@@ -46,6 +47,7 @@ public class MobTrumps {
                 TradeManager.handleLogout(player);
                 DraftManager.handleLogout(player);
                 TournamentManager.handleLogout(player);
+                DuelTables.clearSeatsOf(player.getUUID());
             }
         });
     }

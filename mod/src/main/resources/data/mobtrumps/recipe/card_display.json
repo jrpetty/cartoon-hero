@@ -1,0 +1,12 @@
+{
+  "type": "minecraft:crafting_shapeless",
+  "category": "misc",
+  "ingredients": [
+    { "item": "minecraft:item_frame" },
+    { "item": "minecraft:emerald" }
+  ],
+  "result": {
+    "id": "mobtrumps:card_display",
+    "count": 1
+  }
+}

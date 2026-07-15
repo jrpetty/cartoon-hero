@@ -2,6 +2,7 @@ package com.jrpetty.mobtrumps.client;
 
 import com.jrpetty.mobtrumps.MobCardItem;
 import com.jrpetty.mobtrumps.MobTrumps;
+import com.jrpetty.mobtrumps.ModBlocks;
 import com.jrpetty.mobtrumps.ModItems;
 import com.jrpetty.mobtrumps.game.MobCards;
 import net.minecraft.client.renderer.item.ItemProperties;
@@ -10,6 +11,7 @@ import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.fml.event.lifecycle.FMLClientSetupEvent;
+import net.neoforged.neoforge.client.event.EntityRenderersEvent;
 
 /** Client-only registration: the mob_index item property that selects a
  *  card's per-mob inventory icon via the model overrides. */
@@ -28,5 +30,10 @@ public final class ClientSetup {
                     var card = MobCardItem.cardOf(stack);
                     return card == null ? -1f : MobCards.ordinal(card.id());
                 }));
+    }
+
+    @SubscribeEvent
+    public static void onRegisterRenderers(EntityRenderersEvent.RegisterRenderers event) {
+        event.registerBlockEntityRenderer(ModBlocks.CARD_DISPLAY_BE.get(), CardDisplayRenderer::new);
     }
 }

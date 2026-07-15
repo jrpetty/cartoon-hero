@@ -1,0 +1,17 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "misc",
+  "pattern": [
+    "PEP",
+    "CCC"
+  ],
+  "key": {
+    "P": { "item": "minecraft:paper" },
+    "E": { "item": "minecraft:emerald" },
+    "C": { "item": "minecraft:crafting_table" }
+  },
+  "result": {
+    "id": "mobtrumps:dueling_table",
+    "count": 1
+  }
+}

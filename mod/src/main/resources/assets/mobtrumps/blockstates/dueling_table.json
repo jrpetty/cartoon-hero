@@ -1,0 +1,8 @@
+{
+  "variants": {
+    "facing=north": { "model": "mobtrumps:block/dueling_table" },
+    "facing=south": { "model": "mobtrumps:block/dueling_table" },
+    "facing=west":  { "model": "mobtrumps:block/dueling_table" },
+    "facing=east":  { "model": "mobtrumps:block/dueling_table" }
+  }
+}
