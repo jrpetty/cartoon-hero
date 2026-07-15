@@ -26,10 +26,29 @@ public class RedstoneLinkerItem extends Item {
     public InteractionResult useOn(UseOnContext ctx) {
         Level level = ctx.getLevel();
         BlockEntity be = level.getBlockEntity(ctx.getClickedPos());
+        Player player = ctx.getPlayer();
+        if (be instanceof GateChannels gate) {
+            if (!level.isClientSide() && player != null) {
+                ItemStack stack = ctx.getItemInHand();
+                if (player.isShiftKeyDown()) {
+                    String stored = readChannel(stack);
+                    if (stored.isEmpty()) {
+                        player.displayClientMessage(Component.literal("No channel stored — right-click a block first."), true);
+                    } else {
+                        String label = gate.bindNextInput(stored);
+                        player.displayClientMessage(Component.literal("Gate " + label + " <- " + stored), true);
+                    }
+                } else {
+                    String c = gate.copyOutputChannel();
+                    writeChannel(stack, c);
+                    player.displayClientMessage(Component.literal("Copied gate output " + c), true);
+                }
+            }
+            return InteractionResult.sidedSuccess(level.isClientSide());
+        }
         if (!(be instanceof ChannelBlockEntity channel)) {
             return InteractionResult.PASS;
         }
-        Player player = ctx.getPlayer();
         if (!level.isClientSide() && player != null) {
             ItemStack stack = ctx.getItemInHand();
             if (player.isShiftKeyDown()) {

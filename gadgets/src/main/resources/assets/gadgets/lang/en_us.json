@@ -13,5 +13,8 @@
   "block.gadgets.item_sender": "Item Sender",
   "block.gadgets.item_receiver": "Item Receiver",
   "block.gadgets.drain": "Drain",
+  "block.gadgets.logic_gate": "Logic Gate",
+  "block.gadgets.alarm": "Alarm",
+  "item.gadgets.wireless_remote": "Wireless Remote",
   "itemgroup.gadgets.gadgets": "Gadgets"
 }

@@ -41,10 +41,21 @@ public class DrainBlockEntity extends BlockEntity implements SidedInventory {
         }
         BlockPos up = pos.up();
         BlockState above = world.getBlockState(up);
-        // Only swallow actual fluid blocks — never a waterlogged block someone built.
-        if (!above.getFluidState().isEmpty() && above.getBlock() instanceof FluidBlock) {
-            world.setBlockState(up, Blocks.AIR.getDefaultState());
+        // Only act on actual fluid blocks — never a waterlogged block someone built.
+        if (above.getFluidState().isEmpty() || !(above.getBlock() instanceof FluidBlock)) {
+            return;
         }
+        // Pass the fluid straight through: drop it to the first open space below the
+        // drain (or a stack of drains). If there's no room, it just drains away.
+        BlockPos.Mutable target = pos.mutableCopy().move(Direction.DOWN);
+        while (world.getBlockState(target).getBlock() instanceof DrainBlock) {
+            target.move(Direction.DOWN);
+        }
+        BlockState landing = world.getBlockState(target);
+        if (landing.isAir() || landing.isReplaceable()) {
+            world.setBlockState(target, above);
+        }
+        world.setBlockState(up, Blocks.AIR.getDefaultState());
     }
 
     public ItemStack getDisguise() {

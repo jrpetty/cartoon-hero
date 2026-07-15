@@ -432,3 +432,76 @@ DRAIN2 = [
     "KKKKKKKKKKKKKKKK",
 ]
 write_png(os.path.join(BASE, "block", "drain.png"), grid(DRAIN2, DR_PAL))
+
+# ============ logic gate, alarm, wireless remote ============
+# --- Logic Gate: circuit board with gold traces and an amber processor ---
+LG_PAL = {"K": C(22, 30, 24), "b": C(30, 60, 40), "g": C(220, 180, 70),
+          "a": C(255, 176, 60), "A": C(255, 224, 130), ".": C(38, 74, 50)}
+LG = [
+    "KKKKKKKKKKKKKKKK",
+    "KbbbbbbbbbbbbbbK",
+    "Kb.g..g..g..g.bK",
+    "Kb.gggggggggg.bK",
+    "Kb.g..aaaa..g.bK",
+    "Kb.g.aAAAAa.g.bK",
+    "Kb.g.aAAAAa.g.bK",
+    "Kb.g.aAAAAa.g.bK",
+    "Kb.g.aAAAAa.g.bK",
+    "Kb.g..aaaa..g.bK",
+    "Kb.gggggggggg.bK",
+    "Kb.g..g..g..g.bK",
+    "KbbbbbbbbbbbbbbK",
+    "KKKKKKKKKKKKKKKK",
+    "KKKKKKKKKKKKKKKK",
+    "KKKKKKKKKKKKKKKK",
+]
+LG = [(r + "K" * 16)[:16] for r in LG]
+write_png(os.path.join(BASE, "block", "logic_gate.png"), grid(LG, LG_PAL))
+
+# --- Alarm: steel housing with a red warning bell ---
+AL_PAL = {"K": C(25, 26, 30), "S": C(140, 146, 158), "m": C(80, 85, 96),
+          "r": C(210, 55, 45), "R": C(250, 90, 70), "y": C(250, 210, 70),
+          "d": C(52, 55, 64), ".": C(66, 70, 80)}
+AL = [
+    "KKKKKKKKKKKKKKKK",
+    "KSSSSSSSSSSSSSSK",
+    "KSmmmmmmmmmmmmSK",
+    "KSm...rrrr...mSK",
+    "KSm..rRRRRr..mSK",
+    "KSm.rRRRRRRr.mSK",
+    "KSm.rRRRRRRr.mSK",
+    "KSm.rRRRRRRr.mSK",
+    "KSm.rRRRRRRr.mSK",
+    "KSm..rRRRRr..mSK",
+    "KSm...yyyy...mSK",
+    "KSm....yy....mSK",
+    "KSmmmmmmmmmmmmSK",
+    "KSSSSSSSSSSSSSSK",
+    "KKKKKKKKKKKKKKKK",
+    "KKKKKKKKKKKKKKKK",
+]
+AL = [(r + "K" * 16)[:16] for r in AL]
+write_png(os.path.join(BASE, "block", "alarm.png"), grid(AL, AL_PAL))
+
+# --- Wireless Remote item: dark handheld with a red button and antenna ---
+RM_PAL = {".": CLEAR, "K": C(40, 42, 48), "m": C(80, 85, 96), "s": C(150, 156, 168),
+          "r": C(225, 60, 55), "R": C(255, 120, 110), "g": C(120, 126, 140)}
+RM = [
+    ".......s........",
+    ".......s........",
+    "......ggg.......",
+    "......KKK.......",
+    ".....KmmmK......",
+    ".....KrRrK......",
+    ".....KRRRK......",
+    ".....KrRrK......",
+    ".....KmmmK......",
+    ".....Km.mK......",
+    ".....Km.mK......",
+    ".....KmmmK......",
+    ".....KmmmK......",
+    "......KKK.......",
+    "................",
+    "................",
+]
+write_png(os.path.join(BASE, "item", "wireless_remote.png"), grid(RM, RM_PAL))

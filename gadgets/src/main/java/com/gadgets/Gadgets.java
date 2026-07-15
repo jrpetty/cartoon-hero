@@ -69,6 +69,16 @@ public class Gadgets implements ModInitializer {
             new DrainBlock(AbstractBlock.Settings.create()
                     .strength(2.0F).requiresTool().sounds(BlockSoundGroup.METAL).nonOpaque()));
 
+    public static final Block LOGIC_GATE = registerBlock("logic_gate",
+            new LogicGateBlock(AbstractBlock.Settings.create()
+                    .strength(1.5F).requiresTool().sounds(BlockSoundGroup.METAL)));
+    public static final Block ALARM = registerBlock("alarm",
+            new AlarmBlock(AbstractBlock.Settings.create()
+                    .strength(1.5F).requiresTool().sounds(BlockSoundGroup.METAL)));
+
+    public static final Item WIRELESS_REMOTE = register("wireless_remote",
+            new WirelessRemoteItem(new Item.Settings().maxCount(1)));
+
     public static final RegistryKey<ItemGroup> GADGETS_GROUP_KEY =
             RegistryKey.of(RegistryKeys.ITEM_GROUP, Identifier.of(MOD_ID, "gadgets"));
     public static final ItemGroup GADGETS_GROUP = FabricItemGroup.builder()
@@ -89,6 +99,8 @@ public class Gadgets implements ModInitializer {
     public static BlockEntityType<ItemSenderBlockEntity> ITEM_SENDER_BE;
     public static BlockEntityType<ItemReceiverBlockEntity> ITEM_RECEIVER_BE;
     public static BlockEntityType<DrainBlockEntity> DRAIN_BE;
+    public static BlockEntityType<LogicGateBlockEntity> LOGIC_GATE_BE;
+    public static BlockEntityType<AlarmBlockEntity> ALARM_BE;
 
     @Override
     public void onInitialize() {
@@ -108,6 +120,10 @@ public class Gadgets implements ModInitializer {
                 FabricBlockEntityTypeBuilder.create(ItemReceiverBlockEntity::new, ITEM_RECEIVER).build());
         DRAIN_BE = Registry.register(Registries.BLOCK_ENTITY_TYPE, Identifier.of(MOD_ID, "drain"),
                 FabricBlockEntityTypeBuilder.create(DrainBlockEntity::new, DRAIN).build());
+        LOGIC_GATE_BE = Registry.register(Registries.BLOCK_ENTITY_TYPE, Identifier.of(MOD_ID, "logic_gate"),
+                FabricBlockEntityTypeBuilder.create(LogicGateBlockEntity::new, LOGIC_GATE).build());
+        ALARM_BE = Registry.register(Registries.BLOCK_ENTITY_TYPE, Identifier.of(MOD_ID, "alarm"),
+                FabricBlockEntityTypeBuilder.create(AlarmBlockEntity::new, ALARM).build());
 
         Registry.register(Registries.ITEM_GROUP, GADGETS_GROUP_KEY, GADGETS_GROUP);
         ItemGroupEvents.modifyEntriesEvent(GADGETS_GROUP_KEY).register(entries -> {
@@ -123,6 +139,9 @@ public class Gadgets implements ModInitializer {
             entries.add(ITEM_SENDER);
             entries.add(ITEM_RECEIVER);
             entries.add(DRAIN);
+            entries.add(LOGIC_GATE);
+            entries.add(ALARM);
+            entries.add(WIRELESS_REMOTE);
         });
 
         // Wireless redstone signals are transient — drop them when the server stops

@@ -81,11 +81,21 @@ public class Gadgets {
     public static final DeferredBlock<Block> DRAIN = BLOCKS.register("drain",
             () -> new DrainBlock(BlockBehaviour.Properties.of()
                     .strength(2.0F).requiresCorrectToolForDrops().sound(SoundType.METAL).noOcclusion()));
+    public static final DeferredBlock<Block> LOGIC_GATE = BLOCKS.register("logic_gate",
+            () -> new LogicGateBlock(BlockBehaviour.Properties.of()
+                    .strength(1.5F).requiresCorrectToolForDrops().sound(SoundType.METAL)));
+    public static final DeferredBlock<Block> ALARM = BLOCKS.register("alarm",
+            () -> new AlarmBlock(BlockBehaviour.Properties.of()
+                    .strength(1.5F).requiresCorrectToolForDrops().sound(SoundType.METAL)));
 
     public static final DeferredItem<?> DISPLAY_PEDESTAL_ITEM = ITEMS.registerSimpleBlockItem("display_pedestal", DISPLAY_PEDESTAL);
     public static final DeferredItem<?> ITEM_SENDER_ITEM = ITEMS.registerSimpleBlockItem("item_sender", ITEM_SENDER);
     public static final DeferredItem<?> ITEM_RECEIVER_ITEM = ITEMS.registerSimpleBlockItem("item_receiver", ITEM_RECEIVER);
     public static final DeferredItem<?> DRAIN_ITEM = ITEMS.registerSimpleBlockItem("drain", DRAIN);
+    public static final DeferredItem<?> LOGIC_GATE_ITEM = ITEMS.registerSimpleBlockItem("logic_gate", LOGIC_GATE);
+    public static final DeferredItem<?> ALARM_ITEM = ITEMS.registerSimpleBlockItem("alarm", ALARM);
+    public static final DeferredItem<Item> WIRELESS_REMOTE =
+            ITEMS.register("wireless_remote", () -> new WirelessRemoteItem(new Item.Properties().stacksTo(1)));
 
     public static final Supplier<BlockEntityType<PlayerSensorBlockEntity>> PLAYER_SENSOR_BE =
             BLOCK_ENTITIES.register("player_sensor",
@@ -111,6 +121,12 @@ public class Gadgets {
     public static final Supplier<BlockEntityType<DrainBlockEntity>> DRAIN_BE =
             BLOCK_ENTITIES.register("drain",
                     () -> BlockEntityType.Builder.of(DrainBlockEntity::new, DRAIN.get()).build(null));
+    public static final Supplier<BlockEntityType<LogicGateBlockEntity>> LOGIC_GATE_BE =
+            BLOCK_ENTITIES.register("logic_gate",
+                    () -> BlockEntityType.Builder.of(LogicGateBlockEntity::new, LOGIC_GATE.get()).build(null));
+    public static final Supplier<BlockEntityType<AlarmBlockEntity>> ALARM_BE =
+            BLOCK_ENTITIES.register("alarm",
+                    () -> BlockEntityType.Builder.of(AlarmBlockEntity::new, ALARM.get()).build(null));
 
     public static final Supplier<CreativeModeTab> GADGETS_TAB = CREATIVE_TABS.register("gadgets",
             () -> CreativeModeTab.builder()
@@ -129,6 +145,9 @@ public class Gadgets {
                         output.accept(ITEM_SENDER_ITEM.get());
                         output.accept(ITEM_RECEIVER_ITEM.get());
                         output.accept(DRAIN_ITEM.get());
+                        output.accept(LOGIC_GATE_ITEM.get());
+                        output.accept(ALARM_ITEM.get());
+                        output.accept(WIRELESS_REMOTE.get());
                     })
                     .build());
 

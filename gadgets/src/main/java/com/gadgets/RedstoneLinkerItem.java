@@ -26,10 +26,29 @@ public class RedstoneLinkerItem extends Item {
     public ActionResult useOnBlock(ItemUsageContext ctx) {
         World world = ctx.getWorld();
         BlockEntity be = world.getBlockEntity(ctx.getBlockPos());
+        PlayerEntity player = ctx.getPlayer();
+        if (be instanceof GateChannels gate) {
+            if (!world.isClient() && player != null) {
+                ItemStack stack = ctx.getStack();
+                if (player.isSneaking()) {
+                    String stored = readChannel(stack);
+                    if (stored.isEmpty()) {
+                        player.sendMessage(Text.literal("No channel stored — right-click a block first."), true);
+                    } else {
+                        String label = gate.bindNextInput(stored);
+                        player.sendMessage(Text.literal("Gate " + label + " ← " + stored), true);
+                    }
+                } else {
+                    String c = gate.copyOutputChannel();
+                    writeChannel(stack, c);
+                    player.sendMessage(Text.literal("Copied gate output " + c), true);
+                }
+            }
+            return ActionResult.success(world.isClient());
+        }
         if (!(be instanceof ChannelBlockEntity channel)) {
             return ActionResult.PASS;
         }
-        PlayerEntity player = ctx.getPlayer();
         if (!world.isClient() && player != null) {
             ItemStack stack = ctx.getStack();
             if (player.isSneaking()) {

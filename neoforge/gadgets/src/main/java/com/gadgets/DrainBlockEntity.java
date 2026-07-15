@@ -39,10 +39,21 @@ public class DrainBlockEntity extends BlockEntity implements WorldlyContainer {
         }
         BlockPos up = pos.above();
         BlockState above = level.getBlockState(up);
-        // Only swallow actual fluid blocks — never a waterlogged block someone built.
-        if (!above.getFluidState().isEmpty() && above.getBlock() instanceof LiquidBlock) {
-            level.setBlockAndUpdate(up, Blocks.AIR.defaultBlockState());
+        // Only act on actual fluid blocks — never a waterlogged block someone built.
+        if (above.getFluidState().isEmpty() || !(above.getBlock() instanceof LiquidBlock)) {
+            return;
         }
+        // Pass the fluid straight through: drop it to the first open space below the
+        // drain (or a stack of drains). If there's no room, it just drains away.
+        BlockPos.MutableBlockPos target = pos.mutable().move(Direction.DOWN);
+        while (level.getBlockState(target).getBlock() instanceof DrainBlock) {
+            target.move(Direction.DOWN);
+        }
+        BlockState landing = level.getBlockState(target);
+        if (landing.isAir() || landing.canBeReplaced()) {
+            level.setBlockAndUpdate(target, above);
+        }
+        level.setBlockAndUpdate(up, Blocks.AIR.defaultBlockState());
     }
 
     public ItemStack getDisguise() {
