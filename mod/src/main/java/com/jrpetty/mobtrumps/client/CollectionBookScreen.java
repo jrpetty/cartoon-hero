@@ -249,9 +249,9 @@ public class CollectionBookScreen extends Screen {
                     g.fill(cx - 1, cy + ch - 3, cx + 5, cy + ch + 2, 0xFF55A82F);
                 }
                 // how many of this mob you've collected, bottom-right
-                int have = ClientCollection.killCount(card.id());
-                if (have > 0) {
-                    String badge = "x" + have;
+                int copies = ClientCollection.killCount(card.id());
+                if (copies > 0) {
+                    String badge = "x" + copies;
                     int bw = font.width(badge);
                     int bx = cx + cw - bw - 2;
                     int by = cy + ch - 9;
