@@ -1,13 +1,13 @@
 package com.jrpetty.mobtrumps;
 
 import com.mojang.serialization.MapCodec;
+import net.minecraft.ChatFormatting;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
-import net.minecraft.world.InteractionHand;
+import net.minecraft.network.chat.Component;
+import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.InteractionResult;
-import net.minecraft.world.ItemInteractionResult;
 import net.minecraft.world.entity.player.Player;
-import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.context.BlockPlaceContext;
 import net.minecraft.world.level.BlockGetter;
 import net.minecraft.world.level.Level;
@@ -22,7 +22,12 @@ import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.shapes.CollisionContext;
 import net.minecraft.world.phys.shapes.VoxelShape;
 
-/** A thin wall frame that displays a single mob card face-out. */
+/**
+ * A sleek wall panel that PROJECTS a card from its owner's collection. No item
+ * is ever inside it, so the card can't be stolen — the owner links a card via
+ * a picker (right-click), swaps it the same way, and sneak-right-clicks to
+ * clear. Everyone else right-clicks to admire the card full-screen.
+ */
 public class CardDisplayBlock extends HorizontalDirectionalBlock implements EntityBlock {
 
     public static final MapCodec<CardDisplayBlock> CODEC = simpleCodec(CardDisplayBlock::new);
@@ -67,49 +72,32 @@ public class CardDisplayBlock extends HorizontalDirectionalBlock implements Enti
         };
     }
 
-    /** Right-click with a mob card to mount it. */
-    @Override
-    protected ItemInteractionResult useItemOn(ItemStack stack, BlockState state, Level level, BlockPos pos,
-                                              Player player, InteractionHand hand, BlockHitResult hit) {
-        if (MobCardItem.cardOf(stack) == null) {
-            return ItemInteractionResult.PASS_TO_DEFAULT_BLOCK_INTERACTION;
-        }
-        if (level.getBlockEntity(pos) instanceof CardDisplayBlockEntity be && be.getCard().isEmpty()) {
-            if (!level.isClientSide) {
-                be.setCard(stack.copyWithCount(1));
-                if (!player.getAbilities().instabuild) {
-                    stack.shrink(1);
-                }
-            }
-            return ItemInteractionResult.sidedSuccess(level.isClientSide);
-        }
-        return ItemInteractionResult.PASS_TO_DEFAULT_BLOCK_INTERACTION;
-    }
-
-    /** Right-click empty-handed to take the card back, or click to inspect it. */
     @Override
     protected InteractionResult useWithoutItem(BlockState state, Level level, BlockPos pos,
                                                Player player, BlockHitResult hit) {
-        if (level.getBlockEntity(pos) instanceof CardDisplayBlockEntity be && !be.getCard().isEmpty()) {
-            if (!level.isClientSide) {
-                ItemStack card = be.getCard();
-                be.setCard(ItemStack.EMPTY);
-                if (!player.getInventory().add(card)) {
-                    player.drop(card, false);
+        if (!(level.getBlockEntity(pos) instanceof CardDisplayBlockEntity be)) {
+            return InteractionResult.PASS;
+        }
+
+        // owner sneak-click clears the projection (server side)
+        if (player.isShiftKeyDown()) {
+            if (!level.isClientSide && player instanceof ServerPlayer sp) {
+                if (be.hasCard() && be.canEdit(sp.getUUID())) {
+                    be.clearProjection();
+                    sp.sendSystemMessage(Component.literal("Display cleared.")
+                            .withStyle(ChatFormatting.GRAY));
+                } else if (be.hasCard()) {
+                    sp.sendSystemMessage(Component.literal("Only " + be.getOwnerName()
+                            + " can change this display.").withStyle(ChatFormatting.RED));
                 }
             }
             return InteractionResult.sidedSuccess(level.isClientSide);
         }
-        return InteractionResult.PASS;
-    }
 
-    @Override
-    protected void onRemove(BlockState state, Level level, BlockPos pos, BlockState newState, boolean moved) {
-        if (!state.is(newState.getBlock())
-                && level.getBlockEntity(pos) instanceof CardDisplayBlockEntity be
-                && !be.getCard().isEmpty()) {
-            net.minecraft.world.Containers.dropItemStack(level, pos.getX(), pos.getY(), pos.getZ(), be.getCard());
+        // plain click: the client opens the picker (yours/empty) or the card view
+        if (level.isClientSide) {
+            com.jrpetty.mobtrumps.client.ClientHooks.openDisplayInteract(pos);
         }
-        super.onRemove(state, level, pos, newState, moved);
+        return InteractionResult.sidedSuccess(level.isClientSide);
     }
 }

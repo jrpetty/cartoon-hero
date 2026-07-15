@@ -1,9 +1,9 @@
 {
   "parent": "block/block",
   "textures": {
-    "frame": "minecraft:block/birch_planks",
-    "back": "minecraft:block/dark_oak_planks",
-    "particle": "minecraft:block/birch_planks"
+    "frame": "minecraft:block/polished_blackstone",
+    "back": "minecraft:block/black_concrete",
+    "particle": "minecraft:block/polished_blackstone"
   },
   "elements": [
     {

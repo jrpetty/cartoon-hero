@@ -44,5 +44,11 @@ public final class ModNetworking {
                         }
                     }
                 }));
+        registrar.playToServer(LinkDisplayPayload.TYPE, LinkDisplayPayload.STREAM_CODEC,
+                (payload, context) -> context.enqueueWork(() -> {
+                    if (context.player() instanceof net.minecraft.server.level.ServerPlayer sp) {
+                        LinkDisplayPayload.handle(payload, sp);
+                    }
+                }));
     }
 }

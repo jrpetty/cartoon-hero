@@ -24,6 +24,27 @@ public final class ClientHooks {
         Minecraft.getInstance().setScreen(new CollectionBookScreen());
     }
 
+    /** Right-clicking a card display: owners (or an empty display) get the
+     *  picker; everyone else just admires the projected card full-screen. */
+    public static void openDisplayInteract(net.minecraft.core.BlockPos pos) {
+        Minecraft mc = Minecraft.getInstance();
+        if (mc.level == null || mc.player == null) {
+            return;
+        }
+        if (!(mc.level.getBlockEntity(pos) instanceof com.jrpetty.mobtrumps.CardDisplayBlockEntity be)) {
+            return;
+        }
+        boolean canEdit = be.canEdit(mc.player.getUUID());
+        if (canEdit) {
+            mc.setScreen(new CardDisplayScreen(pos));
+        } else if (be.hasCard()) {
+            MobCard card = com.jrpetty.mobtrumps.game.MobCards.byId(be.getMobId());
+            if (card != null) {
+                mc.setScreen(new MobCardScreen(card, null, be.isFoil()));
+            }
+        }
+    }
+
     public static void openPackReveal(java.util.List<com.jrpetty.mobtrumps.PackOpenedPayload.Pull> pulls) {
         if (!pulls.isEmpty()) {
             Minecraft.getInstance().setScreen(new PackRevealScreen(pulls));

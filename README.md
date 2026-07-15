@@ -75,9 +75,13 @@ In game:
 - **Dueling Table** (craft: 3 crafting tables + 2 paper + emerald) — a placeable
   block so duels are discoverable without commands: right-click to take a seat,
   and when a second player right-clicks it a best-of-3 duel begins between you
-- **Card Display** (craft: item frame + emerald) — a thin wall frame; right-click
-  it holding a mob card to mount it face-out for your base, right-click empty-handed
-  to take it back. Show off your rarest holo on the wall
+- **Card Display** (craft: item frame + emerald) — a sleek dark wall panel that
+  **projects** a card straight from your collection: right-click to open a modern
+  picker and choose any card you own (shift-click for its holographic version).
+  The card **never leaves your collection**, so there is nothing to steal — the
+  projected card floats in the frame but only its owner can swap it (right-click)
+  or clear it (sneak-right-click). Anyone else who right-clicks just admires it
+  full-screen. Show off your rarest holo with zero risk
 - **Quick match & spectating** — `/mobtrumps queue` auto-pairs you with any
   other waiting player; `/mobtrumps watch <player>` lets you follow a live duel
   in chat and place an emerald **side bet** on either duelist (pari-mutuel —

@@ -11,39 +11,96 @@ import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
 
-/** Holds the single card shown by a {@link CardDisplayBlock}, synced to clients. */
+import java.util.UUID;
+
+/**
+ * A card display doesn't hold a physical card — it PROJECTS one straight from
+ * its owner's collection. The card item never leaves the owner's inventory, so
+ * there is nothing to steal: breaking the block or clicking it as another
+ * player can't take anything. Only the owner can swap or clear the projection.
+ */
 public class CardDisplayBlockEntity extends BlockEntity {
 
-    private ItemStack card = ItemStack.EMPTY;
+    private String mobId = "";
+    private boolean foil = false;
+    private UUID owner = null;
+    private String ownerName = "";
 
     public CardDisplayBlockEntity(BlockPos pos, BlockState state) {
         super(ModBlocks.CARD_DISPLAY_BE.get(), pos, state);
     }
 
-    public ItemStack getCard() {
-        return card;
+    public boolean hasCard() {
+        return !mobId.isEmpty();
     }
 
-    public void setCard(ItemStack stack) {
-        this.card = stack;
+    public String getMobId() {
+        return mobId;
+    }
+
+    public boolean isFoil() {
+        return foil;
+    }
+
+    public UUID getOwner() {
+        return owner;
+    }
+
+    public String getOwnerName() {
+        return ownerName;
+    }
+
+    public boolean isOwner(UUID player) {
+        return owner != null && owner.equals(player);
+    }
+
+    /** Anyone may claim an empty or ownerless display; otherwise owner only. */
+    public boolean canEdit(UUID player) {
+        return owner == null || owner.equals(player);
+    }
+
+    public void setProjection(String mobId, boolean foil, UUID owner, String ownerName) {
+        this.mobId = mobId == null ? "" : mobId;
+        this.foil = foil;
+        this.owner = owner;
+        this.ownerName = ownerName == null ? "" : ownerName;
         setChanged();
         if (level != null && !level.isClientSide) {
             level.sendBlockUpdated(worldPosition, getBlockState(), getBlockState(), Block.UPDATE_ALL);
         }
     }
 
+    public void clearProjection() {
+        setProjection("", false, null, "");
+    }
+
     @Override
     protected void saveAdditional(CompoundTag tag, HolderLookup.Provider registries) {
         super.saveAdditional(tag, registries);
-        tag.put("Card", card.saveOptional(registries));
+        tag.putString("MobId", mobId);
+        tag.putBoolean("Foil", foil);
+        tag.putString("OwnerName", ownerName);
+        if (owner != null) {
+            tag.putUUID("Owner", owner);
+        }
     }
 
     @Override
     protected void loadAdditional(CompoundTag tag, HolderLookup.Provider registries) {
         super.loadAdditional(tag, registries);
-        card = tag.contains("Card")
-                ? ItemStack.parseOptional(registries, tag.getCompound("Card"))
-                : ItemStack.EMPTY;
+        mobId = tag.getString("MobId");
+        foil = tag.getBoolean("Foil");
+        ownerName = tag.getString("OwnerName");
+        owner = tag.hasUUID("Owner") ? tag.getUUID("Owner") : null;
+        // migrate a legacy display that held a physical card item
+        if (mobId.isEmpty() && tag.contains("Card")) {
+            ItemStack legacy = ItemStack.parseOptional(registries, tag.getCompound("Card"));
+            var card = MobCardItem.cardOf(legacy);
+            if (card != null) {
+                mobId = card.id();
+                foil = MobCardItem.isFoilCard(legacy);
+            }
+        }
     }
 
     @Override
