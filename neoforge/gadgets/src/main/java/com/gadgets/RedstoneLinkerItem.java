@@ -1,5 +1,8 @@
 package com.gadgets;
 
+import java.util.List;
+import net.minecraft.world.item.TooltipFlag;
+import net.minecraft.ChatFormatting;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.InteractionResult;
@@ -33,15 +36,15 @@ public class RedstoneLinkerItem extends Item {
                 if (player.isShiftKeyDown()) {
                     String stored = readChannel(stack);
                     if (stored.isEmpty()) {
-                        player.displayClientMessage(Component.literal("No channel stored — right-click a block first."), true);
+                        player.displayClientMessage(Component.literal("No channel stored — right-click a block first.").withStyle(ChatFormatting.RED), true);
                     } else {
                         String label = gate.bindNextInput(stored);
-                        player.displayClientMessage(Component.literal("Gate " + label + " <- " + stored), true);
+                        player.displayClientMessage(Component.literal("Gate " + label + " <- " + stored).withStyle(ChatFormatting.GREEN), true);
                     }
                 } else {
                     String c = gate.copyOutputChannel();
                     writeChannel(stack, c);
-                    player.displayClientMessage(Component.literal("Copied gate output " + c), true);
+                    player.displayClientMessage(Component.literal("Copied gate output " + c).withStyle(ChatFormatting.AQUA), true);
                 }
             }
             return InteractionResult.sidedSuccess(level.isClientSide());
@@ -54,10 +57,10 @@ public class RedstoneLinkerItem extends Item {
             if (player.isShiftKeyDown()) {
                 String stored = readChannel(stack);
                 if (stored.isEmpty()) {
-                    player.displayClientMessage(Component.literal("No channel stored — right-click a block first."), true);
+                    player.displayClientMessage(Component.literal("No channel stored — right-click a block first.").withStyle(ChatFormatting.RED), true);
                 } else {
                     channel.setChannel(stored);
-                    player.displayClientMessage(Component.literal("Linked to channel " + stored), true);
+                    player.displayClientMessage(Component.literal("Linked to channel " + stored).withStyle(ChatFormatting.GREEN), true);
                 }
             } else {
                 String c = channel.getChannel();
@@ -66,7 +69,7 @@ public class RedstoneLinkerItem extends Item {
                     channel.setChannel(c);
                 }
                 writeChannel(stack, c);
-                player.displayClientMessage(Component.literal("Copied channel " + c), true);
+                player.displayClientMessage(Component.literal("Copied channel " + c).withStyle(ChatFormatting.AQUA), true);
             }
         }
         return InteractionResult.sidedSuccess(level.isClientSide());
@@ -82,5 +85,10 @@ public class RedstoneLinkerItem extends Item {
         CompoundTag tag = data.copyTag();
         tag.putString("channel", channel);
         stack.set(DataComponents.CUSTOM_DATA, CustomData.of(tag));
+    }
+
+    @Override
+    public void appendHoverText(ItemStack stack, TooltipContext context, List<Component> tooltip, TooltipFlag flag) {
+        Tips.append(tooltip, "tip.gadgets.redstone_linker.1", "tip.gadgets.redstone_linker.2", "tip.gadgets.redstone_linker.3");
     }
 }

@@ -46,7 +46,8 @@ public class Gadgets {
     public static final DeferredBlock<Block> ROPE = BLOCKS.register("rope",
             () -> new RopeBlock(BlockBehaviour.Properties.of()
                     .noCollission().strength(0.2F).sound(SoundType.WOOL).noOcclusion()));
-    public static final DeferredItem<?> ROPE_ITEM = ITEMS.registerSimpleBlockItem("rope", ROPE);
+    public static final DeferredItem<?> ROPE_ITEM = ITEMS.register("rope", () -> new TooltipBlockItem(ROPE.get(), new Item.Properties(),
+            "tip.gadgets.rope.1"));
 
     public static final DeferredBlock<Block> PLAYER_SENSOR = BLOCKS.register("player_sensor",
             () -> new PlayerSensorBlock(BlockBehaviour.Properties.of()
@@ -61,10 +62,14 @@ public class Gadgets {
             () -> new RedstoneReceiverBlock(BlockBehaviour.Properties.of()
                     .strength(1.5F).requiresCorrectToolForDrops().sound(SoundType.METAL)));
 
-    public static final DeferredItem<?> PLAYER_SENSOR_ITEM = ITEMS.registerSimpleBlockItem("player_sensor", PLAYER_SENSOR);
-    public static final DeferredItem<?> FILTER_HOPPER_ITEM = ITEMS.registerSimpleBlockItem("filter_hopper", FILTER_HOPPER);
-    public static final DeferredItem<?> REDSTONE_TRANSMITTER_ITEM = ITEMS.registerSimpleBlockItem("redstone_transmitter", REDSTONE_TRANSMITTER);
-    public static final DeferredItem<?> REDSTONE_RECEIVER_ITEM = ITEMS.registerSimpleBlockItem("redstone_receiver", REDSTONE_RECEIVER);
+    public static final DeferredItem<?> PLAYER_SENSOR_ITEM = ITEMS.register("player_sensor", () -> new TooltipBlockItem(PLAYER_SENSOR.get(), new Item.Properties(),
+            "tip.gadgets.player_sensor.1", "tip.gadgets.player_sensor.2", "tip.gadgets.player_sensor.3"));
+    public static final DeferredItem<?> FILTER_HOPPER_ITEM = ITEMS.register("filter_hopper", () -> new TooltipBlockItem(FILTER_HOPPER.get(), new Item.Properties(),
+            "tip.gadgets.filter_hopper.1", "tip.gadgets.filter_hopper.2"));
+    public static final DeferredItem<?> REDSTONE_TRANSMITTER_ITEM = ITEMS.register("redstone_transmitter", () -> new TooltipBlockItem(REDSTONE_TRANSMITTER.get(), new Item.Properties(),
+            "tip.gadgets.redstone_transmitter.1", "tip.gadgets.redstone_transmitter.2"));
+    public static final DeferredItem<?> REDSTONE_RECEIVER_ITEM = ITEMS.register("redstone_receiver", () -> new TooltipBlockItem(REDSTONE_RECEIVER.get(), new Item.Properties(),
+            "tip.gadgets.redstone_receiver.1", "tip.gadgets.redstone_receiver.2"));
     public static final DeferredItem<Item> REDSTONE_LINKER =
             ITEMS.register("redstone_linker", () -> new RedstoneLinkerItem(new Item.Properties().stacksTo(1)));
 
@@ -88,12 +93,18 @@ public class Gadgets {
             () -> new AlarmBlock(BlockBehaviour.Properties.of()
                     .strength(1.5F).requiresCorrectToolForDrops().sound(SoundType.METAL)));
 
-    public static final DeferredItem<?> DISPLAY_PEDESTAL_ITEM = ITEMS.registerSimpleBlockItem("display_pedestal", DISPLAY_PEDESTAL);
-    public static final DeferredItem<?> ITEM_SENDER_ITEM = ITEMS.registerSimpleBlockItem("item_sender", ITEM_SENDER);
-    public static final DeferredItem<?> ITEM_RECEIVER_ITEM = ITEMS.registerSimpleBlockItem("item_receiver", ITEM_RECEIVER);
-    public static final DeferredItem<?> DRAIN_ITEM = ITEMS.registerSimpleBlockItem("drain", DRAIN);
-    public static final DeferredItem<?> LOGIC_GATE_ITEM = ITEMS.registerSimpleBlockItem("logic_gate", LOGIC_GATE);
-    public static final DeferredItem<?> ALARM_ITEM = ITEMS.registerSimpleBlockItem("alarm", ALARM);
+    public static final DeferredItem<?> DISPLAY_PEDESTAL_ITEM = ITEMS.register("display_pedestal", () -> new TooltipBlockItem(DISPLAY_PEDESTAL.get(), new Item.Properties(),
+            "tip.gadgets.display_pedestal.1", "tip.gadgets.display_pedestal.2", "tip.gadgets.display_pedestal.3"));
+    public static final DeferredItem<?> ITEM_SENDER_ITEM = ITEMS.register("item_sender", () -> new TooltipBlockItem(ITEM_SENDER.get(), new Item.Properties(),
+            "tip.gadgets.item_sender.1", "tip.gadgets.item_sender.2"));
+    public static final DeferredItem<?> ITEM_RECEIVER_ITEM = ITEMS.register("item_receiver", () -> new TooltipBlockItem(ITEM_RECEIVER.get(), new Item.Properties(),
+            "tip.gadgets.item_receiver.1", "tip.gadgets.item_receiver.2"));
+    public static final DeferredItem<?> DRAIN_ITEM = ITEMS.register("drain", () -> new TooltipBlockItem(DRAIN.get(), new Item.Properties(),
+            "tip.gadgets.drain.1", "tip.gadgets.drain.2", "tip.gadgets.drain.3"));
+    public static final DeferredItem<?> LOGIC_GATE_ITEM = ITEMS.register("logic_gate", () -> new TooltipBlockItem(LOGIC_GATE.get(), new Item.Properties(),
+            "tip.gadgets.logic_gate.1", "tip.gadgets.logic_gate.2", "tip.gadgets.logic_gate.3"));
+    public static final DeferredItem<?> ALARM_ITEM = ITEMS.register("alarm", () -> new TooltipBlockItem(ALARM.get(), new Item.Properties(),
+            "tip.gadgets.alarm.1", "tip.gadgets.alarm.2"));
     public static final DeferredItem<Item> WIRELESS_REMOTE =
             ITEMS.register("wireless_remote", () -> new WirelessRemoteItem(new Item.Properties().stacksTo(1)));
 

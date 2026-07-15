@@ -36,45 +36,56 @@ public class Gadgets implements ModInitializer {
 
     public static final Block ROPE = registerBlock("rope",
             new RopeBlock(AbstractBlock.Settings.create()
-                    .noCollision().strength(0.2F).sounds(BlockSoundGroup.WOOL).nonOpaque()));
+                    .noCollision().strength(0.2F).sounds(BlockSoundGroup.WOOL).nonOpaque()),
+            "tip.gadgets.rope.1");
 
     public static final Block PLAYER_SENSOR = registerBlock("player_sensor",
             new PlayerSensorBlock(AbstractBlock.Settings.create()
-                    .strength(1.5F).requiresTool().sounds(BlockSoundGroup.METAL)));
+                    .strength(1.5F).requiresTool().sounds(BlockSoundGroup.METAL)),
+            "tip.gadgets.player_sensor.1", "tip.gadgets.player_sensor.2", "tip.gadgets.player_sensor.3");
     public static final Block FILTER_HOPPER = registerBlock("filter_hopper",
             new FilterHopperBlock(AbstractBlock.Settings.create()
-                    .strength(3.0F).requiresTool().sounds(BlockSoundGroup.METAL)));
+                    .strength(3.0F).requiresTool().sounds(BlockSoundGroup.METAL)),
+            "tip.gadgets.filter_hopper.1", "tip.gadgets.filter_hopper.2");
 
     public static final Block REDSTONE_TRANSMITTER = registerBlock("redstone_transmitter",
             new RedstoneTransmitterBlock(AbstractBlock.Settings.create()
-                    .strength(1.5F).requiresTool().sounds(BlockSoundGroup.METAL)));
+                    .strength(1.5F).requiresTool().sounds(BlockSoundGroup.METAL)),
+            "tip.gadgets.redstone_transmitter.1", "tip.gadgets.redstone_transmitter.2");
     public static final Block REDSTONE_RECEIVER = registerBlock("redstone_receiver",
             new RedstoneReceiverBlock(AbstractBlock.Settings.create()
-                    .strength(1.5F).requiresTool().sounds(BlockSoundGroup.METAL)));
+                    .strength(1.5F).requiresTool().sounds(BlockSoundGroup.METAL)),
+            "tip.gadgets.redstone_receiver.1", "tip.gadgets.redstone_receiver.2");
 
     public static final Item REDSTONE_LINKER = register("redstone_linker",
             new RedstoneLinkerItem(new Item.Settings().maxCount(1)));
 
     public static final Block DISPLAY_PEDESTAL = registerBlock("display_pedestal",
             new DisplayPedestalBlock(AbstractBlock.Settings.create()
-                    .strength(1.0F).sounds(BlockSoundGroup.STONE).nonOpaque()));
+                    .strength(1.0F).sounds(BlockSoundGroup.STONE).nonOpaque()),
+            "tip.gadgets.display_pedestal.1", "tip.gadgets.display_pedestal.2", "tip.gadgets.display_pedestal.3");
     public static final Block ITEM_SENDER = registerBlock("item_sender",
             new ItemSenderBlock(AbstractBlock.Settings.create()
-                    .strength(1.5F).requiresTool().sounds(BlockSoundGroup.METAL)));
+                    .strength(1.5F).requiresTool().sounds(BlockSoundGroup.METAL)),
+            "tip.gadgets.item_sender.1", "tip.gadgets.item_sender.2");
     public static final Block ITEM_RECEIVER = registerBlock("item_receiver",
             new ItemReceiverBlock(AbstractBlock.Settings.create()
-                    .strength(1.5F).requiresTool().sounds(BlockSoundGroup.METAL)));
+                    .strength(1.5F).requiresTool().sounds(BlockSoundGroup.METAL)),
+            "tip.gadgets.item_receiver.1", "tip.gadgets.item_receiver.2");
 
     public static final Block DRAIN = registerBlock("drain",
             new DrainBlock(AbstractBlock.Settings.create()
-                    .strength(2.0F).requiresTool().sounds(BlockSoundGroup.METAL).nonOpaque()));
+                    .strength(2.0F).requiresTool().sounds(BlockSoundGroup.METAL).nonOpaque()),
+            "tip.gadgets.drain.1", "tip.gadgets.drain.2", "tip.gadgets.drain.3");
 
     public static final Block LOGIC_GATE = registerBlock("logic_gate",
             new LogicGateBlock(AbstractBlock.Settings.create()
-                    .strength(1.5F).requiresTool().sounds(BlockSoundGroup.METAL)));
+                    .strength(1.5F).requiresTool().sounds(BlockSoundGroup.METAL)),
+            "tip.gadgets.logic_gate.1", "tip.gadgets.logic_gate.2", "tip.gadgets.logic_gate.3");
     public static final Block ALARM = registerBlock("alarm",
             new AlarmBlock(AbstractBlock.Settings.create()
-                    .strength(1.5F).requiresTool().sounds(BlockSoundGroup.METAL)));
+                    .strength(1.5F).requiresTool().sounds(BlockSoundGroup.METAL)),
+            "tip.gadgets.alarm.1", "tip.gadgets.alarm.2");
 
     public static final Item WIRELESS_REMOTE = register("wireless_remote",
             new WirelessRemoteItem(new Item.Settings().maxCount(1)));
@@ -158,10 +169,12 @@ public class Gadgets implements ModInitializer {
         return Registry.register(Registries.ITEM, Identifier.of(MOD_ID, name), item);
     }
 
-    private static Block registerBlock(String name, Block block) {
+    private static Block registerBlock(String name, Block block, String... tips) {
         Identifier id = Identifier.of(MOD_ID, name);
         Block registered = Registry.register(Registries.BLOCK, id, block);
-        Registry.register(Registries.ITEM, id, new BlockItem(registered, new Item.Settings()));
+        Registry.register(Registries.ITEM, id, tips.length == 0
+                ? new BlockItem(registered, new Item.Settings())
+                : new TooltipBlockItem(registered, new Item.Settings(), tips));
         return registered;
     }
 }

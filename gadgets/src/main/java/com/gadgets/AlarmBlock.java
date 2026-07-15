@@ -1,5 +1,6 @@
 package com.gadgets;
 
+import net.minecraft.util.Formatting;
 import net.minecraft.block.Block;
 import net.minecraft.block.BlockEntityProvider;
 import net.minecraft.block.BlockState;
@@ -53,7 +54,7 @@ public class AlarmBlock extends Block implements BlockEntityProvider {
                         ? eggId.substring(0, eggId.length() - "_spawn_egg".length())
                         : eggId;
                 be.setTarget(mobId);
-                player.sendMessage(Text.literal("Alarm now watches for: " + mobId), true);
+                player.sendMessage(Text.literal("Alarm now watches for: " + mobId).formatted(Formatting.GREEN), true);
             }
             return ItemActionResult.SUCCESS;
         }
@@ -64,7 +65,7 @@ public class AlarmBlock extends Block implements BlockEntityProvider {
     protected ActionResult onUse(BlockState state, World world, BlockPos pos, PlayerEntity player, BlockHitResult hit) {
         if (!world.isClient() && world.getBlockEntity(pos) instanceof AlarmBlockEntity be) {
             String mode = be.cycleMode();
-            player.sendMessage(Text.literal("Alarm now watches for: " + mode), true);
+            player.sendMessage(Text.literal("Alarm now watches for: " + mode).formatted(Formatting.GOLD), true);
         }
         return ActionResult.success(world.isClient());
     }

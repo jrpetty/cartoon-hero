@@ -1,5 +1,6 @@
 package com.gadgets;
 
+import net.minecraft.ChatFormatting;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.registries.BuiltInRegistries;
@@ -52,7 +53,7 @@ public class PlayerSensorBlock extends Block implements EntityBlock {
                         ? eggId.substring(0, eggId.length() - "_spawn_egg".length())
                         : eggId;
                 be.setTarget(mobId);
-                player.displayClientMessage(Component.literal("Sensor now detects: " + mobId), true);
+                player.displayClientMessage(Component.literal("Sensor now detects: " + mobId).withStyle(ChatFormatting.GREEN), true);
             }
             return ItemInteractionResult.sidedSuccess(level.isClientSide());
         }
@@ -63,7 +64,7 @@ public class PlayerSensorBlock extends Block implements EntityBlock {
     protected InteractionResult useWithoutItem(BlockState state, Level level, BlockPos pos, Player player, BlockHitResult hit) {
         if (!level.isClientSide() && level.getBlockEntity(pos) instanceof PlayerSensorBlockEntity be) {
             String mode = be.cycleMode();
-            player.displayClientMessage(Component.literal("Sensor now detects: " + mode), true);
+            player.displayClientMessage(Component.literal("Sensor now detects: " + mode).withStyle(ChatFormatting.GOLD), true);
         }
         return InteractionResult.sidedSuccess(level.isClientSide());
     }

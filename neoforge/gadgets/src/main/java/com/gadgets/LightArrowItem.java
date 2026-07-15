@@ -1,5 +1,8 @@
 package com.gadgets;
 
+import java.util.List;
+import net.minecraft.network.chat.Component;
+import net.minecraft.world.item.TooltipFlag;
 import net.minecraft.core.BlockPos;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
@@ -55,5 +58,10 @@ public class LightArrowItem extends Item {
             player.getCooldowns().addCooldown(this, 10);
         }
         return InteractionResultHolder.sidedSuccess(stack, level.isClientSide());
+    }
+
+    @Override
+    public void appendHoverText(ItemStack stack, TooltipContext context, List<Component> tooltip, TooltipFlag flag) {
+        Tips.append(tooltip, "tip.gadgets.light_arrow.1", "tip.gadgets.light_arrow.2");
     }
 }

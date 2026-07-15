@@ -1,5 +1,6 @@
 package com.gadgets;
 
+import net.minecraft.ChatFormatting;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.InteractionHand;
@@ -72,7 +73,7 @@ public class DrainBlock extends Block implements EntityBlock {
             if (!player.getAbilities().instabuild) {
                 stack.shrink(1);
             }
-            player.displayClientMessage(Component.literal("Drain disguised as " + stack.getHoverName().getString()), true);
+            player.displayClientMessage(Component.literal("Drain disguised as " + stack.getHoverName().getString()).withStyle(ChatFormatting.GREEN), true);
         }
         return ItemInteractionResult.sidedSuccess(level.isClientSide());
     }
@@ -87,7 +88,7 @@ public class DrainBlock extends Block implements EntityBlock {
             if (!player.getInventory().add(taken)) {
                 player.drop(taken, false);
             }
-            player.displayClientMessage(Component.literal("Disguise removed"), true);
+            player.displayClientMessage(Component.literal("Disguise removed").withStyle(ChatFormatting.GRAY), true);
         }
         return InteractionResult.sidedSuccess(level.isClientSide());
     }

@@ -505,3 +505,24 @@ RM = [
     "................",
 ]
 write_png(os.path.join(BASE, "item", "wireless_remote.png"), grid(RM, RM_PAL))
+
+# --- Redstone Receiver front: the output port face ---
+RXF = fix16([
+    "KKKKKKKKKKKKKKKK",
+    "KgSSSSSSSSSSSSgK",
+    "KSmmmmmmmmmmmmSK",
+    "KSm..........mSK",
+    "KSm..rrrrrr..mSK",
+    "KSm..r....r..mSK",
+    "KSm..r.RR.r..mSK",
+    "KSm..r.RR.r..mSK",
+    "KSm..r....r..mSK",
+    "KSm..rrrrrr..mSK",
+    "KSm..........mSK",
+    "KSm..........mSK",
+    "KSmmmmmmmmmmmmSK",
+    "KgSSSSSSSSSSSSgK",
+    "KKKKKKKKKKKKKKKK",
+    "KKKKKKKKKKKKKKKK",
+]) 
+write_png(os.path.join(BASE, "block", "redstone_receiver_front.png"), grid(RXF, pal2))

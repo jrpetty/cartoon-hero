@@ -1,5 +1,6 @@
 package com.gadgets;
 
+import net.minecraft.ChatFormatting;
 import java.util.function.Predicate;
 
 import net.minecraft.core.BlockPos;
@@ -90,7 +91,7 @@ public class AlarmBlockEntity extends BlockEntity {
     private void trigger(Level level, BlockPos pos) {
         level.playSound(null, pos, SoundEvents.BELL_BLOCK, SoundSource.BLOCKS, 2.0F, 0.7F);
         level.playSound(null, pos, SoundEvents.NOTE_BLOCK_PLING.value(), SoundSource.BLOCKS, 1.5F, 1.8F);
-        Component message = Component.literal("⚠ Alarm: " + target + " detected!");
+        Component message = Component.literal("⚠ Alarm: " + target + " detected!").withStyle(ChatFormatting.RED);
         double warnSq = WARN_RADIUS * WARN_RADIUS;
         for (Player player : level.players()) {
             if (player.distanceToSqr(pos.getX() + 0.5, pos.getY() + 0.5, pos.getZ() + 0.5) <= warnSq) {

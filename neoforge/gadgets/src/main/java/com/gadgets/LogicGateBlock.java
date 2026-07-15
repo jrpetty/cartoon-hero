@@ -1,5 +1,6 @@
 package com.gadgets;
 
+import net.minecraft.ChatFormatting;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.InteractionResult;
@@ -46,7 +47,7 @@ public class LogicGateBlock extends Block implements EntityBlock {
     protected InteractionResult useWithoutItem(BlockState state, Level level, BlockPos pos, Player player, BlockHitResult hit) {
         if (!level.isClientSide() && level.getBlockEntity(pos) instanceof LogicGateBlockEntity be) {
             String t = be.cycleType();
-            player.displayClientMessage(Component.literal("Gate: " + t), true);
+            player.displayClientMessage(Component.literal("Gate: " + t).withStyle(ChatFormatting.GOLD), true);
         }
         return InteractionResult.sidedSuccess(level.isClientSide());
     }

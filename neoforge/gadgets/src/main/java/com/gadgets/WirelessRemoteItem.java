@@ -1,5 +1,8 @@
 package com.gadgets;
 
+import java.util.List;
+import net.minecraft.world.item.TooltipFlag;
+import net.minecraft.ChatFormatting;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.Component;
@@ -40,7 +43,7 @@ public class WirelessRemoteItem extends Item {
         if (!level.isClientSide()) {
             String c = ensureChannel(ctx.getItemInHand(), level);
             channel.setChannel(c);
-            player.displayClientMessage(Component.literal("Bound to remote channel " + c), true);
+            player.displayClientMessage(Component.literal("Bound to remote channel " + c).withStyle(ChatFormatting.GREEN), true);
         }
         return InteractionResult.sidedSuccess(level.isClientSide());
     }
@@ -51,12 +54,12 @@ public class WirelessRemoteItem extends Item {
         if (!level.isClientSide()) {
             String c = ensureChannel(stack, level);
             if (player.isShiftKeyDown()) {
-                player.displayClientMessage(Component.literal("Remote channel: " + c), true);
+                player.displayClientMessage(Component.literal("Remote channel: " + c).withStyle(ChatFormatting.AQUA), true);
             } else {
                 WirelessNetwork.publish(c, "remote|" + player.getUUID(), 15, level.getGameTime());
                 level.playSound(null, player.getX(), player.getY(), player.getZ(),
                         SoundEvents.LEVER_CLICK, SoundSource.PLAYERS, 0.6F, 1.4F);
-                player.displayClientMessage(Component.literal("Pulsed " + c), true);
+                player.displayClientMessage(Component.literal("Pulsed " + c).withStyle(ChatFormatting.GOLD), true);
             }
         }
         return InteractionResultHolder.sidedSuccess(stack, level.isClientSide());
@@ -81,5 +84,10 @@ public class WirelessRemoteItem extends Item {
         CompoundTag tag = data.copyTag();
         tag.putString("channel", channel);
         stack.set(DataComponents.CUSTOM_DATA, CustomData.of(tag));
+    }
+
+    @Override
+    public void appendHoverText(ItemStack stack, TooltipContext context, List<Component> tooltip, TooltipFlag flag) {
+        Tips.append(tooltip, "tip.gadgets.wireless_remote.1", "tip.gadgets.wireless_remote.2");
     }
 }

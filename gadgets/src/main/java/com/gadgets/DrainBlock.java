@@ -1,5 +1,6 @@
 package com.gadgets;
 
+import net.minecraft.util.Formatting;
 import net.minecraft.block.Block;
 import net.minecraft.block.BlockEntityProvider;
 import net.minecraft.block.BlockState;
@@ -69,7 +70,7 @@ public class DrainBlock extends Block implements BlockEntityProvider {
             if (!player.getAbilities().creativeMode) {
                 stack.decrement(1);
             }
-            player.sendMessage(Text.literal("Drain disguised as " + stack.getName().getString()), true);
+            player.sendMessage(Text.literal("Drain disguised as " + stack.getName().getString()).formatted(Formatting.GREEN), true);
         }
         return ItemActionResult.SUCCESS;
     }
@@ -81,7 +82,7 @@ public class DrainBlock extends Block implements BlockEntityProvider {
         }
         if (!world.isClient()) {
             player.giveItemStack(be.removeDisguise());
-            player.sendMessage(Text.literal("Disguise removed"), true);
+            player.sendMessage(Text.literal("Disguise removed").formatted(Formatting.GRAY), true);
         }
         return ActionResult.success(world.isClient());
     }

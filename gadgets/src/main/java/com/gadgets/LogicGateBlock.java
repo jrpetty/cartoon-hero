@@ -1,5 +1,6 @@
 package com.gadgets;
 
+import net.minecraft.util.Formatting;
 import net.minecraft.block.Block;
 import net.minecraft.block.BlockEntityProvider;
 import net.minecraft.block.BlockState;
@@ -43,7 +44,7 @@ public class LogicGateBlock extends Block implements BlockEntityProvider {
     protected ActionResult onUse(BlockState state, World world, BlockPos pos, PlayerEntity player, BlockHitResult hit) {
         if (!world.isClient() && world.getBlockEntity(pos) instanceof LogicGateBlockEntity be) {
             String t = be.cycleType();
-            player.sendMessage(Text.literal("Gate: " + t), true);
+            player.sendMessage(Text.literal("Gate: " + t).formatted(Formatting.GOLD), true);
         }
         return ActionResult.success(world.isClient());
     }

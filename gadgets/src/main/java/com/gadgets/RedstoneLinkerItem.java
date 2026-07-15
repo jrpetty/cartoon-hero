@@ -1,5 +1,8 @@
 package com.gadgets;
 
+import java.util.List;
+import net.minecraft.item.tooltip.TooltipType;
+import net.minecraft.util.Formatting;
 import net.minecraft.block.entity.BlockEntity;
 import net.minecraft.component.DataComponentTypes;
 import net.minecraft.component.type.NbtComponent;
@@ -33,15 +36,15 @@ public class RedstoneLinkerItem extends Item {
                 if (player.isSneaking()) {
                     String stored = readChannel(stack);
                     if (stored.isEmpty()) {
-                        player.sendMessage(Text.literal("No channel stored — right-click a block first."), true);
+                        player.sendMessage(Text.literal("No channel stored — right-click a block first.").formatted(Formatting.RED), true);
                     } else {
                         String label = gate.bindNextInput(stored);
-                        player.sendMessage(Text.literal("Gate " + label + " ← " + stored), true);
+                        player.sendMessage(Text.literal("Gate " + label + " ← " + stored).formatted(Formatting.GREEN), true);
                     }
                 } else {
                     String c = gate.copyOutputChannel();
                     writeChannel(stack, c);
-                    player.sendMessage(Text.literal("Copied gate output " + c), true);
+                    player.sendMessage(Text.literal("Copied gate output " + c).formatted(Formatting.AQUA), true);
                 }
             }
             return ActionResult.success(world.isClient());
@@ -54,10 +57,10 @@ public class RedstoneLinkerItem extends Item {
             if (player.isSneaking()) {
                 String stored = readChannel(stack);
                 if (stored.isEmpty()) {
-                    player.sendMessage(Text.literal("No channel stored — right-click a block first."), true);
+                    player.sendMessage(Text.literal("No channel stored — right-click a block first.").formatted(Formatting.RED), true);
                 } else {
                     channel.setChannel(stored);
-                    player.sendMessage(Text.literal("Linked to channel " + stored), true);
+                    player.sendMessage(Text.literal("Linked to channel " + stored).formatted(Formatting.GREEN), true);
                 }
             } else {
                 String c = channel.getChannel();
@@ -66,7 +69,7 @@ public class RedstoneLinkerItem extends Item {
                     channel.setChannel(c);
                 }
                 writeChannel(stack, c);
-                player.sendMessage(Text.literal("Copied channel " + c), true);
+                player.sendMessage(Text.literal("Copied channel " + c).formatted(Formatting.AQUA), true);
             }
         }
         return ActionResult.success(world.isClient());
@@ -82,5 +85,10 @@ public class RedstoneLinkerItem extends Item {
         NbtCompound nbt = data.copyNbt();
         nbt.putString("channel", channel);
         stack.set(DataComponentTypes.CUSTOM_DATA, NbtComponent.of(nbt));
+    }
+
+    @Override
+    public void appendTooltip(ItemStack stack, TooltipContext context, List<Text> tooltip, TooltipType type) {
+        Tips.append(tooltip, "tip.gadgets.redstone_linker.1", "tip.gadgets.redstone_linker.2", "tip.gadgets.redstone_linker.3");
     }
 }

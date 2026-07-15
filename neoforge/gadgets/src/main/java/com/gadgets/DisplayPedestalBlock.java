@@ -1,5 +1,6 @@
 package com.gadgets;
 
+import net.minecraft.ChatFormatting;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.network.chat.Component;
@@ -61,10 +62,10 @@ public class DisplayPedestalBlock extends Block implements EntityBlock {
         if (!level.isClientSide()) {
             if (hit.getDirection() == Direction.UP) {
                 int s = be.cycleSpin();
-                player.displayClientMessage(Component.literal("Spin: " + SPIN_NAMES[s]), true);
+                player.displayClientMessage(Component.literal("Spin: " + SPIN_NAMES[s]).withStyle(ChatFormatting.GOLD), true);
             } else {
                 int s = be.cycleScale();
-                player.displayClientMessage(Component.literal("Display size: " + SCALE_NAMES[s]), true);
+                player.displayClientMessage(Component.literal("Display size: " + SCALE_NAMES[s]).withStyle(ChatFormatting.GOLD), true);
             }
         }
         return ItemInteractionResult.sidedSuccess(level.isClientSide());

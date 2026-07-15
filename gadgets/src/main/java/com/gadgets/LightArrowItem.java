@@ -1,5 +1,8 @@
 package com.gadgets;
 
+import java.util.List;
+import net.minecraft.item.tooltip.TooltipType;
+import net.minecraft.text.Text;
 import net.minecraft.block.BlockState;
 import net.minecraft.block.Blocks;
 import net.minecraft.entity.player.PlayerEntity;
@@ -55,5 +58,10 @@ public class LightArrowItem extends Item {
             user.getItemCooldownManager().set(this, 10);
         }
         return TypedActionResult.success(stack, world.isClient());
+    }
+
+    @Override
+    public void appendTooltip(ItemStack stack, TooltipContext context, List<Text> tooltip, TooltipType type) {
+        Tips.append(tooltip, "tip.gadgets.light_arrow.1", "tip.gadgets.light_arrow.2");
     }
 }

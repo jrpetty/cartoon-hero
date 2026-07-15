@@ -1,5 +1,6 @@
 package com.gadgets;
 
+import net.minecraft.util.Formatting;
 import net.minecraft.block.Block;
 import net.minecraft.block.BlockEntityProvider;
 import net.minecraft.block.BlockState;
@@ -61,10 +62,10 @@ public class DisplayPedestalBlock extends Block implements BlockEntityProvider {
         if (!world.isClient()) {
             if (hit.getSide() == Direction.UP) {
                 int s = be.cycleSpin();
-                player.sendMessage(Text.literal("Spin: " + SPIN_NAMES[s]), true);
+                player.sendMessage(Text.literal("Spin: " + SPIN_NAMES[s]).formatted(Formatting.GOLD), true);
             } else {
                 int s = be.cycleScale();
-                player.sendMessage(Text.literal("Display size: " + SCALE_NAMES[s]), true);
+                player.sendMessage(Text.literal("Display size: " + SCALE_NAMES[s]).formatted(Formatting.GOLD), true);
             }
         }
         return ItemActionResult.SUCCESS;

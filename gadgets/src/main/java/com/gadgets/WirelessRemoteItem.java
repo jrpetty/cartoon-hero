@@ -1,5 +1,8 @@
 package com.gadgets;
 
+import java.util.List;
+import net.minecraft.item.tooltip.TooltipType;
+import net.minecraft.util.Formatting;
 import net.minecraft.block.entity.BlockEntity;
 import net.minecraft.component.DataComponentTypes;
 import net.minecraft.component.type.NbtComponent;
@@ -40,7 +43,7 @@ public class WirelessRemoteItem extends Item {
         if (!world.isClient()) {
             String c = ensureChannel(ctx.getStack(), world);
             channel.setChannel(c);
-            player.sendMessage(Text.literal("Bound to remote channel " + c), true);
+            player.sendMessage(Text.literal("Bound to remote channel " + c).formatted(Formatting.GREEN), true);
         }
         return ActionResult.success(world.isClient());
     }
@@ -51,12 +54,12 @@ public class WirelessRemoteItem extends Item {
         if (!world.isClient()) {
             String c = ensureChannel(stack, world);
             if (player.isSneaking()) {
-                player.sendMessage(Text.literal("Remote channel: " + c), true);
+                player.sendMessage(Text.literal("Remote channel: " + c).formatted(Formatting.AQUA), true);
             } else {
                 WirelessNetwork.publish(c, "remote|" + player.getUuid(), 15, world.getTime());
                 world.playSound(null, player.getX(), player.getY(), player.getZ(),
                         SoundEvents.BLOCK_LEVER_CLICK, SoundCategory.PLAYERS, 0.6F, 1.4F);
-                player.sendMessage(Text.literal("Pulsed " + c), true);
+                player.sendMessage(Text.literal("Pulsed " + c).formatted(Formatting.GOLD), true);
             }
         }
         return TypedActionResult.success(stack, world.isClient());
@@ -81,5 +84,10 @@ public class WirelessRemoteItem extends Item {
         NbtCompound nbt = data.copyNbt();
         nbt.putString("channel", channel);
         stack.set(DataComponentTypes.CUSTOM_DATA, NbtComponent.of(nbt));
+    }
+
+    @Override
+    public void appendTooltip(ItemStack stack, TooltipContext context, List<Text> tooltip, TooltipType type) {
+        Tips.append(tooltip, "tip.gadgets.wireless_remote.1", "tip.gadgets.wireless_remote.2");
     }
 }
