@@ -41,7 +41,7 @@ public final class ClientSetup {
 
     @SubscribeEvent
     public static void onRegisterGuiLayers(RegisterGuiLayersEvent event) {
-        event.registerAbove(net.minecraft.client.gui.VanillaGuiLayers.CROSSHAIR,
+        event.registerAboveAll(
                 ResourceLocation.fromNamespaceAndPath(MobTrumps.MODID, "card_scanner"),
                 ScannerClient::renderHud);
     }
