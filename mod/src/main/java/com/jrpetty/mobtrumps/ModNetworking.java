@@ -51,5 +51,14 @@ public final class ModNetworking {
                         LinkDisplayPayload.handle(payload, sp);
                     }
                 }));
+        registrar.playToClient(BattleSyncPayload.TYPE, BattleSyncPayload.STREAM_CODEC,
+                (payload, context) -> context.enqueueWork(
+                        () -> ClientHooks.updateBattle(payload)));
+        registrar.playToServer(BattleActionPayload.TYPE, BattleActionPayload.STREAM_CODEC,
+                (payload, context) -> context.enqueueWork(() -> {
+                    if (context.player() instanceof net.minecraft.server.level.ServerPlayer sp) {
+                        TableBattleManager.action(sp, payload.action(), payload.stat());
+                    }
+                }));
     }
 }

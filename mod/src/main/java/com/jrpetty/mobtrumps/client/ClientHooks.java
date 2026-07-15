@@ -50,4 +50,19 @@ public final class ClientHooks {
             Minecraft.getInstance().setScreen(new PackRevealScreen(pulls));
         }
     }
+
+    /** Apply a battle state snapshot, opening or closing the battle screen. */
+    public static void updateBattle(com.jrpetty.mobtrumps.BattleSyncPayload payload) {
+        ClientBattle.set(payload.phase(), payload.playerCardId(), payload.cpuCardId(), payload.nums());
+        Minecraft mc = Minecraft.getInstance();
+        if (payload.phase() == com.jrpetty.mobtrumps.BattleSyncPayload.CLOSED) {
+            if (mc.screen instanceof BattleScreen) {
+                mc.setScreen(null);
+            }
+            return;
+        }
+        if (!(mc.screen instanceof BattleScreen)) {
+            mc.setScreen(new BattleScreen());
+        }
+    }
 }

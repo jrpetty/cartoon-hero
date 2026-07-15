@@ -27,10 +27,13 @@ public final class DuelTables {
         BO1("Best of 1", 1),
         BO3("Best of 3", 3),
         BO5("Best of 5", 5),
-        DRAFT("Draft", 0);
+        DRAFT("Draft", 0),
+        CPU_EASY("vs CPU — Easy", 0),
+        CPU_NORMAL("vs CPU — Normal", 0),
+        CPU_HARD("vs CPU — Hard", 0);
 
         final String label;
-        final int bestOf; // 0 = not applicable (draft)
+        final int bestOf; // 0 = not applicable (draft / CPU)
 
         Mode(String label, int bestOf) {
             this.label = label;
@@ -39,6 +42,19 @@ public final class DuelTables {
 
         Mode next() {
             return values()[(ordinal() + 1) % values().length];
+        }
+
+        boolean isCpu() {
+            return this == CPU_EASY || this == CPU_NORMAL || this == CPU_HARD;
+        }
+
+        com.jrpetty.mobtrumps.game.Difficulty cpuDifficulty() {
+            return switch (this) {
+                case CPU_EASY -> com.jrpetty.mobtrumps.game.Difficulty.EASY;
+                case CPU_NORMAL -> com.jrpetty.mobtrumps.game.Difficulty.NORMAL;
+                case CPU_HARD -> com.jrpetty.mobtrumps.game.Difficulty.HARD;
+                default -> null;
+            };
         }
     }
 
@@ -69,9 +85,23 @@ public final class DuelTables {
             return;
         }
 
+        // right-clicking your own seat while it's set to a CPU mode: start a
+        // solo battle against the AI at that difficulty
+        if (seat != null && seat.player().equals(player.getUUID()) && seat.mode().isCpu()) {
+            if (busy(player)) {
+                player.sendSystemMessage(err("Finish your current game first."));
+                return;
+            }
+            SEATS.remove(key);
+            player.serverLevel().playSound(null, pos.getX() + 0.5, pos.getY() + 1, pos.getZ() + 0.5,
+                    SoundEvents.BOOK_PAGE_TURN, SoundSource.BLOCKS, 0.8F, 1.1F);
+            TableBattleManager.start(player, seat.mode().cpuDifficulty());
+            return;
+        }
+
         // no one waiting, or you re-clicking your own seat: (re)take the seat
         if (seat == null || seat.player().equals(player.getUUID())) {
-            if (DuelManager.isInDuel(player) || DraftManager.isDrafting(player)) {
+            if (busy(player)) {
                 player.sendSystemMessage(err("Finish your current game first."));
                 return;
             }
@@ -88,8 +118,15 @@ public final class DuelTables {
         }
 
         // someone else is seated: try to start the game in their chosen mode
-        ServerPlayer opponent = player.serverLevel().getServer().getPlayerList().getPlayer(seat.player());
         Mode mode = seat.mode();
+        if (mode.isCpu()) {
+            // a solo (vs CPU) practice seat — the newcomer just takes it over
+            SEATS.put(key, new Seat(player.getUUID(), now, Mode.BO3));
+            player.sendSystemMessage(Component.literal("You take the seat at the dueling table.")
+                    .withStyle(ChatFormatting.GREEN));
+            return;
+        }
+        ServerPlayer opponent = player.serverLevel().getServer().getPlayerList().getPlayer(seat.player());
         SEATS.remove(key);
         if (opponent == null) {
             // the seated player logged off — just take the seat instead
@@ -119,13 +156,20 @@ public final class DuelTables {
     }
 
     private static void announceMode(ServerPlayer player, Mode mode) {
+        String tail = mode.isCpu()
+                ? " — right-click the table again to start playing the CPU."
+                : mode == Mode.DRAFT
+                        ? " — you'll draft a deck together before duelling."
+                        : " — a single challenger will play " + mode.label.toLowerCase(java.util.Locale.ROOT) + ".";
         player.sendSystemMessage(Component.literal("Table set to ").withStyle(ChatFormatting.YELLOW)
                 .append(Component.literal(mode.label).withStyle(ChatFormatting.AQUA, ChatFormatting.BOLD))
-                .append(Component.literal(mode == Mode.DRAFT
-                                ? " — you'll draft a deck together before duelling."
-                                : " — a single challenger will play " + mode.label.toLowerCase(java.util.Locale.ROOT) + ".")
-                        .withStyle(ChatFormatting.YELLOW)));
+                .append(Component.literal(tail).withStyle(ChatFormatting.YELLOW)));
         player.playNotifySound(SoundEvents.UI_BUTTON_CLICK.value(), SoundSource.BLOCKS, 0.7F, 1.2F);
+    }
+
+    private static boolean busy(ServerPlayer player) {
+        return TableBattleManager.isInBattle(player)
+                || DuelManager.isInDuel(player) || DraftManager.isDrafting(player);
     }
 
     /** Drop a player's seats when they leave, so tables don't hold ghosts. */
