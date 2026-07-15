@@ -84,12 +84,13 @@ In game:
   **how many of that mob you've collected** and your progress toward its holo.
   Great for scouting a mob's card before you commit to the hunt
 - **Card Display** (craft: item frame + emerald) — a sleek dark wall panel that
-  **projects** a card straight from your collection: right-click to open a modern
-  picker and choose any card you own (shift-click for its holographic version).
-  The card **never leaves your collection**, so there is nothing to steal — the
-  projected card floats in the frame but only its owner can swap it (right-click)
-  or clear it (sneak-right-click). Anyone else who right-clicks just admires it
-  full-screen. Show off your rarest holo with zero risk
+  **projects** a card straight from your collection, rendered as a full readable
+  stat card right on the panel: the mob's name, tier, a six-row stat table with
+  value bars, and its total rating. Right-click to open a modern picker and choose
+  any card you own (shift-click for its holographic version). The card **never
+  leaves your collection**, so there is nothing to steal — only its owner can swap
+  it (right-click) or clear it (sneak-right-click); anyone else who right-clicks
+  just admires it full-screen. Show off your rarest holo with zero risk
 - **Holo Projector** (craft: 2 amethyst + sea lantern + Card Display + polished
   blackstone) — a glowing pedestal that projects a **rotating 3D hologram of the
   linked mob** floating above it, with the card shown on a plaque on its face. It
