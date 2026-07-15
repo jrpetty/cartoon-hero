@@ -24,8 +24,11 @@ public class DuelingTableBlock extends HorizontalDirectionalBlock {
 
     public static final MapCodec<DuelingTableBlock> CODEC = simpleCodec(DuelingTableBlock::new);
 
-    // a chunky table: full footprint, 14/16 tall
-    private static final VoxelShape SHAPE = Block.box(0, 0, 0, 16, 14, 16);
+    // a table: full top slab over a slimmer leg zone
+    private static final VoxelShape SHAPE = net.minecraft.world.phys.shapes.Shapes.or(
+            Block.box(0, 10, 0, 16, 14, 16),   // top
+            Block.box(1, 0, 1, 15, 10, 15));   // legs
+
 
     public DuelingTableBlock(Properties properties) {
         super(properties);

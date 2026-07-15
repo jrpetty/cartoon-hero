@@ -44,6 +44,9 @@ public final class DuelTables {
             player.sendSystemMessage(Component.literal("You take a seat at the dueling table — "
                             + "another player right-clicks it to challenge you (best of 3).")
                     .withStyle(ChatFormatting.GREEN));
+            player.serverLevel().playSound(null, pos.getX() + 0.5, pos.getY() + 1, pos.getZ() + 0.5,
+                    net.minecraft.sounds.SoundEvents.BOOK_PAGE_TURN,
+                    net.minecraft.sounds.SoundSource.BLOCKS, 0.8F, 1.0F);
             return;
         }
 

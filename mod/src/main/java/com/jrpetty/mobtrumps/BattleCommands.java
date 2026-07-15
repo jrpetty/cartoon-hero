@@ -415,6 +415,14 @@ public final class BattleCommands {
                 .append(Component.literal("/").withStyle(ChatFormatting.DARK_GRAY))
                 .append(Component.literal("bo5").withStyle(ChatFormatting.AQUA))
                 .append(Component.literal(" (best-of series)").withStyle(ChatFormatting.DARK_GRAY)));
+        player.sendSystemMessage(Component.literal("  In-world: ")
+                .withStyle(ChatFormatting.GRAY)
+                .append(Component.literal("craft a Dueling Table").withStyle(ChatFormatting.AQUA))
+                .append(Component.literal(" (sit, second click starts a bo3) or a ")
+                        .withStyle(ChatFormatting.DARK_GRAY))
+                .append(Component.literal("Card Display").withStyle(ChatFormatting.AQUA))
+                .append(Component.literal(" to mount a card on your wall")
+                        .withStyle(ChatFormatting.DARK_GRAY)));
         player.sendSystemMessage(Component.literal("  ")
                 .append(button("[Quick match]", "/mobtrumps queue", ChatFormatting.GREEN,
                         "Auto-match against another waiting player"))

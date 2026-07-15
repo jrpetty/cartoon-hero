@@ -809,7 +809,13 @@ public final class DuelManager {
         int challengerCards = duel.battle.playerCardCount();
         int targetCards = duel.battle.cpuCardCount();
         int pot = duel.battle.potCount();
-        MutableComponent score = Component.literal(name(duel.challenger) + ": " + challengerCards
+        // in a series, keep the match score in view: "Game 2 (1-0) · "
+        String series = duel.isSeries()
+                ? "Game " + (duel.challengerGames + duel.targetGames + 1)
+                        + " (" + duel.challengerGames + "-" + duel.targetGames + ") · "
+                : "";
+        MutableComponent score = Component.literal(series
+                + name(duel.challenger) + ": " + challengerCards
                 + " | " + name(duel.target) + ": " + targetCards
                 + (pot > 0 ? " | Pot: " + pot : "")).withStyle(ChatFormatting.DARK_GRAY);
         sendBoth(duel, score);
