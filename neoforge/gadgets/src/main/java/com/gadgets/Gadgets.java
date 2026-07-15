@@ -37,6 +37,9 @@ public class Gadgets {
     public static final Supplier<EntityType<RopeArrowEntity>> ROPE_ARROW_ENTITY = ENTITIES.register("rope_arrow",
             () -> EntityType.Builder.<RopeArrowEntity>of(RopeArrowEntity::new, MobCategory.MISC)
                     .sized(0.5F, 0.5F).clientTrackingRange(4).updateInterval(20).build("rope_arrow"));
+    public static final Supplier<EntityType<TorchArrowEntity>> TORCH_ARROW_ENTITY = ENTITIES.register("torch_arrow",
+            () -> EntityType.Builder.<TorchArrowEntity>of(TorchArrowEntity::new, MobCategory.MISC)
+                    .sized(0.5F, 0.5F).clientTrackingRange(4).updateInterval(20).build("torch_arrow"));
 
     public static final DeferredItem<Item> ROPE_ARROW =
             ITEMS.register("rope_arrow", () -> new RopeArrowItem(new Item.Properties()));

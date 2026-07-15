@@ -11,6 +11,7 @@ public class GadgetsClient implements ClientModInitializer {
     @Override
     public void onInitializeClient() {
         EntityRendererRegistry.register(Gadgets.ROPE_ARROW_ENTITY, RopeArrowRenderer::new);
+        EntityRendererRegistry.register(Gadgets.TORCH_ARROW_ENTITY, TorchArrowRenderer::new);
         BlockEntityRendererFactories.register(Gadgets.DISPLAY_PEDESTAL_BE, DisplayPedestalRenderer::new);
         BlockEntityRendererFactories.register(Gadgets.DRAIN_BE, DrainRenderer::new);
     }

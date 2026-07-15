@@ -101,6 +101,10 @@ public class Gadgets implements ModInitializer {
             Registries.ENTITY_TYPE, Identifier.of(MOD_ID, "rope_arrow"),
             EntityType.Builder.<RopeArrowEntity>create(RopeArrowEntity::new, SpawnGroup.MISC)
                     .dimensions(0.5f, 0.5f).maxTrackingRange(64).build("rope_arrow"));
+    public static final EntityType<TorchArrowEntity> TORCH_ARROW_ENTITY = Registry.register(
+            Registries.ENTITY_TYPE, Identifier.of(MOD_ID, "torch_arrow"),
+            EntityType.Builder.<TorchArrowEntity>create(TorchArrowEntity::new, SpawnGroup.MISC)
+                    .dimensions(0.5f, 0.5f).maxTrackingRange(64).build("torch_arrow"));
 
     public static BlockEntityType<PlayerSensorBlockEntity> PLAYER_SENSOR_BE;
     public static BlockEntityType<FilterHopperBlockEntity> FILTER_HOPPER_BE;
