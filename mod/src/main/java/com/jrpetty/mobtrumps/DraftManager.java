@@ -106,17 +106,37 @@ public final class DraftManager {
             to.sendSystemMessage(err("Someone is already in a game."));
             return 0;
         }
+        begin(from, to);
+        return 1;
+    }
+
+    /**
+     * Start a draft directly between two mutually-present players, skipping the
+     * invite/accept dance — used by the dueling table, where both players have
+     * already consented by clicking it. Returns false if either is busy.
+     */
+    public static boolean startDirect(ServerPlayer a, ServerPlayer b) {
+        if (a.getUUID().equals(b.getUUID())) {
+            return false;
+        }
+        if (isDrafting(a) || isDrafting(b) || DuelManager.isInDuel(a) || DuelManager.isInDuel(b)) {
+            return false;
+        }
+        begin(a, b);
+        return true;
+    }
+
+    private static void begin(ServerPlayer a, ServerPlayer b) {
         List<MobCard> pool = new ArrayList<>(
                 MobCards.shuffledDeck(POOL_SIZE, ThreadLocalRandom.current()));
-        Draft draft = new Draft(from, to, pool);
-        ACTIVE.put(from.getUUID(), draft);
-        ACTIVE.put(to.getUUID(), draft);
-        Component intro = Component.literal("=== DRAFT: " + name(from) + " vs " + name(to)
+        Draft draft = new Draft(a, b, pool);
+        ACTIVE.put(a.getUUID(), draft);
+        ACTIVE.put(b.getUUID(), draft);
+        Component intro = Component.literal("=== DRAFT: " + name(a) + " vs " + name(b)
                 + " — " + PICKS_EACH + " picks each ===").withStyle(ChatFormatting.GOLD, ChatFormatting.BOLD);
-        from.sendSystemMessage(intro);
-        to.sendSystemMessage(intro);
+        a.sendSystemMessage(intro);
+        b.sendSystemMessage(intro);
         promptPick(draft);
-        return 1;
     }
 
     public static int decline(ServerPlayer to) {

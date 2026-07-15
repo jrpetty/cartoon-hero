@@ -452,7 +452,8 @@ public final class BattleCommands {
         player.sendSystemMessage(Component.literal("  In-world: ")
                 .withStyle(ChatFormatting.GRAY)
                 .append(Component.literal("craft a Dueling Table").withStyle(ChatFormatting.AQUA))
-                .append(Component.literal(" (sit, second click starts a bo3) or a ")
+                .append(Component.literal(" (sit, sneak-click to pick bo1/bo3/bo5/draft, second "
+                                + "click starts it) or a ")
                         .withStyle(ChatFormatting.DARK_GRAY))
                 .append(Component.literal("Card Display").withStyle(ChatFormatting.AQUA))
                 .append(Component.literal(" to mount a card on your wall")

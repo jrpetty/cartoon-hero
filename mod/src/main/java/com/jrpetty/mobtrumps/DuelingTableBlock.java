@@ -19,7 +19,11 @@ import net.minecraft.world.phys.shapes.VoxelShape;
 
 import net.minecraft.core.BlockPos;
 
-/** A table you place down; two players right-click it to start a best-of-3 duel. */
+/**
+ * A table you place down; sit with right-click, sneak-right-click to cycle the
+ * game mode (best of 1/3/5, or draft), and a second player right-clicks to
+ * start it.
+ */
 public class DuelingTableBlock extends HorizontalDirectionalBlock {
 
     public static final MapCodec<DuelingTableBlock> CODEC = simpleCodec(DuelingTableBlock::new);
@@ -59,7 +63,7 @@ public class DuelingTableBlock extends HorizontalDirectionalBlock {
     protected InteractionResult useWithoutItem(BlockState state, Level level, BlockPos pos,
                                                Player player, BlockHitResult hit) {
         if (!level.isClientSide && player instanceof ServerPlayer sp) {
-            DuelTables.interact(pos, sp);
+            DuelTables.interact(pos, sp, player.isShiftKeyDown());
         }
         return InteractionResult.sidedSuccess(level.isClientSide);
     }

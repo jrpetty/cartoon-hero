@@ -73,8 +73,10 @@ In game:
   decline, timeout or logout). Add `bo3` or `bo5` for a **best-of series** —
   the deck is re-dealt each game and the first to win the majority takes the match
 - **Dueling Table** (craft: 3 crafting tables + 2 paper + emerald) — a placeable
-  block so duels are discoverable without commands: right-click to take a seat,
-  and when a second player right-clicks it a best-of-3 duel begins between you
+  block so duels are discoverable without commands: right-click to take a seat
+  (default best of 3), sneak-right-click to cycle the mode — **Best of 1 / 3 / 5,
+  or Draft** — and when a second player right-clicks it the game begins in
+  whichever mode you left it on
 - **Card Scanner** (craft: spyglass + emerald + amethyst shard) — hold
   right-click to raise it to your eye like a spyglass and zoom in; any mob you
   look at gets its Mob Trumps card **projected in the air above it**, plus a
