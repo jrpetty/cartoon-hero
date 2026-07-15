@@ -49,6 +49,8 @@ public final class ModItems {
                     com.jrpetty.mobtrumps.game.PackType.BOSS));
     public static final DeferredItem<CollectionBookItem> COLLECTION_BOOK =
             ITEMS.register("collection_book", () -> new CollectionBookItem(new Item.Properties()));
+    public static final DeferredItem<CardScannerItem> CARD_SCANNER =
+            ITEMS.register("card_scanner", () -> new CardScannerItem(new Item.Properties().stacksTo(1)));
 
     public static final DeferredHolder<CreativeModeTab, CreativeModeTab> TAB =
             CREATIVE_MODE_TABS.register("mobtrumps", () -> CreativeModeTab.builder()
@@ -56,6 +58,7 @@ public final class ModItems {
                     .icon(() -> new ItemStack(COLLECTION_BOOK.get()))
                     .displayItems((parameters, output) -> {
                         output.accept(COLLECTION_BOOK.get());
+                        output.accept(CARD_SCANNER.get());
                         output.accept(ModBlocks.DUELING_TABLE.get());
                         output.accept(ModBlocks.CARD_DISPLAY.get());
                         // cards are earned by hunting mobs; every card is shown here for reference

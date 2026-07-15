@@ -75,6 +75,11 @@ In game:
 - **Dueling Table** (craft: 3 crafting tables + 2 paper + emerald) — a placeable
   block so duels are discoverable without commands: right-click to take a seat,
   and when a second player right-clicks it a best-of-3 duel begins between you
+- **Card Scanner** (craft: spyglass + emerald + amethyst shard) — hold
+  right-click to raise it to your eye like a spyglass and zoom in; any mob you
+  look at gets its Mob Trumps card **projected in the air above it**, plus a
+  scanner readout of its full stat block at the bottom of the screen. Great for
+  scouting a mob's card before you commit to the hunt
 - **Card Display** (craft: item frame + emerald) — a sleek dark wall panel that
   **projects** a card straight from your collection: right-click to open a modern
   picker and choose any card you own (shift-click for its holographic version).

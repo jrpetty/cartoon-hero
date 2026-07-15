@@ -1,0 +1,13 @@
+{
+  "type": "minecraft:crafting_shapeless",
+  "category": "equipment",
+  "ingredients": [
+    { "item": "minecraft:spyglass" },
+    { "item": "minecraft:emerald" },
+    { "item": "minecraft:amethyst_shard" }
+  ],
+  "result": {
+    "id": "mobtrumps:card_scanner",
+    "count": 1
+  }
+}

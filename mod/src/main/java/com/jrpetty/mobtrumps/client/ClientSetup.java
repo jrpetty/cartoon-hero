@@ -12,6 +12,7 @@ import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.fml.event.lifecycle.FMLClientSetupEvent;
 import net.neoforged.neoforge.client.event.EntityRenderersEvent;
+import net.neoforged.neoforge.client.event.RegisterGuiLayersEvent;
 
 /** Client-only registration: the mob_index item property that selects a
  *  card's per-mob inventory icon via the model overrides. */
@@ -35,5 +36,12 @@ public final class ClientSetup {
     @SubscribeEvent
     public static void onRegisterRenderers(EntityRenderersEvent.RegisterRenderers event) {
         event.registerBlockEntityRenderer(ModBlocks.CARD_DISPLAY_BE.get(), CardDisplayRenderer::new);
+    }
+
+    @SubscribeEvent
+    public static void onRegisterGuiLayers(RegisterGuiLayersEvent event) {
+        event.registerAbove(net.minecraft.client.gui.VanillaGuiLayers.CROSSHAIR,
+                ResourceLocation.fromNamespaceAndPath(MobTrumps.MODID, "card_scanner"),
+                ScannerClient::renderHud);
     }
 }
