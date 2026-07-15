@@ -64,6 +64,8 @@ public final class MobDrops {
                             + kills + " / " + threshold + " kills")
                     .withStyle(ChatFormatting.DARK_PURPLE), true);
         }
+        // push the updated kill count so the book and scanner show it live
+        CollectionTracker.sync(killer);
     }
 
     /** Increment and persist this player's kill count for a mob; returns the new total. */

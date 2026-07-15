@@ -113,10 +113,20 @@ public class MobCardScreen extends Screen {
         }
         pose.popPose();
 
+        // how many of this mob you've collected (and holo progress)
+        int have = ClientCollection.killCount(card.id());
+        int threshold = card.tier().foilKillThreshold();
+        boolean holo = ClientCollection.hasFoil(card.id());
+        String collectedText = have == 0 ? "Not collected yet"
+                : "Collected x" + have + (holo ? "  ·  holo unlocked"
+                        : "  ·  holo at " + threshold + " (" + Math.min(have, threshold) + "/" + threshold + ")");
+        int collectedColor = holo ? 0xFFC77BFF : have > 0 ? 0xFF7BE38A : 0xFFB9BFC9;
+        g.drawCenteredString(font, collectedText, cx, y + h + 6, collectedColor);
+
         // lore: a flavour line and a real Minecraft fact, wrapped under the card
         CardLore.Lore lore = CardLore.of(card.id());
         int loreW = w + 60;
-        int ly = y + h + 12;
+        int ly = y + h + 20;
         for (var line : font.split(Component.literal(lore.flavor())
                 .withStyle(ChatFormatting.ITALIC), loreW)) {
             g.drawCenteredString(font, line, cx, ly, 0xFFE8C56A);

@@ -95,6 +95,7 @@ public final class CollectionTracker {
                 player.getData(ModAttachments.COLLECTED_FOIL.get()),
                 player.getData(ModAttachments.DUEL_WINS.get()),
                 player.getData(ModAttachments.DECK.get()),
-                player.getData(ModAttachments.DISPLAY_FOIL.get())));
+                player.getData(ModAttachments.DISPLAY_FOIL.get()),
+                player.getData(ModAttachments.KILLS.get())));
     }
 }

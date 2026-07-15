@@ -1,6 +1,7 @@
 package com.jrpetty.mobtrumps.client;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 /**
@@ -16,17 +17,24 @@ public final class ClientCollection {
     private static volatile Set<String> displayFoil = Set.of();
     private static volatile Set<String> stored = Set.of();
     private static volatile Set<String> storedFoil = Set.of();
+    private static volatile Map<String, Integer> kills = Map.of();
 
     private ClientCollection() {
     }
 
     public static void set(List<String> ids, List<String> foilIds, int wins, List<String> deckIds,
-                           List<String> displayFoilIds) {
+                           List<String> displayFoilIds, Map<String, Integer> killCounts) {
         collected = Set.copyOf(ids);
         foils = Set.copyOf(foilIds);
         duelWins = wins;
         deck = List.copyOf(deckIds);
         displayFoil = Set.copyOf(displayFoilIds);
+        kills = Map.copyOf(killCounts);
+    }
+
+    /** How many of this mob the player has killed — i.e. cards collected of it. */
+    public static int killCount(String cardId) {
+        return kills.getOrDefault(cardId, 0);
     }
 
     public static void setStorage(List<String> storedIds, List<String> storedFoilIds) {

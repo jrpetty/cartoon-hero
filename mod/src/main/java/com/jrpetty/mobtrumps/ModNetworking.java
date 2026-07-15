@@ -15,7 +15,8 @@ public final class ModNetworking {
         registrar.playToClient(CollectionSyncPayload.TYPE, CollectionSyncPayload.STREAM_CODEC,
                 (payload, context) -> context.enqueueWork(
                         () -> ClientCollection.set(payload.collected(), payload.foils(),
-                                payload.duelWins(), payload.deck(), payload.displayFoil())));
+                                payload.duelWins(), payload.deck(), payload.displayFoil(),
+                                payload.kills())));
         registrar.playToClient(PackOpenedPayload.TYPE, PackOpenedPayload.STREAM_CODEC,
                 (payload, context) -> context.enqueueWork(
                         () -> ClientHooks.openPackReveal(payload.pulls())));

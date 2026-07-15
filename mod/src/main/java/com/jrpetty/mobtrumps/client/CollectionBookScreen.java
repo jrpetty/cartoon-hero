@@ -248,6 +248,16 @@ public class CollectionBookScreen extends Screen {
                     g.fill(cx - 2, cy + ch - 4, cx + 6, cy + ch + 3, CardRenderer.KRAFT_DARK);
                     g.fill(cx - 1, cy + ch - 3, cx + 5, cy + ch + 2, 0xFF55A82F);
                 }
+                // how many of this mob you've collected, bottom-right
+                int have = ClientCollection.killCount(card.id());
+                if (have > 0) {
+                    String badge = "x" + have;
+                    int bw = font.width(badge);
+                    int bx = cx + cw - bw - 2;
+                    int by = cy + ch - 9;
+                    g.fill(bx - 2, by - 1, cx + cw + 1, by + 9, 0xC0101010);
+                    g.drawString(font, badge, bx, by, 0xFFF3E2A7, false);
+                }
                 if (hovered) {
                     g.renderOutline(cx - 2, cy - 2, cw + 4, ch + 4, 0xFFF9D849);
                     g.renderOutline(cx - 3, cy - 3, cw + 6, ch + 6, 0x66F9D849);

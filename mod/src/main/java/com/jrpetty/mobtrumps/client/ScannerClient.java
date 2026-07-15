@@ -164,15 +164,16 @@ public final class ScannerClient {
                 py + 6, tier, false);
 
         // your collection status — the reason to scan before you hunt
-        boolean owned = ClientCollection.has(card.id());
         boolean holo = ClientCollection.hasFoil(card.id());
+        int have = ClientCollection.killCount(card.id());
+        int threshold = card.tier().foilKillThreshold();
         String status;
         int statusColor;
         if (holo) {
-            status = "COLLECTED + HOLO";
+            status = "Collected x" + have + "  ·  HOLO unlocked";
             statusColor = 0xFFC77BFF;
-        } else if (owned) {
-            status = "COLLECTED · holo at " + card.tier().foilKillThreshold() + " kills";
+        } else if (have > 0) {
+            status = "Collected x" + have + "  ·  holo at " + threshold + " (" + have + "/" + threshold + ")";
             statusColor = 0xFF55E06A;
         } else {
             status = "NOT COLLECTED — hunt it to drop its card!";
