@@ -4,6 +4,7 @@ import java.util.List;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.item.TooltipFlag;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.InteractionHand;
@@ -14,14 +15,15 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.ClipContext;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.WallTorchBlock;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.HitResult;
 import net.minecraft.world.phys.Vec3;
 
 /**
- * Right-click while aiming to "fire" light: a glowstone block is planted on the
- * surface you hit. Light up a cave from the entrance.
+ * Right-click while aiming to "fire" a torch onto the surface you hit — a
+ * standing torch on a floor, a wall torch on a wall. Light a cave from afar.
  */
 public class LightArrowItem extends Item {
     private static final double RANGE = 32.0;
@@ -42,14 +44,21 @@ public class LightArrowItem extends Item {
         if (hit.getType() != HitResult.Type.BLOCK) {
             return InteractionResultHolder.pass(stack);
         }
+        Direction side = hit.getDirection();
+        if (side == Direction.DOWN) {
+            return InteractionResultHolder.pass(stack); // torches can't hang from a ceiling
+        }
 
-        BlockPos place = hit.getBlockPos().relative(hit.getDirection());
         if (!level.isClientSide()) {
+            BlockPos place = hit.getBlockPos().relative(side);
+            BlockState torch = side == Direction.UP
+                    ? Blocks.TORCH.defaultBlockState()
+                    : Blocks.WALL_TORCH.defaultBlockState().setValue(WallTorchBlock.FACING, side);
             BlockState existing = level.getBlockState(place);
-            if (!existing.isAir() && !existing.canBeReplaced()) {
+            if ((!existing.isAir() && !existing.canBeReplaced()) || !torch.canSurvive(level, place)) {
                 return InteractionResultHolder.pass(stack);
             }
-            level.setBlockAndUpdate(place, Blocks.GLOWSTONE.defaultBlockState());
+            level.setBlockAndUpdate(place, torch);
             if (!player.getAbilities().instabuild) {
                 stack.shrink(1);
             }

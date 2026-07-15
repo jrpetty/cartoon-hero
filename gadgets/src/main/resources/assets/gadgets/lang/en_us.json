@@ -1,6 +1,6 @@
 {
   "item.gadgets.rope_arrow": "Rope Arrow",
-  "item.gadgets.light_arrow": "Light Arrow",
+  "item.gadgets.light_arrow": "Torch Arrow",
   "block.gadgets.player_sensor": "Entity Sensor",
   "block.gadgets.filter_hopper": "Filter Hopper",
   "message.gadgets.filter_set": "Filter set to %s",
@@ -19,8 +19,8 @@
   "itemgroup.gadgets.gadgets": "Gadgets",
   "tip.gadgets.rope_arrow.1": "Fire it from a bow or crossbow",
   "tip.gadgets.rope_arrow.2": "Hangs climbable rope where it lands",
-  "tip.gadgets.light_arrow.1": "Plants a light on a distant surface",
-  "tip.gadgets.light_arrow.2": "Right-click while aiming",
+  "tip.gadgets.light_arrow.1": "Right-click to plant a torch on a surface",
+  "tip.gadgets.light_arrow.2": "Craft it from an arrow + a torch",
   "tip.gadgets.rope.1": "Climb it like a vine",
   "tip.gadgets.player_sensor.1": "Emits redstone when its target is near",
   "tip.gadgets.player_sensor.2": "Spawn egg: watch that mob",

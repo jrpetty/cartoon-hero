@@ -5,6 +5,7 @@ import net.minecraft.item.tooltip.TooltipType;
 import net.minecraft.text.Text;
 import net.minecraft.block.BlockState;
 import net.minecraft.block.Blocks;
+import net.minecraft.block.WallTorchBlock;
 import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.item.Item;
 import net.minecraft.item.ItemStack;
@@ -15,13 +16,14 @@ import net.minecraft.util.TypedActionResult;
 import net.minecraft.util.hit.BlockHitResult;
 import net.minecraft.util.hit.HitResult;
 import net.minecraft.util.math.BlockPos;
+import net.minecraft.util.math.Direction;
 import net.minecraft.util.math.Vec3d;
 import net.minecraft.world.RaycastContext;
 import net.minecraft.world.World;
 
 /**
- * Right-click while aiming to "fire" light: a glowstone block is planted on the
- * surface you hit. Light up a cave from the entrance.
+ * Right-click while aiming to "fire" a torch onto the surface you hit — a
+ * standing torch on a floor, a wall torch on a wall. Light a cave from afar.
  */
 public class LightArrowItem extends Item {
     private static final double RANGE = 32.0;
@@ -42,14 +44,21 @@ public class LightArrowItem extends Item {
         if (hit.getType() != HitResult.Type.BLOCK) {
             return TypedActionResult.pass(stack);
         }
+        Direction side = hit.getSide();
+        if (side == Direction.DOWN) {
+            return TypedActionResult.pass(stack); // torches can't hang from a ceiling
+        }
 
-        BlockPos place = hit.getBlockPos().offset(hit.getSide());
         if (!world.isClient()) {
+            BlockPos place = hit.getBlockPos().offset(side);
+            BlockState torch = side == Direction.UP
+                    ? Blocks.TORCH.getDefaultState()
+                    : Blocks.WALL_TORCH.getDefaultState().with(WallTorchBlock.FACING, side);
             BlockState existing = world.getBlockState(place);
-            if (!existing.isAir() && !existing.isReplaceable()) {
+            if ((!existing.isAir() && !existing.isReplaceable()) || !torch.canPlaceAt(world, place)) {
                 return TypedActionResult.pass(stack);
             }
-            world.setBlockState(place, Blocks.GLOWSTONE.getDefaultState());
+            world.setBlockState(place, torch);
             if (!user.getAbilities().creativeMode) {
                 stack.decrement(1);
             }

@@ -106,27 +106,27 @@ ROPE = [
 rope_pal = {".": CLEAR, "s": C(120, 120, 130), "w": C(170, 120, 60)}
 write_png(os.path.join(BASE, "item", "rope_arrow.png"), grid(ROPE, rope_pal))
 
-# --- Light Arrow item: arrow with a glowing tip ---
+# --- Torch Arrow item: a torch-tipped arrow ---
 LIGHT = [
-    "................",
-    "................",
-    "............GGG.",
-    "...........GYYYG",
-    "..........GYWWYG",
-    "sss......GYWWWYG",
-    "ssssssssssYWWWYG",
-    "ssssssssssYWWWYG",
-    "sss......GYWWWYG",
-    "..........GYWWYG",
-    "...........GYYYG",
-    "............GGG.",
-    "................",
-    "................",
-    "................",
+    ".......F........",
+    "......FfF.......",
+    ".....FfffF......",
+    "......FfF.......",
+    ".......t........",
+    ".......t........",
+    ".......s........",
+    ".......s........",
+    ".......s........",
+    ".......s........",
+    ".......s........",
+    ".....b.s.b......",
+    "......bsb.......",
+    ".......s........",
+    ".......s........",
     "................",
 ]
-light_pal = {".": CLEAR, "s": C(120, 120, 130),
-             "G": C(255, 220, 90), "Y": C(255, 240, 160), "W": C(255, 255, 235)}
+light_pal = {".": CLEAR, "s": C(150, 150, 160), "t": C(120, 80, 40),
+             "f": C(255, 150, 40), "F": C(255, 215, 110), "b": C(185, 185, 195)}
 write_png(os.path.join(BASE, "item", "light_arrow.png"), grid(LIGHT, light_pal))
 
 # --- Rope block: braided brown, fully opaque (no cutout needed) ---
