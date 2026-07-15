@@ -51,8 +51,10 @@ public class HoloProjectorRenderer implements BlockEntityRenderer<HoloProjectorB
         try {
             ItemStack stack = MobCardItem.stackOf(card, be.isFoil());
             pose.pushPose();
-            pose.translate(0.5, 0.34, 0.5);
-            pose.translate(facing.getStepX() * 0.44, 0.0, facing.getStepZ() * 0.44);
+            // plaque sits flush on the column face (column spans 4..12px),
+            // centred on its height
+            pose.translate(0.5, 0.5, 0.5);
+            pose.translate(facing.getStepX() * 0.27, 0.0, facing.getStepZ() * 0.27);
             pose.mulPose(Axis.YP.rotationDegrees(180.0F - facing.toYRot()));
             pose.scale(0.42F, 0.42F, 0.42F);
             itemRenderer.renderStatic(stack, ItemDisplayContext.FIXED, light, overlay,

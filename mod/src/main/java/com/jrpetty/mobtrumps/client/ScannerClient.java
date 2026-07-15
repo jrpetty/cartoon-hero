@@ -105,8 +105,11 @@ public final class ScannerClient {
             PoseStack pose = event.getPoseStack();
             pose.pushPose();
             pose.translate(x - camPos.x, y - camPos.y, z - camPos.z);
+            // billboard: face the camera, then yaw 180 so the item's FRONT
+            // (not its mirrored back) points at the viewer, upright
             pose.mulPose(event.getCamera().rotation());
-            pose.scale(-0.7F, -0.7F, 0.7F); // billboard toward the camera, flip
+            pose.mulPose(com.mojang.math.Axis.YP.rotationDegrees(180.0F));
+            pose.scale(0.7F, 0.7F, 0.7F);
             ItemStack stack = MobCardItem.stackOf(card, false);
             MultiBufferSource.BufferSource buffers = mc.renderBuffers().bufferSource();
             mc.getItemRenderer().renderStatic(stack, ItemDisplayContext.FIXED,
@@ -140,8 +143,8 @@ public final class ScannerClient {
             return;
         }
 
-        int panelW = 200;
-        int panelH = 60;
+        int panelW = 210;
+        int panelH = 72;
         int px = (sw - panelW) / 2;
         int py = sh - panelH - 46;
         int tier = com.jrpetty.mobtrumps.client.CardRenderer.tierPrintColor(card) | 0xFF000000;
@@ -149,10 +152,33 @@ public final class ScannerClient {
         g.fill(px - 1, py - 1, px + panelW + 1, py + panelH + 1, 0xFF05070A);
         g.fill(px, py, px + panelW, py + panelH, 0xE0121722);
         g.fill(px, py, px + panelW, py + 2, tier); // tier accent bar
+        // subtle corner brackets for a scanner look
+        int ck = 0x80FFFFFF;
+        g.fill(px, py, px + 8, py + 1, ck);
+        g.fill(px, py, px + 1, py + 8, ck);
+        g.fill(px + panelW - 8, py + panelH - 1, px + panelW, py + panelH, ck);
+        g.fill(px + panelW - 1, py + panelH - 8, px + panelW, py + panelH, ck);
 
         g.drawString(font, card.displayName(), px + 8, py + 6, tier, false);
-        String sub = card.tier().label() + "  ·  scanning";
-        g.drawString(font, sub, px + 8, py + 18, 0xFFB9BFC9, false);
+        g.drawString(font, card.tier().label(), px + panelW - 8 - font.width(card.tier().label()),
+                py + 6, tier, false);
+
+        // your collection status — the reason to scan before you hunt
+        boolean owned = ClientCollection.has(card.id());
+        boolean holo = ClientCollection.hasFoil(card.id());
+        String status;
+        int statusColor;
+        if (holo) {
+            status = "COLLECTED + HOLO";
+            statusColor = 0xFFC77BFF;
+        } else if (owned) {
+            status = "COLLECTED · holo at " + card.tier().foilKillThreshold() + " kills";
+            statusColor = 0xFF55E06A;
+        } else {
+            status = "NOT COLLECTED — hunt it to drop its card!";
+            statusColor = 0xFFF9D849;
+        }
+        g.drawString(font, status, px + 8, py + 18, statusColor, false);
 
         // six stats in two columns
         Stat[] stats = Stat.values();
@@ -160,13 +186,17 @@ public final class ScannerClient {
             Stat s = stats[i];
             int col = i / 3;
             int row = i % 3;
-            int tx = px + 8 + col * 98;
-            int ty = py + 30 + row * 10;
+            int tx = px + 8 + col * 102;
+            int ty = py + 32 + row * 12;
             Integer sc = MobCardItem.statColor(s).getColor();
             int color = (sc == null ? 0xFFFFFF : sc) | 0xFF000000;
             g.drawString(font, s.shortLabel, tx, ty, color, false);
+            // mini stat bar
+            int bx = tx + 34;
+            g.fill(bx, ty + 2, bx + 40, ty + 6, 0xFF232833);
+            g.fill(bx, ty + 2, bx + 4 * card.stat(s), ty + 6, color);
             String v = String.valueOf(card.stat(s));
-            g.drawString(font, v, tx + 84 - font.width(v), ty, 0xFFFFFFFF, false);
+            g.drawString(font, v, tx + 88 - font.width(v), ty, 0xFFFFFFFF, false);
         }
     }
 }
