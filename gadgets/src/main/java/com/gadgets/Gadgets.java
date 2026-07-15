@@ -62,8 +62,8 @@ public class Gadgets implements ModInitializer {
 
     public static final Block DISPLAY_PEDESTAL = registerBlock("display_pedestal",
             new DisplayPedestalBlock(AbstractBlock.Settings.create()
-                    .strength(1.0F).sounds(BlockSoundGroup.STONE)),
-            "tip.gadgets.display_pedestal.1", "tip.gadgets.display_pedestal.2", "tip.gadgets.display_pedestal.3", "tip.gadgets.display_pedestal.4");
+                    .strength(1.0F).sounds(BlockSoundGroup.STONE).nonOpaque()),
+            "tip.gadgets.display_pedestal.1", "tip.gadgets.display_pedestal.2", "tip.gadgets.display_pedestal.3", "tip.gadgets.display_pedestal.4", "tip.gadgets.display_pedestal.5");
     public static final Block ITEM_SENDER = registerBlock("item_sender",
             new ItemSenderBlock(AbstractBlock.Settings.create()
                     .strength(1.5F).requiresTool().sounds(BlockSoundGroup.METAL)),

@@ -13,6 +13,7 @@ import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.ItemInteractionResult;
 import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.BlockGetter;
 import net.minecraft.world.level.Level;
@@ -20,27 +21,40 @@ import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.EntityBlock;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.block.state.StateDefinition;
+import net.minecraft.world.level.block.state.properties.BooleanProperty;
 import net.minecraft.world.phys.BlockHitResult;
 import org.jetbrains.annotations.Nullable;
 
 /**
- * A solid marble-and-gold base that showcases an item floating above it. Place
- * bases side by side (up to a filled 3×3) and they act as one big platform: the
- * item sits in the exact centre and grows to match.
+ * A base that showcases an item floating above it — and whose own look you can
+ * change by placing a block onto it (like the Drain's disguise).
  *
  * <ul>
- *   <li>Right-click with an item (group empty) → set it on display.</li>
- *   <li>Right-click the <b>top</b> with an item → cycle spin: Off/Slow/Med/Fast.</li>
- *   <li>Right-click a <b>side</b> with an item → cycle size.</li>
- *   <li>Right-click empty-handed → take the item back.</li>
+ *   <li>Right-click with a <b>block</b> → re-skin the base to look like it.</li>
+ *   <li>Right-click with a <b>non-block item</b> (group empty) → set the floating showcase.</li>
+ *   <li>Right-click a showcased pedestal — top with an item cycles spin, a side cycles size.</li>
+ *   <li>Right-click empty-handed → take the showcased item back.</li>
+ *   <li>Sneak + right-click empty-handed → pop the skin back off.</li>
  * </ul>
+ *
+ * <p>Place bases side by side (a filled rectangle up to 3×3) and they share one
+ * showcase, centred over the whole platform.
  */
 public class DisplayPedestalBlock extends Block implements EntityBlock {
+    public static final BooleanProperty DISGUISED = BooleanProperty.create("disguised");
+
     private static final String[] SCALE_NAMES = {"Small", "Medium", "Large"};
     private static final String[] SPIN_NAMES = {"Off", "Slow", "Medium", "Fast"};
 
     public DisplayPedestalBlock(Properties properties) {
         super(properties);
+        registerDefaultState(getStateDefinition().any().setValue(DISGUISED, false));
+    }
+
+    @Override
+    protected void createBlockStateDefinition(StateDefinition.Builder<Block, BlockState> builder) {
+        builder.add(DISGUISED);
     }
 
     @Nullable
@@ -86,7 +100,7 @@ public class DisplayPedestalBlock extends Block implements EntityBlock {
         return new int[]{pos.getX(), pos.getZ(), pos.getX(), pos.getZ()};
     }
 
-    /** The one pedestal in {@code pos}'s group that currently holds an item, or null. */
+    /** The one pedestal in {@code pos}'s group that currently holds a showcase item, or null. */
     @Nullable
     public static DisplayPedestalBlockEntity holder(BlockGetter level, BlockPos pos) {
         int[] g = groupBounds(level, pos);
@@ -109,6 +123,23 @@ public class DisplayPedestalBlock extends Block implements EntityBlock {
         if (!(level.getBlockEntity(pos) instanceof DisplayPedestalBlockEntity clicked)) {
             return ItemInteractionResult.PASS_TO_DEFAULT_BLOCK_INTERACTION;
         }
+        // A block re-skins the base.
+        if (stack.getItem() instanceof BlockItem) {
+            if (!level.isClientSide()) {
+                ItemStack old = clicked.getDisguise();
+                clicked.setDisguise(stack.copyWithCount(1));
+                if (!player.getAbilities().instabuild) {
+                    stack.shrink(1);
+                }
+                if (!old.isEmpty() && !player.getInventory().add(old)) {
+                    player.drop(old, false);
+                }
+                player.displayClientMessage(Component.literal("Pedestal skinned as " + clicked.getDisguise().getHoverName().getString())
+                        .withStyle(ChatFormatting.GREEN), true);
+            }
+            return ItemInteractionResult.sidedSuccess(level.isClientSide());
+        }
+        // A non-block item is the floating showcase.
         DisplayPedestalBlockEntity held = holder(level, pos);
         if (held == null) {
             if (!level.isClientSide()) {
@@ -119,7 +150,6 @@ public class DisplayPedestalBlock extends Block implements EntityBlock {
             }
             return ItemInteractionResult.sidedSuccess(level.isClientSide());
         }
-        // Occupied: top face tunes the spin, sides tune the size.
         if (!level.isClientSide()) {
             if (hit.getDirection() == Direction.UP) {
                 int s = held.cycleSpin();
@@ -134,8 +164,21 @@ public class DisplayPedestalBlock extends Block implements EntityBlock {
 
     @Override
     protected InteractionResult useWithoutItem(BlockState state, Level level, BlockPos pos, Player player, BlockHitResult hit) {
-        if (!(level.getBlockEntity(pos) instanceof DisplayPedestalBlockEntity)) {
+        if (!(level.getBlockEntity(pos) instanceof DisplayPedestalBlockEntity clicked)) {
             return InteractionResult.PASS;
+        }
+        if (player.isShiftKeyDown()) {
+            if (clicked.getDisguise().isEmpty()) {
+                return InteractionResult.PASS;
+            }
+            if (!level.isClientSide()) {
+                ItemStack skin = clicked.removeDisguise();
+                if (!player.getInventory().add(skin)) {
+                    player.drop(skin, false);
+                }
+                player.displayClientMessage(Component.literal("Skin removed").withStyle(ChatFormatting.GRAY), true);
+            }
+            return InteractionResult.sidedSuccess(level.isClientSide());
         }
         DisplayPedestalBlockEntity held = holder(level, pos);
         if (held == null) {
@@ -153,8 +196,13 @@ public class DisplayPedestalBlock extends Block implements EntityBlock {
     @Override
     protected void onRemove(BlockState state, Level level, BlockPos pos, BlockState newState, boolean moved) {
         if (!state.is(newState.getBlock())) {
-            if (level.getBlockEntity(pos) instanceof DisplayPedestalBlockEntity be && !be.getDisplayed().isEmpty()) {
-                Block.popResource(level, pos, be.getDisplayed());
+            if (level.getBlockEntity(pos) instanceof DisplayPedestalBlockEntity be) {
+                if (!be.getDisplayed().isEmpty()) {
+                    Block.popResource(level, pos, be.getDisplayed());
+                }
+                if (!be.getDisguise().isEmpty()) {
+                    Block.popResource(level, pos, be.getDisguise());
+                }
             }
             super.onRemove(state, level, pos, newState, moved);
         }

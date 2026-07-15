@@ -3,6 +3,7 @@ package com.gadgets;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.math.Axis;
 import net.minecraft.client.renderer.MultiBufferSource;
+import net.minecraft.client.renderer.block.BlockRenderDispatcher;
 import net.minecraft.client.renderer.blockentity.BlockEntityRenderer;
 import net.minecraft.client.renderer.blockentity.BlockEntityRendererProvider;
 import net.minecraft.client.renderer.entity.ItemRenderer;
@@ -10,6 +11,7 @@ import net.minecraft.client.renderer.texture.OverlayTexture;
 import net.minecraft.world.item.ItemDisplayContext;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.level.block.state.BlockState;
 
 /** Draws the displayed item floating above the base, centred over the whole group. */
 public class DisplayPedestalRenderer implements BlockEntityRenderer<DisplayPedestalBlockEntity> {
@@ -17,17 +19,27 @@ public class DisplayPedestalRenderer implements BlockEntityRenderer<DisplayPedes
     private static final float[] SPIN_SPEED = {0.0F, 1.5F, 4.0F, 8.0F};
 
     private final ItemRenderer itemRenderer;
+    private final BlockRenderDispatcher blockRenderer;
 
     public DisplayPedestalRenderer(BlockEntityRendererProvider.Context ctx) {
         this.itemRenderer = ctx.getItemRenderer();
+        this.blockRenderer = ctx.getBlockRenderDispatcher();
     }
 
     @Override
     public void render(DisplayPedestalBlockEntity be, float partialTick, PoseStack pose,
                        MultiBufferSource buffers, int light, int overlay) {
+        // Re-skin the base: draw the disguise block in place of the marble.
+        BlockState disguise = be.getDisguiseState();
+        if (disguise != null) {
+            pose.pushPose();
+            blockRenderer.renderSingleBlock(disguise, pose, buffers, light, overlay);
+            pose.popPose();
+        }
+
         ItemStack stack = be.getDisplayed();
         if (stack.isEmpty()) {
-            return; // only the block that holds the item draws it
+            return; // only the block that holds the item draws the showcase
         }
         Level level = be.getLevel();
         double time = (level != null ? level.getGameTime() : 0L) + partialTick;

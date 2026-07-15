@@ -25,6 +25,7 @@ public class DisplayPedestalBlockEntity extends BlockEntity implements SidedInve
     private static final int[] SLOTS = {0};
 
     private ItemStack displayed = ItemStack.EMPTY;
+    private ItemStack disguise = ItemStack.EMPTY;
     private int scale = 1; // 0=small, 1=medium, 2=large
     private int spin = 1;  // 0=off, 1=slow, 2=medium, 3=fast
 
@@ -34,6 +35,42 @@ public class DisplayPedestalBlockEntity extends BlockEntity implements SidedInve
 
     public ItemStack getDisplayed() {
         return displayed;
+    }
+
+    public ItemStack getDisguise() {
+        return disguise;
+    }
+
+    /** The block state the base should render as, or null when un-skinned. */
+    @Nullable
+    public BlockState getDisguiseState() {
+        return disguise.getItem() instanceof net.minecraft.item.BlockItem bi ? bi.getBlock().getDefaultState() : null;
+    }
+
+    public void setDisguise(ItemStack stack) {
+        this.disguise = stack;
+        updateDisguisedProperty();
+        sync();
+    }
+
+    public ItemStack removeDisguise() {
+        ItemStack taken = disguise;
+        disguise = ItemStack.EMPTY;
+        updateDisguisedProperty();
+        sync();
+        return taken;
+    }
+
+    private void updateDisguisedProperty() {
+        if (world != null && !world.isClient()) {
+            BlockState state = world.getBlockState(pos);
+            if (state.getBlock() instanceof DisplayPedestalBlock) {
+                boolean disguised = getDisguiseState() != null;
+                if (state.get(DisplayPedestalBlock.DISGUISED) != disguised) {
+                    world.setBlockState(pos, state.with(DisplayPedestalBlock.DISGUISED, disguised), Block.NOTIFY_ALL);
+                }
+            }
+        }
     }
 
     public int getScale() {
@@ -176,6 +213,9 @@ public class DisplayPedestalBlockEntity extends BlockEntity implements SidedInve
         if (!displayed.isEmpty()) {
             nbt.put("Item", displayed.encode(registries));
         }
+        if (!disguise.isEmpty()) {
+            nbt.put("Disguise", disguise.encode(registries));
+        }
         nbt.putInt("Scale", scale);
         nbt.putInt("Spin", spin);
     }
@@ -185,6 +225,9 @@ public class DisplayPedestalBlockEntity extends BlockEntity implements SidedInve
         super.readNbt(nbt, registries);
         displayed = nbt.contains("Item")
                 ? ItemStack.fromNbt(registries, nbt.get("Item")).orElse(ItemStack.EMPTY)
+                : ItemStack.EMPTY;
+        disguise = nbt.contains("Disguise")
+                ? ItemStack.fromNbt(registries, nbt.get("Disguise")).orElse(ItemStack.EMPTY)
                 : ItemStack.EMPTY;
         scale = nbt.getInt("Scale");
         spin = nbt.getInt("Spin");

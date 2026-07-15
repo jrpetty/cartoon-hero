@@ -1,1 +1,4 @@
-{ "variants": { "": { "model": "gadgets:block/display_pedestal" } } }
+{ "variants": {
+  "disguised=false": { "model": "gadgets:block/display_pedestal" },
+  "disguised=true":  { "model": "gadgets:block/display_pedestal_disguised" }
+} }

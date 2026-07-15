@@ -51,5 +51,6 @@
   "tip.gadgets.alarm.2": "Spawn egg or empty hand to tune",
   "tip.gadgets.wireless_remote.1": "Right-click: pulse the channel",
   "tip.gadgets.wireless_remote.2": "Sneak + right-click a block: bind it",
-  "tip.gadgets.display_pedestal.4": "Place side by side up to 3×3"
+  "tip.gadgets.display_pedestal.4": "Place side by side up to 3×3",
+  "tip.gadgets.display_pedestal.5": "Right-click a block onto it to re-skin"
 }

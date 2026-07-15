@@ -1,5 +1,7 @@
 package com.gadgets;
 
+import net.minecraft.block.BlockState;
+import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.render.OverlayTexture;
 import net.minecraft.client.render.VertexConsumerProvider;
 import net.minecraft.client.render.block.entity.BlockEntityRenderer;
@@ -25,9 +27,18 @@ public class DisplayPedestalRenderer implements BlockEntityRenderer<DisplayPedes
     @Override
     public void render(DisplayPedestalBlockEntity be, float tickDelta, MatrixStack matrices,
                        VertexConsumerProvider vertexConsumers, int light, int overlay) {
+        // Re-skin the base: draw the disguise block in place of the marble.
+        BlockState disguise = be.getDisguiseState();
+        if (disguise != null) {
+            matrices.push();
+            MinecraftClient.getInstance().getBlockRenderManager()
+                    .renderBlockAsEntity(disguise, matrices, vertexConsumers, light, overlay);
+            matrices.pop();
+        }
+
         ItemStack stack = be.getDisplayed();
         if (stack.isEmpty()) {
-            return; // only the block that holds the item draws it
+            return; // only the block that holds the item draws the showcase
         }
         World world = be.getWorld();
         double time = (world != null ? world.getTime() : 0L) + tickDelta;

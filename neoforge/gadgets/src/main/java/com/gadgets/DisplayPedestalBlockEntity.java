@@ -23,6 +23,7 @@ public class DisplayPedestalBlockEntity extends BlockEntity implements WorldlyCo
     private static final int[] SLOTS = {0};
 
     private ItemStack displayed = ItemStack.EMPTY;
+    private ItemStack disguise = ItemStack.EMPTY;
     private int scale = 1; // 0=small, 1=medium, 2=large
     private int spin = 1;  // 0=off, 1=slow, 2=medium, 3=fast
 
@@ -32,6 +33,42 @@ public class DisplayPedestalBlockEntity extends BlockEntity implements WorldlyCo
 
     public ItemStack getDisplayed() {
         return displayed;
+    }
+
+    public ItemStack getDisguise() {
+        return disguise;
+    }
+
+    /** The block state the base should render as, or null when un-skinned. */
+    @Nullable
+    public BlockState getDisguiseState() {
+        return disguise.getItem() instanceof net.minecraft.world.item.BlockItem bi ? bi.getBlock().defaultBlockState() : null;
+    }
+
+    public void setDisguise(ItemStack stack) {
+        this.disguise = stack;
+        updateDisguisedProperty();
+        sync();
+    }
+
+    public ItemStack removeDisguise() {
+        ItemStack taken = disguise;
+        disguise = ItemStack.EMPTY;
+        updateDisguisedProperty();
+        sync();
+        return taken;
+    }
+
+    private void updateDisguisedProperty() {
+        if (level != null && !level.isClientSide()) {
+            BlockState state = level.getBlockState(worldPosition);
+            if (state.getBlock() instanceof DisplayPedestalBlock) {
+                boolean disguised = getDisguiseState() != null;
+                if (state.getValue(DisplayPedestalBlock.DISGUISED) != disguised) {
+                    level.setBlock(worldPosition, state.setValue(DisplayPedestalBlock.DISGUISED, disguised), Block.UPDATE_ALL);
+                }
+            }
+        }
     }
 
     public int getScale() {
@@ -174,6 +211,9 @@ public class DisplayPedestalBlockEntity extends BlockEntity implements WorldlyCo
         if (!displayed.isEmpty()) {
             tag.put("Item", displayed.save(registries));
         }
+        if (!disguise.isEmpty()) {
+            tag.put("Disguise", disguise.save(registries));
+        }
         tag.putInt("Scale", scale);
         tag.putInt("Spin", spin);
     }
@@ -183,6 +223,9 @@ public class DisplayPedestalBlockEntity extends BlockEntity implements WorldlyCo
         super.loadAdditional(tag, registries);
         displayed = tag.contains("Item")
                 ? ItemStack.parseOptional(registries, tag.getCompound("Item"))
+                : ItemStack.EMPTY;
+        disguise = tag.contains("Disguise")
+                ? ItemStack.parseOptional(registries, tag.getCompound("Disguise"))
                 : ItemStack.EMPTY;
         scale = tag.getInt("Scale");
         spin = tag.getInt("Spin");
