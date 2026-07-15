@@ -88,7 +88,7 @@ public class AlarmBlockEntity extends BlockEntity {
     }
 
     private void trigger(World world, BlockPos pos) {
-        world.playSound(null, pos, SoundEvents.BLOCK_BELL_USE.value(), SoundCategory.BLOCKS, 2.0F, 0.7F);
+        world.playSound(null, pos, SoundEvents.BLOCK_BELL_USE, SoundCategory.BLOCKS, 2.0F, 0.7F);
         world.playSound(null, pos, SoundEvents.BLOCK_NOTE_BLOCK_PLING.value(), SoundCategory.BLOCKS, 1.5F, 1.8F);
         Text message = Text.literal("⚠ Alarm: " + target + " detected!");
         double warnSq = WARN_RADIUS * WARN_RADIUS;
