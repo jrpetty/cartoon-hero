@@ -909,15 +909,49 @@ public final class DuelManager {
         duel.target.sendSystemMessage(prompt);
     }
 
-    /** Update ranked standings and tell both players their new rating. */
+    /** Update ranked standings, announce rank changes, and track lifetime stats. */
     private static void applyRanked(ServerPlayer winner, ServerPlayer loser) {
         if (winner == null || loser == null) return;
         Leaderboard board = Leaderboard.get(winner.serverLevel().getServer());
+        Leaderboard.Entry wBefore = board.entry(winner.getUUID());
+        Leaderboard.Entry lBefore = board.entry(loser.getUUID());
+        int wOld = wBefore == null ? Leaderboard.START : wBefore.rating();
+        int lOld = lBefore == null ? Leaderboard.START : lBefore.rating();
+
         int[] ratings = board.recordDuel(winner, loser);
-        winner.sendSystemMessage(Component.literal("Rating: " + ratings[0]
-                + " (rank #" + board.rankOf(winner.getUUID()) + ")").withStyle(ChatFormatting.AQUA));
-        loser.sendSystemMessage(Component.literal("Rating: " + ratings[1]
-                + " (rank #" + board.rankOf(loser.getUUID()) + ")").withStyle(ChatFormatting.GRAY));
+
+        StatsTracker.bump(winner, "ranked_wins");
+        StatsTracker.bump(loser, "ranked_losses");
+        StatsTracker.recordMax(winner, "ranked_peak", ratings[0]);
+        StatsTracker.recordMax(loser, "ranked_peak", ratings[1]);
+
+        announceRank(winner, wOld, ratings[0], board.rankOf(winner.getUUID()), true);
+        announceRank(loser, lOld, ratings[1], board.rankOf(loser.getUUID()), false);
+    }
+
+    /** Tell a player their new rating and, on a tier/division change, celebrate it. */
+    private static void announceRank(ServerPlayer player, int oldRating, int newRating, int rank, boolean won) {
+        int delta = newRating - oldRating;
+        String sign = delta >= 0 ? "+" : "";
+        player.sendSystemMessage(Component.literal(RankTier.label(newRating))
+                .withStyle(RankTier.of(newRating).color, ChatFormatting.BOLD)
+                .append(Component.literal("  " + newRating + " (" + sign + delta + ")  ")
+                        .withStyle(ChatFormatting.WHITE))
+                .append(Component.literal("rank #" + rank).withStyle(ChatFormatting.DARK_GRAY)));
+
+        int before = RankTier.score(oldRating);
+        int after = RankTier.score(newRating);
+        if (after > before) {
+            player.sendSystemMessage(Component.literal(">> PROMOTED to " + RankTier.label(newRating) + "! <<")
+                    .withStyle(RankTier.of(newRating).color, ChatFormatting.BOLD));
+            player.serverLevel().playSound(null, player.getX(), player.getY(), player.getZ(),
+                    SoundEvents.UI_TOAST_CHALLENGE_COMPLETE, SoundSource.PLAYERS, 0.9F, 1.2F);
+            player.serverLevel().sendParticles(net.minecraft.core.particles.ParticleTypes.TOTEM_OF_UNDYING,
+                    player.getX(), player.getY() + 1.2, player.getZ(), 30, 0.4, 0.5, 0.4, 0.1);
+        } else if (after < before) {
+            player.sendSystemMessage(Component.literal("Demoted to " + RankTier.label(newRating)
+                    + " — win it back!").withStyle(ChatFormatting.RED));
+        }
     }
 
     private static void clear(Duel duel) {

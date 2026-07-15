@@ -27,13 +27,19 @@ public class MobTrumps {
 
         NeoForge.EVENT_BUS.addListener(BattleCommands::onRegisterCommands);
         NeoForge.EVENT_BUS.addListener(MobDrops::onLivingDrops);
-        NeoForge.EVENT_BUS.addListener((net.neoforged.neoforge.event.tick.ServerTickEvent.Post event) ->
-                DuelManager.tickTimers(event.getServer()));
+        NeoForge.EVENT_BUS.addListener((net.neoforged.neoforge.event.tick.ServerTickEvent.Post event) -> {
+            DuelManager.tickTimers(event.getServer());
+            // check for a ranked season rollover about twice a minute
+            if (event.getServer().getTickCount() % 640 == 0) {
+                Leaderboard.get(event.getServer()).maybeRollover(event.getServer());
+            }
+        });
         NeoForge.EVENT_BUS.addListener((PlayerEvent.PlayerLoggedInEvent event) -> {
             if (event.getEntity() instanceof ServerPlayer player) {
                 CollectionTracker.sync(player);
                 BinderStorage.sync(player);
                 CollectionTracker.revalidate(player);
+                Leaderboard.get(player.serverLevel().getServer()).claimPending(player);
             }
         });
         NeoForge.EVENT_BUS.addListener((PlayerEvent.PlayerRespawnEvent event) -> {

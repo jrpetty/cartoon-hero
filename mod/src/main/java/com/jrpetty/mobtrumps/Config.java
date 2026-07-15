@@ -14,6 +14,7 @@ public final class Config {
     public static final ModConfigSpec.IntValue CARDS_PER_PACK;
     public static final ModConfigSpec.DoubleValue FOIL_MULTIPLIER;
     public static final ModConfigSpec.IntValue DECK_MAX;
+    public static final ModConfigSpec.IntValue SEASON_DAYS;
 
     static {
         ModConfigSpec.Builder b = new ModConfigSpec.Builder();
@@ -28,6 +29,11 @@ public final class Config {
         b.push("deck");
         DECK_MAX = b.comment("Maximum cards in a custom battle deck.")
                 .defineInRange("maxDeckSize", 16, 4, 40);
+        b.pop();
+
+        b.push("ranked");
+        SEASON_DAYS = b.comment("Length of a ranked season in real days before ratings soft-reset.")
+                .defineInRange("seasonDays", 7, 1, 90);
         b.pop();
 
         SPEC = b.build();

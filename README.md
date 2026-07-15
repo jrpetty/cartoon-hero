@@ -91,8 +91,16 @@ In game:
 - `/mobtrumps trade <player>` — offer your held card; they hold one and accept
   to swap 1-for-1
 - `/mobtrumps foil` — press 4 duplicate copies of a card into 1 holographic foil
-- **Ranked ladder** — duels update an Elo rating stored server-wide (persisted,
-  offline players included); `/mobtrumps top` shows the standings and your rank
+- **Ranked ladder & seasons** — duels update an Elo rating stored server-wide
+  (persisted, offline players included). Ratings map to **tiers with divisions**
+  — Bronze III up to Master — so you rank up every couple of wins, with a
+  promotion fanfare (and demotions to claw back). Play runs in **seasons**
+  (length set in config, default 7 days): when one ends, ratings soft-reset
+  toward the mean, every ranked player keeps a **permanent tier badge** and is
+  paid emeralds for their final tier (queued for anyone offline). `/mobtrumps
+  top` shows the season standings with tiers, `/mobtrumps season` shows your
+  tier, peak, badges and time left, and both are surfaced on `/mobtrumps stats`
+  and your profile card. Ops can force a rollover with `/mobtrumps season end`
 - `/mobtrumps play <stat>`, `/mobtrumps next`, `/mobtrumps forfeit`
 - `/mobtrumps` on its own opens a clickable hub menu
 - `/mobtrumps guide` — get a written **How to Play** book covering collecting,

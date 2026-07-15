@@ -23,6 +23,15 @@ public final class StatsTracker {
         player.setData(ModAttachments.PLAY_STATS.get(), Map.copyOf(stats));
     }
 
+    /** Store {@code value} in {@code key} only if it beats the stored value. */
+    public static void recordMax(ServerPlayer player, String key, int value) {
+        Map<String, Integer> stats = new HashMap<>(player.getData(ModAttachments.PLAY_STATS.get()));
+        if (value > stats.getOrDefault(key, 0)) {
+            stats.put(key, value);
+            player.setData(ModAttachments.PLAY_STATS.get(), Map.copyOf(stats));
+        }
+    }
+
     public static void recordPick(ServerPlayer player, Stat stat) {
         bump(player, "pick_" + stat.key());
     }
@@ -84,10 +93,8 @@ public final class StatsTracker {
 
         player.sendSystemMessage(Component.literal("═══ YOUR MOB TRUMPS STATS ═══")
                 .withStyle(ChatFormatting.GOLD, ChatFormatting.BOLD));
+        rankedSection(player, board);
         line(player, "Duels", wins + "W " + losses + "L  (" + winRate + " win rate)");
-        if (me != null) {
-            line(player, "Rating", me.rating() + "  (rank #" + board.rankOf(player.getUUID()) + ")");
-        }
         line(player, "CPU battles won", String.valueOf(count(player, "battle_wins")));
         line(player, "Favourite stat", fav == null ? "none yet" : fav.label
                 + " (" + count(player, "pick_" + fav.key()) + " picks)");
@@ -114,6 +121,7 @@ public final class StatsTracker {
         int hp = Math.min(10, 10 - Math.min(9, losses));
         int col = Math.round(collected * 10f / 81f);
 
+        var badges = player.getData(ModAttachments.RANKED_BADGES.get());
         String name = player.getGameProfile().getName();
         player.sendSystemMessage(Component.literal("╔══════ MOB TRUMPS CARD ══════╗")
                 .withStyle(ChatFormatting.GOLD));
@@ -121,6 +129,12 @@ public final class StatsTracker {
                 .withStyle(ChatFormatting.YELLOW, ChatFormatting.BOLD));
         player.sendSystemMessage(Component.literal("  ★ " + title(rating, collected) + " ★")
                 .withStyle(ChatFormatting.LIGHT_PURPLE));
+        player.sendSystemMessage(Component.literal("  Rank: ").withStyle(ChatFormatting.GRAY)
+                .append(Component.literal(RankTier.label(rating))
+                        .withStyle(RankTier.of(rating).color, ChatFormatting.BOLD))
+                .append(badges.isEmpty() ? Component.empty()
+                        : Component.literal("  · " + badges.size() + " season badge"
+                                + (badges.size() == 1 ? "" : "s")).withStyle(ChatFormatting.DARK_GRAY)));
         cardStat(player, "Attack (duel wins)", atk, ChatFormatting.RED);
         cardStat(player, "Health (resilience)", hp, ChatFormatting.GREEN);
         cardStat(player, "Collection", col, ChatFormatting.AQUA);
@@ -131,6 +145,41 @@ public final class StatsTracker {
         player.sendSystemMessage(Component.literal("╚═════════════════════════════╝")
                 .withStyle(ChatFormatting.GOLD));
         return 1;
+    }
+
+    /** The dedicated ranked block: tier, rating, peak, season W/L, badges. */
+    public static void rankedSection(ServerPlayer player, Leaderboard board) {
+        Leaderboard.Entry me = board.entry(player.getUUID());
+        int rating = me == null ? Leaderboard.START : me.rating();
+        player.sendSystemMessage(Component.literal("  RANKED · Season " + board.season())
+                .withStyle(ChatFormatting.LIGHT_PURPLE, ChatFormatting.BOLD));
+        player.sendSystemMessage(Component.literal("   Tier: ").withStyle(ChatFormatting.GRAY)
+                .append(Component.literal(RankTier.label(rating))
+                        .withStyle(RankTier.of(rating).color, ChatFormatting.BOLD))
+                .append(me == null ? Component.literal("  (play a ranked duel to place!)")
+                        .withStyle(ChatFormatting.DARK_GRAY)
+                        : Component.literal("  rank #" + board.rankOf(player.getUUID())
+                                + " / " + board.rankedCount()).withStyle(ChatFormatting.DARK_GRAY)));
+        if (me != null) {
+            line(player, "  Rating", me.rating() + "  (season peak " + me.peak()
+                    + ", best ever " + Math.max(count(player, "ranked_peak"), me.rating()) + ")");
+            line(player, "  This season", me.wins() + "W " + me.losses() + "L");
+        }
+        line(player, "  Lifetime ranked", count(player, "ranked_wins") + "W "
+                + count(player, "ranked_losses") + "L");
+        var badges = player.getData(ModAttachments.RANKED_BADGES.get());
+        line(player, "  Season badges", badges.isEmpty() ? "none yet"
+                : badges.size() + " (" + badges.get(badges.size() - 1).replace(":", " ") + " latest)");
+        line(player, "  Season ends in", humanDuration(board.msLeft()));
+    }
+
+    public static String humanDuration(long ms) {
+        long days = ms / 86_400_000L;
+        long hours = (ms % 86_400_000L) / 3_600_000L;
+        long mins = (ms % 3_600_000L) / 60_000L;
+        if (days > 0) return days + "d " + hours + "h";
+        if (hours > 0) return hours + "h " + mins + "m";
+        return mins + "m";
     }
 
     private static String title(int rating, int collected) {

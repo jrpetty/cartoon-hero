@@ -49,6 +49,13 @@ public final class ModAttachments {
                     .copyOnDeath()
                     .build());
 
+    /** Permanent ranked season badges earned, e.g. "S1:Gold I". Kept on death. */
+    public static final Supplier<AttachmentType<List<String>>> RANKED_BADGES =
+            ATTACHMENTS.register("ranked_badges", () -> AttachmentType.<List<String>>builder(() -> List.of())
+                    .serialize(Codec.STRING.listOf())
+                    .copyOnDeath()
+                    .build());
+
     /** Mob ids whose (normal) card is physically stored inside the collection book. */
     public static final Supplier<AttachmentType<List<String>>> STORED =
             ATTACHMENTS.register("stored", () -> AttachmentType.<List<String>>builder(() -> List.of())

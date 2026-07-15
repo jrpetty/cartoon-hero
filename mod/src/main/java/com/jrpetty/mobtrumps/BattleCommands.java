@@ -230,14 +230,40 @@ public final class BattleCommands {
                         .then(Commands.literal("status")
                                 .executes(ctx -> TournamentManager.status(ctx.getSource().getPlayerOrException()))))
                 .then(Commands.literal("top")
-                        .executes(ctx -> leaderboard(ctx.getSource()))));
+                        .executes(ctx -> leaderboard(ctx.getSource())))
+                .then(Commands.literal("season")
+                        .executes(ctx -> season(ctx.getSource()))
+                        .then(Commands.literal("end")
+                                .requires(src -> src.hasPermission(2))
+                                .executes(ctx -> {
+                                    ServerPlayer p = ctx.getSource().getPlayerOrException();
+                                    Leaderboard.get(p.serverLevel().getServer())
+                                            .endSeason(p.serverLevel().getServer());
+                                    return 1;
+                                }))));
+    }
+
+    private static int season(CommandSourceStack source) throws CommandSyntaxException {
+        ServerPlayer player = source.getPlayerOrException();
+        Leaderboard board = Leaderboard.get(player.serverLevel().getServer());
+        player.sendSystemMessage(Component.literal("═══ RANKED · SEASON " + board.season() + " ═══")
+                .withStyle(ChatFormatting.LIGHT_PURPLE, ChatFormatting.BOLD));
+        player.sendSystemMessage(Component.literal("  Ends in " + StatsTracker.humanDuration(board.msLeft())
+                        + " — final tier earns a badge + emerald payout.")
+                .withStyle(ChatFormatting.GRAY));
+        StatsTracker.rankedSection(player, board);
+        player.sendSystemMessage(Component.literal("  ")
+                .append(button("[Ranked leaderboard]", "/mobtrumps top", ChatFormatting.GOLD,
+                        "See the season standings")));
+        return 1;
     }
 
     private static int leaderboard(CommandSourceStack source) throws CommandSyntaxException {
         ServerPlayer player = source.getPlayerOrException();
         Leaderboard board = Leaderboard.get(player.serverLevel().getServer());
         var top = board.top(10);
-        player.sendSystemMessage(Component.literal("═══ MOB TRUMPS · RANKED ═══")
+        player.sendSystemMessage(Component.literal("═══ RANKED · SEASON " + board.season()
+                        + " · " + StatsTracker.humanDuration(board.msLeft()) + " left ═══")
                 .withStyle(ChatFormatting.GOLD, ChatFormatting.BOLD));
         if (top.isEmpty()) {
             player.sendSystemMessage(Component.literal("No duels played yet. Challenge someone!")
@@ -246,12 +272,14 @@ public final class BattleCommands {
         }
         int rank = 1;
         for (Leaderboard.Entry e : top) {
-            ChatFormatting color = rank == 1 ? ChatFormatting.GOLD
+            ChatFormatting place = rank == 1 ? ChatFormatting.GOLD
                     : rank == 2 ? ChatFormatting.GRAY : rank == 3 ? ChatFormatting.DARK_RED
                     : ChatFormatting.WHITE;
             player.sendSystemMessage(Component.literal(String.format(" %2d. ", rank))
                     .withStyle(ChatFormatting.DARK_GRAY)
-                    .append(Component.literal(e.name()).withStyle(color))
+                    .append(Component.literal(e.name()).withStyle(place))
+                    .append(Component.literal("  " + RankTier.label(e.rating()))
+                            .withStyle(RankTier.of(e.rating()).color))
                     .append(Component.literal("  " + e.rating()).withStyle(ChatFormatting.AQUA))
                     .append(Component.literal("  (" + e.wins() + "W " + e.losses() + "L)")
                             .withStyle(ChatFormatting.DARK_GRAY)));
@@ -260,9 +288,15 @@ public final class BattleCommands {
         int myRank = board.rankOf(player.getUUID());
         Leaderboard.Entry me = board.entry(player.getUUID());
         if (me != null) {
-            player.sendSystemMessage(Component.literal("You: rank #" + myRank + " · " + me.rating()
+            player.sendSystemMessage(Component.literal("You: ").withStyle(ChatFormatting.GREEN)
+                    .append(Component.literal(RankTier.label(me.rating()))
+                            .withStyle(RankTier.of(me.rating()).color, ChatFormatting.BOLD))
+                    .append(Component.literal("  rank #" + myRank + " · " + me.rating()
                             + " (" + me.wins() + "W " + me.losses() + "L)")
-                    .withStyle(ChatFormatting.GREEN));
+                            .withStyle(ChatFormatting.GREEN)));
+        } else {
+            player.sendSystemMessage(Component.literal("You're unranked — win a duel to place!")
+                    .withStyle(ChatFormatting.GRAY));
         }
         return 1;
     }
@@ -480,6 +514,9 @@ public final class BattleCommands {
         player.sendSystemMessage(Component.literal("  ")
                 .append(button("[Ranked leaderboard]", "/mobtrumps top", ChatFormatting.GOLD,
                         "See the server's top duelists"))
+                .append(Component.literal("  "))
+                .append(button("[My season]", "/mobtrumps season", ChatFormatting.LIGHT_PURPLE,
+                        "Your tier, badges and season progress"))
                 .append(Component.literal("  "))
                 .append(button("[How to play]", "/mobtrumps guide", ChatFormatting.AQUA,
                         "Get the Mob Trumps guide book")));
