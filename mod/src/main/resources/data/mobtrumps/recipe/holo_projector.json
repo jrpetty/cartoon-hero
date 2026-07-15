@@ -1,0 +1,19 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "misc",
+  "pattern": [
+    "ASA",
+    "ADA",
+    "BBB"
+  ],
+  "key": {
+    "A": { "item": "minecraft:amethyst_shard" },
+    "S": { "item": "minecraft:sea_lantern" },
+    "D": { "item": "mobtrumps:card_display" },
+    "B": { "item": "minecraft:polished_blackstone" }
+  },
+  "result": {
+    "id": "mobtrumps:holo_projector",
+    "count": 1
+  }
+}

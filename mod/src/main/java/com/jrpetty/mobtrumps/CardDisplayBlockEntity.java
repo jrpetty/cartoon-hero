@@ -30,6 +30,11 @@ public class CardDisplayBlockEntity extends BlockEntity {
         super(ModBlocks.CARD_DISPLAY_BE.get(), pos, state);
     }
 
+    protected CardDisplayBlockEntity(net.minecraft.world.level.block.entity.BlockEntityType<?> type,
+                                     BlockPos pos, BlockState state) {
+        super(type, pos, state);
+    }
+
     public boolean hasCard() {
         return !mobId.isEmpty();
     }

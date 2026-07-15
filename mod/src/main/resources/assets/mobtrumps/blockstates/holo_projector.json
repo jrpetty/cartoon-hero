@@ -1,0 +1,8 @@
+{
+  "variants": {
+    "facing=north": { "model": "mobtrumps:block/holo_projector" },
+    "facing=south": { "model": "mobtrumps:block/holo_projector" },
+    "facing=west":  { "model": "mobtrumps:block/holo_projector" },
+    "facing=east":  { "model": "mobtrumps:block/holo_projector" }
+  }
+}

@@ -87,6 +87,11 @@ In game:
   projected card floats in the frame but only its owner can swap it (right-click)
   or clear it (sneak-right-click). Anyone else who right-clicks just admires it
   full-screen. Show off your rarest holo with zero risk
+- **Holo Projector** (craft: 2 amethyst + sea lantern + Card Display + polished
+  blackstone) — a glowing pedestal that projects a **rotating 3D hologram of the
+  linked mob** floating above it, with the card shown on a plaque on its face. It
+  reuses the same collection-linked, un-stealable projection as the Card Display
+  (right-click to pick a card you own, only the owner can change it)
 - **Quick match & spectating** — `/mobtrumps queue` auto-pairs you with any
   other waiting player; `/mobtrumps watch <player>` lets you follow a live duel
   in chat and place an emerald **side bet** on either duelist (pari-mutuel —
