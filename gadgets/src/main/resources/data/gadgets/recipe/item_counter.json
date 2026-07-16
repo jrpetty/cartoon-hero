@@ -8,9 +8,9 @@
     " C "
   ],
   "key": {
-    "I": "minecraft:iron_ingot",
-    "H": "minecraft:hopper",
-    "C": "minecraft:comparator"
+    "I": { "item": "minecraft:iron_ingot" },
+    "H": { "item": "minecraft:hopper" },
+    "C": { "item": "minecraft:comparator" }
   },
   "result": { "id": "gadgets:item_counter", "count": 1 }
 }

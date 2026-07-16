@@ -3,8 +3,8 @@
   "category": "equipment",
   "group": "gadgets",
   "ingredients": [
-    "minecraft:arrow",
-    "minecraft:torch"
+    { "item": "minecraft:arrow" },
+    { "item": "minecraft:torch" }
   ],
   "result": { "id": "gadgets:light_arrow", "count": 1 }
 }
