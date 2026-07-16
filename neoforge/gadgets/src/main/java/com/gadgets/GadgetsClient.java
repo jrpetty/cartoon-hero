@@ -16,5 +16,6 @@ public class GadgetsClient {
         event.registerEntityRenderer(Gadgets.TORCH_ARROW_ENTITY.get(), TorchArrowRenderer::new);
         event.registerBlockEntityRenderer(Gadgets.DISPLAY_PEDESTAL_BE.get(), DisplayPedestalRenderer::new);
         event.registerBlockEntityRenderer(Gadgets.DRAIN_BE.get(), DrainRenderer::new);
+        event.registerBlockEntityRenderer(Gadgets.ITEM_COUNTER_BE.get(), ItemCounterRenderer::new);
     }
 }

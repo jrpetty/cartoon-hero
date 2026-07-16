@@ -609,20 +609,15 @@ IC_CASING = [
     "MMMMMMMMMMMMMMMM",
 ]
 
-def ic_display(seg, pip, scr):
+def ic_display(edge, scr):
+    # Clean screen — the live readout text is drawn over it by the renderer.
     return [
         "MMMMMMMMMMMMMMMM",
         "MddddddddddddddM",
         "Md.kkkkkkkkkk.dM",
-        "Md.k" + scr * 8 + "k.dM",
-        "Md.k" + (seg * 3 + scr + seg * 3 + scr) + "k.dM",
-        "Md.k" + (seg + scr + seg + scr) * 2 + "k.dM",
-        "Md.k" + (seg * 3 + scr + seg * 3 + scr) + "k.dM",
-        "Md.k" + (seg + scr + seg + scr) * 2 + "k.dM",
-        "Md.k" + (seg * 3 + scr + seg * 3 + scr) + "k.dM",
-        "Md.k" + scr * 8 + "k.dM",
-        "Md.k" + (pip + scr) * 4 + "k.dM",
-        "Md.k" + scr * 8 + "k.dM",
+        "Md.k" + edge * 8 + "k.dM",
+    ] + ["Md.k" + scr * 8 + "k.dM" for _ in range(7)] + [
+        "Md.k" + edge * 8 + "k.dM",
         "Md.kkkkkkkkkk.dM",
         "Md............dM",
         "MddddddddddddddM",
@@ -650,5 +645,5 @@ IC_SENSOR = [
 
 write_png(os.path.join(BASE, "block", "item_counter.png"), grid(IC_CASING, IC_PAL))
 write_png(os.path.join(BASE, "block", "item_counter_sensor.png"), grid(IC_SENSOR, IC_PAL))
-write_png(os.path.join(BASE, "block", "item_counter_display.png"), grid(ic_display("a", "p", "_"), IC_PAL))
-write_png(os.path.join(BASE, "block", "item_counter_display_on.png"), grid(ic_display("A", "P", "~"), IC_PAL))
+write_png(os.path.join(BASE, "block", "item_counter_display.png"), grid(ic_display("p", "_"), IC_PAL))
+write_png(os.path.join(BASE, "block", "item_counter_display_on.png"), grid(ic_display("A", "~"), IC_PAL))
