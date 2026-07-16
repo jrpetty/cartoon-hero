@@ -59,12 +59,20 @@ public final class ClientHooks {
 
     /** Apply a battle state snapshot, opening or closing the battle screen. */
     public static void updateBattle(com.jrpetty.mobtrumps.BattleSyncPayload payload) {
-        ClientBattle.set(payload.phase(), payload.playerCardId(), payload.cpuCardId(), payload.nums());
+        ClientBattle.set(payload.phase(), payload.playerCardId(), payload.cpuCardId(),
+                payload.nums(), payload.label());
         Minecraft mc = Minecraft.getInstance();
-        if (payload.phase() == com.jrpetty.mobtrumps.BattleSyncPayload.CLOSED) {
+        int phase = payload.phase();
+        if (phase == com.jrpetty.mobtrumps.BattleSyncPayload.CLOSED) {
             if (mc.screen instanceof BattleScreen) {
                 mc.setScreen(null);
             }
+            return;
+        }
+        // a final result should only land on a screen that's still open — don't
+        // pop a DEFEAT screen onto someone who already walked away / forfeited
+        if (phase == com.jrpetty.mobtrumps.BattleSyncPayload.FINISHED
+                && !(mc.screen instanceof BattleScreen)) {
             return;
         }
         if (!(mc.screen instanceof BattleScreen)) {

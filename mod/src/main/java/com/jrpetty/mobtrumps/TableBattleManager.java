@@ -169,13 +169,14 @@ public final class TableBattleManager {
         }
         List<Integer> nums = new ArrayList<>(List.of(
                 b.playerCardCount(), b.cpuCardCount(), b.potCount(), b.getRound(),
-                chosen, chooser, winner, game.difficulty.ordinal()));
-        PacketDistributor.sendToPlayer(player, new BattleSyncPayload(game.phase, playerId, cpuId, nums));
+                chosen, chooser, winner, game.difficulty.ordinal(), 0, 0, 0));
+        PacketDistributor.sendToPlayer(player,
+                new BattleSyncPayload(game.phase, playerId, cpuId, nums, ""));
     }
 
     private static void sendClosed(ServerPlayer player) {
         PacketDistributor.sendToPlayer(player, new BattleSyncPayload(
-                BattleSyncPayload.CLOSED, "", "", List.of(0, 0, 0, 0, -1, 2, 2, 0)));
+                BattleSyncPayload.CLOSED, "", "", List.of(0, 0, 0, 0, -1, 2, 2, 0, 0, 0, 0), ""));
     }
 
     private static int sideIdx(Battle.Side side) {

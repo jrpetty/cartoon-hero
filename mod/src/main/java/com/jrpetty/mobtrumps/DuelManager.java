@@ -471,6 +471,7 @@ public final class DuelManager {
             ServerPlayer other = duel.other(player);
             settleSideBets(duel, other);
             clear(duel);
+            pushFinished(duel, other); // close out the remaining player's battle screen
             // leaving counts as a ranked loss for the quitter
             CollectionTracker.addDuelWin(other);
             applyRanked(other, player);
@@ -731,6 +732,7 @@ public final class DuelManager {
 
         sendBoth(duel, reveal);
         sendBoth(duel, outcome);
+        pushResult(duel, result); // flip & reveal on both players' battle screens
 
         if (result.winner() == Battle.Side.PLAYER) {
             roundSound(duel.challenger, 1.3F);
@@ -748,6 +750,69 @@ public final class DuelManager {
         } else {
             promptTurn(duel);
         }
+    }
+
+    // --- on-screen battle sync: mirror the chat duel onto both BattleScreens ---
+
+    /** A screen action (pick / forfeit) arriving from a duelist's battle screen. */
+    public static void handleScreenAction(ServerPlayer player, int action, int stat) {
+        switch (action) {
+            case BattleActionPayload.PICK -> {
+                Stat[] all = Stat.values();
+                if (stat >= 0 && stat < all.length) {
+                    play(player, all[stat].key());
+                }
+            }
+            case BattleActionPayload.FORFEIT -> forfeit(player);
+            default -> {
+            }
+        }
+    }
+
+    private static void pushTurn(Duel duel) {
+        Battle.Side turn = duel.battle.getTurn();
+        for (ServerPlayer p : new ServerPlayer[]{duel.challenger, duel.target}) {
+            Battle.Side side = duel.sideOf(p);
+            int phase = side == turn ? BattleSyncPayload.PLAYER_PICK : BattleSyncPayload.OPPONENT_PICK;
+            MobCard myTop = side == Battle.Side.PLAYER
+                    ? duel.battle.playerTopCard() : duel.battle.cpuTopCard();
+            sendScreen(duel, p, phase, myTop == null ? "" : myTop.id(), "", -1, 2, 2);
+        }
+    }
+
+    private static void pushResult(Duel duel, Battle.RoundResult result) {
+        for (ServerPlayer p : new ServerPlayer[]{duel.challenger, duel.target}) {
+            Battle.Side side = duel.sideOf(p);
+            MobCard mine = side == Battle.Side.PLAYER ? result.playerCard() : result.cpuCard();
+            MobCard opp = side == Battle.Side.PLAYER ? result.cpuCard() : result.playerCard();
+            int chooser = result.chooser() == side ? 0 : 1;
+            int winner = result.winner() == Battle.Side.NONE ? 2 : (result.winner() == side ? 0 : 1);
+            sendScreen(duel, p, BattleSyncPayload.RESULT, mine.id(), opp.id(),
+                    result.stat().ordinal(), chooser, winner);
+        }
+    }
+
+    private static void pushFinished(Duel duel, ServerPlayer winner) {
+        for (ServerPlayer p : new ServerPlayer[]{duel.challenger, duel.target}) {
+            int w = winner == null ? 2 : (winner.getUUID().equals(p.getUUID()) ? 0 : 1);
+            sendScreen(duel, p, BattleSyncPayload.FINISHED, "", "", -1, 2, w);
+        }
+    }
+
+    private static void sendScreen(Duel duel, ServerPlayer p, int phase, String myId, String oppId,
+                                   int chosen, int chooser, int winner) {
+        Battle.Side side = duel.sideOf(p);
+        int myCount = side == Battle.Side.PLAYER
+                ? duel.battle.playerCardCount() : duel.battle.cpuCardCount();
+        int oppCount = side == Battle.Side.PLAYER
+                ? duel.battle.cpuCardCount() : duel.battle.playerCardCount();
+        int myGames = side == Battle.Side.PLAYER ? duel.challengerGames : duel.targetGames;
+        int oppGames = side == Battle.Side.PLAYER ? duel.targetGames : duel.challengerGames;
+        java.util.List<Integer> nums = new java.util.ArrayList<>(java.util.List.of(
+                myCount, oppCount, duel.battle.potCount(), duel.battle.getRound(),
+                chosen, chooser, winner, 0, 1, myGames, oppGames));
+        net.neoforged.neoforge.network.PacketDistributor.sendToPlayer(p,
+                new BattleSyncPayload(phase, myId, oppId, nums, name(duel.other(p))));
     }
 
     /** One game (a full Battle) has ended. For a series, tally it and deal the next
@@ -840,11 +905,13 @@ public final class DuelManager {
                 .withStyle(ChatFormatting.DARK_GRAY));
         duel.turnDeadline = System.currentTimeMillis() + TURN_MS;
         duel.warned = false;
+        pushTurn(duel); // update both battle screens for the new turn
     }
 
     private static void endDuel(Duel duel, ServerPlayer winner, ServerPlayer loser, boolean forfeit) {
         settleSideBets(duel, winner);
         clear(duel);
+        pushFinished(duel, winner); // final banner on both battle screens
         boolean wager = duel.isWager();
         if (winner == null) {
             sendBoth(duel, Component.literal("The duel is a draw — every stake is returned.")

@@ -57,7 +57,11 @@ public final class ModNetworking {
         registrar.playToServer(BattleActionPayload.TYPE, BattleActionPayload.STREAM_CODEC,
                 (payload, context) -> context.enqueueWork(() -> {
                     if (context.player() instanceof net.minecraft.server.level.ServerPlayer sp) {
-                        TableBattleManager.action(sp, payload.action(), payload.stat());
+                        if (DuelManager.isInDuel(sp)) {
+                            DuelManager.handleScreenAction(sp, payload.action(), payload.stat());
+                        } else {
+                            TableBattleManager.action(sp, payload.action(), payload.stat());
+                        }
                     }
                 }));
         registrar.playToClient(TableMenuPayload.TYPE, TableMenuPayload.STREAM_CODEC,

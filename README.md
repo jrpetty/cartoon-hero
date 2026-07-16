@@ -102,7 +102,12 @@ In game:
   round, with win/lose/tie banners, the contested stat highlighted on both cards,
   live deck tallies and a pot. The CPU is dealt **the same number of cards as
   you**, drawn on a fair collector curve — mostly commons, a decent spread of
-  uncommons and rares, and **never more than one legendary**
+  uncommons and rares, and **never more than one legendary**. **Player-vs-player
+  duels play on the very same screen** — each of you sees your own card and the
+  opponent's face-down card, picks stat by stat, and the board flips to reveal
+  the round for both players; best-of series show the running score up top.
+  Cards **auto-size to your window** (with an S / M / L override button) so the
+  stats stay crisp at any GUI scale
 - **Card Scanner** (craft: spyglass + emerald + amethyst shard) — hold
   right-click to raise it to your eye like a spyglass and zoom in; any mob you
   look at gets its Mob Trumps card **projected in the air above it**, plus a

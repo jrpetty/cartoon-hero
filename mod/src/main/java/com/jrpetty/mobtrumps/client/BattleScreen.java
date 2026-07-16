@@ -20,17 +20,15 @@ import java.util.HashMap;
 import java.util.Map;
 
 /**
- * The on-screen Mob Trumps battle against the CPU — same felt-and-gold table
- * as the menu it opens from. Each round your card is dealt in from below and
- * the CPU's face-down card drops in from above; you click a stat row (or press
- * 1-6) to play it, the CPU's card FLIPS over with a flash, the contested stat
- * lights up on both cards, the loser dims while the winner pulses, and little
- * gold cards fly across to the winner's pile. SPACE advances; leaving a live
- * game asks you to confirm.
+ * The on-screen Mob Trumps battle — same felt-and-gold table as the menu it
+ * opens from. Drives both a solo game vs the CPU and a live player-vs-player
+ * duel through the same board: your card left, the opponent's face-down card
+ * right until the play resolves, then it FLIPS to reveal who took the round.
+ * Cards auto-size to the window (override with the size button), the reveal is
+ * held long enough to read even in a fast duel, and everything animates.
  */
 public class BattleScreen extends Screen {
 
-    private static final float CARD_SCALE = 0.68f;
     private static final long FLIP_MS = 440L;
     private static final long DEAL_MS = 320L;
     private static final long LEAVE_CONFIRM_MS = 2500L;
@@ -45,10 +43,12 @@ public class BattleScreen extends Screen {
     private final Map<String, LivingEntity> entityCache = new HashMap<>();
     private final long openedAt = System.currentTimeMillis();
     private long leaveArmedAt = -1;
+    private float cardScale = 0.68f;
 
     // rects captured during render for hit-testing on click
-    private int[] actionRect;   // {x, y, w, h}
+    private int[] actionRect;
     private int[] leaveRect;
+    private int[] sizeRect;
     private final int[][] statRects = new int[Stat.values().length][];
 
     public BattleScreen() {
@@ -62,17 +62,28 @@ public class BattleScreen extends Screen {
 
     @Override
     public void onClose() {
-        // leaving the screen forfeits the running battle (server cleans up)
+        // leaving the screen forfeits the running game (server cleans up)
         PacketDistributor.sendToServer(new BattleActionPayload(BattleActionPayload.FORFEIT, 0));
         super.onClose();
     }
 
+    /** Fit two cards + a centre gap into the window, then apply the size preference. */
+    private float computeScale() {
+        float byW = (width * 0.94f - 48f) / (2f * CardRenderer.CARD_W);
+        float byH = (height - 96f) / CardRenderer.CARD_H;
+        float fit = Mth.clamp(Math.min(byW, byH), 0.40f, 1.05f);
+        return ClientPrefs.resolveScale(fit);
+    }
+
     @Override
     public void render(GuiGraphics g, int mouseX, int mouseY, float partialTick) {
+        ClientBattle.poll(); // promote any held post-reveal state once it has played
         long now = System.currentTimeMillis();
         long elapsed = now - ClientBattle.changedAt();
         float fadeIn = Mth.clamp((now - openedAt) / 260f, 0f, 1f);
         int phase = ClientBattle.phase();
+        boolean pvp = ClientBattle.isPvp();
+        cardScale = computeScale();
 
         // --- the same felt table the menu lives on ---
         g.fillGradient(0, 0, width, height, FELT_LIGHT, FELT_DARK);
@@ -97,56 +108,70 @@ public class BattleScreen extends Screen {
         String title = "MOB TRUMPS";
         g.drawString(font, title, -font.width(title) / 2, 0, GOLD, true);
         pose.popPose();
-        String diff = Difficulty.values()[Mth.clamp(ClientBattle.difficulty(), 0, 2)].label();
-        String sub = "vs " + diff + " CPU   ·   Round " + Math.max(1, ClientBattle.round());
+        String opp = ClientBattle.label().isEmpty() ? "Opponent" : ClientBattle.label();
+        String sub = pvp
+                ? "vs " + opp + "   ·   Round " + Math.max(1, ClientBattle.round())
+                : "vs " + Difficulty.values()[Mth.clamp(ClientBattle.difficulty(), 0, 2)].label()
+                        + " CPU   ·   Round " + Math.max(1, ClientBattle.round());
         g.drawCenteredString(font, sub, width / 2, 30, TEXT_DIM);
+        if (pvp && (ClientBattle.myGames() > 0 || ClientBattle.oppGames() > 0)) {
+            String series = "Series   You " + ClientBattle.myGames()
+                    + " - " + ClientBattle.oppGames() + "   " + opp;
+            g.drawCenteredString(font, series, width / 2, 40, GOLD);
+        }
 
-        int cardW = Math.round(CardRenderer.CARD_W * CARD_SCALE);
-        int cardH = Math.round(CardRenderer.CARD_H * CARD_SCALE);
+        int cardW = Math.round(CardRenderer.CARD_W * cardScale);
+        int cardH = Math.round(CardRenderer.CARD_H * cardScale);
+        int gap = Math.max(48, Math.min(160, cardW));
+        int total = 2 * cardW + gap;
+        int startX = Math.max(2, (width - total) / 2);
+        int playerX = startX;
+        int cpuX = startX + cardW + gap;
         int centerY = height / 2 - 4;
         int baseCardY = centerY - cardH / 2;
-        int playerX = width / 2 - cardW - 48;
-        int cpuX = width / 2 + 48;
 
         boolean reveal = phase == BattleSyncPayload.RESULT || phase == BattleSyncPayload.FINISHED;
         int winner = ClientBattle.winner();
         int chosen = ClientBattle.chosenStat();
 
         // deal-in: on pick phases the cards ease to the table from off-stage
-        boolean dealing = (phase == BattleSyncPayload.PLAYER_PICK || phase == BattleSyncPayload.CPU_PICK)
-                && elapsed < DEAL_MS;
+        boolean dealing = (phase == BattleSyncPayload.PLAYER_PICK
+                || phase == BattleSyncPayload.CPU_PICK
+                || phase == BattleSyncPayload.OPPONENT_PICK) && elapsed < DEAL_MS;
         float dealT = dealing ? easeOutCubic(elapsed / (float) DEAL_MS) : 1f;
         int playerCardY = baseCardY + Math.round((1f - dealT) * 46f);
         int cpuCardY = baseCardY - Math.round((1f - dealT) * 46f);
 
-        // labels + card piles under each side
+        // name tags + card piles beside each side
         g.drawCenteredString(font, "YOU", playerX + cardW / 2, baseCardY - 12, 0xFF7BE38A);
-        g.drawCenteredString(font, "CPU", cpuX + cardW / 2, baseCardY - 12, 0xFFF0857D);
-        pile(g, playerX - 26, centerY, ClientBattle.playerCount(), 0xFF7BE38A);
-        pile(g, cpuX + cardW + 12, centerY, ClientBattle.cpuCount(), 0xFFF0857D);
+        g.drawCenteredString(font, pvp ? shorten(opp) : "CPU",
+                cpuX + cardW / 2, baseCardY - 12, 0xFFF0857D);
+        if (startX >= 30) {
+            pile(g, playerX - 24, centerY, ClientBattle.playerCount(), 0xFF7BE38A);
+            pile(g, cpuX + cardW + 10, centerY, ClientBattle.cpuCount(), 0xFFF0857D);
+        }
 
         // player card (always face up)
         MobCard playerCard = MobCards.byId(ClientBattle.playerCardId());
         boolean myPick = phase == BattleSyncPayload.PLAYER_PICK && playerCard != null;
+        final int pcy = playerCardY;
         if (playerCard != null) {
-            drawCardGlow(g, playerX, playerCardY, cardW, cardH,
+            drawCardGlow(g, playerX, pcy, cardW, cardH,
                     reveal && winner == 0 ? 0xFFFFD54A : (myPick ? 0xFF55E06A : 0));
-            boolean pulseMe = reveal && winner == 0 && phase == BattleSyncPayload.RESULT
-                    && elapsed >= FLIP_MS;
-            withPulse(g, pulseMe, elapsed - FLIP_MS, playerX + cardW / 2f, playerCardY + cardH / 2f, () -> {
+            boolean pulseMe = winner == 0 && phase == BattleSyncPayload.RESULT && elapsed >= FLIP_MS;
+            final int fpx = playerX;
+            withPulse(g, pulseMe, elapsed - FLIP_MS, playerX + cardW / 2f, pcy + cardH / 2f, () -> {
                 LivingEntity mob = CardRenderer.portraitEntity(minecraft, playerCard, entityCache);
-                CardRenderer.renderCard(g, font, playerCard, playerX, playerCardY, CARD_SCALE,
+                CardRenderer.renderCard(g, font, playerCard, fpx, pcy, cardScale,
                         mouseX, mouseY, mob, false, true);
             });
-            // the loser's card sinks into shadow once the flip lands
             if (reveal && winner == 1 && elapsed >= FLIP_MS) {
                 int dim = (int) (Mth.clamp((elapsed - FLIP_MS) / 300f, 0f, 1f) * 0x66) << 24;
-                g.fill(playerX - 2, playerCardY - 2, playerX + cardW + 2, playerCardY + cardH + 2,
-                        dim | 0x000A0806);
+                g.fill(playerX - 2, pcy - 2, playerX + cardW + 2, pcy + cardH + 2, dim | 0x000A0806);
             }
         }
 
-        // cpu card: face down until the play resolves, then it FLIPS to reveal
+        // opponent card: face down until the play resolves, then it FLIPS to reveal
         MobCard cpuCard = MobCards.byId(ClientBattle.cpuCardId());
         boolean flipping = phase == BattleSyncPayload.RESULT && elapsed < FLIP_MS && cpuCard != null;
         boolean faceUp = reveal && cpuCard != null;
@@ -160,42 +185,41 @@ public class BattleScreen extends Screen {
             pose.scale(sx, 1f, 1f);
             pose.translate(-cxMid, 0, 0);
             if (backHalf) {
-                CardRenderer.renderBack(g, font, cpuX, cpuCardY, CARD_SCALE);
+                CardRenderer.renderBack(g, font, cpuX, cpuCardY, cardScale);
             } else {
-                // no live mob mid-flip — it joins once the card lands flat
-                CardRenderer.renderCard(g, font, cpuCard, cpuX, cpuCardY, CARD_SCALE,
+                CardRenderer.renderCard(g, font, cpuCard, cpuX, cpuCardY, cardScale,
                         mouseX, mouseY, null, false, false);
             }
             pose.popPose();
-            // a white flash right at the turn of the card
             float flash = 1f - Math.abs(ft - 0.5f) * 4f;
             if (flash > 0f) {
                 g.fill(cpuX - 4, cpuCardY - 4, cpuX + cardW + 4, cpuCardY + cardH + 4,
                         ((int) (flash * 0x80) << 24) | 0x00FFFFFF);
             }
         } else if (faceUp) {
-            drawCardGlow(g, cpuX, cpuCardY, cardW, cardH, winner == 1 ? 0xFFFFD54A : 0);
+            final int ccy = cpuCardY;
+            drawCardGlow(g, cpuX, ccy, cardW, cardH, winner == 1 ? 0xFFFFD54A : 0);
             boolean pulseCpu = winner == 1 && phase == BattleSyncPayload.RESULT && elapsed >= FLIP_MS;
-            withPulse(g, pulseCpu, elapsed - FLIP_MS, cpuX + cardW / 2f, cpuCardY + cardH / 2f, () -> {
+            final int fcx = cpuX;
+            withPulse(g, pulseCpu, elapsed - FLIP_MS, cpuX + cardW / 2f, ccy + cardH / 2f, () -> {
                 LivingEntity mob = CardRenderer.portraitEntity(minecraft, cpuCard, entityCache);
-                CardRenderer.renderCard(g, font, cpuCard, cpuX, cpuCardY, CARD_SCALE,
+                CardRenderer.renderCard(g, font, cpuCard, fcx, ccy, cardScale,
                         mouseX, mouseY, mob, false, false);
             });
             if (winner == 0 && phase == BattleSyncPayload.RESULT && elapsed >= FLIP_MS) {
                 int dim = (int) (Mth.clamp((elapsed - FLIP_MS) / 300f, 0f, 1f) * 0x66) << 24;
-                g.fill(cpuX - 2, cpuCardY - 2, cpuX + cardW + 2, cpuCardY + cardH + 2,
-                        dim | 0x000A0806);
+                g.fill(cpuX - 2, ccy - 2, cpuX + cardW + 2, ccy + cardH + 2, dim | 0x000A0806);
             }
         } else {
-            CardRenderer.renderBack(g, font, cpuX, cpuCardY, CARD_SCALE);
+            CardRenderer.renderBack(g, font, cpuX, cpuCardY, cardScale);
         }
 
         // stat rows on the player card — clickable when it's your pick
         layoutStatRows(playerX, playerCardY, cardW);
         if (myPick) {
-            // a soft shimmer rolls down the rows so they read as clickable
             float roll = (now % 2000L) / 2000f;
-            int shimmerY = statRects[0][1] + (int) (roll * (statRects[5][1] + statRects[5][3] - statRects[0][1]));
+            int span = statRects[5][1] + statRects[5][3] - statRects[0][1];
+            int shimmerY = statRects[0][1] + (int) (roll * span);
             g.fill(statRects[0][0], shimmerY, statRects[0][0] + statRects[0][2], shimmerY + 2, 0x26FFFFFF);
         }
         for (int i = 0; i < statRects.length; i++) {
@@ -206,7 +230,6 @@ public class BattleScreen extends Screen {
                 g.renderOutline(r[0], r[1], r[2], r[3], 0xFF55E06A);
                 g.drawString(font, String.valueOf(i + 1), r[0] - 9, r[1] + 1, 0xFF55E06A, true);
             }
-            // highlight the chosen stat row on both cards once the flip lands
             if (reveal && chosen == i && !flipping) {
                 g.renderOutline(r[0], r[1], r[2], r[3], 0xFFFFD54A);
                 int[] cr = statRow(cpuX, cpuCardY, cardW, i);
@@ -214,9 +237,9 @@ public class BattleScreen extends Screen {
             }
         }
 
-        // centre column: status chip, VS, tallies, pot
-        drawStatusChip(g, phase, baseCardY - 26, now);
-        drawCenterInfo(g, centerY);
+        // centre column: status chip, VS emblem, tallies, pot
+        drawStatusChip(g, phase, pvp, opp, baseCardY - 26, now);
+        drawCenterInfo(g, centerY, opp, pvp);
 
         // spoils fly to the winner's pile once the card lands
         if (phase == BattleSyncPayload.RESULT && elapsed >= FLIP_MS) {
@@ -229,21 +252,27 @@ public class BattleScreen extends Screen {
             long bannerElapsed = phase == BattleSyncPayload.RESULT
                     ? Math.max(0, elapsed - FLIP_MS) : elapsed;
             drawBanner(g, phase, winner, chosen, playerCard, cpuCard,
-                    centerY - cardH / 2 - 26, bannerElapsed);
+                    centerY - cardH / 2 - 26, bannerElapsed, pvp ? shorten(opp) : "CPU");
         }
 
-        // contextual buttons
-        drawButtons(g, phase, mouseX, mouseY, now);
+        // buttons + size control
+        drawButtons(g, phase, pvp, opp, mouseX, mouseY, now);
+        drawSizeButton(g, mouseX, mouseY);
 
-        String hint = myPick ? "Click a stat on your card (or press 1-6)"
-                : "SPACE to continue  ·  ESC to leave";
+        String hint;
+        if (myPick) {
+            hint = "Click a stat on your card (or press 1-6)";
+        } else if (phase == BattleSyncPayload.OPPONENT_PICK) {
+            hint = "Waiting for " + opp + "...";
+        } else {
+            hint = pvp ? "ESC to leave" : "SPACE to continue  ·  ESC to leave";
+        }
         g.drawCenteredString(font, hint, width / 2, baseCardY + cardH + 8, TEXT_DIM);
     }
 
     // --- pieces ---
 
-    /** "YOUR PICK" / "CPU IS THINKING..." pill between the two name tags. */
-    private void drawStatusChip(GuiGraphics g, int phase, int y, long now) {
+    private void drawStatusChip(GuiGraphics g, int phase, boolean pvp, String opp, int y, long now) {
         String text;
         int color;
         switch (phase) {
@@ -253,6 +282,11 @@ public class BattleScreen extends Screen {
             }
             case BattleSyncPayload.CPU_PICK -> {
                 text = "CPU IS THINKING" + ".".repeat((int) ((now / 350) % 4));
+                color = 0xFFF0857D;
+            }
+            case BattleSyncPayload.OPPONENT_PICK -> {
+                text = shorten(opp).toUpperCase(java.util.Locale.ROOT) + " IS CHOOSING"
+                        + ".".repeat((int) ((now / 350) % 4));
                 color = 0xFFF0857D;
             }
             default -> {
@@ -266,7 +300,6 @@ public class BattleScreen extends Screen {
         g.drawString(font, text, x + 7, y + 3, color, false);
     }
 
-    /** A stacked mini pile of card backs whose height tracks the count. */
     private void pile(GuiGraphics g, int x, int centerY, int count, int color) {
         int stack = Math.min(8, Math.max(count > 0 ? 1 : 0, count / 2));
         int w = 14, h = 19;
@@ -277,31 +310,26 @@ public class BattleScreen extends Screen {
             g.fill(x, py, x + w, py + h, 0xFF7A5F3E);
             g.renderOutline(x, py, w, h, 0xFF5F4A32);
         }
-        String n = String.valueOf(count);
-        g.drawCenteredString(font, n, x + w / 2, baseY - stack * 2 - 11, color);
+        g.drawCenteredString(font, String.valueOf(count), x + w / 2, baseY - stack * 2 - 11, color);
     }
 
-    private void drawCenterInfo(GuiGraphics g, int centerY) {
+    private void drawCenterInfo(GuiGraphics g, int centerY, String opp, boolean pvp) {
         int cx = width / 2;
         float beat = 1f + 0.05f * (float) Math.sin(System.currentTimeMillis() / 500.0);
         var pose = g.pose();
         pose.pushPose();
-        pose.translate(cx, centerY - 12f, 0);
+        pose.translate(cx, centerY - 14f, 0);
         pose.scale(2.0f * beat, 2.0f * beat, 1f);
         g.drawString(font, "VS", -font.width("VS") / 2, 0, 0xFFEFE3B0, true);
         pose.popPose();
+        // reliable tally (piles are decorative and may be hidden when narrow)
+        String tally = ClientBattle.playerCount() + " — " + ClientBattle.cpuCount();
+        g.drawCenteredString(font, tally, cx, centerY + 8, 0xFFCED6E0);
         if (ClientBattle.potCount() > 0) {
-            // the pot as a little face-down pile below the VS
-            int px = cx - 7, py = centerY + 8;
-            for (int i = 0; i < Math.min(4, ClientBattle.potCount()); i++) {
-                g.fill(px - 1, py - i * 2 - 1, px + 15, py - i * 2 + 20, 0xFF2A1F12);
-                g.fill(px, py - i * 2, px + 14, py - i * 2 + 19, 0xFF7A5F3E);
-            }
-            g.drawCenteredString(font, "POT " + ClientBattle.potCount(), cx, py + 22, 0xFFE7C24A);
+            g.drawCenteredString(font, "POT " + ClientBattle.potCount(), cx, centerY + 20, 0xFFE7C24A);
         }
     }
 
-    /** Three tiny gold cards arcing from the loser's card to the winner's pile. */
     private void drawFlyingCards(GuiGraphics g, int winner, long sinceFlip,
                                  int playerCx, int cpuCx, int centerY) {
         if (sinceFlip > 700) {
@@ -317,7 +345,7 @@ public class BattleScreen extends Screen {
             toX = cpuCx;
         } else {
             fromX = playerCx;
-            toX = width / 2; // tie: everything slides to the pot
+            toX = width / 2;
         }
         var pose = g.pose();
         for (int i = 0; i < 3; i++) {
@@ -339,7 +367,7 @@ public class BattleScreen extends Screen {
     }
 
     private void drawBanner(GuiGraphics g, int phase, int winner, int chosen,
-                            MobCard playerCard, MobCard cpuCard, int y, long elapsed) {
+                            MobCard playerCard, MobCard cpuCard, int y, long elapsed, String oppName) {
         String text;
         int color;
         if (phase == BattleSyncPayload.FINISHED) {
@@ -352,7 +380,7 @@ public class BattleScreen extends Screen {
         } else {
             text = switch (winner) {
                 case 0 -> "YOU WIN THE ROUND!";
-                case 1 -> "CPU WINS THE ROUND";
+                case 1 -> oppName.toUpperCase(java.util.Locale.ROOT) + " WINS THE ROUND";
                 default -> "TIE — INTO THE POT";
             };
             color = winner == 0 ? 0xFF6BE87A : winner == 1 ? 0xFFF0857D : 0xFFE7C24A;
@@ -365,24 +393,26 @@ public class BattleScreen extends Screen {
         pose.scale(Math.max(0.05f, scale), Math.max(0.05f, scale), 1f);
         g.drawString(font, text, -font.width(text) / 2, 0, color, true);
         pose.popPose();
-
-        // the head-to-head values on the chosen stat
         if (chosen >= 0 && playerCard != null && cpuCard != null) {
             Stat s = Stat.values()[chosen];
-            String line = s.label + ":  you " + playerCard.stat(s) + "  vs  CPU " + cpuCard.stat(s);
+            String line = s.label + ":  you " + playerCard.stat(s) + "  vs  " + cpuCard.stat(s);
             g.drawCenteredString(font, line, width / 2, y + 16, TEXT_DIM);
         }
     }
 
-    private void drawButtons(GuiGraphics g, int phase, int mouseX, int mouseY, long now) {
+    private void drawButtons(GuiGraphics g, int phase, boolean pvp, String opp,
+                             int mouseX, int mouseY, long now) {
         actionRect = null;
-        // primary action, bottom-centre, pulsing while it waits for you
-        String label = switch (phase) {
-            case BattleSyncPayload.CPU_PICK -> "Reveal CPU's pick";
-            case BattleSyncPayload.RESULT -> "Next >";
-            case BattleSyncPayload.FINISHED -> "Play Again";
-            default -> null;
-        };
+        // primary action. In PvP the round is paced by the server, so the only
+        // button is Close at the end; the CPU game keeps reveal / next / again.
+        String label = pvp
+                ? (phase == BattleSyncPayload.FINISHED ? "Close" : null)
+                : switch (phase) {
+                    case BattleSyncPayload.CPU_PICK -> "Reveal opponent's pick";
+                    case BattleSyncPayload.RESULT -> "Next >";
+                    case BattleSyncPayload.FINISHED -> "Play Again";
+                    default -> null;
+                };
         if (label != null) {
             int w = Math.max(120, font.width(label) + 28);
             int x = width / 2 - w / 2;
@@ -396,9 +426,9 @@ public class BattleScreen extends Screen {
             g.renderOutline(x, y, w, 20, hover ? GOLD : 0x66FFFFFF);
             g.drawString(font, label, x + (w - font.width(label)) / 2, y + 6, 0xFFFFFFFF, true);
         }
-        // leave: needs a second click to confirm while the game is live
-        boolean armed = leaveArmedAt > 0 && now - leaveArmedAt < LEAVE_CONFIRM_MS;
+        // leave: a second click confirms while the game is live
         boolean live = phase != BattleSyncPayload.FINISHED;
+        boolean armed = leaveArmedAt > 0 && now - leaveArmedAt < LEAVE_CONFIRM_MS;
         String leaveLabel = (armed && live) ? "Forfeit?!" : "Leave";
         int lw = font.width(leaveLabel) + 20;
         int lx = phase == BattleSyncPayload.FINISHED ? width / 2 + 70 : width - lw - 14;
@@ -411,6 +441,18 @@ public class BattleScreen extends Screen {
         g.drawString(font, leaveLabel, lx + 10, ly + 6, 0xFFFFFFFF, armed && live);
     }
 
+    private void drawSizeButton(GuiGraphics g, int mouseX, int mouseY) {
+        String label = "Cards: " + ClientPrefs.cardSize().label;
+        int w = font.width(label) + 14;
+        int x = 14;
+        int y = height - 40;
+        sizeRect = new int[]{x, y, w, 20};
+        boolean hover = inRect(mouseX, mouseY, sizeRect);
+        g.fill(x, y, x + w, y + 20, hover ? 0xFF20463A : 0xFF14352A);
+        g.renderOutline(x, y, w, 20, hover ? GOLD : 0x66FFFFFF);
+        g.drawString(font, label, x + 7, y + 6, TEXT_DIM, false);
+    }
+
     private void drawCardGlow(GuiGraphics g, int x, int y, int w, int h, int color) {
         if (color == 0) return;
         float pulse = 0.6f + 0.4f * (float) Math.sin(System.currentTimeMillis() / 400.0);
@@ -421,7 +463,6 @@ public class BattleScreen extends Screen {
         }
     }
 
-    /** Runs {@code draw} inside a one-shot scale bump centred on the card. */
     private void withPulse(GuiGraphics g, boolean active, long sincePulse,
                            float cx, float cy, Runnable draw) {
         if (!active || sincePulse > 500) {
@@ -445,13 +486,16 @@ public class BattleScreen extends Screen {
         }
     }
 
-    /** Screen rect of stat row {@code i} on a card at (cardX,cardY), matching CardRenderer's layout. */
     private int[] statRow(int cardX, int cardY, int cardW, int i) {
-        int x0 = cardX + Math.round(12 * CARD_SCALE);
-        int x1 = cardX + Math.round((CardRenderer.CARD_W - 12) * CARD_SCALE);
-        int yTop = cardY + Math.round((121 + i * 13) * CARD_SCALE);
-        int hgt = Math.round(13 * CARD_SCALE);
+        int x0 = cardX + Math.round(12 * cardScale);
+        int x1 = cardX + Math.round((CardRenderer.CARD_W - 12) * cardScale);
+        int yTop = cardY + Math.round((121 + i * 13) * cardScale);
+        int hgt = Math.round(13 * cardScale);
         return new int[]{x0, yTop, x1 - x0, hgt};
+    }
+
+    private String shorten(String s) {
+        return s.length() > 12 ? s.substring(0, 12) : s;
     }
 
     // --- interaction ---
@@ -462,11 +506,16 @@ public class BattleScreen extends Screen {
             return super.mouseClicked(mouseX, mouseY, button);
         }
         int phase = ClientBattle.phase();
+        if (sizeRect != null && inRect((int) mouseX, (int) mouseY, sizeRect)) {
+            ClientPrefs.cycleCardSize();
+            click();
+            return true;
+        }
         if (leaveRect != null && inRect((int) mouseX, (int) mouseY, leaveRect)) {
             long now = System.currentTimeMillis();
             boolean live = phase != BattleSyncPayload.FINISHED;
             if (live && (leaveArmedAt < 0 || now - leaveArmedAt >= LEAVE_CONFIRM_MS)) {
-                leaveArmedAt = now; // first click arms; second click confirms
+                leaveArmedAt = now;
                 click();
                 return true;
             }
@@ -494,12 +543,10 @@ public class BattleScreen extends Screen {
     @Override
     public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
         int phase = ClientBattle.phase();
-        // SPACE or ENTER drives the primary action
-        if (keyCode == 32 || keyCode == 257) {
+        if (keyCode == 32 || keyCode == 257) { // SPACE / ENTER
             primaryAction(phase);
             return true;
         }
-        // 1-6 play a stat directly on your pick
         if (phase == BattleSyncPayload.PLAYER_PICK && keyCode >= 49 && keyCode <= 54) {
             click();
             send(BattleActionPayload.PICK, keyCode - 49);
@@ -509,6 +556,12 @@ public class BattleScreen extends Screen {
     }
 
     private void primaryAction(int phase) {
+        if (ClientBattle.isPvp()) {
+            if (phase == BattleSyncPayload.FINISHED) {
+                onClose();
+            }
+            return; // PvP rounds are paced by the server
+        }
         switch (phase) {
             case BattleSyncPayload.CPU_PICK, BattleSyncPayload.RESULT ->
                     send(BattleActionPayload.NEXT, 0);
