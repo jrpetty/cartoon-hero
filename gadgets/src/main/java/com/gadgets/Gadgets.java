@@ -89,7 +89,7 @@ public class Gadgets implements ModInitializer {
     public static final Block ITEM_COUNTER = registerBlock("item_counter",
             new ItemCounterBlock(AbstractBlock.Settings.create()
                     .strength(1.5F).requiresTool().sounds(BlockSoundGroup.METAL)),
-            "tip.gadgets.item_counter.1", "tip.gadgets.item_counter.2", "tip.gadgets.item_counter.3");
+            "tip.gadgets.item_counter.1", "tip.gadgets.item_counter.2", "tip.gadgets.item_counter.3", "tip.gadgets.item_counter.4");
 
     public static final Item WIRELESS_REMOTE = register("wireless_remote",
             new WirelessRemoteItem(new Item.Settings().maxCount(1)));

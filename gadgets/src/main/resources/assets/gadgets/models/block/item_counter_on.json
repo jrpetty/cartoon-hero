@@ -3,7 +3,7 @@
   "textures": {
     "particle": "gadgets:block/item_counter",
     "north": "gadgets:block/item_counter_sensor",
-    "south": "gadgets:block/item_counter_display",
+    "south": "gadgets:block/item_counter_display_on",
     "east": "gadgets:block/item_counter",
     "west": "gadgets:block/item_counter",
     "up": "gadgets:block/item_counter",

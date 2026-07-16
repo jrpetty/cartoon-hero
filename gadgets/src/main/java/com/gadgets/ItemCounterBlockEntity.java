@@ -39,6 +39,8 @@ public class ItemCounterBlockEntity extends BlockEntity {
     private int lastContainerCount = -1;
     /** Ids of item entities already counted while they sit in the detection cell. */
     private final Set<Integer> seenEntities = new HashSet<>();
+    /** Which mode the last sample ran in — purely informational, not persisted. */
+    private boolean watchingContainer = false;
 
     public ItemCounterBlockEntity(BlockPos pos, BlockState state) {
         super(Gadgets.ITEM_COUNTER_BE, pos, state);
@@ -50,6 +52,10 @@ public class ItemCounterBlockEntity extends BlockEntity {
 
     public int getCount() {
         return count;
+    }
+
+    public boolean isWatchingContainer() {
+        return watchingContainer;
     }
 
     /** Advance to the next pulse size and restart the running count. */
@@ -76,6 +82,7 @@ public class ItemCounterBlockEntity extends BlockEntity {
 
             int passed;
             Inventory container = HopperBlockEntity.getInventoryAt(world, target);
+            be.watchingContainer = container != null;
             if (container != null) {
                 passed = be.sampleContainer(container);
                 be.seenEntities.clear(); // not in flow mode; forget any stragglers

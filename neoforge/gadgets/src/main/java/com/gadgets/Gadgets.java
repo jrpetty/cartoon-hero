@@ -112,7 +112,7 @@ public class Gadgets {
     public static final DeferredItem<?> ALARM_ITEM = ITEMS.register("alarm", () -> new TooltipBlockItem(ALARM.get(), new Item.Properties(),
             "tip.gadgets.alarm.1", "tip.gadgets.alarm.2"));
     public static final DeferredItem<?> ITEM_COUNTER_ITEM = ITEMS.register("item_counter", () -> new TooltipBlockItem(ITEM_COUNTER.get(), new Item.Properties(),
-            "tip.gadgets.item_counter.1", "tip.gadgets.item_counter.2", "tip.gadgets.item_counter.3"));
+            "tip.gadgets.item_counter.1", "tip.gadgets.item_counter.2", "tip.gadgets.item_counter.3", "tip.gadgets.item_counter.4"));
     public static final DeferredItem<Item> WIRELESS_REMOTE =
             ITEMS.register("wireless_remote", () -> new WirelessRemoteItem(new Item.Properties().stacksTo(1)));
 

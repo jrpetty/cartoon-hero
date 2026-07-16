@@ -1,8 +1,12 @@
 {
-  "parent": "minecraft:block/orientable",
+  "parent": "minecraft:block/cube",
   "textures": {
-    "front": "gadgets:block/redstone_receiver_front",
-    "side": "gadgets:block/filter_hopper",
-    "top": "gadgets:block/filter_hopper"
+    "particle": "gadgets:block/item_counter",
+    "north": "gadgets:block/item_counter_sensor",
+    "south": "gadgets:block/item_counter_display",
+    "east": "gadgets:block/item_counter",
+    "west": "gadgets:block/item_counter",
+    "up": "gadgets:block/item_counter",
+    "down": "gadgets:block/item_counter"
   }
 }

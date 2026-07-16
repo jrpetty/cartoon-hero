@@ -580,3 +580,75 @@ def _ped_bottom():
 write_png(os.path.join(BASE, "block", "pedestal_top.png"), _ped_top())
 write_png(os.path.join(BASE, "block", "pedestal_side.png"), _ped_side())
 write_png(os.path.join(BASE, "block", "pedestal_bottom.png"), _ped_bottom())
+
+# --- Item Counter: sensor lens front, segmented counter screen back, tally casing ---
+IC_PAL = {
+    "M": C(40, 42, 48), "d": C(70, 74, 82), ".": C(55, 58, 66),
+    "k": C(30, 32, 36), "r": C(100, 106, 116), "t": C(120, 126, 138),
+    "_": C(15, 18, 24), "a": C(140, 88, 30), "p": C(80, 52, 22),
+    "~": C(38, 30, 20), "A": C(255, 186, 70), "P": C(255, 150, 50),
+    "c": C(60, 140, 180), "C": C(150, 235, 255),
+}
+
+IC_CASING = [
+    "MMMMMMMMMMMMMMMM",
+    "MddddddddddddddM",
+    "Md.r........r.dM",
+    "Md............dM",
+    "MdkkkkkkkkkkkkdM",
+    "Mdk..........kdM",
+    "Mdk.t.t.t.t..kdM",
+    "Mdk..........kdM",
+    "MdkkkkkkkkkkkkdM",
+    "Md............dM",
+    "Md............dM",
+    "Md............dM",
+    "Md.r........r.dM",
+    "Md............dM",
+    "MddddddddddddddM",
+    "MMMMMMMMMMMMMMMM",
+]
+
+def ic_display(seg, pip, scr):
+    return [
+        "MMMMMMMMMMMMMMMM",
+        "MddddddddddddddM",
+        "Md.kkkkkkkkkk.dM",
+        "Md.k" + scr * 8 + "k.dM",
+        "Md.k" + (seg * 3 + scr + seg * 3 + scr) + "k.dM",
+        "Md.k" + (seg + scr + seg + scr) * 2 + "k.dM",
+        "Md.k" + (seg * 3 + scr + seg * 3 + scr) + "k.dM",
+        "Md.k" + (seg + scr + seg + scr) * 2 + "k.dM",
+        "Md.k" + (seg * 3 + scr + seg * 3 + scr) + "k.dM",
+        "Md.k" + scr * 8 + "k.dM",
+        "Md.k" + (pip + scr) * 4 + "k.dM",
+        "Md.k" + scr * 8 + "k.dM",
+        "Md.kkkkkkkkkk.dM",
+        "Md............dM",
+        "MddddddddddddddM",
+        "MMMMMMMMMMMMMMMM",
+    ]
+
+IC_SENSOR = [
+    "MMMMMMMMMMMMMMMM",
+    "MddddddddddddddM",
+    "Md.r........r.dM",
+    "Md....kkkk....dM",
+    "Md...k....k...dM",
+    "Md..k..cc..k..dM",
+    "Md..k.cCCc.k..dM",
+    "Md..k.cCCc.k..dM",
+    "Md..k..cc..k..dM",
+    "Md...k....k...dM",
+    "Md....kkkk....dM",
+    "Md............dM",
+    "Md.r........r.dM",
+    "Md............dM",
+    "MddddddddddddddM",
+    "MMMMMMMMMMMMMMMM",
+]
+
+write_png(os.path.join(BASE, "block", "item_counter.png"), grid(IC_CASING, IC_PAL))
+write_png(os.path.join(BASE, "block", "item_counter_sensor.png"), grid(IC_SENSOR, IC_PAL))
+write_png(os.path.join(BASE, "block", "item_counter_display.png"), grid(ic_display("a", "p", "_"), IC_PAL))
+write_png(os.path.join(BASE, "block", "item_counter_display_on.png"), grid(ic_display("A", "P", "~"), IC_PAL))

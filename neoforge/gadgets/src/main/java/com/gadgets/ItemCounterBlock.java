@@ -4,6 +4,8 @@ import net.minecraft.ChatFormatting;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.network.chat.Component;
+import net.minecraft.sounds.SoundEvents;
+import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.context.BlockPlaceContext;
@@ -53,9 +55,16 @@ public class ItemCounterBlock extends Block implements EntityBlock {
     @Override
     protected InteractionResult useWithoutItem(BlockState state, Level level, BlockPos pos, Player player, BlockHitResult hit) {
         if (!level.isClientSide() && level.getBlockEntity(pos) instanceof ItemCounterBlockEntity be) {
-            int t = be.cycleThreshold();
-            player.displayClientMessage(Component.literal("Item Counter: pulses every " + t + (t == 1 ? " item" : " items"))
-                    .withStyle(ChatFormatting.GOLD), true);
+            if (player.isShiftKeyDown()) {
+                String mode = be.isWatchingContainer() ? "watching container" : "watching for drops";
+                player.displayClientMessage(Component.literal("Item Counter ▸ " + be.getCount() + " / " + be.getThreshold()
+                        + " · " + mode).withStyle(ChatFormatting.AQUA), true);
+            } else {
+                int t = be.cycleThreshold();
+                level.playSound(null, pos, SoundEvents.COMPARATOR_CLICK, SoundSource.BLOCKS, 0.6F, 1.3F);
+                player.displayClientMessage(Component.literal("Item Counter ▸ pulse every " + t + (t == 1 ? " item" : " items"))
+                        .withStyle(ChatFormatting.GOLD), true);
+            }
         }
         return InteractionResult.sidedSuccess(level.isClientSide());
     }

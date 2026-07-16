@@ -9,6 +9,8 @@ import net.minecraft.block.entity.BlockEntityTicker;
 import net.minecraft.block.entity.BlockEntityType;
 import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.item.ItemPlacementContext;
+import net.minecraft.sound.SoundCategory;
+import net.minecraft.sound.SoundEvents;
 import net.minecraft.state.StateManager;
 import net.minecraft.state.property.BooleanProperty;
 import net.minecraft.state.property.DirectionProperty;
@@ -53,9 +55,16 @@ public class ItemCounterBlock extends Block implements BlockEntityProvider {
     @Override
     protected ActionResult onUse(BlockState state, World world, BlockPos pos, PlayerEntity player, BlockHitResult hit) {
         if (!world.isClient() && world.getBlockEntity(pos) instanceof ItemCounterBlockEntity be) {
-            int t = be.cycleThreshold();
-            player.sendMessage(Text.literal("Item Counter: pulses every " + t + (t == 1 ? " item" : " items"))
-                    .formatted(Formatting.GOLD), true);
+            if (player.isSneaking()) {
+                String mode = be.isWatchingContainer() ? "watching container" : "watching for drops";
+                player.sendMessage(Text.literal("Item Counter ▸ " + be.getCount() + " / " + be.getThreshold()
+                        + " · " + mode).formatted(Formatting.AQUA), true);
+            } else {
+                int t = be.cycleThreshold();
+                world.playSound(null, pos, SoundEvents.BLOCK_COMPARATOR_CLICK, SoundCategory.BLOCKS, 0.6F, 1.3F);
+                player.sendMessage(Text.literal("Item Counter ▸ pulse every " + t + (t == 1 ? " item" : " items"))
+                        .formatted(Formatting.GOLD), true);
+            }
         }
         return ActionResult.success(world.isClient());
     }
