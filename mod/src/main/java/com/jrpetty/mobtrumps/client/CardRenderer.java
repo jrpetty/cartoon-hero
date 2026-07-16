@@ -44,6 +44,12 @@ public final class CardRenderer {
     private static final int BOOST_INK = 0xFF1E7A32;   // boosted stat value on the cream face
     private static final int BOOST_GREEN = 0xFF35B34A;  // the "+N" tag
 
+    // the card frame: dark slate edge, ivory border, gold pinline — escalating
+    // to silver (Holo), gold (Holo II) and a prismatic frame (Holo III)
+    private static final int EDGE_DARK = 0xFF20242C;
+    private static final int BORDER_IVORY = 0xFFF2EEE3;
+    private static final int PIN_GOLD = 0xFFD9B45B;
+
     private static final int ROW_H = 13;
 
     private CardRenderer() {
@@ -87,9 +93,7 @@ public final class CardRenderer {
         pose.translate(x, y, 0);
         pose.scale(scale, scale, 1f);
 
-        g.fill(-2, -2, CARD_W + 2, CARD_H + 2, KRAFT_DARK);
-        g.fill(0, 0, CARD_W, CARD_H, KRAFT);
-        g.fill(6, 6, CARD_W - 6, CARD_H - 6, FACE);
+        drawFrame(g, Math.max(level, foil ? 1 : 0));
 
         // name, 1.5x, centred
         pose.pushPose();
@@ -150,6 +154,19 @@ public final class CardRenderer {
             int half = 2 + lvl;
             g.fill(Math.max(8, sweep - half), 8, Math.min(CARD_W - 8, sweep + half), CARD_H - 8,
                     0x00FFFFFF | sweepA);
+            // Holo III: little star sparkles twinkling across the face
+            if (lvl >= 3) {
+                for (int i = 0; i < 8; i++) {
+                    int sx = 12 + (i * 37) % (CARD_W - 24);
+                    int sy = 12 + (i * 53) % (CARD_H - 24);
+                    float tw = (float) Math.sin(t / 260.0 + i * 1.7);
+                    if (tw > 0.2f) {
+                        int a = (int) (tw * 0xB0) << 24;
+                        g.fill(sx - 2, sy, sx + 3, sy + 1, a | 0x00FFFFFF);
+                        g.fill(sx, sy - 2, sx + 1, sy + 3, a | 0x00FFFFFF);
+                    }
+                }
+            }
         }
 
         // HOLO badge with a pip per level, top-left corner
@@ -179,6 +196,66 @@ public final class CardRenderer {
         }
     }
 
+    /**
+     * The card frame, escalating with upgrade level: a clean ivory border with
+     * a gold pinline for base cards, brushed SILVER for Holo, molten GOLD for
+     * Holo II, and a hue-cycling PRISMATIC frame for Holo III — the top two
+     * tiers add corner gems and a bright glint that laps the border.
+     */
+    private static void drawFrame(GuiGraphics g, int lvl) {
+        long t = System.currentTimeMillis();
+        lvl = Math.min(lvl, 3);
+        g.fill(-2, -2, CARD_W + 2, CARD_H + 2, EDGE_DARK);
+        switch (lvl) {
+            case 0 -> g.fill(0, 0, CARD_W, CARD_H, BORDER_IVORY);
+            case 1 -> g.fillGradient(0, 0, CARD_W, CARD_H, 0xFFF2F5FA, 0xFFC2CCDA);
+            case 2 -> g.fillGradient(0, 0, CARD_W, CARD_H, 0xFFF0CE6E, 0xFFB8892E);
+            default -> {
+                float h = (t % 4200L) / 4200f;
+                int c1 = 0xFF000000 | hsvToRgb(h, 0.50f, 1f);
+                int c2 = 0xFF000000 | hsvToRgb((h + 0.33f) % 1f, 0.50f, 0.82f);
+                g.fillGradient(0, 0, CARD_W, CARD_H, c1, c2);
+            }
+        }
+        int pin = switch (lvl) {
+            case 0 -> PIN_GOLD;
+            case 1 -> 0xFF8FA3BC;
+            case 2 -> 0xFFFFF2C8;
+            default -> 0xFFFFFFFF;
+        };
+        g.renderOutline(4, 4, CARD_W - 8, CARD_H - 8, pin);
+        g.fill(6, 6, CARD_W - 6, CARD_H - 6, FACE);
+
+        if (lvl >= 2) {
+            // corner gems set into the border
+            for (int[] c : new int[][]{{1, 1}, {CARD_W - 4, 1}, {1, CARD_H - 4}, {CARD_W - 4, CARD_H - 4}}) {
+                g.fill(c[0], c[1], c[0] + 3, c[1] + 3, lvl >= 3 ? 0xFFFFFFFF : 0xFFFFE68A);
+                g.fill(c[0], c[1], c[0] + 1, c[1] + 1, 0xFFFFFFFF);
+            }
+            // a bright glint lapping the border
+            int per = 2 * (CARD_W + CARD_H);
+            int pos = (int) ((t % 1800L) / 1800f * per);
+            int gx;
+            int gy;
+            if (pos < CARD_W) {
+                gx = pos;
+                gy = 0;
+            } else if (pos < CARD_W + CARD_H) {
+                gx = CARD_W - 3;
+                gy = pos - CARD_W;
+            } else if (pos < 2 * CARD_W + CARD_H) {
+                gx = 2 * CARD_W + CARD_H - pos;
+                gy = CARD_H - 3;
+            } else {
+                gx = 0;
+                gy = CARD_H - (pos - 2 * CARD_W - CARD_H);
+            }
+            gx = Math.max(0, Math.min(CARD_W - 3, gx));
+            gy = Math.max(0, Math.min(CARD_H - 3, gy));
+            g.fill(gx, gy, gx + 3, gy + 3, 0xE0FFFFFF);
+        }
+    }
+
     /** Draw the back of a card — used for mobs not yet collected. */
     public static void renderBack(GuiGraphics g, Font font, int x, int y, float scale) {
         var pose = g.pose();
@@ -186,8 +263,10 @@ public final class CardRenderer {
         pose.translate(x, y, 0);
         pose.scale(scale, scale, 1f);
 
-        g.fill(-2, -2, CARD_W + 2, CARD_H + 2, KRAFT_DARK);
-        g.fill(0, 0, CARD_W, CARD_H, KRAFT);
+        // same slate-and-ivory frame as the fronts, so the deck reads as one set
+        g.fill(-2, -2, CARD_W + 2, CARD_H + 2, EDGE_DARK);
+        g.fill(0, 0, CARD_W, CARD_H, BORDER_IVORY);
+        g.renderOutline(4, 4, CARD_W - 8, CARD_H - 8, PIN_GOLD);
         g.fill(6, 6, CARD_W - 6, CARD_H - 6, KRAFT_BACK);
         g.renderOutline(10, 10, CARD_W - 20, CARD_H - 20, KRAFT_DARK);
 

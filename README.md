@@ -42,7 +42,11 @@ In game:
   reaches a given tier gets exactly the same upgraded card. Cards show their
   boosted stats with a green **+N** tag and a **HOLO** badge (a pip per tier),
   and every card view — the collection book, deck builder, card view, item
-  tooltip, wall display — **updates live** the moment you cross a milestone
+  tooltip, wall display — **updates live** the moment you cross a milestone.
+  Each tier also wears its own **frame**: base cards get a clean ivory border
+  with a gold pinline, Holo is **brushed silver**, Holo II is **molten gold**
+  with corner gems and a glint lapping the border, and Holo III gets a
+  **hue-cycling prismatic frame** with star sparkles twinkling across the face
 - **Mob categories & set rewards** — every one of the 81 mobs belongs to one
   of ten themed categories: **Farm Animals, Wild Creatures, Villagers & Golems,
   Aquatic, Undead, Overworld Monsters, The End, Nether, Illagers** and **Bosses**.

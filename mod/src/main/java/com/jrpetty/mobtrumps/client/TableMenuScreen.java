@@ -76,6 +76,9 @@ public class TableMenuScreen extends Screen {
 
     @Override
     public void render(GuiGraphics g, int mouseX, int mouseY, float partialTick) {
+        // vanilla background (and its blur pass) FIRST — calling this at the end
+        // of the frame blurs the whole menu instead of the world behind it
+        super.render(g, mouseX, mouseY, partialTick);
         long t = System.currentTimeMillis() - openedAt;
         float in = easeOutCubic(Mth.clamp(t / (float) ENTER_MS, 0f, 1f));
         buttons.clear();
@@ -200,7 +203,6 @@ public class TableMenuScreen extends Screen {
         // slim footer strip so the hint reads as part of the frame
         g.fill(0, height - 13, width, height - 2, 0x66051A12);
         g.drawCenteredString(font, "ESC to close", width / 2, height - 11, 0xFF7E9288);
-        super.render(g, mouseX, mouseY, partialTick);
     }
 
     // --- widgets ---
