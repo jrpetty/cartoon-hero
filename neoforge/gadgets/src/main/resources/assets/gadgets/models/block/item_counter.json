@@ -1,0 +1,8 @@
+{
+  "parent": "minecraft:block/orientable",
+  "textures": {
+    "front": "gadgets:block/redstone_receiver_front",
+    "side": "gadgets:block/filter_hopper",
+    "top": "gadgets:block/filter_hopper"
+  }
+}

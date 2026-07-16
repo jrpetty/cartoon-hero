@@ -1,0 +1,16 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "redstone",
+  "group": "gadgets",
+  "pattern": [
+    " I ",
+    "IHI",
+    " C "
+  ],
+  "key": {
+    "I": "minecraft:iron_ingot",
+    "H": "minecraft:hopper",
+    "C": "minecraft:comparator"
+  },
+  "result": { "id": "gadgets:item_counter", "count": 1 }
+}
