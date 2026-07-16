@@ -197,17 +197,28 @@ public class TableMenuScreen extends Screen {
         // a face-up fan of your actual top deck cards, so the choice is real
         fan(g, barX + panelW - 46, barY + 41, t);
 
-        g.drawCenteredString(font, "ESC to close", width / 2, height - 11, 0xFF6E8278);
+        // slim footer strip so the hint reads as part of the frame
+        g.fill(0, height - 13, width, height - 2, 0x66051A12);
+        g.drawCenteredString(font, "ESC to close", width / 2, height - 11, 0xFF7E9288);
         super.render(g, mouseX, mouseY, partialTick);
     }
 
     // --- widgets ---
 
     private void panel(GuiGraphics g, int x, int y, int w, int h, String head) {
+        g.fill(x + 2, y + 3, x + w + 2, y + h + 3, 0x44000000); // drop shadow
         g.fill(x, y, x + w, y + h, PANEL);
         g.renderOutline(x, y, w, h, PANEL_EDGE);
         g.fill(x, y, x + w, y + 14, 0x66000000);
+        g.fill(x, y + 14, x + w, y + 15, GOLD_DIM);
         g.drawCenteredString(font, head, x + w / 2, y + 3, GOLD);
+        // little gold L-marks in the corners
+        int len = 6;
+        for (int[] c : new int[][]{{x + 3, y + 3, 1, 1}, {x + w - 3, y + 3, -1, 1},
+                {x + 3, y + h - 3, 1, -1}, {x + w - 3, y + h - 3, -1, -1}}) {
+            g.fill(c[0], c[1], c[0] + c[2] * len, c[1] + c[3], GOLD_DIM);
+            g.fill(c[0], c[1], c[0] + c[2], c[1] + c[3] * len, GOLD_DIM);
+        }
     }
 
     /**
