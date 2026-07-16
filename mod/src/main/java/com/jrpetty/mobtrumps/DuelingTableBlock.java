@@ -20,9 +20,9 @@ import net.minecraft.world.phys.shapes.VoxelShape;
 import net.minecraft.core.BlockPos;
 
 /**
- * A table you place down; sit with right-click, sneak-right-click to cycle the
- * game mode (best of 1/3/5, or draft), and a second player right-clicks to
- * start it.
+ * A table you place down. Right-clicking opens the on-screen table menu — the
+ * home screen for card battling: play the CPU (easy/normal/hard), sit and wait
+ * for a challenger (best of 1/3/5 or draft), and pick which deck you play.
  */
 public class DuelingTableBlock extends HorizontalDirectionalBlock {
 
@@ -63,7 +63,7 @@ public class DuelingTableBlock extends HorizontalDirectionalBlock {
     protected InteractionResult useWithoutItem(BlockState state, Level level, BlockPos pos,
                                                Player player, BlockHitResult hit) {
         if (!level.isClientSide && player instanceof ServerPlayer sp) {
-            DuelTables.interact(pos, sp, player.isShiftKeyDown());
+            DuelTables.openMenu(pos, sp);
         }
         return InteractionResult.sidedSuccess(level.isClientSide);
     }

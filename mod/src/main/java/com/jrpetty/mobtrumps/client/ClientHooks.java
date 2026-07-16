@@ -51,6 +51,12 @@ public final class ClientHooks {
         }
     }
 
+    /** Open the dueling table's home menu with the server's seat snapshot. */
+    public static void openTableMenu(com.jrpetty.mobtrumps.TableMenuPayload payload) {
+        Minecraft.getInstance().setScreen(new TableMenuScreen(
+                payload.pos(), payload.seatedName(), payload.seatedMode(), payload.selfSeated()));
+    }
+
     /** Apply a battle state snapshot, opening or closing the battle screen. */
     public static void updateBattle(com.jrpetty.mobtrumps.BattleSyncPayload payload) {
         ClientBattle.set(payload.phase(), payload.playerCardId(), payload.cpuCardId(), payload.nums());

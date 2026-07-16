@@ -60,5 +60,14 @@ public final class ModNetworking {
                         TableBattleManager.action(sp, payload.action(), payload.stat());
                     }
                 }));
+        registrar.playToClient(TableMenuPayload.TYPE, TableMenuPayload.STREAM_CODEC,
+                (payload, context) -> context.enqueueWork(
+                        () -> ClientHooks.openTableMenu(payload)));
+        registrar.playToServer(TableActionPayload.TYPE, TableActionPayload.STREAM_CODEC,
+                (payload, context) -> context.enqueueWork(() -> {
+                    if (context.player() instanceof net.minecraft.server.level.ServerPlayer sp) {
+                        DuelTables.handleAction(sp, payload);
+                    }
+                }));
     }
 }

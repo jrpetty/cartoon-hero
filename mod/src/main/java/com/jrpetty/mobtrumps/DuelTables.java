@@ -1,67 +1,47 @@
 package com.jrpetty.mobtrumps;
 
+import com.jrpetty.mobtrumps.game.Difficulty;
 import net.minecraft.ChatFormatting;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
+import net.neoforged.neoforge.network.PacketDistributor;
 
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * Tracks who is "seated" at each dueling table, and in which game mode. The
- * first player to right-click takes a seat (default best-of-3); sneak-right-
- * click while seated cycles the mode. When a different player right-clicks
- * the table, the game starts in whichever mode the seated player left it on.
+ * The dueling table's server brain. Right-clicking the table opens the on
+ * screen home menu ({@code TableMenuScreen}); the menu's choices come back as
+ * {@link TableActionPayload}s — sit and wait for a challenger in a chosen PvP
+ * mode, challenge whoever is seated, or start a solo battle against the CPU.
  * Seats expire so a table never gets stuck.
  */
 public final class DuelTables {
 
-    private static final long SEAT_TTL_MS = 45_000L;
+    private static final long SEAT_TTL_MS = 120_000L;
+    private static final double MAX_REACH_SQ = 64.0;
 
-    /** The game modes selectable at a table, in cycle order. */
+    /** The PvP modes a seat can wait in. */
     public enum Mode {
         BO1("Best of 1", 1),
         BO3("Best of 3", 3),
         BO5("Best of 5", 5),
-        DRAFT("Draft", 0),
-        CPU_EASY("vs CPU — Easy", 0),
-        CPU_NORMAL("vs CPU — Normal", 0),
-        CPU_HARD("vs CPU — Hard", 0);
+        DRAFT("Draft", 0);
 
-        final String label;
-        final int bestOf; // 0 = not applicable (draft / CPU)
+        public final String label;
+        final int bestOf; // 0 = not applicable (draft)
 
         Mode(String label, int bestOf) {
             this.label = label;
             this.bestOf = bestOf;
         }
-
-        Mode next() {
-            return values()[(ordinal() + 1) % values().length];
-        }
-
-        boolean isCpu() {
-            return this == CPU_EASY || this == CPU_NORMAL || this == CPU_HARD;
-        }
-
-        com.jrpetty.mobtrumps.game.Difficulty cpuDifficulty() {
-            return switch (this) {
-                case CPU_EASY -> com.jrpetty.mobtrumps.game.Difficulty.EASY;
-                case CPU_NORMAL -> com.jrpetty.mobtrumps.game.Difficulty.NORMAL;
-                case CPU_HARD -> com.jrpetty.mobtrumps.game.Difficulty.HARD;
-                default -> null;
-            };
-        }
     }
 
     private record Seat(UUID player, long at, Mode mode) {
-        Seat withMode(Mode m) {
-            return new Seat(player, at, m);
-        }
     }
 
     private static final Map<BlockPos, Seat> SEATS = new ConcurrentHashMap<>();
@@ -69,107 +49,135 @@ public final class DuelTables {
     private DuelTables() {
     }
 
-    public static void interact(BlockPos pos, ServerPlayer player, boolean sneaking) {
+    /** Right-click on the table: send the client everything the menu needs. */
+    public static void openMenu(BlockPos pos, ServerPlayer player) {
         BlockPos key = pos.immutable();
+        Seat seat = validSeat(key);
+        String name = "";
+        int mode = Mode.BO3.ordinal();
+        boolean self = false;
+        if (seat != null) {
+            self = seat.player().equals(player.getUUID());
+            mode = seat.mode().ordinal();
+            if (self) {
+                name = player.getGameProfile().getName();
+            } else {
+                ServerPlayer seated = player.serverLevel().getServer()
+                        .getPlayerList().getPlayer(seat.player());
+                if (seated == null) {
+                    SEATS.remove(key); // ghost seat — player left
+                    name = "";
+                    mode = Mode.BO3.ordinal();
+                } else {
+                    name = seated.getGameProfile().getName();
+                }
+            }
+        }
+        PacketDistributor.sendToPlayer(player, new TableMenuPayload(key, name, mode, self));
+    }
+
+    /** A menu choice arriving from the client. Everything is re-validated. */
+    public static void handleAction(ServerPlayer player, TableActionPayload payload) {
+        BlockPos key = payload.pos().immutable();
+        if (key.distToCenterSqr(player.getX(), player.getY(), player.getZ()) > MAX_REACH_SQ) {
+            return; // too far away to be a legitimate click
+        }
         long now = System.currentTimeMillis();
-        Seat seat = SEATS.get(key);
-        if (seat != null && now - seat.at() > SEAT_TTL_MS) {
-            seat = null;
-        }
-
-        // sneak-clicking your own seat cycles the mode instead of re-sitting
-        if (seat != null && seat.player().equals(player.getUUID()) && sneaking) {
-            Mode next = seat.mode().next();
-            SEATS.put(key, new Seat(player.getUUID(), now, next));
-            announceMode(player, next);
-            return;
-        }
-
-        // right-clicking your own seat while it's set to a CPU mode: start a
-        // solo battle against the AI at that difficulty
-        if (seat != null && seat.player().equals(player.getUUID()) && seat.mode().isCpu()) {
-            if (busy(player)) {
-                player.sendSystemMessage(err("Finish your current game first."));
-                return;
+        switch (payload.action()) {
+            case TableActionPayload.SEAT -> {
+                if (busy(player)) {
+                    player.sendSystemMessage(err("Finish your current game first."));
+                    return;
+                }
+                Seat seat = validSeat(key);
+                if (seat != null && !seat.player().equals(player.getUUID())) {
+                    player.sendSystemMessage(err("Someone is already seated — challenge them instead."));
+                    return;
+                }
+                Mode mode = Mode.values()[clamp(payload.arg(), Mode.values().length)];
+                SEATS.put(key, new Seat(player.getUUID(), now, mode));
+                player.sendSystemMessage(Component.literal("You take a seat — ")
+                        .withStyle(ChatFormatting.GREEN)
+                        .append(Component.literal(mode.label).withStyle(ChatFormatting.AQUA, ChatFormatting.BOLD))
+                        .append(Component.literal(". Waiting for a challenger to right-click the table...")
+                                .withStyle(ChatFormatting.GREEN)));
+                tableSound(player, key, 1.0F);
             }
-            SEATS.remove(key);
-            player.serverLevel().playSound(null, pos.getX() + 0.5, pos.getY() + 1, pos.getZ() + 0.5,
-                    SoundEvents.BOOK_PAGE_TURN, SoundSource.BLOCKS, 0.8F, 1.1F);
-            TableBattleManager.start(player, seat.mode().cpuDifficulty());
-            return;
+            case TableActionPayload.STAND -> {
+                Seat seat = SEATS.get(key);
+                if (seat != null && seat.player().equals(player.getUUID())) {
+                    SEATS.remove(key);
+                    player.sendSystemMessage(Component.literal("You stand up from the table.")
+                            .withStyle(ChatFormatting.GRAY));
+                }
+            }
+            case TableActionPayload.CHALLENGE -> challenge(player, key);
+            case TableActionPayload.CPU -> {
+                if (busy(player)) {
+                    player.sendSystemMessage(err("Finish your current game first."));
+                    return;
+                }
+                Difficulty difficulty = Difficulty.values()[clamp(payload.arg(), Difficulty.values().length)];
+                tableSound(player, key, 1.1F);
+                TableBattleManager.start(player, difficulty, payload.useDeck());
+            }
+            default -> {
+            }
         }
+    }
 
-        // no one waiting, or you re-clicking your own seat: (re)take the seat
+    private static void challenge(ServerPlayer player, BlockPos key) {
+        Seat seat = validSeat(key);
         if (seat == null || seat.player().equals(player.getUUID())) {
-            if (busy(player)) {
-                player.sendSystemMessage(err("Finish your current game first."));
-                return;
-            }
-            Mode mode = seat == null ? Mode.BO3 : seat.mode();
-            SEATS.put(key, new Seat(player.getUUID(), now, mode));
-            player.sendSystemMessage(Component.literal("You take a seat at the dueling table — mode: ")
-                    .withStyle(ChatFormatting.GREEN)
-                    .append(Component.literal(mode.label).withStyle(ChatFormatting.AQUA, ChatFormatting.BOLD))
-                    .append(Component.literal(". Sneak-right-click to change it; another player "
-                            + "right-clicks to challenge you.").withStyle(ChatFormatting.GREEN)));
-            player.serverLevel().playSound(null, pos.getX() + 0.5, pos.getY() + 1, pos.getZ() + 0.5,
-                    SoundEvents.BOOK_PAGE_TURN, SoundSource.BLOCKS, 0.8F, 1.0F);
-            return;
-        }
-
-        // someone else is seated: try to start the game in their chosen mode
-        Mode mode = seat.mode();
-        if (mode.isCpu()) {
-            // a solo (vs CPU) practice seat — the newcomer just takes it over
-            SEATS.put(key, new Seat(player.getUUID(), now, Mode.BO3));
-            player.sendSystemMessage(Component.literal("You take the seat at the dueling table.")
-                    .withStyle(ChatFormatting.GREEN));
+            player.sendSystemMessage(err("No one is waiting at this table right now."));
             return;
         }
         ServerPlayer opponent = player.serverLevel().getServer().getPlayerList().getPlayer(seat.player());
-        SEATS.remove(key);
         if (opponent == null) {
-            // the seated player logged off — just take the seat instead
-            SEATS.put(key, new Seat(player.getUUID(), now, mode));
-            player.sendSystemMessage(Component.literal("You take a seat at the dueling table.")
-                    .withStyle(ChatFormatting.GREEN));
+            SEATS.remove(key);
+            player.sendSystemMessage(err("They've gone offline — the seat is free now."));
             return;
         }
-        if (DuelManager.isInDuel(player) || DraftManager.isDrafting(player)) {
+        if (busy(player)) {
             player.sendSystemMessage(err("Finish your current game first."));
-            SEATS.put(key, seat); // put the original seat back — they're still waiting
             return;
         }
-        if (DuelManager.isInDuel(opponent) || DraftManager.isDrafting(opponent)) {
+        if (busy(opponent)) {
             player.sendSystemMessage(err(opponent.getGameProfile().getName()
                     + " started another game while waiting — take the seat instead."));
             return;
         }
-
-        if (mode == Mode.DRAFT) {
+        SEATS.remove(key);
+        if (seat.mode() == Mode.DRAFT) {
             if (!DraftManager.startDirect(opponent, player)) {
                 player.sendSystemMessage(err("Couldn't start the draft — someone's already busy."));
             }
         } else {
-            DuelManager.startFromTable(opponent, player, mode.bestOf);
+            DuelManager.startFromTable(opponent, player, seat.mode().bestOf);
         }
     }
 
-    private static void announceMode(ServerPlayer player, Mode mode) {
-        String tail = mode.isCpu()
-                ? " — right-click the table again to start playing the CPU."
-                : mode == Mode.DRAFT
-                        ? " — you'll draft a deck together before duelling."
-                        : " — a single challenger will play " + mode.label.toLowerCase(java.util.Locale.ROOT) + ".";
-        player.sendSystemMessage(Component.literal("Table set to ").withStyle(ChatFormatting.YELLOW)
-                .append(Component.literal(mode.label).withStyle(ChatFormatting.AQUA, ChatFormatting.BOLD))
-                .append(Component.literal(tail).withStyle(ChatFormatting.YELLOW)));
-        player.playNotifySound(SoundEvents.UI_BUTTON_CLICK.value(), SoundSource.BLOCKS, 0.7F, 1.2F);
+    private static Seat validSeat(BlockPos key) {
+        Seat seat = SEATS.get(key);
+        if (seat != null && System.currentTimeMillis() - seat.at() > SEAT_TTL_MS) {
+            SEATS.remove(key);
+            return null;
+        }
+        return seat;
     }
 
     private static boolean busy(ServerPlayer player) {
         return TableBattleManager.isInBattle(player)
                 || DuelManager.isInDuel(player) || DraftManager.isDrafting(player);
+    }
+
+    private static void tableSound(ServerPlayer player, BlockPos pos, float pitch) {
+        player.serverLevel().playSound(null, pos.getX() + 0.5, pos.getY() + 1, pos.getZ() + 0.5,
+                SoundEvents.BOOK_PAGE_TURN, SoundSource.BLOCKS, 0.8F, pitch);
+    }
+
+    private static int clamp(int value, int size) {
+        return Math.max(0, Math.min(value, size - 1));
     }
 
     /** Drop a player's seats when they leave, so tables don't hold ghosts. */

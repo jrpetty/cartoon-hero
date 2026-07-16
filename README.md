@@ -90,15 +90,19 @@ In game:
   emeralds and the winner takes the whole pot (stakes are refunded on a draw,
   decline, timeout or logout). Add `bo3` or `bo5` for a **best-of series** —
   the deck is re-dealt each game and the first to win the majority takes the match
-- **Dueling Table** (craft: 3 crafting tables + 2 paper + emerald) — a placeable
-  block so games are discoverable without commands: right-click to take a seat
-  (default best of 3), sneak-right-click to cycle the mode — **Best of 1 / 3 / 5,
-  Draft, or vs CPU (Easy / Normal / Hard)** — and when a second player right-clicks
-  it the PvP game begins in whichever mode you left it on. Pick a **vs CPU** mode
-  and right-click the table again to play the AI in a full **on-screen battle**
-  (no chat): your card and the CPU's face off, you click a stat on your card to
-  play it, reveal the CPU's pick, and watch the round resolve with win/lose/tie
-  banners, live deck tallies and a pot — best deck takes every card
+- **Dueling Table** (craft: 3 crafting tables + 2 paper + emerald) — right-click
+  it and the **table home screen** opens: a felt-and-gold menu where you choose
+  **VS AI** (Easy / Normal / Hard) or **VS PLAYER** (Best of 1 / 3 / 5, or Draft),
+  and pick your **battle deck** — your own custom deck (kill-tier boosts included)
+  or a random deal; Draft always uses the full card pool for that game only.
+  Sitting in a PvP mode leaves you waiting at the table, and anyone who clicks it
+  sees a **CHALLENGE** button with your name and mode. AI games play out in a full
+  **on-screen battle** (no chat): your card on the left, the CPU's **face-down** on
+  the right until the play resolves — then it **flips over** to reveal who took the
+  round, with win/lose/tie banners, the contested stat highlighted on both cards,
+  live deck tallies and a pot. The CPU is dealt **the same number of cards as
+  you**, drawn on a fair collector curve — mostly commons, a decent spread of
+  uncommons and rares, and **never more than one legendary**
 - **Card Scanner** (craft: spyglass + emerald + amethyst shard) — hold
   right-click to raise it to your eye like a spyglass and zoom in; any mob you
   look at gets its Mob Trumps card **projected in the air above it**, plus a

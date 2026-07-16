@@ -209,4 +209,47 @@ public final class MobCards {
         Collections.shuffle(deck, java.util.Random.from(random));
         return new ArrayList<>(deck.subList(0, Math.min(size, deck.size())));
     }
+
+    /**
+     * The CPU's hand for a table battle: {@code size} distinct cards picked at
+     * random but on a fair collector curve — the majority are commons, a decent
+     * spread of uncommons and rares, a couple of epics, and at most ONE
+     * legendary. If a tier runs out of mobs the balance tops up from the next
+     * tiers down, never adding a second legendary.
+     */
+    public static List<MobCard> cpuDeck(int size, RandomGenerator random) {
+        size = Math.max(2, Math.min(size, ALL.size()));
+        java.util.Map<Tier, List<MobCard>> buckets = new java.util.EnumMap<>(Tier.class);
+        for (Tier t : Tier.values()) buckets.put(t, new ArrayList<>());
+        for (MobCard c : ALL) buckets.get(c.tier()).add(c);
+        java.util.Random shuffler = java.util.Random.from(random);
+        for (List<MobCard> bucket : buckets.values()) Collections.shuffle(bucket, shuffler);
+
+        // the curve: exactly one legendary (decks of 6+), a few epics/rares,
+        // a fifth uncommons, and commons fill the rest — always the majority
+        int legendary = size >= 6 ? 1 : 0;
+        int epic = Math.round(size * 0.08f);
+        int rare = Math.round(size * 0.14f);
+        int uncommon = Math.round(size * 0.20f);
+
+        List<MobCard> out = new ArrayList<>(size);
+        take(buckets.get(Tier.LEGENDARY), legendary, out);
+        take(buckets.get(Tier.EPIC), epic, out);
+        take(buckets.get(Tier.RARE), rare, out);
+        take(buckets.get(Tier.UNCOMMON), uncommon, out);
+        take(buckets.get(Tier.COMMON), size - out.size(), out);
+        // commons exhausted (big decks): top up from the lower tiers, never legendary
+        for (Tier t : new Tier[]{Tier.UNCOMMON, Tier.RARE, Tier.EPIC}) {
+            if (out.size() >= size) break;
+            take(buckets.get(t), size - out.size(), out);
+        }
+        Collections.shuffle(out, shuffler);
+        return out;
+    }
+
+    private static void take(List<MobCard> from, int count, List<MobCard> into) {
+        for (int i = 0; i < count && !from.isEmpty(); i++) {
+            into.add(from.remove(from.size() - 1));
+        }
+    }
 }

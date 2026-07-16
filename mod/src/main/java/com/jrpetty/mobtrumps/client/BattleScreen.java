@@ -27,6 +27,7 @@ import java.util.Map;
 public class BattleScreen extends Screen {
 
     private static final float CARD_SCALE = 0.68f;
+    private static final long FLIP_MS = 440L;
 
     private final Map<String, LivingEntity> entityCache = new HashMap<>();
 
@@ -96,9 +97,28 @@ public class BattleScreen extends Screen {
                     mouseX, mouseY, mob, false, true);
         }
 
-        // cpu card (face down until reveal)
+        // cpu card: face down until the play resolves, then it FLIPS to reveal
         MobCard cpuCard = MobCards.byId(ClientBattle.cpuCardId());
-        if (reveal && cpuCard != null) {
+        boolean flipping = phase == BattleSyncPayload.RESULT && elapsed < FLIP_MS && cpuCard != null;
+        boolean faceUp = reveal && cpuCard != null;
+        if (flipping) {
+            float ft = elapsed / (float) FLIP_MS;
+            boolean backHalf = ft < 0.5f;
+            float sx = Math.max(0.04f, backHalf ? 1f - ft * 2f : ft * 2f - 1f);
+            float cxMid = cpuX + cardW / 2f;
+            pose.pushPose();
+            pose.translate(cxMid, 0, 0);
+            pose.scale(sx, 1f, 1f);
+            pose.translate(-cxMid, 0, 0);
+            if (backHalf) {
+                CardRenderer.renderBack(g, font, cpuX, cardY, CARD_SCALE);
+            } else {
+                // no live mob mid-flip — it joins once the card lands flat
+                CardRenderer.renderCard(g, font, cpuCard, cpuX, cardY, CARD_SCALE,
+                        mouseX, mouseY, null, false, false);
+            }
+            pose.popPose();
+        } else if (faceUp) {
             drawCardGlow(g, cpuX, cardY, cardW, cardH, winner == 1 ? 0xFFFFD54A : 0);
             LivingEntity mob = CardRenderer.portraitEntity(minecraft, cpuCard, entityCache);
             CardRenderer.renderCard(g, font, cpuCard, cpuX, cardY, CARD_SCALE,
@@ -117,20 +137,23 @@ public class BattleScreen extends Screen {
                 g.fill(r[0], r[1], r[0] + r[2], r[1] + r[3], 0x553BE0A0);
                 g.renderOutline(r[0], r[1], r[2], r[3], 0xFF55E06A);
             }
-            // highlight the chosen stat row on both cards after a reveal
-            if (reveal && chosen == i) {
+            // highlight the chosen stat row on both cards once the flip lands
+            if (reveal && chosen == i && !flipping) {
                 g.renderOutline(r[0], r[1], r[2], r[3], 0xFFFFD54A);
                 int[] cr = statRow(cpuX, cardY, cardW, i);
-                if (reveal && cpuCard != null) g.renderOutline(cr[0], cr[1], cr[2], cr[3], 0xFFFFD54A);
+                if (cpuCard != null) g.renderOutline(cr[0], cr[1], cr[2], cr[3], 0xFFFFD54A);
             }
         }
 
         // centre VS + tallies
         drawCenterInfo(g, centerY);
 
-        // result / finished banner
-        if (reveal) {
-            drawBanner(g, phase, winner, chosen, playerCard, cpuCard, centerY - cardH / 2 - 26, elapsed);
+        // result / finished banner — pops in only after the flip reveals the card
+        if (reveal && !flipping) {
+            long bannerElapsed = phase == BattleSyncPayload.RESULT
+                    ? Math.max(0, elapsed - FLIP_MS) : elapsed;
+            drawBanner(g, phase, winner, chosen, playerCard, cpuCard,
+                    centerY - cardH / 2 - 26, bannerElapsed);
         }
 
         // contextual buttons

@@ -29,12 +29,14 @@ public final class TableBattleManager {
     private static final class Game {
         final Battle battle;
         final Difficulty difficulty;
+        final boolean useDeck;
         int phase;
         Battle.RoundResult lastResult;
 
-        Game(Battle battle, Difficulty difficulty) {
+        Game(Battle battle, Difficulty difficulty, boolean useDeck) {
             this.battle = battle;
             this.difficulty = difficulty;
+            this.useDeck = useDeck;
             this.phase = BattleSyncPayload.PLAYER_PICK;
         }
     }
@@ -48,11 +50,24 @@ public final class TableBattleManager {
         return GAMES.containsKey(player.getUUID());
     }
 
-    /** Deal a fresh battle at the chosen difficulty and open the screen. */
-    public static void start(ServerPlayer player, Difficulty difficulty) {
-        Battle battle = new Battle(DECK_SIZE, ThreadLocalRandom.current());
+    /**
+     * Deal a fresh battle at the chosen difficulty and open the screen. With
+     * {@code useDeck} the player fights with their own custom deck (kill-tier
+     * boosts included); otherwise they're dealt a random hand. The CPU always
+     * gets the SAME number of cards, drawn on the collector curve — mostly
+     * commons, a fair spread of the rest, and never more than one legendary.
+     */
+    public static void start(ServerPlayer player, Difficulty difficulty, boolean useDeck) {
+        var rng = ThreadLocalRandom.current();
+        List<MobCard> hand = useDeck ? DeckManager.deckCards(player) : List.of();
+        boolean deckOk = hand.size() >= DeckManager.MIN_DECK;
+        if (!deckOk) {
+            hand = com.jrpetty.mobtrumps.game.MobCards.shuffledDeck(DECK_SIZE, rng);
+        }
+        List<MobCard> cpuHand = com.jrpetty.mobtrumps.game.MobCards.cpuDeck(hand.size(), rng);
+        Battle battle = new Battle(hand, cpuHand, rng);
         battle.setDifficulty(difficulty);
-        Game game = new Game(battle, difficulty);
+        Game game = new Game(battle, difficulty, useDeck && deckOk);
         game.phase = battle.getTurn() == Battle.Side.CPU
                 ? BattleSyncPayload.CPU_PICK : BattleSyncPayload.PLAYER_PICK;
         GAMES.put(player.getUUID(), game);
@@ -86,7 +101,7 @@ public final class TableBattleManager {
             }
             case BattleActionPayload.PLAY_AGAIN -> {
                 if (game.phase == BattleSyncPayload.FINISHED) {
-                    start(player, game.difficulty);
+                    start(player, game.difficulty, game.useDeck);
                 }
             }
             case BattleActionPayload.FORFEIT -> {
