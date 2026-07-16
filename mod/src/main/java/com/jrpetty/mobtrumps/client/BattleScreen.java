@@ -284,18 +284,20 @@ public class BattleScreen extends Screen {
         drawHeader(g, pvp, opp);
         drawDock(g, phase, pvp, mouseX, mouseY, now, dockY);
 
-        String hint;
-        if (myPick) {
-            hint = "Click a stat on your card (or press 1-6)";
-        } else if (phase == BattleSyncPayload.OPPONENT_PICK) {
-            hint = "Waiting for " + shorten(opp) + "...";
-        } else if (phase == BattleSyncPayload.FINISHED) {
-            hint = pvp ? "Good game!" : "SPACE to play again";
-        } else {
-            hint = pvp ? "" : "SPACE to continue";
-        }
-        if (!hint.isEmpty()) {
-            g.drawCenteredString(font, hint, width / 2, dockY - 12, TEXT_DIM);
+        // the hint lives in the dock's centre slot, which is free exactly when
+        // there is no primary button — so text never sits on a border
+        if (actionRect == null) {
+            String hint;
+            if (myPick) {
+                hint = "Click a stat on your card  ·  or press 1-6";
+            } else if (phase == BattleSyncPayload.OPPONENT_PICK) {
+                hint = "Waiting for " + shorten(opp) + "...";
+            } else {
+                hint = "";
+            }
+            if (!hint.isEmpty()) {
+                g.drawCenteredString(font, hint, width / 2, dockY + 11, TEXT_DIM);
+            }
         }
 
         if (fadeIn < 1f) {

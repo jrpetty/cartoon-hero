@@ -31,7 +31,10 @@ import java.util.Map;
  */
 public class CollectionBookScreen extends Screen {
 
-    private static final float CARD_SCALE = 0.42f;
+    private static final float BOOK_SCALE_CAP = 0.42f;
+    /** Card scale for this window — shrinks below the cap so the two 3x3
+     *  pages always fit, even at big GUI scales on small screens. */
+    private float cardScale = BOOK_SCALE_CAP;
     private static final int COLS = 3, ROWS = 3, PER_PAGE = COLS * ROWS, PER_SPREAD = 2 * PER_PAGE;
     private static final int ARROW_W = 18, ARROW_H = 14;
     private static final int SPINE = 24;
@@ -73,8 +76,13 @@ public class CollectionBookScreen extends Screen {
     @Override
     protected void init() {
         super.init();
-        cellW = Math.round(CardRenderer.CARD_W * CARD_SCALE) + 8;
-        cellH = Math.round(CardRenderer.CARD_H * CARD_SCALE) + 8;
+        // fit the open book to the window: shrink the cards below the cap until
+        // both 3x3 pages + header + footer fit (fixes GUI scale 2 cutoff)
+        float scaleW = (((width - 28f - SPINE) / 2f) / COLS - 8f) / CardRenderer.CARD_W;
+        float scaleH = ((height - 78f - 26f - 12f) / ROWS - 8f) / CardRenderer.CARD_H;
+        cardScale = Math.max(0.26f, Math.min(BOOK_SCALE_CAP, Math.min(scaleW, scaleH)));
+        cellW = Math.round(CardRenderer.CARD_W * cardScale) + 8;
+        cellH = Math.round(CardRenderer.CARD_H * cardScale) + 8;
 
         int pageW = COLS * cellW;
         panelW = 2 * pageW + SPINE + 28;
@@ -213,8 +221,8 @@ public class CollectionBookScreen extends Screen {
         search.render(g, mouseX, mouseY, partialTick);
         renderChips(g, mouseX, mouseY);
 
-        int cw = Math.round(CardRenderer.CARD_W * CARD_SCALE);
-        int ch = Math.round(CardRenderer.CARD_H * CARD_SCALE);
+        int cw = Math.round(CardRenderer.CARD_W * cardScale);
+        int ch = Math.round(CardRenderer.CARD_H * cardScale);
         int start = spread * PER_SPREAD;
         if (view.isEmpty()) {
             g.drawCenteredString(font, "No cards match.", width / 2, gridTop + 30, CardRenderer.KRAFT_DARK);
@@ -237,7 +245,7 @@ public class CollectionBookScreen extends Screen {
                 boolean foil = ClientCollection.displayedIsFoil(card.id());
                 int level = ClientCollection.displayLevel(card.id(), foil);
                 // only the hovered card comes alive and follows the cursor
-                CardRenderer.renderCard(g, font, card, level, cx, cy, CARD_SCALE,
+                CardRenderer.renderCard(g, font, card, level, cx, cy, cardScale,
                         mouseX, mouseY, mob, foil, hovered);
                 // a small stack tab if more than one variant is owned
                 if (ClientCollection.variantCount(card.id()) > 1) {
@@ -264,7 +272,7 @@ public class CollectionBookScreen extends Screen {
                     g.renderOutline(cx - 3, cy - 3, cw + 6, ch + 6, 0x66F9D849);
                 }
             } else {
-                CardRenderer.renderBack(g, font, cx, cy, CARD_SCALE);
+                CardRenderer.renderBack(g, font, cx, cy, cardScale);
                 if (hovered) g.renderOutline(cx - 2, cy - 2, cw + 4, ch + 4, 0x66FFFFFF);
             }
         }
@@ -431,8 +439,8 @@ public class CollectionBookScreen extends Screen {
             if (inArrow(mouseX, mouseY, prevX, prevY) && spread > 0) { flip(-1); return true; }
             if (inArrow(mouseX, mouseY, nextX, nextY) && spread < spreadCount - 1) { flip(1); return true; }
 
-            int cw = Math.round(CardRenderer.CARD_W * CARD_SCALE);
-            int ch = Math.round(CardRenderer.CARD_H * CARD_SCALE);
+            int cw = Math.round(CardRenderer.CARD_W * cardScale);
+            int ch = Math.round(CardRenderer.CARD_H * cardScale);
             int startIdx = spread * PER_SPREAD;
             for (int s = 0; s < PER_SPREAD; s++) {
                 int i = startIdx + s;

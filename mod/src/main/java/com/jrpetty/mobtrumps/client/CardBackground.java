@@ -203,10 +203,11 @@ public final class CardBackground {
         }
     }
 
-    /** A stepped triangular roof over a body of width w. */
+    /** A stepped triangular roof over a body of width w — peak at the TOP,
+     *  widening downward (inset shrinks as rows descend). */
     private static void roof(GuiGraphics g, int x, int y, int w, int h, int color) {
         for (int i = 0; i < h; i++) {
-            int inset = (int) ((i / (float) h) * (w / 2f));
+            int inset = (int) (((h - 1 - i) / (float) h) * (w / 2f));
             g.fill(x + inset, y + i, x + w - inset, y + i + 1, color);
         }
     }
