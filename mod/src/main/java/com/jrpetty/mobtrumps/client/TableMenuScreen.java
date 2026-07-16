@@ -3,6 +3,8 @@ package com.jrpetty.mobtrumps.client;
 import com.jrpetty.mobtrumps.DeckManager;
 import com.jrpetty.mobtrumps.DuelTables;
 import com.jrpetty.mobtrumps.TableActionPayload;
+import com.jrpetty.mobtrumps.game.MobCard;
+import com.jrpetty.mobtrumps.game.MobCards;
 import com.mojang.math.Axis;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.screens.Screen;
@@ -15,12 +17,15 @@ import net.neoforged.neoforge.network.PacketDistributor;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 
 /**
- * The dueling table's home screen — the casino floor of Mob Trumps. Opened by
- * right-clicking the table: pick VS AI (easy / normal / hard) or VS PLAYER
- * (best of 1/3/5, or draft), and choose whether you battle with your own deck
- * or a random deal. Draft always uses the full card pool for that game only.
+ * The dueling table's home screen — the casino floor of Mob Trumps. Everything
+ * eases in when it opens: the title pops, the VS AI panel slides in from the
+ * left, VS PLAYER from the right and the deck bar rises from the bottom, with
+ * hit-boxes tracking the animation the whole way. Pick VS AI (easy / normal /
+ * hard) or VS PLAYER (best of 1/3/5, or draft), and choose whether you battle
+ * with your own deck — previewed face-up in a little fan — or a random deal.
  */
 public class TableMenuScreen extends Screen {
 
@@ -32,6 +37,8 @@ public class TableMenuScreen extends Screen {
     private static final int GOLD = 0xFFE9C46A;
     private static final int GOLD_DIM = 0xFF9A7F45;
     private static final int TEXT_DIM = 0xFFB9C8C0;
+
+    private static final long ENTER_MS = 300L;
 
     private final BlockPos pos;
     private final String seatedName;
@@ -70,48 +77,59 @@ public class TableMenuScreen extends Screen {
     @Override
     public void render(GuiGraphics g, int mouseX, int mouseY, float partialTick) {
         long t = System.currentTimeMillis() - openedAt;
+        float in = easeOutCubic(Mth.clamp(t / (float) ENTER_MS, 0f, 1f));
         buttons.clear();
 
-        // --- the table: layered felt with a vignette and gold framing ---
+        // --- the table: layered felt, speckle grain, vignette, gold rails ---
         g.fillGradient(0, 0, width, height, FELT_LIGHT, FELT_DARK);
+        for (int i = 0; i < 90; i++) {
+            int sx = (i * 97 + 31) % Math.max(1, width);
+            int sy = (i * 61 + 17) % Math.max(1, height);
+            g.fill(sx, sy, sx + 1, sy + 1, 0x0DFFFFFF);
+        }
         g.fillGradient(0, 0, width, height / 3, 0x66000000, 0x00000000);
         g.fillGradient(0, height * 2 / 3, width, height, 0x00000000, 0x88000000);
         g.fill(0, 0, width, 2, GOLD_DIM);
         g.fill(0, height - 2, width, height, GOLD_DIM);
 
-        // decorative tilted card backs behind the panels
+        // decorative tilted card backs breathing on the felt
         decoCard(g, 30, height - 46, -14f + 2f * (float) Math.sin(t / 900.0));
         decoCard(g, width - 64, height - 42, 11f + 2f * (float) Math.sin(t / 760.0 + 1.7));
 
-        // --- title with a slow shine sweep ---
+        // --- title: pops in with overshoot, then wears a slow shine sweep ---
+        float titleScale = 2.1f * easeOutBack(Mth.clamp(t / (float) ENTER_MS, 0f, 1f));
         var pose = g.pose();
         pose.pushPose();
-        pose.translate(width / 2f, 16f, 0);
-        pose.scale(2.1f, 2.1f, 1f);
+        pose.translate(width / 2f, 22f, 0);
+        pose.scale(Math.max(0.05f, titleScale), Math.max(0.05f, titleScale), 1f);
         String title = "MOB TRUMPS";
-        g.drawString(font, title, -font.width(title) / 2, 0, GOLD, true);
+        g.drawString(font, title, -font.width(title) / 2, -4, GOLD, true);
         pose.popPose();
-        float sweep = (t % 2600L) / 2600f;
-        int sweepX = (int) (width / 2f - 90 + sweep * 180);
-        g.fillGradient(sweepX - 8, 14, sweepX + 8, 36, 0x00FFFFFF, 0x2AFFFFFF);
+        if (t > ENTER_MS) {
+            float sweep = ((t - ENTER_MS) % 2600L) / 2600f;
+            int sweepX = (int) (width / 2f - 90 + sweep * 180);
+            g.fillGradient(sweepX - 8, 12, sweepX + 8, 34, 0x00FFFFFF, 0x2AFFFFFF);
+        }
         g.drawCenteredString(font, "— DUELING TABLE —", width / 2, 38, TEXT_DIM);
 
         int panelW = Math.min(420, width - 20);
         int colW = (panelW - 12) / 2;
-        int leftX = (width - panelW) / 2;
-        int rightX = leftX + colW + 12;
+        // panels slide in from their own side; rects follow the same offsets
+        int slide = Math.round((1f - in) * 34f);
+        int leftX = (width - panelW) / 2 - slide;
+        int rightX = (width - panelW) / 2 + colW + 12 + slide;
         int panelTop = 52;
         int panelH = height - panelTop - 64;
 
         // --- VS AI panel ---
         panel(g, leftX, panelTop, colW, panelH, "VS  AI");
         int by = panelTop + 22;
-        by = modeButton(g, "cpu_0", leftX + 8, by, colW - 16, "EASY",
-                "Plays random stats", 0xFF2E7D46, mouseX, mouseY, true);
-        by = modeButton(g, "cpu_1", leftX + 8, by, colW - 16, "NORMAL",
-                "Leads its best stat", 0xFF2A5F8A, mouseX, mouseY, true);
-        by = modeButton(g, "cpu_2", leftX + 8, by, colW - 16, "HARD",
-                "Reads the odds & bluffs", 0xFF8A3A2E, mouseX, mouseY, true);
+        by = modeButton(g, "cpu_0", leftX + 8, by, colW - 16, "EASY", 1,
+                "Plays random stats", 0xFF2E7D46, mouseX, mouseY, t);
+        by = modeButton(g, "cpu_1", leftX + 8, by, colW - 16, "NORMAL", 2,
+                "Leads its best stat", 0xFF2A5F8A, mouseX, mouseY, t);
+        by = modeButton(g, "cpu_2", leftX + 8, by, colW - 16, "HARD", 3,
+                "Reads the odds & bluffs", 0xFF8A3A2E, mouseX, mouseY, t);
         g.drawCenteredString(font, "CPU deck: same size as yours,", leftX + colW / 2, by + 2, TEXT_DIM);
         g.drawCenteredString(font, "mostly commons, one legendary", leftX + colW / 2, by + 12, TEXT_DIM);
 
@@ -127,53 +145,57 @@ public class TableMenuScreen extends Screen {
             int chY = py + 14;
             g.fill(rightX + 6, chY - 4, rightX + colW - 6, chY + 40, glow);
             bigButton(g, "challenge", rightX + 10, chY, colW - 20, 26,
-                    "CHALLENGE " + seatedName.toUpperCase(java.util.Locale.ROOT),
+                    "CHALLENGE " + seatedName.toUpperCase(Locale.ROOT),
                     0xFF9A6A18, 0xFFC08A28, mouseX, mouseY, true);
             g.drawCenteredString(font, "They chose: " + modeLabel, rightX + colW / 2, chY + 32, GOLD);
             g.drawCenteredString(font, "Winner takes the match!", rightX + colW / 2, chY + 46, TEXT_DIM);
         } else if (selfSeated) {
             String modeLabel = DuelTables.Mode.values()[
                     Mth.clamp(seatedMode, 0, DuelTables.Mode.values().length - 1)].label;
+            // gentle "waiting" dots so the seat feels alive
+            String dots = ".".repeat((int) ((t / 400) % 4));
             g.drawCenteredString(font, "You're seated — " + modeLabel, rightX + colW / 2, py + 8, GOLD);
-            g.drawCenteredString(font, "Waiting for a challenger...", rightX + colW / 2, py + 20, TEXT_DIM);
+            g.drawCenteredString(font, "Waiting for a challenger" + dots, rightX + colW / 2, py + 20, TEXT_DIM);
             bigButton(g, "stand", rightX + 14, py + 34, colW - 28, 18, "Stand up",
                     0xFF5A2530, 0xFF7A3140, mouseX, mouseY, true);
         } else {
-            py = modeButton(g, "seat_0", rightX + 8, py, colW - 16, "BEST OF 1",
-                    "One game, sudden death", 0xFF3A5E2C, mouseX, mouseY, true);
-            py = modeButton(g, "seat_1", rightX + 8, py, colW - 16, "BEST OF 3",
-                    "First to two wins", 0xFF3A5E2C, mouseX, mouseY, true);
-            py = modeButton(g, "seat_2", rightX + 8, py, colW - 16, "BEST OF 5",
-                    "First to three wins", 0xFF3A5E2C, mouseX, mouseY, true);
-            py = modeButton(g, "seat_3", rightX + 8, py, colW - 16, "DRAFT",
-                    "Draft from ALL cards, this game only", 0xFF5E4A8A, mouseX, mouseY, true);
+            py = modeButton(g, "seat_0", rightX + 8, py, colW - 16, "BEST OF 1", 0,
+                    "One game, sudden death", 0xFF3A5E2C, mouseX, mouseY, t);
+            py = modeButton(g, "seat_1", rightX + 8, py, colW - 16, "BEST OF 3", 0,
+                    "First to two wins", 0xFF3A5E2C, mouseX, mouseY, t);
+            py = modeButton(g, "seat_2", rightX + 8, py, colW - 16, "BEST OF 5", 0,
+                    "First to three wins", 0xFF3A5E2C, mouseX, mouseY, t);
+            py = modeButton(g, "seat_3", rightX + 8, py, colW - 16, "DRAFT", 0,
+                    "Draft from ALL cards, this game only", 0xFF5E4A8A, mouseX, mouseY, t);
             g.drawCenteredString(font, "You'll wait at the table until", rightX + colW / 2, py + 2, TEXT_DIM);
             g.drawCenteredString(font, "another player clicks it", rightX + colW / 2, py + 12, TEXT_DIM);
         }
 
-        // --- deck bar ---
-        int barY = height - 58;
-        g.fill(leftX, barY, leftX + panelW, barY + 44, PANEL);
-        g.renderOutline(leftX, barY, panelW, 44, PANEL_EDGE);
-        g.drawString(font, "BATTLE DECK", leftX + 8, barY + 5, GOLD, false);
+        // --- deck bar: rises in from the bottom ---
+        int barLift = Math.round((1f - in) * 26f);
+        int barX = (width - panelW) / 2;
+        int barY = height - 58 + barLift;
+        g.fill(barX, barY, barX + panelW, barY + 44, PANEL);
+        g.renderOutline(barX, barY, panelW, 44, PANEL_EDGE);
+        g.drawString(font, "BATTLE DECK", barX + 8, barY + 5, GOLD, false);
         boolean ready = deckReady();
         int deckN = ClientCollection.deck().size();
-        pill(g, "deck_my", leftX + 8, barY + 18, "My Deck (" + deckN + ")",
+        pill(g, "deck_my", barX + 8, barY + 18, "My Deck (" + deckN + ")",
                 useMyDeck && ready, ready, mouseX, mouseY);
-        pill(g, "deck_rand", leftX + 106, barY + 18, "Random deal",
+        pill(g, "deck_rand", barX + 106, barY + 18, "Random deal",
                 !useMyDeck || !ready, true, mouseX, mouseY);
-        bigButton(g, "deck_edit", leftX + 196, barY + 17, 62, 14, "Edit Deck",
+        bigButton(g, "deck_edit", barX + 196, barY + 17, 62, 14, "Edit Deck",
                 0xFF2A5F8A, 0xFF3A7FB4, mouseX, mouseY, true);
         if (!ready) {
             g.drawString(font, "Build a deck of " + DeckManager.MIN_DECK + "+ in the book",
-                    leftX + 8, barY + 34, 0xFFCB8A8A, false);
+                    barX + 8, barY + 34, 0xFFCB8A8A, false);
         } else {
             g.drawString(font, "Applies to AI battles — duels & draft deal their own",
-                    leftX + 8, barY + 34, TEXT_DIM, false);
+                    barX + 8, barY + 34, TEXT_DIM, false);
         }
 
-        // mini fan of your deck's first cards on the right of the bar
-        fan(g, leftX + panelW - 46, barY + 40, deckN);
+        // a face-up fan of your actual top deck cards, so the choice is real
+        fan(g, barX + panelW - 46, barY + 41, t);
 
         g.drawCenteredString(font, "ESC to close", width / 2, height - 11, 0xFF6E8278);
         super.render(g, mouseX, mouseY, partialTick);
@@ -188,19 +210,35 @@ public class TableMenuScreen extends Screen {
         g.drawCenteredString(font, head, x + w / 2, y + 3, GOLD);
     }
 
-    /** A mode row: bold label + a one-line description. Returns the next y. */
+    /**
+     * A mode row: identity stripe, bold label, difficulty pips, description,
+     * layered gold glow + a nudging chevron on hover. Returns the next y.
+     */
     private int modeButton(GuiGraphics g, String key, int x, int y, int w, String label,
-                           String desc, int base, int mouseX, int mouseY, boolean enabled) {
+                           int pips, String desc, int base, int mouseX, int mouseY, long t) {
         int h = 26;
-        Btn btn = new Btn(key, x, y, w, h, enabled);
+        Btn btn = new Btn(key, x, y, w, h, true);
         buttons.add(btn);
         boolean hover = btn.hit(mouseX, mouseY);
+        if (hover) {
+            // layered outer glow instead of scaling, so hit-boxes never lie
+            g.fill(x - 3, y - 3, x + w + 3, y + h + 3, 0x28E9C46A);
+            g.fill(x - 1, y - 1, x + w + 1, y + h + 1, 0x3CE9C46A);
+        }
         g.fill(x, y, x + w, y + h, hover ? brighten(base) : base);
         g.renderOutline(x, y, w, h, hover ? GOLD : 0x66FFFFFF);
-        g.drawString(font, label, x + 7, y + 4, 0xFFFFFFFF, true);
-        g.drawString(font, desc, x + 7, y + 15, hover ? 0xFFEFE8D0 : TEXT_DIM, false);
+        g.fill(x, y, x + 3, y + h, hover ? GOLD : 0x88FFFFFF); // identity stripe
+        g.drawString(font, label, x + 8, y + 4, 0xFFFFFFFF, true);
+        // difficulty pips: one gold square per skull-level
+        for (int i = 0; i < pips; i++) {
+            int px = x + 10 + font.width(label) + i * 6;
+            g.fill(px, y + 6, px + 4, y + 10, GOLD);
+            g.fill(px, y + 6, px + 4, y + 7, 0xFFFFF0B0);
+        }
+        g.drawString(font, desc, x + 8, y + 15, hover ? 0xFFEFE8D0 : TEXT_DIM, false);
         if (hover) {
-            g.drawString(font, "▶", x + w - 12, y + 9, GOLD, false);
+            int nudge = (int) (2 * Math.sin(t / 150.0));
+            g.drawString(font, ">", x + w - 11 + nudge, y + 9, GOLD, true);
         }
         return y + h + 5;
     }
@@ -210,6 +248,9 @@ public class TableMenuScreen extends Screen {
         Btn btn = new Btn(key, x, y, w, h, enabled);
         buttons.add(btn);
         boolean hover = btn.hit(mouseX, mouseY);
+        if (hover) {
+            g.fill(x - 2, y - 2, x + w + 2, y + h + 2, 0x30E9C46A);
+        }
         g.fill(x, y, x + w, y + h, hover ? hoverCol : base);
         g.renderOutline(x, y, w, h, hover ? GOLD : 0x66FFFFFF);
         g.drawString(font, label, x + (w - font.width(label)) / 2, y + (h - 8) / 2 + 1, 0xFFFFFFFF, true);
@@ -240,18 +281,28 @@ public class TableMenuScreen extends Screen {
         pose.popPose();
     }
 
-    /** A little fan of face-down mini cards showing the deck is ready. */
-    private void fan(GuiGraphics g, int cx, int baseY, int deckN) {
-        int cards = deckN > 0 ? 3 : 1;
+    /**
+     * A little fan of your top deck cards, FACE UP, breathing gently — a real
+     * preview of what you'll battle with. Card backs when the deck is empty.
+     */
+    private void fan(GuiGraphics g, int cx, int baseY, long t) {
+        List<String> deck = ClientCollection.deck();
+        int cards = 3;
         for (int i = 0; i < cards; i++) {
-            float deg = (i - (cards - 1) / 2f) * 14f;
+            float breathe = 1.2f * (float) Math.sin(t / 800.0 + i * 0.9);
+            float deg = (i - (cards - 1) / 2f) * 14f + breathe;
             var pose = g.pose();
             pose.pushPose();
-            pose.translate(cx + i * 6 - (cards - 1) * 3, baseY, 0);
+            pose.translate(cx + i * 7 - (cards - 1) * 3, baseY, 0);
             pose.mulPose(Axis.ZP.rotationDegrees(deg));
             pose.scale(0.16f, 0.16f, 1f);
             pose.translate(-CardRenderer.CARD_W / 2f, -CardRenderer.CARD_H, 0);
-            CardRenderer.renderBack(g, font, 0, 0, 1f);
+            MobCard card = i < deck.size() ? MobCards.byId(deck.get(i)) : null;
+            if (card != null) {
+                CardRenderer.renderCard(g, font, card, 0, 0, 1f, 0, 0, null, false, false);
+            } else {
+                CardRenderer.renderBack(g, font, 0, 0, 1f);
+            }
             pose.popPose();
         }
     }
@@ -261,6 +312,18 @@ public class TableMenuScreen extends Screen {
         int gg = Math.min(255, ((argb >> 8) & 0xFF) + 28);
         int b = Math.min(255, (argb & 0xFF) + 28);
         return (argb & 0xFF000000) | (r << 16) | (gg << 8) | b;
+    }
+
+    private static float easeOutCubic(float t) {
+        float u = 1f - t;
+        return 1f - u * u * u;
+    }
+
+    private static float easeOutBack(float t) {
+        float c1 = 1.70158f;
+        float c3 = c1 + 1f;
+        float u = t - 1f;
+        return 1f + c3 * u * u * u + c1 * u * u;
     }
 
     // --- interaction ---
