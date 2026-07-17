@@ -50,9 +50,12 @@ In game:
 - **Mob categories & set rewards** — every one of the 81 mobs belongs to one
   of ten themed categories: **Farm Animals, Wild Creatures, Villagers & Golems,
   Aquatic, Undead, Overworld Monsters, The End, Nether, Illagers** and **Bosses**.
-  Each card wears a **background painted for its category** — a sunny barn for
-  farm animals, a deep-ocean scene for aquatic, lava and netherrack for the
-  Nether, a starry void for the End, a gold-flecked arena for bosses, and so on.
+  Each card wears a **hand-tuned pixel-art background painted for its
+  category** — a sunny barn with wheat rows for farm animals, a sunbeam-lit
+  ocean with kelp and coral for aquatic, a lava lake under basalt columns for
+  the Nether, a starry void with crystal-topped pillars for the End, a
+  gold-lit colosseum for bosses, and so on — shipped as real textures with
+  dithered skies, glows and silhouettes.
   Collect **every** mob in a category and you're paid a one-time haul that scales
   with how hard the set is: diamonds, iron and gold plus a **randomly-enchanted
   armour piece** (iron for the easy sets, diamond for the hard ones, netherite
