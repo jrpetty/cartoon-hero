@@ -101,6 +101,12 @@ public class Gadgets {
     public static final DeferredBlock<Block> ITEM_MAGNET = BLOCKS.register("item_magnet",
             () -> new ItemMagnetBlock(BlockBehaviour.Properties.of()
                     .strength(1.5F).requiresCorrectToolForDrops().sound(SoundType.METAL)));
+    public static final DeferredBlock<Block> STOCK_MONITOR = BLOCKS.register("stock_monitor",
+            () -> new StockMonitorBlock(BlockBehaviour.Properties.of()
+                    .strength(1.5F).requiresCorrectToolForDrops().sound(SoundType.METAL)));
+    public static final DeferredBlock<Block> TRASH_CAN = BLOCKS.register("trash_can",
+            () -> new TrashCanBlock(BlockBehaviour.Properties.of()
+                    .strength(1.5F).requiresCorrectToolForDrops().sound(SoundType.METAL)));
 
     public static final DeferredItem<?> DISPLAY_PEDESTAL_ITEM = ITEMS.register("display_pedestal", () -> new TooltipBlockItem(DISPLAY_PEDESTAL.get(), new Item.Properties(),
             "tip.gadgets.display_pedestal.1", "tip.gadgets.display_pedestal.2", "tip.gadgets.display_pedestal.3", "tip.gadgets.display_pedestal.4", "tip.gadgets.display_pedestal.5"));
@@ -118,6 +124,10 @@ public class Gadgets {
             "tip.gadgets.item_counter.1", "tip.gadgets.item_counter.2", "tip.gadgets.item_counter.3", "tip.gadgets.item_counter.4"));
     public static final DeferredItem<?> ITEM_MAGNET_ITEM = ITEMS.register("item_magnet", () -> new TooltipBlockItem(ITEM_MAGNET.get(), new Item.Properties(),
             "tip.gadgets.item_magnet.1", "tip.gadgets.item_magnet.2", "tip.gadgets.item_magnet.3"));
+    public static final DeferredItem<?> STOCK_MONITOR_ITEM = ITEMS.register("stock_monitor", () -> new TooltipBlockItem(STOCK_MONITOR.get(), new Item.Properties(),
+            "tip.gadgets.stock_monitor.1", "tip.gadgets.stock_monitor.2", "tip.gadgets.stock_monitor.3", "tip.gadgets.stock_monitor.4"));
+    public static final DeferredItem<?> TRASH_CAN_ITEM = ITEMS.register("trash_can", () -> new TooltipBlockItem(TRASH_CAN.get(), new Item.Properties(),
+            "tip.gadgets.trash_can.1", "tip.gadgets.trash_can.2", "tip.gadgets.trash_can.3"));
     public static final DeferredItem<Item> WIRELESS_REMOTE =
             ITEMS.register("wireless_remote", () -> new WirelessRemoteItem(new Item.Properties().stacksTo(1)));
 
@@ -157,6 +167,12 @@ public class Gadgets {
     public static final Supplier<BlockEntityType<ItemMagnetBlockEntity>> ITEM_MAGNET_BE =
             BLOCK_ENTITIES.register("item_magnet",
                     () -> BlockEntityType.Builder.of(ItemMagnetBlockEntity::new, ITEM_MAGNET.get()).build(null));
+    public static final Supplier<BlockEntityType<StockMonitorBlockEntity>> STOCK_MONITOR_BE =
+            BLOCK_ENTITIES.register("stock_monitor",
+                    () -> BlockEntityType.Builder.of(StockMonitorBlockEntity::new, STOCK_MONITOR.get()).build(null));
+    public static final Supplier<BlockEntityType<TrashCanBlockEntity>> TRASH_CAN_BE =
+            BLOCK_ENTITIES.register("trash_can",
+                    () -> BlockEntityType.Builder.of(TrashCanBlockEntity::new, TRASH_CAN.get()).build(null));
 
     public static final Supplier<CreativeModeTab> GADGETS_TAB = CREATIVE_TABS.register("gadgets",
             () -> CreativeModeTab.builder()
@@ -179,6 +195,8 @@ public class Gadgets {
                         output.accept(ALARM_ITEM.get());
                         output.accept(ITEM_COUNTER_ITEM.get());
                         output.accept(ITEM_MAGNET_ITEM.get());
+                        output.accept(STOCK_MONITOR_ITEM.get());
+                        output.accept(TRASH_CAN_ITEM.get());
                         output.accept(WIRELESS_REMOTE.get());
                     })
                     .build());

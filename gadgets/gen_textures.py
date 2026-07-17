@@ -670,3 +670,33 @@ def _im_rows():
     return rows
 
 write_png(os.path.join(BASE, "block", "item_magnet.png"), grid(_im_rows(), IM_PAL))
+
+# --- Trash Can: dark metal bin with a steel lid, red hazard band and ridges ---
+TC_PAL = {
+    "M": C(40, 42, 48), "d": C(70, 74, 82), ".": C(55, 58, 66),
+    "s": C(200, 205, 215), "R": C(200, 60, 55), "k": C(30, 32, 36),
+}
+
+def _tc_rows():
+    content = [
+        "ssssssssss",  # lid
+        "s.kkkkkk.s",  # lid rim / handle recess
+        "RRRRRRRRRR",  # red hazard band
+        "d.k.d.k.d.",  # bin ridges
+        ".k.d.k.d.k",
+        "d.k.d.k.d.",
+        ".k.d.k.d.k",
+        "d.k.d.k.d.",
+        ".k.d.k.d.k",
+        "d.k.d.k.d.",
+        "RRRRRRRRRR",  # base band
+        "ssssssssss",  # foot
+    ]
+    rows = ["M" * 16, "M" + "d" * 14 + "M"]
+    for c in content:
+        rows.append("Md." + c + ".dM")
+    rows.append("M" + "d" * 14 + "M")
+    rows.append("M" * 16)
+    return rows
+
+write_png(os.path.join(BASE, "block", "trash_can.png"), grid(_tc_rows(), TC_PAL))

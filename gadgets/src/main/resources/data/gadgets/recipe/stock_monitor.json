@@ -1,0 +1,17 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "redstone",
+  "group": "gadgets",
+  "pattern": [
+    " F ",
+    "GCG",
+    "III"
+  ],
+  "key": {
+    "F": { "item": "minecraft:item_frame" },
+    "G": { "item": "minecraft:glass_pane" },
+    "C": { "item": "minecraft:comparator" },
+    "I": { "item": "minecraft:iron_ingot" }
+  },
+  "result": { "id": "gadgets:stock_monitor", "count": 1 }
+}

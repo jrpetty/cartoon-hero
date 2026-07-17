@@ -17,5 +17,6 @@ public class GadgetsClient {
         event.registerBlockEntityRenderer(Gadgets.DISPLAY_PEDESTAL_BE.get(), DisplayPedestalRenderer::new);
         event.registerBlockEntityRenderer(Gadgets.DRAIN_BE.get(), DrainRenderer::new);
         event.registerBlockEntityRenderer(Gadgets.ITEM_COUNTER_BE.get(), ItemCounterRenderer::new);
+        event.registerBlockEntityRenderer(Gadgets.STOCK_MONITOR_BE.get(), StockMonitorRenderer::new);
     }
 }
