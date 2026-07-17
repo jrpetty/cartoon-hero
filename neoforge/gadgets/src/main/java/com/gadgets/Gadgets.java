@@ -98,6 +98,9 @@ public class Gadgets {
     public static final DeferredBlock<Block> ITEM_COUNTER = BLOCKS.register("item_counter",
             () -> new ItemCounterBlock(BlockBehaviour.Properties.of()
                     .strength(1.5F).requiresCorrectToolForDrops().sound(SoundType.METAL)));
+    public static final DeferredBlock<Block> ITEM_MAGNET = BLOCKS.register("item_magnet",
+            () -> new ItemMagnetBlock(BlockBehaviour.Properties.of()
+                    .strength(1.5F).requiresCorrectToolForDrops().sound(SoundType.METAL)));
 
     public static final DeferredItem<?> DISPLAY_PEDESTAL_ITEM = ITEMS.register("display_pedestal", () -> new TooltipBlockItem(DISPLAY_PEDESTAL.get(), new Item.Properties(),
             "tip.gadgets.display_pedestal.1", "tip.gadgets.display_pedestal.2", "tip.gadgets.display_pedestal.3", "tip.gadgets.display_pedestal.4", "tip.gadgets.display_pedestal.5"));
@@ -113,6 +116,8 @@ public class Gadgets {
             "tip.gadgets.alarm.1", "tip.gadgets.alarm.2"));
     public static final DeferredItem<?> ITEM_COUNTER_ITEM = ITEMS.register("item_counter", () -> new TooltipBlockItem(ITEM_COUNTER.get(), new Item.Properties(),
             "tip.gadgets.item_counter.1", "tip.gadgets.item_counter.2", "tip.gadgets.item_counter.3", "tip.gadgets.item_counter.4"));
+    public static final DeferredItem<?> ITEM_MAGNET_ITEM = ITEMS.register("item_magnet", () -> new TooltipBlockItem(ITEM_MAGNET.get(), new Item.Properties(),
+            "tip.gadgets.item_magnet.1", "tip.gadgets.item_magnet.2", "tip.gadgets.item_magnet.3"));
     public static final DeferredItem<Item> WIRELESS_REMOTE =
             ITEMS.register("wireless_remote", () -> new WirelessRemoteItem(new Item.Properties().stacksTo(1)));
 
@@ -149,6 +154,9 @@ public class Gadgets {
     public static final Supplier<BlockEntityType<ItemCounterBlockEntity>> ITEM_COUNTER_BE =
             BLOCK_ENTITIES.register("item_counter",
                     () -> BlockEntityType.Builder.of(ItemCounterBlockEntity::new, ITEM_COUNTER.get()).build(null));
+    public static final Supplier<BlockEntityType<ItemMagnetBlockEntity>> ITEM_MAGNET_BE =
+            BLOCK_ENTITIES.register("item_magnet",
+                    () -> BlockEntityType.Builder.of(ItemMagnetBlockEntity::new, ITEM_MAGNET.get()).build(null));
 
     public static final Supplier<CreativeModeTab> GADGETS_TAB = CREATIVE_TABS.register("gadgets",
             () -> CreativeModeTab.builder()
@@ -170,6 +178,7 @@ public class Gadgets {
                         output.accept(LOGIC_GATE_ITEM.get());
                         output.accept(ALARM_ITEM.get());
                         output.accept(ITEM_COUNTER_ITEM.get());
+                        output.accept(ITEM_MAGNET_ITEM.get());
                         output.accept(WIRELESS_REMOTE.get());
                     })
                     .build());

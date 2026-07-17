@@ -647,3 +647,26 @@ write_png(os.path.join(BASE, "block", "item_counter.png"), grid(IC_CASING, IC_PA
 write_png(os.path.join(BASE, "block", "item_counter_sensor.png"), grid(IC_SENSOR, IC_PAL))
 write_png(os.path.join(BASE, "block", "item_counter_display.png"), grid(ic_display("p", "_"), IC_PAL))
 write_png(os.path.join(BASE, "block", "item_counter_display_on.png"), grid(ic_display("A", "~"), IC_PAL))
+
+# --- Item Magnet: dark metal casing with a red/blue bar magnet and steel poles ---
+IM_PAL = {
+    "M": C(40, 42, 48), "d": C(70, 74, 82), ".": C(55, 58, 66),
+    "R": C(200, 60, 55), "B": C(60, 96, 200), "s": C(205, 210, 220),
+    "r": C(150, 42, 40), "b": C(44, 70, 150),
+}
+
+# 10-wide content rows sit between "Md." and ".dM"; bar is steel-capped, red|blue halves.
+def _im_rows():
+    bg = "." * 10
+    cap = ".sRRRBBBs."   # rounded ends
+    mid = ".RRRRBBBB."   # solid core
+    shine = ".rRRRBBBb."  # a touch of shading on the top row
+    content = [bg, bg, cap, shine, mid, mid, mid, shine, cap, bg, bg, bg]
+    rows = ["M" * 16, "M" + "d" * 14 + "M"]
+    for c in content:
+        rows.append("Md." + c + ".dM")
+    rows.append("M" + "d" * 14 + "M")
+    rows.append("M" * 16)
+    return rows
+
+write_png(os.path.join(BASE, "block", "item_magnet.png"), grid(_im_rows(), IM_PAL))

@@ -1,0 +1,16 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "redstone",
+  "group": "gadgets",
+  "pattern": [
+    "IRI",
+    "RHR",
+    "IRI"
+  ],
+  "key": {
+    "I": { "item": "minecraft:iron_ingot" },
+    "R": { "item": "minecraft:redstone" },
+    "H": { "item": "minecraft:hopper" }
+  },
+  "result": { "id": "gadgets:item_magnet", "count": 1 }
+}

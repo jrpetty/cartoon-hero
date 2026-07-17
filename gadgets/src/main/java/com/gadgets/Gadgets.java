@@ -90,6 +90,10 @@ public class Gadgets implements ModInitializer {
             new ItemCounterBlock(AbstractBlock.Settings.create()
                     .strength(1.5F).requiresTool().sounds(BlockSoundGroup.METAL)),
             "tip.gadgets.item_counter.1", "tip.gadgets.item_counter.2", "tip.gadgets.item_counter.3", "tip.gadgets.item_counter.4");
+    public static final Block ITEM_MAGNET = registerBlock("item_magnet",
+            new ItemMagnetBlock(AbstractBlock.Settings.create()
+                    .strength(1.5F).requiresTool().sounds(BlockSoundGroup.METAL)),
+            "tip.gadgets.item_magnet.1", "tip.gadgets.item_magnet.2", "tip.gadgets.item_magnet.3");
 
     public static final Item WIRELESS_REMOTE = register("wireless_remote",
             new WirelessRemoteItem(new Item.Settings().maxCount(1)));
@@ -121,6 +125,7 @@ public class Gadgets implements ModInitializer {
     public static BlockEntityType<LogicGateBlockEntity> LOGIC_GATE_BE;
     public static BlockEntityType<AlarmBlockEntity> ALARM_BE;
     public static BlockEntityType<ItemCounterBlockEntity> ITEM_COUNTER_BE;
+    public static BlockEntityType<ItemMagnetBlockEntity> ITEM_MAGNET_BE;
 
     @Override
     public void onInitialize() {
@@ -146,6 +151,8 @@ public class Gadgets implements ModInitializer {
                 FabricBlockEntityTypeBuilder.create(AlarmBlockEntity::new, ALARM).build());
         ITEM_COUNTER_BE = Registry.register(Registries.BLOCK_ENTITY_TYPE, Identifier.of(MOD_ID, "item_counter"),
                 FabricBlockEntityTypeBuilder.create(ItemCounterBlockEntity::new, ITEM_COUNTER).build());
+        ITEM_MAGNET_BE = Registry.register(Registries.BLOCK_ENTITY_TYPE, Identifier.of(MOD_ID, "item_magnet"),
+                FabricBlockEntityTypeBuilder.create(ItemMagnetBlockEntity::new, ITEM_MAGNET).build());
 
         Registry.register(Registries.ITEM_GROUP, GADGETS_GROUP_KEY, GADGETS_GROUP);
         ItemGroupEvents.modifyEntriesEvent(GADGETS_GROUP_KEY).register(entries -> {
@@ -164,6 +171,7 @@ public class Gadgets implements ModInitializer {
             entries.add(LOGIC_GATE);
             entries.add(ALARM);
             entries.add(ITEM_COUNTER);
+            entries.add(ITEM_MAGNET);
             entries.add(WIRELESS_REMOTE);
         });
 
