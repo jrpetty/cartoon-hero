@@ -1,0 +1,47 @@
+name: Build Zombie Dimension mod
+
+on:
+  push:
+    branches:
+      - claude/minecraft-card-battle-system-xmu0iu
+      - master
+    paths:
+      - 'zombie-mod/**'
+      - '.github/workflows/build-zombie.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Build mod jar
+        working-directory: zombie-mod
+        run: ./gradlew --no-daemon build
+
+      - name: Upload jar artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: zombierealm-jar
+          path: zombie-mod/build/libs/*.jar
+
+      - name: Publish jar as release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG=zombie-dimension-latest
+          gh release delete "$TAG" --yes || true
+          git push origin ":refs/tags/$TAG" || true
+          gh release create "$TAG" zombie-mod/build/libs/zombierealm-*.jar \
+            --target "$GITHUB_SHA" \
+            --title "Zombie Dimension mod (latest build)" \
+            --notes "NeoForge 21.1.x / Minecraft 1.21.1. Adds The Rotten Realm. Drop the jar into your mods/ folder."
