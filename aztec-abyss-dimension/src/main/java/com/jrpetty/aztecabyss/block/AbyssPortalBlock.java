@@ -52,7 +52,7 @@ public class AbyssPortalBlock extends Block {
     }
 
     @Override
-    protected void animateTick(BlockState state, Level level, BlockPos pos, RandomSource random) {
+    public void animateTick(BlockState state, Level level, BlockPos pos, RandomSource random) {
         if (random.nextInt(80) == 0) {
             level.playLocalSound(pos.getX() + 0.5, pos.getY() + 0.5, pos.getZ() + 0.5,
                     SoundEvents.PORTAL_AMBIENT, SoundSource.BLOCKS,

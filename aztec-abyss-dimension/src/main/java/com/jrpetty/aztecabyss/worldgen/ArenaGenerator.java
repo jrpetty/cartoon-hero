@@ -6,6 +6,7 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.util.RandomSource;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.entity.BlockEntity;
@@ -326,7 +327,7 @@ public final class ArenaGenerator {
         if (level.players().isEmpty() || level.getGameTime() % 4 != 0) {
             return;
         }
-        Random rng = level.random;
+        RandomSource rng = level.random;
         int hw = AztecAbyssConstants.TEMPLE_BASE_HALF_WIDTH;
         int floorY = AztecAbyssConstants.ARENA_FLOOR_Y;
         int round = com.jrpetty.aztecabyss.round.RoundManager.game().getRound();
@@ -374,7 +375,7 @@ public final class ArenaGenerator {
         level.sendParticles(ParticleTypes.SOUL_FIRE_FLAME, 0.5, topY, 0.5, 20 + round * 2, 0.6, 1.0, 0.6, 0.05);
     }
 
-    private static void maybeSpawnBats(ServerLevel level, Random rng) {
+    private static void maybeSpawnBats(ServerLevel level, RandomSource rng) {
         if (level.getGameTime() % 200 != 0 || rng.nextInt(3) != 0) {
             return;
         }

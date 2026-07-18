@@ -70,7 +70,7 @@ public final class AbyssPortalShape {
     private BlockPos calculateBottomLeft(BlockPos pos) {
         BlockPos.MutableBlockPos cursor = pos.mutable();
         int y = cursor.getY();
-        for (; y > level.getMinY() && isEmptyOrPortal(level, cursor.below()); y--) {
+        for (; y > level.getMinBuildHeight() && isEmptyOrPortal(level, cursor.below()); y--) {
             cursor.move(Direction.DOWN);
         }
         Direction leftDir = rightDir.getOpposite();
@@ -100,7 +100,7 @@ public final class AbyssPortalShape {
     }
 
     private int calculateHeight() {
-        int minY = level.getMinY();
+        int minY = level.getMinBuildHeight();
         numPortalBlocks = 0;
         int h;
         for (h = 0; h < MAX_HEIGHT; h++) {
