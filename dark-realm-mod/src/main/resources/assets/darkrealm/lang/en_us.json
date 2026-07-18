@@ -1,0 +1,17 @@
+{
+  "itemGroup.darkrealm": "Dark Realm",
+  "item.darkrealm.soul_igniter": "Soul Igniter",
+  "block.darkrealm.dark_portal": "Dark Portal",
+  "gui.darkrealm.round": "Round %s",
+  "gui.darkrealm.enemies_remaining": "%s enemies remaining",
+  "gui.darkrealm.intermission": "Next round in %s...",
+  "gui.darkrealm.victory": "THE DARK REALM IS CLEARED",
+  "gui.darkrealm.step_to_begin": "Step here to begin the trial",
+  "message.darkrealm.cooldown": "The Dark Realm rejects you for %s more hour(s).",
+  "message.darkrealm.entering": "THE DARK REALM",
+  "message.darkrealm.round_start": "ROUND %s",
+  "message.darkrealm.round_clear": "Round Clear!",
+  "message.darkrealm.you_died": "You fell in Round %s. Your reward awaits at your portal in 20 hours' penance.",
+  "message.darkrealm.banked": "You retreated with the spoils of Round %s.",
+  "death.attack.darkrealm_arena": "%1$s perished in the Dark Realm"
+}
