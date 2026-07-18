@@ -1,0 +1,6 @@
+{
+  "variants": {
+    "axis=x": { "model": "aztecabyss:block/abyss_portal" },
+    "axis=z": { "model": "aztecabyss:block/abyss_portal", "y": 90 }
+  }
+}

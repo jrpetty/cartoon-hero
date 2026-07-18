@@ -1,0 +1,45 @@
+package com.jrpetty.aztecabyss.network;
+
+import com.jrpetty.aztecabyss.AztecAbyssConstants;
+import com.jrpetty.aztecabyss.client.ClientAbyssState;
+import net.minecraft.server.level.ServerPlayer;
+import net.neoforged.bus.api.SubscribeEvent;
+import net.neoforged.fml.common.EventBusSubscriber;
+import net.neoforged.neoforge.network.PacketDistributor;
+import net.neoforged.neoforge.network.event.RegisterPayloadHandlersEvent;
+import net.neoforged.neoforge.network.registration.PayloadRegistrar;
+
+/**
+ * Registers the custom payload and provides the server-side send helper.
+ * The client handler defers to {@link ClientAbyssState} (loaded only on the
+ * client) to avoid touching client classes on a dedicated server.
+ */
+@EventBusSubscriber(modid = AztecAbyssConstants.MOD_ID, bus = EventBusSubscriber.Bus.MOD)
+public final class ModNetworking {
+
+    private ModNetworking() {
+    }
+
+    @SubscribeEvent
+    public static void register(RegisterPayloadHandlersEvent event) {
+        PayloadRegistrar registrar = event.registrar("1");
+        registrar.playToClient(
+                AbyssStatePayload.TYPE,
+                AbyssStatePayload.STREAM_CODEC,
+                (payload, context) -> context.enqueueWork(() -> ClientAbyssState.accept(payload)));
+        registrar.playToClient(
+                RunRecapPayload.TYPE,
+                RunRecapPayload.STREAM_CODEC,
+                (payload, context) -> context.enqueueWork(() -> ClientAbyssState.openRecap(payload)));
+    }
+
+    public static void sendState(ServerPlayer player, boolean inRun, int round) {
+        PacketDistributor.sendToPlayer(player, new AbyssStatePayload(inRun, round));
+    }
+
+    public static void sendRecap(ServerPlayer player, int round, int kills, int revives, int survivalSeconds,
+                                 int previousBest, boolean victory, boolean multiplayer, boolean extracted) {
+        PacketDistributor.sendToPlayer(player, new RunRecapPayload(round, kills, revives, survivalSeconds,
+                previousBest, RunRecapPayload.packFlags(victory, multiplayer, extracted)));
+    }
+}

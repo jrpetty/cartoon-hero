@@ -1,0 +1,40 @@
+name: Build Aztec Abyss jar
+
+# Builds the NeoForge mod in aztec-abyss-dimension/ on GitHub's runners (which
+# have full internet access to the NeoForge/Mojang maven repos this dev sandbox
+# cannot reach) and uploads the finished jar as a downloadable artifact.
+on:
+  push:
+    paths:
+      - 'aztec-abyss-dimension/**'
+      - '.github/workflows/aztec-abyss-build.yml'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: aztec-abyss-dimension
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Make gradlew executable
+        run: chmod +x ./gradlew
+
+      - name: Build
+        run: ./gradlew build --no-daemon --stacktrace
+
+      - name: Upload jar
+        uses: actions/upload-artifact@v4
+        with:
+          name: aztecabyss-jar
+          path: aztec-abyss-dimension/build/libs/*.jar
+          if-no-files-found: error

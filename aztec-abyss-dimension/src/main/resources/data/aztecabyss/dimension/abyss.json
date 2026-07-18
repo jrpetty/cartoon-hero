@@ -1,0 +1,14 @@
+{
+  "type": "aztecabyss:abyss",
+  "generator": {
+    "type": "minecraft:flat",
+    "settings": {
+      "biome": "aztecabyss:abyss",
+      "lakes": false,
+      "features": false,
+      "layers": [
+        { "block": "minecraft:bedrock", "height": 1 }
+      ]
+    }
+  }
+}

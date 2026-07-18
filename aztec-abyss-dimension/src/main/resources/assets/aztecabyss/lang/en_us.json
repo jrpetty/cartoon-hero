@@ -1,0 +1,14 @@
+{
+  "itemGroup.aztecabyss": "Aztec Abyss",
+  "block.aztecabyss.abyssal_obsidian": "Abyssal Obsidian",
+  "block.aztecabyss.abyss_portal": "Abyss Portal",
+
+  "subtitles.aztecabyss.round_start": "A round begins",
+  "subtitles.aztecabyss.round_clear": "Round cleared",
+  "subtitles.aztecabyss.ambient_dread": "The Abyss stirs",
+  "subtitles.aztecabyss.heartbeat": "Heartbeat pounds",
+  "subtitles.aztecabyss.ritual_progress": "A brazier ignites",
+  "subtitles.aztecabyss.ritual_complete": "The offering is accepted",
+  "subtitles.aztecabyss.player_downed": "A hunter falls",
+  "subtitles.aztecabyss.player_revived": "A hunter rises"
+}

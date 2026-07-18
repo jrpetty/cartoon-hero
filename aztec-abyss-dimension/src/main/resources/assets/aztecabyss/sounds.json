@@ -1,0 +1,34 @@
+{
+  "round_start": {
+    "subtitle": "subtitles.aztecabyss.round_start",
+    "sounds": [ { "name": "minecraft:event.raid.horn", "type": "event" } ]
+  },
+  "round_clear": {
+    "subtitle": "subtitles.aztecabyss.round_clear",
+    "sounds": [ { "name": "minecraft:block.beacon.activate", "type": "event" } ]
+  },
+  "ambient_dread": {
+    "subtitle": "subtitles.aztecabyss.ambient_dread",
+    "sounds": [ { "name": "minecraft:entity.warden.ambient", "type": "event" } ]
+  },
+  "heartbeat": {
+    "subtitle": "subtitles.aztecabyss.heartbeat",
+    "sounds": [ { "name": "minecraft:entity.warden.heartbeat", "type": "event" } ]
+  },
+  "ritual_progress": {
+    "subtitle": "subtitles.aztecabyss.ritual_progress",
+    "sounds": [ { "name": "minecraft:block.beacon.power_select", "type": "event" } ]
+  },
+  "ritual_complete": {
+    "subtitle": "subtitles.aztecabyss.ritual_complete",
+    "sounds": [ { "name": "minecraft:block.end_portal.spawn", "type": "event" } ]
+  },
+  "player_downed": {
+    "subtitle": "subtitles.aztecabyss.player_downed",
+    "sounds": [ { "name": "minecraft:entity.wither.hurt", "type": "event" } ]
+  },
+  "player_revived": {
+    "subtitle": "subtitles.aztecabyss.player_revived",
+    "sounds": [ { "name": "minecraft:item.totem.use", "type": "event" } ]
+  }
+}
