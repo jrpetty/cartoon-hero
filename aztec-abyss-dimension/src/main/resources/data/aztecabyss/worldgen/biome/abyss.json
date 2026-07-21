@@ -25,6 +25,6 @@
     "misc": []
   },
   "spawn_costs": {},
-  "carvers": [],
-  "features": [[], [], [], [], [], [], [], [], [], [], []]
+  "carvers": {},
+  "features": []
 }
