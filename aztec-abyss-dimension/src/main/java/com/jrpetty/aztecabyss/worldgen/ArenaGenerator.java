@@ -127,17 +127,17 @@ public final class ArenaGenerator {
         int floorY = AztecAbyssConstants.ARENA_FLOOR_Y;
         Random rng = new Random(WORLDGEN_SEED);
 
+        // The flat generator already leaves air above the base layer, so we don't
+        // clear a tall air column (that was ~1.4M redundant setBlock calls). We just
+        // lay a 2-block-deep floor: a surface + one bedrock layer beneath it. There's
+        // no digging in this mode, so nothing deeper needs to exist.
         for (int x = -radius; x <= radius; x++) {
             for (int z = -radius; z <= radius; z++) {
                 if (x * x + z * z > radius * radius) {
                     continue;
                 }
-                BlockPos floorPos = new BlockPos(x, floorY, z);
-                level.setBlock(floorPos, floorMaterial(rng), 2);
+                level.setBlock(new BlockPos(x, floorY, z), floorMaterial(rng), 2);
                 level.setBlock(new BlockPos(x, floorY - 1, z), Blocks.BEDROCK.defaultBlockState(), 2);
-                for (int y = floorY + 1; y <= floorY + AztecAbyssConstants.WALL_HEIGHT; y++) {
-                    level.setBlock(new BlockPos(x, y, z), Blocks.AIR.defaultBlockState(), 2);
-                }
             }
         }
     }
@@ -160,7 +160,7 @@ public final class ArenaGenerator {
         int radius = AztecAbyssConstants.ARENA_RADIUS;
         int floorY = AztecAbyssConstants.ARENA_FLOOR_Y;
         int top = floorY + AztecAbyssConstants.WALL_HEIGHT;
-        int thickness = 4;
+        int thickness = 2; // world border does the real containment; wall is the visual boundary
 
         for (int x = -radius - thickness; x <= radius + thickness; x++) {
             for (int z = -radius - thickness; z <= radius + thickness; z++) {
@@ -313,7 +313,7 @@ public final class ArenaGenerator {
                 boolean frameEdge = dx == -1 || dx == 2 || dy == 0 || dy == 4;
                 BlockPos pos = new BlockPos(cx + dx, floorY + dy, cz);
                 if (frameEdge) {
-                    level.setBlock(pos, ModBlocks.ABYSSAL_OBSIDIAN.get().defaultBlockState(), 3);
+                    level.setBlock(pos, Blocks.DIAMOND_BLOCK.defaultBlockState(), 3);
                 } else {
                     level.setBlock(pos, ModBlocks.ABYSS_PORTAL.get().defaultBlockState()
                             .setValue(com.jrpetty.aztecabyss.block.AbyssPortalBlock.AXIS, Direction.Axis.X), 3);

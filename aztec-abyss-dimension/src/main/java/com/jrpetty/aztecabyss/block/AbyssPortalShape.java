@@ -144,8 +144,14 @@ public final class AbyssPortalShape {
         return state.isAir() || state.is(ModBlocks.ABYSS_PORTAL.get());
     }
 
-    private static boolean isFrame(LevelAccessor level, BlockPos pos) {
-        return level.getBlockState(pos).is(ModBlocks.ABYSSAL_OBSIDIAN.get());
+    /** The Abyss portal frame is built from vanilla diamond and/or iron blocks. */
+    public static boolean isFrame(LevelAccessor level, BlockPos pos) {
+        return isFrameBlock(level.getBlockState(pos));
+    }
+
+    public static boolean isFrameBlock(net.minecraft.world.level.block.state.BlockState state) {
+        return state.is(net.minecraft.world.level.block.Blocks.DIAMOND_BLOCK)
+                || state.is(net.minecraft.world.level.block.Blocks.IRON_BLOCK);
     }
 
     public boolean isValid() {

@@ -50,7 +50,7 @@ public final class PortalEvents {
         BlockState clickedState = level.getBlockState(clicked);
         ItemStack stack = event.getItemStack();
 
-        if (!clickedState.is(ModBlocks.ABYSSAL_OBSIDIAN.get()) || !(stack.getItem() instanceof FlintAndSteelItem)) {
+        if (!AbyssPortalShape.isFrameBlock(clickedState) || !(stack.getItem() instanceof FlintAndSteelItem)) {
             return;
         }
 
