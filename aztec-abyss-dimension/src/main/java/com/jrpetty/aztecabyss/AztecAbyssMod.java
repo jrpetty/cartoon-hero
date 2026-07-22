@@ -6,7 +6,6 @@ import com.jrpetty.aztecabyss.event.PortalEvents;
 import com.jrpetty.aztecabyss.event.RitualHandler;
 import com.jrpetty.aztecabyss.registry.ModAttachments;
 import com.jrpetty.aztecabyss.registry.ModBlocks;
-import com.jrpetty.aztecabyss.registry.ModCreativeTabs;
 import com.jrpetty.aztecabyss.registry.ModItems;
 import com.jrpetty.aztecabyss.registry.ModParticles;
 import com.jrpetty.aztecabyss.registry.ModSounds;
@@ -22,7 +21,6 @@ public final class AztecAbyssMod {
     public AztecAbyssMod(IEventBus modEventBus, ModContainer modContainer) {
         ModBlocks.register(modEventBus);
         ModItems.register(modEventBus);
-        ModCreativeTabs.register(modEventBus);
         ModParticles.register(modEventBus);
         ModSounds.register(modEventBus);
         ModAttachments.register(modEventBus);

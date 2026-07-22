@@ -1,6 +1,0 @@
-{
-  "parent": "minecraft:block/cube_all",
-  "textures": {
-    "all": "aztecabyss:block/abyssal_obsidian"
-  }
-}

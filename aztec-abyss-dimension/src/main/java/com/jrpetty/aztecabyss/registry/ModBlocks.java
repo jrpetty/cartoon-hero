@@ -15,20 +15,8 @@ public final class ModBlocks {
     public static final DeferredRegister.Blocks BLOCKS =
             DeferredRegister.createBlocks(AztecAbyssConstants.MOD_ID);
 
-    /**
-     * The frame block used to build the Abyss portal. Deliberately NOT obsidian -
-     * this is what makes the portal "assembled differently" from a nether portal:
-     * a darker, rune-veined black stone that only this dimension's portal recognises.
-     */
-    public static final DeferredBlock<Block> ABYSSAL_OBSIDIAN = BLOCKS.registerSimpleBlock(
-            "abyssal_obsidian",
-            BlockBehaviour.Properties.of()
-                    .mapColor(MapColor.COLOR_BLACK)
-                    .requiresCorrectToolForDrops()
-                    .strength(60.0f, 1800.0f) // as tough as obsidian
-                    .sound(SoundType.NETHERITE_BLOCK)
-                    .lightLevel(state -> 0)
-    );
+    // The portal frame is built from vanilla diamond/iron blocks, so no custom
+    // frame block is registered. Only the lit portal surface below is custom.
 
     /** The lit portal block itself - burns with a black flame rather than nether-purple. */
     public static final DeferredBlock<AbyssPortalBlock> ABYSS_PORTAL = BLOCKS.register(

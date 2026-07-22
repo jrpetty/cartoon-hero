@@ -12,7 +12,7 @@ import java.util.function.Predicate;
 
 /**
  * Frame-detection and fill logic for the Abyss portal, adapted from vanilla's
- * nether portal shape algorithm but keyed to {@link ModBlocks#ABYSSAL_OBSIDIAN}
+ * nether portal shape algorithm but keyed to vanilla diamond/iron blocks
  * instead of obsidian, and filling with {@link ModBlocks#ABYSS_PORTAL}.
  *
  * The frame does NOT need to be a specific shape beyond: a rectangular ring of
