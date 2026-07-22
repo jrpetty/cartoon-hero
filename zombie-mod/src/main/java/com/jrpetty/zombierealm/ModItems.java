@@ -21,11 +21,19 @@ public final class ModItems {
             ITEMS.register("rotten_heart",
                     () -> new RottenHeartItem(new Item.Properties().stacksTo(1)));
 
+    /** Soul Shard — dropped by the undead of the Rotten Realm; crafts into light. */
+    public static final DeferredItem<Item> SOUL_SHARD =
+            ITEMS.register("soul_shard", () -> new Item(new Item.Properties()));
+
     public static final DeferredHolder<CreativeModeTab, CreativeModeTab> TAB =
             CREATIVE_MODE_TABS.register("zombierealm", () -> CreativeModeTab.builder()
                     .title(Component.translatable("itemGroup.zombierealm"))
                     .icon(() -> new ItemStack(ROTTEN_HEART.get()))
-                    .displayItems((params, output) -> output.accept(ROTTEN_HEART.get()))
+                    .displayItems((params, output) -> {
+                        output.accept(ROTTEN_HEART.get());
+                        output.accept(SOUL_SHARD.get());
+                        output.accept(ModBlocks.CURSED_LAMP_ITEM.get());
+                    })
                     .build());
 
     private ModItems() {

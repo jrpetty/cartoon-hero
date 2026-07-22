@@ -1,5 +1,7 @@
 {
   "item.zombierealm.rotten_heart": "Rotten Heart",
+  "item.zombierealm.soul_shard": "Soul Shard",
+  "block.zombierealm.cursed_lamp": "Cursed Lamp",
   "itemGroup.zombierealm": "Zombie Dimension",
   "dimension.zombierealm.rotten_realm": "The Rotten Realm"
 }
