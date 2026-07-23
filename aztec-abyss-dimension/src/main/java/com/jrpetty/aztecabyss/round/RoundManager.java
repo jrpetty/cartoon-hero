@@ -830,6 +830,13 @@ public final class RoundManager {
         if (rs.isDowned()) {
             return;
         }
+
+        // Solo (or last one standing): no teammate can revive you, so the downed
+        // grace period is pointless - a lethal hit just ends the run here.
+        if (game.getParticipants().size() <= 1) {
+            sendPlayerHome(level, player, game.getRound(), false, false);
+            return;
+        }
         rs.setDowned(true);
         rs.setBleedoutTicksLeft(AbyssConfig.BLEEDOUT_TICKS.get());
         rs.setReviveProgress(0);
