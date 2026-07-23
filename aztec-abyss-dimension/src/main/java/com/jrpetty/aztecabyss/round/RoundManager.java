@@ -576,8 +576,13 @@ public final class RoundManager {
             level.sendParticles(ParticleTypes.SONIC_BOOM, boss.getX(), boss.getY() + 1.2, boss.getZ(), 1, 0, 0, 0, 0);
         }
         level.sendParticles(ParticleTypes.EXPLOSION, boss.getX(), boss.getY() + 0.2, boss.getZ(), 8, 2.5, 0.2, 2.5, 0.0);
-        level.playSound(null, boss.blockPosition(),
-                finale ? SoundEvents.WARDEN_SONIC_BOOM : SoundEvents.GENERIC_EXPLODE, SoundSource.HOSTILE, 1.2F, 0.8F);
+        // Split rather than ternary: GENERIC_EXPLODE and the Warden sound resolve to
+        // different arg types, which breaks a shared conditional expression.
+        if (finale) {
+            level.playSound(null, boss.blockPosition(), SoundEvents.WARDEN_SONIC_BOOM, SoundSource.HOSTILE, 1.2F, 0.8F);
+        } else {
+            level.playSound(null, boss.blockPosition(), SoundEvents.GENERIC_EXPLODE, SoundSource.HOSTILE, 1.2F, 0.8F);
+        }
     }
 
     /** The boss died: end the spectacle, reward the arena, let the round clear. */
