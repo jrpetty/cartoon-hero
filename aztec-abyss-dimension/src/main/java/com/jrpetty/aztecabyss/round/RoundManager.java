@@ -361,15 +361,22 @@ public final class RoundManager {
     }
 
     // ------------------------------------------------------------------
-    // Boss rounds - the Warden rises (round 10 and the final round)
+    // Boss rounds - the Obsidian Warlord (round 10) and the Warden finale
     // ------------------------------------------------------------------
 
     /** Fixed, dramatic spawn point: between the arrival walkway and the temple. */
     private static final BlockPos BOSS_SPAWN = new BlockPos(0, AztecAbyssConstants.ARENA_FLOOR_Y + 1, 16);
 
+    /** True when the current boss round is the final round (the Warden); otherwise it's the mid-boss Warlord. */
+    private static boolean isFinaleBoss() {
+        return game.getRound() >= AbyssConfig.MAX_ROUND.get();
+    }
+
     private static void spawnBoss(ServerLevel level, int round, List<ServerPlayer> present) {
         boolean finale = round >= AbyssConfig.MAX_ROUND.get();
-        Mob boss = EntityType.WARDEN.create(level);
+        // Round 10 fields a hulking Ravager brute; only the final round summons the Warden,
+        // so the Warden stays the signature finale.
+        Mob boss = (finale ? EntityType.WARDEN : EntityType.RAVAGER).create(level);
         if (boss == null) {
             return;
         }
@@ -378,20 +385,21 @@ public final class RoundManager {
 
         // Explicit, hand-tuned stat line rather than the generic wave scaling: a
         // huge but not interminable health pool, brutal hits, unshakable footing.
-        double hp = 400.0 + round * 30.0;                // r10 ~700, r20 ~1000
+        double hp = finale ? 400.0 + round * 30.0   // Warden ~1000 at round 20
+                           : 350.0 + round * 20.0;  // Warlord ~550 at round 10
         setAttribute(boss, Attributes.MAX_HEALTH, hp);
         scaleAttribute(boss, Attributes.ATTACK_DAMAGE, 1.0 + round * AbyssConfig.DAMAGE_SCALE_PER_ROUND.get());
         setAttribute(boss, Attributes.KNOCKBACK_RESISTANCE, 1.0);
         AttributeInstance scale = boss.getAttribute(Attributes.SCALE);
         if (scale != null) {
-            scale.setBaseValue(finale ? 1.35 : 1.15);
+            scale.setBaseValue(finale ? 1.35 : 1.5); // the Warlord is a squat, wide bruiser
         }
         boss.setHealth(boss.getMaxHealth());
 
         boss.setPersistenceRequired();
         boss.getPersistentData().putBoolean("aztecabyss_wave_mob", true); // for arena cleanup
         boss.getPersistentData().putBoolean("aztecabyss_boss", true);
-        // Always trackable - the Warden is huge and the arena is dark.
+        // Always trackable - the boss is huge and the arena is dark.
         boss.addEffect(new MobEffectInstance(MobEffects.GLOWING, Integer.MAX_VALUE, 0, false, false));
         level.addFreshEntity(boss);
 
@@ -402,18 +410,23 @@ public final class RoundManager {
         game.setBossHealthFraction(1.0f);
         game.setLastBossAbilityAt(level.getGameTime());
 
-        String name = finale ? "THE DEVOURER" : "WARDEN OF THE ABYSS";
+        String name = finale ? "THE DEVOURER" : "THE OBSIDIAN WARLORD";
+        String flavor = finale ? "§cThe Warden claws its way out of the dark..."
+                               : "§cA hulking brute charges from the temple steps...";
         for (ServerPlayer p : present) {
-            title(p, "§4§l⚔ " + name, "§cThe Warden claws its way out of the dark...");
-            level.playSound(null, p.blockPosition(), SoundEvents.WARDEN_EMERGE, SoundSource.HOSTILE, 1.0F, 1.0F);
+            title(p, "§4§l⚔ " + name, flavor);
+            level.playSound(null, p.blockPosition(),
+                    finale ? SoundEvents.WARDEN_EMERGE : SoundEvents.RAVAGER_ROAR, SoundSource.HOSTILE, 1.0F, finale ? 1.0F : 0.8F);
             level.playSound(null, p.blockPosition(), ModSounds.AMBIENT_DREAD.get(), SoundSource.HOSTILE, 1.0F, 0.5F);
-            p.addEffect(new MobEffectInstance(MobEffects.DARKNESS, 120, 0, false, false));
+            if (finale) {
+                p.addEffect(new MobEffectInstance(MobEffects.DARKNESS, 120, 0, false, false));
+            }
         }
         for (ServerBossEvent bar : BOSS_BARS.values()) {
             bar.setName(Component.literal("§4⚔ " + name));
             bar.setColor(BossEvent.BossBarColor.RED);
             bar.setProgress(1.0F);
-            bar.setDarkenScreen(true);
+            bar.setDarkenScreen(finale); // only the Warden blacks out the sky
             bar.setCreateWorldFog(true);
             bar.setPlayBossMusic(true);
         }
@@ -446,13 +459,17 @@ public final class RoundManager {
             }
         }
 
+        boolean finale = isFinaleBoss();
         long now = level.getGameTime();
         int abilityCd = enraged ? 70 : 120; // roughly every 3.5s / 6s
         if (now - game.getLastBossAbilityAt() >= abilityCd) {
             game.setLastBossAbilityAt(now);
             for (ServerPlayer p : present) {
-                p.addEffect(new MobEffectInstance(MobEffects.DARKNESS, 80, 0, false, false));
-                level.playSound(null, p.blockPosition(), SoundEvents.WARDEN_ROAR, SoundSource.HOSTILE, 0.9F, 1.0F);
+                if (finale) {
+                    p.addEffect(new MobEffectInstance(MobEffects.DARKNESS, 80, 0, false, false));
+                }
+                level.playSound(null, p.blockPosition(),
+                        finale ? SoundEvents.WARDEN_ROAR : SoundEvents.RAVAGER_ROAR, SoundSource.HOSTILE, 0.9F, finale ? 1.0F : 0.85F);
             }
             int cap = AbyssConfig.MAX_CONCURRENT_ALIVE.get();
             int summon = Math.min((enraged ? 5 : 3) + present.size(), Math.max(0, cap - game.getAliveZombies()));
@@ -484,11 +501,14 @@ public final class RoundManager {
     /** Starts the slam wind-up: a loud charge and a warning to anyone in the blast ring. */
     private static void beginGroundSlam(ServerLevel level, LivingEntity boss, List<ServerPlayer> present, long landAt) {
         game.setBossSlamAt(landAt);
-        level.playSound(null, boss.blockPosition(), SoundEvents.WARDEN_SONIC_CHARGE, SoundSource.HOSTILE, 1.2F, 0.9F);
+        boolean finale = isFinaleBoss();
+        level.playSound(null, boss.blockPosition(),
+                finale ? SoundEvents.WARDEN_SONIC_CHARGE : SoundEvents.RAVAGER_ROAR, SoundSource.HOSTILE, 1.2F, finale ? 0.9F : 0.7F);
+        String who = finale ? "The Warden rears back" : "The Warlord raises its fists";
         for (ServerPlayer p : present) {
             if (p.distanceToSqr(boss) <= SLAM_RADIUS * SLAM_RADIUS
                     && !p.getData(ModAttachments.RUN_STATE).isDowned()) {
-                actionBar(p, "§c§l⚠ The Warden rears back — get out of the ring!");
+                actionBar(p, "§c§l⚠ " + who + " — get out of the ring!");
             }
         }
     }
@@ -498,26 +518,33 @@ public final class RoundManager {
         if (level.getGameTime() % 3L != 0L) {
             return;
         }
+        boolean finale = isFinaleBoss();
         int points = 28;
         for (int i = 0; i < points; i++) {
             double a = (Math.PI * 2.0 * i) / points;
             double x = boss.getX() + Math.cos(a) * SLAM_RADIUS;
             double z = boss.getZ() + Math.sin(a) * SLAM_RADIUS;
-            level.sendParticles(ParticleTypes.SCULK_CHARGE_POP, x, boss.getY() + 0.15, z, 1, 0.0, 0.0, 0.0, 0.0);
+            level.sendParticles(finale ? ParticleTypes.SCULK_CHARGE_POP : ParticleTypes.CRIT,
+                    x, boss.getY() + 0.15, z, 1, 0.0, 0.0, 0.0, 0.0);
         }
-        level.sendParticles(ParticleTypes.SONIC_BOOM, boss.getX(), boss.getY() + 1.2, boss.getZ(), 1, 0, 0, 0, 0);
+        if (finale) {
+            level.sendParticles(ParticleTypes.SONIC_BOOM, boss.getX(), boss.getY() + 1.2, boss.getZ(), 1, 0, 0, 0, 0);
+        }
     }
 
     private static void enrageBoss(ServerLevel level, LivingEntity boss, List<ServerPlayer> present) {
         game.setBossEnraged(true);
+        boolean finale = isFinaleBoss();
         boss.addEffect(new MobEffectInstance(MobEffects.MOVEMENT_SPEED, Integer.MAX_VALUE, 1, false, false));
         boss.addEffect(new MobEffectInstance(MobEffects.DAMAGE_BOOST, Integer.MAX_VALUE, 1, false, false));
+        String who = finale ? "THE WARDEN ENRAGES" : "THE WARLORD ENRAGES";
         for (ServerPlayer p : present) {
-            title(p, "§4§lTHE WARDEN ENRAGES", "§cIt will not stop now.");
-            level.playSound(null, p.blockPosition(), SoundEvents.WARDEN_ANGRY, SoundSource.HOSTILE, 1.2F, 0.8F);
+            title(p, "§4§l" + who, "§cIt will not stop now.");
+            level.playSound(null, p.blockPosition(),
+                    finale ? SoundEvents.WARDEN_ANGRY : SoundEvents.RAVAGER_ROAR, SoundSource.HOSTILE, 1.2F, finale ? 0.8F : 0.6F);
         }
         for (ServerBossEvent bar : BOSS_BARS.values()) {
-            bar.setName(Component.literal("§4§l⚔ ENRAGED WARDEN"));
+            bar.setName(Component.literal(finale ? "§4§l⚔ ENRAGED WARDEN" : "§4§l⚔ ENRAGED WARLORD"));
         }
     }
 
@@ -544,9 +571,13 @@ public final class RoundManager {
             p.hurtMarked = true;
             p.connection.send(new ClientboundSetEntityMotionPacket(p));
         }
-        level.sendParticles(ParticleTypes.SONIC_BOOM, boss.getX(), boss.getY() + 1.2, boss.getZ(), 1, 0, 0, 0, 0);
+        boolean finale = isFinaleBoss();
+        if (finale) {
+            level.sendParticles(ParticleTypes.SONIC_BOOM, boss.getX(), boss.getY() + 1.2, boss.getZ(), 1, 0, 0, 0, 0);
+        }
         level.sendParticles(ParticleTypes.EXPLOSION, boss.getX(), boss.getY() + 0.2, boss.getZ(), 8, 2.5, 0.2, 2.5, 0.0);
-        level.playSound(null, boss.blockPosition(), SoundEvents.WARDEN_SONIC_BOOM, SoundSource.HOSTILE, 1.2F, 0.8F);
+        level.playSound(null, boss.blockPosition(),
+                finale ? SoundEvents.WARDEN_SONIC_BOOM : SoundEvents.GENERIC_EXPLODE, SoundSource.HOSTILE, 1.2F, 0.8F);
     }
 
     /** The boss died: end the spectacle, reward the arena, let the round clear. */
@@ -564,9 +595,10 @@ public final class RoundManager {
 
         boolean finale = game.getRound() >= AbyssConfig.MAX_ROUND.get();
         for (ServerPlayer p : participantPlayers(level)) {
-            title(p, "§6§l⚔ THE WARDEN FALLS",
-                    finale ? "§eThe Abyss is conquered." : "§eThe dark recoils. Press on.");
-            level.playSound(null, p.blockPosition(), SoundEvents.WARDEN_DEATH, SoundSource.HOSTILE, 1.0F, 1.0F);
+            title(p, finale ? "§6§l⚔ THE WARDEN FALLS" : "§6§l⚔ THE WARLORD FALLS",
+                    finale ? "§eThe Abyss is conquered." : "§eThe brute crumbles. Press on.");
+            level.playSound(null, p.blockPosition(),
+                    finale ? SoundEvents.WARDEN_DEATH : SoundEvents.RAVAGER_DEATH, SoundSource.HOSTILE, 1.0F, 1.0F);
             p.removeEffect(MobEffects.DARKNESS);
         }
         for (ServerBossEvent bar : BOSS_BARS.values()) {
