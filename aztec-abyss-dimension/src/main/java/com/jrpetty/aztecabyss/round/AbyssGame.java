@@ -50,6 +50,8 @@ public final class AbyssGame {
     private long lastBossAbilityAt = 0L;
     /** True once the boss has crossed its enrage threshold this round. */
     private boolean bossEnraged = false;
+    /** Game-time the pending ground slam lands (0 = none charging), for the dodge window. */
+    private long bossSlamAt = 0L;
 
     // --- Easter-egg ritual state ---
     /** Braziers lit so far, in the order the player lit them. */
@@ -190,6 +192,14 @@ public final class AbyssGame {
 
     public void setBossEnraged(boolean v) {
         this.bossEnraged = v;
+    }
+
+    public long getBossSlamAt() {
+        return bossSlamAt;
+    }
+
+    public void setBossSlamAt(long v) {
+        this.bossSlamAt = v;
     }
 
     public void removeParticipant(UUID id) {

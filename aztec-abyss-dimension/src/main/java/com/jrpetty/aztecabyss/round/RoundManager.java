@@ -366,6 +366,7 @@ public final class RoundManager {
         game.setBossId(boss.getUUID());
         game.setBossActive(true);
         game.setBossEnraged(false);
+        game.setBossSlamAt(0L);
         game.setBossHealthFraction(1.0f);
         game.setLastBossAbilityAt(level.getGameTime());
 
@@ -429,11 +430,50 @@ public final class RoundManager {
             }
         }
 
-        // Ground slam: a telegraphed sonic shockwave that flings nearby hunters.
-        int slamInterval = enraged ? 60 : 100;
-        if (now % slamInterval == 0L) {
-            groundSlam(level, boss, present);
+        // Ground slam: charge up (telegraph) first, then land - so it can be dodged.
+        long slamAt = game.getBossSlamAt();
+        if (slamAt == 0L) {
+            int slamInterval = enraged ? 90 : 130;
+            if (now % slamInterval == 0L) {
+                beginGroundSlam(level, boss, present, now + SLAM_WINDUP_TICKS);
+            }
+        } else {
+            telegraphSlam(level, boss);
+            if (now >= slamAt) {
+                game.setBossSlamAt(0L);
+                groundSlam(level, boss, present);
+            }
         }
+    }
+
+    private static final double SLAM_RADIUS = 6.0;
+    private static final int SLAM_WINDUP_TICKS = 34; // ~1.7s to sprint clear of the ring
+
+    /** Starts the slam wind-up: a loud charge and a warning to anyone in the blast ring. */
+    private static void beginGroundSlam(ServerLevel level, LivingEntity boss, List<ServerPlayer> present, long landAt) {
+        game.setBossSlamAt(landAt);
+        level.playSound(null, boss.blockPosition(), SoundEvents.WARDEN_SONIC_CHARGE, SoundSource.HOSTILE, 1.2F, 0.9F);
+        for (ServerPlayer p : present) {
+            if (p.distanceToSqr(boss) <= SLAM_RADIUS * SLAM_RADIUS
+                    && !p.getData(ModAttachments.RUN_STATE).isDowned()) {
+                actionBar(p, "§c§l⚠ The Warden rears back — get out of the ring!");
+            }
+        }
+    }
+
+    /** Draws the glowing danger ring each tick during the wind-up so the AoE is readable. */
+    private static void telegraphSlam(ServerLevel level, LivingEntity boss) {
+        if (level.getGameTime() % 3L != 0L) {
+            return;
+        }
+        int points = 28;
+        for (int i = 0; i < points; i++) {
+            double a = (Math.PI * 2.0 * i) / points;
+            double x = boss.getX() + Math.cos(a) * SLAM_RADIUS;
+            double z = boss.getZ() + Math.sin(a) * SLAM_RADIUS;
+            level.sendParticles(ParticleTypes.SCULK_CHARGE_POP, x, boss.getY() + 0.15, z, 1, 0.0, 0.0, 0.0, 0.0);
+        }
+        level.sendParticles(ParticleTypes.SONIC_BOOM, boss.getX(), boss.getY() + 1.2, boss.getZ(), 1, 0, 0, 0, 0);
     }
 
     private static void enrageBoss(ServerLevel level, LivingEntity boss, List<ServerPlayer> present) {
@@ -449,15 +489,15 @@ public final class RoundManager {
         }
     }
 
+    /** Lands the slam: only players who failed to leave the telegraphed ring are hit. */
     private static void groundSlam(ServerLevel level, LivingEntity boss, List<ServerPlayer> present) {
-        double radius = 7.0;
-        float damage = (float) (5.0 + game.getRound() * 0.4);
+        float damage = (float) (4.0 + game.getRound() * 0.3); // r10 ~7, r20 ~10 - survivable, and dodgeable
         for (ServerPlayer p : present) {
             if (p.getData(ModAttachments.RUN_STATE).isDowned()) {
                 continue; // downed players are already invulnerable
             }
-            if (p.distanceToSqr(boss) > radius * radius) {
-                continue;
+            if (p.distanceToSqr(boss) > SLAM_RADIUS * SLAM_RADIUS) {
+                continue; // stepped clear of the ring in time - no hit
             }
             p.hurt(boss.damageSources().mobAttack(boss), damage);
             double dx = p.getX() - boss.getX();
@@ -468,7 +508,7 @@ public final class RoundManager {
                 dz = RNG.nextDouble() - 0.5;
                 len = Math.sqrt(dx * dx + dz * dz) + 0.001;
             }
-            p.push(dx / len * 1.3, 0.75, dz / len * 1.3);
+            p.push(dx / len * 1.0, 0.55, dz / len * 1.0);
             p.hurtMarked = true;
             p.connection.send(new ClientboundSetEntityMotionPacket(p));
         }
