@@ -22,6 +22,9 @@ public final class ClientAbyssState {
     /** Whether the live HUD panel is shown (toggled by the keybind). */
     private static volatile boolean hudVisible = true;
 
+    /** Epoch millis the re-entry cooldown ends (0 / past = no active lockout). */
+    private static volatile long cooldownUntil = 0L;
+
     /** Counts down while the arrival cinematic plays (client ticks). 0 = not playing. */
     private static int cinematicTicks = 0;
 
@@ -48,6 +51,15 @@ public final class ClientAbyssState {
 
     public static void openRecap(RunRecapPayload payload) {
         Minecraft.getInstance().setScreen(new RunRecapScreen(payload));
+    }
+
+    public static void acceptCooldown(com.jrpetty.aztecabyss.network.AbyssCooldownPayload payload) {
+        cooldownUntil = payload.cooldownUntil();
+    }
+
+    /** Millis remaining on the re-entry lockout, or 0 if none. */
+    public static long cooldownRemainingMillis() {
+        return Math.max(0L, cooldownUntil - System.currentTimeMillis());
     }
 
     public static boolean isInRun() {

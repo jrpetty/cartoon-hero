@@ -116,6 +116,9 @@ public final class AbyssEventHandler {
     public void onPlayerLoggedIn(PlayerEvent.PlayerLoggedInEvent event) {
         if (event.getEntity() instanceof ServerPlayer player) {
             RoundManager.resolveOwedRewardOnLogin(player);
+            // Restore the on-screen re-entry countdown if a lockout is still running.
+            com.jrpetty.aztecabyss.network.ModNetworking.sendCooldown(
+                    player, player.getData(ModAttachments.RUN_STATE).getCooldownUntil());
         }
     }
 

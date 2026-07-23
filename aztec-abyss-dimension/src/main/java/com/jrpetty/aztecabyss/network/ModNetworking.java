@@ -31,6 +31,10 @@ public final class ModNetworking {
                 RunRecapPayload.TYPE,
                 RunRecapPayload.STREAM_CODEC,
                 (payload, context) -> context.enqueueWork(() -> ClientAbyssState.openRecap(payload)));
+        registrar.playToClient(
+                AbyssCooldownPayload.TYPE,
+                AbyssCooldownPayload.STREAM_CODEC,
+                (payload, context) -> context.enqueueWork(() -> ClientAbyssState.acceptCooldown(payload)));
     }
 
     public static void sendState(ServerPlayer player, boolean inRun, int round) {
@@ -47,6 +51,11 @@ public final class ModNetworking {
         PacketDistributor.sendToPlayer(player, new AbyssStatePayload(
                 true, round, fogRound, enemiesRemaining,
                 AbyssStatePayload.packPlayers(playersUp, playersTotal), myKills));
+    }
+
+    /** Pushes the player's re-entry cooldown deadline so their screen can count it down. */
+    public static void sendCooldown(ServerPlayer player, long cooldownUntil) {
+        PacketDistributor.sendToPlayer(player, new AbyssCooldownPayload(cooldownUntil));
     }
 
     public static void sendRecap(ServerPlayer player, int round, int kills, int revives, int survivalSeconds,

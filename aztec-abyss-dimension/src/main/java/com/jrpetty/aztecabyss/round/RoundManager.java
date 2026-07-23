@@ -936,6 +936,7 @@ public final class RoundManager {
         if (!victory) {
             rs.setCooldownUntil(System.currentTimeMillis() + AbyssConfig.cooldownMillis());
         }
+        ModNetworking.sendCooldown(player, rs.getCooldownUntil()); // drive the on-screen countdown
         rs.recordRound(round);
 
         long now = System.currentTimeMillis();
