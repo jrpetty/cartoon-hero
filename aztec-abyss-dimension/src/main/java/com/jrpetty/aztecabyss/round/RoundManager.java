@@ -361,13 +361,14 @@ public final class RoundManager {
     }
 
     /**
-     * Plays a boss sound through a single-target-typed parameter. Passing a
-     * conditional ({@code finale ? A : B}) straight into the heavily overloaded
-     * {@code level.playSound} makes the poly conditional unresolvable; routing it
-     * through this non-overloaded helper gives it one target type and compiles.
+     * Plays a boss sound through a single-target-typed parameter. The Warden and
+     * Ravager {@code SoundEvents} constants are plain {@link net.minecraft.sounds.SoundEvent}s,
+     * so a {@code finale ? A : B} conditional resolves cleanly here; passing that
+     * conditional straight into the heavily overloaded {@code level.playSound}
+     * leaves the poly conditional unresolvable.
      */
     private static void bossSound(ServerLevel level, BlockPos pos,
-            net.minecraft.core.Holder<net.minecraft.sounds.SoundEvent> sound, float volume, float pitch) {
+            net.minecraft.sounds.SoundEvent sound, float volume, float pitch) {
         level.playSound(null, pos, sound, SoundSource.HOSTILE, volume, pitch);
     }
 
@@ -592,7 +593,9 @@ public final class RoundManager {
         if (finale) {
             level.playSound(null, boss.blockPosition(), SoundEvents.WARDEN_SONIC_BOOM, SoundSource.HOSTILE, 1.2F, 0.8F);
         } else {
-            level.playSound(null, boss.blockPosition(), SoundEvents.GENERIC_EXPLODE, SoundSource.HOSTILE, 1.2F, 0.8F);
+            // GENERIC_EXPLODE is a Holder.Reference here (unlike the SoundEvent-typed
+            // Warden/Ravager constants), so unwrap it to the SoundEvent.
+            level.playSound(null, boss.blockPosition(), SoundEvents.GENERIC_EXPLODE.value(), SoundSource.HOSTILE, 1.2F, 0.8F);
         }
     }
 
