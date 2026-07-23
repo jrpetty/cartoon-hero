@@ -72,6 +72,13 @@ public final class AbyssEventHandler {
             return;
         }
 
+        // The Warden boss died: end the boss round (its own path, not the adds counter).
+        if (dying instanceof Mob boss && boss.getPersistentData().getBoolean("aztecabyss_boss")) {
+            ServerPlayer killer = event.getSource().getEntity() instanceof ServerPlayer sp ? sp : null;
+            RoundManager.onBossKilled(level, killer, boss.blockPosition());
+            return;
+        }
+
         // Any wave mob died (zombie, skeleton, creeper, ...): credit the killing participant.
         if (dying instanceof Mob mob && mob.getPersistentData().getBoolean("aztecabyss_wave_mob")) {
             ServerPlayer killer = event.getSource().getEntity() instanceof ServerPlayer sp ? sp : null;

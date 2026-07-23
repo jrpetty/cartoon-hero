@@ -23,10 +23,12 @@ import net.minecraft.world.effect.MobEffects;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.EquipmentSlot;
+import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.MobSpawnType;
 import net.minecraft.world.entity.ai.attributes.AttributeInstance;
 import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.entity.Mob;
+import net.minecraft.sounds.SoundEvents;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
@@ -128,6 +130,7 @@ public final class RoundManager {
         List<ServerPlayer> present = participantPlayers(level);
         if (present.isEmpty()) {
             if (game.getPhase() != AbyssGame.Phase.IDLE) {
+                clearWaveMobs(level); // don't orphan a boss/adds when the arena empties
                 resetSession();
             }
             return;
@@ -158,7 +161,14 @@ public final class RoundManager {
             case IN_ROUND -> {
                 spawnQueued(level, present);
                 hordeAmbience(level, present);
-                if (game.getSpawnedThisRound() >= game.getKillsNeededThisRound() && game.getAliveZombies() <= 0) {
+                if (game.isBossRound()) {
+                    tickBoss(level, present);
+                    // The round ends only when the Warden is slain, not when the adds run out.
+                    if (game.isBossSpawned() && !game.isBossActive()) {
+                        clearWaveMobs(level);
+                        onRoundCleared(level);
+                    }
+                } else if (game.getSpawnedThisRound() >= game.getKillsNeededThisRound() && game.getAliveZombies() <= 0) {
                     onRoundCleared(level);
                 }
                 updateBossBars();
@@ -174,8 +184,18 @@ public final class RoundManager {
         game.setPhase(AbyssGame.Phase.IN_ROUND);
         game.setKillsThisRound(0);
         game.setSpawnedThisRound(0);
-        game.setKillsNeededThisRound(waveSize(round, Math.max(1, game.getParticipants().size())));
         game.setPhaseChangedAt(level.getGameTime());
+
+        boolean bossRound = isBossRound(round);
+        game.setBossRound(bossRound);
+        game.setBossActive(false);
+        game.setBossId(null);
+        game.setBossHealthFraction(0f);
+
+        int fullWave = waveSize(round, Math.max(1, game.getParticipants().size()));
+        // On a boss round the Warden is the objective; the wave is trimmed to a
+        // pressure of adds (the boss summons more as the fight drags on).
+        game.setKillsNeededThisRound(bossRound ? Math.max(4, fullWave / 3) : fullWave);
         com.jrpetty.aztecabyss.worldgen.ArenaGenerator.escalateTemple(level, round);
 
         int max = AbyssConfig.MAX_ROUND.get();
@@ -191,7 +211,19 @@ public final class RoundManager {
             bar.setName(Component.literal("Round " + round + " — Aztec Abyss"));
             bar.setColor(round >= 15 ? BossEvent.BossBarColor.RED : round >= 8 ? BossEvent.BossBarColor.YELLOW : BossEvent.BossBarColor.WHITE);
             bar.setProgress(0.0F);
+            bar.setDarkenScreen(false);
+            bar.setCreateWorldFog(false);
+            bar.setPlayBossMusic(false);
         }
+
+        if (bossRound) {
+            spawnBoss(level, round, participantPlayers(level));
+        }
+    }
+
+    /** Boss rounds: the mid-run gauntlet (10) and the final round. */
+    private static boolean isBossRound(int round) {
+        return round == 10 || round == AbyssConfig.MAX_ROUND.get();
     }
 
     private static void spawnQueued(ServerLevel level, List<ServerPlayer> present) {
@@ -285,6 +317,157 @@ public final class RoundManager {
         if (inst != null) {
             inst.setBaseValue(inst.getBaseValue() * mult);
         }
+    }
+
+    private static void setAttribute(Mob mob, net.minecraft.core.Holder<net.minecraft.world.entity.ai.attributes.Attribute> attr, double value) {
+        AttributeInstance inst = mob.getAttribute(attr);
+        if (inst != null) {
+            inst.setBaseValue(value);
+        }
+    }
+
+    // ------------------------------------------------------------------
+    // Boss rounds - the Warden rises (round 10 and the final round)
+    // ------------------------------------------------------------------
+
+    /** Fixed, dramatic spawn point: between the arrival walkway and the temple. */
+    private static final BlockPos BOSS_SPAWN = new BlockPos(0, AztecAbyssConstants.ARENA_FLOOR_Y + 1, 16);
+
+    private static void spawnBoss(ServerLevel level, int round, List<ServerPlayer> present) {
+        boolean finale = round >= AbyssConfig.MAX_ROUND.get();
+        Mob boss = EntityType.WARDEN.create(level);
+        if (boss == null) {
+            return;
+        }
+        boss.moveTo(BOSS_SPAWN.getX() + 0.5, BOSS_SPAWN.getY(), BOSS_SPAWN.getZ() + 0.5, 180.0F, 0.0F);
+        boss.finalizeSpawn(level, level.getCurrentDifficultyAt(BOSS_SPAWN), MobSpawnType.EVENT, null);
+
+        // Explicit, hand-tuned stat line rather than the generic wave scaling: a
+        // huge but not interminable health pool, brutal hits, unshakable footing.
+        double hp = 400.0 + round * 30.0;                // r10 ~700, r20 ~1000
+        setAttribute(boss, Attributes.MAX_HEALTH, hp);
+        scaleAttribute(boss, Attributes.ATTACK_DAMAGE, 1.0 + round * AbyssConfig.DAMAGE_SCALE_PER_ROUND.get());
+        setAttribute(boss, Attributes.KNOCKBACK_RESISTANCE, 1.0);
+        AttributeInstance scale = boss.getAttribute(Attributes.SCALE);
+        if (scale != null) {
+            scale.setBaseValue(finale ? 1.35 : 1.15);
+        }
+        boss.setHealth(boss.getMaxHealth());
+
+        boss.setPersistenceRequired();
+        boss.getPersistentData().putBoolean("aztecabyss_wave_mob", true); // for arena cleanup
+        boss.getPersistentData().putBoolean("aztecabyss_boss", true);
+        // Always trackable - the Warden is huge and the arena is dark.
+        boss.addEffect(new MobEffectInstance(MobEffects.GLOWING, Integer.MAX_VALUE, 0, false, false));
+        level.addFreshEntity(boss);
+
+        game.setBossId(boss.getUUID());
+        game.setBossActive(true);
+        game.setBossHealthFraction(1.0f);
+        game.setLastBossAbilityAt(level.getGameTime());
+
+        String name = finale ? "THE DEVOURER" : "WARDEN OF THE ABYSS";
+        for (ServerPlayer p : present) {
+            title(p, "§4§l⚔ " + name, "§cThe Warden claws its way out of the dark...");
+            level.playSound(null, p.blockPosition(), SoundEvents.WARDEN_EMERGE, SoundSource.HOSTILE, 1.0F, 1.0F);
+            level.playSound(null, p.blockPosition(), ModSounds.AMBIENT_DREAD.get(), SoundSource.HOSTILE, 1.0F, 0.5F);
+            p.addEffect(new MobEffectInstance(MobEffects.DARKNESS, 120, 0, false, false));
+        }
+        for (ServerBossEvent bar : BOSS_BARS.values()) {
+            bar.setName(Component.literal("§4⚔ " + name));
+            bar.setColor(BossEvent.BossBarColor.RED);
+            bar.setProgress(1.0F);
+            bar.setDarkenScreen(true);
+            bar.setCreateWorldFog(true);
+            bar.setPlayBossMusic(true);
+        }
+    }
+
+    /** Per-tick boss behaviour: keep it hunting, pulse its signature abilities, summon adds. */
+    private static void tickBoss(ServerLevel level, List<ServerPlayer> present) {
+        if (!game.isBossActive() || game.getBossId() == null) {
+            return;
+        }
+        Entity e = level.getEntity(game.getBossId());
+        if (!(e instanceof LivingEntity boss) || !boss.isAlive()) {
+            // Boss vanished without a death event (e.g. chunk edge) - treat as slain.
+            game.setBossActive(false);
+            return;
+        }
+        game.setBossHealthFraction((float) (boss.getHealth() / boss.getMaxHealth()));
+
+        // Keep the Warden locked onto a standing hunter so it never idles.
+        if (boss instanceof Mob m && level.getGameTime() % 20L == 0L) {
+            ServerPlayer target = pickTarget(present);
+            if (target != null && (m.getTarget() == null || !m.getTarget().isAlive())) {
+                m.setTarget(target);
+            }
+        }
+
+        long now = level.getGameTime();
+        if (now - game.getLastBossAbilityAt() >= 120L) { // roughly every 6s
+            game.setLastBossAbilityAt(now);
+            for (ServerPlayer p : present) {
+                p.addEffect(new MobEffectInstance(MobEffects.DARKNESS, 80, 0, false, false));
+                level.playSound(null, p.blockPosition(), SoundEvents.WARDEN_ROAR, SoundSource.HOSTILE, 0.9F, 1.0F);
+            }
+            int cap = AbyssConfig.MAX_CONCURRENT_ALIVE.get();
+            int summon = Math.min(3 + present.size(), Math.max(0, cap - game.getAliveZombies()));
+            for (int i = 0; i < summon; i++) {
+                spawnWaveMob(level, present, game.getRound(), false);
+                game.setAliveZombies(game.getAliveZombies() + 1);
+            }
+        }
+    }
+
+    /** The boss died: end the spectacle, reward the arena, let the round clear. */
+    public static void onBossKilled(ServerLevel level, ServerPlayer killer, BlockPos pos) {
+        if (!game.isBossActive()) {
+            return;
+        }
+        game.setBossActive(false);
+        game.setBossHealthFraction(0f);
+        if (killer != null) {
+            RunState rs = killer.getData(ModAttachments.RUN_STATE);
+            rs.addKill();
+            killer.setData(ModAttachments.RUN_STATE, rs);
+        }
+
+        boolean finale = game.getRound() >= AbyssConfig.MAX_ROUND.get();
+        for (ServerPlayer p : participantPlayers(level)) {
+            title(p, "§6§l⚔ THE WARDEN FALLS",
+                    finale ? "§eThe Abyss is conquered." : "§eThe dark recoils. Press on.");
+            level.playSound(null, p.blockPosition(), SoundEvents.WARDEN_DEATH, SoundSource.HOSTILE, 1.0F, 1.0F);
+            p.removeEffect(MobEffects.DARKNESS);
+        }
+        for (ServerBossEvent bar : BOSS_BARS.values()) {
+            bar.setProgress(0.0F);
+            bar.setDarkenScreen(false);
+            bar.setCreateWorldFog(false);
+            bar.setPlayBossMusic(false);
+        }
+
+        // An immediate in-arena payoff for felling the boss (the run-end chest is separate).
+        for (ItemStack drop : bossBonusDrop(game.getRound())) {
+            level.addFreshEntity(new ItemEntity(level,
+                    pos.getX() + 0.5, pos.getY() + 1.0, pos.getZ() + 0.5, drop));
+        }
+    }
+
+    private static ItemStack[] bossBonusDrop(int round) {
+        boolean finale = round >= AbyssConfig.MAX_ROUND.get();
+        if (finale) {
+            return new ItemStack[]{
+                    new ItemStack(Items.NETHERITE_INGOT, 2),
+                    new ItemStack(Items.ENCHANTED_GOLDEN_APPLE, 2),
+                    new ItemStack(Items.EXPERIENCE_BOTTLE, 24),
+            };
+        }
+        return new ItemStack[]{
+                new ItemStack(Items.NETHERITE_SCRAP, 2),
+                new ItemStack(Items.ENCHANTED_GOLDEN_APPLE, 1),
+                new ItemStack(Items.EXPERIENCE_BOTTLE, 12),
+        };
     }
 
     /** Called from the wave-mob death handler with the killer (if a participant). */
@@ -773,10 +956,16 @@ public final class RoundManager {
     }
 
     private static void updateBossBars() {
-        if (game.getKillsNeededThisRound() <= 0) {
-            return;
+        float progress;
+        if (game.isBossRound() && game.isBossActive()) {
+            // During a boss round the bar tracks the Warden's remaining health.
+            progress = Math.max(0.0F, Math.min(1.0F, game.getBossHealthFraction()));
+        } else {
+            if (game.getKillsNeededThisRound() <= 0) {
+                return;
+            }
+            progress = Math.max(0.0F, Math.min(1.0F, (float) game.getKillsThisRound() / game.getKillsNeededThisRound()));
         }
-        float progress = Math.max(0.0F, Math.min(1.0F, (float) game.getKillsThisRound() / game.getKillsNeededThisRound()));
         for (ServerBossEvent bar : BOSS_BARS.values()) {
             bar.setProgress(progress);
         }

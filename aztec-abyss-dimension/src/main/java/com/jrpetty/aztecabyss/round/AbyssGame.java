@@ -37,6 +37,18 @@ public final class AbyssGame {
     /** True once this run has ever had more than one participant - classifies the run as co-op. */
     private boolean everMultiplayer = false;
 
+    // --- Boss-round state (rounds 10 and the final round summon the Warden) ---
+    /** True while the current round is a boss round. */
+    private boolean bossRound = false;
+    /** True while the boss is alive; flips false when it dies or vanishes. */
+    private boolean bossActive = false;
+    /** The living boss's UUID (null until spawned this round). */
+    private UUID bossId = null;
+    /** Cached boss HP fraction (0..1) for driving the boss bar. */
+    private float bossHealthFraction = 0f;
+    /** Game-time of the boss's last special ability, for cooldown pacing. */
+    private long lastBossAbilityAt = 0L;
+
     // --- Easter-egg ritual state ---
     /** Braziers lit so far, in the order the player lit them. */
     private final List<Integer> ritualSequence = new ArrayList<>();
@@ -121,6 +133,53 @@ public final class AbyssGame {
 
     public boolean isMultiplayerRun() {
         return everMultiplayer;
+    }
+
+    // --- Boss round ---
+
+    public boolean isBossRound() {
+        return bossRound;
+    }
+
+    public void setBossRound(boolean v) {
+        this.bossRound = v;
+    }
+
+    public boolean isBossActive() {
+        return bossActive;
+    }
+
+    public void setBossActive(boolean v) {
+        this.bossActive = v;
+    }
+
+    public UUID getBossId() {
+        return bossId;
+    }
+
+    public void setBossId(UUID id) {
+        this.bossId = id;
+    }
+
+    /** True once the boss has been spawned this round (even if since slain). */
+    public boolean isBossSpawned() {
+        return bossId != null;
+    }
+
+    public float getBossHealthFraction() {
+        return bossHealthFraction;
+    }
+
+    public void setBossHealthFraction(float v) {
+        this.bossHealthFraction = v;
+    }
+
+    public long getLastBossAbilityAt() {
+        return lastBossAbilityAt;
+    }
+
+    public void setLastBossAbilityAt(long v) {
+        this.lastBossAbilityAt = v;
     }
 
     public void removeParticipant(UUID id) {
