@@ -71,6 +71,14 @@ public final class AbyssClientEffects {
             }
         }
 
+        // Floating embers drifting up for depth over the base spore layer.
+        for (int i = 0; i < 3; i++) {
+            double x = player.getX() + (mc.level.random.nextDouble() - 0.5) * 30;
+            double y = player.getY() + mc.level.random.nextDouble() * 10 - 2;
+            double z = player.getZ() + (mc.level.random.nextDouble() - 0.5) * 30;
+            mc.level.addParticle(ParticleTypes.SMALL_FLAME, x, y, z, 0, 0.02 + mc.level.random.nextDouble() * 0.02, 0);
+        }
+
         // Fog round: thicken the air with extra low-drifting ash motes.
         if (ClientAbyssState.isFogRound()) {
             for (int i = 0; i < 10; i++) {
@@ -187,24 +195,24 @@ public final class AbyssClientEffects {
         int kills = ClientAbyssState.getMyKills();
 
         java.util.List<net.minecraft.network.chat.Component> lines = new java.util.ArrayList<>();
-        lines.add(net.minecraft.network.chat.Component.literal("§6§lTHE AZTEC ABYSS"));
+        lines.add(net.minecraft.network.chat.Component.literal("§6§l✦ THE AZTEC ABYSS ✦"));
         if (round <= 0) {
             lines.add(net.minecraft.network.chat.Component.literal("§7Preparing the hunt..."));
         } else {
-            lines.add(net.minecraft.network.chat.Component.literal("§fRound §e§l" + round));
+            lines.add(net.minecraft.network.chat.Component.literal("§e§l⚔ §fRound §e§l" + round));
         }
         if (ClientAbyssState.isFogRound()) {
-            lines.add(net.minecraft.network.chat.Component.literal("§7§oA fog round — stay sharp"));
+            lines.add(net.minecraft.network.chat.Component.literal("§7§o≈ A fog round — stay sharp"));
         }
         if (round > 0) {
             lines.add(enemies > 0
-                    ? net.minecraft.network.chat.Component.literal("§fEnemies left: §c" + enemies)
-                    : net.minecraft.network.chat.Component.literal("§aWave clear"));
+                    ? net.minecraft.network.chat.Component.literal("§c⚔ §fLeft: §c" + enemies)
+                    : net.minecraft.network.chat.Component.literal("§a✔ Wave clear"));
         }
         if (total > 1) {
-            lines.add(net.minecraft.network.chat.Component.literal("§fSquad: §a" + up + "§7/" + total + " up"));
+            lines.add(net.minecraft.network.chat.Component.literal("§c❤ §fSquad: §a" + up + "§7/" + total + " up"));
         }
-        lines.add(net.minecraft.network.chat.Component.literal("§fYour kills: §b" + kills));
+        lines.add(net.minecraft.network.chat.Component.literal("§b✦ §fKills: §b" + kills));
 
         int pad = 4;
         int lineH = font.lineHeight + 2;
@@ -216,12 +224,16 @@ public final class AbyssClientEffects {
         int y = 6;
         int boxW = maxW + pad * 2;
         int boxH = lines.size() * lineH + pad * 2 - 2;
-        g.fill(x, y, x + boxW, y + boxH, 0x88000000);
-        g.fill(x, y, x + boxW, y + 1, 0xAA7A0E0E); // thin blood-red accent edge
+        g.fill(x, y, x + boxW, y + boxH, 0x99000000);
+        g.fill(x, y, x + boxW, y + 1, 0xC0B8860B);          // gold top accent
+        g.fill(x, y + boxH - 1, x + boxW, y + boxH, 0xC0B8860B); // gold bottom accent
         int ty = y + pad;
-        for (net.minecraft.network.chat.Component c : lines) {
-            g.drawString(font, c, x + pad, ty, 0xFFFFFF, true);
+        for (int idx = 0; idx < lines.size(); idx++) {
+            g.drawString(font, lines.get(idx), x + pad, ty, 0xFFFFFF, true);
             ty += lineH;
+            if (idx == 0) {
+                g.fill(x + pad, ty - 2, x + boxW - pad, ty - 1, 0x66FFD700); // gold divider under the title
+            }
         }
     }
 

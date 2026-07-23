@@ -66,6 +66,7 @@ final class TempleBuilder {
         placeRitualBraziers(level);
         carveEntranceCorridor(level, center);
         buildVault(level);
+        decorateExterior(level, center, floorY, topY, halfWidth);
 
         // Sentinel marker at the core - generateIfNeeded() checks this to know it's built.
         level.setBlock(center, GOLD_ACCENT, 3);
@@ -165,6 +166,73 @@ final class TempleBuilder {
         }
         level.setBlock(new BlockPos(cx, topY + 1, cz), Blocks.SOUL_SOIL.defaultBlockState(), 3);
         level.setBlock(new BlockPos(cx, topY + 2, cz), Blocks.SOUL_FIRE.defaultBlockState(), 3);
+    }
+
+    // ------------------------------------------------------------------
+    // Exterior detail pass - Aztec ornamentation on the finished pyramid
+    // ------------------------------------------------------------------
+
+    /**
+     * Dresses the finished pyramid so it reads as an ornate Aztec landmark rather
+     * than a plain stepped cube: soul-lanterns up the grand staircase, glyph
+     * studs and gold trim on each tier's south face, hanging vines off the tier
+     * lips, and a gold-based beacon projecting a beam from the summit.
+     */
+    private static void decorateExterior(ServerLevel level, BlockPos center, int floorY, int topY, int halfWidth) {
+        int cx = center.getX();
+        int cz = center.getZ();
+
+        // Soul-lanterns on gilded posts flanking the staircase.
+        int totalRise = topY - floorY;
+        for (int i = 0; i < totalRise; i += 2) {
+            int y = floorY + 1 + i;
+            int z = halfWidth - i;
+            for (int side : new int[]{-3, 3}) {
+                BlockPos post = new BlockPos(cx + side, y, cz + z);
+                if (!level.getBlockState(post).isAir()) {
+                    continue;
+                }
+                level.setBlock(post, GOLD_ACCENT, 3);
+                level.setBlock(post.above(), Blocks.SOUL_LANTERN.defaultBlockState(), 3);
+            }
+        }
+
+        // Per-tier ornamentation on the south face (the approach side).
+        for (int tier = 0; tier < AztecAbyssConstants.TEMPLE_TIERS; tier++) {
+            int hw = halfWidth - tier * AztecAbyssConstants.TEMPLE_STEP_IN;
+            int tierBase = floorY + tier * AztecAbyssConstants.TEMPLE_TIER_HEIGHT;
+            int yMid = tierBase + 1;
+            int faceZ = cz + hw;
+            BlockState glyph = (tier % 2 == 0)
+                    ? Blocks.RED_GLAZED_TERRACOTTA.defaultBlockState()
+                    : Blocks.ORANGE_GLAZED_TERRACOTTA.defaultBlockState();
+
+            for (int x = -hw + 2; x <= hw - 2; x += 4) {
+                // Glyph stud on the face, gold trim just above it.
+                BlockPos gp = new BlockPos(cx + x, yMid, faceZ);
+                if (!level.getBlockState(gp).isAir()) {
+                    level.setBlock(gp, glyph, 3);
+                    level.setBlock(gp.above(), GOLD_ACCENT, 3);
+                }
+                // A short vine tendril hanging from the tier lip.
+                BlockPos vineTop = new BlockPos(cx + x, tierBase + AztecAbyssConstants.TEMPLE_TIER_HEIGHT, faceZ + 1);
+                BlockState vine = Blocks.VINE.defaultBlockState().setValue(BlockStateProperties.NORTH, true);
+                for (int dy = 0; dy < 2; dy++) {
+                    BlockPos vp = vineTop.below(dy);
+                    if (level.getBlockState(vp).isAir()) {
+                        level.setBlock(vp, vine, 3);
+                    }
+                }
+            }
+        }
+
+        // Summit beacon: a gold base projecting a beam of light skyward.
+        for (int x = -1; x <= 1; x++) {
+            for (int z = -1; z <= 1; z++) {
+                level.setBlock(new BlockPos(cx + x, topY + 2, cz + z), GOLD_BLOCK, 3);
+            }
+        }
+        level.setBlock(new BlockPos(cx, topY + 3, cz), Blocks.BEACON.defaultBlockState(), 3);
     }
 
     // ------------------------------------------------------------------

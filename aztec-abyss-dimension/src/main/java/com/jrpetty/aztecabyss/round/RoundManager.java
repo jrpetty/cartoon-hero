@@ -232,7 +232,7 @@ public final class RoundManager {
         }
         broadcastHud(level);
         for (ServerBossEvent bar : BOSS_BARS.values()) {
-            bar.setName(Component.literal("Round " + round + " — Aztec Abyss"));
+            bar.setName(Component.literal("§6✦ §fRound " + round + " §7— The Aztec Abyss"));
             bar.setColor(round >= 15 ? BossEvent.BossBarColor.RED : round >= 8 ? BossEvent.BossBarColor.YELLOW : BossEvent.BossBarColor.WHITE);
             bar.setProgress(0.0F);
             bar.setDarkenScreen(false);
@@ -415,6 +415,18 @@ public final class RoundManager {
         boss.addEffect(new MobEffectInstance(MobEffects.GLOWING, Integer.MAX_VALUE, 0, false, false));
         level.addFreshEntity(boss);
 
+        // Emergence spectacle: a pillar of light, a ground-crack burst, and an ember plume.
+        double bx = BOSS_SPAWN.getX() + 0.5;
+        double by = BOSS_SPAWN.getY();
+        double bz = BOSS_SPAWN.getZ() + 0.5;
+        for (int dy = 0; dy < 14; dy++) {
+            level.sendParticles(ParticleTypes.END_ROD, bx, by + dy, bz, 3, 0.18, 0.25, 0.18, 0.0);
+        }
+        level.sendParticles(ParticleTypes.EXPLOSION, bx, by + 0.2, bz, 4, 1.6, 0.1, 1.6, 0.0);
+        level.sendParticles(finale ? ParticleTypes.SCULK_SOUL : ParticleTypes.FLAME,
+                bx, by + 0.2, bz, 50, 2.6, 0.2, 2.6, 0.05);
+        level.sendParticles(ParticleTypes.LAVA, bx, by + 1.0, bz, 30, 1.0, 0.6, 1.0, 0.1);
+
         game.setBossId(boss.getUUID());
         game.setBossActive(true);
         game.setBossEnraged(false);
@@ -473,6 +485,11 @@ public final class RoundManager {
 
         boolean finale = isFinaleBoss();
         long now = level.getGameTime();
+        // The Warden leaves a creeping sculk-soul trail beneath it.
+        if (finale && now % 5L == 0L) {
+            level.sendParticles(ParticleTypes.SCULK_SOUL, boss.getX(), boss.getY() + 0.1, boss.getZ(),
+                    2, 0.4, 0.05, 0.4, 0.0);
+        }
         int abilityCd = enraged ? 70 : 120; // roughly every 3.5s / 6s
         if (now - game.getLastBossAbilityAt() >= abilityCd) {
             game.setLastBossAbilityAt(now);

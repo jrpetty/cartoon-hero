@@ -59,7 +59,8 @@ public class AbyssPortalBlock extends Block {
                     0.4F + random.nextFloat() * 0.2F, random.nextFloat() * 0.3F + 0.5F, false);
         }
 
-        for (int i = 0; i < 3; i++) {
+        // Dense swirling core.
+        for (int i = 0; i < 5; i++) {
             double x = pos.getX() + random.nextDouble();
             double y = pos.getY() + random.nextDouble();
             double z = pos.getZ() + random.nextDouble();
@@ -67,6 +68,21 @@ public class AbyssPortalBlock extends Block {
             double vy = (random.nextDouble() - 0.5) * 0.4;
             double vz = (random.nextDouble() - 0.5) * 0.4;
             level.addParticle(ModParticles.BLACK_PORTAL_SWIRL.get(), x, y, z, vx, vy, vz);
+        }
+        // Cold soul-fire energy bleeding off the surface - reads as a live tear.
+        for (int i = 0; i < 3; i++) {
+            double x = pos.getX() + random.nextDouble();
+            double y = pos.getY() + random.nextDouble();
+            double z = pos.getZ() + random.nextDouble();
+            double spread = 0.6;
+            level.addParticle(ParticleTypes.SOUL_FIRE_FLAME, x, y, z,
+                    (random.nextDouble() - 0.5) * spread, random.nextDouble() * 0.08, (random.nextDouble() - 0.5) * spread);
+        }
+        // Occasional ash motes drifting up from the frame and a wisp of smoke.
+        if (random.nextInt(3) == 0) {
+            level.addParticle(ParticleTypes.WHITE_ASH,
+                    pos.getX() + random.nextDouble(), pos.getY() + random.nextDouble(), pos.getZ() + random.nextDouble(),
+                    0.0, 0.03, 0.0);
         }
         if (random.nextInt(20) == 0) {
             level.addParticle(ParticleTypes.SMOKE, pos.getX() + 0.5, pos.getY() + 0.5, pos.getZ() + 0.5, 0, 0.02, 0);
