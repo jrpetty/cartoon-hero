@@ -67,6 +67,16 @@ public final class AbyssClientEffects {
             }
         }
 
+        // Fog round: thicken the air with extra low-drifting ash motes.
+        if (ClientAbyssState.isFogRound()) {
+            for (int i = 0; i < 10; i++) {
+                double x = player.getX() + (mc.level.random.nextDouble() - 0.5) * 16;
+                double y = player.getY() + mc.level.random.nextDouble() * 4;
+                double z = player.getZ() + (mc.level.random.nextDouble() - 0.5) * 16;
+                mc.level.addParticle(ParticleTypes.WHITE_ASH, x, y, z, 0, 0.005, 0);
+            }
+        }
+
         // Drifting wisps that scatter away when you get close.
         for (int i = 0; i < 2; i++) {
             double wx = player.getX() + (mc.level.random.nextDouble() - 0.5) * 30;
@@ -150,6 +160,11 @@ public final class AbyssClientEffects {
         // Base eerie fog even at round 0; it tightens toward the player as rounds climb.
         float far = Mth.lerp(intensity, 64.0f, 20.0f);
         float near = Mth.lerp(intensity, 8.0f, 1.0f);
+        if (ClientAbyssState.isFogRound()) {
+            // Fog round: a pea-soup mist - they'll be on you before you see them.
+            far = Math.min(far, 14.0f);
+            near = Math.min(near, 2.0f);
+        }
         event.setFarPlaneDistance(Math.min(event.getFarPlaneDistance(), far));
         event.setNearPlaneDistance(Math.min(event.getNearPlaneDistance(), near));
         event.setCanceled(true);
@@ -160,11 +175,18 @@ public final class AbyssClientEffects {
         if (!active()) {
             return;
         }
-        // Push the fog toward a dim, blood-tinged near-black.
         float flash = flashTicks > 0 ? 0.35f : 0.0f;
-        event.setRed(0.06f + flash);
-        event.setGreen(0.01f);
-        event.setBlue(0.03f);
+        if (ClientAbyssState.isFogRound()) {
+            // Fog round: a sickly grey-green murk, distinct from the usual red haze.
+            event.setRed(0.12f + flash);
+            event.setGreen(0.13f);
+            event.setBlue(0.12f);
+        } else {
+            // Push the fog toward a dim, blood-tinged near-black.
+            event.setRed(0.06f + flash);
+            event.setGreen(0.01f);
+            event.setBlue(0.03f);
+        }
     }
 
     @SubscribeEvent

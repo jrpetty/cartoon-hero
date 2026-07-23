@@ -13,6 +13,7 @@ public final class ClientAbyssState {
 
     private static volatile boolean inRun = false;
     private static volatile int round = 0;
+    private static volatile boolean fogRound = false;
 
     /** Counts down while the arrival cinematic plays (client ticks). 0 = not playing. */
     private static int cinematicTicks = 0;
@@ -24,6 +25,7 @@ public final class ClientAbyssState {
         boolean wasInRun = inRun;
         inRun = payload.inRun();
         round = payload.round();
+        fogRound = payload.fogRound();
         // Entering an active run triggers the arrival cinematic.
         if (inRun && !wasInRun) {
             cinematicTicks = 110; // ~5.5s
@@ -43,6 +45,10 @@ public final class ClientAbyssState {
 
     public static int getRound() {
         return round;
+    }
+
+    public static boolean isFogRound() {
+        return inRun && fogRound;
     }
 
     public static int getCinematicTicks() {

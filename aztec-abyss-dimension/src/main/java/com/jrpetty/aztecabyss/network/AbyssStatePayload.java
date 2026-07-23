@@ -9,11 +9,12 @@ import net.minecraft.resources.ResourceLocation;
 
 /**
  * Server -> client sync of the minimal state the client needs to drive the
- * "Upside Down" atmosphere: whether the viewer is in an active run and which
- * round it is (so the fog can close in as rounds climb). Sent to each
- * participant whenever their run state changes.
+ * "Upside Down" atmosphere: whether the viewer is in an active run, which
+ * round it is (so the fog can close in as rounds climb), and whether this is
+ * a special fog round (pea-soup mist). Sent to each participant whenever their
+ * run state changes.
  */
-public record AbyssStatePayload(boolean inRun, int round) implements CustomPacketPayload {
+public record AbyssStatePayload(boolean inRun, int round, boolean fogRound) implements CustomPacketPayload {
 
     public static final Type<AbyssStatePayload> TYPE =
             new Type<>(ResourceLocation.fromNamespaceAndPath(AztecAbyssConstants.MOD_ID, "abyss_state"));
@@ -22,6 +23,7 @@ public record AbyssStatePayload(boolean inRun, int round) implements CustomPacke
             StreamCodec.composite(
                     ByteBufCodecs.BOOL, AbyssStatePayload::inRun,
                     ByteBufCodecs.VAR_INT, AbyssStatePayload::round,
+                    ByteBufCodecs.BOOL, AbyssStatePayload::fogRound,
                     AbyssStatePayload::new);
 
     @Override

@@ -34,7 +34,11 @@ public final class ModNetworking {
     }
 
     public static void sendState(ServerPlayer player, boolean inRun, int round) {
-        PacketDistributor.sendToPlayer(player, new AbyssStatePayload(inRun, round));
+        sendState(player, inRun, round, false);
+    }
+
+    public static void sendState(ServerPlayer player, boolean inRun, int round, boolean fogRound) {
+        PacketDistributor.sendToPlayer(player, new AbyssStatePayload(inRun, round, fogRound));
     }
 
     public static void sendRecap(ServerPlayer player, int round, int kills, int revives, int survivalSeconds,

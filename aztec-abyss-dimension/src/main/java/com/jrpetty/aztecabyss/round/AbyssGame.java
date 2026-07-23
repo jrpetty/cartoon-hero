@@ -53,6 +53,12 @@ public final class AbyssGame {
     /** Game-time the pending ground slam lands (0 = none charging), for the dodge window. */
     private long bossSlamAt = 0L;
 
+    // --- Special "fog" rounds (randomised, every 5-8 waves) ---
+    /** The next round number that will roll in as a fog round. */
+    private int nextFogRound = 0;
+    /** True while the current round is a fog round. */
+    private boolean fogRound = false;
+
     // --- Easter-egg ritual state ---
     /** Braziers lit so far, in the order the player lit them. */
     private final List<Integer> ritualSequence = new ArrayList<>();
@@ -200,6 +206,22 @@ public final class AbyssGame {
 
     public void setBossSlamAt(long v) {
         this.bossSlamAt = v;
+    }
+
+    public int getNextFogRound() {
+        return nextFogRound;
+    }
+
+    public void setNextFogRound(int v) {
+        this.nextFogRound = v;
+    }
+
+    public boolean isFogRound() {
+        return fogRound;
+    }
+
+    public void setFogRound(boolean v) {
+        this.fogRound = v;
     }
 
     public void removeParticipant(UUID id) {

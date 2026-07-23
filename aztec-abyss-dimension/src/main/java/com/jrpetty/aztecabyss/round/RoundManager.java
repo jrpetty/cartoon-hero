@@ -90,6 +90,7 @@ public final class RoundManager {
             resetSession();
             game.setPhase(AbyssGame.Phase.BETWEEN_ROUNDS);
             game.setRound(0);
+            game.setNextFogRound(rollNextFogRound(0)); // first mist rolls in around round 5-8
             game.setPhaseChangedAt(player.level().getGameTime());
         }
         game.addParticipant(player.getUUID());
@@ -194,6 +195,13 @@ public final class RoundManager {
         game.setBossId(null);
         game.setBossHealthFraction(0f);
 
+        // Special fog round: randomised, never on a boss round. Reschedule the next.
+        boolean fogRound = !bossRound && round > 0 && round == game.getNextFogRound();
+        game.setFogRound(fogRound);
+        if (fogRound || round >= game.getNextFogRound()) {
+            game.setNextFogRound(rollNextFogRound(round));
+        }
+
         int fullWave = waveSize(round, Math.max(1, game.getParticipants().size()));
         // On a boss round the Warden is the objective; the wave is trimmed to a
         // pressure of adds (the boss summons more as the fight drags on).
@@ -203,10 +211,15 @@ public final class RoundManager {
         int max = AbyssConfig.MAX_ROUND.get();
         for (ServerPlayer p : participantPlayers(level)) {
             p.getData(ModAttachments.RUN_STATE).recordRound(round);
-            ModNetworking.sendState(p, true, round);
-            title(p, "§4§lROUND " + round, round == max
-                    ? "§c§lFINAL ROUND - GOOD LUCK"
-                    : "§7" + game.getKillsNeededThisRound() + " incoming");
+            ModNetworking.sendState(p, true, round, fogRound);
+            if (fogRound) {
+                title(p, "§7§lA CREEPING FOG ROLLS IN", "§8They'll be on you before you see them.");
+                level.playSound(null, p.blockPosition(), ModSounds.AMBIENT_DREAD.get(), SoundSource.HOSTILE, 1.0F, 0.5F);
+            } else {
+                title(p, "§4§lROUND " + round, round == max
+                        ? "§c§lFINAL ROUND - GOOD LUCK"
+                        : "§7" + game.getKillsNeededThisRound() + " incoming");
+            }
             level.playSound(null, p.blockPosition(), ModSounds.ROUND_START.get(), SoundSource.HOSTILE, 1.0F, 1.0F);
         }
         for (ServerBossEvent bar : BOSS_BARS.values()) {
@@ -226,6 +239,11 @@ public final class RoundManager {
     /** Boss rounds: the mid-run gauntlet (10) and the final round. */
     private static boolean isBossRound(int round) {
         return round == 10 || round == AbyssConfig.MAX_ROUND.get();
+    }
+
+    /** Next fog round: a randomised 5-8 waves after {@code fromRound}. */
+    private static int rollNextFogRound(int fromRound) {
+        return fromRound + 5 + RNG.nextInt(4); // +5..+8
     }
 
     private static void spawnQueued(ServerLevel level, List<ServerPlayer> present) {
@@ -288,6 +306,11 @@ public final class RoundManager {
         double healthMult = 1.0 + round * AbyssConfig.HEALTH_SCALE_PER_ROUND.get();
         double dmgMult = 1.0 + round * AbyssConfig.DAMAGE_SCALE_PER_ROUND.get();
         double speedMult = Math.min(1.0 + round * 0.02, 1.6);
+
+        // Fog rounds: the horde looms a touch faster out of the murk.
+        if (game.isFogRound()) {
+            speedMult *= 1.12;
+        }
 
         if (brute) {
             healthMult *= 2.5;
@@ -585,11 +608,16 @@ public final class RoundManager {
         }
         game.setPhase(AbyssGame.Phase.BETWEEN_ROUNDS);
         game.setPhaseChangedAt(level.getGameTime());
+        boolean liftFog = game.isFogRound();
+        game.setFogRound(false);
         boolean canExtract = AbyssConfig.ENABLE_EXTRACTION.get();
         if (canExtract) {
             setExtractionGlyph(level, true);
         }
         for (ServerPlayer p : participantPlayers(level)) {
+            if (liftFog) {
+                ModNetworking.sendState(p, true, game.getRound(), false); // mist clears in the breather
+            }
             title(p, "§a§lROUND " + game.getRound() + " CLEARED", "§7Next wave incoming...");
             level.playSound(null, p.blockPosition(), ModSounds.ROUND_CLEAR.get(), SoundSource.PLAYERS, 1.0F, 1.0F);
             if (canExtract) {
