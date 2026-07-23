@@ -1,6 +1,9 @@
 {
   "block.aztecabyss.abyss_portal": "Abyss Portal",
 
+  "key.categories.aztecabyss": "Aztec Abyss",
+  "key.aztecabyss.toggle_hud": "Toggle Abyss HUD",
+
   "subtitles.aztecabyss.round_start": "A round begins",
   "subtitles.aztecabyss.round_clear": "Round cleared",
   "subtitles.aztecabyss.ambient_dread": "The Abyss stirs",

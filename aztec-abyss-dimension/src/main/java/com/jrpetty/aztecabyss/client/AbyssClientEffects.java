@@ -41,6 +41,10 @@ public final class AbyssClientEffects {
 
     @SubscribeEvent
     public static void onClientTick(ClientTickEvent.Post event) {
+        // Drain the HUD-toggle key every tick, regardless of dimension.
+        while (ClientSetup.TOGGLE_HUD.consumeClick()) {
+            ClientAbyssState.toggleHud();
+        }
         if (!active()) {
             flashTicks = 0;
             return;
@@ -151,6 +155,54 @@ public final class AbyssClientEffects {
         return from + delta * f;
     }
 
+    /** The live run HUD panel: round, enemies remaining, squad headcount, personal kills. */
+    private static void drawHud(net.minecraft.client.gui.GuiGraphics g, Minecraft mc) {
+        net.minecraft.client.gui.Font font = mc.font;
+        int round = ClientAbyssState.getRound();
+        int enemies = ClientAbyssState.getEnemiesRemaining();
+        int up = ClientAbyssState.getPlayersUp();
+        int total = ClientAbyssState.getPlayersTotal();
+        int kills = ClientAbyssState.getMyKills();
+
+        java.util.List<net.minecraft.network.chat.Component> lines = new java.util.ArrayList<>();
+        lines.add(net.minecraft.network.chat.Component.literal("§6§lTHE AZTEC ABYSS"));
+        if (round <= 0) {
+            lines.add(net.minecraft.network.chat.Component.literal("§7Preparing the hunt..."));
+        } else {
+            lines.add(net.minecraft.network.chat.Component.literal("§fRound §e§l" + round));
+        }
+        if (ClientAbyssState.isFogRound()) {
+            lines.add(net.minecraft.network.chat.Component.literal("§7§oA fog round — stay sharp"));
+        }
+        if (round > 0) {
+            lines.add(enemies > 0
+                    ? net.minecraft.network.chat.Component.literal("§fEnemies left: §c" + enemies)
+                    : net.minecraft.network.chat.Component.literal("§aWave clear"));
+        }
+        if (total > 1) {
+            lines.add(net.minecraft.network.chat.Component.literal("§fSquad: §a" + up + "§7/" + total + " up"));
+        }
+        lines.add(net.minecraft.network.chat.Component.literal("§fYour kills: §b" + kills));
+
+        int pad = 4;
+        int lineH = font.lineHeight + 2;
+        int maxW = 0;
+        for (net.minecraft.network.chat.Component c : lines) {
+            maxW = Math.max(maxW, font.width(c));
+        }
+        int x = 6;
+        int y = 6;
+        int boxW = maxW + pad * 2;
+        int boxH = lines.size() * lineH + pad * 2 - 2;
+        g.fill(x, y, x + boxW, y + boxH, 0x88000000);
+        g.fill(x, y, x + boxW, y + 1, 0xAA7A0E0E); // thin blood-red accent edge
+        int ty = y + pad;
+        for (net.minecraft.network.chat.Component c : lines) {
+            g.drawString(font, c, x + pad, ty, 0xFFFFFF, true);
+            ty += lineH;
+        }
+    }
+
     @SubscribeEvent
     public static void onRenderFog(ViewportEvent.RenderFog event) {
         if (!active()) {
@@ -197,6 +249,11 @@ public final class AbyssClientEffects {
         }
         int w = event.getGuiGraphics().guiWidth();
         int h = event.getGuiGraphics().guiHeight();
+
+        // Live run HUD (toggle with the keybind, default H).
+        if (ClientAbyssState.isInRun() && ClientAbyssState.isHudVisible()) {
+            drawHud(event.getGuiGraphics(), mc);
+        }
 
         // Red flash overlay.
         if (flashTicks > 0) {

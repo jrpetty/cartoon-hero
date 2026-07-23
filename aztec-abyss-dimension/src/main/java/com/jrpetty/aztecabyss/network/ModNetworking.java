@@ -38,7 +38,15 @@ public final class ModNetworking {
     }
 
     public static void sendState(ServerPlayer player, boolean inRun, int round, boolean fogRound) {
-        PacketDistributor.sendToPlayer(player, new AbyssStatePayload(inRun, round, fogRound));
+        PacketDistributor.sendToPlayer(player, new AbyssStatePayload(inRun, round, fogRound, 0, 0, 0));
+    }
+
+    /** Full in-run state including the live HUD figures. */
+    public static void sendHud(ServerPlayer player, int round, boolean fogRound,
+                               int enemiesRemaining, int playersUp, int playersTotal, int myKills) {
+        PacketDistributor.sendToPlayer(player, new AbyssStatePayload(
+                true, round, fogRound, enemiesRemaining,
+                AbyssStatePayload.packPlayers(playersUp, playersTotal), myKills));
     }
 
     public static void sendRecap(ServerPlayer player, int round, int kills, int revives, int survivalSeconds,

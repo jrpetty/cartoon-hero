@@ -100,7 +100,10 @@ public final class RoundManager {
         }
         setupBossBar(player);
 
-        ModNetworking.sendState(player, true, game.getRound());
+        ModNetworking.sendState(player, true, game.getRound()); // triggers the arrival cinematic
+        if (player.level() instanceof ServerLevel abyssLevel) {
+            broadcastHud(abyssLevel);
+        }
         boolean coop = game.getParticipants().size() > 1;
         title(player, "§0§lTHE AZTEC ABYSS",
                 coop ? "§8You join the hunt. Round " + Math.max(1, game.getRound()) + "."
@@ -149,6 +152,9 @@ public final class RoundManager {
         }
 
         long now = level.getGameTime();
+        if (now % 10L == 0L) {
+            broadcastHud(level); // refresh the live HUD ~twice a second
+        }
         switch (game.getPhase()) {
             case BETWEEN_ROUNDS -> {
                 // Extraction is offered after any cleared round; while someone is
@@ -211,7 +217,6 @@ public final class RoundManager {
         int max = AbyssConfig.MAX_ROUND.get();
         for (ServerPlayer p : participantPlayers(level)) {
             p.getData(ModAttachments.RUN_STATE).recordRound(round);
-            ModNetworking.sendState(p, true, round, fogRound);
             if (fogRound) {
                 title(p, "§7§lA CREEPING FOG ROLLS IN", "§8They'll be on you before you see them.");
                 level.playSound(null, p.blockPosition(), ModSounds.AMBIENT_DREAD.get(), SoundSource.HOSTILE, 1.0F, 0.5F);
@@ -222,6 +227,7 @@ public final class RoundManager {
             }
             level.playSound(null, p.blockPosition(), ModSounds.ROUND_START.get(), SoundSource.HOSTILE, 1.0F, 1.0F);
         }
+        broadcastHud(level);
         for (ServerBossEvent bar : BOSS_BARS.values()) {
             bar.setName(Component.literal("Round " + round + " — Aztec Abyss"));
             bar.setColor(round >= 15 ? BossEvent.BossBarColor.RED : round >= 8 ? BossEvent.BossBarColor.YELLOW : BossEvent.BossBarColor.WHITE);
@@ -608,16 +614,13 @@ public final class RoundManager {
         }
         game.setPhase(AbyssGame.Phase.BETWEEN_ROUNDS);
         game.setPhaseChangedAt(level.getGameTime());
-        boolean liftFog = game.isFogRound();
-        game.setFogRound(false);
+        game.setFogRound(false); // mist clears in the breather
+        broadcastHud(level);
         boolean canExtract = AbyssConfig.ENABLE_EXTRACTION.get();
         if (canExtract) {
             setExtractionGlyph(level, true);
         }
         for (ServerPlayer p : participantPlayers(level)) {
-            if (liftFog) {
-                ModNetworking.sendState(p, true, game.getRound(), false); // mist clears in the breather
-            }
             title(p, "§a§lROUND " + game.getRound() + " CLEARED", "§7Next wave incoming...");
             level.playSound(null, p.blockPosition(), ModSounds.ROUND_CLEAR.get(), SoundSource.PLAYERS, 1.0F, 1.0F);
             if (canExtract) {
@@ -1046,6 +1049,30 @@ public final class RoundManager {
             }
         }
         return near.above();
+    }
+
+    /** Pushes the live HUD figures (round, enemies left, squad headcount, kills) to each player. */
+    private static void broadcastHud(ServerLevel level) {
+        List<ServerPlayer> present = participantPlayers(level);
+        if (present.isEmpty()) {
+            return;
+        }
+        int total = present.size();
+        int up = 0;
+        for (ServerPlayer p : present) {
+            if (!p.getData(ModAttachments.RUN_STATE).isDowned()) {
+                up++;
+            }
+        }
+        // On a boss round the counter shows the summoned adds still alive; otherwise
+        // it's the wave remaining to clear.
+        int enemies = game.isBossRound()
+                ? game.getAliveZombies()
+                : Math.max(0, game.getKillsNeededThisRound() - game.getKillsThisRound());
+        for (ServerPlayer p : present) {
+            int myKills = p.getData(ModAttachments.RUN_STATE).getKillsThisRun();
+            ModNetworking.sendHud(p, game.getRound(), game.isFogRound(), enemies, up, total, myKills);
+        }
     }
 
     private static List<ServerPlayer> participantPlayers(ServerLevel level) {

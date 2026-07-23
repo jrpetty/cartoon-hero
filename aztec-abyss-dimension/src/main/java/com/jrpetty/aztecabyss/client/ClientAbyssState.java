@@ -14,6 +14,13 @@ public final class ClientAbyssState {
     private static volatile boolean inRun = false;
     private static volatile int round = 0;
     private static volatile boolean fogRound = false;
+    private static volatile int enemiesRemaining = 0;
+    private static volatile int playersUp = 0;
+    private static volatile int playersTotal = 0;
+    private static volatile int myKills = 0;
+
+    /** Whether the live HUD panel is shown (toggled by the keybind). */
+    private static volatile boolean hudVisible = true;
 
     /** Counts down while the arrival cinematic plays (client ticks). 0 = not playing. */
     private static int cinematicTicks = 0;
@@ -26,6 +33,10 @@ public final class ClientAbyssState {
         inRun = payload.inRun();
         round = payload.round();
         fogRound = payload.fogRound();
+        enemiesRemaining = payload.enemiesRemaining();
+        playersUp = payload.playersUp();
+        playersTotal = payload.playersTotal();
+        myKills = payload.myKills();
         // Entering an active run triggers the arrival cinematic.
         if (inRun && !wasInRun) {
             cinematicTicks = 110; // ~5.5s
@@ -49,6 +60,30 @@ public final class ClientAbyssState {
 
     public static boolean isFogRound() {
         return inRun && fogRound;
+    }
+
+    public static int getEnemiesRemaining() {
+        return enemiesRemaining;
+    }
+
+    public static int getPlayersUp() {
+        return playersUp;
+    }
+
+    public static int getPlayersTotal() {
+        return playersTotal;
+    }
+
+    public static int getMyKills() {
+        return myKills;
+    }
+
+    public static boolean isHudVisible() {
+        return hudVisible;
+    }
+
+    public static void toggleHud() {
+        hudVisible = !hudVisible;
     }
 
     public static int getCinematicTicks() {
