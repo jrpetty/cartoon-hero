@@ -360,6 +360,17 @@ public final class RoundManager {
         }
     }
 
+    /**
+     * Plays a boss sound through a single-target-typed parameter. Passing a
+     * conditional ({@code finale ? A : B}) straight into the heavily overloaded
+     * {@code level.playSound} makes the poly conditional unresolvable; routing it
+     * through this non-overloaded helper gives it one target type and compiles.
+     */
+    private static void bossSound(ServerLevel level, BlockPos pos,
+            net.minecraft.core.Holder<net.minecraft.sounds.SoundEvent> sound, float volume, float pitch) {
+        level.playSound(null, pos, sound, SoundSource.HOSTILE, volume, pitch);
+    }
+
     // ------------------------------------------------------------------
     // Boss rounds - the Obsidian Warlord (round 10) and the Warden finale
     // ------------------------------------------------------------------
@@ -415,8 +426,8 @@ public final class RoundManager {
                                : "§cA hulking brute charges from the temple steps...";
         for (ServerPlayer p : present) {
             title(p, "§4§l⚔ " + name, flavor);
-            level.playSound(null, p.blockPosition(),
-                    finale ? SoundEvents.WARDEN_EMERGE : SoundEvents.RAVAGER_ROAR, SoundSource.HOSTILE, 1.0F, finale ? 1.0F : 0.8F);
+            bossSound(level, p.blockPosition(),
+                    finale ? SoundEvents.WARDEN_EMERGE : SoundEvents.RAVAGER_ROAR, 1.0F, finale ? 1.0F : 0.8F);
             level.playSound(null, p.blockPosition(), ModSounds.AMBIENT_DREAD.get(), SoundSource.HOSTILE, 1.0F, 0.5F);
             if (finale) {
                 p.addEffect(new MobEffectInstance(MobEffects.DARKNESS, 120, 0, false, false));
@@ -468,8 +479,8 @@ public final class RoundManager {
                 if (finale) {
                     p.addEffect(new MobEffectInstance(MobEffects.DARKNESS, 80, 0, false, false));
                 }
-                level.playSound(null, p.blockPosition(),
-                        finale ? SoundEvents.WARDEN_ROAR : SoundEvents.RAVAGER_ROAR, SoundSource.HOSTILE, 0.9F, finale ? 1.0F : 0.85F);
+                bossSound(level, p.blockPosition(),
+                        finale ? SoundEvents.WARDEN_ROAR : SoundEvents.RAVAGER_ROAR, 0.9F, finale ? 1.0F : 0.85F);
             }
             int cap = AbyssConfig.MAX_CONCURRENT_ALIVE.get();
             int summon = Math.min((enraged ? 5 : 3) + present.size(), Math.max(0, cap - game.getAliveZombies()));
@@ -502,8 +513,8 @@ public final class RoundManager {
     private static void beginGroundSlam(ServerLevel level, LivingEntity boss, List<ServerPlayer> present, long landAt) {
         game.setBossSlamAt(landAt);
         boolean finale = isFinaleBoss();
-        level.playSound(null, boss.blockPosition(),
-                finale ? SoundEvents.WARDEN_SONIC_CHARGE : SoundEvents.RAVAGER_ROAR, SoundSource.HOSTILE, 1.2F, finale ? 0.9F : 0.7F);
+        bossSound(level, boss.blockPosition(),
+                finale ? SoundEvents.WARDEN_SONIC_CHARGE : SoundEvents.RAVAGER_ROAR, 1.2F, finale ? 0.9F : 0.7F);
         String who = finale ? "The Warden rears back" : "The Warlord raises its fists";
         for (ServerPlayer p : present) {
             if (p.distanceToSqr(boss) <= SLAM_RADIUS * SLAM_RADIUS
@@ -540,8 +551,8 @@ public final class RoundManager {
         String who = finale ? "THE WARDEN ENRAGES" : "THE WARLORD ENRAGES";
         for (ServerPlayer p : present) {
             title(p, "§4§l" + who, "§cIt will not stop now.");
-            level.playSound(null, p.blockPosition(),
-                    finale ? SoundEvents.WARDEN_ANGRY : SoundEvents.RAVAGER_ROAR, SoundSource.HOSTILE, 1.2F, finale ? 0.8F : 0.6F);
+            bossSound(level, p.blockPosition(),
+                    finale ? SoundEvents.WARDEN_ANGRY : SoundEvents.RAVAGER_ROAR, 1.2F, finale ? 0.8F : 0.6F);
         }
         for (ServerBossEvent bar : BOSS_BARS.values()) {
             bar.setName(Component.literal(finale ? "§4§l⚔ ENRAGED WARDEN" : "§4§l⚔ ENRAGED WARLORD"));
@@ -602,8 +613,8 @@ public final class RoundManager {
         for (ServerPlayer p : participantPlayers(level)) {
             title(p, finale ? "§6§l⚔ THE WARDEN FALLS" : "§6§l⚔ THE WARLORD FALLS",
                     finale ? "§eThe Abyss is conquered." : "§eThe brute crumbles. Press on.");
-            level.playSound(null, p.blockPosition(),
-                    finale ? SoundEvents.WARDEN_DEATH : SoundEvents.RAVAGER_DEATH, SoundSource.HOSTILE, 1.0F, 1.0F);
+            bossSound(level, p.blockPosition(),
+                    finale ? SoundEvents.WARDEN_DEATH : SoundEvents.RAVAGER_DEATH, 1.0F, 1.0F);
             p.removeEffect(MobEffects.DARKNESS);
         }
         for (ServerBossEvent bar : BOSS_BARS.values()) {
