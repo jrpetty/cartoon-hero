@@ -88,6 +88,9 @@ public final class RoundManager {
 
         if (game.getPhase() == AbyssGame.Phase.IDLE || game.getPhase() == AbyssGame.Phase.ENDED) {
             resetSession();
+            if (player.level() instanceof ServerLevel abyssLevel) {
+                clearSupplyCaches(abyssLevel); // sweep away last run's caches
+            }
             game.setPhase(AbyssGame.Phase.BETWEEN_ROUNDS);
             game.setRound(0);
             game.setNextFogRound(rollNextFogRound(0)); // first mist rolls in around round 5-8
@@ -616,6 +619,12 @@ public final class RoundManager {
         game.setPhaseChangedAt(level.getGameTime());
         game.setFogRound(false); // mist clears in the breather
         broadcastHud(level);
+
+        // Every fifth cleared round drops a randomised supply cache to keep long runs going.
+        if (game.getRound() % 5 == 0) {
+            spawnSupplyCache(level, game.getRound());
+        }
+
         boolean canExtract = AbyssConfig.ENABLE_EXTRACTION.get();
         if (canExtract) {
             setExtractionGlyph(level, true);
@@ -1015,6 +1024,59 @@ public final class RoundManager {
                         m -> m.getPersistentData().getBoolean("aztecabyss_wave_mob"))
                 .forEach(m -> m.remove(Entity.RemovalReason.DISCARDED));
         game.setAliveZombies(0);
+    }
+
+    /** Positions of active supply-cache chests, cleared out when a new session starts. */
+    private static final List<BlockPos> CACHE_MARKERS = new ArrayList<>();
+
+    /** Drops a randomised supply cache somewhere on the open arena floor, flare and all. */
+    private static void spawnSupplyCache(ServerLevel level, int round) {
+        double angle = RNG.nextDouble() * Math.PI * 2.0;
+        int r = 28 + RNG.nextInt(18); // 28-45: clear of the temple base, well inside the arena
+        int x = (int) Math.round(Math.cos(angle) * r);
+        int z = (int) Math.round(Math.sin(angle) * r);
+        BlockPos pos = new BlockPos(x, AztecAbyssConstants.ARENA_FLOOR_Y + 1, z);
+
+        SupplyCache.Result cache = SupplyCache.roll(round);
+        level.setBlock(pos, Blocks.CHEST.defaultBlockState(), 3);
+        BlockEntity be = level.getBlockEntity(pos);
+        if (be instanceof ChestBlockEntity chest) {
+            int slot = 0;
+            for (ItemStack stack : cache.loot()) {
+                if (!stack.isEmpty() && slot < chest.getContainerSize()) {
+                    chest.setItem(slot++, stack);
+                }
+            }
+        }
+        // A slim end-rod flare above the chest so it's findable, even through fog.
+        for (int dy = 2; dy <= 4; dy++) {
+            level.setBlock(pos.above(dy), Blocks.END_ROD.defaultBlockState(), 3);
+        }
+        CACHE_MARKERS.add(pos);
+
+        String dir = Math.abs(x) > Math.abs(z) ? (x > 0 ? "east" : "west") : (z > 0 ? "south" : "north");
+        for (ServerPlayer p : participantPlayers(level)) {
+            title(p, "§6§l✦ SUPPLY CACHE", cache.flavor());
+            p.displayClientMessage(Component.literal(
+                    "§6✦ A supply cache thuds down to the §e" + dir + "§6 of the temple. §7Grab it before the next wave."), false);
+            level.playSound(null, p.blockPosition(), net.minecraft.sounds.SoundEvents.BEACON_ACTIVATE, SoundSource.PLAYERS, 0.8F, 1.4F);
+        }
+    }
+
+    /** Removes leftover cache chests + flares from a prior run when a new session begins. */
+    private static void clearSupplyCaches(ServerLevel level) {
+        for (BlockPos p : CACHE_MARKERS) {
+            if (level.getBlockState(p).is(Blocks.CHEST)) {
+                level.setBlock(p, Blocks.AIR.defaultBlockState(), 3);
+            }
+            for (int dy = 2; dy <= 4; dy++) {
+                BlockPos m = p.above(dy);
+                if (level.getBlockState(m).is(Blocks.END_ROD)) {
+                    level.setBlock(m, Blocks.AIR.defaultBlockState(), 3);
+                }
+            }
+        }
+        CACHE_MARKERS.clear();
     }
 
     private static void spawnRewardChest(ServerLevel level, BlockPos near, ItemStack[] loot) {
