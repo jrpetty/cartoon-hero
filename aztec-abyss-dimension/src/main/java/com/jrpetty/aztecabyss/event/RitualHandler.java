@@ -124,20 +124,11 @@ public final class RitualHandler {
                 level.setBlock(door.offset(x, y, 0), Blocks.AIR.defaultBlockState(), 3);
             }
         }
-        // Fill the vault chest with the grand hoard.
+        // Fill the vault chest with a modest, randomised reward - a mystery, not a fixed hoard.
         BlockEntity be = level.getBlockEntity(AztecAbyssConstants.VAULT_CHEST_POS);
         if (be instanceof ChestBlockEntity chest) {
-            ItemStack[] hoard = {
-                    new ItemStack(Items.NETHERITE_BLOCK, 2),
-                    new ItemStack(Items.ENCHANTED_GOLDEN_APPLE, 8),
-                    new ItemStack(Items.NETHER_STAR, 3),
-                    new ItemStack(Items.DIAMOND_BLOCK, 4),
-                    new ItemStack(Items.TOTEM_OF_UNDYING, 4),
-                    new ItemStack(Items.ELYTRA, 1),
-                    new ItemStack(Items.ENCHANTED_BOOK, 4),
-            };
             int slot = 0;
-            for (ItemStack s : hoard) {
+            for (ItemStack s : com.jrpetty.aztecabyss.round.RitualReward.rollVault()) {
                 if (slot < chest.getContainerSize()) {
                     chest.setItem(slot++, s);
                 }

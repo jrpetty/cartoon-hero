@@ -1048,7 +1048,7 @@ public final class RoundManager {
         game.setRitualComplete(true);
         for (ServerPlayer p : participantPlayers(level)) {
             level.playSound(null, p.blockPosition(), ModSounds.RITUAL_COMPLETE.get(), SoundSource.HOSTILE, 1.0F, 1.0F);
-            title(p, "§5§lTHE OFFERING IS ACCEPTED", "§dThe vault is open. Your reward will be legendary.");
+            title(p, "§5§lTHE OFFERING IS ACCEPTED", "§dThe vault grinds open. What waits inside, none can say...");
         }
     }
 

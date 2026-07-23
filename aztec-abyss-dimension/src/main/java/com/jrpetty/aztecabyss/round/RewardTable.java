@@ -25,10 +25,9 @@ public final class RewardTable {
     public static ItemStack[] rewardsFor(int roundReached, boolean victory, boolean ritualComplete) {
         List<ItemStack> loot = new ArrayList<>(List.of(baseRewards(roundReached, victory)));
         if (ritualComplete) {
-            // The Easter-egg ritual pays a standout bonus on top of the normal reward.
-            loot.add(new ItemStack(Items.NETHER_STAR, 1));
-            loot.add(new ItemStack(Items.ENCHANTED_GOLDEN_APPLE, 2));
-            loot.add(new ItemStack(Items.NETHERITE_INGOT, 2));
+            // The Easter-egg ritual adds a single small, randomised token - a mystery,
+            // not a guaranteed windfall.
+            loot.add(RitualReward.runEndToken());
         }
         return loot.toArray(new ItemStack[0]);
     }
