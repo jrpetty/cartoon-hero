@@ -35,6 +35,19 @@ public final class ModNetworking {
                 AbyssCooldownPayload.TYPE,
                 AbyssCooldownPayload.STREAM_CODEC,
                 (payload, context) -> context.enqueueWork(() -> ClientAbyssState.acceptCooldown(payload)));
+        registrar.playToClient(
+                SquadPayload.TYPE,
+                SquadPayload.STREAM_CODEC,
+                (payload, context) -> context.enqueueWork(() -> ClientAbyssState.acceptSquad(payload)));
+        registrar.playToServer(
+                PingPayload.TYPE,
+                PingPayload.STREAM_CODEC,
+                (payload, context) -> context.enqueueWork(() -> {
+                    if (context.player() instanceof net.minecraft.server.level.ServerPlayer sp) {
+                        com.jrpetty.aztecabyss.round.RoundManager.onPing(
+                                sp, new net.minecraft.core.BlockPos(payload.x(), payload.y(), payload.z()));
+                    }
+                }));
     }
 
     public static void sendState(ServerPlayer player, boolean inRun, int round) {
@@ -56,6 +69,11 @@ public final class ModNetworking {
     /** Pushes the player's re-entry cooldown deadline so their screen can count it down. */
     public static void sendCooldown(ServerPlayer player, long cooldownUntil) {
         PacketDistributor.sendToPlayer(player, new AbyssCooldownPayload(cooldownUntil));
+    }
+
+    /** Pushes a player's squadmate list for the co-op teammate HUD. */
+    public static void sendSquad(ServerPlayer player, java.util.List<TeammateInfo> teammates) {
+        PacketDistributor.sendToPlayer(player, new SquadPayload(teammates));
     }
 
     public static void sendRecap(ServerPlayer player, int round, int kills, int revives, int survivalSeconds,

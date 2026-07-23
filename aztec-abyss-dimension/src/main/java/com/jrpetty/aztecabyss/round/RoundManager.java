@@ -1203,6 +1203,39 @@ public final class RoundManager {
         for (ServerPlayer p : present) {
             int myKills = p.getData(ModAttachments.RUN_STATE).getKillsThisRun();
             ModNetworking.sendHud(p, game.getRound(), game.isFogRound(), enemies, up, total, myKills);
+
+            // Each player's squad = everyone else in the run (for the teammate HUD).
+            List<com.jrpetty.aztecabyss.network.TeammateInfo> mates = new ArrayList<>();
+            for (ServerPlayer o : present) {
+                if (o == p) {
+                    continue;
+                }
+                int hp = (int) Math.ceil(o.getHealth() / Math.max(1.0F, o.getMaxHealth()) * 100.0);
+                hp = Math.max(0, Math.min(100, hp));
+                mates.add(new com.jrpetty.aztecabyss.network.TeammateInfo(
+                        o.getGameProfile().getName(), hp, o.getData(ModAttachments.RUN_STATE).isDowned(),
+                        o.getBlockX(), o.getBlockY(), o.getBlockZ()));
+            }
+            ModNetworking.sendSquad(p, mates);
+        }
+    }
+
+    /** A player pinged a spot: flash a marker there and call it out to the squad. */
+    public static void onPing(ServerPlayer player, BlockPos target) {
+        if (!game.isParticipant(player.getUUID()) || !(player.level() instanceof ServerLevel level)) {
+            return;
+        }
+        double tx = target.getX() + 0.5;
+        double ty = target.getY();
+        double tz = target.getZ() + 0.5;
+        for (int dy = 0; dy < 8; dy++) {
+            level.sendParticles(ParticleTypes.HAPPY_VILLAGER, tx, ty + dy, tz, 2, 0.15, 0.2, 0.15, 0.0);
+        }
+        level.sendParticles(ParticleTypes.END_ROD, tx, ty + 0.5, tz, 8, 0.3, 0.3, 0.3, 0.0);
+        String who = player.getGameProfile().getName();
+        for (ServerPlayer p : participantPlayers(level)) {
+            p.displayClientMessage(Component.literal("§b⚑ " + who + " pinged a location."), true);
+            level.playSound(null, p.blockPosition(), ModSounds.RITUAL_PROGRESS.get(), SoundSource.PLAYERS, 0.7F, 1.6F);
         }
     }
 

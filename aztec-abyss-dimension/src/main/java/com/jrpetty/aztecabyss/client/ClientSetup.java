@@ -21,6 +21,13 @@ public final class ClientSetup {
             GLFW.GLFW_KEY_H,
             "key.categories.aztecabyss");
 
+    /** Pings the spot the player is looking at for the squad. Default: B. Rebindable. */
+    public static final KeyMapping PING = new KeyMapping(
+            "key.aztecabyss.ping",
+            InputConstants.Type.KEYSYM,
+            GLFW.GLFW_KEY_B,
+            "key.categories.aztecabyss");
+
     @SubscribeEvent
     public static void registerParticleProviders(RegisterParticleProvidersEvent event) {
         event.registerSpriteSet(ModParticles.BLACK_PORTAL_SWIRL.get(), BlackPortalSwirlParticle.Provider::new);
@@ -29,5 +36,6 @@ public final class ClientSetup {
     @SubscribeEvent
     public static void registerKeyMappings(RegisterKeyMappingsEvent event) {
         event.register(TOGGLE_HUD);
+        event.register(PING);
     }
 }

@@ -41,9 +41,13 @@ public final class AbyssClientEffects {
 
     @SubscribeEvent
     public static void onClientTick(ClientTickEvent.Post event) {
-        // Drain the HUD-toggle key every tick, regardless of dimension.
+        // Drain the keybinds every tick, regardless of dimension.
         while (ClientSetup.TOGGLE_HUD.consumeClick()) {
             ClientAbyssState.toggleHud();
+        }
+        boolean pingPressed = false;
+        while (ClientSetup.PING.consumeClick()) {
+            pingPressed = true;
         }
         if (!active()) {
             flashTicks = 0;
@@ -54,6 +58,9 @@ public final class AbyssClientEffects {
         LocalPlayer player = mc.player;
         if (player == null || mc.level == null) {
             return;
+        }
+        if (pingPressed) {
+            sendPing(mc, player);
         }
 
         if (ClientAbyssState.getCinematicTicks() > 0) {
@@ -161,6 +168,61 @@ public final class AbyssClientEffects {
     private static float lerpAngle(float from, float to, float f) {
         float delta = Mth.wrapDegrees(to - from);
         return from + delta * f;
+    }
+
+    /** Ray-casts where the player is looking (up to 48 blocks) and pings that spot to the squad. */
+    private static void sendPing(Minecraft mc, LocalPlayer player) {
+        net.minecraft.world.phys.Vec3 eye = player.getEyePosition(1.0F);
+        net.minecraft.world.phys.Vec3 look = player.getViewVector(1.0F);
+        net.minecraft.world.phys.Vec3 end = eye.add(look.scale(48.0));
+        net.minecraft.world.level.ClipContext ctx = new net.minecraft.world.level.ClipContext(
+                eye, end, net.minecraft.world.level.ClipContext.Block.OUTLINE,
+                net.minecraft.world.level.ClipContext.Fluid.NONE, player);
+        net.minecraft.core.BlockPos target = mc.level.clip(ctx).getBlockPos();
+        net.neoforged.neoforge.network.PacketDistributor.sendToServer(
+                new com.jrpetty.aztecabyss.network.PingPayload(target.getX(), target.getY(), target.getZ()));
+        // The server plays the ping blip back to the whole squad, including us.
+    }
+
+    /** The co-op squad panel: each teammate's name + health bar, and a marker to anyone downed. */
+    private static void drawSquad(net.minecraft.client.gui.GuiGraphics g, Minecraft mc) {
+        java.util.List<com.jrpetty.aztecabyss.network.TeammateInfo> squad = ClientAbyssState.getSquad();
+        if (squad.isEmpty() || mc.player == null) {
+            return;
+        }
+        net.minecraft.client.gui.Font font = mc.font;
+        int x = 6;
+        int y = 82;
+        int rowH = 12;
+        int panelW = 132;
+        int panelH = 14 + squad.size() * rowH + 4;
+        g.fill(x, y, x + panelW, y + panelH, 0x99000000);
+        g.fill(x, y, x + panelW, y + 1, 0xC0B8860B);
+        g.drawString(font, net.minecraft.network.chat.Component.literal("§6§lSQUAD"), x + 4, y + 3, 0xFFFFFF, true);
+
+        int ry = y + 15;
+        for (com.jrpetty.aztecabyss.network.TeammateInfo t : squad) {
+            if (t.downed()) {
+                double dx = t.x() - mc.player.getX();
+                double dz = t.z() - mc.player.getZ();
+                int dist = (int) Math.sqrt(dx * dx + dz * dz);
+                String card = Math.abs(dx) > Math.abs(dz) ? (dx > 0 ? "E" : "W") : (dz > 0 ? "S" : "N");
+                g.drawString(font, net.minecraft.network.chat.Component.literal(
+                        "§c§l⚑ " + t.name() + " §4DOWNED §7" + dist + "m " + card), x + 4, ry, 0xFFFFFF, true);
+            } else {
+                g.drawString(font, net.minecraft.network.chat.Component.literal("§f" + t.name()), x + 4, ry, 0xFFFFFF, true);
+                int bw = 46;
+                int bh = 6;
+                int bx = x + panelW - bw - 4;
+                int by = ry + 1;
+                float frac = Math.max(0f, Math.min(1f, t.health() / 100.0f));
+                int col = frac > 0.5f ? 0xFF33CC33 : frac > 0.25f ? 0xFFCCAA22 : 0xFFCC3333;
+                g.fill(bx - 1, by - 1, bx + bw + 1, by + bh + 1, 0xFF101010);
+                g.fill(bx, by, bx + bw, by + bh, 0xFF303030);
+                g.fill(bx, by, bx + (int) (bw * frac), by + bh, col);
+            }
+            ry += rowH;
+        }
     }
 
     /** Top-right countdown to when the Abyss reopens for a player on a death lockout. */
@@ -292,6 +354,7 @@ public final class AbyssClientEffects {
         // Live run HUD (toggle with the keybind, default H).
         if (ClientAbyssState.isInRun() && ClientAbyssState.isHudVisible()) {
             drawHud(event.getGuiGraphics(), mc);
+            drawSquad(event.getGuiGraphics(), mc);
         }
 
         // Red flash overlay.

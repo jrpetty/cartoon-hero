@@ -25,6 +25,9 @@ public final class ClientAbyssState {
     /** Epoch millis the re-entry cooldown ends (0 / past = no active lockout). */
     private static volatile long cooldownUntil = 0L;
 
+    /** Latest squadmate snapshot for the co-op teammate HUD. */
+    private static volatile java.util.List<com.jrpetty.aztecabyss.network.TeammateInfo> squad = java.util.List.of();
+
     /** Counts down while the arrival cinematic plays (client ticks). 0 = not playing. */
     private static int cinematicTicks = 0;
 
@@ -60,6 +63,14 @@ public final class ClientAbyssState {
     /** Millis remaining on the re-entry lockout, or 0 if none. */
     public static long cooldownRemainingMillis() {
         return Math.max(0L, cooldownUntil - System.currentTimeMillis());
+    }
+
+    public static void acceptSquad(com.jrpetty.aztecabyss.network.SquadPayload payload) {
+        squad = payload.teammates();
+    }
+
+    public static java.util.List<com.jrpetty.aztecabyss.network.TeammateInfo> getSquad() {
+        return squad;
     }
 
     public static boolean isInRun() {
