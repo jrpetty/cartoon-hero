@@ -56,7 +56,11 @@ public final class PortalEvents {
 
         Direction face = event.getFace();
         BlockPos interior = clicked.relative(face);
-        if (!level.getBlockState(interior).isAir()) {
+        BlockState interiorState = level.getBlockState(interior);
+        // The opening must be clickable through - air, or fire from a prior attempt.
+        if (!interiorState.isAir()
+                && !interiorState.is(net.minecraft.world.level.block.Blocks.FIRE)
+                && !interiorState.is(net.minecraft.world.level.block.Blocks.SOUL_FIRE)) {
             return;
         }
 

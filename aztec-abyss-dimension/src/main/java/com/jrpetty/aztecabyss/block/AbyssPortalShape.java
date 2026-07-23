@@ -4,6 +4,7 @@ import com.jrpetty.aztecabyss.registry.ModBlocks;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.world.level.LevelAccessor;
+import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
 
 import javax.annotation.Nullable;
@@ -11,14 +12,13 @@ import java.util.Optional;
 import java.util.function.Predicate;
 
 /**
- * Frame-detection and fill logic for the Abyss portal, adapted from vanilla's
- * nether portal shape algorithm but keyed to vanilla diamond/iron blocks
- * instead of obsidian, and filling with {@link ModBlocks#ABYSS_PORTAL}.
+ * Frame-detection and fill logic for the Abyss portal, mirroring vanilla's
+ * nether portal shape algorithm but keyed to vanilla diamond/iron frame blocks
+ * and filling with {@link ModBlocks#ABYSS_PORTAL}.
  *
- * The frame does NOT need to be a specific shape beyond: a rectangular ring of
- * abyssal obsidian, minimum interior 1x1, maximum interior 21x21, all four
- * sides fully framed, corners not required to be frame blocks (matches vanilla
- * nether portal behaviour).
+ * Frame rules match a nether portal: a rectangular ring of diamond and/or iron
+ * blocks, interior 2..21 wide and 3..21 tall, corners optional. The interior
+ * may contain air, fire (from the igniting click) or existing portal blocks.
  */
 public final class AbyssPortalShape {
 
@@ -45,8 +45,8 @@ public final class AbyssPortalShape {
         if (onAxis.isPresent()) {
             return onAxis;
         }
-        Direction.Axis otherAxis = axis == Direction.Axis.X ? Direction.Axis.Z : Direction.Axis.X;
-        return Optional.of(new AbyssPortalShape(level, pos, otherAxis)).filter(predicate);
+        Direction.Axis other = axis == Direction.Axis.X ? Direction.Axis.Z : Direction.Axis.X;
+        return Optional.of(new AbyssPortalShape(level, pos, other)).filter(predicate);
     }
 
     public AbyssPortalShape(LevelAccessor level, BlockPos pos, Direction.Axis axis) {
@@ -68,80 +68,91 @@ public final class AbyssPortalShape {
 
     @Nullable
     private BlockPos calculateBottomLeft(BlockPos pos) {
+        int minY = Math.max(level.getMinBuildHeight(), pos.getY() - MAX_HEIGHT);
         BlockPos.MutableBlockPos cursor = pos.mutable();
-        int y = cursor.getY();
-        for (; y > level.getMinBuildHeight() && isEmptyOrPortal(level, cursor.below()); y--) {
+        while (cursor.getY() > minY && isEmpty(level.getBlockState(cursor.below()))) {
             cursor.move(Direction.DOWN);
         }
         Direction leftDir = rightDir.getOpposite();
-        int distanceToEdge = getDistanceUntilEdgeAboveFrame(cursor, leftDir) - 1;
-        if (distanceToEdge < 0) {
-            return null;
-        }
-        return cursor.relative(leftDir, distanceToEdge).immutable();
-    }
-
-    private int getDistanceUntilEdgeAboveFrame(BlockPos pos, Direction dir) {
-        for (int i = 0; i <= MAX_WIDTH; i++) {
-            BlockPos check = pos.relative(dir, i);
-            if (!isEmptyOrPortal(level, check) || !isEmptyOrPortal(level, check.below())) {
-                if (isFrame(level, check)) {
-                    return i;
-                }
-                break;
-            }
-        }
-        return -1;
+        int d = getDistanceUntilEdgeAboveFrame(cursor, leftDir) - 1;
+        return d < 0 ? null : cursor.relative(leftDir, d).immutable();
     }
 
     private int calculateWidth() {
-        int max = getDistanceUntilEdgeAboveFrame(bottomLeft, rightDir);
-        return max >= MIN_WIDTH && max <= MAX_WIDTH ? max : 0;
+        int w = getDistanceUntilEdgeAboveFrame(bottomLeft, rightDir);
+        return w >= MIN_WIDTH && w <= MAX_WIDTH ? w : 0;
+    }
+
+    /**
+     * Walking from an interior position toward {@code dir}: each interior column
+     * must be empty AND sit on a frame block (the portal floor). Stops when it
+     * reaches the frame edge, returning the distance to it.
+     */
+    private int getDistanceUntilEdgeAboveFrame(BlockPos pos, Direction dir) {
+        BlockPos.MutableBlockPos m = new BlockPos.MutableBlockPos();
+        for (int i = 0; i <= MAX_WIDTH; i++) {
+            m.set(pos).move(dir, i);
+            BlockState state = level.getBlockState(m);
+            if (!isEmpty(state)) {
+                return isFrameBlock(state) ? i : 0;
+            }
+            BlockState below = level.getBlockState(m.move(Direction.DOWN));
+            if (!isFrameBlock(below)) {
+                return 0;
+            }
+        }
+        return 0;
     }
 
     private int calculateHeight() {
-        int minY = level.getMinBuildHeight();
+        BlockPos.MutableBlockPos m = new BlockPos.MutableBlockPos();
+        int h = getDistanceUntilTop(m);
+        return h >= MIN_HEIGHT && h <= MAX_HEIGHT && hasTopFrame(m, h) ? h : 0;
+    }
+
+    private boolean hasTopFrame(BlockPos.MutableBlockPos m, int h) {
+        for (int i = 0; i < width; i++) {
+            m.set(bottomLeft).move(Direction.UP, h).move(rightDir, i);
+            if (!isFrameBlock(level.getBlockState(m))) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private int getDistanceUntilTop(BlockPos.MutableBlockPos m) {
         numPortalBlocks = 0;
-        int h;
-        for (h = 0; h < MAX_HEIGHT; h++) {
-            BlockPos.MutableBlockPos cursor = new BlockPos.MutableBlockPos();
-            for (int w = 0; w < width; w++) {
-                cursor.set(bottomLeft).move(Direction.UP, h).move(rightDir, w);
-                BlockState state = level.getBlockState(cursor);
-                if (!isEmptyOrPortal(level, cursor)) {
-                    return checkTop(h);
+        for (int i = 0; i < MAX_HEIGHT; i++) {
+            // Left frame column.
+            m.set(bottomLeft).move(Direction.UP, i).move(rightDir, -1);
+            if (!isFrameBlock(level.getBlockState(m))) {
+                return i;
+            }
+            // Right frame column.
+            m.set(bottomLeft).move(Direction.UP, i).move(rightDir, width);
+            if (!isFrameBlock(level.getBlockState(m))) {
+                return i;
+            }
+            // Interior of this row must be empty.
+            for (int j = 0; j < width; j++) {
+                m.set(bottomLeft).move(Direction.UP, i).move(rightDir, j);
+                BlockState state = level.getBlockState(m);
+                if (!isEmpty(state)) {
+                    return i;
                 }
                 if (state.is(ModBlocks.ABYSS_PORTAL.get())) {
                     numPortalBlocks++;
                 }
-                if (w == 0 && !isFrame(level, cursor.relative(rightDir.getOpposite()))) {
-                    return checkTop(h);
-                }
-                if (w == width - 1 && !isFrame(level, cursor.relative(rightDir))) {
-                    return checkTop(h);
-                }
             }
         }
-        return checkTop(h);
+        return MAX_HEIGHT;
     }
 
-    private int checkTop(int h) {
-        if (h < MIN_HEIGHT) {
-            return 0;
-        }
-        BlockPos.MutableBlockPos cursor = new BlockPos.MutableBlockPos();
-        for (int w = 0; w < width; w++) {
-            cursor.set(bottomLeft).move(Direction.UP, h).move(rightDir, w);
-            if (!isFrame(level, cursor)) {
-                return 0;
-            }
-        }
-        return h;
-    }
-
-    private static boolean isEmptyOrPortal(LevelAccessor level, BlockPos pos) {
-        BlockState state = level.getBlockState(pos);
-        return state.isAir() || state.is(ModBlocks.ABYSS_PORTAL.get());
+    private static boolean isEmpty(BlockState state) {
+        return state.isAir()
+                || state.is(Blocks.FIRE)
+                || state.is(Blocks.SOUL_FIRE)
+                || state.is(ModBlocks.ABYSS_PORTAL.get());
     }
 
     /** The Abyss portal frame is built from vanilla diamond and/or iron blocks. */
@@ -149,9 +160,8 @@ public final class AbyssPortalShape {
         return isFrameBlock(level.getBlockState(pos));
     }
 
-    public static boolean isFrameBlock(net.minecraft.world.level.block.state.BlockState state) {
-        return state.is(net.minecraft.world.level.block.Blocks.DIAMOND_BLOCK)
-                || state.is(net.minecraft.world.level.block.Blocks.IRON_BLOCK);
+    public static boolean isFrameBlock(BlockState state) {
+        return state.is(Blocks.DIAMOND_BLOCK) || state.is(Blocks.IRON_BLOCK);
     }
 
     public boolean isValid() {
@@ -163,8 +173,8 @@ public final class AbyssPortalShape {
         BlockState portalState = ModBlocks.ABYSS_PORTAL.get().defaultBlockState()
                 .setValue(AbyssPortalBlock.AXIS, axis);
         BlockPos.betweenClosed(BlockPos.ZERO, new BlockPos(width - 1, height - 1, 0)).forEach(offset -> {
-            BlockPos pos = bottomLeft.relative(rightDir, offset.getX()).above(offset.getY());
-            level.setBlock(pos, portalState, 18);
+            BlockPos p = bottomLeft.relative(rightDir, offset.getX()).above(offset.getY());
+            level.setBlock(p, portalState, 18);
         });
     }
 
