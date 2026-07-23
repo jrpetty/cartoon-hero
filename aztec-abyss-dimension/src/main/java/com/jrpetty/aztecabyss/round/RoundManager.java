@@ -7,8 +7,10 @@ import com.jrpetty.aztecabyss.network.ModNetworking;
 import com.jrpetty.aztecabyss.registry.ModAttachments;
 import com.jrpetty.aztecabyss.registry.ModSounds;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.protocol.game.ClientboundSetActionBarTextPacket;
+import net.minecraft.network.protocol.game.ClientboundSetEntityMotionPacket;
 import net.minecraft.network.protocol.game.ClientboundSetSubtitleTextPacket;
 import net.minecraft.network.protocol.game.ClientboundSetTitleTextPacket;
 import net.minecraft.server.MinecraftServer;
@@ -363,6 +365,7 @@ public final class RoundManager {
 
         game.setBossId(boss.getUUID());
         game.setBossActive(true);
+        game.setBossEnraged(false);
         game.setBossHealthFraction(1.0f);
         game.setLastBossAbilityAt(level.getGameTime());
 
@@ -396,6 +399,12 @@ public final class RoundManager {
         }
         game.setBossHealthFraction((float) (boss.getHealth() / boss.getMaxHealth()));
 
+        // Second wind: below a third HP the Warden enrages - faster, stronger, relentless.
+        if (!game.isBossEnraged() && game.getBossHealthFraction() <= 0.33f) {
+            enrageBoss(level, boss, present);
+        }
+        boolean enraged = game.isBossEnraged();
+
         // Keep the Warden locked onto a standing hunter so it never idles.
         if (boss instanceof Mob m && level.getGameTime() % 20L == 0L) {
             ServerPlayer target = pickTarget(present);
@@ -405,19 +414,67 @@ public final class RoundManager {
         }
 
         long now = level.getGameTime();
-        if (now - game.getLastBossAbilityAt() >= 120L) { // roughly every 6s
+        int abilityCd = enraged ? 70 : 120; // roughly every 3.5s / 6s
+        if (now - game.getLastBossAbilityAt() >= abilityCd) {
             game.setLastBossAbilityAt(now);
             for (ServerPlayer p : present) {
                 p.addEffect(new MobEffectInstance(MobEffects.DARKNESS, 80, 0, false, false));
                 level.playSound(null, p.blockPosition(), SoundEvents.WARDEN_ROAR, SoundSource.HOSTILE, 0.9F, 1.0F);
             }
             int cap = AbyssConfig.MAX_CONCURRENT_ALIVE.get();
-            int summon = Math.min(3 + present.size(), Math.max(0, cap - game.getAliveZombies()));
+            int summon = Math.min((enraged ? 5 : 3) + present.size(), Math.max(0, cap - game.getAliveZombies()));
             for (int i = 0; i < summon; i++) {
                 spawnWaveMob(level, present, game.getRound(), false);
                 game.setAliveZombies(game.getAliveZombies() + 1);
             }
         }
+
+        // Ground slam: a telegraphed sonic shockwave that flings nearby hunters.
+        int slamInterval = enraged ? 60 : 100;
+        if (now % slamInterval == 0L) {
+            groundSlam(level, boss, present);
+        }
+    }
+
+    private static void enrageBoss(ServerLevel level, LivingEntity boss, List<ServerPlayer> present) {
+        game.setBossEnraged(true);
+        boss.addEffect(new MobEffectInstance(MobEffects.MOVEMENT_SPEED, Integer.MAX_VALUE, 1, false, false));
+        boss.addEffect(new MobEffectInstance(MobEffects.DAMAGE_BOOST, Integer.MAX_VALUE, 1, false, false));
+        for (ServerPlayer p : present) {
+            title(p, "§4§lTHE WARDEN ENRAGES", "§cIt will not stop now.");
+            level.playSound(null, p.blockPosition(), SoundEvents.WARDEN_ANGRY, SoundSource.HOSTILE, 1.2F, 0.8F);
+        }
+        for (ServerBossEvent bar : BOSS_BARS.values()) {
+            bar.setName(Component.literal("§4§l⚔ ENRAGED WARDEN"));
+        }
+    }
+
+    private static void groundSlam(ServerLevel level, LivingEntity boss, List<ServerPlayer> present) {
+        double radius = 7.0;
+        float damage = (float) (5.0 + game.getRound() * 0.4);
+        for (ServerPlayer p : present) {
+            if (p.getData(ModAttachments.RUN_STATE).isDowned()) {
+                continue; // downed players are already invulnerable
+            }
+            if (p.distanceToSqr(boss) > radius * radius) {
+                continue;
+            }
+            p.hurt(boss.damageSources().mobAttack(boss), damage);
+            double dx = p.getX() - boss.getX();
+            double dz = p.getZ() - boss.getZ();
+            double len = Math.sqrt(dx * dx + dz * dz);
+            if (len < 0.1) {
+                dx = RNG.nextDouble() - 0.5;
+                dz = RNG.nextDouble() - 0.5;
+                len = Math.sqrt(dx * dx + dz * dz) + 0.001;
+            }
+            p.push(dx / len * 1.3, 0.75, dz / len * 1.3);
+            p.hurtMarked = true;
+            p.connection.send(new ClientboundSetEntityMotionPacket(p));
+        }
+        level.sendParticles(ParticleTypes.SONIC_BOOM, boss.getX(), boss.getY() + 1.2, boss.getZ(), 1, 0, 0, 0, 0);
+        level.sendParticles(ParticleTypes.EXPLOSION, boss.getX(), boss.getY() + 0.2, boss.getZ(), 8, 2.5, 0.2, 2.5, 0.0);
+        level.playSound(null, boss.blockPosition(), SoundEvents.WARDEN_SONIC_BOOM, SoundSource.HOSTILE, 1.2F, 0.8F);
     }
 
     /** The boss died: end the spectacle, reward the arena, let the round clear. */

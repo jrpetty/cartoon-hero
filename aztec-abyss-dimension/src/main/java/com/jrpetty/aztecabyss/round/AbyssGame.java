@@ -48,6 +48,8 @@ public final class AbyssGame {
     private float bossHealthFraction = 0f;
     /** Game-time of the boss's last special ability, for cooldown pacing. */
     private long lastBossAbilityAt = 0L;
+    /** True once the boss has crossed its enrage threshold this round. */
+    private boolean bossEnraged = false;
 
     // --- Easter-egg ritual state ---
     /** Braziers lit so far, in the order the player lit them. */
@@ -180,6 +182,14 @@ public final class AbyssGame {
 
     public void setLastBossAbilityAt(long v) {
         this.lastBossAbilityAt = v;
+    }
+
+    public boolean isBossEnraged() {
+        return bossEnraged;
+    }
+
+    public void setBossEnraged(boolean v) {
+        this.bossEnraged = v;
     }
 
     public void removeParticipant(UUID id) {
