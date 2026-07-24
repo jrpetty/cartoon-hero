@@ -113,6 +113,35 @@ public final class AbyssEventHandler {
     }
 
     @SubscribeEvent
+    public void onUseAbility(net.neoforged.neoforge.event.entity.player.PlayerInteractEvent.RightClickItem event) {
+        if (!(event.getLevel() instanceof ServerLevel level) || !inAbyss(level)) {
+            return;
+        }
+        if (!(event.getEntity() instanceof ServerPlayer player)) {
+            return;
+        }
+        net.minecraft.world.item.ItemStack stack = event.getItemStack();
+        if (!com.jrpetty.aztecabyss.round.AbyssAbility.is(stack)
+                || !RoundManager.game().isParticipant(player.getUUID())) {
+            return;
+        }
+        com.jrpetty.aztecabyss.round.AbyssAbility.trigger(level, player);
+        stack.shrink(1);
+        player.displayClientMessage(net.minecraft.network.chat.Component.literal("§d✦ Abyssal Nova unleashed!"), true);
+        event.setCanceled(true);
+        event.setCancellationResult(net.minecraft.world.InteractionResult.SUCCESS);
+    }
+
+    @SubscribeEvent
+    public void onLeaveAbyss(PlayerEvent.PlayerChangedDimensionEvent event) {
+        // The Abyssal Nova never leaves the dimension - strip it the moment a player exits.
+        if (event.getEntity() instanceof ServerPlayer player
+                && event.getFrom().equals(AztecAbyssConstants.ABYSS_LEVEL_KEY)) {
+            com.jrpetty.aztecabyss.round.AbyssAbility.strip(player);
+        }
+    }
+
+    @SubscribeEvent
     public void onPlayerLoggedIn(PlayerEvent.PlayerLoggedInEvent event) {
         if (event.getEntity() instanceof ServerPlayer player) {
             RoundManager.resolveOwedRewardOnLogin(player);

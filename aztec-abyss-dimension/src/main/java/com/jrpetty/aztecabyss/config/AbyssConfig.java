@@ -66,8 +66,8 @@ public final class AbyssConfig {
                 .defineInRange("damageScalePerRound", 0.14, 0.0, 5.0);
         FIRST_ROUND_DELAY_TICKS = b.comment("Ticks after arrival before round 1 begins (20 ticks = 1s).")
                 .defineInRange("firstRoundDelayTicks", 100, 0, 2400);
-        BETWEEN_ROUND_TICKS = b.comment("Breather between rounds, in ticks.")
-                .defineInRange("betweenRoundTicks", 100, 0, 2400);
+        BETWEEN_ROUND_TICKS = b.comment("Breather between rounds, in ticks (200 = 10s).")
+                .defineInRange("betweenRoundTicks", 200, 0, 2400);
         b.pop();
 
         b.push("entry");

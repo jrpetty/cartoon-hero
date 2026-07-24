@@ -101,6 +101,7 @@ public final class RoundManager {
         if (AbyssConfig.GIVE_STARTING_LOADOUT.get()) {
             giveLoadout(player);
         }
+        AbyssAbility.give(player); // one-charge Abyssal Nova, dimension-locked
         setupBossBar(player);
 
         ModNetworking.sendState(player, true, game.getRound()); // triggers the arrival cinematic
