@@ -730,8 +730,10 @@ public final class DuelManager {
                     .withStyle(ChatFormatting.YELLOW, ChatFormatting.BOLD);
         };
 
-        sendBoth(duel, reveal);
-        sendBoth(duel, outcome);
+        // duelists watch the round unfold on the battle screen; only spectators
+        // (who have no screen) get the play-by-play in chat
+        sendSpectators(duel, reveal);
+        sendSpectators(duel, outcome);
         pushResult(duel, result); // flip & reveal on both players' battle screens
 
         if (result.winner() == Battle.Side.PLAYER) {
@@ -754,7 +756,15 @@ public final class DuelManager {
 
     // --- on-screen battle sync: mirror the chat duel onto both BattleScreens ---
 
-    /** A screen action (pick / forfeit) arriving from a duelist's battle screen. */
+    /** Emote keys in the order the battle screen's emote wheel sends them. */
+    private static final String[] SCREEN_EMOTES = {"gg", "gl", "nice", "close", "oops", "wow"};
+
+    // on-screen rematch: the best-of mode of each player's last duel, and who has
+    // an open rematch offer (reuses the existing LAST_FOE map for the opponent)
+    private static final Map<UUID, Integer> LAST_MODE = new ConcurrentHashMap<>();
+    private static final Map<UUID, Long> REMATCH_WANT = new ConcurrentHashMap<>();
+    private static final long REMATCH_TTL_MS = 30_000L;
+
     public static void handleScreenAction(ServerPlayer player, int action, int stat) {
         switch (action) {
             case BattleActionPayload.PICK -> {
@@ -764,9 +774,74 @@ public final class DuelManager {
                 }
             }
             case BattleActionPayload.FORFEIT -> forfeit(player);
+            case BattleActionPayload.EMOTE -> screenEmote(player, stat);
             default -> {
             }
         }
+    }
+
+    /** REMATCH arrives after the duel has ended, so it's routed here directly.
+     *  When both players have offered, a fresh unwagered duel starts at once. */
+    public static void handleScreenRematch(ServerPlayer player) {
+        LastFoe foe = LAST_FOE.get(player.getUUID());
+        if (foe == null) {
+            return;
+        }
+        ServerPlayer opp = player.serverLevel().getServer().getPlayerList().getPlayer(foe.id());
+        if (opp == null) {
+            player.displayClientMessage(Component.literal("Your last opponent has left.")
+                    .withStyle(ChatFormatting.GRAY), true);
+            return;
+        }
+        if (isInDuel(player) || isInDuel(opp) || DraftManager.isDrafting(player)) {
+            return;
+        }
+        long now = System.currentTimeMillis();
+        Long theirWant = REMATCH_WANT.get(foe.id());
+        LastFoe theirFoe = LAST_FOE.get(foe.id());
+        boolean mutual = theirWant != null && theirWant > now
+                && theirFoe != null && player.getUUID().equals(theirFoe.id());
+        if (mutual) {
+            REMATCH_WANT.remove(player.getUUID());
+            REMATCH_WANT.remove(foe.id());
+            int mode = LAST_MODE.getOrDefault(player.getUUID(), 1);
+            startFromTable(player, opp, mode); // fresh, unwagered rematch
+        } else {
+            REMATCH_WANT.put(player.getUUID(), now + REMATCH_TTL_MS);
+            pushEmote(opp, 1, name(player) + " wants a rematch!");
+            player.displayClientMessage(Component.literal("Rematch offered — waiting for "
+                    + name(opp) + "...").withStyle(ChatFormatting.GRAY), true);
+        }
+    }
+
+    private static void screenEmote(ServerPlayer player, int idx) {
+        Duel duel = ACTIVE.get(player.getUUID());
+        if (duel == null || idx < 0 || idx >= SCREEN_EMOTES.length) {
+            return;
+        }
+        String text = emoteText(SCREEN_EMOTES[idx]);
+        ServerPlayer opp = duel.other(player);
+        pushEmote(player, 0, text); // above your own card
+        pushEmote(opp, 1, text);    // above your opponent's card on their screen
+        sendSpectators(duel, Component.literal(name(player) + ": ").withStyle(ChatFormatting.YELLOW)
+                .append(Component.literal(text).withStyle(ChatFormatting.WHITE)));
+    }
+
+    private static void pushEmote(ServerPlayer to, int side, String text) {
+        net.neoforged.neoforge.network.PacketDistributor.sendToPlayer(to,
+                new BattleEmotePayload(side, text));
+    }
+
+    private static String emoteText(String key) {
+        return switch (key) {
+            case "gg" -> "gg!";
+            case "nice" -> "Nice one!";
+            case "close" -> "So close!";
+            case "oops" -> "Oops...";
+            case "gl" -> "Good luck!";
+            case "wow" -> "Wow!";
+            default -> key;
+        };
     }
 
     private static void pushTurn(Duel duel) {
@@ -808,9 +883,12 @@ public final class DuelManager {
                 ? duel.battle.cpuCardCount() : duel.battle.playerCardCount();
         int myGames = side == Battle.Side.PLAYER ? duel.challengerGames : duel.targetGames;
         int oppGames = side == Battle.Side.PLAYER ? duel.targetGames : duel.challengerGames;
+        // the per-turn countdown (seconds) so the screen can draw a timer bar
+        int turnSeconds = (phase == BattleSyncPayload.PLAYER_PICK
+                || phase == BattleSyncPayload.OPPONENT_PICK) ? (int) (TURN_MS / 1000L) : 0;
         java.util.List<Integer> nums = new java.util.ArrayList<>(java.util.List.of(
                 myCount, oppCount, duel.battle.potCount(), duel.battle.getRound(),
-                chosen, chooser, winner, 0, 1, myGames, oppGames));
+                chosen, chooser, winner, 0, 1, myGames, oppGames, turnSeconds));
         net.neoforged.neoforge.network.PacketDistributor.sendToPlayer(p,
                 new BattleSyncPayload(phase, myId, oppId, nums, name(duel.other(p))));
     }
@@ -832,7 +910,7 @@ public final class DuelManager {
 
         // --- best-of series ---
         if (winSide == Battle.Side.NONE) {
-            sendBoth(duel, Component.literal("Game drawn — it doesn't count. Re-dealing...")
+            sendSpectators(duel, Component.literal("Game drawn — it doesn't count. Re-dealing...")
                     .withStyle(ChatFormatting.YELLOW));
             dealNextGame(duel);
             return;
@@ -840,7 +918,7 @@ public final class DuelManager {
         ServerPlayer gameWinner = duel.forSide(winSide);
         if (winSide == Battle.Side.PLAYER) duel.challengerGames++; else duel.targetGames++;
 
-        sendBoth(duel, Component.literal(name(gameWinner) + " wins the game! Series: ")
+        sendSpectators(duel, Component.literal(name(gameWinner) + " wins the game! Series: ")
                 .withStyle(ChatFormatting.GOLD, ChatFormatting.BOLD)
                 .append(Component.literal(name(duel.challenger) + " " + duel.challengerGames
                         + " - " + duel.targetGames + " " + name(duel.target))
@@ -860,7 +938,7 @@ public final class DuelManager {
     private static void dealNextGame(Duel duel) {
         int gameNo = duel.challengerGames + duel.targetGames + 1;
         duel.battle = new Battle(DECK_SIZE, ThreadLocalRandom.current());
-        sendBoth(duel, Component.literal("--- Game " + gameNo + " of up to " + duel.bestOf + " ---")
+        sendSpectators(duel, Component.literal("--- Game " + gameNo + " of up to " + duel.bestOf + " ---")
                 .withStyle(ChatFormatting.GOLD));
         BattleCommands.shuffleSound(duel.challenger);
         BattleCommands.shuffleSound(duel.target);
@@ -869,7 +947,6 @@ public final class DuelManager {
 
     private static void promptTurn(Duel duel) {
         ServerPlayer chooser = duel.forSide(duel.battle.getTurn());
-        ServerPlayer waiter = duel.other(chooser);
 
         int challengerCards = duel.battle.playerCardCount();
         int targetCards = duel.battle.cpuCardCount();
@@ -879,39 +956,30 @@ public final class DuelManager {
                 ? "Game " + (duel.challengerGames + duel.targetGames + 1)
                         + " (" + duel.challengerGames + "-" + duel.targetGames + ") · "
                 : "";
+        // the duelists see cards, tallies and whose turn it is on the screen;
+        // only spectators need the chat readout
         MutableComponent score = Component.literal(series
                 + name(duel.challenger) + ": " + challengerCards
                 + " | " + name(duel.target) + ": " + targetCards
                 + (pot > 0 ? " | Pot: " + pot : "")).withStyle(ChatFormatting.DARK_GRAY);
-        sendBoth(duel, score);
-
-        MobCard card = duel.battle.getTurn() == Battle.Side.PLAYER
-                ? duel.battle.playerTopCard() : duel.battle.cpuTopCard();
-        MutableComponent picks = Component.literal("Your card: ").withStyle(ChatFormatting.GRAY)
-                .append(BattleCommands.cardName(card))
-                .append(Component.literal("\nPick a stat: ").withStyle(ChatFormatting.GRAY));
-        for (Stat stat : Stat.values()) {
-            picks.append(BattleCommands.button(
-                    "[" + stat.shortLabel + " " + card.stat(stat) + "]",
-                    "/mobtrumps play " + stat.key(),
-                    MobCardItem.statColor(stat),
-                    "Play " + stat.label + " (" + card.stat(stat) + ")"));
-            picks.append(Component.literal(" "));
-        }
-        chooser.sendSystemMessage(picks);
-        waiter.sendSystemMessage(Component.literal("Waiting for " + name(chooser) + " to pick...")
-                .withStyle(ChatFormatting.GRAY));
+        sendSpectators(duel, score);
         sendSpectators(duel, Component.literal(name(chooser) + " is choosing a stat...")
                 .withStyle(ChatFormatting.DARK_GRAY));
         duel.turnDeadline = System.currentTimeMillis() + TURN_MS;
         duel.warned = false;
-        pushTurn(duel); // update both battle screens for the new turn
+        pushTurn(duel); // drive both battle screens (cards, timer bar, turn)
     }
 
     private static void endDuel(Duel duel, ServerPlayer winner, ServerPlayer loser, boolean forfeit) {
         settleSideBets(duel, winner);
         clear(duel);
         pushFinished(duel, winner); // final banner on both battle screens
+        // remember the mode so an on-screen Rematch re-deals the same series
+        // length (LAST_FOE for the opponent is already set at duel start)
+        LAST_MODE.put(duel.challenger.getUUID(), duel.bestOf);
+        LAST_MODE.put(duel.target.getUUID(), duel.bestOf);
+        REMATCH_WANT.remove(duel.challenger.getUUID());
+        REMATCH_WANT.remove(duel.target.getUUID());
         boolean wager = duel.isWager();
         if (winner == null) {
             sendBoth(duel, Component.literal("The duel is a draw — every stake is returned.")

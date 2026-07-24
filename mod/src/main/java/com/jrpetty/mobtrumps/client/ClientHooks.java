@@ -57,6 +57,11 @@ public final class ClientHooks {
                 payload.pos(), payload.seatedName(), payload.seatedMode(), payload.selfSeated()));
     }
 
+    /** Show an emote bubble on the battle screen, if one is open. */
+    public static void showBattleEmote(int side, String text) {
+        ClientBattle.setEmote(side, text);
+    }
+
     /** Apply a battle state snapshot, opening or closing the battle screen. */
     public static void updateBattle(com.jrpetty.mobtrumps.BattleSyncPayload payload) {
         ClientBattle.set(payload.phase(), payload.playerCardId(), payload.cpuCardId(),

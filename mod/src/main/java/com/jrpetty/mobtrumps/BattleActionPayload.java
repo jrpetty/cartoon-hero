@@ -15,7 +15,9 @@ public record BattleActionPayload(int action, int stat) implements CustomPacketP
     public static final int PICK = 0;      // play stat on my card
     public static final int NEXT = 1;      // reveal the CPU's pick / advance past a result
     public static final int FORFEIT = 2;   // leave the battle
-    public static final int PLAY_AGAIN = 3; // rematch at the same difficulty
+    public static final int PLAY_AGAIN = 3; // rematch at the same difficulty (CPU)
+    public static final int EMOTE = 4;     // send an emote (stat = emote index)
+    public static final int REMATCH = 5;   // offer/accept a rematch after a duel (PvP)
 
     public static final CustomPacketPayload.Type<BattleActionPayload> TYPE =
             new CustomPacketPayload.Type<>(

@@ -57,13 +57,19 @@ public final class ModNetworking {
         registrar.playToServer(BattleActionPayload.TYPE, BattleActionPayload.STREAM_CODEC,
                 (payload, context) -> context.enqueueWork(() -> {
                     if (context.player() instanceof net.minecraft.server.level.ServerPlayer sp) {
-                        if (DuelManager.isInDuel(sp)) {
+                        // REMATCH fires after the duel has ended (player no longer "in" it)
+                        if (payload.action() == BattleActionPayload.REMATCH) {
+                            DuelManager.handleScreenRematch(sp);
+                        } else if (DuelManager.isInDuel(sp)) {
                             DuelManager.handleScreenAction(sp, payload.action(), payload.stat());
                         } else {
                             TableBattleManager.action(sp, payload.action(), payload.stat());
                         }
                     }
                 }));
+        registrar.playToClient(BattleEmotePayload.TYPE, BattleEmotePayload.STREAM_CODEC,
+                (payload, context) -> context.enqueueWork(
+                        () -> ClientHooks.showBattleEmote(payload.side(), payload.text())));
         registrar.playToClient(TableMenuPayload.TYPE, TableMenuPayload.STREAM_CODEC,
                 (payload, context) -> context.enqueueWork(
                         () -> ClientHooks.openTableMenu(payload)));

@@ -36,8 +36,14 @@ public final class ClientBattle {
     private static volatile int pvp;
     private static volatile int myGames;
     private static volatile int oppGames;
+    private static volatile int turnSeconds;
     private static volatile String label = "";
     private static volatile long changedAt;
+
+    // transient emote bubble
+    private static volatile int emoteSide = -1;
+    private static volatile String emoteText = "";
+    private static volatile long emoteAt;
 
     private record Snapshot(int phase, String my, String opp, List<Integer> nums, String label) {
     }
@@ -93,11 +99,24 @@ public final class ClientBattle {
         pvp = at(n, 8);
         myGames = at(n, 9);
         oppGames = at(n, 10);
+        turnSeconds = at(n, 11);
         label = nz(s.label());
         if (changed) {
             changedAt = System.currentTimeMillis();
         }
     }
+
+    /** Show an emote bubble: side 0 = my card, 1 = opponent's card. */
+    public static void setEmote(int side, String text) {
+        emoteSide = side;
+        emoteText = text == null ? "" : text;
+        emoteAt = System.currentTimeMillis();
+    }
+
+    public static int emoteSide() { return emoteSide; }
+    public static String emoteText() { return emoteText; }
+    public static long emoteAt() { return emoteAt; }
+    public static int turnSeconds() { return turnSeconds; }
 
     private static String nz(String s) {
         return s == null ? "" : s;

@@ -66,11 +66,21 @@ public class BattleScreen extends Screen {
     private long leaveArmedAt = -1;
     private float cardScale = 0.68f;
 
+    private static final long EMOTE_MS = 2800L;
+    private static final String[] EMOTES = {"GG", "GL", "Nice", "Close", "Oops", "Wow"};
+
     // rects captured during render for hit-testing on click
     private int[] actionRect;
     private int[] leaveRect;
     private int[] sizeRect;
+    private int[] emoteRect;
+    private final int[][] emoteBtnRects = new int[EMOTES.length][];
+    private boolean emoteOpen;
     private final int[][] statRects = new int[Stat.values().length][];
+    // card centres captured each render, so emote bubbles land on the right card
+    private int playerCardMidX;
+    private int cpuCardMidX;
+    private int cardsTopY;
 
     public BattleScreen() {
         super(Component.literal("Mob Trumps Battle"));
@@ -128,6 +138,9 @@ public class BattleScreen extends Screen {
         int centerY = (HEADER_H + dockY) / 2 + 2;
         int baseCardY = centerY - cardH / 2;
         boolean showPiles = startX >= 42;
+        playerCardMidX = playerX + cardW / 2;
+        cpuCardMidX = cpuX + cardW / 2;
+        cardsTopY = baseCardY;
 
         String opp = ClientBattle.label().isEmpty() ? "Opponent" : ClientBattle.label();
         boolean reveal = phase == BattleSyncPayload.RESULT || phase == BattleSyncPayload.FINISHED;
@@ -280,6 +293,16 @@ public class BattleScreen extends Screen {
                     centerY - cardH / 2 - 26, bannerElapsed, pvp ? shorten(opp) : "CPU");
         }
 
+        // --- PvP turn-timer bar, just under the header ---
+        boolean picking = phase == BattleSyncPayload.PLAYER_PICK
+                || phase == BattleSyncPayload.OPPONENT_PICK;
+        if (pvp && picking && ClientBattle.turnSeconds() > 0) {
+            drawTurnTimer(g, elapsed, ClientBattle.turnSeconds() * 1000L, myPick, surfX0, surfX1, HEADER_H + 2);
+        }
+
+        // --- emote bubble floating above whoever spoke ---
+        drawEmote(g, now);
+
         // --- header band & bottom dock frame everything ---
         drawHeader(g, pvp, opp);
         drawDock(g, phase, pvp, mouseX, mouseY, now, dockY);
@@ -302,6 +325,72 @@ public class BattleScreen extends Screen {
 
         if (fadeIn < 1f) {
             g.fill(0, 0, width, height, ((int) ((1f - fadeIn) * 0xE0) << 24));
+        }
+
+        // emote wheel sits on top of everything
+        if (emoteOpen) {
+            drawEmoteWheel(g, mouseX, mouseY);
+        }
+    }
+
+    // --- PvP extras ---
+
+    /** A depleting turn-timer bar; green on your turn, red on the opponent's. */
+    private void drawTurnTimer(GuiGraphics g, long elapsed, long total, boolean mine,
+                               int x0, int x1, int y) {
+        float frac = Mth.clamp(1f - elapsed / (float) total, 0f, 1f);
+        int w = x1 - x0;
+        g.fill(x0, y, x1, y + 3, 0x80000000);
+        int fillW = (int) (w * frac);
+        int col = mine ? YOU_ACCENT : OPP_ACCENT;
+        if (frac < 0.25f) {
+            // flash when time is short
+            col = (System.currentTimeMillis() / 250 % 2 == 0) ? 0xFFF0625A : col;
+        }
+        g.fill(x0, y, x0 + fillW, y + 3, col);
+    }
+
+    /** A speech bubble above the card of whoever emoted, fading out. */
+    private void drawEmote(GuiGraphics g, long now) {
+        long age = now - ClientBattle.emoteAt();
+        int side = ClientBattle.emoteSide();
+        String text = ClientBattle.emoteText();
+        if (side < 0 || text.isEmpty() || age > EMOTE_MS) {
+            return;
+        }
+        int cx = side == 0 ? playerCardMidX : cpuCardMidX;
+        int y = cardsTopY - 22 - (int) (Math.min(age, 300) / 300f * 4);
+        int w = font.width(text) + 12;
+        int x = cx - w / 2;
+        int fade = age > EMOTE_MS - 400 ? (int) ((EMOTE_MS - age) / 400f * 255) : 255;
+        int a = (fade << 24);
+        g.fill(x, y, x + w, y + 13, (Math.min(0xC0, fade) << 24));
+        g.renderOutline(x, y, w, 13, (a & 0xFF000000) | 0x00E9C46A);
+        g.drawString(font, text, x + 6, y + 3, (a & 0xFF000000) | 0x00FFF3C8, false);
+        // little tail
+        g.fill(cx - 1, y + 13, cx + 1, y + 15, (Math.min(0xC0, fade) << 24));
+    }
+
+    /** The 2x3 emote picker, opened by the dock's Emote button. */
+    private void drawEmoteWheel(GuiGraphics g, int mouseX, int mouseY) {
+        g.fill(0, 0, width, height, 0x66000000);
+        int cols = 3, rows = 2, bw = 58, bh = 22, pad = 6;
+        int pw = cols * bw + (cols + 1) * pad;
+        int ph = rows * bh + (rows + 1) * pad + 14;
+        int px = width / 2 - pw / 2;
+        int py = height - DOCK_H - ph - 6;
+        g.fill(px, py, px + pw, py + ph, 0xE0081E16);
+        g.renderOutline(px, py, pw, ph, GOLD_DIM);
+        g.drawCenteredString(font, "EMOTE", width / 2, py + 4, GOLD);
+        for (int i = 0; i < EMOTES.length; i++) {
+            int c = i % cols, r = i / cols;
+            int bx = px + pad + c * (bw + pad);
+            int by = py + 14 + pad + r * (bh + pad);
+            emoteBtnRects[i] = new int[]{bx, by, bw, bh};
+            boolean hover = inRect(mouseX, mouseY, emoteBtnRects[i]);
+            g.fill(bx, by, bx + bw, by + bh, hover ? 0xFF2E7D46 : 0xFF16352A);
+            g.renderOutline(bx, by, bw, bh, hover ? GOLD : EDGE);
+            g.drawCenteredString(font, EMOTES[i], bx + bw / 2, by + (bh - 8) / 2, 0xFFFFFFFF);
         }
     }
 
@@ -344,10 +433,24 @@ public class BattleScreen extends Screen {
         g.renderOutline(10, by, sw, 18, sHover ? GOLD : EDGE);
         g.drawString(font, sizeLabel, 17, by + 5, TEXT_DIM, false);
 
-        // primary action, centre. PvP is server-paced: only Close at the end.
+        // emote button (PvP only), just right of the size button
+        emoteRect = null;
+        if (pvp) {
+            String el = "Emote";
+            int ew = font.width(el) + 16;
+            int ex = 10 + sw + 8;
+            emoteRect = new int[]{ex, by, ew, 18};
+            boolean eHover = inRect(mouseX, mouseY, emoteRect) || emoteOpen;
+            g.fill(ex, by, ex + ew, by + 18, eHover ? 0xFF3A5E2C : 0xFF223A18);
+            g.renderOutline(ex, by, ew, 18, eHover ? GOLD : EDGE);
+            g.drawString(font, el, ex + 8, by + 5, 0xFFFFFFFF, false);
+        }
+
+        // primary action, centre. In PvP the round is server-paced, so the only
+        // centre button is Rematch at the end.
         actionRect = null;
         String label = pvp
-                ? (phase == BattleSyncPayload.FINISHED ? "Close" : null)
+                ? (phase == BattleSyncPayload.FINISHED ? "Rematch" : null)
                 : switch (phase) {
                     case BattleSyncPayload.CPU_PICK -> "Reveal their pick";
                     case BattleSyncPayload.RESULT -> "Next >";
@@ -595,6 +698,24 @@ public class BattleScreen extends Screen {
             return super.mouseClicked(mouseX, mouseY, button);
         }
         int phase = ClientBattle.phase();
+        // the emote wheel captures all clicks while open
+        if (emoteOpen) {
+            for (int i = 0; i < emoteBtnRects.length; i++) {
+                if (inRect((int) mouseX, (int) mouseY, emoteBtnRects[i])) {
+                    click();
+                    send(BattleActionPayload.EMOTE, i);
+                    emoteOpen = false;
+                    return true;
+                }
+            }
+            emoteOpen = false; // click anywhere else closes it
+            return true;
+        }
+        if (emoteRect != null && inRect((int) mouseX, (int) mouseY, emoteRect)) {
+            click();
+            emoteOpen = true;
+            return true;
+        }
         if (sizeRect != null && inRect((int) mouseX, (int) mouseY, sizeRect)) {
             ClientPrefs.cycleCardSize();
             click();
@@ -632,6 +753,10 @@ public class BattleScreen extends Screen {
     @Override
     public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
         int phase = ClientBattle.phase();
+        if (keyCode == 256 && emoteOpen) { // ESC closes the emote wheel first
+            emoteOpen = false;
+            return true;
+        }
         if (keyCode == 32 || keyCode == 257) { // SPACE / ENTER
             primaryAction(phase);
             return true;
@@ -647,7 +772,8 @@ public class BattleScreen extends Screen {
     private void primaryAction(int phase) {
         if (ClientBattle.isPvp()) {
             if (phase == BattleSyncPayload.FINISHED) {
-                onClose();
+                // the centre button is Rematch; the server pairs both requests
+                send(BattleActionPayload.REMATCH, 0);
             }
             return; // PvP rounds are paced by the server
         }
