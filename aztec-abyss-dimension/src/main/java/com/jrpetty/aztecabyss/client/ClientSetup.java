@@ -4,9 +4,11 @@ import com.jrpetty.aztecabyss.particle.BlackPortalSwirlParticle;
 import com.jrpetty.aztecabyss.registry.ModParticles;
 import com.mojang.blaze3d.platform.InputConstants;
 import net.minecraft.client.KeyMapping;
+import net.minecraft.resources.ResourceLocation;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
+import net.neoforged.neoforge.client.event.RegisterDimensionSpecialEffectsEvent;
 import net.neoforged.neoforge.client.event.RegisterKeyMappingsEvent;
 import net.neoforged.neoforge.client.event.RegisterParticleProvidersEvent;
 import org.lwjgl.glfw.GLFW;
@@ -37,5 +39,12 @@ public final class ClientSetup {
     public static void registerKeyMappings(RegisterKeyMappingsEvent event) {
         event.register(TOGGLE_HUD);
         event.register(PING);
+    }
+
+    @SubscribeEvent
+    public static void registerDimensionEffects(RegisterDimensionSpecialEffectsEvent event) {
+        event.register(
+                ResourceLocation.fromNamespaceAndPath(com.jrpetty.aztecabyss.AztecAbyssConstants.MOD_ID, "abyss"),
+                new AbyssSkyEffects());
     }
 }
