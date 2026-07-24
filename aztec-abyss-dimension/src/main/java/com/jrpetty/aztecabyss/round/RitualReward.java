@@ -25,7 +25,7 @@ public final class RitualReward {
         List<ItemStack> loot = new ArrayList<>();
         loot.add(new ItemStack(Items.DIAMOND, 4 + RNG.nextInt(5)));           // 4-8
         loot.add(new ItemStack(Items.EXPERIENCE_BOTTLE, 8 + RNG.nextInt(9))); // 8-16
-        loot.add(new ItemStack(Items.EMERALD, 4 + RNG.nextInt(6)));           // 4-9
+        loot.add(new ItemStack(Items.IRON_INGOT, 6 + RNG.nextInt(6)));        // 6-11
         loot.add(bonus());
         if (RNG.nextBoolean()) {
             loot.add(bonus());

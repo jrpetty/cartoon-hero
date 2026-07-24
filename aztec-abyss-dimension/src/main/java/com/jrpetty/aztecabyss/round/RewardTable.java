@@ -55,7 +55,7 @@ public final class RewardTable {
             loot.add(new ItemStack(Items.DIAMOND, 2 + RNG.nextInt(3)));
             loot.add(new ItemStack(Items.GOLD_INGOT, 8));
             loot.add(new ItemStack(Items.GOLDEN_APPLE, 2));
-            loot.add(new ItemStack(Items.EMERALD, 6));
+            loot.add(new ItemStack(Items.GOLDEN_CARROT, 8));
             loot.add(new ItemStack(Items.EXPERIENCE_BOTTLE, 16));
             loot.add(new ItemStack(Items.SPECTRAL_ARROW, 16));
         } else if (roundReached < 15) {
@@ -63,7 +63,7 @@ public final class RewardTable {
             loot.add(new ItemStack(Items.DIAMOND, 6 + RNG.nextInt(4)));
             loot.add(new ItemStack(Items.NETHERITE_SCRAP, 2));
             loot.add(new ItemStack(Items.ENCHANTED_GOLDEN_APPLE, 1));
-            loot.add(new ItemStack(Items.EMERALD, 16));
+            loot.add(new ItemStack(Items.DIAMOND, 4));
             loot.add(new ItemStack(Items.EXPERIENCE_BOTTLE, 32));
             loot.add(new ItemStack(Items.DIAMOND_CHESTPLATE, 1));
         } else {
@@ -73,7 +73,7 @@ public final class RewardTable {
             loot.add(new ItemStack(Items.TOTEM_OF_UNDYING, 1));
             loot.add(new ItemStack(Items.ENCHANTED_GOLDEN_APPLE, 2));
             loot.add(new ItemStack(Items.ANCIENT_DEBRIS, 3));
-            loot.add(new ItemStack(Items.EMERALD, 24));
+            loot.add(new ItemStack(Items.NETHERITE_SCRAP, 2));
         }
 
         return loot.toArray(new ItemStack[0]);
@@ -91,7 +91,7 @@ public final class RewardTable {
                 new ItemStack(Items.TOTEM_OF_UNDYING, 3),
                 new ItemStack(Items.ENCHANTED_GOLDEN_APPLE, 6),
                 new ItemStack(Items.DIAMOND, 32),
-                new ItemStack(Items.EMERALD, 48),
+                new ItemStack(Items.DIAMOND_BLOCK, 4),
                 new ItemStack(Items.NETHER_STAR, 2),
                 new ItemStack(Items.ELYTRA, 1),
                 new ItemStack(Items.EXPERIENCE_BOTTLE, 64),

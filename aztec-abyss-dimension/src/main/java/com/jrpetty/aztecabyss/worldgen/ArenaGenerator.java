@@ -284,7 +284,7 @@ public final class ArenaGenerator {
         net.minecraft.world.item.Item[] pool = {
                 net.minecraft.world.item.Items.IRON_INGOT,
                 net.minecraft.world.item.Items.GOLD_INGOT,
-                net.minecraft.world.item.Items.EMERALD,
+                net.minecraft.world.item.Items.GOLDEN_CARROT,
                 net.minecraft.world.item.Items.ARROW,
                 net.minecraft.world.item.Items.BREAD,
                 net.minecraft.world.item.Items.TORCH,
