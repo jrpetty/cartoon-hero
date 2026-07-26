@@ -23,7 +23,8 @@ import net.minecraft.world.phys.AABB;
  * or a single mob type (via a spawn egg). See {@link PlayerSensorBlock}.
  */
 public class PlayerSensorBlockEntity extends BlockEntity {
-    private static final double RADIUS = 8.0;
+    public static final int MIN_RADIUS = 2;
+    public static final int MAX_RADIUS = 24;
     private static final int INTERVAL = 10;
 
     /** Built-in modes cycled with an empty hand. */
@@ -34,6 +35,8 @@ public class PlayerSensorBlockEntity extends BlockEntity {
 
     /** One of the mode constants above, or a mob type id like "minecraft:creeper". */
     private String target = PLAYERS;
+    /** Detection radius in blocks, adjustable in the sensor's screen. */
+    private int radius = 8;
 
     public PlayerSensorBlockEntity(BlockPos pos, BlockState state) {
         super(Gadgets.PLAYER_SENSOR_BE.get(), pos, state);
@@ -41,6 +44,18 @@ public class PlayerSensorBlockEntity extends BlockEntity {
 
     public String getTarget() {
         return target;
+    }
+
+    public int getRadius() {
+        return radius;
+    }
+
+    public void setRadius(int radius) {
+        this.radius = Math.max(MIN_RADIUS, Math.min(MAX_RADIUS, radius));
+        setChanged();
+        if (level != null) {
+            level.sendBlockUpdated(worldPosition, getBlockState(), getBlockState(), Block.UPDATE_ALL);
+        }
     }
 
     public void setTarget(String target) {
@@ -78,11 +93,11 @@ public class PlayerSensorBlockEntity extends BlockEntity {
             return;
         }
 
-        AABB area = new AABB(pos).inflate(RADIUS);
-        boolean found = !level.getEntitiesOfClass(Entity.class, area, be.predicate()).isEmpty();
+        AABB area = new AABB(pos).inflate(be.radius);
+        int power = Math.min(15, level.getEntitiesOfClass(Entity.class, area, be.predicate()).size());
 
-        if (state.getValue(PlayerSensorBlock.POWERED) != found) {
-            level.setBlock(pos, state.setValue(PlayerSensorBlock.POWERED, found), Block.UPDATE_ALL);
+        if (state.getValue(PlayerSensorBlock.POWER) != power) {
+            level.setBlock(pos, state.setValue(PlayerSensorBlock.POWER, power), Block.UPDATE_ALL);
         }
     }
 
@@ -90,6 +105,7 @@ public class PlayerSensorBlockEntity extends BlockEntity {
     protected void saveAdditional(CompoundTag tag, HolderLookup.Provider registries) {
         super.saveAdditional(tag, registries);
         tag.putString("Target", target);
+        tag.putInt("Radius", radius);
     }
 
     @Override
@@ -97,6 +113,9 @@ public class PlayerSensorBlockEntity extends BlockEntity {
         super.loadAdditional(tag, registries);
         if (tag.contains("Target")) {
             target = tag.getString("Target");
+        }
+        if (tag.contains("Radius")) {
+            radius = Math.max(MIN_RADIUS, Math.min(MAX_RADIUS, tag.getInt("Radius")));
         }
     }
 }

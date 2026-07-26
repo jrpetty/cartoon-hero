@@ -68,6 +68,9 @@ public class ItemMagnetBlockEntity extends BlockEntity {
         List<ItemEntity> items = level.getEntitiesOfClass(ItemEntity.class, area,
                 item -> item.isAlive() && !item.getItem().isEmpty() && !item.hasPickUpDelay());
         for (ItemEntity item : items) {
+            if (!hasRoom(target, item.getItem())) {
+                continue; // a full chest doesn't tug — items stay collectable elsewhere
+            }
             Vec3 toCenter = center.subtract(item.position());
             if (toCenter.lengthSqr() < ABSORB_DISTANCE * ABSORB_DISTANCE) {
                 be.absorb(target, item);
@@ -77,6 +80,12 @@ public class ItemMagnetBlockEntity extends BlockEntity {
                 item.hasImpulse = true;
             }
         }
+    }
+
+    /** Can the target accept at least one item of this stack? (simulated insert) */
+    private static boolean hasRoom(IItemHandler handler, ItemStack stack) {
+        ItemStack remainder = ItemHandlerHelper.insertItemStacked(handler, stack, true);
+        return remainder.getCount() < stack.getCount();
     }
 
     /** Push as much of the item's stack as fits into the target; discard it if emptied. */

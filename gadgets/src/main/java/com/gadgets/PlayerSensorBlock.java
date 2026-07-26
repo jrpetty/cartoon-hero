@@ -12,8 +12,7 @@ import net.minecraft.item.ItemStack;
 import net.minecraft.item.SpawnEggItem;
 import net.minecraft.registry.Registries;
 import net.minecraft.state.StateManager;
-import net.minecraft.state.property.BooleanProperty;
-import net.minecraft.state.property.Properties;
+import net.minecraft.state.property.IntProperty;
 import net.minecraft.text.Text;
 import net.minecraft.util.ActionResult;
 import net.minecraft.util.Hand;
@@ -26,21 +25,22 @@ import net.minecraft.world.World;
 import org.jetbrains.annotations.Nullable;
 
 /**
- * Emits a full redstone signal while a matching entity is within range. Tune it
- * by right-clicking with a spawn egg (locks onto that mob type) or with an empty
- * hand (cycles players → monsters → animals → all).
+ * Emits an analog redstone signal equal to how many matching entities are in
+ * range (1 entity = level 1 … 15+ = full). Tune it by right-clicking with a
+ * spawn egg (locks onto that mob type) or with an empty hand (cycles players →
+ * monsters → animals → all). The detection radius is adjustable.
  */
 public class PlayerSensorBlock extends Block implements BlockEntityProvider {
-    public static final BooleanProperty POWERED = Properties.POWERED;
+    public static final IntProperty POWER = IntProperty.of("power", 0, 15);
 
     public PlayerSensorBlock(Settings settings) {
         super(settings);
-        setDefaultState(getStateManager().getDefaultState().with(POWERED, false));
+        setDefaultState(getStateManager().getDefaultState().with(POWER, 0));
     }
 
     @Override
     protected void appendProperties(StateManager.Builder<Block, BlockState> builder) {
-        builder.add(POWERED);
+        builder.add(POWER);
     }
 
     @Override
@@ -91,7 +91,7 @@ public class PlayerSensorBlock extends Block implements BlockEntityProvider {
 
     @Override
     protected int getWeakRedstonePower(BlockState state, BlockView world, BlockPos pos, Direction direction) {
-        return state.get(POWERED) ? 15 : 0;
+        return state.get(POWER);
     }
 
     @SuppressWarnings("unchecked")

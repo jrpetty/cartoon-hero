@@ -23,7 +23,8 @@ import net.minecraft.world.World;
  * or a single mob type (via a spawn egg). See {@link PlayerSensorBlock}.
  */
 public class PlayerSensorBlockEntity extends BlockEntity {
-    private static final double RADIUS = 8.0;
+    public static final int MIN_RADIUS = 2;
+    public static final int MAX_RADIUS = 24;
     private static final int INTERVAL = 10;
 
     /** Built-in modes cycled with an empty hand. */
@@ -34,6 +35,8 @@ public class PlayerSensorBlockEntity extends BlockEntity {
 
     /** One of the mode constants above, or a mob type id like "minecraft:creeper". */
     private String target = PLAYERS;
+    /** Detection radius in blocks, adjustable in the sensor's screen. */
+    private int radius = 8;
 
     public PlayerSensorBlockEntity(BlockPos pos, BlockState state) {
         super(Gadgets.PLAYER_SENSOR_BE, pos, state);
@@ -41,6 +44,18 @@ public class PlayerSensorBlockEntity extends BlockEntity {
 
     public String getTarget() {
         return target;
+    }
+
+    public int getRadius() {
+        return radius;
+    }
+
+    public void setRadius(int radius) {
+        this.radius = Math.max(MIN_RADIUS, Math.min(MAX_RADIUS, radius));
+        markDirty();
+        if (world != null) {
+            world.updateListeners(pos, getCachedState(), getCachedState(), Block.NOTIFY_ALL);
+        }
     }
 
     public void setTarget(String target) {
@@ -78,11 +93,11 @@ public class PlayerSensorBlockEntity extends BlockEntity {
             return;
         }
 
-        Box area = new Box(pos).expand(RADIUS);
-        boolean found = !world.getEntitiesByClass(Entity.class, area, be.predicate()).isEmpty();
+        Box area = new Box(pos).expand(be.radius);
+        int power = Math.min(15, world.getEntitiesByClass(Entity.class, area, be.predicate()).size());
 
-        if (state.get(PlayerSensorBlock.POWERED) != found) {
-            world.setBlockState(pos, state.with(PlayerSensorBlock.POWERED, found), Block.NOTIFY_ALL);
+        if (state.get(PlayerSensorBlock.POWER) != power) {
+            world.setBlockState(pos, state.with(PlayerSensorBlock.POWER, power), Block.NOTIFY_ALL);
         }
     }
 
@@ -90,6 +105,7 @@ public class PlayerSensorBlockEntity extends BlockEntity {
     protected void writeNbt(NbtCompound nbt, RegistryWrapper.WrapperLookup registries) {
         super.writeNbt(nbt, registries);
         nbt.putString("Target", target);
+        nbt.putInt("Radius", radius);
     }
 
     @Override
@@ -97,6 +113,9 @@ public class PlayerSensorBlockEntity extends BlockEntity {
         super.readNbt(nbt, registries);
         if (nbt.contains("Target")) {
             target = nbt.getString("Target");
+        }
+        if (nbt.contains("Radius")) {
+            radius = Math.max(MIN_RADIUS, Math.min(MAX_RADIUS, nbt.getInt("Radius")));
         }
     }
 }

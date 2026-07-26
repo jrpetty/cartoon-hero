@@ -33,6 +33,8 @@ public class StockMonitorBlockEntity extends BlockEntity {
     private int threshold = 16;
     private long count = 0;
     private boolean low = false;
+    /** Whether a container was actually found in front on the last sample. */
+    private boolean containerPresent = false;
 
     public StockMonitorBlockEntity(BlockPos pos, BlockState state) {
         super(Gadgets.STOCK_MONITOR_BE, pos, state);
@@ -52,6 +54,10 @@ public class StockMonitorBlockEntity extends BlockEntity {
 
     public boolean isLow() {
         return low;
+    }
+
+    public boolean hasContainer() {
+        return containerPresent;
     }
 
     public void setTracked(Item item) {
@@ -75,7 +81,10 @@ public class StockMonitorBlockEntity extends BlockEntity {
 
     /** Big line on the screen: the current stock, or a dash when nothing is tracked. */
     public String faceValue() {
-        return tracked == Items.AIR ? "—" : ItemCounterBlockEntity.compact(count);
+        if (tracked == Items.AIR) {
+            return "—";
+        }
+        return containerPresent ? ItemCounterBlockEntity.compact(count) : "?";
     }
 
     /** Small line on the screen: the tracked item's name, or a prompt. */
@@ -92,22 +101,23 @@ public class StockMonitorBlockEntity extends BlockEntity {
             return;
         }
         long found = 0;
-        if (be.tracked != Items.AIR) {
-            Inventory inv = HopperBlockEntity.getInventoryAt(world, pos.offset(state.get(StockMonitorBlock.FACING)));
-            if (inv != null) {
-                for (int i = 0; i < inv.size(); i++) {
-                    ItemStack stack = inv.getStack(i);
-                    if (stack.isOf(be.tracked)) {
-                        found += stack.getCount();
-                    }
+        Inventory inv = HopperBlockEntity.getInventoryAt(world, pos.offset(state.get(StockMonitorBlock.FACING)));
+        boolean present = inv != null;
+        if (present && be.tracked != Items.AIR) {
+            for (int i = 0; i < inv.size(); i++) {
+                ItemStack stack = inv.getStack(i);
+                if (stack.isOf(be.tracked)) {
+                    found += stack.getCount();
                 }
             }
         }
-        boolean lowNow = be.tracked != Items.AIR && found < be.threshold;
+        // Never alarm on a missing container — a broken chest is not "out of stock".
+        boolean lowNow = present && be.tracked != Items.AIR && found < be.threshold;
 
-        boolean changed = found != be.count || lowNow != be.low;
+        boolean changed = found != be.count || lowNow != be.low || present != be.containerPresent;
         be.count = found;
         be.low = lowNow;
+        be.containerPresent = present;
         if (state.get(StockMonitorBlock.LOW) != lowNow) {
             world.setBlockState(pos, state.with(StockMonitorBlock.LOW, lowNow), Block.NOTIFY_ALL);
         }
@@ -142,6 +152,7 @@ public class StockMonitorBlockEntity extends BlockEntity {
         nbt.putInt("Threshold", threshold);
         nbt.putLong("Count", count);
         nbt.putBoolean("Low", low);
+        nbt.putBoolean("HasContainer", containerPresent);
     }
 
     @Override
@@ -154,5 +165,6 @@ public class StockMonitorBlockEntity extends BlockEntity {
         }
         count = nbt.getLong("Count");
         low = nbt.getBoolean("Low");
+        containerPresent = nbt.getBoolean("HasContainer");
     }
 }

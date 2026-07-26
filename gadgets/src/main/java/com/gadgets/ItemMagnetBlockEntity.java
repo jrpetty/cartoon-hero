@@ -65,6 +65,9 @@ public class ItemMagnetBlockEntity extends BlockEntity {
         List<ItemEntity> items = world.getEntitiesByClass(ItemEntity.class, area,
                 item -> !item.isRemoved() && !item.getStack().isEmpty() && !item.cannotPickup());
         for (ItemEntity item : items) {
+            if (!hasRoom(target, item.getStack())) {
+                continue; // a full chest doesn't tug — items stay collectable elsewhere
+            }
             Vec3d toCenter = center.subtract(item.getPos());
             if (toCenter.lengthSquared() < ABSORB_DISTANCE * ABSORB_DISTANCE) {
                 be.absorb(target, item);
@@ -74,6 +77,22 @@ public class ItemMagnetBlockEntity extends BlockEntity {
                 item.velocityModified = true;
             }
         }
+    }
+
+    /** Can the target accept at least one item of this stack? */
+    private static boolean hasRoom(Inventory inv, ItemStack stack) {
+        for (int i = 0; i < inv.size(); i++) {
+            ItemStack dst = inv.getStack(i);
+            if (dst.isEmpty()) {
+                if (inv.isValid(i, stack)) {
+                    return true;
+                }
+            } else if (ItemStack.areItemsAndComponentsEqual(dst, stack) && inv.isValid(i, stack)
+                    && dst.getCount() < Math.min(dst.getMaxCount(), inv.getMaxCountPerStack())) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /** Push as much of the item's stack as fits into the target; discard it if emptied. */

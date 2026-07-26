@@ -25,6 +25,8 @@ import net.minecraft.world.level.block.state.properties.BlockStateProperties;
 import net.minecraft.world.level.block.state.properties.BooleanProperty;
 import net.minecraft.world.level.block.state.properties.DirectionProperty;
 import net.minecraft.world.phys.BlockHitResult;
+import net.minecraft.world.phys.shapes.CollisionContext;
+import net.minecraft.world.phys.shapes.VoxelShape;
 import org.jetbrains.annotations.Nullable;
 
 /**
@@ -35,6 +37,16 @@ import org.jetbrains.annotations.Nullable;
 public class StockMonitorBlock extends Block implements EntityBlock {
     public static final DirectionProperty FACING = BlockStateProperties.FACING;
     public static final BooleanProperty LOW = BooleanProperty.create("low");
+
+    /** Sign-thin panel, flush against the face it reads. Indexed by Direction 3D data value. */
+    private static final VoxelShape[] PANEL = {
+            Block.box(0, 0, 0, 16, 2, 16),   // facing down
+            Block.box(0, 14, 0, 16, 16, 16), // facing up
+            Block.box(0, 0, 0, 16, 16, 2),   // facing north
+            Block.box(0, 0, 14, 16, 16, 16), // facing south
+            Block.box(0, 0, 0, 2, 16, 16),   // facing west
+            Block.box(14, 0, 0, 16, 16, 16), // facing east
+    };
 
     public StockMonitorBlock(Properties properties) {
         super(properties);
@@ -73,6 +85,11 @@ public class StockMonitorBlock extends Block implements EntityBlock {
                     .withStyle(ChatFormatting.GOLD), true);
         }
         return InteractionResult.sidedSuccess(level.isClientSide());
+    }
+
+    @Override
+    protected VoxelShape getShape(BlockState state, BlockGetter level, BlockPos pos, CollisionContext context) {
+        return PANEL[state.getValue(FACING).get3DDataValue()];
     }
 
     @Override

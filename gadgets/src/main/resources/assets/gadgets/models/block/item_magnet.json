@@ -1,4 +1,51 @@
 {
-  "parent": "minecraft:block/cube_all",
-  "textures": { "all": "gadgets:block/item_magnet" }
+  "textures": {
+    "particle": "gadgets:block/magnet_steel",
+    "steel": "gadgets:block/magnet_steel",
+    "red": "gadgets:block/magnet_red",
+    "blue": "gadgets:block/magnet_blue"
+  },
+  "elements": [
+    {
+      "from": [1, 0, 1], "to": [15, 3, 15],
+      "faces": {
+        "north": { "uv": [1, 13, 15, 16], "texture": "#steel" },
+        "south": { "uv": [1, 13, 15, 16], "texture": "#steel" },
+        "east":  { "uv": [1, 13, 15, 16], "texture": "#steel" },
+        "west":  { "uv": [1, 13, 15, 16], "texture": "#steel" },
+        "up":    { "uv": [1, 1, 15, 15], "texture": "#steel" },
+        "down":  { "uv": [1, 1, 15, 15], "texture": "#steel" }
+      }
+    },
+    {
+      "from": [2, 3, 4], "to": [7, 11, 12],
+      "faces": {
+        "north": { "uv": [2, 5, 7, 13], "texture": "#red" },
+        "south": { "uv": [9, 5, 14, 13], "texture": "#red" },
+        "east":  { "uv": [4, 5, 12, 13], "texture": "#red" },
+        "west":  { "uv": [4, 5, 12, 13], "texture": "#red" },
+        "up":    { "uv": [2, 4, 7, 12], "texture": "#red" }
+      }
+    },
+    {
+      "from": [9, 3, 4], "to": [14, 11, 12],
+      "faces": {
+        "north": { "uv": [2, 5, 7, 13], "texture": "#blue" },
+        "south": { "uv": [9, 5, 14, 13], "texture": "#blue" },
+        "east":  { "uv": [4, 5, 12, 13], "texture": "#blue" },
+        "west":  { "uv": [4, 5, 12, 13], "texture": "#blue" },
+        "up":    { "uv": [2, 4, 7, 12], "texture": "#blue" }
+      }
+    },
+    {
+      "from": [2, 11, 4], "to": [14, 14, 12],
+      "faces": {
+        "north": { "uv": [2, 1, 14, 4], "texture": "#steel" },
+        "south": { "uv": [2, 1, 14, 4], "texture": "#steel" },
+        "east":  { "uv": [4, 1, 12, 4], "texture": "#steel" },
+        "west":  { "uv": [4, 1, 12, 4], "texture": "#steel" },
+        "up":    { "uv": [2, 4, 14, 12], "texture": "#steel" }
+      }
+    }
+  ]
 }

@@ -671,32 +671,69 @@ def _im_rows():
 
 write_png(os.path.join(BASE, "block", "item_magnet.png"), grid(_im_rows(), IM_PAL))
 
-# --- Trash Can: dark metal bin with a steel lid, red hazard band and ridges ---
+# --- Trash Can: full-bleed bin side (ridges + hazard band) and radial steel lid ---
 TC_PAL = {
     "M": C(40, 42, 48), "d": C(70, 74, 82), ".": C(55, 58, 66),
-    "s": C(200, 205, 215), "R": C(200, 60, 55), "k": C(30, 32, 36),
+    "s": C(200, 205, 215), "S": C(170, 176, 188), "R": C(200, 60, 55),
+    "r": C(150, 42, 40), "k": C(30, 32, 36),
 }
 
-def _tc_rows():
-    content = [
-        "ssssssssss",  # lid
-        "s.kkkkkk.s",  # lid rim / handle recess
-        "RRRRRRRRRR",  # red hazard band
-        "d.k.d.k.d.",  # bin ridges
-        ".k.d.k.d.k",
-        "d.k.d.k.d.",
-        ".k.d.k.d.k",
-        "d.k.d.k.d.",
-        ".k.d.k.d.k",
-        "d.k.d.k.d.",
-        "RRRRRRRRRR",  # base band
-        "ssssssssss",  # foot
-    ]
-    rows = ["M" * 16, "M" + "d" * 14 + "M"]
-    for c in content:
-        rows.append("Md." + c + ".dM")
-    rows.append("M" + "d" * 14 + "M")
-    rows.append("M" * 16)
+def _tc_side():
+    rows = ["kkkkkkkkkkkkkkkk", "RRRRRRRRRRRRRRRR", "RRRRRRRRRRRRRRRR", "rrrrrrrrrrrrrrrr"]
+    for y in range(4, 15):
+        rows.append("".join("d" if x % 3 == 0 else "." for x in range(16)))
+    rows.append("kkkkkkkkkkkkkkkk")
     return rows
 
-write_png(os.path.join(BASE, "block", "trash_can.png"), grid(_tc_rows(), TC_PAL))
+def _tc_lid():
+    rows = []
+    for y in range(16):
+        row = []
+        for x in range(16):
+            ring = min(x, y, 15 - x, 15 - y)
+            row.append("k" if ring == 0 else ("S" if ring % 3 == 1 else "s"))
+        rows.append("".join(row))
+    return rows
+
+write_png(os.path.join(BASE, "block", "trash_can.png"), grid(_tc_side(), TC_PAL))
+write_png(os.path.join(BASE, "block", "trash_can_lid.png"), grid(_tc_lid(), TC_PAL))
+
+# --- Item Magnet horseshoe + sensor eye dome + antenna parts (flat shaded tiles) ---
+def _shaded(base, hi, lo):
+    rows = []
+    for y in range(16):
+        row = []
+        for x in range(16):
+            n = (x * 73856093 ^ y * 19349663) % 7
+            row.append(hi if (y < 2 or n == 0) else (lo if (y > 13 or n == 1) else base))
+        rows.append(row)
+    return rows
+
+write_png(os.path.join(BASE, "block", "magnet_red.png"), _shaded(C(198, 58, 52), C(225, 92, 84), C(150, 42, 40)))
+write_png(os.path.join(BASE, "block", "magnet_blue.png"), _shaded(C(58, 94, 198), C(92, 128, 225), C(42, 70, 150)))
+write_png(os.path.join(BASE, "block", "magnet_steel.png"), _shaded(C(188, 194, 204), C(222, 226, 234), C(146, 152, 164)))
+write_png(os.path.join(BASE, "block", "antenna_mast.png"), _shaded(C(120, 126, 138), C(160, 166, 178), C(88, 94, 106)))
+write_png(os.path.join(BASE, "block", "antenna_tip_tx.png"), _shaded(C(220, 70, 60), C(255, 140, 120), C(170, 50, 44)))
+write_png(os.path.join(BASE, "block", "antenna_tip_rx.png"), _shaded(C(70, 190, 200), C(130, 235, 245), C(50, 140, 150)))
+
+SENSOR_EYE = [
+    "kkkkkkkkkkkkkkkk",
+    "kkkddddddddddkkk",
+    "kkdddddddddddkkk"[:16],
+    "kdddEEEEEEdddddk"[:16],
+    "kddEEEEEEEEEdddk"[:16],
+    "kdEEEWWWWEEEEddk"[:16],
+    "kdEEWWWWWWEEEddk"[:16],
+    "kdEEWWWWWWEEEddk"[:16],
+    "kdEEEWWWWEEEEddk"[:16],
+    "kddEEEEEEEEEdddk"[:16],
+    "kdddEEEEEEdddddk"[:16],
+    "kkdddddddddddkkk"[:16],
+    "kkkddddddddddkkk",
+    "kkkkkkkkkkkkkkkk",
+    "kkkkkkkkkkkkkkkk",
+    "kkkkkkkkkkkkkkkk",
+]
+SENSOR_EYE = [(r + "k" * 16)[:16] for r in SENSOR_EYE]
+eye_pal = {"k": C(30, 32, 36), "d": C(70, 74, 82), "E": C(220, 60, 60), "W": C(255, 210, 140)}
+write_png(os.path.join(BASE, "block", "sensor_eye.png"), grid(SENSOR_EYE, eye_pal))

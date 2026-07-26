@@ -27,6 +27,7 @@ import net.minecraft.util.ItemActionResult;
 import net.minecraft.util.hit.BlockHitResult;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.Direction;
+import net.minecraft.util.shape.VoxelShape;
 import net.minecraft.world.BlockView;
 import net.minecraft.world.World;
 import org.jetbrains.annotations.Nullable;
@@ -41,6 +42,16 @@ import org.jetbrains.annotations.Nullable;
 public class ItemCounterBlock extends Block implements BlockEntityProvider {
     public static final DirectionProperty FACING = Properties.FACING;
     public static final BooleanProperty POWERED = Properties.POWERED;
+
+    /** Sign-thin panel, flush against the face it reads. Indexed by Direction id. */
+    private static final VoxelShape[] PANEL = {
+            Block.createCuboidShape(0, 0, 0, 16, 2, 16),   // facing down
+            Block.createCuboidShape(0, 14, 0, 16, 16, 16), // facing up
+            Block.createCuboidShape(0, 0, 0, 16, 16, 2),   // facing north
+            Block.createCuboidShape(0, 0, 14, 16, 16, 16), // facing south
+            Block.createCuboidShape(0, 0, 0, 2, 16, 16),   // facing west
+            Block.createCuboidShape(14, 0, 0, 16, 16, 16), // facing east
+    };
 
     public ItemCounterBlock(Settings settings) {
         super(settings);
@@ -109,6 +120,11 @@ public class ItemCounterBlock extends Block implements BlockEntityProvider {
                         + " × " + ItemCounterBlockEntity.fmt(e.getValue())).formatted(Formatting.GRAY), false);
             }
         }
+    }
+
+    @Override
+    protected VoxelShape getOutlineShape(BlockState state, BlockView world, BlockPos pos, net.minecraft.block.ShapeContext context) {
+        return PANEL[state.get(FACING).getId()];
     }
 
     @Override

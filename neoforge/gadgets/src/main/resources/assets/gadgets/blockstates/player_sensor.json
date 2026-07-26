@@ -1,1 +1,1 @@
-{ "variants": { "powered=false": { "model": "gadgets:block/player_sensor" }, "powered=true": { "model": "gadgets:block/player_sensor" } } }
+{ "variants": { "": { "model": "gadgets:block/player_sensor" } } }

@@ -1,1 +1,40 @@
-{ "parent": "minecraft:block/cube_all", "textures": { "all": "gadgets:block/trash_can" } }
+{
+  "textures": {
+    "particle": "gadgets:block/trash_can",
+    "side": "gadgets:block/trash_can",
+    "lid": "gadgets:block/trash_can_lid"
+  },
+  "elements": [
+    {
+      "from": [2, 0, 2], "to": [14, 13, 14],
+      "faces": {
+        "north": { "uv": [2, 3, 14, 16], "texture": "#side" },
+        "south": { "uv": [2, 3, 14, 16], "texture": "#side" },
+        "east":  { "uv": [2, 3, 14, 16], "texture": "#side" },
+        "west":  { "uv": [2, 3, 14, 16], "texture": "#side" },
+        "down":  { "uv": [2, 2, 14, 14], "texture": "#lid" }
+      }
+    },
+    {
+      "from": [1, 13, 1], "to": [15, 15, 15],
+      "faces": {
+        "north": { "uv": [1, 0, 15, 2], "texture": "#side" },
+        "south": { "uv": [1, 0, 15, 2], "texture": "#side" },
+        "east":  { "uv": [1, 0, 15, 2], "texture": "#side" },
+        "west":  { "uv": [1, 0, 15, 2], "texture": "#side" },
+        "up":    { "uv": [1, 1, 15, 15], "texture": "#lid" },
+        "down":  { "uv": [1, 1, 15, 15], "texture": "#lid" }
+      }
+    },
+    {
+      "from": [6, 15, 7], "to": [10, 16, 9],
+      "faces": {
+        "north": { "uv": [6, 7, 10, 8], "texture": "#lid" },
+        "south": { "uv": [6, 7, 10, 8], "texture": "#lid" },
+        "east":  { "uv": [7, 7, 9, 8], "texture": "#lid" },
+        "west":  { "uv": [7, 7, 9, 8], "texture": "#lid" },
+        "up":    { "uv": [6, 7, 10, 9], "texture": "#lid" }
+      }
+    }
+  ]
+}

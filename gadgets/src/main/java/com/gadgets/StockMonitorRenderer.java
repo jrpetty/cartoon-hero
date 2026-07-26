@@ -42,7 +42,7 @@ public class StockMonitorRenderer implements BlockEntityRenderer<StockMonitorBlo
         } else {
             matrices.multiply(RotationAxis.POSITIVE_X.rotationDegrees(back == Direction.UP ? -90.0F : 90.0F));
         }
-        matrices.translate(0.0, 0.0, 0.505);
+        matrices.translate(0.0, 0.0, -0.368);
         matrices.scale(0.018F, -0.018F, 0.018F);
 
         String value = be.faceValue();

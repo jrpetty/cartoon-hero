@@ -20,27 +20,27 @@ import net.minecraft.world.level.block.entity.BlockEntityTicker;
 import net.minecraft.world.level.block.entity.BlockEntityType;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.StateDefinition;
-import net.minecraft.world.level.block.state.properties.BlockStateProperties;
-import net.minecraft.world.level.block.state.properties.BooleanProperty;
+import net.minecraft.world.level.block.state.properties.IntegerProperty;
 import net.minecraft.world.phys.BlockHitResult;
 import org.jetbrains.annotations.Nullable;
 
 /**
- * Emits a full redstone signal while a matching entity is within range. Tune it
- * by right-clicking with a spawn egg (locks onto that mob type) or with an empty
- * hand (cycles players → monsters → animals → all).
+ * Emits an analog redstone signal equal to how many matching entities are in
+ * range (1 entity = level 1 … 15+ = full). Tune it by right-clicking with a
+ * spawn egg (locks onto that mob type) or with an empty hand (cycles players →
+ * monsters → animals → all). The detection radius is adjustable.
  */
 public class PlayerSensorBlock extends Block implements EntityBlock {
-    public static final BooleanProperty POWERED = BlockStateProperties.POWERED;
+    public static final IntegerProperty POWER = IntegerProperty.create("power", 0, 15);
 
     public PlayerSensorBlock(Properties properties) {
         super(properties);
-        registerDefaultState(getStateDefinition().any().setValue(POWERED, false));
+        registerDefaultState(getStateDefinition().any().setValue(POWER, 0));
     }
 
     @Override
     protected void createBlockStateDefinition(StateDefinition.Builder<Block, BlockState> builder) {
-        builder.add(POWERED);
+        builder.add(POWER);
     }
 
     @Override
@@ -94,6 +94,6 @@ public class PlayerSensorBlock extends Block implements EntityBlock {
 
     @Override
     protected int getSignal(BlockState state, BlockGetter level, BlockPos pos, Direction direction) {
-        return state.getValue(POWERED) ? 15 : 0;
+        return state.getValue(POWER);
     }
 }

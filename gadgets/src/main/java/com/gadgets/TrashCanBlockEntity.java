@@ -9,6 +9,9 @@ import net.minecraft.item.Item;
 import net.minecraft.item.ItemStack;
 import net.minecraft.item.Items;
 import net.minecraft.nbt.NbtCompound;
+import net.minecraft.network.listener.ClientPlayPacketListener;
+import net.minecraft.network.packet.Packet;
+import net.minecraft.network.packet.s2c.play.BlockEntityUpdateS2CPacket;
 import net.minecraft.registry.Registries;
 import net.minecraft.registry.RegistryWrapper;
 import net.minecraft.util.Identifier;
@@ -39,6 +42,9 @@ public class TrashCanBlockEntity extends BlockEntity implements SidedInventory {
     public void setFilter(Item item) {
         this.filter = item;
         markDirty();
+        if (world != null && !world.isClient()) {
+            world.updateListeners(pos, getCachedState(), getCachedState(), 3);
+        }
     }
 
     /** True when this item is allowed in (and therefore destroyed). */
@@ -107,7 +113,17 @@ public class TrashCanBlockEntity extends BlockEntity implements SidedInventory {
         return false;
     }
 
-    // --- persistence ---
+    // --- sync + persistence ---
+
+    @Override
+    public Packet<ClientPlayPacketListener> toUpdatePacket() {
+        return BlockEntityUpdateS2CPacket.create(this);
+    }
+
+    @Override
+    public NbtCompound toInitialChunkDataNbt(RegistryWrapper.WrapperLookup registries) {
+        return createNbt(registries);
+    }
 
     @Override
     protected void writeNbt(NbtCompound nbt, RegistryWrapper.WrapperLookup registries) {

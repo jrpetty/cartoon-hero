@@ -16,5 +16,6 @@ public class GadgetsClient implements ClientModInitializer {
         BlockEntityRendererFactories.register(Gadgets.DRAIN_BE, DrainRenderer::new);
         BlockEntityRendererFactories.register(Gadgets.ITEM_COUNTER_BE, ItemCounterRenderer::new);
         BlockEntityRendererFactories.register(Gadgets.STOCK_MONITOR_BE, StockMonitorRenderer::new);
+        BlockEntityRendererFactories.register(Gadgets.TRASH_CAN_BE, TrashCanRenderer::new);
     }
 }

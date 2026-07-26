@@ -30,25 +30,6 @@ public class RedstoneLinkerItem extends Item {
         Level level = ctx.getLevel();
         BlockEntity be = level.getBlockEntity(ctx.getClickedPos());
         Player player = ctx.getPlayer();
-        if (be instanceof GateChannels gate) {
-            if (!level.isClientSide() && player != null) {
-                ItemStack stack = ctx.getItemInHand();
-                if (player.isShiftKeyDown()) {
-                    String stored = readChannel(stack);
-                    if (stored.isEmpty()) {
-                        player.displayClientMessage(Component.literal("No channel stored — right-click a block first.").withStyle(ChatFormatting.RED), true);
-                    } else {
-                        String label = gate.bindNextInput(stored);
-                        player.displayClientMessage(Component.literal("Gate " + label + " <- " + stored).withStyle(ChatFormatting.GREEN), true);
-                    }
-                } else {
-                    String c = gate.copyOutputChannel();
-                    writeChannel(stack, c);
-                    player.displayClientMessage(Component.literal("Copied gate output " + c).withStyle(ChatFormatting.AQUA), true);
-                }
-            }
-            return InteractionResult.sidedSuccess(level.isClientSide());
-        }
         if (!(be instanceof ChannelBlockEntity channel)) {
             return InteractionResult.PASS;
         }
@@ -89,6 +70,6 @@ public class RedstoneLinkerItem extends Item {
 
     @Override
     public void appendHoverText(ItemStack stack, TooltipContext context, List<Component> tooltip, TooltipFlag flag) {
-        Tips.append(tooltip, "tip.gadgets.redstone_linker.1", "tip.gadgets.redstone_linker.2", "tip.gadgets.redstone_linker.3");
+        Tips.append(tooltip, "tip.gadgets.redstone_linker.1", "tip.gadgets.redstone_linker.2");
     }
 }

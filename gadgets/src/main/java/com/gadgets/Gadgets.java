@@ -43,10 +43,6 @@ public class Gadgets implements ModInitializer {
             new PlayerSensorBlock(AbstractBlock.Settings.create()
                     .strength(1.5F).requiresTool().sounds(BlockSoundGroup.METAL)),
             "tip.gadgets.player_sensor.1", "tip.gadgets.player_sensor.2", "tip.gadgets.player_sensor.3");
-    public static final Block FILTER_HOPPER = registerBlock("filter_hopper",
-            new FilterHopperBlock(AbstractBlock.Settings.create()
-                    .strength(3.0F).requiresTool().sounds(BlockSoundGroup.METAL)),
-            "tip.gadgets.filter_hopper.1", "tip.gadgets.filter_hopper.2");
 
     public static final Block REDSTONE_TRANSMITTER = registerBlock("redstone_transmitter",
             new RedstoneTransmitterBlock(AbstractBlock.Settings.create()
@@ -78,14 +74,6 @@ public class Gadgets implements ModInitializer {
                     .strength(2.0F).requiresTool().sounds(BlockSoundGroup.METAL).nonOpaque()),
             "tip.gadgets.drain.1", "tip.gadgets.drain.2", "tip.gadgets.drain.3");
 
-    public static final Block LOGIC_GATE = registerBlock("logic_gate",
-            new LogicGateBlock(AbstractBlock.Settings.create()
-                    .strength(1.5F).requiresTool().sounds(BlockSoundGroup.METAL)),
-            "tip.gadgets.logic_gate.1", "tip.gadgets.logic_gate.2", "tip.gadgets.logic_gate.3");
-    public static final Block ALARM = registerBlock("alarm",
-            new AlarmBlock(AbstractBlock.Settings.create()
-                    .strength(1.5F).requiresTool().sounds(BlockSoundGroup.METAL)),
-            "tip.gadgets.alarm.1", "tip.gadgets.alarm.2");
     public static final Block ITEM_COUNTER = registerBlock("item_counter",
             new ItemCounterBlock(AbstractBlock.Settings.create()
                     .strength(1.5F).requiresTool().sounds(BlockSoundGroup.METAL)),
@@ -123,15 +111,12 @@ public class Gadgets implements ModInitializer {
                     .dimensions(0.5f, 0.5f).maxTrackingRange(64).build("torch_arrow"));
 
     public static BlockEntityType<PlayerSensorBlockEntity> PLAYER_SENSOR_BE;
-    public static BlockEntityType<FilterHopperBlockEntity> FILTER_HOPPER_BE;
     public static BlockEntityType<RedstoneTransmitterBlockEntity> REDSTONE_TRANSMITTER_BE;
     public static BlockEntityType<RedstoneReceiverBlockEntity> REDSTONE_RECEIVER_BE;
     public static BlockEntityType<DisplayPedestalBlockEntity> DISPLAY_PEDESTAL_BE;
     public static BlockEntityType<ItemSenderBlockEntity> ITEM_SENDER_BE;
     public static BlockEntityType<ItemReceiverBlockEntity> ITEM_RECEIVER_BE;
     public static BlockEntityType<DrainBlockEntity> DRAIN_BE;
-    public static BlockEntityType<LogicGateBlockEntity> LOGIC_GATE_BE;
-    public static BlockEntityType<AlarmBlockEntity> ALARM_BE;
     public static BlockEntityType<ItemCounterBlockEntity> ITEM_COUNTER_BE;
     public static BlockEntityType<ItemMagnetBlockEntity> ITEM_MAGNET_BE;
     public static BlockEntityType<StockMonitorBlockEntity> STOCK_MONITOR_BE;
@@ -141,8 +126,6 @@ public class Gadgets implements ModInitializer {
     public void onInitialize() {
         PLAYER_SENSOR_BE = Registry.register(Registries.BLOCK_ENTITY_TYPE, Identifier.of(MOD_ID, "player_sensor"),
                 FabricBlockEntityTypeBuilder.create(PlayerSensorBlockEntity::new, PLAYER_SENSOR).build());
-        FILTER_HOPPER_BE = Registry.register(Registries.BLOCK_ENTITY_TYPE, Identifier.of(MOD_ID, "filter_hopper"),
-                FabricBlockEntityTypeBuilder.create(FilterHopperBlockEntity::new, FILTER_HOPPER).build());
         REDSTONE_TRANSMITTER_BE = Registry.register(Registries.BLOCK_ENTITY_TYPE, Identifier.of(MOD_ID, "redstone_transmitter"),
                 FabricBlockEntityTypeBuilder.create(RedstoneTransmitterBlockEntity::new, REDSTONE_TRANSMITTER).build());
         REDSTONE_RECEIVER_BE = Registry.register(Registries.BLOCK_ENTITY_TYPE, Identifier.of(MOD_ID, "redstone_receiver"),
@@ -155,10 +138,6 @@ public class Gadgets implements ModInitializer {
                 FabricBlockEntityTypeBuilder.create(ItemReceiverBlockEntity::new, ITEM_RECEIVER).build());
         DRAIN_BE = Registry.register(Registries.BLOCK_ENTITY_TYPE, Identifier.of(MOD_ID, "drain"),
                 FabricBlockEntityTypeBuilder.create(DrainBlockEntity::new, DRAIN).build());
-        LOGIC_GATE_BE = Registry.register(Registries.BLOCK_ENTITY_TYPE, Identifier.of(MOD_ID, "logic_gate"),
-                FabricBlockEntityTypeBuilder.create(LogicGateBlockEntity::new, LOGIC_GATE).build());
-        ALARM_BE = Registry.register(Registries.BLOCK_ENTITY_TYPE, Identifier.of(MOD_ID, "alarm"),
-                FabricBlockEntityTypeBuilder.create(AlarmBlockEntity::new, ALARM).build());
         ITEM_COUNTER_BE = Registry.register(Registries.BLOCK_ENTITY_TYPE, Identifier.of(MOD_ID, "item_counter"),
                 FabricBlockEntityTypeBuilder.create(ItemCounterBlockEntity::new, ITEM_COUNTER).build());
         ITEM_MAGNET_BE = Registry.register(Registries.BLOCK_ENTITY_TYPE, Identifier.of(MOD_ID, "item_magnet"),
@@ -174,7 +153,6 @@ public class Gadgets implements ModInitializer {
             entries.add(LIGHT_ARROW);
             entries.add(ROPE);
             entries.add(PLAYER_SENSOR);
-            entries.add(FILTER_HOPPER);
             entries.add(REDSTONE_TRANSMITTER);
             entries.add(REDSTONE_RECEIVER);
             entries.add(REDSTONE_LINKER);
@@ -182,8 +160,6 @@ public class Gadgets implements ModInitializer {
             entries.add(ITEM_SENDER);
             entries.add(ITEM_RECEIVER);
             entries.add(DRAIN);
-            entries.add(LOGIC_GATE);
-            entries.add(ALARM);
             entries.add(ITEM_COUNTER);
             entries.add(ITEM_MAGNET);
             entries.add(STOCK_MONITOR);

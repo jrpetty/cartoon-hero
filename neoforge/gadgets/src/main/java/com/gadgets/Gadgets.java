@@ -55,9 +55,6 @@ public class Gadgets {
     public static final DeferredBlock<Block> PLAYER_SENSOR = BLOCKS.register("player_sensor",
             () -> new PlayerSensorBlock(BlockBehaviour.Properties.of()
                     .strength(1.5F).requiresCorrectToolForDrops().sound(SoundType.METAL)));
-    public static final DeferredBlock<Block> FILTER_HOPPER = BLOCKS.register("filter_hopper",
-            () -> new FilterHopperBlock(BlockBehaviour.Properties.of()
-                    .strength(3.0F).requiresCorrectToolForDrops().sound(SoundType.METAL)));
     public static final DeferredBlock<Block> REDSTONE_TRANSMITTER = BLOCKS.register("redstone_transmitter",
             () -> new RedstoneTransmitterBlock(BlockBehaviour.Properties.of()
                     .strength(1.5F).requiresCorrectToolForDrops().sound(SoundType.METAL)));
@@ -67,8 +64,6 @@ public class Gadgets {
 
     public static final DeferredItem<?> PLAYER_SENSOR_ITEM = ITEMS.register("player_sensor", () -> new TooltipBlockItem(PLAYER_SENSOR.get(), new Item.Properties(),
             "tip.gadgets.player_sensor.1", "tip.gadgets.player_sensor.2", "tip.gadgets.player_sensor.3"));
-    public static final DeferredItem<?> FILTER_HOPPER_ITEM = ITEMS.register("filter_hopper", () -> new TooltipBlockItem(FILTER_HOPPER.get(), new Item.Properties(),
-            "tip.gadgets.filter_hopper.1", "tip.gadgets.filter_hopper.2"));
     public static final DeferredItem<?> REDSTONE_TRANSMITTER_ITEM = ITEMS.register("redstone_transmitter", () -> new TooltipBlockItem(REDSTONE_TRANSMITTER.get(), new Item.Properties(),
             "tip.gadgets.redstone_transmitter.1", "tip.gadgets.redstone_transmitter.2"));
     public static final DeferredItem<?> REDSTONE_RECEIVER_ITEM = ITEMS.register("redstone_receiver", () -> new TooltipBlockItem(REDSTONE_RECEIVER.get(), new Item.Properties(),
@@ -89,12 +84,6 @@ public class Gadgets {
     public static final DeferredBlock<Block> DRAIN = BLOCKS.register("drain",
             () -> new DrainBlock(BlockBehaviour.Properties.of()
                     .strength(2.0F).requiresCorrectToolForDrops().sound(SoundType.METAL).noOcclusion()));
-    public static final DeferredBlock<Block> LOGIC_GATE = BLOCKS.register("logic_gate",
-            () -> new LogicGateBlock(BlockBehaviour.Properties.of()
-                    .strength(1.5F).requiresCorrectToolForDrops().sound(SoundType.METAL)));
-    public static final DeferredBlock<Block> ALARM = BLOCKS.register("alarm",
-            () -> new AlarmBlock(BlockBehaviour.Properties.of()
-                    .strength(1.5F).requiresCorrectToolForDrops().sound(SoundType.METAL)));
     public static final DeferredBlock<Block> ITEM_COUNTER = BLOCKS.register("item_counter",
             () -> new ItemCounterBlock(BlockBehaviour.Properties.of()
                     .strength(1.5F).requiresCorrectToolForDrops().sound(SoundType.METAL)));
@@ -116,10 +105,6 @@ public class Gadgets {
             "tip.gadgets.item_receiver.1", "tip.gadgets.item_receiver.2"));
     public static final DeferredItem<?> DRAIN_ITEM = ITEMS.register("drain", () -> new TooltipBlockItem(DRAIN.get(), new Item.Properties(),
             "tip.gadgets.drain.1", "tip.gadgets.drain.2", "tip.gadgets.drain.3"));
-    public static final DeferredItem<?> LOGIC_GATE_ITEM = ITEMS.register("logic_gate", () -> new TooltipBlockItem(LOGIC_GATE.get(), new Item.Properties(),
-            "tip.gadgets.logic_gate.1", "tip.gadgets.logic_gate.2", "tip.gadgets.logic_gate.3"));
-    public static final DeferredItem<?> ALARM_ITEM = ITEMS.register("alarm", () -> new TooltipBlockItem(ALARM.get(), new Item.Properties(),
-            "tip.gadgets.alarm.1", "tip.gadgets.alarm.2"));
     public static final DeferredItem<?> ITEM_COUNTER_ITEM = ITEMS.register("item_counter", () -> new TooltipBlockItem(ITEM_COUNTER.get(), new Item.Properties(),
             "tip.gadgets.item_counter.1", "tip.gadgets.item_counter.2", "tip.gadgets.item_counter.3", "tip.gadgets.item_counter.4"));
     public static final DeferredItem<?> ITEM_MAGNET_ITEM = ITEMS.register("item_magnet", () -> new TooltipBlockItem(ITEM_MAGNET.get(), new Item.Properties(),
@@ -134,9 +119,6 @@ public class Gadgets {
     public static final Supplier<BlockEntityType<PlayerSensorBlockEntity>> PLAYER_SENSOR_BE =
             BLOCK_ENTITIES.register("player_sensor",
                     () -> BlockEntityType.Builder.of(PlayerSensorBlockEntity::new, PLAYER_SENSOR.get()).build(null));
-    public static final Supplier<BlockEntityType<FilterHopperBlockEntity>> FILTER_HOPPER_BE =
-            BLOCK_ENTITIES.register("filter_hopper",
-                    () -> BlockEntityType.Builder.of(FilterHopperBlockEntity::new, FILTER_HOPPER.get()).build(null));
     public static final Supplier<BlockEntityType<RedstoneTransmitterBlockEntity>> REDSTONE_TRANSMITTER_BE =
             BLOCK_ENTITIES.register("redstone_transmitter",
                     () -> BlockEntityType.Builder.of(RedstoneTransmitterBlockEntity::new, REDSTONE_TRANSMITTER.get()).build(null));
@@ -155,12 +137,6 @@ public class Gadgets {
     public static final Supplier<BlockEntityType<DrainBlockEntity>> DRAIN_BE =
             BLOCK_ENTITIES.register("drain",
                     () -> BlockEntityType.Builder.of(DrainBlockEntity::new, DRAIN.get()).build(null));
-    public static final Supplier<BlockEntityType<LogicGateBlockEntity>> LOGIC_GATE_BE =
-            BLOCK_ENTITIES.register("logic_gate",
-                    () -> BlockEntityType.Builder.of(LogicGateBlockEntity::new, LOGIC_GATE.get()).build(null));
-    public static final Supplier<BlockEntityType<AlarmBlockEntity>> ALARM_BE =
-            BLOCK_ENTITIES.register("alarm",
-                    () -> BlockEntityType.Builder.of(AlarmBlockEntity::new, ALARM.get()).build(null));
     public static final Supplier<BlockEntityType<ItemCounterBlockEntity>> ITEM_COUNTER_BE =
             BLOCK_ENTITIES.register("item_counter",
                     () -> BlockEntityType.Builder.of(ItemCounterBlockEntity::new, ITEM_COUNTER.get()).build(null));
@@ -183,7 +159,6 @@ public class Gadgets {
                         output.accept(LIGHT_ARROW.get());
                         output.accept(ROPE_ITEM.get());
                         output.accept(PLAYER_SENSOR_ITEM.get());
-                        output.accept(FILTER_HOPPER_ITEM.get());
                         output.accept(REDSTONE_TRANSMITTER_ITEM.get());
                         output.accept(REDSTONE_RECEIVER_ITEM.get());
                         output.accept(REDSTONE_LINKER.get());
@@ -191,8 +166,6 @@ public class Gadgets {
                         output.accept(ITEM_SENDER_ITEM.get());
                         output.accept(ITEM_RECEIVER_ITEM.get());
                         output.accept(DRAIN_ITEM.get());
-                        output.accept(LOGIC_GATE_ITEM.get());
-                        output.accept(ALARM_ITEM.get());
                         output.accept(ITEM_COUNTER_ITEM.get());
                         output.accept(ITEM_MAGNET_ITEM.get());
                         output.accept(STOCK_MONITOR_ITEM.get());
