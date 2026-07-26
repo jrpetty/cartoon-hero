@@ -49,7 +49,46 @@ public final class ArenaGenerator {
         placeOreVeins(level);
         placeLootChests(level);
         placeArrivalPortal(level);
+        buildMobGates(level);
         MonumentBuilder.build(level);
+    }
+
+    /**
+     * The four horde gates: crying-obsidian arches at the cardinal points of
+     * the wall, wreathed in soul fire. Every wave mob pours out of one of these
+     * instead of materialising in the open, so the horde always has a visible
+     * source players can watch (and dread).
+     */
+    private static void buildMobGates(ServerLevel level) {
+        for (BlockPos gate : AztecAbyssConstants.MOB_GATES) {
+            boolean onZAxis = gate.getX() == 0; // north/south gates span X; east/west span Z
+            int gx = gate.getX();
+            int gy = gate.getY();
+            int gz = gate.getZ();
+            for (int off = -2; off <= 2; off++) {
+                int x = onZAxis ? gx + off : gx;
+                int z = onZAxis ? gz : gz + off;
+                boolean pillar = off == -2 || off == 2;
+                for (int dy = 0; dy < 5; dy++) {
+                    BlockPos p = new BlockPos(x, gy + dy, z);
+                    if (pillar || dy == 4) {
+                        level.setBlock(p, Blocks.CRYING_OBSIDIAN.defaultBlockState(), 3);
+                    } else {
+                        // Open mouth of the gate - kept as air so mobs walk straight out.
+                        level.setBlock(p, Blocks.AIR.defaultBlockState(), 3);
+                    }
+                }
+                if (pillar) {
+                    level.setBlock(new BlockPos(x, gy + 5, z), Blocks.SOUL_LANTERN.defaultBlockState(), 3);
+                }
+            }
+            // A scorched threshold so the gate reads from a distance.
+            for (int off = -2; off <= 2; off++) {
+                int x = onZAxis ? gx + off : gx;
+                int z = onZAxis ? gz : gz + off;
+                level.setBlock(new BlockPos(x, gy - 1, z), Blocks.BLACKSTONE.defaultBlockState(), 3);
+            }
+        }
     }
 
     /**
@@ -239,9 +278,10 @@ public final class ArenaGenerator {
                 Blocks.COAL_ORE.defaultBlockState()
         };
 
+        int oreSpan = AztecAbyssConstants.ARENA_RADIUS - 8 - (AztecAbyssConstants.TEMPLE_BASE_HALF_WIDTH + 4);
         for (int i = 0; i < 40; i++) {
             double angle = rng.nextDouble() * Math.PI * 2.0;
-            double dist = AztecAbyssConstants.TEMPLE_BASE_HALF_WIDTH + 4 + rng.nextDouble() * 60;
+            double dist = AztecAbyssConstants.TEMPLE_BASE_HALF_WIDTH + 4 + rng.nextDouble() * oreSpan;
             int cx = (int) Math.round(Math.cos(angle) * dist);
             int cz = (int) Math.round(Math.sin(angle) * dist);
             BlockState ore = ores[rng.nextInt(ores.length)];
@@ -261,10 +301,11 @@ public final class ArenaGenerator {
         int placed = 0;
         int attempts = 0;
 
+        int chestSpan = AztecAbyssConstants.ARENA_RADIUS - 8 - (AztecAbyssConstants.TEMPLE_BASE_HALF_WIDTH + 6);
         while (placed < 6 && attempts < 200) {
             attempts++;
             double angle = rng.nextDouble() * Math.PI * 2.0;
-            double dist = AztecAbyssConstants.TEMPLE_BASE_HALF_WIDTH + 6 + rng.nextDouble() * 70;
+            double dist = AztecAbyssConstants.TEMPLE_BASE_HALF_WIDTH + 6 + rng.nextDouble() * chestSpan;
             int x = (int) Math.round(Math.cos(angle) * dist);
             int z = (int) Math.round(Math.sin(angle) * dist);
             BlockPos pos = new BlockPos(x, floorY + 1, z);
@@ -344,6 +385,11 @@ public final class ArenaGenerator {
         if (rng.nextInt(3) == 0) {
             level.sendParticles(ParticleTypes.WHITE_ASH, 0, floorY + 2, 0, 2, hw * 0.6, 0.3, hw * 0.6, 0.01);
         }
+        // The horde gates smoulder with soul energy so they always read as live.
+        for (BlockPos gate : AztecAbyssConstants.MOB_GATES) {
+            level.sendParticles(ParticleTypes.SCULK_SOUL,
+                    gate.getX() + 0.5, gate.getY() + 1.5, gate.getZ() + 0.5, 2, 1.2, 1.0, 1.2, 0.01);
+        }
         // Bats: a small, capped population of skittish ambient mobs.
         maybeSpawnBats(level, rng);
     }
@@ -387,7 +433,7 @@ public final class ArenaGenerator {
             return;
         }
         double angle = rng.nextDouble() * Math.PI * 2.0;
-        double dist = 30 + rng.nextDouble() * 50;
+        double dist = 30 + rng.nextDouble() * (AztecAbyssConstants.ARENA_RADIUS - 37);
         BlockPos pos = new BlockPos((int) (Math.cos(angle) * dist),
                 AztecAbyssConstants.ARENA_FLOOR_Y + 6 + rng.nextInt(10), (int) (Math.sin(angle) * dist));
         net.minecraft.world.entity.ambient.Bat bat = net.minecraft.world.entity.EntityType.BAT.create(level);

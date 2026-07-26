@@ -54,7 +54,6 @@ import java.util.UUID;
 public final class RoundManager {
 
     private static final RandomSource RNG = RandomSource.create();
-    private static final int SPAWN_RADIUS = 36;
     private static final int MAX_CONCURRENT_BASE = 8;
 
     private static final Map<UUID, ServerBossEvent> BOSS_BARS = new HashMap<>();
@@ -276,11 +275,13 @@ public final class RoundManager {
 
     private static void spawnWaveMob(ServerLevel level, List<ServerPlayer> present, int round, boolean brute) {
         ServerPlayer target = pickTarget(present);
-        double angle = RNG.nextDouble() * Math.PI * 2.0;
-        BlockPos anchor = target != null ? target.blockPosition() : AztecAbyssConstants.TEMPLE_CENTER;
-        int x = anchor.getX() + (int) (Math.cos(angle) * SPAWN_RADIUS);
-        int z = anchor.getZ() + (int) (Math.sin(angle) * SPAWN_RADIUS);
-        BlockPos pos = new BlockPos(x, AztecAbyssConstants.ARENA_FLOOR_Y + 1, z);
+        // Every wave mob pours out of one of the four cardinal horde gates.
+        BlockPos gate = AztecAbyssConstants.MOB_GATES[RNG.nextInt(AztecAbyssConstants.MOB_GATES.length)];
+        boolean onZAxis = gate.getX() == 0; // north/south gates jitter along X; east/west along Z
+        int jitter = RNG.nextInt(3) - 1;
+        BlockPos pos = onZAxis ? gate.offset(jitter, 0, 0) : gate.offset(0, 0, jitter);
+        level.sendParticles(net.minecraft.core.particles.ParticleTypes.PORTAL,
+                pos.getX() + 0.5, pos.getY() + 1.0, pos.getZ() + 0.5, 12, 0.4, 0.8, 0.4, 0.05);
 
         WaveMobs.Spawn choice = WaveMobs.pick(RNG, round);
         Mob mob = choice.type().create(level);
@@ -331,6 +332,10 @@ public final class RoundManager {
         scaleAttribute(mob, Attributes.MAX_HEALTH, healthMult);
         scaleAttribute(mob, Attributes.ATTACK_DAMAGE, dmgMult);
         scaleAttribute(mob, Attributes.MOVEMENT_SPEED, speedMult);
+        // Arena mobs see the whole arena: they march from their gate straight at
+        // the hunters instead of loitering until someone wanders close. Only wave
+        // mobs pass through here, so nothing outside the arena is affected.
+        setAttribute(mob, Attributes.FOLLOW_RANGE, AztecAbyssConstants.ARENA_RADIUS * 2.5);
         AttributeInstance armor = mob.getAttribute(Attributes.ARMOR);
         if (armor != null) {
             armor.setBaseValue(Math.min(20.0, round * 0.6));
@@ -403,6 +408,7 @@ public final class RoundManager {
         setAttribute(boss, Attributes.MAX_HEALTH, hp);
         scaleAttribute(boss, Attributes.ATTACK_DAMAGE, 1.0 + round * AbyssConfig.DAMAGE_SCALE_PER_ROUND.get());
         setAttribute(boss, Attributes.KNOCKBACK_RESISTANCE, 1.0);
+        setAttribute(boss, Attributes.FOLLOW_RANGE, AztecAbyssConstants.ARENA_RADIUS * 2.5);
         AttributeInstance scale = boss.getAttribute(Attributes.SCALE);
         if (scale != null) {
             scale.setBaseValue(finale ? 1.35 : 1.5); // the Warlord is a squat, wide bruiser

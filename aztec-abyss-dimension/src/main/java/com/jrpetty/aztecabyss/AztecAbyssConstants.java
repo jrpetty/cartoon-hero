@@ -33,7 +33,7 @@ public final class AztecAbyssConstants {
     // ------------------------------------------------------------------
 
     /** Radius (blocks) of the whole playable arena, centred on (0,*,0). Beyond this = bedrock wall. */
-    public static final int ARENA_RADIUS = 96;
+    public static final int ARENA_RADIUS = 67; // 30% tighter than the original 96
 
     /** Y level of the arena floor. */
     public static final int ARENA_FLOOR_Y = 64;
@@ -100,14 +100,28 @@ public final class AztecAbyssConstants {
      * the standings the moment they step through. Its carved signs face west
      * toward the arrival walkway and are rewritten live as runs end.
      */
-    public static final BlockPos MONUMENT_POS = new BlockPos(7, ARENA_FLOOR_Y, 58);
+    public static final BlockPos MONUMENT_POS = new BlockPos(7, ARENA_FLOOR_Y, 52);
 
     /**
      * Fixed arrival point in the Abyss - every portal in every overworld leads here.
      * Placed at the forest's edge so the temple is visible through the trees on arrival,
      * per the brief ("the spawn for the portal should always be in the same place").
      */
-    public static final BlockPos ABYSS_ARRIVAL_POS = new BlockPos(0, ARENA_FLOOR_Y + 1, 58);
+    public static final BlockPos ABYSS_ARRIVAL_POS = new BlockPos(0, ARENA_FLOOR_Y + 1, 52);
+
+    /** Distance from centre of the four mob spawn-gates (just inside the wall). */
+    public static final int MOB_GATE_DISTANCE = ARENA_RADIUS - 6;
+
+    /**
+     * The four horde gates - dark portal arches at the cardinal points of the
+     * wall that every wave mob pours out of (N, S, E, W).
+     */
+    public static final BlockPos[] MOB_GATES = new BlockPos[]{
+            new BlockPos(0, ARENA_FLOOR_Y + 1, -MOB_GATE_DISTANCE), // north
+            new BlockPos(0, ARENA_FLOOR_Y + 1, MOB_GATE_DISTANCE),  // south
+            new BlockPos(MOB_GATE_DISTANCE, ARENA_FLOOR_Y + 1, 0),  // east
+            new BlockPos(-MOB_GATE_DISTANCE, ARENA_FLOOR_Y + 1, 0), // west
+    };
 
     /** Facing the arrival portal so players look toward the temple when they step through. */
     public static final net.minecraft.core.Direction ABYSS_ARRIVAL_FACING = net.minecraft.core.Direction.SOUTH;
