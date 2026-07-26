@@ -26,7 +26,7 @@ import net.neoforged.neoforge.items.IItemHandler;
  */
 public class StockMonitorBlockEntity extends BlockEntity {
     private static final int INTERVAL = 10;
-    private static final int[] THRESHOLDS = {1, 8, 16, 32, 64, 128, 256};
+    public static final int[] THRESHOLDS = {1, 8, 16, 32, 64, 128, 256};
 
     private Item tracked = Items.AIR;
     private int threshold = 16;
@@ -62,6 +62,17 @@ public class StockMonitorBlockEntity extends BlockEntity {
     public void setTracked(Item item) {
         this.tracked = item;
         sync();
+    }
+
+    /** Set the alert level directly — only preset values are accepted. */
+    public void setThreshold(int value) {
+        for (int preset : THRESHOLDS) {
+            if (preset == value) {
+                threshold = value;
+                sync();
+                return;
+            }
+        }
     }
 
     /** Advance the low-stock alert level and return it. */

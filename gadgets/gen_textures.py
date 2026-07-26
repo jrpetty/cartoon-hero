@@ -737,3 +737,53 @@ SENSOR_EYE = [
 SENSOR_EYE = [(r + "k" * 16)[:16] for r in SENSOR_EYE]
 eye_pal = {"k": C(30, 32, 36), "d": C(70, 74, 82), "E": C(220, 60, 60), "W": C(255, 210, 140)}
 write_png(os.path.join(BASE, "block", "sensor_eye.png"), grid(SENSOR_EYE, eye_pal))
+
+# --- Storage Sensor amber tip + Command Hub screen ---
+write_png(os.path.join(BASE, "block", "antenna_tip_st.png"), _shaded(C(230, 170, 60), C(255, 210, 120), C(180, 128, 44)))
+
+def _hub_screen():
+    rows = []
+    for y in range(16):
+        row = []
+        for x in range(16):
+            if x == 0 or x == 15 or y == 0 or y == 15:
+                c = C(40, 42, 48)      # frame
+            elif y in (1, 2):
+                c = C(230, 170, 60)    # amber header bar
+            elif y % 4 == 0 or x % 5 == 0:
+                c = C(28, 34, 44)      # faint grid
+            else:
+                c = C(15, 18, 24)      # screen
+            row.append(c)
+        rows.append(row)
+    return rows
+
+def _hub_side():
+    return [[C(40, 42, 48) if (y in (0, 15) or x in (0, 15)) else
+             (C(70, 74, 82) if (x + y) % 7 == 0 else C(55, 58, 66)) for x in range(16)] for y in range(16)]
+
+write_png(os.path.join(BASE, "block", "hub_screen.png"), _hub_screen())
+write_png(os.path.join(BASE, "block", "hub_side.png"), _hub_side())
+
+# --- Monitor Wand item: stick with an amber scanner head ---
+WAND = [
+    "..........kAAk..",
+    ".........kAWWAk.",
+    ".........kAWWAk.",
+    "..........kAAk..",
+    "........ss......",
+    ".......ss.......",
+    "......ss........",
+    ".....ss.........",
+    "....ss..........",
+    "...ss...........",
+    "..ss............",
+    ".ss.............",
+    "ss..............",
+    "................",
+    "................",
+    "................",
+]
+WAND = [(r + "." * 16)[:16] for r in WAND]
+wand_pal = {".": CLEAR, "k": C(40, 42, 48), "A": C(230, 170, 60), "W": C(255, 240, 200), "s": C(126, 92, 56)}
+write_png(os.path.join(BASE, "item", "monitor_wand.png"), grid(WAND, wand_pal))

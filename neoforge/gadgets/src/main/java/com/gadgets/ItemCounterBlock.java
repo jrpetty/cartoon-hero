@@ -88,40 +88,10 @@ public class ItemCounterBlock extends Block implements EntityBlock {
 
     @Override
     protected InteractionResult useWithoutItem(BlockState state, Level level, BlockPos pos, Player player, BlockHitResult hit) {
-        if (!level.isClientSide() && level.getBlockEntity(pos) instanceof ItemCounterBlockEntity be) {
-            if (player.isShiftKeyDown()) {
-                String label = be.cycleDisplayMode();
-                level.playSound(null, pos, SoundEvents.COMPARATOR_CLICK, SoundSource.BLOCKS, 0.6F, 1.6F);
-                player.displayClientMessage(Component.literal("Item Counter ▸ face shows " + label)
-                        .withStyle(ChatFormatting.GOLD), true);
-            } else {
-                sendDashboard(player, be);
-            }
+        if (level.isClientSide() && level.getBlockEntity(pos) instanceof ItemCounterBlockEntity be) {
+            ScreenOpener.COUNTER.accept(be);
         }
         return InteractionResult.sidedSuccess(level.isClientSide());
-    }
-
-    /** The full stats readout, printed to chat — the counter's "screen". */
-    private static void sendDashboard(Player player, ItemCounterBlockEntity be) {
-        String mode = be.isWatchingContainer() ? "watching container" : "watching for drops";
-        player.displayClientMessage(Component.literal("⚙ Item Counter — " + mode)
-                .withStyle(ChatFormatting.GOLD, ChatFormatting.BOLD), false);
-        player.displayClientMessage(Component.literal(" Rate  " + ItemCounterBlockEntity.fmt(be.getRateMin()) + " /min · "
-                + ItemCounterBlockEntity.fmt(be.getRateHour()) + " /hour").withStyle(ChatFormatting.AQUA), false);
-        player.displayClientMessage(Component.literal(" Total " + ItemCounterBlockEntity.fmt(be.getTotal()) + " items in "
-                + ItemCounterBlockEntity.duration(be.getUptimeTicks())).withStyle(ChatFormatting.AQUA), false);
-        player.displayClientMessage(Component.literal(" Pulse every " + be.getThreshold() + " items · at " + be.getCount()
-                + " (redstone dust to change)").withStyle(ChatFormatting.AQUA), false);
-        player.displayClientMessage(Component.literal(" Face  showing " + be.faceLabel() + " (sneak + click to change)")
-                .withStyle(ChatFormatting.AQUA), false);
-        List<Map.Entry<String, Long>> top = be.topItems(5);
-        if (!top.isEmpty()) {
-            player.displayClientMessage(Component.literal(" Top items").withStyle(ChatFormatting.GOLD), false);
-            for (Map.Entry<String, Long> e : top) {
-                player.displayClientMessage(Component.literal("  • " + ItemCounterBlockEntity.displayName(e.getKey())
-                        + " × " + ItemCounterBlockEntity.fmt(e.getValue())).withStyle(ChatFormatting.GRAY), false);
-            }
-        }
     }
 
     @Override

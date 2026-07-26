@@ -5,6 +5,7 @@ import java.util.function.Predicate;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.network.protocol.game.ClientboundBlockEntityDataPacket;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.LivingEntity;
@@ -64,6 +65,37 @@ public class PlayerSensorBlockEntity extends BlockEntity {
         if (level != null) {
             level.sendBlockUpdated(worldPosition, getBlockState(), getBlockState(), Block.UPDATE_ALL);
         }
+    }
+
+    public static final String[] MODES = {PLAYERS, MONSTERS, ANIMALS, ALL};
+
+    /** Index of the current built-in mode, or -1 for a specific mob type. */
+    public int modeIndex() {
+        for (int i = 0; i < MODES.length; i++) {
+            if (MODES[i].equals(target)) {
+                return i;
+            }
+        }
+        return -1;
+    }
+
+    /** Set one of the four built-in modes by index (screen buttons). */
+    public void setModeIndex(int index) {
+        if (index >= 0 && index < MODES.length) {
+            setTarget(MODES[index]);
+        }
+    }
+
+    @Override
+    public ClientboundBlockEntityDataPacket getUpdatePacket() {
+        return ClientboundBlockEntityDataPacket.create(this);
+    }
+
+    @Override
+    public CompoundTag getUpdateTag(HolderLookup.Provider registries) {
+        CompoundTag tag = new CompoundTag();
+        saveAdditional(tag, registries);
+        return tag;
     }
 
     /** Cycle through the four built-in modes. */

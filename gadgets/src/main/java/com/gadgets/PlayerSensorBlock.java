@@ -62,9 +62,8 @@ public class PlayerSensorBlock extends Block implements BlockEntityProvider {
 
     @Override
     protected ActionResult onUse(BlockState state, World world, BlockPos pos, PlayerEntity player, BlockHitResult hit) {
-        if (!world.isClient() && world.getBlockEntity(pos) instanceof PlayerSensorBlockEntity be) {
-            String mode = be.cycleMode();
-            player.sendMessage(Text.literal("Sensor now detects: " + mode).formatted(Formatting.GOLD), true);
+        if (world.isClient() && world.getBlockEntity(pos) instanceof PlayerSensorBlockEntity be) {
+            ScreenOpener.SENSOR.accept(be);
         }
         return ActionResult.success(world.isClient());
     }

@@ -87,39 +87,10 @@ public class ItemCounterBlock extends Block implements BlockEntityProvider {
 
     @Override
     protected ActionResult onUse(BlockState state, World world, BlockPos pos, PlayerEntity player, BlockHitResult hit) {
-        if (!world.isClient() && world.getBlockEntity(pos) instanceof ItemCounterBlockEntity be) {
-            if (player.isSneaking()) {
-                String label = be.cycleDisplayMode();
-                world.playSound(null, pos, SoundEvents.BLOCK_COMPARATOR_CLICK, SoundCategory.BLOCKS, 0.6F, 1.6F);
-                player.sendMessage(Text.literal("Item Counter ▸ face shows " + label)
-                        .formatted(Formatting.GOLD), true);
-            } else {
-                sendDashboard(player, be);
-            }
+        if (world.isClient() && world.getBlockEntity(pos) instanceof ItemCounterBlockEntity be) {
+            ScreenOpener.COUNTER.accept(be);
         }
         return ActionResult.success(world.isClient());
-    }
-
-    /** The full stats readout, printed to chat — the counter's "screen". */
-    private static void sendDashboard(PlayerEntity player, ItemCounterBlockEntity be) {
-        String mode = be.isWatchingContainer() ? "watching container" : "watching for drops";
-        player.sendMessage(Text.literal("⚙ Item Counter — " + mode).formatted(Formatting.GOLD, Formatting.BOLD), false);
-        player.sendMessage(Text.literal(" Rate  " + ItemCounterBlockEntity.fmt(be.getRateMin()) + " /min · "
-                + ItemCounterBlockEntity.fmt(be.getRateHour()) + " /hour").formatted(Formatting.AQUA), false);
-        player.sendMessage(Text.literal(" Total " + ItemCounterBlockEntity.fmt(be.getTotal()) + " items in "
-                + ItemCounterBlockEntity.duration(be.getUptimeTicks())).formatted(Formatting.AQUA), false);
-        player.sendMessage(Text.literal(" Pulse every " + be.getThreshold() + " items · at " + be.getCount()
-                + " (redstone dust to change)").formatted(Formatting.AQUA), false);
-        player.sendMessage(Text.literal(" Face  showing " + be.faceLabel() + " (sneak + click to change)")
-                .formatted(Formatting.AQUA), false);
-        List<Map.Entry<String, Long>> top = be.topItems(5);
-        if (!top.isEmpty()) {
-            player.sendMessage(Text.literal(" Top items").formatted(Formatting.GOLD), false);
-            for (Map.Entry<String, Long> e : top) {
-                player.sendMessage(Text.literal("  • " + ItemCounterBlockEntity.displayName(e.getKey())
-                        + " × " + ItemCounterBlockEntity.fmt(e.getValue())).formatted(Formatting.GRAY), false);
-            }
-        }
     }
 
     @Override

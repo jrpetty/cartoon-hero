@@ -62,9 +62,8 @@ public class PlayerSensorBlock extends Block implements EntityBlock {
 
     @Override
     protected InteractionResult useWithoutItem(BlockState state, Level level, BlockPos pos, Player player, BlockHitResult hit) {
-        if (!level.isClientSide() && level.getBlockEntity(pos) instanceof PlayerSensorBlockEntity be) {
-            String mode = be.cycleMode();
-            player.displayClientMessage(Component.literal("Sensor now detects: " + mode).withStyle(ChatFormatting.GOLD), true);
+        if (level.isClientSide() && level.getBlockEntity(pos) instanceof PlayerSensorBlockEntity be) {
+            ScreenOpener.SENSOR.accept(be);
         }
         return InteractionResult.sidedSuccess(level.isClientSide());
     }

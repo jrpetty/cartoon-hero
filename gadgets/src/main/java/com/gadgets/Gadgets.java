@@ -2,6 +2,8 @@ package com.gadgets;
 
 import net.fabricmc.api.ModInitializer;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
+import net.fabricmc.fabric.api.networking.v1.PayloadTypeRegistry;
+import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
 import net.fabricmc.fabric.api.itemgroup.v1.FabricItemGroup;
 import net.fabricmc.fabric.api.itemgroup.v1.ItemGroupEvents;
 import net.fabricmc.fabric.api.object.builder.v1.block.entity.FabricBlockEntityTypeBuilder;
@@ -90,6 +92,16 @@ public class Gadgets implements ModInitializer {
             new TrashCanBlock(AbstractBlock.Settings.create()
                     .strength(1.5F).requiresTool().sounds(BlockSoundGroup.METAL)),
             "tip.gadgets.trash_can.1", "tip.gadgets.trash_can.2", "tip.gadgets.trash_can.3");
+    public static final Block STORAGE_SENSOR = registerBlock("storage_sensor",
+            new StorageSensorBlock(AbstractBlock.Settings.create()
+                    .strength(1.5F).requiresTool().sounds(BlockSoundGroup.METAL)),
+            "tip.gadgets.storage_sensor.1", "tip.gadgets.storage_sensor.2", "tip.gadgets.storage_sensor.3");
+    public static final Block COMMAND_HUB = registerBlock("command_hub",
+            new CommandHubBlock(AbstractBlock.Settings.create()
+                    .strength(2.0F).requiresTool().sounds(BlockSoundGroup.METAL).nonOpaque()),
+            "tip.gadgets.command_hub.1", "tip.gadgets.command_hub.2", "tip.gadgets.command_hub.3");
+    public static final Item MONITOR_WAND = register("monitor_wand",
+            new MonitorWandItem(new Item.Settings().maxCount(1)));
 
     public static final Item WIRELESS_REMOTE = register("wireless_remote",
             new WirelessRemoteItem(new Item.Settings().maxCount(1)));
@@ -121,6 +133,8 @@ public class Gadgets implements ModInitializer {
     public static BlockEntityType<ItemMagnetBlockEntity> ITEM_MAGNET_BE;
     public static BlockEntityType<StockMonitorBlockEntity> STOCK_MONITOR_BE;
     public static BlockEntityType<TrashCanBlockEntity> TRASH_CAN_BE;
+    public static BlockEntityType<StorageSensorBlockEntity> STORAGE_SENSOR_BE;
+    public static BlockEntityType<CommandHubBlockEntity> COMMAND_HUB_BE;
 
     @Override
     public void onInitialize() {
@@ -146,6 +160,10 @@ public class Gadgets implements ModInitializer {
                 FabricBlockEntityTypeBuilder.create(StockMonitorBlockEntity::new, STOCK_MONITOR).build());
         TRASH_CAN_BE = Registry.register(Registries.BLOCK_ENTITY_TYPE, Identifier.of(MOD_ID, "trash_can"),
                 FabricBlockEntityTypeBuilder.create(TrashCanBlockEntity::new, TRASH_CAN).build());
+        STORAGE_SENSOR_BE = Registry.register(Registries.BLOCK_ENTITY_TYPE, Identifier.of(MOD_ID, "storage_sensor"),
+                FabricBlockEntityTypeBuilder.create(StorageSensorBlockEntity::new, STORAGE_SENSOR).build());
+        COMMAND_HUB_BE = Registry.register(Registries.BLOCK_ENTITY_TYPE, Identifier.of(MOD_ID, "command_hub"),
+                FabricBlockEntityTypeBuilder.create(CommandHubBlockEntity::new, COMMAND_HUB).build());
 
         Registry.register(Registries.ITEM_GROUP, GADGETS_GROUP_KEY, GADGETS_GROUP);
         ItemGroupEvents.modifyEntriesEvent(GADGETS_GROUP_KEY).register(entries -> {
@@ -164,8 +182,15 @@ public class Gadgets implements ModInitializer {
             entries.add(ITEM_MAGNET);
             entries.add(STOCK_MONITOR);
             entries.add(TRASH_CAN);
+            entries.add(STORAGE_SENSOR);
+            entries.add(COMMAND_HUB);
+            entries.add(MONITOR_WAND);
             entries.add(WIRELESS_REMOTE);
         });
+
+        PayloadTypeRegistry.playC2S().register(GadgetConfigPayload.ID, GadgetConfigPayload.CODEC);
+        ServerPlayNetworking.registerGlobalReceiver(GadgetConfigPayload.ID,
+                (payload, context) -> GadgetConfigPayload.apply(context.player(), payload));
 
         // Wireless redstone signals are transient — drop them when the server stops
         // so they never leak into the next world loaded in the same session.

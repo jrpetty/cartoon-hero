@@ -40,7 +40,7 @@ import net.minecraft.world.World;
 public class ItemCounterBlockEntity extends BlockEntity {
     private static final int INTERVAL = 2;
     private static final int PULSE_TICKS = 4;
-    private static final int[] THRESHOLDS = {1, 4, 8, 16, 32, 64};
+    public static final int[] THRESHOLDS = {1, 4, 8, 16, 32, 64};
     private static final int MAX_TRACKED_ITEMS = 64;
     private static final String OTHER_KEY = "other";
 
@@ -135,6 +135,43 @@ public class ItemCounterBlockEntity extends BlockEntity {
         displayMode = (displayMode + 1) % MODE_LABELS.length;
         sync();
         return faceLabel();
+    }
+
+    public int getDisplayMode() {
+        return displayMode;
+    }
+
+    /** Set the face readout mode directly (screen buttons). */
+    public void setDisplayMode(int mode) {
+        if (mode >= 0 && mode < MODE_LABELS.length) {
+            displayMode = mode;
+            sync();
+        }
+    }
+
+    /** Set the pulse size directly — only preset values are accepted. */
+    public void setThreshold(int value) {
+        for (int preset : THRESHOLDS) {
+            if (preset == value) {
+                threshold = value;
+                count = 0;
+                sync();
+                return;
+            }
+        }
+    }
+
+    /** Wipe every statistic and start the counter fresh (screen button). */
+    public void resetStats() {
+        total = 0L;
+        uptimeTicks = 0L;
+        count = 0;
+        perItem.clear();
+        java.util.Arrays.fill(secBuckets, 0);
+        java.util.Arrays.fill(minBuckets, 0);
+        rateMin = 0;
+        rateHour = 0;
+        sync();
     }
 
     /** The value string shown on the display face. */
@@ -342,15 +379,8 @@ public class ItemCounterBlockEntity extends BlockEntity {
 
     @Override
     public NbtCompound toInitialChunkDataNbt(RegistryWrapper.WrapperLookup registries) {
-        // Lean tag for clients: just what the face renderer needs.
-        NbtCompound nbt = new NbtCompound();
-        nbt.putInt("Threshold", threshold);
-        nbt.putInt("Count", count);
-        nbt.putInt("DisplayMode", displayMode);
-        nbt.putLong("Total", total);
-        nbt.putInt("RateMin", rateMin);
-        nbt.putInt("RateHour", rateHour);
-        return nbt;
+        // Full tag: the stats screen shows uptime and the per-item breakdown too.
+        return createNbt(registries);
     }
 
     @Override

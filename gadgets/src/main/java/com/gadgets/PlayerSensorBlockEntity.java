@@ -12,6 +12,9 @@ import net.minecraft.entity.mob.Monster;
 import net.minecraft.entity.passive.AnimalEntity;
 import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.nbt.NbtCompound;
+import net.minecraft.network.listener.ClientPlayPacketListener;
+import net.minecraft.network.packet.Packet;
+import net.minecraft.network.packet.s2c.play.BlockEntityUpdateS2CPacket;
 import net.minecraft.registry.RegistryWrapper;
 import net.minecraft.util.math.Box;
 import net.minecraft.util.math.BlockPos;
@@ -64,6 +67,35 @@ public class PlayerSensorBlockEntity extends BlockEntity {
         if (world != null) {
             world.updateListeners(pos, getCachedState(), getCachedState(), Block.NOTIFY_ALL);
         }
+    }
+
+    public static final String[] MODES = {PLAYERS, MONSTERS, ANIMALS, ALL};
+
+    /** Index of the current built-in mode, or -1 for a specific mob type. */
+    public int modeIndex() {
+        for (int i = 0; i < MODES.length; i++) {
+            if (MODES[i].equals(target)) {
+                return i;
+            }
+        }
+        return -1;
+    }
+
+    /** Set one of the four built-in modes by index (screen buttons). */
+    public void setModeIndex(int index) {
+        if (index >= 0 && index < MODES.length) {
+            setTarget(MODES[index]);
+        }
+    }
+
+    @Override
+    public Packet<ClientPlayPacketListener> toUpdatePacket() {
+        return BlockEntityUpdateS2CPacket.create(this);
+    }
+
+    @Override
+    public NbtCompound toInitialChunkDataNbt(RegistryWrapper.WrapperLookup registries) {
+        return createNbt(registries);
     }
 
     /** Cycle through the four built-in modes. */

@@ -78,11 +78,8 @@ public class StockMonitorBlock extends Block implements EntityBlock {
 
     @Override
     protected InteractionResult useWithoutItem(BlockState state, Level level, BlockPos pos, Player player, BlockHitResult hit) {
-        if (!level.isClientSide() && level.getBlockEntity(pos) instanceof StockMonitorBlockEntity be) {
-            int t = be.cycleThreshold();
-            level.playSound(null, pos, SoundEvents.COMPARATOR_CLICK, SoundSource.BLOCKS, 0.6F, 1.6F);
-            player.displayClientMessage(Component.literal("Stock Monitor ▸ alert below " + t + " items")
-                    .withStyle(ChatFormatting.GOLD), true);
+        if (level.isClientSide() && level.getBlockEntity(pos) instanceof StockMonitorBlockEntity be) {
+            ScreenOpener.MONITOR.accept(be);
         }
         return InteractionResult.sidedSuccess(level.isClientSide());
     }

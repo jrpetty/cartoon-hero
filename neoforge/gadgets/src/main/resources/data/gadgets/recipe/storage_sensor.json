@@ -1,0 +1,12 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "redstone",
+  "group": "gadgets",
+  "pattern": [ " E ", "ICI", "III" ],
+  "key": {
+    "E": { "item": "minecraft:ender_pearl" },
+    "C": { "item": "minecraft:comparator" },
+    "I": { "item": "minecraft:iron_ingot" }
+  },
+  "result": { "id": "gadgets:storage_sensor", "count": 1 }
+}

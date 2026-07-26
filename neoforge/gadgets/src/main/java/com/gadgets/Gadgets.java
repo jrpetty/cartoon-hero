@@ -13,10 +13,13 @@ import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.SoundType;
 import net.minecraft.world.level.block.entity.BlockEntityType;
 import net.minecraft.world.level.block.state.BlockBehaviour;
+import net.minecraft.server.level.ServerPlayer;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.fml.common.Mod;
 import net.neoforged.neoforge.common.NeoForge;
 import net.neoforged.neoforge.event.server.ServerStoppedEvent;
+import net.neoforged.neoforge.network.event.RegisterPayloadHandlersEvent;
+import net.neoforged.neoforge.network.registration.PayloadRegistrar;
 import net.neoforged.neoforge.registries.DeferredBlock;
 import net.neoforged.neoforge.registries.DeferredItem;
 import net.neoforged.neoforge.registries.DeferredRegister;
@@ -96,6 +99,12 @@ public class Gadgets {
     public static final DeferredBlock<Block> TRASH_CAN = BLOCKS.register("trash_can",
             () -> new TrashCanBlock(BlockBehaviour.Properties.of()
                     .strength(1.5F).requiresCorrectToolForDrops().sound(SoundType.METAL)));
+    public static final DeferredBlock<Block> STORAGE_SENSOR = BLOCKS.register("storage_sensor",
+            () -> new StorageSensorBlock(BlockBehaviour.Properties.of()
+                    .strength(1.5F).requiresCorrectToolForDrops().sound(SoundType.METAL)));
+    public static final DeferredBlock<Block> COMMAND_HUB = BLOCKS.register("command_hub",
+            () -> new CommandHubBlock(BlockBehaviour.Properties.of()
+                    .strength(2.0F).requiresCorrectToolForDrops().sound(SoundType.METAL).noOcclusion()));
 
     public static final DeferredItem<?> DISPLAY_PEDESTAL_ITEM = ITEMS.register("display_pedestal", () -> new TooltipBlockItem(DISPLAY_PEDESTAL.get(), new Item.Properties(),
             "tip.gadgets.display_pedestal.1", "tip.gadgets.display_pedestal.2", "tip.gadgets.display_pedestal.3", "tip.gadgets.display_pedestal.4", "tip.gadgets.display_pedestal.5"));
@@ -113,6 +122,12 @@ public class Gadgets {
             "tip.gadgets.stock_monitor.1", "tip.gadgets.stock_monitor.2", "tip.gadgets.stock_monitor.3", "tip.gadgets.stock_monitor.4"));
     public static final DeferredItem<?> TRASH_CAN_ITEM = ITEMS.register("trash_can", () -> new TooltipBlockItem(TRASH_CAN.get(), new Item.Properties(),
             "tip.gadgets.trash_can.1", "tip.gadgets.trash_can.2", "tip.gadgets.trash_can.3"));
+    public static final DeferredItem<?> STORAGE_SENSOR_ITEM = ITEMS.register("storage_sensor", () -> new TooltipBlockItem(STORAGE_SENSOR.get(), new Item.Properties(),
+            "tip.gadgets.storage_sensor.1", "tip.gadgets.storage_sensor.2", "tip.gadgets.storage_sensor.3"));
+    public static final DeferredItem<?> COMMAND_HUB_ITEM = ITEMS.register("command_hub", () -> new TooltipBlockItem(COMMAND_HUB.get(), new Item.Properties(),
+            "tip.gadgets.command_hub.1", "tip.gadgets.command_hub.2", "tip.gadgets.command_hub.3"));
+    public static final DeferredItem<Item> MONITOR_WAND =
+            ITEMS.register("monitor_wand", () -> new MonitorWandItem(new Item.Properties().stacksTo(1)));
     public static final DeferredItem<Item> WIRELESS_REMOTE =
             ITEMS.register("wireless_remote", () -> new WirelessRemoteItem(new Item.Properties().stacksTo(1)));
 
@@ -149,6 +164,12 @@ public class Gadgets {
     public static final Supplier<BlockEntityType<TrashCanBlockEntity>> TRASH_CAN_BE =
             BLOCK_ENTITIES.register("trash_can",
                     () -> BlockEntityType.Builder.of(TrashCanBlockEntity::new, TRASH_CAN.get()).build(null));
+    public static final Supplier<BlockEntityType<StorageSensorBlockEntity>> STORAGE_SENSOR_BE =
+            BLOCK_ENTITIES.register("storage_sensor",
+                    () -> BlockEntityType.Builder.of(StorageSensorBlockEntity::new, STORAGE_SENSOR.get()).build(null));
+    public static final Supplier<BlockEntityType<CommandHubBlockEntity>> COMMAND_HUB_BE =
+            BLOCK_ENTITIES.register("command_hub",
+                    () -> BlockEntityType.Builder.of(CommandHubBlockEntity::new, COMMAND_HUB.get()).build(null));
 
     public static final Supplier<CreativeModeTab> GADGETS_TAB = CREATIVE_TABS.register("gadgets",
             () -> CreativeModeTab.builder()
@@ -170,6 +191,9 @@ public class Gadgets {
                         output.accept(ITEM_MAGNET_ITEM.get());
                         output.accept(STOCK_MONITOR_ITEM.get());
                         output.accept(TRASH_CAN_ITEM.get());
+                        output.accept(STORAGE_SENSOR_ITEM.get());
+                        output.accept(COMMAND_HUB_ITEM.get());
+                        output.accept(MONITOR_WAND.get());
                         output.accept(WIRELESS_REMOTE.get());
                     })
                     .build());
@@ -180,6 +204,7 @@ public class Gadgets {
         BLOCK_ENTITIES.register(modBus);
         CREATIVE_TABS.register(modBus);
         ENTITIES.register(modBus);
+        modBus.addListener(Gadgets::registerPayloads);
 
         // Wireless redstone signals are transient — drop them when the server stops
         // so they never leak into the next world loaded in the same session.
@@ -187,5 +212,15 @@ public class Gadgets {
             WirelessNetwork.clear();
             ItemNetwork.clear();
         });
+    }
+
+    private static void registerPayloads(RegisterPayloadHandlersEvent event) {
+        PayloadRegistrar registrar = event.registrar("1");
+        registrar.playToServer(GadgetConfigPayload.TYPE, GadgetConfigPayload.CODEC, (payload, context) ->
+                context.enqueueWork(() -> {
+                    if (context.player() instanceof ServerPlayer sp) {
+                        GadgetConfigPayload.apply(sp, payload);
+                    }
+                }));
     }
 }

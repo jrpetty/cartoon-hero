@@ -77,10 +77,8 @@ public class StockMonitorBlock extends Block implements BlockEntityProvider {
 
     @Override
     protected ActionResult onUse(BlockState state, World world, BlockPos pos, PlayerEntity player, BlockHitResult hit) {
-        if (!world.isClient() && world.getBlockEntity(pos) instanceof StockMonitorBlockEntity be) {
-            int t = be.cycleThreshold();
-            world.playSound(null, pos, SoundEvents.BLOCK_COMPARATOR_CLICK, SoundCategory.BLOCKS, 0.6F, 1.6F);
-            player.sendMessage(Text.literal("Stock Monitor ▸ alert below " + t + " items").formatted(Formatting.GOLD), true);
+        if (world.isClient() && world.getBlockEntity(pos) instanceof StockMonitorBlockEntity be) {
+            ScreenOpener.MONITOR.accept(be);
         }
         return ActionResult.success(world.isClient());
     }
