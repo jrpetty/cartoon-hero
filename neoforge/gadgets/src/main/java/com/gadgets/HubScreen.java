@@ -13,9 +13,11 @@ public class HubScreen extends GadgetScreen {
 
     private final CommandHubBlockEntity be;
     private int page = 0;
+    /** Two-step guard so a stray click can never wipe the board. */
+    private boolean armed = false;
 
     public HubScreen(CommandHubBlockEntity be) {
-        super(Component.literal("Command Hub"), 300, 196);
+        super(Component.literal("Command Hub"), 300, 214);
         this.be = be;
     }
 
@@ -26,6 +28,19 @@ public class HubScreen extends GadgetScreen {
                 .bounds(left + 12, top + 174, 20, 14).build());
         addRenderableWidget(Button.builder(Component.literal("▶"), b -> page = Math.min(maxPage(), page + 1))
                 .bounds(left + panelW - 32, top + 174, 20, 14).build());
+        // Clearing the whole board lives here rather than on the wand, where it
+        // used to fire by accident on a sneak-click.
+        addRenderableWidget(Button.builder(
+                        Component.literal(armed ? "Confirm — clear all links" : "Reset links"), b -> {
+                            if (armed) {
+                                send(be.getBlockPos(), "hub_clear", 0);
+                                armed = false;
+                            } else {
+                                armed = true;
+                            }
+                            rebuildWidgets();
+                        })
+                .bounds(left + 40, top + 192, panelW - 80, 14).build());
     }
 
     private int maxPage() {
@@ -44,8 +59,9 @@ public class HubScreen extends GadgetScreen {
 
         if (nodes.isEmpty()) {
             gfx.drawString(font, "Nothing linked yet.", x, top + 44, GRAY, false);
-            gfx.drawString(font, "Use the Monitor Wand: click this hub,", x, top + 58, GRAY, false);
+            gfx.drawString(font, "Take the Monitor Wand, click this hub,", x, top + 58, GRAY, false);
             gfx.drawString(font, "then click your counters and monitors.", x, top + 70, GRAY, false);
+            gfx.drawString(font, "Sneak-click a linked one to unlink it.", x, top + 82, GRAY, false);
             return;
         }
 
@@ -59,14 +75,16 @@ public class HubScreen extends GadgetScreen {
             if (!n.online) {
                 gfx.drawString(font, "○ " + where + " — offline (unloaded)", x, y, GRAY, false);
             } else if (n.type == CommandHubBlockEntity.TYPE_COUNTER) {
-                gfx.drawString(font, "● " + ItemCounterBlockEntity.compact(n.a) + "/m · "
-                        + ItemCounterBlockEntity.compact(n.b) + "/h · " + ItemCounterBlockEntity.compact(n.c)
-                        + " total  @" + where, x, y, AMBER, false);
+                gfx.drawString(font, "● " + trim(n.label, 14) + "  "
+                        + ItemCounterBlockEntity.compact(n.a) + "/m · "
+                        + ItemCounterBlockEntity.compact(n.b) + "/h · "
+                        + ItemCounterBlockEntity.compact(n.c) + " total", x, y, AMBER, false);
             } else {
                 boolean low = n.c != 0;
-                gfx.drawString(font, (low ? "▼ " : "● ") + trim(n.label, 16) + " — "
-                        + ItemCounterBlockEntity.fmt(n.a) + (low ? "  LOW (<" + n.b + ")" : "")
-                        + "  @" + where, x, y, low ? RED : GREEN, false);
+                gfx.drawString(font, (low ? "▼ " : "● ") + trim(n.label, 14) + "  "
+                        + ItemCounterBlockEntity.fmt(n.a)
+                        + (low ? " LOW(<" + n.b + ")" : "")
+                        + " · " + n.d + " types", x, y, low ? RED : GREEN, false);
             }
         }
         if (maxPage() > 0) {

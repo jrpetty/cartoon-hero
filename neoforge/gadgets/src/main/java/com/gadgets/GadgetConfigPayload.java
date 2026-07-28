@@ -16,14 +16,19 @@ import net.minecraft.world.level.block.entity.BlockEntity;
  * applying, so the packet can never touch anything but a gadget in front of
  * the player.
  */
-public record GadgetConfigPayload(BlockPos pos, String key, int value) implements CustomPacketPayload {
+public record GadgetConfigPayload(BlockPos pos, String key, int value, String text) implements CustomPacketPayload {
     public static final CustomPacketPayload.Type<GadgetConfigPayload> TYPE =
             new CustomPacketPayload.Type<>(ResourceLocation.fromNamespaceAndPath(Gadgets.MODID, "config"));
     public static final StreamCodec<RegistryFriendlyByteBuf, GadgetConfigPayload> CODEC = StreamCodec.composite(
             BlockPos.STREAM_CODEC, GadgetConfigPayload::pos,
             ByteBufCodecs.STRING_UTF8, GadgetConfigPayload::key,
             ByteBufCodecs.VAR_INT, GadgetConfigPayload::value,
+            ByteBufCodecs.STRING_UTF8, GadgetConfigPayload::text,
             GadgetConfigPayload::new);
+
+    public GadgetConfigPayload(BlockPos pos, String key, int value) {
+        this(pos, key, value, "");
+    }
 
     @Override
     public CustomPacketPayload.Type<? extends CustomPacketPayload> type() {
@@ -67,6 +72,20 @@ public record GadgetConfigPayload(BlockPos pos, String key, int value) implement
             case "monitor_threshold" -> {
                 if (be instanceof StockMonitorBlockEntity monitor) {
                     monitor.setThreshold(p.value());
+                }
+            }
+            case "set_name" -> {
+                // One label field, shared by both display gadgets.
+                String name = p.text().length() > 24 ? p.text().substring(0, 24) : p.text();
+                if (be instanceof ItemCounterBlockEntity counter) {
+                    counter.setCustomName(name);
+                } else if (be instanceof StockMonitorBlockEntity monitor) {
+                    monitor.setCustomName(name);
+                }
+            }
+            case "hub_clear" -> {
+                if (be instanceof CommandHubBlockEntity hub) {
+                    hub.clearNodes();
                 }
             }
             default -> {

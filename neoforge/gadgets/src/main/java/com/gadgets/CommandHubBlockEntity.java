@@ -43,6 +43,7 @@ public class CommandHubBlockEntity extends BlockEntity {
         public long a = 0; // counter: rate/min   · monitor: stock count
         public long b = 0; // counter: rate/hour  · monitor: alert threshold
         public long c = 0; // counter: total      · monitor: low flag (1/0)
+        public long d = 0; //                        · monitor: distinct item types
 
         public CompoundTag toNbt() {
             CompoundTag n = new CompoundTag();
@@ -54,6 +55,7 @@ public class CommandHubBlockEntity extends BlockEntity {
             n.putLong("A", a);
             n.putLong("B", b);
             n.putLong("C", c);
+            n.putLong("D2", d);
             return n;
         }
 
@@ -67,6 +69,7 @@ public class CommandHubBlockEntity extends BlockEntity {
             node.a = n.getLong("A");
             node.b = n.getLong("B");
             node.c = n.getLong("C");
+            node.d = n.getLong("D2");
             return node;
         }
     }
@@ -181,17 +184,18 @@ public class CommandHubBlockEntity extends BlockEntity {
         }
         if (w.getBlockEntity(p) instanceof ItemCounterBlockEntity counter) {
             n.online = true;
-            n.label = "Counter";
+            n.label = counter.displayName();
             n.a = counter.getRateMin();
             n.b = counter.getRateHour();
             n.c = counter.getTotal();
+            n.d = 0;
         } else if (w.getBlockEntity(p) instanceof StockMonitorBlockEntity monitor) {
             n.online = true;
-            n.label = ItemCounterBlockEntity.displayName(
-                    BuiltInRegistries.ITEM.getKey(monitor.getTracked()).toString());
+            n.label = monitor.displayName();
             n.a = monitor.getCount();
             n.b = monitor.getThreshold();
             n.c = monitor.isLow() ? 1 : 0;
+            n.d = monitor.getDistinctTypes();
         }
     }
 

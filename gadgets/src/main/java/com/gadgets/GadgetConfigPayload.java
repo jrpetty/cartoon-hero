@@ -16,14 +16,19 @@ import net.minecraft.world.World;
  * applying, so the packet can never touch anything but a gadget in front of
  * the player.
  */
-public record GadgetConfigPayload(BlockPos pos, String key, int value) implements CustomPayload {
+public record GadgetConfigPayload(BlockPos pos, String key, int value, String text) implements CustomPayload {
     public static final CustomPayload.Id<GadgetConfigPayload> ID =
             new CustomPayload.Id<>(Identifier.of(Gadgets.MOD_ID, "config"));
     public static final PacketCodec<RegistryByteBuf, GadgetConfigPayload> CODEC = PacketCodec.tuple(
             BlockPos.PACKET_CODEC, GadgetConfigPayload::pos,
             PacketCodecs.STRING, GadgetConfigPayload::key,
             PacketCodecs.VAR_INT, GadgetConfigPayload::value,
+            PacketCodecs.STRING, GadgetConfigPayload::text,
             GadgetConfigPayload::new);
+
+    public GadgetConfigPayload(BlockPos pos, String key, int value) {
+        this(pos, key, value, "");
+    }
 
     @Override
     public CustomPayload.Id<? extends CustomPayload> getId() {
@@ -67,6 +72,20 @@ public record GadgetConfigPayload(BlockPos pos, String key, int value) implement
             case "monitor_threshold" -> {
                 if (be instanceof StockMonitorBlockEntity monitor) {
                     monitor.setThreshold(p.value());
+                }
+            }
+            case "set_name" -> {
+                // One label field, shared by both display gadgets.
+                String name = p.text().length() > 24 ? p.text().substring(0, 24) : p.text();
+                if (be instanceof ItemCounterBlockEntity counter) {
+                    counter.setCustomName(name);
+                } else if (be instanceof StockMonitorBlockEntity monitor) {
+                    monitor.setCustomName(name);
+                }
+            }
+            case "hub_clear" -> {
+                if (be instanceof CommandHubBlockEntity hub) {
+                    hub.clearNodes();
                 }
             }
             default -> {

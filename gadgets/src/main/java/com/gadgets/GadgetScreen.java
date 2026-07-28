@@ -49,6 +49,10 @@ public abstract class GadgetScreen extends Screen {
     }
 
     protected static void send(BlockPos pos, String key, int value) {
-        ClientPlayNetworking.send(new GadgetConfigPayload(pos, key, value));
+        ClientPlayNetworking.send(new GadgetConfigPayload(pos, key, value, ""));
+    }
+
+    protected static void sendText(BlockPos pos, String key, String text) {
+        ClientPlayNetworking.send(new GadgetConfigPayload(pos, key, 0, text));
     }
 }

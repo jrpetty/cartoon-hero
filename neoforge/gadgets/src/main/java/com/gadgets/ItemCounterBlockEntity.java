@@ -49,6 +49,8 @@ public class ItemCounterBlockEntity extends BlockEntity {
     private int count = 0;
     private long poweredUntil = 0L;
     private int displayMode = 0;
+    /** Player-set label shown on the face and on a Command Hub board. */
+    private String customName = "";
 
     // --- lifetime stats (persisted) ---
     private long total = 0L;
@@ -135,6 +137,21 @@ public class ItemCounterBlockEntity extends BlockEntity {
         return faceLabel();
     }
 
+
+    public String getCustomName() {
+        return customName;
+    }
+
+    /** A human label for this counter, or a sensible default when unnamed. */
+    public String displayName() {
+        return customName.isEmpty() ? "Counter" : customName;
+    }
+
+    public void setCustomName(String name) {
+        this.customName = name == null ? "" : name;
+        sync();
+    }
+
     public int getDisplayMode() {
         return displayMode;
     }
@@ -184,7 +201,7 @@ public class ItemCounterBlockEntity extends BlockEntity {
 
     /** The unit label shown under the face value. */
     public String faceLabel() {
-        return MODE_LABELS[displayMode];
+        return customName.isEmpty() ? MODE_LABELS[displayMode] : customName;
     }
 
     public static void tick(Level level, BlockPos pos, BlockState state, ItemCounterBlockEntity be) {
@@ -390,6 +407,7 @@ public class ItemCounterBlockEntity extends BlockEntity {
         tag.putInt("Count", count);
         tag.putLong("PoweredUntil", poweredUntil);
         tag.putInt("DisplayMode", displayMode);
+        tag.putString("CustomName", customName);
         tag.putLong("Total", total);
         tag.putLong("Uptime", uptimeTicks);
         tag.putInt("RateMin", rateMin);

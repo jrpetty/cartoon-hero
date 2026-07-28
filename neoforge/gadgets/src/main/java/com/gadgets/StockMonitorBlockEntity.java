@@ -34,6 +34,10 @@ public class StockMonitorBlockEntity extends BlockEntity {
     private boolean low = false;
     /** Whether a container was actually found in front on the last sample. */
     private boolean containerPresent = false;
+    /** How many different item types the watched container holds. */
+    private int distinctTypes = 0;
+    /** Player-set label shown on the face and on a Command Hub board. */
+    private String customName = "";
 
     public StockMonitorBlockEntity(BlockPos pos, BlockState state) {
         super(Gadgets.STOCK_MONITOR_BE.get(), pos, state);
@@ -53,6 +57,20 @@ public class StockMonitorBlockEntity extends BlockEntity {
 
     public boolean isLow() {
         return low;
+    }
+
+
+    public int getDistinctTypes() {
+        return distinctTypes;
+    }
+
+    public String getCustomName() {
+        return customName;
+    }
+
+    public void setCustomName(String name) {
+        this.customName = name == null ? "" : name;
+        sync();
     }
 
     public boolean hasContainer() {
@@ -97,13 +115,24 @@ public class StockMonitorBlockEntity extends BlockEntity {
         return containerPresent ? ItemCounterBlockEntity.compact(count) : "?";
     }
 
-    /** Small line on the screen: the tracked item's name, or a prompt. */
+    /** Small line on the screen: the player's label, else the tracked item's name. */
     public String faceLabel() {
-        if (tracked == Items.AIR) {
-            return "set item";
+        String name = customName;
+        if (name.isEmpty()) {
+            if (tracked == Items.AIR) {
+                return "set item";
+            }
+            name = tracked.getDescription().getString();
         }
-        String name = tracked.getDescription().getString();
         return name.length() > 14 ? name.substring(0, 13) + "…" : name;
+    }
+
+    /** A human label for this monitor, used on a Command Hub board. */
+    public String displayName() {
+        if (!customName.isEmpty()) {
+            return customName;
+        }
+        return tracked == Items.AIR ? "unset" : tracked.getDescription().getString();
     }
 
     public static void tick(Level level, BlockPos pos, BlockState state, StockMonitorBlockEntity be) {
@@ -111,24 +140,33 @@ public class StockMonitorBlockEntity extends BlockEntity {
             return;
         }
         long found = 0;
+        int types = 0;
         Direction facing = state.getValue(StockMonitorBlock.FACING);
         IItemHandler handler = level.getCapability(Capabilities.ItemHandler.BLOCK, pos.relative(facing), facing.getOpposite());
         boolean present = handler != null;
-        if (present && be.tracked != Items.AIR) {
+        if (present) {
+            java.util.Set<Item> seen = new java.util.HashSet<>();
             for (int i = 0; i < handler.getSlots(); i++) {
                 ItemStack stack = handler.getStackInSlot(i);
+                if (stack.isEmpty()) {
+                    continue;
+                }
+                seen.add(stack.getItem());
                 if (stack.is(be.tracked)) {
                     found += stack.getCount();
                 }
             }
+            types = seen.size();
         }
         // Never alarm on a missing container — a broken chest is not "out of stock".
         boolean lowNow = present && be.tracked != Items.AIR && found < be.threshold;
 
-        boolean changed = found != be.count || lowNow != be.low || present != be.containerPresent;
+        boolean changed = found != be.count || lowNow != be.low || present != be.containerPresent
+                || types != be.distinctTypes;
         be.count = found;
         be.low = lowNow;
         be.containerPresent = present;
+        be.distinctTypes = types;
         if (state.getValue(StockMonitorBlock.LOW) != lowNow) {
             level.setBlock(pos, state.setValue(StockMonitorBlock.LOW, lowNow), Block.UPDATE_ALL);
         }
@@ -166,6 +204,8 @@ public class StockMonitorBlockEntity extends BlockEntity {
         tag.putLong("Count", count);
         tag.putBoolean("Low", low);
         tag.putBoolean("HasContainer", containerPresent);
+        tag.putInt("DistinctTypes", distinctTypes);
+        tag.putString("CustomName", customName);
     }
 
     @Override
@@ -179,5 +219,7 @@ public class StockMonitorBlockEntity extends BlockEntity {
         count = tag.getLong("Count");
         low = tag.getBoolean("Low");
         containerPresent = tag.getBoolean("HasContainer");
+        distinctTypes = tag.getInt("DistinctTypes");
+        customName = tag.getString("CustomName");
     }
 }
