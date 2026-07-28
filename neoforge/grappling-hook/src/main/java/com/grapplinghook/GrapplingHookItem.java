@@ -1,7 +1,10 @@
 package com.grapplinghook;
 
+import java.util.List;
 import java.util.Optional;
 
+import net.minecraft.ChatFormatting;
+import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.sounds.SoundEvents;
@@ -13,7 +16,11 @@ import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.Item;
+import net.minecraft.world.damagesource.DamageSource;
+import net.minecraft.world.effect.MobEffectInstance;
+import net.minecraft.world.effect.MobEffects;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.TooltipFlag;
 import net.minecraft.world.item.UseAnim;
 import net.minecraft.world.level.ClipContext;
 import net.minecraft.world.level.Level;
@@ -55,6 +62,13 @@ public class GrapplingHookItem extends Item {
         if (player.getCooldowns().isOnCooldown(this)) {
             return InteractionResultHolder.fail(stack);
         }
+        if (GrappleUpgrades.isWornOut(stack)) {
+            if (!level.isClientSide()) {
+                player.displayClientMessage(
+                        Component.translatable("message.grapplinghook.worn_out").withStyle(ChatFormatting.RED), true);
+            }
+            return InteractionResultHolder.fail(stack);
+        }
         player.startUsingItem(hand);
         return InteractionResultHolder.consume(stack);
     }
@@ -69,7 +83,8 @@ public class GrapplingHookItem extends Item {
 
         int ticksUsed = getUseDuration(stack, entity) - timeLeft;
         double charge = Mth.clamp(ticksUsed / (double) GrappleConfig.chargeTicks, 0.0, 1.0);
-        double reach = Mth.lerp(charge, GrappleConfig.minRange, GrappleConfig.maxRange);
+        double reach = Mth.lerp(charge, GrappleConfig.minRange, GrappleConfig.maxRange)
+                * GrappleUpgrades.rangeMultiplier(stack);
 
         Vec3 start = player.getEyePosition(1.0F);
         Vec3 look = player.getViewVector(1.0F);
@@ -89,7 +104,8 @@ public class GrapplingHookItem extends Item {
             Entity target = findEntity(serverLevel, player, start, end, blockDist);
             if (target != null) {
                 yankEntity(serverLevel, player, target);
-                player.getCooldowns().addCooldown(this, GrappleConfig.cooldownTicks);
+                GrappleUpgrades.spendUse(stack);
+                player.getCooldowns().addCooldown(this, cooldownFor(stack));
                 return;
             }
         }
@@ -102,14 +118,65 @@ public class GrapplingHookItem extends Item {
         // direction; momentum then carries you. No reeling, no snap-back.
         Vec3 anchor = blockHit.getLocation();
         Vec3 dir = anchor.subtract(player.position()).normalize();
-        double launch = Mth.lerp(charge, GrappleConfig.minLaunchSpeed, GrappleConfig.maxLaunchSpeed);
+        double launch = Mth.lerp(charge, GrappleConfig.minLaunchSpeed, GrappleConfig.maxLaunchSpeed)
+                * GrappleUpgrades.launchMultiplier(stack);
         player.setDeltaMovement(dir.scale(launch).add(0.0, GrappleConfig.upwardBoost, 0.0));
         player.hurtMarked = true;
         player.hasImpulse = true;
         player.fallDistance = 0.0F;
 
+        if (GrappleUpgrades.has(stack, GrappleUpgrades.IMPACT)) {
+            impact(serverLevel, player, anchor);
+        }
+        if (GrappleUpgrades.has(stack, GrappleUpgrades.LANDING)) {
+            // Ride the arc down gently instead of splattering at the far end.
+            player.addEffect(new MobEffectInstance(MobEffects.SLOW_FALLING, 100, 0, true, false, true));
+        }
+
         GrappleManager.drawRope(serverLevel, start, anchor);
-        player.getCooldowns().addCooldown(this, GrappleConfig.cooldownTicks);
+        GrappleUpgrades.spendUse(stack);
+        player.getCooldowns().addCooldown(this, cooldownFor(stack));
+    }
+
+    private static int cooldownFor(ItemStack stack) {
+        return Math.max(1, (int) Math.round(GrappleConfig.cooldownTicks * GrappleUpgrades.cooldownMultiplier(stack)));
+    }
+
+    /** Impact Charge: the hook slams home, hurting whatever is at the anchor. */
+    private static void impact(ServerLevel level, ServerPlayer player, Vec3 anchor) {
+        DamageSource source = level.damageSources().playerAttack(player);
+        AABB blast = new AABB(anchor, anchor).inflate(3.0);
+        for (Entity e : level.getEntities(player, blast,
+                ent -> ent instanceof LivingEntity && ent.isAlive() && !ent.isSpectator())) {
+            e.hurt(source, 8.0F); // 4 hearts
+        }
+        level.playSound(null, anchor.x, anchor.y, anchor.z,
+                SoundEvents.GENERIC_EXPLODE.value(), SoundSource.PLAYERS, 0.7F, 1.6F);
+    }
+
+    @Override
+    public boolean isBarVisible(ItemStack stack) {
+        return GrappleUpgrades.wear(stack) > 0;
+    }
+
+    @Override
+    public int getBarWidth(ItemStack stack) {
+        return Math.round(13.0F * GrappleUpgrades.usesLeft(stack) / GrappleUpgrades.MAX_USES);
+    }
+
+    @Override
+    public int getBarColor(ItemStack stack) {
+        float left = GrappleUpgrades.usesLeft(stack) / (float) GrappleUpgrades.MAX_USES;
+        return Mth.hsvToRgb(left / 3.0F, 1.0F, 1.0F);
+    }
+
+    @Override
+    public void appendHoverText(ItemStack stack, TooltipContext context, List<Component> tooltip, TooltipFlag flag) {
+        tooltip.add(Component.literal("Condition " + GrappleUpgrades.usesLeft(stack) + "/" + GrappleUpgrades.MAX_USES)
+                .withStyle(GrappleUpgrades.isWornOut(stack) ? ChatFormatting.RED : ChatFormatting.GRAY));
+        for (GrappleUpgrades.Upgrade u : GrappleUpgrades.installed(stack)) {
+            tooltip.add(Component.literal("✦ " + u.name()).withStyle(ChatFormatting.GOLD));
+        }
     }
 
     private static Entity findEntity(ServerLevel level, Player player, Vec3 start, Vec3 end, double maxDist) {
