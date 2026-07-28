@@ -3,6 +3,7 @@ package com.jrpetty.mobtrumps.client;
 import com.jrpetty.mobtrumps.game.MobCard;
 import com.jrpetty.mobtrumps.game.MobCards;
 import com.jrpetty.mobtrumps.game.Stat;
+import com.mojang.math.Axis;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
@@ -39,8 +40,19 @@ public final class CardRenderer {
     private static final int PORTRAIT_TOP = 0xFFCFE4F2;
     private static final int PORTRAIT_BOTTOM = 0xFFE8F2D9;
     private static final int FACT_BG = 0xFFEDE3CE;
-    private static final int BACK_DOT = 0xFF6A5236;
-    private static final int BACK_TEXT = 0xFFD8C9A8;
+
+    // the card back: a deep indigo-to-plum field under a gold damask lattice,
+    // with the creeper-face emblem set in a rotated medallion
+    private static final int BACK_TOP = 0xFF241C4A;
+    private static final int BACK_BOTTOM = 0xFF431C4C;
+    private static final int BACK_GOLD = 0xFFE3C071;
+    private static final int BACK_GOLD_DIM = 0xFF8C6F32;
+    private static final int BACK_LATTICE = 0x3AE3C071;
+    private static final int BACK_WELL = 0xFF130F2C;
+    private static final int EMBLEM_GREEN = 0xFF4E9E48;
+    private static final int EMBLEM_GREEN_LIT = 0xFF6DBF63;
+    private static final int EMBLEM_INK = 0xFF13260F;
+    private static final int BACK_TEXT = 0xFFEBD6A2;
     private static final int BOOST_INK = 0xFF1E7A32;   // boosted stat value on the cream face
     private static final int BOOST_GREEN = 0xFF35B34A;  // the "+N" tag
 
@@ -122,10 +134,11 @@ public final class CardRenderer {
             total += value;
             boolean blue = i % 2 == 0;
             drawRow(g, font, rowY, blue ? ROW_BLUE : ROW_GREEN, blue ? LABEL_BLUE : LABEL_GREEN,
-                    stat.label.toUpperCase(Locale.ROOT), value, value - baseCard.stat(stat));
+                    stat.label.toUpperCase(Locale.ROOT), value, value - baseCard.stat(stat),
+                    stat.lowerWins);
             rowY += ROW_H;
         }
-        drawRow(g, font, rowY, ROW_GOLD, INK, "MOB RATING", total, 0);
+        drawRow(g, font, rowY, ROW_GOLD, INK, "MOB RATING", total, 0, false);
         rowY += ROW_H;
 
         // fact file strip
@@ -138,7 +151,9 @@ public final class CardRenderer {
         // holographic foil sheen: shifting rainbow bands + sweep, richer per level
         if (foil || level > 0) {
             int lvl = Math.max(1, level);
-            long t = System.currentTimeMillis();
+            // "Foil sheen" off in settings freezes the rainbow instead of
+            // dropping it, so a holo still reads as a holo
+            long t = ClientPrefs.foilSheen() ? System.currentTimeMillis() : 0L;
             long period = Math.max(1400L, 3200L - (lvl - 1) * 700L);
             float phase = (t % period) / (float) period;
             int bandAlpha = 0x1C + lvl * 0x10; // 0x2C / 0x3C / 0x4C
@@ -203,7 +218,7 @@ public final class CardRenderer {
      * tiers add corner gems and a bright glint that laps the border.
      */
     private static void drawFrame(GuiGraphics g, int lvl) {
-        long t = System.currentTimeMillis();
+        long t = ClientPrefs.foilSheen() ? System.currentTimeMillis() : 0L;
         lvl = Math.min(lvl, 3);
         g.fill(-2, -2, CARD_W + 2, CARD_H + 2, EDGE_DARK);
         switch (lvl) {
@@ -256,7 +271,13 @@ public final class CardRenderer {
         }
     }
 
-    /** Draw the back of a card — used for mobs not yet collected. */
+    /**
+     * Draw the back of a card — the face-down card in a duel, and every mob you
+     * haven't collected yet. A deep indigo-to-plum field under a gold damask
+     * lattice, with the creeper-face emblem set into a rotated medallion and the
+     * wordmark on a ruled banner beneath it. The frame matches the fronts, so a
+     * mixed spread still reads as one deck.
+     */
     public static void renderBack(GuiGraphics g, Font font, int x, int y, float scale) {
         var pose = g.pose();
         pose.pushPose();
@@ -267,28 +288,107 @@ public final class CardRenderer {
         g.fill(-2, -2, CARD_W + 2, CARD_H + 2, EDGE_DARK);
         g.fill(0, 0, CARD_W, CARD_H, BORDER_IVORY);
         g.renderOutline(4, 4, CARD_W - 8, CARD_H - 8, PIN_GOLD);
-        g.fill(6, 6, CARD_W - 6, CARD_H - 6, KRAFT_BACK);
-        g.renderOutline(10, 10, CARD_W - 20, CARD_H - 20, KRAFT_DARK);
 
-        // quilted dot pattern
-        for (int py = 18; py < CARD_H - 20; py += 14) {
-            for (int px = 18 + ((py / 14) % 2) * 7; px < CARD_W - 20; px += 14) {
-                g.fill(px, py, px + 3, py + 3, BACK_DOT);
-            }
+        // the field, with a double gold rule inset from the border
+        g.fillGradient(6, 6, CARD_W - 6, CARD_H - 6, BACK_TOP, BACK_BOTTOM);
+        g.renderOutline(10, 10, CARD_W - 20, CARD_H - 20, BACK_GOLD_DIM);
+        g.renderOutline(13, 13, CARD_W - 26, CARD_H - 26, 0x55E3C071);
+
+        drawBackLattice(g);
+        drawBackMedallion(g);
+        drawBackWordmark(g, font);
+
+        // corner pips finish the border like a printed card
+        for (int[] c : new int[][]{{10, 10}, {CARD_W - 14, 10}, {10, CARD_H - 14}, {CARD_W - 14, CARD_H - 14}}) {
+            g.fill(c[0], c[1], c[0] + 4, c[1] + 4, BACK_GOLD);
+            g.fill(c[0] + 1, c[1] + 1, c[0] + 3, c[1] + 3, BACK_WELL);
         }
 
-        // central medallion with a big question mark
-        g.fill(60, 86, CARD_W - 60, 136, KRAFT_DARK);
-        g.fill(63, 89, CARD_W - 63, 133, FACE);
+        pose.popPose();
+    }
+
+    /** A staggered damask of small gold diamonds, parting around the medallion. */
+    private static void drawBackLattice(GuiGraphics g) {
+        final int pitch = 28;
+        final int radius = 5;
+        for (int row = 0; row < 7; row++) {
+            int cy = 28 + row * pitch;
+            int offset = (row % 2 == 0) ? 0 : pitch / 2;
+            for (int col = 0; col < 5; col++) {
+                int cx = 28 + offset + col * pitch;
+                if (cx > CARD_W - 20) continue;
+                // leave the medallion and the banner their own clean space
+                if (Math.abs(cx - CARD_W / 2) < 44 && cy > 66 && cy < 158) continue;
+                if (cy > 186) continue;
+                diamond(g, cx, cy, radius, BACK_LATTICE);
+            }
+        }
+    }
+
+    /** A filled diamond built from horizontal rows — cheap and crisply pixelly. */
+    private static void diamond(GuiGraphics g, int cx, int cy, int radius, int color) {
+        for (int dy = -radius; dy <= radius; dy++) {
+            int half = radius - Math.abs(dy);
+            g.fill(cx - half, cy + dy, cx + half + 1, cy + dy + 1, color);
+        }
+    }
+
+    /** The emblem: a gold-ringed diamond medallion holding a creeper face. */
+    private static void drawBackMedallion(GuiGraphics g) {
+        final int cx = CARD_W / 2;
+        final int cy = 112;
+        var pose = g.pose();
         pose.pushPose();
-        pose.translate(CARD_W / 2f, 98f, 0);
-        pose.scale(3f, 3f, 1f);
-        g.drawString(font, "?", -font.width("?") / 2, 0, KRAFT_DARK, false);
+        pose.translate(cx, cy, 0);
+        pose.mulPose(Axis.ZP.rotationDegrees(45f));
+        g.fill(-30, -30, 30, 30, BACK_GOLD_DIM);
+        g.fill(-27, -27, 27, 27, BACK_GOLD);
+        g.fill(-25, -25, 25, 25, BACK_WELL);
+        g.renderOutline(-25, -25, 50, 50, 0x66000000);
         pose.popPose();
 
-        String label = "MOB TRUMPS";
-        g.drawString(font, label, (CARD_W - font.width(label)) / 2, 210, BACK_TEXT, false);
+        // the creeper plate sits upright inside the tilted medallion
+        g.fillGradient(cx - 20, cy - 20, cx + 20, cy + 20, EMBLEM_GREEN_LIT, EMBLEM_GREEN);
+        g.renderOutline(cx - 20, cy - 20, 40, 40, 0x66103A0E);
 
+        // classic 8x8 creeper face, 5px to the cell
+        final int u = 5;
+        final int ox = cx - 20;
+        final int oy = cy - 20;
+        face(g, ox, oy, u, 1, 1, 2, 2); // left eye
+        face(g, ox, oy, u, 5, 1, 2, 2); // right eye
+        face(g, ox, oy, u, 3, 3, 2, 1); // bridge
+        face(g, ox, oy, u, 2, 4, 4, 2); // jaw
+        face(g, ox, oy, u, 2, 6, 1, 1); // left fang
+        face(g, ox, oy, u, 5, 6, 1, 1); // right fang
+    }
+
+    /** One block of the creeper face, in 8x8 grid cells. */
+    private static void face(GuiGraphics g, int ox, int oy, int unit, int col, int row, int w, int h) {
+        g.fill(ox + col * unit, oy + row * unit,
+                ox + (col + w) * unit, oy + (row + h) * unit, EMBLEM_INK);
+    }
+
+    /** The wordmark on a ruled banner, with a strapline beneath it. */
+    private static void drawBackWordmark(GuiGraphics g, Font font) {
+        final int cx = CARD_W / 2;
+        g.fill(26, 186, CARD_W - 26, 187, BACK_GOLD_DIM);
+        diamond(g, 20, 186, 3, BACK_GOLD);
+        diamond(g, CARD_W - 20, 186, 3, BACK_GOLD);
+
+        String label = "MOB TRUMPS";
+        var pose = g.pose();
+        pose.pushPose();
+        pose.translate(cx, 194f, 0);
+        pose.scale(1.25f, 1.25f, 1f);
+        g.drawString(font, label, -font.width(label) / 2, 0, BACK_TEXT, false);
+        pose.popPose();
+
+        String strap = "COLLECT · BATTLE · TRADE";
+        pose.pushPose();
+        pose.translate(cx, 210f, 0);
+        pose.scale(0.7f, 0.7f, 1f);
+        g.drawString(font, strap, -font.width(strap) / 2, 0, 0xFF9E86C4, false);
         pose.popPose();
     }
 
@@ -307,6 +407,9 @@ public final class CardRenderer {
     /** Fetch (and cache) a client-side mob to pose for a card's portrait. */
     public static LivingEntity portraitEntity(Minecraft minecraft, MobCard card,
                                               Map<String, LivingEntity> cache) {
+        if (!ClientPrefs.livePortraits()) {
+            return null; // settings: portraits fall back to the scene backdrop
+        }
         if (cache.containsKey(card.id())) {
             return cache.get(card.id());
         }
@@ -367,9 +470,13 @@ public final class CardRenderer {
     }
 
     private static void drawRow(GuiGraphics g, Font font, int rowY, int bg, int labelColor,
-                                String label, int value, int delta) {
+                                String label, int value, int delta, boolean lowerWins) {
         g.fill(12, rowY, CARD_W - 12, rowY + ROW_H - 1, bg);
         g.drawString(font, label, 16, rowY + 3, labelColor, false);
+        if (lowerWins) {
+            // a small down-caret marks the one stat where the LOWER number wins
+            lowerCaret(g, 18 + font.width(label), rowY + 4, labelColor);
+        }
         String v = String.valueOf(value);
         int vx = CARD_W - 16 - font.width(v);
         g.drawString(font, v, vx, rowY + 3, delta > 0 ? BOOST_INK : INK, false);
@@ -384,6 +491,17 @@ public final class CardRenderer {
             pose.scale(ds, ds, 1f);
             g.drawString(font, d, 0, 0, BOOST_GREEN, false);
             pose.popPose();
+        }
+    }
+
+    /**
+     * A tiny solid down-caret drawn beside a "lower wins" stat label, so Rarity
+     * reads as what it is — the rarer the mob, the smaller the number, and the
+     * smaller number takes the round.
+     */
+    private static void lowerCaret(GuiGraphics g, int x, int y, int color) {
+        for (int i = 0; i < 3; i++) {
+            g.fill(x + i, y + i, x + 5 - i, y + i + 1, color);
         }
     }
 

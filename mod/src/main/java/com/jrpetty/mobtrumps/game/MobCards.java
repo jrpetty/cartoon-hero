@@ -133,10 +133,13 @@ public final class MobCards {
     public static double winOdds(Stat stat, int value) {
         int below = 0;
         int equal = 0;
+        // score() folds in the stat's direction, so "lower wins" stats (Rarity)
+        // score correctly without a second code path
+        int mine = stat.score(value);
         for (MobCard c : ALL) {
-            int v = c.stat(stat);
-            if (v < value) below++;
-            else if (v == value) equal++;
+            int v = stat.score(c.stat(stat));
+            if (v < mine) below++;
+            else if (v == mine) equal++;
         }
         return (below + equal / 2.0) / ALL.size();
     }

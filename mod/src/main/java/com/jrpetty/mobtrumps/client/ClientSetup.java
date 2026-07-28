@@ -24,6 +24,7 @@ public final class ClientSetup {
 
     @SubscribeEvent
     public static void onClientSetup(FMLClientSetupEvent event) {
+        event.enqueueWork(ClientPrefs::load);
         event.enqueueWork(() -> ItemProperties.register(
                 ModItems.MOB_CARD.get(),
                 ResourceLocation.fromNamespaceAndPath(MobTrumps.MODID, "mob_index"),

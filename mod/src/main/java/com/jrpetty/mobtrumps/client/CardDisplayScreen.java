@@ -20,21 +20,32 @@ import java.util.Locale;
 import java.util.Map;
 
 /**
- * Modern picker for a card display: choose any card you own to project onto it.
+ * Picker for a card display: choose any card you own to project onto it.
  * Click to display, shift-click for the holographic version, or clear it.
  * The card never leaves your collection — this only links which card is shown.
+ *
+ * <p>Typographically this is a quiet, gallery-ish screen: a letter-spaced
+ * eyebrow over a sentence-case headline, a hairline rule, and everything else
+ * set small and dim so the cards themselves carry the page. The footer is laid
+ * out in fixed left/right slots, so the hint line and the Clear button can
+ * never collide the way a centred hint over a centred button did.
  */
 public class CardDisplayScreen extends Screen {
 
     private static final float SCALE = 0.34f;
-    private static final int COLS = 7;
-    private static final int GAP = 6;
+    private static final int GAP = 8;
+    private static final int HEADER_H = 84;
+    private static final int FOOTER_H = 44;
 
-    private static final int BG = 0xF00E0F12;
-    private static final int PANEL = 0xFF16181D;
-    private static final int PANEL_EDGE = 0xFF2A2E37;
-    private static final int ACCENT = 0xFF3FA9F5;
+    private static final int BG = 0xF00B0D11;
+    private static final int PANEL = 0xFF14171D;
+    private static final int PANEL_HI = 0xFF1D2229;
+    private static final int HAIRLINE = 0xFF262B34;
+    private static final int ACCENT = 0xFF4CC2F1;
     private static final int FOIL_ACCENT = 0xFFB57BFF;
+    private static final int TEXT = 0xFFE8EDF4;
+    private static final int TEXT_DIM = 0xFF8C95A3;
+    private static final int TEXT_FAINT = 0xFF5C6472;
 
     private final BlockPos pos;
     private final Map<String, LivingEntity> entityCache = new HashMap<>();
@@ -42,7 +53,8 @@ public class CardDisplayScreen extends Screen {
 
     private EditBox search;
     private int scrollRow = 0;
-    private int cellW, cellH, gridX, gridY, gridW, gridH, rowsVisible;
+    private int cols = 7;
+    private int cellW, cellH, gridX, gridY, gridH, rowsVisible;
     private int clearX, clearY, clearW;
 
     public CardDisplayScreen(BlockPos pos) {
@@ -61,21 +73,23 @@ public class CardDisplayScreen extends Screen {
         cellW = Math.round(CardRenderer.CARD_W * SCALE);
         cellH = Math.round(CardRenderer.CARD_H * SCALE);
 
-        gridW = COLS * (cellW + GAP) - GAP;
+        // as many columns as comfortably fit, so the grid never runs off-screen
+        cols = Math.max(1, Math.min(9, (width - 80 + GAP) / (cellW + GAP)));
+        int gridW = cols * (cellW + GAP) - GAP;
         gridX = (width - gridW) / 2;
-        gridY = 74;
-        gridH = height - gridY - 44;
+        gridY = HEADER_H;
+        gridH = height - gridY - FOOTER_H - 8;
         rowsVisible = Math.max(1, (gridH + GAP) / (cellH + GAP));
 
-        int sbW = 160;
-        search = new EditBox(font, (width - sbW) / 2, 44, sbW, 16, Component.literal("Search"));
-        search.setHint(Component.literal("search your cards..."));
+        int sbW = 180;
+        search = new EditBox(font, (width - sbW) / 2, 56, sbW, 16, Component.literal("Search"));
+        search.setHint(Component.literal("search your cards"));
         search.setResponder(s -> { scrollRow = 0; rebuild(); });
         addWidget(search);
 
-        clearW = font.width("Clear display") + 16;
-        clearX = width / 2 - clearW - 6;
-        clearY = height - 30;
+        clearW = font.width("Clear display") + 20;
+        clearX = width - clearW - 16;
+        clearY = height - 29;
 
         rebuild();
     }
@@ -88,8 +102,15 @@ public class CardDisplayScreen extends Screen {
             if (!q.isEmpty() && !c.displayName().toLowerCase(Locale.ROOT).contains(q)) continue;
             owned.add(c);
         }
-        int rows = Math.max(1, (owned.size() + COLS - 1) / COLS);
-        scrollRow = Math.max(0, Math.min(scrollRow, Math.max(0, rows - rowsVisible)));
+        scrollRow = Math.max(0, Math.min(scrollRow, maxScroll()));
+    }
+
+    private int rowCount() {
+        return Math.max(1, (owned.size() + cols - 1) / cols);
+    }
+
+    private int maxScroll() {
+        return Math.max(0, rowCount() - rowsVisible);
     }
 
     @Override
@@ -97,31 +118,62 @@ public class CardDisplayScreen extends Screen {
         super.render(g, mouseX, mouseY, partialTick);
         g.fill(0, 0, width, height, BG);
 
-        // header
-        g.fill(0, 0, width, 34, PANEL);
-        g.fill(0, 34, width, 35, ACCENT);
-        String title = "LINK A CARD TO YOUR DISPLAY";
-        g.drawString(font, title, (width - font.width(title)) / 2, 13, 0xFFFFFFFF, false);
-
+        drawHeader(g);
         search.render(g, mouseX, mouseY, partialTick);
 
-        if (owned.isEmpty()) {
-            g.drawCenteredString(font, "You haven't collected any cards yet — hunt some mobs!",
-                    width / 2, gridY + 30, 0xFFB9BFC9);
-        }
+        MobCard hovered = drawGrid(g, mouseX, mouseY);
+        drawScrollbar(g);
+        drawFooter(g, hovered, mouseX, mouseY);
+    }
 
-        // grid of owned cards
-        int start = scrollRow * COLS;
-        for (int i = 0; i < rowsVisible * COLS; i++) {
+    /** Eyebrow, headline, hairline rule — the whole typographic hierarchy. */
+    private void drawHeader(GuiGraphics g) {
+        g.fill(0, 0, width, HEADER_H - 10, PANEL);
+        g.fill(0, HEADER_H - 10, width, HEADER_H - 9, HAIRLINE);
+
+        var pose = g.pose();
+        // eyebrow: small, wide-tracked, dim
+        pose.pushPose();
+        pose.translate(width / 2f, 14f, 0);
+        pose.scale(0.85f, 0.85f, 1f);
+        tracked(g, "CARD DISPLAY", 0, 0, ACCENT, 3);
+        pose.popPose();
+
+        // headline: large, sentence case, calm
+        String title = "Choose a card to project";
+        pose.pushPose();
+        pose.translate(width / 2f, 26f, 0);
+        pose.scale(1.7f, 1.7f, 1f);
+        g.drawString(font, title, -font.width(title) / 2, 0, TEXT, false);
+        pose.popPose();
+
+        // a short accent rule under the headline, not a full-width band
+        int ruleW = Math.min(120, width / 4);
+        g.fill(width / 2 - ruleW / 2, 46, width / 2 + ruleW / 2, 47, ACCENT);
+    }
+
+    /** The owned-card grid. Returns the card under the cursor, or null. */
+    private MobCard drawGrid(GuiGraphics g, int mouseX, int mouseY) {
+        if (owned.isEmpty()) {
+            String empty = search != null && !search.getValue().isEmpty()
+                    ? "No cards match that search."
+                    : "You haven't collected any cards yet — go hunt some mobs.";
+            g.drawCenteredString(font, empty, width / 2, gridY + 40, TEXT_DIM);
+            return null;
+        }
+        MobCard hovered = null;
+        int start = scrollRow * cols;
+        for (int i = 0; i < rowsVisible * cols; i++) {
             int idx = start + i;
             if (idx >= owned.size()) break;
             MobCard card = owned.get(idx);
-            int col = i % COLS, row = i / COLS;
+            int col = i % cols, row = i / cols;
             int cx = gridX + col * (cellW + GAP);
             int cy = gridY + row * (cellH + GAP);
             boolean hover = mouseX >= cx && mouseX < cx + cellW && mouseY >= cy && mouseY < cy + cellH;
+            if (hover) hovered = card;
 
-            g.fill(cx - 2, cy - 2, cx + cellW + 2, cy + cellH + 2, hover ? 0xFF20242C : PANEL);
+            g.fill(cx - 3, cy - 3, cx + cellW + 3, cy + cellH + 3, hover ? PANEL_HI : PANEL);
             LivingEntity mob = CardRenderer.portraitEntity(minecraft, card, entityCache);
             boolean foilPreview = hasShiftDown() && ClientCollection.hasFoil(card.id());
             int level = ClientCollection.displayLevel(card.id(), foilPreview);
@@ -130,19 +182,69 @@ public class CardDisplayScreen extends Screen {
                 g.fill(cx + cellW - 6, cy + 1, cx + cellW - 1, cy + 6, FOIL_ACCENT);
             }
             if (hover) {
-                g.renderOutline(cx - 2, cy - 2, cellW + 4, cellH + 4, foilPreview ? FOIL_ACCENT : ACCENT);
+                g.renderOutline(cx - 3, cy - 3, cellW + 6, cellH + 6, foilPreview ? FOIL_ACCENT : ACCENT);
             }
         }
+        return hovered;
+    }
 
-        // footer
-        g.fill(0, height - 40, width, height - 39, PANEL_EDGE);
-        boolean clearHover = mouseX >= clearX && mouseX < clearX + clearW
+    /** A slim track on the right of the grid, only while there is more to see. */
+    private void drawScrollbar(GuiGraphics g) {
+        int max = maxScroll();
+        if (max <= 0) return;
+        int x = gridX + cols * (cellW + GAP) - GAP + 10;
+        int y0 = gridY;
+        int y1 = gridY + rowsVisible * (cellH + GAP) - GAP;
+        g.fill(x, y0, x + 3, y1, HAIRLINE);
+        int span = y1 - y0;
+        int thumb = Math.max(18, span * rowsVisible / rowCount());
+        int top = y0 + (span - thumb) * scrollRow / max;
+        g.fill(x, top, x + 3, top + thumb, ACCENT);
+    }
+
+    /**
+     * Left slot: what a click does, plus the collection count. Right slot: the
+     * Clear button. Fixed slots, so nothing can ever overlap.
+     */
+    private void drawFooter(GuiGraphics g, MobCard hovered, int mouseX, int mouseY) {
+        int top = height - FOOTER_H;
+        g.fill(0, top, width, height, PANEL);
+        g.fill(0, top, width, top + 1, HAIRLINE);
+
+        if (hovered != null) {
+            g.drawString(font, hovered.displayName(), 16, top + 10, TEXT, false);
+            String sub = hovered.tier().label()
+                    + (ClientCollection.hasFoil(hovered.id()) ? "  ·  holographic owned" : "");
+            g.drawString(font, sub, 16, top + 24, TEXT_DIM, false);
+        } else {
+            g.drawString(font, "Click to display  ·  Shift-click for the holographic version",
+                    16, top + 10, TEXT_DIM, false);
+            g.drawString(font, owned.size() + " of " + MobCards.ALL.size()
+                            + " cards collected  ·  ESC to cancel",
+                    16, top + 24, TEXT_FAINT, false);
+        }
+
+        boolean hover = mouseX >= clearX && mouseX < clearX + clearW
                 && mouseY >= clearY && mouseY < clearY + 18;
-        g.fill(clearX, clearY, clearX + clearW, clearY + 18, clearHover ? 0xFF5A2530 : 0xFF2A2E37);
-        g.drawString(font, "Clear display", clearX + 8, clearY + 5, 0xFFF0A0A8, false);
+        g.fill(clearX, clearY, clearX + clearW, clearY + 18, hover ? 0xFF5A2530 : 0xFF23272F);
+        g.renderOutline(clearX, clearY, clearW, 18, hover ? 0xFFE06B78 : HAIRLINE);
+        g.drawString(font, "Clear display", clearX + 10, clearY + 5,
+                hover ? 0xFFFFD9DD : 0xFFC98F98, false);
+    }
 
-        String hint = "Click to display  ·  Shift-click for the holographic version  ·  ESC to cancel";
-        g.drawString(font, hint, width / 2 - font.width(hint) / 2, clearY + 5, 0xFFB9BFC9, false);
+    /** Draw text with extra tracking between glyphs, centred on x. */
+    private void tracked(GuiGraphics g, String text, int x, int y, int color, int gap) {
+        int total = 0;
+        for (int i = 0; i < text.length(); i++) {
+            total += font.width(String.valueOf(text.charAt(i))) + gap;
+        }
+        total -= gap;
+        int cx = x - total / 2;
+        for (int i = 0; i < text.length(); i++) {
+            String ch = String.valueOf(text.charAt(i));
+            g.drawString(font, ch, cx, y, color, false);
+            cx += font.width(ch) + gap;
+        }
     }
 
     @Override
@@ -157,11 +259,11 @@ public class CardDisplayScreen extends Screen {
             return true;
         }
         if (button == 0) {
-            int start = scrollRow * COLS;
-            for (int i = 0; i < rowsVisible * COLS; i++) {
+            int start = scrollRow * cols;
+            for (int i = 0; i < rowsVisible * cols; i++) {
                 int idx = start + i;
                 if (idx >= owned.size()) break;
-                int col = i % COLS, row = i / COLS;
+                int col = i % cols, row = i / cols;
                 int cx = gridX + col * (cellW + GAP);
                 int cy = gridY + row * (cellH + GAP);
                 if (mouseX >= cx && mouseX < cx + cellW && mouseY >= cy && mouseY < cy + cellH) {
@@ -186,9 +288,7 @@ public class CardDisplayScreen extends Screen {
 
     @Override
     public boolean mouseScrolled(double mouseX, double mouseY, double dx, double dy) {
-        int rows = Math.max(1, (owned.size() + COLS - 1) / COLS);
-        int maxScroll = Math.max(0, rows - rowsVisible);
-        if (dy < 0) scrollRow = Math.min(maxScroll, scrollRow + 1);
+        if (dy < 0) scrollRow = Math.min(maxScroll(), scrollRow + 1);
         else if (dy > 0) scrollRow = Math.max(0, scrollRow - 1);
         return true;
     }

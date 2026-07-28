@@ -192,10 +192,15 @@ public final class ScannerClient {
             Integer sc = MobCardItem.statColor(s).getColor();
             int color = (sc == null ? 0xFFFFFF : sc) | 0xFF000000;
             g.drawString(font, s.shortLabel, tx, ty, color, false);
-            // mini stat bar
+            // mini stat bar. For a "lower wins" stat the bar shows how STRONG
+            // the number is, not how big, so a rarity 1 reads as a full bar.
             int bx = tx + 34;
             g.fill(bx, ty + 2, bx + 40, ty + 6, 0xFF232833);
-            g.fill(bx, ty + 2, bx + 4 * card.stat(s), ty + 6, color);
+            g.fill(bx, ty + 2, bx + 4 * s.strength(card.stat(s)), ty + 6, color);
+            if (s.lowerWins) {
+                g.fill(bx + 41, ty + 2, bx + 44, ty + 3, color);
+                g.fill(bx + 42, ty + 3, bx + 43, ty + 5, color);
+            }
             String v = String.valueOf(card.stat(s));
             g.drawString(font, v, tx + 88 - font.width(v), ty, 0xFFFFFFFF, false);
         }

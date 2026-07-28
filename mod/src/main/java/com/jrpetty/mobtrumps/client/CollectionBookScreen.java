@@ -1,10 +1,16 @@
 package com.jrpetty.mobtrumps.client;
 
+import com.jrpetty.mobtrumps.AwardActionPayload;
 import com.jrpetty.mobtrumps.MobCardItem;
 import com.jrpetty.mobtrumps.SetDisplayPayload;
+import com.jrpetty.mobtrumps.SetEggs;
 import com.jrpetty.mobtrumps.StorageActionPayload;
+import com.jrpetty.mobtrumps.game.Achievement;
+import com.jrpetty.mobtrumps.game.Achievements;
+import com.jrpetty.mobtrumps.game.Category;
 import com.jrpetty.mobtrumps.game.MobCard;
 import com.jrpetty.mobtrumps.game.MobCards;
+import com.jrpetty.mobtrumps.game.MobCategories;
 import com.jrpetty.mobtrumps.game.Stat;
 import com.jrpetty.mobtrumps.game.Tier;
 import net.minecraft.client.gui.GuiGraphics;
@@ -14,6 +20,8 @@ import net.minecraft.client.resources.sounds.SimpleSoundInstance;
 import net.minecraft.network.chat.Component;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.item.Item;
+import net.minecraft.world.item.ItemStack;
 import net.neoforged.neoforge.network.PacketDistributor;
 
 import java.util.ArrayList;
@@ -23,11 +31,14 @@ import java.util.Locale;
 import java.util.Map;
 
 /**
- * The collection binder as an open two-page book: a 3x3 grid of cards on each
- * page (18 per spread) with a central spine. Search / filter / sort / stats
- * carry over. Each mob shows its chosen "top of the pile" variant; clicking a
- * mob you own in more than one variant opens a picker to choose which sits on
- * top and to view it large.
+ * The collection binder as an open two-page book. The card pages come first — a
+ * 3x3 grid on each leaf, 18 to a spread — and the back of the book holds the
+ * award pages and a settings leaf, reached by the tabs along the top or simply
+ * by flipping on past the last card.
+ *
+ * <p>Awards are never paid out automatically: an earned one shows a Collect
+ * button and the reward drops straight into your inventory when you press it.
+ * A finished set additionally lets you take one spawn egg from that set, once.
  */
 public class CollectionBookScreen extends Screen {
 
@@ -38,25 +49,50 @@ public class CollectionBookScreen extends Screen {
     private static final int COLS = 3, ROWS = 3, PER_PAGE = COLS * ROWS, PER_SPREAD = 2 * PER_PAGE;
     private static final int ARROW_W = 18, ARROW_H = 14;
     private static final int SPINE = 24;
+    /** Award spreads (two groups each) plus the one set-rewards/settings leaf. */
+    private static final int AWARD_SPREADS = 2;
+    private static final int BACK_SPREADS = AWARD_SPREADS + 1;
+
+    private enum Section { CARDS, AWARDS, SETTINGS }
 
     private enum Filter { ALL("All"), OWNED("Owned"), MISSING("Missing"), FOIL("Foil");
         final String label; Filter(String l) { label = l; } }
     private enum Sort { NUMBER("No."), NAME("Name"), TIER("Tier"), RATING("Rating");
         final String label; Sort(String l) { label = l; } }
 
+    /** One toggle/cycle on the settings leaf. */
+    private record Setting(String key, String label, String blurb) {
+    }
+
+    private static final List<Setting> SETTINGS = List.of(
+            new Setting("kill_counter", "Hunt counter on cards",
+                    "The little x12 badge showing how many you've hunted"),
+            new Setting("card_size", "Battle card size", "How large cards render at the table"),
+            new Setting("brightness", "Arena brightness", "How brightly the duel table is lit"),
+            new Setting("live_portraits", "Live mob portraits", "Real mobs posing inside the card art"),
+            new Setting("foil_sheen", "Holographic sheen", "The moving rainbow on foil cards"),
+            new Setting("reduced_motion", "Reduced motion", "Calms flips, pulses and flying cards"),
+            new Setting("battle_hints", "Battle hints", "The prompt line along the bottom of a duel"),
+            new Setting("confirm_leave", "Confirm forfeits", "Ask twice before leaving a live game"));
+
     private final Map<String, LivingEntity> entityCache = new HashMap<>();
     private final List<MobCard> view = new ArrayList<>();
     private final List<Chip> chips = new ArrayList<>();
+    private final List<Chip> tabs = new ArrayList<>();
+    /** Rebuilt every frame on the back pages: buttons and their action keys. */
+    private final List<Chip> hotspots = new ArrayList<>();
 
     private int spread;
     private Filter filter = Filter.ALL;
     private Sort sort = Sort.NUMBER;
     private boolean statsOpen = false;
     private String pickerMob = null;
+    private Category eggPicker = null;
     private EditBox search;
 
+    private int cardSpreads;
     private int spreadCount;
-    private int cellW, cellH, gridTop, leftGridX, rightGridX;
+    private int cellW, cellH, gridTop, leftGridX, rightGridX, pageW, pageBottom;
     private int panelX, panelY, panelW, panelH;
     private int prevX, prevY, nextX, nextY;
 
@@ -84,15 +120,16 @@ public class CollectionBookScreen extends Screen {
         cellW = Math.round(CardRenderer.CARD_W * cardScale) + 8;
         cellH = Math.round(CardRenderer.CARD_H * cardScale) + 8;
 
-        int pageW = COLS * cellW;
+        pageW = COLS * cellW;
         panelW = 2 * pageW + SPINE + 28;
         int headerH = 78;
         panelH = headerH + ROWS * cellH + 26;
         panelX = (width - panelW) / 2;
-        panelY = Math.max(6, (height - panelH) / 2);
+        panelY = Math.max(20, (height - panelH) / 2);
         gridTop = panelY + headerH;
         leftGridX = panelX + 14;
         rightGridX = panelX + 14 + pageW + SPINE;
+        pageBottom = panelY + panelH - 26;
 
         int arrowY = panelY + panelH - 20;
         prevX = panelX + 12;
@@ -108,13 +145,46 @@ public class CollectionBookScreen extends Screen {
         search.setResponder(s -> { spread = 0; rebuild(); });
         addWidget(search);
 
+        layoutTabs();
         layoutChips();
         rebuild();
+    }
+
+    // --- structure ----------------------------------------------------------
+
+    private Section section() {
+        if (spread < cardSpreads) return Section.CARDS;
+        return spread < cardSpreads + AWARD_SPREADS ? Section.AWARDS : Section.SETTINGS;
+    }
+
+    /** The first spread of a section, for the tabs to jump to. */
+    private int firstSpread(Section s) {
+        return switch (s) {
+            case CARDS -> 0;
+            case AWARDS -> cardSpreads;
+            case SETTINGS -> cardSpreads + AWARD_SPREADS;
+        };
+    }
+
+    private void layoutTabs() {
+        tabs.clear();
+        int x = panelX + panelW - 12;
+        // laid out right to left so the rightmost tab is the last leaf
+        String[] labels = {"Settings", "Awards", "Cards"};
+        Section[] keys = {Section.SETTINGS, Section.AWARDS, Section.CARDS};
+        for (int i = 0; i < labels.length; i++) {
+            int w = font.width(labels[i]) + 14;
+            x -= w + 3;
+            tabs.add(new Chip("tab_" + keys[i].name(), x, panelY - 13, w, 15));
+        }
     }
 
     private void layoutChips() {
         chips.clear();
         int y = panelY + 60;
+        if (section() != Section.CARDS) {
+            return; // the filter row belongs to the card pages only
+        }
         int x = panelX + 12;
         for (Filter f : Filter.values()) {
             int w = font.width(f.label) + 8;
@@ -157,8 +227,10 @@ public class CollectionBookScreen extends Screen {
             case TIER -> cmpTier(a, b);
             case RATING -> cmpRating(a, b);
         });
-        spreadCount = Math.max(1, (view.size() + PER_SPREAD - 1) / PER_SPREAD);
+        cardSpreads = Math.max(1, (view.size() + PER_SPREAD - 1) / PER_SPREAD);
+        spreadCount = cardSpreads + BACK_SPREADS;
         spread = Math.max(0, Math.min(spread, spreadCount - 1));
+        layoutChips();
     }
 
     private int cmpTier(MobCard a, MobCard b) {
@@ -187,9 +259,19 @@ public class CollectionBookScreen extends Screen {
         return new int[]{gx, gy};
     }
 
+    // --- render -------------------------------------------------------------
+
     @Override
     public void render(GuiGraphics g, int mouseX, int mouseY, float partialTick) {
         super.render(g, mouseX, mouseY, partialTick);
+        hotspots.clear();
+        Section section = section();
+        if (section != Section.CARDS && search.isFocused()) {
+            search.setFocused(false); // the search box belongs to the card pages
+            setFocused(null);
+        }
+
+        drawTabs(g, section, mouseX, mouseY);
 
         // book cover + cream inner with a central spine through the card area
         g.fill(panelX - 3, panelY - 3, panelX + panelW + 3, panelY + panelH + 3, CardRenderer.KRAFT_DARK);
@@ -198,6 +280,44 @@ public class CollectionBookScreen extends Screen {
         g.fill(panelX + panelW / 2 - 1, gridTop - 6, panelX + panelW / 2 + 1, panelY + panelH - 24,
                 CardRenderer.KRAFT_DARK);
 
+        drawMasthead(g);
+
+        if (section == Section.CARDS) {
+            search.render(g, mouseX, mouseY, partialTick);
+            renderChips(g, mouseX, mouseY);
+            renderCardPages(g, mouseX, mouseY);
+        } else if (section == Section.AWARDS) {
+            int pair = (spread - cardSpreads) * 2;
+            Achievement.Group[] groups = Achievement.Group.values();
+            renderAwardPage(g, leftGridX, groups[pair], mouseX, mouseY);
+            if (pair + 1 < groups.length) {
+                renderAwardPage(g, rightGridX, groups[pair + 1], mouseX, mouseY);
+            }
+        } else {
+            renderSetRewardsPage(g, leftGridX, mouseX, mouseY);
+            renderSettingsPage(g, rightGridX, mouseX, mouseY);
+        }
+
+        drawArrow(g, prevX, prevY, "<", spread > 0, mouseX, mouseY);
+        drawArrow(g, nextX, nextY, ">", spread < spreadCount - 1, mouseX, mouseY);
+        String pageText = "Pages " + (spread * 2 + 1) + "–" + (spread * 2 + 2) + " / " + (spreadCount * 2);
+        g.drawString(font, pageText, panelX + (panelW - font.width(pageText)) / 2, panelY + panelH - 17,
+                CardRenderer.KRAFT_DARK, false);
+
+        String hint = switch (section) {
+            case CARDS -> "Click a card to view it · Store files loose cards away · shift-click a green-tabbed card to take one out";
+            case AWARDS -> "Press Collect on a finished award and the reward lands straight in your inventory";
+            case SETTINGS -> "Settings are yours alone — they change how the mod looks, never how it plays";
+        };
+        g.drawString(font, hint, (width - font.width(hint)) / 2, panelY + panelH + 8, 0xFFAAAAAA, true);
+
+        if (pickerMob != null) renderPicker(g, mouseX, mouseY);
+        if (eggPicker != null) renderEggPicker(g, mouseX, mouseY);
+        if (statsOpen) renderStats(g);
+    }
+
+    /** Title, collection tally and progress bar across the top of the spread. */
+    private void drawMasthead(GuiGraphics g) {
         var pose = g.pose();
         pose.pushPose();
         pose.translate(panelX + panelW / 2f, panelY + 12f, 0);
@@ -217,16 +337,41 @@ public class CollectionBookScreen extends Screen {
         g.fill(barX, barY, barX + barW, barY + 3, 0xFF8A755A);
         int fillW = (int) (barW * (have / (float) total));
         if (fillW > 0) g.fill(barX, barY, barX + fillW, barY + 3, 0xFF55A82F);
+    }
 
-        search.render(g, mouseX, mouseY, partialTick);
-        renderChips(g, mouseX, mouseY);
+    /** Section tabs sticking up out of the top edge of the book. */
+    private void drawTabs(GuiGraphics g, Section active, int mouseX, int mouseY) {
+        int waiting = ClientAwards.collectableCount();
+        for (Chip tab : tabs) {
+            Section s = Section.valueOf(tab.key().substring(4));
+            boolean on = s == active;
+            boolean hover = tab.hit(mouseX, mouseY);
+            int bg = on ? CardRenderer.FACE : hover ? 0xFFB99465 : CardRenderer.KRAFT;
+            g.fill(tab.x() - 2, tab.y() - 2, tab.x() + tab.w() + 2, tab.y() + tab.h() + 2,
+                    CardRenderer.KRAFT_DARK);
+            g.fill(tab.x(), tab.y(), tab.x() + tab.w(), tab.y() + tab.h() + 4, bg);
+            String label = switch (s) {
+                case CARDS -> "Cards";
+                case AWARDS -> "Awards";
+                case SETTINGS -> "Settings";
+            };
+            g.drawString(font, label, tab.x() + 7, tab.y() + 4,
+                    on ? CardRenderer.INK : CardRenderer.KRAFT_DARK, false);
+            // a red pip on the Awards tab while anything is waiting to be collected
+            if (s == Section.AWARDS && waiting > 0) {
+                g.fill(tab.x() + tab.w() - 5, tab.y() + 1, tab.x() + tab.w() - 1, tab.y() + 5, 0xFFD8452F);
+            }
+        }
+    }
 
+    private void renderCardPages(GuiGraphics g, int mouseX, int mouseY) {
         int cw = Math.round(CardRenderer.CARD_W * cardScale);
         int ch = Math.round(CardRenderer.CARD_H * cardScale);
         int start = spread * PER_SPREAD;
         if (view.isEmpty()) {
             g.drawCenteredString(font, "No cards match.", width / 2, gridTop + 30, CardRenderer.KRAFT_DARK);
         }
+        boolean overlayOpen = pickerMob != null || statsOpen || eggPicker != null;
         for (int s = 0; s < PER_SPREAD; s++) {
             int i = start + s;
             if (i >= view.size()) break;
@@ -234,7 +379,6 @@ public class CollectionBookScreen extends Screen {
             int[] p = slotPos(s);
             int cx = p[0], cy = p[1];
             g.fill(cx + 2, cy + 3, cx + cw + 4, cy + ch + 5, 0x44000000);
-            boolean overlayOpen = pickerMob != null || statsOpen;
             boolean hovered = !overlayOpen
                     && mouseX >= cx && mouseX < cx + cw && mouseY >= cy && mouseY < cy + ch;
             if (ClientCollection.has(card.id())) {
@@ -257,9 +401,9 @@ public class CollectionBookScreen extends Screen {
                     g.fill(cx - 2, cy + ch - 4, cx + 6, cy + ch + 3, CardRenderer.KRAFT_DARK);
                     g.fill(cx - 1, cy + ch - 3, cx + 5, cy + ch + 2, 0xFF55A82F);
                 }
-                // how many of this mob you've collected, bottom-right
+                // how many of this mob you've hunted, bottom-right (settings)
                 int copies = ClientCollection.killCount(card.id());
-                if (copies > 0) {
+                if (copies > 0 && ClientPrefs.killCounter()) {
                     String badge = "x" + copies;
                     int bw = font.width(badge);
                     int bx = cx + cw - bw - 2;
@@ -276,21 +420,299 @@ public class CollectionBookScreen extends Screen {
                 if (hovered) g.renderOutline(cx - 2, cy - 2, cw + 4, ch + 4, 0x66FFFFFF);
             }
         }
-
-        drawArrow(g, prevX, prevY, "<", spread > 0, mouseX, mouseY);
-        drawArrow(g, nextX, nextY, ">", spread < spreadCount - 1, mouseX, mouseY);
-        String pageText = "Pages " + (spread * 2 + 1) + "–" + (spread * 2 + 2) + " / " + (spreadCount * 2);
-        g.drawString(font, pageText, panelX + (panelW - font.width(pageText)) / 2, panelY + panelH - 17,
-                CardRenderer.KRAFT_DARK, false);
-
-        String hint = "Click a card to view it · Store files loose cards away · shift-click a green-tabbed card to take one out";
-        g.drawString(font, hint, (width - font.width(hint)) / 2, panelY + panelH + 8, 0xFFAAAAAA, true);
-
-        if (pickerMob != null) renderPicker(g, mouseX, mouseY);
-        if (statsOpen) renderStats(g);
     }
 
-    // --- variant picker ---
+    // --- award pages --------------------------------------------------------
+
+    private void renderAwardPage(GuiGraphics g, int x0, Achievement.Group group,
+                                 int mouseX, int mouseY) {
+        List<Achievement> list = Achievements.of(group);
+        int x1 = x0 + pageW;
+        int y = gridTop;
+
+        g.fill(x0, y, x1, y + 2, group.accent());
+        y += 6;
+        g.drawString(font, group.label().toUpperCase(Locale.ROOT), x0, y, CardRenderer.INK, false);
+        String done = countCollected(list) + " / " + list.size();
+        g.drawString(font, done, x1 - font.width(done), y, CardRenderer.KRAFT_DARK, false);
+        y += 10;
+        g.drawString(font, group.blurb(), x0, y, 0xFF8B8074, false);
+        y += 12;
+
+        int available = pageBottom - y;
+        int rowH = Math.max(18, Math.min(30, available / Math.max(1, list.size())));
+        for (Achievement a : list) {
+            drawAwardRow(g, a, x0, x1, y, rowH, mouseX, mouseY);
+            y += rowH;
+        }
+    }
+
+    private int countCollected(List<Achievement> list) {
+        int n = 0;
+        for (Achievement a : list) {
+            if (ClientAwards.isClaimed(a)) n++;
+        }
+        return n;
+    }
+
+    private void drawAwardRow(GuiGraphics g, Achievement a, int x0, int x1, int y, int rowH,
+                              int mouseX, int mouseY) {
+        boolean claimed = ClientAwards.isClaimed(a);
+        boolean ready = ClientAwards.isCollectable(a);
+        int progress = ClientAwards.progress(a);
+        float frac = Math.min(1f, progress / (float) a.target());
+
+        // the row plate: earned rows lift off the page, claimed ones settle back
+        int plate = ready ? 0x2255A82F : claimed ? 0x14000000 : 0x0E000000;
+        g.fill(x0, y, x1, y + rowH - 2, plate);
+        if (ready) {
+            g.renderOutline(x0, y, x1 - x0, rowH - 2, 0xFF55A82F);
+        }
+
+        int btnW = font.width("Collect") + 10;
+        int textRight = x1 - 6;
+        if (ready) {
+            int bx = x1 - btnW - 3;
+            int by = y + (rowH - 2 - 12) / 2;
+            Chip btn = new Chip("claim_" + a.id(), bx, by, btnW, 12);
+            hotspots.add(btn);
+            boolean hover = btn.hit(mouseX, mouseY);
+            g.fill(bx, by, bx + btnW, by + 12, hover ? 0xFF6BC33F : 0xFF55A82F);
+            g.renderOutline(bx, by, btnW, 12, 0xFF2E6B18);
+            g.drawString(font, "Collect", bx + 5, by + 2, 0xFFFFFFFF, false);
+            textRight = bx - 6;
+        } else if (claimed) {
+            String tick = "✔ collected";
+            g.drawString(font, tick, x1 - font.width(tick) - 2, y + 2, 0xFF3D8B3D, false);
+            textRight = x1 - font.width(tick) - 8;
+        }
+
+        int titleColor = claimed ? 0xFF8B8074 : CardRenderer.INK;
+        g.drawString(font, a.title(), x0 + 4, y + 2, titleColor, false);
+
+        if (rowH >= 26) {
+            g.drawString(font, trim(a.description(), textRight - x0 - 8), x0 + 4, y + 12,
+                    0xFF9A9083, false);
+        }
+
+        // progress rail with the count riding its right end
+        int railY = y + rowH - 9;
+        int railX1 = Math.max(x0 + 40, textRight - 46);
+        g.fill(x0 + 4, railY, railX1, railY + 3, 0x33000000);
+        int fill = (int) ((railX1 - x0 - 4) * frac);
+        if (fill > 0) {
+            g.fill(x0 + 4, railY, x0 + 4 + fill, railY + 3,
+                    claimed ? 0xFF9A9083 : a.group().accent());
+        }
+        String count = progress + " / " + a.target();
+        g.drawString(font, count, railX1 + 4, railY - 3, 0xFF8B8074, false);
+
+        // the payout, right-aligned under the button
+        if (rowH >= 26) {
+            String reward = trim(a.rewardLabel(), (x1 - x0) / 2);
+            g.drawString(font, reward, textRight - font.width(reward), railY - 3,
+                    claimed ? 0xFFB3AA9C : 0xFF6E6154, false);
+        }
+    }
+
+    private String trim(String text, int maxWidth) {
+        if (maxWidth <= 8 || font.width(text) <= maxWidth) {
+            return text;
+        }
+        String out = text;
+        while (out.length() > 1 && font.width(out + "…") > maxWidth) {
+            out = out.substring(0, out.length() - 1);
+        }
+        return out + "…";
+    }
+
+    // --- set rewards leaf ---------------------------------------------------
+
+    private void renderSetRewardsPage(GuiGraphics g, int x0, int mouseX, int mouseY) {
+        int x1 = x0 + pageW;
+        int y = gridTop;
+        g.fill(x0, y, x1, y + 2, 0xFFB57EDC);
+        y += 6;
+        g.drawString(font, "SET REWARDS", x0, y, CardRenderer.INK, false);
+        y += 10;
+        g.drawString(font, "Finish a set, keep one of its mobs as a spawn egg", x0, y, 0xFF8B8074, false);
+        y += 12;
+
+        Category[] cats = Category.values();
+        int rowH = Math.max(16, Math.min(26, (pageBottom - y) / cats.length));
+        for (Category cat : cats) {
+            drawSetRow(g, cat, x0, x1, y, rowH, mouseX, mouseY);
+            y += rowH;
+        }
+    }
+
+    private void drawSetRow(GuiGraphics g, Category cat, int x0, int x1, int y, int rowH,
+                            int mouseX, int mouseY) {
+        List<String> members = MobCategories.members(cat);
+        int have = 0;
+        for (String id : members) {
+            if (ClientCollection.has(id)) have++;
+        }
+        boolean complete = have == members.size();
+        boolean pending = ClientAwards.eggPending(cat);
+        String taken = ClientAwards.eggTaken(cat);
+
+        g.fill(x0, y, x1, y + rowH - 2, pending ? 0x22B57EDC : 0x0E000000);
+        if (pending) {
+            g.renderOutline(x0, y, x1 - x0, rowH - 2, 0xFFB57EDC);
+        }
+        g.fill(x0 + 3, y + 3, x0 + 6, y + rowH - 5, cat.accent());
+        g.drawString(font, cat.label(), x0 + 11, y + 2,
+                complete ? CardRenderer.INK : 0xFF6E6154, false);
+
+        String state;
+        int stateColor;
+        if (taken != null) {
+            MobCard card = MobCards.byId(taken);
+            state = "✔ " + (card == null ? taken : card.displayName()) + " egg";
+            stateColor = 0xFF3D8B3D;
+        } else if (pending) {
+            state = null;
+            stateColor = 0;
+        } else if (complete) {
+            state = SetEggs.hasAny(cat) ? "claimed" : "no spawn eggs in this set";
+            stateColor = 0xFF9A9083;
+        } else {
+            state = have + " / " + members.size() + " collected";
+            stateColor = 0xFF9A9083;
+        }
+
+        if (pending) {
+            String label = "Choose egg";
+            int bw = font.width(label) + 10;
+            int bx = x1 - bw - 3;
+            int by = y + (rowH - 2 - 12) / 2;
+            Chip btn = new Chip("egg_" + cat.name(), bx, by, bw, 12);
+            hotspots.add(btn);
+            boolean hover = btn.hit(mouseX, mouseY);
+            g.fill(bx, by, bx + bw, by + 12, hover ? 0xFFC79BEA : 0xFFB57EDC);
+            g.renderOutline(bx, by, bw, 12, 0xFF6B3F94);
+            g.drawString(font, label, bx + 5, by + 2, 0xFF2A1338, false);
+        } else if (state != null) {
+            g.drawString(font, state, x1 - font.width(state) - 2, y + 2, stateColor, false);
+        }
+
+        if (rowH >= 22 && !complete) {
+            int railY = y + rowH - 8;
+            int railW = x1 - x0 - 8;
+            g.fill(x0 + 4, railY, x0 + 4 + railW, railY + 2, 0x33000000);
+            int fill = (int) (railW * (have / (float) Math.max(1, members.size())));
+            if (fill > 0) g.fill(x0 + 4, railY, x0 + 4 + fill, railY + 2, cat.accent());
+        }
+    }
+
+    // --- settings leaf ------------------------------------------------------
+
+    private void renderSettingsPage(GuiGraphics g, int x0, int mouseX, int mouseY) {
+        int x1 = x0 + pageW;
+        int y = gridTop;
+        g.fill(x0, y, x1, y + 2, 0xFF3FA7D6);
+        y += 6;
+        g.drawString(font, "SETTINGS", x0, y, CardRenderer.INK, false);
+        y += 10;
+        g.drawString(font, "Saved on this computer, for every world", x0, y, 0xFF8B8074, false);
+        y += 12;
+
+        int rowH = Math.max(18, Math.min(28, (pageBottom - y) / SETTINGS.size()));
+        for (Setting s : SETTINGS) {
+            drawSettingRow(g, s, x0, x1, y, rowH, mouseX, mouseY);
+            y += rowH;
+        }
+    }
+
+    private void drawSettingRow(GuiGraphics g, Setting s, int x0, int x1, int y, int rowH,
+                                int mouseX, int mouseY) {
+        String value;
+        boolean on;
+        switch (s.key()) {
+            case "card_size" -> {
+                value = ClientPrefs.cardSize().label;
+                on = true;
+            }
+            case "brightness" -> {
+                value = ClientPrefs.brightness().label;
+                on = true;
+            }
+            default -> {
+                on = ClientPrefs.get(s.key());
+                value = on ? "On" : "Off";
+            }
+        }
+        boolean isToggle = !s.key().equals("card_size") && !s.key().equals("brightness");
+
+        int bw = Math.max(font.width("Normal"), font.width(value)) + 12;
+        int bx = x1 - bw - 3;
+        int by = y + (rowH - 2 - 12) / 2;
+        Chip btn = new Chip("set_" + s.key(), bx, by, bw, 12);
+        hotspots.add(btn);
+        boolean hover = btn.hit(mouseX, mouseY);
+
+        g.fill(x0, y, x1, y + rowH - 2, hover ? 0x18000000 : 0x0A000000);
+        g.drawString(font, s.label(), x0 + 4, y + 2, CardRenderer.INK, false);
+        if (rowH >= 24) {
+            g.drawString(font, trim(s.blurb(), bx - x0 - 10), x0 + 4, y + 12, 0xFF9A9083, false);
+        }
+
+        int fillCol = isToggle
+                ? (on ? (hover ? 0xFF6BC33F : 0xFF55A82F) : (hover ? 0xFFB0A695 : 0xFF8E8578))
+                : (hover ? 0xFF5EC0E8 : 0xFF3FA7D6);
+        g.fill(bx, by, bx + bw, by + 12, fillCol);
+        g.renderOutline(bx, by, bw, 12, CardRenderer.KRAFT_DARK);
+        g.drawString(font, value, bx + (bw - font.width(value)) / 2, by + 2, 0xFFFFFFFF, false);
+    }
+
+    // --- overlays -----------------------------------------------------------
+
+    /** Pick which mob's spawn egg to take for a finished set. */
+    private void renderEggPicker(GuiGraphics g, int mouseX, int mouseY) {
+        List<String> options = SetEggs.choices(eggPicker);
+        if (options.isEmpty()) {
+            eggPicker = null;
+            return;
+        }
+        g.fill(0, 0, width, height, 0xAA000000);
+        int cols = Math.min(5, options.size());
+        int cell = 42;
+        int pw = Math.max(260, cols * cell + 40);
+        int rows = (options.size() + cols - 1) / cols;
+        int ph = 78 + rows * cell;
+        int px = (width - pw) / 2, py = (height - ph) / 2;
+        g.fill(px - 3, py - 3, px + pw + 3, py + ph + 3, CardRenderer.KRAFT_DARK);
+        g.fill(px, py, px + pw, py + ph, CardRenderer.KRAFT);
+        g.fill(px + 5, py + 5, px + pw - 5, py + ph - 5, CardRenderer.FACE);
+
+        g.drawCenteredString(font, eggPicker.label().toUpperCase(Locale.ROOT) + " — COMPLETE",
+                width / 2, py + 12, CardRenderer.INK);
+        g.drawCenteredString(font, "Take one spawn egg. You only get this choice once.",
+                width / 2, py + 25, CardRenderer.KRAFT_DARK);
+
+        int gridX = px + (pw - cols * cell) / 2;
+        int gridY = py + 44;
+        for (int i = 0; i < options.size(); i++) {
+            String mobId = options.get(i);
+            Item egg = SetEggs.eggFor(mobId);
+            if (egg == null) continue;
+            int cx = gridX + (i % cols) * cell;
+            int cy = gridY + (i / cols) * cell;
+            Chip slot = new Chip("pickegg_" + mobId, cx + 3, cy + 2, cell - 6, cell - 6);
+            hotspots.add(slot);
+            boolean hover = slot.hit(mouseX, mouseY);
+            g.fill(cx + 3, cy + 2, cx + cell - 3, cy + cell - 4, hover ? 0xFFE6D9BC : 0x22000000);
+            g.renderOutline(cx + 3, cy + 2, cell - 6, cell - 6, hover ? 0xFFB57EDC : CardRenderer.KRAFT_DARK);
+            g.renderItem(new ItemStack(egg), cx + cell / 2 - 8, cy + 6);
+            MobCard card = MobCards.byId(mobId);
+            String name = card == null ? mobId : card.displayName();
+            String shown = trim(name, cell - 6);
+            g.drawString(font, shown, cx + (cell - font.width(shown)) / 2, cy + cell - 14,
+                    CardRenderer.INK, false);
+        }
+        g.drawCenteredString(font, "ESC to decide later", width / 2, py + ph - 14, 0xFF9A9083);
+    }
 
     private void renderPicker(GuiGraphics g, int mouseX, int mouseY) {
         MobCard card = MobCards.byId(pickerMob);
@@ -349,9 +771,9 @@ public class CollectionBookScreen extends Screen {
 
     private int categoriesComplete() {
         int done = 0;
-        for (com.jrpetty.mobtrumps.game.Category cat : com.jrpetty.mobtrumps.game.Category.values()) {
+        for (Category cat : Category.values()) {
             boolean all = true;
-            for (String id : com.jrpetty.mobtrumps.game.MobCategories.members(cat)) {
+            for (String id : MobCategories.members(cat)) {
                 if (!ClientCollection.has(id)) { all = false; break; }
             }
             if (all) done++;
@@ -360,7 +782,7 @@ public class CollectionBookScreen extends Screen {
     }
 
     private void renderStats(GuiGraphics g) {
-        int pw = 220, ph = 176;
+        int pw = 220, ph = 190;
         int px = (width - pw) / 2, py = (height - ph) / 2;
         g.fill(0, 0, width, height, 0x99000000);
         g.fill(px - 3, py - 3, px + pw + 3, py + ph + 3, CardRenderer.KRAFT_DARK);
@@ -376,8 +798,8 @@ public class CollectionBookScreen extends Screen {
         statLine(g, px + 14, valX, y, "Holographic foils", ClientCollection.foilCount() + " / " + total); y += 12;
         statLine(g, px + 14, valX, y, "Filed in book", String.valueOf(ClientCollection.storedCount())); y += 12;
         statLine(g, px + 14, valX, y, "Duel wins", String.valueOf(ClientCollection.duelWins())); y += 12;
-        statLine(g, px + 14, valX, y, "Categories done", categoriesComplete() + " / "
-                + com.jrpetty.mobtrumps.game.Category.values().length); y += 16;
+        statLine(g, px + 14, valX, y, "Sets done", categoriesComplete() + " / " + Category.values().length); y += 12;
+        statLine(g, px + 14, valX, y, "Awards waiting", String.valueOf(ClientAwards.collectableCount())); y += 16;
         for (Tier t : new Tier[]{Tier.LEGENDARY, Tier.EPIC, Tier.RARE, Tier.UNCOMMON, Tier.COMMON}) {
             int tt = 0, th = 0;
             for (MobCard c : MobCards.ALL) {
@@ -427,42 +849,110 @@ public class CollectionBookScreen extends Screen {
                 enabled ? CardRenderer.INK : 0xFF9A9083, false);
     }
 
+    // --- interaction --------------------------------------------------------
+
     @Override
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
         if (statsOpen) { statsOpen = false; return true; }
+        if (eggPicker != null) {
+            // the overlay swallows every click; only its own slots do anything,
+            // so a stray click can't reach a settings button underneath it
+            if (button == 0) {
+                for (Chip spot : hotspots) {
+                    if (spot.key().startsWith("pickegg_") && spot.hit(mouseX, mouseY)) {
+                        PacketDistributor.sendToServer(AwardActionPayload.egg(
+                                eggPicker.name(), spot.key().substring("pickegg_".length())));
+                        eggPicker = null;
+                        rewardSound();
+                        return true;
+                    }
+                }
+            }
+            eggPicker = null;
+            return true;
+        }
         if (pickerMob != null) { pickerClick(mouseX, mouseY); return true; }
-        if (search.mouseClicked(mouseX, mouseY, button)) { setFocused(search); return true; }
         if (button == 0) {
+            for (Chip tab : tabs) {
+                if (tab.hit(mouseX, mouseY)) {
+                    spread = firstSpread(Section.valueOf(tab.key().substring(4)));
+                    layoutChips();
+                    clickSound();
+                    return true;
+                }
+            }
+        }
+        if (section() == Section.CARDS && search.mouseClicked(mouseX, mouseY, button)) {
+            setFocused(search);
+            return true;
+        }
+        if (button == 0) {
+            if (clickHotspots(mouseX, mouseY)) return true;
             for (Chip chip : chips) {
                 if (chip.hit(mouseX, mouseY)) { onChip(chip.key()); return true; }
             }
             if (inArrow(mouseX, mouseY, prevX, prevY) && spread > 0) { flip(-1); return true; }
             if (inArrow(mouseX, mouseY, nextX, nextY) && spread < spreadCount - 1) { flip(1); return true; }
 
-            int cw = Math.round(CardRenderer.CARD_W * cardScale);
-            int ch = Math.round(CardRenderer.CARD_H * cardScale);
-            int startIdx = spread * PER_SPREAD;
-            for (int s = 0; s < PER_SPREAD; s++) {
-                int i = startIdx + s;
-                if (i >= view.size()) break;
-                MobCard card = view.get(i);
-                int[] p = slotPos(s);
-                if (mouseX >= p[0] && mouseX < p[0] + cw && mouseY >= p[1] && mouseY < p[1] + ch
-                        && ClientCollection.has(card.id())) {
-                    if (hasShiftDown() && withdrawOne(card.id())) {
-                        return true;
-                    }
-                    if (ClientCollection.variantCount(card.id()) > 1) {
-                        pickerMob = card.id();
-                        clickSound();
-                    } else if (minecraft != null) {
-                        minecraft.setScreen(new MobCardScreen(card, this, ClientCollection.displayedIsFoil(card.id())));
-                    }
-                    return true;
-                }
+            if (section() == Section.CARDS && clickCard(mouseX, mouseY)) {
+                return true;
             }
         }
         return super.mouseClicked(mouseX, mouseY, button);
+    }
+
+    /** Buttons on the award / set / settings leaves and in the egg picker. */
+    private boolean clickHotspots(double mouseX, double mouseY) {
+        for (Chip spot : hotspots) {
+            if (!spot.hit(mouseX, mouseY)) continue;
+            String key = spot.key();
+            if (key.startsWith("claim_")) {
+                PacketDistributor.sendToServer(
+                        AwardActionPayload.claim(key.substring("claim_".length())));
+                rewardSound();
+            } else if (key.startsWith("egg_")) {
+                eggPicker = SetEggs.category(key.substring("egg_".length()));
+                clickSound();
+            } else if (key.startsWith("set_")) {
+                String setting = key.substring("set_".length());
+                switch (setting) {
+                    case "card_size" -> ClientPrefs.cycleCardSize();
+                    case "brightness" -> ClientPrefs.cycleBrightness();
+                    default -> ClientPrefs.toggle(setting);
+                }
+                clickSound();
+            } else {
+                continue;
+            }
+            return true;
+        }
+        return false;
+    }
+
+    private boolean clickCard(double mouseX, double mouseY) {
+        int cw = Math.round(CardRenderer.CARD_W * cardScale);
+        int ch = Math.round(CardRenderer.CARD_H * cardScale);
+        int startIdx = spread * PER_SPREAD;
+        for (int s = 0; s < PER_SPREAD; s++) {
+            int i = startIdx + s;
+            if (i >= view.size()) break;
+            MobCard card = view.get(i);
+            int[] p = slotPos(s);
+            if (mouseX >= p[0] && mouseX < p[0] + cw && mouseY >= p[1] && mouseY < p[1] + ch
+                    && ClientCollection.has(card.id())) {
+                if (hasShiftDown() && withdrawOne(card.id())) {
+                    return true;
+                }
+                if (ClientCollection.variantCount(card.id()) > 1) {
+                    pickerMob = card.id();
+                    clickSound();
+                } else if (minecraft != null) {
+                    minecraft.setScreen(new MobCardScreen(card, this, ClientCollection.displayedIsFoil(card.id())));
+                }
+                return true;
+            }
+        }
+        return false;
     }
 
     private void pickerClick(double mouseX, double mouseY) {
@@ -530,7 +1020,7 @@ public class CollectionBookScreen extends Screen {
 
     @Override
     public boolean mouseScrolled(double mouseX, double mouseY, double sx, double sy) {
-        if (pickerMob != null || statsOpen) return true;
+        if (pickerMob != null || statsOpen || eggPicker != null) return true;
         if (sy < 0 && spread < spreadCount - 1) { flip(1); return true; }
         if (sy > 0 && spread > 0) { flip(-1); return true; }
         return super.mouseScrolled(mouseX, mouseY, sx, sy);
@@ -539,6 +1029,7 @@ public class CollectionBookScreen extends Screen {
     @Override
     public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
         if (pickerMob != null && keyCode == 256) { pickerMob = null; return true; }
+        if (eggPicker != null && keyCode == 256) { eggPicker = null; return true; }
         if (statsOpen && keyCode == 256) { statsOpen = false; return true; }
         if (search.isFocused() && search.keyPressed(keyCode, scanCode, modifiers)) return true;
         if (keyCode == 263 && spread > 0) { flip(-1); return true; }
@@ -554,12 +1045,20 @@ public class CollectionBookScreen extends Screen {
 
     private void flip(int direction) {
         spread += direction;
+        layoutChips();
         clickSound();
     }
 
     private void clickSound() {
         if (minecraft != null) {
             minecraft.getSoundManager().play(SimpleSoundInstance.forUI(SoundEvents.BOOK_PAGE_TURN, 1.0F));
+        }
+    }
+
+    private void rewardSound() {
+        if (minecraft != null) {
+            minecraft.getSoundManager().play(
+                    SimpleSoundInstance.forUI(SoundEvents.UI_BUTTON_CLICK.value(), 1.5f));
         }
     }
 }

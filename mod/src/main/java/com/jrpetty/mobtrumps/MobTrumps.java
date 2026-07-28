@@ -45,6 +45,7 @@ public class MobTrumps {
         NeoForge.EVENT_BUS.addListener((PlayerEvent.PlayerRespawnEvent event) -> {
             if (event.getEntity() instanceof ServerPlayer player) {
                 CollectionTracker.sync(player);
+                AchievementManager.sync(player);
             }
         });
         NeoForge.EVENT_BUS.addListener((PlayerEvent.PlayerLoggedOutEvent event) -> {

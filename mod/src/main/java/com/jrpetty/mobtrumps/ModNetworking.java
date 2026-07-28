@@ -32,6 +32,21 @@ public final class ModNetworking {
                         CollectionTracker.setDisplayFoil(sp, payload.mobId(), payload.foil());
                     }
                 }));
+        registrar.playToClient(AchievementSyncPayload.TYPE, AchievementSyncPayload.STREAM_CODEC,
+                (payload, context) -> context.enqueueWork(
+                        () -> com.jrpetty.mobtrumps.client.ClientAwards.set(payload.progress(),
+                                payload.states(), payload.eggPending(), payload.eggClaimed())));
+        registrar.playToServer(AwardActionPayload.TYPE, AwardActionPayload.STREAM_CODEC,
+                (payload, context) -> context.enqueueWork(() -> {
+                    if (context.player() instanceof net.minecraft.server.level.ServerPlayer sp) {
+                        switch (payload.action()) {
+                            case AwardActionPayload.CLAIM -> AchievementManager.claim(sp, payload.key());
+                            case AwardActionPayload.CHOOSE_EGG ->
+                                    AchievementManager.chooseEgg(sp, payload.key(), payload.mobId());
+                            default -> { }
+                        }
+                    }
+                }));
         registrar.playToClient(StorageSyncPayload.TYPE, StorageSyncPayload.STREAM_CODEC,
                 (payload, context) -> context.enqueueWork(
                         () -> ClientCollection.setStorage(payload.stored(), payload.storedFoil())));

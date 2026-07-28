@@ -84,6 +84,31 @@ public final class ModAttachments {
                     .copyOnDeath()
                     .build());
 
+    /**
+     * Award state: achievement id -> {@code 1} unlocked (and announced) or
+     * {@code 2} claimed. Ids missing from the map are still in progress.
+     */
+    public static final Supplier<AttachmentType<Map<String, Integer>>> ACHIEVEMENTS =
+            ATTACHMENTS.register("achievements",
+                    () -> AttachmentType.<Map<String, Integer>>builder(() -> Map.of())
+                    .serialize(Codec.unboundedMap(Codec.STRING, Codec.INT))
+                    .copyOnDeath()
+                    .build());
+
+    /** Categories completed whose free spawn egg is still waiting to be chosen. */
+    public static final Supplier<AttachmentType<List<String>>> EGG_PENDING =
+            ATTACHMENTS.register("egg_pending", () -> AttachmentType.<List<String>>builder(() -> List.of())
+                    .serialize(Codec.STRING.listOf())
+                    .copyOnDeath()
+                    .build());
+
+    /** Set spawn eggs already taken, as "CATEGORY:mob_id" — one per set, ever. */
+    public static final Supplier<AttachmentType<List<String>>> EGG_CLAIMED =
+            ATTACHMENTS.register("egg_claimed", () -> AttachmentType.<List<String>>builder(() -> List.of())
+                    .serialize(Codec.STRING.listOf())
+                    .copyOnDeath()
+                    .build());
+
     /** Named saved decks (deck name -> mob ids), beyond the active DECK. */
     public static final Supplier<AttachmentType<Map<String, List<String>>>> SAVED_DECKS =
             ATTACHMENTS.register("saved_decks",

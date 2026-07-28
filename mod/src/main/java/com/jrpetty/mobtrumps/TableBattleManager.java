@@ -128,11 +128,16 @@ public final class TableBattleManager {
     private static void advance(ServerPlayer player, Game game) {
         if (game.battle.isFinished()) {
             game.phase = BattleSyncPayload.FINISHED;
+            StatsTracker.bump(player, "games_played");
             if (game.battle.getWinner() == Battle.Side.PLAYER) {
                 StatsTracker.bump(player, "battle_wins");
+                // per-difficulty tallies drive the Arena awards
+                StatsTracker.bump(player, "battle_wins_"
+                        + game.difficulty.name().toLowerCase(java.util.Locale.ROOT));
                 player.serverLevel().playSound(null, player.getX(), player.getY(), player.getZ(),
                         SoundEvents.UI_TOAST_CHALLENGE_COMPLETE, SoundSource.PLAYERS, 0.8F, 1.0F);
             }
+            AchievementManager.refresh(player);
         } else {
             game.phase = game.battle.getTurn() == Battle.Side.CPU
                     ? BattleSyncPayload.CPU_PICK : BattleSyncPayload.PLAYER_PICK;

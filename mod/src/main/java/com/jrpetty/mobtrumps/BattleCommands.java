@@ -747,11 +747,14 @@ public final class BattleCommands {
 
     private static void endBattle(ServerPlayer player, Battle battle) {
         BATTLES.remove(player.getUUID());
+        StatsTracker.bump(player, "games_played");
         switch (battle.getWinner()) {
             case PLAYER -> {
                 player.sendSystemMessage(Component.literal("VICTORY! You hold every card!")
                         .withStyle(ChatFormatting.GOLD, ChatFormatting.BOLD));
                 StatsTracker.bump(player, "battle_wins");
+                StatsTracker.bump(player, "battle_wins_"
+                        + battle.getDifficulty().name().toLowerCase(java.util.Locale.ROOT));
                 ItemStack reward = new ItemStack(net.minecraft.world.item.Items.EMERALD, 3);
                 if (!player.getInventory().add(reward)) {
                     player.drop(reward, false);
@@ -766,6 +769,7 @@ public final class BattleCommands {
             case NONE -> player.sendSystemMessage(Component.literal("A draw — the pot swallowed everything.")
                     .withStyle(ChatFormatting.YELLOW, ChatFormatting.BOLD));
         }
+        AchievementManager.refresh(player);
         player.sendSystemMessage(Component.literal("Play again? ")
                 .withStyle(ChatFormatting.GRAY)
                 .append(button("[Battle!]", "/mobtrumps battle", ChatFormatting.GREEN,

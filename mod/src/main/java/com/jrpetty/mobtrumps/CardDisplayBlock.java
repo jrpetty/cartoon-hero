@@ -11,7 +11,10 @@ import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.context.BlockPlaceContext;
 import net.minecraft.world.level.BlockGetter;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.level.LevelAccessor;
+import net.minecraft.world.level.LevelReader;
 import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.EntityBlock;
 import net.minecraft.world.level.block.HorizontalDirectionalBlock;
 import net.minecraft.world.level.block.entity.BlockEntity;
@@ -27,15 +30,26 @@ import net.minecraft.world.phys.shapes.VoxelShape;
  * is ever inside it, so the card can't be stolen — the owner links a card via
  * a picker (right-click), swaps it the same way, and sneak-right-clicks to
  * clear. Everyone else right-clicks to admire the card full-screen.
+ *
+ * <p>It hangs like an item frame rather than sitting like a block: it mounts on
+ * the face you click, its panel is flush against that supporting wall, it has
+ * no collision so you can walk right up to it, and it pops off if the wall it
+ * hangs on is broken. {@code FACING} is the direction the panel LOOKS — the
+ * wall it clings to is always one block behind it.
  */
 public class CardDisplayBlock extends HorizontalDirectionalBlock implements EntityBlock {
 
     public static final MapCodec<CardDisplayBlock> CODEC = simpleCodec(CardDisplayBlock::new);
 
-    private static final VoxelShape NORTH = Block.box(1, 1, 0, 15, 15, 1.5);
-    private static final VoxelShape SOUTH = Block.box(1, 1, 14.5, 15, 15, 16);
-    private static final VoxelShape WEST = Block.box(0, 1, 1, 1.5, 15, 15);
-    private static final VoxelShape EAST = Block.box(14.5, 1, 1, 16, 15, 15);
+    /** How deep the panel is, in sixteenths — it hugs the wall it hangs on. */
+    private static final double DEPTH = 1.5;
+
+    // the panel sits against the supporting wall, i.e. on the side OPPOSITE
+    // the direction it faces (facing north => wall to the south => z 14.5..16)
+    private static final VoxelShape NORTH = Block.box(1, 1, 16 - DEPTH, 15, 15, 16);
+    private static final VoxelShape SOUTH = Block.box(1, 1, 0, 15, 15, DEPTH);
+    private static final VoxelShape WEST = Block.box(16 - DEPTH, 1, 1, 16, 15, 15);
+    private static final VoxelShape EAST = Block.box(0, 1, 1, DEPTH, 15, 15);
 
     public CardDisplayBlock(Properties properties) {
         super(properties);
@@ -52,9 +66,49 @@ public class CardDisplayBlock extends HorizontalDirectionalBlock implements Enti
         return new CardDisplayBlockEntity(pos, state);
     }
 
+    /**
+     * Hang it on the face that was clicked, like an item frame. If the click
+     * landed on a floor or ceiling, fall back to whichever horizontal direction
+     * the player is looking that actually has a wall to hang on.
+     */
     @Override
     public BlockState getStateForPlacement(BlockPlaceContext ctx) {
-        return defaultBlockState().setValue(FACING, ctx.getHorizontalDirection().getOpposite());
+        Direction clicked = ctx.getClickedFace();
+        if (clicked.getAxis().isHorizontal()
+                && canAttach(ctx.getLevel(), ctx.getClickedPos(), clicked)) {
+            return defaultBlockState().setValue(FACING, clicked);
+        }
+        for (Direction look : ctx.getNearestLookingDirections()) {
+            if (!look.getAxis().isHorizontal()) {
+                continue;
+            }
+            Direction facing = look.getOpposite();
+            if (canAttach(ctx.getLevel(), ctx.getClickedPos(), facing)) {
+                return defaultBlockState().setValue(FACING, facing);
+            }
+        }
+        return null; // nothing to hang it on
+    }
+
+    @Override
+    protected boolean canSurvive(BlockState state, LevelReader level, BlockPos pos) {
+        return canAttach(level, pos, state.getValue(FACING));
+    }
+
+    /** Pop off when the wall it hangs on goes away. */
+    @Override
+    protected BlockState updateShape(BlockState state, Direction direction, BlockState neighbour,
+                                     LevelAccessor level, BlockPos pos, BlockPos neighbourPos) {
+        if (direction == state.getValue(FACING).getOpposite() && !canSurvive(state, level, pos)) {
+            return Blocks.AIR.defaultBlockState();
+        }
+        return state;
+    }
+
+    /** Is there a solid face behind a display at {@code pos} looking {@code facing}? */
+    private static boolean canAttach(LevelReader level, BlockPos pos, Direction facing) {
+        BlockPos support = pos.relative(facing.getOpposite());
+        return level.getBlockState(support).isFaceSturdy(level, support, facing);
     }
 
     @Override

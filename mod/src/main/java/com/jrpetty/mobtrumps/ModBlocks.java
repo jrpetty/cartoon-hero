@@ -25,7 +25,9 @@ public final class ModBlocks {
     public static final DeferredBlock<CardDisplayBlock> CARD_DISPLAY =
             BLOCKS.register("card_display", () -> new CardDisplayBlock(
                     BlockBehaviour.Properties.of().mapColor(MapColor.WOOD).strength(1.0F)
-                            .instabreak().noOcclusion()));
+                            // hangs like an item frame: walk-through, never solid
+                            .instabreak().noOcclusion().noCollission()
+                            .pushReaction(net.minecraft.world.level.material.PushReaction.DESTROY)));
 
     public static final DeferredBlock<HoloProjectorBlock> HOLO_PROJECTOR =
             BLOCKS.register("holo_projector", () -> new HoloProjectorBlock(

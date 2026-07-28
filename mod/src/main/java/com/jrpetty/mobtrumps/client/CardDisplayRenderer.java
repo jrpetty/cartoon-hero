@@ -56,7 +56,9 @@ public class CardDisplayRenderer implements BlockEntityRenderer<CardDisplayBlock
             // scale into card-pixel space (positive x so glyphs aren't mirrored,
             // negative y because text lays out downward like a sign)
             pose.translate(0.5, 0.5, 0.5);
-            pose.translate(facing.getStepX() * 0.47, 0.0, facing.getStepZ() * 0.47);
+            // the panel hangs flush against the wall BEHIND the block, so the
+            // card face sits on the far side from where it looks
+            pose.translate(-facing.getStepX() * 0.433, 0.0, -facing.getStepZ() * 0.433);
             pose.mulPose(Axis.YP.rotationDegrees(180.0F - facing.toYRot()));
             float s = FACE_FILL / CANVAS_H;
             pose.scale(s, -s, s);
@@ -88,10 +90,12 @@ public class CardDisplayRenderer implements BlockEntityRenderer<CardDisplayBlock
                 int col = argb(MobCardItem.statColor(st));
                 int value = shown.stat(st);
                 int gain = value - card.stat(st);
-                text(st.label.toUpperCase(java.util.Locale.ROOT), -50f, y, col, mtx, buffers);
-                // value bar: track then filled portion (0..10 -> 40px)
+                text(st.label.toUpperCase(java.util.Locale.ROOT)
+                        + (st.lowerWins ? " v" : ""), -50f, y, col, mtx, buffers);
+                // value bar: track then filled portion (0..10 -> 40px). A
+                // "lower wins" stat fills by strength, so rarity 1 shows full.
                 bar(buffers, mtx, 6f, y - 1f, 46f, y + 7f, 0xC0141821);
-                bar(buffers, mtx, 6f, y - 1f, 6f + value * 4f, y + 7f, col);
+                bar(buffers, mtx, 6f, y - 1f, 6f + st.strength(value) * 4f, y + 7f, col);
                 right(String.valueOf(value), 52f, y, gain > 0 ? 0xFF6BE87A : 0xFFFFFFFF, mtx, buffers);
                 if (gain > 0) {
                     text("+" + gain, 54f, y, 0xFF3FCB5A, mtx, buffers);

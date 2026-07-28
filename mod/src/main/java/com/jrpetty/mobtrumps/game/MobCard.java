@@ -134,11 +134,15 @@ public record MobCard(String id, String displayName, int health, int attack,
         return Tier.COMMON;
     }
 
-    /** The stat this card is strongest in — the CPU leads with it. */
+    /**
+     * The stat this card is strongest in — the CPU leads with it. Compared on
+     * {@link Stat#strength(int)} so a "lower wins" stat is ranked by how good
+     * its number is, not how big (a rarity-1 legendary leads with Rarity).
+     */
     public Stat bestStat() {
         Stat best = Stat.HEALTH;
         for (Stat s : Stat.values()) {
-            if (stat(s) > stat(best)) best = s;
+            if (s.strength(stat(s)) > best.strength(stat(best))) best = s;
         }
         return best;
     }

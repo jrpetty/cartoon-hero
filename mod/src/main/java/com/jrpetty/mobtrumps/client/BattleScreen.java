@@ -45,16 +45,18 @@ public class BattleScreen extends Screen {
     private static final long DEAL_MS = 320L;
     private static final long LEAVE_CONFIRM_MS = 2500L;
 
-    // felt & trim palette (matches TableMenuScreen)
-    private static final int FELT_LIGHT = 0xFF14503C;
-    private static final int FELT_DARK = 0xFF072A1F;
-    private static final int SURFACE_LIGHT = 0xFF1A5C46;
-    private static final int SURFACE_DARK = 0xFF0E3B2C;
-    private static final int BAND = 0x99051A12;
-    private static final int GOLD = 0xFFE9C46A;
-    private static final int GOLD_DIM = 0xFF9A7F45;
-    private static final int TEXT_DIM = 0xFFB9C8C0;
-    private static final int EDGE = 0xFF2E5C48;
+    // felt & trim palette. The table used to sit in near-darkness, so the base
+    // greens are lifted here and then scaled again by the Arena brightness
+    // setting — see lit() — which is why every felt colour goes through it.
+    private static final int FELT_LIGHT = 0xFF20785B;
+    private static final int FELT_DARK = 0xFF0D4433;
+    private static final int SURFACE_LIGHT = 0xFF2A8A69;
+    private static final int SURFACE_DARK = 0xFF165944;
+    private static final int BAND = 0xB4082A1E;
+    private static final int GOLD = 0xFFF3D68A;
+    private static final int GOLD_DIM = 0xFFB89555;
+    private static final int TEXT_DIM = 0xFFD5E2DB;
+    private static final int EDGE = 0xFF48836B;
     private static final int YOU_ACCENT = 0xFF55E06A;
     private static final int OPP_ACCENT = 0xFFF0857D;
 
@@ -98,6 +100,11 @@ public class BattleScreen extends Screen {
         super.onClose();
     }
 
+    /** Apply the Arena brightness setting to one of the felt colours. */
+    private static int lit(int argb) {
+        return ClientPrefs.lit(argb);
+    }
+
     /** Fit two cards + a centre gap between the header and dock, then apply the size pref. */
     private float computeScale() {
         int dockY = height - DOCK_H;
@@ -118,14 +125,16 @@ public class BattleScreen extends Screen {
         cardScale = computeScale();
         int dockY = height - DOCK_H;
 
-        // --- base felt + grain + vignette ---
-        g.fillGradient(0, 0, width, height, FELT_LIGHT, FELT_DARK);
+        // --- base felt + grain + a much gentler vignette than before ---
+        g.fillGradient(0, 0, width, height, lit(FELT_LIGHT), lit(FELT_DARK));
         for (int i = 0; i < 90; i++) {
             int sx = (i * 97 + 31) % Math.max(1, width);
             int sy = (i * 61 + 17) % Math.max(1, height);
-            g.fill(sx, sy, sx + 1, sy + 1, 0x0DFFFFFF);
+            g.fill(sx, sy, sx + 1, sy + 1, 0x14FFFFFF);
         }
-        g.fillGradient(0, height * 2 / 3, width, height, 0x00000000, 0x66000000);
+        // a soft warm pool of light over the middle of the table
+        g.fillGradient(0, HEADER_H, width, height / 2, 0x18FFF2C8, 0x00FFF2C8);
+        g.fillGradient(0, height * 3 / 4, width, height, 0x00000000, 0x33000000);
 
         // --- geometry ---
         int cardW = Math.round(CardRenderer.CARD_W * cardScale);
@@ -153,7 +162,7 @@ public class BattleScreen extends Screen {
         int surfY0 = HEADER_H + 6;
         int surfY1 = dockY - 6;
         g.fill(surfX0 + 3, surfY0 + 4, surfX1 + 3, surfY1 + 4, 0x44000000); // drop shadow
-        g.fillGradient(surfX0, surfY0, surfX1, surfY1, SURFACE_LIGHT, SURFACE_DARK);
+        g.fillGradient(surfX0, surfY0, surfX1, surfY1, lit(SURFACE_LIGHT), lit(SURFACE_DARK));
         g.renderOutline(surfX0, surfY0, surfX1 - surfX0, surfY1 - surfY0, GOLD_DIM);
         g.renderOutline(surfX0 + 2, surfY0 + 2, surfX1 - surfX0 - 4, surfY1 - surfY0 - 4, 0x55E9C46A);
         cornerTicks(g, surfX0, surfY0, surfX1, surfY1);
@@ -280,7 +289,7 @@ public class BattleScreen extends Screen {
         drawCenterInfo(g, centerY);
 
         // spoils fly to the winner's pile once the card lands
-        if (phase == BattleSyncPayload.RESULT && elapsed >= FLIP_MS) {
+        if (phase == BattleSyncPayload.RESULT && elapsed >= FLIP_MS && !ClientPrefs.reducedMotion()) {
             drawFlyingCards(g, winner, elapsed - FLIP_MS,
                     playerX + cardW / 2, cpuX + cardW / 2, centerY);
         }
@@ -309,7 +318,7 @@ public class BattleScreen extends Screen {
 
         // the hint lives in the dock's centre slot, which is free exactly when
         // there is no primary button — so text never sits on a border
-        if (actionRect == null) {
+        if (actionRect == null && ClientPrefs.battleHints()) {
             String hint;
             if (myPick) {
                 hint = "Click a stat on your card  ·  or press 1-6";
@@ -471,7 +480,7 @@ public class BattleScreen extends Screen {
         }
 
         // leave, right — needs a confirming second click while the game is live
-        boolean live = phase != BattleSyncPayload.FINISHED;
+        boolean live = phase != BattleSyncPayload.FINISHED && ClientPrefs.confirmLeave();
         boolean armed = leaveArmedAt > 0 && now - leaveArmedAt < LEAVE_CONFIRM_MS;
         String leaveLabel = (armed && live) ? "Forfeit?!" : "Leave";
         int lw = font.width(leaveLabel) + 20;
@@ -630,7 +639,8 @@ public class BattleScreen extends Screen {
         pose.popPose();
         if (chosen >= 0 && playerCard != null && cpuCard != null) {
             Stat s = Stat.values()[chosen];
-            String line = s.label + ":  you " + playerCard.stat(s) + "  vs  " + cpuCard.stat(s);
+            String line = s.label + ":  you " + playerCard.stat(s) + "  vs  " + cpuCard.stat(s)
+                    + (s.lowerWins ? "   (lower wins)" : "");
             g.drawCenteredString(font, line, width / 2, y + 16, TEXT_DIM);
         }
     }
@@ -647,7 +657,7 @@ public class BattleScreen extends Screen {
 
     private void withPulse(GuiGraphics g, boolean active, long sincePulse,
                            float cx, float cy, Runnable draw) {
-        if (!active || sincePulse > 500) {
+        if (!active || sincePulse > 500 || ClientPrefs.reducedMotion()) {
             draw.run();
             return;
         }
@@ -723,7 +733,7 @@ public class BattleScreen extends Screen {
         }
         if (leaveRect != null && inRect((int) mouseX, (int) mouseY, leaveRect)) {
             long now = System.currentTimeMillis();
-            boolean live = phase != BattleSyncPayload.FINISHED;
+            boolean live = phase != BattleSyncPayload.FINISHED && ClientPrefs.confirmLeave();
             if (live && (leaveArmedAt < 0 || now - leaveArmedAt >= LEAVE_CONFIRM_MS)) {
                 leaveArmedAt = now;
                 click();

@@ -33,7 +33,14 @@ public final class DuelManager {
     private static final int DECK_SIZE = 20;
     private static final long CHALLENGE_TTL_MS = 60_000L;
     /** How long a player has to pick before their turn is auto-played. */
-    private static final long TURN_MS = 45_000L;
+    private static final long TURN_MS = 7_000L;
+    /**
+     * The client holds a post-result state briefly so the card flip can play
+     * before the next prompt lands, so its timer bar starts that much later
+     * than the server's. Bank the same grace here or a short turn would expire
+     * while the bar still looks part-full.
+     */
+    private static final long SCREEN_HOLD_MS = 1_900L;
 
     /** target UUID -> pending challenge from a challenger. */
     private static final Map<UUID, Pending> PENDING = new ConcurrentHashMap<>();
@@ -680,12 +687,9 @@ public final class DuelManager {
             long left = duel.turnDeadline - now;
             if (left <= 0) {
                 autoPlay(duel);
-            } else if (!duel.warned && left <= 10_000L) {
-                duel.warned = true;
-                duel.forSide(duel.battle.getTurn()).sendSystemMessage(
-                        Component.literal("10 seconds to pick, or your turn is auto-played!")
-                                .withStyle(ChatFormatting.RED));
             }
+            // no chat warning: turns are short and the on-screen timer bar
+            // flashes red on its own as the clock runs down
         }
     }
 
@@ -965,7 +969,7 @@ public final class DuelManager {
         sendSpectators(duel, score);
         sendSpectators(duel, Component.literal(name(chooser) + " is choosing a stat...")
                 .withStyle(ChatFormatting.DARK_GRAY));
-        duel.turnDeadline = System.currentTimeMillis() + TURN_MS;
+        duel.turnDeadline = System.currentTimeMillis() + TURN_MS + SCREEN_HOLD_MS;
         duel.warned = false;
         pushTurn(duel); // drive both battle screens (cards, timer bar, turn)
     }
@@ -980,6 +984,11 @@ public final class DuelManager {
         LAST_MODE.put(duel.target.getUUID(), duel.bestOf);
         REMATCH_WANT.remove(duel.challenger.getUUID());
         REMATCH_WANT.remove(duel.target.getUUID());
+        // a finished duel counts as a game played for both seats
+        StatsTracker.bump(duel.challenger, "games_played");
+        StatsTracker.bump(duel.target, "games_played");
+        AchievementManager.refresh(duel.challenger);
+        AchievementManager.refresh(duel.target);
         boolean wager = duel.isWager();
         if (winner == null) {
             sendBoth(duel, Component.literal("The duel is a draw — every stake is returned.")

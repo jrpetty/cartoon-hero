@@ -119,6 +119,11 @@ public class MobCardItem extends Item {
                 line = line.copy().append(Component.literal(" (+" + gain + ")")
                         .withStyle(ChatFormatting.DARK_GREEN));
             }
+            if (stat.lowerWins) {
+                // Rarity is the odd one out: 1 is a legendary mob, and it beats a 10
+                line = line.copy().append(Component.literal("  ▼ lower wins")
+                        .withStyle(ChatFormatting.DARK_GRAY));
+            }
             tooltip.add(line);
         }
         tooltip.add(Component.literal("Right-click to view the card").withStyle(ChatFormatting.DARK_GRAY));

@@ -79,6 +79,8 @@ public final class MobDrops {
         }
         // push the updated kill count so the book and scanner show it live
         CollectionTracker.sync(killer);
+        // hunting drives several awards (mobs hunted, Holo III), so re-check them
+        AchievementManager.refresh(killer);
     }
 
     /** "Holo" / "Holo II" / "Holo III" for upgrade levels 1-3. */

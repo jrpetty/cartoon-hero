@@ -60,6 +60,15 @@ public final class GuideBook {
             Difficulty: §e/mobtrumps battle easy|normal|hard§r. Hard plays the odds and bluffs.""",
 
             """
+            §l§6The Rarity rule§r
+
+            Five stats work how you'd expect: the §obigger§r number takes the round.
+
+            §cRarity is the exception.§r It is how §ocommon§r the mob is — 10 is a Chicken, 1 is the Warden — so the §lLOWER§r§c number wins§r.
+
+            Look for the small §7▼§r beside it on the card.""",
+
+            """
             §l§6Duels§r
 
             §e/mobtrumps duel <player>§r challenges a friend.
@@ -92,6 +101,24 @@ public final class GuideBook {
             Craft it: §obook + emerald§r.
 
             It tracks all 81 cards and acts as a binder — hit §aStore§r to file loose cards away and tidy your inventory.
+
+            Tabs on the top edge open §6Awards§r and §bSettings§r.""",
+
+            """
+            §l§6Awards§r
+
+            The back of the book lists every award: collecting, the arena, duels and hunting.
+
+            Nothing is paid out for you — an earned award shows §aCollect§r, and the reward drops into your inventory.
+
+            Finish a whole §oset§r and you also pick §oone§r spawn egg from it. One choice, forever.""",
+
+            """
+            §l§6Settings§r
+
+            The last leaf is yours: hide the hunt counter, resize battle cards, brighten the arena, calm the motion.
+
+            They only change how the mod §olooks§r, never how it plays, and they're saved on your computer.
 
             §e/mobtrumps top§r shows the ranked ladder. Good luck!"""
     };

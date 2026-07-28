@@ -40,6 +40,7 @@ public final class CollectionTracker {
         }
         if (changed) {
             sync(player);
+            AchievementManager.refresh(player);
             ModTriggers.COLLECTION.get().trigger(player,
                     player.getData(ModAttachments.COLLECTED.get()).size(),
                     player.getData(ModAttachments.COLLECTED_FOIL.get()).size());
@@ -66,6 +67,7 @@ public final class CollectionTracker {
                 player.getData(ModAttachments.COLLECTED.get()).size(),
                 player.getData(ModAttachments.COLLECTED_FOIL.get()).size());
         ModTriggers.DUEL_WIN.get().trigger(player, player.getData(ModAttachments.DUEL_WINS.get()));
+        AchievementManager.refresh(player);
     }
 
     public static void addDuelWin(ServerPlayer player) {
@@ -73,6 +75,7 @@ public final class CollectionTracker {
         player.setData(ModAttachments.DUEL_WINS.get(), wins);
         ModTriggers.DUEL_WIN.get().trigger(player, wins);
         sync(player);
+        AchievementManager.refresh(player);
     }
 
     /** Choose which variant of a mob shows on top of the pile in the book. */

@@ -84,6 +84,8 @@ public final class CategoryRewards {
         give(player, armor);
 
         announce(player, category, iron, gold, diamond, armor);
+        // and the pick of the set: one spawn egg from any mob in it, once ever
+        AchievementManager.offerEgg(player, category);
     }
 
     private static double multiplier() {

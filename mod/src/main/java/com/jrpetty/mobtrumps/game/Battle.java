@@ -111,15 +111,19 @@ public final class Battle {
         MobCard cpuCard = cpuDeck.pollFirst();
         round++;
 
+        // Rarity is a "lower wins" stat, so compare direction-aware scores
+        int playerScore = stat.score(playerCard.stat(stat));
+        int cpuScore = stat.score(cpuCard.stat(stat));
+
         Side roundWinner;
-        if (playerCard.stat(stat) > cpuCard.stat(stat)) {
+        if (playerScore > cpuScore) {
             roundWinner = Side.PLAYER;
             playerDeck.addLast(playerCard);
             playerDeck.addLast(cpuCard);
             pot.forEach(playerDeck::addLast);
             pot.clear();
             turn = Side.PLAYER;
-        } else if (cpuCard.stat(stat) > playerCard.stat(stat)) {
+        } else if (cpuScore > playerScore) {
             roundWinner = Side.CPU;
             cpuDeck.addLast(cpuCard);
             cpuDeck.addLast(playerCard);
