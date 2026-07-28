@@ -347,14 +347,17 @@ public final class CardRenderer {
         g.renderOutline(-25, -25, 50, 50, 0x66000000);
         pose.popPose();
 
-        // the creeper plate sits upright inside the tilted medallion
-        g.fillGradient(cx - 20, cy - 20, cx + 20, cy + 20, EMBLEM_GREEN_LIT, EMBLEM_GREEN);
-        g.renderOutline(cx - 20, cy - 20, 40, 40, 0x66103A0E);
+        // the creeper plate sits upright inside the tilted medallion, small
+        // enough that the dark well still frames it on every side
+        g.fill(cx - 19, cy - 19, cx + 19, cy + 19, BACK_GOLD_DIM);
+        g.fillGradient(cx - 18, cy - 18, cx + 18, cy + 18, EMBLEM_GREEN_LIT, EMBLEM_GREEN);
+        g.fill(cx - 18, cy - 18, cx + 18, cy - 17, 0x66FFFFFF); // top highlight
+        g.renderOutline(cx - 18, cy - 18, 36, 36, 0x55103A0E);
 
-        // classic 8x8 creeper face, 5px to the cell
-        final int u = 5;
-        final int ox = cx - 20;
-        final int oy = cy - 20;
+        // classic 8x8 creeper face, 4px to the cell
+        final int u = 4;
+        final int ox = cx - 16;
+        final int oy = cy - 16;
         face(g, ox, oy, u, 1, 1, 2, 2); // left eye
         face(g, ox, oy, u, 5, 1, 2, 2); // right eye
         face(g, ox, oy, u, 3, 3, 2, 1); // bridge

@@ -88,6 +88,8 @@ public class CollectionBookScreen extends Screen {
     private boolean statsOpen = false;
     private String pickerMob = null;
     private Category eggPicker = null;
+    /** The award row under the cursor this frame — its description fills the footer. */
+    private Achievement hoveredAward;
     private EditBox search;
 
     private int cardSpreads;
@@ -265,6 +267,7 @@ public class CollectionBookScreen extends Screen {
     public void render(GuiGraphics g, int mouseX, int mouseY, float partialTick) {
         super.render(g, mouseX, mouseY, partialTick);
         hotspots.clear();
+        hoveredAward = null;
         Section section = section();
         if (section != Section.CARDS && search.isFocused()) {
             search.setFocused(false); // the search box belongs to the card pages
@@ -304,12 +307,22 @@ public class CollectionBookScreen extends Screen {
         g.drawString(font, pageText, panelX + (panelW - font.width(pageText)) / 2, panelY + panelH - 17,
                 CardRenderer.KRAFT_DARK, false);
 
-        String hint = switch (section) {
-            case CARDS -> "Click a card to view it · Store files loose cards away · shift-click a green-tabbed card to take one out";
-            case AWARDS -> "Press Collect on a finished award and the reward lands straight in your inventory";
-            case SETTINGS -> "Settings are yours alone — they change how the mod looks, never how it plays";
-        };
-        g.drawString(font, hint, (width - font.width(hint)) / 2, panelY + panelH + 8, 0xFFAAAAAA, true);
+        // the footer doubles as the awards' description line, so a row never has
+        // to squeeze the title, the payout, the bar and the blurb into 26 pixels
+        String hint;
+        int hintColor = 0xFFAAAAAA;
+        if (hoveredAward != null) {
+            hint = hoveredAward.title() + " — " + hoveredAward.description()
+                    + "   ·   " + hoveredAward.rewardLabel();
+            hintColor = 0xFFF3E2A7;
+        } else {
+            hint = switch (section) {
+                case CARDS -> "Click a card to view it · Store files loose cards away · shift-click a green-tabbed card to take one out";
+                case AWARDS -> "Press Collect on a finished award and the reward lands straight in your inventory";
+                case SETTINGS -> "Settings are yours alone — they change how the mod looks, never how it plays";
+            };
+        }
+        g.drawString(font, hint, (width - font.width(hint)) / 2, panelY + panelH + 8, hintColor, true);
 
         if (pickerMob != null) renderPicker(g, mouseX, mouseY);
         if (eggPicker != null) renderEggPicker(g, mouseX, mouseY);
@@ -440,7 +453,7 @@ public class CollectionBookScreen extends Screen {
         y += 12;
 
         int available = pageBottom - y;
-        int rowH = Math.max(18, Math.min(30, available / Math.max(1, list.size())));
+        int rowH = Math.max(16, Math.min(30, available / Math.max(1, list.size())));
         for (Achievement a : list) {
             drawAwardRow(g, a, x0, x1, y, rowH, mouseX, mouseY);
             y += rowH;
@@ -455,63 +468,96 @@ public class CollectionBookScreen extends Screen {
         return n;
     }
 
+    /**
+     * One award row. Two layouts, picked by how much height the page can spare:
+     * a two-line card (title + payout above, progress + Collect below) when
+     * there is room, and a single baseline when the book is squeezed. The
+     * description never competes for space — it goes to the footer on hover.
+     */
     private void drawAwardRow(GuiGraphics g, Achievement a, int x0, int x1, int y, int rowH,
                               int mouseX, int mouseY) {
         boolean claimed = ClientAwards.isClaimed(a);
         boolean ready = ClientAwards.isCollectable(a);
         int progress = ClientAwards.progress(a);
         float frac = Math.min(1f, progress / (float) a.target());
+        boolean tall = rowH >= 24;
+        int inner = rowH - 2;
 
         // the row plate: earned rows lift off the page, claimed ones settle back
         int plate = ready ? 0x2255A82F : claimed ? 0x14000000 : 0x0E000000;
-        g.fill(x0, y, x1, y + rowH - 2, plate);
+        g.fill(x0, y, x1, y + inner, plate);
         if (ready) {
-            g.renderOutline(x0, y, x1 - x0, rowH - 2, 0xFF55A82F);
+            g.renderOutline(x0, y, x1 - x0, inner, 0xFF55A82F);
+        }
+        if (mouseX >= x0 && mouseX < x1 && mouseY >= y && mouseY < y + inner) {
+            hoveredAward = a;
         }
 
-        int btnW = font.width("Collect") + 10;
-        int textRight = x1 - 6;
+        // right-hand slot: the Collect button, or a tick once it is spent
+        int slotLeft = x1 - 4;
         if (ready) {
+            int btnW = font.width("Collect") + 10;
             int bx = x1 - btnW - 3;
-            int by = y + (rowH - 2 - 12) / 2;
+            int by = y + (inner - 12) / 2;
             Chip btn = new Chip("claim_" + a.id(), bx, by, btnW, 12);
             hotspots.add(btn);
             boolean hover = btn.hit(mouseX, mouseY);
             g.fill(bx, by, bx + btnW, by + 12, hover ? 0xFF6BC33F : 0xFF55A82F);
             g.renderOutline(bx, by, btnW, 12, 0xFF2E6B18);
             g.drawString(font, "Collect", bx + 5, by + 2, 0xFFFFFFFF, false);
-            textRight = bx - 6;
+            slotLeft = bx - 6;
         } else if (claimed) {
-            String tick = "✔ collected";
-            g.drawString(font, tick, x1 - font.width(tick) - 2, y + 2, 0xFF3D8B3D, false);
-            textRight = x1 - font.width(tick) - 8;
+            String tick = "✔";
+            g.drawString(font, tick, x1 - font.width(tick) - 4, y + (inner - 8) / 2,
+                    0xFF3D8B3D, false);
+            slotLeft = x1 - font.width(tick) - 10;
         }
 
         int titleColor = claimed ? 0xFF8B8074 : CardRenderer.INK;
-        g.drawString(font, a.title(), x0 + 4, y + 2, titleColor, false);
-
-        if (rowH >= 26) {
-            g.drawString(font, trim(a.description(), textRight - x0 - 8), x0 + 4, y + 12,
-                    0xFF9A9083, false);
-        }
-
-        // progress rail with the count riding its right end
-        int railY = y + rowH - 9;
-        int railX1 = Math.max(x0 + 40, textRight - 46);
-        g.fill(x0 + 4, railY, railX1, railY + 3, 0x33000000);
-        int fill = (int) ((railX1 - x0 - 4) * frac);
-        if (fill > 0) {
-            g.fill(x0 + 4, railY, x0 + 4 + fill, railY + 3,
-                    claimed ? 0xFF9A9083 : a.group().accent());
-        }
         String count = progress + " / " + a.target();
-        g.drawString(font, count, railX1 + 4, railY - 3, 0xFF8B8074, false);
+        int countW = font.width(count);
 
-        // the payout, right-aligned under the button
-        if (rowH >= 26) {
-            String reward = trim(a.rewardLabel(), (x1 - x0) / 2);
-            g.drawString(font, reward, textRight - font.width(reward), railY - 3,
+        // the count is always pinned to the slot and everything else takes what
+        // is left, so a long title or a wide button can never push it under the
+        // Collect button the way a minimum-rail-width rule could
+        int countX = slotLeft - countW;
+
+        if (tall) {
+            // line 1: title, with the payout right-aligned against the slot
+            g.drawString(font, a.title(), x0 + 4, y + 2, titleColor, false);
+            int titleEnd = x0 + 8 + font.width(a.title());
+            String reward = trim(a.rewardLabel(), Math.max(20, slotLeft - titleEnd));
+            g.drawString(font, reward, slotLeft - font.width(reward), y + 2,
                     claimed ? 0xFFB3AA9C : 0xFF6E6154, false);
+
+            // line 2: the progress rail, with its count on the right
+            int railY = y + inner - 8;
+            g.drawString(font, count, countX, railY - 3, 0xFF8B8074, false);
+            drawRail(g, a, x0 + 4, countX - 6, railY, frac, claimed);
+        } else if (ready) {
+            // squeezed AND finished: a full bar next to a Collect button says
+            // nothing the button doesn't, so give the whole line to the title
+            int textY = y + (inner - 8) / 2;
+            g.drawString(font, trim(a.title(), slotLeft - x0 - 8), x0 + 4, textY, titleColor, false);
+        } else {
+            // one baseline: title | rail | count | slot
+            int textY = y + (inner - 8) / 2;
+            int titleMax = Math.max(30, Math.min((x1 - x0) * 2 / 5, countX - x0 - 46));
+            g.drawString(font, trim(a.title(), titleMax), x0 + 4, textY, titleColor, false);
+            g.drawString(font, count, countX, textY, 0xFF8B8074, false);
+            drawRail(g, a, x0 + 8 + titleMax, countX - 6, y + inner / 2 - 1, frac, claimed);
+        }
+    }
+
+    private void drawRail(GuiGraphics g, Achievement a, int x0, int x1, int y,
+                          float frac, boolean claimed) {
+        if (x1 <= x0) {
+            return;
+        }
+        g.fill(x0, y, x1, y + 3, 0x33000000);
+        int fill = (int) ((x1 - x0) * frac);
+        if (fill > 0) {
+            g.fill(x0, y, x0 + fill, y + 3, claimed ? 0xFF9A9083 : a.group().accent());
         }
     }
 

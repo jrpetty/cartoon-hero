@@ -91,7 +91,7 @@ public class CardDisplayRenderer implements BlockEntityRenderer<CardDisplayBlock
                 int value = shown.stat(st);
                 int gain = value - card.stat(st);
                 text(st.label.toUpperCase(java.util.Locale.ROOT)
-                        + (st.lowerWins ? " v" : ""), -50f, y, col, mtx, buffers);
+                        + (st.lowerWins ? " ▼" : ""), -50f, y, col, mtx, buffers);
                 // value bar: track then filled portion (0..10 -> 40px). A
                 // "lower wins" stat fills by strength, so rarity 1 shows full.
                 bar(buffers, mtx, 6f, y - 1f, 46f, y + 7f, 0xC0141821);
