@@ -15,7 +15,7 @@ import net.minecraft.world.level.block.SoundType;
 import net.minecraft.world.level.block.state.BlockBehaviour;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.fml.common.Mod;
-import net.neoforged.neoforge.common.extensions.IMenuTypeExtension;
+import net.minecraft.world.flag.FeatureFlags;
 import net.neoforged.neoforge.event.BuildCreativeModeTabContentsEvent;
 import net.neoforged.neoforge.registries.DeferredBlock;
 import net.neoforged.neoforge.registries.DeferredHolder;
@@ -44,7 +44,7 @@ public class GrapplingHookMod {
 
     public static final Supplier<MenuType<EnhancementMenu>> ENHANCEMENT_MENU =
             MENUS.register("enhancement_table",
-                    () -> IMenuTypeExtension.create((id, inventory, buf) -> new EnhancementMenu(id, inventory)));
+                    () -> new MenuType<EnhancementMenu>(EnhancementMenu::new, FeatureFlags.VANILLA_SET));
 
     public static final DeferredHolder<CreativeModeTab, CreativeModeTab> TAB = CREATIVE_TABS.register("grapplinghook",
             () -> CreativeModeTab.builder()

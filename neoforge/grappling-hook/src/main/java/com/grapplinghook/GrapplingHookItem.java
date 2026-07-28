@@ -171,7 +171,7 @@ public class GrapplingHookItem extends Item {
     }
 
     @Override
-    public void appendHoverText(ItemStack stack, TooltipContext context, List<Component> tooltip, TooltipFlag flag) {
+    public void appendHoverText(ItemStack stack, Item.TooltipContext context, List<Component> tooltip, TooltipFlag flag) {
         tooltip.add(Component.literal("Condition " + GrappleUpgrades.usesLeft(stack) + "/" + GrappleUpgrades.MAX_USES)
                 .withStyle(GrappleUpgrades.isWornOut(stack) ? ChatFormatting.RED : ChatFormatting.GRAY));
         for (GrappleUpgrades.Upgrade u : GrappleUpgrades.installed(stack)) {

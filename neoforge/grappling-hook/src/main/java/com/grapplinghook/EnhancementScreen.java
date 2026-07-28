@@ -78,11 +78,11 @@ public class EnhancementScreen extends AbstractContainerScreen<EnhancementMenu> 
 
     @Override
     public void render(GuiGraphics gfx, int mouseX, int mouseY, float delta) {
+        // AbstractContainerScreen#render already draws the hovered-slot tooltip.
         super.render(gfx, mouseX, mouseY, delta);
         if (enhanceButton != null) {
             enhanceButton.active = menu.preview().ready();
         }
-        renderTooltip(gfx, mouseX, mouseY);
     }
 
     private static String trim(String s, int max) {
