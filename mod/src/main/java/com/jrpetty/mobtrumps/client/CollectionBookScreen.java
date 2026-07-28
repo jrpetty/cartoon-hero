@@ -443,14 +443,9 @@ public class CollectionBookScreen extends Screen {
         int x1 = x0 + pageW;
         int y = gridTop;
 
-        g.fill(x0, y, x1, y + 2, group.accent());
-        y += 6;
-        g.drawString(font, group.label().toUpperCase(Locale.ROOT), x0, y, CardRenderer.INK, false);
         String done = countCollected(list) + " / " + list.size();
-        g.drawString(font, done, x1 - font.width(done), y, CardRenderer.KRAFT_DARK, false);
-        y += 10;
-        g.drawString(font, group.blurb(), x0, y, 0xFF8B8074, false);
-        y += 12;
+        y = drawPageHeading(g, x0, x1, y, group.accent(),
+                group.label().toUpperCase(Locale.ROOT), group.blurb(), done);
 
         int available = pageBottom - y;
         int rowH = Math.max(16, Math.min(30, available / Math.max(1, list.size())));
@@ -458,6 +453,26 @@ public class CollectionBookScreen extends Screen {
             drawAwardRow(g, a, x0, x1, y, rowH, mouseX, mouseY);
             y += rowH;
         }
+    }
+
+    /**
+     * The accent rule, heading, optional right-aligned tally and blurb every
+     * back page shares. Everything is trimmed to the leaf it belongs to, so a
+     * long blurb can never bleed across the spine onto the facing page.
+     */
+    private int drawPageHeading(GuiGraphics g, int x0, int x1, int y, int accent,
+                                String heading, String blurb, String tally) {
+        g.fill(x0, y, x1, y + 2, accent);
+        y += 6;
+        int headingMax = x1 - x0;
+        if (tally != null) {
+            g.drawString(font, tally, x1 - font.width(tally), y, CardRenderer.KRAFT_DARK, false);
+            headingMax = x1 - x0 - font.width(tally) - 6;
+        }
+        g.drawString(font, trim(heading, headingMax), x0, y, CardRenderer.INK, false);
+        y += 10;
+        g.drawString(font, trim(blurb, x1 - x0), x0, y, 0xFF8B8074, false);
+        return y + 12;
     }
 
     private int countCollected(List<Achievement> list) {
@@ -576,13 +591,8 @@ public class CollectionBookScreen extends Screen {
 
     private void renderSetRewardsPage(GuiGraphics g, int x0, int mouseX, int mouseY) {
         int x1 = x0 + pageW;
-        int y = gridTop;
-        g.fill(x0, y, x1, y + 2, 0xFFB57EDC);
-        y += 6;
-        g.drawString(font, "SET REWARDS", x0, y, CardRenderer.INK, false);
-        y += 10;
-        g.drawString(font, "Finish a set, keep one of its mobs as a spawn egg", x0, y, 0xFF8B8074, false);
-        y += 12;
+        int y = drawPageHeading(g, x0, x1, gridTop, 0xFFB57EDC, "SET REWARDS",
+                "Finish a set, keep one of its mobs as a spawn egg", null);
 
         Category[] cats = Category.values();
         int rowH = Math.max(16, Math.min(26, (pageBottom - y) / cats.length));
@@ -608,26 +618,9 @@ public class CollectionBookScreen extends Screen {
             g.renderOutline(x0, y, x1 - x0, rowH - 2, 0xFFB57EDC);
         }
         g.fill(x0 + 3, y + 3, x0 + 6, y + rowH - 5, cat.accent());
-        g.drawString(font, cat.label(), x0 + 11, y + 2,
-                complete ? CardRenderer.INK : 0xFF6E6154, false);
 
-        String state;
-        int stateColor;
-        if (taken != null) {
-            MobCard card = MobCards.byId(taken);
-            state = "✔ " + (card == null ? taken : card.displayName()) + " egg";
-            stateColor = 0xFF3D8B3D;
-        } else if (pending) {
-            state = null;
-            stateColor = 0;
-        } else if (complete) {
-            state = SetEggs.hasAny(cat) ? "claimed" : "no spawn eggs in this set";
-            stateColor = 0xFF9A9083;
-        } else {
-            state = have + " / " + members.size() + " collected";
-            stateColor = 0xFF9A9083;
-        }
-
+        // draw the right-hand slot first, so the set name knows what room it has
+        int slotLeft = x1 - 2;
         if (pending) {
             String label = "Choose egg";
             int bw = font.width(label) + 10;
@@ -639,9 +632,24 @@ public class CollectionBookScreen extends Screen {
             g.fill(bx, by, bx + bw, by + 12, hover ? 0xFFC79BEA : 0xFFB57EDC);
             g.renderOutline(bx, by, bw, 12, 0xFF6B3F94);
             g.drawString(font, label, bx + 5, by + 2, 0xFF2A1338, false);
-        } else if (state != null) {
+            slotLeft = bx - 6;
+        } else {
+            String state;
+            int stateColor = 0xFF9A9083;
+            if (taken != null) {
+                MobCard card = MobCards.byId(taken);
+                state = "✔ " + (card == null ? taken : card.displayName()) + " egg";
+                stateColor = 0xFF3D8B3D;
+            } else if (complete) {
+                state = SetEggs.hasAny(cat) ? "claimed" : "no eggs in this set";
+            } else {
+                state = have + " / " + members.size() + " collected";
+            }
             g.drawString(font, state, x1 - font.width(state) - 2, y + 2, stateColor, false);
+            slotLeft = x1 - font.width(state) - 8;
         }
+        g.drawString(font, trim(cat.label(), slotLeft - x0 - 11), x0 + 11, y + 2,
+                complete ? CardRenderer.INK : 0xFF6E6154, false);
 
         if (rowH >= 22 && !complete) {
             int railY = y + rowH - 8;
@@ -656,13 +664,8 @@ public class CollectionBookScreen extends Screen {
 
     private void renderSettingsPage(GuiGraphics g, int x0, int mouseX, int mouseY) {
         int x1 = x0 + pageW;
-        int y = gridTop;
-        g.fill(x0, y, x1, y + 2, 0xFF3FA7D6);
-        y += 6;
-        g.drawString(font, "SETTINGS", x0, y, CardRenderer.INK, false);
-        y += 10;
-        g.drawString(font, "Saved on this computer, for every world", x0, y, 0xFF8B8074, false);
-        y += 12;
+        int y = drawPageHeading(g, x0, x1, gridTop, 0xFF3FA7D6, "SETTINGS",
+                "Saved on this computer, for every world", null);
 
         int rowH = Math.max(18, Math.min(28, (pageBottom - y) / SETTINGS.size()));
         for (Setting s : SETTINGS) {
@@ -699,7 +702,7 @@ public class CollectionBookScreen extends Screen {
         boolean hover = btn.hit(mouseX, mouseY);
 
         g.fill(x0, y, x1, y + rowH - 2, hover ? 0x18000000 : 0x0A000000);
-        g.drawString(font, s.label(), x0 + 4, y + 2, CardRenderer.INK, false);
+        g.drawString(font, trim(s.label(), bx - x0 - 10), x0 + 4, y + 2, CardRenderer.INK, false);
         if (rowH >= 24) {
             g.drawString(font, trim(s.blurb(), bx - x0 - 10), x0 + 4, y + 12, 0xFF9A9083, false);
         }
