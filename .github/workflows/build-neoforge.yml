@@ -41,7 +41,9 @@ jobs:
 
       - name: Build
         working-directory: neoforge/${{ matrix.mod }}
-        run: ./gradlew build --no-daemon --stacktrace
+        # No --stacktrace: on a compile failure its 150 lines of Gradle
+        # internals bury the javac errors past where the log API truncates.
+        run: ./gradlew build --no-daemon
 
       - name: Upload mod jar
         uses: actions/upload-artifact@v4
