@@ -18,6 +18,9 @@
   "entrypoints": {
     "main": [
       "com.grapplinghook.GrapplingHookMod"
+    ],
+    "client": [
+      "com.grapplinghook.GrapplingHookClient"
     ]
   },
   "depends": {

@@ -1,12 +1,19 @@
 package com.grapplinghook;
 
+import java.util.List;
 import java.util.Optional;
 
 import net.minecraft.entity.Entity;
 import net.minecraft.entity.LivingEntity;
+import net.minecraft.entity.damage.DamageSource;
+import net.minecraft.entity.effect.StatusEffectInstance;
+import net.minecraft.entity.effect.StatusEffects;
 import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.item.Item;
 import net.minecraft.item.ItemStack;
+import net.minecraft.item.tooltip.TooltipType;
+import net.minecraft.text.Text;
+import net.minecraft.util.Formatting;
 import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.server.world.ServerWorld;
 import net.minecraft.sound.SoundCategory;
@@ -55,6 +62,12 @@ public class GrapplingHookItem extends Item {
         if (user.getItemCooldownManager().isCoolingDown(this)) {
             return TypedActionResult.fail(stack);
         }
+        if (GrappleUpgrades.isWornOut(stack)) {
+            if (!world.isClient()) {
+                user.sendMessage(Text.translatable("message.grapplinghook.worn_out").formatted(Formatting.RED), true);
+            }
+            return TypedActionResult.fail(stack);
+        }
         user.setCurrentHand(hand);
         return TypedActionResult.consume(stack);
     }
@@ -69,7 +82,8 @@ public class GrapplingHookItem extends Item {
 
         int ticksUsed = getMaxUseTime(stack, userEntity) - remainingUseTicks;
         double charge = MathHelper.clamp(ticksUsed / (double) GrappleConfig.chargeTicks, 0.0, 1.0);
-        double reach = MathHelper.lerp(charge, GrappleConfig.minRange, GrappleConfig.maxRange);
+        double reach = MathHelper.lerp(charge, GrappleConfig.minRange, GrappleConfig.maxRange)
+                * GrappleUpgrades.rangeMultiplier(stack);
 
         Vec3d start = player.getEyePos();
         Vec3d look = player.getRotationVec(1.0F);
@@ -90,7 +104,8 @@ public class GrapplingHookItem extends Item {
             Entity target = findEntity(serverWorld, player, start, end, blockDist);
             if (target != null) {
                 yankEntity(serverWorld, player, target);
-                player.getItemCooldownManager().set(this, GrappleConfig.cooldownTicks);
+                GrappleUpgrades.spendUse(stack);
+                player.getItemCooldownManager().set(this, cooldownFor(stack));
                 return;
             }
         }
@@ -103,13 +118,64 @@ public class GrapplingHookItem extends Item {
         // direction; momentum then carries you. No reeling, no snap-back.
         Vec3d anchor = blockHit.getPos();
         Vec3d dir = anchor.subtract(player.getPos()).normalize();
-        double launch = MathHelper.lerp(charge, GrappleConfig.minLaunchSpeed, GrappleConfig.maxLaunchSpeed);
+        double launch = MathHelper.lerp(charge, GrappleConfig.minLaunchSpeed, GrappleConfig.maxLaunchSpeed)
+                * GrappleUpgrades.launchMultiplier(stack);
         player.setVelocity(dir.multiply(launch).add(0.0, GrappleConfig.upwardBoost, 0.0));
         player.velocityModified = true;
         player.fallDistance = 0.0F;
 
+        if (GrappleUpgrades.has(stack, GrappleUpgrades.IMPACT)) {
+            impact(serverWorld, player, anchor);
+        }
+        if (GrappleUpgrades.has(stack, GrappleUpgrades.LANDING)) {
+            // Ride the arc down gently instead of splattering at the far end.
+            player.addStatusEffect(new StatusEffectInstance(StatusEffects.SLOW_FALLING, 100, 0, true, false, true));
+        }
+
         GrappleManager.drawRope(serverWorld, start, anchor);
-        player.getItemCooldownManager().set(this, GrappleConfig.cooldownTicks);
+        GrappleUpgrades.spendUse(stack);
+        player.getItemCooldownManager().set(this, cooldownFor(stack));
+    }
+
+    private static int cooldownFor(ItemStack stack) {
+        return Math.max(1, (int) Math.round(GrappleConfig.cooldownTicks * GrappleUpgrades.cooldownMultiplier(stack)));
+    }
+
+    /** Impact Charge: the hook slams home, hurting whatever is at the anchor. */
+    private static void impact(ServerWorld world, ServerPlayerEntity player, Vec3d anchor) {
+        DamageSource source = world.getDamageSources().playerAttack(player);
+        Box blast = new Box(anchor, anchor).expand(3.0);
+        for (Entity e : world.getOtherEntities(player, blast,
+                ent -> ent instanceof LivingEntity && ent.isAlive() && !ent.isSpectator())) {
+            e.damage(source, 8.0F); // 4 hearts
+        }
+        world.playSound(null, anchor.x, anchor.y, anchor.z,
+                SoundEvents.ENTITY_GENERIC_EXPLODE.value(), SoundCategory.PLAYERS, 0.7F, 1.6F);
+    }
+
+    @Override
+    public boolean isItemBarVisible(ItemStack stack) {
+        return GrappleUpgrades.wear(stack) > 0;
+    }
+
+    @Override
+    public int getItemBarStep(ItemStack stack) {
+        return Math.round(13.0F * GrappleUpgrades.usesLeft(stack) / GrappleUpgrades.MAX_USES);
+    }
+
+    @Override
+    public int getItemBarColor(ItemStack stack) {
+        float left = GrappleUpgrades.usesLeft(stack) / (float) GrappleUpgrades.MAX_USES;
+        return net.minecraft.util.math.MathHelper.hsvToRgb(left / 3.0F, 1.0F, 1.0F);
+    }
+
+    @Override
+    public void appendTooltip(ItemStack stack, TooltipContext context, List<Text> tooltip, TooltipType type) {
+        tooltip.add(Text.literal("Condition " + GrappleUpgrades.usesLeft(stack) + "/" + GrappleUpgrades.MAX_USES)
+                .formatted(GrappleUpgrades.isWornOut(stack) ? Formatting.RED : Formatting.GRAY));
+        for (GrappleUpgrades.Upgrade u : GrappleUpgrades.installed(stack)) {
+            tooltip.add(Text.literal("✦ " + u.name()).formatted(Formatting.GOLD));
+        }
     }
 
     /** Closest living entity whose hitbox the aim ray crosses within maxDist. */
