@@ -102,6 +102,17 @@ public class CommandHubBlockEntity extends BlockEntity {
         return true;
     }
 
+    /** Drop one linked gadget from the board; false when it wasn't on it. */
+    public boolean removeNode(String dim, BlockPos nodePos) {
+        long packed = nodePos.asLong();
+        boolean removed = nodes.removeIf(n -> n.dim.equals(dim) && n.pos == packed);
+        if (removed) {
+            setChanged();
+            sync();
+        }
+        return removed;
+    }
+
     public void clearNodes() {
         nodes.clear();
         setChanged();

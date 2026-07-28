@@ -1,7 +1,15 @@
 package com.gadgets;
 
+import net.minecraft.ChatFormatting;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
+import net.minecraft.network.chat.Component;
+import net.minecraft.world.InteractionHand;
+import net.minecraft.world.InteractionResult;
+import net.minecraft.world.ItemInteractionResult;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.item.context.BlockPlaceContext;
 import net.minecraft.world.level.BlockGetter;
 import net.minecraft.world.level.Level;
@@ -41,6 +49,29 @@ public class RedstoneReceiverBlock extends Block implements EntityBlock {
     public BlockState getStateForPlacement(BlockPlaceContext ctx) {
         // Mirror the repeater: the output side ends up facing where the player looks.
         return defaultBlockState().setValue(FACING, ctx.getHorizontalDirection().getOpposite());
+    }
+
+    @Override
+    protected ItemInteractionResult useItemOn(ItemStack stack, BlockState state, Level level, BlockPos pos,
+                                              Player player, InteractionHand hand, BlockHitResult hit) {
+        // Never swallow the Linker's click — it has to reach the item.
+        return stack.getItem() instanceof RedstoneLinkerItem
+                ? ItemInteractionResult.SKIP_DEFAULT_BLOCK_INTERACTION
+                : ItemInteractionResult.PASS_TO_DEFAULT_BLOCK_INTERACTION;
+    }
+
+    @Override
+    protected InteractionResult useWithoutItem(BlockState state, Level level, BlockPos pos, Player player, BlockHitResult hit) {
+        if (!level.isClientSide() && level.getBlockEntity(pos) instanceof RedstoneReceiverBlockEntity be) {
+            String channel = be.getChannel();
+            int power = state.getValue(POWER);
+            player.displayClientMessage(channel.isEmpty()
+                    ? Component.literal("Receiver ▸ no channel — copy one from a Transmitter with the Linker").withStyle(ChatFormatting.RED)
+                    : Component.literal("Receiver ▸ " + channel + " · output " + power + "/15 out the "
+                            + state.getValue(FACING).getName() + " face")
+                            .withStyle(power > 0 ? ChatFormatting.GREEN : ChatFormatting.GRAY), true);
+        }
+        return InteractionResult.sidedSuccess(level.isClientSide());
     }
 
     @Override

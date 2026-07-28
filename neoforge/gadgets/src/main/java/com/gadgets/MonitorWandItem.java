@@ -11,6 +11,8 @@ import net.minecraft.resources.ResourceKey;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.sounds.SoundEvents;
+import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.Item;
@@ -23,102 +25,139 @@ import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.entity.HopperBlockEntity;
 
 /**
- * The linking tool for the monitoring network. Click a Command Hub to select
- * it, then click Item Counters / Stock Monitors to put them on its board.
+ * The linking tool for the monitoring network.
+ *
+ * <p>Click a Command Hub to select it, then click Item Counters and Stock
+ * Monitors to put them on its board (sneak-click a linked one to remove it).
  * Click any container to clip it, then click a Storage Sensor to bind that
- * container to the sensor. Sneak-click a hub to clear its board.
+ * container to the sensor.
+ *
+ * <p>The wand is dispatched from a right-click <em>event</em> rather than the
+ * normal item hook, because most of the blocks it targets — the hub, the
+ * counter, the monitor, and vanilla chests — all open a screen on click and
+ * would swallow the interaction before an item ever saw it. See
+ * {@link #handle} and its registration in {@link Gadgets}.
  */
 public class MonitorWandItem extends Item {
     public MonitorWandItem(Properties properties) {
         super(properties);
     }
 
-    @Override
-    public InteractionResult useOn(UseOnContext ctx) {
-        Level level = ctx.getLevel();
-        Player player = ctx.getPlayer();
-        if (player == null) {
-            return InteractionResult.PASS;
-        }
-        BlockPos pos = ctx.getClickedPos();
+    /**
+     * Runs the wand's action for a right-click on {@code pos}.
+     *
+     * @return true when the wand consumed the click (so the block's own
+     *         interaction must be suppressed).
+     */
+    public static boolean handle(Level level, Player player, ItemStack stack, BlockPos pos) {
         BlockEntity be = level.getBlockEntity(pos);
-        ItemStack stack = ctx.getItemInHand();
-        String dim = level.dimension().location().toString();
-
-        if (be instanceof CommandHubBlockEntity hub) {
-            if (!level.isClientSide()) {
-                if (player.isShiftKeyDown()) {
-                    hub.clearNodes();
-                    player.displayClientMessage(Component.literal("Command Hub ▸ board cleared").withStyle(ChatFormatting.RED), true);
-                } else {
-                    write(stack, "HubDim", dim, "HubPos", pos.asLong());
-                    player.displayClientMessage(Component.literal("Wand ▸ hub selected — now click counters and monitors")
-                            .withStyle(ChatFormatting.GREEN), true);
-                }
-            }
-            return InteractionResult.sidedSuccess(level.isClientSide());
+        boolean isGadget = be instanceof CommandHubBlockEntity || be instanceof ItemCounterBlockEntity
+                || be instanceof StockMonitorBlockEntity || be instanceof StorageSensorBlockEntity;
+        boolean isContainer = !isGadget && HopperBlockEntity.getContainerAt(level, pos) != null;
+        if (!isGadget && !isContainer) {
+            return false; // not a wand target — let the block behave normally
+        }
+        if (level.isClientSide()) {
+            return true; // swing the arm; the server does the real work
         }
 
-        if (be instanceof ItemCounterBlockEntity || be instanceof StockMonitorBlockEntity) {
-            if (!level.isClientSide()) {
+        String dim = level.dimension().location().toString();
+        if (be instanceof CommandHubBlockEntity hub) {
+            write(stack, "HubDim", dim, "HubPos", pos.asLong());
+            say(level, player, pos, Component.literal("Wand ▸ hub selected (" + hub.nodeCount()
+                    + " linked) — now click counters and monitors").withStyle(ChatFormatting.GREEN));
+        } else if (be instanceof ItemCounterBlockEntity || be instanceof StockMonitorBlockEntity) {
+            if (player.isShiftKeyDown()) {
+                unlinkFromHub(level, player, stack, dim, pos);
+            } else {
                 linkToHub(level, player, stack, be, dim, pos);
             }
-            return InteractionResult.sidedSuccess(level.isClientSide());
-        }
-
-        if (be instanceof StorageSensorBlockEntity sensor) {
-            if (!level.isClientSide()) {
-                CompoundTag nbt = read(stack);
-                if (!nbt.contains("ContDim")) {
-                    player.displayClientMessage(Component.literal("Wand ▸ clip a container first (right-click it)")
-                            .withStyle(ChatFormatting.RED), true);
-                } else {
-                    sensor.bind(nbt.getString("ContDim"), BlockPos.of(nbt.getLong("ContPos")));
-                    player.displayClientMessage(Component.literal("Storage Sensor ▸ bound to " + sensor.describeBinding())
-                            .withStyle(ChatFormatting.GREEN), true);
-                }
+        } else if (be instanceof StorageSensorBlockEntity sensor) {
+            CompoundTag nbt = read(stack);
+            if (!nbt.contains("ContDim")) {
+                say(level, player, pos, Component.literal("Wand ▸ clip a container first, then click this sensor")
+                        .withStyle(ChatFormatting.RED));
+            } else {
+                sensor.bind(nbt.getString("ContDim"), BlockPos.of(nbt.getLong("ContPos")));
+                say(level, player, pos, Component.literal("Storage Sensor ▸ bound to " + sensor.describeBinding())
+                        .withStyle(ChatFormatting.GREEN));
             }
-            return InteractionResult.sidedSuccess(level.isClientSide());
+        } else {
+            write(stack, "ContDim", dim, "ContPos", pos.asLong());
+            say(level, player, pos, Component.literal("Wand ▸ container clipped — now click a Storage Sensor")
+                    .withStyle(ChatFormatting.AQUA));
         }
+        return true;
+    }
 
-        if (HopperBlockEntity.getContainerAt(level, pos) != null) {
-            if (!level.isClientSide()) {
-                write(stack, "ContDim", dim, "ContPos", pos.asLong());
-                player.displayClientMessage(Component.literal("Wand ▸ container clipped — now click a Storage Sensor")
-                        .withStyle(ChatFormatting.AQUA), true);
-            }
-            return InteractionResult.sidedSuccess(level.isClientSide());
-        }
-        return InteractionResult.PASS;
+    private static void say(Level level, Player player, BlockPos pos, Component message) {
+        player.displayClientMessage(message, true);
+        level.playSound(null, pos, SoundEvents.COMPARATOR_CLICK, SoundSource.BLOCKS, 0.7F, 1.5F);
     }
 
     private static void linkToHub(Level level, Player player, ItemStack stack, BlockEntity node,
                                   String nodeDim, BlockPos nodePos) {
-        CompoundTag nbt = read(stack);
-        if (!nbt.contains("HubDim")) {
-            player.displayClientMessage(Component.literal("Wand ▸ select a Command Hub first (right-click it)")
-                    .withStyle(ChatFormatting.RED), true);
-            return;
-        }
-        MinecraftServer server = level.getServer();
-        ResourceLocation hubDim = ResourceLocation.tryParse(nbt.getString("HubDim"));
-        BlockPos hubPos = BlockPos.of(nbt.getLong("HubPos"));
-        ServerLevel hubWorld = server == null || hubDim == null
-                ? null : server.getLevel(ResourceKey.create(net.minecraft.core.registries.Registries.DIMENSION, hubDim));
-        if (hubWorld == null || !hubWorld.isLoaded(hubPos)
-                || !(hubWorld.getBlockEntity(hubPos) instanceof CommandHubBlockEntity hub)) {
-            player.displayClientMessage(Component.literal("Wand ▸ that hub is gone or unloaded").withStyle(ChatFormatting.RED), true);
+        CommandHubBlockEntity hub = resolveHub(level, stack);
+        if (hub == null) {
+            say(level, player, nodePos, Component.literal("Wand ▸ select a Command Hub first (click one with the wand)")
+                    .withStyle(ChatFormatting.RED));
             return;
         }
         int type = node instanceof ItemCounterBlockEntity
                 ? CommandHubBlockEntity.TYPE_COUNTER : CommandHubBlockEntity.TYPE_MONITOR;
         if (hub.addNode(type, nodeDim, nodePos)) {
-            player.displayClientMessage(Component.literal("Wand ▸ linked to hub (" + hub.nodeCount() + "/"
-                    + CommandHubBlockEntity.MAX_NODES + ")").withStyle(ChatFormatting.GREEN), true);
+            say(level, player, nodePos, Component.literal("Wand ▸ linked to hub (" + hub.nodeCount() + "/"
+                    + CommandHubBlockEntity.MAX_NODES + ")").withStyle(ChatFormatting.GREEN));
         } else {
-            player.displayClientMessage(Component.literal("Wand ▸ already linked, or the board is full")
-                    .withStyle(ChatFormatting.GOLD), true);
+            say(level, player, nodePos, Component.literal("Wand ▸ already linked (sneak-click to unlink), or the board is full")
+                    .withStyle(ChatFormatting.GOLD));
         }
+    }
+
+    private static void unlinkFromHub(Level level, Player player, ItemStack stack,
+                                      String nodeDim, BlockPos nodePos) {
+        CommandHubBlockEntity hub = resolveHub(level, stack);
+        if (hub == null) {
+            say(level, player, nodePos, Component.literal("Wand ▸ select a Command Hub first").withStyle(ChatFormatting.RED));
+            return;
+        }
+        if (hub.removeNode(nodeDim, nodePos)) {
+            say(level, player, nodePos, Component.literal("Wand ▸ unlinked from hub (" + hub.nodeCount() + " left)")
+                    .withStyle(ChatFormatting.GOLD));
+        } else {
+            say(level, player, nodePos, Component.literal("Wand ▸ that isn't on the selected hub").withStyle(ChatFormatting.GOLD));
+        }
+    }
+
+    /** The hub stored on the wand, or null when it is gone, unloaded, or unset. */
+    private static CommandHubBlockEntity resolveHub(Level level, ItemStack stack) {
+        CompoundTag nbt = read(stack);
+        if (!nbt.contains("HubDim")) {
+            return null;
+        }
+        MinecraftServer server = level.getServer();
+        ResourceLocation hubDim = ResourceLocation.tryParse(nbt.getString("HubDim"));
+        if (server == null || hubDim == null) {
+            return null;
+        }
+        ServerLevel hubLevel = server.getLevel(ResourceKey.create(net.minecraft.core.registries.Registries.DIMENSION, hubDim));
+        BlockPos hubPos = BlockPos.of(nbt.getLong("HubPos"));
+        if (hubLevel == null || !hubLevel.isLoaded(hubPos)) {
+            return null;
+        }
+        return hubLevel.getBlockEntity(hubPos) instanceof CommandHubBlockEntity hub ? hub : null;
+    }
+
+    /** Fallback path: only reached for targets the event hook let through. */
+    @Override
+    public InteractionResult useOn(UseOnContext ctx) {
+        Player player = ctx.getPlayer();
+        if (player == null) {
+            return InteractionResult.PASS;
+        }
+        return handle(ctx.getLevel(), player, ctx.getItemInHand(), ctx.getClickedPos())
+                ? InteractionResult.sidedSuccess(ctx.getLevel().isClientSide())
+                : InteractionResult.PASS;
     }
 
     private static CompoundTag read(ItemStack stack) {
@@ -135,6 +174,17 @@ public class MonitorWandItem extends Item {
 
     @Override
     public void appendHoverText(ItemStack stack, TooltipContext context, List<Component> tooltip, TooltipFlag flag) {
+        CompoundTag nbt = read(stack);
+        if (nbt.contains("HubPos")) {
+            BlockPos p = BlockPos.of(nbt.getLong("HubPos"));
+            tooltip.add(Component.literal("Hub: " + p.getX() + ", " + p.getY() + ", " + p.getZ())
+                    .withStyle(ChatFormatting.GREEN));
+        }
+        if (nbt.contains("ContPos")) {
+            BlockPos p = BlockPos.of(nbt.getLong("ContPos"));
+            tooltip.add(Component.literal("Container: " + p.getX() + ", " + p.getY() + ", " + p.getZ())
+                    .withStyle(ChatFormatting.AQUA));
+        }
         Tips.append(tooltip, "tip.gadgets.monitor_wand.1", "tip.gadgets.monitor_wand.2", "tip.gadgets.monitor_wand.3");
     }
 }

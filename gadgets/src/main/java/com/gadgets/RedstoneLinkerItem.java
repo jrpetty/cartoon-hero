@@ -35,22 +35,22 @@ public class RedstoneLinkerItem extends Item {
         }
         if (!world.isClient() && player != null) {
             ItemStack stack = ctx.getStack();
-            if (player.isSneaking()) {
-                String stored = readChannel(stack);
-                if (stored.isEmpty()) {
-                    player.sendMessage(Text.literal("No channel stored — right-click a block first.").formatted(Formatting.RED), true);
-                } else {
-                    channel.setChannel(stored);
-                    player.sendMessage(Text.literal("Linked to channel " + stored).formatted(Formatting.GREEN), true);
-                }
+            String stored = readChannel(stack);
+            String blockChannel = channel.getChannel();
+            // Natural flow: click the first block to pick up its channel, then click
+            // the second to paste it. Sneak forces a fresh copy from the block clicked.
+            if (!stored.isEmpty() && !stored.equals(blockChannel) && !player.isSneaking()) {
+                channel.setChannel(stored);
+                player.sendMessage(Text.literal("Linked to channel " + stored + " ✓").formatted(Formatting.GREEN), true);
             } else {
-                String c = channel.getChannel();
+                String c = blockChannel;
                 if (c.isEmpty()) {
                     c = String.format("CH-%04X", world.getRandom().nextInt(0x10000));
                     channel.setChannel(c);
                 }
                 writeChannel(stack, c);
-                player.sendMessage(Text.literal("Copied channel " + c).formatted(Formatting.AQUA), true);
+                player.sendMessage(Text.literal("Copied " + c + " — now click the other block to link it")
+                        .formatted(Formatting.AQUA), true);
             }
         }
         return ActionResult.success(world.isClient());
@@ -70,6 +70,10 @@ public class RedstoneLinkerItem extends Item {
 
     @Override
     public void appendTooltip(ItemStack stack, TooltipContext context, List<Text> tooltip, TooltipType type) {
+        String stored = readChannel(stack);
+        if (!stored.isEmpty()) {
+            tooltip.add(Text.literal("Holding: " + stored).formatted(Formatting.AQUA));
+        }
         Tips.append(tooltip, "tip.gadgets.redstone_linker.1", "tip.gadgets.redstone_linker.2");
     }
 }

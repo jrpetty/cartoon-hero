@@ -2,6 +2,7 @@ package com.gadgets;
 
 import net.fabricmc.api.ModInitializer;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
+import net.fabricmc.fabric.api.event.player.UseBlockCallback;
 import net.fabricmc.fabric.api.networking.v1.PayloadTypeRegistry;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
 import net.fabricmc.fabric.api.itemgroup.v1.FabricItemGroup;
@@ -14,6 +15,7 @@ import net.minecraft.entity.EntityType;
 import net.minecraft.entity.SpawnGroup;
 import net.minecraft.item.BlockItem;
 import net.minecraft.item.Item;
+import net.minecraft.util.ActionResult;
 import net.minecraft.item.ItemGroup;
 import net.minecraft.item.ItemStack;
 import net.minecraft.registry.Registries;
@@ -43,16 +45,16 @@ public class Gadgets implements ModInitializer {
 
     public static final Block PLAYER_SENSOR = registerBlock("player_sensor",
             new PlayerSensorBlock(AbstractBlock.Settings.create()
-                    .strength(1.5F).requiresTool().sounds(BlockSoundGroup.METAL)),
+                    .strength(1.5F).requiresTool().sounds(BlockSoundGroup.METAL).nonOpaque()),
             "tip.gadgets.player_sensor.1", "tip.gadgets.player_sensor.2", "tip.gadgets.player_sensor.3");
 
     public static final Block REDSTONE_TRANSMITTER = registerBlock("redstone_transmitter",
             new RedstoneTransmitterBlock(AbstractBlock.Settings.create()
-                    .strength(1.5F).requiresTool().sounds(BlockSoundGroup.METAL)),
+                    .strength(1.5F).requiresTool().sounds(BlockSoundGroup.METAL).nonOpaque()),
             "tip.gadgets.redstone_transmitter.1", "tip.gadgets.redstone_transmitter.2");
     public static final Block REDSTONE_RECEIVER = registerBlock("redstone_receiver",
             new RedstoneReceiverBlock(AbstractBlock.Settings.create()
-                    .strength(1.5F).requiresTool().sounds(BlockSoundGroup.METAL)),
+                    .strength(1.5F).requiresTool().sounds(BlockSoundGroup.METAL).nonOpaque()),
             "tip.gadgets.redstone_receiver.1", "tip.gadgets.redstone_receiver.2");
 
     public static final Item REDSTONE_LINKER = register("redstone_linker",
@@ -64,11 +66,11 @@ public class Gadgets implements ModInitializer {
             "tip.gadgets.display_pedestal.1", "tip.gadgets.display_pedestal.2", "tip.gadgets.display_pedestal.3", "tip.gadgets.display_pedestal.4", "tip.gadgets.display_pedestal.5");
     public static final Block ITEM_SENDER = registerBlock("item_sender",
             new ItemSenderBlock(AbstractBlock.Settings.create()
-                    .strength(1.5F).requiresTool().sounds(BlockSoundGroup.METAL)),
+                    .strength(1.5F).requiresTool().sounds(BlockSoundGroup.METAL).nonOpaque()),
             "tip.gadgets.item_sender.1", "tip.gadgets.item_sender.2");
     public static final Block ITEM_RECEIVER = registerBlock("item_receiver",
             new ItemReceiverBlock(AbstractBlock.Settings.create()
-                    .strength(1.5F).requiresTool().sounds(BlockSoundGroup.METAL)),
+                    .strength(1.5F).requiresTool().sounds(BlockSoundGroup.METAL).nonOpaque()),
             "tip.gadgets.item_receiver.1", "tip.gadgets.item_receiver.2");
 
     public static final Block DRAIN = registerBlock("drain",
@@ -78,23 +80,23 @@ public class Gadgets implements ModInitializer {
 
     public static final Block ITEM_COUNTER = registerBlock("item_counter",
             new ItemCounterBlock(AbstractBlock.Settings.create()
-                    .strength(1.5F).requiresTool().sounds(BlockSoundGroup.METAL)),
+                    .strength(1.5F).requiresTool().sounds(BlockSoundGroup.METAL).nonOpaque()),
             "tip.gadgets.item_counter.1", "tip.gadgets.item_counter.2", "tip.gadgets.item_counter.3", "tip.gadgets.item_counter.4");
     public static final Block ITEM_MAGNET = registerBlock("item_magnet",
             new ItemMagnetBlock(AbstractBlock.Settings.create()
-                    .strength(1.5F).requiresTool().sounds(BlockSoundGroup.METAL)),
+                    .strength(1.5F).requiresTool().sounds(BlockSoundGroup.METAL).nonOpaque()),
             "tip.gadgets.item_magnet.1", "tip.gadgets.item_magnet.2", "tip.gadgets.item_magnet.3");
     public static final Block STOCK_MONITOR = registerBlock("stock_monitor",
             new StockMonitorBlock(AbstractBlock.Settings.create()
-                    .strength(1.5F).requiresTool().sounds(BlockSoundGroup.METAL)),
+                    .strength(1.5F).requiresTool().sounds(BlockSoundGroup.METAL).nonOpaque()),
             "tip.gadgets.stock_monitor.1", "tip.gadgets.stock_monitor.2", "tip.gadgets.stock_monitor.3", "tip.gadgets.stock_monitor.4");
     public static final Block TRASH_CAN = registerBlock("trash_can",
             new TrashCanBlock(AbstractBlock.Settings.create()
-                    .strength(1.5F).requiresTool().sounds(BlockSoundGroup.METAL)),
+                    .strength(1.5F).requiresTool().sounds(BlockSoundGroup.METAL).nonOpaque()),
             "tip.gadgets.trash_can.1", "tip.gadgets.trash_can.2", "tip.gadgets.trash_can.3");
     public static final Block STORAGE_SENSOR = registerBlock("storage_sensor",
             new StorageSensorBlock(AbstractBlock.Settings.create()
-                    .strength(1.5F).requiresTool().sounds(BlockSoundGroup.METAL)),
+                    .strength(1.5F).requiresTool().sounds(BlockSoundGroup.METAL).nonOpaque()),
             "tip.gadgets.storage_sensor.1", "tip.gadgets.storage_sensor.2", "tip.gadgets.storage_sensor.3");
     public static final Block COMMAND_HUB = registerBlock("command_hub",
             new CommandHubBlock(AbstractBlock.Settings.create()
@@ -186,6 +188,17 @@ public class Gadgets implements ModInitializer {
             entries.add(COMMAND_HUB);
             entries.add(MONITOR_WAND);
             entries.add(WIRELESS_REMOTE);
+        });
+
+        // The wand has to run before the block's own interaction: hubs, counters,
+        // monitors and chests all open a screen on click and would eat it first.
+        UseBlockCallback.EVENT.register((player, world, hand, hit) -> {
+            ItemStack held = player.getStackInHand(hand);
+            if (held.getItem() instanceof MonitorWandItem
+                    && MonitorWandItem.handle(world, player, held, hit.getBlockPos())) {
+                return ActionResult.SUCCESS;
+            }
+            return ActionResult.PASS;
         });
 
         PayloadTypeRegistry.playC2S().register(GadgetConfigPayload.ID, GadgetConfigPayload.CODEC);

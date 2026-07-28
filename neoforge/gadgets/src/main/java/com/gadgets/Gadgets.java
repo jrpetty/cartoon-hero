@@ -8,6 +8,7 @@ import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.MobCategory;
 import net.minecraft.world.item.CreativeModeTab;
 import net.minecraft.world.item.Item;
+import net.minecraft.world.InteractionResult;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.SoundType;
@@ -17,6 +18,7 @@ import net.minecraft.server.level.ServerPlayer;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.fml.common.Mod;
 import net.neoforged.neoforge.common.NeoForge;
+import net.neoforged.neoforge.event.entity.player.PlayerInteractEvent;
 import net.neoforged.neoforge.event.server.ServerStoppedEvent;
 import net.neoforged.neoforge.network.event.RegisterPayloadHandlersEvent;
 import net.neoforged.neoforge.network.registration.PayloadRegistrar;
@@ -57,13 +59,13 @@ public class Gadgets {
 
     public static final DeferredBlock<Block> PLAYER_SENSOR = BLOCKS.register("player_sensor",
             () -> new PlayerSensorBlock(BlockBehaviour.Properties.of()
-                    .strength(1.5F).requiresCorrectToolForDrops().sound(SoundType.METAL)));
+                    .strength(1.5F).requiresCorrectToolForDrops().sound(SoundType.METAL).noOcclusion()));
     public static final DeferredBlock<Block> REDSTONE_TRANSMITTER = BLOCKS.register("redstone_transmitter",
             () -> new RedstoneTransmitterBlock(BlockBehaviour.Properties.of()
-                    .strength(1.5F).requiresCorrectToolForDrops().sound(SoundType.METAL)));
+                    .strength(1.5F).requiresCorrectToolForDrops().sound(SoundType.METAL).noOcclusion()));
     public static final DeferredBlock<Block> REDSTONE_RECEIVER = BLOCKS.register("redstone_receiver",
             () -> new RedstoneReceiverBlock(BlockBehaviour.Properties.of()
-                    .strength(1.5F).requiresCorrectToolForDrops().sound(SoundType.METAL)));
+                    .strength(1.5F).requiresCorrectToolForDrops().sound(SoundType.METAL).noOcclusion()));
 
     public static final DeferredItem<?> PLAYER_SENSOR_ITEM = ITEMS.register("player_sensor", () -> new TooltipBlockItem(PLAYER_SENSOR.get(), new Item.Properties(),
             "tip.gadgets.player_sensor.1", "tip.gadgets.player_sensor.2", "tip.gadgets.player_sensor.3"));
@@ -79,29 +81,29 @@ public class Gadgets {
                     .strength(1.0F).sound(SoundType.STONE).noOcclusion()));
     public static final DeferredBlock<Block> ITEM_SENDER = BLOCKS.register("item_sender",
             () -> new ItemSenderBlock(BlockBehaviour.Properties.of()
-                    .strength(1.5F).requiresCorrectToolForDrops().sound(SoundType.METAL)));
+                    .strength(1.5F).requiresCorrectToolForDrops().sound(SoundType.METAL).noOcclusion()));
     public static final DeferredBlock<Block> ITEM_RECEIVER = BLOCKS.register("item_receiver",
             () -> new ItemReceiverBlock(BlockBehaviour.Properties.of()
-                    .strength(1.5F).requiresCorrectToolForDrops().sound(SoundType.METAL)));
+                    .strength(1.5F).requiresCorrectToolForDrops().sound(SoundType.METAL).noOcclusion()));
 
     public static final DeferredBlock<Block> DRAIN = BLOCKS.register("drain",
             () -> new DrainBlock(BlockBehaviour.Properties.of()
                     .strength(2.0F).requiresCorrectToolForDrops().sound(SoundType.METAL).noOcclusion()));
     public static final DeferredBlock<Block> ITEM_COUNTER = BLOCKS.register("item_counter",
             () -> new ItemCounterBlock(BlockBehaviour.Properties.of()
-                    .strength(1.5F).requiresCorrectToolForDrops().sound(SoundType.METAL)));
+                    .strength(1.5F).requiresCorrectToolForDrops().sound(SoundType.METAL).noOcclusion()));
     public static final DeferredBlock<Block> ITEM_MAGNET = BLOCKS.register("item_magnet",
             () -> new ItemMagnetBlock(BlockBehaviour.Properties.of()
-                    .strength(1.5F).requiresCorrectToolForDrops().sound(SoundType.METAL)));
+                    .strength(1.5F).requiresCorrectToolForDrops().sound(SoundType.METAL).noOcclusion()));
     public static final DeferredBlock<Block> STOCK_MONITOR = BLOCKS.register("stock_monitor",
             () -> new StockMonitorBlock(BlockBehaviour.Properties.of()
-                    .strength(1.5F).requiresCorrectToolForDrops().sound(SoundType.METAL)));
+                    .strength(1.5F).requiresCorrectToolForDrops().sound(SoundType.METAL).noOcclusion()));
     public static final DeferredBlock<Block> TRASH_CAN = BLOCKS.register("trash_can",
             () -> new TrashCanBlock(BlockBehaviour.Properties.of()
-                    .strength(1.5F).requiresCorrectToolForDrops().sound(SoundType.METAL)));
+                    .strength(1.5F).requiresCorrectToolForDrops().sound(SoundType.METAL).noOcclusion()));
     public static final DeferredBlock<Block> STORAGE_SENSOR = BLOCKS.register("storage_sensor",
             () -> new StorageSensorBlock(BlockBehaviour.Properties.of()
-                    .strength(1.5F).requiresCorrectToolForDrops().sound(SoundType.METAL)));
+                    .strength(1.5F).requiresCorrectToolForDrops().sound(SoundType.METAL).noOcclusion()));
     public static final DeferredBlock<Block> COMMAND_HUB = BLOCKS.register("command_hub",
             () -> new CommandHubBlock(BlockBehaviour.Properties.of()
                     .strength(2.0F).requiresCorrectToolForDrops().sound(SoundType.METAL).noOcclusion()));
@@ -211,6 +213,17 @@ public class Gadgets {
         NeoForge.EVENT_BUS.addListener((ServerStoppedEvent event) -> {
             WirelessNetwork.clear();
             ItemNetwork.clear();
+        });
+
+        // The wand has to run before the block's own interaction: hubs, counters,
+        // monitors and chests all open a screen on click and would eat it first.
+        NeoForge.EVENT_BUS.addListener((PlayerInteractEvent.RightClickBlock event) -> {
+            ItemStack held = event.getItemStack();
+            if (held.getItem() instanceof MonitorWandItem
+                    && MonitorWandItem.handle(event.getLevel(), event.getEntity(), held, event.getPos())) {
+                event.setCanceled(true);
+                event.setCancellationResult(InteractionResult.SUCCESS);
+            }
         });
     }
 

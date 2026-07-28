@@ -35,22 +35,22 @@ public class RedstoneLinkerItem extends Item {
         }
         if (!level.isClientSide() && player != null) {
             ItemStack stack = ctx.getItemInHand();
-            if (player.isShiftKeyDown()) {
-                String stored = readChannel(stack);
-                if (stored.isEmpty()) {
-                    player.displayClientMessage(Component.literal("No channel stored — right-click a block first.").withStyle(ChatFormatting.RED), true);
-                } else {
-                    channel.setChannel(stored);
-                    player.displayClientMessage(Component.literal("Linked to channel " + stored).withStyle(ChatFormatting.GREEN), true);
-                }
+            String stored = readChannel(stack);
+            String blockChannel = channel.getChannel();
+            // Natural flow: click the first block to pick up its channel, then click
+            // the second to paste it. Sneak forces a fresh copy from the block clicked.
+            if (!stored.isEmpty() && !stored.equals(blockChannel) && !player.isShiftKeyDown()) {
+                channel.setChannel(stored);
+                player.displayClientMessage(Component.literal("Linked to channel " + stored + " ✓").withStyle(ChatFormatting.GREEN), true);
             } else {
-                String c = channel.getChannel();
+                String c = blockChannel;
                 if (c.isEmpty()) {
                     c = String.format("CH-%04X", level.getRandom().nextInt(0x10000));
                     channel.setChannel(c);
                 }
                 writeChannel(stack, c);
-                player.displayClientMessage(Component.literal("Copied channel " + c).withStyle(ChatFormatting.AQUA), true);
+                player.displayClientMessage(Component.literal("Copied " + c + " — now click the other block to link it")
+                        .withStyle(ChatFormatting.AQUA), true);
             }
         }
         return InteractionResult.sidedSuccess(level.isClientSide());
@@ -70,6 +70,10 @@ public class RedstoneLinkerItem extends Item {
 
     @Override
     public void appendHoverText(ItemStack stack, TooltipContext context, List<Component> tooltip, TooltipFlag flag) {
+        String stored = readChannel(stack);
+        if (!stored.isEmpty()) {
+            tooltip.add(Component.literal("Holding: " + stored).withStyle(ChatFormatting.AQUA));
+        }
         Tips.append(tooltip, "tip.gadgets.redstone_linker.1", "tip.gadgets.redstone_linker.2");
     }
 }
