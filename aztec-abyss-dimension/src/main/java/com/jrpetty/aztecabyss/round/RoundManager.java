@@ -103,6 +103,10 @@ public final class RoundManager {
             bar.removeAllPlayers();
         }
         BOSS_BARS.clear();
+        for (ServerBossEvent bar : HEART_BARS.values()) {
+            bar.removeAllPlayers();
+        }
+        HEART_BARS.clear();
         game = new AbyssGame();
     }
 
@@ -140,6 +144,7 @@ public final class RoundManager {
         }
         AbyssAbility.give(player); // one-charge Abyssal Nova, dimension-locked
         setupBossBar(player);
+        setupHeartBar(player);
         // Seal the way out the moment the run begins: no late joins, no walking away.
         if (player.level() instanceof ServerLevel abyss) {
             setArrivalPortalOpen(abyss, false);
@@ -206,6 +211,10 @@ public final class RoundManager {
         }
         if (now % 200L == 0L) {
             repatriateStuckMobs(level, present); // pull glitched stragglers back to a gate
+        }
+        if (game.getMap().objective() != null) {
+            tickObjective(level, present);
+            updateHeartBars();
         }
         switch (game.getPhase()) {
             case BETWEEN_ROUNDS -> {
@@ -1391,18 +1400,156 @@ public final class RoundManager {
         }
     }
 
-    /** Keeps every wave mob locked onto the closest hunter so nothing loiters. */
+    /** How close a hunter has to be to pull the horde's attention off the objective. */
+    private static final double AGGRO_RADIUS = 7.0;
+    /** How long a mob stays fixated on whoever hurt it. */
+    private static final long PROVOKE_TICKS = 200L;
+
+    /**
+     * Drives horde intent. On maps with something to defend the mobs march on the
+     * objective by default; a hunter who stands in the way (or who has recently
+     * hit them) pulls them off it. On maps with no objective they simply hunt the
+     * nearest hunter as before.
+     */
     private static void retargetWaveMobs(ServerLevel level, List<ServerPlayer> present) {
         List<Mob> mobs = level.getEntitiesOfClass(Mob.class, game.getMap().bounds(),
                 m -> m.getPersistentData().getBoolean("aztecabyss_wave_mob"));
+        BlockPos objective = game.hasLiveObjective() ? game.getMap().objective() : null;
+        long now = level.getGameTime();
+
         for (Mob mob : mobs) {
+            // Still fixated on whoever last hurt it?
+            long provokedUntil = mob.getPersistentData().getLong("aztecabyss_provoked_until");
             net.minecraft.world.entity.LivingEntity current = mob.getTarget();
-            if (current == null || !current.isAlive()) {
-                ServerPlayer target = nearestTarget(present, mob.blockPosition());
-                if (target != null) {
-                    mob.setTarget(target);
+            if (now < provokedUntil && current instanceof ServerPlayer p && p.isAlive()
+                    && !p.getData(ModAttachments.RUN_STATE).isDowned()) {
+                continue;
+            }
+
+            // A hunter standing in its path takes priority over the objective.
+            ServerPlayer blocking = nearestTargetWithin(present, mob.blockPosition(), AGGRO_RADIUS);
+            if (blocking != null) {
+                mob.setTarget(blocking);
+                continue;
+            }
+
+            if (objective == null) {
+                if (current == null || !current.isAlive()) {
+                    ServerPlayer target = nearestTarget(present, mob.blockPosition());
+                    if (target != null) {
+                        mob.setTarget(target);
+                    }
+                }
+                continue;
+            }
+
+            // Otherwise: march on the thing they came here to break.
+            mob.setTarget(null);
+            if (mob.getNavigation().isDone() || now % 40L == 0L) {
+                mob.getNavigation().moveTo(objective.getX() + 0.5, objective.getY(), objective.getZ() + 0.5, 1.0);
+            }
+        }
+    }
+
+    /** Nearest standing hunter within a radius, or null. */
+    private static ServerPlayer nearestTargetWithin(List<ServerPlayer> present, BlockPos from, double radius) {
+        ServerPlayer best = null;
+        double bestDist = radius * radius;
+        for (ServerPlayer p : present) {
+            if (p.getData(ModAttachments.RUN_STATE).isDowned()) {
+                continue;
+            }
+            double d = p.distanceToSqr(from.getX() + 0.5, from.getY(), from.getZ() + 0.5);
+            if (d <= bestDist) {
+                bestDist = d;
+                best = p;
+            }
+        }
+        return best;
+    }
+
+    /** A player hit a wave mob: it turns on them for a while. */
+    public static void provokeMob(Mob mob, ServerPlayer by, long gameTime) {
+        mob.getPersistentData().putLong("aztecabyss_provoked_until", gameTime + PROVOKE_TICKS);
+        mob.setTarget(by);
+    }
+
+    /**
+     * Mobs crowding the objective chew through it. Damage scales with how many
+     * are on it, so letting the horde reach the Heart is visibly punishing.
+     */
+    private static void tickObjective(ServerLevel level, List<ServerPlayer> present) {
+        BlockPos heart = game.getMap().objective();
+        if (heart == null) {
+            return;
+        }
+        if (game.getObjectiveHealth() <= 0.0f) {
+            return;
+        }
+
+        double reach = 3.0;
+        net.minecraft.world.phys.AABB near = new net.minecraft.world.phys.AABB(heart).inflate(reach);
+        List<Mob> onIt = level.getEntitiesOfClass(Mob.class, near,
+                m -> m.getPersistentData().getBoolean("aztecabyss_wave_mob"));
+
+        if (!onIt.isEmpty()) {
+            float dmg = 1.0f * onIt.size();
+            game.setObjectiveHealth(game.getObjectiveHealth() - dmg);
+            level.sendParticles(ParticleTypes.CRIT,
+                    heart.getX() + 0.5, heart.getY() + 0.5, heart.getZ() + 0.5, 6, 0.4, 0.4, 0.4, 0.1);
+            if (level.getGameTime() % 20L == 0L) {
+                for (ServerPlayer p : present) {
+                    level.playSound(null, heart, net.minecraft.sounds.SoundEvents.ANVIL_LAND,
+                            SoundSource.HOSTILE, 0.5F, 0.6F);
+                    actionBar(p, "§4⚠ THE HEART IS UNDER ATTACK!");
                 }
             }
+        } else if (level.getGameTime() % 60L == 0L && game.getPhase() == AbyssGame.Phase.BETWEEN_ROUNDS) {
+            // Slowly knits itself back together during the breather.
+            game.setObjectiveHealth(game.getObjectiveHealth() + 5.0f);
+        }
+
+        // Ambient glow so it always reads as the thing to protect.
+        if (level.getGameTime() % 10L == 0L) {
+            level.sendParticles(ParticleTypes.END_ROD,
+                    heart.getX() + 0.5, heart.getY() + 0.9, heart.getZ() + 0.5, 2, 0.25, 0.25, 0.25, 0.01);
+        }
+
+        if (game.getObjectiveHealth() <= 0.0f) {
+            for (ServerPlayer p : present) {
+                title(p, "§4§lTHE HEART HAS FALLEN", "§cThe hold is broken.");
+                level.playSound(null, heart, net.minecraft.sounds.SoundEvents.GENERIC_EXPLODE.value(),
+                        SoundSource.HOSTILE, 1.4F, 0.5F);
+            }
+            level.sendParticles(ParticleTypes.EXPLOSION_EMITTER,
+                    heart.getX() + 0.5, heart.getY() + 0.5, heart.getZ() + 0.5, 1, 0, 0, 0, 0);
+            endGame(level, false);
+        }
+    }
+
+    /** Per-player health bar for the objective, shown under the round bar. */
+    private static final Map<UUID, ServerBossEvent> HEART_BARS = new HashMap<>();
+
+    private static void setupHeartBar(ServerPlayer player) {
+        if (game.getMap().objective() == null) {
+            return;
+        }
+        ServerBossEvent bar = new ServerBossEvent(Component.literal("§b❤ The Heart"),
+                BossEvent.BossBarColor.BLUE, BossEvent.BossBarOverlay.PROGRESS);
+        bar.setProgress(game.objectiveFraction());
+        bar.addPlayer(player);
+        HEART_BARS.put(player.getUUID(), bar);
+    }
+
+    private static void updateHeartBars() {
+        if (HEART_BARS.isEmpty()) {
+            return;
+        }
+        float frac = game.objectiveFraction();
+        for (ServerBossEvent bar : HEART_BARS.values()) {
+            bar.setProgress(Math.max(0.0f, Math.min(1.0f, frac)));
+            bar.setColor(frac > 0.5f ? BossEvent.BossBarColor.BLUE
+                    : frac > 0.25f ? BossEvent.BossBarColor.YELLOW : BossEvent.BossBarColor.RED);
         }
     }
 
@@ -1447,6 +1594,10 @@ public final class RoundManager {
         ServerBossEvent bar = BOSS_BARS.remove(player.getUUID());
         if (bar != null) {
             bar.removeAllPlayers();
+        }
+        ServerBossEvent heart = HEART_BARS.remove(player.getUUID());
+        if (heart != null) {
+            heart.removeAllPlayers();
         }
     }
 

@@ -40,6 +40,11 @@ public final class AbyssGame {
     /** Which arena this run is being fought in. Fixed when the first player enters. */
     private com.jrpetty.aztecabyss.worldgen.ArenaMap map = com.jrpetty.aztecabyss.worldgen.ArenaMap.TEMPLE;
 
+    // --- Defence objective (maps that have something to protect) ---
+    /** Max health of the objective. */
+    public static final float OBJECTIVE_MAX_HEALTH = 500.0f;
+    private float objectiveHealth = OBJECTIVE_MAX_HEALTH;
+
     // --- Boss-round state (rounds 10 and the final round summon the Warden) ---
     /** True while the current round is a boss round. */
     private boolean bossRound = false;
@@ -146,6 +151,23 @@ public final class AbyssGame {
 
     public boolean isMultiplayerRun() {
         return everMultiplayer;
+    }
+
+    public float getObjectiveHealth() {
+        return objectiveHealth;
+    }
+
+    public void setObjectiveHealth(float v) {
+        this.objectiveHealth = Math.max(0.0f, Math.min(OBJECTIVE_MAX_HEALTH, v));
+    }
+
+    public float objectiveFraction() {
+        return objectiveHealth / OBJECTIVE_MAX_HEALTH;
+    }
+
+    /** True when this run has something to defend and it's still standing. */
+    public boolean hasLiveObjective() {
+        return map.objective() != null && objectiveHealth > 0.0f;
     }
 
     public com.jrpetty.aztecabyss.worldgen.ArenaMap getMap() {

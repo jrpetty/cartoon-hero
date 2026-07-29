@@ -45,6 +45,15 @@ public final class RunRecapScreen extends Screen {
         }
     }
 
+    /**
+     * A flat dark wash instead of vanilla's blurred backdrop - the blur made the
+     * scoreboard text read as smeared.
+     */
+    @Override
+    public void renderBackground(GuiGraphics g, int mouseX, int mouseY, float partialTick) {
+        g.fill(0, 0, this.width, this.height, 0xE0080608);
+    }
+
     @Override
     public void render(GuiGraphics g, int mouseX, int mouseY, float partialTick) {
         this.renderBackground(g, mouseX, mouseY, partialTick);

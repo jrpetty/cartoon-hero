@@ -28,14 +28,10 @@ public final class ClientAbyssState {
     /** Latest squadmate snapshot for the co-op teammate HUD. */
     private static volatile java.util.List<com.jrpetty.aztecabyss.network.TeammateInfo> squad = java.util.List.of();
 
-    /** Counts down while the arrival cinematic plays (client ticks). 0 = not playing. */
-    private static int cinematicTicks = 0;
-
     private ClientAbyssState() {
     }
 
     public static void accept(AbyssStatePayload payload) {
-        boolean wasInRun = inRun;
         inRun = payload.inRun();
         round = payload.round();
         fogRound = payload.fogRound();
@@ -43,13 +39,6 @@ public final class ClientAbyssState {
         playersUp = payload.playersUp();
         playersTotal = payload.playersTotal();
         myKills = payload.myKills();
-        // Entering an active run triggers the arrival cinematic.
-        if (inRun && !wasInRun) {
-            cinematicTicks = 110; // ~5.5s
-        }
-        if (!inRun) {
-            cinematicTicks = 0;
-        }
     }
 
     public static void openRecap(RunRecapPayload payload) {
@@ -116,16 +105,6 @@ public final class ClientAbyssState {
 
     public static void toggleHud() {
         hudVisible = !hudVisible;
-    }
-
-    public static int getCinematicTicks() {
-        return cinematicTicks;
-    }
-
-    public static void decrementCinematic() {
-        if (cinematicTicks > 0) {
-            cinematicTicks--;
-        }
     }
 
     /** 0.0 at round 0, ramping to 1.0 by the final round - drives fog thickness etc. */

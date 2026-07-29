@@ -111,6 +111,14 @@ public enum ArenaMap {
         return borderSize;
     }
 
+    /**
+     * The block the horde makes for on this map, or null if there's nothing to
+     * defend and they simply hunt players.
+     */
+    public BlockPos objective() {
+        return this == BRIDGE ? BridgeBuilder.HEART : null;
+    }
+
     /** The volume wave mobs are tracked and swept within for this map. */
     public AABB bounds() {
         if (this == BRIDGE) {

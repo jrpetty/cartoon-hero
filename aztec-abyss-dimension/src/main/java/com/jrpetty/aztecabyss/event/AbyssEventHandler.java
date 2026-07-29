@@ -125,6 +125,9 @@ public final class AbyssEventHandler {
                 || !RoundManager.game().isParticipant(shooter.getUUID())) {
             return;
         }
+        // Hitting a mob pulls it off the objective and onto you.
+        RoundManager.provokeMob(mob, shooter, level.getGameTime());
+
         double headLine = mob.getY() + mob.getBbHeight() * 0.75;
         if (projectile.getY() >= headLine) {
             RunState rs = shooter.getData(ModAttachments.RUN_STATE);
@@ -132,6 +135,22 @@ public final class AbyssEventHandler {
             shooter.setData(ModAttachments.RUN_STATE, rs);
             level.playSound(null, shooter.blockPosition(),
                     net.minecraft.sounds.SoundEvents.PLAYER_ATTACK_CRIT, net.minecraft.sounds.SoundSource.PLAYERS, 0.6F, 1.8F);
+        }
+    }
+
+    /** Any hit from a hunter - melee or otherwise - drags a mob's attention onto them. */
+    @SubscribeEvent
+    public void onMobProvoked(LivingIncomingDamageEvent event) {
+        if (!(event.getEntity() instanceof Mob mob)
+                || !(mob.level() instanceof ServerLevel level) || !inAbyss(level)) {
+            return;
+        }
+        if (!mob.getPersistentData().getBoolean("aztecabyss_wave_mob")) {
+            return;
+        }
+        if (event.getSource().getEntity() instanceof ServerPlayer attacker
+                && RoundManager.game().isParticipant(attacker.getUUID())) {
+            RoundManager.provokeMob(mob, attacker, level.getGameTime());
         }
     }
 

@@ -47,9 +47,6 @@ public final class BridgeBuilder {
     /** Rough middle of the playable span, used to centre the world border. */
     public static final int CENTER_Z = 15;
 
-    /** Flanking walls, 40 blocks clear of each bridge edge. */
-    public static final int WALL_OFFSET = 40;
-
     /** Where players spawn in - behind the fort, on the island. */
     public static final BlockPos ARRIVAL = new BlockPos(CENTER_X, DECK_Y + 1, ISLAND_CENTER_Z + 14);
 
@@ -60,6 +57,13 @@ public final class BridgeBuilder {
 
     /** Extraction glyph, tucked inside the fort courtyard. */
     public static final BlockPos EXTRACTION = new BlockPos(CENTER_X, DECK_Y, ISLAND_CENTER_Z + 6);
+
+    /**
+     * The Heart: the thing you're actually defending. Sits on its dais in the
+     * middle of the fort courtyard - the horde makes straight for it, and if it
+     * falls, the run is over.
+     */
+    public static final BlockPos HEART = new BlockPos(CENTER_X, DECK_Y + 3, ISLAND_CENTER_Z + 4);
 
     /** Sentinel: if this is already the fort's beacon block, the map is built. */
     private static final BlockPos SENTINEL = new BlockPos(CENTER_X, DECK_Y + 1, ISLAND_CENTER_Z);
@@ -74,7 +78,6 @@ public final class BridgeBuilder {
         Random rng = new Random(SEED);
         buildIsland(level, rng);
         buildBridge(level, rng);
-        buildFlankWalls(level);
         buildGate(level);
         buildFort(level, rng);
         buildArrivalFrame(level);
@@ -265,21 +268,8 @@ public final class BridgeBuilder {
     }
 
     // ------------------------------------------------------------------
-    // Flank walls + the horde gate
+    // The horde gate
     // ------------------------------------------------------------------
-
-    private static void buildFlankWalls(ServerLevel level) {
-        int minZ = NORTH_END - 20;
-        int maxZ = ISLAND_CENTER_Z + ISLAND_RADIUS + 16;
-        for (int side : new int[]{-HALF_WIDTH - WALL_OFFSET, HALF_WIDTH - 1 + WALL_OFFSET}) {
-            int x = CENTER_X + side;
-            for (int z = minZ; z <= maxZ; z++) {
-                for (int y = DECK_Y - 30; y <= DECK_Y + 30; y++) {
-                    level.setBlock(new BlockPos(x, y, z), Blocks.BEDROCK.defaultBlockState(), 2);
-                }
-            }
-        }
-    }
 
     private static void buildGate(ServerLevel level) {
         BlockPos gate = GATES[0];
@@ -375,8 +365,10 @@ public final class BridgeBuilder {
                         Blocks.GILDED_BLACKSTONE.defaultBlockState(), 2);
             }
         }
-        level.setBlock(new BlockPos(CENTER_X, DECK_Y + 2, cz + 4), Blocks.SOUL_SOIL.defaultBlockState(), 2);
-        level.setBlock(new BlockPos(CENTER_X, DECK_Y + 3, cz + 4), Blocks.SOUL_FIRE.defaultBlockState(), 2);
+        // The Heart itself, raised on the dais: a glowing crystal the horde wants.
+        level.setBlock(new BlockPos(CENTER_X, DECK_Y + 2, cz + 4), Blocks.CRYING_OBSIDIAN.defaultBlockState(), 2);
+        level.setBlock(HEART, Blocks.SEA_LANTERN.defaultBlockState(), 2);
+        level.setBlock(new BlockPos(CENTER_X, DECK_Y + 4, cz + 4), Blocks.SOUL_FIRE.defaultBlockState(), 2);
         for (int[] c : new int[][]{{-2, 2}, {2, 2}, {-2, -2}, {2, -2}}) {
             int sx = CENTER_X + c[0];
             int sz = cz + 4 + c[1];

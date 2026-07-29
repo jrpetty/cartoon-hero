@@ -6,9 +6,7 @@
       "biome": "aztecabyss:abyss",
       "lakes": false,
       "features": false,
-      "layers": [
-        { "block": "minecraft:bedrock", "height": 1 }
-      ]
+      "layers": []
     }
   }
 }

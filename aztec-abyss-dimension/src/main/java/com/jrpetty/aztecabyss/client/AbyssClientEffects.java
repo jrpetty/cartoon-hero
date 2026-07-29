@@ -63,10 +63,6 @@ public final class AbyssClientEffects {
             sendPing(mc, player);
         }
 
-        if (ClientAbyssState.getCinematicTicks() > 0) {
-            playArrivalCinematic(mc, player);
-        }
-
         // Floating spores.
         for (int i = 0; i < 6; i++) {
             double x = player.getX() + (mc.level.random.nextDouble() - 0.5) * 24;
@@ -130,44 +126,6 @@ public final class AbyssClientEffects {
             player.playSound(ModSounds.HEARTBEAT.get(), 0.9f, 1.0f);
             heartbeatCooldown = (int) (14 + hp * 20); // faster as HP drops
         }
-    }
-
-    /**
-     * The arrival sequence: the view swings to settle on the temple through the
-     * trees while a staged title crawls and a low drone swells, before control
-     * returns and the first round horn sounds.
-     */
-    private static void playArrivalCinematic(Minecraft mc, LocalPlayer player) {
-        int t = ClientAbyssState.getCinematicTicks(); // counts DOWN from ~110
-        ClientAbyssState.decrementCinematic();
-
-        // Ease the camera to face the temple centre (0, ~70, 0).
-        double dx = 0.0 - player.getX();
-        double dy = (AztecAbyssConstants.ARENA_FLOOR_Y + 14) - player.getEyeY();
-        double dz = 0.0 - player.getZ();
-        double horiz = Math.sqrt(dx * dx + dz * dz);
-        float targetYaw = (float) (Math.toDegrees(Math.atan2(-dx, dz)));
-        float targetPitch = (float) (-Math.toDegrees(Math.atan2(dy, horiz)));
-        player.setYRot(lerpAngle(player.getYRot(), targetYaw, 0.08f));
-        player.setXRot(Mth.lerp(0.08f, player.getXRot(), targetPitch));
-
-        // Drone swell at the very start.
-        if (t == 110) {
-            player.playSound(ModSounds.AMBIENT_DREAD.get(), 1.0f, 0.5f);
-            mc.gui.setTimes(8, 50, 20);
-            mc.gui.setTitle(net.minecraft.network.chat.Component.literal("§0§lTHE AZTEC ABYSS"));
-            mc.gui.setSubtitle(net.minecraft.network.chat.Component.literal("§8Something ancient has been waiting."));
-        }
-        if (t == 55) {
-            mc.gui.setTimes(8, 40, 15);
-            mc.gui.setTitle(net.minecraft.network.chat.Component.literal(""));
-            mc.gui.setSubtitle(net.minecraft.network.chat.Component.literal("§7The temple watches through the trees..."));
-        }
-    }
-
-    private static float lerpAngle(float from, float to, float f) {
-        float delta = Mth.wrapDegrees(to - from);
-        return from + delta * f;
     }
 
     /** Ray-casts where the player is looking (up to 48 blocks) and pings that spot to the squad. */
