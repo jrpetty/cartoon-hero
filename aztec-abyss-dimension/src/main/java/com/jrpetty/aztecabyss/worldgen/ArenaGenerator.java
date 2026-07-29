@@ -35,6 +35,9 @@ public final class ArenaGenerator {
     }
 
     public static void generateIfNeeded(ServerLevel level) {
+        // The second arena lives far along +X in the same dimension.
+        BridgeBuilder.generateIfNeeded(level);
+
         BlockState sentinel = level.getBlockState(AztecAbyssConstants.TEMPLE_CENTER);
         if (sentinel.is(Blocks.GILDED_BLACKSTONE)) {
             return; // already built

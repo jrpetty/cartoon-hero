@@ -39,6 +39,23 @@ public final class ModNetworking {
                 SquadPayload.TYPE,
                 SquadPayload.STREAM_CODEC,
                 (payload, context) -> context.enqueueWork(() -> ClientAbyssState.acceptSquad(payload)));
+        registrar.playToClient(
+                OpenMapPickerPayload.TYPE,
+                OpenMapPickerPayload.STREAM_CODEC,
+                (payload, context) -> context.enqueueWork(() -> ClientAbyssState.openMapPicker(payload)));
+        registrar.playToServer(
+                MapSelectPayload.TYPE,
+                MapSelectPayload.STREAM_CODEC,
+                (payload, context) -> context.enqueueWork(() -> {
+                    if (context.player() instanceof ServerPlayer sp) {
+                        int id = Math.max(0, Math.min(payload.mapId(),
+                                com.jrpetty.aztecabyss.worldgen.ArenaMap.values().length - 1));
+                        sp.getPersistentData().putInt("aztecabyss_chosen_map", id);
+                        sp.displayClientMessage(net.minecraft.network.chat.Component.literal(
+                                "§6✦ Hunt set: §e" + com.jrpetty.aztecabyss.worldgen.ArenaMap.byId(id).title()
+                                        + " §7— step through the portal when you're ready."), false);
+                    }
+                }));
         registrar.playToServer(
                 PingPayload.TYPE,
                 PingPayload.STREAM_CODEC,
@@ -69,6 +86,12 @@ public final class ModNetworking {
     /** Pushes the player's re-entry cooldown deadline so their screen can count it down. */
     public static void sendCooldown(ServerPlayer player, long cooldownUntil) {
         PacketDistributor.sendToPlayer(player, new AbyssCooldownPayload(cooldownUntil));
+    }
+
+    /** Opens the arena picker on a player's screen, pre-selecting their last choice. */
+    public static void sendOpenMapPicker(ServerPlayer player) {
+        PacketDistributor.sendToPlayer(player,
+                new OpenMapPickerPayload(player.getPersistentData().getInt("aztecabyss_chosen_map")));
     }
 
     /** Pushes a player's squadmate list for the co-op teammate HUD. */

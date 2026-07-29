@@ -82,7 +82,7 @@ public final class RoundManager {
      * it (and can't get bounced straight home by standing in it on arrival).
      */
     public static void setArrivalPortalOpen(ServerLevel level, boolean open) {
-        BlockPos arrival = AztecAbyssConstants.ABYSS_ARRIVAL_POS;
+        BlockPos arrival = game.getMap().arrival();
         int floorY = arrival.getY() - 1;
         for (int dx = 0; dx <= 1; dx++) {
             for (int dy = 1; dy <= 3; dy++) {
@@ -119,8 +119,14 @@ public final class RoundManager {
 
         if (game.getPhase() == AbyssGame.Phase.IDLE || game.getPhase() == AbyssGame.Phase.ENDED) {
             resetSession();
+            // The first player through fixes the arena for the whole run.
+            game.setMap(com.jrpetty.aztecabyss.worldgen.ArenaMap.byId(
+                    player.getPersistentData().getInt("aztecabyss_chosen_map")));
             if (player.level() instanceof ServerLevel abyssLevel) {
                 clearSupplyCaches(abyssLevel); // sweep away last run's caches
+                com.jrpetty.aztecabyss.worldgen.ArenaMap m = game.getMap();
+                abyssLevel.getWorldBorder().setCenter(m.borderCenterX(), m.borderCenterZ());
+                abyssLevel.getWorldBorder().setSize(m.borderSize());
             }
             game.setPhase(AbyssGame.Phase.BETWEEN_ROUNDS);
             game.setRound(0);
@@ -258,7 +264,9 @@ public final class RoundManager {
         // On a boss round the Warden is the objective; the wave is trimmed to a
         // pressure of adds (the boss summons more as the fight drags on).
         game.setKillsNeededThisRound(bossRound ? Math.max(4, fullWave / 3) : fullWave);
-        com.jrpetty.aztecabyss.worldgen.ArenaGenerator.escalateTemple(level, round);
+        if (game.getMap() == com.jrpetty.aztecabyss.worldgen.ArenaMap.TEMPLE) {
+            com.jrpetty.aztecabyss.worldgen.ArenaGenerator.escalateTemple(level, round);
+        }
 
         int max = AbyssConfig.MAX_ROUND.get();
         for (ServerPlayer p : participantPlayers(level)) {
@@ -317,11 +325,12 @@ public final class RoundManager {
     }
 
     private static void spawnWaveMob(ServerLevel level, List<ServerPlayer> present, int round, boolean brute) {
-        // Every wave mob pours out of one of the four cardinal horde gates.
-        BlockPos gate = AztecAbyssConstants.MOB_GATES[RNG.nextInt(AztecAbyssConstants.MOB_GATES.length)];
-        boolean onZAxis = gate.getX() == 0; // north/south gates jitter along X; east/west along Z
-        int jitter = RNG.nextInt(3) - 1;
-        BlockPos pos = onZAxis ? gate.offset(jitter, 0, 0) : gate.offset(0, 0, jitter);
+        // Every wave mob pours out of one of the active map's horde gates.
+        BlockPos[] gates = game.getMap().gates();
+        BlockPos gate = gates[RNG.nextInt(gates.length)];
+        boolean spreadAlongX = gate.getZ() != 0 || gates.length == 1;
+        int jitter = RNG.nextInt(5) - 2;
+        BlockPos pos = spreadAlongX ? gate.offset(jitter, 0, 0) : gate.offset(0, 0, jitter);
         level.sendParticles(net.minecraft.core.particles.ParticleTypes.PORTAL,
                 pos.getX() + 0.5, pos.getY() + 1.0, pos.getZ() + 0.5, 12, 0.4, 0.8, 0.4, 0.05);
 
@@ -427,8 +436,17 @@ public final class RoundManager {
     // Boss rounds - the Obsidian Warlord (round 10) and the Warden finale
     // ------------------------------------------------------------------
 
-    /** Fixed, dramatic spawn point: between the arrival walkway and the temple. */
-    private static final BlockPos BOSS_SPAWN = new BlockPos(0, AztecAbyssConstants.ARENA_FLOOR_Y + 1, 16);
+    /**
+     * Where a boss makes its entrance: on the temple map, between the arrival
+     * walkway and the pyramid; on the bridge, striding out of the far gate.
+     */
+    private static BlockPos bossSpawn() {
+        if (game.getMap() == com.jrpetty.aztecabyss.worldgen.ArenaMap.BRIDGE) {
+            BlockPos gate = game.getMap().gates()[0];
+            return gate.offset(0, 0, 4);
+        }
+        return new BlockPos(0, AztecAbyssConstants.ARENA_FLOOR_Y + 1, 16);
+    }
 
     /** True when the current boss round is the final round (the Warden); otherwise it's the mid-boss Warlord. */
     private static boolean isFinaleBoss() {
@@ -443,8 +461,9 @@ public final class RoundManager {
         if (boss == null) {
             return;
         }
-        boss.moveTo(BOSS_SPAWN.getX() + 0.5, BOSS_SPAWN.getY(), BOSS_SPAWN.getZ() + 0.5, 180.0F, 0.0F);
-        boss.finalizeSpawn(level, level.getCurrentDifficultyAt(BOSS_SPAWN), MobSpawnType.EVENT, null);
+        BlockPos spawnAt = bossSpawn();
+        boss.moveTo(spawnAt.getX() + 0.5, spawnAt.getY(), spawnAt.getZ() + 0.5, 180.0F, 0.0F);
+        boss.finalizeSpawn(level, level.getCurrentDifficultyAt(spawnAt), MobSpawnType.EVENT, null);
 
         // Explicit, hand-tuned stat line rather than the generic wave scaling: a
         // huge but not interminable health pool, brutal hits, unshakable footing.
@@ -468,9 +487,9 @@ public final class RoundManager {
         level.addFreshEntity(boss);
 
         // Emergence spectacle: a pillar of light, a ground-crack burst, and an ember plume.
-        double bx = BOSS_SPAWN.getX() + 0.5;
-        double by = BOSS_SPAWN.getY();
-        double bz = BOSS_SPAWN.getZ() + 0.5;
+        double bx = spawnAt.getX() + 0.5;
+        double by = spawnAt.getY();
+        double bz = spawnAt.getZ() + 0.5;
         for (int dy = 0; dy < 14; dy++) {
             level.sendParticles(ParticleTypes.END_ROD, bx, by + dy, bz, 3, 0.18, 0.25, 0.18, 0.0);
         }
@@ -767,7 +786,7 @@ public final class RoundManager {
 
     /** Places or clears the glowing extraction glyph on the south approach. */
     private static void setExtractionGlyph(ServerLevel level, boolean show) {
-        BlockPos c = AztecAbyssConstants.EXTRACTION_POS;
+        BlockPos c = game.getMap().extraction();
         for (int dx = -1; dx <= 1; dx++) {
             for (int dz = -1; dz <= 1; dz++) {
                 BlockPos p = c.offset(dx, 0, dz);
@@ -796,7 +815,7 @@ public final class RoundManager {
         if (!AbyssConfig.ENABLE_EXTRACTION.get() || game.getRound() < 1) {
             return false;
         }
-        BlockPos glyph = AztecAbyssConstants.EXTRACTION_POS;
+        BlockPos glyph = game.getMap().extraction();
         int needed = AbyssConfig.EXTRACTION_CHANNEL_TICKS.get();
         boolean anyChannelling = false;
 
@@ -1149,9 +1168,7 @@ public final class RoundManager {
 
     private static void clearWaveMobs(ServerLevel level) {
         level.getEntitiesOfClass(Mob.class,
-                        new net.minecraft.world.phys.AABB(
-                                -AztecAbyssConstants.ARENA_RADIUS, AztecAbyssConstants.ARENA_FLOOR_Y - 4, -AztecAbyssConstants.ARENA_RADIUS,
-                                AztecAbyssConstants.ARENA_RADIUS, AztecAbyssConstants.ARENA_FLOOR_Y + AztecAbyssConstants.WALL_HEIGHT, AztecAbyssConstants.ARENA_RADIUS),
+                        game.getMap().bounds(),
                         m -> m.getPersistentData().getBoolean("aztecabyss_wave_mob"))
                 .forEach(m -> m.remove(Entity.RemovalReason.DISCARDED));
         game.setAliveZombies(0);
@@ -1162,11 +1179,24 @@ public final class RoundManager {
 
     /** Drops a randomised supply cache somewhere on the open arena floor, flare and all. */
     private static void spawnSupplyCache(ServerLevel level, int round) {
-        double angle = RNG.nextDouble() * Math.PI * 2.0;
-        int r = 28 + RNG.nextInt(18); // 28-45: clear of the temple base, well inside the arena
-        int x = (int) Math.round(Math.cos(angle) * r);
-        int z = (int) Math.round(Math.sin(angle) * r);
-        BlockPos pos = new BlockPos(x, AztecAbyssConstants.ARENA_FLOOR_Y + 1, z);
+        BlockPos pos;
+        if (game.getMap() == com.jrpetty.aztecabyss.worldgen.ArenaMap.BRIDGE) {
+            // Lands on the island, near the fort, so it's grabbable between waves.
+            double a = RNG.nextDouble() * Math.PI * 2.0;
+            int rr = 6 + RNG.nextInt(8);
+            pos = new BlockPos(
+                    com.jrpetty.aztecabyss.worldgen.BridgeBuilder.CENTER_X + (int) Math.round(Math.cos(a) * rr),
+                    com.jrpetty.aztecabyss.worldgen.BridgeBuilder.DECK_Y + 1,
+                    com.jrpetty.aztecabyss.worldgen.BridgeBuilder.ISLAND_CENTER_Z + 10 + (int) Math.round(Math.sin(a) * rr));
+        } else {
+            double angle = RNG.nextDouble() * Math.PI * 2.0;
+            int r = 28 + RNG.nextInt(18); // 28-45: clear of the temple base, well inside the arena
+            pos = new BlockPos((int) Math.round(Math.cos(angle) * r),
+                    AztecAbyssConstants.ARENA_FLOOR_Y + 1,
+                    (int) Math.round(Math.sin(angle) * r));
+        }
+        int x = pos.getX();
+        int z = pos.getZ();
 
         SupplyCache.Result cache = SupplyCache.roll(round);
         level.setBlock(pos, Blocks.CHEST.defaultBlockState(), 3);
@@ -1339,19 +1369,17 @@ public final class RoundManager {
      */
     private static void repatriateStuckMobs(ServerLevel level, List<ServerPlayer> present) {
         long now = level.getGameTime();
-        int r = AztecAbyssConstants.ARENA_RADIUS;
-        List<Mob> mobs = level.getEntitiesOfClass(Mob.class,
-                new net.minecraft.world.phys.AABB(-r, AztecAbyssConstants.ARENA_FLOOR_Y - 8, -r,
-                        r, AztecAbyssConstants.ARENA_FLOOR_Y + AztecAbyssConstants.WALL_HEIGHT, r),
+        List<Mob> mobs = level.getEntitiesOfClass(Mob.class, game.getMap().bounds(),
                 m -> m.getPersistentData().getBoolean("aztecabyss_wave_mob")
                         && !m.getPersistentData().getBoolean("aztecabyss_boss"));
 
+        BlockPos[] gates = game.getMap().gates();
         for (Mob mob : mobs) {
             long since = now - mob.getPersistentData().getLong("aztecabyss_gate_tick");
             if (since < STUCK_TICKS) {
                 continue;
             }
-            BlockPos gate = AztecAbyssConstants.MOB_GATES[RNG.nextInt(AztecAbyssConstants.MOB_GATES.length)];
+            BlockPos gate = gates[RNG.nextInt(gates.length)];
             mob.teleportTo(gate.getX() + 0.5, gate.getY(), gate.getZ() + 0.5);
             mob.getPersistentData().putLong("aztecabyss_gate_tick", now);
             ServerPlayer target = nearestTarget(present, gate);
@@ -1365,10 +1393,7 @@ public final class RoundManager {
 
     /** Keeps every wave mob locked onto the closest hunter so nothing loiters. */
     private static void retargetWaveMobs(ServerLevel level, List<ServerPlayer> present) {
-        int r = AztecAbyssConstants.ARENA_RADIUS;
-        List<Mob> mobs = level.getEntitiesOfClass(Mob.class,
-                new net.minecraft.world.phys.AABB(-r, AztecAbyssConstants.ARENA_FLOOR_Y - 8, -r,
-                        r, AztecAbyssConstants.ARENA_FLOOR_Y + AztecAbyssConstants.WALL_HEIGHT, r),
+        List<Mob> mobs = level.getEntitiesOfClass(Mob.class, game.getMap().bounds(),
                 m -> m.getPersistentData().getBoolean("aztecabyss_wave_mob"));
         for (Mob mob : mobs) {
             net.minecraft.world.entity.LivingEntity current = mob.getTarget();

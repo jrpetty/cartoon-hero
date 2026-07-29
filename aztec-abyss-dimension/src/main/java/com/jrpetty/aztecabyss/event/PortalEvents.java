@@ -50,6 +50,16 @@ public final class PortalEvents {
         BlockState clickedState = level.getBlockState(clicked);
         ItemStack stack = event.getItemStack();
 
+        // Right-clicking a lit portal in the overworld opens the arena picker.
+        if (clickedState.is(ModBlocks.ABYSS_PORTAL.get())
+                && !level.dimension().equals(AztecAbyssConstants.ABYSS_LEVEL_KEY)
+                && event.getEntity() instanceof ServerPlayer sp) {
+            com.jrpetty.aztecabyss.network.ModNetworking.sendOpenMapPicker(sp);
+            event.setCanceled(true);
+            event.setCancellationResult(net.minecraft.world.InteractionResult.SUCCESS);
+            return;
+        }
+
         if (!AbyssPortalShape.isFrameBlock(clickedState) || !(stack.getItem() instanceof FlintAndSteelItem)) {
             return;
         }
@@ -184,7 +194,10 @@ public final class PortalEvents {
         state.setHome(player.blockPosition(), currentDim);
         player.setData(ModAttachments.RUN_STATE, state);
 
-        player.changeDimension(AbyssTeleporter.toAbyssArrival(abyss));
+        // Whichever arena this player picked at the portal (defaults to the temple).
+        com.jrpetty.aztecabyss.worldgen.ArenaMap chosen = com.jrpetty.aztecabyss.worldgen.ArenaMap.byId(
+                player.getPersistentData().getInt("aztecabyss_chosen_map"));
+        player.changeDimension(AbyssTeleporter.toAbyssArrival(abyss, chosen));
         // Don't let the arrival portal immediately fling them home again.
         player.getPersistentData().putLong("aztecabyss_portal_grace", abyss.getGameTime() + 100L);
         RoundManager.onPlayerEnter(player);

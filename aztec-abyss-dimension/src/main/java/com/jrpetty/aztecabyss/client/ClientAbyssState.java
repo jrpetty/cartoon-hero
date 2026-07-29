@@ -56,6 +56,10 @@ public final class ClientAbyssState {
         Minecraft.getInstance().setScreen(new RunRecapScreen(payload));
     }
 
+    public static void openMapPicker(com.jrpetty.aztecabyss.network.OpenMapPickerPayload payload) {
+        Minecraft.getInstance().setScreen(new MapSelectScreen(payload.currentChoice()));
+    }
+
     public static void acceptCooldown(com.jrpetty.aztecabyss.network.AbyssCooldownPayload payload) {
         cooldownUntil = payload.cooldownUntil();
     }

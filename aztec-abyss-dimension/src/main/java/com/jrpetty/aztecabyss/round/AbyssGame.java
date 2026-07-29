@@ -37,6 +37,9 @@ public final class AbyssGame {
     /** True once this run has ever had more than one participant - classifies the run as co-op. */
     private boolean everMultiplayer = false;
 
+    /** Which arena this run is being fought in. Fixed when the first player enters. */
+    private com.jrpetty.aztecabyss.worldgen.ArenaMap map = com.jrpetty.aztecabyss.worldgen.ArenaMap.TEMPLE;
+
     // --- Boss-round state (rounds 10 and the final round summon the Warden) ---
     /** True while the current round is a boss round. */
     private boolean bossRound = false;
@@ -143,6 +146,14 @@ public final class AbyssGame {
 
     public boolean isMultiplayerRun() {
         return everMultiplayer;
+    }
+
+    public com.jrpetty.aztecabyss.worldgen.ArenaMap getMap() {
+        return map;
+    }
+
+    public void setMap(com.jrpetty.aztecabyss.worldgen.ArenaMap map) {
+        this.map = map;
     }
 
     // --- Boss round ---

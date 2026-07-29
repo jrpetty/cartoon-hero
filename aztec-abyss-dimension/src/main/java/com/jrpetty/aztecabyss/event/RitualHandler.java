@@ -54,6 +54,12 @@ public final class RitualHandler {
         BlockPos clicked = event.getPos();
         ItemStack held = event.getItemStack();
 
+        // The bridge map runs its own ritual instead of the temple's braziers.
+        if (RoundManager.game().getMap() == com.jrpetty.aztecabyss.worldgen.ArenaMap.BRIDGE) {
+            tryBridgeBeacon(level, player, game, clicked, event);
+            return;
+        }
+
         // Feeding the altar.
         if (clicked.equals(AztecAbyssConstants.ALTAR_OFFERING_POS)) {
             tryOffering(level, player, game, held, event);
@@ -65,6 +71,63 @@ public final class RitualHandler {
             if (clicked.equals(AztecAbyssConstants.BRAZIER_POSITIONS[i]) && held.getItem() == Items.FLINT_AND_STEEL) {
                 tryLightBrazier(level, player, game, i, event);
                 return;
+            }
+        }
+    }
+
+    /**
+     * The bridge's hidden ritual: four lanterns burn along the span. Douse them
+     * from the far end back toward the island - the order they were lit - and
+     * the sealed cache under the fort courtyard grinds open. Get one out of
+     * order and every lantern relights.
+     */
+    private void tryBridgeBeacon(ServerLevel level, ServerPlayer player, AbyssGame game,
+                                 BlockPos clicked, PlayerInteractEvent.RightClickBlock event) {
+        BlockPos[] beacons = com.jrpetty.aztecabyss.worldgen.BridgeBuilder.BEACONS;
+        int index = -1;
+        for (int i = 0; i < beacons.length; i++) {
+            if (beacons[i].equals(clicked)) {
+                index = i;
+                break;
+            }
+        }
+        if (index < 0 || !level.getBlockState(clicked).is(Blocks.LANTERN)) {
+            return;
+        }
+
+        int step = game.getRitualSequence().size();
+        if (index != step) {
+            // Wrong lantern - relight everything and start over.
+            for (BlockPos b : beacons) {
+                level.setBlock(b, Blocks.LANTERN.defaultBlockState(), 3);
+            }
+            game.resetRitualSequence();
+            level.playSound(null, clicked, net.minecraft.sounds.SoundEvents.FIRE_EXTINGUISH, SoundSource.BLOCKS, 1.0F, 0.6F);
+            player.displayClientMessage(Component.literal("§8The lanterns flare back to life. Wrong one."), true);
+            event.setCanceled(true);
+            return;
+        }
+
+        game.lightBrazier(index);
+        level.setBlock(clicked, Blocks.AIR.defaultBlockState(), 3);
+        level.playSound(null, clicked, ModSounds.RITUAL_PROGRESS.get(), SoundSource.BLOCKS, 1.0F, 1.0F);
+        int done = game.getRitualSequence().size();
+        player.displayClientMessage(Component.literal("§bA lantern gutters out. §3(" + done + "/4)"), true);
+        event.setCanceled(true);
+
+        if (done == beacons.length) {
+            game.setAltarFed(true);
+            RoundManager.onRitualComplete(level);
+            level.setBlock(com.jrpetty.aztecabyss.worldgen.BridgeBuilder.VAULT_SEAL,
+                    Blocks.AIR.defaultBlockState(), 3);
+            BlockEntity be = level.getBlockEntity(com.jrpetty.aztecabyss.worldgen.BridgeBuilder.VAULT_CHEST);
+            if (be instanceof ChestBlockEntity chest) {
+                int slot = 0;
+                for (ItemStack s : com.jrpetty.aztecabyss.round.RitualReward.rollVault()) {
+                    if (slot < chest.getContainerSize()) {
+                        chest.setItem(slot++, s);
+                    }
+                }
             }
         }
     }
