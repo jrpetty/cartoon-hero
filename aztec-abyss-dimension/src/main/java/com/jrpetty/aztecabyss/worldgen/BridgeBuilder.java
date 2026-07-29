@@ -44,6 +44,9 @@ public final class BridgeBuilder {
     public static final int ISLAND_CENTER_Z = 68;
     public static final int ISLAND_RADIUS = 20;
 
+    /** Rough middle of the playable span, used to centre the world border. */
+    public static final int CENTER_Z = 15;
+
     /** Flanking walls, 40 blocks clear of each bridge edge. */
     public static final int WALL_OFFSET = 40;
 
@@ -193,7 +196,7 @@ public final class BridgeBuilder {
             int x = CENTER_X + side;
             for (int dy = 1; dy <= height; dy++) {
                 BlockState body = (dy % 4 == 0)
-                        ? Blocks.POLISHED_DEEPSLATE_BRICKS.defaultBlockState()
+                        ? Blocks.DEEPSLATE_BRICKS.defaultBlockState()
                         : Blocks.DEEPSLATE_BRICKS.defaultBlockState();
                 level.setBlock(new BlockPos(x, DECK_Y + dy, z), body, 2);
                 // Widen the foot into a buttress.
@@ -359,7 +362,7 @@ public final class BridgeBuilder {
             int x = CENTER_X + c[0];
             int z = cz + c[1];
             for (int y = DECK_Y + 1; y <= wallTop + 3; y++) {
-                level.setBlock(new BlockPos(x, y, z), Blocks.POLISHED_DEEPSLATE_BRICKS.defaultBlockState(), 2);
+                level.setBlock(new BlockPos(x, y, z), Blocks.DEEPSLATE_BRICKS.defaultBlockState(), 2);
             }
             level.setBlock(new BlockPos(x, wallTop + 4, z), Blocks.SOUL_LANTERN.defaultBlockState(), 2);
         }
@@ -507,7 +510,7 @@ public final class BridgeBuilder {
                 for (int dy = 0; dy <= 3; dy++) {
                     BlockPos p = VAULT_CHEST.offset(dx, dy, dz);
                     boolean shell = dx == -2 || dx == 2 || dz == -2 || dz == 2 || dy == 0 || dy == 3;
-                    level.setBlock(p, shell ? Blocks.POLISHED_DEEPSLATE_BRICKS.defaultBlockState()
+                    level.setBlock(p, shell ? Blocks.DEEPSLATE_BRICKS.defaultBlockState()
                             : Blocks.AIR.defaultBlockState(), 3);
                 }
             }
