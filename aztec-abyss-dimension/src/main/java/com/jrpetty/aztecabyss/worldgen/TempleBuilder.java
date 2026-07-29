@@ -233,6 +233,77 @@ final class TempleBuilder {
             }
         }
         level.setBlock(new BlockPos(cx, topY + 3, cz), Blocks.BEACON.defaultBlockState(), 3);
+
+        // Colossal guardians flanking the grand stair, and hanging brazier chains.
+        buildGuardian(level, cx - 7, floorY, cz + halfWidth + 3);
+        buildGuardian(level, cx + 7, floorY, cz + halfWidth + 3);
+        hangStairBraziers(level, cx, floorY, topY, halfWidth);
+    }
+
+    /**
+     * A hulking carved guardian: blackstone legs and torso, gilded shoulders, a
+     * glowing skull head and outstretched arms. Two of these flank the temple
+     * stair so the approach reads as a threshold you're being *allowed* through.
+     */
+    private static void buildGuardian(ServerLevel level, int x, int floorY, int z) {
+        BlockState body = Blocks.POLISHED_BLACKSTONE_BRICKS.defaultBlockState();
+        BlockState trim = Blocks.GILDED_BLACKSTONE.defaultBlockState();
+
+        // Plinth.
+        for (int dx = -2; dx <= 2; dx++) {
+            for (int dz = -2; dz <= 2; dz++) {
+                level.setBlock(new BlockPos(x + dx, floorY + 1, z + dz), trim, 3);
+            }
+        }
+        // Legs.
+        for (int dy = 2; dy <= 5; dy++) {
+            level.setBlock(new BlockPos(x - 1, floorY + dy, z), body, 3);
+            level.setBlock(new BlockPos(x + 1, floorY + dy, z), body, 3);
+        }
+        // Torso, 3 wide.
+        for (int dy = 6; dy <= 10; dy++) {
+            for (int dx = -1; dx <= 1; dx++) {
+                level.setBlock(new BlockPos(x + dx, floorY + dy, z), dy == 10 ? trim : body, 3);
+            }
+        }
+        // Outstretched arms.
+        for (int dx = -3; dx <= 3; dx++) {
+            if (Math.abs(dx) < 2) {
+                continue;
+            }
+            level.setBlock(new BlockPos(x + dx, floorY + 9, z), body, 3);
+            level.setBlock(new BlockPos(x + dx, floorY + 8, z), Math.abs(dx) == 3 ? trim : body, 3);
+        }
+        // Brazier cupped in each hand.
+        for (int dx : new int[]{-3, 3}) {
+            level.setBlock(new BlockPos(x + dx, floorY + 10, z), Blocks.SOUL_LANTERN.defaultBlockState(), 3);
+        }
+        // Glowing skull head crowned in gold.
+        level.setBlock(new BlockPos(x, floorY + 11, z), Blocks.WITHER_SKELETON_SKULL.defaultBlockState(), 3);
+        level.setBlock(new BlockPos(x - 1, floorY + 11, z), Blocks.SHROOMLIGHT.defaultBlockState(), 3);
+        level.setBlock(new BlockPos(x + 1, floorY + 11, z), Blocks.SHROOMLIGHT.defaultBlockState(), 3);
+        level.setBlock(new BlockPos(x, floorY + 12, z), trim, 3);
+    }
+
+    /** Chained braziers swinging over the staircase - pools of light on the climb. */
+    private static void hangStairBraziers(ServerLevel level, int cx, int floorY, int topY, int halfWidth) {
+        int totalRise = topY - floorY;
+        for (int i = 4; i < totalRise; i += 6) {
+            int y = floorY + 1 + i;
+            int z = halfWidth - i;
+            for (int side : new int[]{-4, 4}) {
+                BlockPos anchor = new BlockPos(cx + side, y + 5, z);
+                if (!level.getBlockState(anchor).isAir()) {
+                    continue;
+                }
+                for (int c = 0; c < 3; c++) {
+                    level.setBlock(anchor.below(c), Blocks.CHAIN.defaultBlockState()
+                            .setValue(BlockStateProperties.AXIS, Direction.Axis.Y), 3);
+                }
+                level.setBlock(anchor.below(3), Blocks.LANTERN.defaultBlockState()
+                        .setValue(BlockStateProperties.HANGING, true), 3);
+            }
+        }
     }
 
     // ------------------------------------------------------------------

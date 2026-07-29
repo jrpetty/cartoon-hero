@@ -48,6 +48,8 @@ public final class ArenaGenerator {
         decoratePerimeter(level);
         applyWorldBorder(level);
         TempleBuilder.build(level, AztecAbyssConstants.TEMPLE_CENTER);
+        carveFloorVeins(level);
+        placeObelisks(level);
         placeRuins(level);
         placeOreVeins(level);
         placeLootChests(level);
@@ -83,13 +85,38 @@ public final class ArenaGenerator {
                 }
                 if (pillar) {
                     level.setBlock(new BlockPos(x, gy + 5, z), Blocks.SOUL_LANTERN.defaultBlockState(), 3);
+                    // Flanking towers so each gate reads as a monumental doorway.
+                    for (int dy = 5; dy <= 9; dy++) {
+                        level.setBlock(new BlockPos(x, gy + dy, z),
+                                dy == 9 ? Blocks.GILDED_BLACKSTONE.defaultBlockState()
+                                        : Blocks.POLISHED_BLACKSTONE_BRICKS.defaultBlockState(), 3);
+                    }
+                    level.setBlock(new BlockPos(x, gy + 10, z), Blocks.SOUL_SOIL.defaultBlockState(), 3);
+                    level.setBlock(new BlockPos(x, gy + 11, z), Blocks.SOUL_FIRE.defaultBlockState(), 3);
                 }
             }
-            // A scorched threshold so the gate reads from a distance.
-            for (int off = -2; off <= 2; off++) {
+            // Scorched threshold, glowing hot at the mouth of the gate.
+            for (int off = -3; off <= 3; off++) {
                 int x = onZAxis ? gx + off : gx;
                 int z = onZAxis ? gz : gz + off;
-                level.setBlock(new BlockPos(x, gy - 1, z), Blocks.BLACKSTONE.defaultBlockState(), 3);
+                level.setBlock(new BlockPos(x, gy - 1, z),
+                        Math.abs(off) <= 1 ? Blocks.CRYING_OBSIDIAN.defaultBlockState()
+                                : Blocks.BLACKSTONE.defaultBlockState(), 3);
+                // Scorch fanning out into the arena from the mouth.
+                for (int step = 1; step <= 4; step++) {
+                    int sx = onZAxis ? x : gx + (gx > 0 ? -step : step);
+                    int sz = onZAxis ? gz + (gz > 0 ? -step : step) : z;
+                    if (Math.abs(off) <= 3 - step / 2) {
+                        level.setBlock(new BlockPos(sx, gy - 1, sz), Blocks.BLACKSTONE.defaultBlockState(), 2);
+                    }
+                }
+            }
+            // Hanging chains and a keystone banner-slab over the arch.
+            for (int off = -1; off <= 1; off++) {
+                int x = onZAxis ? gx + off : gx;
+                int z = onZAxis ? gz : gz + off;
+                level.setBlock(new BlockPos(x, gy + 3, z), Blocks.CHAIN.defaultBlockState()
+                        .setValue(BlockStateProperties.AXIS, Direction.Axis.Y), 3);
             }
         }
     }
@@ -256,6 +283,97 @@ public final class ArenaGenerator {
                 case 1 -> ruinPillar(level, base, rng);
                 case 2 -> ruinRubble(level, base, rng);
                 default -> ruinArch(level, base, rng);
+            }
+        }
+    }
+
+    /**
+     * Glowing veins clawing outward from the temple across the arena floor:
+     * crying-obsidian and magma cracks fading into blackstone scorch. Gives the
+     * flat field depth and a sense that something under it is still alive.
+     */
+    private static void carveFloorVeins(ServerLevel level) {
+        Random rng = new Random(WORLDGEN_SEED + 11);
+        int floorY = AztecAbyssConstants.ARENA_FLOOR_Y;
+        int start = AztecAbyssConstants.TEMPLE_BASE_HALF_WIDTH + 2;
+        int end = AztecAbyssConstants.ARENA_RADIUS - 4;
+
+        int veins = 14;
+        for (int v = 0; v < veins; v++) {
+            double angle = (Math.PI * 2.0 / veins) * v + rng.nextDouble() * 0.25;
+            double drift = 0.0;
+            for (int d = start; d < end; d++) {
+                // Wander a little so the vein snakes instead of running straight.
+                drift += (rng.nextDouble() - 0.5) * 0.16;
+                double a = angle + drift;
+                int x = (int) Math.round(Math.cos(a) * d);
+                int z = (int) Math.round(Math.sin(a) * d);
+
+                // Brightest near the temple, guttering out toward the wall.
+                double t = 1.0 - (d - start) / (double) (end - start);
+                BlockState core;
+                double roll = rng.nextDouble();
+                if (roll < 0.18 * t) {
+                    core = Blocks.MAGMA_BLOCK.defaultBlockState();
+                } else if (roll < 0.45 * t) {
+                    core = Blocks.CRYING_OBSIDIAN.defaultBlockState();
+                } else if (roll < 0.75) {
+                    core = Blocks.BLACKSTONE.defaultBlockState();
+                } else {
+                    core = Blocks.BASALT.defaultBlockState();
+                }
+                level.setBlock(new BlockPos(x, floorY, z), core, 2);
+
+                // Ragged edges either side of the crack.
+                if (rng.nextInt(3) == 0) {
+                    int ox = x + (rng.nextBoolean() ? 1 : -1);
+                    int oz = z + (rng.nextBoolean() ? 1 : -1);
+                    level.setBlock(new BlockPos(ox, floorY, oz), Blocks.BLACKSTONE.defaultBlockState(), 2);
+                }
+            }
+        }
+    }
+
+    /**
+     * A ring of tall carved obelisks standing guard between the temple and the
+     * outer field - vertical punctuation on an otherwise flat arena, each capped
+     * with a burning soul-flame.
+     */
+    private static void placeObelisks(ServerLevel level) {
+        Random rng = new Random(WORLDGEN_SEED + 12);
+        int floorY = AztecAbyssConstants.ARENA_FLOOR_Y;
+        int ring = AztecAbyssConstants.TEMPLE_BASE_HALF_WIDTH + 12;
+        int count = 8;
+
+        for (int i = 0; i < count; i++) {
+            double angle = (Math.PI * 2.0 / count) * i + Math.PI / count;
+            int x = (int) Math.round(Math.cos(angle) * ring);
+            int z = (int) Math.round(Math.sin(angle) * ring);
+            if (nearGate(x, z, 8)) {
+                continue;
+            }
+            int h = 7 + rng.nextInt(4);
+            for (int dy = 1; dy <= h; dy++) {
+                BlockState body = (dy % 3 == 0)
+                        ? Blocks.GILDED_BLACKSTONE.defaultBlockState()
+                        : Blocks.POLISHED_BLACKSTONE_BRICKS.defaultBlockState();
+                level.setBlock(new BlockPos(x, floorY + dy, z), body, 2);
+            }
+            // Glyph band and a soul-flame crown.
+            level.setBlock(new BlockPos(x, floorY + h - 2, z), Blocks.RED_GLAZED_TERRACOTTA.defaultBlockState(), 2);
+            level.setBlock(new BlockPos(x, floorY + h + 1, z), Blocks.SOUL_SOIL.defaultBlockState(), 2);
+            level.setBlock(new BlockPos(x, floorY + h + 2, z), Blocks.SOUL_FIRE.defaultBlockState(), 2);
+            // Cracked base spilling around the foot.
+            for (int dx = -1; dx <= 1; dx++) {
+                for (int dz = -1; dz <= 1; dz++) {
+                    if (dx == 0 && dz == 0) {
+                        continue;
+                    }
+                    if (rng.nextBoolean()) {
+                        level.setBlock(new BlockPos(x + dx, floorY + 1, z + dz),
+                                Blocks.POLISHED_BLACKSTONE_BRICK_SLAB.defaultBlockState(), 2);
+                    }
+                }
             }
         }
     }

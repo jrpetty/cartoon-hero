@@ -159,6 +159,12 @@ public final class BridgeBuilder {
                 level.setBlock(new BlockPos(x, DECK_Y + 1, z), Blocks.DEEPSLATE_BRICK_WALL.defaultBlockState(), 2);
             }
 
+            // Glowing rune inlay running the length of the centre line.
+            if (Math.floorMod(z - NORTH_END, 5) == 0) {
+                level.setBlock(new BlockPos(CENTER_X - 1, DECK_Y, z), Blocks.CRYING_OBSIDIAN.defaultBlockState(), 2);
+                level.setBlock(new BlockPos(CENTER_X, DECK_Y, z), Blocks.CRYING_OBSIDIAN.defaultBlockState(), 2);
+            }
+
             // Every 8 blocks: buttress ribs below and lantern posts above.
             if (Math.floorMod(z - NORTH_END, 8) == 0) {
                 buildRib(level, z);
@@ -168,6 +174,60 @@ public final class BridgeBuilder {
                     level.setBlock(new BlockPos(x, DECK_Y + 3, z), Blocks.SOUL_LANTERN.defaultBlockState(), 2);
                 }
             }
+
+            // Every 25 blocks: colossal pylons straddling the span.
+            if (Math.floorMod(z - NORTH_END, 25) == 12) {
+                buildPylonPair(level, z);
+            }
+        }
+    }
+
+    /**
+     * A pair of towering pylons flanking the bridge, linked overhead by a
+     * lantern-hung crossbeam. These are the silhouette of the map - you see them
+     * marching off into the dark long before you see what's coming down the span.
+     */
+    private static void buildPylonPair(ServerLevel level, int z) {
+        int height = 16;
+        for (int side : new int[]{-HALF_WIDTH, HALF_WIDTH - 1}) {
+            int x = CENTER_X + side;
+            for (int dy = 1; dy <= height; dy++) {
+                BlockState body = (dy % 4 == 0)
+                        ? Blocks.POLISHED_DEEPSLATE_BRICKS.defaultBlockState()
+                        : Blocks.DEEPSLATE_BRICKS.defaultBlockState();
+                level.setBlock(new BlockPos(x, DECK_Y + dy, z), body, 2);
+                // Widen the foot into a buttress.
+                if (dy <= 3) {
+                    int out = side < 0 ? -1 : 1;
+                    level.setBlock(new BlockPos(x + out, DECK_Y + dy, z),
+                            Blocks.POLISHED_DEEPSLATE.defaultBlockState(), 2);
+                }
+            }
+            // Crown brazier.
+            level.setBlock(new BlockPos(x, DECK_Y + height + 1, z), Blocks.SOUL_SOIL.defaultBlockState(), 2);
+            level.setBlock(new BlockPos(x, DECK_Y + height + 2, z), Blocks.SOUL_FIRE.defaultBlockState(), 2);
+            // Banner cloth hanging down the inner face.
+            int inward = side < 0 ? 1 : -1;
+            for (int dy = height - 10; dy <= height - 4; dy++) {
+                level.setBlock(new BlockPos(x + inward, DECK_Y + dy, z),
+                        Blocks.RED_WOOL.defaultBlockState(), 2);
+            }
+            level.setBlock(new BlockPos(x + inward, DECK_Y + height - 3, z),
+                    Blocks.GILDED_BLACKSTONE.defaultBlockState(), 2);
+        }
+
+        // Crossbeam spanning the top, with chained lanterns dangling over the deck.
+        for (int dx = -HALF_WIDTH; dx <= HALF_WIDTH - 1; dx++) {
+            level.setBlock(new BlockPos(CENTER_X + dx, DECK_Y + height, z),
+                    Blocks.POLISHED_DEEPSLATE.defaultBlockState(), 2);
+        }
+        for (int dx : new int[]{-6, -2, 2, 5}) {
+            for (int c = 1; c <= 3; c++) {
+                level.setBlock(new BlockPos(CENTER_X + dx, DECK_Y + height - c, z),
+                        Blocks.CHAIN.defaultBlockState().setValue(BlockStateProperties.AXIS, Direction.Axis.Y), 2);
+            }
+            level.setBlock(new BlockPos(CENTER_X + dx, DECK_Y + height - 4, z),
+                    Blocks.LANTERN.defaultBlockState().setValue(BlockStateProperties.HANGING, true), 2);
         }
     }
 
@@ -302,6 +362,35 @@ public final class BridgeBuilder {
                 level.setBlock(new BlockPos(x, y, z), Blocks.POLISHED_DEEPSLATE_BRICKS.defaultBlockState(), 2);
             }
             level.setBlock(new BlockPos(x, wallTop + 4, z), Blocks.SOUL_LANTERN.defaultBlockState(), 2);
+        }
+
+        // Courtyard centrepiece: a raised fire bowl on a gilded dais, with
+        // banner-draped standards at its corners.
+        for (int dx = -2; dx <= 2; dx++) {
+            for (int dz = -2; dz <= 2; dz++) {
+                level.setBlock(new BlockPos(CENTER_X + dx, DECK_Y + 1, cz + dz + 4),
+                        Blocks.GILDED_BLACKSTONE.defaultBlockState(), 2);
+            }
+        }
+        level.setBlock(new BlockPos(CENTER_X, DECK_Y + 2, cz + 4), Blocks.SOUL_SOIL.defaultBlockState(), 2);
+        level.setBlock(new BlockPos(CENTER_X, DECK_Y + 3, cz + 4), Blocks.SOUL_FIRE.defaultBlockState(), 2);
+        for (int[] c : new int[][]{{-2, 2}, {2, 2}, {-2, -2}, {2, -2}}) {
+            int sx = CENTER_X + c[0];
+            int sz = cz + 4 + c[1];
+            for (int dy = 2; dy <= 5; dy++) {
+                level.setBlock(new BlockPos(sx, DECK_Y + dy, sz), Blocks.POLISHED_DEEPSLATE.defaultBlockState(), 2);
+            }
+            level.setBlock(new BlockPos(sx, DECK_Y + 6, sz), Blocks.LANTERN.defaultBlockState(), 2);
+        }
+
+        // Banners hung down the inner face of the north wall, facing the bridge.
+        for (int dx = -halfX + 3; dx <= halfX - 3; dx += 5) {
+            for (int dy = 2; dy <= 4; dy++) {
+                level.setBlock(new BlockPos(CENTER_X + dx, DECK_Y + dy, cz - halfZ + 1),
+                        Blocks.RED_WOOL.defaultBlockState(), 2);
+            }
+            level.setBlock(new BlockPos(CENTER_X + dx, DECK_Y + 5, cz - halfZ + 1),
+                    Blocks.GILDED_BLACKSTONE.defaultBlockState(), 2);
         }
 
         // Stairs up onto the north rampart so players can fight from the wall.
