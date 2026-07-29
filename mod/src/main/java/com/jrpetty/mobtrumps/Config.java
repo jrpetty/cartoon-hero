@@ -17,6 +17,7 @@ public final class Config {
     public static final ModConfigSpec.IntValue SEASON_DAYS;
     public static final ModConfigSpec.BooleanValue CATEGORY_REWARDS;
     public static final ModConfigSpec.DoubleValue CATEGORY_REWARD_MULTIPLIER;
+    public static final ModConfigSpec.DoubleValue CARD_DROP_MULTIPLIER;
 
     static {
         ModConfigSpec.Builder b = new ModConfigSpec.Builder();
@@ -26,6 +27,14 @@ public final class Config {
                 .defineInRange("cardsPerPack", 5, 1, 9);
         FOIL_MULTIPLIER = b.comment("Multiplier applied to a legacy pack's holographic-foil chance (1.0 = default).")
                 .defineInRange("foilMultiplier", 1.0, 0.0, 10.0);
+        b.pop();
+
+        b.push("drops");
+        CARD_DROP_MULTIPLIER = b.comment("Scales the chance that killing a mob drops its card.",
+                        "Base chances are by collector tier: common 1 in 20, uncommon 1 in 10,",
+                        "rare 1 in 5, epic 1 in 2, legendary always (so every boss is certain).",
+                        "2.0 doubles every chance; 20.0 effectively makes all cards guaranteed.")
+                .defineInRange("cardDropMultiplier", 1.0, 0.0, 20.0);
         b.pop();
 
         b.push("deck");

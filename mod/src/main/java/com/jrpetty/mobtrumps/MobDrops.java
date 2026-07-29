@@ -2,6 +2,7 @@ package com.jrpetty.mobtrumps;
 
 import com.jrpetty.mobtrumps.game.MobCard;
 import com.jrpetty.mobtrumps.game.MobCards;
+import com.jrpetty.mobtrumps.game.Tier;
 import net.minecraft.ChatFormatting;
 import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.core.registries.BuiltInRegistries;
@@ -38,12 +39,17 @@ public final class MobDrops {
             return; // not a mob we have a card for
         }
 
-        // the base card drops 100% of the time, with the mob's normal loot
-        event.getDrops().add(cardDrop(dead, MobCardItem.stackOf(card, false)));
-        CollectionTracker.record(killer, id, false);
-
-        int kills = bumpKills(killer, id);
         var tier = card.tier();
+        int kills = bumpKills(killer, id);
+
+        // the card is a prize, not a certainty: commons land 1 in 20 and the
+        // odds climb with rarity until a legendary always drops
+        if (rollForCard(killer, id, tier)) {
+            event.getDrops().add(cardDrop(dead, MobCardItem.stackOf(card, false)));
+            CollectionTracker.record(killer, id, false);
+            cardFanfare(killer, tier);
+        }
+
         int prevLevel = tier.upgradeLevel(kills - 1);
         int level = tier.upgradeLevel(kills);
         boolean alreadyFoil = killer.getData(ModAttachments.COLLECTED_FOIL.get()).contains(id);
@@ -122,6 +128,51 @@ public final class MobDrops {
             out.append("+").append(gain).append(" ").append(stat.label);
         }
         return out.length() == 0 ? "already maxed out" : out.toString();
+    }
+
+    /**
+     * Decide whether this kill yields its card. Rolls the tier's chance, and
+     * guarantees it once the player has gone {@link Tier#pityKills()} kills of
+     * that mob empty-handed — the streak counter resets on every card, so the
+     * pity only ever rescues a genuinely cold run.
+     */
+    private static boolean rollForCard(ServerPlayer player, String id, Tier tier) {
+        float chance = tier.cardDropChance() * (float) dropMultiplier();
+        Map<String, Integer> drought = new HashMap<>(player.getData(ModAttachments.DROUGHT.get()));
+        int dry = drought.getOrDefault(id, 0) + 1;
+
+        boolean won = chance >= 1.0f
+                || player.getRandom().nextFloat() < chance
+                || dry >= tier.pityKills();
+
+        drought.put(id, won ? 0 : dry);
+        player.setData(ModAttachments.DROUGHT.get(), Map.copyOf(drought));
+        return won;
+    }
+
+    private static double dropMultiplier() {
+        try {
+            return Config.CARD_DROP_MULTIPLIER.get();
+        } catch (IllegalStateException notLoaded) {
+            return 1.0; // config not up yet: ship defaults
+        }
+    }
+
+    /** A card is an event now, so it gets a chime that sharpens with rarity. */
+    private static void cardFanfare(ServerPlayer player, Tier tier) {
+        float pitch = switch (tier) {
+            case COMMON -> 1.0F;
+            case UNCOMMON -> 1.15F;
+            case RARE -> 1.3F;
+            case EPIC -> 1.5F;
+            case LEGENDARY -> 1.8F;
+        };
+        player.playNotifySound(SoundEvents.NOTE_BLOCK_CHIME.value(), SoundSource.PLAYERS, 0.7F, pitch);
+        if (tier.ordinal() >= Tier.RARE.ordinal()) {
+            player.serverLevel().sendParticles(ParticleTypes.END_ROD,
+                    player.getX(), player.getY() + 1.0, player.getZ(),
+                    6 + tier.ordinal() * 6, 0.4, 0.5, 0.4, 0.03);
+        }
     }
 
     private static int bumpKills(ServerPlayer player, String id) {

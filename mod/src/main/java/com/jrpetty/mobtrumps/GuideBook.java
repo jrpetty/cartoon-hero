@@ -31,7 +31,29 @@ public final class GuideBook {
             """
             §l§6Collecting cards§r
 
-            Kill any mob and it drops §oits own card§r, 100% of the time.
+            Kill any mob for a §ochance§r at its card. Rarer mobs give it up far more readily, because you meet them far less often:
+
+            §7Common§r 1 in 20
+            §aUncommon§r 1 in 10
+            §bRare§r 1 in 5
+            §5Epic§r 1 in 2
+            §6Legendary§r §lalways§r
+
+            Every boss is Legendary, so a boss always pays.""",
+
+            """
+            §l§6Cold streaks§r
+
+            The dice can be cruel, so they're not the only rule.
+
+            Go long enough hunting one mob with nothing to show — about §othree times§r the usual wait — and its next card is §lguaranteed§r.
+
+            That counter resets every time a card drops, so it only ever rescues a genuinely unlucky run.""",
+
+            """
+            §l§6Unlocking holos§r
+
+            Kills always count, even when no card drops — a dry spell is never wasted effort.
 
             Kill lots of one mob to unlock its §dholographic§r card, which is stat-boosted.
 

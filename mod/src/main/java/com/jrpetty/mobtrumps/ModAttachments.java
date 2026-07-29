@@ -77,6 +77,18 @@ public final class ModAttachments {
                     .copyOnDeath()
                     .build());
 
+    /**
+     * Kills of each mob since its card last dropped. Drives the pity guarantee
+     * in {@link MobDrops}, so an unlucky streak always ends. Server-side only —
+     * the client never needs to know how cold a streak has been.
+     */
+    public static final Supplier<AttachmentType<Map<String, Integer>>> DROUGHT =
+            ATTACHMENTS.register("drought",
+                    () -> AttachmentType.<Map<String, Integer>>builder(() -> Map.of())
+                    .serialize(Codec.unboundedMap(Codec.STRING, Codec.INT))
+                    .copyOnDeath()
+                    .build());
+
     /** Category names whose completion reward this player has already claimed. */
     public static final Supplier<AttachmentType<List<String>>> CLAIMED_CATEGORIES =
             ATTACHMENTS.register("claimed_categories", () -> AttachmentType.<List<String>>builder(() -> List.of())
