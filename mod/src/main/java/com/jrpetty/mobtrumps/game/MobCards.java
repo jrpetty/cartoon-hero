@@ -225,20 +225,40 @@ public final class MobCards {
     }
 
     /**
-     * As {@link #cpuDeck(int, RandomGenerator)}, but never dealing a card whose
-     * id is in {@code exclude} — normally the player's own hand, so the two
-     * sides bring different mobs to the table. Identical cards tie on every
-     * stat, so a mirrored deal would be decided almost entirely by coin flips.
+     * As {@link #cpuDeck(int, RandomGenerator)}, but PREFERRING not to deal a
+     * card whose id is in {@code exclude} — normally the player's own hand, so
+     * the two sides bring different mobs where possible. Identical cards tie on
+     * every stat, so a mirrored deal is decided almost entirely by coin flips.
+     *
+     * <p>Deliberately a preference and not a ban. There are only twelve commons
+     * in the whole set but a 16-card deck wants nine of them, so treating the
+     * exclusion as absolute starved the common bucket and silently promoted
+     * those slots to uncommons — handing the CPU a richer deck than the curve
+     * allows, exactly when the player was running a humble common-heavy one.
+     * The collector curve is the guarantee; avoiding overlap is a courtesy.
      */
     public static List<MobCard> cpuDeck(int size, RandomGenerator random, java.util.Set<String> exclude) {
         size = Math.max(2, Math.min(size, ALL.size()));
         java.util.Map<Tier, List<MobCard>> buckets = new java.util.EnumMap<>(Tier.class);
-        for (Tier t : Tier.values()) buckets.put(t, new ArrayList<>());
+        java.util.Map<Tier, List<MobCard>> overlap = new java.util.EnumMap<>(Tier.class);
+        for (Tier t : Tier.values()) {
+            buckets.put(t, new ArrayList<>());
+            overlap.put(t, new ArrayList<>());
+        }
         for (MobCard c : ALL) {
-            if (!exclude.contains(c.id())) buckets.get(c.tier()).add(c);
+            (exclude.contains(c.id()) ? overlap : buckets).get(c.tier()).add(c);
         }
         java.util.Random shuffler = java.util.Random.from(random);
-        for (List<MobCard> bucket : buckets.values()) Collections.shuffle(bucket, shuffler);
+        // take() draws from the tail, so put the preferred cards last: a tier
+        // only dips into the player's own mobs once it has exhausted the rest
+        for (Tier t : Tier.values()) {
+            List<MobCard> preferred = buckets.get(t);
+            List<MobCard> fallback = overlap.get(t);
+            Collections.shuffle(preferred, shuffler);
+            Collections.shuffle(fallback, shuffler);
+            fallback.addAll(preferred);
+            buckets.put(t, fallback);
+        }
 
         // the curve: exactly one legendary (decks of 6+), a few epics/rares,
         // a fifth uncommons, and commons fill the rest — always the majority
