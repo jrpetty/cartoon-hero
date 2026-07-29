@@ -439,12 +439,7 @@ public class CollectionBookScreen extends Screen {
             g.fill(tab.x() - 2, tab.y() - 2, tab.x() + tab.w() + 2, tab.y() + tab.h() + 2,
                     CardRenderer.KRAFT_DARK);
             g.fill(tab.x(), tab.y(), tab.x() + tab.w(), tab.y() + tab.h() + 4, bg);
-            String label = switch (s) {
-                case CARDS -> "Cards";
-                case AWARDS -> "Awards";
-                case SETTINGS -> "Settings";
-            };
-            g.drawString(font, label, tab.x() + 7, tab.y() + 4,
+            g.drawString(font, tabLabel(s), tab.x() + 7, tab.y() + 4,
                     on ? CardRenderer.INK : CardRenderer.KRAFT_DARK, false);
             // a red pip on the Awards tab while anything is waiting to be collected
             if (s == Section.AWARDS && waiting > 0) {
