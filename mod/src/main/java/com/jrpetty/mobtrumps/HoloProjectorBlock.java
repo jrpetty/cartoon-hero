@@ -35,4 +35,26 @@ public class HoloProjectorBlock extends CardDisplayBlock {
             net.minecraft.world.phys.shapes.CollisionContext ctx) {
         return net.minecraft.world.phys.shapes.Shapes.block(); // a solid pedestal
     }
+
+    /**
+     * A pedestal, not a picture: it stands wherever you put it — floor, table,
+     * anywhere — and simply turns to face you. The parent's item-frame mounting
+     * rules are deliberately NOT inherited.
+     */
+    @Override
+    public BlockState getStateForPlacement(net.minecraft.world.item.context.BlockPlaceContext ctx) {
+        return defaultBlockState().setValue(FACING, ctx.getHorizontalDirection().getOpposite());
+    }
+
+    @Override
+    protected boolean canSurvive(BlockState state, net.minecraft.world.level.LevelReader level, BlockPos pos) {
+        return true;
+    }
+
+    @Override
+    protected BlockState updateShape(BlockState state, net.minecraft.core.Direction direction,
+                                     BlockState neighbour, net.minecraft.world.level.LevelAccessor level,
+                                     BlockPos pos, BlockPos neighbourPos) {
+        return state; // nothing to fall off
+    }
 }

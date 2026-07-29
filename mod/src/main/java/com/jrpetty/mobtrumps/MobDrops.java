@@ -69,8 +69,9 @@ public final class MobDrops {
                         .withStyle(ChatFormatting.GRAY));
                 celebrate(killer, level);
             }
-        } else if (level < tier.maxLevel()) {
-            // quiet progress nudge on the action bar toward the next milestone
+        } else if (level < tier.maxLevel() && ClientPrefsPayload.huntCounter(killer)) {
+            // quiet progress nudge on the action bar toward the next milestone,
+            // unless this player switched the hunt counter off in their book
             int next = tier.nextMilestone(kills);
             String label = level == 0 ? "holo" : holoLabel(level + 1);
             killer.displayClientMessage(Component.literal(card.displayName() + " " + label + ": "

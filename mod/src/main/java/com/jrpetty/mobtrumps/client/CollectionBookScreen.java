@@ -49,31 +49,66 @@ public class CollectionBookScreen extends Screen {
     private static final int COLS = 3, ROWS = 3, PER_PAGE = COLS * ROWS, PER_SPREAD = 2 * PER_PAGE;
     private static final int ARROW_W = 18, ARROW_H = 14;
     private static final int SPINE = 24;
-    /** Award spreads (two groups each) plus the one set-rewards/settings leaf. */
-    private static final int AWARD_SPREADS = 2;
-    private static final int BACK_SPREADS = AWARD_SPREADS + 1;
+    /**
+     * The back of the book: one spread per award group, then the set-rewards
+     * leaf and the settings leaf. Each gets the WHOLE spread — rows run across
+     * both leaves rather than being squeezed into one narrow column, which is
+     * what used to chop every title and blurb in half.
+     */
+    private static final int AWARD_SPREADS = 4; // one per Achievement.Group
+    private static final int BACK_SPREADS = AWARD_SPREADS + 2;
+    /** Back pages are drawn through this scale so the text is properly legible. */
+    private static final float UI = 1.25f;
 
-    private enum Section { CARDS, AWARDS, SETTINGS }
+    private enum Section { CARDS, AWARDS, SETS, SETTINGS }
 
     private enum Filter { ALL("All"), OWNED("Owned"), MISSING("Missing"), FOIL("Foil");
         final String label; Filter(String l) { label = l; } }
     private enum Sort { NUMBER("No."), NAME("Name"), TIER("Tier"), RATING("Rating");
         final String label; Sort(String l) { label = l; } }
 
-    /** One toggle/cycle on the settings leaf. */
-    private record Setting(String key, String label, String blurb) {
+    /**
+     * One toggle/cycle on the settings leaf. {@code blurb} is the one-liner that
+     * fits on the row; {@code detail} is the full explanation shown on hover,
+     * so nothing important has to survive being truncated.
+     */
+    private record Setting(String key, String label, String blurb, String detail) {
     }
 
     private static final List<Setting> SETTINGS = List.of(
-            new Setting("kill_counter", "Hunt counter on cards",
-                    "The little x12 badge showing how many you've hunted"),
-            new Setting("card_size", "Battle card size", "How large cards render at the table"),
-            new Setting("brightness", "Arena brightness", "How brightly the duel table is lit"),
-            new Setting("live_portraits", "Live mob portraits", "Real mobs posing inside the card art"),
-            new Setting("foil_sheen", "Holographic sheen", "The moving rainbow on foil cards"),
-            new Setting("reduced_motion", "Reduced motion", "Calms flips, pulses and flying cards"),
-            new Setting("battle_hints", "Battle hints", "The prompt line along the bottom of a duel"),
-            new Setting("confirm_leave", "Confirm forfeits", "Ask twice before leaving a live game"));
+            new Setting("kill_counter", "Hunt counter", "The kill tally that pops up as you hunt",
+                    "Shows \"Creeper holo: 12 / 100 kills\" above your hotbar each time you kill a "
+                    + "mob, and puts the matching x12 badge on cards in this book. Turn it off for "
+                    + "a clean screen — your kills are still counted, you just aren't told about "
+                    + "each one."),
+            new Setting("card_size", "Battle card size", "How large cards render at the table",
+                    "Auto fits the cards to your window, which is usually what you want. Small, "
+                    + "Medium and Large pin them to a fixed size instead, never larger than the "
+                    + "window can show."),
+            new Setting("brightness", "Arena brightness", "How brightly the duel table is lit",
+                    "Scales the light on the felt during a battle. Dim is the old, moodier table; "
+                    + "Bright is the default; Vivid pushes it further again if your monitor runs "
+                    + "dark."),
+            new Setting("live_portraits", "Live mob portraits", "Real mobs posing inside the card art",
+                    "Each card's picture holds an actual 3D mob that looks around and follows your "
+                    + "cursor. Turning it off leaves the painted scene behind it, which is calmer "
+                    + "and noticeably cheaper on a busy book page."),
+            new Setting("foil_sheen", "Holographic sheen", "The moving rainbow on foil cards",
+                    "Holographic cards wash a shifting rainbow across their face. Off freezes that "
+                    + "pattern rather than removing it, so a holo still looks like a holo — it just "
+                    + "stops moving."),
+            new Setting("reduced_motion", "Reduced motion", "Calms flips, pulses and flying cards",
+                    "Switches off the decorative movement in a battle: cards stop sliding in, "
+                    + "winners stop pulsing, spoils stop flying across the table and the banners "
+                    + "stop overshooting. The card flip itself still plays so you can read the "
+                    + "round."),
+            new Setting("battle_hints", "Battle hints", "The prompt line along the bottom of a duel",
+                    "The line at the foot of the battle screen telling you to click a stat or that "
+                    + "you're waiting on your opponent. Off once you know the game by heart."),
+            new Setting("confirm_leave", "Confirm forfeits", "Ask twice before leaving a live game",
+                    "Leaving a game in progress forfeits it. With this on, the Leave button arms "
+                    + "itself and asks \"Forfeit?!\" before it actually quits, so a stray click "
+                    + "can't cost you a duel."));
 
     private final Map<String, LivingEntity> entityCache = new HashMap<>();
     private final List<MobCard> view = new ArrayList<>();
@@ -90,6 +125,8 @@ public class CollectionBookScreen extends Screen {
     private Category eggPicker = null;
     /** The award row under the cursor this frame — its description fills the footer. */
     private Achievement hoveredAward;
+    /** The settings row under the cursor — its full detail is drawn as a tooltip. */
+    private Setting hoveredSetting;
     private EditBox search;
 
     private int cardSpreads;
@@ -156,7 +193,8 @@ public class CollectionBookScreen extends Screen {
 
     private Section section() {
         if (spread < cardSpreads) return Section.CARDS;
-        return spread < cardSpreads + AWARD_SPREADS ? Section.AWARDS : Section.SETTINGS;
+        if (spread < cardSpreads + AWARD_SPREADS) return Section.AWARDS;
+        return spread == cardSpreads + AWARD_SPREADS ? Section.SETS : Section.SETTINGS;
     }
 
     /** The first spread of a section, for the tabs to jump to. */
@@ -164,7 +202,8 @@ public class CollectionBookScreen extends Screen {
         return switch (s) {
             case CARDS -> 0;
             case AWARDS -> cardSpreads;
-            case SETTINGS -> cardSpreads + AWARD_SPREADS;
+            case SETS -> cardSpreads + AWARD_SPREADS;
+            case SETTINGS -> cardSpreads + AWARD_SPREADS + 1;
         };
     }
 
@@ -172,13 +211,33 @@ public class CollectionBookScreen extends Screen {
         tabs.clear();
         int x = panelX + panelW - 12;
         // laid out right to left so the rightmost tab is the last leaf
-        String[] labels = {"Settings", "Awards", "Cards"};
-        Section[] keys = {Section.SETTINGS, Section.AWARDS, Section.CARDS};
-        for (int i = 0; i < labels.length; i++) {
-            int w = font.width(labels[i]) + 14;
+        Section[] keys = {Section.SETTINGS, Section.SETS, Section.AWARDS, Section.CARDS};
+        for (Section key : keys) {
+            int w = font.width(tabLabel(key)) + 14;
             x -= w + 3;
-            tabs.add(new Chip("tab_" + keys[i].name(), x, panelY - 13, w, 15));
+            tabs.add(new Chip("tab_" + key.name(), x, panelY - 13, w, 15));
         }
+    }
+
+    private static String tabLabel(Section s) {
+        return switch (s) {
+            case CARDS -> "Cards";
+            case AWARDS -> "Awards";
+            case SETS -> "Sets";
+            case SETTINGS -> "Settings";
+        };
+    }
+
+    // --- the scaled coordinate space the back pages are laid out in ----------
+
+    /** Screen -> logical (back-page) coordinate. */
+    private static int lg(int screen) {
+        return Math.round(screen / UI);
+    }
+
+    /** The logical bounds of the whole content area, across both leaves. */
+    private int[] contentBounds() {
+        return new int[]{lg(panelX + 14), lg(gridTop), lg(panelX + panelW - 14), lg(pageBottom)};
     }
 
     private void layoutChips() {
@@ -268,6 +327,7 @@ public class CollectionBookScreen extends Screen {
         super.render(g, mouseX, mouseY, partialTick);
         hotspots.clear();
         hoveredAward = null;
+        hoveredSetting = null;
         Section section = section();
         if (section != Section.CARDS && search.isFocused()) {
             search.setFocused(false); // the search box belongs to the card pages
@@ -280,8 +340,15 @@ public class CollectionBookScreen extends Screen {
         g.fill(panelX - 3, panelY - 3, panelX + panelW + 3, panelY + panelH + 3, CardRenderer.KRAFT_DARK);
         g.fill(panelX, panelY, panelX + panelW, panelY + panelH, CardRenderer.KRAFT);
         g.fill(panelX + 6, panelY + 6, panelX + panelW - 6, panelY + panelH - 6, CardRenderer.FACE);
-        g.fill(panelX + panelW / 2 - 1, gridTop - 6, panelX + panelW / 2 + 1, panelY + panelH - 24,
-                CardRenderer.KRAFT_DARK);
+        if (section == Section.CARDS) {
+            // the spine only belongs on the card pages; the back pages run
+            // across both leaves and would be cut in half by it
+            g.fill(panelX + panelW / 2 - 1, gridTop - 6, panelX + panelW / 2 + 1,
+                    panelY + panelH - 24, CardRenderer.KRAFT_DARK);
+        } else {
+            g.fill(panelX + panelW / 2 - 1, gridTop - 6, panelX + panelW / 2, panelY + panelH - 24,
+                    0x14000000);
+        }
 
         drawMasthead(g);
 
@@ -289,16 +356,21 @@ public class CollectionBookScreen extends Screen {
             search.render(g, mouseX, mouseY, partialTick);
             renderChips(g, mouseX, mouseY);
             renderCardPages(g, mouseX, mouseY);
-        } else if (section == Section.AWARDS) {
-            int pair = (spread - cardSpreads) * 2;
-            Achievement.Group[] groups = Achievement.Group.values();
-            renderAwardPage(g, leftGridX, groups[pair], mouseX, mouseY);
-            if (pair + 1 < groups.length) {
-                renderAwardPage(g, rightGridX, groups[pair + 1], mouseX, mouseY);
-            }
         } else {
-            renderSetRewardsPage(g, leftGridX, mouseX, mouseY);
-            renderSettingsPage(g, rightGridX, mouseX, mouseY);
+            // back pages are laid out in logical units and drawn through UI, so
+            // hit-testing has to happen in the same space — see clickHotspots
+            int lmx = lg(mouseX);
+            int lmy = lg(mouseY);
+            var pose = g.pose();
+            pose.pushPose();
+            pose.scale(UI, UI, 1f);
+            switch (section) {
+                case AWARDS -> renderAwardPage(g,
+                        Achievement.Group.values()[spread - cardSpreads], lmx, lmy);
+                case SETS -> renderSetRewardsPage(g, lmx, lmy);
+                default -> renderSettingsPage(g, lmx, lmy);
+            }
+            pose.popPose();
         }
 
         drawArrow(g, prevX, prevY, "<", spread > 0, mouseX, mouseY);
@@ -319,11 +391,15 @@ public class CollectionBookScreen extends Screen {
             hint = switch (section) {
                 case CARDS -> "Click a card to view it · Store files loose cards away · shift-click a green-tabbed card to take one out";
                 case AWARDS -> "Press Collect on a finished award and the reward lands straight in your inventory";
+                case SETS -> "Complete every mob in a set to choose one of them as a spawn egg";
                 case SETTINGS -> "Settings are yours alone — they change how the mod looks, never how it plays";
             };
         }
         g.drawString(font, hint, (width - font.width(hint)) / 2, panelY + panelH + 8, hintColor, true);
 
+        if (hoveredSetting != null && pickerMob == null && eggPicker == null && !statsOpen) {
+            drawSettingTooltip(g, mouseX, mouseY, hoveredSetting);
+        }
         if (pickerMob != null) renderPicker(g, mouseX, mouseY);
         if (eggPicker != null) renderEggPicker(g, mouseX, mouseY);
         if (statsOpen) renderStats(g);
@@ -437,17 +513,16 @@ public class CollectionBookScreen extends Screen {
 
     // --- award pages --------------------------------------------------------
 
-    private void renderAwardPage(GuiGraphics g, int x0, Achievement.Group group,
-                                 int mouseX, int mouseY) {
+    private void renderAwardPage(GuiGraphics g, Achievement.Group group, int mouseX, int mouseY) {
         List<Achievement> list = Achievements.of(group);
-        int x1 = x0 + pageW;
-        int y = gridTop;
+        int[] b = contentBounds();
+        int x0 = b[0], x1 = b[2];
 
         String done = countCollected(list) + " / " + list.size();
-        y = drawPageHeading(g, x0, x1, y, group.accent(),
+        int y = drawPageHeading(g, x0, x1, b[1], group.accent(),
                 group.label().toUpperCase(Locale.ROOT), group.blurb(), done);
 
-        int available = pageBottom - y;
+        int available = b[3] - y;
         int rowH = Math.max(16, Math.min(30, available / Math.max(1, list.size())));
         for (Achievement a : list) {
             drawAwardRow(g, a, x0, x1, y, rowH, mouseX, mouseY);
@@ -589,13 +664,14 @@ public class CollectionBookScreen extends Screen {
 
     // --- set rewards leaf ---------------------------------------------------
 
-    private void renderSetRewardsPage(GuiGraphics g, int x0, int mouseX, int mouseY) {
-        int x1 = x0 + pageW;
-        int y = drawPageHeading(g, x0, x1, gridTop, 0xFFB57EDC, "SET REWARDS",
-                "Finish a set, keep one of its mobs as a spawn egg", null);
+    private void renderSetRewardsPage(GuiGraphics g, int mouseX, int mouseY) {
+        int[] b = contentBounds();
+        int x0 = b[0], x1 = b[2];
+        int y = drawPageHeading(g, x0, x1, b[1], 0xFFB57EDC, "SET REWARDS",
+                "Finish a set and keep one of its mobs as a spawn egg — one choice, forever", null);
 
         Category[] cats = Category.values();
-        int rowH = Math.max(16, Math.min(26, (pageBottom - y) / cats.length));
+        int rowH = Math.max(16, Math.min(30, (b[3] - y) / cats.length));
         for (Category cat : cats) {
             drawSetRow(g, cat, x0, x1, y, rowH, mouseX, mouseY);
             y += rowH;
@@ -662,12 +738,13 @@ public class CollectionBookScreen extends Screen {
 
     // --- settings leaf ------------------------------------------------------
 
-    private void renderSettingsPage(GuiGraphics g, int x0, int mouseX, int mouseY) {
-        int x1 = x0 + pageW;
-        int y = drawPageHeading(g, x0, x1, gridTop, 0xFF3FA7D6, "SETTINGS",
-                "Saved on this computer, for every world", null);
+    private void renderSettingsPage(GuiGraphics g, int mouseX, int mouseY) {
+        int[] b = contentBounds();
+        int x0 = b[0], x1 = b[2];
+        int y = drawPageHeading(g, x0, x1, b[1], 0xFF3FA7D6, "SETTINGS",
+                "Saved on this computer, for every world — hover a row for the full story", null);
 
-        int rowH = Math.max(18, Math.min(28, (pageBottom - y) / SETTINGS.size()));
+        int rowH = Math.max(18, Math.min(34, (b[3] - y) / SETTINGS.size()));
         for (Setting s : SETTINGS) {
             drawSettingRow(g, s, x0, x1, y, rowH, mouseX, mouseY);
             y += rowH;
@@ -701,7 +778,11 @@ public class CollectionBookScreen extends Screen {
         hotspots.add(btn);
         boolean hover = btn.hit(mouseX, mouseY);
 
-        g.fill(x0, y, x1, y + rowH - 2, hover ? 0x18000000 : 0x0A000000);
+        boolean rowHover = mouseX >= x0 && mouseX < x1 && mouseY >= y && mouseY < y + rowH - 2;
+        if (rowHover) {
+            hoveredSetting = s;
+        }
+        g.fill(x0, y, x1, y + rowH - 2, rowHover ? 0x18000000 : 0x0A000000);
         g.drawString(font, trim(s.label(), bx - x0 - 10), x0 + 4, y + 2, CardRenderer.INK, false);
         if (rowH >= 24) {
             g.drawString(font, trim(s.blurb(), bx - x0 - 10), x0 + 4, y + 12, 0xFF9A9083, false);
@@ -713,6 +794,35 @@ public class CollectionBookScreen extends Screen {
         g.fill(bx, by, bx + bw, by + 12, fillCol);
         g.renderOutline(bx, by, bw, 12, CardRenderer.KRAFT_DARK);
         g.drawString(font, value, bx + (bw - font.width(value)) / 2, by + 2, 0xFFFFFFFF, false);
+    }
+
+    /**
+     * The full explanation of a setting, wrapped into a panel beside the cursor.
+     * Drawn in plain screen space (not the back pages' scaled space) and nudged
+     * to stay on screen.
+     */
+    private void drawSettingTooltip(GuiGraphics g, int mouseX, int mouseY, Setting s) {
+        int maxW = Math.min(260, Math.max(140, width - 40));
+        List<net.minecraft.util.FormattedCharSequence> body =
+                font.split(Component.literal(s.detail()), maxW);
+        int textW = font.width(s.label());
+        for (var line : body) {
+            textW = Math.max(textW, font.width(line));
+        }
+        int w = textW + 12;
+        int h = 12 + body.size() * 10 + 8;
+        int x = Math.min(mouseX + 12, width - w - 4);
+        int y = Math.min(Math.max(4, mouseY - h / 2), height - h - 4);
+
+        g.fill(x - 1, y - 1, x + w + 1, y + h + 1, 0xFF241C10);
+        g.fill(x, y, x + w, y + h, 0xFFFAF6EC);
+        g.fill(x, y, x + w, y + 1, 0xFF3FA7D6);
+        g.drawString(font, s.label(), x + 6, y + 5, CardRenderer.INK, false);
+        int ly = y + 17;
+        for (var line : body) {
+            g.drawString(font, line, x + 6, ly, 0xFF6E6154, false);
+            ly += 10;
+        }
     }
 
     // --- overlays -----------------------------------------------------------
@@ -950,10 +1060,17 @@ public class CollectionBookScreen extends Screen {
         return super.mouseClicked(mouseX, mouseY, button);
     }
 
-    /** Buttons on the award / set / settings leaves and in the egg picker. */
+    /**
+     * Buttons on the award / set / settings leaves and in the egg picker. Back
+     * pages record their rects in the scaled logical space they are drawn in,
+     * so the cursor has to be converted the same way before it is compared.
+     */
     private boolean clickHotspots(double mouseX, double mouseY) {
+        boolean scaled = section() != Section.CARDS && eggPicker == null;
+        double mx = scaled ? mouseX / UI : mouseX;
+        double my = scaled ? mouseY / UI : mouseY;
         for (Chip spot : hotspots) {
-            if (!spot.hit(mouseX, mouseY)) continue;
+            if (!spot.hit(mx, my)) continue;
             String key = spot.key();
             if (key.startsWith("claim_")) {
                 PacketDistributor.sendToServer(

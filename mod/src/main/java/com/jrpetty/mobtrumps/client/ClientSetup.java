@@ -40,6 +40,20 @@ public final class ClientSetup {
         event.registerBlockEntityRenderer(ModBlocks.HOLO_PROJECTOR_BE.get(), HoloProjectorRenderer::new);
     }
 
+    /** Announce the server-facing settings as soon as we're in a world. */
+    @EventBusSubscriber(modid = MobTrumps.MODID, value = Dist.CLIENT)
+    public static final class Game {
+
+        private Game() {
+        }
+
+        @SubscribeEvent
+        public static void onLoggedIn(net.neoforged.neoforge.client.event.ClientPlayerNetworkEvent.LoggingIn event) {
+            ClientPrefs.load();
+            ClientPrefs.syncToServer();
+        }
+    }
+
     @SubscribeEvent
     public static void onRegisterGuiLayers(RegisterGuiLayersEvent event) {
         event.registerAboveAll(

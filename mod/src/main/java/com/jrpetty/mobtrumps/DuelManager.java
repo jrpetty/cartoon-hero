@@ -890,9 +890,12 @@ public final class DuelManager {
         // the per-turn countdown (seconds) so the screen can draw a timer bar
         int turnSeconds = (phase == BattleSyncPayload.PLAYER_PICK
                 || phase == BattleSyncPayload.OPPONENT_PICK) ? (int) (TURN_MS / 1000L) : 0;
+        // who won the coin flip on a drawn round, from THIS player's seat
+        Battle.Side coinSide = duel.battle.lastCoin();
+        int coin = coinSide == Battle.Side.NONE ? 0 : (coinSide == side ? 1 : 2);
         java.util.List<Integer> nums = new java.util.ArrayList<>(java.util.List.of(
                 myCount, oppCount, duel.battle.potCount(), duel.battle.getRound(),
-                chosen, chooser, winner, 0, 1, myGames, oppGames, turnSeconds));
+                chosen, chooser, winner, 0, 1, myGames, oppGames, turnSeconds, coin));
         net.neoforged.neoforge.network.PacketDistributor.sendToPlayer(p,
                 new BattleSyncPayload(phase, myId, oppId, nums, name(duel.other(p))));
     }

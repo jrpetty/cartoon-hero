@@ -129,6 +129,7 @@ public final class ClientPrefs {
             }
         }
         save();
+        syncToServer();
     }
 
     public static boolean get(String key) {
@@ -202,6 +203,25 @@ public final class ClientPrefs {
         reducedMotion = bool(props, "reducedMotion", reducedMotion);
         battleHints = bool(props, "battleHints", battleHints);
         confirmLeave = bool(props, "confirmLeave", confirmLeave);
+    }
+
+    /**
+     * Tell the server the settings it has to act on itself — right now just the
+     * hunt counter, whose action-bar line the server sends. Safe to call any
+     * time: it no-ops until a connection exists.
+     */
+    public static void syncToServer() {
+        Minecraft mc = Minecraft.getInstance();
+        if (mc == null || mc.getConnection() == null) {
+            return;
+        }
+        int flags = killCounter ? com.jrpetty.mobtrumps.ClientPrefsPayload.HUNT_COUNTER : 0;
+        try {
+            net.neoforged.neoforge.network.PacketDistributor.sendToServer(
+                    new com.jrpetty.mobtrumps.ClientPrefsPayload(flags));
+        } catch (RuntimeException ignored) {
+            // not connected yet, or the server doesn't have the mod — harmless
+        }
     }
 
     private static synchronized void save() {

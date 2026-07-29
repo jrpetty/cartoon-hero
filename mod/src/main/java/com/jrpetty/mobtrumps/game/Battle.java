@@ -34,6 +34,8 @@ public final class Battle {
     private int round = 0;
     private boolean finished = false;
     private Side winner = Side.NONE;
+    /** Who won the coin flip that settled the most recent drawn round. */
+    private Side lastCoin = Side.NONE;
 
     public Battle(int deckSize, RandomGenerator random) {
         this.random = random;
@@ -75,6 +77,15 @@ public final class Battle {
         return turn;
     }
 
+    /**
+     * The side that won the coin flip settling the last round, or {@link
+     * Side#NONE} if that round was not a draw. Reset at the start of every
+     * round, so it always describes the round just played.
+     */
+    public Side lastCoin() {
+        return lastCoin;
+    }
+
     public int getRound() {
         return round;
     }
@@ -110,6 +121,7 @@ public final class Battle {
         MobCard playerCard = playerDeck.pollFirst();
         MobCard cpuCard = cpuDeck.pollFirst();
         round++;
+        lastCoin = Side.NONE; // only a drawn round sets this
 
         // Rarity is a "lower wins" stat, so compare direction-aware scores
         int playerScore = stat.score(playerCard.stat(stat));
@@ -131,9 +143,15 @@ public final class Battle {
             pot.clear();
             turn = Side.CPU;
         } else {
-            roundWinner = Side.NONE; // tie: cards to the pot, chooser goes again
+            // Tie: both cards go to the pot and nobody has earned the next pick.
+            // Letting the chooser simply go again quietly rewards whoever picked
+            // the drawn stat, so the turn is settled on a straight coin flip —
+            // an even chance for each side. lastCoin lets the UI show it.
+            roundWinner = Side.NONE;
             pot.add(playerCard);
             pot.add(cpuCard);
+            turn = random.nextBoolean() ? Side.PLAYER : Side.CPU;
+            lastCoin = turn;
         }
 
         checkEnd();

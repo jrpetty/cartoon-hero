@@ -172,9 +172,12 @@ public final class TableBattleManager {
         if (game.phase == BattleSyncPayload.FINISHED) {
             winner = sideIdx(b.getWinner());
         }
+        // 1 = the coin flip on a drawn round went to you, 2 = to the CPU
+        Battle.Side coinSide = b.lastCoin();
+        int coin = coinSide == Battle.Side.NONE ? 0 : (coinSide == Battle.Side.PLAYER ? 1 : 2);
         List<Integer> nums = new ArrayList<>(List.of(
                 b.playerCardCount(), b.cpuCardCount(), b.potCount(), b.getRound(),
-                chosen, chooser, winner, game.difficulty.ordinal(), 0, 0, 0));
+                chosen, chooser, winner, game.difficulty.ordinal(), 0, 0, 0, 0, coin));
         PacketDistributor.sendToPlayer(player,
                 new BattleSyncPayload(game.phase, playerId, cpuId, nums, ""));
     }

@@ -30,6 +30,12 @@ public class CardDisplayRenderer implements BlockEntityRenderer<CardDisplayBlock
     // virtual "card canvas" in text pixels; scaled to sit on the block face
     private static final float CANVAS_H = 150f;
     private static final float FACE_FILL = 0.72f; // fraction of the 1-block face the card fills
+    /**
+     * How far from the block centre the card plane sits, toward the wall the
+     * panel hangs on. 0.402 lands it level with the front of the frame rails
+     * (14.5/16) and a clear 0.035 blocks proud of the backing board (15/16).
+     */
+    private static final float CARD_PLANE = 0.402f;
 
     private final Font font;
 
@@ -56,13 +62,21 @@ public class CardDisplayRenderer implements BlockEntityRenderer<CardDisplayBlock
             // scale into card-pixel space (positive x so glyphs aren't mirrored,
             // negative y because text lays out downward like a sign)
             pose.translate(0.5, 0.5, 0.5);
-            // the panel hangs flush against the wall BEHIND the block, so the
-            // card face sits on the far side from where it looks
-            pose.translate(-facing.getStepX() * 0.433, 0.0, -facing.getStepZ() * 0.433);
+            // The panel hangs flush against the wall BEHIND the block, so the
+            // card sits on the far side from where the display looks. CARD_PLANE
+            // puts it level with the front of the frame rails: the backing board
+            // is at 15/16, and drawing this close to it (the old 0.47 left a
+            // 0.07-PIXEL gap) simply z-fought its way out of existence.
+            pose.translate(-facing.getStepX() * CARD_PLANE, 0.0, -facing.getStepZ() * CARD_PLANE);
             pose.mulPose(Axis.YP.rotationDegrees(180.0F - facing.toYRot()));
             float s = FACE_FILL / CANVAS_H;
             pose.scale(s, -s, s);
             Matrix4f mtx = pose.last().pose();
+
+            // the card's own backdrop, so it reads as a card rather than as
+            // floating text on whatever the panel happens to be made of
+            bar(buffers, mtx, -58f, -78f, 58f, 80f, 0xFFF7F1E3);
+            bar(buffers, mtx, -55f, -75f, 55f, 77f, 0xFF2A2420);
 
             // a holographic display projects the boosted card
             MobCard shown = foil ? card.foilVersion() : card;

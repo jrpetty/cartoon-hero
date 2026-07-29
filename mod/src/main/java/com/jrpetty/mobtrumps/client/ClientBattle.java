@@ -37,6 +37,7 @@ public final class ClientBattle {
     private static volatile int myGames;
     private static volatile int oppGames;
     private static volatile int turnSeconds;
+    private static volatile int coin;
     private static volatile String label = "";
     private static volatile long changedAt;
 
@@ -100,6 +101,7 @@ public final class ClientBattle {
         myGames = at(n, 9);
         oppGames = at(n, 10);
         turnSeconds = at(n, 11);
+        coin = at(n, 12);
         label = nz(s.label());
         if (changed) {
             changedAt = System.currentTimeMillis();
@@ -117,6 +119,9 @@ public final class ClientBattle {
     public static String emoteText() { return emoteText; }
     public static long emoteAt() { return emoteAt; }
     public static int turnSeconds() { return turnSeconds; }
+
+    /** Coin flip that settled a drawn round: 0 none, 1 you pick next, 2 they do. */
+    public static int coin() { return coin; }
 
     private static String nz(String s) {
         return s == null ? "" : s;

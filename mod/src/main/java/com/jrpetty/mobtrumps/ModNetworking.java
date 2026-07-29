@@ -32,6 +32,12 @@ public final class ModNetworking {
                         CollectionTracker.setDisplayFoil(sp, payload.mobId(), payload.foil());
                     }
                 }));
+        registrar.playToServer(ClientPrefsPayload.TYPE, ClientPrefsPayload.STREAM_CODEC,
+                (payload, context) -> context.enqueueWork(() -> {
+                    if (context.player() instanceof net.minecraft.server.level.ServerPlayer sp) {
+                        ClientPrefsPayload.store(sp, payload.flags());
+                    }
+                }));
         registrar.playToClient(AchievementSyncPayload.TYPE, AchievementSyncPayload.STREAM_CODEC,
                 (payload, context) -> context.enqueueWork(
                         () -> com.jrpetty.mobtrumps.client.ClientAwards.set(payload.progress(),

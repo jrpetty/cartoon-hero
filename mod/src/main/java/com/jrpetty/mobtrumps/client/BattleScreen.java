@@ -68,6 +68,7 @@ public class BattleScreen extends Screen {
     private long leaveArmedAt = -1;
     private float cardScale = 0.68f;
 
+    private static final long COIN_SPIN_MS = 900L;
     private static final long EMOTE_MS = 2800L;
     private static final String[] EMOTES = {"GG", "GL", "Nice", "Close", "Oops", "Wow"};
 
@@ -170,7 +171,8 @@ public class BattleScreen extends Screen {
         // deal-in: on pick phases the cards ease to the table from off-stage
         boolean dealing = (phase == BattleSyncPayload.PLAYER_PICK
                 || phase == BattleSyncPayload.CPU_PICK
-                || phase == BattleSyncPayload.OPPONENT_PICK) && elapsed < DEAL_MS;
+                || phase == BattleSyncPayload.OPPONENT_PICK)
+                && elapsed < DEAL_MS && !ClientPrefs.reducedMotion();
         float dealT = dealing ? easeOutCubic(elapsed / (float) DEAL_MS) : 1f;
         int playerCardY = baseCardY + Math.round((1f - dealT) * 46f);
         int cpuCardY = baseCardY - Math.round((1f - dealT) * 46f);
@@ -257,7 +259,7 @@ public class BattleScreen extends Screen {
 
         // --- stat rows on the player card, with always-on hotkey chips ---
         layoutStatRows(playerX, playerCardY, cardW);
-        if (myPick) {
+        if (myPick && !ClientPrefs.reducedMotion()) {
             float roll = (now % 2000L) / 2000f;
             int span = statRects[5][1] + statRects[5][3] - statRects[0][1];
             int shimmerY = statRects[0][1] + (int) (roll * span);
@@ -309,6 +311,12 @@ public class BattleScreen extends Screen {
             drawTurnTimer(g, elapsed, ClientBattle.turnSeconds() * 1000L, myPick, surfX0, surfX1, HEADER_H + 2);
         }
 
+        // --- coin flip settling a drawn round ---
+        if (phase == BattleSyncPayload.RESULT && winner == 2 && ClientBattle.coin() != 0) {
+            drawCoinFlip(g, centerY, Math.max(0, elapsed - FLIP_MS), ClientBattle.coin(),
+                    pvp ? shorten(opp) : "CPU");
+        }
+
         // --- emote bubble floating above whoever spoke ---
         drawEmote(g, now);
 
@@ -357,6 +365,55 @@ public class BattleScreen extends Screen {
             col = (System.currentTimeMillis() / 250 % 2 == 0) ? 0xFFF0625A : col;
         }
         g.fill(x0, y, x0 + fillW, y + 3, col);
+    }
+
+    /**
+     * The coin that settles a drawn round. Nobody won the cards, so nobody has
+     * earned the next pick — it spins for {@link #COIN_SPIN_MS}, squashing
+     * through its edge as it turns, then lands and names who chooses. Reduced
+     * motion skips straight to the landed face.
+     */
+    private void drawCoinFlip(GuiGraphics g, int centerY, long since, int coin, String oppName) {
+        boolean mine = coin == 1;
+        float t = ClientPrefs.reducedMotion() ? 1f
+                : Mth.clamp(since / (float) COIN_SPIN_MS, 0f, 1f);
+        int cx = width / 2;
+        int cy = centerY - 46;
+        int r = 15;
+
+        // spin: ease out so it visibly slows into its final face
+        float turns = (1f - (1f - t) * (1f - t) * (1f - t)) * 7.5f;
+        float squash = t >= 1f ? 1f : (float) Math.abs(Math.cos(turns * Math.PI));
+        int h = Math.max(1, Math.round(r * squash));
+        // while spinning, the face on show alternates with each half turn
+        boolean showMine = t >= 1f ? mine : (((int) (turns * 2)) % 2 == 0) == mine;
+        int face = showMine ? YOU_ACCENT : OPP_ACCENT;
+
+        g.fill(cx - r - 2, cy - h - 2, cx + r + 2, cy + h + 2, 0xC0081E16);
+        g.fill(cx - r, cy - h, cx + r, cy + h, 0xFFB8892E);          // coin edge
+        g.fill(cx - r + 2, cy - Math.max(1, h - 2), cx + r - 2, cy + Math.max(1, h - 2), GOLD);
+        if (h > 4) {
+            g.fill(cx - r + 5, cy - h + 4, cx + r - 5, cy + h - 4, face);
+        }
+
+        String label;
+        int labelColor;
+        if (t < 1f) {
+            label = "COIN FLIP";
+            labelColor = GOLD;
+        } else {
+            label = mine ? "YOU PICK NEXT" : oppName.toUpperCase(Locale.ROOT) + " PICKS NEXT";
+            labelColor = mine ? YOU_ACCENT : OPP_ACCENT;
+        }
+        int w = font.width(label) + 12;
+        int lx = cx - w / 2;
+        int ly = cy + r + 5;
+        g.fill(lx, ly, lx + w, ly + 13, 0xC0081E16);
+        g.renderOutline(lx, ly, w, 13, labelColor);
+        g.drawString(font, label, lx + 6, ly + 3, labelColor, false);
+        if (t >= 1f) {
+            g.drawCenteredString(font, "the round was a draw", cx, ly + 16, TEXT_DIM);
+        }
     }
 
     /** A speech bubble above the card of whoever emoted, fading out. */
@@ -471,7 +528,8 @@ public class BattleScreen extends Screen {
             int x = width / 2 - w / 2;
             actionRect = new int[]{x, by, w, 18};
             boolean hover = inRect(mouseX, mouseY, actionRect);
-            float pulse = 0.5f + 0.5f * (float) Math.sin(now / 350.0);
+            float pulse = ClientPrefs.reducedMotion() ? 0.5f
+                    : 0.5f + 0.5f * (float) Math.sin(now / 350.0);
             int glowA = (int) (0x30 + 0x28 * pulse) << 24;
             g.fill(x - 3, by - 3, x + w + 3, by + 21, glowA | 0x00E9C46A);
             g.fill(x, by, x + w, by + 18, hover ? 0xFF3BA85E : 0xFF2E7D46);
@@ -553,7 +611,8 @@ public class BattleScreen extends Screen {
     /** The VS medallion: a gold diamond with the beat of the table, tally + pot below. */
     private void drawCenterInfo(GuiGraphics g, int centerY) {
         int cx = width / 2;
-        float beat = 1f + 0.05f * (float) Math.sin(System.currentTimeMillis() / 500.0);
+        float beat = ClientPrefs.reducedMotion() ? 1f
+                : 1f + 0.05f * (float) Math.sin(System.currentTimeMillis() / 500.0);
         var pose = g.pose();
         // the diamond behind the VS
         pose.pushPose();
@@ -630,7 +689,8 @@ public class BattleScreen extends Screen {
             color = winner == 0 ? 0xFF6BE87A : winner == 1 ? OPP_ACCENT : 0xFFE7C24A;
         }
         float t = Mth.clamp(elapsed / 200f, 0f, 1f);
-        float scale = (phase == BattleSyncPayload.FINISHED ? 2.4f : 1.5f) * easeOutBack(t);
+        float grow = ClientPrefs.reducedMotion() ? 1f : easeOutBack(t);
+        float scale = (phase == BattleSyncPayload.FINISHED ? 2.4f : 1.5f) * grow;
         var pose = g.pose();
         pose.pushPose();
         pose.translate(width / 2f, y, 0);
@@ -647,7 +707,8 @@ public class BattleScreen extends Screen {
 
     private void drawCardGlow(GuiGraphics g, int x, int y, int w, int h, int color) {
         if (color == 0) return;
-        float pulse = 0.6f + 0.4f * (float) Math.sin(System.currentTimeMillis() / 400.0);
+        float pulse = ClientPrefs.reducedMotion() ? 1f
+                : 0.6f + 0.4f * (float) Math.sin(System.currentTimeMillis() / 400.0);
         for (int i = 4; i >= 1; i--) {
             int s = i * 3;
             int a = (int) (0x30 * pulse * (1f - (i - 1) / 4f)) << 24;
