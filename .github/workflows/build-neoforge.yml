@@ -69,6 +69,24 @@ jobs:
           find artifacts -name '*.jar' ! -name '*-sources.jar' -exec cp {} release/ \;
           ls -l release
 
+      # The publish step only adds and overwrites, so a jar for a mod that no
+      # longer exists would sit on the release forever and get installed
+      # alongside its replacement. Drop anything we are not about to upload.
+      - name: Prune stale release assets
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          api="https://api.github.com/repos/${{ github.repository }}"
+          assets=$(curl -sS -H "Authorization: Bearer $GH_TOKEN" \
+            "$api/releases/tags/neoforge-latest" | jq -r '.assets[]? | "\(.id) \(.name)"')
+          while read -r id name; do
+            [ -n "$id" ] || continue
+            if [ ! -f "release/$name" ]; then
+              echo "Deleting stale asset: $name"
+              curl -sS -X DELETE -H "Authorization: Bearer $GH_TOKEN" "$api/releases/assets/$id"
+            fi
+          done <<< "$assets"
+
       - name: Publish release
         uses: softprops/action-gh-release@v2
         with:
