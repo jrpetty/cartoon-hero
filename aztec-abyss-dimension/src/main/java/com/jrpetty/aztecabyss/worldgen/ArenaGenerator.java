@@ -45,7 +45,7 @@ public final class ArenaGenerator {
         decoratePerimeter(level);
         applyWorldBorder(level);
         TempleBuilder.build(level, AztecAbyssConstants.TEMPLE_CENTER);
-        plantForest(level);
+        placeRuins(level);
         placeOreVeins(level);
         placeLootChests(level);
         placeArrivalPortal(level);
@@ -221,49 +221,152 @@ public final class ArenaGenerator {
         level.getWorldBorder().setSize((AztecAbyssConstants.ARENA_RADIUS - 2) * 2.0);
     }
 
-    private static void plantForest(ServerLevel level) {
+    /**
+     * Scatters crumbling Aztec ruins across the open field around the temple -
+     * broken walls, toppled pillars, rubble piles and the odd arch. Deliberately
+     * low and sparse so sightlines stay open and the horde can always path
+     * through: cover and character without the sightline-blocking forest that
+     * used to stand here.
+     */
+    private static void placeRuins(ServerLevel level) {
         Random rng = new Random(WORLDGEN_SEED + 1);
         int floorY = AztecAbyssConstants.ARENA_FLOOR_Y;
-        int innerEdge = AztecAbyssConstants.TEMPLE_BASE_HALF_WIDTH + 14;
-        int outerEdge = AztecAbyssConstants.ARENA_RADIUS - 8;
+        int innerEdge = AztecAbyssConstants.TEMPLE_BASE_HALF_WIDTH + 8;
+        int outerEdge = AztecAbyssConstants.ARENA_RADIUS - 10;
 
-        for (int i = 0; i < 260; i++) {
+        for (int i = 0; i < 46; i++) {
             double angle = rng.nextDouble() * Math.PI * 2.0;
             double dist = innerEdge + rng.nextDouble() * (outerEdge - innerEdge);
             int x = (int) Math.round(Math.cos(angle) * dist);
             int z = (int) Math.round(Math.sin(angle) * dist);
 
-            // Keep a clear sightline/approach directly south of the arrival portal.
+            // Keep the arrival walkway and every gate mouth clear.
             if (z > 40 && Math.abs(x) < 6) {
                 continue;
             }
-            plantTree(level, new BlockPos(x, floorY + 1, z), rng);
+            if (nearGate(x, z, 7)) {
+                continue;
+            }
+            BlockPos base = new BlockPos(x, floorY + 1, z);
+            switch (rng.nextInt(4)) {
+                case 0 -> ruinWall(level, base, rng);
+                case 1 -> ruinPillar(level, base, rng);
+                case 2 -> ruinRubble(level, base, rng);
+                default -> ruinArch(level, base, rng);
+            }
         }
     }
 
-    private static void plantTree(ServerLevel level, BlockPos base, Random rng) {
-        boolean darkOak = rng.nextBoolean();
-        BlockState log = (darkOak ? Blocks.DARK_OAK_LOG : Blocks.SPRUCE_LOG).defaultBlockState();
-        BlockState leaves = (darkOak ? Blocks.DARK_OAK_LEAVES : Blocks.SPRUCE_LEAVES).defaultBlockState()
-                .setValue(BlockStateProperties.PERSISTENT, true);
-        int height = 5 + rng.nextInt(4);
-
-        if (!level.getBlockState(base.below()).is(Blocks.AIR)) {
-            for (int h = 0; h < height; h++) {
-                level.setBlock(base.above(h), log, 2);
+    private static boolean nearGate(int x, int z, int pad) {
+        for (BlockPos g : AztecAbyssConstants.MOB_GATES) {
+            if (Math.abs(g.getX() - x) <= pad && Math.abs(g.getZ() - z) <= pad) {
+                return true;
             }
-            int canopyR = 2 + rng.nextInt(2);
-            for (int dx = -canopyR; dx <= canopyR; dx++) {
-                for (int dz = -canopyR; dz <= canopyR; dz++) {
-                    for (int dy = 0; dy <= 2; dy++) {
-                        if (dx * dx + dz * dz <= canopyR * canopyR + 1 && rng.nextDouble() < 0.85) {
-                            BlockPos leafPos = base.offset(dx, height - 2 + dy, dz);
-                            if (level.getBlockState(leafPos).isAir()) {
-                                level.setBlock(leafPos, leaves, 2);
-                            }
-                        }
-                    }
+        }
+        return false;
+    }
+
+    private static BlockState ruinBlock(Random rng) {
+        return switch (rng.nextInt(5)) {
+            case 0 -> Blocks.MOSSY_STONE_BRICKS.defaultBlockState();
+            case 1 -> Blocks.CRACKED_STONE_BRICKS.defaultBlockState();
+            case 2 -> Blocks.POLISHED_BLACKSTONE_BRICKS.defaultBlockState();
+            case 3 -> Blocks.CHISELED_STONE_BRICKS.defaultBlockState();
+            default -> Blocks.STONE_BRICKS.defaultBlockState();
+        };
+    }
+
+    /** A broken length of wall, taller at one end and crumbling away at the other. */
+    private static void ruinWall(ServerLevel level, BlockPos base, Random rng) {
+        boolean alongX = rng.nextBoolean();
+        int len = 4 + rng.nextInt(6);
+        int peak = 2 + rng.nextInt(3);
+        for (int i = 0; i < len; i++) {
+            int h = Math.max(1, peak - (i * peak) / Math.max(1, len - 1) + (rng.nextInt(2)));
+            for (int dy = 0; dy < h; dy++) {
+                BlockPos p = alongX ? base.offset(i, dy, 0) : base.offset(0, dy, i);
+                if (level.getBlockState(p).isAir()) {
+                    level.setBlock(p, ruinBlock(rng), 2);
                 }
+            }
+            // The odd gap where the wall has fallen through.
+            if (rng.nextInt(5) == 0) {
+                i++;
+            }
+        }
+    }
+
+    /** A toppled or snapped-off column, sometimes with a fallen capital beside it. */
+    private static void ruinPillar(ServerLevel level, BlockPos base, Random rng) {
+        int h = 2 + rng.nextInt(4);
+        for (int dy = 0; dy < h; dy++) {
+            BlockPos p = base.above(dy);
+            if (level.getBlockState(p).isAir()) {
+                level.setBlock(p, ruinBlock(rng), 2);
+            }
+        }
+        if (rng.nextBoolean()) {
+            level.setBlock(base.above(h), Blocks.STONE_BRICK_SLAB.defaultBlockState(), 2);
+        }
+        // Fallen section lying on the ground.
+        if (rng.nextInt(3) == 0) {
+            int dir = rng.nextInt(4);
+            for (int i = 1; i <= 2 + rng.nextInt(2); i++) {
+                BlockPos p = switch (dir) {
+                    case 0 -> base.offset(i, 0, 0);
+                    case 1 -> base.offset(-i, 0, 0);
+                    case 2 -> base.offset(0, 0, i);
+                    default -> base.offset(0, 0, -i);
+                };
+                if (level.getBlockState(p).isAir()) {
+                    level.setBlock(p, ruinBlock(rng), 2);
+                }
+            }
+        }
+    }
+
+    /** A low scatter of rubble and slabs - ankle-height dressing. */
+    private static void ruinRubble(ServerLevel level, BlockPos base, Random rng) {
+        int spread = 2 + rng.nextInt(3);
+        for (int dx = -spread; dx <= spread; dx++) {
+            for (int dz = -spread; dz <= spread; dz++) {
+                if (rng.nextDouble() > 0.35) {
+                    continue;
+                }
+                BlockPos p = base.offset(dx, 0, dz);
+                if (!level.getBlockState(p).isAir()) {
+                    continue;
+                }
+                level.setBlock(p, rng.nextBoolean()
+                        ? Blocks.STONE_BRICK_SLAB.defaultBlockState()
+                        : ruinBlock(rng), 2);
+            }
+        }
+    }
+
+    /** A standing doorway/arch - the most recognisable ruin silhouette. */
+    private static void ruinArch(ServerLevel level, BlockPos base, Random rng) {
+        boolean alongX = rng.nextBoolean();
+        int h = 3 + rng.nextInt(2);
+        int span = 2 + rng.nextInt(2);
+        for (int dy = 0; dy < h; dy++) {
+            BlockPos a = base.above(dy);
+            BlockPos b = alongX ? base.offset(span, dy, 0) : base.offset(0, dy, span);
+            if (level.getBlockState(a).isAir()) {
+                level.setBlock(a, ruinBlock(rng), 2);
+            }
+            if (level.getBlockState(b).isAir()) {
+                level.setBlock(b, ruinBlock(rng), 2);
+            }
+        }
+        // Lintel across the top, sometimes partly collapsed.
+        for (int i = 0; i <= span; i++) {
+            if (rng.nextInt(6) == 0) {
+                continue;
+            }
+            BlockPos p = alongX ? base.offset(i, h, 0) : base.offset(0, h, i);
+            if (level.getBlockState(p).isAir()) {
+                level.setBlock(p, ruinBlock(rng), 2);
             }
         }
     }

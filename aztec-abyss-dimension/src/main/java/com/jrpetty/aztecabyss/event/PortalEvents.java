@@ -95,6 +95,18 @@ public final class PortalEvents {
         boolean inPortal = player.level().getBlockState(pos).is(ModBlocks.ABYSS_PORTAL.get());
 
         CompoundTag data = player.getPersistentData();
+
+        // Grace window right after a dimension change: you always spawn standing
+        // in/near a portal, and without this you'd be yanked straight back.
+        long grace = data.getLong("aztecabyss_portal_grace");
+        if (grace > 0L) {
+            if (player.level().getGameTime() < grace) {
+                data.putInt("aztecabyss_portal_ticks", 0);
+                return;
+            }
+            data.putLong("aztecabyss_portal_grace", 0L);
+        }
+
         int ticks = data.getInt("aztecabyss_portal_ticks");
 
         if (!inPortal) {
@@ -120,8 +132,20 @@ public final class PortalEvents {
         ResourceKey<Level> currentDim = player.level().dimension();
 
         if (currentDim.equals(AztecAbyssConstants.ABYSS_LEVEL_KEY)) {
-            // Walking back into the arrival portal is a voluntary retreat: no reward, no cooldown.
-            RoundManager.abandonRun((ServerLevel) player.level(), player);
+            // There is no walking away from a live run - the only ways out are
+            // death, extraction, or clearing the final round.
+            if (RoundManager.game().isParticipant(player.getUUID())) {
+                player.displayClientMessage(Component.literal(
+                        "§4The way back is sealed. §7Survive, extract between rounds — or die trying."), true);
+            }
+            return;
+        }
+
+        // A run is already under way: the Abyss is closed to newcomers.
+        if (RoundManager.isRunLocked()) {
+            player.displayClientMessage(Component.literal(
+                    "§5The Abyss is sealed — a hunt is already under way. §7Wait for it to end."), true);
+            player.level().playSound(null, player.blockPosition(), SoundEvents.PORTAL_TRAVEL, SoundSource.BLOCKS, 0.3F, 0.2F);
             return;
         }
 
@@ -161,6 +185,8 @@ public final class PortalEvents {
         player.setData(ModAttachments.RUN_STATE, state);
 
         player.changeDimension(AbyssTeleporter.toAbyssArrival(abyss));
+        // Don't let the arrival portal immediately fling them home again.
+        player.getPersistentData().putLong("aztecabyss_portal_grace", abyss.getGameTime() + 100L);
         RoundManager.onPlayerEnter(player);
     }
 

@@ -66,6 +66,38 @@ public final class RoundManager {
         return game;
     }
 
+    /**
+     * True while a run is under way with players still inside. The Abyss is
+     * sealed in this state: nobody can join late and nobody can walk out - the
+     * only way home is to die, extract, or win.
+     */
+    public static boolean isRunLocked() {
+        return !game.getParticipants().isEmpty()
+                && (game.getPhase() == AbyssGame.Phase.BETWEEN_ROUNDS || game.getPhase() == AbyssGame.Phase.IN_ROUND);
+    }
+
+    /**
+     * Seals or reopens the arrival portal inside the Abyss. While a run is live
+     * the portal surface is removed entirely, so players can't slip back through
+     * it (and can't get bounced straight home by standing in it on arrival).
+     */
+    public static void setArrivalPortalOpen(ServerLevel level, boolean open) {
+        BlockPos arrival = AztecAbyssConstants.ABYSS_ARRIVAL_POS;
+        int floorY = arrival.getY() - 1;
+        for (int dx = 0; dx <= 1; dx++) {
+            for (int dy = 1; dy <= 3; dy++) {
+                BlockPos p = new BlockPos(arrival.getX() + dx, floorY + dy, arrival.getZ());
+                if (open) {
+                    level.setBlock(p, com.jrpetty.aztecabyss.registry.ModBlocks.ABYSS_PORTAL.get().defaultBlockState()
+                            .setValue(com.jrpetty.aztecabyss.block.AbyssPortalBlock.AXIS,
+                                    net.minecraft.core.Direction.Axis.X), 3);
+                } else {
+                    level.setBlock(p, Blocks.AIR.defaultBlockState(), 3);
+                }
+            }
+        }
+    }
+
     private static void resetSession() {
         for (ServerBossEvent bar : BOSS_BARS.values()) {
             bar.removeAllPlayers();
@@ -102,6 +134,10 @@ public final class RoundManager {
         }
         AbyssAbility.give(player); // one-charge Abyssal Nova, dimension-locked
         setupBossBar(player);
+        // Seal the way out the moment the run begins: no late joins, no walking away.
+        if (player.level() instanceof ServerLevel abyss) {
+            setArrivalPortalOpen(abyss, false);
+        }
 
         ModNetworking.sendState(player, true, game.getRound()); // triggers the arrival cinematic
         if (player.level() instanceof ServerLevel abyssLevel) {
@@ -141,6 +177,7 @@ public final class RoundManager {
             if (game.getPhase() != AbyssGame.Phase.IDLE) {
                 clearWaveMobs(level); // don't orphan a boss/adds when the arena empties
                 resetSession();
+                setArrivalPortalOpen(level, true); // arena is free again - the way in reopens
             }
             return;
         }
@@ -157,6 +194,12 @@ public final class RoundManager {
         long now = level.getGameTime();
         if (now % 10L == 0L) {
             broadcastHud(level); // refresh the live HUD ~twice a second
+        }
+        if (now % 40L == 0L) {
+            retargetWaveMobs(level, present); // nothing gets to loiter
+        }
+        if (now % 200L == 0L) {
+            repatriateStuckMobs(level, present); // pull glitched stragglers back to a gate
         }
         switch (game.getPhase()) {
             case BETWEEN_ROUNDS -> {
@@ -274,7 +317,6 @@ public final class RoundManager {
     }
 
     private static void spawnWaveMob(ServerLevel level, List<ServerPlayer> present, int round, boolean brute) {
-        ServerPlayer target = pickTarget(present);
         // Every wave mob pours out of one of the four cardinal horde gates.
         BlockPos gate = AztecAbyssConstants.MOB_GATES[RNG.nextInt(AztecAbyssConstants.MOB_GATES.length)];
         boolean onZAxis = gate.getX() == 0; // north/south gates jitter along X; east/west along Z
@@ -294,6 +336,9 @@ public final class RoundManager {
         applyRoundScaling(mob, round, brute);
         mob.setPersistenceRequired();
         mob.getPersistentData().putBoolean("aztecabyss_wave_mob", true);
+        mob.getPersistentData().putLong("aztecabyss_gate_tick", level.getGameTime());
+        // Lock straight onto whoever is closest to the gate it came out of.
+        ServerPlayer target = nearestTarget(present, pos);
         if (target != null) {
             mob.setTarget(target);
         }
@@ -1262,6 +1307,75 @@ public final class RoundManager {
             }
         }
         return out;
+    }
+
+    /** The closest standing hunter to a point - wave mobs always hunt the nearest. */
+    private static ServerPlayer nearestTarget(List<ServerPlayer> present, BlockPos from) {
+        ServerPlayer best = null;
+        double bestDist = Double.MAX_VALUE;
+        for (ServerPlayer p : present) {
+            if (p.getData(ModAttachments.RUN_STATE).isDowned()) {
+                continue;
+            }
+            double d = p.distanceToSqr(from.getX() + 0.5, from.getY(), from.getZ() + 0.5);
+            if (d < bestDist) {
+                bestDist = d;
+                best = p;
+            }
+        }
+        return best != null ? best : pickTarget(present);
+    }
+
+    /** Ticks in the arena before a wave mob is assumed stuck and pulled back to a gate. */
+    private static final long STUCK_TICKS = 3600L; // 3 minutes
+
+    /**
+     * Sweeps the arena for wave mobs that have been alive too long - usually
+     * stuck on geometry or pathing nowhere - and teleports them back to a gate
+     * with a fresh target, so a wave can never stall on a glitched straggler.
+     */
+    private static void repatriateStuckMobs(ServerLevel level, List<ServerPlayer> present) {
+        long now = level.getGameTime();
+        int r = AztecAbyssConstants.ARENA_RADIUS;
+        List<Mob> mobs = level.getEntitiesOfClass(Mob.class,
+                new net.minecraft.world.phys.AABB(-r, AztecAbyssConstants.ARENA_FLOOR_Y - 8, -r,
+                        r, AztecAbyssConstants.ARENA_FLOOR_Y + AztecAbyssConstants.WALL_HEIGHT, r),
+                m -> m.getPersistentData().getBoolean("aztecabyss_wave_mob")
+                        && !m.getPersistentData().getBoolean("aztecabyss_boss"));
+
+        for (Mob mob : mobs) {
+            long since = now - mob.getPersistentData().getLong("aztecabyss_gate_tick");
+            if (since < STUCK_TICKS) {
+                continue;
+            }
+            BlockPos gate = AztecAbyssConstants.MOB_GATES[RNG.nextInt(AztecAbyssConstants.MOB_GATES.length)];
+            mob.teleportTo(gate.getX() + 0.5, gate.getY(), gate.getZ() + 0.5);
+            mob.getPersistentData().putLong("aztecabyss_gate_tick", now);
+            ServerPlayer target = nearestTarget(present, gate);
+            if (target != null) {
+                mob.setTarget(target);
+            }
+            level.sendParticles(ParticleTypes.PORTAL,
+                    gate.getX() + 0.5, gate.getY() + 1.0, gate.getZ() + 0.5, 10, 0.4, 0.7, 0.4, 0.05);
+        }
+    }
+
+    /** Keeps every wave mob locked onto the closest hunter so nothing loiters. */
+    private static void retargetWaveMobs(ServerLevel level, List<ServerPlayer> present) {
+        int r = AztecAbyssConstants.ARENA_RADIUS;
+        List<Mob> mobs = level.getEntitiesOfClass(Mob.class,
+                new net.minecraft.world.phys.AABB(-r, AztecAbyssConstants.ARENA_FLOOR_Y - 8, -r,
+                        r, AztecAbyssConstants.ARENA_FLOOR_Y + AztecAbyssConstants.WALL_HEIGHT, r),
+                m -> m.getPersistentData().getBoolean("aztecabyss_wave_mob"));
+        for (Mob mob : mobs) {
+            net.minecraft.world.entity.LivingEntity current = mob.getTarget();
+            if (current == null || !current.isAlive()) {
+                ServerPlayer target = nearestTarget(present, mob.blockPosition());
+                if (target != null) {
+                    mob.setTarget(target);
+                }
+            }
+        }
     }
 
     private static ServerPlayer pickTarget(List<ServerPlayer> present) {
