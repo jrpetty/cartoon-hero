@@ -6,6 +6,7 @@ import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.fml.event.lifecycle.FMLClientSetupEvent;
 import net.neoforged.neoforge.client.event.EntityRenderersEvent;
+import net.neoforged.neoforge.client.event.RegisterMenuScreensEvent;
 
 /**
  * Client-side setup: registers the Rope Arrow projectile renderer.
@@ -22,6 +23,12 @@ public class GadgetsClient {
         event.registerBlockEntityRenderer(Gadgets.STOCK_MONITOR_BE.get(), StockMonitorRenderer::new);
         event.registerBlockEntityRenderer(Gadgets.TRASH_CAN_BE.get(), TrashCanRenderer::new);
         event.registerBlockEntityRenderer(Gadgets.COMMAND_HUB_BE.get(), CommandHubRenderer::new);
+    }
+
+    // NeoForge keeps MenuScreens.register private; screens are bound here instead.
+    @SubscribeEvent
+    public static void onRegisterScreens(RegisterMenuScreensEvent event) {
+        event.register(Gadgets.ENHANCEMENT_MENU.get(), EnhancementScreen::new);
     }
 
     @SubscribeEvent

@@ -7,6 +7,9 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.MobCategory;
 import net.minecraft.world.item.CreativeModeTab;
+import net.minecraft.world.item.CreativeModeTabs;
+import net.minecraft.world.flag.FeatureFlags;
+import net.minecraft.world.inventory.MenuType;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.item.ItemStack;
@@ -18,6 +21,7 @@ import net.minecraft.server.level.ServerPlayer;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.fml.common.Mod;
 import net.neoforged.neoforge.common.NeoForge;
+import net.neoforged.neoforge.event.BuildCreativeModeTabContentsEvent;
 import net.neoforged.neoforge.event.entity.player.PlayerInteractEvent;
 import net.neoforged.neoforge.event.server.ServerStoppedEvent;
 import net.neoforged.neoforge.network.event.RegisterPayloadHandlersEvent;
@@ -38,6 +42,8 @@ public class Gadgets {
             DeferredRegister.create(Registries.CREATIVE_MODE_TAB, MODID);
     public static final DeferredRegister<EntityType<?>> ENTITIES =
             DeferredRegister.create(Registries.ENTITY_TYPE, MODID);
+    public static final DeferredRegister<MenuType<?>> MENUS =
+            DeferredRegister.create(Registries.MENU, MODID);
 
     public static final Supplier<EntityType<RopeArrowEntity>> ROPE_ARROW_ENTITY = ENTITIES.register("rope_arrow",
             () -> EntityType.Builder.<RopeArrowEntity>of(RopeArrowEntity::new, MobCategory.MISC)
@@ -128,6 +134,17 @@ public class Gadgets {
             "tip.gadgets.storage_sensor.1", "tip.gadgets.storage_sensor.2", "tip.gadgets.storage_sensor.3"));
     public static final DeferredItem<?> COMMAND_HUB_ITEM = ITEMS.register("command_hub", () -> new TooltipBlockItem(COMMAND_HUB.get(), new Item.Properties(),
             "tip.gadgets.command_hub.1", "tip.gadgets.command_hub.2", "tip.gadgets.command_hub.3"));
+    public static final DeferredItem<Item> GRAPPLING_HOOK =
+            ITEMS.register("grappling_hook", () -> new GrapplingHookItem(new Item.Properties().stacksTo(1)));
+    public static final DeferredBlock<Block> ENHANCEMENT_TABLE = BLOCKS.register("enhancement_table",
+            () -> new EnhancementTableBlock(BlockBehaviour.Properties.of()
+                    .strength(2.5F).requiresCorrectToolForDrops().sound(SoundType.METAL).noOcclusion()));
+    public static final DeferredItem<?> ENHANCEMENT_TABLE_ITEM = ITEMS.register("enhancement_table",
+            () -> new TooltipBlockItem(ENHANCEMENT_TABLE.get(), new Item.Properties(),
+                    "tip.gadgets.enhancement_table.1", "tip.gadgets.enhancement_table.2"));
+    public static final Supplier<MenuType<EnhancementMenu>> ENHANCEMENT_MENU = MENUS.register("enhancement_table",
+            () -> new MenuType<EnhancementMenu>(EnhancementMenu::new, FeatureFlags.VANILLA_SET));
+
     public static final DeferredItem<Item> MONITOR_WAND =
             ITEMS.register("monitor_wand", () -> new MonitorWandItem(new Item.Properties().stacksTo(1)));
     public static final DeferredItem<Item> WIRELESS_REMOTE =
@@ -197,16 +214,21 @@ public class Gadgets {
                         output.accept(COMMAND_HUB_ITEM.get());
                         output.accept(MONITOR_WAND.get());
                         output.accept(WIRELESS_REMOTE.get());
+                        output.accept(GRAPPLING_HOOK.get());
+                        output.accept(ENHANCEMENT_TABLE_ITEM.get());
                     })
                     .build());
 
     public Gadgets(IEventBus modBus) {
+        GrappleConfig.load();
         ITEMS.register(modBus);
         BLOCKS.register(modBus);
         BLOCK_ENTITIES.register(modBus);
         CREATIVE_TABS.register(modBus);
         ENTITIES.register(modBus);
+        MENUS.register(modBus);
         modBus.addListener(Gadgets::registerPayloads);
+        modBus.addListener(Gadgets::addCreative);
 
         // Wireless redstone signals are transient — drop them when the server stops
         // so they never leak into the next world loaded in the same session.
@@ -225,6 +247,13 @@ public class Gadgets {
                 event.setCancellationResult(InteractionResult.SUCCESS);
             }
         });
+    }
+
+    private static void addCreative(BuildCreativeModeTabContentsEvent event) {
+        // The hook stays discoverable in the vanilla tab people already look in.
+        if (event.getTabKey() == CreativeModeTabs.TOOLS_AND_UTILITIES) {
+            event.accept(GRAPPLING_HOOK);
+        }
     }
 
     private static void registerPayloads(RegisterPayloadHandlersEvent event) {

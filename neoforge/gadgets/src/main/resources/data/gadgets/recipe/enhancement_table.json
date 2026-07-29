@@ -1,0 +1,12 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "equipment",
+  "pattern": [ "III", "SAS", "LLL" ],
+  "key": {
+    "I": { "item": "minecraft:iron_ingot" },
+    "S": { "item": "minecraft:string" },
+    "A": { "item": "minecraft:anvil" },
+    "L": { "item": "minecraft:oak_log" }
+  },
+  "result": { "id": "gadgets:enhancement_table", "count": 1 }
+}

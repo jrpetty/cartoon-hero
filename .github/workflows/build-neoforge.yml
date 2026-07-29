@@ -21,7 +21,6 @@ jobs:
         mod:
           - cartoon-hero
           - desire-paths
-          - grappling-hook
           - succession
           - gadgets
     name: Build ${{ matrix.mod }} (NeoForge)
