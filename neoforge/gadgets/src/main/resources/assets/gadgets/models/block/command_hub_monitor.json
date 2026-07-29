@@ -1,0 +1,32 @@
+{
+  "textures": {
+    "particle": "gadgets:block/hub_monitor_frame",
+    "frame": "gadgets:block/hub_monitor_frame",
+    "screen": "gadgets:block/hub_monitor_screen"
+  },
+  "elements": [
+    {
+      "name": "back",
+      "from": [0, 0, 1], "to": [16, 16, 4],
+      "faces": {
+        "north": { "uv": [0, 0, 16, 16], "texture": "#frame" },
+        "south": { "uv": [0, 0, 16, 16], "texture": "#frame" },
+        "east":  { "uv": [1, 0, 4, 16], "texture": "#frame" },
+        "west":  { "uv": [1, 0, 4, 16], "texture": "#frame" },
+        "up":    { "uv": [0, 1, 16, 4], "texture": "#frame" },
+        "down":  { "uv": [0, 1, 16, 4], "texture": "#frame" }
+      }
+    },
+    {
+      "name": "glass",
+      "from": [1, 1, 0], "to": [15, 15, 1],
+      "faces": {
+        "north": { "uv": [1, 1, 15, 15], "texture": "#screen" },
+        "east":  { "uv": [0, 1, 1, 15], "texture": "#frame" },
+        "west":  { "uv": [0, 1, 1, 15], "texture": "#frame" },
+        "up":    { "uv": [1, 0, 15, 1], "texture": "#frame" },
+        "down":  { "uv": [1, 0, 15, 1], "texture": "#frame" }
+      }
+    }
+  ]
+}

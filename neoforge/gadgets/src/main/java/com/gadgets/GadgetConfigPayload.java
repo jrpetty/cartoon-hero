@@ -88,8 +88,42 @@ public record GadgetConfigPayload(BlockPos pos, String key, int value, String te
                     hub.clearNodes();
                 }
             }
+            case "hub_unlink" -> {
+                // Index is validated against the live board, so a click on a
+                // stale row is dropped rather than unlinking the wrong gadget.
+                if (be instanceof CommandHubBlockEntity hub) {
+                    hub.removeNodeAt(p.value());
+                }
+            }
+            case "hubmon_pick" -> {
+                if (be instanceof CommandHubMonitorBlockEntity monitor) {
+                    pickMonitorSource(player, monitor, p.text());
+                }
+            }
             default -> {
             }
+        }
+    }
+
+    /**
+     * Applies a monitor's chosen line, encoded as {@code dimension@packedPos}.
+     * An empty selection blanks the screen. The monitor itself checks the line
+     * is really on its hub's board before accepting it.
+     */
+    private static void pickMonitorSource(ServerPlayer player, CommandHubMonitorBlockEntity monitor, String text) {
+        if (text.isEmpty()) {
+            monitor.clearChosenSource();
+            return;
+        }
+        int at = text.lastIndexOf('@');
+        if (at <= 0 || player.level().getServer() == null) {
+            return;
+        }
+        try {
+            monitor.chooseSource(player.level().getServer(), text.substring(0, at),
+                    Long.parseLong(text.substring(at + 1)));
+        } catch (NumberFormatException ignored) {
+            // malformed selection — ignore
         }
     }
 }

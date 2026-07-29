@@ -1,0 +1,8 @@
+{
+  "type": "minecraft:block",
+  "pools": [ {
+    "rolls": 1,
+    "entries": [ { "type": "minecraft:item", "name": "gadgets:command_hub_monitor" } ],
+    "conditions": [ { "condition": "minecraft:survives_explosion" } ]
+  } ]
+}

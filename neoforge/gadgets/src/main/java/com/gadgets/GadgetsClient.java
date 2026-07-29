@@ -23,6 +23,7 @@ public class GadgetsClient {
         event.registerBlockEntityRenderer(Gadgets.STOCK_MONITOR_BE.get(), StockMonitorRenderer::new);
         event.registerBlockEntityRenderer(Gadgets.TRASH_CAN_BE.get(), TrashCanRenderer::new);
         event.registerBlockEntityRenderer(Gadgets.COMMAND_HUB_BE.get(), CommandHubRenderer::new);
+        event.registerBlockEntityRenderer(Gadgets.COMMAND_HUB_MONITOR_BE.get(), CommandHubMonitorRenderer::new);
     }
 
     // NeoForge keeps MenuScreens.register private; screens are bound here instead.
@@ -37,5 +38,7 @@ public class GadgetsClient {
         ScreenOpener.SENSOR = be -> Minecraft.getInstance().setScreen(new SensorScreen((PlayerSensorBlockEntity) be));
         ScreenOpener.COUNTER = be -> Minecraft.getInstance().setScreen(new CounterScreen((ItemCounterBlockEntity) be));
         ScreenOpener.MONITOR = be -> Minecraft.getInstance().setScreen(new MonitorScreen((StockMonitorBlockEntity) be));
+        ScreenOpener.HUB_MONITOR = be ->
+                Minecraft.getInstance().setScreen(new HubMonitorScreen((CommandHubMonitorBlockEntity) be));
     }
 }

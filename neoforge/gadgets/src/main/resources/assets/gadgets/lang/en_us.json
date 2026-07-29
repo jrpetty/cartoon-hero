@@ -70,5 +70,9 @@
   "container.gadgets.enhancement_table": "Enhancement Bench",
   "message.gadgets.worn_out": "The hook is worn out — repair it at an Enhancement Bench",
   "tip.gadgets.enhancement_table.1": "Ring a Grappling Hook with a material to fuse an upgrade",
-  "tip.gadgets.enhancement_table.2": "Iron and string repair a worn hook"
+  "tip.gadgets.enhancement_table.2": "Iron and string repair a worn hook",
+  "block.gadgets.command_hub_monitor": "Command Hub Monitor",
+  "tip.gadgets.command_hub_monitor.1": "A remote screen for one line of a hub's board",
+  "tip.gadgets.command_hub_monitor.2": "Select a hub with the Monitor Wand, then click this",
+  "tip.gadgets.command_hub_monitor.3": "Right-click: choose which gadget to display"
 }

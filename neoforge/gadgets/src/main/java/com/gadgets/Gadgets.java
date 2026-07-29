@@ -110,6 +110,9 @@ public class Gadgets {
     public static final DeferredBlock<Block> COMMAND_HUB = BLOCKS.register("command_hub",
             () -> new CommandHubBlock(BlockBehaviour.Properties.of()
                     .strength(2.0F).requiresCorrectToolForDrops().sound(SoundType.METAL).noOcclusion()));
+    public static final DeferredBlock<Block> COMMAND_HUB_MONITOR = BLOCKS.register("command_hub_monitor",
+            () -> new CommandHubMonitorBlock(BlockBehaviour.Properties.of()
+                    .strength(1.5F).requiresCorrectToolForDrops().sound(SoundType.METAL).noOcclusion()));
 
     public static final DeferredItem<?> DISPLAY_PEDESTAL_ITEM = ITEMS.register("display_pedestal", () -> new TooltipBlockItem(DISPLAY_PEDESTAL.get(), new Item.Properties(),
             "tip.gadgets.display_pedestal.1", "tip.gadgets.display_pedestal.2", "tip.gadgets.display_pedestal.3", "tip.gadgets.display_pedestal.4", "tip.gadgets.display_pedestal.5"));
@@ -140,6 +143,10 @@ public class Gadgets {
     public static final Supplier<MenuType<EnhancementMenu>> ENHANCEMENT_MENU = MENUS.register("enhancement_table",
             () -> new MenuType<EnhancementMenu>(EnhancementMenu::new, FeatureFlags.VANILLA_SET));
 
+    public static final DeferredItem<?> COMMAND_HUB_MONITOR_ITEM = ITEMS.register("command_hub_monitor",
+            () -> new TooltipBlockItem(COMMAND_HUB_MONITOR.get(), new Item.Properties(),
+                    "tip.gadgets.command_hub_monitor.1", "tip.gadgets.command_hub_monitor.2",
+                    "tip.gadgets.command_hub_monitor.3"));
     public static final DeferredItem<Item> MONITOR_WAND =
             ITEMS.register("monitor_wand", () -> new MonitorWandItem(new Item.Properties().stacksTo(1)));
     public static final DeferredItem<Item> WIRELESS_REMOTE =
@@ -182,6 +189,10 @@ public class Gadgets {
             BLOCK_ENTITIES.register("command_hub",
                     () -> BlockEntityType.Builder.of(CommandHubBlockEntity::new, COMMAND_HUB.get()).build(null));
 
+    public static final Supplier<BlockEntityType<CommandHubMonitorBlockEntity>> COMMAND_HUB_MONITOR_BE =
+            BLOCK_ENTITIES.register("command_hub_monitor",
+                    () -> BlockEntityType.Builder.of(CommandHubMonitorBlockEntity::new, COMMAND_HUB_MONITOR.get()).build(null));
+
     public static final Supplier<CreativeModeTab> GADGETS_TAB = CREATIVE_TABS.register("gadgets",
             () -> CreativeModeTab.builder()
                     .title(Component.translatable("itemgroup.gadgets.gadgets"))
@@ -203,6 +214,7 @@ public class Gadgets {
                         output.accept(STOCK_MONITOR_ITEM.get());
                         output.accept(TRASH_CAN_ITEM.get());
                         output.accept(COMMAND_HUB_ITEM.get());
+                        output.accept(COMMAND_HUB_MONITOR_ITEM.get());
                         output.accept(MONITOR_WAND.get());
                         output.accept(WIRELESS_REMOTE.get());
                         output.accept(GRAPPLING_HOOK.get());

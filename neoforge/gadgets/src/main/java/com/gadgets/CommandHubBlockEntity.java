@@ -17,6 +17,7 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
+import org.jetbrains.annotations.Nullable;
 
 /**
  * The Command Hub: a base-wide monitoring console. Link Item Counters and
@@ -122,6 +123,47 @@ public class CommandHubBlockEntity extends BlockEntity {
         sync();
     }
 
+    /** Drop the link at {@code index} — what the board's per-row ✕ button calls. */
+    public boolean removeNodeAt(int index) {
+        if (index < 0 || index >= nodes.size()) {
+            return false;
+        }
+        nodes.remove(index);
+        setChanged();
+        sync();
+        return true;
+    }
+
+    /**
+     * Forget links whose gadget is gone for good.
+     *
+     * <p>Only a loaded chunk can prove absence: an unloaded one reads as empty
+     * and would drop every link in an unvisited base. So a node is dropped only
+     * when its chunk is loaded and the block there is no longer a counter or a
+     * monitor.
+     */
+    private boolean pruneDead(MinecraftServer server) {
+        return nodes.removeIf(n -> {
+            ServerLevel w = levelOf(server, n);
+            if (w == null) {
+                return false; // dimension missing — keep, it may come back
+            }
+            BlockPos p = BlockPos.of(n.pos);
+            if (!w.isLoaded(p)) {
+                return false; // unloaded is "offline", never "deleted"
+            }
+            BlockEntity there = w.getBlockEntity(p);
+            return !(there instanceof ItemCounterBlockEntity || there instanceof StockMonitorBlockEntity);
+        });
+    }
+
+    @Nullable
+    private static ServerLevel levelOf(MinecraftServer server, Node n) {
+        ResourceLocation dimId = ResourceLocation.tryParse(n.dim);
+        return dimId == null ? null
+                : server.getLevel(ResourceKey.create(net.minecraft.core.registries.Registries.DIMENSION, dimId));
+    }
+
     // --- screen summary ---
 
     public int nodeCount() {
@@ -156,6 +198,9 @@ public class CommandHubBlockEntity extends BlockEntity {
         if (server == null) {
             return;
         }
+        // A broken counter or monitor drops off the board rather than sitting
+        // there as a permanent "offline" ghost.
+        be.pruneDead(server);
         for (Node n : be.nodes) {
             be.refresh(server, n);
         }
@@ -170,11 +215,7 @@ public class CommandHubBlockEntity extends BlockEntity {
 
     private void refresh(MinecraftServer server, Node n) {
         n.online = false;
-        ResourceLocation dimId = ResourceLocation.tryParse(n.dim);
-        if (dimId == null) {
-            return;
-        }
-        ServerLevel w = server.getLevel(ResourceKey.create(net.minecraft.core.registries.Registries.DIMENSION, dimId));
+        ServerLevel w = levelOf(server, n);
         if (w == null) {
             return;
         }

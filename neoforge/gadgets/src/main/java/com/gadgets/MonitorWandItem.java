@@ -49,7 +49,7 @@ public class MonitorWandItem extends Item {
     public static boolean handle(Level level, Player player, ItemStack stack, BlockPos pos) {
         BlockEntity be = level.getBlockEntity(pos);
         boolean isGadget = be instanceof CommandHubBlockEntity || be instanceof ItemCounterBlockEntity
-                || be instanceof StockMonitorBlockEntity;
+                || be instanceof StockMonitorBlockEntity || be instanceof CommandHubMonitorBlockEntity;
         if (!isGadget) {
             return false; // not a wand target — let the block behave normally
         }
@@ -62,6 +62,21 @@ public class MonitorWandItem extends Item {
             write(stack, "HubDim", dim, "HubPos", pos.asLong());
             say(level, player, pos, Component.literal("Wand ▸ hub selected (" + hub.nodeCount()
                     + " linked) — now click counters and monitors").withStyle(ChatFormatting.GREEN));
+        } else if (be instanceof CommandHubMonitorBlockEntity screen) {
+            // A monitor doesn't join the board — it points at one, so clicking it
+            // binds the screen to whichever hub the wand currently holds.
+            CompoundTag nbt = read(stack);
+            if (!nbt.contains("HubDim")) {
+                say(level, player, pos, Component.literal("Wand ▸ select a Command Hub first (click one with the wand)")
+                        .withStyle(ChatFormatting.RED));
+            } else if (resolveHub(level, stack) == null) {
+                say(level, player, pos, Component.literal("Wand ▸ that hub is gone or unloaded")
+                        .withStyle(ChatFormatting.RED));
+            } else {
+                screen.linkHub(nbt.getString("HubDim"), BlockPos.of(nbt.getLong("HubPos")));
+                say(level, player, pos, Component.literal("Monitor ▸ linked to hub — right-click it to choose a display")
+                        .withStyle(ChatFormatting.GREEN));
+            }
         } else if (be instanceof ItemCounterBlockEntity || be instanceof StockMonitorBlockEntity) {
             if (player.isShiftKeyDown()) {
                 unlinkFromHub(level, player, stack, dim, pos);
