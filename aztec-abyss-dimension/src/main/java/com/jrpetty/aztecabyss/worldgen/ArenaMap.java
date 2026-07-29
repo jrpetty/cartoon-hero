@@ -18,17 +18,21 @@ public enum ArenaMap {
     /** The original: a stepped Aztec pyramid ringed by ruins, hordes from four gates. */
     TEMPLE(
             "The Aztec Temple",
-            "An open ruin-field around a stepped pyramid. Hordes pour in from all four sides.",
+            "An open ruin-field around a stepped pyramid. Hordes pour in from all four sides at once.",
+            "HARD",
+            0xFFD04040,
             AztecAbyssConstants.ABYSS_ARRIVAL_POS,
             AztecAbyssConstants.MOB_GATES,
             AztecAbyssConstants.EXTRACTION_POS,
             0, 0,
             (AztecAbyssConstants.ARENA_RADIUS - 2) * 2.0),
 
-    /** A last stand on a high bridge over the void - everything comes from one end. */
+    /** A last stand on a high bridge over the void - everything funnels in from one end. */
     BRIDGE(
             "The Long Bridge",
-            "Hold a fortified island at the end of a bridge over the void. One direction. No retreat.",
+            "Hold a fortified island from behind walls. Everything funnels down one bridge — a single choke to defend.",
+            "EASIER",
+            0xFF55CC55,
             BridgeBuilder.ARRIVAL,
             BridgeBuilder.GATES,
             BridgeBuilder.EXTRACTION,
@@ -37,6 +41,8 @@ public enum ArenaMap {
 
     private final String title;
     private final String blurb;
+    private final String difficulty;
+    private final int difficultyColor;
     private final BlockPos arrival;
     private final BlockPos[] gates;
     private final BlockPos extraction;
@@ -44,10 +50,13 @@ public enum ArenaMap {
     private final int borderCenterZ;
     private final double borderSize;
 
-    ArenaMap(String title, String blurb, BlockPos arrival, BlockPos[] gates, BlockPos extraction,
+    ArenaMap(String title, String blurb, String difficulty, int difficultyColor,
+             BlockPos arrival, BlockPos[] gates, BlockPos extraction,
              int borderCenterX, int borderCenterZ, double borderSize) {
         this.title = title;
         this.blurb = blurb;
+        this.difficulty = difficulty;
+        this.difficultyColor = difficultyColor;
         this.arrival = arrival;
         this.gates = gates;
         this.extraction = extraction;
@@ -67,6 +76,15 @@ public enum ArenaMap {
 
     public String blurb() {
         return blurb;
+    }
+
+    /** Short difficulty tag shown on the picker card. */
+    public String difficulty() {
+        return difficulty;
+    }
+
+    public int difficultyColor() {
+        return difficultyColor;
     }
 
     public BlockPos arrival() {

@@ -50,8 +50,14 @@ public final class PortalEvents {
         BlockState clickedState = level.getBlockState(clicked);
         ItemStack stack = event.getItemStack();
 
-        // Right-clicking a lit portal in the overworld opens the arena picker.
-        if (clickedState.is(ModBlocks.ABYSS_PORTAL.get())
+        // Right-clicking a lit portal - or empty-handed on its frame - opens the
+        // arena picker. The frame fallback matters because portal blocks are
+        // non-solid and can be fiddly to click precisely.
+        boolean clickedPortal = clickedState.is(ModBlocks.ABYSS_PORTAL.get());
+        boolean clickedLitFrame = AbyssPortalShape.isFrameBlock(clickedState)
+                && stack.isEmpty()
+                && isPortalAdjacent(level, clicked);
+        if ((clickedPortal || clickedLitFrame)
                 && !level.dimension().equals(AztecAbyssConstants.ABYSS_LEVEL_KEY)
                 && event.getEntity() instanceof ServerPlayer sp) {
             com.jrpetty.aztecabyss.network.ModNetworking.sendOpenMapPicker(sp);
@@ -94,6 +100,16 @@ public final class PortalEvents {
         }
         event.setCanceled(true);
         event.setCancellationResult(net.minecraft.world.InteractionResult.SUCCESS);
+    }
+
+    /** True if any face of this block touches a live portal surface. */
+    private static boolean isPortalAdjacent(Level level, BlockPos pos) {
+        for (Direction d : Direction.values()) {
+            if (level.getBlockState(pos.relative(d)).is(ModBlocks.ABYSS_PORTAL.get())) {
+                return true;
+            }
+        }
+        return false;
     }
 
     @SubscribeEvent

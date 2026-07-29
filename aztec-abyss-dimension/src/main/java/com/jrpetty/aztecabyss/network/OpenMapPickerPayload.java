@@ -11,7 +11,8 @@ import net.minecraft.resources.ResourceLocation;
  * Server -> client: pop open the arena picker, pre-selecting whatever the
  * player chose last time. Sent when they right-click a lit Abyss portal.
  */
-public record OpenMapPickerPayload(int currentChoice) implements CustomPacketPayload {
+public record OpenMapPickerPayload(int currentChoice, java.util.List<Integer> bestRounds)
+        implements CustomPacketPayload {
 
     public static final Type<OpenMapPickerPayload> TYPE =
             new Type<>(ResourceLocation.fromNamespaceAndPath(AztecAbyssConstants.MOD_ID, "open_map_picker"));
@@ -19,7 +20,13 @@ public record OpenMapPickerPayload(int currentChoice) implements CustomPacketPay
     public static final StreamCodec<RegistryFriendlyByteBuf, OpenMapPickerPayload> STREAM_CODEC =
             StreamCodec.composite(
                     ByteBufCodecs.VAR_INT, OpenMapPickerPayload::currentChoice,
+                    ByteBufCodecs.VAR_INT.apply(ByteBufCodecs.list()), OpenMapPickerPayload::bestRounds,
                     OpenMapPickerPayload::new);
+
+    /** This player's personal best round on the given arena, 0 if never run. */
+    public int bestOn(int mapId) {
+        return (mapId >= 0 && mapId < bestRounds.size()) ? bestRounds.get(mapId) : 0;
+    }
 
     @Override
     public Type<OpenMapPickerPayload> type() {

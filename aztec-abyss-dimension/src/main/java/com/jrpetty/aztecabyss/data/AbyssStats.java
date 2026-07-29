@@ -23,13 +23,17 @@ public final class AbyssStats extends SavedData {
 
     public static final String NAME = "aztecabyss_stats";
 
+    /** How many arenas we keep separate best-round records for. */
+    public static final int MAP_COUNT = 2;
+
     public record Entry(String name,
                         int soloBestRound, int soloBestSeconds,
                         int mpBestRound, int mpBestSeconds,
-                        int totalKills, int totalRevives, int wins) {
+                        int totalKills, int totalRevives, int wins,
+                        int[] mapBestRound, int[] mapBestSeconds) {
 
         static Entry empty(String name) {
-            return new Entry(name, 0, 0, 0, 0, 0, 0, 0);
+            return new Entry(name, 0, 0, 0, 0, 0, 0, 0, new int[MAP_COUNT], new int[MAP_COUNT]);
         }
 
         int bestRound(boolean mp) {
@@ -38,6 +42,15 @@ public final class AbyssStats extends SavedData {
 
         int bestSeconds(boolean mp) {
             return mp ? mpBestSeconds : soloBestSeconds;
+        }
+
+        /** Best round this player has reached on one specific arena. */
+        public int bestRoundOnMap(int mapId) {
+            return (mapId >= 0 && mapId < mapBestRound.length) ? mapBestRound[mapId] : 0;
+        }
+
+        public int bestSecondsOnMap(int mapId) {
+            return (mapId >= 0 && mapId < mapBestSeconds.length) ? mapBestSeconds[mapId] : 0;
         }
     }
 
@@ -52,7 +65,7 @@ public final class AbyssStats extends SavedData {
     }
 
     public void record(UUID id, String name, int roundReached, int survivalSeconds,
-                       int totalKills, int totalRevives, boolean victory, boolean multiplayer) {
+                       int totalKills, int totalRevives, boolean victory, boolean multiplayer, int mapId) {
         Entry p = entries.getOrDefault(id, Entry.empty(name));
         int soloRound = p.soloBestRound();
         int soloSecs = p.soloBestSeconds();
@@ -65,13 +78,28 @@ public final class AbyssStats extends SavedData {
             soloRound = Math.max(soloRound, roundReached);
             soloSecs = Math.max(soloSecs, survivalSeconds);
         }
+
+        // Per-arena personal bests, so each map has its own record to chase.
+        int[] mapRounds = p.mapBestRound().clone();
+        int[] mapSecs = p.mapBestSeconds().clone();
+        if (mapId >= 0 && mapId < MAP_COUNT) {
+            mapRounds[mapId] = Math.max(mapRounds[mapId], roundReached);
+            mapSecs[mapId] = Math.max(mapSecs[mapId], survivalSeconds);
+        }
+
         entries.put(id, new Entry(name, soloRound, soloSecs, mpRound, mpSecs,
-                totalKills, totalRevives, p.wins() + (victory ? 1 : 0)));
+                totalKills, totalRevives, p.wins() + (victory ? 1 : 0), mapRounds, mapSecs));
         setDirty();
     }
 
     public Entry get(UUID id) {
         return entries.get(id);
+    }
+
+    /** A player's best round on one arena (0 if they've never run it). */
+    public int bestRoundOnMap(UUID id, int mapId) {
+        Entry e = entries.get(id);
+        return e == null ? 0 : e.bestRoundOnMap(mapId);
     }
 
     /** Top players in a category, ranked by longest survival then best round. */
@@ -85,6 +113,17 @@ public final class AbyssStats extends SavedData {
         return list.subList(0, Math.min(n, list.size()));
     }
 
+    /** Top players on one specific arena, ranked by survival then round. */
+    public List<Map.Entry<UUID, Entry>> topOnMap(int n, int mapId) {
+        List<Map.Entry<UUID, Entry>> list = new ArrayList<>(entries.entrySet());
+        list.removeIf(e -> e.getValue().bestRoundOnMap(mapId) <= 0);
+        list.sort(Comparator
+                .comparingInt((Map.Entry<UUID, Entry> e) -> e.getValue().bestSecondsOnMap(mapId))
+                .thenComparingInt(e -> e.getValue().bestRoundOnMap(mapId))
+                .reversed());
+        return list.subList(0, Math.min(n, list.size()));
+    }
+
     // ------------------------------------------------------------------
     // Serialization
     // ------------------------------------------------------------------
@@ -94,13 +133,26 @@ public final class AbyssStats extends SavedData {
         ListTag list = tag.getList("entries", Tag.TAG_COMPOUND);
         for (int i = 0; i < list.size(); i++) {
             CompoundTag e = list.getCompound(i);
+            // Older saves predate per-map records; fall back to zeroed arrays.
+            int[] mapRounds = padded(e.getIntArray("map_best_round"));
+            int[] mapSecs = padded(e.getIntArray("map_best_seconds"));
             stats.entries.put(e.getUUID("id"), new Entry(
                     e.getString("name"),
                     e.getInt("solo_best_round"), e.getInt("solo_best_seconds"),
                     e.getInt("mp_best_round"), e.getInt("mp_best_seconds"),
-                    e.getInt("total_kills"), e.getInt("total_revives"), e.getInt("wins")));
+                    e.getInt("total_kills"), e.getInt("total_revives"), e.getInt("wins"),
+                    mapRounds, mapSecs));
         }
         return stats;
+    }
+
+    /** Grows (or creates) a stored array to the current map count. */
+    private static int[] padded(int[] stored) {
+        int[] out = new int[MAP_COUNT];
+        if (stored != null) {
+            System.arraycopy(stored, 0, out, 0, Math.min(stored.length, MAP_COUNT));
+        }
+        return out;
     }
 
     @Override
@@ -118,6 +170,8 @@ public final class AbyssStats extends SavedData {
             e.putInt("total_kills", v.totalKills());
             e.putInt("total_revives", v.totalRevives());
             e.putInt("wins", v.wins());
+            e.putIntArray("map_best_round", v.mapBestRound());
+            e.putIntArray("map_best_seconds", v.mapBestSeconds());
             list.add(e);
         }
         tag.put("entries", list);

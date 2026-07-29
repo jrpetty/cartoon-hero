@@ -88,10 +88,18 @@ public final class ModNetworking {
         PacketDistributor.sendToPlayer(player, new AbyssCooldownPayload(cooldownUntil));
     }
 
-    /** Opens the arena picker on a player's screen, pre-selecting their last choice. */
+    /** Opens the arena picker, pre-selecting their last choice and showing per-map bests. */
     public static void sendOpenMapPicker(ServerPlayer player) {
-        PacketDistributor.sendToPlayer(player,
-                new OpenMapPickerPayload(player.getPersistentData().getInt("aztecabyss_chosen_map")));
+        java.util.List<Integer> bests = new java.util.ArrayList<>();
+        if (player.getServer() != null) {
+            com.jrpetty.aztecabyss.data.AbyssStats stats =
+                    com.jrpetty.aztecabyss.data.AbyssStats.get(player.getServer());
+            for (int i = 0; i < com.jrpetty.aztecabyss.worldgen.ArenaMap.values().length; i++) {
+                bests.add(stats.bestRoundOnMap(player.getUUID(), i));
+            }
+        }
+        PacketDistributor.sendToPlayer(player, new OpenMapPickerPayload(
+                player.getPersistentData().getInt("aztecabyss_chosen_map"), bests));
     }
 
     /** Pushes a player's squadmate list for the co-op teammate HUD. */

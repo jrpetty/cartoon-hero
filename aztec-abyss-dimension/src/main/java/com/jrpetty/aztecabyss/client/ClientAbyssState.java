@@ -57,7 +57,12 @@ public final class ClientAbyssState {
     }
 
     public static void openMapPicker(com.jrpetty.aztecabyss.network.OpenMapPickerPayload payload) {
-        Minecraft.getInstance().setScreen(new MapSelectScreen(payload.currentChoice()));
+        int n = com.jrpetty.aztecabyss.worldgen.ArenaMap.values().length;
+        int[] bests = new int[n];
+        for (int i = 0; i < n; i++) {
+            bests[i] = payload.bestOn(i);
+        }
+        Minecraft.getInstance().setScreen(new MapSelectScreen(payload.currentChoice(), bests));
     }
 
     public static void acceptCooldown(com.jrpetty.aztecabyss.network.AbyssCooldownPayload payload) {

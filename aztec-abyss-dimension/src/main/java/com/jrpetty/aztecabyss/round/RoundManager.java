@@ -873,7 +873,7 @@ public final class RoundManager {
         spawnRewardChest(homeLevel, returnPos, RewardTable.rewardsFor(round, false, ritual));
         com.jrpetty.aztecabyss.data.AbyssStats.get(server).record(
                 player.getUUID(), player.getGameProfile().getName(),
-                round, survivalSeconds, rs.getTotalKills(), rs.getTotalRevives(), false, multiplayer);
+                round, survivalSeconds, rs.getTotalKills(), rs.getTotalRevives(), false, multiplayer, game.getMap().ordinal());
         com.jrpetty.aztecabyss.worldgen.MonumentBuilder.build(abyssLevel);
         ModNetworking.sendRecap(player, round, killsThisRun, revivesThisRun, survivalSeconds, prevBest,
                 false, multiplayer, true, rs.getHeadshotsThisRun(), rs.getTotalDeaths(), ritual);
@@ -1045,7 +1045,7 @@ public final class RoundManager {
 
         com.jrpetty.aztecabyss.data.AbyssStats.get(server).record(
                 player.getUUID(), player.getGameProfile().getName(),
-                round, survivalSeconds, rs.getTotalKills(), rs.getTotalRevives(), victory, multiplayer);
+                round, survivalSeconds, rs.getTotalKills(), rs.getTotalRevives(), victory, multiplayer, game.getMap().ordinal());
         com.jrpetty.aztecabyss.worldgen.MonumentBuilder.build(abyssLevel);
 
         // Death/victory recap screen data.
