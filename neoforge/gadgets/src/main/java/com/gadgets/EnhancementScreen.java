@@ -1,10 +1,13 @@
 package com.gadgets;
 
+import java.util.List;
+
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
 import net.minecraft.network.chat.Component;
+import net.minecraft.util.FormattedCharSequence;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.item.ItemStack;
 
@@ -21,13 +24,18 @@ public class EnhancementScreen extends AbstractContainerScreen<EnhancementMenu> 
     private static final int DIM = 0xFFB08A50;
     private static final int GRAY = 0xFF8E8478;
     private static final int GREEN = 0xFF7CE87C;
+    private static final int LINE = 10;
+    private static final int MAX_LINES = 2;
 
     private Button enhanceButton;
 
     public EnhancementScreen(EnhancementMenu menu, Inventory inventory, Component title) {
         super(menu, inventory, title);
         this.imageWidth = 176;
-        this.imageHeight = 200;
+        // Tall enough for the worst-case status block: a two-line preview title,
+        // a two-line detail line and the condition row, all clear of the
+        // inventory label below them.
+        this.imageHeight = 224;
         this.inventoryLabelY = this.imageHeight - 94;
     }
 
@@ -61,19 +69,33 @@ public class EnhancementScreen extends AbstractContainerScreen<EnhancementMenu> 
         gfx.drawString(font, title, 8, 6, AMBER, false);
         gfx.drawString(font, playerInventoryTitle, 8, inventoryLabelY, DIM, false);
 
+        // One cursor down the panel so nothing can land on top of anything else,
+        // however long the wrapped strings turn out to be.
         EnhancementMenu.Preview preview = menu.preview();
-        gfx.drawString(font, trim(preview.title(), 30), 8, 80, preview.ready() ? GREEN : GRAY, false);
+        int y = 80;
+        y = drawWrapped(gfx, preview.title(), y, preview.ready() ? GREEN : GRAY);
         if (!preview.detail().isEmpty()) {
-            gfx.drawString(font, trim(preview.detail(), 34), 8, 92, GRAY, false);
+            y = drawWrapped(gfx, preview.detail(), y, GRAY);
         }
 
         ItemStack hook = menu.slots.get(EnhancementMenu.HOOK_SLOT).getItem();
         if (!hook.isEmpty()) {
             int left = GrappleUpgrades.usesLeft(hook);
             gfx.drawString(font, "Condition " + left + "/" + GrappleUpgrades.MAX_USES
-                    + " · " + GrappleUpgrades.installed(hook).size() + "/5 upgrades", 8, 104,
+                            + " · " + GrappleUpgrades.installed(hook).size() + "/5 upgrades", 8, y,
                     left <= 10 ? 0xFFFF5555 : DIM, false);
         }
+    }
+
+    /** Draws {@code text} wrapped to the panel, capped at two lines, and
+     *  returns the y the next row should use. */
+    private int drawWrapped(GuiGraphics gfx, String text, int y, int colour) {
+        List<FormattedCharSequence> lines = font.split(Component.literal(text), imageWidth - 16);
+        for (int i = 0; i < Math.min(lines.size(), MAX_LINES); i++) {
+            gfx.drawString(font, lines.get(i), 8, y, colour, false);
+            y += LINE;
+        }
+        return y;
     }
 
     @Override
@@ -85,7 +107,4 @@ public class EnhancementScreen extends AbstractContainerScreen<EnhancementMenu> 
         }
     }
 
-    private static String trim(String s, int max) {
-        return s.length() > max ? s.substring(0, max - 1) + "…" : s;
-    }
 }

@@ -22,15 +22,12 @@ import net.minecraft.world.item.component.CustomData;
 import net.minecraft.world.item.context.UseOnContext;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.entity.BlockEntity;
-import net.minecraft.world.level.block.entity.HopperBlockEntity;
 
 /**
  * The linking tool for the monitoring network.
  *
  * <p>Click a Command Hub to select it, then click Item Counters and Stock
  * Monitors to put them on its board (sneak-click a linked one to remove it).
- * Click any container to clip it, then click a Storage Sensor to bind that
- * container to the sensor.
  *
  * <p>The wand is dispatched from a right-click <em>event</em> rather than the
  * normal item hook, because most of the blocks it targets — the hub, the
@@ -52,9 +49,8 @@ public class MonitorWandItem extends Item {
     public static boolean handle(Level level, Player player, ItemStack stack, BlockPos pos) {
         BlockEntity be = level.getBlockEntity(pos);
         boolean isGadget = be instanceof CommandHubBlockEntity || be instanceof ItemCounterBlockEntity
-                || be instanceof StockMonitorBlockEntity || be instanceof StorageSensorBlockEntity;
-        boolean isContainer = !isGadget && HopperBlockEntity.getContainerAt(level, pos) != null;
-        if (!isGadget && !isContainer) {
+                || be instanceof StockMonitorBlockEntity;
+        if (!isGadget) {
             return false; // not a wand target — let the block behave normally
         }
         if (level.isClientSide()) {
@@ -72,20 +68,6 @@ public class MonitorWandItem extends Item {
             } else {
                 linkToHub(level, player, stack, be, dim, pos);
             }
-        } else if (be instanceof StorageSensorBlockEntity sensor) {
-            CompoundTag nbt = read(stack);
-            if (!nbt.contains("ContDim")) {
-                say(level, player, pos, Component.literal("Wand ▸ clip a container first, then click this sensor")
-                        .withStyle(ChatFormatting.RED));
-            } else {
-                sensor.bind(nbt.getString("ContDim"), BlockPos.of(nbt.getLong("ContPos")));
-                say(level, player, pos, Component.literal("Storage Sensor ▸ bound to " + sensor.describeBinding())
-                        .withStyle(ChatFormatting.GREEN));
-            }
-        } else {
-            write(stack, "ContDim", dim, "ContPos", pos.asLong());
-            say(level, player, pos, Component.literal("Wand ▸ container clipped — now click a Storage Sensor")
-                    .withStyle(ChatFormatting.AQUA));
         }
         return true;
     }
@@ -180,11 +162,6 @@ public class MonitorWandItem extends Item {
             tooltip.add(Component.literal("Hub: " + p.getX() + ", " + p.getY() + ", " + p.getZ())
                     .withStyle(ChatFormatting.GREEN));
         }
-        if (nbt.contains("ContPos")) {
-            BlockPos p = BlockPos.of(nbt.getLong("ContPos"));
-            tooltip.add(Component.literal("Container: " + p.getX() + ", " + p.getY() + ", " + p.getZ())
-                    .withStyle(ChatFormatting.AQUA));
-        }
-        Tips.append(tooltip, "tip.gadgets.monitor_wand.1", "tip.gadgets.monitor_wand.2", "tip.gadgets.monitor_wand.3");
+        Tips.append(tooltip, "tip.gadgets.monitor_wand.1", "tip.gadgets.monitor_wand.2");
     }
 }

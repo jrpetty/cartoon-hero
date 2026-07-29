@@ -61,11 +61,11 @@ public class EnhancementMenu extends AbstractContainerMenu {
         }
         for (int row = 0; row < 3; row++) {
             for (int col = 0; col < 9; col++) {
-                addSlot(new Slot(playerInventory, col + row * 9 + 9, 8 + col * 18, 118 + row * 18));
+                addSlot(new Slot(playerInventory, col + row * 9 + 9, 8 + col * 18, 142 + row * 18));
             }
         }
         for (int col = 0; col < 9; col++) {
-            addSlot(new Slot(playerInventory, col, 8 + col * 18, 176));
+            addSlot(new Slot(playerInventory, col, 8 + col * 18, 200));
         }
     }
 
@@ -88,7 +88,7 @@ public class EnhancementMenu extends AbstractContainerMenu {
             }
         }
         return new Preview(false, "Ring the hook with a material",
-                "8 × 20 string · iron · blaze powder · gunpowder · membrane");
+                "20 per slot: string · iron · blaze powder · gunpowder · membrane");
     }
 
     /** Every outer slot holds iron or string, mixed freely. */
