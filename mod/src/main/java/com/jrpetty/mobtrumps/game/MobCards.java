@@ -221,10 +221,22 @@ public final class MobCards {
      * tiers down, never adding a second legendary.
      */
     public static List<MobCard> cpuDeck(int size, RandomGenerator random) {
+        return cpuDeck(size, random, java.util.Set.of());
+    }
+
+    /**
+     * As {@link #cpuDeck(int, RandomGenerator)}, but never dealing a card whose
+     * id is in {@code exclude} — normally the player's own hand, so the two
+     * sides bring different mobs to the table. Identical cards tie on every
+     * stat, so a mirrored deal would be decided almost entirely by coin flips.
+     */
+    public static List<MobCard> cpuDeck(int size, RandomGenerator random, java.util.Set<String> exclude) {
         size = Math.max(2, Math.min(size, ALL.size()));
         java.util.Map<Tier, List<MobCard>> buckets = new java.util.EnumMap<>(Tier.class);
         for (Tier t : Tier.values()) buckets.put(t, new ArrayList<>());
-        for (MobCard c : ALL) buckets.get(c.tier()).add(c);
+        for (MobCard c : ALL) {
+            if (!exclude.contains(c.id())) buckets.get(c.tier()).add(c);
+        }
         java.util.Random shuffler = java.util.Random.from(random);
         for (List<MobCard> bucket : buckets.values()) Collections.shuffle(bucket, shuffler);
 
@@ -247,6 +259,32 @@ public final class MobCards {
             take(buckets.get(t), size - out.size(), out);
         }
         Collections.shuffle(out, shuffler);
+        return out;
+    }
+
+    /**
+     * Give {@code hand} the same spread of holo upgrade levels as {@code levels}
+     * describes, so an opponent dealt against a well-hunted deck is upgraded to
+     * the same degree rather than fielding plain cards against boosted ones.
+     *
+     * <p>The levels are shuffled across the hand rather than stacked onto its
+     * best cards: the point is to match the player's investment, not to play
+     * optimally with it. Any shortfall is padded with unupgraded cards.
+     */
+    public static List<MobCard> matchLevels(List<MobCard> hand, List<Integer> levels,
+                                            RandomGenerator random) {
+        if (hand.isEmpty() || levels == null || levels.isEmpty()) {
+            return hand;
+        }
+        List<Integer> pool = new ArrayList<>(levels);
+        while (pool.size() < hand.size()) {
+            pool.add(0);
+        }
+        Collections.shuffle(pool, java.util.Random.from(random));
+        List<MobCard> out = new ArrayList<>(hand.size());
+        for (int i = 0; i < hand.size(); i++) {
+            out.add(hand.get(i).upgraded(Math.max(0, pool.get(i))));
+        }
         return out;
     }
 

@@ -596,7 +596,13 @@ public final class BattleCommands {
                     .withStyle(ChatFormatting.RED));
             return 0;
         }
-        Battle battle = new Battle(deck, java.util.List.of(), ThreadLocalRandom.current());
+        // different mobs, levelled to match the holos you brought
+        var rng = ThreadLocalRandom.current();
+        var cpuDeck = com.jrpetty.mobtrumps.game.MobCards.matchLevels(
+                com.jrpetty.mobtrumps.game.MobCards.cpuDeck(deck.size(), rng,
+                        DeckManager.deckIds(player)),
+                DeckManager.deckLevels(player), rng);
+        Battle battle = new Battle(deck, cpuDeck, rng);
         battle.setDifficulty(difficulty);
         BATTLES.put(player.getUUID(), battle);
         player.sendSystemMessage(Component.literal("=== MOB TRUMPS: YOUR DECK · " + difficulty.label()

@@ -86,6 +86,40 @@ public final class DeckManager {
      * The player's deck as cards, dropping any they no longer own. Cards whose
      * holographic the player has unlocked are played in their boosted form.
      */
+    /**
+     * The holo upgrade level of each card in the player's deck, in the same
+     * order as {@link #deckCards}. The CPU's hand is levelled to match this, so
+     * a deck you have hunted hard meets an opponent that has kept up.
+     */
+    public static List<Integer> deckLevels(ServerPlayer player) {
+        Set<String> collected = new LinkedHashSet<>(player.getData(ModAttachments.COLLECTED.get()));
+        Set<String> foils = new LinkedHashSet<>(player.getData(ModAttachments.COLLECTED_FOIL.get()));
+        java.util.Map<String, Integer> kills = player.getData(ModAttachments.KILLS.get());
+        List<Integer> levels = new ArrayList<>();
+        for (String id : player.getData(ModAttachments.DECK.get())) {
+            if (!collected.contains(id)) {
+                continue;
+            }
+            MobCard card = MobCards.byId(id);
+            if (card == null) {
+                continue;
+            }
+            int byKills = card.tier().upgradeLevel(kills.getOrDefault(id, 0));
+            levels.add(Math.max(foils.contains(id) ? 1 : 0, byKills));
+        }
+        return levels;
+    }
+
+    /** The card ids actually in the player's deck, for dealing the CPU different mobs. */
+    public static Set<String> deckIds(ServerPlayer player) {
+        Set<String> collected = new LinkedHashSet<>(player.getData(ModAttachments.COLLECTED.get()));
+        Set<String> ids = new LinkedHashSet<>();
+        for (String id : player.getData(ModAttachments.DECK.get())) {
+            if (collected.contains(id)) ids.add(id);
+        }
+        return ids;
+    }
+
     public static List<MobCard> deckCards(ServerPlayer player) {
         Set<String> collected = new LinkedHashSet<>(player.getData(ModAttachments.COLLECTED.get()));
         Set<String> foils = new LinkedHashSet<>(player.getData(ModAttachments.COLLECTED_FOIL.get()));

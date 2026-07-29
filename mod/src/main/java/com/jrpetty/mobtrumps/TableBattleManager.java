@@ -61,10 +61,16 @@ public final class TableBattleManager {
         var rng = ThreadLocalRandom.current();
         List<MobCard> hand = useDeck ? DeckManager.deckCards(player) : List.of();
         boolean deckOk = hand.size() >= DeckManager.MIN_DECK;
+        List<Integer> levels = deckOk ? DeckManager.deckLevels(player) : List.of();
+        java.util.Set<String> mine = deckOk ? DeckManager.deckIds(player) : new java.util.HashSet<>();
         if (!deckOk) {
             hand = com.jrpetty.mobtrumps.game.MobCards.shuffledDeck(DECK_SIZE, rng);
+            for (MobCard c : hand) mine.add(c.id());
         }
-        List<MobCard> cpuHand = com.jrpetty.mobtrumps.game.MobCards.cpuDeck(hand.size(), rng);
+        // the CPU brings DIFFERENT mobs, upgraded to the same degree as yours —
+        // otherwise a well-hunted deck of boosted cards walks every battle
+        List<MobCard> cpuHand = com.jrpetty.mobtrumps.game.MobCards.matchLevels(
+                com.jrpetty.mobtrumps.game.MobCards.cpuDeck(hand.size(), rng, mine), levels, rng);
         Battle battle = new Battle(hand, cpuHand, rng);
         battle.setDifficulty(difficulty);
         Game game = new Game(battle, difficulty, useDeck && deckOk);
