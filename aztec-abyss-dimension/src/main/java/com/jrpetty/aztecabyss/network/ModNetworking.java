@@ -77,8 +77,11 @@ public final class ModNetworking {
     }
 
     public static void sendRecap(ServerPlayer player, int round, int kills, int revives, int survivalSeconds,
-                                 int previousBest, boolean victory, boolean multiplayer, boolean extracted) {
-        PacketDistributor.sendToPlayer(player, new RunRecapPayload(round, kills, revives, survivalSeconds,
-                previousBest, RunRecapPayload.packFlags(victory, multiplayer, extracted)));
+                                 int previousBest, boolean victory, boolean multiplayer, boolean extracted,
+                                 int headshots, int deaths, boolean ritual) {
+        PacketDistributor.sendToPlayer(player, new RunRecapPayload(
+                round, kills, headshots, survivalSeconds,
+                RunRecapPayload.pack(previousBest, deaths, revives),
+                RunRecapPayload.packFlags(victory, multiplayer, extracted, ritual)));
     }
 }

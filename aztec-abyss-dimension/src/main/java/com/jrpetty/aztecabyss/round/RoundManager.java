@@ -856,7 +856,8 @@ public final class RoundManager {
                 player.getUUID(), player.getGameProfile().getName(),
                 round, survivalSeconds, rs.getTotalKills(), rs.getTotalRevives(), false, multiplayer);
         com.jrpetty.aztecabyss.worldgen.MonumentBuilder.build(abyssLevel);
-        ModNetworking.sendRecap(player, round, killsThisRun, revivesThisRun, survivalSeconds, prevBest, false, multiplayer, true);
+        ModNetworking.sendRecap(player, round, killsThisRun, revivesThisRun, survivalSeconds, prevBest,
+                false, multiplayer, true, rs.getHeadshotsThisRun(), rs.getTotalDeaths(), ritual);
 
         rs.clearRun();
         player.setData(ModAttachments.RUN_STATE, rs);
@@ -1011,6 +1012,7 @@ public final class RoundManager {
 
         if (!victory) {
             rs.setCooldownUntil(System.currentTimeMillis() + AbyssConfig.cooldownMillis());
+            rs.addDeath();
         }
         ModNetworking.sendCooldown(player, rs.getCooldownUntil()); // drive the on-screen countdown
         rs.recordRound(round);
@@ -1028,7 +1030,8 @@ public final class RoundManager {
         com.jrpetty.aztecabyss.worldgen.MonumentBuilder.build(abyssLevel);
 
         // Death/victory recap screen data.
-        ModNetworking.sendRecap(player, round, killsThisRun, revivesThisRun, survivalSeconds, prevBest, victory, multiplayer, false);
+        ModNetworking.sendRecap(player, round, killsThisRun, revivesThisRun, survivalSeconds, prevBest,
+                victory, multiplayer, false, rs.getHeadshotsThisRun(), rs.getTotalDeaths(), ritual);
 
         rs.clearRun();
         player.setData(ModAttachments.RUN_STATE, rs);

@@ -33,8 +33,10 @@ public final class RunState {
     private int killsThisRun;
     private int revivesThisRun;
     private long runStartMillis;
+    private int headshotsThisRun;
     // Lifetime.
     private int totalRevives;
+    private int totalDeaths;
 
     @Nullable
     private BlockPos homePortalPos;
@@ -42,13 +44,16 @@ public final class RunState {
     private ResourceLocation homeDimension;
 
     public RunState() {
-        this(false, false, 0, 0, 0L, 0, 0, 0, 0, 0, 0L, 0, null, null);
+        this(false, false, 0, 0, 0L, 0, 0, 0, 0, 0, 0L, 0, 0, 0, null, null);
     }
 
     private RunState(boolean inRun, boolean downed, int bleedoutTicksLeft, int reviveProgress,
                      long cooldownUntil, int bestRound, int totalKills, int owedRewardRound,
                      int killsThisRun, int revivesThisRun, long runStartMillis, int totalRevives,
+                     int headshotsThisRun, int totalDeaths,
                      @Nullable BlockPos homePortalPos, @Nullable ResourceLocation homeDimension) {
+        this.headshotsThisRun = headshotsThisRun;
+        this.totalDeaths = totalDeaths;
         this.inRun = inRun;
         this.downed = downed;
         this.bleedoutTicksLeft = bleedoutTicksLeft;
@@ -78,16 +83,18 @@ public final class RunState {
             Codec.INT.optionalFieldOf("revives_this_run", 0).forGetter(s -> s.revivesThisRun),
             Codec.LONG.optionalFieldOf("run_start_millis", 0L).forGetter(s -> s.runStartMillis),
             Codec.INT.optionalFieldOf("total_revives", 0).forGetter(s -> s.totalRevives),
+            Codec.INT.optionalFieldOf("headshots_this_run", 0).forGetter(s -> s.headshotsThisRun),
+            Codec.INT.optionalFieldOf("total_deaths", 0).forGetter(s -> s.totalDeaths),
             BlockPos.CODEC.optionalFieldOf("home_portal_pos").forGetter(s -> Optional.ofNullable(s.homePortalPos)),
             ResourceLocation.CODEC.optionalFieldOf("home_dimension").forGetter(s -> Optional.ofNullable(s.homeDimension))
     ).apply(instance, RunState::fromCodec));
 
     private static RunState fromCodec(boolean inRun, boolean downed, int bleed, int revive, long cooldown,
                                       int best, int kills, int owed, int killsRun, int revivesRun,
-                                      long startMillis, int totalRevives,
+                                      long startMillis, int totalRevives, int headshotsRun, int totalDeaths,
                                       Optional<BlockPos> homePos, Optional<ResourceLocation> homeDim) {
         return new RunState(inRun, downed, bleed, revive, cooldown, best, kills, owed, killsRun, revivesRun,
-                startMillis, totalRevives, homePos.orElse(null), homeDim.orElse(null));
+                startMillis, totalRevives, headshotsRun, totalDeaths, homePos.orElse(null), homeDim.orElse(null));
     }
 
     // ------------------------------------------------------------------
@@ -176,11 +183,28 @@ public final class RunState {
         return runStartMillis;
     }
 
+    public int getHeadshotsThisRun() {
+        return headshotsThisRun;
+    }
+
+    public void addHeadshot() {
+        this.headshotsThisRun++;
+    }
+
+    public int getTotalDeaths() {
+        return totalDeaths;
+    }
+
+    public void addDeath() {
+        this.totalDeaths++;
+    }
+
     /** Marks the start of a fresh run and zeroes the per-run counters. */
     public void beginRunTracking(long nowMillis) {
         this.runStartMillis = nowMillis;
         this.killsThisRun = 0;
         this.revivesThisRun = 0;
+        this.headshotsThisRun = 0;
     }
 
     /** Survival time of the current/just-finished run, in whole seconds. */

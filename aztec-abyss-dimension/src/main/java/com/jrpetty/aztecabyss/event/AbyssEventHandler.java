@@ -102,6 +102,39 @@ public final class AbyssEventHandler {
         }
     }
 
+    /**
+     * Approximates a headshot: a projectile that strikes the upper quarter of a
+     * wave mob's hitbox. Minecraft has no native hit-location model, so this is
+     * a height check against the arrow's impact position - good enough to make
+     * precise archery feel rewarded and to fill the end-of-run scoreboard.
+     */
+    @SubscribeEvent
+    public void onHeadshotCheck(LivingIncomingDamageEvent event) {
+        if (!(event.getEntity() instanceof Mob mob)
+                || !(mob.level() instanceof ServerLevel level) || !inAbyss(level)) {
+            return;
+        }
+        if (!mob.getPersistentData().getBoolean("aztecabyss_wave_mob")) {
+            return;
+        }
+        net.minecraft.world.entity.Entity direct = event.getSource().getDirectEntity();
+        if (!(direct instanceof net.minecraft.world.entity.projectile.Projectile projectile)) {
+            return;
+        }
+        if (!(projectile.getOwner() instanceof ServerPlayer shooter)
+                || !RoundManager.game().isParticipant(shooter.getUUID())) {
+            return;
+        }
+        double headLine = mob.getY() + mob.getBbHeight() * 0.75;
+        if (projectile.getY() >= headLine) {
+            RunState rs = shooter.getData(ModAttachments.RUN_STATE);
+            rs.addHeadshot();
+            shooter.setData(ModAttachments.RUN_STATE, rs);
+            level.playSound(null, shooter.blockPosition(),
+                    net.minecraft.sounds.SoundEvents.PLAYER_ATTACK_CRIT, net.minecraft.sounds.SoundSource.PLAYERS, 0.6F, 1.8F);
+        }
+    }
+
     @SubscribeEvent
     public void onIncomingDamage(LivingIncomingDamageEvent event) {
         if (event.getEntity() instanceof ServerPlayer player
