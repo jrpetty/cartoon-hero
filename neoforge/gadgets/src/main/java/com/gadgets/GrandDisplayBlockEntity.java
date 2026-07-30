@@ -16,7 +16,6 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
-import net.minecraft.world.phys.AABB;
 import org.jetbrains.annotations.Nullable;
 
 /**
@@ -64,15 +63,6 @@ public class GrandDisplayBlockEntity extends BlockEntity {
         super(Gadgets.GRAND_DISPLAY_BE.get(), pos, state);
     }
 
-    /**
-     * One panel draws the text for its whole run, so its render box has to cover
-     * the run — otherwise the board blanks out as soon as that particular panel
-     * leaves the view frustum while the rest is still on screen.
-     */
-    @Override
-    public AABB getRenderBoundingBox() {
-        return new AABB(worldPosition).inflate(MAX_RUN);
-    }
 
     // --- state the screen and renderer read ---
 

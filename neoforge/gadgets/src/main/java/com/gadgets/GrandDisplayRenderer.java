@@ -127,6 +127,22 @@ public class GrandDisplayRenderer implements BlockEntityRenderer<GrandDisplayBlo
         pose.popPose();
     }
 
+    /**
+     * One panel draws the text for its whole run, so it has to keep drawing when
+     * it alone is out of view — otherwise a wide board blanks as soon as its
+     * drawing panel leaves the frustum while the rest is still on screen.
+     */
+    @Override
+    public boolean shouldRenderOffScreen(GrandDisplayBlockEntity be) {
+        return true;
+    }
+
+    /** How far away the board stays legible before it stops drawing. */
+    @Override
+    public int getViewDistance() {
+        return 96;
+    }
+
     /** Another panel of the same board: same block, same facing. */
     private static boolean isPanel(BlockGetter level, BlockPos pos, Direction front) {
         BlockState state = level.getBlockState(pos);
