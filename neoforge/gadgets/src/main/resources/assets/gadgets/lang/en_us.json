@@ -74,5 +74,7 @@
   "block.gadgets.command_hub_monitor": "Command Hub Monitor",
   "tip.gadgets.command_hub_monitor.1": "A remote screen for one line of a hub's board",
   "tip.gadgets.command_hub_monitor.2": "Select a hub with the Monitor Wand, then click this",
-  "tip.gadgets.command_hub_monitor.3": "Right-click: choose which gadget to display"
+  "tip.gadgets.command_hub_monitor.3": "Right-click: choose which gadget to display",
+  "tip.gadgets.command_hub.4": "Outputs redstone while anything is low or stalled",
+  "tip.gadgets.item_counter.5": "Linked to a hub: flagged STALLED after quiet minutes"
 }

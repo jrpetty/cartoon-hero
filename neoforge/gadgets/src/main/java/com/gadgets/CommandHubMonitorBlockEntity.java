@@ -34,18 +34,19 @@ public class CommandHubMonitorBlockEntity extends BlockEntity {
     private static final int INTERVAL = 20;
 
     /** One pickable line, mirrored to the client so the chooser can list names. */
-    public record Choice(String dim, long pos, int type, String label) {
+    public record Choice(String dim, long pos, int type, String label, boolean alarmed) {
         CompoundTag toNbt() {
             CompoundTag t = new CompoundTag();
             t.putString("D", dim);
             t.putLong("P", pos);
             t.putInt("T", type);
             t.putString("L", label);
+            t.putBoolean("Al", alarmed);
             return t;
         }
 
         static Choice fromNbt(CompoundTag t) {
-            return new Choice(t.getString("D"), t.getLong("P"), t.getInt("T"), t.getString("L"));
+            return new Choice(t.getString("D"), t.getLong("P"), t.getInt("T"), t.getString("L"), t.getBoolean("Al"));
         }
     }
 
@@ -224,7 +225,7 @@ public class CommandHubMonitorBlockEntity extends BlockEntity {
         be.choices.clear();
         if (hub != null) {
             for (CommandHubBlockEntity.Node n : hub.getNodes()) {
-                be.choices.add(new Choice(n.dim, n.pos, n.type, n.label));
+                be.choices.add(new Choice(n.dim, n.pos, n.type, n.label, n.alarmed()));
             }
             // The board drops links whose gadget is gone; follow it, so a broken
             // counter clears this screen instead of freezing its last numbers.
@@ -261,7 +262,7 @@ public class CommandHubMonitorBlockEntity extends BlockEntity {
             a = counter.getRateMin();
             b = counter.getRateHour();
             c = counter.getTotal();
-            d = 0;
+            d = counter.isStalled() ? 1 : 0;
         } else if (w.getBlockEntity(p) instanceof StockMonitorBlockEntity monitor) {
             type = CommandHubBlockEntity.TYPE_MONITOR;
             online = true;
@@ -279,7 +280,7 @@ public class CommandHubMonitorBlockEntity extends BlockEntity {
                 .append(type).append(online).append(label)
                 .append(a).append(',').append(b).append(',').append(c).append(',').append(d);
         for (Choice ch : choices) {
-            sb.append('|').append(ch.dim()).append(ch.pos()).append(ch.type()).append(ch.label());
+            sb.append('|').append(ch.dim()).append(ch.pos()).append(ch.type()).append(ch.label()).append(ch.alarmed());
         }
         return sb.toString();
     }

@@ -12,7 +12,7 @@ import net.minecraft.world.level.block.HorizontalDirectionalBlock;
 import net.minecraft.world.level.block.state.BlockState;
 import org.joml.Matrix4f;
 
-/** Live summary on the hub's screen: nodes linked, combined rate, low-stock alerts. */
+/** Live summary on the hub's screen: nodes linked, combined rate, low-stock and stalled-counter alerts. */
 public class CommandHubRenderer implements BlockEntityRenderer<CommandHubBlockEntity> {
     private static final int HEAD_COLOR = 0xE6AA3C;
     private static final int OK_COLOR = 0xFFC864;
@@ -39,17 +39,17 @@ public class CommandHubRenderer implements BlockEntityRenderer<CommandHubBlockEn
         pose.translate(0.0, 0.0, 0.505);
         pose.scale(0.014F, -0.014F, 0.014F);
 
-        int low = be.lowCount();
+        int alarms = be.alarmCount();
         String l1 = "◈ " + be.nodeCount() + " linked";
         String l2 = ItemCounterBlockEntity.compact(be.totalRateMin()) + " /min";
-        String l3 = low == 0 ? "all stocked" : low + " low!";
+        String l3 = alarms == 0 ? "all clear" : alarms + " alert" + (alarms == 1 ? "" : "s") + "!";
         Matrix4f matrix = pose.last().pose();
         int bright = LightTexture.FULL_BRIGHT;
         font.drawInBatch(l1, -font.width(l1) / 2.0F, -14.0F, HEAD_COLOR, false,
                 matrix, buffers, Font.DisplayMode.POLYGON_OFFSET, 0, bright);
         font.drawInBatch(l2, -font.width(l2) / 2.0F, -3.0F, OK_COLOR, false,
                 matrix, buffers, Font.DisplayMode.POLYGON_OFFSET, 0, bright);
-        font.drawInBatch(l3, -font.width(l3) / 2.0F, 8.0F, low == 0 ? OK_COLOR : LOW_COLOR, false,
+        font.drawInBatch(l3, -font.width(l3) / 2.0F, 8.0F, alarms == 0 ? OK_COLOR : LOW_COLOR, false,
                 matrix, buffers, Font.DisplayMode.POLYGON_OFFSET, 0, bright);
         pose.popPose();
     }

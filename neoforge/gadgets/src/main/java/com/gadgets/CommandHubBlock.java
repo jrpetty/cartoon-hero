@@ -8,6 +8,7 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.context.BlockPlaceContext;
+import net.minecraft.world.level.BlockGetter;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.EntityBlock;
@@ -17,19 +18,25 @@ import net.minecraft.world.level.block.entity.BlockEntityTicker;
 import net.minecraft.world.level.block.entity.BlockEntityType;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.StateDefinition;
+import net.minecraft.world.level.block.state.properties.BooleanProperty;
 import net.minecraft.world.phys.BlockHitResult;
 import org.jetbrains.annotations.Nullable;
 
 /**
  * The Command Hub console. Its screen faces the player; link gadgets to it
  * with the Monitor Wand. Right-click opens the monitoring board.
+ *
+ * <p>Emits redstone whenever a linked monitor goes low or a linked counter
+ * stalls, so one hub can drive a single base-wide alarm instead of wiring
+ * every gadget's own signal separately.
  */
 public class CommandHubBlock extends HorizontalDirectionalBlock implements EntityBlock {
     public static final MapCodec<CommandHubBlock> CODEC = simpleCodec(CommandHubBlock::new);
+    public static final BooleanProperty ALARM = BooleanProperty.create("alarm");
 
     public CommandHubBlock(Properties properties) {
         super(properties);
-        registerDefaultState(getStateDefinition().any().setValue(FACING, Direction.NORTH));
+        registerDefaultState(getStateDefinition().any().setValue(FACING, Direction.NORTH).setValue(ALARM, false));
     }
 
     @Override
@@ -39,7 +46,17 @@ public class CommandHubBlock extends HorizontalDirectionalBlock implements Entit
 
     @Override
     protected void createBlockStateDefinition(StateDefinition.Builder<Block, BlockState> builder) {
-        builder.add(FACING);
+        builder.add(FACING, ALARM);
+    }
+
+    @Override
+    protected boolean isSignalSource(BlockState state) {
+        return true;
+    }
+
+    @Override
+    protected int getSignal(BlockState state, BlockGetter level, BlockPos pos, Direction direction) {
+        return state.getValue(ALARM) ? 15 : 0;
     }
 
     @Nullable
@@ -57,7 +74,7 @@ public class CommandHubBlock extends HorizontalDirectionalBlock implements Entit
         if (!level.isClientSide() && level.getBlockEntity(pos) instanceof CommandHubBlockEntity be && player.isShiftKeyDown()) {
             player.displayClientMessage(Component.literal("Command Hub ▸ " + be.nodeCount() + "/" + CommandHubBlockEntity.MAX_NODES
                     + " linked · " + ItemCounterBlockEntity.fmt(be.totalRateMin()) + "/min · "
-                    + be.lowCount() + " low").withStyle(ChatFormatting.GOLD), true);
+                    + be.alarmCount() + " alerts").withStyle(ChatFormatting.GOLD), true);
         }
         return InteractionResult.sidedSuccess(level.isClientSide());
     }

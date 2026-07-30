@@ -59,11 +59,13 @@ public class CommandHubMonitorRenderer implements BlockEntityRenderer<CommandHub
             line(pose, buffers, trim(be.sourceLabel()), -14.0F, SMALL, NAME);
             line(pose, buffers, "OFFLINE", 0.0F, SMALL, IDLE);
         } else if (be.sourceType() == CommandHubBlockEntity.TYPE_COUNTER) {
-            // Mirrors the Item Counter's own face: rate headline, then /h and total.
+            // Mirrors the Item Counter's own face: rate headline, then /h and
+            // total — or, once it goes quiet, a STALLED flag in place of both.
+            boolean stalled = be.d() != 0;
             line(pose, buffers, trim(be.sourceLabel()), -18.0F, SMALL, NAME);
-            line(pose, buffers, ItemCounterBlockEntity.compact(be.a()) + "/m", -4.0F, BIG, VALUE);
-            line(pose, buffers, ItemCounterBlockEntity.compact(be.b()) + "/h  ·  "
-                    + ItemCounterBlockEntity.compact(be.c()) + " tot", 16.0F, SMALL, SUB);
+            line(pose, buffers, ItemCounterBlockEntity.compact(be.a()) + "/m", -4.0F, BIG, stalled ? LOW : VALUE);
+            line(pose, buffers, stalled ? "STALLED" : ItemCounterBlockEntity.compact(be.b()) + "/h  ·  "
+                    + ItemCounterBlockEntity.compact(be.c()) + " tot", 16.0F, SMALL, stalled ? LOW : SUB);
         } else {
             // Mirrors the Stock Monitor: the count headline, then the alert state.
             boolean low = be.c() != 0;

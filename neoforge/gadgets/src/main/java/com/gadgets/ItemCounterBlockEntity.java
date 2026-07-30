@@ -41,6 +41,8 @@ public class ItemCounterBlockEntity extends BlockEntity {
     public static final int[] THRESHOLDS = {1, 4, 8, 16, 32, 64};
     private static final int MAX_TRACKED_ITEMS = 64;
     private static final String OTHER_KEY = "other";
+    /** No items for this long after having seen at least one: flagged as stalled. */
+    private static final long STALL_TICKS = 3600L; // 3 minutes
 
     /** Face readout modes, cycled with sneak + empty hand. */
     public static final String[] MODE_LABELS = {"/min", "/hour", "total", "pulse"};
@@ -56,6 +58,8 @@ public class ItemCounterBlockEntity extends BlockEntity {
     private long total = 0L;
     private long uptimeTicks = 0L;
     private final Map<String, Long> perItem = new HashMap<>();
+    /** Ticks since the last item was recorded; large until the first one ever is. */
+    private long ticksSinceItem = Long.MAX_VALUE / 2;
 
     // --- rolling rate clocks (transient; rebuilt after reload) ---
     private final int[] secBuckets = new int[60];
@@ -106,6 +110,12 @@ public class ItemCounterBlockEntity extends BlockEntity {
 
     public boolean isWatchingContainer() {
         return watchingContainer;
+    }
+
+    /** True once a counter that has actually seen items goes quiet for a while —
+     *  the signal a hub board uses to flag "this farm stopped producing". */
+    public boolean isStalled() {
+        return total > 0L && ticksSinceItem > STALL_TICKS;
     }
 
     /** The top {@code n} item types counted so far, best first. */
@@ -186,6 +196,7 @@ public class ItemCounterBlockEntity extends BlockEntity {
         java.util.Arrays.fill(minBuckets, 0);
         rateMin = 0;
         rateHour = 0;
+        ticksSinceItem = Long.MAX_VALUE / 2;
         sync();
     }
 
@@ -206,6 +217,9 @@ public class ItemCounterBlockEntity extends BlockEntity {
 
     public static void tick(Level level, BlockPos pos, BlockState state, ItemCounterBlockEntity be) {
         be.uptimeTicks++;
+        if (be.ticksSinceItem < Long.MAX_VALUE / 2) {
+            be.ticksSinceItem++;
+        }
         be.advanceClocks(level.getGameTime());
 
         if (level.getGameTime() % INTERVAL == 0L) {
@@ -275,6 +289,7 @@ public class ItemCounterBlockEntity extends BlockEntity {
     /** Credit {@code n} passed items of the given type to every statistic. */
     private void record(String id, int n) {
         total += n;
+        ticksSinceItem = 0;
         secBuckets[(int) (lastSec % 60L)] += n;
         minBuckets[(int) (lastMin % 60L)] += n;
         String key = (!perItem.containsKey(id) && perItem.size() >= MAX_TRACKED_ITEMS) ? OTHER_KEY : id;
@@ -410,6 +425,7 @@ public class ItemCounterBlockEntity extends BlockEntity {
         tag.putString("CustomName", customName);
         tag.putLong("Total", total);
         tag.putLong("Uptime", uptimeTicks);
+        tag.putLong("TicksSinceItem", ticksSinceItem);
         tag.putInt("RateMin", rateMin);
         tag.putInt("RateHour", rateHour);
         CompoundTag items = new CompoundTag();
@@ -428,6 +444,7 @@ public class ItemCounterBlockEntity extends BlockEntity {
         displayMode = tag.getInt("DisplayMode") % MODE_LABELS.length;
         total = tag.getLong("Total");
         uptimeTicks = tag.getLong("Uptime");
+        ticksSinceItem = tag.contains("TicksSinceItem") ? tag.getLong("TicksSinceItem") : Long.MAX_VALUE / 2;
         rateMin = tag.getInt("RateMin");
         rateHour = tag.getInt("RateHour");
         if (tag.contains("PerItem")) {

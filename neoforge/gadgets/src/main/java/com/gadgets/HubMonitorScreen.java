@@ -90,7 +90,9 @@ public class HubMonitorScreen extends GadgetScreen {
             String kind = choice.type() == CommandHubBlockEntity.TYPE_COUNTER ? "counter" : "stock";
             String name = choice.label().isBlank() ? "(unnamed " + kind + ")" : choice.label();
 
-            gfx.drawString(font, (showing ? "▶ " : "  ") + name, x, y, showing ? GREEN : AMBER, false);
+            String dot = choice.alarmed() ? "● " : "";
+            gfx.drawString(font, (showing ? "▶ " : "  ") + dot + name, x, y,
+                    choice.alarmed() ? RED : showing ? GREEN : AMBER, false);
             gfx.drawString(font, kind + " · " + p.getX() + "," + p.getY() + "," + p.getZ(),
                     x + 8, y + 9, GRAY, false);
         }

@@ -14,7 +14,10 @@ import net.minecraft.resources.ResourceKey;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.sounds.SoundEvents;
+import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
 import org.jetbrains.annotations.Nullable;
@@ -24,8 +27,12 @@ import org.jetbrains.annotations.Nullable;
  * Stock Monitors to it with the Monitor Wand and it aggregates their live
  * numbers every second — throughput per counter, stock per monitor, offline
  * markers for unloaded chunks — across dimensions. The screen shows a
- * summary; the full board opens on right-click. This is v1 of the base
- * command center: read-only telemetry today, control later.
+ * summary; the full board opens on right-click.
+ *
+ * <p>It also drives one output: redstone through the block itself, on
+ * whenever any linked monitor is low or any linked counter has stalled, so a
+ * single hub can trigger a base-wide alarm instead of wiring every gadget's
+ * own signal separately.
  */
 public class CommandHubBlockEntity extends BlockEntity {
     public static final int MAX_NODES = 32;
@@ -44,7 +51,12 @@ public class CommandHubBlockEntity extends BlockEntity {
         public long a = 0; // counter: rate/min   · monitor: stock count
         public long b = 0; // counter: rate/hour  · monitor: alert threshold
         public long c = 0; // counter: total      · monitor: low flag (1/0)
-        public long d = 0; //                        · monitor: distinct item types
+        public long d = 0; // counter: stalled (1/0) · monitor: distinct item types
+
+        /** True when this node is in a state the hub's alarm output should count. */
+        public boolean alarmed() {
+            return online && (type == TYPE_COUNTER ? d != 0 : c != 0);
+        }
 
         public CompoundTag toNbt() {
             CompoundTag n = new CompoundTag();
@@ -180,14 +192,15 @@ public class CommandHubBlockEntity extends BlockEntity {
         return sum;
     }
 
-    public int lowCount() {
-        int low = 0;
-        for (Node n : nodes) {
-            if (n.type == TYPE_MONITOR && n.online && n.c != 0) {
-                low++;
+    /** Nodes currently flagged: a monitor gone low, or a counter gone stalled. */
+    public int alarmCount() {
+        int n = 0;
+        for (Node node : nodes) {
+            if (node.alarmed()) {
+                n++;
             }
         }
-        return low;
+        return n;
     }
 
     public static void tick(Level level, BlockPos pos, BlockState state, CommandHubBlockEntity be) {
@@ -204,6 +217,17 @@ public class CommandHubBlockEntity extends BlockEntity {
         for (Node n : be.nodes) {
             be.refresh(server, n);
         }
+
+        boolean alarmed = be.alarmCount() > 0;
+        if (state.getValue(CommandHubBlock.ALARM) != alarmed) {
+            level.setBlock(pos, state.setValue(CommandHubBlock.ALARM, alarmed), Block.UPDATE_ALL);
+            // A cue only on the transition into alarm — polling every interval
+            // would mean a constant chime for as long as anything stays flagged.
+            if (alarmed) {
+                level.playSound(null, pos, SoundEvents.NOTE_BLOCK_BELL.value(), SoundSource.BLOCKS, 0.5F, 0.8F);
+            }
+        }
+
         // Push to clients only when the board actually changed.
         String fingerprint = be.buildList().toString();
         if (!fingerprint.equals(be.lastSync)) {
@@ -229,7 +253,7 @@ public class CommandHubBlockEntity extends BlockEntity {
             n.a = counter.getRateMin();
             n.b = counter.getRateHour();
             n.c = counter.getTotal();
-            n.d = 0;
+            n.d = counter.isStalled() ? 1 : 0;
         } else if (w.getBlockEntity(p) instanceof StockMonitorBlockEntity monitor) {
             n.online = true;
             n.label = monitor.displayName();
