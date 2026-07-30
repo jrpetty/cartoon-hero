@@ -127,6 +127,9 @@ public class CollectionBookScreen extends Screen {
     private Achievement hoveredAward;
     /** The settings row under the cursor — its full detail is drawn as a tooltip. */
     private Setting hoveredSetting;
+    /** The grid card under the cursor — drives the details tooltip and its File/Take control. */
+    private MobCard hoveredCard;
+    private Chip cardAction;
     private EditBox search;
 
     private int cardSpreads;
@@ -333,6 +336,8 @@ public class CollectionBookScreen extends Screen {
         hotspots.clear();
         hoveredAward = null;
         hoveredSetting = null;
+        hoveredCard = null;
+        cardAction = null;
         Section section = section();
         if (section != Section.CARDS && search.isFocused()) {
             search.setFocused(false); // the search box belongs to the card pages
@@ -402,6 +407,8 @@ public class CollectionBookScreen extends Screen {
         boolean overlay = pickerMob != null || eggPicker != null || statsOpen;
         if (hoveredSetting != null && !overlay) {
             drawInfoTooltip(g, mouseX, mouseY, hoveredSetting.label(), hoveredSetting.detail(), 0xFF3FA7D6);
+        } else if (hoveredCard != null && !overlay) {
+            drawCardTooltip(g, mouseX, mouseY, hoveredCard);
         } else if (hoveredAward != null && !overlay) {
             Achievement a = hoveredAward;
             String need = a.description() + ".  Progress " + ClientAwards.progress(a) + " / " + a.target()
@@ -509,11 +516,106 @@ public class CollectionBookScreen extends Screen {
                 if (hovered) {
                     g.renderOutline(cx - 2, cy - 2, cw + 4, ch + 4, 0xFFF9D849);
                     g.renderOutline(cx - 3, cy - 3, cw + 6, ch + 6, 0x66F9D849);
+                    hoveredCard = card;
+                    drawCardAction(g, card, foil, cx, cy, cw, ch, mouseX, mouseY);
                 }
             } else {
                 CardRenderer.renderBack(g, font, cx, cy, cardScale);
                 if (hovered) g.renderOutline(cx - 2, cy - 2, cw + 4, ch + 4, 0x66FFFFFF);
             }
+        }
+    }
+
+    /**
+     * The File / Take out control on the hovered card. The binder holds one of
+     * each card; this is how a single card goes in or comes back out, for
+     * anyone whose plan is to sell them rather than keep them.
+     */
+    private void drawCardAction(GuiGraphics g, MobCard card, boolean foil,
+                                int cx, int cy, int cw, int ch, int mouseX, int mouseY) {
+        boolean filed = ClientCollection.isStored(card.id(), foil);
+        boolean holding = heldCopies(card.id(), foil) > 0;
+        if (!filed && !holding) {
+            return; // nothing to put in and nothing to take out
+        }
+        String label = filed ? "Take out" : "File";
+        int w = Math.min(cw, font.width(label) + 12);
+        int x = cx + (cw - w) / 2;
+        int y = cy + ch - 15;
+        cardAction = new Chip((filed ? "take_" : "file_") + card.id() + (foil ? ":f" : ""), x, y, w, 13);
+        boolean hover = cardAction.hit(mouseX, mouseY);
+        int base = filed ? 0xFFB4762A : 0xFF2E7D46;
+        g.fill(x, y, x + w, y + 13, hover ? CardRenderer.lighten(base) : base);
+        g.renderOutline(x, y, w, 13, hover ? 0xFFFFF0B0 : 0xFF2A1F12);
+        g.drawString(font, label, x + (w - font.width(label)) / 2, y + 3, 0xFFFFFFFF, false);
+    }
+
+    /** Loose copies of a card in the player's own inventory, counted client-side. */
+    private int heldCopies(String mobId, boolean foil) {
+        if (minecraft == null || minecraft.player == null) {
+            return 0;
+        }
+        int n = 0;
+        var inv = minecraft.player.getInventory();
+        for (int i = 0; i < inv.getContainerSize(); i++) {
+            ItemStack s = inv.getItem(i);
+            MobCard c = MobCardItem.cardOf(s);
+            if (c != null && c.id().equals(mobId) && MobCardItem.isFoilCard(s) == foil) {
+                n += s.getCount();
+            }
+        }
+        return n;
+    }
+
+    /** Everything about a card, on hover: tier, the stats, the hunt, where it is. */
+    private void drawCardTooltip(GuiGraphics g, int mouseX, int mouseY, MobCard card) {
+        boolean foil = ClientCollection.displayedIsFoil(card.id());
+        int level = ClientCollection.displayLevel(card.id(), foil);
+        MobCard shown = card.upgraded(level);
+        int total = 0;
+        for (Stat st : Stat.values()) total += shown.stat(st);
+        int kills = ClientCollection.killCount(card.id());
+        Tier tier = card.tier();
+
+        List<String> lines = new ArrayList<>();
+        List<Integer> colors = new ArrayList<>();
+        lines.add(tier.label().toUpperCase(Locale.ROOT) + "   ·   Rarity " + card.rarity() + " (lower wins)");
+        colors.add(CardRenderer.tierPrintColor(card));
+        lines.add("Mob rating " + total + "   ·   "
+                + (card.category() == null ? "" : card.category().label())
+                + "   ·   No. " + (MobCards.ordinal(card.id()) + 1) + " / " + MobCards.ALL.size());
+        colors.add(0xFF6E6154);
+        lines.add("Drops 1 in " + Math.round(1f / tier.cardDropChance())
+                + "   ·   hunted " + kills + " time" + (kills == 1 ? "" : "s"));
+        colors.add(0xFF6E6154);
+        int next = tier.nextMilestone(kills);
+        lines.add(level > 0 ? "Holo " + "I".repeat(Math.min(3, level))
+                        + (next < 0 ? " — fully upgraded" : "  ·  next at " + next + " kills")
+                : (next < 0 ? "No holo" : "Holo at " + next + " kills"));
+        colors.add(level > 0 ? 0xFF8746C9 : 0xFF9A9083);
+
+        boolean filed = ClientCollection.isStored(card.id(), foil);
+        int held = heldCopies(card.id(), foil);
+        String where = filed ? "Filed in this book — click Take out to pocket it"
+                : held > 0 ? held + " in your inventory — click File to store one here"
+                : "Not in your book or your inventory";
+        lines.add(where);
+        colors.add(filed ? 0xFF2E8B3A : held > 0 ? 0xFF1C7FA8 : 0xFF9A9083);
+
+        int textW = font.width(card.displayName());
+        for (String l : lines) textW = Math.max(textW, font.width(l));
+        int w = textW + 12;
+        int h = 12 + lines.size() * 10 + 8;
+        int x = Math.min(mouseX + 12, width - w - 4);
+        int y = Math.min(Math.max(4, mouseY - h / 2), height - h - 4);
+        g.fill(x - 1, y - 1, x + w + 1, y + h + 1, 0xFF241C10);
+        g.fill(x, y, x + w, y + h, CardRenderer.FACE);
+        g.fill(x, y, x + w, y + 1, CardRenderer.tierPrintColor(card));
+        g.drawString(font, card.displayName(), x + 6, y + 5, CardRenderer.INK, false);
+        int ly = y + 17;
+        for (int i = 0; i < lines.size(); i++) {
+            g.drawString(font, lines.get(i), x + 6, ly, colors.get(i), false);
+            ly += 10;
         }
     }
 
@@ -1103,6 +1205,17 @@ public class CollectionBookScreen extends Screen {
     }
 
     private boolean clickCard(double mouseX, double mouseY) {
+        // the File / Take out pill sits on top of the card and wins the click
+        if (cardAction != null && cardAction.hit(mouseX, mouseY)) {
+            String key = cardAction.key();
+            boolean foil = key.endsWith(":f");
+            String id = key.substring(key.indexOf('_') + 1, foil ? key.length() - 2 : key.length());
+            PacketDistributor.sendToServer(key.startsWith("take_")
+                    ? StorageActionPayload.withdraw(id, foil)
+                    : StorageActionPayload.deposit(id, foil));
+            clickSound();
+            return true;
+        }
         int cw = Math.round(CardRenderer.CARD_W * cardScale);
         int ch = Math.round(CardRenderer.CARD_H * cardScale);
         int startIdx = spread * PER_SPREAD;

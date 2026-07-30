@@ -62,6 +62,7 @@ public final class ModNetworking {
                         switch (payload.action()) {
                             case StorageActionPayload.DEPOSIT_ALL -> BinderStorage.depositAll(sp);
                             case StorageActionPayload.WITHDRAW -> BinderStorage.withdraw(sp, payload.mobId(), payload.foil());
+                            case StorageActionPayload.DEPOSIT_ONE -> BinderStorage.deposit(sp, payload.mobId(), payload.foil());
                             default -> { }
                         }
                     }

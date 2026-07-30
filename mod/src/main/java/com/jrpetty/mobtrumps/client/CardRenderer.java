@@ -395,6 +395,15 @@ public final class CardRenderer {
         pose.popPose();
     }
 
+    /** A lighter shade of a packed ARGB colour, for hover states. */
+    public static int lighten(int argb) {
+        int a = argb >>> 24;
+        int r = Math.min(255, (int) (((argb >> 16) & 0xFF) * 1.35f));
+        int g = Math.min(255, (int) (((argb >> 8) & 0xFF) * 1.35f));
+        int b = Math.min(255, (int) ((argb & 0xFF) * 1.35f));
+        return (a << 24) | (r << 16) | (g << 8) | b;
+    }
+
     /** Chat colours glow on dark backgrounds but wash out on the cream card
      *  face, so the printed tier line uses darker ink versions of them. */
     public static int tierPrintColor(MobCard card) {

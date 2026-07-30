@@ -72,6 +72,40 @@ public final class BinderStorage {
         return deposited;
     }
 
+    /**
+     * File ONE specific loose card from the inventory into the book. Used by
+     * the per-card control in the book, so a player selling off a collection
+     * can place and remove them one at a time instead of all or nothing.
+     */
+    public static boolean deposit(ServerPlayer player, String mobId, boolean foil) {
+        MobCard card = com.jrpetty.mobtrumps.game.MobCards.byId(mobId);
+        if (card == null) return false;
+        var attachment = foil ? ModAttachments.STORED_FOIL.get() : ModAttachments.STORED.get();
+        List<String> current = player.getData(attachment);
+        if (current.contains(mobId)) return false; // the book already holds one
+
+        var inv = player.getInventory();
+        for (int i = 0; i < inv.getContainerSize(); i++) {
+            ItemStack s = inv.getItem(i);
+            MobCard held = MobCardItem.cardOf(s);
+            if (held == null || !held.id().equals(mobId)) continue;
+            if (MobCardItem.isFoilCard(s) != foil) continue;
+            s.shrink(1);
+            List<String> next = new ArrayList<>(current);
+            next.add(mobId);
+            player.setData(attachment, List.copyOf(next));
+            CollectionTracker.record(player, mobId, foil);
+            sync(player);
+            player.sendSystemMessage(Component.literal("Filed " + (foil ? "a foil " : "")
+                            + card.displayName() + " into your book.")
+                    .withStyle(ChatFormatting.GREEN));
+            player.serverLevel().playSound(null, player.getX(), player.getY(), player.getZ(),
+                    SoundEvents.BOOK_PAGE_TURN, SoundSource.PLAYERS, 0.9F, 1.1F);
+            return true;
+        }
+        return false; // not carrying one
+    }
+
     /** Take a single stored card back out of the book as an item. */
     public static boolean withdraw(ServerPlayer player, String mobId, boolean foil) {
         MobCard card = com.jrpetty.mobtrumps.game.MobCards.byId(mobId);

@@ -11,11 +11,13 @@ import net.minecraft.resources.ResourceLocation;
  *
  *   DEPOSIT_ALL - vacuum one of each loose card type from the inventory into the book
  *   WITHDRAW    - take one stored card ({@code mobId}, {@code foil}) back out as an item
+ *   DEPOSIT_ONE - file one specific loose card from the inventory into the book
  */
 public record StorageActionPayload(int action, String mobId, boolean foil) implements CustomPacketPayload {
 
     public static final int DEPOSIT_ALL = 0;
     public static final int WITHDRAW = 1;
+    public static final int DEPOSIT_ONE = 2;
 
     public static final CustomPacketPayload.Type<StorageActionPayload> TYPE =
             new CustomPacketPayload.Type<>(
@@ -33,6 +35,10 @@ public record StorageActionPayload(int action, String mobId, boolean foil) imple
 
     public static StorageActionPayload withdraw(String mobId, boolean foil) {
         return new StorageActionPayload(WITHDRAW, mobId, foil);
+    }
+
+    public static StorageActionPayload deposit(String mobId, boolean foil) {
+        return new StorageActionPayload(DEPOSIT_ONE, mobId, foil);
     }
 
     @Override
