@@ -193,27 +193,30 @@ Every category anchors exactly two missions; the pair feels different because
 the padding changes entirely — Village I is four villagers propped up by twelve
 Rares, Village II the same four backed by twelve Epics.
 
-Opponent ramp, as shipped in v1.59.0. Two extra knobs appear because the
-player now brings their own collection, and a themed category deck is not
-automatically a match for it:
+Opponent ramp, as shipped in v1.60.0. **Both decks are always exactly 16** —
+neither side ever holds more cards than the other, so the difficulty lives in
+the cards themselves and in how the opponent plays them, never in a card-count
+advantage.
 
-| missions | brain | counts | their deck | their prints |
-|---|---|---|---|---|
-| 1-3 | Easy | - | 20 | Holo III |
-| 4-6 | Normal | - | 18 | Holo I |
-| 7 | Normal | - | 17 | Holo I |
-| 8-10 | Hard | - | 17 | base |
-| 11-16 | Hard | - | 16 | base |
-| 17 | Hard | yes | 16 | base |
-| 18 | Hard | yes | 17 | base |
-| 19-20 | Hard | yes | 18 | base |
+| missions | brain | counts the deck |
+|---|---|---|
+| 1-10 | Normal | - |
+| 11-15 | Hard | - |
+| 16-20 | Hard | yes |
 
-The early missions field premium prints and bigger decks because farm animals
-and reef fish are simply weak cards: at base print, sixteen of them cannot make
-a game of it against any real collection. By mission 8 the decks stand on their
-own and the handicaps come off. Fitted by search over cpuLevel x cpuExtra
-against a target curve, then smoothed into the table above -- mean error 6.4
-points, which buys an explainable ramp instead of fitted noise.
+Plus a per-mission **holo level** the opponent's deck is fielded at:
+
+```
+mission  1  2  3  4  5  6  7  8  9 10 11 12 13 14 15 16 17 18 19 20
+holo     2  1  2  2  3  1  1  2  2  1  0  0  0  0  1  0  0  0  0  0
+```
+
+That is not a ramp and is not meant to be: it is per-mission compensation for
+how strong a category's own cards happen to be. Farm animals and reef fish
+need premium prints to be a match for any real collection; Wild Creatures need
+less; by mission 11 an Epic-tier deck stands on its own and the help comes off
+entirely. Card counting is worth roughly 25-50 points of win rate on its own,
+which is why it is held back until mission 16.
 
 Card counting is not a fourth enum but a flag on the Hard brain: in a fixed
 16-card mission deck it genuinely knows the pool, so tracking what has been
@@ -222,28 +225,33 @@ played is honest inference rather than cheating. Note 15-16 hand the extra card
 
 ### Measured, not guessed
 
-3000 runs per mission against two collections: "no legends" is commons through
-rares, roughly a mid-game book; "full" draws from all 81.
+Fitted by DP over the holo level against a target curve, with a penalty for the
+difficulty going backwards, then verified at 3000 runs per mission. Two
+collections: "no legends" is commons through rares, roughly a mid-game book;
+"full" draws from all 81.
 
 | # | no-legends | full | | # | no-legends | full |
 |---|---|---|---|---|---|---|
-| 1 | 94% | 98% | | 11 | 59% | 61% |
-| 2 | 95% | 99% | | 12 | 48% | 61% |
-| 3 | 95% | 99% | | 13 | 42% | 64% |
-| 4 | 72% | 50% | | 14 | 39% | 62% |
-| 5 | 90% | 75% | | 15 | 46% | 69% |
-| 6 | 62% | 42% | | 16 | 52% | 78% |
-| 7 | 69% | 50% | | 17 | 39% | 50% |
-| 8 | 67% | 71% | | 18 | 31% | 36% |
-| 9 | 69% | 81% | | 19 | 30% | 37% |
-| 10 | 58% | 69% | | 20 | 30% | 37% |
+| 1 | 80% | 61% | | 11 | 59% | 61% |
+| 2 | 77% | 63% | | 12 | 48% | 61% |
+| 3 | 70% | 43% | | 13 | 42% | 64% |
+| 4 | 53% | 37% | | 14 | 39% | 62% |
+| 5 | 59% | 45% | | 15 | 34% | 49% |
+| 6 | 68% | 46% | | 16 | 38% | 63% |
+| 7 | 64% | 54% | | 17 | 39% | 50% |
+| 8 | 56% | 47% | | 18 | 35% | 40% |
+| 9 | 53% | 35% | | 19 | 32% | 42% |
+| 10 | 53% | 45% | | 20 | 29% | 35% |
 
-Descends 94% to 30%. **Missions 1-3 sit at the engine's ceiling**: even at Holo
-III with 20 cards a farm-animal deck only gets down to ~94%, because the player
-draws from the whole pool while the mission is locked to one weak category.
-They are loseable rather than automatic, but they are not a fight. The only
-lever that would make them one is capping what the player may BRING to the
-mission's tier band -- a real rule change, not yet made.
+Descends 80% to 29%: no walkover, no wall, mean error 4.9 points against the
+target. Earlier attempts to let the fit choose the opponent's *brain* as well
+produced a better number (3.9) and an unshippable result — it put Hard on
+mission 1 and Easy on mission 20. Brain and card counting are a designed ramp;
+only the holo level is fitted.
+
+The "full" column is choppier because a complete collection trivialises the
+mid-tier decks. That is the collection doing its job, and there is no knob left
+to flatten it without giving one side more cards.
 
 ### Progression, rewards, screen
 

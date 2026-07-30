@@ -21,13 +21,12 @@ package com.jrpetty.mobtrumps.game;
  * @param maxTier    highest tier the padding may be drawn from
  * @param brain      how the opponent picks its stats
  * @param counting   the opponent tracks the deck and plays the remaining odds
- * @param cpuExtra   cards the opponent's deck gets beyond the standard sixteen
  * @param cpuLevel   holo level the opponent's deck is fielded at, 0-3
  * @param trophyMob  the mob whose Trophy-edition card a first clear awards
  */
 public record CampaignMission(int index, String id, String name, String tagline,
                               Category anchor, Tier minTier, Tier maxTier,
-                              Difficulty brain, boolean counting, int cpuExtra,
+                              Difficulty brain, boolean counting,
                               int cpuLevel, String trophyMob) {
 
     /** How many cards the padding has to supply for this mission. */
@@ -35,19 +34,16 @@ public record CampaignMission(int index, String id, String name, String tagline,
         return Math.max(0, deckSize() - MobCategories.size(anchor));
     }
 
-    /** The opponent's deck size: the standard sixteen plus its handicap. */
+    /** Always sixteen. Both sides field a full deck; nobody gets extra cards. */
     public int deckSize() {
-        return CampaignDecks.DECK_SIZE + Math.max(0, cpuExtra);
+        return CampaignDecks.DECK_SIZE;
     }
 
-    /** "Hard · counts the deck · +1 card" — the opponent, in one line. */
+    /** "Hard · counts the deck · Holo II prints" — the opponent, in one line. */
     public String opponentLabel() {
         StringBuilder sb = new StringBuilder(brain.label());
         if (counting) {
             sb.append("  ·  counts the deck");
-        }
-        if (cpuExtra > 0) {
-            sb.append("  ·  +").append(cpuExtra).append(" card").append(cpuExtra == 1 ? "" : "s");
         }
         if (cpuLevel > 0) {
             sb.append("  ·  Holo ").append("I".repeat(Math.min(3, cpuLevel))).append(" prints");
