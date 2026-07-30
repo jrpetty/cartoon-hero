@@ -60,7 +60,6 @@ public final class ModItems {
                         output.accept(COLLECTION_BOOK.get());
                         output.accept(CARD_SCANNER.get());
                         output.accept(ModBlocks.DUELING_TABLE.get());
-                        output.accept(ModBlocks.CARD_DISPLAY.get());
                         output.accept(ModBlocks.HOLO_PROJECTOR.get());
                         // cards are earned by hunting mobs; every card is shown here for reference
                         for (MobCard card : MobCards.ALL) {

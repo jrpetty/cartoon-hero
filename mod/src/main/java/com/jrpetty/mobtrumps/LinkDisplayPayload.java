@@ -13,8 +13,8 @@ import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
 
 /**
- * Client -> server: link a card from the sender's collection onto a card
- * display (empty {@code mobId} clears it). The server re-checks ownership of
+ * Client -> server: link a card from the sender's collection onto a holo
+ * projector (empty {@code mobId} clears it). The server re-checks ownership of
  * both the display and the card, so nothing can be spoofed or stolen.
  */
 public record LinkDisplayPayload(BlockPos pos, String mobId, boolean foil) implements CustomPacketPayload {
@@ -41,12 +41,12 @@ public record LinkDisplayPayload(BlockPos pos, String mobId, boolean foil) imple
         if (pos.distToCenterSqr(player.getX(), player.getY(), player.getZ()) > 64.0) {
             return; // too far away to be a legitimate click
         }
-        if (!(level.getBlockEntity(pos) instanceof CardDisplayBlockEntity be)) {
+        if (!(level.getBlockEntity(pos) instanceof HoloProjectorBlockEntity be)) {
             return;
         }
         if (!be.canEdit(player.getUUID())) {
             player.sendSystemMessage(Component.literal("Only " + be.getOwnerName()
-                    + " can change this display.").withStyle(ChatFormatting.RED));
+                    + " can change this projector.").withStyle(ChatFormatting.RED));
             return;
         }
 
@@ -54,7 +54,7 @@ public record LinkDisplayPayload(BlockPos pos, String mobId, boolean foil) imple
         if (payload.mobId().isEmpty()) {
             if (be.hasCard()) {
                 be.clearProjection();
-                player.sendSystemMessage(Component.literal("Display cleared.")
+                player.sendSystemMessage(Component.literal("Projector cleared.")
                         .withStyle(ChatFormatting.GRAY));
             }
             return;

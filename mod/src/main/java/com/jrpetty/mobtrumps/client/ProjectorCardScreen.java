@@ -20,7 +20,7 @@ import java.util.Locale;
 import java.util.Map;
 
 /**
- * Picker for a card display: choose any card you own to project onto it.
+ * Picker for a holo projector: choose any card you own to project onto it.
  * Click to display, shift-click for the holographic version, or clear it.
  * The card never leaves your collection — this only links which card is shown.
  *
@@ -30,7 +30,7 @@ import java.util.Map;
  * out in fixed left/right slots, so the hint line and the Clear button can
  * never collide the way a centred hint over a centred button did.
  */
-public class CardDisplayScreen extends Screen {
+public class ProjectorCardScreen extends Screen {
 
     private static final float SCALE = 0.34f;
     private static final int GAP = 8;
@@ -57,7 +57,7 @@ public class CardDisplayScreen extends Screen {
     private int cellW, cellH, gridX, gridY, gridH, rowsVisible;
     private int clearX, clearY, clearW;
 
-    public CardDisplayScreen(BlockPos pos) {
+    public ProjectorCardScreen(BlockPos pos) {
         super(Component.literal("Card Display"));
         this.pos = pos;
     }

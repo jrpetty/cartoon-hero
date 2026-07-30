@@ -36,7 +36,6 @@ public final class ClientSetup {
 
     @SubscribeEvent
     public static void onRegisterRenderers(EntityRenderersEvent.RegisterRenderers event) {
-        event.registerBlockEntityRenderer(ModBlocks.CARD_DISPLAY_BE.get(), CardDisplayRenderer::new);
         event.registerBlockEntityRenderer(ModBlocks.HOLO_PROJECTOR_BE.get(), HoloProjectorRenderer::new);
     }
 

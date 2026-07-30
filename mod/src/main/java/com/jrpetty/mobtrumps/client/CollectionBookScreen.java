@@ -164,7 +164,7 @@ public class CollectionBookScreen extends Screen {
         int headerH = 78;
         panelH = headerH + ROWS * cellH + 26;
         panelX = (width - panelW) / 2;
-        panelY = Math.max(20, (height - panelH) / 2);
+        panelY = Math.max(26, (height - panelH) / 2); // room for the tabs above
         gridTop = panelY + headerH;
         leftGridX = panelX + 14;
         rightGridX = panelX + 14 + pageW + SPINE;
@@ -235,9 +235,14 @@ public class CollectionBookScreen extends Screen {
         return Math.round(screen / UI);
     }
 
-    /** The logical bounds of the whole content area, across both leaves. */
+    /**
+     * The logical bounds of the whole content area, across both leaves. Back
+     * pages start right under the masthead: the band below it is reserved for
+     * the search box and filter chips, which only the card pages draw, so
+     * keeping the gap left a dead strip across the top of every award leaf.
+     */
     private int[] contentBounds() {
-        return new int[]{lg(panelX + 14), lg(gridTop), lg(panelX + panelW - 14), lg(pageBottom)};
+        return new int[]{lg(panelX + 14), lg(panelY + 48), lg(panelX + panelW - 14), lg(pageBottom)};
     }
 
     private void layoutChips() {
@@ -345,9 +350,6 @@ public class CollectionBookScreen extends Screen {
             // across both leaves and would be cut in half by it
             g.fill(panelX + panelW / 2 - 1, gridTop - 6, panelX + panelW / 2 + 1,
                     panelY + panelH - 24, CardRenderer.KRAFT_DARK);
-        } else {
-            g.fill(panelX + panelW / 2 - 1, gridTop - 6, panelX + panelW / 2, panelY + panelH - 24,
-                    0x14000000);
         }
 
         drawMasthead(g);
@@ -397,8 +399,17 @@ public class CollectionBookScreen extends Screen {
         }
         g.drawString(font, hint, (width - font.width(hint)) / 2, panelY + panelH + 8, hintColor, true);
 
-        if (hoveredSetting != null && pickerMob == null && eggPicker == null && !statsOpen) {
-            drawSettingTooltip(g, mouseX, mouseY, hoveredSetting);
+        boolean overlay = pickerMob != null || eggPicker != null || statsOpen;
+        if (hoveredSetting != null && !overlay) {
+            drawInfoTooltip(g, mouseX, mouseY, hoveredSetting.label(), hoveredSetting.detail(), 0xFF3FA7D6);
+        } else if (hoveredAward != null && !overlay) {
+            Achievement a = hoveredAward;
+            String need = a.description() + ".  Progress " + ClientAwards.progress(a) + " / " + a.target()
+                    + (ClientAwards.isClaimed(a) ? ".  Already collected."
+                        : ClientAwards.isCollectable(a) ? ".  Ready — press Collect."
+                        : ".")
+                    + "  Reward: " + a.rewardLabel() + ".";
+            drawInfoTooltip(g, mouseX, mouseY, a.title(), need, a.group().accent());
         }
         if (pickerMob != null) renderPicker(g, mouseX, mouseY);
         if (eggPicker != null) renderEggPicker(g, mouseX, mouseY);
@@ -796,11 +807,12 @@ public class CollectionBookScreen extends Screen {
      * Drawn in plain screen space (not the back pages' scaled space) and nudged
      * to stay on screen.
      */
-    private void drawSettingTooltip(GuiGraphics g, int mouseX, int mouseY, Setting s) {
+    private void drawInfoTooltip(GuiGraphics g, int mouseX, int mouseY, String title,
+                                 String detail, int accent) {
         int maxW = Math.min(260, Math.max(140, width - 40));
         List<net.minecraft.util.FormattedCharSequence> body =
-                font.split(Component.literal(s.detail()), maxW);
-        int textW = font.width(s.label());
+                font.split(Component.literal(detail), maxW);
+        int textW = font.width(title);
         for (var line : body) {
             textW = Math.max(textW, font.width(line));
         }
@@ -811,8 +823,8 @@ public class CollectionBookScreen extends Screen {
 
         g.fill(x - 1, y - 1, x + w + 1, y + h + 1, 0xFF241C10);
         g.fill(x, y, x + w, y + h, 0xFFFAF6EC);
-        g.fill(x, y, x + w, y + 1, 0xFF3FA7D6);
-        g.drawString(font, s.label(), x + 6, y + 5, CardRenderer.INK, false);
+        g.fill(x, y, x + w, y + 1, accent);
+        g.drawString(font, title, x + 6, y + 5, CardRenderer.INK, false);
         int ly = y + 17;
         for (var line : body) {
             g.drawString(font, line, x + 6, ly, 0xFF6E6154, false);

@@ -30,6 +30,12 @@ public final class TableBattleManager {
         final Battle battle;
         final Difficulty difficulty;
         final boolean useDeck;
+        /**
+         * A "Random deal" game costs nothing to enter — no collection, no deck,
+         * no hunting — so it is practice only and never feeds wins, games
+         * played or any award. Only a game fought with your OWN deck counts.
+         */
+        final boolean ranked;
         int phase;
         Battle.RoundResult lastResult;
 
@@ -37,6 +43,7 @@ public final class TableBattleManager {
             this.battle = battle;
             this.difficulty = difficulty;
             this.useDeck = useDeck;
+            this.ranked = useDeck;
             this.phase = BattleSyncPayload.PLAYER_PICK;
         }
     }
@@ -134,16 +141,21 @@ public final class TableBattleManager {
     private static void advance(ServerPlayer player, Game game) {
         if (game.battle.isFinished()) {
             game.phase = BattleSyncPayload.FINISHED;
-            StatsTracker.bump(player, "games_played");
-            if (game.battle.getWinner() == Battle.Side.PLAYER) {
-                StatsTracker.bump(player, "battle_wins");
-                // per-difficulty tallies drive the Arena awards
-                StatsTracker.bump(player, "battle_wins_"
-                        + game.difficulty.name().toLowerCase(java.util.Locale.ROOT));
+            boolean won = game.battle.getWinner() == Battle.Side.PLAYER;
+            if (game.ranked) {
+                StatsTracker.bump(player, "games_played");
+                if (won) {
+                    StatsTracker.bump(player, "battle_wins");
+                    // per-difficulty tallies drive the Arena awards
+                    StatsTracker.bump(player, "battle_wins_"
+                            + game.difficulty.name().toLowerCase(java.util.Locale.ROOT));
+                }
+                AchievementManager.refresh(player);
+            }
+            if (won) {
                 player.serverLevel().playSound(null, player.getX(), player.getY(), player.getZ(),
                         SoundEvents.UI_TOAST_CHALLENGE_COMPLETE, SoundSource.PLAYERS, 0.8F, 1.0F);
             }
-            AchievementManager.refresh(player);
         } else {
             game.phase = game.battle.getTurn() == Battle.Side.CPU
                     ? BattleSyncPayload.CPU_PICK : BattleSyncPayload.PLAYER_PICK;

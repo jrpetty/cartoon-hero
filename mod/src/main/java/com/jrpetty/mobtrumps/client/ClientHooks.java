@@ -24,19 +24,19 @@ public final class ClientHooks {
         Minecraft.getInstance().setScreen(new CollectionBookScreen());
     }
 
-    /** Right-clicking a card display: owners (or an empty display) get the
-     *  picker; everyone else just admires the projected card full-screen. */
-    public static void openDisplayInteract(net.minecraft.core.BlockPos pos) {
+    /** Right-clicking a projector: owners (or an empty one) get the picker;
+     *  everyone else just admires the projected card full-screen. */
+    public static void openProjectorInteract(net.minecraft.core.BlockPos pos) {
         Minecraft mc = Minecraft.getInstance();
         if (mc.level == null || mc.player == null) {
             return;
         }
-        if (!(mc.level.getBlockEntity(pos) instanceof com.jrpetty.mobtrumps.CardDisplayBlockEntity be)) {
+        if (!(mc.level.getBlockEntity(pos) instanceof com.jrpetty.mobtrumps.HoloProjectorBlockEntity be)) {
             return;
         }
         boolean canEdit = be.canEdit(mc.player.getUUID());
         if (canEdit) {
-            mc.setScreen(new CardDisplayScreen(pos));
+            mc.setScreen(new ProjectorCardScreen(pos));
         } else if (be.hasCard()) {
             MobCard card = com.jrpetty.mobtrumps.game.MobCards.byId(be.getMobId());
             if (card != null) {

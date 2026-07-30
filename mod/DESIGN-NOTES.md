@@ -21,32 +21,67 @@ Since v1.50.0 a common drops **1 in 20**, so a second chicken card takes another
 balanced as "drain the pile" any more — either the rates are generous enough that
 a handful of spares matters, or the machine accepts something besides dupes.
 
-### Proposed shape
+### Two machines, one loop
 
-- **Yield scales with tier, but gently** — roughly 2 / 3 / 5 / 8 / 14 for
-  common → legendary. The instinct is 1:20, but the drop ladder already
-  equalises effort (a common takes ~20 kills, a legendary takes 1), so in *work*
-  terms they cost about the same. A mild curve matches player expectation
-  without turning boss farming into a fragment mine.
+**Card Shredder → Card Fragments → Printing Press.** You pulp old cards and
+print new ones; the metaphor is physically coherent and it names the failure
+case for free (a *misprint*, not "you lost your fragments").
+
+**The Shredder**
+
+- **Yield scales with tier, gently** — 4 / 6 / 10 / 16 / 28 for common →
+  legendary. The instinct is 1:20, but the drop ladder already equalises effort
+  (a common takes ~20 kills, a legendary takes 1), so in *work* terms they cost
+  about the same. A mild curve matches player expectation without turning boss
+  farming into a fragment mine.
 - **Duplicates only.** The book records discovery permanently, so shredding a
   spare can never cost collection progress — but the machine must refuse your
-  last physical copy. That one rule removes most of the exploit surface.
-- **The loop must be lossy.** Fragments are a sink, not a printer. Target
-  something like 8–10 spare commons per new random card, so spares shorten the
-  tail of a collection without ever beating hunting as the main route.
-- **Two counters:** cheap *random* synthesis (a card you don't own, tier drawn
-  on the pack curve) and expensive *targeted* synthesis (name the card, pay
-  through the nose) as the release valve for "the shulker will not drop".
+  last copy, and cards currently in a deck. That removes most of the exploit
+  surface.
 - **A machine, not a button** — hopper, visible grind, progress bar, fragments
   stacking up. Same reasoning as the coin-flip animation.
 
-### Open question (needs an answer before building)
+**The Printing Press**
 
-Should synthesis ever hand back a card you already own? The ask was "a *chance*
-of getting a card you don't have", but the drop is already RNG, and a second RNG
-gate behind a sink you paid into is where it starts feeling like a robbery.
-**Recommendation:** always produce a card you don't own; let the gamble be
-*which one*.
+You choose a **tier**, invest fragments up to that tier's maximum, and pull. The
+odds are **linear in what you invested**; the max guarantees a card. The result
+is a **random card of that tier — not necessarily one you are missing.**
+
+| Tier | Max (guarantees) | 50% at | Shred yield |
+|---|---|---|---|
+| Common | 30 | 15 | 4 |
+| Uncommon | 45 | 22 | 6 |
+| Rare | 70 | 35 | 10 |
+| Epic | 110 | 55 | 16 |
+| Legendary | 180 | 90 | 28 |
+
+Same-tier conversion is a steady **~7 spare cards per printed card** across the
+whole ladder; a legendary printed purely from spare commons costs 45 of them.
+
+### The property that makes it work — don't break it
+
+Linear odds **plus losing the fragments on a failure** means the expected cost
+per card is identical however you play: 15 fragments at 50% averages 30 per
+common, and so does 30 at 100%. There is no optimal strategy to look up, only a
+choice about variance.
+
+That collapses the moment a consolation refund is added. Refund 25% on a failure
+and the expected cost becomes `0.75·max + 0.25·invested`, so investing low is
+strictly cheaper, everyone minimum-bets, and the decision evaporates.
+**No refund on a failure.** A minimum stake of ~5 fragments is fine purely to
+stop one-fragment spam clogging the UI.
+
+### The one open question
+
+A random card of the tier means **the press gets worse as your collection
+fills** — own 10 of the 12 commons and a successful print is only 17% likely to
+be new, so it is nearly useless for your last few cards.
+
+If the intent is "the press is for volume and trading, hunting is for
+completion", that is already correct. If it should stay useful late, the minimal
+change is to **weight the roll toward cards you don't own** (≈3×) without ever
+guaranteeing one — still a gamble, still yields duplicates, but it leans your
+way. *Undecided.*
 
 ### Sequencing warning
 

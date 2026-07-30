@@ -133,8 +133,9 @@ public class TableMenuScreen extends Screen {
                 "Leads its best stat", 0xFF2A5F8A, mouseX, mouseY, t);
         by = modeButton(g, "cpu_2", leftX + 8, by, colW - 16, "HARD", 3,
                 "Reads the odds & bluffs", 0xFF8A3A2E, mouseX, mouseY, t);
-        g.drawCenteredString(font, "CPU deck: same size as yours,", leftX + colW / 2, by + 2, TEXT_DIM);
-        g.drawCenteredString(font, "mostly commons, one legendary", leftX + colW / 2, by + 12, TEXT_DIM);
+        drawCenteredFitted(g, "CPU deck: same size as yours,", leftX + colW / 2, by + 2, colW - 12, TEXT_DIM);
+        drawCenteredFitted(g, "mostly commons, one legendary", leftX + colW / 2, by + 12, colW - 12, TEXT_DIM);
+        drawCenteredFitted(g, "and levelled to match your holos", leftX + colW / 2, by + 22, colW - 12, TEXT_DIM);
 
         // --- VS PLAYER panel ---
         panel(g, rightX, panelTop, colW, panelH, "VS  PLAYER");
@@ -170,8 +171,8 @@ public class TableMenuScreen extends Screen {
                     "First to three wins", 0xFF3A5E2C, mouseX, mouseY, t);
             py = modeButton(g, "seat_3", rightX + 8, py, colW - 16, "DRAFT", 0,
                     "Draft from ALL cards, this game only", 0xFF5E4A8A, mouseX, mouseY, t);
-            g.drawCenteredString(font, "You'll wait at the table until", rightX + colW / 2, py + 2, TEXT_DIM);
-            g.drawCenteredString(font, "another player clicks it", rightX + colW / 2, py + 12, TEXT_DIM);
+            drawCenteredFitted(g, "You'll wait at the table until", rightX + colW / 2, py + 2, colW - 12, TEXT_DIM);
+            drawCenteredFitted(g, "another player clicks it", rightX + colW / 2, py + 12, colW - 12, TEXT_DIM);
         }
 
         // --- deck bar: rises in from the bottom ---
@@ -185,17 +186,17 @@ public class TableMenuScreen extends Screen {
         int deckN = ClientCollection.deck().size();
         pill(g, "deck_my", barX + 8, barY + 18, "My Deck (" + deckN + ")",
                 useMyDeck && ready, ready, mouseX, mouseY);
-        pill(g, "deck_rand", barX + 106, barY + 18, "Random deal",
+        pill(g, "deck_rand", barX + 106, barY + 18, "Random deal (practice)",
                 !useMyDeck || !ready, true, mouseX, mouseY);
         bigButton(g, "deck_edit", barX + 196, barY + 17, 62, 14, "Edit Deck",
                 0xFF2A5F8A, 0xFF3A7FB4, mouseX, mouseY, true);
-        if (!ready) {
-            g.drawString(font, "Build a deck of " + DeckManager.MIN_DECK + "+ in the book",
-                    barX + 8, barY + 34, 0xFFCB8A8A, false);
-        } else {
-            g.drawString(font, "Applies to AI battles — duels & draft deal their own",
-                    barX + 8, barY + 34, TEXT_DIM, false);
-        }
+        // a dealt hand costs nothing to enter, so it earns nothing either
+        String note = !ready
+                ? "Build a deck of " + DeckManager.MIN_DECK + "+ in the book — random deals don't count"
+                : (useMyDeck ? "Your deck: wins and awards count"
+                             : "Practice: no wins, no awards, no progress");
+        drawFitted(g, note, barX + 8, barY + 34,
+                panelW - 16, !ready ? 0xFFCB8A8A : (useMyDeck ? 0xFF8FD08F : TEXT_DIM));
 
         // a face-up fan of your actual top deck cards, so the choice is real
         fan(g, barX + panelW - 46, barY + 41, t);
@@ -248,7 +249,9 @@ public class TableMenuScreen extends Screen {
             g.fill(px, y + 6, px + 4, y + 10, GOLD);
             g.fill(px, y + 6, px + 4, y + 7, 0xFFFFF0B0);
         }
-        g.drawString(font, desc, x + 8, y + 15, hover ? 0xFFEFE8D0 : TEXT_DIM, false);
+        // shrink the description to fit rather than letting it bleed past the
+        // card's right edge, which is what "…this game only" used to do
+        drawFitted(g, desc, x + 8, y + 15, w - 18, hover ? 0xFFEFE8D0 : TEXT_DIM);
         if (hover) {
             int nudge = (int) (2 * Math.sin(t / 150.0));
             g.drawString(font, ">", x + w - 11 + nudge, y + 9, GOLD, true);
@@ -318,6 +321,34 @@ public class TableMenuScreen extends Screen {
             }
             pose.popPose();
         }
+    }
+
+    /** Draw text at x, squeezing it horizontally if it would exceed maxWidth. */
+    private void drawFitted(GuiGraphics g, String text, int x, int y, int maxWidth, int color) {
+        int tw = font.width(text);
+        if (tw <= maxWidth) {
+            g.drawString(font, text, x, y, color, false);
+            return;
+        }
+        float scale = maxWidth / (float) tw;
+        var pose = g.pose();
+        pose.pushPose();
+        pose.translate(x, y + (font.lineHeight * (1 - scale)) / 2f, 0);
+        pose.scale(scale, scale, 1f);
+        g.drawString(font, text, 0, 0, color, false);
+        pose.popPose();
+    }
+
+    /** As {@link #drawFitted}, centred on cx. */
+    private void drawCenteredFitted(GuiGraphics g, String text, int cx, int y, int maxWidth, int color) {
+        int tw = font.width(text);
+        float scale = tw <= maxWidth ? 1f : maxWidth / (float) tw;
+        var pose = g.pose();
+        pose.pushPose();
+        pose.translate(cx, y + (font.lineHeight * (1 - scale)) / 2f, 0);
+        pose.scale(scale, scale, 1f);
+        g.drawString(font, text, -tw / 2, 0, color, false);
+        pose.popPose();
     }
 
     private static int brighten(int argb) {
