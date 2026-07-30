@@ -37,7 +37,7 @@ public final class GrappleUpgrades {
     public static final Upgrade VELOCITY = new Upgrade("vel", "Spring Loaded",
             "Pulls you in 50% faster", Items.BLAZE_POWDER, 20);
     public static final Upgrade IMPACT = new Upgrade("aoe", "Impact Charge",
-            "Slams the anchor point for 4 hearts", Items.GUNPOWDER, 20);
+            "Shockwave throws mobs clear on impact", Items.GUNPOWDER, 20);
     public static final Upgrade LANDING = new Upgrade("land", "Soft Landing",
             "Drift down safely after a grapple", Items.PHANTOM_MEMBRANE, 20);
 

@@ -65,6 +65,24 @@ public record GadgetConfigPayload(BlockPos pos, String key, int value, String te
                     counter.setDisplayMode(p.value());
                 }
             }
+            case "counter_direction" -> {
+                if (be instanceof ItemCounterBlockEntity counter) {
+                    counter.setCountMode(p.value());
+                }
+            }
+            case "counter_unfilter" -> {
+                if (be instanceof ItemCounterBlockEntity counter) {
+                    ResourceLocation id = ResourceLocation.tryParse(p.text());
+                    if (id != null && BuiltInRegistries.ITEM.containsKey(id)) {
+                        counter.removeFilter(BuiltInRegistries.ITEM.get(id));
+                    }
+                }
+            }
+            case "counter_unfilter_all" -> {
+                if (be instanceof ItemCounterBlockEntity counter) {
+                    counter.clearFilter();
+                }
+            }
             case "counter_reset" -> {
                 if (be instanceof ItemCounterBlockEntity counter) {
                     counter.resetStats();

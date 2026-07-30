@@ -142,13 +142,43 @@ public class GrapplingHookItem extends Item {
         return Math.max(1, (int) Math.round(GrappleConfig.cooldownTicks * GrappleUpgrades.cooldownMultiplier(stack)));
     }
 
-    /** Impact Charge: the hook slams home, hurting whatever is at the anchor. */
+    /** Radius of the Impact Charge shockwave, in blocks. */
+    private static final double BLAST_RADIUS = 4.5;
+    /** Push applied at the centre, falling off to nothing at the rim. */
+    private static final double BLAST_PUSH = 1.15;
+    /** Deliberately light: this is a crowd-parter, not a weapon. */
+    private static final float BLAST_DAMAGE = 2.0F;
+
+    /**
+     * Impact Charge: the hook slams home and throws everything nearby outwards.
+     *
+     * <p>Weighted towards displacement rather than damage — a full hit is one
+     * heart and a shove, so it clears a path or breaks up a mob pile without
+     * turning the hook into a better sword than a sword.
+     */
     private static void impact(ServerLevel level, ServerPlayer player, Vec3 anchor) {
         DamageSource source = level.damageSources().playerAttack(player);
-        AABB blast = new AABB(anchor, anchor).inflate(3.0);
+        AABB blast = new AABB(anchor, anchor).inflate(BLAST_RADIUS);
         for (Entity e : level.getEntities(player, blast,
                 ent -> ent instanceof LivingEntity && ent.isAlive() && !ent.isSpectator())) {
-            e.hurt(source, 8.0F); // 4 hearts
+            Vec3 away = e.position().add(0.0, e.getBbHeight() * 0.5, 0.0).subtract(anchor);
+            double distance = away.length();
+            if (distance > BLAST_RADIUS) {
+                continue; // the box is square; the shockwave is not
+            }
+            // Full strength at the centre, nothing at the rim.
+            double falloff = 1.0 - (distance / BLAST_RADIUS);
+            // Straight up for anything directly under the anchor, rather than
+            // dividing by a length of zero.
+            Vec3 direction = distance < 0.001 ? new Vec3(0.0, 1.0, 0.0) : away.scale(1.0 / distance);
+            Vec3 push = direction.scale(BLAST_PUSH * falloff).add(0.0, 0.25 * falloff, 0.0);
+
+            e.setDeltaMovement(e.getDeltaMovement().add(push));
+            e.hurtMarked = true;
+            e.hasImpulse = true;
+            if (falloff > 0.15) {
+                e.hurt(source, BLAST_DAMAGE * (float) falloff);
+            }
         }
         level.playSound(null, anchor.x, anchor.y, anchor.z,
                 SoundEvents.GENERIC_EXPLODE.value(), SoundSource.PLAYERS, 0.7F, 1.6F);

@@ -83,6 +83,17 @@ public class ItemCounterBlock extends Block implements EntityBlock {
             }
             return ItemInteractionResult.sidedSuccess(level.isClientSide());
         }
+        // Any other item narrows what the counter counts, the same gesture the
+        // Stock Monitor uses for its tracked list.
+        if (!stack.isEmpty()) {
+            if (!level.isClientSide() && level.getBlockEntity(pos) instanceof ItemCounterBlockEntity be) {
+                String what = be.toggleFilter(stack.getItem());
+                level.playSound(null, pos, SoundEvents.COMPARATOR_CLICK, SoundSource.BLOCKS, 0.6F, 1.1F);
+                player.displayClientMessage(Component.literal("Item Counter ▸ " + what)
+                        .withStyle(ChatFormatting.GOLD), true);
+            }
+            return ItemInteractionResult.sidedSuccess(level.isClientSide());
+        }
         return ItemInteractionResult.PASS_TO_DEFAULT_BLOCK_INTERACTION;
     }
 

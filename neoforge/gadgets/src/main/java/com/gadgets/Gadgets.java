@@ -127,7 +127,7 @@ public class Gadgets {
             "tip.gadgets.drain.1", "tip.gadgets.drain.2", "tip.gadgets.drain.3"));
     public static final DeferredItem<?> ITEM_COUNTER_ITEM = ITEMS.register("item_counter", () -> new TooltipBlockItem(ITEM_COUNTER.get(), new Item.Properties(),
             "tip.gadgets.item_counter.1", "tip.gadgets.item_counter.2", "tip.gadgets.item_counter.3",
-            "tip.gadgets.item_counter.4", "tip.gadgets.item_counter.5"));
+            "tip.gadgets.item_counter.4", "tip.gadgets.item_counter.5", "tip.gadgets.item_counter.6"));
     public static final DeferredItem<?> ITEM_MAGNET_ITEM = ITEMS.register("item_magnet", () -> new TooltipBlockItem(ITEM_MAGNET.get(), new Item.Properties(),
             "tip.gadgets.item_magnet.1", "tip.gadgets.item_magnet.2", "tip.gadgets.item_magnet.3"));
     public static final DeferredItem<?> STOCK_MONITOR_ITEM = ITEMS.register("stock_monitor", () -> new TooltipBlockItem(STOCK_MONITOR.get(), new Item.Properties(),

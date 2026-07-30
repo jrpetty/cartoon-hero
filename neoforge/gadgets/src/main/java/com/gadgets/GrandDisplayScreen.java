@@ -48,12 +48,11 @@ public class GrandDisplayScreen extends GadgetScreen {
 
         gfx.drawString(font, "Order:", x, top + 68, DIM, false);
         gfx.drawString(font, be.isLarge()
-                        ? GrandDisplayBlockEntity.ROWS_LARGE + " big rows — readable from further away"
-                        : GrandDisplayBlockEntity.ROWS_COMPACT + " small rows — more of the base at once",
-                x + 116, top + 90, GRAY, false);
+                        ? GrandDisplayBlockEntity.ROWS_LARGE + " big rows"
+                        : GrandDisplayBlockEntity.ROWS_COMPACT + " small rows",
+                x + 118, top + 90, GRAY, false);
 
-        gfx.drawString(font, "The board draws " + GrandDisplayRenderer.BLOCKS_WIDE + " blocks wide —",
-                x, top + 114, GRAY, false);
-        gfx.drawString(font, "build it into a flat wall, centre block here.", x, top + 126, GRAY, false);
+        gfx.drawString(font, "Place panels in a row, all facing the same way,", x, top + 112, GRAY, false);
+        gfx.drawString(font, "and they join into one wider screen.", x, top + 124, GRAY, false);
     }
 }

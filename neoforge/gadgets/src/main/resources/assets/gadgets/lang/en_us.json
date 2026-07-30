@@ -42,7 +42,7 @@
   "tip.gadgets.drain.1": "A walkable grate — fluids fall through",
   "tip.gadgets.drain.2": "Right-click with a block to disguise it",
   "tip.gadgets.drain.3": "Empty hand: remove the disguise",
-  "tip.gadgets.item_counter.1": "Counts items leaving a container or dropping past",
+  "tip.gadgets.item_counter.1": "Counts items moving through the container it faces",
   "tip.gadgets.item_counter.2": "Screen shows a live rate — /min, /hour, total, pulse",
   "tip.gadgets.item_counter.3": "Right-click: stats & settings screen",
   "tip.gadgets.item_counter.4": "Redstone dust: set pulse size (1/4/8/16/32/64)",
@@ -79,7 +79,8 @@
   "tip.gadgets.item_counter.5": "Linked to a hub: flagged STALLED after quiet minutes",
   "block.gadgets.grand_display": "Grand Display",
   "tip.gadgets.grand_display.1": "A multi-line board for a whole Command Hub",
-  "tip.gadgets.grand_display.2": "Draws 3 blocks wide — build it into a flat wall",
+  "tip.gadgets.grand_display.2": "Place several in a row to make one wider screen",
   "tip.gadgets.grand_display.3": "Right-click: ordering and row size",
-  "tip.gadgets.stock_monitor.5": "Sneak + right-click: track that item's tag (#logs)"
+  "tip.gadgets.stock_monitor.5": "Sneak + right-click: track that item's tag (#logs)",
+  "tip.gadgets.item_counter.6": "Right-click an item: count only that item"
 }

@@ -13,9 +13,13 @@ import net.minecraft.core.Direction;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.ListTag;
+import net.minecraft.nbt.StringTag;
+import net.minecraft.nbt.Tag;
 import net.minecraft.network.protocol.game.ClientboundBlockEntityDataPacket;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.item.ItemEntity;
+import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Block;
@@ -47,10 +51,26 @@ public class ItemCounterBlockEntity extends BlockEntity {
     /** Face readout modes, cycled with sneak + empty hand. */
     public static final String[] MODE_LABELS = {"/min", "/hour", "total", "pulse"};
 
+    /** Which way through the watched container items are counted. */
+    public static final int COUNT_IN = 0;
+    public static final int COUNT_OUT = 1;
+    public static final int COUNT_BOTH = 2;
+    public static final String[] COUNT_LABELS = {"arriving", "leaving", "both ways"};
+
+    /** Beyond a handful, an unfiltered counter plus the breakdown is clearer. */
+    public static final int MAX_FILTER = 6;
+
     private int threshold = 8;
     private int count = 0;
     private long poweredUntil = 0L;
     private int displayMode = 0;
+    /**
+     * Default: items arriving. A counter is usually pointed at the chest a farm
+     * fills, and counting only departures made that read zero forever.
+     */
+    private int countMode = COUNT_IN;
+    /** Only these items are counted; empty counts everything. */
+    private final List<Item> filter = new ArrayList<>();
     /** Player-set label shown on the face and on a Command Hub board. */
     private String customName = "";
 
@@ -110,6 +130,62 @@ public class ItemCounterBlockEntity extends BlockEntity {
 
     public boolean isWatchingContainer() {
         return watchingContainer;
+    }
+
+    public int getCountMode() {
+        return countMode;
+    }
+
+    public String getCountLabel() {
+        return COUNT_LABELS[countMode];
+    }
+
+    public void setCountMode(int mode) {
+        if (mode >= 0 && mode < COUNT_LABELS.length) {
+            countMode = mode;
+            lastContents = null; // reseed: old contents belong to the old rule
+            sync();
+        }
+    }
+
+    public List<Item> getFilter() {
+        return filter;
+    }
+
+    /** Add or remove an item from the count filter; returns click feedback. */
+    public String toggleFilter(Item item) {
+        if (filter.remove(item)) {
+            sync();
+            return filter.isEmpty()
+                    ? "counting everything again"
+                    : "stopped counting " + item.getDescription().getString();
+        }
+        if (filter.size() >= MAX_FILTER) {
+            return "already filtering " + MAX_FILTER + " items";
+        }
+        filter.add(item);
+        sync();
+        return "counting only " + describeFilter();
+    }
+
+    public void removeFilter(Item item) {
+        if (filter.remove(item)) {
+            sync();
+        }
+    }
+
+    public void clearFilter() {
+        filter.clear();
+        sync();
+    }
+
+    /** "Iron Ingot" / "Iron Ingot +2" / "everything". */
+    public String describeFilter() {
+        if (filter.isEmpty()) {
+            return "everything";
+        }
+        String first = filter.get(0).getDescription().getString();
+        return filter.size() == 1 ? first : first + " +" + (filter.size() - 1);
     }
 
     /** True once a counter that has actually seen items goes quiet for a while —
@@ -296,7 +372,11 @@ public class ItemCounterBlockEntity extends BlockEntity {
         perItem.merge(key, (long) n, Long::sum);
     }
 
-    /** Diff the handler per item type; count every item whose stock went down. */
+    /**
+     * Diff the handler per item type and credit whichever direction of movement
+     * this counter is set to watch. Types present in either sample are visited,
+     * so a stack arriving into an empty container counts as well as one leaving.
+     */
     private int sampleContainer(IItemHandler handler) {
         Map<String, Integer> now = new HashMap<>();
         for (int i = 0; i < handler.getSlots(); i++) {
@@ -307,16 +387,39 @@ public class ItemCounterBlockEntity extends BlockEntity {
         }
         int passed = 0;
         if (lastContents != null) {
-            for (Map.Entry<String, Integer> e : lastContents.entrySet()) {
-                int left = e.getValue() - now.getOrDefault(e.getKey(), 0);
-                if (left > 0) {
-                    record(e.getKey(), left);
-                    passed += left;
+            Set<String> types = new HashSet<>(lastContents.keySet());
+            types.addAll(now.keySet());
+            for (String id : types) {
+                if (!counts(id)) {
+                    continue;
+                }
+                int delta = now.getOrDefault(id, 0) - lastContents.getOrDefault(id, 0);
+                int moved = switch (countMode) {
+                    case COUNT_OUT -> delta < 0 ? -delta : 0;
+                    case COUNT_BOTH -> Math.abs(delta);
+                    default -> delta > 0 ? delta : 0;
+                };
+                if (moved > 0) {
+                    record(id, moved);
+                    passed += moved;
                 }
             }
         }
         lastContents = now;
         return passed;
+    }
+
+    /** Is this item one the counter has been told to watch? */
+    private boolean counts(String id) {
+        if (filter.isEmpty()) {
+            return true;
+        }
+        for (Item item : filter) {
+            if (BuiltInRegistries.ITEM.getKey(item).toString().equals(id)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /** Count dropped item entities entering the detection cell — each stack once. */
@@ -328,8 +431,12 @@ public class ItemCounterBlockEntity extends BlockEntity {
             int id = item.getId();
             present.add(id);
             if (seenEntities.add(id)) {
+                String itemId = idOf(item.getItem());
+                if (!counts(itemId)) {
+                    continue;
+                }
                 int n = item.getItem().getCount();
-                record(idOf(item.getItem()), n);
+                record(itemId, n);
                 passed += n;
             }
         }
@@ -426,6 +533,12 @@ public class ItemCounterBlockEntity extends BlockEntity {
         tag.putLong("Total", total);
         tag.putLong("Uptime", uptimeTicks);
         tag.putLong("TicksSinceItem", ticksSinceItem);
+        tag.putInt("CountMode", countMode);
+        ListTag filterTag = new ListTag();
+        for (Item item : filter) {
+            filterTag.add(StringTag.valueOf(BuiltInRegistries.ITEM.getKey(item).toString()));
+        }
+        tag.put("Filter", filterTag);
         tag.putInt("RateMin", rateMin);
         tag.putInt("RateHour", rateHour);
         CompoundTag items = new CompoundTag();
@@ -442,9 +555,22 @@ public class ItemCounterBlockEntity extends BlockEntity {
         count = tag.getInt("Count");
         poweredUntil = tag.getLong("PoweredUntil");
         displayMode = tag.getInt("DisplayMode") % MODE_LABELS.length;
+        // Saved but never read until now: the client threw the name away on
+        // every sync, so it showed on a hub (read server-side) but never on the
+        // counter's own screen or face, and it was lost on reload.
+        customName = tag.getString("CustomName");
         total = tag.getLong("Total");
         uptimeTicks = tag.getLong("Uptime");
         ticksSinceItem = tag.contains("TicksSinceItem") ? tag.getLong("TicksSinceItem") : Long.MAX_VALUE / 2;
+        countMode = Math.floorMod(tag.getInt("CountMode"), COUNT_LABELS.length);
+        filter.clear();
+        ListTag filterTag = tag.getList("Filter", Tag.TAG_STRING);
+        for (int i = 0; i < Math.min(filterTag.size(), MAX_FILTER); i++) {
+            ResourceLocation key = ResourceLocation.tryParse(filterTag.getString(i));
+            if (key != null && BuiltInRegistries.ITEM.containsKey(key)) {
+                filter.add(BuiltInRegistries.ITEM.get(key));
+            }
+        }
         rateMin = tag.getInt("RateMin");
         rateHour = tag.getInt("RateHour");
         if (tag.contains("PerItem")) {
