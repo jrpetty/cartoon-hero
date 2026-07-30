@@ -69,6 +69,7 @@ public class MobTrumps {
                 TournamentManager.handleLogout(player);
                 DuelTables.clearSeatsOf(player.getUUID());
                 TableBattleManager.clear(player.getUUID());
+                CampaignManager.clear(player.getUUID());
                 ClientPrefsPayload.forget(player.getUUID());
                 ConditionTracker.forget(player.getUUID());
                 ServerSync.forget(player.getUUID());

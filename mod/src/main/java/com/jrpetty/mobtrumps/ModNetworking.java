@@ -53,6 +53,16 @@ public final class ModNetworking {
                         }
                     }
                 }));
+        registrar.playToClient(CampaignSyncPayload.TYPE, CampaignSyncPayload.STREAM_CODEC,
+                (payload, context) -> context.enqueueWork(
+                        () -> com.jrpetty.mobtrumps.client.ClientCampaign.set(payload.states())));
+        registrar.playToServer(CampaignActionPayload.TYPE, CampaignActionPayload.STREAM_CODEC,
+                (payload, context) -> context.enqueueWork(() -> {
+                    if (context.player() instanceof net.minecraft.server.level.ServerPlayer sp
+                            && payload.action() == CampaignActionPayload.BEGIN) {
+                        CampaignManager.begin(sp, payload.mission());
+                    }
+                }));
         registrar.playToClient(StorageSyncPayload.TYPE, StorageSyncPayload.STREAM_CODEC,
                 (payload, context) -> context.enqueueWork(
                         () -> ClientCollection.setStorage(payload.stored(), payload.storedFoil())));
@@ -84,6 +94,8 @@ public final class ModNetworking {
                             DuelManager.handleScreenRematch(sp);
                         } else if (DuelManager.isInDuel(sp)) {
                             DuelManager.handleScreenAction(sp, payload.action(), payload.stat());
+                        } else if (CampaignManager.isPlaying(sp)) {
+                            CampaignManager.action(sp, payload.action(), payload.stat());
                         } else {
                             TableBattleManager.action(sp, payload.action(), payload.stat());
                         }

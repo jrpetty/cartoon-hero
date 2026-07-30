@@ -28,6 +28,11 @@ public final class ClientHooks {
         }
     }
 
+    /** Open the campaign route. */
+    public static void openCampaign() {
+        Minecraft.getInstance().setScreen(new CampaignScreen());
+    }
+
     public static void openCollectionBook() {
         Minecraft.getInstance().setScreen(new CollectionBookScreen());
     }

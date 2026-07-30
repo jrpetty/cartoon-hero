@@ -188,6 +188,8 @@ public class TableMenuScreen extends Screen {
                 useMyDeck && ready, ready, mouseX, mouseY);
         pill(g, "deck_rand", barX + 106, barY + 18, "Random deal (practice)",
                 !useMyDeck || !ready, true, mouseX, mouseY);
+        bigButton(g, "campaign", barX + 264, barY + 17, 70, 14, "Campaign",
+                0xFF5A3A8A, 0xFF7A52B4, mouseX, mouseY, true);
         bigButton(g, "deck_edit", barX + 196, barY + 17, 62, 14, "Edit Deck",
                 0xFF2A5F8A, 0xFF3A7FB4, mouseX, mouseY, true);
         // a dealt hand costs nothing to enter, so it earns nothing either
@@ -400,6 +402,9 @@ public class TableMenuScreen extends Screen {
                 useMyDeck = true;
             } else if (key.equals("deck_rand")) {
                 useMyDeck = false;
+            } else if (key.equals("campaign") && minecraft != null) {
+                minecraft.setScreen(new CampaignScreen());
+                return true;
             } else if (key.equals("deck_edit") && minecraft != null) {
                 minecraft.setScreen(new DeckBuilderScreen(this));
             }

@@ -54,6 +54,15 @@ public class MobCardItem extends Item {
         return stack;
     }
 
+    /** A brand new card of a specific edition — Trophy prints, for instance. */
+    public static ItemStack issued(net.minecraft.server.level.ServerPlayer unlocker, MobCard card,
+                                   com.jrpetty.mobtrumps.game.CardEdition edition) {
+        ItemStack stack = stackOf(card, edition == com.jrpetty.mobtrumps.game.CardEdition.FOIL);
+        CardIdentityService.issue(unlocker == null ? null : unlocker.getServer(),
+                stack, unlocker, edition);
+        return stack;
+    }
+
     /** The card this stack represents, or null for a blank card. */
     public static MobCard cardOf(ItemStack stack) {
         return MobCards.byId(stack.get(ModItems.MOB_ID.get()));

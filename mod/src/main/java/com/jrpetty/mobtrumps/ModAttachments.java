@@ -133,6 +133,14 @@ public final class ModAttachments {
                     .copyOnDeath()
                     .build());
 
+    /** Campaign progress: mission id -> 1 cleared, 2 cleared without losing a round. */
+    public static final Supplier<AttachmentType<Map<String, Integer>>> CAMPAIGN =
+            ATTACHMENTS.register("campaign",
+                    () -> AttachmentType.<Map<String, Integer>>builder(() -> Map.of())
+                    .serialize(Codec.unboundedMap(Codec.STRING, Codec.INT))
+                    .copyOnDeath()
+                    .build());
+
     /** Named saved decks (deck name -> mob ids), beyond the active DECK. */
     public static final Supplier<AttachmentType<Map<String, List<String>>>> SAVED_DECKS =
             ATTACHMENTS.register("saved_decks",

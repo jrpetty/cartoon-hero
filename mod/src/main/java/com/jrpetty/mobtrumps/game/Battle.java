@@ -30,6 +30,8 @@ public final class Battle {
     private final List<MobCard> pot = new ArrayList<>();
     private final RandomGenerator random;
     private Difficulty difficulty = Difficulty.NORMAL;
+    /** Campaign missions can hand the opponent a memory for the deck. */
+    private boolean cardCounting = false;
     private Side turn = Side.PLAYER;
     private int round = 0;
     private boolean finished = false;
@@ -166,15 +168,52 @@ public final class Battle {
         return difficulty;
     }
 
+    /**
+     * Give the opponent a card counter. A campaign mission is one fixed deck
+     * split between both sides, so an opponent with perfect memory genuinely
+     * knows what is still in your half — this is inference the situation really
+     * supports, not a peek at hidden information it could never deduce.
+     */
+    public void setCardCounting(boolean counting) {
+        this.cardCounting = counting;
+    }
+
     /** The stat the CPU will pick on its turn, according to the difficulty. */
     public Stat cpuChoice() {
         MobCard top = cpuDeck.peekFirst();
         if (top == null) return Stat.HEALTH;
+        if (cardCounting) {
+            return countedChoice(top);
+        }
         return switch (difficulty) {
             case EASY -> Stat.values()[random.nextInt(Stat.values().length)];
             case NORMAL -> top.bestStat();
             case HARD -> hardChoice(top);
         };
+    }
+
+    /**
+     * Pick the stat that beats the most cards actually left in the opponent's
+     * hand. Ties count as half, since a drawn round only sends both cards to
+     * the pot. Ruthless, and exactly what a perfect counter would do.
+     */
+    private Stat countedChoice(MobCard top) {
+        Stat best = Stat.HEALTH;
+        double bestScore = -1;
+        for (Stat s : Stat.values()) {
+            int mine = s.score(top.stat(s));
+            double beats = 0;
+            for (MobCard theirs : playerDeck) {
+                int v = s.score(theirs.stat(s));
+                if (mine > v) beats += 1;
+                else if (mine == v) beats += 0.5;
+            }
+            if (beats > bestScore) {
+                bestScore = beats;
+                best = s;
+            }
+        }
+        return best;
     }
 
     /** Lead with the stat that has the best odds of beating a random card, with a little bluff. */
