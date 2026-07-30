@@ -11,7 +11,6 @@ import net.minecraft.world.item.Items;
 import net.minecraft.world.item.enchantment.EnchantmentHelper;
 
 import java.util.List;
-import java.util.Locale;
 import java.util.Optional;
 
 /**
@@ -23,6 +22,9 @@ import java.util.Optional;
  * are the real prize at the top, and they are rolled exactly like an enchanting
  * table so the results are genuinely random: some will be superb and some will
  * be junk, which is the point of a book.
+ *
+ * <p>Every book the campaign pays out is an enchanted one. A stack of blank
+ * books is not a reward, it is a shopping list.
  *
  * @param stacks    plain item payouts
  * @param books     how many enchanted books
@@ -53,15 +55,16 @@ public record CampaignRewards(List<Payout> stacks, int books, int bookLevel) {
      * Each payout is themed to the mission that gave it.
      *
      * <p><b>6-9 the first metals.</b> Iron arrives at six, moderately, and gold
-     * and the first single diamond follow. Books start being enchanted here, at
-     * low levels, so the reward is a lottery ticket rather than a guarantee.
+     * and the first single diamond follow. Enchanted books start here at low
+     * levels, so the reward is a lottery ticket rather than a guarantee.
      *
      * <p><b>10-14 the middle.</b> Diamonds in ones and twos, netherite scrap as
      * a rare treat, experience for the anvil.
      *
      * <p><b>15-20 the payoff.</b> This is where it becomes worth the twenty
      * missions: stacks of diamond, real netherite, and books rolled at the top
-     * of the enchanting range.
+     * of the enchanting range. Three books at level 30 is the ceiling until the
+     * finale, which is the only mission in the campaign that pays four.
      */
     public static CampaignRewards forMission(int index) {
         return switch (index) {
@@ -83,40 +86,39 @@ public record CampaignRewards(List<Payout> stacks, int books, int bookLevel) {
             case 7 -> new CampaignRewards(List.of(of(Items.IRON_INGOT, 10),
                     of(Items.GOLD_INGOT, 4), of(Items.ENDER_PEARL, 6)), 1, 5);
             case 8 -> new CampaignRewards(List.of(of(Items.EMERALD, 12),
-                    of(Items.GOLD_INGOT, 8), of(Items.BOOK, 6)), 1, 8);
+                    of(Items.GOLD_INGOT, 8)), 1, 8);
             case 9 -> new CampaignRewards(List.of(of(Items.DIAMOND, 1),
-                    of(Items.IRON_INGOT, 14), of(Items.ENDER_PEARL, 8)), 1, 10);
+                    of(Items.IRON_INGOT, 14), of(Items.ENDER_PEARL, 8)), 2, 10);
             // --- the middle ---------------------------------------------------
             case 10 -> new CampaignRewards(List.of(of(Items.DIAMOND, 2),
-                    of(Items.GOLD_INGOT, 12), of(Items.BOOK, 8)), 1, 12);
+                    of(Items.GOLD_INGOT, 12)), 2, 12);
             case 11 -> new CampaignRewards(List.of(of(Items.DIAMOND, 2),
                     of(Items.IRON_INGOT, 16), of(Items.EXPERIENCE_BOTTLE, 8)), 2, 15);
             case 12 -> new CampaignRewards(List.of(of(Items.DIAMOND, 3),
-                    of(Items.EMERALD, 16), of(Items.BOOK, 10)), 2, 16);
+                    of(Items.EMERALD, 16)), 2, 16);
             case 13 -> new CampaignRewards(List.of(of(Items.DIAMOND, 3),
-                    of(Items.GOLD_INGOT, 16), of(Items.EXPERIENCE_BOTTLE, 10)), 2, 18);
+                    of(Items.GOLD_INGOT, 16), of(Items.EXPERIENCE_BOTTLE, 10)), 3, 18);
             case 14 -> new CampaignRewards(List.of(of(Items.DIAMOND, 4),
-                    of(Items.NETHERITE_SCRAP, 1), of(Items.BOOK, 12)), 2, 20);
+                    of(Items.NETHERITE_SCRAP, 1)), 3, 20);
             // --- the payoff ---------------------------------------------------
             case 15 -> new CampaignRewards(List.of(of(Items.DIAMOND, 5),
-                    of(Items.GOLD_BLOCK, 2), of(Items.EXPERIENCE_BOTTLE, 12)), 2, 22);
+                    of(Items.GOLD_BLOCK, 2), of(Items.EXPERIENCE_BOTTLE, 12)), 3, 22);
             case 16 -> new CampaignRewards(List.of(of(Items.DIAMOND, 6),
-                    of(Items.NETHERITE_SCRAP, 1), of(Items.ENDER_PEARL, 12),
-                    of(Items.BOOK, 14)), 3, 24);
+                    of(Items.NETHERITE_SCRAP, 1), of(Items.ENDER_PEARL, 12)), 3, 24);
             case 17 -> new CampaignRewards(List.of(of(Items.DIAMOND, 7),
                     of(Items.EMERALD_BLOCK, 2), of(Items.EXPERIENCE_BOTTLE, 14)), 3, 26);
             case 18 -> new CampaignRewards(List.of(of(Items.DIAMOND, 8),
-                    of(Items.NETHERITE_SCRAP, 2), of(Items.BOOK, 16)), 3, 28);
+                    of(Items.NETHERITE_SCRAP, 2)), 3, 28);
             case 19 -> new CampaignRewards(List.of(of(Items.DIAMOND, 10),
-                    of(Items.BOOK, 20), of(Items.EXPERIENCE_BOTTLE, 16)), 3, 30);
+                    of(Items.EXPERIENCE_BOTTLE, 16)), 3, 30);
             case 20 -> new CampaignRewards(List.of(of(Items.DIAMOND, 12),
-                    of(Items.NETHERITE_INGOT, 1), of(Items.BOOK, 30),
-                    of(Items.EXPERIENCE_BOTTLE, 16), of(Items.ENCHANTED_GOLDEN_APPLE, 1)), 4, 30);
+                    of(Items.NETHERITE_INGOT, 1), of(Items.EXPERIENCE_BOTTLE, 16),
+                    of(Items.ENCHANTED_GOLDEN_APPLE, 1)), 4, 30);
             default -> new CampaignRewards(List.of(of(Items.BREAD, 4)), 0, 0);
         };
     }
 
-    /** "12x Diamond · 30x Book · 4 enchanted books (level 30)" for the briefing. */
+    /** "12x Diamond · 1x Netherite ingot · 4 enchanted books (level 30)". */
     public String label() {
         StringBuilder sb = new StringBuilder();
         for (Payout p : stacks) {

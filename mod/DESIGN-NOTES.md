@@ -249,11 +249,15 @@ materials they were meant to go and mine for, so 1-5 pay in the things that
 *let* you go mining, themed to the mission that gave them: bread and beef for
 the farm, the day's catch for the reef, torches for the graves, a saddle and
 four ender pearls for the stampede. Iron arrives at 6 in a moderate 8, gold at
-7, the first single diamond at 9. Enchanted books start at 7 rolled at level 5
-and climb to level 30, table-style with no curation, so they are a lottery
-ticket rather than a guarantee. Mission 20 pays 12 diamonds, a netherite ingot,
-30 plain books, 16 experience bottles, a notch apple, and **4 enchanted books
-rolled at level 30**.
+7, the first single diamond at 9.
+
+**Every book the campaign pays is an enchanted one** — a stack of blank books is
+a shopping list, not a reward. They start at mission 7 rolled at level 5 and
+climb to level 30, table-style with no curation, so they are a lottery ticket
+rather than a guarantee. The count goes 1 (7-8), 2 (9-12), 3 (13-19), and the
+finale is the only mission in the campaign that pays **4, rolled at level 30**,
+alongside 12 diamonds, a netherite ingot, 16 experience bottles and a notch
+apple.
 
 ### Open calls
 
