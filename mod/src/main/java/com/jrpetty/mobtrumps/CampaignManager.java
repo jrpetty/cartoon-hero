@@ -28,11 +28,12 @@ import java.util.concurrent.ThreadLocalRandom;
 /**
  * The twenty-mission campaign.
  *
- * <p>Each mission is one sixteen-card deck (see {@link CampaignDecks}) dealt
- * between the player and the opponent, so nobody has to own anything to play —
- * the mission supplies the cards. What the player's collection changes is
- * <em>power</em>: any card in the deal they have hunted plays at their earned
- * holo level, while the opponent's half plays at base.
+ * <p>Sixteen against sixteen. The mission fields its own themed deck (see
+ * {@link CampaignDecks}) and the player fields sixteen cards out of their
+ * Collection Book, played at whatever holo level they have earned on each.
+ * The campaign therefore does not open until the book holds
+ * {@value #REQUIRED_CARDS} cards — the collection is the entry fee, and what
+ * you have hunted is what you take into the fight.
  *
  * <p>Missions unlock in order and are cleared once. A clear that never drops a
  * single round is recorded as flawless, so a finished mission still has
@@ -42,6 +43,14 @@ public final class CampaignManager {
 
     public static final int CLEARED = 1;
     public static final int FLAWLESS = 2;
+
+    /**
+     * Cards that must be filed in the Collection Book before the campaign
+     * opens at all. You bring your own sixteen and the mission brings its own
+     * sixteen, so until the book can field a full deck there is nothing to
+     * play with.
+     */
+    public static final int REQUIRED_CARDS = CampaignDecks.DECK_SIZE;
 
     private static final class Run {
         final CampaignMission mission;
@@ -93,6 +102,17 @@ public final class CampaignManager {
         return mission.index() <= highestCleared(player) + 1;
     }
 
+    /** How many cards are filed in the book, plain and foil. */
+    public static int filedCards(ServerPlayer player) {
+        return player.getData(ModAttachments.STORED.get()).size()
+                + player.getData(ModAttachments.STORED_FOIL.get()).size();
+    }
+
+    /** The campaign is shut until the book can field a full sixteen. */
+    public static boolean canPlay(ServerPlayer player) {
+        return filedCards(player) >= REQUIRED_CARDS;
+    }
+
     public static void sync(ServerPlayer player) {
         PacketDistributor.sendToPlayer(player, new CampaignSyncPayload(progress(player)));
     }
@@ -110,18 +130,34 @@ public final class CampaignManager {
                     .withStyle(ChatFormatting.RED));
             return;
         }
+        if (!canPlay(player)) {
+            player.sendSystemMessage(Component.literal("The campaign needs "
+                            + REQUIRED_CARDS + " cards filed in your Collection Book — you have "
+                            + filedCards(player) + ".")
+                    .withStyle(ChatFormatting.RED));
+            return;
+        }
         var rng = ThreadLocalRandom.current();
 
-        // the mission's deck is fixed; only how it falls is random
-        List<MobCard> deck = new ArrayList<>(CampaignDecks.deck(mission));
-        Collections.shuffle(deck, java.util.Random.from(rng));
-
-        int cpuCount = Math.min(deck.size() - 1, deck.size() / 2 + mission.cpuExtra());
-        List<MobCard> cpuHand = new ArrayList<>(deck.subList(0, cpuCount));
-        List<MobCard> playerHand = new ArrayList<>(deck.subList(cpuCount, deck.size()));
-
-        // cards the player has actually hunted fight at their earned level
-        playerHand = upgradeOwned(player, playerHand);
+        // You bring sixteen of your own; the mission brings its own deck. What
+        // the collection changes is no longer just power, it is what you can
+        // field at all.
+        List<MobCard> playerHand = playerDeck(player);
+        if (playerHand.size() < CampaignDecks.DECK_SIZE) {
+            player.sendSystemMessage(Component.literal(
+                            "Your book cannot field " + CampaignDecks.DECK_SIZE + " cards yet.")
+                    .withStyle(ChatFormatting.RED));
+            return;
+        }
+        // the opponent fields its deck as premium prints where the mission says
+        // so -- the early categories are simply weak cards, and a base-print
+        // farm animal cannot make a game of it against a real collection
+        List<MobCard> cpuHand = new ArrayList<>();
+        for (MobCard card : CampaignDecks.cpuDeck(mission)) {
+            cpuHand.add(card.upgraded(mission.cpuLevel()));
+        }
+        Collections.shuffle(cpuHand, java.util.Random.from(rng));
+        Collections.shuffle(playerHand, java.util.Random.from(rng));
 
         Battle battle = new Battle(playerHand, cpuHand, rng);
         battle.setDifficulty(mission.brain());
@@ -138,6 +174,43 @@ public final class CampaignManager {
                 .withStyle(ChatFormatting.GRAY));
         BattleCommands.shuffleSound(player);
         send(player, run);
+    }
+
+    /**
+     * The sixteen cards the player takes into a mission.
+     *
+     * <p>Their saved battle deck first, filtered to what is actually filed in
+     * the book — a deck entry whose card has been sold or pocketed cannot be
+     * played — then topped up from the rest of the book so a player who has
+     * never opened the deck builder can still start. Every card plays at the
+     * holo level its owner has earned.
+     */
+    private static List<MobCard> playerDeck(ServerPlayer player) {
+        java.util.Set<String> filed = new java.util.LinkedHashSet<>(
+                player.getData(ModAttachments.STORED.get()));
+        filed.addAll(player.getData(ModAttachments.STORED_FOIL.get()));
+
+        java.util.LinkedHashSet<String> chosen = new java.util.LinkedHashSet<>();
+        for (String id : player.getData(ModAttachments.DECK.get())) {
+            if (filed.contains(id) && chosen.size() < CampaignDecks.DECK_SIZE) {
+                chosen.add(id);
+            }
+        }
+        for (String id : filed) {
+            if (chosen.size() >= CampaignDecks.DECK_SIZE) {
+                break;
+            }
+            chosen.add(id);
+        }
+
+        List<MobCard> hand = new ArrayList<>(chosen.size());
+        for (String id : chosen) {
+            MobCard card = MobCards.byId(id);
+            if (card != null) {
+                hand.add(card);
+            }
+        }
+        return upgradeOwned(player, hand);
     }
 
     /** Apply the player's holo levels to any card in the deal that they own. */

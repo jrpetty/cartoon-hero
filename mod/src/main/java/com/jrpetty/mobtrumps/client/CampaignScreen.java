@@ -77,12 +77,17 @@ public class CampaignScreen extends Screen {
         ensureVisible();
     }
 
+    /** The campaign is shut until the book can field a full sixteen. */
+    private static boolean canPlay() {
+        return ClientCollection.storedCount() >= CampaignDecks.DECK_SIZE;
+    }
+
     private void select(int index) {
         selected = index;
         briefScroll = 0;
         if (deckFor != index) {
             CampaignMission m = CampaignDecks.byIndex(index);
-            deck = m == null ? List.of() : CampaignDecks.deck(m);
+            deck = m == null ? List.of() : CampaignDecks.cpuDeck(m);
             deckFor = index;
         }
     }
@@ -117,13 +122,22 @@ public class CampaignScreen extends Screen {
         g.drawString(font, title, -font.width(title) / 2, 0, GOLD, true);
         pose.popPose();
         int done = ClientCampaign.clearedCount();
-        String sub = done + " of " + CampaignDecks.count() + " missions cleared";
-        g.drawCenteredString(font, sub, width / 2, 42, INK_DIM);
+        int filed = ClientCollection.storedCount();
+        String sub = canPlay()
+                ? done + " of " + CampaignDecks.count() + " missions cleared"
+                : "File " + CampaignDecks.DECK_SIZE + " cards in your Collection Book to begin — "
+                        + filed + " / " + CampaignDecks.DECK_SIZE;
+        g.drawCenteredString(font, sub, width / 2, 42, canPlay() ? INK_DIM : 0xFFE0A05A);
         int barW = Math.min(340, width - 40);
         int barX = width / 2 - barW / 2;
         g.fill(barX, 54, barX + barW, 57, 0x40000000);
-        if (done > 0) {
-            g.fill(barX, 54, barX + barW * done / CampaignDecks.count(), 57, GOLD);
+        if (canPlay()) {
+            if (done > 0) {
+                g.fill(barX, 54, barX + barW * done / CampaignDecks.count(), 57, GOLD);
+            }
+        } else {
+            int got = Math.min(filed, CampaignDecks.DECK_SIZE);
+            g.fill(barX, 54, barX + barW * got / CampaignDecks.DECK_SIZE, 57, 0xFFE0A05A);
         }
 
         drawRoute(g, mouseX, mouseY, now);
@@ -258,7 +272,9 @@ public class CampaignScreen extends Screen {
         b += 18;
 
         // the deck: sixteen chips, anchor cards in the set colour, padding grey
-        g.drawString(font, "THE DECK  ·  16 cards, dealt between you", x0 + 8, b, GOLD, false);
+        g.drawString(font, "THEIR DECK  ·  " + deck.size() + " cards"
+                + (m.cpuLevel() > 0 ? "  ·  Holo " + "I".repeat(Math.min(3, m.cpuLevel())) : ""),
+                x0 + 8, b, GOLD, false);
         b += 12;
         int cx = x0 + 8;
         for (MobCard card : deck) {
@@ -277,6 +293,15 @@ public class CampaignScreen extends Screen {
         b += 14;
         g.drawString(font, "coloured = " + m.anchor().label() + "  ·  grey = brought in",
                 x0 + 8, b, 0xFF6C6480, false);
+        b += 14;
+        int filed = ClientCollection.storedCount();
+        g.drawString(font, "YOUR DECK  ·  " + CampaignDecks.DECK_SIZE + " from your book",
+                x0 + 8, b, GOLD, false);
+        b += 11;
+        g.drawString(font, canPlay()
+                        ? "Your battle deck, topped up from the book, at your holo levels"
+                        : "You have " + filed + " of " + CampaignDecks.DECK_SIZE + " cards filed",
+                x0 + 8, b, canPlay() ? INK_DIM : 0xFFE0A05A, false);
         b += 18;
 
         g.drawString(font, "REWARD  ·  first clear only", x0 + 8, b, GOLD, false);
@@ -308,22 +333,26 @@ public class CampaignScreen extends Screen {
         }
 
         // --- fixed Begin button ---------------------------------------------
-        String label = !unlocked ? "Locked"
+        boolean ready = unlocked && canPlay();
+        String label = !canPlay()
+                ? "Need " + CampaignDecks.DECK_SIZE + " filed  ·  " + ClientCollection.storedCount()
+                        + "/" + CampaignDecks.DECK_SIZE
+                : !unlocked ? "Locked"
                 : ClientCampaign.cleared(m) ? "Play again" : "Begin";
         int bw = Math.max(120, font.width(label) + 32);
         int bx = x0 + (panelW - bw) / 2;
         beginRect = new int[]{bx, by, bw, BTN_H};
-        boolean hover = unlocked && inRect(mouseX, mouseY, beginRect);
-        int base = !unlocked ? 0xFF2A2440 : hover ? 0xFF4B8F3E : 0xFF3A7A32;
-        if (unlocked) {
+        boolean hover = ready && inRect(mouseX, mouseY, beginRect);
+        int base = !ready ? 0xFF2A2440 : hover ? 0xFF4B8F3E : 0xFF3A7A32;
+        if (ready) {
             float pulse = 0.5f + 0.5f * (float) Math.sin(now / 380.0);
             g.fill(bx - 2, by - 2, bx + bw + 2, by + BTN_H + 2,
                     ((int) (0x28 + 0x24 * pulse) << 24) | 0x00E3C071);
         }
         g.fill(bx, by, bx + bw, by + BTN_H, base);
-        g.renderOutline(bx, by, bw, BTN_H, unlocked ? (hover ? GOLD : 0x66FFFFFF) : 0xFF3A3350);
+        g.renderOutline(bx, by, bw, BTN_H, ready ? (hover ? GOLD : 0x66FFFFFF) : 0xFF3A3350);
         g.drawString(font, label, bx + (bw - font.width(label)) / 2, by + 6,
-                unlocked ? 0xFFFFFFFF : 0xFF6C6480, true);
+                ready ? 0xFFFFFFFF : 0xFF6C6480, true);
     }
 
     /** CLEARED / FLAWLESS stamp, right-aligned on the briefing's header row. */
@@ -411,7 +440,7 @@ public class CampaignScreen extends Screen {
     /** Launch the selected mission, if it is actually playable. */
     private void begin() {
         CampaignMission m = CampaignDecks.byIndex(selected);
-        if (m == null || !ClientCampaign.unlocked(m)) {
+        if (m == null || !ClientCampaign.unlocked(m) || !canPlay()) {
             click(0.7f);
             return;
         }

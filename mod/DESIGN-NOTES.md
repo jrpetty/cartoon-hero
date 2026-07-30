@@ -104,9 +104,19 @@ Building serials first makes the recycler richer for free.
 Twenty missions, each anchored to a category, mission 1 the farm and mission 20
 the bosses.
 
-### The structural move
+### The structural move (revised v1.59.0)
 
-**Every mission is ONE 16-card deck, dealt 8 and 8.** In Top Trumps a single
+**Sixteen against sixteen.** The mission fields its own deck and the player
+fields sixteen out of their Collection Book. The campaign does not open until
+the book holds 16 cards -- the collection is the entry fee, and what you have
+hunted is what you take in. Your saved battle deck is used first, filtered to
+what is actually filed, then topped up from the rest of the book.
+
+This replaces the original reading below, which is kept because the deck
+BUILDER is unchanged -- the mission's sixteen are still its whole anchor
+category padded from outside it.
+
+**Originally: every mission is ONE 16-card deck, dealt 8 and 8.** In Top Trumps a single
 deck is shared between two players, so the mission's deck *is* the sixteen
 cards. This resolves several problems at once:
 
@@ -183,18 +193,27 @@ Every category anchors exactly two missions; the pair feels different because
 the padding changes entirely — Village I is four villagers propped up by twelve
 Rares, Village II the same four backed by twelve Epics.
 
-Opponent ramp, as shipped — four knobs that climb independently so no two
-missions feel the same:
+Opponent ramp, as shipped in v1.59.0. Two extra knobs appear because the
+player now brings their own collection, and a themed category deck is not
+automatically a match for it:
 
-| missions | brain | counts | deal |
-|---|---|---|---|
-| 1-3 | Easy | - | 8/8 |
-| 4-7 | Normal | - | 8/8 |
-| 8-9 | Hard | - | 8/8 |
-| 10-14 | Hard | - | 7/9 |
-| 15-16 | Hard | yes | 8/8 |
-| 17-18 | Hard | yes | 7/9 |
-| 19-20 | Hard | yes | 6/10 |
+| missions | brain | counts | their deck | their prints |
+|---|---|---|---|---|
+| 1-3 | Easy | - | 20 | Holo III |
+| 4-6 | Normal | - | 18 | Holo I |
+| 7 | Normal | - | 17 | Holo I |
+| 8-10 | Hard | - | 17 | base |
+| 11-16 | Hard | - | 16 | base |
+| 17 | Hard | yes | 16 | base |
+| 18 | Hard | yes | 17 | base |
+| 19-20 | Hard | yes | 18 | base |
+
+The early missions field premium prints and bigger decks because farm animals
+and reef fish are simply weak cards: at base print, sixteen of them cannot make
+a game of it against any real collection. By mission 8 the decks stand on their
+own and the handicaps come off. Fitted by search over cpuLevel x cpuExtra
+against a target curve, then smoothed into the table above -- mean error 6.4
+points, which buys an explainable ramp instead of fitted noise.
 
 Card counting is not a fourth enum but a flag on the Hard brain: in a fixed
 16-card mission deck it genuinely knows the pool, so tracking what has been
@@ -203,28 +222,28 @@ played is honest inference rather than cheating. Note 15-16 hand the extra card
 
 ### Measured, not guessed
 
-4000 simulated runs per mission, two player models — "naive" always leads its
-card's best stat, "skilled" plays the odds against the known pool:
+3000 runs per mission against two collections: "no legends" is commons through
+rares, roughly a mid-game book; "full" draws from all 81.
 
-| # | naive | skilled | | # | naive | skilled |
+| # | no-legends | full | | # | no-legends | full |
 |---|---|---|---|---|---|---|
-| 1 | 93% | 99% | | 11 | 53% | 62% |
-| 2 | 98% | 99% | | 12 | 59% | 66% |
-| 3 | 91% | 98% | | 13 | 44% | 62% |
-| 4 | 53% | 85% | | 14 | 31% | 62% |
-| 5 | 55% | 95% | | 15 | 47% | 55% |
-| 6 | 56% | 84% | | 16 | 29% | 56% |
-| 7 | 57% | 68% | | 17 | 18% | 49% |
-| 8 | 35% | 69% | | 18 | 16% | 44% |
-| 9 | 47% | 66% | | 19 | 11% | 39% |
-| 10 | 73% | 72% | | 20 | 6% | 36% |
+| 1 | 94% | 98% | | 11 | 59% | 61% |
+| 2 | 95% | 99% | | 12 | 48% | 61% |
+| 3 | 95% | 99% | | 13 | 42% | 64% |
+| 4 | 72% | 50% | | 14 | 39% | 62% |
+| 5 | 90% | 75% | | 15 | 46% | 69% |
+| 6 | 62% | 42% | | 16 | 52% | 78% |
+| 7 | 69% | 50% | | 17 | 39% | 50% |
+| 8 | 67% | 71% | | 18 | 31% | 36% |
+| 9 | 69% | 81% | | 19 | 30% | 37% |
+| 10 | 58% | 69% | | 20 | 30% | 37% |
 
-The skilled curve is monotone through the whole back half and lands the finale
-at ~36% — three attempts for someone who has learned the game. The naive curve
-wobbles (mission 10 spikes, both Village missions are walls) because different
-decks punish sloppy play differently; that is deck identity, not imbalance, and
-chasing it flat would cost the themes. Games run 13-18 rounds on average, no
-stalemates in 80,000 simulated games.
+Descends 94% to 30%. **Missions 1-3 sit at the engine's ceiling**: even at Holo
+III with 20 cards a farm-animal deck only gets down to ~94%, because the player
+draws from the whole pool while the mission is locked to one weak category.
+They are loseable rather than automatic, but they are not a fight. The only
+lever that would make them one is capping what the player may BRING to the
+mission's tier band -- a real rule change, not yet made.
 
 ### Progression, rewards, screen
 
