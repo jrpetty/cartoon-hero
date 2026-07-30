@@ -150,19 +150,93 @@ a category, and it fires right where the set-completion reward already does.
 
 ## 3. Condition, serials and sleeves
 
-**Status:** fully specified by the uploaded brief, not started. The largest
-outstanding build.
+**Status:** agreed in full, **nothing built**. The largest outstanding item.
 
-Per-mob serial numbers (`CREEPER-000001`), permanent original-unlocker record,
-condition that wears 5% per unsleeved hand entry after one free grace, a Card
-Sleeve item, and a flippable inspection screen.
+The idea: every card becomes a unique physical object with a history rather than
+an interchangeable copy. Two Creeper cards play identically, but one may be
+`CREEPER-000001`, mint, unlocked by you on day one; the other `CREEPER-004317`,
+worn to 40%, unlocked by a stranger. **All value is scarcity and preservation —
+never stats.**
 
-Suggested order, since everything else hangs off identity:
+### What a card carries
 
-1. Serial registry + authenticity IDs (server-authoritative, atomic, persistent,
-   never reused) and migration for existing cards.
-2. Condition tracking on genuine held-item transitions, plus the sleeve.
-3. The inspection screen (front/back flip) and visual wear stages.
+Shown: mob, per-mob serial, authenticity id (hidden but verified), condition %
+and label, who unlocked it, when, edition, sleeved or not, plus the existing
+stats. **Never shown or stored for display:** times handled, current owner,
+previous owners.
+
+### Serials
+
+- Per-mob sequences — `CREEPER-000001`, `ZOMBIE-000001` — so every mob has
+  exactly one `000001`, the server's historical first of that card.
+- Allocated **when the kill creates the card**, server-side and atomically, so
+  simultaneous kills cannot collide. Persistent across restart/crash, never
+  reset, **never reused** even if the card is destroyed.
+- A hidden authenticity id makes renaming or anvil-copying lore produce a fake
+  the server rejects.
+- Six-digit padding by default (configurable).
+
+### Unlocked by
+
+The player whose kill created that exact card. UUID plus a name snapshot so it
+still reads correctly after a rename. **Immutable — it does not change on
+trade.** It is history, not ownership. A complete set of `000001`s is therefore
+a set of the server's earliest discoveries, each signed by its finder.
+
+### Condition
+
+Starts at **100%**. Falls only when an **unsleeved** card *enters an active
+hand*, and the first such entry is free — **once per card, ever**, not once per
+player. Every qualifying entry after that costs **5 points** (configurable,
+default 5). Floor 0%; nothing in normal play repairs it.
+
+No wear from: creating, picking up, moving between slots, storage, switching
+away, or re-inspecting a card already in hand. Detect genuine held-item
+transitions by authenticity id, not item type, and never let death, respawn,
+reconnect, dimension change, GUI opening or inventory sync fake one.
+
+Labels: 100 Mint · 90–95 Near Mint · 75–85 Excellent · 55–70 Good · 30–50 Worn ·
+5–25 Damaged · 0 Ruined. The card visibly degrades — corner wear, then creases
+and fading, then obvious damage. The numeric percentage is authoritative.
+
+### Card Sleeve
+
+One item, one card, no tiers. A sleeved card never wears; sleeving preserves
+what is left but repairs nothing. Still holdable, inspectable, tradeable and
+playable while sleeved, with the card visible inside. All insert/remove is
+server-side and must never duplicate either item.
+
+### Inspection
+
+Right-click for a large view: front is art, name, stats, serial and visible
+wear; a Flip control shows the back — serial, exact % and label, unlocked by,
+unlock date, edition, sleeved status. Inspecting never itself causes wear.
+
+### Editions
+
+Standard, Foil, Trophy, first-kill, flawless-kill. Edition changes art and
+desirability **only, never stats**. Serials run in creation order regardless of
+edition — a Trophy does not get its own separate `000001`.
+
+### Decisions added on top of the brief
+
+1. **Build order**, since everything hangs off identity: serials + authenticity
+   + non-stackable cards + migration → condition + sleeve → inspection screen.
+2. **Non-stackable is a foundational blocker, not a detail.** Cards register
+   with a plain `Item.Properties()` today and stack to 64. Unstacking them
+   ripples through the binder, trading and the shredder, because "one card"
+   stops meaning "one item in a stack of forty".
+3. **This should land before the recycler (§1).** Worn cards become the obvious
+   thing to shred, yield probably wants to scale with condition, and the
+   shredder must refuse `000001`. Cheap now, painful to retrofit.
+4. **Trophy edition is the Gauntlet's reward** (§2) — visibly different,
+   stat-identical, only obtainable by winning.
+5. **Pin the card order before building on it.** The `#12 / 81` catalogue number
+   is a *different thing* from a serial — it is the mob's fixed position in the
+   set of 81, identical for every player, derived from declaration order in
+   `MobCards`. Verified working (81 unique ordinals, 1–81, stable), but
+   inserting a mob mid-list would silently renumber every card after it. Harmless
+   today; bad once serials or a Hall of Fame depend on it.
 
 ---
 
