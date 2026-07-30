@@ -32,6 +32,13 @@ public final class ClientSetup {
                     var card = MobCardItem.cardOf(stack);
                     return card == null ? -1f : MobCards.ordinal(card.id());
                 }));
+        // how battered the card looks in your hand: 0 Mint through 5 Ruined,
+        // selecting a model that stacks the matching wear overlay on the art
+        event.enqueueWork(() -> ItemProperties.register(
+                ModItems.MOB_CARD.get(),
+                ResourceLocation.fromNamespaceAndPath(MobTrumps.MODID, "wear"),
+                (stack, level, entity, seed) -> com.jrpetty.mobtrumps.game.CardCondition.stage(
+                        com.jrpetty.mobtrumps.CardIdentityService.wearOf(stack).condition())));
     }
 
     @SubscribeEvent

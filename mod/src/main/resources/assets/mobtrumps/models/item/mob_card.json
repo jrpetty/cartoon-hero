@@ -6,489 +6,3405 @@
   "overrides": [
     {
       "predicate": {
-        "mobtrumps:mob_index": 0
+        "mobtrumps:mob_index": 0,
+        "mobtrumps:wear": 0
       },
       "model": "mobtrumps:item/card/allay"
     },
     {
       "predicate": {
-        "mobtrumps:mob_index": 1
+        "mobtrumps:mob_index": 0,
+        "mobtrumps:wear": 1
+      },
+      "model": "mobtrumps:item/card/allay_w1"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 0,
+        "mobtrumps:wear": 2
+      },
+      "model": "mobtrumps:item/card/allay_w2"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 0,
+        "mobtrumps:wear": 3
+      },
+      "model": "mobtrumps:item/card/allay_w3"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 0,
+        "mobtrumps:wear": 4
+      },
+      "model": "mobtrumps:item/card/allay_w4"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 0,
+        "mobtrumps:wear": 5
+      },
+      "model": "mobtrumps:item/card/allay_w5"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 1,
+        "mobtrumps:wear": 0
       },
       "model": "mobtrumps:item/card/armadillo"
     },
     {
       "predicate": {
-        "mobtrumps:mob_index": 2
+        "mobtrumps:mob_index": 1,
+        "mobtrumps:wear": 1
+      },
+      "model": "mobtrumps:item/card/armadillo_w1"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 1,
+        "mobtrumps:wear": 2
+      },
+      "model": "mobtrumps:item/card/armadillo_w2"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 1,
+        "mobtrumps:wear": 3
+      },
+      "model": "mobtrumps:item/card/armadillo_w3"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 1,
+        "mobtrumps:wear": 4
+      },
+      "model": "mobtrumps:item/card/armadillo_w4"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 1,
+        "mobtrumps:wear": 5
+      },
+      "model": "mobtrumps:item/card/armadillo_w5"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 2,
+        "mobtrumps:wear": 0
       },
       "model": "mobtrumps:item/card/axolotl"
     },
     {
       "predicate": {
-        "mobtrumps:mob_index": 3
+        "mobtrumps:mob_index": 2,
+        "mobtrumps:wear": 1
+      },
+      "model": "mobtrumps:item/card/axolotl_w1"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 2,
+        "mobtrumps:wear": 2
+      },
+      "model": "mobtrumps:item/card/axolotl_w2"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 2,
+        "mobtrumps:wear": 3
+      },
+      "model": "mobtrumps:item/card/axolotl_w3"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 2,
+        "mobtrumps:wear": 4
+      },
+      "model": "mobtrumps:item/card/axolotl_w4"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 2,
+        "mobtrumps:wear": 5
+      },
+      "model": "mobtrumps:item/card/axolotl_w5"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 3,
+        "mobtrumps:wear": 0
       },
       "model": "mobtrumps:item/card/bat"
     },
     {
       "predicate": {
-        "mobtrumps:mob_index": 4
+        "mobtrumps:mob_index": 3,
+        "mobtrumps:wear": 1
+      },
+      "model": "mobtrumps:item/card/bat_w1"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 3,
+        "mobtrumps:wear": 2
+      },
+      "model": "mobtrumps:item/card/bat_w2"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 3,
+        "mobtrumps:wear": 3
+      },
+      "model": "mobtrumps:item/card/bat_w3"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 3,
+        "mobtrumps:wear": 4
+      },
+      "model": "mobtrumps:item/card/bat_w4"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 3,
+        "mobtrumps:wear": 5
+      },
+      "model": "mobtrumps:item/card/bat_w5"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 4,
+        "mobtrumps:wear": 0
       },
       "model": "mobtrumps:item/card/bee"
     },
     {
       "predicate": {
-        "mobtrumps:mob_index": 5
+        "mobtrumps:mob_index": 4,
+        "mobtrumps:wear": 1
+      },
+      "model": "mobtrumps:item/card/bee_w1"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 4,
+        "mobtrumps:wear": 2
+      },
+      "model": "mobtrumps:item/card/bee_w2"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 4,
+        "mobtrumps:wear": 3
+      },
+      "model": "mobtrumps:item/card/bee_w3"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 4,
+        "mobtrumps:wear": 4
+      },
+      "model": "mobtrumps:item/card/bee_w4"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 4,
+        "mobtrumps:wear": 5
+      },
+      "model": "mobtrumps:item/card/bee_w5"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 5,
+        "mobtrumps:wear": 0
       },
       "model": "mobtrumps:item/card/blaze"
     },
     {
       "predicate": {
-        "mobtrumps:mob_index": 6
+        "mobtrumps:mob_index": 5,
+        "mobtrumps:wear": 1
+      },
+      "model": "mobtrumps:item/card/blaze_w1"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 5,
+        "mobtrumps:wear": 2
+      },
+      "model": "mobtrumps:item/card/blaze_w2"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 5,
+        "mobtrumps:wear": 3
+      },
+      "model": "mobtrumps:item/card/blaze_w3"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 5,
+        "mobtrumps:wear": 4
+      },
+      "model": "mobtrumps:item/card/blaze_w4"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 5,
+        "mobtrumps:wear": 5
+      },
+      "model": "mobtrumps:item/card/blaze_w5"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 6,
+        "mobtrumps:wear": 0
       },
       "model": "mobtrumps:item/card/bogged"
     },
     {
       "predicate": {
-        "mobtrumps:mob_index": 7
+        "mobtrumps:mob_index": 6,
+        "mobtrumps:wear": 1
+      },
+      "model": "mobtrumps:item/card/bogged_w1"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 6,
+        "mobtrumps:wear": 2
+      },
+      "model": "mobtrumps:item/card/bogged_w2"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 6,
+        "mobtrumps:wear": 3
+      },
+      "model": "mobtrumps:item/card/bogged_w3"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 6,
+        "mobtrumps:wear": 4
+      },
+      "model": "mobtrumps:item/card/bogged_w4"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 6,
+        "mobtrumps:wear": 5
+      },
+      "model": "mobtrumps:item/card/bogged_w5"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 7,
+        "mobtrumps:wear": 0
       },
       "model": "mobtrumps:item/card/breeze"
     },
     {
       "predicate": {
-        "mobtrumps:mob_index": 8
+        "mobtrumps:mob_index": 7,
+        "mobtrumps:wear": 1
+      },
+      "model": "mobtrumps:item/card/breeze_w1"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 7,
+        "mobtrumps:wear": 2
+      },
+      "model": "mobtrumps:item/card/breeze_w2"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 7,
+        "mobtrumps:wear": 3
+      },
+      "model": "mobtrumps:item/card/breeze_w3"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 7,
+        "mobtrumps:wear": 4
+      },
+      "model": "mobtrumps:item/card/breeze_w4"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 7,
+        "mobtrumps:wear": 5
+      },
+      "model": "mobtrumps:item/card/breeze_w5"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 8,
+        "mobtrumps:wear": 0
       },
       "model": "mobtrumps:item/card/camel"
     },
     {
       "predicate": {
-        "mobtrumps:mob_index": 9
+        "mobtrumps:mob_index": 8,
+        "mobtrumps:wear": 1
+      },
+      "model": "mobtrumps:item/card/camel_w1"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 8,
+        "mobtrumps:wear": 2
+      },
+      "model": "mobtrumps:item/card/camel_w2"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 8,
+        "mobtrumps:wear": 3
+      },
+      "model": "mobtrumps:item/card/camel_w3"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 8,
+        "mobtrumps:wear": 4
+      },
+      "model": "mobtrumps:item/card/camel_w4"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 8,
+        "mobtrumps:wear": 5
+      },
+      "model": "mobtrumps:item/card/camel_w5"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 9,
+        "mobtrumps:wear": 0
       },
       "model": "mobtrumps:item/card/cat"
     },
     {
       "predicate": {
-        "mobtrumps:mob_index": 10
+        "mobtrumps:mob_index": 9,
+        "mobtrumps:wear": 1
+      },
+      "model": "mobtrumps:item/card/cat_w1"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 9,
+        "mobtrumps:wear": 2
+      },
+      "model": "mobtrumps:item/card/cat_w2"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 9,
+        "mobtrumps:wear": 3
+      },
+      "model": "mobtrumps:item/card/cat_w3"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 9,
+        "mobtrumps:wear": 4
+      },
+      "model": "mobtrumps:item/card/cat_w4"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 9,
+        "mobtrumps:wear": 5
+      },
+      "model": "mobtrumps:item/card/cat_w5"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 10,
+        "mobtrumps:wear": 0
       },
       "model": "mobtrumps:item/card/cave_spider"
     },
     {
       "predicate": {
-        "mobtrumps:mob_index": 11
+        "mobtrumps:mob_index": 10,
+        "mobtrumps:wear": 1
+      },
+      "model": "mobtrumps:item/card/cave_spider_w1"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 10,
+        "mobtrumps:wear": 2
+      },
+      "model": "mobtrumps:item/card/cave_spider_w2"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 10,
+        "mobtrumps:wear": 3
+      },
+      "model": "mobtrumps:item/card/cave_spider_w3"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 10,
+        "mobtrumps:wear": 4
+      },
+      "model": "mobtrumps:item/card/cave_spider_w4"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 10,
+        "mobtrumps:wear": 5
+      },
+      "model": "mobtrumps:item/card/cave_spider_w5"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 11,
+        "mobtrumps:wear": 0
       },
       "model": "mobtrumps:item/card/chicken"
     },
     {
       "predicate": {
-        "mobtrumps:mob_index": 12
+        "mobtrumps:mob_index": 11,
+        "mobtrumps:wear": 1
+      },
+      "model": "mobtrumps:item/card/chicken_w1"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 11,
+        "mobtrumps:wear": 2
+      },
+      "model": "mobtrumps:item/card/chicken_w2"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 11,
+        "mobtrumps:wear": 3
+      },
+      "model": "mobtrumps:item/card/chicken_w3"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 11,
+        "mobtrumps:wear": 4
+      },
+      "model": "mobtrumps:item/card/chicken_w4"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 11,
+        "mobtrumps:wear": 5
+      },
+      "model": "mobtrumps:item/card/chicken_w5"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 12,
+        "mobtrumps:wear": 0
       },
       "model": "mobtrumps:item/card/cod"
     },
     {
       "predicate": {
-        "mobtrumps:mob_index": 13
+        "mobtrumps:mob_index": 12,
+        "mobtrumps:wear": 1
+      },
+      "model": "mobtrumps:item/card/cod_w1"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 12,
+        "mobtrumps:wear": 2
+      },
+      "model": "mobtrumps:item/card/cod_w2"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 12,
+        "mobtrumps:wear": 3
+      },
+      "model": "mobtrumps:item/card/cod_w3"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 12,
+        "mobtrumps:wear": 4
+      },
+      "model": "mobtrumps:item/card/cod_w4"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 12,
+        "mobtrumps:wear": 5
+      },
+      "model": "mobtrumps:item/card/cod_w5"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 13,
+        "mobtrumps:wear": 0
       },
       "model": "mobtrumps:item/card/cow"
     },
     {
       "predicate": {
-        "mobtrumps:mob_index": 14
+        "mobtrumps:mob_index": 13,
+        "mobtrumps:wear": 1
+      },
+      "model": "mobtrumps:item/card/cow_w1"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 13,
+        "mobtrumps:wear": 2
+      },
+      "model": "mobtrumps:item/card/cow_w2"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 13,
+        "mobtrumps:wear": 3
+      },
+      "model": "mobtrumps:item/card/cow_w3"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 13,
+        "mobtrumps:wear": 4
+      },
+      "model": "mobtrumps:item/card/cow_w4"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 13,
+        "mobtrumps:wear": 5
+      },
+      "model": "mobtrumps:item/card/cow_w5"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 14,
+        "mobtrumps:wear": 0
       },
       "model": "mobtrumps:item/card/creaking"
     },
     {
       "predicate": {
-        "mobtrumps:mob_index": 15
+        "mobtrumps:mob_index": 14,
+        "mobtrumps:wear": 1
+      },
+      "model": "mobtrumps:item/card/creaking_w1"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 14,
+        "mobtrumps:wear": 2
+      },
+      "model": "mobtrumps:item/card/creaking_w2"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 14,
+        "mobtrumps:wear": 3
+      },
+      "model": "mobtrumps:item/card/creaking_w3"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 14,
+        "mobtrumps:wear": 4
+      },
+      "model": "mobtrumps:item/card/creaking_w4"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 14,
+        "mobtrumps:wear": 5
+      },
+      "model": "mobtrumps:item/card/creaking_w5"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 15,
+        "mobtrumps:wear": 0
       },
       "model": "mobtrumps:item/card/creeper"
     },
     {
       "predicate": {
-        "mobtrumps:mob_index": 16
+        "mobtrumps:mob_index": 15,
+        "mobtrumps:wear": 1
+      },
+      "model": "mobtrumps:item/card/creeper_w1"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 15,
+        "mobtrumps:wear": 2
+      },
+      "model": "mobtrumps:item/card/creeper_w2"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 15,
+        "mobtrumps:wear": 3
+      },
+      "model": "mobtrumps:item/card/creeper_w3"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 15,
+        "mobtrumps:wear": 4
+      },
+      "model": "mobtrumps:item/card/creeper_w4"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 15,
+        "mobtrumps:wear": 5
+      },
+      "model": "mobtrumps:item/card/creeper_w5"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 16,
+        "mobtrumps:wear": 0
       },
       "model": "mobtrumps:item/card/dolphin"
     },
     {
       "predicate": {
-        "mobtrumps:mob_index": 17
+        "mobtrumps:mob_index": 16,
+        "mobtrumps:wear": 1
+      },
+      "model": "mobtrumps:item/card/dolphin_w1"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 16,
+        "mobtrumps:wear": 2
+      },
+      "model": "mobtrumps:item/card/dolphin_w2"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 16,
+        "mobtrumps:wear": 3
+      },
+      "model": "mobtrumps:item/card/dolphin_w3"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 16,
+        "mobtrumps:wear": 4
+      },
+      "model": "mobtrumps:item/card/dolphin_w4"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 16,
+        "mobtrumps:wear": 5
+      },
+      "model": "mobtrumps:item/card/dolphin_w5"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 17,
+        "mobtrumps:wear": 0
       },
       "model": "mobtrumps:item/card/donkey"
     },
     {
       "predicate": {
-        "mobtrumps:mob_index": 18
+        "mobtrumps:mob_index": 17,
+        "mobtrumps:wear": 1
+      },
+      "model": "mobtrumps:item/card/donkey_w1"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 17,
+        "mobtrumps:wear": 2
+      },
+      "model": "mobtrumps:item/card/donkey_w2"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 17,
+        "mobtrumps:wear": 3
+      },
+      "model": "mobtrumps:item/card/donkey_w3"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 17,
+        "mobtrumps:wear": 4
+      },
+      "model": "mobtrumps:item/card/donkey_w4"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 17,
+        "mobtrumps:wear": 5
+      },
+      "model": "mobtrumps:item/card/donkey_w5"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 18,
+        "mobtrumps:wear": 0
       },
       "model": "mobtrumps:item/card/drowned"
     },
     {
       "predicate": {
-        "mobtrumps:mob_index": 19
+        "mobtrumps:mob_index": 18,
+        "mobtrumps:wear": 1
+      },
+      "model": "mobtrumps:item/card/drowned_w1"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 18,
+        "mobtrumps:wear": 2
+      },
+      "model": "mobtrumps:item/card/drowned_w2"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 18,
+        "mobtrumps:wear": 3
+      },
+      "model": "mobtrumps:item/card/drowned_w3"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 18,
+        "mobtrumps:wear": 4
+      },
+      "model": "mobtrumps:item/card/drowned_w4"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 18,
+        "mobtrumps:wear": 5
+      },
+      "model": "mobtrumps:item/card/drowned_w5"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 19,
+        "mobtrumps:wear": 0
       },
       "model": "mobtrumps:item/card/elder_guardian"
     },
     {
       "predicate": {
-        "mobtrumps:mob_index": 20
+        "mobtrumps:mob_index": 19,
+        "mobtrumps:wear": 1
+      },
+      "model": "mobtrumps:item/card/elder_guardian_w1"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 19,
+        "mobtrumps:wear": 2
+      },
+      "model": "mobtrumps:item/card/elder_guardian_w2"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 19,
+        "mobtrumps:wear": 3
+      },
+      "model": "mobtrumps:item/card/elder_guardian_w3"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 19,
+        "mobtrumps:wear": 4
+      },
+      "model": "mobtrumps:item/card/elder_guardian_w4"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 19,
+        "mobtrumps:wear": 5
+      },
+      "model": "mobtrumps:item/card/elder_guardian_w5"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 20,
+        "mobtrumps:wear": 0
       },
       "model": "mobtrumps:item/card/ender_dragon"
     },
     {
       "predicate": {
-        "mobtrumps:mob_index": 21
+        "mobtrumps:mob_index": 20,
+        "mobtrumps:wear": 1
+      },
+      "model": "mobtrumps:item/card/ender_dragon_w1"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 20,
+        "mobtrumps:wear": 2
+      },
+      "model": "mobtrumps:item/card/ender_dragon_w2"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 20,
+        "mobtrumps:wear": 3
+      },
+      "model": "mobtrumps:item/card/ender_dragon_w3"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 20,
+        "mobtrumps:wear": 4
+      },
+      "model": "mobtrumps:item/card/ender_dragon_w4"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 20,
+        "mobtrumps:wear": 5
+      },
+      "model": "mobtrumps:item/card/ender_dragon_w5"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 21,
+        "mobtrumps:wear": 0
       },
       "model": "mobtrumps:item/card/enderman"
     },
     {
       "predicate": {
-        "mobtrumps:mob_index": 22
+        "mobtrumps:mob_index": 21,
+        "mobtrumps:wear": 1
+      },
+      "model": "mobtrumps:item/card/enderman_w1"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 21,
+        "mobtrumps:wear": 2
+      },
+      "model": "mobtrumps:item/card/enderman_w2"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 21,
+        "mobtrumps:wear": 3
+      },
+      "model": "mobtrumps:item/card/enderman_w3"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 21,
+        "mobtrumps:wear": 4
+      },
+      "model": "mobtrumps:item/card/enderman_w4"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 21,
+        "mobtrumps:wear": 5
+      },
+      "model": "mobtrumps:item/card/enderman_w5"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 22,
+        "mobtrumps:wear": 0
       },
       "model": "mobtrumps:item/card/endermite"
     },
     {
       "predicate": {
-        "mobtrumps:mob_index": 23
+        "mobtrumps:mob_index": 22,
+        "mobtrumps:wear": 1
+      },
+      "model": "mobtrumps:item/card/endermite_w1"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 22,
+        "mobtrumps:wear": 2
+      },
+      "model": "mobtrumps:item/card/endermite_w2"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 22,
+        "mobtrumps:wear": 3
+      },
+      "model": "mobtrumps:item/card/endermite_w3"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 22,
+        "mobtrumps:wear": 4
+      },
+      "model": "mobtrumps:item/card/endermite_w4"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 22,
+        "mobtrumps:wear": 5
+      },
+      "model": "mobtrumps:item/card/endermite_w5"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 23,
+        "mobtrumps:wear": 0
       },
       "model": "mobtrumps:item/card/evoker"
     },
     {
       "predicate": {
-        "mobtrumps:mob_index": 24
+        "mobtrumps:mob_index": 23,
+        "mobtrumps:wear": 1
+      },
+      "model": "mobtrumps:item/card/evoker_w1"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 23,
+        "mobtrumps:wear": 2
+      },
+      "model": "mobtrumps:item/card/evoker_w2"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 23,
+        "mobtrumps:wear": 3
+      },
+      "model": "mobtrumps:item/card/evoker_w3"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 23,
+        "mobtrumps:wear": 4
+      },
+      "model": "mobtrumps:item/card/evoker_w4"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 23,
+        "mobtrumps:wear": 5
+      },
+      "model": "mobtrumps:item/card/evoker_w5"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 24,
+        "mobtrumps:wear": 0
       },
       "model": "mobtrumps:item/card/fox"
     },
     {
       "predicate": {
-        "mobtrumps:mob_index": 25
+        "mobtrumps:mob_index": 24,
+        "mobtrumps:wear": 1
+      },
+      "model": "mobtrumps:item/card/fox_w1"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 24,
+        "mobtrumps:wear": 2
+      },
+      "model": "mobtrumps:item/card/fox_w2"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 24,
+        "mobtrumps:wear": 3
+      },
+      "model": "mobtrumps:item/card/fox_w3"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 24,
+        "mobtrumps:wear": 4
+      },
+      "model": "mobtrumps:item/card/fox_w4"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 24,
+        "mobtrumps:wear": 5
+      },
+      "model": "mobtrumps:item/card/fox_w5"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 25,
+        "mobtrumps:wear": 0
       },
       "model": "mobtrumps:item/card/frog"
     },
     {
       "predicate": {
-        "mobtrumps:mob_index": 26
+        "mobtrumps:mob_index": 25,
+        "mobtrumps:wear": 1
+      },
+      "model": "mobtrumps:item/card/frog_w1"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 25,
+        "mobtrumps:wear": 2
+      },
+      "model": "mobtrumps:item/card/frog_w2"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 25,
+        "mobtrumps:wear": 3
+      },
+      "model": "mobtrumps:item/card/frog_w3"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 25,
+        "mobtrumps:wear": 4
+      },
+      "model": "mobtrumps:item/card/frog_w4"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 25,
+        "mobtrumps:wear": 5
+      },
+      "model": "mobtrumps:item/card/frog_w5"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 26,
+        "mobtrumps:wear": 0
       },
       "model": "mobtrumps:item/card/ghast"
     },
     {
       "predicate": {
-        "mobtrumps:mob_index": 27
+        "mobtrumps:mob_index": 26,
+        "mobtrumps:wear": 1
+      },
+      "model": "mobtrumps:item/card/ghast_w1"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 26,
+        "mobtrumps:wear": 2
+      },
+      "model": "mobtrumps:item/card/ghast_w2"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 26,
+        "mobtrumps:wear": 3
+      },
+      "model": "mobtrumps:item/card/ghast_w3"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 26,
+        "mobtrumps:wear": 4
+      },
+      "model": "mobtrumps:item/card/ghast_w4"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 26,
+        "mobtrumps:wear": 5
+      },
+      "model": "mobtrumps:item/card/ghast_w5"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 27,
+        "mobtrumps:wear": 0
       },
       "model": "mobtrumps:item/card/glow_squid"
     },
     {
       "predicate": {
-        "mobtrumps:mob_index": 28
+        "mobtrumps:mob_index": 27,
+        "mobtrumps:wear": 1
+      },
+      "model": "mobtrumps:item/card/glow_squid_w1"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 27,
+        "mobtrumps:wear": 2
+      },
+      "model": "mobtrumps:item/card/glow_squid_w2"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 27,
+        "mobtrumps:wear": 3
+      },
+      "model": "mobtrumps:item/card/glow_squid_w3"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 27,
+        "mobtrumps:wear": 4
+      },
+      "model": "mobtrumps:item/card/glow_squid_w4"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 27,
+        "mobtrumps:wear": 5
+      },
+      "model": "mobtrumps:item/card/glow_squid_w5"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 28,
+        "mobtrumps:wear": 0
       },
       "model": "mobtrumps:item/card/goat"
     },
     {
       "predicate": {
-        "mobtrumps:mob_index": 29
+        "mobtrumps:mob_index": 28,
+        "mobtrumps:wear": 1
+      },
+      "model": "mobtrumps:item/card/goat_w1"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 28,
+        "mobtrumps:wear": 2
+      },
+      "model": "mobtrumps:item/card/goat_w2"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 28,
+        "mobtrumps:wear": 3
+      },
+      "model": "mobtrumps:item/card/goat_w3"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 28,
+        "mobtrumps:wear": 4
+      },
+      "model": "mobtrumps:item/card/goat_w4"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 28,
+        "mobtrumps:wear": 5
+      },
+      "model": "mobtrumps:item/card/goat_w5"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 29,
+        "mobtrumps:wear": 0
       },
       "model": "mobtrumps:item/card/guardian"
     },
     {
       "predicate": {
-        "mobtrumps:mob_index": 30
+        "mobtrumps:mob_index": 29,
+        "mobtrumps:wear": 1
+      },
+      "model": "mobtrumps:item/card/guardian_w1"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 29,
+        "mobtrumps:wear": 2
+      },
+      "model": "mobtrumps:item/card/guardian_w2"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 29,
+        "mobtrumps:wear": 3
+      },
+      "model": "mobtrumps:item/card/guardian_w3"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 29,
+        "mobtrumps:wear": 4
+      },
+      "model": "mobtrumps:item/card/guardian_w4"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 29,
+        "mobtrumps:wear": 5
+      },
+      "model": "mobtrumps:item/card/guardian_w5"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 30,
+        "mobtrumps:wear": 0
       },
       "model": "mobtrumps:item/card/hoglin"
     },
     {
       "predicate": {
-        "mobtrumps:mob_index": 31
+        "mobtrumps:mob_index": 30,
+        "mobtrumps:wear": 1
+      },
+      "model": "mobtrumps:item/card/hoglin_w1"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 30,
+        "mobtrumps:wear": 2
+      },
+      "model": "mobtrumps:item/card/hoglin_w2"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 30,
+        "mobtrumps:wear": 3
+      },
+      "model": "mobtrumps:item/card/hoglin_w3"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 30,
+        "mobtrumps:wear": 4
+      },
+      "model": "mobtrumps:item/card/hoglin_w4"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 30,
+        "mobtrumps:wear": 5
+      },
+      "model": "mobtrumps:item/card/hoglin_w5"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 31,
+        "mobtrumps:wear": 0
       },
       "model": "mobtrumps:item/card/horse"
     },
     {
       "predicate": {
-        "mobtrumps:mob_index": 32
+        "mobtrumps:mob_index": 31,
+        "mobtrumps:wear": 1
+      },
+      "model": "mobtrumps:item/card/horse_w1"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 31,
+        "mobtrumps:wear": 2
+      },
+      "model": "mobtrumps:item/card/horse_w2"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 31,
+        "mobtrumps:wear": 3
+      },
+      "model": "mobtrumps:item/card/horse_w3"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 31,
+        "mobtrumps:wear": 4
+      },
+      "model": "mobtrumps:item/card/horse_w4"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 31,
+        "mobtrumps:wear": 5
+      },
+      "model": "mobtrumps:item/card/horse_w5"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 32,
+        "mobtrumps:wear": 0
       },
       "model": "mobtrumps:item/card/husk"
     },
     {
       "predicate": {
-        "mobtrumps:mob_index": 33
+        "mobtrumps:mob_index": 32,
+        "mobtrumps:wear": 1
+      },
+      "model": "mobtrumps:item/card/husk_w1"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 32,
+        "mobtrumps:wear": 2
+      },
+      "model": "mobtrumps:item/card/husk_w2"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 32,
+        "mobtrumps:wear": 3
+      },
+      "model": "mobtrumps:item/card/husk_w3"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 32,
+        "mobtrumps:wear": 4
+      },
+      "model": "mobtrumps:item/card/husk_w4"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 32,
+        "mobtrumps:wear": 5
+      },
+      "model": "mobtrumps:item/card/husk_w5"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 33,
+        "mobtrumps:wear": 0
       },
       "model": "mobtrumps:item/card/iron_golem"
     },
     {
       "predicate": {
-        "mobtrumps:mob_index": 34
+        "mobtrumps:mob_index": 33,
+        "mobtrumps:wear": 1
+      },
+      "model": "mobtrumps:item/card/iron_golem_w1"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 33,
+        "mobtrumps:wear": 2
+      },
+      "model": "mobtrumps:item/card/iron_golem_w2"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 33,
+        "mobtrumps:wear": 3
+      },
+      "model": "mobtrumps:item/card/iron_golem_w3"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 33,
+        "mobtrumps:wear": 4
+      },
+      "model": "mobtrumps:item/card/iron_golem_w4"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 33,
+        "mobtrumps:wear": 5
+      },
+      "model": "mobtrumps:item/card/iron_golem_w5"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 34,
+        "mobtrumps:wear": 0
       },
       "model": "mobtrumps:item/card/llama"
     },
     {
       "predicate": {
-        "mobtrumps:mob_index": 35
+        "mobtrumps:mob_index": 34,
+        "mobtrumps:wear": 1
+      },
+      "model": "mobtrumps:item/card/llama_w1"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 34,
+        "mobtrumps:wear": 2
+      },
+      "model": "mobtrumps:item/card/llama_w2"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 34,
+        "mobtrumps:wear": 3
+      },
+      "model": "mobtrumps:item/card/llama_w3"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 34,
+        "mobtrumps:wear": 4
+      },
+      "model": "mobtrumps:item/card/llama_w4"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 34,
+        "mobtrumps:wear": 5
+      },
+      "model": "mobtrumps:item/card/llama_w5"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 35,
+        "mobtrumps:wear": 0
       },
       "model": "mobtrumps:item/card/magma_cube"
     },
     {
       "predicate": {
-        "mobtrumps:mob_index": 36
+        "mobtrumps:mob_index": 35,
+        "mobtrumps:wear": 1
+      },
+      "model": "mobtrumps:item/card/magma_cube_w1"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 35,
+        "mobtrumps:wear": 2
+      },
+      "model": "mobtrumps:item/card/magma_cube_w2"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 35,
+        "mobtrumps:wear": 3
+      },
+      "model": "mobtrumps:item/card/magma_cube_w3"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 35,
+        "mobtrumps:wear": 4
+      },
+      "model": "mobtrumps:item/card/magma_cube_w4"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 35,
+        "mobtrumps:wear": 5
+      },
+      "model": "mobtrumps:item/card/magma_cube_w5"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 36,
+        "mobtrumps:wear": 0
       },
       "model": "mobtrumps:item/card/mooshroom"
     },
     {
       "predicate": {
-        "mobtrumps:mob_index": 37
+        "mobtrumps:mob_index": 36,
+        "mobtrumps:wear": 1
+      },
+      "model": "mobtrumps:item/card/mooshroom_w1"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 36,
+        "mobtrumps:wear": 2
+      },
+      "model": "mobtrumps:item/card/mooshroom_w2"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 36,
+        "mobtrumps:wear": 3
+      },
+      "model": "mobtrumps:item/card/mooshroom_w3"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 36,
+        "mobtrumps:wear": 4
+      },
+      "model": "mobtrumps:item/card/mooshroom_w4"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 36,
+        "mobtrumps:wear": 5
+      },
+      "model": "mobtrumps:item/card/mooshroom_w5"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 37,
+        "mobtrumps:wear": 0
       },
       "model": "mobtrumps:item/card/mule"
     },
     {
       "predicate": {
-        "mobtrumps:mob_index": 38
+        "mobtrumps:mob_index": 37,
+        "mobtrumps:wear": 1
+      },
+      "model": "mobtrumps:item/card/mule_w1"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 37,
+        "mobtrumps:wear": 2
+      },
+      "model": "mobtrumps:item/card/mule_w2"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 37,
+        "mobtrumps:wear": 3
+      },
+      "model": "mobtrumps:item/card/mule_w3"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 37,
+        "mobtrumps:wear": 4
+      },
+      "model": "mobtrumps:item/card/mule_w4"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 37,
+        "mobtrumps:wear": 5
+      },
+      "model": "mobtrumps:item/card/mule_w5"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 38,
+        "mobtrumps:wear": 0
       },
       "model": "mobtrumps:item/card/ocelot"
     },
     {
       "predicate": {
-        "mobtrumps:mob_index": 39
+        "mobtrumps:mob_index": 38,
+        "mobtrumps:wear": 1
+      },
+      "model": "mobtrumps:item/card/ocelot_w1"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 38,
+        "mobtrumps:wear": 2
+      },
+      "model": "mobtrumps:item/card/ocelot_w2"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 38,
+        "mobtrumps:wear": 3
+      },
+      "model": "mobtrumps:item/card/ocelot_w3"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 38,
+        "mobtrumps:wear": 4
+      },
+      "model": "mobtrumps:item/card/ocelot_w4"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 38,
+        "mobtrumps:wear": 5
+      },
+      "model": "mobtrumps:item/card/ocelot_w5"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 39,
+        "mobtrumps:wear": 0
       },
       "model": "mobtrumps:item/card/panda"
     },
     {
       "predicate": {
-        "mobtrumps:mob_index": 40
+        "mobtrumps:mob_index": 39,
+        "mobtrumps:wear": 1
+      },
+      "model": "mobtrumps:item/card/panda_w1"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 39,
+        "mobtrumps:wear": 2
+      },
+      "model": "mobtrumps:item/card/panda_w2"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 39,
+        "mobtrumps:wear": 3
+      },
+      "model": "mobtrumps:item/card/panda_w3"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 39,
+        "mobtrumps:wear": 4
+      },
+      "model": "mobtrumps:item/card/panda_w4"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 39,
+        "mobtrumps:wear": 5
+      },
+      "model": "mobtrumps:item/card/panda_w5"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 40,
+        "mobtrumps:wear": 0
       },
       "model": "mobtrumps:item/card/parrot"
     },
     {
       "predicate": {
-        "mobtrumps:mob_index": 41
+        "mobtrumps:mob_index": 40,
+        "mobtrumps:wear": 1
+      },
+      "model": "mobtrumps:item/card/parrot_w1"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 40,
+        "mobtrumps:wear": 2
+      },
+      "model": "mobtrumps:item/card/parrot_w2"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 40,
+        "mobtrumps:wear": 3
+      },
+      "model": "mobtrumps:item/card/parrot_w3"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 40,
+        "mobtrumps:wear": 4
+      },
+      "model": "mobtrumps:item/card/parrot_w4"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 40,
+        "mobtrumps:wear": 5
+      },
+      "model": "mobtrumps:item/card/parrot_w5"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 41,
+        "mobtrumps:wear": 0
       },
       "model": "mobtrumps:item/card/phantom"
     },
     {
       "predicate": {
-        "mobtrumps:mob_index": 42
+        "mobtrumps:mob_index": 41,
+        "mobtrumps:wear": 1
+      },
+      "model": "mobtrumps:item/card/phantom_w1"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 41,
+        "mobtrumps:wear": 2
+      },
+      "model": "mobtrumps:item/card/phantom_w2"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 41,
+        "mobtrumps:wear": 3
+      },
+      "model": "mobtrumps:item/card/phantom_w3"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 41,
+        "mobtrumps:wear": 4
+      },
+      "model": "mobtrumps:item/card/phantom_w4"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 41,
+        "mobtrumps:wear": 5
+      },
+      "model": "mobtrumps:item/card/phantom_w5"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 42,
+        "mobtrumps:wear": 0
       },
       "model": "mobtrumps:item/card/pig"
     },
     {
       "predicate": {
-        "mobtrumps:mob_index": 43
+        "mobtrumps:mob_index": 42,
+        "mobtrumps:wear": 1
+      },
+      "model": "mobtrumps:item/card/pig_w1"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 42,
+        "mobtrumps:wear": 2
+      },
+      "model": "mobtrumps:item/card/pig_w2"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 42,
+        "mobtrumps:wear": 3
+      },
+      "model": "mobtrumps:item/card/pig_w3"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 42,
+        "mobtrumps:wear": 4
+      },
+      "model": "mobtrumps:item/card/pig_w4"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 42,
+        "mobtrumps:wear": 5
+      },
+      "model": "mobtrumps:item/card/pig_w5"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 43,
+        "mobtrumps:wear": 0
       },
       "model": "mobtrumps:item/card/piglin"
     },
     {
       "predicate": {
-        "mobtrumps:mob_index": 44
+        "mobtrumps:mob_index": 43,
+        "mobtrumps:wear": 1
+      },
+      "model": "mobtrumps:item/card/piglin_w1"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 43,
+        "mobtrumps:wear": 2
+      },
+      "model": "mobtrumps:item/card/piglin_w2"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 43,
+        "mobtrumps:wear": 3
+      },
+      "model": "mobtrumps:item/card/piglin_w3"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 43,
+        "mobtrumps:wear": 4
+      },
+      "model": "mobtrumps:item/card/piglin_w4"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 43,
+        "mobtrumps:wear": 5
+      },
+      "model": "mobtrumps:item/card/piglin_w5"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 44,
+        "mobtrumps:wear": 0
       },
       "model": "mobtrumps:item/card/piglin_brute"
     },
     {
       "predicate": {
-        "mobtrumps:mob_index": 45
+        "mobtrumps:mob_index": 44,
+        "mobtrumps:wear": 1
+      },
+      "model": "mobtrumps:item/card/piglin_brute_w1"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 44,
+        "mobtrumps:wear": 2
+      },
+      "model": "mobtrumps:item/card/piglin_brute_w2"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 44,
+        "mobtrumps:wear": 3
+      },
+      "model": "mobtrumps:item/card/piglin_brute_w3"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 44,
+        "mobtrumps:wear": 4
+      },
+      "model": "mobtrumps:item/card/piglin_brute_w4"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 44,
+        "mobtrumps:wear": 5
+      },
+      "model": "mobtrumps:item/card/piglin_brute_w5"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 45,
+        "mobtrumps:wear": 0
       },
       "model": "mobtrumps:item/card/pillager"
     },
     {
       "predicate": {
-        "mobtrumps:mob_index": 46
+        "mobtrumps:mob_index": 45,
+        "mobtrumps:wear": 1
+      },
+      "model": "mobtrumps:item/card/pillager_w1"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 45,
+        "mobtrumps:wear": 2
+      },
+      "model": "mobtrumps:item/card/pillager_w2"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 45,
+        "mobtrumps:wear": 3
+      },
+      "model": "mobtrumps:item/card/pillager_w3"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 45,
+        "mobtrumps:wear": 4
+      },
+      "model": "mobtrumps:item/card/pillager_w4"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 45,
+        "mobtrumps:wear": 5
+      },
+      "model": "mobtrumps:item/card/pillager_w5"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 46,
+        "mobtrumps:wear": 0
       },
       "model": "mobtrumps:item/card/polar_bear"
     },
     {
       "predicate": {
-        "mobtrumps:mob_index": 47
+        "mobtrumps:mob_index": 46,
+        "mobtrumps:wear": 1
+      },
+      "model": "mobtrumps:item/card/polar_bear_w1"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 46,
+        "mobtrumps:wear": 2
+      },
+      "model": "mobtrumps:item/card/polar_bear_w2"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 46,
+        "mobtrumps:wear": 3
+      },
+      "model": "mobtrumps:item/card/polar_bear_w3"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 46,
+        "mobtrumps:wear": 4
+      },
+      "model": "mobtrumps:item/card/polar_bear_w4"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 46,
+        "mobtrumps:wear": 5
+      },
+      "model": "mobtrumps:item/card/polar_bear_w5"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 47,
+        "mobtrumps:wear": 0
       },
       "model": "mobtrumps:item/card/pufferfish"
     },
     {
       "predicate": {
-        "mobtrumps:mob_index": 48
+        "mobtrumps:mob_index": 47,
+        "mobtrumps:wear": 1
+      },
+      "model": "mobtrumps:item/card/pufferfish_w1"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 47,
+        "mobtrumps:wear": 2
+      },
+      "model": "mobtrumps:item/card/pufferfish_w2"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 47,
+        "mobtrumps:wear": 3
+      },
+      "model": "mobtrumps:item/card/pufferfish_w3"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 47,
+        "mobtrumps:wear": 4
+      },
+      "model": "mobtrumps:item/card/pufferfish_w4"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 47,
+        "mobtrumps:wear": 5
+      },
+      "model": "mobtrumps:item/card/pufferfish_w5"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 48,
+        "mobtrumps:wear": 0
       },
       "model": "mobtrumps:item/card/rabbit"
     },
     {
       "predicate": {
-        "mobtrumps:mob_index": 49
+        "mobtrumps:mob_index": 48,
+        "mobtrumps:wear": 1
+      },
+      "model": "mobtrumps:item/card/rabbit_w1"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 48,
+        "mobtrumps:wear": 2
+      },
+      "model": "mobtrumps:item/card/rabbit_w2"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 48,
+        "mobtrumps:wear": 3
+      },
+      "model": "mobtrumps:item/card/rabbit_w3"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 48,
+        "mobtrumps:wear": 4
+      },
+      "model": "mobtrumps:item/card/rabbit_w4"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 48,
+        "mobtrumps:wear": 5
+      },
+      "model": "mobtrumps:item/card/rabbit_w5"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 49,
+        "mobtrumps:wear": 0
       },
       "model": "mobtrumps:item/card/ravager"
     },
     {
       "predicate": {
-        "mobtrumps:mob_index": 50
+        "mobtrumps:mob_index": 49,
+        "mobtrumps:wear": 1
+      },
+      "model": "mobtrumps:item/card/ravager_w1"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 49,
+        "mobtrumps:wear": 2
+      },
+      "model": "mobtrumps:item/card/ravager_w2"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 49,
+        "mobtrumps:wear": 3
+      },
+      "model": "mobtrumps:item/card/ravager_w3"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 49,
+        "mobtrumps:wear": 4
+      },
+      "model": "mobtrumps:item/card/ravager_w4"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 49,
+        "mobtrumps:wear": 5
+      },
+      "model": "mobtrumps:item/card/ravager_w5"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 50,
+        "mobtrumps:wear": 0
       },
       "model": "mobtrumps:item/card/salmon"
     },
     {
       "predicate": {
-        "mobtrumps:mob_index": 51
+        "mobtrumps:mob_index": 50,
+        "mobtrumps:wear": 1
+      },
+      "model": "mobtrumps:item/card/salmon_w1"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 50,
+        "mobtrumps:wear": 2
+      },
+      "model": "mobtrumps:item/card/salmon_w2"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 50,
+        "mobtrumps:wear": 3
+      },
+      "model": "mobtrumps:item/card/salmon_w3"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 50,
+        "mobtrumps:wear": 4
+      },
+      "model": "mobtrumps:item/card/salmon_w4"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 50,
+        "mobtrumps:wear": 5
+      },
+      "model": "mobtrumps:item/card/salmon_w5"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 51,
+        "mobtrumps:wear": 0
       },
       "model": "mobtrumps:item/card/sheep"
     },
     {
       "predicate": {
-        "mobtrumps:mob_index": 52
+        "mobtrumps:mob_index": 51,
+        "mobtrumps:wear": 1
+      },
+      "model": "mobtrumps:item/card/sheep_w1"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 51,
+        "mobtrumps:wear": 2
+      },
+      "model": "mobtrumps:item/card/sheep_w2"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 51,
+        "mobtrumps:wear": 3
+      },
+      "model": "mobtrumps:item/card/sheep_w3"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 51,
+        "mobtrumps:wear": 4
+      },
+      "model": "mobtrumps:item/card/sheep_w4"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 51,
+        "mobtrumps:wear": 5
+      },
+      "model": "mobtrumps:item/card/sheep_w5"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 52,
+        "mobtrumps:wear": 0
       },
       "model": "mobtrumps:item/card/shulker"
     },
     {
       "predicate": {
-        "mobtrumps:mob_index": 53
+        "mobtrumps:mob_index": 52,
+        "mobtrumps:wear": 1
+      },
+      "model": "mobtrumps:item/card/shulker_w1"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 52,
+        "mobtrumps:wear": 2
+      },
+      "model": "mobtrumps:item/card/shulker_w2"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 52,
+        "mobtrumps:wear": 3
+      },
+      "model": "mobtrumps:item/card/shulker_w3"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 52,
+        "mobtrumps:wear": 4
+      },
+      "model": "mobtrumps:item/card/shulker_w4"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 52,
+        "mobtrumps:wear": 5
+      },
+      "model": "mobtrumps:item/card/shulker_w5"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 53,
+        "mobtrumps:wear": 0
       },
       "model": "mobtrumps:item/card/silverfish"
     },
     {
       "predicate": {
-        "mobtrumps:mob_index": 54
+        "mobtrumps:mob_index": 53,
+        "mobtrumps:wear": 1
+      },
+      "model": "mobtrumps:item/card/silverfish_w1"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 53,
+        "mobtrumps:wear": 2
+      },
+      "model": "mobtrumps:item/card/silverfish_w2"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 53,
+        "mobtrumps:wear": 3
+      },
+      "model": "mobtrumps:item/card/silverfish_w3"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 53,
+        "mobtrumps:wear": 4
+      },
+      "model": "mobtrumps:item/card/silverfish_w4"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 53,
+        "mobtrumps:wear": 5
+      },
+      "model": "mobtrumps:item/card/silverfish_w5"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 54,
+        "mobtrumps:wear": 0
       },
       "model": "mobtrumps:item/card/skeleton"
     },
     {
       "predicate": {
-        "mobtrumps:mob_index": 55
+        "mobtrumps:mob_index": 54,
+        "mobtrumps:wear": 1
+      },
+      "model": "mobtrumps:item/card/skeleton_w1"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 54,
+        "mobtrumps:wear": 2
+      },
+      "model": "mobtrumps:item/card/skeleton_w2"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 54,
+        "mobtrumps:wear": 3
+      },
+      "model": "mobtrumps:item/card/skeleton_w3"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 54,
+        "mobtrumps:wear": 4
+      },
+      "model": "mobtrumps:item/card/skeleton_w4"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 54,
+        "mobtrumps:wear": 5
+      },
+      "model": "mobtrumps:item/card/skeleton_w5"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 55,
+        "mobtrumps:wear": 0
       },
       "model": "mobtrumps:item/card/skeleton_horse"
     },
     {
       "predicate": {
-        "mobtrumps:mob_index": 56
+        "mobtrumps:mob_index": 55,
+        "mobtrumps:wear": 1
+      },
+      "model": "mobtrumps:item/card/skeleton_horse_w1"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 55,
+        "mobtrumps:wear": 2
+      },
+      "model": "mobtrumps:item/card/skeleton_horse_w2"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 55,
+        "mobtrumps:wear": 3
+      },
+      "model": "mobtrumps:item/card/skeleton_horse_w3"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 55,
+        "mobtrumps:wear": 4
+      },
+      "model": "mobtrumps:item/card/skeleton_horse_w4"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 55,
+        "mobtrumps:wear": 5
+      },
+      "model": "mobtrumps:item/card/skeleton_horse_w5"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 56,
+        "mobtrumps:wear": 0
       },
       "model": "mobtrumps:item/card/slime"
     },
     {
       "predicate": {
-        "mobtrumps:mob_index": 57
+        "mobtrumps:mob_index": 56,
+        "mobtrumps:wear": 1
+      },
+      "model": "mobtrumps:item/card/slime_w1"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 56,
+        "mobtrumps:wear": 2
+      },
+      "model": "mobtrumps:item/card/slime_w2"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 56,
+        "mobtrumps:wear": 3
+      },
+      "model": "mobtrumps:item/card/slime_w3"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 56,
+        "mobtrumps:wear": 4
+      },
+      "model": "mobtrumps:item/card/slime_w4"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 56,
+        "mobtrumps:wear": 5
+      },
+      "model": "mobtrumps:item/card/slime_w5"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 57,
+        "mobtrumps:wear": 0
       },
       "model": "mobtrumps:item/card/sniffer"
     },
     {
       "predicate": {
-        "mobtrumps:mob_index": 58
+        "mobtrumps:mob_index": 57,
+        "mobtrumps:wear": 1
+      },
+      "model": "mobtrumps:item/card/sniffer_w1"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 57,
+        "mobtrumps:wear": 2
+      },
+      "model": "mobtrumps:item/card/sniffer_w2"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 57,
+        "mobtrumps:wear": 3
+      },
+      "model": "mobtrumps:item/card/sniffer_w3"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 57,
+        "mobtrumps:wear": 4
+      },
+      "model": "mobtrumps:item/card/sniffer_w4"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 57,
+        "mobtrumps:wear": 5
+      },
+      "model": "mobtrumps:item/card/sniffer_w5"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 58,
+        "mobtrumps:wear": 0
       },
       "model": "mobtrumps:item/card/snow_golem"
     },
     {
       "predicate": {
-        "mobtrumps:mob_index": 59
+        "mobtrumps:mob_index": 58,
+        "mobtrumps:wear": 1
+      },
+      "model": "mobtrumps:item/card/snow_golem_w1"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 58,
+        "mobtrumps:wear": 2
+      },
+      "model": "mobtrumps:item/card/snow_golem_w2"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 58,
+        "mobtrumps:wear": 3
+      },
+      "model": "mobtrumps:item/card/snow_golem_w3"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 58,
+        "mobtrumps:wear": 4
+      },
+      "model": "mobtrumps:item/card/snow_golem_w4"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 58,
+        "mobtrumps:wear": 5
+      },
+      "model": "mobtrumps:item/card/snow_golem_w5"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 59,
+        "mobtrumps:wear": 0
       },
       "model": "mobtrumps:item/card/spider"
     },
     {
       "predicate": {
-        "mobtrumps:mob_index": 60
+        "mobtrumps:mob_index": 59,
+        "mobtrumps:wear": 1
+      },
+      "model": "mobtrumps:item/card/spider_w1"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 59,
+        "mobtrumps:wear": 2
+      },
+      "model": "mobtrumps:item/card/spider_w2"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 59,
+        "mobtrumps:wear": 3
+      },
+      "model": "mobtrumps:item/card/spider_w3"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 59,
+        "mobtrumps:wear": 4
+      },
+      "model": "mobtrumps:item/card/spider_w4"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 59,
+        "mobtrumps:wear": 5
+      },
+      "model": "mobtrumps:item/card/spider_w5"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 60,
+        "mobtrumps:wear": 0
       },
       "model": "mobtrumps:item/card/squid"
     },
     {
       "predicate": {
-        "mobtrumps:mob_index": 61
+        "mobtrumps:mob_index": 60,
+        "mobtrumps:wear": 1
+      },
+      "model": "mobtrumps:item/card/squid_w1"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 60,
+        "mobtrumps:wear": 2
+      },
+      "model": "mobtrumps:item/card/squid_w2"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 60,
+        "mobtrumps:wear": 3
+      },
+      "model": "mobtrumps:item/card/squid_w3"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 60,
+        "mobtrumps:wear": 4
+      },
+      "model": "mobtrumps:item/card/squid_w4"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 60,
+        "mobtrumps:wear": 5
+      },
+      "model": "mobtrumps:item/card/squid_w5"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 61,
+        "mobtrumps:wear": 0
       },
       "model": "mobtrumps:item/card/stray"
     },
     {
       "predicate": {
-        "mobtrumps:mob_index": 62
+        "mobtrumps:mob_index": 61,
+        "mobtrumps:wear": 1
+      },
+      "model": "mobtrumps:item/card/stray_w1"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 61,
+        "mobtrumps:wear": 2
+      },
+      "model": "mobtrumps:item/card/stray_w2"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 61,
+        "mobtrumps:wear": 3
+      },
+      "model": "mobtrumps:item/card/stray_w3"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 61,
+        "mobtrumps:wear": 4
+      },
+      "model": "mobtrumps:item/card/stray_w4"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 61,
+        "mobtrumps:wear": 5
+      },
+      "model": "mobtrumps:item/card/stray_w5"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 62,
+        "mobtrumps:wear": 0
       },
       "model": "mobtrumps:item/card/strider"
     },
     {
       "predicate": {
-        "mobtrumps:mob_index": 63
+        "mobtrumps:mob_index": 62,
+        "mobtrumps:wear": 1
+      },
+      "model": "mobtrumps:item/card/strider_w1"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 62,
+        "mobtrumps:wear": 2
+      },
+      "model": "mobtrumps:item/card/strider_w2"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 62,
+        "mobtrumps:wear": 3
+      },
+      "model": "mobtrumps:item/card/strider_w3"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 62,
+        "mobtrumps:wear": 4
+      },
+      "model": "mobtrumps:item/card/strider_w4"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 62,
+        "mobtrumps:wear": 5
+      },
+      "model": "mobtrumps:item/card/strider_w5"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 63,
+        "mobtrumps:wear": 0
       },
       "model": "mobtrumps:item/card/sulfur_cube"
     },
     {
       "predicate": {
-        "mobtrumps:mob_index": 64
+        "mobtrumps:mob_index": 63,
+        "mobtrumps:wear": 1
+      },
+      "model": "mobtrumps:item/card/sulfur_cube_w1"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 63,
+        "mobtrumps:wear": 2
+      },
+      "model": "mobtrumps:item/card/sulfur_cube_w2"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 63,
+        "mobtrumps:wear": 3
+      },
+      "model": "mobtrumps:item/card/sulfur_cube_w3"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 63,
+        "mobtrumps:wear": 4
+      },
+      "model": "mobtrumps:item/card/sulfur_cube_w4"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 63,
+        "mobtrumps:wear": 5
+      },
+      "model": "mobtrumps:item/card/sulfur_cube_w5"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 64,
+        "mobtrumps:wear": 0
       },
       "model": "mobtrumps:item/card/tadpole"
     },
     {
       "predicate": {
-        "mobtrumps:mob_index": 65
+        "mobtrumps:mob_index": 64,
+        "mobtrumps:wear": 1
+      },
+      "model": "mobtrumps:item/card/tadpole_w1"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 64,
+        "mobtrumps:wear": 2
+      },
+      "model": "mobtrumps:item/card/tadpole_w2"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 64,
+        "mobtrumps:wear": 3
+      },
+      "model": "mobtrumps:item/card/tadpole_w3"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 64,
+        "mobtrumps:wear": 4
+      },
+      "model": "mobtrumps:item/card/tadpole_w4"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 64,
+        "mobtrumps:wear": 5
+      },
+      "model": "mobtrumps:item/card/tadpole_w5"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 65,
+        "mobtrumps:wear": 0
       },
       "model": "mobtrumps:item/card/trader_llama"
     },
     {
       "predicate": {
-        "mobtrumps:mob_index": 66
+        "mobtrumps:mob_index": 65,
+        "mobtrumps:wear": 1
+      },
+      "model": "mobtrumps:item/card/trader_llama_w1"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 65,
+        "mobtrumps:wear": 2
+      },
+      "model": "mobtrumps:item/card/trader_llama_w2"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 65,
+        "mobtrumps:wear": 3
+      },
+      "model": "mobtrumps:item/card/trader_llama_w3"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 65,
+        "mobtrumps:wear": 4
+      },
+      "model": "mobtrumps:item/card/trader_llama_w4"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 65,
+        "mobtrumps:wear": 5
+      },
+      "model": "mobtrumps:item/card/trader_llama_w5"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 66,
+        "mobtrumps:wear": 0
       },
       "model": "mobtrumps:item/card/tropical_fish"
     },
     {
       "predicate": {
-        "mobtrumps:mob_index": 67
+        "mobtrumps:mob_index": 66,
+        "mobtrumps:wear": 1
+      },
+      "model": "mobtrumps:item/card/tropical_fish_w1"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 66,
+        "mobtrumps:wear": 2
+      },
+      "model": "mobtrumps:item/card/tropical_fish_w2"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 66,
+        "mobtrumps:wear": 3
+      },
+      "model": "mobtrumps:item/card/tropical_fish_w3"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 66,
+        "mobtrumps:wear": 4
+      },
+      "model": "mobtrumps:item/card/tropical_fish_w4"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 66,
+        "mobtrumps:wear": 5
+      },
+      "model": "mobtrumps:item/card/tropical_fish_w5"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 67,
+        "mobtrumps:wear": 0
       },
       "model": "mobtrumps:item/card/turtle"
     },
     {
       "predicate": {
-        "mobtrumps:mob_index": 68
+        "mobtrumps:mob_index": 67,
+        "mobtrumps:wear": 1
+      },
+      "model": "mobtrumps:item/card/turtle_w1"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 67,
+        "mobtrumps:wear": 2
+      },
+      "model": "mobtrumps:item/card/turtle_w2"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 67,
+        "mobtrumps:wear": 3
+      },
+      "model": "mobtrumps:item/card/turtle_w3"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 67,
+        "mobtrumps:wear": 4
+      },
+      "model": "mobtrumps:item/card/turtle_w4"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 67,
+        "mobtrumps:wear": 5
+      },
+      "model": "mobtrumps:item/card/turtle_w5"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 68,
+        "mobtrumps:wear": 0
       },
       "model": "mobtrumps:item/card/vex"
     },
     {
       "predicate": {
-        "mobtrumps:mob_index": 69
+        "mobtrumps:mob_index": 68,
+        "mobtrumps:wear": 1
+      },
+      "model": "mobtrumps:item/card/vex_w1"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 68,
+        "mobtrumps:wear": 2
+      },
+      "model": "mobtrumps:item/card/vex_w2"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 68,
+        "mobtrumps:wear": 3
+      },
+      "model": "mobtrumps:item/card/vex_w3"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 68,
+        "mobtrumps:wear": 4
+      },
+      "model": "mobtrumps:item/card/vex_w4"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 68,
+        "mobtrumps:wear": 5
+      },
+      "model": "mobtrumps:item/card/vex_w5"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 69,
+        "mobtrumps:wear": 0
       },
       "model": "mobtrumps:item/card/villager"
     },
     {
       "predicate": {
-        "mobtrumps:mob_index": 70
+        "mobtrumps:mob_index": 69,
+        "mobtrumps:wear": 1
+      },
+      "model": "mobtrumps:item/card/villager_w1"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 69,
+        "mobtrumps:wear": 2
+      },
+      "model": "mobtrumps:item/card/villager_w2"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 69,
+        "mobtrumps:wear": 3
+      },
+      "model": "mobtrumps:item/card/villager_w3"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 69,
+        "mobtrumps:wear": 4
+      },
+      "model": "mobtrumps:item/card/villager_w4"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 69,
+        "mobtrumps:wear": 5
+      },
+      "model": "mobtrumps:item/card/villager_w5"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 70,
+        "mobtrumps:wear": 0
       },
       "model": "mobtrumps:item/card/vindicator"
     },
     {
       "predicate": {
-        "mobtrumps:mob_index": 71
+        "mobtrumps:mob_index": 70,
+        "mobtrumps:wear": 1
+      },
+      "model": "mobtrumps:item/card/vindicator_w1"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 70,
+        "mobtrumps:wear": 2
+      },
+      "model": "mobtrumps:item/card/vindicator_w2"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 70,
+        "mobtrumps:wear": 3
+      },
+      "model": "mobtrumps:item/card/vindicator_w3"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 70,
+        "mobtrumps:wear": 4
+      },
+      "model": "mobtrumps:item/card/vindicator_w4"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 70,
+        "mobtrumps:wear": 5
+      },
+      "model": "mobtrumps:item/card/vindicator_w5"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 71,
+        "mobtrumps:wear": 0
       },
       "model": "mobtrumps:item/card/wandering_trader"
     },
     {
       "predicate": {
-        "mobtrumps:mob_index": 72
+        "mobtrumps:mob_index": 71,
+        "mobtrumps:wear": 1
+      },
+      "model": "mobtrumps:item/card/wandering_trader_w1"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 71,
+        "mobtrumps:wear": 2
+      },
+      "model": "mobtrumps:item/card/wandering_trader_w2"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 71,
+        "mobtrumps:wear": 3
+      },
+      "model": "mobtrumps:item/card/wandering_trader_w3"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 71,
+        "mobtrumps:wear": 4
+      },
+      "model": "mobtrumps:item/card/wandering_trader_w4"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 71,
+        "mobtrumps:wear": 5
+      },
+      "model": "mobtrumps:item/card/wandering_trader_w5"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 72,
+        "mobtrumps:wear": 0
       },
       "model": "mobtrumps:item/card/warden"
     },
     {
       "predicate": {
-        "mobtrumps:mob_index": 73
+        "mobtrumps:mob_index": 72,
+        "mobtrumps:wear": 1
+      },
+      "model": "mobtrumps:item/card/warden_w1"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 72,
+        "mobtrumps:wear": 2
+      },
+      "model": "mobtrumps:item/card/warden_w2"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 72,
+        "mobtrumps:wear": 3
+      },
+      "model": "mobtrumps:item/card/warden_w3"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 72,
+        "mobtrumps:wear": 4
+      },
+      "model": "mobtrumps:item/card/warden_w4"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 72,
+        "mobtrumps:wear": 5
+      },
+      "model": "mobtrumps:item/card/warden_w5"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 73,
+        "mobtrumps:wear": 0
       },
       "model": "mobtrumps:item/card/witch"
     },
     {
       "predicate": {
-        "mobtrumps:mob_index": 74
+        "mobtrumps:mob_index": 73,
+        "mobtrumps:wear": 1
+      },
+      "model": "mobtrumps:item/card/witch_w1"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 73,
+        "mobtrumps:wear": 2
+      },
+      "model": "mobtrumps:item/card/witch_w2"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 73,
+        "mobtrumps:wear": 3
+      },
+      "model": "mobtrumps:item/card/witch_w3"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 73,
+        "mobtrumps:wear": 4
+      },
+      "model": "mobtrumps:item/card/witch_w4"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 73,
+        "mobtrumps:wear": 5
+      },
+      "model": "mobtrumps:item/card/witch_w5"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 74,
+        "mobtrumps:wear": 0
       },
       "model": "mobtrumps:item/card/wither"
     },
     {
       "predicate": {
-        "mobtrumps:mob_index": 75
+        "mobtrumps:mob_index": 74,
+        "mobtrumps:wear": 1
+      },
+      "model": "mobtrumps:item/card/wither_w1"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 74,
+        "mobtrumps:wear": 2
+      },
+      "model": "mobtrumps:item/card/wither_w2"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 74,
+        "mobtrumps:wear": 3
+      },
+      "model": "mobtrumps:item/card/wither_w3"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 74,
+        "mobtrumps:wear": 4
+      },
+      "model": "mobtrumps:item/card/wither_w4"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 74,
+        "mobtrumps:wear": 5
+      },
+      "model": "mobtrumps:item/card/wither_w5"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 75,
+        "mobtrumps:wear": 0
       },
       "model": "mobtrumps:item/card/wither_skeleton"
     },
     {
       "predicate": {
-        "mobtrumps:mob_index": 76
+        "mobtrumps:mob_index": 75,
+        "mobtrumps:wear": 1
+      },
+      "model": "mobtrumps:item/card/wither_skeleton_w1"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 75,
+        "mobtrumps:wear": 2
+      },
+      "model": "mobtrumps:item/card/wither_skeleton_w2"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 75,
+        "mobtrumps:wear": 3
+      },
+      "model": "mobtrumps:item/card/wither_skeleton_w3"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 75,
+        "mobtrumps:wear": 4
+      },
+      "model": "mobtrumps:item/card/wither_skeleton_w4"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 75,
+        "mobtrumps:wear": 5
+      },
+      "model": "mobtrumps:item/card/wither_skeleton_w5"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 76,
+        "mobtrumps:wear": 0
       },
       "model": "mobtrumps:item/card/wolf"
     },
     {
       "predicate": {
-        "mobtrumps:mob_index": 77
+        "mobtrumps:mob_index": 76,
+        "mobtrumps:wear": 1
+      },
+      "model": "mobtrumps:item/card/wolf_w1"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 76,
+        "mobtrumps:wear": 2
+      },
+      "model": "mobtrumps:item/card/wolf_w2"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 76,
+        "mobtrumps:wear": 3
+      },
+      "model": "mobtrumps:item/card/wolf_w3"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 76,
+        "mobtrumps:wear": 4
+      },
+      "model": "mobtrumps:item/card/wolf_w4"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 76,
+        "mobtrumps:wear": 5
+      },
+      "model": "mobtrumps:item/card/wolf_w5"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 77,
+        "mobtrumps:wear": 0
       },
       "model": "mobtrumps:item/card/zombie"
     },
     {
       "predicate": {
-        "mobtrumps:mob_index": 78
+        "mobtrumps:mob_index": 77,
+        "mobtrumps:wear": 1
+      },
+      "model": "mobtrumps:item/card/zombie_w1"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 77,
+        "mobtrumps:wear": 2
+      },
+      "model": "mobtrumps:item/card/zombie_w2"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 77,
+        "mobtrumps:wear": 3
+      },
+      "model": "mobtrumps:item/card/zombie_w3"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 77,
+        "mobtrumps:wear": 4
+      },
+      "model": "mobtrumps:item/card/zombie_w4"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 77,
+        "mobtrumps:wear": 5
+      },
+      "model": "mobtrumps:item/card/zombie_w5"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 78,
+        "mobtrumps:wear": 0
       },
       "model": "mobtrumps:item/card/zombie_villager"
     },
     {
       "predicate": {
-        "mobtrumps:mob_index": 79
+        "mobtrumps:mob_index": 78,
+        "mobtrumps:wear": 1
+      },
+      "model": "mobtrumps:item/card/zombie_villager_w1"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 78,
+        "mobtrumps:wear": 2
+      },
+      "model": "mobtrumps:item/card/zombie_villager_w2"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 78,
+        "mobtrumps:wear": 3
+      },
+      "model": "mobtrumps:item/card/zombie_villager_w3"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 78,
+        "mobtrumps:wear": 4
+      },
+      "model": "mobtrumps:item/card/zombie_villager_w4"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 78,
+        "mobtrumps:wear": 5
+      },
+      "model": "mobtrumps:item/card/zombie_villager_w5"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 79,
+        "mobtrumps:wear": 0
       },
       "model": "mobtrumps:item/card/zombified_piglin"
     },
     {
       "predicate": {
-        "mobtrumps:mob_index": 80
+        "mobtrumps:mob_index": 79,
+        "mobtrumps:wear": 1
+      },
+      "model": "mobtrumps:item/card/zombified_piglin_w1"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 79,
+        "mobtrumps:wear": 2
+      },
+      "model": "mobtrumps:item/card/zombified_piglin_w2"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 79,
+        "mobtrumps:wear": 3
+      },
+      "model": "mobtrumps:item/card/zombified_piglin_w3"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 79,
+        "mobtrumps:wear": 4
+      },
+      "model": "mobtrumps:item/card/zombified_piglin_w4"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 79,
+        "mobtrumps:wear": 5
+      },
+      "model": "mobtrumps:item/card/zombified_piglin_w5"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 80,
+        "mobtrumps:wear": 0
       },
       "model": "mobtrumps:item/card/zoglin"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 80,
+        "mobtrumps:wear": 1
+      },
+      "model": "mobtrumps:item/card/zoglin_w1"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 80,
+        "mobtrumps:wear": 2
+      },
+      "model": "mobtrumps:item/card/zoglin_w2"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 80,
+        "mobtrumps:wear": 3
+      },
+      "model": "mobtrumps:item/card/zoglin_w3"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 80,
+        "mobtrumps:wear": 4
+      },
+      "model": "mobtrumps:item/card/zoglin_w4"
+    },
+    {
+      "predicate": {
+        "mobtrumps:mob_index": 80,
+        "mobtrumps:wear": 5
+      },
+      "model": "mobtrumps:item/card/zoglin_w5"
     }
   ]
 }

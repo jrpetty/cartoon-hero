@@ -150,6 +150,13 @@ public class CampaignScreen extends Screen {
 
             int plate = !unlocked ? PLATE_LOCKED : (isSel ? 0xFF352C4E : hover ? 0xFF2C2542 : PLATE);
             g.fill(listX, y, listX + LIST_W, y + ROW_H - 4, plate);
+            // a band of the mission's own scene behind the label
+            MissionArt.drawStrip(g, m, listX, y, LIST_W, ROW_H - 4, !unlocked);
+            if (isSel) {
+                g.fill(listX, y, listX + LIST_W, y + ROW_H - 4, 0x2AE3C071);
+            } else if (hover) {
+                g.fill(listX, y, listX + LIST_W, y + ROW_H - 4, 0x18FFFFFF);
+            }
             // the category's colour as an identity stripe
             int accent = m.anchor().accent();
             g.fill(listX, y, listX + 3, y + ROW_H - 4, unlocked ? accent : 0xFF3A3350);
@@ -208,27 +215,24 @@ public class CampaignScreen extends Screen {
         int panelBottom = listY + listH;
         int by = panelBottom - 26;                 // top of the Begin button
 
-        g.fill(x0, listY, x1, panelBottom, 0x66120E1E);
-        g.fill(x0, listY, x1, listY + 2, m.anchor().accent());
+        g.fill(x0, listY, x1, panelBottom, 0xCC120E1E);
 
-        // --- fixed header -------------------------------------------------
-        int y = listY + 10;
+        // --- the mission's own scene, with its name laid over the foot of it --
+        int bannerH = Mth.clamp(listH / 3, 46, MissionArt.BANNER_H);
+        MissionArt.draw(g, m, x0, listY, panelW, bannerH, !unlocked);
         var pose = g.pose();
         pose.pushPose();
-        pose.translate(x0 + 8, y, 0);
-        pose.scale(1.4f, 1.4f, 1f);
-        g.drawString(font, "MISSION " + m.index(), 0, 0, m.anchor().accent(), false);
+        pose.translate(x0 + 8, listY + bannerH - 22f, 0);
+        pose.scale(1.7f, 1.7f, 1f);
+        g.drawString(font, m.name(), 0, 0, INK, true);
         pose.popPose();
-        drawStatusChip(g, m, x1 - 8, y);
-        y += 18;
         pose.pushPose();
-        pose.translate(x0 + 8, y, 0);
-        pose.scale(1.6f, 1.6f, 1f);
-        g.drawString(font, m.name(), 0, 0, INK, false);
+        pose.translate(x0 + 8, listY + 7f, 0);
+        pose.scale(1.3f, 1.3f, 1f);
+        g.drawString(font, "MISSION " + m.index(), 0, 0, 0xFFFFFFFF, true);
         pose.popPose();
-        y += 24;
-        g.fill(x0 + 8, y, x1 - 8, y + 1, 0x30FFFFFF);
-        y += 6;
+        drawStatusChip(g, m, x1 - 8, listY + 7);
+        int y = listY + bannerH + 6;
 
         // --- scrollable body ------------------------------------------------
         int bodyTop = y;
