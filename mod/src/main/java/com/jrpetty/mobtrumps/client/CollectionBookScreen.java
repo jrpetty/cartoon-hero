@@ -47,7 +47,11 @@ public class CollectionBookScreen extends Screen {
     /** Card scale for this window — shrinks below the cap so the two 3x3
      *  pages always fit, even at big GUI scales on small screens. */
     private float cardScale = BOOK_SCALE_CAP;
-    private static final int COLS = 3, ROWS = 3, PER_PAGE = COLS * ROWS, PER_SPREAD = 2 * PER_PAGE;
+    /** The card grid. Not constant: a short window drops to fewer rows rather
+     *  than shrinking the cards until they are unreadable, or -- as it used to
+     *  -- letting the panel hang off the bottom of the screen. */
+    private int cols = 3, rows = 3, perPage = 9, perSpread = 18;
+    private static final float MIN_SCALE = 0.26f;
     private static final int ARROW_W = 18, ARROW_H = 14;
     private static final int SPINE = 24;
     /**
@@ -163,22 +167,51 @@ public class CollectionBookScreen extends Screen {
         // Fit the open book to the window. The panel is not the whole story:
         // the tabs sit ABOVE it and the hint line BELOW it, and both used to be
         // left out of the budget, which is what pushed them off-screen.
+        //
+        // The card scale is solved FROM the space that leaves rather than
+        // floored at a readable size and hoped for -- a floor is what let a
+        // short window overflow again. If three rows cannot be read at that
+        // scale we drop a row, then trim the header, then drop a column.
+        int avail = height - TAB_RESERVE - HINT_RESERVE;
+        int[][] plans = {{3, 3, 78}, {3, 2, 78}, {3, 2, 62}, {2, 2, 62}};
         int headerH = 78;
-        int chromeH = headerH + FOOTER_H + TAB_RESERVE + HINT_RESERVE;
-        float scaleW = (((width - 28f - SPINE) / 2f) / COLS - 8f) / CardRenderer.CARD_W;
-        float scaleH = (((height - chromeH) / (float) ROWS) - 8f) / CardRenderer.CARD_H;
-        cardScale = Math.max(0.20f, Math.min(BOOK_SCALE_CAP, Math.min(scaleW, scaleH)));
+        for (int i = 0; i < plans.length; i++) {
+            int[] plan = plans[i];
+            float sH = (((avail - plan[2] - FOOTER_H) / (float) plan[1]) - 8f) / CardRenderer.CARD_H;
+            float sW = (((width - 28f - SPINE) / 2f) / plan[0] - 8f) / CardRenderer.CARD_W;
+            float s = Math.min(BOOK_SCALE_CAP, Math.min(sW, sH));
+            // take this plan if it reads, or if it is the last one we have
+            if (s >= MIN_SCALE || i == plans.length - 1) {
+                cols = plan[0];
+                rows = plan[1];
+                headerH = plan[2];
+                cardScale = Math.max(0.12f, s);
+                break;
+            }
+        }
+        // Whatever plan we landed on, force it inside the window. Solving the
+        // scale per-plan is not enough on its own, because the plan we accept
+        // may be the last one rather than one that actually fit.
+        cardScale = Math.min(cardScale,
+                ((width - 12f - SPINE - 28f) / (2 * cols) - 8f) / CardRenderer.CARD_W);
+        cardScale = Math.min(cardScale,
+                (((avail - headerH - FOOTER_H) / (float) rows) - 8f) / CardRenderer.CARD_H);
+        cardScale = Math.max(0.08f, cardScale);
+
+        perPage = cols * rows;
+        perSpread = 2 * perPage;
         cellW = Math.round(CardRenderer.CARD_W * cardScale) + 8;
         cellH = Math.round(CardRenderer.CARD_H * cardScale) + 8;
 
-        pageW = COLS * cellW;
+        pageW = cols * cellW;
         panelW = 2 * pageW + SPINE + 28;
-        panelH = headerH + ROWS * cellH + FOOTER_H;
-        panelX = Math.max(2, (width - panelW) / 2);
+        panelH = headerH + rows * cellH + FOOTER_H;
+        panelX = Math.max(0, (width - panelW) / 2);
         // centre in the band left between the tabs and the hint, and never let
         // either end escape the window
-        int band = Math.max(0, height - TAB_RESERVE - HINT_RESERVE - panelH);
-        panelY = TAB_RESERVE + band / 2;
+        int band = Math.max(0, avail - panelH);
+        panelY = Math.max(TAB_RESERVE, Math.min(TAB_RESERVE + band / 2,
+                Math.max(TAB_RESERVE, height - HINT_RESERVE - panelH)));
         gridTop = panelY + headerH;
         leftGridX = panelX + 14;
         rightGridX = panelX + 14 + pageW + SPINE;
@@ -245,10 +278,9 @@ public class CollectionBookScreen extends Screen {
     // --- the scaled coordinate space the back pages are laid out in ----------
 
     /** Screen -> logical (back-page) coordinate. */
-    /** A rect from the back pages' scaled space into plain screen space. */
-    private static int[] toScreen(int x, int y, int w, int h) {
-        return new int[]{Math.round(x * UI), Math.round(y * UI),
-                Math.round(w * UI), Math.round(h * UI)};
+    /** The open book, in screen space. */
+    private int[] panelRect() {
+        return new int[]{panelX, panelY, panelW, panelH};
     }
 
     private static int lg(int screen) {
@@ -313,7 +345,7 @@ public class CollectionBookScreen extends Screen {
             case TIER -> cmpTier(a, b);
             case RATING -> cmpRating(a, b);
         });
-        cardSpreads = Math.max(1, (view.size() + PER_SPREAD - 1) / PER_SPREAD);
+        cardSpreads = Math.max(1, (view.size() + perSpread - 1) / perSpread);
         spreadCount = cardSpreads + BACK_SPREADS;
         spread = Math.max(0, Math.min(spread, spreadCount - 1));
         layoutChips();
@@ -337,9 +369,9 @@ public class CollectionBookScreen extends Screen {
 
     /** Screen position of a spread slot (0..17), or null if empty. */
     private int[] slotPos(int slotInSpread) {
-        boolean right = slotInSpread >= PER_PAGE;
-        int idx = right ? slotInSpread - PER_PAGE : slotInSpread;
-        int col = idx % COLS, row = idx / COLS;
+        boolean right = slotInSpread >= perPage;
+        int idx = right ? slotInSpread - perPage : slotInSpread;
+        int col = idx % cols, row = idx / cols;
         int gx = (right ? rightGridX : leftGridX) + col * cellW + 4;
         int gy = gridTop + row * cellH + 4;
         return new int[]{gx, gy};
@@ -490,12 +522,12 @@ public class CollectionBookScreen extends Screen {
     private void renderCardPages(GuiGraphics g, int mouseX, int mouseY) {
         int cw = Math.round(CardRenderer.CARD_W * cardScale);
         int ch = Math.round(CardRenderer.CARD_H * cardScale);
-        int start = spread * PER_SPREAD;
+        int start = spread * perSpread;
         if (view.isEmpty()) {
             g.drawCenteredString(font, "No cards match.", width / 2, gridTop + 30, CardRenderer.KRAFT_DARK);
         }
         boolean overlayOpen = pickerMob != null || statsOpen || eggPicker != null;
-        for (int s = 0; s < PER_SPREAD; s++) {
+        for (int s = 0; s < perSpread; s++) {
             int i = start + s;
             if (i >= view.size()) break;
             MobCard card = view.get(i);
@@ -604,6 +636,16 @@ public class CollectionBookScreen extends Screen {
     private void drawHoverPanel(GuiGraphics g, int mouseX, int mouseY, String title, int accent,
                                 List<String> lines, List<Integer> colors, int[] avoid) {
         int maxW = Math.max(120, Math.min(190, width - 24));
+        // When the target is as wide as the book, the panel can only go beside
+        // it — so size it to the margin that is actually there rather than to a
+        // fixed width that then cannot fit anywhere and falls back onto the
+        // cursor, which is the covering-the-button behaviour we are fixing.
+        if (avoid != null && avoid[2] > width / 2) {
+            int room = Math.max(avoid[0] - 10, width - (avoid[0] + avoid[2]) - 10);
+            if (room >= 90) {
+                maxW = Mth.clamp(room - 12, 90, maxW);
+            }
+        }
         List<net.minecraft.util.FormattedCharSequence> body = new ArrayList<>();
         List<Integer> bodyColor = new ArrayList<>();
         for (int i = 0; i < lines.size(); i++) {
@@ -637,12 +679,15 @@ public class CollectionBookScreen extends Screen {
             int ax = avoid[0], ay = avoid[1], aw = avoid[2], ah = avoid[3];
             int alignX = Mth.clamp(ax, 2, Math.max(2, width - w - 2));
             int alignY = Mth.clamp(ay, 2, Math.max(2, height - h - 2));
-            int[][] tries = {
-                    {alignX, ay + ah + 4},        // below
-                    {alignX, ay - h - 4},         // above
-                    {ax + aw + 6, alignY},        // right
-                    {ax - w - 6, alignY},         // left
-            };
+            int[] below = {alignX, ay + ah + 4};
+            int[] above = {alignX, ay - h - 4};
+            int[] right = {ax + aw + 6, alignY};
+            int[] left = {ax - w - 6, alignY};
+            // something as wide as the book has to be dodged sideways; a small
+            // card cell is better dodged downwards, nearer the cursor
+            int[][] tries = aw > width / 2
+                    ? new int[][]{right, left, below, above}
+                    : new int[][]{below, right, above, left};
             for (int[] t : tries) {
                 if (t[0] >= 2 && t[1] >= 2 && t[0] + w <= width - 2 && t[1] + h <= height - 2) {
                     return t;
@@ -763,7 +808,7 @@ public class CollectionBookScreen extends Screen {
         }
         if (mouseX >= x0 && mouseX < x1 && mouseY >= y && mouseY < y + inner) {
             hoveredAward = a;
-            hoverRect = toScreen(x0, y, x1 - x0, inner);
+            hoverRect = panelRect();
         }
 
         // right-hand slot: the Collect button, or a tick once it is spent
@@ -964,7 +1009,7 @@ public class CollectionBookScreen extends Screen {
         boolean rowHover = mouseX >= x0 && mouseX < x1 && mouseY >= y && mouseY < y + rowH - 2;
         if (rowHover) {
             hoveredSetting = s;
-            hoverRect = toScreen(x0, y, x1 - x0, rowH - 2);
+            hoverRect = panelRect();
         }
         g.fill(x0, y, x1, y + rowH - 2, rowHover ? 0x18000000 : 0x0A000000);
         g.drawString(font, trim(s.label(), bx - x0 - 10), x0 + 4, y + 2, CardRenderer.INK, false);
@@ -1275,8 +1320,8 @@ public class CollectionBookScreen extends Screen {
         }
         int cw = Math.round(CardRenderer.CARD_W * cardScale);
         int ch = Math.round(CardRenderer.CARD_H * cardScale);
-        int startIdx = spread * PER_SPREAD;
-        for (int s = 0; s < PER_SPREAD; s++) {
+        int startIdx = spread * perSpread;
+        for (int s = 0; s < perSpread; s++) {
             int i = startIdx + s;
             if (i >= view.size()) break;
             MobCard card = view.get(i);

@@ -194,33 +194,32 @@ public class TableMenuScreen extends Screen {
         String editLabel = "Edit Deck";
         String campLabel = "Campaign " + ClientCampaign.clearedCount()
                 + "/" + com.jrpetty.mobtrumps.game.CampaignDecks.count();
-        int fanRoom = 44;
-        int rowRight = barX + panelW - fanRoom;
         int rowLeft = barX + 8;
+        int rowRight = barX + panelW - 44;   // the card fan lives past here
         int gap = 6;
-        for (int pass = 0; pass < 3; pass++) {
-            int need = font.width(myLabel) + 14 + gap + font.width(randLabel) + 14 + gap
-                    + font.width(editLabel) + 16 + gap + font.width(campLabel) + 16;
-            if (need <= rowRight - rowLeft) {
-                break;
-            }
-            if (pass == 0) randLabel = "Random deal";
-            else if (pass == 1) editLabel = "Deck";
-            else randLabel = "Random";
-        }
-        int campW = font.width(campLabel) + 16;
-        int editW = font.width(editLabel) + 16;
+        int room = Math.max(80, rowRight - rowLeft);
+
+        // Budget the row before drawing any of it, then trim each label into
+        // the width it was given. Shrinking labels and hoping was not enough:
+        // whichever element measured widest still ran over its neighbour.
+        int rightCap = room * 55 / 100;
+        int campW = Math.min(font.width(campLabel) + 16, rightCap * 55 / 100);
+        int editW = Math.max(26, Math.min(font.width(editLabel) + 16, rightCap - campW - gap));
         int campX = rowRight - campW;
         int editX = campX - gap - editW;
-        bigButton(g, "campaign", campX, barY + 17, campW, 14, campLabel,
+
+        int leftRoom = Math.max(56, editX - gap - rowLeft);
+        int myW = Math.min(font.width(myLabel) + 14, Math.max(24, leftRoom * 40 / 100));
+        int randW = Math.max(24, leftRoom - myW - gap);
+
+        bigButton(g, "campaign", campX, barY + 17, campW, 14, fit(campLabel, campW - 16),
                 0xFF5A3A8A, 0xFF7A52B4, mouseX, mouseY, true);
-        bigButton(g, "deck_edit", editX, barY + 17, editW, 14, editLabel,
+        bigButton(g, "deck_edit", editX, barY + 17, editW, 14, fit(editLabel, editW - 16),
                 0xFF2A5F8A, 0xFF3A7FB4, mouseX, mouseY, true);
-        pill(g, "deck_my", rowLeft, barY + 18, myLabel, useMyDeck && ready, ready, mouseX, mouseY);
-        int randX = rowLeft + font.width(myLabel) + 14 + gap;
-        // never let the second pill start under the Edit Deck button
-        randX = Math.min(randX, Math.max(rowLeft, editX - gap - font.width(randLabel) - 14));
-        pill(g, "deck_rand", randX, barY + 18, randLabel, !useMyDeck || !ready, true, mouseX, mouseY);
+        pill(g, "deck_my", rowLeft, barY + 18, fit(myLabel, myW - 14),
+                useMyDeck && ready, ready, mouseX, mouseY);
+        pill(g, "deck_rand", rowLeft + myW + gap, barY + 18, fit(randLabel, randW - 14),
+                !useMyDeck || !ready, true, mouseX, mouseY);
         // a dealt hand costs nothing to enter, so it earns nothing either
         String note = !ready
                 ? "Build a deck of " + DeckManager.MIN_DECK + "+ in the book — random deals don't count"
@@ -355,6 +354,18 @@ public class TableMenuScreen extends Screen {
     }
 
     /** Draw text at x, squeezing it horizontally if it would exceed maxWidth. */
+    /** Cut a label down to a width it was budgeted, with an ellipsis if cut. */
+    private String fit(String text, int maxWidth) {
+        if (maxWidth <= 0) {
+            return "";
+        }
+        if (font.width(text) <= maxWidth) {
+            return text;
+        }
+        String cut = font.plainSubstrByWidth(text, Math.max(1, maxWidth - font.width("…")));
+        return cut.isEmpty() ? "" : cut + "…";
+    }
+
     private void drawFitted(GuiGraphics g, String text, int x, int y, int maxWidth, int color) {
         int tw = font.width(text);
         if (tw <= maxWidth) {
