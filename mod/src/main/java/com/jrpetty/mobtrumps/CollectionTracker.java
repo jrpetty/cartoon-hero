@@ -57,7 +57,7 @@ public final class CollectionTracker {
         }
         List<String> next = new ArrayList<>(current);
         next.add(cardId);
-        player.setData(attachment, List.copyOf(next));
+        player.setData(attachment, next); // already a fresh list; copyOf would copy it twice
         return true;
     }
 
@@ -95,8 +95,16 @@ public final class CollectionTracker {
         sync(player);
     }
 
-    /** Push the player's collection to their client for the book screen. */
+    /**
+     * Ask for the collection to be pushed. Coalesced by {@link ServerSync} —
+     * a burst of kills produces one packet, not one per kill.
+     */
     public static void sync(ServerPlayer player) {
+        ServerSync.markCollection(player);
+    }
+
+    /** Actually build and send the packet. Called by the flush, or on login. */
+    public static void sendNow(ServerPlayer player) {
         PacketDistributor.sendToPlayer(player, new CollectionSyncPayload(
                 player.getData(ModAttachments.COLLECTED.get()),
                 player.getData(ModAttachments.COLLECTED_FOIL.get()),

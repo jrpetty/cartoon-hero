@@ -59,6 +59,7 @@ public final class BinderStorage {
             for (String id : stored) CollectionTracker.record(player, id, false);
             for (String id : storedFoil) CollectionTracker.record(player, id, true);
             sync(player);
+            ServerSync.flushNow(player);
             player.sendSystemMessage(Component.literal("Filed " + deposited + " card"
                             + (deposited == 1 ? "" : "s") + " into your Collection Book.")
                     .withStyle(ChatFormatting.GREEN));
@@ -96,6 +97,7 @@ public final class BinderStorage {
             player.setData(attachment, List.copyOf(next));
             CollectionTracker.record(player, mobId, foil);
             sync(player);
+            ServerSync.flushNow(player);
             player.sendSystemMessage(Component.literal("Filed " + (foil ? "a foil " : "")
                             + card.displayName() + " into your book.")
                     .withStyle(ChatFormatting.GREEN));
@@ -182,8 +184,13 @@ public final class BinderStorage {
         return MobCardItem.stackOf(card, foil);
     }
 
-    /** Push the binder contents to the player's client for the book screen. */
+    /** Ask for a binder push; coalesced by {@link ServerSync}. */
     public static void sync(ServerPlayer player) {
+        ServerSync.markStorage(player);
+    }
+
+    /** Actually send it. Binder changes are all click-driven, so these flush at once. */
+    public static void sendNow(ServerPlayer player) {
         PacketDistributor.sendToPlayer(player, new StorageSyncPayload(
                 player.getData(ModAttachments.STORED.get()),
                 player.getData(ModAttachments.STORED_FOIL.get())));

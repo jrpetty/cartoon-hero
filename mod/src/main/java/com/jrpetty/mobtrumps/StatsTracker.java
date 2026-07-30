@@ -20,7 +20,7 @@ public final class StatsTracker {
     public static void bump(ServerPlayer player, String key) {
         Map<String, Integer> stats = new HashMap<>(player.getData(ModAttachments.PLAY_STATS.get()));
         stats.merge(key, 1, Integer::sum);
-        player.setData(ModAttachments.PLAY_STATS.get(), Map.copyOf(stats));
+        player.setData(ModAttachments.PLAY_STATS.get(), stats);
     }
 
     /** Store {@code value} in {@code key} only if it beats the stored value. */
@@ -28,7 +28,7 @@ public final class StatsTracker {
         Map<String, Integer> stats = new HashMap<>(player.getData(ModAttachments.PLAY_STATS.get()));
         if (value > stats.getOrDefault(key, 0)) {
             stats.put(key, value);
-            player.setData(ModAttachments.PLAY_STATS.get(), Map.copyOf(stats));
+            player.setData(ModAttachments.PLAY_STATS.get(), stats);
         }
     }
 

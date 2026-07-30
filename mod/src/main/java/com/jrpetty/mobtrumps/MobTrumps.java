@@ -30,6 +30,7 @@ public class MobTrumps {
         NeoForge.EVENT_BUS.addListener((net.neoforged.neoforge.event.tick.ServerTickEvent.Post event) -> {
             DuelManager.tickTimers(event.getServer());
             ConditionTracker.tick(event.getServer());
+            ServerSync.tick(event.getServer());
             // check for a ranked season rollover about twice a minute
             if (event.getServer().getTickCount() % 640 == 0) {
                 Leaderboard.get(event.getServer()).maybeRollover(event.getServer());
@@ -43,6 +44,8 @@ public class MobTrumps {
                 AchievementManager.sync(player);
                 // remember what they logged in holding WITHOUT charging them for it
                 ConditionTracker.seed(player);
+                // the book must be correct the instant they land, not half a second later
+                ServerSync.flushNow(player);
                 Leaderboard.get(player.serverLevel().getServer()).claimPending(player);
             }
         });
@@ -68,6 +71,7 @@ public class MobTrumps {
                 TableBattleManager.clear(player.getUUID());
                 ClientPrefsPayload.forget(player.getUUID());
                 ConditionTracker.forget(player.getUUID());
+                ServerSync.forget(player.getUUID());
             }
         });
     }

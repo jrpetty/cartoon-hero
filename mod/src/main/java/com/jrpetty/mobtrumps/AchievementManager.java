@@ -82,10 +82,19 @@ public final class AchievementManager {
         return n;
     }
 
+    /**
+     * How many sets are finished. Builds ONE hash set of the player's
+     * collection and tests every category against it: the old version asked
+     * CategoryRewards ten times, and each of those did a linear scan of the
+     * collected LIST once per member — around 6,500 string comparisons, on
+     * every mob kill.
+     */
     private static int categoriesComplete(ServerPlayer player) {
+        java.util.Set<String> owned =
+                new java.util.HashSet<>(player.getData(ModAttachments.COLLECTED.get()));
         int done = 0;
         for (Category c : Category.values()) {
-            if (CategoryRewards.isComplete(player, c)) done++;
+            if (owned.containsAll(com.jrpetty.mobtrumps.game.MobCategories.members(c))) done++;
         }
         return done;
     }
@@ -124,6 +133,15 @@ public final class AchievementManager {
      * in — anything that could move a counter.
      */
     public static void refresh(ServerPlayer player) {
+        ServerSync.markAwards(player);
+    }
+
+    /**
+     * The real work: recompute every metric, announce anything newly earned and
+     * push the board. Expensive enough that it must not run per kill, so it is
+     * driven by {@link ServerSync}'s flush.
+     */
+    public static void recheckNow(ServerPlayer player) {
         Map<String, Integer> states = new HashMap<>(player.getData(ModAttachments.ACHIEVEMENTS.get()));
         List<Achievement> unlocked = new ArrayList<>();
         for (Achievement a : Achievements.ALL) {
@@ -136,12 +154,12 @@ public final class AchievementManager {
             }
         }
         if (!unlocked.isEmpty()) {
-            player.setData(ModAttachments.ACHIEVEMENTS.get(), Map.copyOf(states));
+            player.setData(ModAttachments.ACHIEVEMENTS.get(), states);
             for (Achievement a : unlocked) {
                 announce(player, a);
             }
         }
-        sync(player);
+        sendNow(player);
     }
 
     private static void announce(ServerPlayer player, Achievement a) {
@@ -184,7 +202,7 @@ public final class AchievementManager {
                 .withStyle(ChatFormatting.GREEN));
         player.serverLevel().playSound(null, player.getX(), player.getY(), player.getZ(),
                 SoundEvents.PLAYER_LEVELUP, SoundSource.PLAYERS, 0.7F, 1.4F);
-        sync(player);
+        sendNow(player);
     }
 
     private static ItemStack stackOf(Achievement.Reward reward) {
@@ -233,7 +251,7 @@ public final class AchievementManager {
                         .withStyle(ChatFormatting.DARK_GRAY)));
         player.serverLevel().playSound(null, player.getX(), player.getY(), player.getZ(),
                 SoundEvents.PLAYER_LEVELUP, SoundSource.PLAYERS, 0.7F, 1.2F);
-        sync(player);
+        sendNow(player);
     }
 
     /** Queue a completed set's spawn-egg choice (no-op if the set has no eggs). */
@@ -261,6 +279,11 @@ public final class AchievementManager {
     // --- sync ---------------------------------------------------------------
 
     public static void sync(ServerPlayer player) {
+        ServerSync.markAwards(player);
+    }
+
+    /** Build and send the award board. */
+    public static void sendNow(ServerPlayer player) {
         PacketDistributor.sendToPlayer(player, new AchievementSyncPayload(
                 progressMap(player),
                 player.getData(ModAttachments.ACHIEVEMENTS.get()),

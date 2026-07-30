@@ -48,6 +48,8 @@ public final class DuelManager {
     private static final Map<UUID, Duel> ACTIVE = new ConcurrentHashMap<>();
     /** spectator UUID -> the duel they are watching. */
     private static final Map<UUID, Duel> SPECTATING = new ConcurrentHashMap<>();
+    /** Scratch set reused by the timer tick, so it allocates nothing per tick. */
+    private static final Set<Duel> TICK_SEEN = new HashSet<>();
     /** players waiting to be auto-matched into a duel. */
     private static final Set<UUID> QUEUE = ConcurrentHashMap.newKeySet();
     /** player UUID -> their most recent opponent, for /mobtrumps rematch. */
@@ -681,7 +683,10 @@ public final class DuelManager {
     public static void tickTimers(MinecraftServer server) {
         if (ACTIVE.isEmpty()) return;
         long now = System.currentTimeMillis();
-        Set<Duel> seen = new HashSet<>();
+        // both duellists map to the same Duel, so we still need to de-duplicate —
+        // but reuse one scratch set rather than allocating one every tick
+        Set<Duel> seen = TICK_SEEN;
+        seen.clear();
         for (Duel duel : ACTIVE.values()) {
             if (!seen.add(duel) || duel.battle.isFinished()) continue;
             long left = duel.turnDeadline - now;

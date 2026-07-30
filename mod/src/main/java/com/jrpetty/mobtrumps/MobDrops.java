@@ -146,7 +146,8 @@ public final class MobDrops {
                 || dry >= tier.pityKills();
 
         drought.put(id, won ? 0 : dry);
-        player.setData(ModAttachments.DROUGHT.get(), Map.copyOf(drought));
+        // the HashMap above is already a private copy; Map.copyOf would copy it again
+        player.setData(ModAttachments.DROUGHT.get(), drought);
         return won;
     }
 
@@ -179,7 +180,7 @@ public final class MobDrops {
         Map<String, Integer> counts = new HashMap<>(player.getData(ModAttachments.KILLS.get()));
         int next = counts.getOrDefault(id, 0) + 1;
         counts.put(id, next);
-        player.setData(ModAttachments.KILLS.get(), Map.copyOf(counts));
+        player.setData(ModAttachments.KILLS.get(), counts);
         return next;
     }
 
