@@ -18,6 +18,7 @@ import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.resources.sounds.SimpleSoundInstance;
 import net.minecraft.network.chat.Component;
+import net.minecraft.util.Mth;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.item.Item;
@@ -59,6 +60,9 @@ public class CollectionBookScreen extends Screen {
     private static final int BACK_SPREADS = AWARD_SPREADS + 2;
     /** Back pages are drawn through this scale so the text is properly legible. */
     private static final float UI = 1.25f;
+    /** Panel chrome that must be budgeted for: page arrows and numbers inside
+     *  the panel, the tab row above it, the hint line below it. */
+    private static final int FOOTER_H = 26, TAB_RESERVE = 20, HINT_RESERVE = 22;
 
     private enum Section { CARDS, AWARDS, SETS, SETTINGS }
 
@@ -129,6 +133,8 @@ public class CollectionBookScreen extends Screen {
     private Setting hoveredSetting;
     /** The grid card under the cursor — drives the details tooltip and its File/Take control. */
     private MobCard hoveredCard;
+    /** Screen-space bounds of whatever is hovered, so its tooltip can dodge it. */
+    private int[] hoverRect;
     private Chip cardAction;
     private EditBox search;
 
@@ -154,20 +160,25 @@ public class CollectionBookScreen extends Screen {
     @Override
     protected void init() {
         super.init();
-        // fit the open book to the window: shrink the cards below the cap until
-        // both 3x3 pages + header + footer fit (fixes GUI scale 2 cutoff)
+        // Fit the open book to the window. The panel is not the whole story:
+        // the tabs sit ABOVE it and the hint line BELOW it, and both used to be
+        // left out of the budget, which is what pushed them off-screen.
+        int headerH = 78;
+        int chromeH = headerH + FOOTER_H + TAB_RESERVE + HINT_RESERVE;
         float scaleW = (((width - 28f - SPINE) / 2f) / COLS - 8f) / CardRenderer.CARD_W;
-        float scaleH = ((height - 78f - 26f - 12f) / ROWS - 8f) / CardRenderer.CARD_H;
-        cardScale = Math.max(0.26f, Math.min(BOOK_SCALE_CAP, Math.min(scaleW, scaleH)));
+        float scaleH = (((height - chromeH) / (float) ROWS) - 8f) / CardRenderer.CARD_H;
+        cardScale = Math.max(0.20f, Math.min(BOOK_SCALE_CAP, Math.min(scaleW, scaleH)));
         cellW = Math.round(CardRenderer.CARD_W * cardScale) + 8;
         cellH = Math.round(CardRenderer.CARD_H * cardScale) + 8;
 
         pageW = COLS * cellW;
         panelW = 2 * pageW + SPINE + 28;
-        int headerH = 78;
-        panelH = headerH + ROWS * cellH + 26;
-        panelX = (width - panelW) / 2;
-        panelY = Math.max(26, (height - panelH) / 2); // room for the tabs above
+        panelH = headerH + ROWS * cellH + FOOTER_H;
+        panelX = Math.max(2, (width - panelW) / 2);
+        // centre in the band left between the tabs and the hint, and never let
+        // either end escape the window
+        int band = Math.max(0, height - TAB_RESERVE - HINT_RESERVE - panelH);
+        panelY = TAB_RESERVE + band / 2;
         gridTop = panelY + headerH;
         leftGridX = panelX + 14;
         rightGridX = panelX + 14 + pageW + SPINE;
@@ -234,6 +245,12 @@ public class CollectionBookScreen extends Screen {
     // --- the scaled coordinate space the back pages are laid out in ----------
 
     /** Screen -> logical (back-page) coordinate. */
+    /** A rect from the back pages' scaled space into plain screen space. */
+    private static int[] toScreen(int x, int y, int w, int h) {
+        return new int[]{Math.round(x * UI), Math.round(y * UI),
+                Math.round(w * UI), Math.round(h * UI)};
+    }
+
     private static int lg(int screen) {
         return Math.round(screen / UI);
     }
@@ -337,6 +354,7 @@ public class CollectionBookScreen extends Screen {
         hoveredAward = null;
         hoveredSetting = null;
         hoveredCard = null;
+        hoverRect = null;
         cardAction = null;
         Section section = section();
         if (section != Section.CARDS && search.isFocused()) {
@@ -396,11 +414,14 @@ public class CollectionBookScreen extends Screen {
             hintColor = 0xFFF3E2A7;
         } else {
             hint = switch (section) {
-                case CARDS -> "Click a card to view it · Store files loose cards away · shift-click a green-tabbed card to take one out";
+                case CARDS -> "Click a card to view it  ·  hover it to File or Take out";
                 case AWARDS -> "Press Collect on a finished award and the reward lands straight in your inventory";
                 case SETS -> "Complete every mob in a set to choose one of them as a spawn egg";
                 case SETTINGS -> "Settings are yours alone — they change how the mod looks, never how it plays";
             };
+        }
+        if (font.width(hint) > width - 8) {
+            hint = font.plainSubstrByWidth(hint, width - 16) + "…";
         }
         g.drawString(font, hint, (width - font.width(hint)) / 2, panelY + panelH + 8, hintColor, true);
 
@@ -517,6 +538,9 @@ public class CollectionBookScreen extends Screen {
                     g.renderOutline(cx - 2, cy - 2, cw + 4, ch + 4, 0xFFF9D849);
                     g.renderOutline(cx - 3, cy - 3, cw + 6, ch + 6, 0x66F9D849);
                     hoveredCard = card;
+                    // the cell INCLUDING its File/Take control, so the tooltip
+                    // is never placed over the button it is telling you about
+                    hoverRect = new int[]{cx - 2, cy - 2, cw + 4, ch + 16};
                     drawCardAction(g, card, foil, cx, cy, cw, ch, mouseX, mouseY);
                 }
             } else {
@@ -567,6 +591,68 @@ public class CollectionBookScreen extends Screen {
         return n;
     }
 
+    /**
+     * A hover panel that is placed <em>outside</em> the thing being hovered.
+     *
+     * <p>Tooltips used to be pinned to the cursor, which put them straight over
+     * the row's own Collect button and three cards either side. This tries
+     * below, above, right and left of {@code avoid} in turn and takes the first
+     * side the panel fits on, so the control you are reading about stays
+     * visible while you read about it. Body text is wrapped to a narrow column
+     * rather than running to whatever width the longest line happens to want.
+     */
+    private void drawHoverPanel(GuiGraphics g, int mouseX, int mouseY, String title, int accent,
+                                List<String> lines, List<Integer> colors, int[] avoid) {
+        int maxW = Math.max(120, Math.min(190, width - 24));
+        List<net.minecraft.util.FormattedCharSequence> body = new ArrayList<>();
+        List<Integer> bodyColor = new ArrayList<>();
+        for (int i = 0; i < lines.size(); i++) {
+            for (var wrapped : font.split(Component.literal(lines.get(i)), maxW)) {
+                body.add(wrapped);
+                bodyColor.add(colors.get(Math.min(i, colors.size() - 1)));
+            }
+        }
+        int textW = font.width(title);
+        for (var line : body) textW = Math.max(textW, font.width(line));
+        int w = Math.min(maxW + 12, textW + 12);
+        int h = 12 + body.size() * 10 + 8;
+
+        int[] pos = place(w, h, mouseX, mouseY, avoid);
+        int x = pos[0], y = pos[1];
+
+        g.fill(x - 1, y - 1, x + w + 1, y + h + 1, 0xFF241C10);
+        g.fill(x, y, x + w, y + h, CardRenderer.FACE);
+        g.fill(x, y, x + w, y + 1, accent);
+        g.drawString(font, title, x + 6, y + 5, CardRenderer.INK, false);
+        int ly = y + 17;
+        for (int i = 0; i < body.size(); i++) {
+            g.drawString(font, body.get(i), x + 6, ly, bodyColor.get(i), false);
+            ly += 10;
+        }
+    }
+
+    /** Pick the first side of {@code avoid} the panel fits on; else hug the cursor. */
+    private int[] place(int w, int h, int mouseX, int mouseY, int[] avoid) {
+        if (avoid != null) {
+            int ax = avoid[0], ay = avoid[1], aw = avoid[2], ah = avoid[3];
+            int alignX = Mth.clamp(ax, 2, Math.max(2, width - w - 2));
+            int alignY = Mth.clamp(ay, 2, Math.max(2, height - h - 2));
+            int[][] tries = {
+                    {alignX, ay + ah + 4},        // below
+                    {alignX, ay - h - 4},         // above
+                    {ax + aw + 6, alignY},        // right
+                    {ax - w - 6, alignY},         // left
+            };
+            for (int[] t : tries) {
+                if (t[0] >= 2 && t[1] >= 2 && t[0] + w <= width - 2 && t[1] + h <= height - 2) {
+                    return t;
+                }
+            }
+        }
+        return new int[]{Math.min(mouseX + 12, Math.max(2, width - w - 2)),
+                Mth.clamp(mouseY + 12, 2, Math.max(2, height - h - 2))};
+    }
+
     /** Everything about a card, on hover: tier, the stats, the hunt, where it is. */
     private void drawCardTooltip(GuiGraphics g, int mouseX, int mouseY, MobCard card) {
         boolean foil = ClientCollection.displayedIsFoil(card.id());
@@ -579,14 +665,15 @@ public class CollectionBookScreen extends Screen {
 
         List<String> lines = new ArrayList<>();
         List<Integer> colors = new ArrayList<>();
-        lines.add(tier.label().toUpperCase(Locale.ROOT) + "   ·   Rarity " + card.rarity() + " (lower wins)");
+        lines.add(tier.label().toUpperCase(Locale.ROOT) + "  ·  Rarity " + card.rarity() + " (lower wins)");
         colors.add(CardRenderer.tierPrintColor(card));
-        lines.add("Mob rating " + total + "   ·   "
-                + (card.category() == null ? "" : card.category().label())
-                + "   ·   No. " + (MobCards.ordinal(card.id()) + 1) + " / " + MobCards.ALL.size());
+        lines.add("No. " + (MobCards.ordinal(card.id()) + 1) + " / " + MobCards.ALL.size()
+                + (card.category() == null ? "" : "  ·  " + card.category().label()));
         colors.add(0xFF6E6154);
-        lines.add("Drops 1 in " + Math.round(1f / tier.cardDropChance())
-                + "   ·   hunted " + kills + " time" + (kills == 1 ? "" : "s"));
+        lines.add("Mob rating " + total + "  ·  drops 1 in "
+                + Math.round(1f / tier.cardDropChance()));
+        colors.add(0xFF6E6154);
+        lines.add("Hunted " + kills + " time" + (kills == 1 ? "" : "s"));
         colors.add(0xFF6E6154);
         int next = tier.nextMilestone(kills);
         lines.add(level > 0 ? "Holo " + "I".repeat(Math.min(3, level))
@@ -596,27 +683,14 @@ public class CollectionBookScreen extends Screen {
 
         boolean filed = ClientCollection.isStored(card.id(), foil);
         int held = heldCopies(card.id(), foil);
-        String where = filed ? "Filed in this book — click Take out to pocket it"
-                : held > 0 ? held + " in your inventory — click File to store one here"
+        String where = filed ? "Filed in this book — Take out to pocket it"
+                : held > 0 ? held + " in your inventory — File to store one here"
                 : "Not in your book or your inventory";
         lines.add(where);
         colors.add(filed ? 0xFF2E8B3A : held > 0 ? 0xFF1C7FA8 : 0xFF9A9083);
 
-        int textW = font.width(card.displayName());
-        for (String l : lines) textW = Math.max(textW, font.width(l));
-        int w = textW + 12;
-        int h = 12 + lines.size() * 10 + 8;
-        int x = Math.min(mouseX + 12, width - w - 4);
-        int y = Math.min(Math.max(4, mouseY - h / 2), height - h - 4);
-        g.fill(x - 1, y - 1, x + w + 1, y + h + 1, 0xFF241C10);
-        g.fill(x, y, x + w, y + h, CardRenderer.FACE);
-        g.fill(x, y, x + w, y + 1, CardRenderer.tierPrintColor(card));
-        g.drawString(font, card.displayName(), x + 6, y + 5, CardRenderer.INK, false);
-        int ly = y + 17;
-        for (int i = 0; i < lines.size(); i++) {
-            g.drawString(font, lines.get(i), x + 6, ly, colors.get(i), false);
-            ly += 10;
-        }
+        drawHoverPanel(g, mouseX, mouseY, card.displayName(),
+                CardRenderer.tierPrintColor(card), lines, colors, hoverRect);
     }
 
     // --- award pages --------------------------------------------------------
@@ -689,6 +763,7 @@ public class CollectionBookScreen extends Screen {
         }
         if (mouseX >= x0 && mouseX < x1 && mouseY >= y && mouseY < y + inner) {
             hoveredAward = a;
+            hoverRect = toScreen(x0, y, x1 - x0, inner);
         }
 
         // right-hand slot: the Collect button, or a tick once it is spent
@@ -889,6 +964,7 @@ public class CollectionBookScreen extends Screen {
         boolean rowHover = mouseX >= x0 && mouseX < x1 && mouseY >= y && mouseY < y + rowH - 2;
         if (rowHover) {
             hoveredSetting = s;
+            hoverRect = toScreen(x0, y, x1 - x0, rowH - 2);
         }
         g.fill(x0, y, x1, y + rowH - 2, rowHover ? 0x18000000 : 0x0A000000);
         g.drawString(font, trim(s.label(), bx - x0 - 10), x0 + 4, y + 2, CardRenderer.INK, false);
@@ -911,27 +987,8 @@ public class CollectionBookScreen extends Screen {
      */
     private void drawInfoTooltip(GuiGraphics g, int mouseX, int mouseY, String title,
                                  String detail, int accent) {
-        int maxW = Math.min(260, Math.max(140, width - 40));
-        List<net.minecraft.util.FormattedCharSequence> body =
-                font.split(Component.literal(detail), maxW);
-        int textW = font.width(title);
-        for (var line : body) {
-            textW = Math.max(textW, font.width(line));
-        }
-        int w = textW + 12;
-        int h = 12 + body.size() * 10 + 8;
-        int x = Math.min(mouseX + 12, width - w - 4);
-        int y = Math.min(Math.max(4, mouseY - h / 2), height - h - 4);
-
-        g.fill(x - 1, y - 1, x + w + 1, y + h + 1, 0xFF241C10);
-        g.fill(x, y, x + w, y + h, 0xFFFAF6EC);
-        g.fill(x, y, x + w, y + 1, accent);
-        g.drawString(font, title, x + 6, y + 5, CardRenderer.INK, false);
-        int ly = y + 17;
-        for (var line : body) {
-            g.drawString(font, line, x + 6, ly, 0xFF6E6154, false);
-            ly += 10;
-        }
+        drawHoverPanel(g, mouseX, mouseY, title, accent,
+                List.of(detail), List.of(0xFF6E6154), hoverRect);
     }
 
     // --- overlays -----------------------------------------------------------

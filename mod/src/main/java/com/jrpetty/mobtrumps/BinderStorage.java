@@ -119,10 +119,15 @@ public final class BinderStorage {
         List<String> next = new ArrayList<>(current);
         next.remove(mobId);
         player.setData(attachment, List.copyOf(next));
-        CardActions.give(player, MobCardItem.stackOf(card, foil));
+        // hand back the card that was actually filed -- serial, condition and
+        // all -- not a freshly minted blank
+        CardActions.give(player, take(player, mobId, foil, card));
+        // and give up the mob with it: the book is the record of what you own
+        CollectionTracker.releaseToBinder(player, mobId);
         sync(player);
+        ServerSync.flushNow(player);
         player.sendSystemMessage(Component.literal("Took " + (foil ? "a foil " : "")
-                        + card.displayName() + " out of your book.")
+                        + card.displayName() + " out of your book — it no longer counts as collected.")
                 .withStyle(ChatFormatting.YELLOW));
         player.serverLevel().playSound(null, player.getX(), player.getY(), player.getZ(),
                 SoundEvents.BOOK_PAGE_TURN, SoundSource.PLAYERS, 0.7F, 1.3F);
@@ -145,7 +150,10 @@ public final class BinderStorage {
         player.setData(ModAttachments.STORED.get(), List.of());
         player.setData(ModAttachments.STORED_FOIL.get(), List.of());
         player.setData(ModAttachments.STORED_CARDS.get(), List.of());
+        for (String id : stored) CollectionTracker.releaseToBinder(player, id);
+        for (String id : storedFoil) CollectionTracker.releaseToBinder(player, id);
         sync(player);
+        ServerSync.flushNow(player);
         if (taken > 0) {
             player.sendSystemMessage(Component.literal("Emptied your book — " + taken
                             + " card" + (taken == 1 ? "" : "s") + " back in your inventory.")

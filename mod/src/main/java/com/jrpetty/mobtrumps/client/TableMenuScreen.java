@@ -184,21 +184,43 @@ public class TableMenuScreen extends Screen {
         g.drawString(font, "BATTLE DECK", barX + 8, barY + 5, GOLD, false);
         boolean ready = deckReady();
         int deckN = ClientCollection.deck().size();
-        pill(g, "deck_my", barX + 8, barY + 18, "My Deck (" + deckN + ")",
-                useMyDeck && ready, ready, mouseX, mouseY);
-        pill(g, "deck_rand", barX + 106, barY + 18, "Random deal (practice)",
-                !useMyDeck || !ready, true, mouseX, mouseY);
-        // anchored off the card fan so they can never slide under it on a
-        // narrow window; the campaign wears its own progress so the route is
-        // an invitation rather than a plain button
+        // One measured row: the two deck pills run from the left, the two
+        // buttons back from the card fan on the right. Everything used to sit
+        // at hardcoded offsets, so "Random deal (practice)" ran straight under
+        // the Edit Deck button. If the row cannot fit, the labels give way in
+        // order of how much they can afford to lose.
+        String myLabel = "My Deck (" + deckN + ")";
+        String randLabel = "Random deal (practice)";
+        String editLabel = "Edit Deck";
         String campLabel = "Campaign " + ClientCampaign.clearedCount()
                 + "/" + com.jrpetty.mobtrumps.game.CampaignDecks.count();
-        int campW = font.width(campLabel) + 14;
-        int campX = barX + panelW - 72 - campW;
+        int fanRoom = 44;
+        int rowRight = barX + panelW - fanRoom;
+        int rowLeft = barX + 8;
+        int gap = 6;
+        for (int pass = 0; pass < 3; pass++) {
+            int need = font.width(myLabel) + 14 + gap + font.width(randLabel) + 14 + gap
+                    + font.width(editLabel) + 16 + gap + font.width(campLabel) + 16;
+            if (need <= rowRight - rowLeft) {
+                break;
+            }
+            if (pass == 0) randLabel = "Random deal";
+            else if (pass == 1) editLabel = "Deck";
+            else randLabel = "Random";
+        }
+        int campW = font.width(campLabel) + 16;
+        int editW = font.width(editLabel) + 16;
+        int campX = rowRight - campW;
+        int editX = campX - gap - editW;
         bigButton(g, "campaign", campX, barY + 17, campW, 14, campLabel,
                 0xFF5A3A8A, 0xFF7A52B4, mouseX, mouseY, true);
-        bigButton(g, "deck_edit", campX - 68, barY + 17, 62, 14, "Edit Deck",
+        bigButton(g, "deck_edit", editX, barY + 17, editW, 14, editLabel,
                 0xFF2A5F8A, 0xFF3A7FB4, mouseX, mouseY, true);
+        pill(g, "deck_my", rowLeft, barY + 18, myLabel, useMyDeck && ready, ready, mouseX, mouseY);
+        int randX = rowLeft + font.width(myLabel) + 14 + gap;
+        // never let the second pill start under the Edit Deck button
+        randX = Math.min(randX, Math.max(rowLeft, editX - gap - font.width(randLabel) - 14));
+        pill(g, "deck_rand", randX, barY + 18, randLabel, !useMyDeck || !ready, true, mouseX, mouseY);
         // a dealt hand costs nothing to enter, so it earns nothing either
         String note = !ready
                 ? "Build a deck of " + DeckManager.MIN_DECK + "+ in the book — random deals don't count"

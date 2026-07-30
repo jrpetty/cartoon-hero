@@ -81,9 +81,11 @@ public final class ConditionTracker {
         HELD.put(player.getUUID(), CardIdentityService.identityOf(stack) == null
                 ? "" : CardIdentityService.identityOf(stack).uid());
 
-        if (!before.firstHandUsed()) {
-            player.displayClientMessage(Component.literal("First handling — still Mint. "
-                            + "Sleeve it to keep it that way.")
+        if (after.condition() == before.condition() && after.freeLeft() >= 0
+                && before.freeLeft() > 0) {
+            player.displayClientMessage(Component.literal("Still Mint — "
+                            + after.freeLeft() + " free handling"
+                            + (after.freeLeft() == 1 ? "" : "s") + " left. Sleeve it to keep it.")
                     .withStyle(ChatFormatting.DARK_GREEN), true);
         } else if (after.condition() != before.condition()) {
             player.displayClientMessage(Component.literal(CardIdentityService.serialText(stack)

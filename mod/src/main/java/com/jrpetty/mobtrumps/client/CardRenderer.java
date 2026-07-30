@@ -99,13 +99,22 @@ public final class CardRenderer {
     public static void renderCard(GuiGraphics g, Font font, MobCard baseCard, int level, int x, int y,
                                   float scale, int mouseX, int mouseY, LivingEntity mob,
                                   boolean foil, boolean followMouse) {
+        renderCard(g, font, baseCard, level, x, y, scale, mouseX, mouseY, mob, foil, followMouse,
+                com.jrpetty.mobtrumps.game.CardEdition.STANDARD);
+    }
+
+    /** As above, but the print's edition can claim the frame — see {@link #drawFrame}. */
+    public static void renderCard(GuiGraphics g, Font font, MobCard baseCard, int level, int x, int y,
+                                  float scale, int mouseX, int mouseY, LivingEntity mob,
+                                  boolean foil, boolean followMouse,
+                                  com.jrpetty.mobtrumps.game.CardEdition edition) {
         MobCard card = baseCard.upgraded(level);
         var pose = g.pose();
         pose.pushPose();
         pose.translate(x, y, 0);
         pose.scale(scale, scale, 1f);
 
-        drawFrame(g, Math.max(level, foil ? 1 : 0));
+        drawFrame(g, Math.max(level, foil ? 1 : 0), edition);
 
         // name, 1.5x, centred
         pose.pushPose();
@@ -217,9 +226,18 @@ public final class CardRenderer {
      * Holo II, and a hue-cycling PRISMATIC frame for Holo III — the top two
      * tiers add corner gems and a bright glint that laps the border.
      */
-    private static void drawFrame(GuiGraphics g, int lvl) {
+    private static void drawFrame(GuiGraphics g, int lvl,
+                                  com.jrpetty.mobtrumps.game.CardEdition edition) {
         long t = ClientPrefs.foilSheen() ? System.currentTimeMillis() : 0L;
         lvl = Math.min(lvl, 3);
+        // A Trophy takes the frame outright. It is the one print that cannot be
+        // dropped, traded for or pulled -- only won -- so it should never be
+        // mistaken for a standard card at a glance, at any holo level.
+        boolean trophy = edition == com.jrpetty.mobtrumps.game.CardEdition.TROPHY;
+        if (trophy) {
+            drawTrophyFrame(g, t);
+            return;
+        }
         g.fill(-2, -2, CARD_W + 2, CARD_H + 2, EDGE_DARK);
         switch (lvl) {
             case 0 -> g.fill(0, 0, CARD_W, CARD_H, BORDER_IVORY);
@@ -269,6 +287,61 @@ public final class CardRenderer {
             gy = Math.max(0, Math.min(CARD_H - 3, gy));
             g.fill(gx, gy, gx + 3, gy + 3, 0xE0FFFFFF);
         }
+    }
+
+    /**
+     * The Trophy frame: a deep struck-gold border with a bronze bevel, a cream
+     * pinline, laurel notches down both long edges and a lit gem in every
+     * corner. Read next to the ivory standard frame it should be unmistakable
+     * across a room, because a Trophy is the only print that can never be
+     * dropped, traded for or pulled from a pack.
+     */
+    private static void drawTrophyFrame(GuiGraphics g, long t) {
+        g.fill(-2, -2, CARD_W + 2, CARD_H + 2, 0xFF2A1C05);
+        // struck gold: bright at the top, molten at the bottom
+        g.fillGradient(0, 0, CARD_W, CARD_H, 0xFFF9E4A2, 0xFF9A6714);
+        // bronze bevel just inside the outer edge gives the metal depth
+        g.renderOutline(2, 2, CARD_W - 4, CARD_H - 4, 0xFF6E4708);
+        g.renderOutline(3, 3, CARD_W - 6, CARD_H - 6, 0xFFFFF0BE);
+
+        // laurel notches down the long edges — small paired ticks, alternating
+        for (int ny = 18; ny < CARD_H - 18; ny += 12) {
+            int shade = ((ny / 12) % 2 == 0) ? 0xFFFFF3CC : 0xFF7A5210;
+            g.fill(1, ny, 4, ny + 5, shade);
+            g.fill(CARD_W - 4, ny + 6, CARD_W - 1, ny + 11, shade);
+        }
+
+        g.renderOutline(4, 4, CARD_W - 8, CARD_H - 8, 0xFFFFF4D2);
+        g.fill(6, 6, CARD_W - 6, CARD_H - 6, FACE);
+
+        // a lit gem in each corner
+        for (int[] c : new int[][]{{0, 0}, {CARD_W - 5, 0}, {0, CARD_H - 5}, {CARD_W - 5, CARD_H - 5}}) {
+            g.fill(c[0], c[1], c[0] + 5, c[1] + 5, 0xFF6E4708);
+            g.fill(c[0] + 1, c[1] + 1, c[0] + 4, c[1] + 4, 0xFFFFE07A);
+            g.fill(c[0] + 1, c[1] + 1, c[0] + 2, c[1] + 2, 0xFFFFFFFF);
+        }
+
+        // a slow highlight sweeping the border, half the speed of a holo glint
+        int per = 2 * (CARD_W + CARD_H);
+        int pos = (int) ((t % 3600L) / 3600f * per);
+        int gx;
+        int gy;
+        if (pos < CARD_W) {
+            gx = pos;
+            gy = 0;
+        } else if (pos < CARD_W + CARD_H) {
+            gx = CARD_W - 4;
+            gy = pos - CARD_W;
+        } else if (pos < 2 * CARD_W + CARD_H) {
+            gx = 2 * CARD_W + CARD_H - pos;
+            gy = CARD_H - 4;
+        } else {
+            gx = 0;
+            gy = CARD_H - (pos - 2 * CARD_W - CARD_H);
+        }
+        gx = Math.max(0, Math.min(CARD_W - 4, gx));
+        gy = Math.max(0, Math.min(CARD_H - 4, gy));
+        g.fill(gx, gy, gx + 4, gy + 4, 0xC0FFFFFF);
     }
 
     /**

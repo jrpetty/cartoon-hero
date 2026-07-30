@@ -61,6 +61,49 @@ public final class CollectionTracker {
         return true;
     }
 
+    /**
+     * Give a mob up, because its card has just left the book.
+     *
+     * <p>The Collection Book is the record of what you own, not a list of
+     * everything you have ever seen. Taking a card out to sell or trade it used
+     * to leave the entry sitting there ticked, so a player could empty the
+     * whole binder and still show 81/81 and play every card. After a
+     * withdrawal the mob counts as collected only while a copy — plain or foil
+     * — is still filed, and the foil variant only while the foil itself is.
+     *
+     * <p>Awards already claimed stay claimed; this only moves progress.
+     */
+    public static void releaseToBinder(ServerPlayer player, String cardId) {
+        boolean hasPlain = player.getData(ModAttachments.STORED.get()).contains(cardId);
+        boolean hasFoil = player.getData(ModAttachments.STORED_FOIL.get()).contains(cardId);
+        boolean changed = false;
+        if (!hasPlain && !hasFoil) {
+            changed = removeFrom(player, ModAttachments.COLLECTED.get(), cardId);
+        }
+        if (!hasFoil) {
+            changed |= removeFrom(player, ModAttachments.COLLECTED_FOIL.get(), cardId);
+            // the pile-top can't be a foil you no longer have
+            changed |= removeFrom(player, ModAttachments.DISPLAY_FOIL.get(), cardId);
+        }
+        if (changed) {
+            sync(player);
+            AchievementManager.refresh(player);
+        }
+    }
+
+    private static boolean removeFrom(ServerPlayer player,
+                                      net.neoforged.neoforge.attachment.AttachmentType<List<String>> attachment,
+                                      String cardId) {
+        List<String> current = player.getData(attachment);
+        if (!current.contains(cardId)) {
+            return false;
+        }
+        List<String> next = new ArrayList<>(current);
+        next.remove(cardId);
+        player.setData(attachment, List.copyOf(next));
+        return true;
+    }
+
     /** Re-evaluate all Mob Trumps advancement triggers for a player (on login). */
     public static void revalidate(ServerPlayer player) {
         ModTriggers.COLLECTION.get().trigger(player,

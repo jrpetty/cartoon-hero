@@ -102,7 +102,8 @@ public class CardInspectScreen extends Screen {
         } else {
             LivingEntity mob = CardRenderer.portraitEntity(minecraft, card, entityCache);
             CardRenderer.renderCard(g, font, card, level, cx, cy, scale,
-                    mouseX, mouseY, mob, foil, true);
+                    mouseX, mouseY, mob, foil, true,
+                    identity == null ? CardEdition.STANDARD : identity.editionType());
             drawFrontOverlay(g, stack, identity, wear, cx, cy, cw, ch);
         }
         // wear is drawn over whichever face is showing, so a battered card
@@ -143,10 +144,15 @@ public class CardInspectScreen extends Screen {
             g.drawCenteredString(font, note, cx + cw / 2, cy + ch - 19, 0xFFE0A090);
             return;
         }
+        // The serial sits on a plate just BELOW the card. It used to be centred
+        // over the fact strip, which printed the number straight through
+        // "Farm · 4 / 81" — there is no clear space inside the frame for it.
         String serial = CardIdentityService.serialText(stack);
-        int w = font.width(serial) + 10;
-        g.fill(cx + cw / 2 - w / 2, cy + ch - 22, cx + cw / 2 + w / 2, cy + ch - 9, 0xC0140F0A);
-        g.drawCenteredString(font, serial, cx + cw / 2, cy + ch - 19, 0xFFE3C071);
+        int w = font.width(serial) + 14;
+        int plateY = Math.min(cy + ch + 5, height - 46);
+        g.fill(cx + cw / 2 - w / 2, plateY, cx + cw / 2 + w / 2, plateY + 12, 0xC0140F0A);
+        g.renderOutline(cx + cw / 2 - w / 2, plateY, w, 12, 0x60E3C071);
+        g.drawCenteredString(font, serial, cx + cw / 2, plateY + 2, 0xFFE3C071);
 
         CardEdition edition = identity.editionType();
         if (edition != CardEdition.STANDARD && !edition.symbol().isEmpty()) {
