@@ -146,15 +146,15 @@ public class GrapplingHookItem extends Item {
     private static final double BLAST_RADIUS = 4.5;
     /** Push applied at the centre, falling off to nothing at the rim. */
     private static final double BLAST_PUSH = 1.15;
-    /** Deliberately light: this is a crowd-parter, not a weapon. */
-    private static final float BLAST_DAMAGE = 2.0F;
+    /** Five hearts at the centre of the blast, scaled down towards the rim. */
+    private static final float BLAST_DAMAGE = 10.0F;
 
     /**
      * Impact Charge: the hook slams home and throws everything nearby outwards.
      *
-     * <p>Weighted towards displacement rather than damage — a full hit is one
-     * heart and a shove, so it clears a path or breaks up a mob pile without
-     * turning the hook into a better sword than a sword.
+     * <p>Both the shove and the damage fall off with distance, so a direct hit
+     * lands the full five hearts while something clipped at the edge is mostly
+     * just moved.
      */
     private static void impact(ServerLevel level, ServerPlayer player, Vec3 anchor) {
         DamageSource source = level.damageSources().playerAttack(player);
