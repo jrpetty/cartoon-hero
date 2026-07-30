@@ -44,39 +44,71 @@ public record CampaignRewards(List<Payout> stacks, int books, int bookLevel) {
     }
 
     /**
-     * The ladder. Missions 1-4 are food, 5-9 add metals, 10-15 bring diamonds
-     * and the first enchanted books, and the last five build to the finale.
+     * The ladder, in five acts.
+     *
+     * <p><b>1-5 provisions.</b> Food and travelling supplies only — not one
+     * ingot. A card game must not hand a new player the materials they were
+     * meant to go and mine for, so the early missions pay in the things that
+     * <em>let</em> you go mining: meat, torches, a saddle, a few ender pearls.
+     * Each payout is themed to the mission that gave it.
+     *
+     * <p><b>6-9 the first metals.</b> Iron arrives at six, moderately, and gold
+     * and the first single diamond follow. Books start being enchanted here, at
+     * low levels, so the reward is a lottery ticket rather than a guarantee.
+     *
+     * <p><b>10-14 the middle.</b> Diamonds in ones and twos, netherite scrap as
+     * a rare treat, experience for the anvil.
+     *
+     * <p><b>15-20 the payoff.</b> This is where it becomes worth the twenty
+     * missions: stacks of diamond, real netherite, and books rolled at the top
+     * of the enchanting range.
      */
     public static CampaignRewards forMission(int index) {
         return switch (index) {
-            case 1 -> new CampaignRewards(List.of(of(Items.BREAD, 8), of(Items.COOKED_BEEF, 4)), 0, 0);
-            case 2 -> new CampaignRewards(List.of(of(Items.BREAD, 12), of(Items.COOKED_PORKCHOP, 6)), 0, 0);
-            case 3 -> new CampaignRewards(List.of(of(Items.COOKED_COD, 10), of(Items.GOLDEN_CARROT, 4)), 0, 0);
-            case 4 -> new CampaignRewards(List.of(of(Items.BREAD, 16), of(Items.IRON_INGOT, 6)), 0, 0);
-            case 5 -> new CampaignRewards(List.of(of(Items.IRON_INGOT, 8), of(Items.COOKED_BEEF, 8)), 0, 0);
-            case 6 -> new CampaignRewards(List.of(of(Items.IRON_INGOT, 10), of(Items.GOLD_INGOT, 4),
-                    of(Items.BOOK, 4)), 0, 0);
-            case 7 -> new CampaignRewards(List.of(of(Items.IRON_INGOT, 12), of(Items.GOLD_INGOT, 6)), 1, 5);
-            case 8 -> new CampaignRewards(List.of(of(Items.DIAMOND, 1), of(Items.GOLD_INGOT, 8),
-                    of(Items.BOOK, 6)), 1, 8);
-            case 9 -> new CampaignRewards(List.of(of(Items.DIAMOND, 2), of(Items.IRON_INGOT, 12)), 1, 10);
-            case 10 -> new CampaignRewards(List.of(of(Items.DIAMOND, 2), of(Items.GOLD_INGOT, 12),
-                    of(Items.BOOK, 8)), 1, 12);
-            case 11 -> new CampaignRewards(List.of(of(Items.DIAMOND, 3), of(Items.EXPERIENCE_BOTTLE, 8)), 2, 15);
-            case 12 -> new CampaignRewards(List.of(of(Items.DIAMOND, 3), of(Items.GOLD_INGOT, 14),
-                    of(Items.BOOK, 10)), 2, 16);
-            case 13 -> new CampaignRewards(List.of(of(Items.DIAMOND, 4), of(Items.EXPERIENCE_BOTTLE, 10)), 2, 18);
-            case 14 -> new CampaignRewards(List.of(of(Items.DIAMOND, 4), of(Items.NETHERITE_SCRAP, 1),
-                    of(Items.BOOK, 12)), 2, 20);
-            case 15 -> new CampaignRewards(List.of(of(Items.DIAMOND, 5), of(Items.EXPERIENCE_BOTTLE, 12)), 2, 22);
-            case 16 -> new CampaignRewards(List.of(of(Items.DIAMOND, 5), of(Items.NETHERITE_SCRAP, 1),
+            // --- provisions: no metals, no gems -----------------------------
+            case 1 -> new CampaignRewards(List.of(       // the farm feeds you
+                    of(Items.BREAD, 12), of(Items.COOKED_BEEF, 6)), 0, 0);
+            case 2 -> new CampaignRewards(List.of(       // spoils of the woods
+                    of(Items.COOKED_PORKCHOP, 10), of(Items.APPLE, 8)), 0, 0);
+            case 3 -> new CampaignRewards(List.of(       // the day's catch
+                    of(Items.COOKED_SALMON, 12), of(Items.COOKED_COD, 8)), 0, 0);
+            case 4 -> new CampaignRewards(List.of(       // light for the graves
+                    of(Items.TORCH, 32), of(Items.GOLDEN_CARROT, 6)), 0, 0);
+            case 5 -> new CampaignRewards(List.of(       // gear up and go
+                    of(Items.ENDER_PEARL, 4), of(Items.SADDLE, 1),
+                    of(Items.COOKED_BEEF, 12)), 0, 0);
+            // --- the first metals -------------------------------------------
+            case 6 -> new CampaignRewards(List.of(
+                    of(Items.IRON_INGOT, 8), of(Items.GOLDEN_CARROT, 8)), 0, 0);
+            case 7 -> new CampaignRewards(List.of(of(Items.IRON_INGOT, 10),
+                    of(Items.GOLD_INGOT, 4), of(Items.ENDER_PEARL, 6)), 1, 5);
+            case 8 -> new CampaignRewards(List.of(of(Items.EMERALD, 12),
+                    of(Items.GOLD_INGOT, 8), of(Items.BOOK, 6)), 1, 8);
+            case 9 -> new CampaignRewards(List.of(of(Items.DIAMOND, 1),
+                    of(Items.IRON_INGOT, 14), of(Items.ENDER_PEARL, 8)), 1, 10);
+            // --- the middle ---------------------------------------------------
+            case 10 -> new CampaignRewards(List.of(of(Items.DIAMOND, 2),
+                    of(Items.GOLD_INGOT, 12), of(Items.BOOK, 8)), 1, 12);
+            case 11 -> new CampaignRewards(List.of(of(Items.DIAMOND, 2),
+                    of(Items.IRON_INGOT, 16), of(Items.EXPERIENCE_BOTTLE, 8)), 2, 15);
+            case 12 -> new CampaignRewards(List.of(of(Items.DIAMOND, 3),
+                    of(Items.EMERALD, 16), of(Items.BOOK, 10)), 2, 16);
+            case 13 -> new CampaignRewards(List.of(of(Items.DIAMOND, 3),
+                    of(Items.GOLD_INGOT, 16), of(Items.EXPERIENCE_BOTTLE, 10)), 2, 18);
+            case 14 -> new CampaignRewards(List.of(of(Items.DIAMOND, 4),
+                    of(Items.NETHERITE_SCRAP, 1), of(Items.BOOK, 12)), 2, 20);
+            // --- the payoff ---------------------------------------------------
+            case 15 -> new CampaignRewards(List.of(of(Items.DIAMOND, 5),
+                    of(Items.GOLD_BLOCK, 2), of(Items.EXPERIENCE_BOTTLE, 12)), 2, 22);
+            case 16 -> new CampaignRewards(List.of(of(Items.DIAMOND, 6),
+                    of(Items.NETHERITE_SCRAP, 1), of(Items.ENDER_PEARL, 12),
                     of(Items.BOOK, 14)), 3, 24);
-            case 17 -> new CampaignRewards(List.of(of(Items.DIAMOND, 6), of(Items.GOLD_BLOCK, 1),
-                    of(Items.EXPERIENCE_BOTTLE, 12)), 3, 26);
-            case 18 -> new CampaignRewards(List.of(of(Items.DIAMOND, 6), of(Items.NETHERITE_SCRAP, 2),
-                    of(Items.BOOK, 16)), 3, 28);
-            case 19 -> new CampaignRewards(List.of(of(Items.DIAMOND, 8), of(Items.BOOK, 20),
-                    of(Items.EXPERIENCE_BOTTLE, 16)), 3, 30);
+            case 17 -> new CampaignRewards(List.of(of(Items.DIAMOND, 7),
+                    of(Items.EMERALD_BLOCK, 2), of(Items.EXPERIENCE_BOTTLE, 14)), 3, 26);
+            case 18 -> new CampaignRewards(List.of(of(Items.DIAMOND, 8),
+                    of(Items.NETHERITE_SCRAP, 2), of(Items.BOOK, 16)), 3, 28);
+            case 19 -> new CampaignRewards(List.of(of(Items.DIAMOND, 10),
+                    of(Items.BOOK, 20), of(Items.EXPERIENCE_BOTTLE, 16)), 3, 30);
             case 20 -> new CampaignRewards(List.of(of(Items.DIAMOND, 12),
                     of(Items.NETHERITE_INGOT, 1), of(Items.BOOK, 30),
                     of(Items.EXPERIENCE_BOTTLE, 16), of(Items.ENCHANTED_GOLDEN_APPLE, 1)), 4, 30);
@@ -126,9 +158,9 @@ public record CampaignRewards(List<Payout> stacks, int books, int bookLevel) {
 
     /** Announce the haul in chat. */
     public void announce(ServerPlayer player) {
+        String text = label();
         MutableComponent line = Component.literal("Mission reward: ").withStyle(ChatFormatting.GRAY);
-        line.append(Component.literal(label().toLowerCase(Locale.UK).isEmpty() ? "—" : label())
-                .withStyle(ChatFormatting.YELLOW));
+        line.append(Component.literal(text.isEmpty() ? "—" : text).withStyle(ChatFormatting.YELLOW));
         player.sendSystemMessage(line);
     }
 }

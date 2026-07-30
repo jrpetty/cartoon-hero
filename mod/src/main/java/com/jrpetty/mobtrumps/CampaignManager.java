@@ -311,9 +311,12 @@ public final class CampaignManager {
         }
         Battle.Side coinSide = b.lastCoin();
         int coin = coinSide == Battle.Side.NONE ? 0 : (coinSide == Battle.Side.PLAYER ? 1 : 2);
+        // slot 13 marks this as a campaign game, so closing the battle screen can
+        // put the player back on the route instead of dumping them in the world
         List<Integer> nums = new ArrayList<>(List.of(
                 b.playerCardCount(), b.cpuCardCount(), b.potCount(), b.getRound(),
-                chosen, chooser, winner, run.mission.brain().ordinal(), 0, 0, 0, 0, coin));
+                chosen, chooser, winner, run.mission.brain().ordinal(), 0, 0, 0, 0, coin,
+                run.mission.index()));
         PacketDistributor.sendToPlayer(player, new BattleSyncPayload(
                 run.phase, playerId, cpuId, nums,
                 "M" + run.mission.index() + " " + run.mission.name()));

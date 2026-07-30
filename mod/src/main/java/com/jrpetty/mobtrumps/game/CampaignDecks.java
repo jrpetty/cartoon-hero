@@ -52,25 +52,25 @@ public final class CampaignDecks {
 
         mission(1, "first_pasture", "The First Pasture",
                 "Every animal on the farm, and two that wandered in.",
-                Category.FARM, Tier.UNCOMMON, Tier.UNCOMMON, Difficulty.NORMAL, false, 0, "cow");
+                Category.FARM, Tier.UNCOMMON, Tier.UNCOMMON, Difficulty.EASY, false, 0, "cow");
         mission(2, "woodland_wanderers", "Woodland Wanderers",
                 "The quiet things in the trees, and what keeps them company.",
-                Category.CREATURE, Tier.COMMON, Tier.UNCOMMON, Difficulty.NORMAL, false, 0, "fox");
+                Category.CREATURE, Tier.COMMON, Tier.UNCOMMON, Difficulty.EASY, false, 0, "fox");
         mission(3, "shallow_water", "Shallow Water",
                 "Reef and riverbed. Nothing down here bites hard yet.",
-                Category.AQUATIC, Tier.UNCOMMON, Tier.UNCOMMON, Difficulty.NORMAL, false, 0, "dolphin");
+                Category.AQUATIC, Tier.UNCOMMON, Tier.UNCOMMON, Difficulty.EASY, false, 0, "dolphin");
         mission(4, "shallow_graves", "Shallow Graves",
                 "The restless dead, still close to the surface.",
                 Category.UNDEAD, Tier.UNCOMMON, Tier.RARE, Difficulty.NORMAL, false, 0, "drowned");
         mission(5, "stampede", "Stampede",
                 "The same herd, and this time something is driving it.",
-                Category.FARM, Tier.RARE, Tier.RARE, Difficulty.HARD, false, 0, "horse");
+                Category.FARM, Tier.RARE, Tier.RARE, Difficulty.NORMAL, false, 0, "horse");
         mission(6, "things_that_hiss", "Things That Hiss",
                 "Nine strangers stand behind the creepers.",
-                Category.MONSTER, Tier.UNCOMMON, Tier.RARE, Difficulty.HARD, false, 0, "creeper");
+                Category.MONSTER, Tier.UNCOMMON, Tier.RARE, Difficulty.NORMAL, false, 0, "creeper");
         mission(7, "tooth_and_claw", "Tooth and Claw",
                 "The woods again, and the woods have grown teeth.",
-                Category.CREATURE, Tier.RARE, Tier.RARE, Difficulty.HARD, false, 0, "wolf");
+                Category.CREATURE, Tier.RARE, Tier.RARE, Difficulty.NORMAL, false, 0, "wolf");
         mission(8, "trading_post", "The Trading Post",
                 "Four villagers with twelve hired hands.",
                 Category.VILLAGE, Tier.RARE, Tier.RARE, Difficulty.HARD, false, 0, "villager");

@@ -98,6 +98,12 @@ public class BattleScreen extends Screen {
     public void onClose() {
         // leaving the screen forfeits the running game (server cleans up)
         PacketDistributor.sendToServer(new BattleActionPayload(BattleActionPayload.FORFEIT, 0));
+        // a campaign mission hands you back to the route, so a clear rolls
+        // straight on into picking the next one
+        if (minecraft != null && ClientBattle.campaignMission() > 0) {
+            minecraft.setScreen(new CampaignScreen());
+            return;
+        }
         super.onClose();
     }
 
@@ -478,8 +484,16 @@ public class BattleScreen extends Screen {
         g.fill(cx, 5, cx + cw, 20, 0xC0081E16);
         g.renderOutline(cx, 5, cw, 15, GOLD_DIM);
         g.drawString(font, chip, cx + 7, 9, GOLD, false);
-        String right = pvp ? "vs " + shorten(opp)
-                : "vs " + Difficulty.values()[Mth.clamp(ClientBattle.difficulty(), 0, 2)].label() + " CPU";
+        String brain = Difficulty.values()[Mth.clamp(ClientBattle.difficulty(), 0, 2)].label();
+        String right;
+        if (pvp) {
+            right = "vs " + shorten(opp);
+        } else if (ClientBattle.campaignMission() > 0) {
+            // a mission keeps its own name on screen the whole way through
+            right = opp + "  ·  " + brain;
+        } else {
+            right = "vs " + brain + " CPU";
+        }
         g.drawString(font, right, width - 10 - font.width(right), 9, TEXT_DIM, false);
     }
 

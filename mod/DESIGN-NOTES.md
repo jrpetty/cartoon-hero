@@ -99,8 +99,7 @@ Building serials first makes the recycler richer for free.
 
 ## 2. The Campaign — twenty missions
 
-**Status:** architecture agreed, not built. Supersedes the earlier "Gauntlet"
-sketch.
+**Status:** BUILT (v1.57.0). Supersedes the earlier "Gauntlet" sketch.
 
 Twenty missions, each anchored to a category, mission 1 the farm and mission 20
 the bosses.
@@ -184,10 +183,48 @@ Every category anchors exactly two missions; the pair feels different because
 the padding changes entirely — Village I is four villagers propped up by twelve
 Rares, Village II the same four backed by twelve Epics.
 
-Opponent ramp: Normal (1-4), Hard (5-9), Hard +1 card (10-14), card counter
-(15-18), counter +2 (19-20). The **card counter** is a fourth brain worth
-writing: in a fixed 16-card mission deck it genuinely knows the pool, so
-tracking what has been played is honest inference rather than cheating.
+Opponent ramp, as shipped — four knobs that climb independently so no two
+missions feel the same:
+
+| missions | brain | counts | deal |
+|---|---|---|---|
+| 1-3 | Easy | - | 8/8 |
+| 4-7 | Normal | - | 8/8 |
+| 8-9 | Hard | - | 8/8 |
+| 10-14 | Hard | - | 7/9 |
+| 15-16 | Hard | yes | 8/8 |
+| 17-18 | Hard | yes | 7/9 |
+| 19-20 | Hard | yes | 6/10 |
+
+Card counting is not a fourth enum but a flag on the Hard brain: in a fixed
+16-card mission deck it genuinely knows the pool, so tracking what has been
+played is honest inference rather than cheating. Note 15-16 hand the extra card
+*back* — you trade a material advantage for a smarter opponent.
+
+### Measured, not guessed
+
+4000 simulated runs per mission, two player models — "naive" always leads its
+card's best stat, "skilled" plays the odds against the known pool:
+
+| # | naive | skilled | | # | naive | skilled |
+|---|---|---|---|---|---|---|
+| 1 | 93% | 99% | | 11 | 53% | 62% |
+| 2 | 98% | 99% | | 12 | 59% | 66% |
+| 3 | 91% | 98% | | 13 | 44% | 62% |
+| 4 | 53% | 85% | | 14 | 31% | 62% |
+| 5 | 55% | 95% | | 15 | 47% | 55% |
+| 6 | 56% | 84% | | 16 | 29% | 56% |
+| 7 | 57% | 68% | | 17 | 18% | 49% |
+| 8 | 35% | 69% | | 18 | 16% | 44% |
+| 9 | 47% | 66% | | 19 | 11% | 39% |
+| 10 | 73% | 72% | | 20 | 6% | 36% |
+
+The skilled curve is monotone through the whole back half and lands the finale
+at ~36% — three attempts for someone who has learned the game. The naive curve
+wobbles (mission 10 spikes, both Village missions are walls) because different
+decks punish sloppy play differently; that is deck identity, not imbalance, and
+chasing it flat would cost the themes. Games run 13-18 rounds on average, no
+stalemates in 80,000 simulated games.
 
 ### Progression, rewards, screen
 
@@ -195,8 +232,7 @@ Sequential unlock, clear N to open N+1. A `CAMPAIGN` attachment maps mission id
 to cleared/claimed plus a **flawless** flag (won without losing a round), so a
 cleared mission still has something to chase.
 
-First clear awards a **Trophy-edition card** — the player picks which mob from
-that mission's anchor gets the Trophy print. Stat-identical, so it cannot
+First clear awards a **Trophy-edition card** — the mission names the mob. Stat-identical, so it cannot
 unbalance anything; purely a thing only winning can produce. This is what the
 edition enum added in 1.54.0 was reserved for.
 
@@ -205,6 +241,19 @@ readable at a glance: locked (dim, chained), available (lit, pulsing), cleared
 (stamped), flawless (gold star). Clicking opens a briefing — name, tagline, the
 full 16-card deck as a hoverable fan, the opponent's skull rating and the Trophy
 on offer — then Begin.
+
+### The reward ladder
+
+No metals before mission 6. A card game must not hand a new player the
+materials they were meant to go and mine for, so 1-5 pay in the things that
+*let* you go mining, themed to the mission that gave them: bread and beef for
+the farm, the day's catch for the reef, torches for the graves, a saddle and
+four ender pearls for the stampede. Iron arrives at 6 in a moderate 8, gold at
+7, the first single diamond at 9. Enchanted books start at 7 rolled at level 5
+and climb to level 30, table-style with no curation, so they are a lottery
+ticket rather than a guarantee. Mission 20 pays 12 diamonds, a netherite ingot,
+30 plain books, 16 experience bottles, a notch apple, and **4 enchanted books
+rolled at level 30**.
 
 ### Open calls
 

@@ -38,6 +38,7 @@ public final class ClientBattle {
     private static volatile int oppGames;
     private static volatile int turnSeconds;
     private static volatile int coin;
+    private static volatile int campaignMission;
     private static volatile String label = "";
     private static volatile long changedAt;
 
@@ -102,6 +103,7 @@ public final class ClientBattle {
         oppGames = at(n, 10);
         turnSeconds = at(n, 11);
         coin = at(n, 12);
+        campaignMission = at(n, 13);
         label = nz(s.label());
         if (changed) {
             changedAt = System.currentTimeMillis();
@@ -122,6 +124,9 @@ public final class ClientBattle {
 
     /** Coin flip that settled a drawn round: 0 none, 1 you pick next, 2 they do. */
     public static int coin() { return coin; }
+
+    /** The campaign mission this game belongs to, or 0 if it is not a mission. */
+    public static int campaignMission() { return campaignMission; }
 
     private static String nz(String s) {
         return s == null ? "" : s;

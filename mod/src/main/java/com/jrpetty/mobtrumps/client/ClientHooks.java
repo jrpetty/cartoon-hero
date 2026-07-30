@@ -77,13 +77,15 @@ public final class ClientHooks {
 
     /** Apply a battle state snapshot, opening or closing the battle screen. */
     public static void updateBattle(com.jrpetty.mobtrumps.BattleSyncPayload payload) {
+        boolean wasCampaign = ClientBattle.campaignMission() > 0;
         ClientBattle.set(payload.phase(), payload.playerCardId(), payload.cpuCardId(),
                 payload.nums(), payload.label());
         Minecraft mc = Minecraft.getInstance();
         int phase = payload.phase();
         if (phase == com.jrpetty.mobtrumps.BattleSyncPayload.CLOSED) {
             if (mc.screen instanceof BattleScreen) {
-                mc.setScreen(null);
+                // a mission ending hands you back to the route, not to the world
+                mc.setScreen(wasCampaign ? new CampaignScreen() : null);
             }
             return;
         }

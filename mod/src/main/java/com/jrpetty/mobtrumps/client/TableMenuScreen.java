@@ -188,9 +188,16 @@ public class TableMenuScreen extends Screen {
                 useMyDeck && ready, ready, mouseX, mouseY);
         pill(g, "deck_rand", barX + 106, barY + 18, "Random deal (practice)",
                 !useMyDeck || !ready, true, mouseX, mouseY);
-        bigButton(g, "campaign", barX + 264, barY + 17, 70, 14, "Campaign",
+        // anchored off the card fan so they can never slide under it on a
+        // narrow window; the campaign wears its own progress so the route is
+        // an invitation rather than a plain button
+        String campLabel = "Campaign " + ClientCampaign.clearedCount()
+                + "/" + com.jrpetty.mobtrumps.game.CampaignDecks.count();
+        int campW = font.width(campLabel) + 14;
+        int campX = barX + panelW - 72 - campW;
+        bigButton(g, "campaign", campX, barY + 17, campW, 14, campLabel,
                 0xFF5A3A8A, 0xFF7A52B4, mouseX, mouseY, true);
-        bigButton(g, "deck_edit", barX + 196, barY + 17, 62, 14, "Edit Deck",
+        bigButton(g, "deck_edit", campX - 68, barY + 17, 62, 14, "Edit Deck",
                 0xFF2A5F8A, 0xFF3A7FB4, mouseX, mouseY, true);
         // a dealt hand costs nothing to enter, so it earns nothing either
         String note = !ready
