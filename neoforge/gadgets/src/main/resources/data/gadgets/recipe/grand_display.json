@@ -1,0 +1,12 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "redstone",
+  "group": "gadgets",
+  "pattern": [ "IGI", "GRG", "IGI" ],
+  "key": {
+    "I": { "item": "minecraft:iron_ingot" },
+    "G": { "item": "minecraft:glass_pane" },
+    "R": { "item": "minecraft:redstone_block" }
+  },
+  "result": { "id": "gadgets:grand_display", "count": 1 }
+}

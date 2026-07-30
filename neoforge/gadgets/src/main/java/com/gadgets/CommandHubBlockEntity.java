@@ -135,17 +135,6 @@ public class CommandHubBlockEntity extends BlockEntity {
         sync();
     }
 
-    /** Drop the link at {@code index} — what the board's per-row ✕ button calls. */
-    public boolean removeNodeAt(int index) {
-        if (index < 0 || index >= nodes.size()) {
-            return false;
-        }
-        nodes.remove(index);
-        setChanged();
-        sync();
-        return true;
-    }
-
     /**
      * Forget links whose gadget is gone for good.
      *
@@ -204,20 +193,24 @@ public class CommandHubBlockEntity extends BlockEntity {
     }
 
     public static void tick(Level level, BlockPos pos, BlockState state, CommandHubBlockEntity be) {
-        if (level.getGameTime() % INTERVAL != 0L || be.nodes.isEmpty()) {
+        if (level.getGameTime() % INTERVAL != 0L) {
             return;
         }
         MinecraftServer server = level.getServer();
         if (server == null) {
             return;
         }
-        // A broken counter or monitor drops off the board rather than sitting
-        // there as a permanent "offline" ghost.
-        be.pruneDead(server);
-        for (Node n : be.nodes) {
-            be.refresh(server, n);
+        if (!be.nodes.isEmpty()) {
+            // A broken counter or monitor drops off the board rather than sitting
+            // there as a permanent "offline" ghost.
+            be.pruneDead(server);
+            for (Node n : be.nodes) {
+                be.refresh(server, n);
+            }
         }
 
+        // Reconciled even with an empty board: unlinking the last alarmed gadget
+        // has to release the redstone output, not leave it latched on forever.
         boolean alarmed = be.alarmCount() > 0;
         if (state.getValue(CommandHubBlock.ALARM) != alarmed) {
             level.setBlock(pos, state.setValue(CommandHubBlock.ALARM, alarmed), Block.UPDATE_ALL);

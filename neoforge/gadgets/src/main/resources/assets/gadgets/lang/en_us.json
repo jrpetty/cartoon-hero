@@ -49,8 +49,8 @@
   "tip.gadgets.item_magnet.1": "Pulls nearby dropped items into the container below",
   "tip.gadgets.item_magnet.2": "Empty hand: set the pull radius (4/6/8/12)",
   "tip.gadgets.item_magnet.3": "A redstone signal switches it off",
-  "tip.gadgets.stock_monitor.1": "Shows the live stock of a chosen item it faces",
-  "tip.gadgets.stock_monitor.2": "Right-click with an item to track it",
+  "tip.gadgets.stock_monitor.1": "Totals a list of items, or a whole tag, in the container it faces",
+  "tip.gadgets.stock_monitor.2": "Right-click an item: add or remove it from the list",
   "tip.gadgets.stock_monitor.3": "Right-click: open the monitor screen",
   "tip.gadgets.stock_monitor.4": "Emits redstone while stock is below the alert",
   "tip.gadgets.trash_can.1": "Voids items piped or hoppered into it",
@@ -76,5 +76,10 @@
   "tip.gadgets.command_hub_monitor.2": "Select a hub with the Monitor Wand, then click this",
   "tip.gadgets.command_hub_monitor.3": "Right-click: choose which gadget to display",
   "tip.gadgets.command_hub.4": "Outputs redstone while anything is low or stalled",
-  "tip.gadgets.item_counter.5": "Linked to a hub: flagged STALLED after quiet minutes"
+  "tip.gadgets.item_counter.5": "Linked to a hub: flagged STALLED after quiet minutes",
+  "block.gadgets.grand_display": "Grand Display",
+  "tip.gadgets.grand_display.1": "A multi-line board for a whole Command Hub",
+  "tip.gadgets.grand_display.2": "Draws 3 blocks wide — build it into a flat wall",
+  "tip.gadgets.grand_display.3": "Right-click: ordering and row size",
+  "tip.gadgets.stock_monitor.5": "Sneak + right-click: track that item's tag (#logs)"
 }

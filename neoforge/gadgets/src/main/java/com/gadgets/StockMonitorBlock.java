@@ -68,10 +68,12 @@ public class StockMonitorBlock extends Block implements EntityBlock {
     protected ItemInteractionResult useItemOn(ItemStack stack, BlockState state, Level level, BlockPos pos,
                                               Player player, InteractionHand hand, BlockHitResult hit) {
         if (!level.isClientSide() && level.getBlockEntity(pos) instanceof StockMonitorBlockEntity be) {
-            be.setTracked(stack.getItem());
+            // Plain click builds a list of specific items; sneak-click walks the
+            // tags the held item belongs to, for "any kind of log" style totals.
+            String what = player.isShiftKeyDown() ? be.cycleTag(stack) : be.toggleTracked(stack.getItem());
             level.playSound(null, pos, SoundEvents.COMPARATOR_CLICK, SoundSource.BLOCKS, 0.6F, 1.3F);
-            player.displayClientMessage(Component.literal("Stock Monitor ▸ tracking ")
-                    .withStyle(ChatFormatting.GOLD).append(stack.getHoverName()), true);
+            player.displayClientMessage(Component.literal("Stock Monitor ▸ " + what)
+                    .withStyle(ChatFormatting.GOLD), true);
         }
         return ItemInteractionResult.SUCCESS;
     }

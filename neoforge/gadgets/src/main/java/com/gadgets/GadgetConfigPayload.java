@@ -1,6 +1,7 @@
 package com.gadgets;
 
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.codec.ByteBufCodecs;
 import net.minecraft.network.codec.StreamCodec;
@@ -74,6 +75,19 @@ public record GadgetConfigPayload(BlockPos pos, String key, int value, String te
                     monitor.setThreshold(p.value());
                 }
             }
+            case "monitor_untrack" -> {
+                if (be instanceof StockMonitorBlockEntity monitor) {
+                    ResourceLocation id = ResourceLocation.tryParse(p.text());
+                    if (id != null && BuiltInRegistries.ITEM.containsKey(id)) {
+                        monitor.untrack(BuiltInRegistries.ITEM.get(id));
+                    }
+                }
+            }
+            case "monitor_clear" -> {
+                if (be instanceof StockMonitorBlockEntity monitor) {
+                    monitor.clearTracked();
+                }
+            }
             case "set_name" -> {
                 // One label field, shared by both display gadgets.
                 String name = p.text().length() > 24 ? p.text().substring(0, 24) : p.text();
@@ -89,10 +103,28 @@ public record GadgetConfigPayload(BlockPos pos, String key, int value, String te
                 }
             }
             case "hub_unlink" -> {
-                // Index is validated against the live board, so a click on a
-                // stale row is dropped rather than unlinking the wrong gadget.
+                // Addressed as dimension@packedPos, so it unlinks the gadget the
+                // player actually clicked even if the board reordered in flight.
                 if (be instanceof CommandHubBlockEntity hub) {
-                    hub.removeNodeAt(p.value());
+                    int at = p.text().lastIndexOf('@');
+                    if (at > 0) {
+                        try {
+                            hub.removeNode(p.text().substring(0, at),
+                                    BlockPos.of(Long.parseLong(p.text().substring(at + 1))));
+                        } catch (NumberFormatException ignored) {
+                            // malformed target — ignore
+                        }
+                    }
+                }
+            }
+            case "grand_order" -> {
+                if (be instanceof GrandDisplayBlockEntity board) {
+                    board.setOrder(p.value());
+                }
+            }
+            case "grand_large" -> {
+                if (be instanceof GrandDisplayBlockEntity board) {
+                    board.setLarge(p.value() != 0);
                 }
             }
             case "hubmon_pick" -> {

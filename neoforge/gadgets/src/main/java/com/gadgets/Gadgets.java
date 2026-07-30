@@ -113,6 +113,9 @@ public class Gadgets {
     public static final DeferredBlock<Block> COMMAND_HUB_MONITOR = BLOCKS.register("command_hub_monitor",
             () -> new CommandHubMonitorBlock(BlockBehaviour.Properties.of()
                     .strength(1.5F).requiresCorrectToolForDrops().sound(SoundType.METAL).noOcclusion()));
+    public static final DeferredBlock<Block> GRAND_DISPLAY = BLOCKS.register("grand_display",
+            () -> new GrandDisplayBlock(BlockBehaviour.Properties.of()
+                    .strength(1.5F).requiresCorrectToolForDrops().sound(SoundType.METAL).noOcclusion()));
 
     public static final DeferredItem<?> DISPLAY_PEDESTAL_ITEM = ITEMS.register("display_pedestal", () -> new TooltipBlockItem(DISPLAY_PEDESTAL.get(), new Item.Properties(),
             "tip.gadgets.display_pedestal.1", "tip.gadgets.display_pedestal.2", "tip.gadgets.display_pedestal.3", "tip.gadgets.display_pedestal.4", "tip.gadgets.display_pedestal.5"));
@@ -128,12 +131,18 @@ public class Gadgets {
     public static final DeferredItem<?> ITEM_MAGNET_ITEM = ITEMS.register("item_magnet", () -> new TooltipBlockItem(ITEM_MAGNET.get(), new Item.Properties(),
             "tip.gadgets.item_magnet.1", "tip.gadgets.item_magnet.2", "tip.gadgets.item_magnet.3"));
     public static final DeferredItem<?> STOCK_MONITOR_ITEM = ITEMS.register("stock_monitor", () -> new TooltipBlockItem(STOCK_MONITOR.get(), new Item.Properties(),
-            "tip.gadgets.stock_monitor.1", "tip.gadgets.stock_monitor.2", "tip.gadgets.stock_monitor.3", "tip.gadgets.stock_monitor.4"));
+            "tip.gadgets.stock_monitor.1", "tip.gadgets.stock_monitor.2", "tip.gadgets.stock_monitor.5",
+            "tip.gadgets.stock_monitor.3", "tip.gadgets.stock_monitor.4"));
     public static final DeferredItem<?> TRASH_CAN_ITEM = ITEMS.register("trash_can", () -> new TooltipBlockItem(TRASH_CAN.get(), new Item.Properties(),
             "tip.gadgets.trash_can.1", "tip.gadgets.trash_can.2", "tip.gadgets.trash_can.3"));
     public static final DeferredItem<?> COMMAND_HUB_ITEM = ITEMS.register("command_hub", () -> new TooltipBlockItem(COMMAND_HUB.get(), new Item.Properties(),
             "tip.gadgets.command_hub.1", "tip.gadgets.command_hub.2", "tip.gadgets.command_hub.3",
             "tip.gadgets.command_hub.4"));
+    public static final DeferredItem<?> GRAND_DISPLAY_ITEM = ITEMS.register("grand_display",
+            () -> new TooltipBlockItem(GRAND_DISPLAY.get(), new Item.Properties(),
+                    "tip.gadgets.grand_display.1", "tip.gadgets.grand_display.2",
+                    "tip.gadgets.grand_display.3"));
+
     public static final DeferredItem<Item> GRAPPLING_HOOK =
             ITEMS.register("grappling_hook", () -> new GrapplingHookItem(new Item.Properties().stacksTo(1)));
     public static final DeferredBlock<Block> ENHANCEMENT_TABLE = BLOCKS.register("enhancement_table",
@@ -194,6 +203,9 @@ public class Gadgets {
     public static final Supplier<BlockEntityType<CommandHubMonitorBlockEntity>> COMMAND_HUB_MONITOR_BE =
             BLOCK_ENTITIES.register("command_hub_monitor",
                     () -> BlockEntityType.Builder.of(CommandHubMonitorBlockEntity::new, COMMAND_HUB_MONITOR.get()).build(null));
+    public static final Supplier<BlockEntityType<GrandDisplayBlockEntity>> GRAND_DISPLAY_BE =
+            BLOCK_ENTITIES.register("grand_display",
+                    () -> BlockEntityType.Builder.of(GrandDisplayBlockEntity::new, GRAND_DISPLAY.get()).build(null));
 
     public static final Supplier<CreativeModeTab> GADGETS_TAB = CREATIVE_TABS.register("gadgets",
             () -> CreativeModeTab.builder()
@@ -217,6 +229,7 @@ public class Gadgets {
                         output.accept(TRASH_CAN_ITEM.get());
                         output.accept(COMMAND_HUB_ITEM.get());
                         output.accept(COMMAND_HUB_MONITOR_ITEM.get());
+                        output.accept(GRAND_DISPLAY_ITEM.get());
                         output.accept(MONITOR_WAND.get());
                         output.accept(WIRELESS_REMOTE.get());
                         output.accept(GRAPPLING_HOOK.get());
