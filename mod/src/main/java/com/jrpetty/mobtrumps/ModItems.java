@@ -30,6 +30,20 @@ public final class ModItems {
                     .networkSynchronized(ByteBufCodecs.STRING_UTF8)
                     .build());
 
+    /** Immutable per-card identity: serial, authenticity id, unlocker, edition. */
+    public static final DeferredHolder<DataComponentType<?>, DataComponentType<CardIdentity>> CARD_IDENTITY =
+            DATA_COMPONENTS.register("card_identity", () -> DataComponentType.<CardIdentity>builder()
+                    .persistent(CardIdentity.CODEC)
+                    .networkSynchronized(ByteBufCodecs.fromCodec(CardIdentity.CODEC))
+                    .build());
+
+    /** Mutable per-card state: condition, the free-handling flag, sleeve. */
+    public static final DeferredHolder<DataComponentType<?>, DataComponentType<CardWear>> CARD_WEAR =
+            DATA_COMPONENTS.register("card_wear", () -> DataComponentType.<CardWear>builder()
+                    .persistent(CardWear.CODEC)
+                    .networkSynchronized(ByteBufCodecs.fromCodec(CardWear.CODEC))
+                    .build());
+
     /** Data component marking a card as a rare holographic foil variant. */
     public static final DeferredHolder<DataComponentType<?>, DataComponentType<Boolean>> FOIL =
             DATA_COMPONENTS.register("foil", () -> DataComponentType.<Boolean>builder()
@@ -38,7 +52,7 @@ public final class ModItems {
                     .build());
 
     public static final DeferredItem<MobCardItem> MOB_CARD =
-            ITEMS.register("mob_card", () -> new MobCardItem(new Item.Properties()));
+            ITEMS.register("mob_card", () -> new MobCardItem(new Item.Properties().stacksTo(1)));
     public static final DeferredItem<CardPackItem> CARD_PACK =
             ITEMS.register("card_pack", () -> new CardPackItem(new Item.Properties()));
     public static final DeferredItem<CardPackItem> NETHER_PACK =
@@ -49,6 +63,8 @@ public final class ModItems {
                     com.jrpetty.mobtrumps.game.PackType.BOSS));
     public static final DeferredItem<CollectionBookItem> COLLECTION_BOOK =
             ITEMS.register("collection_book", () -> new CollectionBookItem(new Item.Properties()));
+    public static final DeferredItem<CardSleeveItem> CARD_SLEEVE =
+            ITEMS.register("card_sleeve", () -> new CardSleeveItem(new Item.Properties()));
     public static final DeferredItem<CardScannerItem> CARD_SCANNER =
             ITEMS.register("card_scanner", () -> new CardScannerItem(new Item.Properties().stacksTo(1)));
 
@@ -59,6 +75,7 @@ public final class ModItems {
                     .displayItems((parameters, output) -> {
                         output.accept(COLLECTION_BOOK.get());
                         output.accept(CARD_SCANNER.get());
+                        output.accept(CARD_SLEEVE.get());
                         output.accept(ModBlocks.DUELING_TABLE.get());
                         output.accept(ModBlocks.HOLO_PROJECTOR.get());
                         // cards are earned by hunting mobs; every card is shown here for reference

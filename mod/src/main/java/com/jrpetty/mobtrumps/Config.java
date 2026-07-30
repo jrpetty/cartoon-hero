@@ -18,6 +18,9 @@ public final class Config {
     public static final ModConfigSpec.BooleanValue CATEGORY_REWARDS;
     public static final ModConfigSpec.DoubleValue CATEGORY_REWARD_MULTIPLIER;
     public static final ModConfigSpec.DoubleValue CARD_DROP_MULTIPLIER;
+    public static final ModConfigSpec.IntValue CARD_WEAR_PER_HANDLING;
+    public static final ModConfigSpec.IntValue SERIAL_DIGITS;
+    public static final ModConfigSpec.BooleanValue RUINED_CARDS_PLAYABLE;
 
     static {
         ModConfigSpec.Builder b = new ModConfigSpec.Builder();
@@ -35,6 +38,17 @@ public final class Config {
                         "rare 1 in 5, epic 1 in 2, legendary always (so every boss is certain).",
                         "2.0 doubles every chance; 20.0 effectively makes all cards guaranteed.")
                 .defineInRange("cardDropMultiplier", 1.0, 0.0, 20.0);
+        b.pop();
+
+        b.push("cards");
+        CARD_WEAR_PER_HANDLING = b.comment("Condition lost each time an UNSLEEVED card enters a hand,",
+                        "after its one free first handling. The shipped behaviour is 5.")
+                .defineInRange("wearPerHandling", 5, 0, 100);
+        SERIAL_DIGITS = b.comment("Digits a per-mob serial is padded to, e.g. 6 -> CREEPER-000001.")
+                .defineInRange("serialDigits", 6, 1, 10);
+        RUINED_CARDS_PLAYABLE = b.comment("Whether a 0% (Ruined) card can still be played,",
+                        "or becomes a display-only collectable.")
+                .define("ruinedCardsPlayable", true);
         b.pop();
 
         b.push("deck");

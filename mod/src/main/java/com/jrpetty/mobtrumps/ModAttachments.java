@@ -63,6 +63,18 @@ public final class ModAttachments {
                     .copyOnDeath()
                     .build());
 
+    /**
+     * The actual card items filed in the book. The id lists above say WHICH
+     * mobs are filed (which is all the UI needs); this holds the real stacks,
+     * so a card keeps its serial, condition and history while it is in there.
+     */
+    public static final Supplier<AttachmentType<List<net.minecraft.world.item.ItemStack>>> STORED_CARDS =
+            ATTACHMENTS.register("stored_cards",
+                    () -> AttachmentType.<List<net.minecraft.world.item.ItemStack>>builder(() -> List.of())
+                    .serialize(net.minecraft.world.item.ItemStack.CODEC.listOf())
+                    .copyOnDeath()
+                    .build());
+
     /** Mob ids whose foil card is physically stored inside the collection book. */
     public static final Supplier<AttachmentType<List<String>>> STORED_FOIL =
             ATTACHMENTS.register("stored_foil", () -> AttachmentType.<List<String>>builder(() -> List.of())

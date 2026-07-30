@@ -47,7 +47,7 @@ public final class BinderStorage {
             boolean foil = MobCardItem.isFoilCard(s);
             Set<String> target = foil ? storedFoil : stored;
             if (target.add(card.id())) {
-                s.shrink(1); // pull exactly one copy into the book
+                keep(player, s.split(1)); // the real card goes in, serial and all
                 deposited++;
             }
         }
@@ -134,14 +134,15 @@ public final class BinderStorage {
         int taken = 0;
         for (String id : stored) {
             MobCard card = com.jrpetty.mobtrumps.game.MobCards.byId(id);
-            if (card != null) { CardActions.give(player, MobCardItem.stackOf(card, false)); taken++; }
+            if (card != null) { CardActions.give(player, take(player, id, false, card)); taken++; }
         }
         for (String id : storedFoil) {
             MobCard card = com.jrpetty.mobtrumps.game.MobCards.byId(id);
-            if (card != null) { CardActions.give(player, MobCardItem.stackOf(card, true)); taken++; }
+            if (card != null) { CardActions.give(player, take(player, id, true, card)); taken++; }
         }
         player.setData(ModAttachments.STORED.get(), List.of());
         player.setData(ModAttachments.STORED_FOIL.get(), List.of());
+        player.setData(ModAttachments.STORED_CARDS.get(), List.of());
         sync(player);
         if (taken > 0) {
             player.sendSystemMessage(Component.literal("Emptied your book — " + taken
@@ -152,6 +153,33 @@ public final class BinderStorage {
                     .withStyle(ChatFormatting.GRAY));
         }
         return taken;
+    }
+
+    /** Put a physical card into the book's shelf of real stacks. */
+    private static void keep(ServerPlayer player, ItemStack stack) {
+        if (stack.isEmpty()) return;
+        List<ItemStack> shelf = new ArrayList<>(player.getData(ModAttachments.STORED_CARDS.get()));
+        shelf.add(stack.copy());
+        player.setData(ModAttachments.STORED_CARDS.get(), List.copyOf(shelf));
+    }
+
+    /**
+     * Pull the filed card for a mob back off the shelf. Falls back to minting a
+     * plain one only if the shelf has no record — which can only happen for a
+     * book filled before cards had identities.
+     */
+    private static ItemStack take(ServerPlayer player, String mobId, boolean foil, MobCard card) {
+        List<ItemStack> shelf = new ArrayList<>(player.getData(ModAttachments.STORED_CARDS.get()));
+        for (int i = 0; i < shelf.size(); i++) {
+            ItemStack s = shelf.get(i);
+            MobCard held = MobCardItem.cardOf(s);
+            if (held != null && held.id().equals(mobId) && MobCardItem.isFoilCard(s) == foil) {
+                shelf.remove(i);
+                player.setData(ModAttachments.STORED_CARDS.get(), List.copyOf(shelf));
+                return s;
+            }
+        }
+        return MobCardItem.stackOf(card, foil);
     }
 
     /** Push the binder contents to the player's client for the book screen. */

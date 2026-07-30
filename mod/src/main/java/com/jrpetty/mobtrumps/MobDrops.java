@@ -45,7 +45,7 @@ public final class MobDrops {
         // the card is a prize, not a certainty: commons land 1 in 20 and the
         // odds climb with rarity until a legendary always drops
         if (rollForCard(killer, id, tier)) {
-            event.getDrops().add(cardDrop(dead, MobCardItem.stackOf(card, false)));
+            event.getDrops().add(cardDrop(dead, MobCardItem.issued(killer, card, false)));
             CollectionTracker.record(killer, id, false);
             cardFanfare(killer, tier);
         }
@@ -60,7 +60,7 @@ public final class MobDrops {
             MobCard to = card.upgraded(level);
             if (level == 1 && !alreadyFoil) {
                 // first milestone: the holographic drops as a physical card
-                event.getDrops().add(cardDrop(dead, MobCardItem.stackOf(card, true)));
+                event.getDrops().add(cardDrop(dead, MobCardItem.issued(killer, card, true)));
                 CollectionTracker.record(killer, id, true);
                 killer.sendSystemMessage(Component.literal("✦ HOLOGRAPHIC UNLOCKED: " + card.displayName()
                                 + "! ✦").withStyle(ChatFormatting.LIGHT_PURPLE, ChatFormatting.BOLD));

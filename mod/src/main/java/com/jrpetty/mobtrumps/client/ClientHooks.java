@@ -20,6 +20,14 @@ public final class ClientHooks {
         Minecraft.getInstance().setScreen(new MobCardScreen(card, null, foil));
     }
 
+    /** Open the big inspection view for the card held in {@code hand}. */
+    public static void openCardInspect(net.minecraft.world.InteractionHand hand) {
+        Minecraft mc = Minecraft.getInstance();
+        if (mc.player != null) {
+            mc.setScreen(new CardInspectScreen(hand));
+        }
+    }
+
     public static void openCollectionBook() {
         Minecraft.getInstance().setScreen(new CollectionBookScreen());
     }
