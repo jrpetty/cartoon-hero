@@ -97,54 +97,121 @@ Building serials first makes the recycler richer for free.
 
 ---
 
-## 2. The Gauntlet — a campaign against the CPU
+## 2. The Campaign — twenty missions
 
-**Status:** designed, deferred. "Cool in the future but not now."
+**Status:** architecture agreed, not built. Supersedes the earlier "Gauntlet"
+sketch.
 
-Ten themed CPU decks in ladder order (Farm Animals → … → Bosses), each beatable
-once for a reward and a badge, the CPU sharpening as you climb.
+Twenty missions, each anchored to a category, mission 1 the farm and mission 20
+the bosses.
 
-### The decision at the heart of it
+### The structural move
 
-**Does the player have to field a themed deck too?** If not, you bring Warden /
-Wither / Ender Dragon to every round and the ladder collapses into one strategy.
-If so, the gauntlet becomes a **collection check with a scoreboard**: to beat the
-Farm round you must have actually collected farm animals.
+**Every mission is ONE 16-card deck, dealt 8 and 8.** In Top Trumps a single
+deck is shared between two players, so the mission's deck *is* the sixteen
+cards. This resolves several problems at once:
 
-That also solves unlocking for free — a round opens when you own enough of its
-set to field a deck. No arbitrary "beat 3 to unlock 4", no dead ends if you hate
-a category, and it fires right where the set-completion reward already does.
+- **No ownership gate.** The mission provides the cards, so the campaign never
+  waits on the player's collection — which matters now that rarity-scaled drops
+  make collections build slowly.
+- **Both sides always hold comparable material**; nobody can bring the Warden to
+  the chicken round.
+- **The mission's identity is its deck** — fixed and seeded, identical every
+  attempt, therefore learnable.
+- **The mirror-match problem in the boss round disappears**, because the three
+  bosses are three cards in a sixteen-card deck rather than the entire deck.
 
-### Decisions taken
+Collection still matters, as power rather than access: **any card in the mission
+deck the player has hunted plays at their holo level.** The CPU's half plays at
+base. Hunt your cows and the Pasture gets easier.
 
-- **Uneven set sizes are fine** — no padding, no special-casing. Farm is 14 mobs,
-  End and Bosses are 3. A 3-card boss duel is short and brutal, which suits it.
-- **Holo matching: settled and already shipped** in v1.51.0 (see below). The CPU
-  levels its deck to match yours and brings different mobs.
+### Data model
 
-### Still open
+```
+CampaignMission(index 1..20, id, name, tagline,
+                anchor: Category,        // themed set, used whole
+                subsidyBand: Tier..Tier, // what the padding is drawn from
+                brain: NORMAL|HARD|COUNTER,
+                cpuExtra: 0..2)          // uneven deal, 9/7 rather than 8/8
+```
 
-- Themed player decks — yes or no? Everything above assumes yes.
-- Strict ladder order, or free choice among unlocked rounds? Recommendation:
-  collection-gated with free choice; the ladder is just presentation.
+### Deck builder
 
-### Notes
+```
+deck    = every member of the anchor category   (max 14, so always padded)
+need    = 16 - deck.size
+subsidy = `need` cards from OUTSIDE the anchor, where
+            tier is within the mission's band,
+            preferring AFFINE categories, falling back to any,
+            seeded on the mission id so it never changes
+```
 
-- Small sets mean both sides may draw the same mob, and identical cards tie on
-  every stat. For large sets, deal both decks from one shared pool so no card
-  appears twice. For 3-mob sets overlap is unavoidable.
-- The CPU runs out of brains before the ladder runs out of rungs (only three AI
-  levels). Two knobs that need no new AI: **card advantage** ("the Wither deals
-  itself two extra cards"), and a fourth brain worth writing — **card counting**,
-  which is honest in a themed gauntlet because the CPU genuinely knows the pool
-  both decks came from.
-- **Reward idea:** the uploaded spec already defines a **Trophy** edition. A
-  gauntlet round awarding the Trophy-edition card of a mob from that set gives
-  the ladder a purpose materials never will — visibly different, stat-identical,
-  breaks nothing. Wants the edition system to exist first.
-- **Second life** so it isn't dead after one clear: a **Gauntlet Run** (all ten
-  in sequence, one life, times on the existing leaderboard), plus per-round
-  medals for clean wins.
+Affinity keeps the padding thematic: Farm-Creature-Village,
+Undead-Monster-Illager, Nether-Boss, Aquatic-Creature, End-Boss.
+
+Verified against the real pools: **no Wild Creature is common tier** (mildest are
+Bat 8, Wolf 7, Bee 7, all Uncommon), so mission 1 is 14 farm animals + Bat +
+Wolf — one tier above "two commons" because nothing gentler exists in that set.
+Mission 20 needs 13 from Epic+Legendary and **27** are available outside the
+bosses, so "mostly high tier" holds comfortably.
+
+### The twenty
+
+| # | Name | Anchor | Pad | Band |
+|---|---|---|---|---|
+| 1 | The First Pasture | Farm | 2 | Uncommon |
+| 2 | Woodland Wanderers | Creatures | 5 | Uncommon |
+| 3 | Shallow Water | Aquatic | 3 | Uncommon |
+| 4 | Shallow Graves | Undead | 5 | Unc-Rare |
+| 5 | Stampede | Farm | 2 | Rare |
+| 6 | Things That Hiss | Monsters | 9 | Unc-Rare |
+| 7 | Tooth and Claw | Creatures | 5 | Rare |
+| 8 | The Trading Post | Village | 12 | Rare |
+| 9 | The Deep | Aquatic | 3 | Rare-Epic |
+| 10 | Ashlands | Nether | 7 | Rare-Epic |
+| 11 | The Long Night | Undead | 5 | Epic |
+| 12 | Raid Bells | Illagers | 10 | Rare-Epic |
+| 13 | Cave-In | Monsters | 9 | Epic |
+| 14 | Iron and Emerald | Village | 12 | Epic |
+| 15 | The Fortress | Nether | 7 | Epic |
+| 16 | Void-Touched | The End | 13 | Epic |
+| 17 | The Mansion | Illagers | 10 | Epic-Leg |
+| 18 | The Outer Isles | The End | 13 | Epic-Leg |
+| 19 | Reckoning | Bosses | 13 | Leg-Epic |
+| 20 | The Last Trump | Bosses | 13 | Legendary |
+
+Every category anchors exactly two missions; the pair feels different because
+the padding changes entirely — Village I is four villagers propped up by twelve
+Rares, Village II the same four backed by twelve Epics.
+
+Opponent ramp: Normal (1-4), Hard (5-9), Hard +1 card (10-14), card counter
+(15-18), counter +2 (19-20). The **card counter** is a fourth brain worth
+writing: in a fixed 16-card mission deck it genuinely knows the pool, so
+tracking what has been played is honest inference rather than cheating.
+
+### Progression, rewards, screen
+
+Sequential unlock, clear N to open N+1. A `CAMPAIGN` attachment maps mission id
+to cleared/claimed plus a **flawless** flag (won without losing a round), so a
+cleared mission still has something to chase.
+
+First clear awards a **Trophy-edition card** — the player picks which mob from
+that mission's anchor gets the Trophy print. Stat-identical, so it cannot
+unbalance anything; purely a thing only winning can produce. This is what the
+edition enum added in 1.54.0 was reserved for.
+
+The screen is a vertical route of 20 tiles in category accent colours, state
+readable at a glance: locked (dim, chained), available (lit, pulsing), cleared
+(stamped), flawless (gold star). Clicking opens a briefing — name, tagline, the
+full 16-card deck as a hoverable fan, the opponent's skull rating and the Trophy
+on offer — then Begin.
+
+### Open calls
+
+1. **8/8 from one 16-card deck** is the reading of "every deck has 16 cards"
+   that everything above rests on. Sixteen *each side* would change the builder.
+2. **No ownership requirement.** Missions hand you the cards; the collection
+   makes them stronger, never available.
 
 ---
 
