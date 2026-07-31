@@ -28,6 +28,12 @@ public final class AztecAbyssConstants {
             ResourceLocation.fromNamespaceAndPath(MOD_ID, "abyss")
     );
 
+    /** The Maze Runner dimension - a separate world from the arena Abyss. */
+    public static final ResourceKey<Level> MAZE_LEVEL_KEY = ResourceKey.create(
+            Registries.DIMENSION,
+            ResourceLocation.fromNamespaceAndPath(MOD_ID, "maze")
+    );
+
     // ------------------------------------------------------------------
     // Arena layout - all fixed, all deterministic. Do not randomize.
     // ------------------------------------------------------------------
