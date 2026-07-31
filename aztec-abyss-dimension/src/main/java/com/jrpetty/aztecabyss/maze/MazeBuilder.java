@@ -67,9 +67,25 @@ public final class MazeBuilder {
     }
 
     /** True once the maze has been stamped in this world. */
+    /**
+     * Where the "this world already has a maze" marker lives.
+     *
+     * <p>Down at the very bottom of the dimension, nowhere near anything the
+     * builders touch. It used to be inferred from scenery instead - a grass
+     * block at the spawn point - and that was wrong in the worst possible way:
+     * {@link GladeBuilder} lays a worn <em>path</em> across the middle of the
+     * Glade and then drops the Box on top of it, so the spawn block ends up
+     * deepslate and the check could never come back true.
+     *
+     * <p>The consequence was that the maze could never be entered at all. Every
+     * attempt called {@code beginIfNeeded}, saw "not built", restarted the build
+     * from zero, and was turned away because a build was running - forever. A
+     * marker nothing else writes to cannot fail that way.
+     */
+    private static final BlockPos BUILT_MARKER = new BlockPos(MazeData.SPAWN_X, 1, MazeData.SPAWN_Z);
+
     public static boolean isBuilt(ServerLevel level) {
-        return level.getBlockState(new BlockPos(MazeData.SPAWN_X, MazeData.FLOOR_Y, MazeData.SPAWN_Z))
-                .is(Blocks.GRASS_BLOCK);
+        return level.getBlockState(BUILT_MARKER).is(Blocks.BEDROCK);
     }
 
     public static boolean isBuilding() {
@@ -376,6 +392,9 @@ public final class MazeBuilder {
     /** Seals the outer rim, then dresses the Glade. */
     private static void finish(ServerLevel level) {
         GladeBuilder.build(level);
+        // Stamp the marker last, so a build interrupted by a crash or a restart
+        // is treated as unbuilt and simply runs again.
+        level.setBlock(BUILT_MARKER, BEDROCK, 2);
         int max = MazeData.SPAN - 1;
         for (int i = 0; i < MazeData.SPAN; i++) {
             for (int y = MazeData.WALL_BASE_Y; y <= MazeData.WALL_TOP_Y; y++) {

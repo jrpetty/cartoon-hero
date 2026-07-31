@@ -58,10 +58,63 @@ public final class OutpostBuilder {
     private static final BlockState WALL = Blocks.CRACKED_STONE_BRICKS.defaultBlockState();
     private static final BlockState WALL_ALT = Blocks.MOSSY_STONE_BRICKS.defaultBlockState();
     private static final BlockState WALL_PLAIN = Blocks.STONE_BRICKS.defaultBlockState();
-    private static final BlockState GROUND = Blocks.GRAVEL.defaultBlockState();
-    private static final BlockState BOARDS = Blocks.OAK_PLANKS.defaultBlockState();
-    private static final BlockState BEAM = Blocks.STRIPPED_OAK_LOG.defaultBlockState();
+    private static final BlockState BOARDS = Blocks.DARK_OAK_PLANKS.defaultBlockState();
+    private static final BlockState BEAM = Blocks.STRIPPED_DARK_OAK_LOG.defaultBlockState();
     private static final BlockState RUBBLE = Blocks.COBBLESTONE.defaultBlockState();
+
+    /**
+     * The masonry palette.
+     *
+     * <p>Five closely related greys rather than three, and - crucially - chosen
+     * by position rather than by a die, so they come out in patches. A wall that
+     * is mossy for a stretch and then cracked for a stretch reads as a building
+     * that has been patched up and shelled again. A wall that changes material
+     * every single block reads as static.
+     */
+    private static final BlockState[] WALL_BODY = {
+            Blocks.STONE_BRICKS.defaultBlockState(),
+            Blocks.CRACKED_STONE_BRICKS.defaultBlockState(),
+            Blocks.MOSSY_STONE_BRICKS.defaultBlockState(),
+            Blocks.COBBLESTONE.defaultBlockState(),
+            Blocks.ANDESITE.defaultBlockState(),
+    };
+    private static final float[] WALL_BODY_W = {0.38f, 0.24f, 0.15f, 0.15f, 0.08f};
+
+    /** The damp course. Everything within two blocks of the floor takes the wet. */
+    private static final BlockState[] WALL_DAMP = {
+            Blocks.MOSSY_COBBLESTONE.defaultBlockState(),
+            Blocks.MOSSY_STONE_BRICKS.defaultBlockState(),
+            Blocks.COBBLED_DEEPSLATE.defaultBlockState(),
+            Blocks.CRACKED_STONE_BRICKS.defaultBlockState(),
+    };
+    private static final float[] WALL_DAMP_W = {0.34f, 0.30f, 0.20f, 0.16f};
+
+    /** The cellar is older than the house above it: deepslate, not brick. */
+    private static final BlockState[] CELLAR_WALL = {
+            Blocks.COBBLED_DEEPSLATE.defaultBlockState(),
+            Blocks.DEEPSLATE_BRICKS.defaultBlockState(),
+            Blocks.CRACKED_DEEPSLATE_BRICKS.defaultBlockState(),
+            Blocks.DEEPSLATE_TILES.defaultBlockState(),
+            Blocks.MOSSY_COBBLESTONE.defaultBlockState(),
+    };
+    private static final float[] CELLAR_WALL_W = {0.30f, 0.26f, 0.20f, 0.14f, 0.10f};
+
+    /** Floorboards, laid in two tones so the boards read as boards. */
+    private static final BlockState[] FLOOR_BOARDS = {
+            Blocks.DARK_OAK_PLANKS.defaultBlockState(),
+            Blocks.SPRUCE_PLANKS.defaultBlockState(),
+            Blocks.OAK_PLANKS.defaultBlockState(),
+    };
+    private static final float[] FLOOR_BOARDS_W = {0.52f, 0.33f, 0.15f};
+
+    /** What shows through where the boards have gone. */
+    private static final BlockState[] FLOOR_WORN = {
+            Blocks.PACKED_MUD.defaultBlockState(),
+            Blocks.COARSE_DIRT.defaultBlockState(),
+            Blocks.ROOTED_DIRT.defaultBlockState(),
+            Blocks.COBBLESTONE.defaultBlockState(),
+    };
+    private static final float[] FLOOR_WORN_W = {0.34f, 0.28f, 0.20f, 0.18f};
 
     private OutpostBuilder() {
     }
@@ -231,17 +284,108 @@ public final class OutpostBuilder {
         for (int x = -IN_X - 1; x <= IN_X + 1; x++) {
             for (int z = -IN_Z - 1; z <= IN_Z + 1; z++) {
                 for (int y = CELLAR - 2; y <= ROOF; y++) {
-                    level.setBlock(at(x, y, z), wallStone(rng), 2);
+                    level.setBlock(at(x, y, z), wallStone(x, y, z), 2);
                 }
             }
         }
         for (int x = -IN_X; x <= IN_X; x++) {
             for (int z = -IN_Z; z <= IN_Z; z++) {
-                level.setBlock(at(x, -1, z), GROUND, 2);
+                level.setBlock(at(x, -1, z), floorState(x, z), 2);
                 for (int y = 0; y < ROOF; y++) {
                     level.setBlock(at(x, y, z), Blocks.AIR.defaultBlockState(), 2);
                 }
             }
+        }
+        pilasters(level);
+        cornice(level);
+        rafters(level);
+    }
+
+    /**
+     * The floor of the hall and back room.
+     *
+     * <p>Boards over most of it, a stone kerb around the edge where the boards
+     * would have been nailed to a sill, and patches worn through to the dirt
+     * underneath on the routes people walked most. The worn patches are the
+     * point: an unbroken plane of one material is what made the old floor look
+     * like a texture swatch rather than a room.
+     */
+    private static BlockState floorState(int x, int z) {
+        boolean kerb = x <= -IN_X + 1 || x >= IN_X - 1 || z <= -IN_Z + 1 || z >= IN_Z - 1;
+        if (kerb) {
+            return Deco.pick(x, 0, z, 4, 0x5713,
+                    new BlockState[]{WALL_PLAIN, WALL, Blocks.ANDESITE.defaultBlockState()},
+                    new float[]{0.5f, 0.3f, 0.2f});
+        }
+        if (Deco.patch(x, 0, z, 5, 0x91A3) < 0.22f) {
+            return Deco.pick(x, 0, z, 3, 0x2C7F, FLOOR_WORN, FLOOR_WORN_W);
+        }
+        return Deco.pick(x, 0, z, 4, 0x66D1, FLOOR_BOARDS, FLOOR_BOARDS_W);
+    }
+
+    /**
+     * Buttresses up the outside corners and at intervals along the long walls.
+     *
+     * <p>A flat wall from floor to roof has no scale to it - nothing tells your
+     * eye how big the building is. Pilasters break the elevation into bays and
+     * cost almost nothing to place.
+     */
+    private static void pilasters(ServerLevel level) {
+        int[] xs = {-IN_X - 1, IN_X + 1};
+        for (int x : xs) {
+            for (int z = -IN_Z; z <= IN_Z; z += 5) {
+                for (int y = 0; y <= ROOF - 1; y++) {
+                    level.setBlock(at(x, y, z), y < 2
+                            ? Blocks.POLISHED_ANDESITE.defaultBlockState()
+                            : Blocks.ANDESITE.defaultBlockState(), 2);
+                }
+                level.setBlock(at(x, ROOF, z), Blocks.ANDESITE_SLAB.defaultBlockState(), 2);
+            }
+        }
+        int[] zs = {-IN_Z - 1, IN_Z + 1};
+        for (int z : zs) {
+            for (int x = -IN_X; x <= IN_X; x += 5) {
+                for (int y = 0; y <= ROOF - 1; y++) {
+                    level.setBlock(at(x, y, z), y < 2
+                            ? Blocks.POLISHED_ANDESITE.defaultBlockState()
+                            : Blocks.ANDESITE.defaultBlockState(), 2);
+                }
+                level.setBlock(at(x, ROOF, z), Blocks.ANDESITE_SLAB.defaultBlockState(), 2);
+            }
+        }
+    }
+
+    /** A banded course under the eaves, so the roofline is a line and not an edge. */
+    private static void cornice(ServerLevel level) {
+        for (int x = -IN_X - 1; x <= IN_X + 1; x++) {
+            level.setBlock(at(x, ROOF - 1, -IN_Z - 1), Blocks.CHISELED_STONE_BRICKS.defaultBlockState(), 2);
+            level.setBlock(at(x, ROOF - 1, IN_Z + 1), Blocks.CHISELED_STONE_BRICKS.defaultBlockState(), 2);
+        }
+        for (int z = -IN_Z - 1; z <= IN_Z + 1; z++) {
+            level.setBlock(at(-IN_X - 1, ROOF - 1, z), Blocks.CHISELED_STONE_BRICKS.defaultBlockState(), 2);
+            level.setBlock(at(IN_X + 1, ROOF - 1, z), Blocks.CHISELED_STONE_BRICKS.defaultBlockState(), 2);
+        }
+    }
+
+    /**
+     * Exposed roof timbers over the attic void.
+     *
+     * <p>Looking up used to show a flat stone lid. Now it shows the underside of
+     * a roof - which is most of what sells a derelict building, and it gives the
+     * shell hole something to have torn through.
+     */
+    private static void rafters(ServerLevel level) {
+        for (int z = -IN_Z + 1; z <= IN_Z - 1; z += 3) {
+            for (int x = -IN_X; x <= IN_X; x++) {
+                level.setBlock(at(x, ROOF - 1, z), Deco.log(Blocks.DARK_OAK_LOG, Direction.Axis.X), 2);
+            }
+            // Knee braces where each rafter meets the wall.
+            level.setBlock(at(-IN_X, ROOF - 2, z), Deco.stairs(Blocks.DARK_OAK_STAIRS, Direction.EAST), 2);
+            level.setBlock(at(IN_X, ROOF - 2, z), Deco.stairs(Blocks.DARK_OAK_STAIRS, Direction.WEST), 2);
+        }
+        // A ridge purlin running the length of the building.
+        for (int x = -IN_X; x <= IN_X; x++) {
+            level.setBlock(at(x, ROOF - 2, 0), Deco.log(Blocks.DARK_OAK_LOG, Direction.Axis.X), 2);
         }
     }
 
@@ -305,9 +449,23 @@ public final class OutpostBuilder {
                 .setValue(BlockStateProperties.HANGING, true), 2);
     }
 
-    private static BlockState wallStone(RandomSource rng) {
-        int r = rng.nextInt(10);
-        return r < 4 ? WALL : r < 7 ? WALL_ALT : WALL_PLAIN;
+    /**
+     * The stone for one position in the shell.
+     *
+     * <p>Position-driven rather than random, and layered by height: deepslate
+     * below ground where the cellar is cut into older foundations, a damp mossy
+     * course at the bottom of the standing walls, and brickwork above that. The
+     * layering is what gives the elevation somewhere to start and stop - a wall
+     * of uniformly mixed rubble from footing to eaves has no storey to it.
+     */
+    private static BlockState wallStone(int x, int y, int z) {
+        if (y <= -2) {
+            return Deco.pick(x, y, z, 4, 0x1D3A, CELLAR_WALL, CELLAR_WALL_W);
+        }
+        if (y <= 1) {
+            return Deco.pick(x, y, z, 3, 0x4B82, WALL_DAMP, WALL_DAMP_W);
+        }
+        return Deco.pick(x, y, z, 4, 0x7F19, WALL_BODY, WALL_BODY_W);
     }
 
     /**
@@ -319,18 +477,32 @@ public final class OutpostBuilder {
     private static void upperFloor(ServerLevel level, RandomSource rng) {
         for (int x = UPPER_EDGE; x <= IN_X; x++) {
             for (int z = -IN_Z; z <= IN_Z; z++) {
-                level.setBlock(at(x, UPPER, z), rng.nextInt(9) == 0
-                        ? Blocks.AIR.defaultBlockState() : BOARDS, 2);
+                // Holes come in clusters, like a floor that has rotted from a leak,
+                // rather than one in nine boards missing at random across the room.
+                if (Deco.patch(x, UPPER, z, 3, 0xB41C) < 0.11f) {
+                    level.setBlock(at(x, UPPER, z), Blocks.AIR.defaultBlockState(), 2);
+                    continue;
+                }
+                level.setBlock(at(x, UPPER, z),
+                        Deco.pick(x, UPPER, z, 4, 0x33E7, FLOOR_BOARDS, FLOOR_BOARDS_W), 2);
             }
         }
         // Exposed joists under the boards, and a rail along the open edge.
         for (int z = -IN_Z; z <= IN_Z; z += 3) {
             for (int x = UPPER_EDGE; x <= IN_X; x++) {
-                level.setBlock(at(x, UPPER - 1, z), BEAM, 2);
+                level.setBlock(at(x, UPPER - 1, z), Deco.log(Blocks.STRIPPED_DARK_OAK_LOG,
+                        Direction.Axis.X), 2);
             }
         }
+        // The rail along the drop, with posts standing proud of it.
         for (int z = -IN_Z; z <= IN_Z; z++) {
-            level.setBlock(at(UPPER_EDGE, UPPER + 1, z), Blocks.OAK_FENCE.defaultBlockState(), 2);
+            level.setBlock(at(UPPER_EDGE, UPPER + 1, z), Blocks.DARK_OAK_FENCE.defaultBlockState(), 2);
+            if (Math.floorMod(z, 4) == 0) {
+                level.setBlock(at(UPPER_EDGE, UPPER + 2, z),
+                        Deco.log(Blocks.DARK_OAK_LOG, Direction.Axis.Y), 2);
+                level.setBlock(at(UPPER_EDGE, UPPER + 3, z),
+                        Deco.hangingLantern(false), 2);
+            }
         }
     }
 

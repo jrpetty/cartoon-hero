@@ -33,8 +33,26 @@ public final class MazeEvents {
     private MazeEvents() {
     }
 
+    /** Players who asked to go in while the maze was still being raised. */
+    private static final java.util.Set<java.util.UUID> WAITING = new java.util.HashSet<>();
+
     private static boolean isMaze(Level level) {
         return level instanceof ServerLevel sl && sl.dimension().equals(AztecAbyssConstants.MAZE_LEVEL_KEY);
+    }
+
+    /** Sends in everyone who was queued while the build was running. */
+    private static void admitWaiting(ServerLevel level) {
+        if (WAITING.isEmpty() || level.getServer() == null) {
+            return;
+        }
+        java.util.List<java.util.UUID> queued = new java.util.ArrayList<>(WAITING);
+        WAITING.clear();
+        for (java.util.UUID id : queued) {
+            ServerPlayer p = level.getServer().getPlayerList().getPlayer(id);
+            if (p != null) {
+                sendToMaze(p);
+            }
+        }
     }
 
     @SubscribeEvent
@@ -54,6 +72,9 @@ public final class MazeEvents {
         // in seconds; after that the clock only needs looking at once a second.
         if (MazeBuilder.isBuilding()) {
             MazeBuilder.tick(level);
+            if (!MazeBuilder.isBuilding()) {
+                admitWaiting(level);
+            }
             return;
         }
         if (level.getGameTime() % 20L == 0L) {
@@ -90,6 +111,10 @@ public final class MazeEvents {
         }
         ServerLevel maze = player.getServer().getLevel(AztecAbyssConstants.MAZE_LEVEL_KEY);
         if (maze == null) {
+            // Never fail mutely here. This is reached from a button that closes
+            // itself, so a silent false looks exactly like the game ignoring you.
+            player.displayClientMessage(Component.literal(
+                    "§cThe maze dimension is not loaded on this world."), false);
             return false;
         }
         int lock = MazeRuns.lockoutRemaining(player.getUUID());
@@ -100,9 +125,13 @@ public final class MazeEvents {
         }
         MazeBuilder.beginIfNeeded(maze);
         if (MazeBuilder.isBuilding()) {
+            // Queue them instead of turning them away. The build is a one-off and
+            // takes seconds, and "try again in a moment" is indistinguishable from
+            // the game being broken if you happen to hit it twice.
+            WAITING.add(player.getUUID());
             player.displayClientMessage(Component.literal(
-                    "§7The maze is still being raised — §e" + MazeBuilder.progressPercent()
-                            + "%§7. Try again in a moment."), true);
+                    "§7The maze is being raised — §e" + MazeBuilder.progressPercent()
+                            + "%§7. You will be sent in the moment it is ready."), false);
             return false;
         }
         // Remember the teleporter they stepped through, so the maze can put them
