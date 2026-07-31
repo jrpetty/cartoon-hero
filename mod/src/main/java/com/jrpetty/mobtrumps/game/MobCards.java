@@ -320,6 +320,40 @@ public final class MobCards {
      * best cards: the point is to match the player's investment, not to play
      * optimally with it. Any shortfall is padded with unupgraded cards.
      */
+    /** The highest level any tier can reach, so a level can always be recovered. */
+    public static final int MAX_UPGRADE_LEVEL = 8;
+
+    /**
+     * The upgrade level a card is being fielded at.
+     *
+     * <p>A battle holds cards that have already been {@link MobCard#upgraded}, and
+     * upgrading preserves the id — so sending an id across the wire loses the
+     * levelling entirely and the receiver rebuilds the base print instead. That
+     * shows the wrong numbers on a card that has already been played, which
+     * reads as the round having been decided wrongly.
+     *
+     * <p>Recoverable rather than tracked, because {@code upgraded} is purely
+     * derived and deterministic. Where a card has hit the stat ceiling several
+     * levels produce identical numbers; the lowest is returned, which is the
+     * right answer for anything that only cares what the card reads as.
+     * Returns 0 for a base print or an unrecognised card.
+     */
+    public static int levelOf(MobCard card) {
+        if (card == null) {
+            return 0;
+        }
+        MobCard base = byId(card.id());
+        if (base == null) {
+            return 0;
+        }
+        for (int level = 0; level <= MAX_UPGRADE_LEVEL; level++) {
+            if (base.upgraded(level).equals(card)) {
+                return level;
+            }
+        }
+        return 0;
+    }
+
     public static List<MobCard> matchLevels(List<MobCard> hand, List<Integer> levels,
                                             RandomGenerator random) {
         if (hand.isEmpty() || levels == null || levels.isEmpty()) {

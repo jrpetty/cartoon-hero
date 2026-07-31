@@ -177,15 +177,20 @@ public final class TableBattleManager {
         int chosen = -1;
         int chooser = 2;
         int winner = 2;
+        int playerLevel = 0;
+        int cpuLevel = 0;
         if (reveal && game.lastResult != null) {
             playerId = game.lastResult.playerCard().id();
             cpuId = game.lastResult.cpuCard().id();
+            playerLevel = com.jrpetty.mobtrumps.game.MobCards.levelOf(game.lastResult.playerCard());
+            cpuLevel = com.jrpetty.mobtrumps.game.MobCards.levelOf(game.lastResult.cpuCard());
             chosen = game.lastResult.stat().ordinal();
             chooser = sideIdx(game.lastResult.chooser());
             winner = sideIdx(game.lastResult.winner());
         } else {
             MobCard top = b.playerTopCard();
             playerId = top == null ? "" : top.id();
+            playerLevel = com.jrpetty.mobtrumps.game.MobCards.levelOf(top);
         }
         if (game.phase == BattleSyncPayload.FINISHED) {
             winner = sideIdx(b.getWinner());
@@ -195,7 +200,8 @@ public final class TableBattleManager {
         int coin = coinSide == Battle.Side.NONE ? 0 : (coinSide == Battle.Side.PLAYER ? 1 : 2);
         List<Integer> nums = new ArrayList<>(List.of(
                 b.playerCardCount(), b.cpuCardCount(), b.potCount(), b.getRound(),
-                chosen, chooser, winner, game.difficulty.ordinal(), 0, 0, 0, 0, coin));
+                chosen, chooser, winner, game.difficulty.ordinal(), 0, 0, 0, 0, coin,
+                0, playerLevel, cpuLevel));
         PacketDistributor.sendToPlayer(player,
                 new BattleSyncPayload(game.phase, playerId, cpuId, nums, ""));
     }

@@ -109,6 +109,46 @@ class MobCardsTest {
     }
 
     @Test
+    void aFieldedCardsLevelCanAlwaysBeRecovered() {
+        // Only a card's id crosses the wire to the battle screen, and upgrading
+        // preserves the id — so the level has to be recoverable from the card
+        // itself or the screen rebuilds the base print and draws numbers that
+        // disagree with the round the player just watched being decided.
+        for (MobCard card : MobCards.ALL) {
+            for (int level = 0; level <= 4; level++) {
+                MobCard fielded = card.upgraded(level);
+                int recovered = MobCards.levelOf(fielded);
+                assertEquals(fielded, MobCards.byId(fielded.id()).upgraded(recovered),
+                        card.id() + " fielded at level " + level + " was rebuilt as level "
+                                + recovered + ", which is a different card");
+            }
+        }
+    }
+
+    @Test
+    void aBasePrintReportsNoLevel() {
+        for (MobCard card : MobCards.ALL) {
+            assertEquals(0, MobCards.levelOf(card), card.id() + " is a base print");
+        }
+        assertEquals(0, MobCards.levelOf(null));
+    }
+
+    @Test
+    void upgradingActuallyChangesTheNumbers() {
+        // If it didn't, the bug above would be invisible rather than merely
+        // subtle — this pins that a levelled card really does read differently.
+        int changed = 0;
+        for (MobCard card : MobCards.ALL) {
+            if (!card.upgraded(1).equals(card)) {
+                changed++;
+            }
+        }
+        assertTrue(changed > MobCards.ALL.size() / 2,
+                "only " + changed + " of " + MobCards.ALL.size()
+                        + " cards change when upgraded — levelling is barely doing anything");
+    }
+
+    @Test
     void everyMobBelongsToExactlyOneCategory() {
         Set<String> placed = new HashSet<>();
         for (Category category : Category.values()) {

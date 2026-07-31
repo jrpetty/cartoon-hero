@@ -369,15 +369,20 @@ public final class CampaignManager {
         int chosen = -1;
         int chooser = 2;
         int winner = 2;
+        int playerLevel = 0;
+        int cpuLevel = 0;
         if (reveal && run.lastResult != null) {
             playerId = run.lastResult.playerCard().id();
             cpuId = run.lastResult.cpuCard().id();
+            playerLevel = MobCards.levelOf(run.lastResult.playerCard());
+            cpuLevel = MobCards.levelOf(run.lastResult.cpuCard());
             chosen = run.lastResult.stat().ordinal();
             chooser = sideIdx(run.lastResult.chooser());
             winner = sideIdx(run.lastResult.winner());
         } else {
             MobCard top = b.playerTopCard();
             playerId = top == null ? "" : top.id();
+            playerLevel = MobCards.levelOf(top);
         }
         if (run.phase == BattleSyncPayload.FINISHED) {
             winner = sideIdx(b.getWinner());
@@ -386,10 +391,14 @@ public final class CampaignManager {
         int coin = coinSide == Battle.Side.NONE ? 0 : (coinSide == Battle.Side.PLAYER ? 1 : 2);
         // slot 13 marks this as a campaign game, so closing the battle screen can
         // put the player back on the route instead of dumping them in the world
+        // slots 14/15 carry the holo level each side is fielding. The opponent's
+        // cards are upgraded prints (see start()), and only their id crosses the
+        // wire — without the level the client would look up the base card and
+        // draw stats that do not match the round it just watched being decided.
         List<Integer> nums = new ArrayList<>(List.of(
                 b.playerCardCount(), b.cpuCardCount(), b.potCount(), b.getRound(),
                 chosen, chooser, winner, run.mission.brain().ordinal(), 0, 0, 0, 0, coin,
-                run.mission.index()));
+                run.mission.index(), playerLevel, cpuLevel));
         PacketDistributor.sendToPlayer(player, new BattleSyncPayload(
                 run.phase, playerId, cpuId, nums,
                 "M" + run.mission.index() + " " + run.mission.name()));

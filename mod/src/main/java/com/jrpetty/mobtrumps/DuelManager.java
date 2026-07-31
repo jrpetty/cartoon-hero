@@ -883,6 +883,13 @@ public final class DuelManager {
         }
     }
 
+    /**
+     * PvP hands are never upgraded — both sides field base prints, so the two
+     * holo-level slots the battle screen reads (14 and 15) are left off and
+     * default to 0. If a duel mode ever starts fielding levelled cards it must
+     * send them, or the screen will draw base numbers for a card that was played
+     * as a premium print and the round will look wrongly decided.
+     */
     private static void sendScreen(Duel duel, ServerPlayer p, int phase, String myId, String oppId,
                                    int chosen, int chooser, int winner) {
         Battle.Side side = duel.sideOf(p);

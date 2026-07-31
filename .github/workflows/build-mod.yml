@@ -26,6 +26,12 @@ jobs:
 
       # Compiles the mod and runs the game-rule tests. `build` depends on
       # `test`, so a broken rule fails here and never reaches a release.
+      # A skipped popPose() corrupts every later draw in the frame, which shows
+      # up as huge misplaced geometry rather than as a missing element.
+      - name: Check matrix-stack balance
+        working-directory: mod
+        run: python3 tools/checkpose.py src/main/java
+
       - name: Build mod jar and run tests
         working-directory: mod
         run: ./gradlew --no-daemon build

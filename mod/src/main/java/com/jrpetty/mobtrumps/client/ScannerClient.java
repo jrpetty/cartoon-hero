@@ -95,6 +95,12 @@ public final class ScannerClient {
         if (card == null) {
             return;
         }
+        // This draws inside the world render pass, so an unbalanced matrix stack
+        // does not merely lose the scanner overlay — every later draw in the
+        // frame inherits the leftover billboard transform, which paints huge
+        // misplaced geometry across the world. The pop belongs in a finally.
+        PoseStack pose = event.getPoseStack();
+        pose.pushPose();
         try {
             float pt = mc.getTimer().getGameTimeDeltaPartialTick(false);
             Vec3 camPos = event.getCamera().getPosition();
@@ -102,8 +108,6 @@ public final class ScannerClient {
             double y = Mth.lerp(pt, mob.yOld, mob.getY()) + mob.getBbHeight() + 0.75;
             double z = Mth.lerp(pt, mob.zOld, mob.getZ());
 
-            PoseStack pose = event.getPoseStack();
-            pose.pushPose();
             pose.translate(x - camPos.x, y - camPos.y, z - camPos.z);
             // billboard: face the camera, then yaw 180 so the item's FRONT
             // (not its mirrored back) points at the viewer, upright
@@ -116,9 +120,10 @@ public final class ScannerClient {
                     LightTexture.FULL_BRIGHT, net.minecraft.client.renderer.texture.OverlayTexture.NO_OVERLAY,
                     pose, buffers, mc.level, 0);
             buffers.endBatch();
-            pose.popPose();
         } catch (Exception ignored) {
             // rendering must never crash the client
+        } finally {
+            pose.popPose();
         }
     }
 

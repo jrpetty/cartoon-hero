@@ -48,9 +48,14 @@ public class HoloProjectorRenderer implements BlockEntityRenderer<HoloProjectorB
         float t = (time + partialTick);
 
         // --- card plaque, standing just in front of the pedestal face ---
+        // The pop MUST be in a finally. A throw between push and pop leaves the
+        // matrix stack one deep, and every later draw in that frame — other
+        // blocks, entities, the player's own hand — inherits this translate and
+        // scale, which is why a single bad model used to smear giant geometry
+        // across the world instead of just failing to draw a card.
+        pose.pushPose();
         try {
             ItemStack stack = MobCardItem.stackOf(card, be.isFoil());
-            pose.pushPose();
             // plaque sits flush on the column face (column spans 4..12px),
             // centred on its height
             pose.translate(0.5, 0.5, 0.5);
@@ -59,8 +64,10 @@ public class HoloProjectorRenderer implements BlockEntityRenderer<HoloProjectorB
             pose.scale(0.42F, 0.42F, 0.42F);
             itemRenderer.renderStatic(stack, ItemDisplayContext.FIXED, light, overlay,
                     pose, buffers, be.getLevel(), 0);
-            pose.popPose();
         } catch (Exception ignored) {
+            // a card that will not draw is not worth breaking the frame over
+        } finally {
+            pose.popPose();
         }
 
         // --- rotating 3D mob hologram floating above ---
@@ -68,12 +75,13 @@ public class HoloProjectorRenderer implements BlockEntityRenderer<HoloProjectorB
         if (mob == null) {
             return;
         }
+        EntityRenderDispatcher dispatcher = mc.getEntityRenderDispatcher();
+        pose.pushPose();
         try {
             float bob = (float) Math.sin(t * 0.05F) * 0.06F;
             float spin = t * 2.2F;
             float fit = 0.55F / Math.max(1.0F, mob.getBbHeight());
 
-            pose.pushPose();
             pose.translate(0.5, 1.35 + bob, 0.5);
             pose.scale(fit, fit, fit);
             pose.mulPose(Axis.YP.rotationDegrees(spin));
@@ -84,14 +92,17 @@ public class HoloProjectorRenderer implements BlockEntityRenderer<HoloProjectorB
             mob.setYHeadRot(0.0F);
             mob.yHeadRotO = 0.0F;
 
-            EntityRenderDispatcher dispatcher = mc.getEntityRenderDispatcher();
             dispatcher.setRenderShadow(false);
             dispatcher.render(mob, 0.0, 0.0, 0.0, 0.0F, partialTick, pose, buffers,
                     LightTexture.FULL_BRIGHT);
-            dispatcher.setRenderShadow(true);
-            pose.popPose();
         } catch (Exception ignored) {
             // never let a rogue entity model crash the client
+        } finally {
+            // both of these are global render state: a throw between them used
+            // to leave shadows off for every entity in the world until restart,
+            // and the matrix stack unbalanced for the rest of the frame
+            dispatcher.setRenderShadow(true);
+            pose.popPose();
         }
     }
 }

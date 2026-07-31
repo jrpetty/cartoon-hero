@@ -1,6 +1,8 @@
 package com.jrpetty.mobtrumps.client;
 
 import com.jrpetty.mobtrumps.BattleSyncPayload;
+import com.jrpetty.mobtrumps.game.MobCard;
+import com.jrpetty.mobtrumps.game.MobCards;
 
 import java.util.List;
 
@@ -39,6 +41,9 @@ public final class ClientBattle {
     private static volatile int turnSeconds;
     private static volatile int coin;
     private static volatile int campaignMission;
+    /** Holo level each side is fielding, so the shown card matches the played one. */
+    private static volatile int myLevel;
+    private static volatile int oppLevel;
     private static volatile String label = "";
     private static volatile long changedAt;
 
@@ -104,6 +109,8 @@ public final class ClientBattle {
         turnSeconds = at(n, 11);
         coin = at(n, 12);
         campaignMission = at(n, 13);
+        myLevel = at(n, 14);
+        oppLevel = at(n, 15);
         label = nz(s.label());
         if (changed) {
             changedAt = System.currentTimeMillis();
@@ -127,6 +134,24 @@ public final class ClientBattle {
 
     /** The campaign mission this game belongs to, or 0 if it is not a mission. */
     public static int campaignMission() { return campaignMission; }
+
+    /**
+     * The card each side actually has in play, upgraded to the print they are
+     * fielding. Looking a card up by id alone gives the base print, which is a
+     * different card with different numbers whenever a level is in play — and
+     * the mismatch reads as the round having been decided wrongly.
+     */
+    public static MobCard myCard() {
+        return upgrade(MobCards.byId(myCardId), myLevel);
+    }
+
+    public static MobCard oppCard() {
+        return upgrade(MobCards.byId(oppCardId), oppLevel);
+    }
+
+    private static MobCard upgrade(MobCard card, int level) {
+        return card == null || level <= 0 ? card : card.upgraded(level);
+    }
 
     private static String nz(String s) {
         return s == null ? "" : s;

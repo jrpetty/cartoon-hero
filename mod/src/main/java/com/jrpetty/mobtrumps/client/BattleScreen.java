@@ -218,7 +218,7 @@ public class BattleScreen extends Screen {
         }
 
         // --- player card (always face up) ---
-        MobCard playerCard = MobCards.byId(ClientBattle.playerCardId());
+        MobCard playerCard = ClientBattle.myCard();
         boolean myPick = phase == BattleSyncPayload.PLAYER_PICK && playerCard != null;
         final int pcy = playerCardY;
         if (playerCard != null) {
@@ -238,7 +238,7 @@ public class BattleScreen extends Screen {
         }
 
         // --- opponent card: face down until the play resolves, then FLIPS ---
-        MobCard cpuCard = MobCards.byId(ClientBattle.cpuCardId());
+        MobCard cpuCard = ClientBattle.oppCard();
         boolean flipping = phase == BattleSyncPayload.RESULT && elapsed < FLIP_MS && cpuCard != null;
         boolean faceUp = reveal && cpuCard != null;
         var pose = g.pose();
@@ -330,8 +330,12 @@ public class BattleScreen extends Screen {
         if (reveal && !flipping) {
             long bannerElapsed = phase == BattleSyncPayload.RESULT
                     ? Math.max(0, elapsed - FLIP_MS) : elapsed;
+            // the group is laid out UPWARD from here, so it clears the
+            // nameplates (which start at baseCardY - 17) whatever size the
+            // banner text is. Drawing it downward from a fixed point used to
+            // drop the stat line straight through the "YOU xN" plates.
             drawBanner(g, phase, winner, chosen, playerCard, cpuCard,
-                    centerY - cardH / 2 - 26, bannerElapsed, pvp ? shorten(opp) : "CPU");
+                    baseCardY - 20, bannerElapsed, pvp ? shorten(opp) : "CPU");
         }
 
         // --- PvP turn-timer bar, just under the header ---
@@ -707,8 +711,18 @@ public class BattleScreen extends Screen {
         }
     }
 
+    /**
+     * The result banner and the stat comparison under it, stacked upward from
+     * {@code bottomY} — the lowest pixel the group may touch.
+     *
+     * <p>Laid out from the bottom because the banner's text scale changes with
+     * the phase (a round result is 1.5x, a finish is 2.4x) and pops in with an
+     * overshoot. Anchoring the top and letting it grow downward put the stat
+     * line on top of the nameplates at some sizes and not others.
+     */
     private void drawBanner(GuiGraphics g, int phase, int winner, int chosen,
-                            MobCard playerCard, MobCard cpuCard, int y, long elapsed, String oppName) {
+                            MobCard playerCard, MobCard cpuCard, int bottomY,
+                            long elapsed, String oppName) {
         String text;
         int color;
         if (phase == BattleSyncPayload.FINISHED) {
@@ -728,19 +742,45 @@ public class BattleScreen extends Screen {
         }
         float t = Mth.clamp(elapsed / 200f, 0f, 1f);
         float grow = ClientPrefs.reducedMotion() ? 1f : easeOutBack(t);
-        float scale = (phase == BattleSyncPayload.FINISHED ? 2.4f : 1.5f) * grow;
+        float settled = phase == BattleSyncPayload.FINISHED ? 2.4f : 1.5f;
+        float scale = settled * grow;
+
+        String line = null;
+        if (chosen >= 0 && playerCard != null && cpuCard != null) {
+            Stat s = Stat.values()[chosen];
+            line = s.label + ":  you " + playerCard.stat(s) + "  vs  " + cpuCard.stat(s)
+                    + (s.lowerWins ? "   (lower wins)" : "");
+        }
+
+        // reserve from the bottom up: stat line, gap, then the banner itself.
+        // Height uses the SETTLED scale so the group does not jitter while the
+        // banner pops in.
+        int lineH = line == null ? 0 : font.lineHeight + 3;
+        int bannerH = Math.round(font.lineHeight * settled);
+        int bannerTop = bottomY - lineH - bannerH;
+
         var pose = g.pose();
         pose.pushPose();
-        pose.translate(width / 2f, y, 0);
+        pose.translate(width / 2f, bannerTop, 0);
         pose.scale(Math.max(0.05f, scale), Math.max(0.05f, scale), 1f);
         g.drawString(font, text, -font.width(text) / 2, 0, color, true);
         pose.popPose();
-        if (chosen >= 0 && playerCard != null && cpuCard != null) {
-            Stat s = Stat.values()[chosen];
-            String line = s.label + ":  you " + playerCard.stat(s) + "  vs  " + cpuCard.stat(s)
-                    + (s.lowerWins ? "   (lower wins)" : "");
-            g.drawCenteredString(font, line, width / 2, y + 16, TEXT_DIM);
+
+        if (line != null) {
+            // the stat line sits above the cards, so it has the full width to
+            // itself — but trim it anyway rather than let it run off a narrow window
+            g.drawCenteredString(font, fitWidth(line, width - 16),
+                    width / 2, bottomY - font.lineHeight, TEXT_DIM);
         }
+    }
+
+    /** Trim text to fit a width, with an ellipsis when it has to be cut. */
+    private String fitWidth(String text, int maxWidth) {
+        if (maxWidth <= 0 || font.width(text) <= maxWidth) {
+            return text;
+        }
+        String cut = font.plainSubstrByWidth(text, Math.max(1, maxWidth - font.width("…")));
+        return cut.isEmpty() ? "" : cut + "…";
     }
 
     private void drawCardGlow(GuiGraphics g, int x, int y, int w, int h, int color) {

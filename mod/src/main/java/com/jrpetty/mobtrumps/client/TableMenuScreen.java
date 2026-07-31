@@ -30,6 +30,11 @@ import java.util.Locale;
 public class TableMenuScreen extends Screen {
 
     // felt & trim palette
+    /** Where the deck fan's centre sits, measured back from the panel's right edge. */
+    private static final int FAN_INSET = 40;
+    /** Half the fan's drawn width, tilt included — the button row must clear it. */
+    private static final int FAN_HALF_W = 26;
+
     private static final int FELT_LIGHT = 0xFF14503C;
     private static final int FELT_DARK = 0xFF072A1F;
     private static final int PANEL = 0xC0081E16;
@@ -111,7 +116,7 @@ public class TableMenuScreen extends Screen {
         if (t > ENTER_MS) {
             float sweep = ((t - ENTER_MS) % 2600L) / 2600f;
             int sweepX = (int) (width / 2f - 90 + sweep * 180);
-            g.fillGradient(sweepX - 8, 12, sweepX + 8, 34, 0x00FFFFFF, 0x2AFFFFFF);
+            shine(g, sweepX, 12, 34, 10, 0x2A);
         }
         g.drawCenteredString(font, "— DUELING TABLE —", width / 2, 38, TEXT_DIM);
 
@@ -196,7 +201,13 @@ public class TableMenuScreen extends Screen {
                 + "/" + com.jrpetty.mobtrumps.game.CampaignDecks.count();
         String hallLabel = "Hall";
         int rowLeft = barX + 8;
-        int rowRight = barX + panelW - 44;   // the card fan lives past here
+        // The fan is drawn at 0.16 scale from a 170x236 card, three of them
+        // stepped 7px apart and tilted +-14 degrees: about 50px wide around its
+        // centre, rising 38px from its baseline. The old 44px reserve was a
+        // guess and the fan sat straight on top of the Hall and Campaign
+        // buttons, clipping them. Derive the reserve from the geometry instead.
+        int fanCx = barX + panelW - FAN_INSET;
+        int rowRight = fanCx - FAN_HALF_W - 6;
         int gap = 6;
         int room = Math.max(80, rowRight - rowLeft);
 
@@ -235,7 +246,7 @@ public class TableMenuScreen extends Screen {
                 panelW - 16, !ready ? 0xFFCB8A8A : (useMyDeck ? 0xFF8FD08F : TEXT_DIM));
 
         // a face-up fan of your actual top deck cards, so the choice is real
-        fan(g, barX + panelW - 46, barY + 41, t);
+        fan(g, fanCx, barY + 41, t);
 
         // slim footer strip so the hint reads as part of the frame
         g.fill(0, height - 13, width, height - 2, 0x66051A12);
@@ -319,6 +330,24 @@ public class TableMenuScreen extends Screen {
         g.renderOutline(x, y, w, 13, active ? 0xFF55E06A : PANEL_EDGE);
         g.drawString(font, label, x + 7, y + 3,
                 !enabled ? 0xFF5E6E66 : active ? 0xFFFFFFFF : TEXT_DIM, false);
+    }
+
+    /**
+     * A soft vertical band that fades out to both sides — the highlight that
+     * travels across the title.
+     *
+     * <p>Hand-rolled because {@code fillGradient} only ramps top-to-bottom. Used
+     * for a sweep it draws a hard-edged rectangle sitting over the letters,
+     * which read as a grey block punched into the wordmark rather than a shine.
+     */
+    private void shine(GuiGraphics g, int cx, int top, int bottom, int halfW, int peakAlpha) {
+        for (int dx = -halfW; dx < halfW; dx++) {
+            float falloff = 1f - Math.abs(dx) / (float) halfW;
+            int alpha = (int) (peakAlpha * falloff * falloff);
+            if (alpha > 0) {
+                g.fill(cx + dx, top, cx + dx + 1, bottom, (alpha << 24) | 0xFFFFFF);
+            }
+        }
     }
 
     /** A tilted decorative card back on the felt. */
