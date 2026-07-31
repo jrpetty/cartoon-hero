@@ -1,0 +1,6 @@
+{
+  "parent": "gadgets:block/fluid_monitor",
+  "textures": {
+    "screen": "gadgets:block/fluid_monitor_alarm"
+  }
+}

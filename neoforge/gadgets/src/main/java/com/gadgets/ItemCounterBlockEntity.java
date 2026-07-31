@@ -40,7 +40,13 @@ import net.neoforged.neoforge.items.IItemHandler;
  * on the display face by {@link ItemCounterRenderer}.
  */
 public class ItemCounterBlockEntity extends BlockEntity {
-    private static final int INTERVAL = 2;
+    /**
+     * Samples every tick. Every other tick was enough for a hopper feed, but an
+     * item thrown past the face can cross the detection cell inside two ticks
+     * and was simply never seen; and in container mode, anything that arrived
+     * and left inside one window cancelled itself out before it was counted.
+     */
+    private static final int INTERVAL = 1;
     /** How often the face readout is recomputed and, if it changed, synced. */
     private static final int FACE_INTERVAL = 20;
     private static final int PULSE_TICKS = 4;
@@ -92,15 +98,20 @@ public class ItemCounterBlockEntity extends BlockEntity {
     // --- transient sampling state ---
     /** Per-item contents of the watched container on the previous sample; null = reseed. */
     private Map<String, Integer> lastContents = null;
+    /** The other half of the snapshot pair, reused rather than reallocated. */
+    private Map<String, Integer> spareContents = new HashMap<>();
     /** Ids of item entities already counted while they sit in the detection cell. */
     private final Set<Integer> seenEntities = new HashSet<>();
     /** Which mode the last sample ran in — purely informational, not persisted. */
     private boolean watchingContainer = false;
+    /** True when the counter faces a solid block: nothing can pass through it. */
+    private boolean blocked = false;
 
     // --- face readout, synced to clients once a second when it changes ---
     private int rateMin = 0;
     private int rateHour = 0;
-    private String lastFace = "";
+    /** Digest of the last readout pushed to clients; see {@link #fingerprint()}. */
+    private long lastFace = Long.MIN_VALUE;
 
     /** The container this counter faces, if it is one. */
     private final CapCache<IItemHandler> source = new CapCache<>(Capabilities.ItemHandler.BLOCK, this);
@@ -135,6 +146,11 @@ public class ItemCounterBlockEntity extends BlockEntity {
 
     public boolean isWatchingContainer() {
         return watchingContainer;
+    }
+
+    /** True when what the counter faces is solid, so nothing can flow past it. */
+    public boolean isBlocked() {
+        return blocked;
     }
 
     public int getCountMode() {
@@ -308,13 +324,20 @@ public class ItemCounterBlockEntity extends BlockEntity {
             BlockPos target = pos.relative(facing);
 
             int passed;
-            IItemHandler handler = be.source.get(level, target, facing.getOpposite());
+            IItemHandler handler = Inventories.at(level, target, facing.getOpposite(), be.source);
             be.watchingContainer = handler != null;
             if (handler != null) {
+                be.blocked = false;
                 passed = be.sampleContainer(handler);
                 be.seenEntities.clear(); // not in flow mode; forget any stragglers
             } else {
-                passed = be.sampleFlow(level, target);
+                // No inventory in front. Air, water or a plant is fine — items fly
+                // through those and flow mode reads them. A solid block is not:
+                // nothing can pass through a grass block, so counting there would
+                // sit at zero forever with no hint as to why.
+                BlockState front = level.getBlockState(target);
+                be.blocked = !front.isAir() && !front.canBeReplaced();
+                passed = be.blocked ? 0 : be.sampleFlow(level, target);
                 be.lastContents = null; // container gone; reseed if it returns
             }
 
@@ -338,8 +361,8 @@ public class ItemCounterBlockEntity extends BlockEntity {
         if (TickPhase.due(level, pos, FACE_INTERVAL)) {
             be.rateMin = sum(be.secBuckets);
             be.rateHour = sum(be.minBuckets);
-            String face = be.faceValue() + "|" + be.faceLabel();
-            if (!face.equals(be.lastFace)) {
+            long face = be.fingerprint();
+            if (face != be.lastFace) {
                 be.lastFace = face;
                 be.sync();
             }
@@ -383,7 +406,11 @@ public class ItemCounterBlockEntity extends BlockEntity {
      * so a stack arriving into an empty container counts as well as one leaving.
      */
     private int sampleContainer(IItemHandler handler) {
-        Map<String, Integer> now = new HashMap<>();
+        // The two snapshots take turns rather than one being allocated fresh:
+        // this runs every tick now, and a chest-sized map per tick per counter
+        // is a lot of garbage for a reading that usually hasn't changed.
+        Map<String, Integer> now = spareContents;
+        now.clear();
         for (int i = 0; i < handler.getSlots(); i++) {
             ItemStack stack = handler.getStackInSlot(i);
             if (!stack.isEmpty()) {
@@ -392,26 +419,61 @@ public class ItemCounterBlockEntity extends BlockEntity {
         }
         int passed = 0;
         if (lastContents != null) {
-            Set<String> types = new HashSet<>(lastContents.keySet());
-            types.addAll(now.keySet());
-            for (String id : types) {
-                if (!counts(id)) {
-                    continue;
-                }
-                int delta = now.getOrDefault(id, 0) - lastContents.getOrDefault(id, 0);
-                int moved = switch (countMode) {
-                    case COUNT_OUT -> delta < 0 ? -delta : 0;
-                    case COUNT_BOTH -> Math.abs(delta);
-                    default -> delta > 0 ? delta : 0;
-                };
-                if (moved > 0) {
-                    record(id, moved);
-                    passed += moved;
+            // Everything in the new snapshot, then whatever left entirely — the
+            // union of both, without building a set to hold it.
+            for (Map.Entry<String, Integer> e : now.entrySet()) {
+                passed += credit(e.getKey(), e.getValue() - lastContents.getOrDefault(e.getKey(), 0));
+            }
+            for (Map.Entry<String, Integer> e : lastContents.entrySet()) {
+                if (!now.containsKey(e.getKey())) {
+                    passed += credit(e.getKey(), -e.getValue());
                 }
             }
         }
+        spareContents = lastContents == null ? new HashMap<>() : lastContents;
         lastContents = now;
         return passed;
+    }
+
+    /** Credit one item type's movement in whichever direction is being watched. */
+    private int credit(String id, int delta) {
+        if (delta == 0 || !counts(id)) {
+            return 0;
+        }
+        int moved = switch (countMode) {
+            case COUNT_OUT -> delta < 0 ? -delta : 0;
+            case COUNT_BOTH -> Math.abs(delta);
+            default -> delta > 0 ? delta : 0;
+        };
+        if (moved > 0) {
+            record(id, moved);
+        }
+        return moved;
+    }
+
+    /**
+     * A digest of everything the screen and face show.
+     *
+     * <p>The client is only sent an update when this changes, and it used to
+     * cover just the two lines on the block's face — so the stats panel's total,
+     * uptime and per-item breakdown sat frozen whenever the face text happened
+     * to stay the same. Uptime is included at five-second resolution: fine
+     * enough to look live, coarse enough that an idle counter isn't sending a
+     * packet every second for a number nobody is watching.
+     */
+    private long fingerprint() {
+        long h = rateMin;
+        h = h * 31 + rateHour;
+        h = h * 31 + total;
+        h = h * 31 + count;
+        h = h * 31 + threshold;
+        h = h * 31 + displayMode;
+        h = h * 31 + perItem.size();
+        h = h * 31 + (watchingContainer ? 1 : 0);
+        h = h * 31 + (blocked ? 1 : 0);
+        h = h * 31 + (isStalled() ? 1 : 0);
+        h = h * 31 + uptimeTicks / 100L;
+        return h;
     }
 
     /** Is this item one the counter has been told to watch? */
@@ -539,6 +601,8 @@ public class ItemCounterBlockEntity extends BlockEntity {
         tag.putLong("Uptime", uptimeTicks);
         tag.putLong("TicksSinceItem", ticksSinceItem);
         tag.putInt("CountMode", countMode);
+        // Synced so the screen can explain why nothing is being counted.
+        tag.putBoolean("Blocked", blocked);
         ListTag filterTag = new ListTag();
         for (Item item : filter) {
             filterTag.add(StringTag.valueOf(BuiltInRegistries.ITEM.getKey(item).toString()));
@@ -568,6 +632,7 @@ public class ItemCounterBlockEntity extends BlockEntity {
         uptimeTicks = tag.getLong("Uptime");
         ticksSinceItem = tag.contains("TicksSinceItem") ? tag.getLong("TicksSinceItem") : Long.MAX_VALUE / 2;
         countMode = Math.floorMod(tag.getInt("CountMode"), COUNT_LABELS.length);
+        blocked = tag.getBoolean("Blocked");
         filter.clear();
         ListTag filterTag = tag.getList("Filter", Tag.TAG_STRING);
         for (int i = 0; i < Math.min(filterTag.size(), MAX_FILTER); i++) {

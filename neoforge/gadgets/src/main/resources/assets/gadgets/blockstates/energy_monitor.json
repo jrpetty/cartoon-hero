@@ -1,8 +1,50 @@
-{ "variants": {
-  "facing=down":  { "model": "gadgets:block/energy_monitor", "x": 90 },
-  "facing=up":    { "model": "gadgets:block/energy_monitor", "x": 270 },
-  "facing=north": { "model": "gadgets:block/energy_monitor" },
-  "facing=south": { "model": "gadgets:block/energy_monitor", "y": 180 },
-  "facing=west":  { "model": "gadgets:block/energy_monitor", "y": 270 },
-  "facing=east":  { "model": "gadgets:block/energy_monitor", "y": 90 }
-} }
+{
+  "variants": {
+    "facing=down,low=false": {
+      "model": "gadgets:block/energy_monitor",
+      "x": 90
+    },
+    "facing=down,low=true": {
+      "model": "gadgets:block/energy_monitor_alarm",
+      "x": 90
+    },
+    "facing=up,low=false": {
+      "model": "gadgets:block/energy_monitor",
+      "x": 270
+    },
+    "facing=up,low=true": {
+      "model": "gadgets:block/energy_monitor_alarm",
+      "x": 270
+    },
+    "facing=north,low=false": {
+      "model": "gadgets:block/energy_monitor"
+    },
+    "facing=north,low=true": {
+      "model": "gadgets:block/energy_monitor_alarm"
+    },
+    "facing=south,low=false": {
+      "model": "gadgets:block/energy_monitor",
+      "y": 180
+    },
+    "facing=south,low=true": {
+      "model": "gadgets:block/energy_monitor_alarm",
+      "y": 180
+    },
+    "facing=west,low=false": {
+      "model": "gadgets:block/energy_monitor",
+      "y": 270
+    },
+    "facing=west,low=true": {
+      "model": "gadgets:block/energy_monitor_alarm",
+      "y": 270
+    },
+    "facing=east,low=false": {
+      "model": "gadgets:block/energy_monitor",
+      "y": 90
+    },
+    "facing=east,low=true": {
+      "model": "gadgets:block/energy_monitor_alarm",
+      "y": 90
+    }
+  }
+}

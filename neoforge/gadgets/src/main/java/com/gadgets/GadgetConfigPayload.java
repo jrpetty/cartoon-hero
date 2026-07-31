@@ -147,16 +147,6 @@ public record GadgetConfigPayload(BlockPos pos, String key, int value, String te
                     }
                 }
             }
-            case "grand_order" -> {
-                if (be instanceof GrandDisplayBlockEntity board) {
-                    board.setOrder(p.value());
-                }
-            }
-            case "grand_large" -> {
-                if (be instanceof GrandDisplayBlockEntity board) {
-                    board.setLarge(p.value() != 0);
-                }
-            }
             case "hubmon_pick" -> {
                 if (be instanceof CommandHubMonitorBlockEntity monitor) {
                     pickMonitorSource(player, monitor, p.text());

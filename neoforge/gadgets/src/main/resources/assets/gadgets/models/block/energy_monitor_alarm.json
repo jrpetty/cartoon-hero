@@ -1,0 +1,6 @@
+{
+  "parent": "gadgets:block/energy_monitor",
+  "textures": {
+    "screen": "gadgets:block/energy_monitor_alarm"
+  }
+}

@@ -23,7 +23,13 @@ import net.minecraft.network.chat.Component;
  */
 public class HubScreen extends GadgetScreen {
     private static final int ROWS_PER_PAGE = 8;
-    private static final int ROW_H = 18;
+    /**
+     * Every row is two lines of text — the name over its kind and position, the
+     * reading over its detail. Two nine-pixel lines need twenty-two pixels of
+     * row to sit in; at eighteen the second line ran under the next row's
+     * background and had its feet cut off.
+     */
+    private static final int ROW_H = 22;
     private static final int CONTROLS_TOP = 36;
     private static final int HEADER_TOP = 56;
     private static final int ROW_TOP = 68;
@@ -53,7 +59,7 @@ public class HubScreen extends GadgetScreen {
     private Button clearButton;
 
     public HubScreen(CommandHubBlockEntity be) {
-        super(Component.literal("Command Hub"), 320, 248);
+        super(Component.literal("Command Hub"), 320, 276);
         this.be = be;
     }
 
@@ -233,7 +239,7 @@ public class HubScreen extends GadgetScreen {
             int slot = i - start;
             int y = top + ROW_TOP + slot * ROW_H;
             if (slot % 2 == 0) {
-                gfx.fill(left + 8, y - 4, left + panelW - 8, y + 13, ROW_ALT);
+                gfx.fill(left + 8, y - 4, left + panelW - 8, y + 18, ROW_ALT);
             }
 
             BlockPos p = BlockPos.of(n.pos);
@@ -299,7 +305,7 @@ public class HubScreen extends GadgetScreen {
             int slot = i - start;
             int y = top + ROW_TOP + slot * ROW_H;
             if (slot % 2 == 0) {
-                gfx.fill(left + 8, y - 4, left + panelW - 8, y + 13, ROW_ALT);
+                gfx.fill(left + 8, y - 4, left + panelW - 8, y + 18, ROW_ALT);
             }
             gfx.drawString(font, "●", x, y, e.raised() ? RED : GREEN, false);
             gfx.drawString(font, e.when(), x + 12, y, GRAY, false);

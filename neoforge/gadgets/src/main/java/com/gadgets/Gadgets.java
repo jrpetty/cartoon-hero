@@ -119,9 +119,6 @@ public class Gadgets {
     public static final DeferredBlock<Block> ENERGY_MONITOR = BLOCKS.register("energy_monitor",
             () -> new EnergyMonitorBlock(BlockBehaviour.Properties.of()
                     .strength(1.5F).requiresCorrectToolForDrops().sound(SoundType.METAL).noOcclusion()));
-    public static final DeferredBlock<Block> GRAND_DISPLAY = BLOCKS.register("grand_display",
-            () -> new GrandDisplayBlock(BlockBehaviour.Properties.of()
-                    .strength(1.5F).requiresCorrectToolForDrops().sound(SoundType.METAL).noOcclusion()));
 
     public static final DeferredItem<?> DISPLAY_PEDESTAL_ITEM = ITEMS.register("display_pedestal", () -> new TooltipBlockItem(DISPLAY_PEDESTAL.get(), new Item.Properties(),
             "tip.gadgets.display_pedestal.1", "tip.gadgets.display_pedestal.2", "tip.gadgets.display_pedestal.3", "tip.gadgets.display_pedestal.4", "tip.gadgets.display_pedestal.5"));
@@ -150,10 +147,6 @@ public class Gadgets {
     public static final DeferredItem<?> ENERGY_MONITOR_ITEM = ITEMS.register("energy_monitor",
             () -> new TooltipBlockItem(ENERGY_MONITOR.get(), new Item.Properties(),
                     "tip.gadgets.energy_monitor.1", "tip.gadgets.energy_monitor.2", "tip.gadgets.energy_monitor.3"));
-    public static final DeferredItem<?> GRAND_DISPLAY_ITEM = ITEMS.register("grand_display",
-            () -> new TooltipBlockItem(GRAND_DISPLAY.get(), new Item.Properties(),
-                    "tip.gadgets.grand_display.1", "tip.gadgets.grand_display.2",
-                    "tip.gadgets.grand_display.3"));
 
     public static final DeferredItem<Item> GRAPPLING_HOOK =
             ITEMS.register("grappling_hook", () -> new GrapplingHookItem(new Item.Properties().stacksTo(1)));
@@ -221,9 +214,6 @@ public class Gadgets {
     public static final Supplier<BlockEntityType<EnergyMonitorBlockEntity>> ENERGY_MONITOR_BE =
             BLOCK_ENTITIES.register("energy_monitor",
                     () -> BlockEntityType.Builder.of(EnergyMonitorBlockEntity::new, ENERGY_MONITOR.get()).build(null));
-    public static final Supplier<BlockEntityType<GrandDisplayBlockEntity>> GRAND_DISPLAY_BE =
-            BLOCK_ENTITIES.register("grand_display",
-                    () -> BlockEntityType.Builder.of(GrandDisplayBlockEntity::new, GRAND_DISPLAY.get()).build(null));
 
     public static final Supplier<CreativeModeTab> GADGETS_TAB = CREATIVE_TABS.register("gadgets",
             () -> CreativeModeTab.builder()
@@ -249,7 +239,6 @@ public class Gadgets {
                         output.accept(COMMAND_HUB_MONITOR_ITEM.get());
                         output.accept(FLUID_MONITOR_ITEM.get());
                         output.accept(ENERGY_MONITOR_ITEM.get());
-                        output.accept(GRAND_DISPLAY_ITEM.get());
                         output.accept(MONITOR_WAND.get());
                         output.accept(WIRELESS_REMOTE.get());
                         output.accept(GRAPPLING_HOOK.get());

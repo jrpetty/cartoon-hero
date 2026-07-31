@@ -14,12 +14,21 @@ import net.minecraft.world.item.Item;
 public class CounterScreen extends GadgetScreen {
     private static final int NAME_Y = 18;
     private static final int STATS_Y = 40;
-    private static final int DIR_Y = 78;
-    private static final int FILTER_Y = 100;
-    private static final int TOP_ITEMS_Y = 152;
-    private static final int PULSE_Y = 206;
-    private static final int MODE_Y = 238;
-    private static final int RESET_Y = 266;
+    private static final int DIR_Y = 76;
+    private static final int FILTER_Y = 106;
+    private static final int TOP_ITEMS_Y = 162;
+    private static final int PULSE_Y = 214;
+    private static final int MODE_Y = 246;
+    private static final int RESET_Y = 278;
+
+    /**
+     * Filtered items listed before the rest are summarised. The section has to
+     * be a fixed height — everything below it is positioned once, when the
+     * screen opens, so a growing list would slide in under the next heading.
+     */
+    private static final int FILTER_ROWS = 4;
+    /** Left edge of the "count everything" button, and the room left for the label. */
+    private static final int CLEAR_X = 128;
 
     private final ItemCounterBlockEntity be;
     private EditBox nameField;
@@ -59,7 +68,7 @@ public class CounterScreen extends GadgetScreen {
 
         // One remove control per filtered item, plus a reset to "everything".
         List<Item> filter = be.getFilter();
-        for (int i = 0; i < filter.size(); i++) {
+        for (int i = 0; i < Math.min(filter.size(), FILTER_ROWS); i++) {
             String id = BuiltInRegistries.ITEM.getKey(filter.get(i)).toString();
             addRenderableWidget(Button.builder(Component.literal("✕"), b -> {
                 sendText(be.getBlockPos(), "counter_unfilter", id);
@@ -70,7 +79,7 @@ public class CounterScreen extends GadgetScreen {
             addRenderableWidget(Button.builder(Component.literal("Count everything"), b -> {
                 send(be.getBlockPos(), "counter_unfilter_all", 0);
                 rebuildWidgets();
-            }).bounds(left + 100, top + FILTER_Y, 124, 12).build());
+            }).bounds(left + CLEAR_X, top + FILTER_Y - 2, 240 - CLEAR_X - 16, 12).build());
         }
 
         for (int i = 0; i < ItemCounterBlockEntity.THRESHOLDS.length; i++) {
@@ -110,20 +119,33 @@ public class CounterScreen extends GadgetScreen {
                 + ItemCounterBlockEntity.duration(be.getUptimeTicks()), x, top + STATS_Y + 12, AMBER, false);
         gfx.drawString(font, "Pulse " + be.getCount() + " / " + be.getThreshold(), x, top + STATS_Y + 24, DIM, false);
 
-        gfx.drawString(font, be.isWatchingContainer()
-                        ? "Counting items " + be.getCountLabel() + " in the container it faces"
-                        : "No container ahead — counting items dropping past",
-                x, top + DIR_Y, be.isWatchingContainer() ? GRAY : DIM, false);
+        String where;
+        if (be.isWatchingContainer()) {
+            where = "Reading the container ahead · " + be.getCountLabel();
+        } else if (be.isBlocked()) {
+            where = "Solid block ahead · nothing can pass through";
+        } else {
+            where = "Nothing ahead · counting items dropping past";
+        }
+        gfx.drawString(font, where, x, top + DIR_Y, be.isWatchingContainer() ? GRAY : DIM, false);
 
+        // Sits above the direction buttons, and never under them: the label is
+        // cut to whatever room the "count everything" button leaves it.
         List<Item> filter = be.getFilter();
-        gfx.drawString(font, "Counting: " + be.describeFilter(), x, top + FILTER_Y, AMBER, false);
+        String counting = "Counting: " + be.describeFilter();
+        gfx.drawString(font, filter.isEmpty() ? counting : fit(counting, CLEAR_X - 16),
+                x, top + FILTER_Y, AMBER, false);
         if (filter.isEmpty()) {
             gfx.drawString(font, "Right-click it with an item to count only that",
                     x, top + FILTER_Y + 12, GRAY, false);
         }
-        for (int i = 0; i < filter.size(); i++) {
+        for (int i = 0; i < Math.min(filter.size(), FILTER_ROWS); i++) {
             gfx.drawString(font, "· " + trim(filter.get(i).getDescription().getString(), 26),
                     x, top + FILTER_Y + 12 + i * 10, GRAY, false);
+        }
+        if (filter.size() > FILTER_ROWS) {
+            gfx.drawString(font, "· +" + (filter.size() - FILTER_ROWS) + " more",
+                    x, top + FILTER_Y + 12 + FILTER_ROWS * 10, DIM, false);
         }
 
         List<Map.Entry<String, Long>> top5 = be.topItems(4);
@@ -141,5 +163,17 @@ public class CounterScreen extends GadgetScreen {
 
     private static String trim(String s, int max) {
         return s.length() > max ? s.substring(0, max - 1) + "…" : s;
+    }
+
+    /** Shortens a line to a pixel width rather than a character count. */
+    private String fit(String s, int width) {
+        if (font.width(s) <= width) {
+            return s;
+        }
+        String out = s;
+        while (!out.isEmpty() && font.width(out + "…") > width) {
+            out = out.substring(0, out.length() - 1);
+        }
+        return out + "…";
     }
 }

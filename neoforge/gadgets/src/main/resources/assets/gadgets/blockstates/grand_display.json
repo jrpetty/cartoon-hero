@@ -1,6 +1,0 @@
-{ "variants": {
-  "facing=north": { "model": "gadgets:block/grand_display" },
-  "facing=south": { "model": "gadgets:block/grand_display", "y": 180 },
-  "facing=west":  { "model": "gadgets:block/grand_display", "y": 270 },
-  "facing=east":  { "model": "gadgets:block/grand_display", "y": 90 }
-} }

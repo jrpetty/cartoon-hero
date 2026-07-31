@@ -264,7 +264,7 @@ public class StockMonitorBlockEntity extends BlockEntity {
         long found = 0;
         int types = 0;
         Direction facing = state.getValue(StockMonitorBlock.FACING);
-        IItemHandler handler = be.source.get(level, pos.relative(facing), facing.getOpposite());
+        IItemHandler handler = Inventories.at(level, pos.relative(facing), facing.getOpposite(), be.source);
         boolean present = handler != null;
         if (present) {
             Set<Item> seen = new HashSet<>();
