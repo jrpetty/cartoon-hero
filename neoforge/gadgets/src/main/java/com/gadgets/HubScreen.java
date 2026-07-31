@@ -80,8 +80,8 @@ public class HubScreen extends GadgetScreen {
     /** What the filter matches against: name, kind and coordinates. */
     private static String haystack(CommandHubBlockEntity.Node n) {
         BlockPos p = BlockPos.of(n.pos);
-        String kind = n.type == CommandHubBlockEntity.TYPE_COUNTER ? "counter" : "stock monitor";
-        return (n.label + " " + kind + " " + p.getX() + " " + p.getY() + " " + p.getZ()).toLowerCase(Locale.ROOT);
+        return (n.label + " " + CommandHubBlockEntity.kindOf(n.type)
+                + " " + p.getX() + " " + p.getY() + " " + p.getZ()).toLowerCase(Locale.ROOT);
     }
 
     private int maxPage() {
@@ -214,7 +214,7 @@ public class HubScreen extends GadgetScreen {
         if (nodes.isEmpty()) {
             gfx.drawString(font, "Nothing linked yet.", x, top + HEADER_TOP + 8, GRAY, false);
             gfx.drawString(font, "Take the Monitor Wand, click this hub,", x, top + HEADER_TOP + 22, GRAY, false);
-            gfx.drawString(font, "then click your counters and monitors.", x, top + HEADER_TOP + 34, GRAY, false);
+            gfx.drawString(font, "then click counters, monitors and gauges.", x, top + HEADER_TOP + 34, GRAY, false);
             gfx.drawString(font, "Sneak-click a linked one to unlink it.", x, top + HEADER_TOP + 46, GRAY, false);
             return;
         }

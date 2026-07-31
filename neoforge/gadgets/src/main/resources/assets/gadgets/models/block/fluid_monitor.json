@@ -1,19 +1,31 @@
 {
   "textures": {
-    "particle": "gadgets:block/hub_monitor_frame",
-    "frame": "gadgets:block/hub_monitor_frame",
-    "screen": "gadgets:block/hub_monitor_screen"
+    "particle": "gadgets:block/fluid_monitor_frame",
+    "frame": "gadgets:block/fluid_monitor_frame",
+    "screen": "gadgets:block/fluid_monitor_screen"
   },
   "elements": [
     {
-      "from": [0, 0, 0], "to": [16, 16, 2],
+      "name": "housing",
+      "from": [0, 0, 1], "to": [16, 16, 3],
       "faces": {
-        "north": { "uv": [0, 0, 16, 16], "texture": "#screen" },
+        "north": { "uv": [0, 0, 16, 16], "texture": "#frame" },
         "south": { "uv": [0, 0, 16, 16], "texture": "#frame" },
-        "east":  { "uv": [0, 0, 2, 16], "texture": "#frame" },
-        "west":  { "uv": [0, 0, 2, 16], "texture": "#frame" },
-        "up":    { "uv": [0, 0, 16, 2], "texture": "#frame" },
-        "down":  { "uv": [0, 0, 16, 2], "texture": "#frame" }
+        "east":  { "uv": [1, 0, 3, 16], "texture": "#frame" },
+        "west":  { "uv": [1, 0, 3, 16], "texture": "#frame" },
+        "up":    { "uv": [0, 1, 16, 3], "texture": "#frame" },
+        "down":  { "uv": [0, 1, 16, 3], "texture": "#frame" }
+      }
+    },
+    {
+      "name": "glass",
+      "from": [1, 1, 0], "to": [15, 15, 1],
+      "faces": {
+        "north": { "uv": [1, 1, 15, 15], "texture": "#screen" },
+        "east":  { "uv": [0, 1, 1, 15], "texture": "#frame" },
+        "west":  { "uv": [0, 1, 1, 15], "texture": "#frame" },
+        "up":    { "uv": [1, 0, 15, 1], "texture": "#frame" },
+        "down":  { "uv": [1, 0, 15, 1], "texture": "#frame" }
       }
     }
   ]

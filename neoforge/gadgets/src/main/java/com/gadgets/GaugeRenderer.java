@@ -22,7 +22,9 @@ public class GaugeRenderer<T extends BlockEntity & HubGauge> implements BlockEnt
     private static final int OK_COLOR = 0xFFC864;
     private static final int LOW_COLOR = 0xFF5555;
     private static final int LABEL_COLOR = 0xC0B090;
-    private static final int BAR_BG = 0xFF241C14;
+    private static final int BAR_BG = 0xFF3A322A;
+    /** Cells in the fill bar; 20 gives 5% resolution. */
+    private static final int BAR_CELLS = 20;
 
     private final Font font;
 
@@ -55,19 +57,29 @@ public class GaugeRenderer<T extends BlockEntity & HubGauge> implements BlockEnt
         Matrix4f matrix = pose.last().pose();
         int bright = LightTexture.FULL_BRIGHT;
 
-        font.drawInBatch(value, -font.width(value) / 2.0F, -12.0F, colour, false,
+        font.drawInBatch(value, -font.width(value) / 2.0F, -13.0F, colour, false,
                 matrix, buffers, Font.DisplayMode.POLYGON_OFFSET, 0, bright);
 
         // A bar makes a glance enough; the number is for when you care exactly.
+        // Built from '|' rather than block-drawing characters: those are not
+        // guaranteed to be in the player's font, and a missing glyph would show
+        // as a row of boxes. Every cell is the same width, so drawing the filled
+        // part over the empty one from the same origin lines up exactly.
         if (be.hasSource()) {
-            int filled = Math.max(0, Math.min(20, be.percent() / 5));
-            String bar = "▉".repeat(filled) + "·".repeat(20 - filled);
-            font.drawInBatch(bar, -font.width(bar) / 2.0F, 0.0F, filled == 0 ? BAR_BG : colour, false,
+            String track = "|".repeat(BAR_CELLS);
+            int filled = Math.round(BAR_CELLS * Math.max(0, Math.min(100, be.percent())) / 100.0F);
+            float barX = -font.width(track) / 2.0F;
+            font.drawInBatch(track, barX, -1.0F, BAR_BG, false,
                     matrix, buffers, Font.DisplayMode.POLYGON_OFFSET, 0, bright);
+            if (filled > 0) {
+                font.drawInBatch("|".repeat(filled), barX, -1.0F, colour, false,
+                        matrix, buffers, Font.DisplayMode.POLYGON_OFFSET, 0, bright);
+            }
         }
 
-        font.drawInBatch(label, -font.width(label) / 2.0F, 10.0F, LABEL_COLOR, false,
+        font.drawInBatch(label, -font.width(label) / 2.0F, 6.0F, LABEL_COLOR, false,
                 matrix, buffers, Font.DisplayMode.POLYGON_OFFSET, 0, bright);
         pose.popPose();
     }
+
 }
