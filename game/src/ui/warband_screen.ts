@@ -34,6 +34,29 @@ const BATTLE_SPEED = 2; // sim-time multiplier while watching a fight
 const INTRO_LEN = 1.4;  // seconds the VS clash banner holds before the charge
 const easeOut = (t: number) => 1 - Math.pow(1 - Math.max(0, Math.min(1, t)), 3);
 
+/** Left rail (standings, commander, synergies, relics) and bottom bar heights. */
+export const RAIL_W = 232;
+export const BENCH_H = 66;
+export const SHOP_H = 132;
+
+/**
+ * The arena rect for a given canvas. The board is a 10×10 grid, so its cells
+ * are kept close to square and the board is centred in whatever width is left
+ * — otherwise on a wide monitor the arena smears into a near-empty field of
+ * very flat rectangles with the units lost in the middle of it.
+ */
+export function boardRect(W: number, H: number): { x: number; y: number; w: number; h: number } {
+  const y = 92;
+  const availX = RAIL_W;
+  const availW = W - availX - 16;
+  const availH = (H - SHOP_H) - BENCH_H - 16 - y;
+  const cellH = availH / GRID_ROWS;
+  // A little horizontal stretch reads fine; a lot looks broken.
+  const cellW = Math.min(availW / GRID_COLS, cellH * 1.25);
+  const w = cellW * GRID_COLS;
+  return { x: Math.round(availX + (availW - w) / 2), y, w, h: cellH * GRID_ROWS };
+}
+
 export class WarbandScreen {
   private selectedItem = -1; // index into the run's item stash, or -1
   private battle: LiveBattle | null = null;
@@ -150,7 +173,12 @@ export class WarbandScreen {
       });
       if (next) ui.text("⚔", sx + 96, sy + 17, { size: 12, color: "#e0786a" });
       ui.bar(sx + 110, sy + 9, 82, 9, Math.max(0, s.life) / 100, s.alive ? "#7df2a9" : "#5a554d");
-      ui.text(String(Math.max(0, s.life)), sx + 152, sy + 17, { align: "center", size: 9, bold: true, color: "rgba(6,10,6,0.85)" });
+      // Light text with a dark halo, so it stays legible over both the filled
+      // and the empty part of the bar.
+      ctx.save();
+      ctx.shadowColor = "rgba(0,0,0,0.9)"; ctx.shadowBlur = 3;
+      ui.text(String(Math.max(0, s.life)), sx + 152, sy + 17, { align: "center", size: 9.5, bold: true, color: "#f2f7ee" });
+      ctx.restore();
       if (hov && !picking && ui.clicked && !ui.pointerConsumed) { ui.pointerConsumed = true; this.scoutId = open ? -1 : s.id; audio.play("ui"); }
       sy += h + 3;
     }
@@ -251,14 +279,15 @@ export class WarbandScreen {
     }
 
     // ---- board geometry ----
-    const bx = 232;
-    const boardX = bx;
-    const boardY = 92;
-    const boardW = W - boardX - 16;
-    const benchH = 66;
-    const shopTop = H - 132;
-    const boardBottom = shopTop - benchH - 16;
-    const boardH = boardBottom - boardY;
+    const bx = RAIL_W;
+    const board = boardRect(W, H);
+    const boardX = board.x;
+    const boardY = board.y;
+    const boardW = board.w;
+    const boardH = board.h;
+    const benchH = BENCH_H;
+    const shopTop = H - SHOP_H;
+    const boardBottom = boardY + boardH;
 
     // Keep a battle world around for the current matchup: during shop it's a
     // static preview (both warbands standing on the board); FIGHT begins it.
@@ -399,10 +428,13 @@ export class WarbandScreen {
     ctx.fillRect(0, shopY - 8, W, H - shopY + 8);
 
     if (run.phase === "shop") {
-      ui.text("Shop", bx, shopY + 6, { size: 13, bold: true, color: PAL.uiAccent });
       const sw = 120, sh = 108; // tall enough for the unit to actually be seen
+      // Centre the five cards under the board rather than pinning them to the rail.
+      const shopW = 5 * sw + 4 * 8;
+      const shopX = Math.round(Math.max(bx, boardX + (boardW - shopW) / 2 - 70));
+      ui.text("Shop", shopX, shopY + 6, { size: 13, bold: true, color: PAL.uiAccent });
       run.shop.forEach((type, i) => {
-        const cx = bx + i * (sw + 8);
+        const cx = shopX + i * (sw + 8);
         const cy = shopY + 12;
         if (type) {
           const can = run.canBuy(i);
@@ -415,7 +447,7 @@ export class WarbandScreen {
           ctx.setLineDash([4, 4]); this.roundRect(ctx, cx + 0.5, cy + 0.5, sw - 1, sh - 1, 8); ctx.stroke(); ctx.setLineDash([]);
         }
       });
-      const rxx = bx + 5 * (120 + 8) + 8;
+      const rxx = shopX + 5 * (sw + 8) + 8;
       const rc = run.rerollCost();
       const freeR = run.freeRerollsLeft();
       if (ui.button(freeR > 0 ? `Reroll  (FREE ×${freeR})` : `Reroll  (${rc}g)`, rxx, shopY + 14, 130, 32, {

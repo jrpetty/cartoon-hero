@@ -2,15 +2,15 @@ import { describe, expect, it } from "vitest";
 import { createCanvas } from "@napi-rs/canvas";
 import { ui } from "./ui";
 import { setMouseDown } from "./screens";
-import { WarbandScreen } from "./warband_screen";
+import { WarbandScreen, boardRect } from "./warband_screen";
 import { WarbandRun } from "../sim/warband";
 
 const W = 1280, H = 760;
-const boardX = 232, boardY = 92;
-const boardW = W - boardX - 16;
-const boardH = (H - 132) - 66 - 16 - boardY;
-const cellW = boardW / 10, cellH = boardH / 10;
-const cellCenter = (c: number, r: number) => [boardX + (c + 0.5) * cellW, boardY + (r + 0.5) * cellH] as const;
+// Take the arena rect from the screen itself, so a layout change can't quietly
+// leave these clicking empty space.
+const board = boardRect(W, H);
+const cellW = board.w / 10, cellH = board.h / 10;
+const cellCenter = (c: number, r: number) => [board.x + (c + 0.5) * cellW, board.y + (r + 0.5) * cellH] as const;
 
 describe("Warband screen placement", () => {
   const setup = () => {
@@ -34,7 +34,7 @@ describe("Warband screen placement", () => {
     frame(0, 0, false, false); // settle (resolves auto-placement)
     const before = run.pieces.length;
     const [ux, uy] = cellCenter(2, 3);
-    const [sx, sy] = [boardX + boardW - 156 / 2 - 14, boardY + boardH - 66 / 2 - 14];
+    const [sx, sy] = [board.x + board.w - 156 / 2 - 14, board.y + board.h - 66 / 2 - 14];
     frame(ux, uy, true, false);   // press → grab
     frame(sx, sy, true, false);   // drag over the sell box
     frame(sx, sy, false, true);   // release → sell
