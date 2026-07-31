@@ -41,8 +41,16 @@ public final class AbyssGame {
     private com.jrpetty.aztecabyss.worldgen.ArenaMap map = com.jrpetty.aztecabyss.worldgen.ArenaMap.TEMPLE;
 
     // --- Defence objective (maps that have something to protect) ---
-    /** Max health of the objective. */
-    public static final float OBJECTIVE_MAX_HEALTH = 200.0f;
+    /**
+     * Max health of the objective: 300 hearts.
+     *
+     * <p>Stored in health points, which is what everything that damages or heals
+     * it deals in - so 300 hearts is 600 here, the same two-points-per-heart the
+     * player bar uses. Repair and regeneration are both expressed as fractions of
+     * this pool, so retuning the number does not quietly change how long a
+     * diamond or a between-round tick is worth.
+     */
+    public static final float OBJECTIVE_MAX_HEALTH = 600.0f;
     private float objectiveHealth = OBJECTIVE_MAX_HEALTH;
 
     // --- Boss-round state (rounds 10 and the final round summon the Warden) ---
