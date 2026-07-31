@@ -132,6 +132,9 @@ export function streakBonus(streak: number): number {
   return STREAK_GOLD[Math.min(Math.abs(streak), STREAK_GOLD.length - 1)];
 }
 
+/** Star scaling used when weighing a board we don't simulate (matches the sim). */
+const STAR_POWER = [0, 1, 1.8, 3.2];
+
 /** Bench slots — reserves beyond your deployed board, exactly like TFT's nine. */
 export const BENCH_SLOTS = 9;
 
@@ -782,11 +785,15 @@ export class WarbandRun {
     // Personality shapes the three levers every warband pulls: how hard it banks
     // for interest, how fast it techs, and how much it rolls for star-ups.
     const play = b.play;
-    const levelPace = play === "aggressor" ? 0.85 : play === "roller" ? 0.62 : 0.72;
+    const levelPace = play === "aggressor" ? 0.95 : play === "roller" ? 0.68 : 0.8;
     const targetLevel = Math.min(MAX_LEVEL, 1 + Math.floor(this.round * levelPace));
-    const reserveCap = play === "economist" ? 50 : play === "roller" ? 20 : 30;
+    // Banking is right early and wrong late. Past the mid-game a warband that
+    // is still sitting on 50 gold is a warband fielding a board it could have
+    // upgraded, so the reserve collapses and they spend down.
+    const late = this.round > 11;
+    const reserveCap = late ? 8 : play === "economist" ? 50 : play === "roller" ? 20 : 30;
     const reserve = Math.min(reserveCap, Math.max(0, (this.round - 2) * 8));
-    let rerolls = (play === "roller" ? 5 : 2) + Math.floor(this.round / 2);
+    let rerolls = (play === "roller" ? 5 : 2) + Math.floor(this.round / 2) + (late ? 6 : 0);
     let guard = 0;
     while (guard++ < 160) {
       // Tech toward the curve when it can afford to and stay above reserve.
@@ -957,18 +964,56 @@ export class WarbandRun {
 
   /** Off-screen attrition: random living foes lose a little life each round. */
   private thinTheHerd() {
-    for (const o of this.livingFoes()) {
-      if (this.rng.range(0, 1) < 0.35) {
-        o.life -= this.rng.int(4, 10) + Math.floor(this.round / 2);
-        // Attrition never decides the run: the last warband standing has to be
-        // beaten in the arena, not quietly whittled away off-screen. Without
-        // this the lobby can empty on the same round you die, leaving nobody.
-        if (o.life <= 0) {
-          if (this.livingFoes().length <= 1) { o.life = 1; continue; }
-          o.life = 0; o.alive = false;
-        }
+    // The rest of the lobby fights its own round. This used to be random
+    // attrition, which meant rivals died to dice rather than to bad drafting —
+    // and a player who simply survived inherited the win. Now the warbands that
+    // last are the ones that actually built the better board, so the field you
+    // face late is the strong half of it.
+    const others = this.livingFoes().filter((o) => o !== this.pendingFoe);
+    for (let i = others.length - 1; i > 0; i--) { // deterministic shuffle
+      const j = this.rng.int(0, i);
+      [others[i], others[j]] = [others[j], others[i]];
+    }
+    for (let i = 0; i + 1 < others.length; i += 2) {
+      const a = others[i], b = others[i + 1];
+      const sa = this.foeStrength(this.foeBrains[a.id]);
+      const sb = this.foeStrength(this.foeBrains[b.id]);
+      if (sa === sb) continue; // a true stalemate costs neither of them
+      const winner = sa > sb ? a : b;
+      const loser = sa > sb ? b : a;
+      const hi = Math.max(sa, sb), lo = Math.min(sa, sb);
+      // Survivors scale with how lopsided it was, so a narrow win barely stings.
+      const power = Math.max(1, Math.round(this.foeBrains[winner.id].level * (1 - lo / hi)));
+      loser.life -= roundDamage(this.round, power);
+      if (loser.life <= 0) {
+        // The last warband standing has to be beaten in the arena, not
+        // eliminated off-screen — otherwise the lobby can empty on the same
+        // round you die, leaving nobody alive at all.
+        if (this.livingFoes().length <= 1) { loser.life = 1; continue; }
+        loser.life = 0; loser.alive = false;
       }
     }
+  }
+
+  /**
+   * How hard a warband hits, for the fights we resolve off-screen: star-weighted
+   * tier, plus relics, plus whatever its synergies are worth. Cheap on purpose —
+   * simulating three extra battles a round would stall the frame the result
+   * lands on.
+   */
+  private foeStrength(b: FoeBrain): number {
+    const board = [...b.pieces]
+      .sort((p, q) => q.star - p.star || (UNIT_TIER[q.type] ?? 0) - (UNIT_TIER[p.type] ?? 0))
+      .slice(0, b.level);
+    let total = 0;
+    for (const p of board) {
+      total += (UNIT_TIER[p.type] ?? 1) * (STAR_POWER[p.star] ?? 1);
+      total += p.items.length * 1.5;
+    }
+    for (const at of activeTraits([...new Set(board.map((p) => p.type))])) {
+      if (at.tier) total += 2 * (at.tierIndex + 1);
+    }
+    return total;
   }
 
   /** Advance from the result screen into the next shop phase. */

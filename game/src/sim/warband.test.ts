@@ -884,3 +884,75 @@ describe("Warband scouting", () => {
     for (const r of rows.filter((x) => !x.you)) expect(run.scout(r.id)!.name).toBe(r.name);
   });
 });
+
+describe("Warband difficulty", () => {
+  /** Play a whole run with a fixed level of care, and report the placement. */
+  function playRun(seed: number, skill: "idle" | "average" | "good"): number {
+    const run = new WarbandRun(seed, null);
+    let guard = 0;
+    while (run.phase !== "over" && guard++ < 400) {
+      if (run.phase === "augment") { run.pickAugment(0); continue; }
+      if (run.phase === "draft") { run.takeCarousel(0); continue; }
+      if (run.phase === "shop") {
+        if (skill === "average") { if (run.gold >= 12) run.buyXp(); run.buy(0); run.buy(1); }
+        if (skill === "good") {
+          while (run.gold >= 20 && run.level < 9) run.buyXp();
+          for (let s = 0; s < 5; s++) run.buy(s);
+          if (run.gold > 30) { run.reroll(); for (let s = 0; s < 5; s++) run.buy(s); }
+        }
+        run.fight();
+      } else if (run.phase === "result") run.next();
+    }
+    return run.placement();
+  }
+
+  const SEEDS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
+  const mean = (xs: number[]) => xs.reduce((a, b) => a + b, 0) / xs.length;
+
+  it("punishes doing nothing, and rewards playing well", () => {
+    const idle = SEEDS.map((s) => playRun(s, "idle"));
+    const average = SEEDS.map((s) => playRun(s, "average"));
+    const good = SEEDS.map((s) => playRun(s, "good"));
+
+    // Skill has to separate the outcomes, in the right order.
+    expect(mean(good)).toBeLessThan(mean(average));
+    expect(mean(average)).toBeLessThan(mean(idle));
+
+    // Fielding nothing loses, every time — the lobby is never so passive that
+    // an empty board coasts on other people's mistakes.
+    expect(Math.max(...idle)).toBe(8);
+    expect(idle.filter((p) => p === 1).length).toBe(0);
+
+    // A middling player lands mid-pack and only occasionally takes it. This is
+    // the guard against the mode drifting back to "survive and inherit a win".
+    expect(mean(average)).toBeGreaterThan(3);
+    expect(average.filter((p) => p === 1).length).toBeLessThanOrEqual(4);
+
+    // Playing well is properly rewarded, without being a formality.
+    expect(mean(good)).toBeLessThan(3);
+    expect(good.filter((p) => p === 1).length).toBeGreaterThan(1);
+  }, 120000);
+
+  it("thins the lobby through lost fights, and never below one survivor", () => {
+    // A real run — an empty board dies long before the field would thin.
+    const run = new WarbandRun(77, null);
+    let guard = 0;
+    while (run.phase !== "over" && guard++ < 400) {
+      if (run.phase === "augment") { run.pickAugment(0); continue; }
+      if (run.phase === "draft") { run.takeCarousel(0); continue; }
+      if (run.phase === "shop") {
+        while (run.gold >= 20 && run.level < 9) run.buyXp();
+        for (let s = 0; s < 5; s++) run.buy(s);
+        run.fight();
+      } else if (run.phase === "result") run.next();
+    }
+    expect(run.phase).toBe("over");
+    // Rivals were knocked out, and every one of them lost life to get there
+    // rather than vanishing — dice never eliminated anybody.
+    const dead = run.opponents.filter((o) => !o.alive);
+    expect(dead.length).toBeGreaterThan(0);
+    for (const o of dead) expect(o.life).toBe(0);
+    // The run always ends with somebody still standing.
+    expect(run.standings()[0].alive).toBe(true);
+  }, 60000);
+});
