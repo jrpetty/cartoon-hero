@@ -356,9 +356,10 @@ public final class RoundManager {
         if (penned) {
             // Materialise inside the sealed gatehouse, back from the boards, so
             // there is a walk-up before the tearing starts.
-            BlockPos pen = Barricade.penSpawn(gate);
+            BlockPos pen = Barricade.penSpawn(game.getMap(), gateIndex);
             int j = RNG.nextInt(3) - 1;
-            pos = spreadAlongX ? pen.offset(j, 0, 0) : pen.offset(0, 0, j);
+            pos = Barricade.spansX(game.getMap(), gateIndex)
+                    ? pen.offset(j, 0, 0) : pen.offset(0, 0, j);
         } else {
             pos = spreadAlongX ? gate.offset(jitter, 0, 0) : gate.offset(0, 0, jitter);
         }
@@ -718,11 +719,16 @@ public final class RoundManager {
      * walkway and the pyramid; on the bridge, striding out of the far gate.
      */
     private static BlockPos bossSpawn() {
-        if (game.getMap() == com.jrpetty.aztecabyss.worldgen.ArenaMap.BRIDGE) {
-            BlockPos gate = game.getMap().gates()[0];
-            return gate.offset(0, 0, 4);
-        }
-        return new BlockPos(0, AztecAbyssConstants.ARENA_FLOOR_Y + 1, 16);
+        return switch (game.getMap()) {
+            case BRIDGE -> game.getMap().gates()[0].offset(0, 0, 4);
+            // Down the north arm, so it has to walk the length of the compound and
+            // the squad still has three other arms to scatter down when it slams.
+            case CRYPT -> new BlockPos(
+                    com.jrpetty.aztecabyss.worldgen.CryptBuilder.CENTER_X,
+                    com.jrpetty.aztecabyss.worldgen.CryptBuilder.FLOOR_Y + 1,
+                    com.jrpetty.aztecabyss.worldgen.CryptBuilder.CENTER_Z - 14);
+            default -> new BlockPos(0, AztecAbyssConstants.ARENA_FLOOR_Y + 1, 16);
+        };
     }
 
     /** True when the current boss round is the final round (the Warden); otherwise it's the mid-boss Warlord. */
@@ -1047,9 +1053,10 @@ public final class RoundManager {
             int missing = Barricade.missingBoards();
             if (missing > 0) {
                 int open = Barricade.openCount();
+                String noun = game.getMap().gateNoun().toLowerCase(java.util.Locale.ROOT);
                 String msg = open > 0
-                        ? "§c⚒ " + open + " gate" + (open > 1 ? "s" : "") + " standing open §7— board them before the next wave"
-                        : "§e⚒ " + missing + " board" + (missing > 1 ? "s" : "") + " gone §7— right-click a gate to mend it";
+                        ? "§c⚒ " + open + " " + noun + (open > 1 ? "s" : "") + " standing open §7— board them before the next wave"
+                        : "§e⚒ " + missing + " board" + (missing > 1 ? "s" : "") + " gone §7— right-click a " + noun + " to mend it";
                 for (ServerPlayer p : participantPlayers(level)) {
                     actionBar(p, msg);
                 }
@@ -1483,7 +1490,17 @@ public final class RoundManager {
     /** Drops a randomised supply cache somewhere on the open arena floor, flare and all. */
     private static void spawnSupplyCache(ServerLevel level, int round) {
         BlockPos pos;
-        if (game.getMap() == com.jrpetty.aztecabyss.worldgen.ArenaMap.BRIDGE) {
+        if (game.getMap() == com.jrpetty.aztecabyss.worldgen.ArenaMap.CRYPT) {
+            // Down a random arm, clear of the junction so it isn't underfoot.
+            int arm = RNG.nextInt(4);
+            int out = 9 + RNG.nextInt(6);
+            int dx = arm == 0 ? out : arm == 1 ? -out : 0;
+            int dz = arm == 2 ? out : arm == 3 ? -out : 0;
+            pos = new BlockPos(
+                    com.jrpetty.aztecabyss.worldgen.CryptBuilder.CENTER_X + dx,
+                    com.jrpetty.aztecabyss.worldgen.CryptBuilder.FLOOR_Y,
+                    com.jrpetty.aztecabyss.worldgen.CryptBuilder.CENTER_Z + dz);
+        } else if (game.getMap() == com.jrpetty.aztecabyss.worldgen.ArenaMap.BRIDGE) {
             // Lands on the island, near the fort, so it's grabbable between waves.
             double a = RNG.nextDouble() * Math.PI * 2.0;
             int rr = 6 + RNG.nextInt(8);
@@ -1890,7 +1907,7 @@ public final class RoundManager {
         for (int i = 0; i < gates.length; i++) {
             final int gateIndex = i;
             BlockPos gate = gates[i];
-            List<Mob> penned = level.getEntitiesOfClass(Mob.class, Barricade.penBounds(gate),
+            List<Mob> penned = level.getEntitiesOfClass(Mob.class, Barricade.penBounds(map, i),
                     m -> m.getPersistentData().getBoolean("aztecabyss_wave_mob")
                             && !m.getPersistentData().getBoolean("aztecabyss_boss")
                             && m.getPersistentData().getInt("aztecabyss_gate_index") == gateIndex);
@@ -1957,13 +1974,14 @@ public final class RoundManager {
             // The gate is open. This is the loud moment.
             barricadeSound(level, gate, net.minecraft.sounds.SoundEvents.RAVAGER_ROAR, 1.5F, 0.6F);
             for (ServerPlayer p : present) {
-                actionBar(p, "§4§l✖ THE " + Barricade.gateName(gateIndex) + " GATE IS OPEN");
+                actionBar(p, "§4§l✖ " + game.getMap().gateLabel(gateIndex) + " "
+                        + game.getMap().gateNoun() + " IS OPEN");
                 level.playSound(null, p.blockPosition(), net.minecraft.sounds.SoundEvents.ANVIL_LAND,
                         SoundSource.HOSTILE, 0.8F, 0.5F);
             }
         } else if (left == 1) {
             for (ServerPlayer p : present) {
-                actionBar(p, "§c⚠ The §f" + Barricade.gateName(gateIndex) + "§c gate is about to fall");
+                actionBar(p, "§c⚠ §f" + game.getMap().gateLabel(gateIndex) + "§c is about to fall");
             }
         }
     }
@@ -1997,7 +2015,7 @@ public final class RoundManager {
             return false; // still hammering the previous one
         }
         if (Barricade.count(gateIndex) >= Barricade.MAX_BOARDS) {
-            actionBar(player, "§7The " + Barricade.gateName(gateIndex) + " gate is sound.");
+            actionBar(player, "§7" + map.gateLabel(gateIndex) + " is sound.");
             return false;
         }
         LAST_REPAIR.put(player.getUUID(), now);
@@ -2008,9 +2026,8 @@ public final class RoundManager {
         BlockPos gate = map.gates()[gateIndex];
         barricadeSound(level, gate, net.minecraft.sounds.SoundEvents.WOOD_PLACE, 1.2F, 0.9F);
         actionBar(player, left >= Barricade.MAX_BOARDS
-                ? "§a✔ The " + Barricade.gateName(gateIndex) + " gate is sound again"
-                : "§e⚒ Board " + left + "§7/" + Barricade.MAX_BOARDS + " §e- "
-                        + Barricade.gateName(gateIndex) + " gate");
+                ? "§a✔ " + map.gateLabel(gateIndex) + " is sound again"
+                : "§e⚒ Board " + left + "§7/" + Barricade.MAX_BOARDS + " §e- " + map.gateLabel(gateIndex));
         return true;
     }
 

@@ -66,8 +66,6 @@ public final class Barricade {
             Blocks.OAK_TRAPDOOR, Blocks.SPRUCE_TRAPDOOR, Blocks.DARK_OAK_TRAPDOOR,
     };
 
-    private static final String[] COMPASS = {"NORTH", "SOUTH", "EAST", "WEST"};
-
     /** Boards remaining per gate. */
     private static int[] boards = new int[0];
     /** Accumulated tearing effort per gate, in plain-mob-seconds toward the next board. */
@@ -80,27 +78,37 @@ public final class Barricade {
     // Geometry
     // ------------------------------------------------------------------
 
-    /** North/south gates span X; east/west gates span Z. */
-    public static boolean spansX(BlockPos gate) {
-        return gate.getX() == 0;
+    /**
+     * The direction pointing out of the arena through a gate.
+     *
+     * <p>Read from the map rather than derived from the gate's coordinates. The
+     * old derivation only worked for arenas whose gates sat on the cardinal axes
+     * through the world origin - fine for the Temple, meaningless the moment a
+     * map puts two windows side by side in the same wall.
+     */
+    public static Direction outward(ArenaMap map, int gate) {
+        Direction[] facings = map.gateFacings();
+        return gate >= 0 && gate < facings.length ? facings[gate] : Direction.NORTH;
     }
 
-    /** The direction pointing out of the arena through this gate. */
-    public static Direction outward(BlockPos gate) {
-        if (spansX(gate)) {
-            return gate.getZ() < 0 ? Direction.NORTH : Direction.SOUTH;
-        }
-        return gate.getX() < 0 ? Direction.WEST : Direction.EAST;
+    /** True when a gate's opening runs along X (i.e. it faces north or south). */
+    public static boolean spansX(ArenaMap map, int gate) {
+        return outward(map, gate).getAxis() == Direction.Axis.Z;
     }
 
     /** Where the horde materialises inside the pen, deep enough to have to walk up. */
-    public static BlockPos penSpawn(BlockPos gate) {
-        return gate.relative(outward(gate), SPAWN_DEPTH);
+    public static BlockPos penSpawn(ArenaMap map, int gate) {
+        return map.gates()[gate].relative(outward(map, gate), SPAWN_DEPTH);
     }
 
-    /** The volume of the gatehouse, used to find who is currently working on the boards. */
-    public static AABB penBounds(BlockPos gate) {
-        BlockPos far = gate.relative(outward(gate), POCKET_DEPTH);
+    /** The volume of the pen, used to find who is currently working on the boards. */
+    public static AABB penBounds(ArenaMap map, int gate) {
+        BlockPos g = map.gates()[gate];
+        BlockPos far = g.relative(outward(map, gate), POCKET_DEPTH);
+        return penBox(g, far);
+    }
+
+    private static AABB penBox(BlockPos gate, BlockPos far) {
         int minX = Math.min(gate.getX(), far.getX()) - POCKET_HALF_WIDTH;
         int maxX = Math.max(gate.getX(), far.getX()) + POCKET_HALF_WIDTH;
         int minZ = Math.min(gate.getZ(), far.getZ()) - POCKET_HALF_WIDTH;
@@ -108,8 +116,8 @@ public final class Barricade {
         return new AABB(minX, gate.getY() - 2, minZ, maxX + 1.0, gate.getY() + 7.0, maxZ + 1.0);
     }
 
-    private static BlockPos cell(BlockPos gate, int off, int dy) {
-        return spansX(gate)
+    private static BlockPos cell(BlockPos gate, boolean spansX, int off, int dy) {
+        return spansX
                 ? new BlockPos(gate.getX() + off, gate.getY() + dy, gate.getZ())
                 : new BlockPos(gate.getX(), gate.getY() + dy, gate.getZ() + off);
     }
@@ -119,18 +127,16 @@ public final class Barricade {
         BlockPos[] gates = map.gates();
         for (int i = 0; i < gates.length; i++) {
             BlockPos g = gates[i];
-            if (Math.abs(pos.getY() - g.getY()) <= 5
-                    && Math.abs(pos.getX() - g.getX()) <= 3
-                    && Math.abs(pos.getZ() - g.getZ()) <= 3) {
+            // Deliberately tight on the span axis: the Crypt puts two windows six
+            // blocks apart in one wall, and a generous box would mend the wrong one.
+            boolean spansX = spansX(map, i);
+            int along = Math.abs(spansX ? pos.getX() - g.getX() : pos.getZ() - g.getZ());
+            int through = Math.abs(spansX ? pos.getZ() - g.getZ() : pos.getX() - g.getX());
+            if (Math.abs(pos.getY() - g.getY()) <= 5 && along <= 2 && through <= 2) {
                 return i;
             }
         }
         return -1;
-    }
-
-    /** Human-readable name for a gate, for callouts. */
-    public static String gateName(int gate) {
-        return gate >= 0 && gate < COMPASS.length ? COMPASS[gate] : "UNKNOWN";
     }
 
     // ------------------------------------------------------------------
@@ -239,13 +245,14 @@ public final class Barricade {
             return;
         }
         BlockPos g = map.gates()[gate];
-        Direction face = outward(g);
+        Direction face = outward(map, gate);
+        boolean spansX = spansX(map, gate);
         int have = boards[gate];
         for (int i = 0; i < MAX_BOARDS; i++) {
             boolean up = i < have;
             int[] cells = BOARD_CELLS[i];
             for (int c = 0; c < cells.length; c += 2) {
-                BlockPos p = cell(g, cells[c], cells[c + 1]);
+                BlockPos p = cell(g, spansX, cells[c], cells[c + 1]);
                 if (!up) {
                     level.setBlock(p, Blocks.AIR.defaultBlockState(), 3);
                     continue;
@@ -264,22 +271,29 @@ public final class Barricade {
     // HUD packing
     // ------------------------------------------------------------------
 
-    /** Sentinel nibble meaning "this map has no barricades" so the HUD can hide the row. */
-    public static final int NO_BARRICADES = 0xF;
-
     /**
-     * Packs up to four gates into one int, a nibble each, so the HUD payload stays
-     * inside the stream codec's six-pair ceiling.
+     * Packs the whole barricade picture into sixteen bits for the HUD: how many
+     * gates stand open, and what fraction of the boards are still up.
+     *
+     * <p>Aggregate rather than per-gate because the Crypt has eight windows and a
+     * per-window gauge at that count is unreadable noise - the callouts and the
+     * audio already tell you which one is going.
+     *
+     * <p>Layout: open count (4 bits) | percent intact (7 bits) | present flag.
      */
     public static int packed(ArenaMap map) {
-        if (!map.hasBarricades()) {
-            return NO_BARRICADES | (NO_BARRICADES << 4) | (NO_BARRICADES << 8) | (NO_BARRICADES << 12);
+        if (!map.hasBarricades() || boards.length == 0) {
+            return 0;
         }
-        int out = 0;
-        for (int i = 0; i < 4; i++) {
-            int v = i < boards.length ? Math.min(MAX_BOARDS, Math.max(0, boards[i])) : NO_BARRICADES;
-            out |= (v & 0xF) << (i * 4);
+        int max = boards.length * MAX_BOARDS;
+        int have = 0;
+        for (int b : boards) {
+            have += b;
         }
-        return out;
+        int percent = max == 0 ? 0 : Math.round(have * 100.0f / max);
+        return PRESENT | ((Math.min(15, openCount()) & 0xF) << 1) | ((percent & 0x7F) << 5);
     }
+
+    /** Low bit: this map has barricades at all. Decoded in AbyssStatePayload. */
+    public static final int PRESENT = 1;
 }

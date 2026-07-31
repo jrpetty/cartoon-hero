@@ -24,7 +24,7 @@ public final class AbyssStats extends SavedData {
     public static final String NAME = "aztecabyss_stats";
 
     /** How many arenas we keep separate best-round records for. */
-    public static final int MAP_COUNT = 2;
+    public static final int MAP_COUNT = com.jrpetty.aztecabyss.worldgen.ArenaMap.values().length;
 
     public record Entry(String name,
                         int soloBestRound, int soloBestSeconds,

@@ -18,9 +18,11 @@ import net.minecraft.resources.ResourceLocation;
  * board count on each of up to four horde gates - because the composite codec
  * tops out at six field pairs and this payload is already at all six.
  *
- * <p>Layout, low bits first: total (8) | up (8) | gate boards (4 x 4). A gate
- * nibble of {@code 0xF} means the active map has no barricades at all, which is
- * how the client knows to leave that row off the HUD entirely.
+ * <p>Layout, low bits first: total (8) | up (8) | barricade summary (16). The
+ * summary is itself packed - present flag (1) | gates standing open (4) |
+ * percent of boards intact (7) - and is aggregate rather than per-gate because
+ * the Crypt has eight windows, at which count a per-window gauge is unreadable
+ * noise. Which one is going is carried by the callouts and the audio.
  */
 public record AbyssStatePayload(boolean inRun, int round, boolean fogRound,
                                 int enemiesRemaining, int packed, int myKills)
@@ -39,11 +41,12 @@ public record AbyssStatePayload(boolean inRun, int round, boolean fogRound,
                     ByteBufCodecs.VAR_INT, AbyssStatePayload::myKills,
                     AbyssStatePayload::new);
 
-    /** Nibble value meaning "no barricades on this map". */
-    public static final int NO_GATE = 0xF;
+    public static int pack(int up, int total, int barricadeSummary) {
+        return ((barricadeSummary & 0xFFFF) << 16) | ((up & 0xFF) << 8) | (total & 0xFF);
+    }
 
-    public static int pack(int up, int total, int gateBoardsPacked) {
-        return ((gateBoardsPacked & 0xFFFF) << 16) | ((up & 0xFF) << 8) | (total & 0xFF);
+    private int summary() {
+        return (packed >>> 16) & 0xFFFF;
     }
 
     public int playersUp() {
@@ -54,14 +57,19 @@ public record AbyssStatePayload(boolean inRun, int round, boolean fogRound,
         return packed & 0xFF;
     }
 
-    /** Boards left on gate {@code i}, or {@link #NO_GATE} if this map has none. */
-    public int gateBoards(int i) {
-        return (packed >>> (16 + i * 4)) & 0xF;
+    /** Whether the active map has boarded ways in worth showing on the HUD. */
+    public boolean hasGates() {
+        return (summary() & 1) != 0;
     }
 
-    /** Whether the active map has boarded gates worth showing on the HUD. */
-    public boolean hasGates() {
-        return gateBoards(0) != NO_GATE;
+    /** How many ways in are currently standing open. */
+    public int gatesOpen() {
+        return (summary() >>> 1) & 0xF;
+    }
+
+    /** Percentage of all boards still nailed up, 0-100. */
+    public int gatesPercent() {
+        return (summary() >>> 5) & 0x7F;
     }
 
     @Override

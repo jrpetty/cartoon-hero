@@ -205,33 +205,26 @@ public final class AbyssClientEffects {
         g.drawString(font, label, x, y, 0xFFFFFF, true);
     }
 
-    private static final String[] GATE_LABELS = {"N", "S", "E", "W"};
-
     /**
-     * One compact row showing every horde gate as a run of filled and missing
-     * boards, so a glance tells you which side is about to give. Colour carries
-     * the urgency; the bar carries how long you have.
+     * One compact bar for the state of every way in: how much of the boarding is
+     * still up, and how many are standing wide open. Aggregate on purpose - with
+     * eight windows on the Crypt a per-window readout is noise, and the callouts
+     * already name the one that's going.
      */
-    private static String gateGauge(int[] gates) {
-        StringBuilder sb = new StringBuilder();
-        for (int i = 0; i < gates.length && i < GATE_LABELS.length; i++) {
-            int boards = gates[i];
-            String colour = boards == 0 ? "§4" : boards <= 2 ? "§c" : boards <= 4 ? "§e" : "§a";
-            if (i > 0) {
-                sb.append(" ");
-            }
-            sb.append("§7").append(GATE_LABELS[i]).append(colour);
-            if (boards == 0) {
-                sb.append("✖");
-                continue;
-            }
-            for (int b = 0; b < boards; b++) {
-                sb.append("|");
-            }
-            sb.append("§8");
-            for (int b = boards; b < com.jrpetty.aztecabyss.round.Barricade.MAX_BOARDS; b++) {
-                sb.append("|");
-            }
+    private static String gateGauge(int percent, int open) {
+        String colour = open > 0 ? "§4" : percent <= 33 ? "§c" : percent <= 66 ? "§e" : "§a";
+        int filled = Math.round(percent / 10.0f);
+        StringBuilder sb = new StringBuilder(colour);
+        for (int i = 0; i < filled; i++) {
+            sb.append("|");
+        }
+        sb.append("§8");
+        for (int i = filled; i < 10; i++) {
+            sb.append("|");
+        }
+        sb.append(" ").append(colour).append(percent).append("%");
+        if (open > 0) {
+            sb.append(" §4✖").append(open).append(" open");
         }
         return sb.toString();
     }
@@ -263,10 +256,10 @@ public final class AbyssClientEffects {
         if (total > 1) {
             lines.add(net.minecraft.network.chat.Component.literal("§c❤ §fSquad: §a" + up + "§7/" + total + " up"));
         }
-        int[] gates = ClientAbyssState.getGateBoards();
-        if (gates.length > 0) {
-            lines.add(net.minecraft.network.chat.Component.literal("§6⌸ §fGates"));
-            lines.add(net.minecraft.network.chat.Component.literal(gateGauge(gates)));
+        if (ClientAbyssState.hasGates()) {
+            lines.add(net.minecraft.network.chat.Component.literal("§6⌸ §fBoarding"));
+            lines.add(net.minecraft.network.chat.Component.literal(
+                    gateGauge(ClientAbyssState.getGatesPercent(), ClientAbyssState.getGatesOpen())));
         }
         lines.add(net.minecraft.network.chat.Component.literal("§b✦ §fKills: §b" + kills));
 

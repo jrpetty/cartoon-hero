@@ -35,6 +35,7 @@ public final class MonumentBuilder {
     public static void build(ServerLevel level) {
         buildAt(level, AztecAbyssConstants.MONUMENT_POS);
         buildAt(level, BRIDGE_MONUMENT);
+        buildAt(level, CryptBuilder.MONUMENT);
     }
 
     /**
@@ -77,7 +78,11 @@ public final class MonumentBuilder {
         for (int i = 0; i < maps.length; i++) {
             int cz = z + (i + 1) * 2;
             ArenaMap map = maps[i];
-            String shortName = map == ArenaMap.BRIDGE ? "THE BRIDGE" : "THE TEMPLE";
+            String shortName = switch (map) {
+                case BRIDGE -> "THE BRIDGE";
+                case CRYPT -> "THE CRYPT";
+                default -> "THE TEMPLE";
+            };
             writeSign(level, new BlockPos(x, floorY + 3, cz), new String[]{
                     "", "§b§l" + shortName, "§7best rounds", ""});
             writeSign(level, new BlockPos(x, floorY + 2, cz), mapLeaderboardLines(stats, i, 0));

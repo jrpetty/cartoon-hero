@@ -54,9 +54,23 @@ public final class RitualHandler {
         BlockPos clicked = event.getPos();
         ItemStack held = event.getItemStack();
 
-        // The bridge map runs its own ritual instead of the temple's braziers.
-        if (RoundManager.game().getMap() == com.jrpetty.aztecabyss.worldgen.ArenaMap.BRIDGE) {
-            tryBridgeBeacon(level, player, game, clicked, event);
+        // Only the temple uses the brazier ritual; the other maps run a lantern
+        // sequence over their own landmarks.
+        com.jrpetty.aztecabyss.worldgen.ArenaMap map = RoundManager.game().getMap();
+        if (map == com.jrpetty.aztecabyss.worldgen.ArenaMap.BRIDGE) {
+            tryLanternSequence(level, player, game, clicked, event,
+                    com.jrpetty.aztecabyss.worldgen.BridgeBuilder.BEACONS,
+                    com.jrpetty.aztecabyss.worldgen.BridgeBuilder.VAULT_SEAL,
+                    com.jrpetty.aztecabyss.worldgen.BridgeBuilder.VAULT_CHEST,
+                    "§bA lantern gutters out.", "§8The lanterns flare back to life. Wrong one.");
+            return;
+        }
+        if (map == com.jrpetty.aztecabyss.worldgen.ArenaMap.CRYPT) {
+            tryLanternSequence(level, player, game, clicked, event,
+                    com.jrpetty.aztecabyss.worldgen.CryptBuilder.SEALS,
+                    com.jrpetty.aztecabyss.worldgen.CryptBuilder.VAULT_SEAL,
+                    com.jrpetty.aztecabyss.worldgen.CryptBuilder.VAULT_CHEST,
+                    "§bA grave-candle goes out.", "§8Wax runs black. Every candle relights.");
             return;
         }
 
@@ -76,14 +90,17 @@ public final class RitualHandler {
     }
 
     /**
-     * The bridge's hidden ritual: four lanterns burn along the span. Douse them
-     * from the far end back toward the island - the order they were lit - and
-     * the sealed cache under the fort courtyard grinds open. Get one out of
-     * order and every lantern relights.
+     * The lantern-sequence ritual, shared by every map that isn't the temple.
+     *
+     * <p>Four flames burn somewhere on the map. Douse them in the one correct
+     * order and a sealed cache grinds open; get one wrong and they all relight.
+     * The bridge runs it down the span, the crypt around its four arms - same
+     * mechanic, different landmarks and different flavour.
      */
-    private void tryBridgeBeacon(ServerLevel level, ServerPlayer player, AbyssGame game,
-                                 BlockPos clicked, PlayerInteractEvent.RightClickBlock event) {
-        BlockPos[] beacons = com.jrpetty.aztecabyss.worldgen.BridgeBuilder.BEACONS;
+    private void tryLanternSequence(ServerLevel level, ServerPlayer player, AbyssGame game,
+                                    BlockPos clicked, PlayerInteractEvent.RightClickBlock event,
+                                    BlockPos[] beacons, BlockPos vaultSeal, BlockPos vaultChest,
+                                    String progressMsg, String wrongMsg) {
         int index = -1;
         for (int i = 0; i < beacons.length; i++) {
             if (beacons[i].equals(clicked)) {
@@ -103,7 +120,7 @@ public final class RitualHandler {
             }
             game.resetRitualSequence();
             level.playSound(null, clicked, net.minecraft.sounds.SoundEvents.FIRE_EXTINGUISH, SoundSource.BLOCKS, 1.0F, 0.6F);
-            player.displayClientMessage(Component.literal("§8The lanterns flare back to life. Wrong one."), true);
+            player.displayClientMessage(Component.literal(wrongMsg), true);
             event.setCanceled(true);
             return;
         }
@@ -112,15 +129,14 @@ public final class RitualHandler {
         level.setBlock(clicked, Blocks.AIR.defaultBlockState(), 3);
         level.playSound(null, clicked, ModSounds.RITUAL_PROGRESS.get(), SoundSource.BLOCKS, 1.0F, 1.0F);
         int done = game.getRitualSequence().size();
-        player.displayClientMessage(Component.literal("§bA lantern gutters out. §3(" + done + "/4)"), true);
+        player.displayClientMessage(Component.literal(progressMsg + " §3(" + done + "/4)"), true);
         event.setCanceled(true);
 
         if (done == beacons.length) {
             game.setAltarFed(true);
             RoundManager.onRitualComplete(level);
-            level.setBlock(com.jrpetty.aztecabyss.worldgen.BridgeBuilder.VAULT_SEAL,
-                    Blocks.AIR.defaultBlockState(), 3);
-            BlockEntity be = level.getBlockEntity(com.jrpetty.aztecabyss.worldgen.BridgeBuilder.VAULT_CHEST);
+            level.setBlock(vaultSeal, Blocks.AIR.defaultBlockState(), 3);
+            BlockEntity be = level.getBlockEntity(vaultChest);
             if (be instanceof ChestBlockEntity chest) {
                 int slot = 0;
                 for (ItemStack s : com.jrpetty.aztecabyss.round.RitualReward.rollVault()) {

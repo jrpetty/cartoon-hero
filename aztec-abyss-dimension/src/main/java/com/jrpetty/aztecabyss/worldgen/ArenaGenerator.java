@@ -45,11 +45,12 @@ public final class ArenaGenerator {
             // arch pens nothing, you just walk around it. Retro-fit the gatehouses
             // rather than making players delete the dimension to get the feature.
             BlockPos probe = AztecAbyssConstants.MOB_GATES[0]
-                    .relative(com.jrpetty.aztecabyss.round.Barricade.outward(AztecAbyssConstants.MOB_GATES[0]),
+                    .relative(com.jrpetty.aztecabyss.round.Barricade.outward(ArenaMap.TEMPLE, 0),
                             com.jrpetty.aztecabyss.round.Barricade.POCKET_DEPTH);
             if (!level.getBlockState(probe.above()).is(Blocks.POLISHED_BLACKSTONE_BRICKS)) {
                 buildMobGates(level);
             }
+            buildCryptIfNeeded(level);
             return; // already built
         }
 
@@ -65,7 +66,20 @@ public final class ArenaGenerator {
         placeLootChests(level);
         placeArrivalPortal(level);
         buildMobGates(level);
+        buildCryptIfNeeded(level);
         MonumentBuilder.build(level);
+    }
+
+    /**
+     * The Crypt sits far along X in the same dimension, like the bridge, so it
+     * needs no dimension of its own. Built on its own sentinel so it appears in
+     * worlds generated before it existed.
+     */
+    private static void buildCryptIfNeeded(ServerLevel level) {
+        if (level.getBlockState(CryptBuilder.EXTRACTION.below()).is(Blocks.GILDED_BLACKSTONE)) {
+            return;
+        }
+        CryptBuilder.build(level);
     }
 
     /**
@@ -75,7 +89,8 @@ public final class ArenaGenerator {
      * source players can watch (and dread).
      */
     private static void buildMobGates(ServerLevel level) {
-        for (BlockPos gate : AztecAbyssConstants.MOB_GATES) {
+        for (int gateIndex = 0; gateIndex < AztecAbyssConstants.MOB_GATES.length; gateIndex++) {
+            BlockPos gate = AztecAbyssConstants.MOB_GATES[gateIndex];
             boolean onZAxis = gate.getX() == 0; // north/south gates span X; east/west span Z
             int gx = gate.getX();
             int gy = gate.getY();
@@ -130,7 +145,7 @@ public final class ArenaGenerator {
                         .setValue(BlockStateProperties.AXIS, Direction.Axis.Y), 3);
             }
 
-            buildGatehouse(level, gate);
+            buildGatehouse(level, gate, gateIndex);
         }
     }
 
@@ -147,9 +162,9 @@ public final class ArenaGenerator {
      * <p>It doubles as atmosphere - you can see them massing in the dark behind
      * the planks, lit from below by soul fire, before a single board comes off.
      */
-    private static void buildGatehouse(ServerLevel level, BlockPos gate) {
+    private static void buildGatehouse(ServerLevel level, BlockPos gate, int gateIndex) {
         boolean onZAxis = gate.getX() == 0;
-        Direction out = com.jrpetty.aztecabyss.round.Barricade.outward(gate);
+        Direction out = com.jrpetty.aztecabyss.round.Barricade.outward(ArenaMap.TEMPLE, gateIndex);
         int half = com.jrpetty.aztecabyss.round.Barricade.POCKET_HALF_WIDTH;
         int depth = com.jrpetty.aztecabyss.round.Barricade.POCKET_DEPTH;
         int gy = gate.getY();
