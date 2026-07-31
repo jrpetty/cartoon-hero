@@ -208,6 +208,17 @@ public enum ArenaMap {
         return this == OUTPOST;
     }
 
+    /**
+     * Whether this map runs its own closed economy: no gear in, points earned
+     * inside, nothing but materials out.
+     *
+     * <p>Outpost only. The arenas are a test of the gear you already own, which
+     * is the opposite proposition, and mixing the two would make both worse.
+     */
+    public boolean hasEconomy() {
+        return this == OUTPOST;
+    }
+
     /** The volume wave mobs are tracked and swept within for this map. */
     public AABB bounds() {
         if (this == OUTPOST) {

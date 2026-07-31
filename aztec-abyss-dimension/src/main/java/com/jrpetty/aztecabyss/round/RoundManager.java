@@ -144,7 +144,10 @@ public final class RoundManager {
         }
         game.addParticipant(player.getUUID());
 
-        if (AbyssConfig.GIVE_STARTING_LOADOUT.get()) {
+        if (game.getMap() == com.jrpetty.aztecabyss.worldgen.ArenaMap.OUTPOST) {
+            // The Outpost runs its own economy: nothing you own comes in with you.
+            OutpostEconomy.enter(player);
+        } else if (AbyssConfig.GIVE_STARTING_LOADOUT.get()) {
             giveLoadout(player);
         }
         AbyssAbility.give(player); // one-charge Abyssal Nova, dimension-locked
@@ -318,6 +321,7 @@ public final class RoundManager {
         broadcastHud(level);
         for (ServerBossEvent bar : BOSS_BARS.values()) {
             bar.setName(Component.literal("§6✦ §fRound " + round + " §7— The Aztec Abyss"));
+            // (points are appended per-player in updateBossBars)
             bar.setColor(round >= 15 ? BossEvent.BossBarColor.RED : round >= 8 ? BossEvent.BossBarColor.YELLOW : BossEvent.BossBarColor.WHITE);
             bar.setProgress(0.0F);
             bar.setDarkenScreen(false);
@@ -1171,10 +1175,31 @@ public final class RoundManager {
     public static void onWaveZombieKilled(ServerLevel level, ServerPlayer killer) {
         game.setKillsThisRound(game.getKillsThisRound() + 1);
         game.setAliveZombies(game.getAliveZombies() - 1);
-        if (killer != null) {
-            RunState rs = killer.getData(ModAttachments.RUN_STATE);
-            rs.addKill();
-            killer.setData(ModAttachments.RUN_STATE, rs);
+        if (killer == null) {
+            return;
+        }
+        RunState rs = killer.getData(ModAttachments.RUN_STATE);
+        rs.addKill();
+        killer.setData(ModAttachments.RUN_STATE, rs);
+
+        if (!game.getMap().hasEconomy()) {
+            return;
+        }
+        ItemStack held = killer.getMainHandItem();
+        int pts = OutpostEconomy.POINTS_KILL;
+        if (OutpostShop.hasPerk(held, OutpostShop.Perk.SCAVENGER)) {
+            pts += pts / 2;
+        }
+        OutpostEconomy.award(killer, pts);
+        if (OutpostShop.hasPerk(held, OutpostShop.Perk.SIPHON)) {
+            killer.heal(2.0F);
+        }
+    }
+
+    /** Points for a hit that did not finish the job. */
+    public static void onWaveMobHurt(ServerPlayer attacker) {
+        if (game.getMap().hasEconomy()) {
+            OutpostEconomy.award(attacker, OutpostEconomy.POINTS_HIT);
         }
     }
 
@@ -1460,7 +1485,20 @@ public final class RoundManager {
      * Sends one player home with a round-scaled reward chest and (on death)
      * the re-entry cooldown, then drops them from the run.
      */
+    /** Hands back the vault and pays out materials on the way out of the Outpost. */
+    private static void settleOutpost(ServerPlayer player, int round) {
+        if (!game.getMap().hasEconomy() || player.getServer() == null
+                || !OutpostEconomy.hasVault(player.getServer(), player.getUUID())) {
+            return; // nothing held at the door means this run was already settled
+        }
+        String paid = OutpostEconomy.payoutSummary(round);
+        OutpostEconomy.leave(player, round);
+        player.displayClientMessage(Component.literal(
+                "§7Your gear is back. §fThe Outpost paid out: " + paid), false);
+    }
+
     private static void sendPlayerHome(ServerLevel abyssLevel, ServerPlayer player, int round, boolean victory, boolean batched) {
+        settleOutpost(player, round);
         RunState rs = player.getData(ModAttachments.RUN_STATE);
         boolean ritual = game.isRitualComplete();
 
@@ -2152,8 +2190,9 @@ public final class RoundManager {
             return false;
         }
         long now = level.getGameTime();
+        boolean quick = OutpostShop.hasPerk(player.getMainHandItem(), OutpostShop.Perk.BOARDWRIGHT);
         Long last = LAST_REPAIR.get(player.getUUID());
-        if (last != null && now - last < REPAIR_COOLDOWN_TICKS) {
+        if (!quick && last != null && now - last < REPAIR_COOLDOWN_TICKS) {
             return false; // still hammering the previous one
         }
         if (Barricade.count(gateIndex) >= Barricade.MAX_BOARDS) {
@@ -2165,6 +2204,9 @@ public final class RoundManager {
             return false;
         }
         int left = Barricade.count(gateIndex);
+        if (map.hasEconomy()) {
+            OutpostEconomy.award(player, OutpostEconomy.POINTS_BOARD);
+        }
         BlockPos gate = map.gates()[gateIndex];
         barricadeSound(level, gate, net.minecraft.sounds.SoundEvents.WOOD_PLACE, 1.2F, 0.9F);
         actionBar(player, left >= Barricade.MAX_BOARDS

@@ -149,6 +149,10 @@ public final class AbyssEventHandler {
             RunState rs = shooter.getData(ModAttachments.RUN_STATE);
             rs.addHeadshot();
             shooter.setData(ModAttachments.RUN_STATE, rs);
+            if (RoundManager.game().getMap().hasEconomy()) {
+                com.jrpetty.aztecabyss.round.OutpostEconomy.award(
+                        shooter, com.jrpetty.aztecabyss.round.OutpostEconomy.POINTS_HEADSHOT);
+            }
             level.playSound(null, shooter.blockPosition(),
                     net.minecraft.sounds.SoundEvents.PLAYER_ATTACK_CRIT, net.minecraft.sounds.SoundSource.PLAYERS, 0.6F, 1.8F);
         }
@@ -167,7 +171,36 @@ public final class AbyssEventHandler {
         if (event.getSource().getEntity() instanceof ServerPlayer attacker
                 && RoundManager.game().isParticipant(attacker.getUUID())) {
             RoundManager.provokeMob(mob, attacker, level.getGameTime());
+            RoundManager.onWaveMobHurt(attacker);
+
+            // Outpost perks that change what a swing is worth.
+            net.minecraft.world.item.ItemStack held = attacker.getMainHandItem();
+            float mult = 1.0F;
+            if (com.jrpetty.aztecabyss.round.OutpostShop.hasPerk(held,
+                    com.jrpetty.aztecabyss.round.OutpostShop.Perk.BREAKERS_BANE)
+                    && mob.getPersistentData().getInt("aztecabyss_role") != 0) {
+                mult *= 2.0F;
+            }
+            if (com.jrpetty.aztecabyss.round.OutpostShop.hasPerk(held,
+                    com.jrpetty.aztecabyss.round.OutpostShop.Perk.RAMPART)
+                    && nearAWindow(attacker)) {
+                mult *= 1.25F;
+            }
+            if (mult > 1.0F) {
+                event.setAmount(event.getAmount() * mult);
+            }
         }
+    }
+
+    /** Within reach of any window on the active map - what Rampart pays out on. */
+    private boolean nearAWindow(ServerPlayer player) {
+        com.jrpetty.aztecabyss.worldgen.ArenaMap map = RoundManager.game().getMap();
+        for (net.minecraft.core.BlockPos g : map.gates()) {
+            if (player.blockPosition().distSqr(g) <= 36) {
+                return true;
+            }
+        }
+        return false;
     }
 
     @SubscribeEvent
@@ -228,6 +261,24 @@ public final class AbyssEventHandler {
         com.jrpetty.aztecabyss.worldgen.ArenaMap map = RoundManager.game().getMap();
         if (!map.hasBarricades()) {
             return;
+        }
+        // Shop fronts and the Crucible come before the boards: both sit on walls
+        // a window could otherwise claim.
+        if (map.hasEconomy()) {
+            int shop = com.jrpetty.aztecabyss.worldgen.OutpostBuilder.shopIndexNear(event.getPos());
+            if (shop >= 0 && shop < com.jrpetty.aztecabyss.round.OutpostShop.CATALOGUE.length) {
+                com.jrpetty.aztecabyss.round.OutpostShop.buy(level, player,
+                        com.jrpetty.aztecabyss.round.OutpostShop.CATALOGUE[shop]);
+                event.setCanceled(true);
+                event.setCancellationResult(net.minecraft.world.InteractionResult.SUCCESS);
+                return;
+            }
+            if (com.jrpetty.aztecabyss.worldgen.OutpostBuilder.isCrucible(event.getPos())) {
+                com.jrpetty.aztecabyss.round.OutpostShop.useCrucible(level, player);
+                event.setCanceled(true);
+                event.setCancellationResult(net.minecraft.world.InteractionResult.SUCCESS);
+                return;
+            }
         }
         // Rubble first: a pile sits in a doorway, well clear of any window.
         if (map == com.jrpetty.aztecabyss.worldgen.ArenaMap.OUTPOST) {

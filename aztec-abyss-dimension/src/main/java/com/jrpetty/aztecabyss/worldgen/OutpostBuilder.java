@@ -141,6 +141,27 @@ public final class OutpostBuilder {
             new BlockPos(CENTER_X + 1, FLOOR_Y + UPPER + 1, CENTER_Z - 8),          // upstairs
     };
 
+    /**
+     * Where each wall buy is bolted, in {@link com.jrpetty.aztecabyss.round.OutpostShop#CATALOGUE}
+     * order. Spread so the cheap essentials are in the hall you start in and the
+     * things that win rounds are behind rubble - the shop is another reason to
+     * open the building up, and another reason not to.
+     */
+    public static final BlockPos[] SHOP = new BlockPos[]{
+            new BlockPos(CENTER_X - IN_X, FLOOR_Y + 1, CENTER_Z + 2),          // stone sword - hall
+            new BlockPos(CENTER_X + IN_X, FLOOR_Y + 1, CENTER_Z - 8),          // iron sword - back
+            new BlockPos(CENTER_X - IN_X, FLOOR_Y + CELLAR + 1, CENTER_Z),     // iron axe - cellar
+            new BlockPos(CENTER_X - IN_X, FLOOR_Y + 1, CENTER_Z + 5),          // bow - hall
+            new BlockPos(CENTER_X - IN_X, FLOOR_Y + 1, CENTER_Z + 7),          // arrows - hall
+            new BlockPos(CENTER_X + IN_X, FLOOR_Y + UPPER + 1, CENTER_Z - 8),  // crossbow - upstairs
+            new BlockPos(CENTER_X + 6, FLOOR_Y + 1, CENTER_Z - IN_Z),          // shield - back
+            new BlockPos(CENTER_X - 1, FLOOR_Y + UPPER + 1, CENTER_Z - IN_Z),  // chestplate - upstairs
+            new BlockPos(CENTER_X - 4, FLOOR_Y + 1, CENTER_Z - IN_Z),          // rations - hall
+    };
+
+    /** The Crucible, upstairs and deliberately behind two lots of rubble. */
+    public static final BlockPos CRUCIBLE = new BlockPos(CENTER_X + 7, FLOOR_Y + UPPER + 1, CENTER_Z - 5);
+
     public static final BlockPos VAULT_SEAL = new BlockPos(CENTER_X + 6, FLOOR_Y + UPPER + 1, CENTER_Z + 8);
     public static final BlockPos VAULT_CHEST = new BlockPos(CENTER_X + 6, FLOOR_Y + UPPER + 1, CENTER_Z + 7);
 
@@ -169,6 +190,8 @@ public final class OutpostBuilder {
         placeDebris(level);
         placeSeals(level);
         placeLoot(level);
+        shopFronts(level);
+        crucible(level);
         detail(level, rng);
         // Sentinel under the extraction glyph: marks the Outpost as built.
         level.setBlock(EXTRACTION.below(), Blocks.GILDED_BLACKSTONE.defaultBlockState(), 2);
@@ -701,6 +724,82 @@ public final class OutpostBuilder {
                         .setValue(BlockStateProperties.LIT, true), 2);
             }
         }
+    }
+
+    /** A lit plate and a price board at every wall buy. */
+    private static void shopFronts(ServerLevel level) {
+        var cat = com.jrpetty.aztecabyss.round.OutpostShop.CATALOGUE;
+        for (int i = 0; i < SHOP.length && i < cat.length; i++) {
+            BlockPos at = SHOP[i];
+            level.setBlock(at, Blocks.CHISELED_STONE_BRICKS.defaultBlockState(), 2);
+            level.setBlock(at.above(), Blocks.LANTERN.defaultBlockState(), 2);
+            BlockPos board = at.below();
+            Direction face = at.getX() <= CENTER_X - IN_X ? Direction.EAST
+                    : at.getX() >= CENTER_X + IN_X ? Direction.WEST : Direction.SOUTH;
+            level.setBlock(board, Blocks.OAK_WALL_SIGN.defaultBlockState()
+                    .setValue(BlockStateProperties.HORIZONTAL_FACING, face), 2);
+            final int idx = i;
+            if (level.getBlockEntity(board) instanceof SignBlockEntity be) {
+                be.updateText(t -> t
+                        .setMessage(0, Component.literal("§8— WALL BUY —"))
+                        .setMessage(1, Component.literal("§f" + cat[idx].label()))
+                        .setMessage(2, Component.literal("§e" + cat[idx].price() + " pts"))
+                        .setMessage(3, Component.literal("§8right-click")), true);
+            }
+        }
+    }
+
+    /**
+     * The Crucible: a squat furnace-and-anvil machine wedged into the upstairs
+     * wall, lit from inside. It reads as something salvaged and rewired rather
+     * than built, which is the right note for a thing that turns a wooden sword
+     * into something with a name.
+     */
+    private static void crucible(ServerLevel level) {
+        BlockPos c = CRUCIBLE;
+        level.setBlock(c.below(), Blocks.POLISHED_DEEPSLATE.defaultBlockState(), 2);
+        level.setBlock(c, Blocks.BLAST_FURNACE.defaultBlockState()
+                .setValue(BlockStateProperties.HORIZONTAL_FACING, Direction.SOUTH), 2);
+        level.setBlock(c.above(), Blocks.ANVIL.defaultBlockState(), 2);
+        level.setBlock(c.above(2), Blocks.CHISELED_DEEPSLATE.defaultBlockState(), 2);
+        for (Direction d : new Direction[]{Direction.EAST, Direction.WEST}) {
+            level.setBlock(c.relative(d), Blocks.DEEPSLATE_BRICK_WALL.defaultBlockState(), 2);
+            level.setBlock(c.relative(d).above(), Blocks.REDSTONE_LAMP.defaultBlockState()
+                    .setValue(BlockStateProperties.LIT, true), 2);
+            level.setBlock(c.relative(d).above(2), Blocks.CHAIN.defaultBlockState()
+                    .setValue(BlockStateProperties.AXIS, Direction.Axis.Y), 2);
+        }
+        BlockPos plate = c.relative(Direction.SOUTH);
+        level.setBlock(plate.below(), Blocks.GILDED_BLACKSTONE.defaultBlockState(), 2);
+        BlockPos board = c.above(2).relative(Direction.SOUTH);
+        level.setBlock(board, Blocks.OAK_WALL_SIGN.defaultBlockState()
+                .setValue(BlockStateProperties.HORIZONTAL_FACING, Direction.SOUTH), 2);
+        if (level.getBlockEntity(board) instanceof SignBlockEntity be) {
+            be.updateText(t -> t
+                    .setMessage(0, Component.literal("§5§lTHE CRUCIBLE"))
+                    .setMessage(1, Component.literal("§7one tier up"))
+                    .setMessage(2, Component.literal("§7and a name"))
+                    .setMessage(3, Component.literal("§8right-click")), true);
+        }
+    }
+
+    /** Which wall buy a clicked block is, or -1. */
+    public static int shopIndexNear(BlockPos pos) {
+        for (int i = 0; i < SHOP.length; i++) {
+            BlockPos s = SHOP[i];
+            if (Math.abs(pos.getX() - s.getX()) <= 1 && Math.abs(pos.getZ() - s.getZ()) <= 1
+                    && Math.abs(pos.getY() - s.getY()) <= 1) {
+                return i;
+            }
+        }
+        return -1;
+    }
+
+    /** Whether a clicked block is the Crucible. */
+    public static boolean isCrucible(BlockPos pos) {
+        return Math.abs(pos.getX() - CRUCIBLE.getX()) <= 1
+                && Math.abs(pos.getZ() - CRUCIBLE.getZ()) <= 1
+                && Math.abs(pos.getY() - CRUCIBLE.getY()) <= 2;
     }
 
     private static BlockPos cell(BlockPos origin, boolean spansX, int off, int dy) {
