@@ -159,6 +159,34 @@ public final class OutpostBuilder {
             new BlockPos(CENTER_X - 4, FLOOR_Y + 1, CENTER_Z - IN_Z),          // rations - hall
     };
 
+    /**
+     * Where the Box can turn up - one per area, so a relocation regularly puts
+     * it somewhere nobody has dug out yet. That is the whole mechanic.
+     */
+    public static final BlockPos[] BOX_SITES = new BlockPos[]{
+            new BlockPos(CENTER_X - 9, FLOOR_Y + 1, CENTER_Z + 6),                 // hall
+            new BlockPos(CENTER_X + 6, FLOOR_Y + 1, CENTER_Z - 2),                 // back room
+            new BlockPos(CENTER_X + 3, FLOOR_Y + UPPER + 1, CENTER_Z - 2),         // upstairs
+            new BlockPos(CENTER_X - 9, FLOOR_Y + CELLAR, CENTER_Z - 2),            // cellar
+    };
+
+    private static final String[] BOX_SITE_NAMES = {"hall", "back room", "landing", "cellar"};
+
+    public static String boxSiteName(int i) {
+        return i >= 0 && i < BOX_SITE_NAMES.length ? BOX_SITE_NAMES[i] : "somewhere";
+    }
+
+    /**
+     * The four Draught machines, spread one per area so kitting yourself out
+     * means opening the whole building.
+     */
+    public static final BlockPos[] DRAUGHTS = new BlockPos[]{
+            new BlockPos(CENTER_X - 11, FLOOR_Y + 1, CENTER_Z + 3),                // Ironhide - hall
+            new BlockPos(CENTER_X + 11, FLOOR_Y + 1, CENTER_Z + 4),                // Quickhand - back
+            new BlockPos(CENTER_X + 10, FLOOR_Y + UPPER + 1, CENTER_Z - 2),        // Doubletap - upstairs
+            new BlockPos(CENTER_X - 11, FLOOR_Y + CELLAR, CENTER_Z + 6),           // Second Wind - cellar
+    };
+
     /** The Crucible, upstairs and deliberately behind two lots of rubble. */
     public static final BlockPos CRUCIBLE = new BlockPos(CENTER_X + 7, FLOOR_Y + UPPER + 1, CENTER_Z - 5);
 
@@ -192,6 +220,7 @@ public final class OutpostBuilder {
         placeLoot(level);
         shopFronts(level);
         crucible(level);
+        draughtMachines(level);
         detail(level, rng);
         // Sentinel under the extraction glyph: marks the Outpost as built.
         level.setBlock(EXTRACTION.below(), Blocks.GILDED_BLACKSTONE.defaultBlockState(), 2);
@@ -781,6 +810,44 @@ public final class OutpostBuilder {
                     .setMessage(2, Component.literal("§7and a name"))
                     .setMessage(3, Component.literal("§8right-click")), true);
         }
+    }
+
+    /**
+     * The Draught machines: a barrel on a lit plinth with its name over it.
+     * Scrappy and improvised, like everything else people built in here.
+     */
+    private static void draughtMachines(ServerLevel level) {
+        var kinds = com.jrpetty.aztecabyss.round.Draughts.Draught.values();
+        for (int i = 0; i < DRAUGHTS.length && i < kinds.length; i++) {
+            BlockPos at = DRAUGHTS[i];
+            level.setBlock(at.below(), Blocks.POLISHED_DEEPSLATE.defaultBlockState(), 2);
+            level.setBlock(at, Blocks.BARREL.defaultBlockState(), 2);
+            level.setBlock(at.above(), Blocks.REDSTONE_LAMP.defaultBlockState()
+                    .setValue(BlockStateProperties.LIT, true), 2);
+            BlockPos board = at.above(2);
+            level.setBlock(board, Blocks.OAK_WALL_SIGN.defaultBlockState()
+                    .setValue(BlockStateProperties.HORIZONTAL_FACING, Direction.SOUTH), 2);
+            final int idx = i;
+            if (level.getBlockEntity(board) instanceof SignBlockEntity be) {
+                be.updateText(t -> t
+                        .setMessage(0, Component.literal("§5§lDRAUGHT"))
+                        .setMessage(1, Component.literal("§f" + kinds[idx].title))
+                        .setMessage(2, Component.literal("§e" + kinds[idx].price + " pts"))
+                        .setMessage(3, Component.literal("§8right-click")), true);
+            }
+        }
+    }
+
+    /** Which Draught machine a clicked block is, or -1. */
+    public static int draughtIndexNear(BlockPos pos) {
+        for (int i = 0; i < DRAUGHTS.length; i++) {
+            BlockPos d = DRAUGHTS[i];
+            if (Math.abs(pos.getX() - d.getX()) <= 1 && Math.abs(pos.getZ() - d.getZ()) <= 1
+                    && Math.abs(pos.getY() - d.getY()) <= 2) {
+                return i;
+            }
+        }
+        return -1;
     }
 
     /** Which wall buy a clicked block is, or -1. */

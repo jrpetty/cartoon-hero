@@ -187,6 +187,7 @@ public final class AbyssEventHandler {
                     && nearAWindow(attacker)) {
                 mult *= 1.25F;
             }
+            mult *= com.jrpetty.aztecabyss.round.Draughts.damageMultiplier(attacker.getUUID());
             if (mult > 1.0F) {
                 event.setAmount(event.getAmount() * mult);
             }
@@ -274,6 +275,21 @@ public final class AbyssEventHandler {
             if (shop >= 0 && shop < com.jrpetty.aztecabyss.round.OutpostShop.CATALOGUE.length) {
                 com.jrpetty.aztecabyss.round.OutpostShop.buy(level, player,
                         com.jrpetty.aztecabyss.round.OutpostShop.CATALOGUE[shop]);
+                event.setCanceled(true);
+                event.setCancellationResult(net.minecraft.world.InteractionResult.SUCCESS);
+                return;
+            }
+            if (com.jrpetty.aztecabyss.round.MysteryBox.isBox(event.getPos())) {
+                com.jrpetty.aztecabyss.round.MysteryBox.open(level, player,
+                        net.minecraft.util.RandomSource.create());
+                event.setCanceled(true);
+                event.setCancellationResult(net.minecraft.world.InteractionResult.SUCCESS);
+                return;
+            }
+            int draught = com.jrpetty.aztecabyss.worldgen.OutpostBuilder.draughtIndexNear(event.getPos());
+            if (draught >= 0) {
+                com.jrpetty.aztecabyss.round.Draughts.buy(level, player,
+                        com.jrpetty.aztecabyss.round.Draughts.Draught.values()[draught]);
                 event.setCanceled(true);
                 event.setCancellationResult(net.minecraft.world.InteractionResult.SUCCESS);
                 return;

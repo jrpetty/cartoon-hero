@@ -109,6 +109,7 @@ public final class RoundManager {
         HEART_BARS.clear();
         LAST_HUD_STAMP.clear();
         OutpostPowerUps.reset();
+        Draughts.clearAll();
         game = new AbyssGame();
     }
 
@@ -136,6 +137,9 @@ public final class RoundManager {
                 // Every gate goes back up for a fresh run, however last run ended.
                 Barricade.resetFor(abyssLevel, m);
                 resetAreas(abyssLevel, m);
+                if (m.hasEconomy()) {
+                    MysteryBox.reset(abyssLevel);
+                }
                 LAST_REPAIR.clear();
             }
             game.setPhase(AbyssGame.Phase.BETWEEN_ROUNDS);
@@ -1391,6 +1395,12 @@ public final class RoundManager {
 
     /** Puts a participant into the downed state instead of killing them. */
     public static void downPlayer(ServerLevel level, ServerPlayer player) {
+        // Second Wind spends itself here rather than letting you hit the floor.
+        if (game.getMap().hasEconomy() && Draughts.consumeSecondWind(player)) {
+            player.setHealth(player.getMaxHealth() * 0.5F);
+            player.addEffect(new MobEffectInstance(MobEffects.DAMAGE_RESISTANCE, 100, 1, false, false));
+            return;
+        }
         RunState rs = player.getData(ModAttachments.RUN_STATE);
         if (rs.isDowned()) {
             return;
@@ -1513,6 +1523,7 @@ public final class RoundManager {
             return; // nothing held at the door means this run was already settled
         }
         String paid = OutpostEconomy.payoutSummary(round);
+        Draughts.clear(player);
         OutpostEconomy.leave(player, round);
         player.displayClientMessage(Component.literal(
                 "§7Your gear is back. §fThe Outpost paid out: " + paid), false);
@@ -2211,7 +2222,8 @@ public final class RoundManager {
             return false;
         }
         long now = level.getGameTime();
-        boolean quick = OutpostShop.hasPerk(player.getMainHandItem(), OutpostShop.Perk.BOARDWRIGHT);
+        boolean quick = OutpostShop.hasPerk(player.getMainHandItem(), OutpostShop.Perk.BOARDWRIGHT)
+                || Draughts.has(player.getUUID(), Draughts.Draught.QUICKHAND);
         Long last = LAST_REPAIR.get(player.getUUID());
         if (!quick && last != null && now - last < REPAIR_COOLDOWN_TICKS) {
             return false; // still hammering the previous one
@@ -2441,7 +2453,8 @@ public final class RoundManager {
                         "§6✦ §fRound " + game.getRound()
                                 + " §8| §e" + OutpostEconomy.points(e.getKey()) + " pts"
                                 + (game.isFogRound() ? " §8| §7≈ fog" : "")
-                                + OutpostPowerUps.hudFragment(level)));
+                                + OutpostPowerUps.hudFragment(level)
+                                + Draughts.hudFragment(e.getKey())));
             }
         }
         float progress;
