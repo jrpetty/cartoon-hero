@@ -45,9 +45,20 @@ public final class MazeData {
     /** Full width of the map, in blocks. */
     public static final int SPAN = GRID * CELL;
 
-    /** Corridors are two wide, centred in the cell, leaving four-block walls. */
-    public static final int CORRIDOR_MIN = 2;
-    public static final int CORRIDOR_MAX = 3;
+    /**
+     * Corridors are four wide, centred in the cell, leaving two-block walls.
+     *
+     * <p>They were two wide, which a Griever physically fits through and cannot
+     * fight in - it is a scaled-up spider, so a two-block corridor meant it
+     * filled the passage wall to wall and there was no getting past it, only
+     * backwards. Four wide gives it room to move and you room to dodge, which is
+     * the difference between a chase and a dead end.
+     *
+     * <p>Everything downstream reads these two numbers - corridor carving, the
+     * wall test, the toggle writer - so the whole map rescales from here.
+     */
+    public static final int CORRIDOR_MIN = 1;
+    public static final int CORRIDOR_MAX = 4;
 
     public static final int FLOOR_Y = 60;
     public static final int WALL_BASE_Y = 61;

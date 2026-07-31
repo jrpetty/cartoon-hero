@@ -392,6 +392,7 @@ public final class MazeBuilder {
     /** Seals the outer rim, then dresses the Glade. */
     private static void finish(ServerLevel level) {
         GladeBuilder.build(level);
+        gladeWall(level);
         // Stamp the marker last, so a build interrupted by a crash or a restart
         // is treated as unbuilt and simply runs again.
         level.setBlock(BUILT_MARKER, BEDROCK, 2);
@@ -427,6 +428,125 @@ public final class MazeBuilder {
     }
 
     /** Carves (or refills) the half of a shared edge that belongs to one cell. */
+    /** The four cells the Glade's doors sit in, in build order N, E, S, W. */
+    public static final int[][] DOOR_CELLS = {{48, 39}, {56, 48}, {47, 56}, {39, 47}};
+
+    /**
+     * Walls the Glade in, leaving only the four doors.
+     *
+     * <p>Without this the Glade simply ended and the maze started, so wherever a
+     * bordering cell happened to have a corridor along that edge you could step
+     * straight out of the clearing - and, worse, walk the whole way round the
+     * outside of it. The doors were four openings in a fence that was not there.
+     *
+     * <p>Built as a solid ring one cell outside the Glade proper, punched through
+     * at the four door cells and nowhere else.
+     */
+    public static void gladeWall(ServerLevel level) {
+        int lo = MazeData.GLADE_MIN_CELL * MazeData.CELL - 1;
+        int hi = (MazeData.GLADE_MAX_CELL + 1) * MazeData.CELL;
+        RandomSource rng = RandomSource.create(0x6AD3);
+        for (int i = lo; i <= hi; i++) {
+            for (int y = MazeData.WALL_BASE_Y; y <= MazeData.WALL_TOP_Y; y++) {
+                level.setBlock(new BlockPos(i, y, lo), wallStone(rng), 2);
+                level.setBlock(new BlockPos(i, y, hi), wallStone(rng), 2);
+                level.setBlock(new BlockPos(lo, y, i), wallStone(rng), 2);
+                level.setBlock(new BlockPos(hi, y, i), wallStone(rng), 2);
+            }
+        }
+        // Punch the four doors back through, full corridor width and head height.
+        for (int[] cell : DOOR_CELLS) {
+            int bx = cell[0] * MazeData.CELL;
+            int bz = cell[1] * MazeData.CELL;
+            for (int a = MazeData.CORRIDOR_MIN; a <= MazeData.CORRIDOR_MAX; a++) {
+                for (int y = MazeData.WALL_BASE_Y; y <= MazeData.WALL_BASE_Y + 5; y++) {
+                    // Clear the ring wherever it crosses this door cell, on both
+                    // axes - one of the two is the ring, the other is a no-op.
+                    for (int s = -1; s <= MazeData.CELL; s++) {
+                        int x = bx + a;
+                        int z = bz + s;
+                        if (z == lo || z == hi) {
+                            level.setBlock(new BlockPos(x, y, z), Blocks.AIR.defaultBlockState(), 2);
+                        }
+                        x = bx + s;
+                        z = bz + a;
+                        if (x == lo || x == hi) {
+                            level.setBlock(new BlockPos(x, y, z), Blocks.AIR.defaultBlockState(), 2);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /** Opens the wall between two neighbouring cells, both halves. */
+    public static void openEdge(ServerLevel level, int cx, int cz, int nx, int nz, RandomSource rng) {
+        writeHalf(level, cx, cz, nx, nz, true, rng);
+        writeHalf(level, nx, nz, cx, cz, true, rng);
+    }
+
+    /**
+     * Carves a guaranteed corridor from one cell to another.
+     *
+     * <p>This is the promise that there is always a way out. Rather than trusting
+     * the dataset's connectivity to happen to join a door to today's exit - which
+     * nothing checks, and which would strand a runner in a maze with no solution -
+     * a route is cut by construction: step the cell cursor toward the target one
+     * cell at a time, opening every wall it crosses on the way.
+     *
+     * <p>The walk is deliberately not a straight line. It picks its axis from a
+     * position hash, so each door's route wanders differently and the four of them
+     * do not become the same corridor the moment they leave the clearing.
+     *
+     * <p>Glade cells are never carved through - a route that cut across the
+     * clearing would be a hole in the wall we just built.
+     */
+    public static void carveRoute(ServerLevel level, int fromX, int fromZ,
+                                  int toX, int toZ, int salt) {
+        RandomSource rng = RandomSource.create();
+        int cx = fromX;
+        int cz = fromZ;
+        int guard = 0;
+        // The cell grid is 96 a side; a Manhattan walk cannot need more steps
+        // than the perimeter, and the guard stops a pathological loop dead.
+        while ((cx != toX || cz != toZ) && guard++ < MazeData.GRID * 4) {
+            int dx = Integer.signum(toX - cx);
+            int dz = Integer.signum(toZ - cz);
+            boolean stepX;
+            if (dx == 0) {
+                stepX = false;
+            } else if (dz == 0) {
+                stepX = true;
+            } else {
+                // Hashed choice: same maze every time, different per door.
+                stepX = com.jrpetty.aztecabyss.worldgen.Deco.hashUnit(cx, salt, cz, salt) < 0.5f;
+            }
+            int nx = stepX ? cx + dx : cx;
+            int nz = stepX ? cz : cz + dz;
+            if (nx < 1 || nz < 1 || nx >= MazeData.GRID - 1 || nz >= MazeData.GRID - 1) {
+                break;
+            }
+            if (MazeData.inGlade(nx, nz)) {
+                // Never tunnel back through the clearing; sidestep instead.
+                if (stepX && dz != 0) {
+                    nx = cx;
+                    nz = cz + dz;
+                } else if (!stepX && dx != 0) {
+                    nx = cx + dx;
+                    nz = cz;
+                } else {
+                    break;
+                }
+                if (MazeData.inGlade(nx, nz)) {
+                    break;
+                }
+            }
+            openEdge(level, cx, cz, nx, nz, rng);
+            cx = nx;
+            cz = nz;
+        }
+    }
+
     private static void writeHalf(ServerLevel level, int cx, int cz, int nx, int nz,
                                   boolean open, RandomSource rng) {
         int dx = Integer.signum(nx - cx);

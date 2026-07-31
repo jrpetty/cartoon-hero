@@ -62,6 +62,8 @@ public final class MazeRuntime {
     private static int[] weekOrder = null;
     /** The day whose layout is currently standing in the world, or -1. */
     private static long appliedDay = -1;
+    /** Bumped on a wipe, so the next run gets a different way out. */
+    private static int layoutShift = 0;
     private static boolean doorsOpen = false;
     private static long lastPhaseDay = -1;
     private static boolean warnedDusk = false;
@@ -110,7 +112,29 @@ public final class MazeRuntime {
         if (n == 0) {
             return null;
         }
-        return MazeData.layout(weekOrder[(int) Math.floorMod(dayNumber(level), n)]);
+        return MazeData.layout(weekOrder[(int) Math.floorMod(dayNumber(level) + layoutShift, n)]);
+    }
+
+    /**
+     * Re-rolls the maze after a wipe, without rebuilding a single block.
+     *
+     * <p>Called when somebody walks back in and nobody else is inside - which is
+     * what "everyone died" looks like from here. The world itself is left exactly
+     * as it was found: anything built, mined or dropped in the maze stays, because
+     * the build is never re-run. Only the layout moves on, which re-seals the old
+     * exit, opens a new one, and cuts fresh routes to it.
+     *
+     * <p>So the progress you made on the world survives your death and the way out
+     * does not.
+     */
+    public static void rerollAfterWipe(ServerLevel level) {
+        layoutShift++;
+        appliedDay = -1;
+        MazeData.Layout next = todaysLayout(level);
+        if (next != null) {
+            applyLayout(level, next);
+            appliedDay = dayNumber(level);
+        }
     }
 
     /**
@@ -216,7 +240,7 @@ public final class MazeRuntime {
                 if (seconds >= 0 && MazeRace.onEscape(level, p, seconds)) {
                     MazeAdvancements.grant(p, MazeAdvancements.RACE_WIN);
                 }
-                sendHome(level, p);
+                sendHome(level, p, seconds);
             }
             updateBar(level, p, layout, t);
         }
@@ -243,10 +267,80 @@ public final class MazeRuntime {
                 && Math.abs(at.getY() - p[1]) <= 3;
     }
 
-    /** Escaping puts you back in the Glade to run again. */
-    private static void sendHome(ServerLevel level, ServerPlayer p) {
-        p.teleportTo(level, MazeData.SPAWN_X + 0.5, MazeData.SPAWN_Y, MazeData.SPAWN_Z + 0.5,
-                java.util.Set.of(), 0.0F, 0.0F);
+    /**
+     * Dresses the live exit as a portal you can pick out at a distance.
+     *
+     * <p>It was a gap in a wall with a lantern over it, which at the end of a long
+     * corridor looks like every other gap in every other wall. A framed, lit
+     * doorway is the one thing in the maze that says <em>this is the way out</em>
+     * without a marker on your screen telling you so.
+     */
+    private static void portalFrame(ServerLevel level, MazeData.Exit ex, int[] p) {
+        boolean alongX = "north".equals(ex.facing()) || "south".equals(ex.facing());
+        for (int side = -1; side <= 2; side++) {
+            for (int dy = -1; dy <= 5; dy++) {
+                boolean jamb = side == -1 || side == 2;
+                boolean head = dy == -1 || dy == 5;
+                if (!jamb && !head) {
+                    continue;
+                }
+                BlockPos at = new BlockPos(
+                        p[0] + (alongX ? side : 0),
+                        MazeData.WALL_BASE_Y + dy,
+                        p[2] + (alongX ? 0 : side));
+                level.setBlock(at, jamb && head
+                        ? Blocks.CHISELED_DEEPSLATE.defaultBlockState()
+                        : jamb ? Blocks.CRYING_OBSIDIAN.defaultBlockState()
+                        : Blocks.POLISHED_DEEPSLATE.defaultBlockState(), 2);
+            }
+        }
+        // A pair of lights on the jambs, so it reads as lit rather than as a hole.
+        for (int side : new int[]{-1, 2}) {
+            level.setBlock(new BlockPos(
+                    p[0] + (alongX ? side : 0),
+                    MazeData.WALL_BASE_Y + 2,
+                    p[2] + (alongX ? 0 : side)), Blocks.SEA_LANTERN.defaultBlockState(), 2);
+        }
+    }
+
+    /**
+     * Escaping takes you out of the maze entirely, and pays.
+     *
+     * <p>It used to drop you back in the Glade, which made getting out the same
+     * as not getting out: the way through was solved and the reward for solving
+     * it was standing where you began. Going through the portal now returns you
+     * to the teleporter you came in by, with your time recorded and a bonus
+     * scaled to how fast you ran it.
+     */
+    private static void sendHome(ServerLevel level, ServerPlayer p, int seconds) {
+        escapeBonus(p, seconds);
+        MazeEvents.returnToTeleporter(p);
+    }
+
+    /**
+     * What getting out is worth. Faster runs pay more, and everything in the
+     * table is a material - nothing here shortcuts an arena.
+     */
+    private static void escapeBonus(ServerPlayer p, int seconds) {
+        int tier = seconds < 0 ? 1 : seconds <= 180 ? 3 : seconds <= 420 ? 2 : 1;
+        java.util.List<net.minecraft.world.item.ItemStack> paid = new java.util.ArrayList<>();
+        paid.add(new net.minecraft.world.item.ItemStack(
+                net.minecraft.world.item.Items.DIAMOND, tier * 2));
+        paid.add(new net.minecraft.world.item.ItemStack(
+                net.minecraft.world.item.Items.IRON_INGOT, tier * 8));
+        paid.add(new net.minecraft.world.item.ItemStack(
+                net.minecraft.world.item.Items.GOLD_INGOT, tier * 4));
+        paid.add(new net.minecraft.world.item.ItemStack(
+                net.minecraft.world.item.Items.LAPIS_LAZULI, tier * 6));
+        for (net.minecraft.world.item.ItemStack stack : paid) {
+            if (!p.getInventory().add(stack)) {
+                p.drop(stack, false);
+            }
+        }
+        p.giveExperiencePoints(200 * tier);
+        String pace = tier == 3 ? "§6Blistering." : tier == 2 ? "§eGood pace." : "§7You made it.";
+        p.displayClientMessage(Component.literal(
+                "§a§lOUT. §r" + pace + " §7The Glade pays what it owes you."), false);
     }
 
     private static void brief(ServerPlayer p) {
@@ -346,9 +440,37 @@ public final class MazeRuntime {
             MazeBuilder.setToggle(level, tp, layout.open().contains(tp.id()), rng);
         }
         openExit(level, layout);
+        guaranteeRoutes(level, layout);
         for (ServerPlayer p : level.players()) {
             p.displayClientMessage(Component.literal(
                     "§5The walls grind. §7The maze has changed."), false);
+        }
+    }
+
+    /**
+     * Guarantees every door can reach today's exit, by separate routes.
+     *
+     * <p>Nothing else in the maze checks that the exit is reachable. The dataset's
+     * connectivity plus a night's toggles could perfectly well leave a runner in a
+     * maze with no solution at all, and there would be no symptom other than
+     * somebody wandering until the clock ran out.
+     *
+     * <p>So each of the four doors gets its own carved route to the live exit,
+     * each with a different hash salt. That does two things at once: it makes the
+     * promise that a way through exists from wherever you started, and it stops
+     * the four doors being the same corridor - they wander apart before they
+     * converge on the way out.
+     */
+    private static void guaranteeRoutes(ServerLevel level, MazeData.Layout layout) {
+        MazeData.Exit ex = MazeData.exit(layout.exit());
+        if (ex == null) {
+            return;
+        }
+        int salt = 1;
+        for (int[] door : MazeBuilder.DOOR_CELLS) {
+            MazeBuilder.carveRoute(level, door[0], door[1], ex.cellX(), ex.cellZ(),
+                    layout.name().hashCode() + salt * 7919);
+            salt++;
         }
     }
 
@@ -382,6 +504,7 @@ public final class MazeRuntime {
                 level.setBlock(new BlockPos(p[0], MazeData.WALL_BASE_Y + 4, p[2]),
                         Blocks.LANTERN.defaultBlockState()
                                 .setValue(net.minecraft.world.level.block.state.properties.BlockStateProperties.HANGING, true), 2);
+                portalFrame(level, ex, p);
             }
         }
     }

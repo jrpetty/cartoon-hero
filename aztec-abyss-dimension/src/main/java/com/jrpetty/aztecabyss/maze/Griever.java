@@ -109,9 +109,11 @@ public final class Griever {
         }
         mob.setHealth(mob.getMaxHealth());
 
-        // Seen through walls and lit from within - a Griever is never a surprise,
-        // it is a countdown. Costs the server nothing: both are client-side.
-        mob.addEffect(new MobEffectInstance(MobEffects.GLOWING, Integer.MAX_VALUE, 0, false, false));
+        // Deliberately not glowing. It used to carry permanent Glowing so it read
+        // as a countdown rather than a surprise - but an outline drawn through
+        // solid stone tells you exactly where it is and which way it is going,
+        // and a maze whose monster you can track through the walls is a map, not
+        // a maze. You find it now the way it finds you: by sound.
         tint(level, mob);
     }
 

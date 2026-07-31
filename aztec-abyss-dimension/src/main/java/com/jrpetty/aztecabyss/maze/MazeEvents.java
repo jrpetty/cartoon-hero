@@ -144,6 +144,13 @@ public final class MazeEvents {
             rs.setHome(player.blockPosition(), player.level().dimension());
             player.setData(com.jrpetty.aztecabyss.registry.ModAttachments.RUN_STATE, rs);
         }
+        // Nobody inside means the last attempt ended - everyone died or everyone
+        // left. Re-roll the way out before this runner arrives, so a wipe costs
+        // you the route you had learned. The maze itself is untouched: whatever
+        // was built or broken in there is exactly where it was left.
+        if (maze.players().isEmpty()) {
+            MazeRuntime.rerollAfterWipe(maze);
+        }
         player.changeDimension(new DimensionTransition(maze,
                 new Vec3(MazeData.SPAWN_X + 0.5, MazeData.SPAWN_Y, MazeData.SPAWN_Z + 0.5),
                 Vec3.ZERO, 0.0F, 0.0F, DimensionTransition.DO_NOTHING));
@@ -176,7 +183,7 @@ public final class MazeEvents {
      * at a dimension that no longer loads - and never at the maze itself, which
      * would leave someone ejected from the maze standing in it.
      */
-    private static void returnToTeleporter(ServerPlayer player) {
+    public static void returnToTeleporter(ServerPlayer player) {
         if (player.getServer() == null) {
             return;
         }
