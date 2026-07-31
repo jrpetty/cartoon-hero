@@ -13,14 +13,33 @@ public final class GrappleManager {
 
     private GrappleManager() {}
 
-    /** A line of particles from the player to the anchor — the visible tether. */
+    /** Roughly how many particles make up a block of rope. */
+    private static final double DENSITY = 2.0;
+    /** Rope is drawn in this many chunks, however long it is. */
+    private static final int SEGMENTS = 6;
+
+    /**
+     * A line of particles from the player to the anchor — the visible tether.
+     *
+     * <p>The rope is sent as a handful of bursts rather than one packet per
+     * particle. Each burst asks the client to scatter its share of the particles
+     * along one stretch of the line, so the rope looks the same as before while a
+     * long shot costs six packets to every nearby player instead of fifty.
+     */
     public static void drawRope(ServerLevel level, Vec3 from, Vec3 to) {
         Vec3 delta = to.subtract(from);
-        int points = (int) Mth.clamp(delta.length() * 2.0, 4, 48);
-        for (int i = 0; i <= points; i++) {
-            double t = i / (double) points;
-            Vec3 p = from.add(delta.scale(t));
-            level.sendParticles(ParticleTypes.CRIT, p.x, p.y, p.z, 1, 0.0, 0.0, 0.0, 0.0);
+        int points = (int) Mth.clamp(delta.length() * DENSITY, 4, 48);
+        Vec3 step = delta.scale(1.0 / SEGMENTS);
+        // Half a segment in each axis: the spread the client scatters a burst over.
+        double sx = Math.abs(step.x) / 2.0;
+        double sy = Math.abs(step.y) / 2.0;
+        double sz = Math.abs(step.z) / 2.0;
+        for (int i = 0; i < SEGMENTS; i++) {
+            Vec3 mid = from.add(step.scale(i + 0.5));
+            int share = points / SEGMENTS + (i < points % SEGMENTS ? 1 : 0);
+            if (share > 0) {
+                level.sendParticles(ParticleTypes.CRIT, mid.x, mid.y, mid.z, share, sx, sy, sz, 0.0);
+            }
         }
     }
 }

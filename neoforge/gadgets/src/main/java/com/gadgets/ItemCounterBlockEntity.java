@@ -41,6 +41,8 @@ import net.neoforged.neoforge.items.IItemHandler;
  */
 public class ItemCounterBlockEntity extends BlockEntity {
     private static final int INTERVAL = 2;
+    /** How often the face readout is recomputed and, if it changed, synced. */
+    private static final int FACE_INTERVAL = 20;
     private static final int PULSE_TICKS = 4;
     public static final int[] THRESHOLDS = {1, 4, 8, 16, 32, 64};
     private static final int MAX_TRACKED_ITEMS = 64;
@@ -99,6 +101,9 @@ public class ItemCounterBlockEntity extends BlockEntity {
     private int rateMin = 0;
     private int rateHour = 0;
     private String lastFace = "";
+
+    /** The container this counter faces, if it is one. */
+    private final CapCache<IItemHandler> source = new CapCache<>(Capabilities.ItemHandler.BLOCK, this);
 
     public ItemCounterBlockEntity(BlockPos pos, BlockState state) {
         super(Gadgets.ITEM_COUNTER_BE.get(), pos, state);
@@ -298,12 +303,12 @@ public class ItemCounterBlockEntity extends BlockEntity {
         }
         be.advanceClocks(level.getGameTime());
 
-        if (level.getGameTime() % INTERVAL == 0L) {
+        if (TickPhase.due(level, pos, INTERVAL)) {
             Direction facing = state.getValue(ItemCounterBlock.FACING);
             BlockPos target = pos.relative(facing);
 
             int passed;
-            IItemHandler handler = level.getCapability(Capabilities.ItemHandler.BLOCK, target, facing.getOpposite());
+            IItemHandler handler = be.source.get(level, target, facing.getOpposite());
             be.watchingContainer = handler != null;
             if (handler != null) {
                 passed = be.sampleContainer(handler);
@@ -330,7 +335,7 @@ public class ItemCounterBlockEntity extends BlockEntity {
         }
 
         // Refresh the face readout once a second; push to clients only on change.
-        if (level.getGameTime() % 20L == 0L) {
+        if (TickPhase.due(level, pos, FACE_INTERVAL)) {
             be.rateMin = sum(be.secBuckets);
             be.rateHour = sum(be.minBuckets);
             String face = be.faceValue() + "|" + be.faceLabel();

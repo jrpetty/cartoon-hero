@@ -18,7 +18,7 @@ public class RedstoneReceiverBlockEntity extends BlockEntity implements ChannelB
     }
 
     public static void tick(Level level, BlockPos pos, BlockState state, RedstoneReceiverBlockEntity be) {
-        if (level.getGameTime() % INTERVAL != 0L) {
+        if (!TickPhase.due(level, pos, INTERVAL)) {
             return;
         }
         int power = WirelessNetwork.strength(be.channel, level.getGameTime());

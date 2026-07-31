@@ -17,7 +17,7 @@ public class ItemReceiverBlockEntity extends BlockEntity implements ChannelBlock
     }
 
     public static void tick(Level level, BlockPos pos, BlockState state, ItemReceiverBlockEntity be) {
-        if (level.getGameTime() % INTERVAL != 0L || be.channel.isEmpty()) {
+        if (!TickPhase.due(level, pos, INTERVAL) || be.channel.isEmpty()) {
             return;
         }
         ItemNetwork.publish(be.channel, sourceKey(level, pos), level.getGameTime());

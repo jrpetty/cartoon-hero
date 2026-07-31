@@ -1,0 +1,13 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "redstone",
+  "group": "gadgets",
+  "pattern": [ " P ", "SOS", " R " ],
+  "key": {
+    "P": { "item": "minecraft:ender_pearl" },
+    "S": { "item": "minecraft:stone" },
+    "O": { "item": "minecraft:observer" },
+    "R": { "item": "minecraft:redstone" }
+  },
+  "result": { "id": "gadgets:player_sensor", "count": 1 }
+}

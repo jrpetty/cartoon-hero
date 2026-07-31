@@ -1,0 +1,11 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "building",
+  "group": "gadgets",
+  "pattern": [ "BBB", "I I", "BBB" ],
+  "key": {
+    "B": { "item": "minecraft:iron_bars" },
+    "I": { "item": "minecraft:iron_ingot" }
+  },
+  "result": { "id": "gadgets:drain", "count": 2 }
+}

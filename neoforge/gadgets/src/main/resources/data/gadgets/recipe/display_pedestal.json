@@ -1,0 +1,11 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "building",
+  "group": "gadgets",
+  "pattern": [ " Q ", "QSQ", "SSS" ],
+  "key": {
+    "Q": { "item": "minecraft:quartz" },
+    "S": { "item": "minecraft:smooth_stone" }
+  },
+  "result": { "id": "gadgets:display_pedestal", "count": 1 }
+}

@@ -30,6 +30,9 @@ public class EnergyMonitorBlockEntity extends BlockEntity implements HubGauge {
     private boolean present = false;
     private String customName = "";
 
+    /** The energy cell this monitor faces. */
+    private final CapCache<IEnergyStorage> source = new CapCache<>(Capabilities.EnergyStorage.BLOCK, this);
+
     public EnergyMonitorBlockEntity(BlockPos pos, BlockState state) {
         super(Gadgets.ENERGY_MONITOR_BE.get(), pos, state);
     }
@@ -104,12 +107,11 @@ public class EnergyMonitorBlockEntity extends BlockEntity implements HubGauge {
     }
 
     public static void tick(Level level, BlockPos pos, BlockState state, EnergyMonitorBlockEntity be) {
-        if (level.getGameTime() % INTERVAL != 0L) {
+        if (!TickPhase.due(level, pos, INTERVAL)) {
             return;
         }
         Direction facing = state.getValue(EnergyMonitorBlock.FACING);
-        IEnergyStorage cell = level.getCapability(Capabilities.EnergyStorage.BLOCK,
-                pos.relative(facing), facing.getOpposite());
+        IEnergyStorage cell = be.source.get(level, pos.relative(facing), facing.getOpposite());
 
         boolean found = cell != null;
         long total = found ? cell.getEnergyStored() : 0;

@@ -32,6 +32,9 @@ public class ItemMagnetBlockEntity extends BlockEntity {
 
     private int radius = 6;
 
+    /** The container below, which collected items are pushed into. */
+    private final CapCache<IItemHandler> destination = new CapCache<>(Capabilities.ItemHandler.BLOCK, this);
+
     public ItemMagnetBlockEntity(BlockPos pos, BlockState state) {
         super(Gadgets.ITEM_MAGNET_BE.get(), pos, state);
     }
@@ -55,10 +58,10 @@ public class ItemMagnetBlockEntity extends BlockEntity {
     }
 
     public static void tick(Level level, BlockPos pos, BlockState state, ItemMagnetBlockEntity be) {
-        if (level.getGameTime() % INTERVAL != 0L || level.hasNeighborSignal(pos)) {
+        if (!TickPhase.due(level, pos, INTERVAL) || level.hasNeighborSignal(pos)) {
             return; // a redstone signal parks the magnet, like a hopper
         }
-        IItemHandler target = level.getCapability(Capabilities.ItemHandler.BLOCK, pos.below(), Direction.UP);
+        IItemHandler target = be.destination.get(level, pos.below(), Direction.UP);
         if (target == null) {
             return; // nowhere to put anything — stay idle
         }

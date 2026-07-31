@@ -1,6 +1,7 @@
 package com.gadgets;
 
 import java.util.ArrayList;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Locale;
 
@@ -150,7 +151,8 @@ public class CommandHubBlockEntity extends BlockEntity {
     private final List<Node> nodes = new ArrayList<>();
     /** Newest first, so the interesting end is the one you read. */
     private final List<Event> events = new ArrayList<>();
-    private String lastSync = "";
+    /** Digest of the last board pushed to clients; see {@link #fingerprint()}. */
+    private long lastSync = Long.MIN_VALUE;
 
     public CommandHubBlockEntity(BlockPos pos, BlockState state) {
         super(Gadgets.COMMAND_HUB_BE.get(), pos, state);
@@ -220,30 +222,6 @@ public class CommandHubBlockEntity extends BlockEntity {
         sync();
     }
 
-    /**
-     * Forget links whose gadget is gone for good.
-     *
-     * <p>Only a loaded chunk can prove absence: an unloaded one reads as empty
-     * and would drop every link in an unvisited base. So a node is dropped only
-     * when its chunk is loaded and the block there is no longer a counter or a
-     * monitor.
-     */
-    private boolean pruneDead(MinecraftServer server) {
-        return nodes.removeIf(n -> {
-            ServerLevel w = levelOf(server, n);
-            if (w == null) {
-                return false; // dimension missing — keep, it may come back
-            }
-            BlockPos p = BlockPos.of(n.pos);
-            if (!w.isLoaded(p)) {
-                return false; // unloaded is "offline", never "deleted"
-            }
-            BlockEntity there = w.getBlockEntity(p);
-            return !(there instanceof ItemCounterBlockEntity || there instanceof StockMonitorBlockEntity
-                    || there instanceof HubGauge);
-        });
-    }
-
     @Nullable
     private static ServerLevel levelOf(MinecraftServer server, Node n) {
         ResourceLocation dimId = ResourceLocation.tryParse(n.dim);
@@ -279,7 +257,7 @@ public class CommandHubBlockEntity extends BlockEntity {
     }
 
     public static void tick(Level level, BlockPos pos, BlockState state, CommandHubBlockEntity be) {
-        if (level.getGameTime() % INTERVAL != 0L) {
+        if (!TickPhase.due(level, pos, INTERVAL)) {
             return;
         }
         MinecraftServer server = level.getServer();
@@ -287,11 +265,18 @@ public class CommandHubBlockEntity extends BlockEntity {
             return;
         }
         if (!be.nodes.isEmpty()) {
-            // A broken counter or monitor drops off the board rather than sitting
-            // there as a permanent "offline" ghost.
-            be.pruneDead(server);
-            for (Node n : be.nodes) {
-                be.refresh(server, n);
+            // One pass: read each gadget, and drop it if that read proves it's
+            // gone. Pruning and refreshing separately meant looking every linked
+            // block up twice a second for the same answer.
+            Iterator<Node> it = be.nodes.iterator();
+            while (it.hasNext()) {
+                Node n = it.next();
+                if (be.refresh(server, n) == Link.GONE) {
+                    // A broken counter or monitor drops off the board rather
+                    // than sitting there as a permanent "offline" ghost.
+                    it.remove();
+                    continue;
+                }
                 // An offline node keeps its last known alarm state: an unloaded
                 // chunk is not evidence that anything changed.
                 if (n.online) {
@@ -319,40 +304,80 @@ public class CommandHubBlockEntity extends BlockEntity {
         // Push to clients only when the board actually changed. The newest event
         // is part of that: a log entry with no matching board change still needs
         // to reach the screen.
-        String fingerprint = be.buildList() + "#" + be.events.size()
-                + (be.events.isEmpty() ? "" : "@" + be.events.get(0).dayTime());
-        if (!fingerprint.equals(be.lastSync)) {
+        long fingerprint = be.fingerprint();
+        if (fingerprint != be.lastSync) {
             be.lastSync = fingerprint;
             be.setChanged();
             be.sync();
         }
     }
 
-    private void refresh(MinecraftServer server, Node n) {
+    /**
+     * A cheap digest of everything the board shows.
+     *
+     * <p>This used to build the whole sync payload and compare its text against
+     * last second's — a tag per node plus a string of the lot, allocated once a
+     * second for the life of every hub, purely to answer "did anything move?".
+     * Reading the same fields into a running hash allocates nothing at all.
+     */
+    private long fingerprint() {
+        long h = 1125899906842597L;
+        for (Node n : nodes) {
+            h = h * 31 + n.type;
+            h = h * 31 + n.pos;
+            h = h * 31 + n.dim.hashCode();
+            h = h * 31 + (n.online ? 1 : 0);
+            h = h * 31 + n.label.hashCode();
+            h = h * 31 + n.a;
+            h = h * 31 + n.b;
+            h = h * 31 + n.c;
+            h = h * 31 + n.d;
+        }
+        h = h * 31 + events.size();
+        if (!events.isEmpty()) {
+            h = h * 31 + events.get(0).dayTime();
+        }
+        return h;
+    }
+
+    /** What a look at a linked gadget found. */
+    private enum Link {
+        /** Read successfully; the node now holds fresh numbers. */
+        LIVE,
+        /** Out of reach — unloaded chunk or missing dimension. Keep the link. */
+        OFFLINE,
+        /** Reachable, and there is no gadget there any more. Drop the link. */
+        GONE
+    }
+
+    private Link refresh(MinecraftServer server, Node n) {
         n.online = false;
         ServerLevel w = levelOf(server, n);
         if (w == null) {
-            return;
+            return Link.OFFLINE; // dimension missing — it may come back
         }
         BlockPos p = BlockPos.of(n.pos);
         if (!w.isLoaded(p)) {
-            return; // offline: chunk not loaded — never force it
+            return Link.OFFLINE; // never force a chunk, and never read absence into one
         }
-        if (w.getBlockEntity(p) instanceof ItemCounterBlockEntity counter) {
+        // One lookup, then decide what it is — the chunk and block-entity map
+        // don't need walking three times to answer the same question.
+        BlockEntity linked = w.getBlockEntity(p);
+        if (linked instanceof ItemCounterBlockEntity counter) {
             n.online = true;
             n.label = counter.displayName();
             n.a = counter.getRateMin();
             n.b = counter.getRateHour();
             n.c = counter.getTotal();
             n.d = counter.isStalled() ? 1 : 0;
-        } else if (w.getBlockEntity(p) instanceof StockMonitorBlockEntity monitor) {
+        } else if (linked instanceof StockMonitorBlockEntity monitor) {
             n.online = true;
             n.label = monitor.displayName();
             n.a = monitor.getCount();
             n.b = monitor.getThreshold();
             n.c = monitor.isLow() ? 1 : 0;
             n.d = monitor.getDistinctTypes();
-        } else if (w.getBlockEntity(p) instanceof HubGauge gauge) {
+        } else if (linked instanceof HubGauge gauge) {
             n.online = true;
             n.type = gauge.gaugeType();
             n.label = gauge.displayName();
@@ -361,6 +386,7 @@ public class CommandHubBlockEntity extends BlockEntity {
             n.c = gauge.isLow() ? 1 : 0;
             n.d = gauge.percent();
         }
+        return n.online ? Link.LIVE : Link.GONE;
     }
 
     private void sync() {

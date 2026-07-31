@@ -57,7 +57,8 @@ public class GrandDisplayBlockEntity extends BlockEntity {
     private int totalRows = 0;
     private final List<CommandHubBlockEntity.Node> rows = new ArrayList<>();
 
-    private String lastSync = "";
+    /** Digest of the last board pushed to clients; see {@link #fingerprint()}. */
+    private long lastSync = Long.MIN_VALUE;
 
     public GrandDisplayBlockEntity(BlockPos pos, BlockState state) {
         super(Gadgets.GRAND_DISPLAY_BE.get(), pos, state);
@@ -130,19 +131,6 @@ public class GrandDisplayBlockEntity extends BlockEntity {
     }
 
     @Nullable
-    private CommandHubBlockEntity resolveHub(MinecraftServer server) {
-        if (!hubLinked) {
-            return null;
-        }
-        ServerLevel w = levelOf(server, hubDim);
-        BlockPos p = BlockPos.of(hubPos);
-        if (w == null || !w.isLoaded(p)) {
-            return null;
-        }
-        return w.getBlockEntity(p) instanceof CommandHubBlockEntity hub ? hub : null;
-    }
-
-    @Nullable
     private static ServerLevel levelOf(MinecraftServer server, String dim) {
         ResourceLocation id = ResourceLocation.tryParse(dim);
         return id == null ? null
@@ -152,7 +140,7 @@ public class GrandDisplayBlockEntity extends BlockEntity {
     // --- tick ---
 
     public static void tick(Level level, BlockPos pos, BlockState state, GrandDisplayBlockEntity be) {
-        if (level.getGameTime() % INTERVAL != 0L || !be.hubLinked) {
+        if (!TickPhase.due(level, pos, INTERVAL) || !be.hubLinked) {
             return;
         }
         MinecraftServer server = level.getServer();
@@ -160,19 +148,22 @@ public class GrandDisplayBlockEntity extends BlockEntity {
             return;
         }
 
-        // A destroyed hub takes its boards down with it. As everywhere else in
-        // this system, only a loaded chunk may prove the block is gone.
+        // One lookup answers both questions: is the hub still there, and what is
+        // on its board. A destroyed hub takes its boards down with it — and, as
+        // everywhere else in this system, only a loaded chunk may prove that.
         ServerLevel hubLevel = levelOf(server, be.hubDim);
         BlockPos hp = BlockPos.of(be.hubPos);
-        if (hubLevel != null && hubLevel.isLoaded(hp)
-                && !(hubLevel.getBlockEntity(hp) instanceof CommandHubBlockEntity)) {
-            be.unlinkHub();
-            be.setChanged();
-            be.sync();
-            return;
+        CommandHubBlockEntity hub = null;
+        if (hubLevel != null && hubLevel.isLoaded(hp)) {
+            if (hubLevel.getBlockEntity(hp) instanceof CommandHubBlockEntity found) {
+                hub = found;
+            } else {
+                be.unlinkHub();
+                be.setChanged();
+                be.sync();
+                return;
+            }
         }
-
-        CommandHubBlockEntity hub = be.resolveHub(server);
         be.rows.clear();
         be.totalRows = 0;
         if (hub != null) {
@@ -190,22 +181,35 @@ public class GrandDisplayBlockEntity extends BlockEntity {
             }
         }
 
-        String fingerprint = be.fingerprint();
-        if (!fingerprint.equals(be.lastSync)) {
+        long fingerprint = be.fingerprint();
+        if (fingerprint != be.lastSync) {
             be.lastSync = fingerprint;
             be.setChanged();
             be.sync();
         }
     }
 
-    private String fingerprint() {
-        StringBuilder sb = new StringBuilder();
-        sb.append(hubLinked).append(order).append(large).append(totalRows);
+    /**
+     * A cheap digest of what the board is showing, so a push to clients only
+     * happens when something actually moved. Hashing the fields costs nothing;
+     * building a string of them all every second, forever, did not.
+     */
+    private long fingerprint() {
+        long h = 1125899906842597L;
+        h = h * 31 + (hubLinked ? 1 : 0);
+        h = h * 31 + order;
+        h = h * 31 + (large ? 1 : 0);
+        h = h * 31 + totalRows;
         for (CommandHubBlockEntity.Node n : rows) {
-            sb.append('|').append(n.label).append(n.type).append(n.online)
-                    .append(n.a).append(',').append(n.b).append(',').append(n.c).append(',').append(n.d);
+            h = h * 31 + n.label.hashCode();
+            h = h * 31 + n.type;
+            h = h * 31 + (n.online ? 1 : 0);
+            h = h * 31 + n.a;
+            h = h * 31 + n.b;
+            h = h * 31 + n.c;
+            h = h * 31 + n.d;
         }
-        return sb.toString();
+        return h;
     }
 
     private void sync() {

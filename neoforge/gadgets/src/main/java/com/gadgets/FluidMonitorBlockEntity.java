@@ -33,6 +33,9 @@ public class FluidMonitorBlockEntity extends BlockEntity implements HubGauge {
     private boolean present = false;
     private String customName = "";
 
+    /** The tank this monitor faces. */
+    private final CapCache<IFluidHandler> source = new CapCache<>(Capabilities.FluidHandler.BLOCK, this);
+
     public FluidMonitorBlockEntity(BlockPos pos, BlockState state) {
         super(Gadgets.FLUID_MONITOR_BE.get(), pos, state);
     }
@@ -120,12 +123,11 @@ public class FluidMonitorBlockEntity extends BlockEntity implements HubGauge {
     }
 
     public static void tick(Level level, BlockPos pos, BlockState state, FluidMonitorBlockEntity be) {
-        if (level.getGameTime() % INTERVAL != 0L) {
+        if (!TickPhase.due(level, pos, INTERVAL)) {
             return;
         }
         Direction facing = state.getValue(FluidMonitorBlock.FACING);
-        IFluidHandler tank = level.getCapability(Capabilities.FluidHandler.BLOCK,
-                pos.relative(facing), facing.getOpposite());
+        IFluidHandler tank = be.source.get(level, pos.relative(facing), facing.getOpposite());
 
         long total = 0;
         long room = 0;

@@ -25,7 +25,7 @@ public class ItemSenderBlockEntity extends BlockEntity implements ChannelBlockEn
     }
 
     public static void tick(Level level, BlockPos pos, BlockState state, ItemSenderBlockEntity be) {
-        if (level.getGameTime() % INTERVAL != 0L || be.channel.isEmpty()) {
+        if (!TickPhase.due(level, pos, INTERVAL) || be.channel.isEmpty()) {
             return;
         }
         Container source = HopperBlockEntity.getContainerAt(level, pos.above());

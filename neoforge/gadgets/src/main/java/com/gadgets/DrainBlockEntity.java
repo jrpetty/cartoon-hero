@@ -34,7 +34,7 @@ public class DrainBlockEntity extends BlockEntity implements WorldlyContainer {
     }
 
     public static void tick(Level level, BlockPos pos, BlockState state, DrainBlockEntity be) {
-        if (level.getGameTime() % INTERVAL != 0L) {
+        if (!TickPhase.due(level, pos, INTERVAL)) {
             return;
         }
         BlockPos up = pos.above();

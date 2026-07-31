@@ -1,11 +1,11 @@
 package com.gadgets;
 
-import java.util.function.Predicate;
-
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.HolderLookup;
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.protocol.game.ClientboundBlockEntityDataPacket;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.LivingEntity;
@@ -27,6 +27,8 @@ public class PlayerSensorBlockEntity extends BlockEntity {
     public static final int MIN_RADIUS = 2;
     public static final int MAX_RADIUS = 24;
     private static final int INTERVAL = 10;
+    /** Full redstone — counting past this changes nothing. */
+    private static final int MAX_POWER = 15;
 
     /** Built-in modes cycled with an empty hand. */
     public static final String PLAYERS = "players";
@@ -110,23 +112,65 @@ public class PlayerSensorBlockEntity extends BlockEntity {
         return next;
     }
 
-    private Predicate<Entity> predicate() {
-        return switch (target) {
-            case PLAYERS -> e -> e instanceof Player p && !p.isSpectator();
-            case MONSTERS -> e -> e instanceof Monster;
-            case ANIMALS -> e -> e instanceof Animal;
-            case ALL -> e -> e instanceof LivingEntity && !e.isSpectator();
-            default -> e -> EntityType.getKey(e.getType()).toString().equals(target);
-        };
+    /**
+     * The mob type a custom target names, looked up once per change of target
+     * rather than rebuilt from a string for every entity in range on every scan.
+     */
+    private EntityType<?> exactType;
+    private String exactTypeFor;
+
+    private EntityType<?> exactType() {
+        if (!target.equals(exactTypeFor)) {
+            exactTypeFor = target;
+            ResourceLocation id = ResourceLocation.tryParse(target);
+            exactType = id == null ? null : BuiltInRegistries.ENTITY_TYPE.getOptional(id).orElse(null);
+        }
+        return exactType;
+    }
+
+    /**
+     * How many matching entities are in range, capped at full redstone.
+     *
+     * <p>Each mode asks the level for the narrowest class it can. That matters:
+     * a sweep for {@code Entity.class} hands back every arrow, dropped item and
+     * XP orb in the box for the predicate to throw away, and a busy base has far
+     * more of those than it has mobs. Watching for players skips the world scan
+     * altogether — the server already keeps a list of them.
+     */
+    private int count(Level level, BlockPos pos) {
+        AABB area = new AABB(pos).inflate(radius);
+        switch (target) {
+            case PLAYERS: {
+                int found = 0;
+                for (Player player : level.players()) {
+                    if (!player.isSpectator() && area.intersects(player.getBoundingBox()) && ++found >= MAX_POWER) {
+                        break;
+                    }
+                }
+                return found;
+            }
+            case MONSTERS:
+                return level.getEntitiesOfClass(Monster.class, area, e -> true).size();
+            case ANIMALS:
+                return level.getEntitiesOfClass(Animal.class, area, e -> true).size();
+            case ALL:
+                return level.getEntitiesOfClass(LivingEntity.class, area, e -> !e.isSpectator()).size();
+            default: {
+                EntityType<?> want = exactType();
+                if (want == null) {
+                    return 0; // an unknown id matches nothing, and costs nothing to check
+                }
+                return level.getEntitiesOfClass(Entity.class, area, e -> e.getType() == want).size();
+            }
+        }
     }
 
     public static void tick(Level level, BlockPos pos, BlockState state, PlayerSensorBlockEntity be) {
-        if (level.getGameTime() % INTERVAL != 0L) {
+        if (!TickPhase.due(level, pos, INTERVAL)) {
             return;
         }
 
-        AABB area = new AABB(pos).inflate(be.radius);
-        int power = Math.min(15, level.getEntitiesOfClass(Entity.class, area, be.predicate()).size());
+        int power = Math.min(MAX_POWER, be.count(level, pos));
 
         if (state.getValue(PlayerSensorBlock.POWER) != power) {
             level.setBlock(pos, state.setValue(PlayerSensorBlock.POWER, power), Block.UPDATE_ALL);

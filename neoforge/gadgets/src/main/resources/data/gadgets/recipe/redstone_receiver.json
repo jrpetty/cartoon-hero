@@ -1,0 +1,12 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "redstone",
+  "group": "gadgets",
+  "pattern": [ "III", "IRI", " T " ],
+  "key": {
+    "T": { "item": "minecraft:redstone_torch" },
+    "I": { "item": "minecraft:iron_ingot" },
+    "R": { "item": "minecraft:redstone" }
+  },
+  "result": { "id": "gadgets:redstone_receiver", "count": 1 }
+}

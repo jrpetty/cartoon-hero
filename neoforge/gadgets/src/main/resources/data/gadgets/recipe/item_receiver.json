@@ -1,0 +1,12 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "redstone",
+  "group": "gadgets",
+  "pattern": [ "III", "IHI", "IEI" ],
+  "key": {
+    "I": { "item": "minecraft:iron_ingot" },
+    "E": { "item": "minecraft:ender_pearl" },
+    "H": { "item": "minecraft:hopper" }
+  },
+  "result": { "id": "gadgets:item_receiver", "count": 1 }
+}

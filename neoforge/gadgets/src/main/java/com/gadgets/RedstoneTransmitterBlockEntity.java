@@ -17,7 +17,7 @@ public class RedstoneTransmitterBlockEntity extends BlockEntity implements Chann
     }
 
     public static void tick(Level level, BlockPos pos, BlockState state, RedstoneTransmitterBlockEntity be) {
-        if (level.getGameTime() % INTERVAL != 0L) {
+        if (!TickPhase.due(level, pos, INTERVAL)) {
             return;
         }
         int power = level.getBestNeighborSignal(pos);

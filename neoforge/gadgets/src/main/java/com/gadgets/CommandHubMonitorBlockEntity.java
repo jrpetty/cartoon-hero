@@ -67,7 +67,8 @@ public class CommandHubMonitorBlockEntity extends BlockEntity {
     private long a, b, c, d;
     private final List<Choice> choices = new ArrayList<>();
 
-    private String lastSync = "";
+    /** Digest of the last screen pushed to clients; see {@link #fingerprint()}. */
+    private long lastSync = Long.MIN_VALUE;
 
     public CommandHubMonitorBlockEntity(BlockPos pos, BlockState state) {
         super(Gadgets.COMMAND_HUB_MONITOR_BE.get(), pos, state);
@@ -201,7 +202,7 @@ public class CommandHubMonitorBlockEntity extends BlockEntity {
     // --- tick ---
 
     public static void tick(Level level, BlockPos pos, BlockState state, CommandHubMonitorBlockEntity be) {
-        if (level.getGameTime() % INTERVAL != 0L || !be.hubLinked) {
+        if (!TickPhase.due(level, pos, INTERVAL) || !be.hubLinked) {
             return;
         }
         MinecraftServer server = level.getServer();
@@ -209,19 +210,22 @@ public class CommandHubMonitorBlockEntity extends BlockEntity {
             return;
         }
 
-        // A destroyed hub takes its screens down with it. As on the hub itself,
-        // only a loaded chunk is allowed to prove the block is gone.
+        // One lookup answers both questions: is the hub still there, and what
+        // is on its board. A destroyed hub takes its screens down with it — and, as
+        // everywhere else in this system, only a loaded chunk may prove that.
         ServerLevel hubLevel = levelOf(server, be.hubDim);
         BlockPos hp = BlockPos.of(be.hubPos);
-        if (hubLevel != null && hubLevel.isLoaded(hp)
-                && !(hubLevel.getBlockEntity(hp) instanceof CommandHubBlockEntity)) {
-            be.unlinkHub();
-            be.setChanged();
-            be.sync();
-            return;
+        CommandHubBlockEntity hub = null;
+        if (hubLevel != null && hubLevel.isLoaded(hp)) {
+            if (hubLevel.getBlockEntity(hp) instanceof CommandHubBlockEntity found) {
+                hub = found;
+            } else {
+                be.unlinkHub();
+                be.setChanged();
+                be.sync();
+                return;
+            }
         }
-
-        CommandHubBlockEntity hub = be.resolveHub(server);
         be.choices.clear();
         if (hub != null) {
             for (CommandHubBlockEntity.Node n : hub.getNodes()) {
@@ -235,8 +239,8 @@ public class CommandHubMonitorBlockEntity extends BlockEntity {
         }
         be.readSource(server);
 
-        String fingerprint = be.fingerprint();
-        if (!fingerprint.equals(be.lastSync)) {
+        long fingerprint = be.fingerprint();
+        if (fingerprint != be.lastSync) {
             be.lastSync = fingerprint;
             be.setChanged();
             be.sync();
@@ -282,15 +286,32 @@ public class CommandHubMonitorBlockEntity extends BlockEntity {
         }
     }
 
-    private String fingerprint() {
-        StringBuilder sb = new StringBuilder();
-        sb.append(hubLinked).append(srcChosen).append(srcDim).append(srcPos)
-                .append(type).append(online).append(label)
-                .append(a).append(',').append(b).append(',').append(c).append(',').append(d);
+    /**
+     * A cheap digest of what the screen is showing, so a push to clients only
+     * happens when something actually moved. Hashing the fields costs nothing;
+     * building a string of them all every second, forever, did not.
+     */
+    private long fingerprint() {
+        long h = 1125899906842597L;
+        h = h * 31 + (hubLinked ? 1 : 0);
+        h = h * 31 + (srcChosen ? 1 : 0);
+        h = h * 31 + srcDim.hashCode();
+        h = h * 31 + srcPos;
+        h = h * 31 + type;
+        h = h * 31 + (online ? 1 : 0);
+        h = h * 31 + label.hashCode();
+        h = h * 31 + a;
+        h = h * 31 + b;
+        h = h * 31 + c;
+        h = h * 31 + d;
         for (Choice ch : choices) {
-            sb.append('|').append(ch.dim()).append(ch.pos()).append(ch.type()).append(ch.label()).append(ch.alarmed());
+            h = h * 31 + ch.dim().hashCode();
+            h = h * 31 + ch.pos();
+            h = h * 31 + ch.type();
+            h = h * 31 + ch.label().hashCode();
+            h = h * 31 + (ch.alarmed() ? 1 : 0);
         }
-        return sb.toString();
+        return h;
     }
 
     private void sync() {

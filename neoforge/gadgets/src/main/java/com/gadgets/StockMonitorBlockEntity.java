@@ -64,6 +64,9 @@ public class StockMonitorBlockEntity extends BlockEntity {
     /** Parsed form of {@link #tagId}, rebuilt whenever the id changes. */
     private TagKey<Item> tagKey = null;
 
+    /** The container this monitor faces. */
+    private final CapCache<IItemHandler> source = new CapCache<>(Capabilities.ItemHandler.BLOCK, this);
+
     public StockMonitorBlockEntity(BlockPos pos, BlockState state) {
         super(Gadgets.STOCK_MONITOR_BE.get(), pos, state);
     }
@@ -255,13 +258,13 @@ public class StockMonitorBlockEntity extends BlockEntity {
     }
 
     public static void tick(Level level, BlockPos pos, BlockState state, StockMonitorBlockEntity be) {
-        if (level.getGameTime() % INTERVAL != 0L) {
+        if (!TickPhase.due(level, pos, INTERVAL)) {
             return;
         }
         long found = 0;
         int types = 0;
         Direction facing = state.getValue(StockMonitorBlock.FACING);
-        IItemHandler handler = level.getCapability(Capabilities.ItemHandler.BLOCK, pos.relative(facing), facing.getOpposite());
+        IItemHandler handler = be.source.get(level, pos.relative(facing), facing.getOpposite());
         boolean present = handler != null;
         if (present) {
             Set<Item> seen = new HashSet<>();
