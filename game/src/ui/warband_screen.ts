@@ -16,7 +16,7 @@ import { UNITS } from "../content/units";
 import { WarbandRun, UNIT_TIER, Piece } from "../sim/warband";
 import { LiveBattle, GRID_COLS, GRID_ROWS, GRID_CELL } from "../sim/autobattle";
 import { traitsOf, Buff } from "../sim/traits";
-import { ITEMS, Item, applyItems } from "../sim/items";
+import { Item, applyItems, itemDef, isComponent, buildsInto } from "../sim/items";
 import { ABILITIES } from "../content/abilities";
 import { Augment, TIER_COLOR as AUG_COLOR } from "../sim/augments";
 
@@ -54,6 +54,8 @@ export class WarbandScreen {
   private augT = 0;       // augment picker intro clock (card deal-in)
   // A star-up celebration: set when the run reports a merge, fades on its own.
   private starUp: { type: string; star: number; t: number } | null = null;
+  // A relic-forged flourish when two components fuse on a unit.
+  private fusion: { item: string; type: string; t: number } | null = null;
 
   draw(W: number, H: number, time: number, run: WarbandRun): "exit" | null {
     const ctx = ui.ctx;
@@ -189,7 +191,7 @@ export class WarbandScreen {
       if (run.itemStash.length === 0) { ui.text("— none yet —", sx, sy + 12, { size: 11, color: "#6f6a5c" }); sy += 22; }
       const tile = 42, gap = 6, per = 4;
       run.itemStash.forEach((id, idx) => {
-        const it = ITEMS[id];
+        const it = itemDef(id);
         if (!it) return;
         const tilex = sx + (idx % per) * (tile + gap);
         const tiley = sy + Math.floor(idx / per) * (tile + gap);
@@ -202,8 +204,12 @@ export class WarbandScreen {
         ctx.fillStyle = g; this.roundRect(ctx, tilex, tiley, tile, tile, 7); ctx.fill();
         if (sel || hov) ctx.restore();
         ctx.strokeStyle = withAlpha(it.color, sel ? 1 : 0.8); ctx.lineWidth = sel ? 2.5 : 1.5;
+        // Components get a dashed edge — a part, not a finished relic.
+        if (it.component) ctx.setLineDash([4, 3]);
         this.roundRect(ctx, tilex + 1, tiley + 1, tile - 2, tile - 2, 6); ctx.stroke();
-        this.itemIcon(ctx, tilex + tile / 2, tiley + tile / 2 - 2, tile * 0.5, it);
+        ctx.setLineDash([]);
+        this.itemIcon(ctx, tilex + tile / 2, tiley + tile / 2 - 2, tile * 0.42, it);
+        if (it.component) ui.text(it.short, tilex + tile / 2, tiley + tile - 5, { align: "center", size: 8, bold: true, color: withAlpha(it.color, 0.9) });
         if (hov) this.itemTip = { id, x: tilex + tile + 8, y: tiley };
         if (hov && ui.clicked && !ui.pointerConsumed) { ui.pointerConsumed = true; this.selectedItem = sel ? -1 : idx; }
       });
@@ -236,6 +242,12 @@ export class WarbandScreen {
       audio.play("levelup");
     }
     if (this.starUp) { this.starUp.t += dt; if (this.starUp.t > 1.6) this.starUp = null; }
+    if (run.lastFusion) {
+      this.fusion = { item: run.lastFusion.item, type: run.lastFusion.type, t: 0 };
+      run.lastFusion = null;
+      audio.play("complete");
+    }
+    if (this.fusion) { this.fusion.t += dt; if (this.fusion.t > 1.7) this.fusion = null; }
     if (run.phase === "augment") this.augT += dt; else this.augT = 0;
     // Advance the live fight in real (scaled) time, then bank the result.
     if (run.phase === "battle" && this.battle) {
@@ -387,6 +399,7 @@ export class WarbandScreen {
 
     // ---- overlays, back to front ----
     this.drawStarUp(boardX, boardY, boardW, boardH);
+    this.drawFusion(boardX, boardY, boardW, boardH);
     if (this.scoutId >= 0 && run.phase !== "over") this.drawScoutPanel(W, H, run, time);
     if (picking) { this.unitTip = null; this.itemTip = null; this.augTip = null; this.drawAugmentPicker(W, H, run, time); }
     this.drawItemTip(W, H);
@@ -713,6 +726,38 @@ export class WarbandScreen {
     }
   }
 
+  /** A forge flourish when two components fuse into a full relic. */
+  private drawFusion(bx: number, by: number, bw: number, bh: number) {
+    if (!this.fusion) return;
+    const it = itemDef(this.fusion.item);
+    if (!it) return;
+    const ctx = ui.ctx;
+    const t = this.fusion.t / 1.7;
+    const a = Math.max(0, 1 - Math.pow(t, 2));
+    const cx = bx + bw / 2, cy = by + bh * 0.62;
+    ctx.save();
+    ctx.globalAlpha = a;
+    // Sparks flying outward from the forge point.
+    for (let i = 0; i < 14; i++) {
+      const ang = (i / 14) * Math.PI * 2 + t * 1.2;
+      const d = 18 + t * 96;
+      ctx.fillStyle = withAlpha(it.color, 0.85);
+      ctx.beginPath(); ctx.arc(cx + Math.cos(ang) * d, cy + Math.sin(ang) * d * 0.55, Math.max(0.6, 3 * (1 - t)), 0, Math.PI * 2); ctx.fill();
+    }
+    const pop = 1 + 0.35 * Math.exp(-t * 6) * Math.cos(t * 15);
+    ctx.translate(cx, cy); ctx.scale(pop, pop); ctx.translate(-cx, -cy);
+    ctx.save();
+    ctx.shadowColor = it.color; ctx.shadowBlur = 20;
+    ctx.fillStyle = "rgba(10,7,4,0.85)";
+    ctx.beginPath(); ctx.arc(cx, cy - 16, 24, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = it.color; ctx.lineWidth = 2; ctx.stroke();
+    this.itemIcon(ctx, cx, cy - 16, 14, it);
+    ui.text("RELIC FORGED", cx, cy + 24, { align: "center", size: 13, bold: true, color: "#f7efdc", font: "Georgia, serif" });
+    ui.text(it.name, cx, cy + 42, { align: "center", size: 16, bold: true, color: it.color, font: "Georgia, serif" });
+    ctx.restore();
+    ctx.restore();
+  }
+
   /** A star-up flourish over the board when three pieces merge. */
   private drawStarUp(bx: number, by: number, bw: number, bh: number) {
     if (!this.starUp) return;
@@ -1021,7 +1066,7 @@ export class WarbandScreen {
         const r = Math.min(7, cellW * 0.1), gap = r * 2.2;
         let ix = sx - (eqItems.length - 1) * gap / 2;
         for (const id of eqItems) {
-          const it = ITEMS[id]; if (!it) continue;
+          const it = itemDef(id); if (!it) continue;
           ctx.fillStyle = "rgba(8,6,3,0.92)"; ctx.beginPath(); ctx.arc(ix, footY + cellH * 0.16, r, 0, Math.PI * 2); ctx.fill();
           ctx.strokeStyle = it.color; ctx.lineWidth = 1; ctx.stroke();
           this.itemIcon(ctx, ix, footY + cellH * 0.16, r * 0.72, it);
@@ -1078,7 +1123,7 @@ export class WarbandScreen {
     // Equipped relics as mini icons along the bottom.
     let ix = x + 11;
     for (const id of p.items) {
-      const it = ITEMS[id]; if (!it) continue;
+      const it = itemDef(id); if (!it) continue;
       ctx.fillStyle = "rgba(8,6,3,0.9)"; ctx.beginPath(); ctx.arc(ix, y + h - 8, 6, 0, Math.PI * 2); ctx.fill();
       ctx.strokeStyle = it.color; ctx.lineWidth = 1; ctx.stroke();
       this.itemIcon(ctx, ix, y + h - 8, 4.3, it);
@@ -1233,6 +1278,78 @@ export class WarbandScreen {
         }
         break;
       }
+      // ---- components: deliberately simpler, "raw part" shapes ----
+      case "blade": // a short blade
+        ctx.beginPath();
+        ctx.moveTo(0, -h); ctx.lineTo(h * 0.26, -h * 0.35); ctx.lineTo(h * 0.26, h * 0.3);
+        ctx.lineTo(-h * 0.26, h * 0.3); ctx.lineTo(-h * 0.26, -h * 0.35); ctx.closePath(); ctx.fill(); ctx.stroke();
+        ctx.fillStyle = "#6a4a2a"; ctx.beginPath(); ctx.rect(-h * 0.4, h * 0.28, h * 0.8, h * 0.22); ctx.fill(); ctx.stroke();
+        break;
+      case "plate": // a riveted armour plate
+        ctx.beginPath();
+        ctx.moveTo(-h * 0.7, -h * 0.72); ctx.lineTo(h * 0.7, -h * 0.72);
+        ctx.lineTo(h * 0.82, h * 0.5); ctx.quadraticCurveTo(0, h * 0.95, -h * 0.82, h * 0.5);
+        ctx.closePath(); ctx.fill(); ctx.stroke();
+        ctx.fillStyle = "rgba(0,0,0,0.4)";
+        for (const rx of [-0.45, 0.45]) { ctx.beginPath(); ctx.arc(rx * h, -h * 0.45, h * 0.12, 0, Math.PI * 2); ctx.fill(); }
+        break;
+      case "hide": // a stretched pelt
+        ctx.beginPath();
+        ctx.moveTo(0, -h);
+        ctx.quadraticCurveTo(h * 0.95, -h * 0.6, h * 0.6, 0);
+        ctx.quadraticCurveTo(h * 0.95, h * 0.7, 0, h);
+        ctx.quadraticCurveTo(-h * 0.95, h * 0.7, -h * 0.6, 0);
+        ctx.quadraticCurveTo(-h * 0.95, -h * 0.6, 0, -h);
+        ctx.closePath(); ctx.fill(); ctx.stroke();
+        break;
+      case "spur": // a rowel spur
+        ctx.beginPath(); ctx.arc(0, 0, h * 0.42, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+        for (let i = 0; i < 6; i++) {
+          const a2 = (i / 6) * Math.PI * 2;
+          ctx.beginPath();
+          ctx.moveTo(Math.cos(a2) * h * 0.42, Math.sin(a2) * h * 0.42);
+          ctx.lineTo(Math.cos(a2) * h, Math.sin(a2) * h);
+          ctx.lineTo(Math.cos(a2 + 0.4) * h * 0.42, Math.sin(a2 + 0.4) * h * 0.42);
+          ctx.closePath(); ctx.fill(); ctx.stroke();
+        }
+        break;
+      case "sigil": { // a rune diamond
+        ctx.beginPath();
+        ctx.moveTo(0, -h); ctx.lineTo(h * 0.72, 0); ctx.lineTo(0, h); ctx.lineTo(-h * 0.72, 0);
+        ctx.closePath(); ctx.fill(); ctx.stroke();
+        ctx.strokeStyle = "rgba(0,0,0,0.45)"; ctx.lineWidth = s * 0.14;
+        ctx.beginPath(); ctx.moveTo(0, -h * 0.5); ctx.lineTo(0, h * 0.5); ctx.moveTo(-h * 0.34, 0); ctx.lineTo(h * 0.34, 0); ctx.stroke();
+        break;
+      }
+      // ---- the three grid-completing relics ----
+      case "duelistedge": // slim rapier over a buckler
+        ctx.beginPath(); ctx.arc(-h * 0.35, h * 0.3, h * 0.45, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+        ctx.fillStyle = "#e8e0cc";
+        ctx.beginPath();
+        ctx.moveTo(h * 0.15, -h); ctx.lineTo(h * 0.34, -h * 0.75); ctx.lineTo(h * 0.34, h * 0.55);
+        ctx.lineTo(h * 0.1, h * 0.55); ctx.closePath(); ctx.fill(); ctx.stroke();
+        break;
+      case "reaverscleaver": // heavy cleaver
+        ctx.strokeStyle = "#6a4a2a"; ctx.lineWidth = s * 0.2;
+        ctx.beginPath(); ctx.moveTo(-h * 0.3, h); ctx.lineTo(h * 0.05, -h * 0.3); ctx.stroke();
+        ctx.fillStyle = it.color; ctx.strokeStyle = "rgba(0,0,0,0.55)"; ctx.lineWidth = Math.max(1, s * 0.1);
+        ctx.beginPath();
+        ctx.moveTo(-h * 0.15, -h * 0.25); ctx.lineTo(h * 0.35, -h);
+        ctx.quadraticCurveTo(h * 1.0, -h * 0.3, h * 0.5, h * 0.15);
+        ctx.closePath(); ctx.fill(); ctx.stroke();
+        break;
+      case "dancersmail": // winged mail
+        ctx.beginPath();
+        ctx.moveTo(-h * 0.45, -h * 0.6); ctx.lineTo(h * 0.45, -h * 0.6); ctx.lineTo(h * 0.45, h * 0.35);
+        ctx.quadraticCurveTo(0, h * 0.9, -h * 0.45, h * 0.35); ctx.closePath(); ctx.fill(); ctx.stroke();
+        for (const dir of [-1, 1]) {
+          ctx.beginPath();
+          ctx.moveTo(dir * h * 0.45, -h * 0.45);
+          ctx.quadraticCurveTo(dir * h * 1.05, -h * 0.55, dir * h * 0.95, h * 0.05);
+          ctx.quadraticCurveTo(dir * h * 0.75, -h * 0.1, dir * h * 0.45, h * 0.05);
+          ctx.closePath(); ctx.fill(); ctx.stroke();
+        }
+        break;
       default:
         ctx.beginPath(); ctx.arc(0, 0, h * 0.7, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
     }
@@ -1255,10 +1372,13 @@ export class WarbandScreen {
   private drawItemTip(W: number, H: number) {
     if (!this.itemTip) return;
     const ctx = ui.ctx;
-    const it = ITEMS[this.itemTip.id];
+    const it = itemDef(this.itemTip.id);
     if (!it) return;
     const lines = this.buffLines(it.buff);
-    const pw = 196, ph = 46 + lines.length * 17 + 16;
+    // A component also lists every relic it can still become.
+    const recipes = it.component ? buildsInto(it.id).map((r) => itemDef(r)!).filter(Boolean) : [];
+    const pw = it.component ? 250 : 196;
+    const ph = 58 + lines.length * 17 + (recipes.length ? 26 + Math.ceil(recipes.length / 2) * 15 + 14 : 20);
     let px = this.itemTip.x, py = this.itemTip.y;
     if (px + pw > W - 4) px = Math.max(4, this.itemTip.x - pw - 56);
     if (py + ph > H - 4) py = H - ph - 4;
@@ -1269,10 +1389,23 @@ export class WarbandScreen {
     ctx.strokeStyle = withAlpha(it.color, 0.95); ctx.lineWidth = 1.5; this.roundRect(ctx, px + 0.75, py + 0.75, pw - 1.5, ph - 1.5, 9); ctx.stroke();
     this.itemIcon(ctx, px + 20, py + 22, 13, it);
     ui.text(it.name, px + 40, py + 20, { size: 15, bold: true, color: it.color, font: "Georgia, serif" });
-    ui.text("Relic", px + 40, py + 34, { size: 10, color: "#9a917b" });
+    ui.text(it.component ? "Component" : "Relic", px + 40, py + 34, { size: 10, color: "#9a917b" });
     let ly = py + 58;
     for (const ln of lines) { ui.text("◆ " + ln, px + 14, ly, { size: 12.5, bold: true, color: "#e7ddc4" }); ly += 17; }
-    ui.text("Equip onto a unit · up to 3 each", px + 14, ly + 4, { size: 10, color: "#8a8278" });
+    if (recipes.length) {
+      ctx.strokeStyle = "rgba(255,255,255,0.09)"; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(px + 12, ly - 2); ctx.lineTo(px + pw - 12, ly - 2); ctx.stroke();
+      ui.text("Builds into", px + 14, ly + 13, { size: 10, bold: true, color: "#9a917b" });
+      ly += 26;
+      recipes.forEach((r, i) => {
+        const cx2 = px + 14 + (i % 2) * ((pw - 28) / 2);
+        const cy2 = ly + Math.floor(i / 2) * 15;
+        this.itemIcon(ctx, cx2 + 5, cy2 - 3, 5, r);
+        ui.text(this.clip(r.name, 16), cx2 + 14, cy2, { size: 9.5, color: withAlpha(r.color, 0.95) });
+      });
+      ly += Math.ceil(recipes.length / 2) * 15;
+      ui.text("Pair two components on one unit to forge it", px + 14, ly + 4, { size: 9.5, color: "#8a8278" });
+    } else ui.text("Equip onto a unit · up to 3 each", px + 14, ly + 4, { size: 10, color: "#8a8278" });
   }
 
   /** Hover inspector for a unit: its tier, star, live combat stats, counter
@@ -1284,7 +1417,7 @@ export class WarbandScreen {
     const def = UNITS[p.type];
     if (!def) return;
     const tier = UNIT_TIER[p.type] ?? 1;
-    const relics = p.items.map((id) => ITEMS[id]).filter(Boolean) as Item[];
+    const relics = p.items.map((id) => itemDef(id)).filter(Boolean) as Item[];
     const ab = ABILITIES[p.type];
     // Effective stats = base × star, then relics (synergies add more in a fight).
     const sm = STAR_MULT[p.star] ?? 1;

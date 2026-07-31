@@ -8,7 +8,7 @@ import { RNG } from "../engine/rng";
 import { UNITS } from "../content/units";
 import { resolveBattle, UnitStack, ArenaUnit, BattleResult, SideOpts } from "./autobattle";
 import { activeTraits, ActiveTrait } from "./traits";
-import { ITEM_IDS, MAX_ITEMS } from "./items";
+import { COMPONENT_IDS, MAX_ITEMS, fuseComponents } from "./items";
 import { Augment, offerAugments, tierForRound, combinedBuff, combinedTraitBonus } from "./augments";
 import { CreepCamp, isCreepRound, campForRound, campBoard } from "./creeps";
 
@@ -124,6 +124,8 @@ export class WarbandRun {
   pendingCamp: CreepCamp | null = null;
   /** Set whenever pieces merge into a star-up, for the screen's celebration. */
   lastMerge: { type: string; star: number } | null = null;
+  /** Set whenever two components fuse into a relic, for the screen's flourish. */
+  lastFusion: { item: string; type: string } | null = null;
   // The round's matchup, fixed when the shop opens so the on-board preview shows
   // the real upcoming enemy and the live fight uses the same deterministic seed.
   pendingSeed = 0;
@@ -272,13 +274,19 @@ export class WarbandRun {
     if (made.length) this.lastMerge = made[made.length - 1]; // the screen clears it after celebrating
   }
 
-  /** Equip a stashed relic onto a piece (max 3 per unit). */
+  /**
+   * Equip a stashed component or relic onto a piece (max 3 per unit). Landing a
+   * second loose component on the same unit fuses the pair into its full relic
+   * and frees the slot — that's how carries get built.
+   */
   equipItem(stashIndex: number, pieceIndex: number): boolean {
     if (this.phase !== "shop") return false;
     if (stashIndex < 0 || stashIndex >= this.itemStash.length) return false;
     const p = this.pieces[pieceIndex];
     if (!p || p.items.length >= MAX_ITEMS) return false;
     p.items.push(this.itemStash.splice(stashIndex, 1)[0]);
+    const made = fuseComponents(p.items);
+    if (made) this.lastFusion = { item: made, type: p.type };
     return true;
   }
 
@@ -433,8 +441,8 @@ export class WarbandRun {
     } else this.phase = "shop";
   }
 
-  /** Add a random relic to the stash. */
-  private grantRelic() { this.itemStash.push(ITEM_IDS[this.rng.int(0, ITEM_IDS.length - 1)]); }
+  /** Add a random component to the stash — two on one unit fuse into a relic. */
+  private grantRelic() { this.itemStash.push(COMPONENT_IDS[this.rng.int(0, COMPONENT_IDS.length - 1)]); }
 
   /**
    * Take one of the three offered augments. Its one-off effects (bounty, life,
@@ -511,13 +519,14 @@ export class WarbandRun {
     }
   }
 
-  /** Earn + equip a relic onto an opponent's strongest unit (carry-building). */
+  /** Earn + equip a component onto an opponent's strongest unit, fusing pairs
+   *  into full relics the same way you do — so foes build carries too. */
   private equipFoeRelic(b: FoeBrain) {
-    const id = ITEM_IDS[b.rng.int(0, ITEM_IDS.length - 1)];
+    const id = COMPONENT_IDS[b.rng.int(0, COMPONENT_IDS.length - 1)];
     const target = [...b.pieces]
       .sort((p, q) => q.star - p.star || (UNIT_TIER[q.type] ?? 0) - (UNIT_TIER[p.type] ?? 0))
       .find((p) => p.items.length < MAX_ITEMS);
-    if (target) target.items.push(id);
+    if (target) { target.items.push(id); fuseComponents(target.items); }
   }
 
   /** An opponent's deployed warband — its strongest pieces (with relics) on its half. */
