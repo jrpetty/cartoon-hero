@@ -563,6 +563,17 @@ public final class CardRenderer {
         return (a << 24) | (r << 16) | (g << 8) | b;
     }
 
+    /** A tier's colour on a DARK panel — bright enough to read as an accent. */
+    public static int tierColor(com.jrpetty.mobtrumps.game.Tier tier) {
+        return switch (tier) {
+            case COMMON -> 0xFFA8A8A8;
+            case UNCOMMON -> 0xFF55C455;
+            case RARE -> 0xFF3FA7D6;
+            case EPIC -> 0xFFB06BEE;
+            case LEGENDARY -> 0xFFE3B23C;
+        };
+    }
+
     /** Chat colours glow on dark backgrounds but wash out on the cream card
      *  face, so the printed tier line uses darker ink versions of them. */
     public static int tierPrintColor(MobCard card) {
