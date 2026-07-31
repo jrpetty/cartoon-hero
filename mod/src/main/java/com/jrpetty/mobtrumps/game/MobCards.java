@@ -324,56 +324,16 @@ public final class MobCards {
     public static final int MAX_UPGRADE_LEVEL = 8;
 
     /**
-     * How many of the 81 mobs carry each value 0-10 of a stat.
-     *
-     * <p>Twenty-One is played by calling a stat before the card is turned, which
-     * means the player is betting on this shape. Measured, it differs sharply per
-     * stat — thirty mobs have no Attack at all, while Farmable is spread right
-     * across the top — and a player who cannot see that is guessing rather than
-     * choosing. Perfect play is worth about 29 points of win rate over naive
-     * play, nearly all of it knowing these curves, so the screen shows them.
+     * The mean value of a stat across every mob. Used by the Twenty-One dealer
+     * to decide what to call; never shown to a player, because working the
+     * distributions out is the game.
      */
-    public static int[] spread(Stat stat) {
-        int[] counts = new int[11];
-        for (MobCard card : ALL) {
-            int value = card.stat(stat);
-            if (value >= 0 && value < counts.length) {
-                counts[value]++;
-            }
-        }
-        return counts;
-    }
-
-    /** The mean value of a stat across every mob. */
     public static double averageOf(Stat stat) {
         double sum = 0;
         for (MobCard card : ALL) {
             sum += card.stat(stat);
         }
         return ALL.isEmpty() ? 0 : sum / ALL.size();
-    }
-
-    /** The highest value of a stat anyone has — the worst a call can cost you. */
-    public static int maxOf(Stat stat) {
-        int max = 0;
-        for (MobCard card : ALL) {
-            max = Math.max(max, card.stat(stat));
-        }
-        return max;
-    }
-
-    /** Chance in 0-1 that calling this stat adds more than {@code room}. */
-    public static double bustChance(Stat stat, int room) {
-        if (room < 0) {
-            return 1.0;
-        }
-        int over = 0;
-        for (MobCard card : ALL) {
-            if (card.stat(stat) > room) {
-                over++;
-            }
-        }
-        return ALL.isEmpty() ? 0 : over / (double) ALL.size();
     }
 
     /**

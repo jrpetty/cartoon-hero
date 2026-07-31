@@ -502,41 +502,38 @@ You call a stat **before** the card is turned. Call Health, the card comes up
 Warden, you take its 10. Call Speed and turn a Cat for 4 and you are on 14.
 Nearest to 21 without going over.
 
-**Why it is a game and not a coin flip.** The six stats are six different bets,
-and the numbers are far apart:
+**Why it is a game and not a coin flip.** The six stats are six different bets.
+Farmable averages 5.84 and Rarity 5.54, so they climb fast and bust often;
+Speed averages 3.88 but almost never lands high; and **thirty of the eighty-one
+mobs have no Attack at all**, which makes Attack the nibble when you are sitting
+on 20. The best call inverts as your total climbs, and working that out is the
+game.
 
-| Stat | Mean | Busts you from 15 | What it is for |
-|---|---|---|---|
-| Farmable | 5.84 | 41% | the fast climb |
-| Rarity | 5.54 | 37% | the fast climb |
-| Speed | 3.88 | **4%** | the safe hit when you are far out |
-| Size | 3.28 | 10% | filler |
-| Health | 3.22 | 9% | filler |
-| Attack | 2.49 | 9% | **30 mobs have none — the nibble at 20** |
+**A stat may be called as often as you like** *(changed v1.69.0)*. The first
+build allowed each stat once per hand, which measured well but made the dealer
+run out of stats and stand on totals like 14. Repeats are the better feel, and
+the balance moved onto the dealer instead:
 
-The best call changes with your total: from 20 Attack busts you 57% of the time
-and Speed 99%, but from 14 Speed is the safest thing on the table. That
-inversion is the game.
+- **Dealer stands on 20**, not a casino's 17. A player who may repeat a stat can
+  nurse a hand up almost risklessly: measured, a dealer standing on 17 left the
+  player a 36% edge, on 19 a 9% one, on 20 about one point.
+- **The house takes ties.** Pushing on a tie handed the player 9% back.
+- **A hand is capped at 12 draws.** Attack is 0 on thirty mobs, so with repeats
+  a total can sit still indefinitely; the cap is what guarantees a hand ends.
+- **No bonus for landing exactly on 21**, which measured as handing the edge
+  straight back.
+- **A shoe of all 81, not your own deck**, which could be stacked with
+  zero-Attack mobs until the bet stopped being a bet.
 
-**One use per stat per hand.** Without it a player simply calls the safest stat
-every time, never busts, and holds a **+35%** edge — a faucet, not a table. It
-also makes the arithmetic elegant: the six means total 24.3, comfortably past
-21, so a hand is really the question of which four or five of your six to spend.
+**No odds are shown** *(changed v1.69.0)*. The first build printed each stat's
+spread and its live bust chance, on the reasoning that hiding them made the game
+a memory test. Asked for and removed: a table that prints the answer beside every
+button is a calculator with a felt background. Perfect play is now about even and
+a plain policy loses 12-20%, so there is roughly a 13-point skill curve to climb
+— narrow enough to be learnable, wide enough to be worth learning.
 
-**Decisions, all measured rather than guessed:**
-
-- **Dealer stands on 19**, not a casino's 17. Under the same one-use rule the
-  dealer runs out of stats and stands too low; at 17 the player held +22%.
-- **Ties push.** Giving ties to the house was worth about 13 points and
-  overcorrected.
-- **No bonus for landing exactly on 21.** Measured at +25%/+50% it handed the
-  player the edge back.
-- **Cards come from a shoe of all 81, not your own deck.** A deck you build
-  yourself could be stacked with zero-Attack mobs and the bet stops being a bet.
-- **The screen shows every stat's spread and its live bust chance.** Perfect play
-  is +3.9% and naive play is −24.5%; almost all of that 28-point gap is simply
-  knowing the curves. Hiding them would not make the game harder, only more
-  obscure — the same mistake as leaving Guess Who's traits off the card.
+**The dealt cards are drawn as cards**, art and all, wrapping into rows. A hand
+should read as a hand.
 
 ---
 

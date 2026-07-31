@@ -19,7 +19,7 @@ import java.util.List;
  *
  * @param phase   0 player's call, 1 dealer playing out, 2 settled
  * @param result  0 none, 1 player, 2 dealer, 3 push
- * @param nums    playerTotal, dealerTotal, usedStatMask, fragments, stake
+ * @param nums    playerTotal, dealerTotal, drawsTaken, fragments, stake
  * @param player  the player's draws
  * @param dealer  the dealer's draws, revealed as it plays
  */

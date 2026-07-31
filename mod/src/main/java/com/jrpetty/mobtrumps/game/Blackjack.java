@@ -23,11 +23,12 @@ import java.util.random.RandomGenerator;
  * so calling Attack on 20 is the nibble that might cost you nothing. Choosing a
  * stat is choosing a distribution, and that is the whole skill.
  *
- * <p><b>Each stat may be called once per hand.</b> Without that rule a player
- * simply calls the safest stat every time and the game falls apart — measured at
- * a 35% edge, which is not a game, it is a faucet. One use each also makes the
- * arithmetic elegant: the six means add up to 24.3, comfortably past 21, so a
- * hand is really the question of which four or five of your six to spend.
+ * <p><b>A stat may be called as often as you like.</b> That hands the player a
+ * large advantage on its own — you can simply keep calling the safest stat — so
+ * the dealer is set against it rather than against a casino's rules: it draws
+ * until {@value #DEALER_STANDS} and takes ties. Measured, that brings the game
+ * back to roughly even, at the cost of a dealer that busts about half the time.
+ * A loud table, but a fair one.
  *
  * <p>Cards come from a shoe of all 81 dealt without replacement, not from the
  * player's own deck. A deck you assemble yourself could be stacked with
@@ -41,12 +42,20 @@ public final class Blackjack {
     public static final int TARGET = 21;
 
     /**
-     * The dealer draws below this. Higher than a casino's 17 because the dealer
-     * is under the same one-use rule and runs out of stats: at 17 it stood too
-     * low too often and the player held a 22% edge. At 19 the game is close to
-     * even and the dealer busts about a fifth of the time.
+     * The dealer draws below this. Far above a casino's 17 because a player who
+     * may repeat a stat can nurse a hand upward almost without risk: measured,
+     * a dealer standing on 17 leaves the player a 36% edge, on 19 a 9% one. At
+     * 20 the game is within about a point of even. The dealer busts roughly half
+     * the time as a result, which is the price of letting stats repeat.
      */
-    public static final int DEALER_STANDS = 19;
+    public static final int DEALER_STANDS = 20;
+
+    /**
+     * A hand cannot run longer than this. Attack is 0 on thirty of the eighty-one
+     * mobs, so with repeats allowed a total can sit still indefinitely; without a
+     * ceiling a hand has no guaranteed end and the table would grow without bound.
+     */
+    public static final int MAX_DRAWS = 12;
 
     /** Reshuffle the shoe below this many cards so a hand never runs dry. */
     private static final int RESHUFFLE_AT = 12;
@@ -70,8 +79,6 @@ public final class Blackjack {
     private final Deque<MobCard> shoe = new ArrayDeque<>();
     private final List<Draw> playerDraws = new ArrayList<>();
     private final List<Draw> dealerDraws = new ArrayList<>();
-    private final Set<Stat> playerUsed = EnumSet.noneOf(Stat.class);
-    private final Set<Stat> dealerUsed = EnumSet.noneOf(Stat.class);
     private int playerTotal;
     private int dealerTotal;
     private Phase phase = Phase.PLAYER;
@@ -98,15 +105,13 @@ public final class Blackjack {
 
     // --- what the player may do -------------------------------------------
 
-    /** Stats the player has not spent yet. Empty means they must stand. */
+    /** Every stat, always — a call may be repeated as often as you like. */
     public Set<Stat> availableStats() {
-        Set<Stat> left = EnumSet.allOf(Stat.class);
-        left.removeAll(playerUsed);
-        return left;
+        return EnumSet.allOf(Stat.class);
     }
 
     public boolean canHit() {
-        return phase == Phase.PLAYER && !availableStats().isEmpty();
+        return phase == Phase.PLAYER && playerDraws.size() < MAX_DRAWS;
     }
 
     /**
@@ -118,10 +123,12 @@ public final class Blackjack {
         if (phase != Phase.PLAYER) {
             throw new IllegalStateException("not the player's turn");
         }
-        if (stat == null || playerUsed.contains(stat)) {
-            throw new IllegalArgumentException("that stat has already been called");
+        if (stat == null) {
+            throw new IllegalArgumentException("a stat must be called");
         }
-        playerUsed.add(stat);
+        if (playerDraws.size() >= MAX_DRAWS) {
+            throw new IllegalStateException("this hand has run its full length");
+        }
         MobCard card = deal();
         int value = card.stat(stat);
         playerTotal += value;
@@ -130,7 +137,7 @@ public final class Blackjack {
         if (playerTotal > TARGET) {
             phase = Phase.DONE;
             result = Result.DEALER_WIN;
-        } else if (availableStats().isEmpty()) {
+        } else if (playerDraws.size() >= MAX_DRAWS) {
             stand();
         }
         return draw;
@@ -160,15 +167,13 @@ public final class Blackjack {
         if (dealerTotal >= DEALER_STANDS) {
             return null;
         }
-        Set<Stat> left = EnumSet.allOf(Stat.class);
-        left.removeAll(dealerUsed);
-        if (left.isEmpty()) {
+        if (dealerDraws.size() >= MAX_DRAWS) {
             return null;
         }
         int need = TARGET - dealerTotal;
         Stat best = null;
         double bestGap = Double.MAX_VALUE;
-        for (Stat stat : left) {
+        for (Stat stat : Stat.values()) {
             double gap = Math.abs(MobCards.averageOf(stat) - need);
             if (gap < bestGap) {
                 bestGap = gap;
@@ -181,7 +186,6 @@ public final class Blackjack {
     private void playDealer() {
         Stat choice;
         while ((choice = dealerChoice()) != null) {
-            dealerUsed.add(choice);
             MobCard card = deal();
             int value = card.stat(choice);
             dealerTotal += value;
@@ -197,11 +201,11 @@ public final class Blackjack {
             result = Result.DEALER_WIN;
         } else if (dealerTotal > TARGET || playerTotal > dealerTotal) {
             result = Result.PLAYER_WIN;
-        } else if (playerTotal < dealerTotal) {
-            result = Result.DEALER_WIN;
         } else {
-            // a tie returns the stake, as it does at a real table
-            result = Result.PUSH;
+            // the house takes ties. With repeats allowed the player can nurse a
+            // hand up almost risklessly, and pushing on a tie handed them a 9%
+            // edge on top of that; this is the cheapest way to claw it back.
+            result = Result.DEALER_WIN;
         }
     }
 
@@ -244,7 +248,8 @@ public final class Blackjack {
         return List.copyOf(dealerDraws);
     }
 
-    public Set<Stat> playerUsed() {
-        return EnumSet.copyOf(playerUsed.isEmpty() ? EnumSet.noneOf(Stat.class) : playerUsed);
+    /** How many cards the player has taken, against {@link #MAX_DRAWS}. */
+    public int drawsTaken() {
+        return playerDraws.size();
     }
 }

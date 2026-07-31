@@ -19,7 +19,7 @@ public final class ClientBlackjack {
     private static volatile int result;
     private static volatile int playerTotal;
     private static volatile int dealerTotal;
-    private static volatile int usedMask;
+    private static volatile int drawsTaken;
     private static volatile int fragments;
     private static volatile int stake;
     private static volatile List<Draw> player = List.of();
@@ -36,7 +36,7 @@ public final class ClientBlackjack {
         result = payload.result();
         playerTotal = at(payload.nums(), 0);
         dealerTotal = at(payload.nums(), 1);
-        usedMask = at(payload.nums(), 2);
+        drawsTaken = at(payload.nums(), 2);
         fragments = at(payload.nums(), 3);
         stake = at(payload.nums(), 4);
         player = decode(payload.player());
@@ -103,9 +103,9 @@ public final class ClientBlackjack {
         return changedAt;
     }
 
-    /** Whether a stat has already been spent this hand. */
-    public static boolean used(int statOrdinal) {
-        return (usedMask & (1 << statOrdinal)) != 0;
+    /** How many cards the player has taken this hand. */
+    public static int drawsTaken() {
+        return drawsTaken;
     }
 
     /** True when there is a hand in progress waiting on the player. */

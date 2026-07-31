@@ -1,7 +1,6 @@
 package com.jrpetty.mobtrumps;
 
 import com.jrpetty.mobtrumps.game.Blackjack;
-import com.jrpetty.mobtrumps.game.MobCards;
 import com.jrpetty.mobtrumps.game.Stat;
 import net.minecraft.ChatFormatting;
 import net.minecraft.network.chat.Component;
@@ -92,8 +91,8 @@ public final class BlackjackManager {
             return;
         }
         Stat stat = stats[statOrdinal];
-        if (!game.availableStats().contains(stat)) {
-            return; // already spent — refuse rather than trust the client
+        if (!game.canHit()) {
+            return; // hand has run its full length — refuse rather than trust the client
         }
         Blackjack.Draw draw = game.hit(stat);
         player.serverLevel().playSound(null, player.getX(), player.getY(), player.getZ(),
@@ -171,10 +170,6 @@ public final class BlackjackManager {
                     List.of(), List.of()));
             return;
         }
-        int used = 0;
-        for (Stat stat : game.playerUsed()) {
-            used |= 1 << stat.ordinal();
-        }
         int phase = switch (game.phase()) {
             case PLAYER -> BlackjackSyncPayload.PHASE_PLAYER;
             case DEALER -> BlackjackSyncPayload.PHASE_DEALER;
@@ -192,7 +187,7 @@ public final class BlackjackManager {
                 ? List.of() : encode(game.dealerDraws());
         PacketDistributor.sendToPlayer(player, new BlackjackSyncPayload(
                 phase, result,
-                List.of(game.playerTotal(), game.dealerTotal(), used,
+                List.of(game.playerTotal(), game.dealerTotal(), game.drawsTaken(),
                         RecyclerManager.fragments(player), STAKE),
                 encode(game.playerDraws()), dealer));
     }
@@ -202,8 +197,4 @@ public final class BlackjackManager {
         TABLES.remove(player.getUUID());
     }
 
-    /** How many mobs carry each value of a stat — sent for the odds readout. */
-    public static int[] spread(Stat stat) {
-        return MobCards.spread(stat);
-    }
 }

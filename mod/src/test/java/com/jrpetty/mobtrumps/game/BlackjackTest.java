@@ -19,9 +19,11 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * are measured rather than argued about — the rules exactly, over every path,
  * and the odds over hundreds of thousands of hands.
  *
- * <p>The one-use-per-stat rule is the load-bearing one. Without it a player just
- * calls the safest stat every time, never busts, and holds a 35% edge, which
- * makes the table a fragment faucet rather than a game.
+ * <p>Stats may be called again, which by itself hands the player a large edge —
+ * you can keep calling the safest one. The dealer is set against that rather
+ * than against a casino's rules: it draws to {@value Blackjack#DEALER_STANDS}
+ * and takes ties. Those two numbers are the balance, so they are measured here
+ * over tens of thousands of hands rather than assumed.
  */
 class BlackjackTest {
 
@@ -43,15 +45,15 @@ class BlackjackTest {
         return game;
     }
 
-    /** Of the stats left, the one least likely to bust from here. */
+    /** The stat whose average most nearly fills the gap — a sane player's call. */
     private static Stat safest(Blackjack game) {
         int room = Blackjack.TARGET - game.playerTotal();
         Stat best = null;
-        double bestRisk = Double.MAX_VALUE;
+        double bestGap = Double.MAX_VALUE;
         for (Stat stat : game.availableStats()) {
-            double risk = MobCards.bustChance(stat, room);
-            if (risk < bestRisk) {
-                bestRisk = risk;
+            double gap = Math.abs(MobCards.averageOf(stat) - room);
+            if (gap < bestGap) {
+                bestGap = gap;
                 best = stat;
             }
         }
@@ -59,39 +61,33 @@ class BlackjackTest {
     }
 
     @Test
-    void aStatCanOnlyBeCalledOncePerHand() {
+    void thesSameStatCanBeCalledAgain() {
         Blackjack game = hand(1);
-        Stat first = game.availableStats().iterator().next();
-        game.hit(first);
-        assertFalse(game.availableStats().contains(first),
-                "a spent stat is still on offer");
+        game.hit(Stat.ATTACK);
+        assertTrue(game.availableStats().contains(Stat.ATTACK),
+                "a called stat was taken off the table — repeats are allowed now");
         if (!game.isFinished()) {
-            assertThrows(IllegalArgumentException.class, () -> game.hit(first),
-                    "the same stat was accepted twice — without this rule the "
-                            + "player just calls the safest stat forever");
+            game.hit(Stat.ATTACK);
+            assertEquals(2, game.playerDraws().size(), "the second call did not land");
         }
     }
 
     @Test
-    void aHandNeverRunsPastSixCalls() {
-        for (long seed = 0; seed < 2000; seed++) {
-            Blackjack game = playOut(seed, Blackjack.TARGET);
-            assertTrue(game.playerDraws().size() <= Stat.values().length,
-                    "seed " + seed + " drew " + game.playerDraws().size() + " times");
-            assertTrue(game.dealerDraws().size() <= Stat.values().length);
-        }
-    }
-
-    @Test
-    void runningOutOfStatsStandsYouAutomatically() {
-        for (long seed = 0; seed < 500; seed++) {
+    void aHandAlwaysEnds() {
+        // Attack is 0 on thirty of the eighty-one mobs, so with repeats allowed a
+        // total can sit still; the draw cap is what guarantees a hand terminates
+        for (long seed = 0; seed < 1500; seed++) {
             Blackjack game = hand(seed);
+            int guard = 0;
             while (game.canHit()) {
-                game.hit(game.availableStats().iterator().next());
+                game.hit(Stat.ATTACK);
+                if (++guard > Blackjack.MAX_DRAWS + 4) {
+                    throw new AssertionError("seed " + seed + " never stopped drawing");
+                }
             }
-            assertTrue(game.isFinished(),
-                    "seed " + seed + " spent every stat but the hand is still open");
-            assertFalse(game.canHit());
+            assertTrue(game.isFinished(), "seed " + seed + " hit the cap but stayed open");
+            assertTrue(game.playerDraws().size() <= Blackjack.MAX_DRAWS);
+            assertTrue(game.dealerDraws().size() <= Blackjack.MAX_DRAWS);
         }
     }
 
@@ -149,15 +145,10 @@ class BlackjackTest {
                                 + Blackjack.DEALER_STANDS);
             }
             // and never called the same stat twice
-            List<Stat> used = new ArrayList<>();
-            for (Blackjack.Draw d : draws) {
-                assertFalse(used.contains(d.stat()), "the dealer reused " + d.stat());
-                used.add(d.stat());
-            }
-            // it stops only when standing, bust, or out of stats
+            // it stops only when standing, bust, or out of draws
             if (!game.dealerBust() && game.dealerTotal() < Blackjack.DEALER_STANDS) {
-                assertEquals(Stat.values().length, draws.size(),
-                        "the dealer stopped on " + game.dealerTotal() + " with stats left");
+                assertEquals(Blackjack.MAX_DRAWS, draws.size(),
+                        "the dealer stopped on " + game.dealerTotal() + " early");
             }
         }
     }
@@ -172,10 +163,8 @@ class BlackjackTest {
                 expected = Blackjack.Result.DEALER_WIN;
             } else if (game.dealerBust() || game.playerTotal() > game.dealerTotal()) {
                 expected = Blackjack.Result.PLAYER_WIN;
-            } else if (game.playerTotal() < game.dealerTotal()) {
-                expected = Blackjack.Result.DEALER_WIN;
             } else {
-                expected = Blackjack.Result.PUSH;
+                expected = Blackjack.Result.DEALER_WIN; // the house takes ties
             }
             assertEquals(expected, game.result(), "seed " + seed + ": player "
                     + game.playerTotal() + " v dealer " + game.dealerTotal());
@@ -233,12 +222,14 @@ class BlackjackTest {
             }
         }
         assertEquals(hands, wins + losses + pushes);
+        assertEquals(0, pushes, "the house takes ties, so there should be none");
         double edge = (wins - losses) / (double) hands;
-        assertTrue(pushes > hands / 40, "ties almost never happen: " + pushes);
-        // a plain "stand on 18, pick the safest stat" player should be losing —
-        // the edge that makes this a game is knowing the stat spreads
-        assertTrue(edge < 0.0, "a naive policy is already winning (edge " + edge + ")");
-        assertTrue(edge > -0.45, "a naive policy loses far too heavily (edge " + edge + ")");
+        // the whole balance is DEALER_STANDS plus ties going to the house. A
+        // plain policy should be a little behind; if this drifts positive the
+        // table has become a fragment faucet, and far negative it is unplayable.
+        assertTrue(edge < 0.02, "a plain policy is winning (edge " + edge + ") — "
+                + "the table is now a faucet");
+        assertTrue(edge > -0.35, "a plain policy loses far too heavily (edge " + edge + ")");
     }
 
     @Test
@@ -251,62 +242,18 @@ class BlackjackTest {
     }
 
     @Test
-    void theStatSpreadsTheScreenShowsAreTheOnesActuallyDealt() {
-        for (Stat stat : Stat.values()) {
-            int[] spread = MobCards.spread(stat);
-            int total = 0;
-            for (int count : spread) {
-                total += count;
-            }
-            assertEquals(MobCards.ALL.size(), total,
-                    stat + " spread does not account for every mob");
-            double mean = 0;
-            for (int v = 0; v < spread.length; v++) {
-                mean += (double) v * spread[v];
-            }
-            assertEquals(mean / MobCards.ALL.size(), MobCards.averageOf(stat), 1e-9,
-                    stat + " average disagrees with its own spread");
-            assertEquals(0.0, MobCards.bustChance(stat, MobCards.maxOf(stat)), 1e-9,
-                    stat + " reports a bust chance with room for its highest value");
-            assertEquals(1.0, MobCards.bustChance(stat, -1), 1e-9);
-        }
-    }
-
-    @Test
-    void noSingleStatIsStrictlyTheBestCall() {
-        // if one stat were both higher-scoring and safer than another, that other
-        // stat would be dead weight and the choice would stop being a choice
-        for (Stat a : Stat.values()) {
-            boolean dominated = false;
-            for (Stat b : Stat.values()) {
-                if (a == b) {
-                    continue;
-                }
-                boolean betterEverywhere = MobCards.averageOf(b) >= MobCards.averageOf(a);
-                for (int room = 0; room <= 10 && betterEverywhere; room++) {
-                    if (MobCards.bustChance(b, room) > MobCards.bustChance(a, room)) {
-                        betterEverywhere = false;
-                    }
-                }
-                if (betterEverywhere && MobCards.averageOf(b) > MobCards.averageOf(a)) {
-                    dominated = true;
-                }
-            }
-            assertFalse(dominated, a + " is beaten by another stat at every total — "
-                    + "nobody would ever call it");
-        }
-    }
-
-    @Test
     void attackIsTheNibbleAndFarmableIsTheGamble() {
         // the two ends the whole game hangs on, pinned so a card edit cannot
         // quietly flatten the choice
-        int[] attack = MobCards.spread(Stat.ATTACK);
-        assertTrue(attack[0] >= 20, "only " + attack[0] + " mobs have no Attack — "
-                + "calling Attack on 20 is meant to be the safe nibble");
+        int zeros = 0;
+        for (MobCard card : MobCards.ALL) {
+            if (card.stat(Stat.ATTACK) == 0) {
+                zeros++;
+            }
+        }
+        assertTrue(zeros >= 20, "only " + zeros + " mobs have no Attack — calling "
+                + "Attack on 20 is meant to be the safe nibble");
         assertTrue(MobCards.averageOf(Stat.FARMABLE) > MobCards.averageOf(Stat.ATTACK) + 2.0,
                 "Farmable is meant to be the fast, risky climb");
-        assertTrue(MobCards.bustChance(Stat.SPEED, 6) < MobCards.bustChance(Stat.FARMABLE, 6),
-                "Speed is meant to be the safer hit than Farmable");
     }
 }
