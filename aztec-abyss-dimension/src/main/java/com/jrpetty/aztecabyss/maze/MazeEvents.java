@@ -193,11 +193,41 @@ public final class MazeEvents {
         }
         MazeRuns.onDeath(player);
         MazeRace.dropOut(level, player.getUUID());
+        MazeSting.clear(player.getUUID());
         DIED_IN_MAZE.add(player.getUUID());
     }
 
     /** Who died in the maze and is owed a trip out of it on respawn. */
     private static final java.util.Set<java.util.UUID> DIED_IN_MAZE = new java.util.HashSet<>();
+
+    /**
+     * A Griever landing a hit adds to the tally. Four is what turns it - so a
+     * hit is a cost, not a verdict, until the fourth one.
+     */
+    @SubscribeEvent
+    public static void onStung(net.neoforged.neoforge.event.entity.living.LivingIncomingDamageEvent event) {
+        if (!(event.getEntity() instanceof ServerPlayer player)
+                || !(player.level() instanceof ServerLevel level) || !isMaze(level)) {
+            return;
+        }
+        if (event.getSource().getEntity() instanceof net.minecraft.world.entity.Mob mob
+                && Griever.isGriever(mob)) {
+            MazeSting.onStung(level, player);
+        }
+    }
+
+    /** Drinking Grief Serum stops the Changing and wipes the tally. */
+    @SubscribeEvent
+    public static void onDrink(net.neoforged.neoforge.event.entity.living.LivingEntityUseItemEvent.Finish event) {
+        if (!(event.getEntity() instanceof ServerPlayer player)
+                || !(player.level() instanceof ServerLevel level) || !isMaze(level)) {
+            return;
+        }
+        if (event.getItem().is(net.minecraft.world.item.Items.POTION)
+                && event.getItem().has(net.minecraft.core.component.DataComponents.CUSTOM_NAME)) {
+            MazeSting.cure(level, player);
+        }
+    }
 
     /** A dead Griever leaves the colour team, and sometimes a serum. */
     @SubscribeEvent
@@ -264,6 +294,7 @@ public final class MazeEvents {
         if (event.getFrom().equals(AztecAbyssConstants.MAZE_LEVEL_KEY)) {
             MazeRuns.abandon(event.getEntity().getUUID());
             MazeRuntime.onPlayerLeft(event.getEntity().getUUID());
+            MazeSting.clear(event.getEntity().getUUID());
         }
         if (event.getTo().equals(AztecAbyssConstants.MAZE_LEVEL_KEY)
                 && event.getEntity() instanceof ServerPlayer p) {

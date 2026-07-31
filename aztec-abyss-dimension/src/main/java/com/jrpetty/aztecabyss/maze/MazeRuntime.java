@@ -87,6 +87,7 @@ public final class MazeRuntime {
         }
         BARS.clear();
         MazeRuns.clearAll();
+        MazeSting.clearAll();
     }
 
     /** Which day of the run this is, counting from world start. */
@@ -260,6 +261,8 @@ public final class MazeRuntime {
         p.displayClientMessage(Component.literal(
                 "§c§lDie and the walls put you out. §8There is no second try at a run."), false);
         p.displayClientMessage(Component.literal(
+                "§7A Griever sting is survivable — §cfour§7 is not. Serum clears the tally."), false);
+        p.displayClientMessage(Component.literal(
                 "§8/maze status · /maze leaderboard"), false);
     }
 
@@ -276,7 +279,8 @@ public final class MazeRuntime {
         String title = "§fDay §e" + (dayNumber(level) + 1)
                 + " §8| §f" + (layout == null ? "?" : layout.name())
                 + " §8| " + (doorsOpen ? "§aDOORS OPEN" : "§4DOORS SEALED")
-                + (run >= 0 ? " §8| §b" + MazeRuns.format(run) : "");
+                + (run >= 0 ? " §8| §b" + MazeRuns.format(run) : "")
+                + MazeSting.hudFragment(p.getUUID());
         bar.setName(Component.literal(title));
         bar.setColor(isNight(t) ? BossEvent.BossBarColor.RED
                 : doorsOpen ? BossEvent.BossBarColor.GREEN : BossEvent.BossBarColor.YELLOW);
