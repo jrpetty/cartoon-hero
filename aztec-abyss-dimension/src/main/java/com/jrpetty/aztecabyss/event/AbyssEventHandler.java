@@ -164,6 +164,33 @@ public final class AbyssEventHandler {
         }
     }
 
+    /** Right-clicking the Heart with a diamond mends it - at the cost of the diamond. */
+    @SubscribeEvent
+    public void onRepairHeart(net.neoforged.neoforge.event.entity.player.PlayerInteractEvent.RightClickBlock event) {
+        if (!(event.getLevel() instanceof ServerLevel level) || !inAbyss(level)) {
+            return;
+        }
+        if (!(event.getEntity() instanceof ServerPlayer player)) {
+            return;
+        }
+        net.minecraft.core.BlockPos heart = RoundManager.game().getMap().objective();
+        if (heart == null || !event.getPos().equals(heart)) {
+            return;
+        }
+        net.minecraft.world.item.ItemStack held = event.getItemStack();
+        if (!held.is(net.minecraft.world.item.Items.DIAMOND)) {
+            player.displayClientMessage(net.minecraft.network.chat.Component.literal(
+                    "§bThe Heart hungers for §fdiamond§b."), true);
+            event.setCanceled(true);
+            return;
+        }
+        if (RoundManager.repairObjective(level, player) && !player.getAbilities().instabuild) {
+            held.shrink(1);
+        }
+        event.setCanceled(true);
+        event.setCancellationResult(net.minecraft.world.InteractionResult.SUCCESS);
+    }
+
     @SubscribeEvent
     public void onUseAbility(net.neoforged.neoforge.event.entity.player.PlayerInteractEvent.RightClickItem event) {
         if (!(event.getLevel() instanceof ServerLevel level) || !inAbyss(level)) {

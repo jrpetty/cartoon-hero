@@ -360,12 +360,96 @@ public final class RoundManager {
         mob.setPersistenceRequired();
         mob.getPersistentData().putBoolean("aztecabyss_wave_mob", true);
         mob.getPersistentData().putLong("aztecabyss_gate_tick", level.getGameTime());
-        // Lock straight onto whoever is closest to the gate it came out of.
-        ServerPlayer target = nearestTarget(present, pos);
-        if (target != null) {
-            mob.setTarget(target);
+
+        // On maps with something to defend, some of the horde comes specifically
+        // for it - these are the ones that punish you for not watching the Heart.
+        int role = rollRole(round);
+        applyRole(level, mob, role, present);
+
+        if (role != ROLE_BREAKER) {
+            // Breakers never look at players; everything else opens on the nearest.
+            ServerPlayer target = nearestTarget(present, pos);
+            if (target != null) {
+                mob.setTarget(target);
+            }
         }
         level.addFreshEntity(mob);
+    }
+
+    // ------------------------------------------------------------------
+    // Objective specialists - only meaningful on maps with something to defend
+    // ------------------------------------------------------------------
+
+    static final int ROLE_NORMAL = 0;
+    /** Sprints for the objective and will not be distracted by players at all. */
+    static final int ROLE_BREAKER = 1;
+    /** Slow and armoured, but tears chunks out of the objective. */
+    static final int ROLE_SAPPER = 2;
+
+    /** How much objective damage each role deals per damage tick. */
+    private static float roleHeartDamage(int role) {
+        return switch (role) {
+            case ROLE_BREAKER -> 2.0f;
+            case ROLE_SAPPER -> 5.0f;
+            default -> 1.0f;
+        };
+    }
+
+    /**
+     * Rolls a specialist role. Breakers start showing up early to teach the
+     * mechanic; sappers arrive later and get steadily more common, so late
+     * rounds live or die on how fast you can pick them out of the crowd.
+     */
+    private static int rollRole(int round) {
+        if (game.getMap().objective() == null) {
+            return ROLE_NORMAL;
+        }
+        if (round >= 6 && RNG.nextInt(100) < Math.min(6 + round, 20)) {
+            return ROLE_SAPPER;
+        }
+        if (round >= 3 && RNG.nextInt(100) < Math.min(10 + round * 2, 30)) {
+            return ROLE_BREAKER;
+        }
+        return ROLE_NORMAL;
+    }
+
+    /** Stamps a specialist's stats, look and name so it's readable in a crowd. */
+    private static void applyRole(ServerLevel level, Mob mob, int role, List<ServerPlayer> present) {
+        if (role == ROLE_NORMAL) {
+            return;
+        }
+        mob.getPersistentData().putInt("aztecabyss_role", role);
+        mob.setCustomNameVisible(true);
+
+        if (role == ROLE_BREAKER) {
+            // Fast, fragile, single-minded.
+            scaleAttribute(mob, Attributes.MOVEMENT_SPEED, 1.45);
+            scaleAttribute(mob, Attributes.MAX_HEALTH, 0.6);
+            mob.setHealth(mob.getMaxHealth());
+            mob.setCustomName(Component.literal("§c⇥ Breaker"));
+            mob.addEffect(new MobEffectInstance(MobEffects.MOVEMENT_SPEED, Integer.MAX_VALUE, 1, false, false));
+            mob.addEffect(new MobEffectInstance(MobEffects.GLOWING, Integer.MAX_VALUE, 0, false, false));
+        } else {
+            // Slow, tanky, and devastating if it reaches the Heart.
+            scaleAttribute(mob, Attributes.MOVEMENT_SPEED, 0.6);
+            scaleAttribute(mob, Attributes.MAX_HEALTH, 2.2);
+            AttributeInstance armor = mob.getAttribute(Attributes.ARMOR);
+            if (armor != null) {
+                armor.setBaseValue(Math.min(20.0, armor.getBaseValue() + 10.0));
+            }
+            mob.setHealth(mob.getMaxHealth());
+            mob.setCustomName(Component.literal("§4⛏ Sapper"));
+            mob.setItemSlot(EquipmentSlot.HEAD, new ItemStack(Items.NETHERITE_HELMET));
+            mob.setDropChance(EquipmentSlot.HEAD, 0.0F);
+            mob.addEffect(new MobEffectInstance(MobEffects.GLOWING, Integer.MAX_VALUE, 0, false, false));
+        }
+
+        // Call it out so players can react rather than be blindsided.
+        for (ServerPlayer p : present) {
+            actionBar(p, role == ROLE_BREAKER
+                    ? "§c⇥ A Breaker is running for the Heart!"
+                    : "§4⛏ A Sapper is closing on the Heart — kill it first!");
+        }
     }
 
     private static void equipWeapon(Mob mob, WaveMobs.Weapon weapon) {
@@ -1435,6 +1519,15 @@ public final class RoundManager {
         long now = level.getGameTime();
 
         for (Mob mob : mobs) {
+            // Breakers are single-minded: no aggro, no provoking, no distractions.
+            // The only way to stop one is to put it down.
+            if (objective != null
+                    && mob.getPersistentData().getInt("aztecabyss_role") == ROLE_BREAKER) {
+                mob.setTarget(null);
+                mob.getNavigation().moveTo(objective.getX() + 0.5, objective.getY(), objective.getZ() + 0.5, 1.35);
+                continue;
+            }
+
             // Still fixated on whoever last hurt it?
             long provokedUntil = mob.getPersistentData().getLong("aztecabyss_provoked_until");
             net.minecraft.world.entity.LivingEntity current = mob.getTarget();
@@ -1485,14 +1578,52 @@ public final class RoundManager {
         return best;
     }
 
-    /** A player hit a wave mob: it turns on them for a while. */
+    /** A player hit a wave mob: it turns on them for a while. Breakers never care. */
     public static void provokeMob(Mob mob, ServerPlayer by, long gameTime) {
+        if (mob.getPersistentData().getInt("aztecabyss_role") == ROLE_BREAKER) {
+            return;
+        }
         mob.getPersistentData().putLong("aztecabyss_provoked_until", gameTime + PROVOKE_TICKS);
         mob.setTarget(by);
     }
 
     /** How often the objective is sampled, in ticks. */
     private static final int OBJECTIVE_INTERVAL = 10;
+
+    /** Health restored per diamond fed to the Heart. */
+    private static final float REPAIR_PER_DIAMOND = 25.0f;
+
+    /**
+     * Feeds a diamond to the Heart to mend it. Deliberately costs the one thing
+     * players actually want to walk away with, so patching the Heart is a real
+     * decision: spend your diamonds now, or keep them and hope the wall holds.
+     *
+     * @return true if a diamond was consumed
+     */
+    public static boolean repairObjective(ServerLevel level, ServerPlayer player) {
+        if (!game.hasLiveObjective() || !game.isParticipant(player.getUUID())) {
+            return false;
+        }
+        if (game.getObjectiveHealth() >= AbyssGame.OBJECTIVE_MAX_HEALTH) {
+            actionBar(player, "§7The Heart is already whole.");
+            return false;
+        }
+        game.setObjectiveHealth(game.getObjectiveHealth() + REPAIR_PER_DIAMOND);
+
+        BlockPos heart = game.getMap().objective();
+        level.sendParticles(ParticleTypes.HAPPY_VILLAGER,
+                heart.getX() + 0.5, heart.getY() + 0.8, heart.getZ() + 0.5, 14, 0.5, 0.5, 0.5, 0.05);
+        level.playSound(null, heart, net.minecraft.sounds.SoundEvents.AMETHYST_BLOCK_CHIME,
+                SoundSource.PLAYERS, 0.9F, 1.2F);
+
+        int pct = (int) (game.objectiveFraction() * 100);
+        for (ServerPlayer p : participantPlayers(level)) {
+            p.displayClientMessage(Component.literal(
+                    "§b❤ " + player.getGameProfile().getName() + " mends the Heart §7— now " + pct + "%"), true);
+        }
+        updateHeartBars();
+        return true;
+    }
 
     /**
      * Tells everyone the Heart is being hit, and - crucially on a map 135 blocks
@@ -1538,7 +1669,12 @@ public final class RoundManager {
                     m -> m.getPersistentData().getBoolean("aztecabyss_wave_mob"));
 
             if (!onIt.isEmpty()) {
-                game.setObjectiveHealth(game.getObjectiveHealth() - onIt.size() * OBJECTIVE_INTERVAL);
+                // Sappers hit five times as hard as rank-and-file, breakers twice.
+                float dmg = 0.0f;
+                for (Mob m : onIt) {
+                    dmg += roleHeartDamage(m.getPersistentData().getInt("aztecabyss_role"));
+                }
+                game.setObjectiveHealth(game.getObjectiveHealth() - dmg * OBJECTIVE_INTERVAL);
                 level.sendParticles(ParticleTypes.CRIT,
                         heart.getX() + 0.5, heart.getY() + 0.5, heart.getZ() + 0.5, 6, 0.4, 0.4, 0.4, 0.1);
                 if (now % 20L == 0L) {
