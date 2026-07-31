@@ -120,8 +120,8 @@ public final class MazeRuntime {
      *
      * <p>Called when somebody walks back in and nobody else is inside - which is
      * what "everyone died" looks like from here. The world itself is left exactly
-     * as it was found: anything built, mined or dropped in the maze stays, because
-     * the build is never re-run. Only the layout moves on, which re-seals the old
+     * as it was found, because the build is never re-run: whatever state the maze
+     * had reached carries over. Only the layout moves on, which re-seals the old
      * exit, opens a new one, and cuts fresh routes to it.
      *
      * <p>So the progress you made on the world survives your death and the way out

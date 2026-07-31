@@ -63,6 +63,31 @@ public final class MazeEvents {
         }
     }
 
+    /**
+     * Nothing gets built in the maze.
+     *
+     * <p>A maze you can bridge over, pillar up out of or wall yourself into is
+     * not a maze - every one of those turns the walls from a problem into
+     * scenery. The corridors are the whole puzzle, so they stay exactly as the
+     * builder left them.
+     *
+     * <p>Creative is exempt, because that is the only way to fix a map by hand.
+     */
+    @SubscribeEvent
+    public static void onPlaceBlock(net.neoforged.neoforge.event.level.BlockEvent.EntityPlaceEvent event) {
+        if (!(event.getLevel() instanceof ServerLevel level) || !isMaze(level)) {
+            return;
+        }
+        if (event.getEntity() instanceof ServerPlayer p) {
+            if (p.isCreative()) {
+                return;
+            }
+            p.displayClientMessage(Component.literal(
+                    "§7The Glade does not let you build your way out."), true);
+        }
+        event.setCanceled(true);
+    }
+
     @SubscribeEvent
     public static void onLevelTick(LevelTickEvent.Post event) {
         if (!(event.getLevel() instanceof ServerLevel level) || !isMaze(level)) {
@@ -89,6 +114,8 @@ public final class MazeEvents {
                 .then(Commands.literal("leave").executes(ctx -> leave(ctx.getSource())))
                 .then(Commands.literal("status").executes(ctx -> status(ctx.getSource())))
                 .then(Commands.literal("section").executes(ctx -> section(ctx.getSource())))
+                .then(Commands.literal("rebuild").requires(src -> src.hasPermission(2))
+                        .executes(ctx -> rebuild(ctx.getSource())))
                 .then(Commands.literal("leaderboard").executes(ctx -> leaderboard(ctx.getSource())))
                 .then(Commands.literal("top").executes(ctx -> leaderboard(ctx.getSource())))
                 .then(Commands.literal("stop").executes(ctx -> stop(ctx.getSource())))
@@ -203,6 +230,25 @@ public final class MazeEvents {
                 : Vec3.atBottomCenterOf(home.getSharedSpawnPos());
         player.changeDimension(new DimensionTransition(home, to,
                 Vec3.ZERO, player.getYRot(), 0.0F, DimensionTransition.DO_NOTHING));
+    }
+
+    /**
+     * {@code /maze rebuild} - restamps the whole map from scratch.
+     *
+     * <p>An existing world keeps whatever maze it was first given, so a change to
+     * the shape of the map is invisible on it. This is the way to take one.
+     */
+    private static int rebuild(CommandSourceStack src) {
+        ServerLevel maze = src.getServer().getLevel(AztecAbyssConstants.MAZE_LEVEL_KEY);
+        if (maze == null) {
+            src.sendFailure(Component.literal("The maze dimension is not loaded."));
+            return 0;
+        }
+        MazeBuilder.forceRebuild(maze);
+        MazeRuntime.reset();
+        src.sendSuccess(() -> Component.literal(
+                "§5The maze is being torn down and raised again. §7Give it a moment."), true);
+        return 1;
     }
 
     private static int status(CommandSourceStack src) {

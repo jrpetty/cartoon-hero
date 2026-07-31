@@ -75,6 +75,19 @@ public final class ArenaGenerator {
      * needs no dimension of its own. Built on its own sentinel so it appears in
      * worlds generated before it existed.
      */
+    /**
+     * Clears the Outpost's sentinel so the next check restamps it from scratch.
+     *
+     * <p>The map is only ever built once per world, which means a change to its
+     * geometry - a bigger footprint, breaches instead of windows - is invisible
+     * on any world that has already stood one up. Dropping the sentinel is how
+     * you take the new one without deleting the dimension.
+     */
+    public static void forceOutpostRebuild(ServerLevel level) {
+        level.setBlock(OutpostBuilder.EXTRACTION.below(), Blocks.AIR.defaultBlockState(), 2);
+        OutpostBuilder.build(level);
+    }
+
     private static void buildOutpostIfNeeded(ServerLevel level) {
         if (level.getBlockState(OutpostBuilder.EXTRACTION.below()).is(Blocks.GILDED_BLACKSTONE)) {
             return;

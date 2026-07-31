@@ -92,6 +92,19 @@ public final class MazeBuilder {
         return cursor >= 0;
     }
 
+    /**
+     * Forces a full restamp of an already-built maze.
+     *
+     * <p>Needed whenever the maze's geometry changes in code - corridor width, the
+     * Glade wall, anything structural. A world that already has a maze will never
+     * be restamped on its own, so without this the only way to see a change to the
+     * shape of the map is to start a new world.
+     */
+    public static void forceRebuild(ServerLevel level) {
+        level.setBlock(BUILT_MARKER, Blocks.AIR.defaultBlockState(), 2);
+        cursor = 0;
+    }
+
     /** Kicks off a build if this world has never had one. */
     public static void beginIfNeeded(ServerLevel level) {
         MazeData.load();
