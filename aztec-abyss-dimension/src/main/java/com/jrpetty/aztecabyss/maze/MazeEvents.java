@@ -105,6 +105,16 @@ public final class MazeEvents {
                             + "%§7. Try again in a moment."), true);
             return false;
         }
+        // Remember the teleporter they stepped through, so the maze can put them
+        // back on it rather than at whatever the world calls spawn. Uses the same
+        // home fields the arena side already keeps, so a player who does both
+        // always returns to wherever they last went in from.
+        if (!player.level().dimension().equals(AztecAbyssConstants.MAZE_LEVEL_KEY)) {
+            com.jrpetty.aztecabyss.round.RunState rs =
+                    player.getData(com.jrpetty.aztecabyss.registry.ModAttachments.RUN_STATE);
+            rs.setHome(player.blockPosition(), player.level().dimension());
+            player.setData(com.jrpetty.aztecabyss.registry.ModAttachments.RUN_STATE, rs);
+        }
         player.changeDimension(new DimensionTransition(maze,
                 new Vec3(MazeData.SPAWN_X + 0.5, MazeData.SPAWN_Y, MazeData.SPAWN_Z + 0.5),
                 Vec3.ZERO, 0.0F, 0.0F, DimensionTransition.DO_NOTHING));
@@ -126,11 +136,37 @@ public final class MazeEvents {
         if (player == null || player.getServer() == null) {
             return 0;
         }
-        ServerLevel home = player.getServer().overworld();
-        player.changeDimension(new DimensionTransition(home,
-                Vec3.atBottomCenterOf(home.getSharedSpawnPos()),
-                Vec3.ZERO, 0.0F, 0.0F, DimensionTransition.DO_NOTHING));
+        returnToTeleporter(player);
         return 1;
+    }
+
+    /**
+     * Puts a player back on the teleporter they came in through.
+     *
+     * <p>Falls back to world spawn only if the stored home is missing or points
+     * at a dimension that no longer loads - and never at the maze itself, which
+     * would leave someone ejected from the maze standing in it.
+     */
+    private static void returnToTeleporter(ServerPlayer player) {
+        if (player.getServer() == null) {
+            return;
+        }
+        com.jrpetty.aztecabyss.round.RunState rs =
+                player.getData(com.jrpetty.aztecabyss.registry.ModAttachments.RUN_STATE);
+        ServerLevel home = player.getServer().overworld();
+        if (rs.getHomeDimension() != null) {
+            ServerLevel stored = player.getServer().getLevel(net.minecraft.resources.ResourceKey.create(
+                    net.minecraft.core.registries.Registries.DIMENSION, rs.getHomeDimension()));
+            if (stored != null && !stored.dimension().equals(AztecAbyssConstants.MAZE_LEVEL_KEY)) {
+                home = stored;
+            }
+        }
+        net.minecraft.core.BlockPos at = rs.getHomePortalPos();
+        Vec3 to = at != null
+                ? new Vec3(at.getX() + 0.5, at.getY() + 0.5, at.getZ() + 0.5)
+                : Vec3.atBottomCenterOf(home.getSharedSpawnPos());
+        player.changeDimension(new DimensionTransition(home, to,
+                Vec3.ZERO, player.getYRot(), 0.0F, DimensionTransition.DO_NOTHING));
     }
 
     private static int status(CommandSourceStack src) {
@@ -215,16 +251,11 @@ public final class MazeEvents {
         if (player.getServer() == null) {
             return;
         }
-        ServerLevel home = player.getServer().overworld();
-        if (player.level() != home) {
-            player.changeDimension(new DimensionTransition(home,
-                    Vec3.atBottomCenterOf(home.getSharedSpawnPos()),
-                    Vec3.ZERO, 0.0F, 0.0F, DimensionTransition.DO_NOTHING));
-        }
+        returnToTeleporter(player);
         int lock = MazeRuns.lockoutRemaining(player.getUUID());
         player.displayClientMessage(Component.literal(lock > 0
-                ? "§7The walls put you out. §8You can go back in in " + lock + "s."
-                : "§7The walls put you out."), false);
+                ? "§7The walls spat you back out at the teleporter. §8Back in in " + lock + "s."
+                : "§7The walls spat you back out at the teleporter."), false);
     }
 
     /** Leaving the dimension abandons whatever run was going. */
@@ -232,6 +263,7 @@ public final class MazeEvents {
     public static void onChangedDimension(PlayerEvent.PlayerChangedDimensionEvent event) {
         if (event.getFrom().equals(AztecAbyssConstants.MAZE_LEVEL_KEY)) {
             MazeRuns.abandon(event.getEntity().getUUID());
+            MazeRuntime.onPlayerLeft(event.getEntity().getUUID());
         }
         if (event.getTo().equals(AztecAbyssConstants.MAZE_LEVEL_KEY)
                 && event.getEntity() instanceof ServerPlayer p) {

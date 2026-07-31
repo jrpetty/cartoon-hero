@@ -219,8 +219,16 @@ public final class MazeRuntime {
             }
             updateBar(level, p, layout, t);
         }
-        // Drop bars for anyone who has left the dimension.
-        BARS.keySet().removeIf(id -> level.getPlayerByUUID(id) == null);
+        // Drop bars for anyone who has left the dimension. The bar has to be
+        // emptied, not just forgotten: dropping the reference alone leaves the
+        // maze's status bar stuck on their screen out in the real world.
+        BARS.entrySet().removeIf(e -> {
+            if (level.getPlayerByUUID(e.getKey()) != null) {
+                return false;
+            }
+            e.getValue().removeAllPlayers();
+            return true;
+        });
     }
 
     /** Within a couple of blocks of today's exit portal. */
@@ -417,6 +425,15 @@ public final class MazeRuntime {
                 + " | " + (doorsOpen ? "doors OPEN" : "doors SEALED")
                 + " | t=" + t
                 + (MazeBuilder.isBuilding() ? " | building " + MazeBuilder.progressPercent() + "%" : "");
+    }
+
+    /** Tears down everything the maze was showing a player who has left it. */
+    public static void onPlayerLeft(java.util.UUID id) {
+        ServerBossEvent bar = BARS.remove(id);
+        if (bar != null) {
+            bar.removeAllPlayers();
+        }
+        NIGHT_OUT.remove(id);
     }
 
     /** Which of the eight compass sections a position falls in. */
