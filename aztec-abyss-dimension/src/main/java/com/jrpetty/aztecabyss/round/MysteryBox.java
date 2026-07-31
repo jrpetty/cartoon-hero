@@ -132,20 +132,50 @@ public final class MysteryBox {
         }
     }
 
-    /** The Box itself: a chest lashed under a lit frame you can spot in the dark. */
+    /**
+     * The Box: a crate chained to a plinth, lit purple from inside.
+     *
+     * <p>It has to be findable at a glance from the far side of a dark room,
+     * because the entire point of the thing is that it keeps moving and people
+     * keep having to look for it. Amethyst does that - it is the only purple
+     * light in the building, so "the Box is in the cellar" is something you can
+     * confirm from the stairs rather than by walking the whole floor.
+     */
     public static void buildBox(ServerLevel level, BlockPos at) {
-        level.setBlock(at.below(), Blocks.CHISELED_DEEPSLATE.defaultBlockState(), 2);
+        // Plinth, banded in gold.
+        level.setBlock(at.below(), Blocks.GILDED_BLACKSTONE.defaultBlockState(), 2);
+        for (net.minecraft.core.Direction d : net.minecraft.core.Direction.Plane.HORIZONTAL) {
+            level.setBlock(at.below().relative(d), Blocks.POLISHED_BLACKSTONE.defaultBlockState(), 2);
+            // Chains lashing the crate down at each corner.
+            level.setBlock(at.relative(d), Blocks.CHAIN.defaultBlockState()
+                    .setValue(BlockStateProperties.AXIS, net.minecraft.core.Direction.Axis.Y), 2);
+        }
         level.setBlock(at, Blocks.CHEST.defaultBlockState(), 2);
-        level.setBlock(at.above(), Blocks.CHAIN.defaultBlockState()
+        // The glow: budding amethyst under a cluster, so it reads purple in the
+        // dark and nothing else on the map does.
+        level.setBlock(at.above(), Blocks.BUDDING_AMETHYST.defaultBlockState(), 2);
+        level.setBlock(at.above(2), Blocks.AMETHYST_CLUSTER.defaultBlockState()
+                .setValue(BlockStateProperties.FACING, net.minecraft.core.Direction.DOWN), 2);
+        level.setBlock(at.above(3), Blocks.CHAIN.defaultBlockState()
                 .setValue(BlockStateProperties.AXIS, net.minecraft.core.Direction.Axis.Y), 2);
-        level.setBlock(at.above(2), Blocks.SOUL_LANTERN.defaultBlockState()
-                .setValue(BlockStateProperties.HANGING, true), 2);
     }
 
+    /**
+     * Strips the Box back off a site.
+     *
+     * <p>Deliberately leaves the plinth where it is. Clearing it too would punch
+     * a hole in whatever floor the Box was standing on - and every site is on a
+     * different material, so there is no single right block to put back. A spare
+     * plinth reads as somewhere the Box has been, which is fine; a hole in the
+     * cellar floor is not.
+     */
     private static void clearBox(ServerLevel level, BlockPos at) {
-        level.setBlock(at, Blocks.AIR.defaultBlockState(), 2);
-        level.setBlock(at.above(), Blocks.AIR.defaultBlockState(), 2);
-        level.setBlock(at.above(2), Blocks.AIR.defaultBlockState(), 2);
+        for (net.minecraft.core.Direction d : net.minecraft.core.Direction.Plane.HORIZONTAL) {
+            level.setBlock(at.relative(d), Blocks.AIR.defaultBlockState(), 2);
+        }
+        for (int dy = 0; dy <= 3; dy++) {
+            level.setBlock(at.above(dy), Blocks.AIR.defaultBlockState(), 2);
+        }
     }
 
     /** Only the Outpost has a Box. */

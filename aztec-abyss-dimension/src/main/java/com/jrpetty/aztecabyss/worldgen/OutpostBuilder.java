@@ -755,51 +755,106 @@ public final class OutpostBuilder {
         }
     }
 
-    /** A lit plate and a price board at every wall buy. */
+    /**
+     * A wall buy: a lit alcove with the weapon itself hung on the wall.
+     *
+     * <p>The glowing frame is the whole trick. This map is pitch dark by design,
+     * and a price on a sign is something you have to walk up to and read - but a
+     * weapon hanging lit on a wall is something you recognise from across a room
+     * while you are being chased. It turns the shop from a list into landmarks.
+     */
     private static void shopFronts(ServerLevel level) {
         var cat = com.jrpetty.aztecabyss.round.OutpostShop.CATALOGUE;
         for (int i = 0; i < SHOP.length && i < cat.length; i++) {
             BlockPos at = SHOP[i];
-            level.setBlock(at, Blocks.CHISELED_STONE_BRICKS.defaultBlockState(), 2);
-            level.setBlock(at.above(), Blocks.LANTERN.defaultBlockState(), 2);
-            BlockPos board = at.below();
             Direction face = at.getX() <= CENTER_X - IN_X ? Direction.EAST
                     : at.getX() >= CENTER_X + IN_X ? Direction.WEST : Direction.SOUTH;
+
+            // A recessed alcove of dark brick, trimmed in copper, so the buy
+            // reads as something built rather than something painted on.
+            for (int dy = -1; dy <= 2; dy++) {
+                for (int off = -1; off <= 1; off++) {
+                    BlockPos p = face.getAxis() == Direction.Axis.X
+                            ? at.offset(0, dy, off) : at.offset(off, dy, 0);
+                    boolean rim = dy == -1 || dy == 2 || Math.abs(off) == 1;
+                    level.setBlock(p, rim ? Blocks.CUT_COPPER.defaultBlockState()
+                            : Blocks.POLISHED_DEEPSLATE.defaultBlockState(), 2);
+                }
+            }
+            level.setBlock(at, Blocks.CHISELED_DEEPSLATE.defaultBlockState(), 2);
+            level.setBlock(at.above(2), Blocks.WAXED_CUT_COPPER.defaultBlockState(), 2);
+            level.setBlock(at.relative(face).above(2), Blocks.SOUL_LANTERN.defaultBlockState()
+                    .setValue(BlockStateProperties.HANGING, true), 2);
+
+            // The goods, hung lit on the wall.
+            hangGoods(level, at.relative(face), face, new net.minecraft.world.item.ItemStack(cat[i].item()));
+
+            BlockPos board = at.relative(face).below();
             level.setBlock(board, Blocks.OAK_WALL_SIGN.defaultBlockState()
                     .setValue(BlockStateProperties.HORIZONTAL_FACING, face), 2);
             final int idx = i;
             if (level.getBlockEntity(board) instanceof SignBlockEntity be) {
                 be.updateText(t -> t
-                        .setMessage(0, Component.literal("§8— WALL BUY —"))
-                        .setMessage(1, Component.literal("§f" + cat[idx].label()))
-                        .setMessage(2, Component.literal("§e" + cat[idx].price() + " pts"))
-                        .setMessage(3, Component.literal("§8right-click")), true);
+                        .setMessage(0, Component.literal("§f" + cat[idx].label()))
+                        .setMessage(1, Component.literal("§e" + cat[idx].price() + " pts"))
+                        .setMessage(2, Component.literal("§8right-click"))
+                        .setMessage(3, Component.literal("")), true);
             }
         }
     }
 
     /**
-     * The Crucible: a squat furnace-and-anvil machine wedged into the upstairs
-     * wall, lit from inside. It reads as something salvaged and rewired rather
-     * than built, which is the right note for a thing that turns a wooden sword
-     * into something with a name.
+     * Hangs an item in a glowing frame. Invulnerable and silent so a stray
+     * arrow, or a creeper, cannot quietly delete a shop front mid-run.
+     */
+    private static void hangGoods(ServerLevel level, BlockPos at, Direction facing,
+                                  net.minecraft.world.item.ItemStack stack) {
+        net.minecraft.world.entity.decoration.GlowItemFrame frame =
+                new net.minecraft.world.entity.decoration.GlowItemFrame(level, at, facing);
+        frame.setItem(stack);
+        frame.setInvulnerable(true);
+        frame.setSilent(true);
+        level.addFreshEntity(frame);
+    }
+
+    /**
+     * The Crucible: a forge sunk into the floor, lit from underneath.
+     *
+     * <p>It has to look like the most important object in the building, because
+     * it is - it sits behind two lots of rubble and costs more than anything
+     * else on the map. Lava under a grate does the heavy lifting: it is the only
+     * moving light in the Outpost, so the room breathes even when nothing is
+     * happening in it.
      */
     private static void crucible(ServerLevel level) {
         BlockPos c = CRUCIBLE;
-        level.setBlock(c.below(), Blocks.POLISHED_DEEPSLATE.defaultBlockState(), 2);
-        level.setBlock(c, Blocks.BLAST_FURNACE.defaultBlockState()
-                .setValue(BlockStateProperties.HORIZONTAL_FACING, Direction.SOUTH), 2);
+
+        // Sunken fire pit: lava, capped with a grate you can see through.
+        level.setBlock(c.below(2), Blocks.OBSIDIAN.defaultBlockState(), 2);
+        level.setBlock(c.below(1), Blocks.LAVA.defaultBlockState(), 2);
+        level.setBlock(c, Blocks.IRON_BARS.defaultBlockState(), 2);
+
+        // The anvil sits on the grate; the frame around it is obsidian and gold.
         level.setBlock(c.above(), Blocks.ANVIL.defaultBlockState(), 2);
-        level.setBlock(c.above(2), Blocks.CHISELED_DEEPSLATE.defaultBlockState(), 2);
         for (Direction d : new Direction[]{Direction.EAST, Direction.WEST}) {
-            level.setBlock(c.relative(d), Blocks.DEEPSLATE_BRICK_WALL.defaultBlockState(), 2);
-            level.setBlock(c.relative(d).above(), Blocks.REDSTONE_LAMP.defaultBlockState()
-                    .setValue(BlockStateProperties.LIT, true), 2);
+            level.setBlock(c.relative(d).below(), Blocks.OBSIDIAN.defaultBlockState(), 2);
+            level.setBlock(c.relative(d), Blocks.CRYING_OBSIDIAN.defaultBlockState(), 2);
+            level.setBlock(c.relative(d).above(), Blocks.GILDED_BLACKSTONE.defaultBlockState(), 2);
             level.setBlock(c.relative(d).above(2), Blocks.CHAIN.defaultBlockState()
                     .setValue(BlockStateProperties.AXIS, Direction.Axis.Y), 2);
+            level.setBlock(c.relative(d).above(3), Blocks.SOUL_LANTERN.defaultBlockState()
+                    .setValue(BlockStateProperties.HANGING, true), 2);
         }
-        BlockPos plate = c.relative(Direction.SOUTH);
-        level.setBlock(plate.below(), Blocks.GILDED_BLACKSTONE.defaultBlockState(), 2);
+        // A hood over it, so the light pools rather than spilling.
+        for (int off = -1; off <= 1; off++) {
+            BlockPos hood = c.offset(off, 3, 0);
+            level.setBlock(hood, Blocks.POLISHED_BLACKSTONE.defaultBlockState(), 2);
+        }
+        level.setBlock(c.north(), Blocks.BLAST_FURNACE.defaultBlockState()
+                .setValue(BlockStateProperties.HORIZONTAL_FACING, Direction.SOUTH)
+                .setValue(BlockStateProperties.LIT, true), 2);
+        level.setBlock(c.north().above(), Blocks.CHISELED_DEEPSLATE.defaultBlockState(), 2);
+
         BlockPos board = c.above(2).relative(Direction.SOUTH);
         level.setBlock(board, Blocks.OAK_WALL_SIGN.defaultBlockState()
                 .setValue(BlockStateProperties.HORIZONTAL_FACING, Direction.SOUTH), 2);
@@ -813,18 +868,42 @@ public final class OutpostBuilder {
     }
 
     /**
-     * The Draught machines: a barrel on a lit plinth with its name over it.
-     * Scrappy and improvised, like everything else people built in here.
+     * The Draught machines. Each one is built out of its own material and lit in
+     * its own colour, so you learn them by silhouette rather than by reading the
+     * sign - which matters in a building this dark, and matters more when you
+     * are running to one with something behind you.
      */
     private static void draughtMachines(ServerLevel level) {
         var kinds = com.jrpetty.aztecabyss.round.Draughts.Draught.values();
+        BlockState[] body = {
+                Blocks.IRON_BLOCK.defaultBlockState(),        // Ironhide
+                Blocks.CUT_COPPER.defaultBlockState(),        // Quickhand
+                Blocks.REDSTONE_BLOCK.defaultBlockState(),    // Doubletap
+                Blocks.AMETHYST_BLOCK.defaultBlockState(),    // Second Wind
+        };
+        BlockState[] glow = {
+                Blocks.SEA_LANTERN.defaultBlockState(),
+                Blocks.OCHRE_FROGLIGHT.defaultBlockState(),
+                Blocks.REDSTONE_LAMP.defaultBlockState().setValue(BlockStateProperties.LIT, true),
+                Blocks.AMETHYST_CLUSTER.defaultBlockState(),
+        };
         for (int i = 0; i < DRAUGHTS.length && i < kinds.length; i++) {
             BlockPos at = DRAUGHTS[i];
+            int k = i % body.length;
+
             level.setBlock(at.below(), Blocks.POLISHED_DEEPSLATE.defaultBlockState(), 2);
-            level.setBlock(at, Blocks.BARREL.defaultBlockState(), 2);
-            level.setBlock(at.above(), Blocks.REDSTONE_LAMP.defaultBlockState()
-                    .setValue(BlockStateProperties.LIT, true), 2);
-            BlockPos board = at.above(2);
+            level.setBlock(at, body[k], 2);
+            level.setBlock(at.above(), Blocks.CAULDRON.defaultBlockState(), 2);
+            level.setBlock(at.above(2), glow[k], 2);
+
+            // Piping down each side - it should look plumbed in, not placed.
+            for (Direction d : new Direction[]{Direction.EAST, Direction.WEST}) {
+                level.setBlock(at.relative(d), Blocks.IRON_BARS.defaultBlockState(), 2);
+                level.setBlock(at.relative(d).above(), Blocks.CHAIN.defaultBlockState()
+                        .setValue(BlockStateProperties.AXIS, Direction.Axis.Y), 2);
+            }
+
+            BlockPos board = at.above(3);
             level.setBlock(board, Blocks.OAK_WALL_SIGN.defaultBlockState()
                     .setValue(BlockStateProperties.HORIZONTAL_FACING, Direction.SOUTH), 2);
             final int idx = i;
