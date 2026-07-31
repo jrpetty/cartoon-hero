@@ -41,8 +41,11 @@ public final class Config {
         b.pop();
 
         b.push("cards");
-        CARD_WEAR_PER_HANDLING = b.comment("Condition lost each time an UNSLEEVED card enters a hand,",
-                        "after its one free first handling. The shipped behaviour is 5.")
+        CARD_WEAR_PER_HANDLING = b.comment("Condition an UNSLEEVED card loses per wear step.",
+                        "A card gets 2 completely free handlings, and after that it takes",
+                        "2 more handlings to lose one step -- so at the default 5 a card is",
+                        "still Mint after 3 pickups, 95% after 4, and reaches 50% at 22.",
+                        "Set to 0 to switch wear off entirely.")
                 .defineInRange("wearPerHandling", 5, 0, 100);
         SERIAL_DIGITS = b.comment("Digits a per-mob serial is padded to, e.g. 6 -> CREEPER-000001.")
                 .defineInRange("serialDigits", 6, 1, 10);
