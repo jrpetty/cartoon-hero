@@ -44,13 +44,13 @@ public enum ArenaMap {
             220.0),
 
     /**
-     * A derelict two-storey house built around the boarded windows: start sealed
-     * in one room, dig out the rubble to open the rest, and take on more windows
-     * than you can hold in exchange for everything worth having.
+     * A derelict two-storey house torn open at the walls: start sealed in one
+     * room, dig out the rubble to open the rest, and hold more ways in than you
+     * can cover in exchange for everything worth having.
      */
     OUTPOST(
             "The Outpost",
-            "Endless. A bombed-out house, pitch dark — twelve boarded windows across three floors, and no final round. Extract while you still can.",
+            "Endless. A bombed-out house, pitch dark — twelve open breaches across three floors, and no final round. Extract while you still can.",
             "ENDLESS",
             0xFFC03080,
             OutpostBuilder.ARRIVAL,

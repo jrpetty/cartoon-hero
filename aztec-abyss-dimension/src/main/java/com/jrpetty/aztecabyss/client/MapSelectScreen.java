@@ -21,7 +21,16 @@ public final class MapSelectScreen extends Screen {
     private static final int CARD_W = 260;
     /** Card chrome above the blurb (title row) and below it (record row). */
     private static final int CARD_HEAD = 22;
-    private static final int CARD_FOOT = 18;
+    /**
+     * Room under the blurb for the record row.
+     *
+     * <p>The record sits at {@code cardH - 13}, and the card grows with the
+     * wrapped line count, so the clearance below the last line is this minus 13
+     * whatever the blurb says - constant, never a collision. It was 18, leaving
+     * five pixels, which did not read as a gap so much as a near miss on the
+     * three-line cards.
+     */
+    private static final int CARD_FOOT = 24;
     private static final int LINE_H = 10;
     private static final int GAP = 10;
 
