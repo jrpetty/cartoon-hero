@@ -17,6 +17,7 @@ public final class Config {
     public static final ModConfigSpec.BooleanValue ONLY_PLAYER_PLACED;
     public static final ModConfigSpec.BooleanValue COLLAPSE_WARNING_EFFECTS;
     public static final ModConfigSpec.IntValue COLLAPSE_WARN_DELAY_TICKS;
+    public static final ModConfigSpec.DoubleValue COLLAPSE_IMPACT_DAMAGE_SCALE;
 
     // --- material spans -----------------------------------------------------------------
     public static final ModConfigSpec.IntValue SPAN_DIRT;
@@ -56,6 +57,12 @@ public final class Config {
                 .comment("Ticks between the warning and the fall (20 ticks = 1 second). 0 = fall as",
                         "soon as it is processed (the warning still plays).")
                 .defineInRange("collapseWarnDelayTicks", 15, 0, 200);
+        COLLAPSE_IMPACT_DAMAGE_SCALE = b
+                .comment("Collapsing blocks damage entities they land on, scaled by the",
+                        "material's structural strength (span) — stone lands like an anvil,",
+                        "metal hits harder, dirt barely stings. This multiplies both the",
+                        "damage-per-block-fallen and the damage cap. 0 disables impact damage.")
+                .defineInRange("collapseImpactDamageScale", 1.0, 0.0, 10.0);
         b.pop();
 
         b.push("spans");

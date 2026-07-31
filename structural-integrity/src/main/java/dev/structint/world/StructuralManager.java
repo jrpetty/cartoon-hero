@@ -165,6 +165,23 @@ public final class StructuralManager {
                 6, 0.3, 0.3, 0.3, 0.0);
     }
 
+    /**
+     * Collapsing blocks hurt whatever they land on, scaled by the material's structural strength
+     * (its span): a dirt clod stings, a metal girder is worse than an anvil. Damage-per-block-
+     * fallen and the total cap both grow with span; stone (span 7) lands close to a vanilla anvil
+     * (2.0/block, cap 40). One knob scales both; 0 disables.
+     */
+    private static void applyImpactDamage(FallingBlockEntity entity, BlockState state) {
+        double scale = Config.COLLAPSE_IMPACT_DAMAGE_SCALE.get();
+        if (scale <= 0.0) {
+            return;
+        }
+        int span = BlockClassifier.spanOf(state);
+        float perBlockFallen = (float) (scale * (0.5 + 0.25 * span));
+        int maxDamage = (int) Math.round(scale * Math.min(40.0, 4.0 + 2.5 * span));
+        entity.setHurtsEntities(perBlockFallen, Math.max(1, maxDamage));
+    }
+
     private static void collapse(ServerLevel level, BlockPos pos, BlockState state) {
         StructuralData.setManaged(level, pos, false);
 
@@ -176,6 +193,7 @@ public final class StructuralManager {
             if (entity != null) {
                 // Tag it so we can re-mark the block as player-managed when it lands (see below).
                 entity.setData(ModAttachments.FROM_COLLAPSE.get(), Boolean.TRUE);
+                applyImpactDamage(entity, state);
             }
         } else {
             // Multi-cell blocks (doors/beds/tall plants), attachment blocks (torches, carpets,
