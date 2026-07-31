@@ -31,8 +31,20 @@ public final class MonumentBuilder {
     private MonumentBuilder() {
     }
 
+    /** Rebuilds every monument in the dimension - one per arena. */
     public static void build(ServerLevel level) {
-        BlockPos p = AztecAbyssConstants.MONUMENT_POS;
+        buildAt(level, AztecAbyssConstants.MONUMENT_POS);
+        buildAt(level, BRIDGE_MONUMENT);
+    }
+
+    /**
+     * The bridge's own monument, standing in the fort courtyard so defenders on
+     * that map get the same standings the temple crowd sees.
+     */
+    public static final BlockPos BRIDGE_MONUMENT = new BlockPos(
+            BridgeBuilder.CENTER_X - 9, BridgeBuilder.DECK_Y, BridgeBuilder.ISLAND_CENTER_Z - 4);
+
+    private static void buildAt(ServerLevel level, BlockPos p) {
         int floorY = p.getY();
         int x = p.getX();
         int z = p.getZ();

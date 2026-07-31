@@ -592,6 +592,12 @@ public final class ArenaGenerator {
         if (level.players().isEmpty() || level.getGameTime() % 4 != 0) {
             return;
         }
+        // Temple dressing only - don't burn particles and entity queries on an
+        // arena nobody is standing in.
+        if (com.jrpetty.aztecabyss.round.RoundManager.game().getMap()
+                != com.jrpetty.aztecabyss.worldgen.ArenaMap.TEMPLE) {
+            return;
+        }
         RandomSource rng = level.random;
         int hw = AztecAbyssConstants.TEMPLE_BASE_HALF_WIDTH;
         int floorY = AztecAbyssConstants.ARENA_FLOOR_Y;

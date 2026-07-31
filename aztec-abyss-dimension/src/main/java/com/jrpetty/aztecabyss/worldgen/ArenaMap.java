@@ -30,9 +30,9 @@ public enum ArenaMap {
     /** A last stand on a high bridge over the void - everything funnels in from one end. */
     BRIDGE(
             "The Long Bridge",
-            "Hold a fortified island from behind walls. Everything funnels down one bridge — a single choke to defend.",
-            "EASIER",
-            0xFF55CC55,
+            "Hold one bridge and keep the Heart alive. A single choke to defend — but if the Heart falls, the run is over.",
+            "MEDIUM",
+            0xFFE0B040,
             BridgeBuilder.ARRIVAL,
             BridgeBuilder.GATES,
             BridgeBuilder.EXTRACTION,

@@ -107,6 +107,7 @@ public final class RoundManager {
             bar.removeAllPlayers();
         }
         HEART_BARS.clear();
+        LAST_HUD_STAMP.clear();
         game = new AbyssGame();
     }
 
@@ -206,11 +207,15 @@ public final class RoundManager {
         if (now % 10L == 0L) {
             broadcastHud(level); // refresh the live HUD ~twice a second
         }
+        // One arena-wide entity sweep drives both retargeting and the stuck check,
+        // instead of two overlapping queries on different cadences.
         if (now % 40L == 0L) {
-            retargetWaveMobs(level, present); // nothing gets to loiter
-        }
-        if (now % 200L == 0L) {
-            repatriateStuckMobs(level, present); // pull glitched stragglers back to a gate
+            List<Mob> waveMobs = level.getEntitiesOfClass(Mob.class, game.getMap().bounds(),
+                    m -> m.getPersistentData().getBoolean("aztecabyss_wave_mob"));
+            retargetWaveMobs(level, present, waveMobs);
+            if (now % 200L == 0L) {
+                repatriateStuckMobs(level, present, waveMobs);
+            }
         }
         if (game.getMap().objective() != null) {
             tickObjective(level, present);
@@ -1303,9 +1308,21 @@ public final class RoundManager {
                 : Math.max(0, game.getKillsNeededThisRound() - game.getKillsThisRound());
         for (ServerPlayer p : present) {
             int myKills = p.getData(ModAttachments.RUN_STATE).getKillsThisRun();
-            ModNetworking.sendHud(p, game.getRound(), game.isFogRound(), enemies, up, total, myKills);
 
-            // Each player's squad = everyone else in the run (for the teammate HUD).
+            // Only push the HUD when something a player can actually see changed;
+            // this used to fire twice a second per player regardless.
+            long stamp = (((long) game.getRound() * 1000L + enemies) * 100L + up) * 10000L
+                    + myKills + (game.isFogRound() ? 1L : 0L) * 100000000L + total * 1000000L;
+            Long last = LAST_HUD_STAMP.get(p.getUUID());
+            if (last == null || last != stamp) {
+                LAST_HUD_STAMP.put(p.getUUID(), stamp);
+                ModNetworking.sendHud(p, game.getRound(), game.isFogRound(), enemies, up, total, myKills);
+            }
+
+            // Squad panel only matters in co-op - skip the whole build solo.
+            if (total <= 1) {
+                continue;
+            }
             List<com.jrpetty.aztecabyss.network.TeammateInfo> mates = new ArrayList<>();
             for (ServerPlayer o : present) {
                 if (o == p) {
@@ -1320,6 +1337,9 @@ public final class RoundManager {
             ModNetworking.sendSquad(p, mates);
         }
     }
+
+    /** Last HUD payload fingerprint per player, so unchanged frames aren't resent. */
+    private static final Map<UUID, Long> LAST_HUD_STAMP = new HashMap<>();
 
     /** A player pinged a spot: flash a marker there and call it out to the squad. */
     public static void onPing(ServerPlayer player, BlockPos target) {
@@ -1376,14 +1396,13 @@ public final class RoundManager {
      * stuck on geometry or pathing nowhere - and teleports them back to a gate
      * with a fresh target, so a wave can never stall on a glitched straggler.
      */
-    private static void repatriateStuckMobs(ServerLevel level, List<ServerPlayer> present) {
+    private static void repatriateStuckMobs(ServerLevel level, List<ServerPlayer> present, List<Mob> mobs) {
         long now = level.getGameTime();
-        List<Mob> mobs = level.getEntitiesOfClass(Mob.class, game.getMap().bounds(),
-                m -> m.getPersistentData().getBoolean("aztecabyss_wave_mob")
-                        && !m.getPersistentData().getBoolean("aztecabyss_boss"));
-
         BlockPos[] gates = game.getMap().gates();
         for (Mob mob : mobs) {
+            if (mob.getPersistentData().getBoolean("aztecabyss_boss")) {
+                continue;
+            }
             long since = now - mob.getPersistentData().getLong("aztecabyss_gate_tick");
             if (since < STUCK_TICKS) {
                 continue;
@@ -1411,9 +1430,7 @@ public final class RoundManager {
      * hit them) pulls them off it. On maps with no objective they simply hunt the
      * nearest hunter as before.
      */
-    private static void retargetWaveMobs(ServerLevel level, List<ServerPlayer> present) {
-        List<Mob> mobs = level.getEntitiesOfClass(Mob.class, game.getMap().bounds(),
-                m -> m.getPersistentData().getBoolean("aztecabyss_wave_mob"));
+    private static void retargetWaveMobs(ServerLevel level, List<ServerPlayer> present, List<Mob> mobs) {
         BlockPos objective = game.hasLiveObjective() ? game.getMap().objective() : null;
         long now = level.getGameTime();
 
@@ -1474,6 +1491,29 @@ public final class RoundManager {
         mob.setTarget(by);
     }
 
+    /** How often the objective is sampled, in ticks. */
+    private static final int OBJECTIVE_INTERVAL = 10;
+
+    /**
+     * Tells everyone the Heart is being hit, and - crucially on a map 135 blocks
+     * long - which way to run. Players already standing on it just get the alert.
+     */
+    private static void warnHeartUnderAttack(List<ServerPlayer> present, BlockPos heart) {
+        for (ServerPlayer p : present) {
+            double dx = (heart.getX() + 0.5) - p.getX();
+            double dz = (heart.getZ() + 0.5) - p.getZ();
+            int dist = (int) Math.sqrt(dx * dx + dz * dz);
+            if (dist <= 6) {
+                actionBar(p, "§4⚠ THE HEART IS UNDER ATTACK!");
+                continue;
+            }
+            String dir = Math.abs(dx) > Math.abs(dz)
+                    ? (dx > 0 ? "EAST" : "WEST")
+                    : (dz > 0 ? "SOUTH" : "NORTH");
+            actionBar(p, "§4⚠ THE HEART IS UNDER ATTACK §7— §c" + dist + "m " + dir);
+        }
+    }
+
     /**
      * Mobs crowding the objective chew through it. Damage scales with how many
      * are on it, so letting the horde reach the Heart is visibly punishing.
@@ -1487,30 +1527,33 @@ public final class RoundManager {
             return;
         }
 
-        double reach = 3.0;
-        net.minecraft.world.phys.AABB near = new net.minecraft.world.phys.AABB(heart).inflate(reach);
-        List<Mob> onIt = level.getEntitiesOfClass(Mob.class, near,
-                m -> m.getPersistentData().getBoolean("aztecabyss_wave_mob"));
+        // Sampled every 10 ticks rather than every tick - a full entity sweep per
+        // tick was the single most expensive thing the mode did. Damage is scaled
+        // by the interval so the felt rate is unchanged.
+        long now = level.getGameTime();
+        if (now % OBJECTIVE_INTERVAL == 0L) {
+            double reach = 3.0;
+            net.minecraft.world.phys.AABB near = new net.minecraft.world.phys.AABB(heart).inflate(reach);
+            List<Mob> onIt = level.getEntitiesOfClass(Mob.class, near,
+                    m -> m.getPersistentData().getBoolean("aztecabyss_wave_mob"));
 
-        if (!onIt.isEmpty()) {
-            float dmg = 1.0f * onIt.size();
-            game.setObjectiveHealth(game.getObjectiveHealth() - dmg);
-            level.sendParticles(ParticleTypes.CRIT,
-                    heart.getX() + 0.5, heart.getY() + 0.5, heart.getZ() + 0.5, 6, 0.4, 0.4, 0.4, 0.1);
-            if (level.getGameTime() % 20L == 0L) {
-                for (ServerPlayer p : present) {
+            if (!onIt.isEmpty()) {
+                game.setObjectiveHealth(game.getObjectiveHealth() - onIt.size() * OBJECTIVE_INTERVAL);
+                level.sendParticles(ParticleTypes.CRIT,
+                        heart.getX() + 0.5, heart.getY() + 0.5, heart.getZ() + 0.5, 6, 0.4, 0.4, 0.4, 0.1);
+                if (now % 20L == 0L) {
                     level.playSound(null, heart, net.minecraft.sounds.SoundEvents.ANVIL_LAND,
-                            SoundSource.HOSTILE, 0.5F, 0.6F);
-                    actionBar(p, "§4⚠ THE HEART IS UNDER ATTACK!");
+                            SoundSource.HOSTILE, 0.6F, 0.6F);
+                    warnHeartUnderAttack(present, heart);
                 }
+            } else if (now % 60L == 0L && game.getPhase() == AbyssGame.Phase.BETWEEN_ROUNDS) {
+                // Slowly knits itself back together during the breather.
+                game.setObjectiveHealth(game.getObjectiveHealth() + 5.0f);
             }
-        } else if (level.getGameTime() % 60L == 0L && game.getPhase() == AbyssGame.Phase.BETWEEN_ROUNDS) {
-            // Slowly knits itself back together during the breather.
-            game.setObjectiveHealth(game.getObjectiveHealth() + 5.0f);
         }
 
         // Ambient glow so it always reads as the thing to protect.
-        if (level.getGameTime() % 10L == 0L) {
+        if (now % 10L == 0L) {
             level.sendParticles(ParticleTypes.END_ROD,
                     heart.getX() + 0.5, heart.getY() + 0.9, heart.getZ() + 0.5, 2, 0.25, 0.25, 0.25, 0.01);
         }
