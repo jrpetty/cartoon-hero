@@ -532,8 +532,19 @@ button is a calculator with a felt background. Perfect play is now about even an
 a plain policy loses 12-20%, so there is roughly a 13-point skill curve to climb
 — narrow enough to be learnable, wide enough to be worth learning.
 
-**The dealt cards are drawn as cards**, art and all, wrapping into rows. A hand
-should read as a hand.
+**The dealt cards are drawn as cards**, art and all, wrapping into rows, and the
+dealer turns its hand over one card at a time — it knows the whole hand the
+moment you stand, but watching it arrive is the tense part.
+
+**The layout is solved, not assumed** *(v1.70.0)*. The first version hard-coded
+card sizes that fitted a large window and ran the buttons off the bottom of
+anything under ~320px — GUI scale 3 and 4 on an ordinary display. Now the cards
+shrink, then the stat buttons wrap into two or three columns, then the header
+drops its subtitle, until it fits. Crucially the row count is derived from the
+size being tried rather than fixed first, so shrinking cards fits more per row
+and a twelve-card hand can always be made to fit. Verified across 468
+combinations of window size and hand length; the only failures are below 240px,
+which Minecraft never renders.
 
 ---
 

@@ -23,9 +23,15 @@ import java.util.Map;
 /**
  * The Twenty-One table.
  *
- * <p>The cards you have been dealt are the point of the screen, so they are
- * drawn as cards — art and all — rather than listed as text. A hand reads as a
- * hand, and you can see what you have been given at a glance.
+ * <p>The cards you were dealt are the point of the screen, so they are drawn as
+ * cards rather than listed as text — and the layout is solved from the space
+ * actually available rather than assumed. Hard-coded card sizes fitted a large
+ * window and ran the buttons straight off the bottom of a small one; a hand can
+ * now be twelve cards long, so the size has to give instead.
+ *
+ * <p>The dealer turns its hand over one card at a time. It knows the whole hand
+ * the moment you stand, but watching it arrive a card at a time is the tense
+ * part, and dumping five cards on screen at once threw the result away.
  *
  * <p>No odds are shown. Working out that Farmable climbs fast and Attack is
  * often nothing is the game; a table that prints the answer beside every button
@@ -43,18 +49,29 @@ public class BlackjackScreen extends Screen {
     private static final int LOSE = 0xFFF0625A;
     private static final int EDGE = 0xFF1B4536;
 
-    private static final float CARD_SCALE = 0.22f;
-    private static final int CARD_W = Math.round(CardRenderer.CARD_W * CARD_SCALE);
-    private static final int CARD_H = Math.round(CardRenderer.CARD_H * CARD_SCALE);
-    private static final int CARD_GAP = 4;
-    /** Height of the stat/value caption drawn under each card. */
-    private static final int CAPTION_H = 11;
+    /** How long one card takes to turn over. */
+    private static final long FLIP_MS = 190L;
+    /** Gap between the dealer's cards as it plays its hand out. */
+    private static final long DEAL_STEP_MS = 330L;
+    private static final int CAPTION_H = 10;
 
     private final Map<String, LivingEntity> entityCache = new HashMap<>();
     private final int[][] statRects = new int[Stat.values().length][];
     private int[] dealRect;
     private int[] standRect;
     private int hovered = -1;
+    /** Dealer cards already turned, so a new one can be announced with a sound. */
+    private int announced;
+
+    // solved each frame from the window
+    private float cardScale;
+    private int cardW;
+    private int cardH;
+    private int rowH;
+    /** Stat buttons per row: 1 tall column when there is room, 2 or 3 when not. */
+    private int statCols = 1;
+    private int statRows = 6;
+    private boolean compact;
 
     public BlackjackScreen() {
         super(Component.literal("Twenty-One"));
@@ -63,6 +80,74 @@ public class BlackjackScreen extends Screen {
     @Override
     public boolean isPauseScreen() {
         return false;
+    }
+
+    /**
+     * Fit the whole screen into the window, biggest cards first.
+     *
+     * <p>Everything gives in turn: the cards shrink, then the stat buttons wrap
+     * into two or three columns, then the header loses its subtitle. Solving it
+     * this way rather than hard-coding sizes is the difference between a table
+     * that works at every GUI scale and one that hides its own buttons below the
+     * bottom of the screen — which the first version did on anything under about
+     * 320 pixels, meaning GUI scale 3 and 4 on an ordinary display.
+     *
+     * <p>The row count is derived from the size being tried, not fixed up front:
+     * smaller cards fit more per row, so shrinking them reduces the rows as well
+     * as their height. Computing rows first and then picking a scale meant a long
+     * hand could never be made to fit however small the cards went.
+     *
+     * @param cards how many cards the longer of the two hands holds
+     * @param half  the width one hand has to lay out in
+     * @return the y the card area starts at
+     */
+    private int solveLayout(int cards, int half) {
+        int stats = Stat.values().length;
+        for (int cols = 1; cols <= 3; cols++) {
+            for (int rh = 15; rh >= 12; rh--) {
+                for (boolean tight : new boolean[]{false, true}) {
+                    for (float scale = 0.24f; scale >= 0.10f; scale -= 0.01f) {
+                        int cw = Math.round(CardRenderer.CARD_W * scale);
+                        int ch = Math.round(CardRenderer.CARD_H * scale);
+                        int perRow = Math.max(1, (half + 4) / (cw + 4));
+                        int handRows = Math.max(1, (Math.max(1, cards) + perRow - 1) / perRow);
+                        int headH = tight ? 26 : 42;
+                        int sRows = (stats + cols - 1) / cols;
+                        int total = headH + 24 + 6 + handRows * (ch + CAPTION_H + 4)
+                                + 14 + sRows * rh + 6 + 15 + 14;
+                        if (total <= height) {
+                            cardScale = scale;
+                            cardW = cw;
+                            cardH = ch;
+                            rowH = rh;
+                            statCols = cols;
+                            statRows = sRows;
+                            compact = tight;
+                            return headH + 24 + 6;
+                        }
+                    }
+                }
+            }
+        }
+        // a window too small for any arrangement: smallest of everything and
+        // let the card area clip rather than push the buttons off-screen
+        cardScale = 0.10f;
+        cardW = Math.round(CardRenderer.CARD_W * cardScale);
+        cardH = Math.round(CardRenderer.CARD_H * cardScale);
+        rowH = 12;
+        statCols = 3;
+        statRows = 2;
+        compact = true;
+        return 26 + 24 + 6;
+    }
+
+    /** How many of the dealer's cards have been turned over so far. */
+    private int dealerRevealed(long since) {
+        int total = ClientBlackjack.dealerDraws().size();
+        if (ClientBlackjack.phase() == BlackjackSyncPayload.PHASE_PLAYER) {
+            return 0;
+        }
+        return Mth.clamp((int) (since / DEAL_STEP_MS) + 1, 0, total);
     }
 
     @Override
@@ -76,78 +161,112 @@ public class BlackjackScreen extends Screen {
         boolean live = phase == BlackjackSyncPayload.PHASE_PLAYER;
         long since = System.currentTimeMillis() - ClientBlackjack.changedAt();
 
+        int half = Math.min(310, (width - 34) / 2);
+        int leftX = width / 2 - half - 5;
+        int rightX = width / 2 + 5;
+
+        List<ClientBlackjack.Draw> mine = ClientBlackjack.playerDraws();
+        List<ClientBlackjack.Draw> theirs = ClientBlackjack.dealerDraws();
+        int shown = dealerRevealed(since);
+
+        // announce each dealer card as it lands
+        if (shown > announced) {
+            announced = shown;
+            if (minecraft != null && shown > 0) {
+                minecraft.getSoundManager().play(SimpleSoundInstance.forUI(
+                        SoundEvents.BOOK_PAGE_TURN, 1.0f + shown * 0.05f));
+            }
+        }
+        if (live) {
+            announced = 0;
+        }
+
+        int longest = Math.max(mine.size(), shown);
+        int cardsTop = solveLayout(longest, half);
+        int perRow = Math.max(1, (half + 4) / (cardW + 4));
+        int rows = Math.max(rowsFor(mine.size(), perRow), rowsFor(shown, perRow));
+
+        // --- header ---------------------------------------------------------
         var pose = g.pose();
         pose.pushPose();
-        pose.translate(width / 2f, 10f, 0);
-        pose.scale(1.7f, 1.7f, 1f);
+        pose.translate(width / 2f, compact ? 4f : 8f, 0);
+        float ts = compact ? 1.2f : 1.6f;
+        pose.scale(ts, ts, 1f);
         String head = "TWENTY-ONE";
         g.drawString(font, head, -font.width(head) / 2, 0, GOLD, true);
         pose.popPose();
-        g.drawCenteredString(font, "call a stat, then the card turns", width / 2, 32, DIM);
+        if (!compact) {
+            g.drawCenteredString(font, "call a stat, then the card turns", width / 2, 28, DIM);
+        }
 
-        // --- the two hands, side by side --------------------------------
-        int half = Math.min(300, (width - 40) / 2);
-        int leftX = width / 2 - half - 6;
-        int rightX = width / 2 + 6;
-        int handY = 48;
+        // --- totals, counting up as cards land ------------------------------
+        int totalsY = compact ? 20 : 40;
+        int myShown = countUp(ClientBlackjack.playerTotal(), mine, mine.size(), since, true);
+        drawTotal(g, leftX, totalsY, half, "YOU", myShown,
+                ClientBlackjack.playerTotal() > Blackjack.TARGET && since > FLIP_MS);
+        int theirShown = shown == 0 ? -1
+                : theirs.get(Math.min(shown, theirs.size()) - 1).total();
+        drawTotal(g, rightX, totalsY, half, "DEALER", theirShown,
+                theirShown > Blackjack.TARGET);
 
-        boolean showDealer = phase != BlackjackSyncPayload.PHASE_PLAYER
-                && !ClientBlackjack.dealerDraws().isEmpty();
-        drawTotal(g, leftX, handY, half, "YOU", ClientBlackjack.playerTotal(),
-                ClientBlackjack.playerTotal() > Blackjack.TARGET);
-        drawTotal(g, rightX, handY, half, "DEALER",
-                showDealer ? ClientBlackjack.dealerTotal() : -1,
-                showDealer && ClientBlackjack.dealerTotal() > Blackjack.TARGET);
-
-        int cardsTop = handY + 30;
-        int cardsBottom = drawHand(g, leftX, cardsTop, half,
-                ClientBlackjack.playerDraws(), mouseX, mouseY, since, true);
-        if (showDealer) {
-            cardsBottom = Math.max(cardsBottom, drawHand(g, rightX, cardsTop, half,
-                    ClientBlackjack.dealerDraws(), mouseX, mouseY, since, false));
+        // --- the two hands ---------------------------------------------------
+        drawHand(g, leftX, cardsTop, perRow, mine, mine.size(), mouseX, mouseY, since, true);
+        if (shown > 0) {
+            drawHand(g, rightX, cardsTop, perRow, theirs, shown, mouseX, mouseY, since, false);
         } else if (live) {
             g.drawString(font, "waiting…", rightX + 4, cardsTop + 4, EDGE, false);
         }
 
-        // --- the six calls ------------------------------------------------
-        int rowH = 15;
-        int listY = Math.max(cardsBottom + 20, height - 60 - Stat.values().length * rowH);
-        int listX0 = width / 2 - 110;
-        int listX1 = width / 2 + 110;
+        int cardsBottom = cardsTop + Math.max(1, rows) * (cardH + CAPTION_H + 4);
+
+        // --- the six calls ----------------------------------------------------
+        int listW = Math.min(240, width - 20);
+        int listX0 = width / 2 - listW / 2;
+        int listX1 = listX0 + listW;
+        int colW = (listW - (statCols - 1) * 4) / statCols;
+        int listY = Math.max(cardsBottom + 14, height - 20 - statRows * rowH - 21);
         g.drawString(font, live ? "CALL A STAT" : "PRESS DEAL TO PLAY A HAND",
-                listX0, listY - 12, GOLD, false);
+                listX0, listY - 11, GOLD, false);
         hovered = -1;
         for (Stat stat : Stat.values()) {
             int i = stat.ordinal();
-            int y = listY + i * rowH;
-            boolean over = mouseX >= listX0 && mouseX < listX1 && mouseY >= y && mouseY < y + 14;
+            int cx = listX0 + (i % statCols) * (colW + 4);
+            int y = listY + (i / statCols) * rowH;
+            boolean over = mouseX >= cx && mouseX < cx + colW
+                    && mouseY >= y && mouseY < y + rowH - 1;
             if (over && live) {
                 hovered = i;
             }
-            statRects[i] = new int[]{listX0, y, listX1 - listX0, 14};
-            g.fill(listX0, y, listX1, y + 14,
-                    !live ? 0x18000000 : over ? 0x33E9C46A : 0x22000000);
+            statRects[i] = new int[]{cx, y, colW, rowH - 1};
+            g.fill(cx, y, cx + colW, y + rowH - 1,
+                    !live ? 0x18000000 : over ? 0x3AE9C46A : 0x22000000);
             if (live && over) {
-                g.renderOutline(listX0, y, listX1 - listX0, 14, GOLD_DIM);
+                g.renderOutline(cx, y, colW, rowH - 1, GOLD);
             }
             String label = stat.label.toUpperCase(Locale.ROOT);
-            g.drawString(font, label, listX0 + 8, y + 3, live ? INK : 0xFF4E6A5C, false);
+            // the number that also calls it, so the keyboard shortcut is discoverable
+            String key = String.valueOf(i + 1);
+            g.drawString(font, key, cx + 4, y + 2, live ? GOLD_DIM : 0xFF3E5A4C, false);
+            g.drawString(font, fit(label, colW - 20), cx + 13, y + 2,
+                    live ? INK : 0xFF4E6A5C, false);
         }
 
-        // --- buttons --------------------------------------------------------
-        int by = listY + Stat.values().length * rowH + 8;
-        dealRect = new int[]{listX0, by, 130, 16};
-        standRect = new int[]{listX1 - 78, by, 78, 16};
+        // --- buttons -----------------------------------------------------------
+        int by = listY + statRows * rowH + 6;
+        dealRect = new int[]{listX0, by, 130, 15};
+        standRect = new int[]{listX1 - 78, by, 78, 15};
         if (live) {
             button(g, standRect, "STAND", mouseX, mouseY, true);
         } else {
-            button(g, dealRect, "DEAL  (" + ClientBlackjack.stake() + " fragments)",
-                    mouseX, mouseY, ClientBlackjack.fragments() >= ClientBlackjack.stake());
+            button(g, dealRect, "DEAL  (" + ClientBlackjack.stake() + ")", mouseX, mouseY,
+                    ClientBlackjack.fragments() >= ClientBlackjack.stake());
         }
 
-        // --- result, in its own band so it cannot land on anything ----------
-        if (phase == BlackjackSyncPayload.PHASE_DONE
-                && ClientBlackjack.result() != BlackjackSyncPayload.RESULT_NONE) {
+        // --- result, once the dealer has finished turning its hand -------------
+        boolean settled = phase == BlackjackSyncPayload.PHASE_DONE
+                && ClientBlackjack.result() != BlackjackSyncPayload.RESULT_NONE
+                && shown >= theirs.size();
+        if (settled) {
             String text = switch (ClientBlackjack.result()) {
                 case BlackjackSyncPayload.RESULT_PLAYER -> "YOU WIN";
                 case BlackjackSyncPayload.RESULT_DEALER ->
@@ -159,102 +278,114 @@ public class BlackjackScreen extends Screen {
                 case BlackjackSyncPayload.RESULT_DEALER -> LOSE;
                 default -> GOLD;
             };
-            float grow = Mth.clamp(since / 220f, 0f, 1f);
-            int bannerY = Math.max(cardsBottom + 4, listY - 30);
+            long settledFor = since - (long) Math.max(0, theirs.size() - 1) * DEAL_STEP_MS;
+            float grow = Mth.clamp(settledFor / 200f, 0f, 1f);
             pose.pushPose();
-            pose.translate(width / 2f, bannerY, 0);
-            pose.scale(Math.max(0.05f, 1.8f * grow), Math.max(0.05f, 1.8f * grow), 1f);
+            pose.translate(width / 2f, listY - 26f, 0);
+            pose.scale(Math.max(0.05f, 1.7f * grow), Math.max(0.05f, 1.7f * grow), 1f);
             g.drawString(font, text, -font.width(text) / 2, 0, colour, true);
             pose.popPose();
         }
 
         g.drawCenteredString(font, ClientBlackjack.fragments() + " fragments  ·  ESC to leave",
-                width / 2, height - 14, DIM);
+                width / 2, height - 12, DIM);
+    }
+
+    private String fit(String text, int maxWidth) {
+        if (maxWidth <= 0 || font.width(text) <= maxWidth) {
+            return text;
+        }
+        String cut = font.plainSubstrByWidth(text, Math.max(1, maxWidth));
+        return cut;
+    }
+
+    private static int rowsFor(int cards, int perRow) {
+        return cards <= 0 ? 1 : (cards + perRow - 1) / perRow;
+    }
+
+    /** The total as it appears mid-animation, so the number climbs with the card. */
+    private int countUp(int finalTotal, List<ClientBlackjack.Draw> draws, int shown,
+                        long since, boolean mine) {
+        if (draws.isEmpty() || shown <= 0) {
+            return mine ? finalTotal : -1;
+        }
+        if (!mine || since >= FLIP_MS) {
+            return draws.get(Math.min(shown, draws.size()) - 1).total();
+        }
+        // the newest card has not finished turning, so it has not scored yet
+        return shown >= 2 ? draws.get(shown - 2).total() : 0;
     }
 
     /**
-     * One side's dealt cards, drawn as cards. Wraps into rows rather than
-     * overlapping, so every card in the hand stays fully readable — with stats
-     * repeatable a hand can now run long, and a fanned pile would hide the
-     * middle of it.
-     *
-     * @return the y just below the last row
+     * One side's cards, wrapping into rows. Each newly turned card flips open on
+     * its vertical axis and settles down into place.
      */
-    private int drawHand(GuiGraphics g, int x, int y, int available,
-                         List<ClientBlackjack.Draw> draws, int mouseX, int mouseY,
-                         long since, boolean mine) {
-        int perRow = Math.max(2, (available + CARD_GAP) / (CARD_W + CARD_GAP));
-        int row = 0;
-        int col = 0;
+    private void drawHand(GuiGraphics g, int x, int y, int perRow,
+                          List<ClientBlackjack.Draw> draws, int shown,
+                          int mouseX, int mouseY, long since, boolean mine) {
         MobCard hoverCard = null;
         int hoverX = 0;
         int hoverY = 0;
-        for (int i = 0; i < draws.size(); i++) {
+        for (int i = 0; i < Math.min(shown, draws.size()); i++) {
             ClientBlackjack.Draw draw = draws.get(i);
             MobCard card = MobCards.byId(draw.mobId());
-            int cx = x + col * (CARD_W + CARD_GAP);
-            int cy = y + row * (CARD_H + CAPTION_H + 4);
+            int cx = x + (i % perRow) * (cardW + 4);
+            int cy = y + (i / perRow) * (cardH + CAPTION_H + 4);
+
+            // how far through its flip this particular card is
+            long age = mine
+                    ? (i == draws.size() - 1 ? since : FLIP_MS)
+                    : since - (long) i * DEAL_STEP_MS;
+            float t = Mth.clamp(age / (float) FLIP_MS, 0f, 1f);
+            float ease = t * t * (3f - 2f * t);
 
             if (card != null) {
-                // the newest card fades in as it is turned over
-                boolean newest = mine && i == draws.size() - 1;
-                float t = newest ? Mth.clamp(since / 220f, 0f, 1f) : 1f;
-                if (t < 1f) {
-                    g.pose().pushPose();
-                    g.pose().translate(cx + CARD_W / 2f, cy + CARD_H / 2f, 0);
-                    g.pose().scale(Math.max(0.05f, t), 1f, 1f);
-                    g.pose().translate(-CARD_W / 2f, -CARD_H / 2f, 0);
-                    LivingEntity mob = CardRenderer.portraitEntity(minecraft, card, entityCache);
-                    CardRenderer.renderCard(g, font, card, 0, 0, CARD_SCALE, -1, -1, mob, false, false);
-                    g.pose().popPose();
-                } else {
-                    LivingEntity mob = CardRenderer.portraitEntity(minecraft, card, entityCache);
-                    CardRenderer.renderCard(g, font, card, cx, cy, CARD_SCALE, -1, -1, mob, false, false);
-                }
-                if (mouseX >= cx && mouseX < cx + CARD_W && mouseY >= cy && mouseY < cy + CARD_H) {
+                var pose = g.pose();
+                pose.pushPose();
+                // turn on the vertical axis, and drop the last inch into place
+                pose.translate(cx + cardW / 2f, cy + cardH / 2f - (1f - ease) * 6f, 0);
+                pose.scale(Math.max(0.02f, ease), 1f, 1f);
+                pose.translate(-cardW / 2f, -cardH / 2f, 0);
+                LivingEntity mob = CardRenderer.portraitEntity(minecraft, card, entityCache);
+                CardRenderer.renderCard(g, font, card, 0, 0, cardScale, -1, -1, mob, false, false);
+                pose.popPose();
+                if (mouseX >= cx && mouseX < cx + cardW && mouseY >= cy && mouseY < cy + cardH) {
                     hoverCard = card;
                     hoverX = cx;
                     hoverY = cy;
                 }
             }
 
-            // which stat was called, and what it was worth
-            String cap = draw.stat() >= 0 && draw.stat() < Stat.values().length
-                    ? Stat.values()[draw.stat()].shortLabel : "?";
-            String val = "+" + draw.value();
-            g.drawString(font, cap, cx, cy + CARD_H + 2, DIM, false);
-            g.drawString(font, val, cx + CARD_W - font.width(val), cy + CARD_H + 2,
-                    draw.value() == 0 ? DIM : INK, false);
-
-            if (++col >= perRow) {
-                col = 0;
-                row++;
+            if (t >= 1f) {
+                String cap = draw.stat() >= 0 && draw.stat() < Stat.values().length
+                        ? Stat.values()[draw.stat()].shortLabel : "?";
+                String val = "+" + draw.value();
+                g.drawString(font, cap, cx, cy + cardH + 1, DIM, false);
+                g.drawString(font, val, cx + cardW - font.width(val), cy + cardH + 1,
+                        draw.value() == 0 ? DIM : INK, false);
             }
         }
-        // hovering a dealt card names it, since the art is small at this size
         if (hoverCard != null) {
             String name = hoverCard.displayName();
             int w = font.width(name) + 8;
-            int tx = Mth.clamp(hoverX + CARD_W / 2 - w / 2, 2, width - w - 2);
+            int tx = Mth.clamp(hoverX + cardW / 2 - w / 2, 2, width - w - 2);
             int ty = Math.max(2, hoverY - 12);
             g.fill(tx, ty, tx + w, ty + 11, 0xE0000000);
             g.renderOutline(tx, ty, w, 11, GOLD_DIM);
             g.drawString(font, name, tx + 4, ty + 2, INK, false);
         }
-        int rows = draws.isEmpty() ? 0 : row + (col > 0 ? 1 : 0);
-        return y + Math.max(1, rows) * (CARD_H + CAPTION_H + 4);
     }
 
     private void drawTotal(GuiGraphics g, int x, int y, int w, String who, int total,
                            boolean bust) {
-        g.fill(x, y, x + w, y + 26, 0x33000000);
-        g.renderOutline(x, y, w, 26, EDGE);
-        g.drawString(font, who, x + 6, y + 9, DIM, false);
+        g.fill(x, y, x + w, y + 24, 0x33000000);
+        g.renderOutline(x, y, w, 24, bust ? LOSE : EDGE);
+        g.drawString(font, who, x + 6, y + 8, DIM, false);
         String value = total < 0 ? "??" : String.valueOf(total);
         var pose = g.pose();
         pose.pushPose();
-        pose.translate(x + w - 8f, y + 5f, 0);
-        pose.scale(1.7f, 1.7f, 1f);
+        pose.translate(x + w - 8f, y + 4f, 0);
+        pose.scale(1.6f, 1.6f, 1f);
         g.drawString(font, value, -font.width(value), 0, bust ? LOSE : INK, true);
         pose.popPose();
     }
@@ -292,6 +423,30 @@ public class BlackjackScreen extends Screen {
             }
         }
         return super.mouseClicked(mouseX, mouseY, button);
+    }
+
+    @Override
+    public boolean keyPressed(int key, int scan, int mods) {
+        // 1-6 call a stat, space stands, enter deals — the table should be
+        // playable without hunting for a small row with the mouse
+        if (ClientBlackjack.inHand()) {
+            if (key >= 49 && key < 49 + Stat.values().length) {
+                send(BlackjackActionPayload.call(key - 49));
+                click();
+                return true;
+            }
+            if (key == 32) {
+                send(BlackjackActionPayload.stand());
+                click();
+                return true;
+            }
+        } else if ((key == 257 || key == 335)
+                && ClientBlackjack.fragments() >= ClientBlackjack.stake()) {
+            send(BlackjackActionPayload.deal());
+            click();
+            return true;
+        }
+        return super.keyPressed(key, scan, mods);
     }
 
     private static boolean hit(int[] r, double mouseX, double mouseY) {
