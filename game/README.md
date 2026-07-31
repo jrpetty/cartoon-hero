@@ -93,6 +93,14 @@ standing wins.
 - **Monster camps** — the opening round and every fifth round after it are PvE.
   The camp is visible while you set up, no player life is at stake, and clearing
   it drops relics and gold.
+- **Battle styles** — a unit isn't only stats, it's *how it opens the fight*.
+  **Vanguards** plant on the centre line and hold it. **Line** troops push
+  straight in. **Flankers** sweep along the edge and come in from the side.
+  **Artillery** never advances at all — it stands where you put it and shoots.
+  And **Infiltrators** aren't there when the horns blow: they open the fight
+  behind the enemy, straight onto their archers and engines. That is what makes
+  placement a real decision — artillery parked at the back is safe from the
+  front line and helpless against an Infiltrator, so somebody has to answer it.
 - **Battlefield conditions** — every round is fought in some weather, on some
   ground, and it hits *both* warbands equally: driving rain slackens bowstrings
   (Marksmen weaker), deep mud bogs down a cavalry charge, still air lets siege
@@ -103,7 +111,7 @@ standing wins.
 
 **Positioning matters:** drag units between the bench and your half of the board,
 swap cells, and drop onto the sell box to cash out. Front-rank placement decides
-who absorbs the charge.
+who absorbs the charge — and your back rank decides what an Infiltrator lands on.
 
 ## Test it
 
@@ -135,4 +143,5 @@ renderer.
 - Warband Tactics lives in `src/sim/warband.ts` (run engine), `autobattle.ts`
   (headless + watchable battle resolution), `traits.ts`, `items.ts`,
   `augments.ts`, `creeps.ts`, `carousel.ts`, `conditions.ts`,
-  `warband_commanders.ts`, drawn by `src/ui/warband_screen.ts`.
+  `warband_commanders.ts` and `content/battle_styles.ts`, drawn by
+  `src/ui/warband_screen.ts`.

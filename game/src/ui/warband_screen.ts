@@ -23,6 +23,7 @@ import { WarbandCommander, commanderIdentity } from "../sim/warband_commanders";
 import { CarouselPick } from "../sim/carousel";
 import { Condition, hasEffect, conditionLines } from "../sim/conditions";
 import { TRAITS } from "../sim/traits";
+import { styleDef, BattleStyleDef } from "../content/battle_styles";
 
 const TIER_COLOR = ["#888888", "#9aa8b4", "#4caf50", "#3a78d8", "#9b5cf0", "#e0a020"];
 const STAR_MULT = [1, 1, 1.8, 3.2]; // hp/attack multiplier by star (matches the battle sim)
@@ -929,6 +930,45 @@ export class WarbandScreen {
     if (ui.clicked) ui.pointerConsumed = true;
   }
 
+  /**
+   * A unit's battle-style mark: an arrow-and-line glyph saying how it opens the
+   * fight. Drawn small on the board so a comp's shape reads at a glance.
+   */
+  private styleGlyph(ctx: CanvasRenderingContext2D, cx: number, cy: number, r: number, def: BattleStyleDef) {
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.lineJoin = "round"; ctx.lineCap = "round";
+    ctx.strokeStyle = def.color; ctx.fillStyle = def.color; ctx.lineWidth = Math.max(1, r * 0.3);
+    switch (def.id) {
+      case "vanguard": // a wall
+        ctx.beginPath(); ctx.moveTo(0, -r); ctx.lineTo(0, r); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(-r * 0.7, -r * 0.45); ctx.lineTo(-r * 0.1, 0); ctx.lineTo(-r * 0.7, r * 0.45); ctx.stroke();
+        break;
+      case "line": // straight arrow
+        ctx.beginPath(); ctx.moveTo(-r, 0); ctx.lineTo(r * 0.55, 0); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(r * 0.15, -r * 0.5); ctx.lineTo(r, 0); ctx.lineTo(r * 0.15, r * 0.5); ctx.closePath(); ctx.fill();
+        break;
+      case "flanker": // a hooking arrow
+        ctx.beginPath();
+        ctx.moveTo(-r, r * 0.5);
+        ctx.quadraticCurveTo(-r * 0.1, r * 0.6, r * 0.3, -r * 0.4);
+        ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(r * 0.65, -r * 0.35); ctx.lineTo(r * 0.2, -r); ctx.lineTo(r * 0.75, -r * 0.85); ctx.closePath(); ctx.fill();
+        break;
+      case "artillery": // an anchored mark with an arc over it
+        ctx.beginPath(); ctx.arc(0, r * 0.25, r * 0.35, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.arc(0, r * 0.25, r * 0.95, Math.PI * 1.15, Math.PI * 1.85); ctx.stroke();
+        break;
+      case "infiltrator": // a dashed jump over the line
+        ctx.setLineDash([r * 0.42, r * 0.34]);
+        ctx.beginPath(); ctx.arc(0, r * 0.6, r, Math.PI * 1.12, Math.PI * 1.88); ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.beginPath(); ctx.moveTo(r * 0.45, -r * 0.5); ctx.lineTo(r * 1.05, -r * 0.05); ctx.lineTo(r * 0.4, r * 0.1); ctx.closePath(); ctx.fill();
+        break;
+    }
+    ctx.restore();
+  }
+
   /** A tiny weather mark for the condition chip: sun, rain, snow or cloud. */
   private weatherGlyph(ctx: CanvasRenderingContext2D, cx: number, cy: number, r: number, c: Condition, time: number) {
     ctx.save();
@@ -1494,6 +1534,11 @@ export class WarbandScreen {
       ctx.translate(-e.x, -e.y);
       try { drawUnit(ctx, e, time, 0); } catch { /* never let one unit kill the frame */ }
       ctx.restore();
+      // Battle-style mark at the unit's shoulder in setup, so a comp's shape
+      // (who holds, who sweeps, who jumps their line) reads at a glance.
+      if (setup && !lifted && e.team === 0) {
+        this.styleGlyph(ctx, sx + cellW * 0.28, sy - cellH * 0.12, Math.min(6.5, cellW * 0.1), styleDef(e.type));
+      }
       // Star pips above the unit in setup so tiers read at a glance.
       if (setup && star >= 2 && !lifted) {
         for (let s = 0; s < star; s++) {
@@ -1598,6 +1643,11 @@ export class WarbandScreen {
     let txx = x + 10;
     for (const tr of tt) { ui.text(tr.name, txx, y + oy + 44, { size: 9.5, color: affordable ? tr.color : withAlpha(tr.color, 0.5) }); txx += tr.name.length * 5.6 + 8; }
     ui.text(`Tier ${tier}`, x + 10, y + oy + h - 10, { size: 10, color: withAlpha(col, affordable ? 1 : 0.5) });
+    // How it opens a fight, as a corner mark — the name lives in the tooltip.
+    const sd2 = styleDef(type);
+    ctx.globalAlpha = affordable ? 1 : 0.45;
+    this.styleGlyph(ctx, x + w - 15, y + oy + 15, 6, sd2);
+    ctx.globalAlpha = 1;
     // Copies left in the shared lobby pool.
     ui.text(`${poolLeft} left`, x + w / 2, y + oy + h - 10, { align: "center", size: 9.5, color: poolLeft <= 3 ? "#e0786a" : "#8a8278" });
     // Gold coin with the cost.
@@ -1869,6 +1919,7 @@ export class WarbandScreen {
 
     const pw = 244;
     let ph = 50 + 56; // header + stat block (incl. RATE + DPS)
+    ph += 52; // battle-style block
     if (bonuses.length) ph += 18;
     if (ab) ph += 34;
     ph += 8 + (relics.length ? relics.length * 30 : 16);
@@ -1884,6 +1935,9 @@ export class WarbandScreen {
     ui.text(UNITS[p.type]?.name ?? p.type, px + 14, py + 21, { size: 15, bold: true, color: "#f2e8d0", font: "Georgia, serif" });
     ui.text(stars(p.star), px + 14, py + 37, { size: 13, color: p.star >= 3 ? "#ffd24a" : p.star === 2 ? "#cfe0ff" : "#9a917b" });
     ui.text(`Tier ${tier}`, px + pw - 14, py + 21, { align: "right", size: 11, color: TIER_COLOR[tier] });
+    const sd = styleDef(p.type);
+    this.styleGlyph(ctx, px + pw - 24, py + 38, 6.5, sd);
+    ui.text(sd.name, px + pw - 36, py + 41, { align: "right", size: 10.5, bold: true, color: sd.color });
     let y = py + 50;
     const div = () => { ctx.strokeStyle = "rgba(255,255,255,0.08)"; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(px + 10, y); ctx.lineTo(px + pw - 10, y); ctx.stroke(); };
     div();
@@ -1903,6 +1957,14 @@ export class WarbandScreen {
     ui.text(`DPS ≈ ${dps}`, px + 16, y + 50, { size: 10.5, bold: true, color: "#ffb47a" });
     ui.text(`(${st.attack} dmg every ${def.attackInterval.toFixed(1)}s)`, px + 78, y + 50, { size: 9.5, color: "#8a8278" });
     y += 56;
+    // How it enters a fight — as important as its stats for where you place it.
+    div();
+    this.styleGlyph(ctx, px + 20, y + 15, 6.5, sd);
+    ui.text(sd.name, px + 32, y + 18, { size: 11.5, bold: true, color: sd.color });
+    this.wrap(sd.desc, 52).slice(0, 2).forEach((ln, i) => {
+      ui.text(ln, px + 14, y + 31 + i * 11, { size: 9, color: "#cabfa4" });
+    });
+    y += 52;
     if (bonuses.length) {
       div(); ui.text("⚔ " + bonuses.join("  "), px + 14, y + 13, { size: 11, bold: true, color: "#ffb47a" }); y += 18;
     }

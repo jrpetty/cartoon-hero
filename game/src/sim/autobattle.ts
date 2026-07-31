@@ -13,6 +13,7 @@ import { SIM_HZ, SIM_DT } from "../content/balance";
 import { activeTraits, applyBuff, traitsOf, ActiveTrait, Buff } from "./traits";
 import { applyItems } from "./items";
 import { ABILITIES } from "../content/abilities";
+import { styleOf } from "../content/battle_styles";
 
 export interface UnitStack {
   type: string;
@@ -145,6 +146,63 @@ function spawnArmy(w: World, units: ArenaUnit[], team: Team, side: number, posFn
   return ids;
 }
 
+// ---- opening orders: how each battle style enters the fight -----------------
+//
+// Depths are world-x offsets from the centre line, measured *toward* the enemy.
+// The board is 10 cells of GRID_CELL, so ±180 is the far back rank.
+const VANGUARD_DEPTH = 10;  // plant on the line
+const LINE_DEPTH = 44;      // push a cell into them
+const FLANK_DEPTH = 130;    // come in well past their front
+const INFILTRATE_X = 150;   // land among their back ranks
+
+/**
+ * Send a side into the fight according to each unit's battle style. Shared by
+ * the headless resolver and the watchable battle so both agree exactly.
+ *
+ * `side` is −1 for the left (player) army and +1 for the right, so the enemy
+ * always lies in the `-side` direction.
+ *
+ * Returns the Infiltrators' jumps as (from → to) pairs so a UI can draw them.
+ */
+export function openingOrders(
+  w: World, ids: EntityId[], side: number, cx: number, cy: number,
+): { x0: number; y0: number; x1: number; y1: number; team: Team }[] {
+  const dir = -side; // +1 when the enemy is to the right
+  const leaps: { x0: number; y0: number; x1: number; y1: number; team: Team }[] = [];
+  const halfH = (GRID_ROWS / 2) * GRID_CELL;
+  for (const id of ids) {
+    const e = w.byId.get(id);
+    if (!e || !e.alive) continue;
+    switch (styleOf(e.type)) {
+      case "artillery":
+        break; // stands its ground and shoots from where you placed it
+      case "vanguard":
+        w.issueMove([id], cx + dir * VANGUARD_DEPTH, e.y, false, true);
+        break;
+      case "flanker": {
+        // Sweep to the nearer edge, then drive in behind their front rank.
+        const edgeY = e.y < cy ? cy - halfH + GRID_CELL * 0.5 : cy + halfH - GRID_CELL * 0.5;
+        w.issueMove([id], e.x + dir * GRID_CELL, edgeY, false, true);
+        w.issueMove([id], cx + dir * FLANK_DEPTH, edgeY, true, true); // queued second leg
+        break;
+      }
+      case "infiltrator": {
+        // Not a march — they're simply behind you when it starts.
+        const x0 = e.x, y0 = e.y;
+        e.x = cx + dir * INFILTRATE_X;
+        e.y = Math.max(cy - halfH + 8, Math.min(cy + halfH - 8, y0));
+        leaps.push({ x0, y0, x1: e.x, y1: e.y, team: e.team });
+        // Then fight their way forward, into the backline they landed on.
+        w.issueMove([id], cx + dir * 70, e.y, false, true);
+        break;
+      }
+      default:
+        w.issueMove([id], cx + dir * LINE_DEPTH, e.y, false, true);
+    }
+  }
+  return leaps;
+}
+
 const alivePower = (w: World, team: Team): { count: number; power: number } => {
   let count = 0;
   let power = 0;
@@ -168,9 +226,10 @@ export function resolveBattle(
 
   const idsA = spawnArmy(w, normalize(a), Team.Player, -1, undefined, mergeSideOpts(optsA, field));
   const idsB = spawnArmy(w, normalize(b), Team.Enemy, 1, undefined, field);
-  // March both lines into the centre so they actually clash.
-  w.issueFormationMove(idsA, cx + 30, cy, false, true);
-  w.issueFormationMove(idsB, cx - 30, cy, false, true);
+  // Each side enters by its units' battle styles — the same orders the watched
+  // fight issues, so headless and live resolve identically.
+  openingOrders(w, idsA, -1, cx, cy);
+  openingOrders(w, idsB, 1, cx, cy);
 
   const maxTicks = SIM_HZ * maxSeconds;
   let t = 0;
@@ -250,8 +309,14 @@ export class LiveBattle {
   begin(): void {
     if (this.started) return;
     this.started = true;
-    for (const id of this.idsA) { const e = this.world.byId.get(id); if (e) this.world.issueMove([id], this.cx + 24, e.y, false, true); }
-    for (const id of this.idsB) { const e = this.world.byId.get(id); if (e) this.world.issueMove([id], this.cx - 24, e.y, false, true); }
+    const leaps = [
+      ...openingOrders(this.world, this.idsA, -1, this.cx, this.cy),
+      ...openingOrders(this.world, this.idsB, 1, this.cx, this.cy),
+    ];
+    // Surface each Infiltrator's jump so the screen can draw the pounce.
+    for (const l of leaps) {
+      this.fxEvents.push({ kind: "leap", x: l.x0, y: l.y0, team: l.team, data: `${l.x1},${l.y1}` });
+    }
   }
 
   /** Advance the sim a few ticks; stops automatically when one side is wiped. */

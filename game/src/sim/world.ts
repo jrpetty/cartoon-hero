@@ -109,7 +109,8 @@ const HERO_RESPAWN_SEC = 65;
 export interface WorldEvent {
   kind:
     | "sword" | "bow" | "arrowHit" | "siege" | "death" | "collapse"
-    | "build" | "complete" | "underattack" | "age" | "deposit" | "spawn" | "hit" | "ability" | "callout";
+    | "build" | "complete" | "underattack" | "age" | "deposit" | "spawn" | "hit" | "ability" | "callout"
+    | "leap"; // an arena Infiltrator opening the fight behind the enemy line
   x: number;
   y: number;
   team: Team;

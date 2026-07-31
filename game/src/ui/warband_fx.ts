@@ -10,10 +10,13 @@ import { ABILITIES } from "../content/abilities";
 
 interface Spark { x: number; y: number; vx: number; vy: number; life: number; max: number; size: number; color: string; grav: number; glow: boolean; }
 interface DmgText { x: number; y: number; vy: number; life: number; max: number; text: string; color: string; size: number; }
+/** The streak an Infiltrator leaves behind when it jumps the line. */
+interface Trail { x0: number; y0: number; x1: number; y1: number; life: number; max: number; color: string; }
 
 export class WarbandFx {
   private sparks: Spark[] = [];
   private dmg: DmgText[] = [];
+  private trails: Trail[] = [];
   shake = 0;
   private lastSound: Record<string, number> = {};
   private clock = 0;
@@ -48,6 +51,18 @@ export class WarbandFx {
           this.sound("death", 0.08);
           break;
         }
+        case "leap": {
+          // An Infiltrator opening the fight behind the enemy: a scatter of
+          // dust where it was, a hard violet burst where it lands, and a streak
+          // between the two so the eye can follow the jump.
+          const [tx, ty] = (ev.data ?? "0,0").split(",").map(Number);
+          this.burst(ev.x, ev.y, 10, "#6a5a44", 70, 0.5, 2.4, 60);
+          this.burst(tx, ty, 16, "#cf5fd8", 120, 0.65, 2.8, 20);
+          this.trails.push({ x0: ev.x, y0: ev.y, x1: tx, y1: ty, life: 0.45, max: 0.45, color: "#cf5fd8" });
+          this.shake = Math.min(8, this.shake + 2);
+          this.sound("select", 0.05);
+          break;
+        }
         case "ability": {
           // A bright signature-ability cast: a ring of sparks in the ability colour.
           const col = Object.values(ABILITIES).find((a) => a.id === ev.data)?.color ?? "#ffe9a8";
@@ -74,15 +89,26 @@ export class WarbandFx {
     this.sparks = this.sparks.filter((p) => p.life > 0);
     for (const d of this.dmg) { d.y += d.vy * dt; d.vy += 26 * dt; d.life -= dt; }
     this.dmg = this.dmg.filter((d) => d.life > 0);
+    for (const t of this.trails) t.life -= dt;
+    this.trails = this.trails.filter((t) => t.life > 0);
     this.shake *= Math.max(0, 1 - dt * 7);
     if (this.shake < 0.15) this.shake = 0;
   }
 
-  clear() { this.sparks.length = 0; this.dmg.length = 0; this.shake = 0; }
+  clear() { this.sparks.length = 0; this.dmg.length = 0; this.trails.length = 0; this.shake = 0; }
 
   /** Draw sparks + damage numbers, mapping arena world-space to screen. */
   draw(ctx: CanvasRenderingContext2D, mapX: (x: number) => number, mapY: (y: number) => number, scale: number) {
     ctx.save();
+    // Leap streaks sit under the sparks.
+    for (const t of this.trails) {
+      const a = Math.max(0, Math.min(1, t.life / t.max));
+      ctx.globalAlpha = a * 0.75;
+      ctx.strokeStyle = t.color; ctx.lineWidth = Math.max(1, 4 * a);
+      ctx.shadowColor = t.color; ctx.shadowBlur = 10;
+      ctx.beginPath(); ctx.moveTo(mapX(t.x0), mapY(t.y0)); ctx.lineTo(mapX(t.x1), mapY(t.y1)); ctx.stroke();
+    }
+    ctx.shadowBlur = 0;
     for (const p of this.sparks) {
       const a = Math.max(0, Math.min(1, p.life / p.max));
       const sx = mapX(p.x), sy = mapY(p.y), r = Math.max(0.6, p.size * scale * (0.4 + a * 0.6));
