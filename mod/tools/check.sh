@@ -1,0 +1,42 @@
+#!/usr/bin/env bash
+# Offline checks for Mob Trumps.
+#
+# The pure-game package has no Minecraft on its classpath, so it compiles and
+# runs standalone. That is what makes these worth having: the CI build only
+# tells you the mod compiles, this tells you the RULES still hold.
+#
+#   1. syntax over the whole source tree (filtered for the missing Minecraft
+#      classes, which are expected)
+#   2. enum switches: any without a default must list every constant. This is
+#      the class of bug that broke the v1.49.0 build -- javac cannot catch it
+#      offline because it gives up before flow analysis
+#   3. the game rules themselves: card set, campaign decks, recycler economics
+#
+# Usage:  mod/tools/check.sh
+set -u
+cd "$(dirname "$0")/.." || exit 1
+SRC=src/main/java
+OUT=$(mktemp -d)
+fail=0
+
+echo "== 1. syntax =="
+if javac -nowarn -proc:none -Xmaxerrs 100000 -d "$OUT" $(find $SRC -name '*.java') 2>&1 \
+     | grep "error:" \
+     | grep -Ev "cannot find symbol|does not exist|cannot access|method does not override" \
+     | grep . ; then
+  echo "   FAILED"; fail=1
+else
+  echo "   clean"
+fi
+
+echo "== 2. enum switch exhaustiveness =="
+python3 tools/checkswitch.py "$SRC/com/jrpetty/mobtrumps" || fail=1
+
+echo "== 3. game rules =="
+javac -nowarn -d "$OUT" $SRC/com/jrpetty/mobtrumps/game/*.java 2>/dev/null || { echo "   game package did not compile"; fail=1; }
+javac -nowarn -cp "$OUT" -d "$OUT" tools/Regress.java 2>/dev/null || { echo "   harness did not compile"; fail=1; }
+java -cp "$OUT" Regress || fail=1
+
+rm -rf "$OUT"
+[ $fail -eq 0 ] && echo "ALL CHECKS PASS" || echo "CHECKS FAILED"
+exit $fail

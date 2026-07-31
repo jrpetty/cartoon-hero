@@ -68,6 +68,7 @@ public class RecyclerScreen extends Screen {
     private long armedAt = -1;
     /** When the current machine run started, or -1 when the machine is idle. */
     private long runStart = -1;
+    private long lastStamp = Long.MIN_VALUE;
     private MobCard runCard;
     private boolean runFoil;
 
@@ -104,7 +105,28 @@ public class RecyclerScreen extends Screen {
         listX = panelX + 10;
         listW = panelW - 20 - (previewW > 0 ? previewW + 8 : 0);
         previewX = panelX + panelW - 10 - previewW;
+        ClientRecycler.clear();   // no stale result on the machine when it opens
+        lastStamp = inventoryStamp();
         rebuild();
+    }
+
+    /** Cheap signature of the card-bearing slots, to skip pointless rebuilds. */
+    private long inventoryStamp() {
+        if (minecraft == null || minecraft.player == null) {
+            return 0L;
+        }
+        var inv = minecraft.player.getInventory();
+        long h = 1125899906842597L;
+        for (int i = 0; i < inv.getContainerSize(); i++) {
+            ItemStack s = inv.getItem(i);
+            MobCard card = MobCardItem.cardOf(s);
+            if (card == null) continue;
+            h = 31 * h + i;
+            h = 31 * h + card.id().hashCode();
+            h = 31 * h + s.getCount();
+            h = 31 * h + CardIdentityService.wearOf(s).condition();
+        }
+        return h;
     }
 
     private void rebuild() {
@@ -392,12 +414,17 @@ public class RecyclerScreen extends Screen {
         };
     }
 
-    private static int poolSize(Tier tier) {
-        int n = 0;
+    /** How many cards each tier holds. Fixed for the run, so counted once. */
+    private static final int[] POOL = new int[Tier.values().length];
+
+    static {
         for (MobCard card : MobCards.ALL) {
-            if (card.tier() == tier) n++;
+            POOL[card.tier().ordinal()]++;
         }
-        return n;
+    }
+
+    private static int poolSize(Tier tier) {
+        return POOL[tier.ordinal()];
     }
 
     private void drawScrollbar(GuiGraphics g, int x, int y, int h, int total, int visible, int at) {
@@ -442,7 +469,11 @@ public class RecyclerScreen extends Screen {
         if (mode == RecyclerManager.MODE_SHREDDER) {
             for (int r = 0; r < rowRects.size(); r++) {
                 if (inRect(mx, my, rowRects.get(r))) {
-                    Spare s = spares.get(scroll + r);
+                    int idx = scroll + r;
+                    if (idx < 0 || idx >= spares.size()) {
+                        return true;   // the list moved under us; ignore the click
+                    }
+                    Spare s = spares.get(idx);
                     PacketDistributor.sendToServer(
                             RecyclerActionPayload.shred(s.card().id(), s.foil()));
                     startRun(now, s.card(), s.foil());
@@ -551,7 +582,21 @@ public class RecyclerScreen extends Screen {
     @Override
     public void tick() {
         super.tick();
-        rebuild(); // the inventory is the source of truth and it changes under us
+        // the inventory is the source of truth and it changes under us, but it
+        // does not change every tick -- only pay for a rebuild when it has
+        long stamp = inventoryStamp();
+        if (stamp != lastStamp) {
+            lastStamp = stamp;
+            rebuild();
+        }
+        // a refusal is not a run: the card was never destroyed, so stop the
+        // machine rather than let it mime chewing something it did not take
+        if (runStart > 0 && ClientRecycler.resolvedSince(runStart)
+                && ClientRecycler.kind() == com.jrpetty.mobtrumps.RecyclerResultPayload.REFUSED) {
+            runStart = -1;
+            ClientRecycler.clear();
+            return;
+        }
         // hold the finished frame long enough to read, then go back to idle
         if (runStart > 0 && System.currentTimeMillis() - runStart > MachineView.RUN_MS + 4000L) {
             runStart = -1;
