@@ -82,9 +82,20 @@ public final class AbyssEventHandler {
         // Any wave mob died (zombie, skeleton, creeper, ...): credit the killing participant.
         if (dying instanceof Mob mob && mob.getPersistentData().getBoolean("aztecabyss_wave_mob")) {
             // Specialists sit on a colour team for their outline glow - take them
-            // back off it so the scoreboard doesn't fill with dead UUIDs.
-            if (mob.getPersistentData().getInt("aztecabyss_role") != 0) {
+            // back off it so the scoreboard doesn't fill with dead UUIDs, and give
+            // them a death cry that matches their spawn cry so a kill reads by ear.
+            int role = mob.getPersistentData().getInt("aztecabyss_role");
+            if (role != 0) {
                 level.getScoreboard().removePlayerFromTeam(mob.getStringUUID());
+                if (role == 1) { // Breaker - the keen cuts off short
+                    level.playSound(null, mob.blockPosition(),
+                            net.minecraft.sounds.SoundEvents.RAVAGER_DEATH,
+                            net.minecraft.sounds.SoundSource.HOSTILE, 1.0F, 1.8F);
+                } else { // Sapper - a heavy collapse
+                    level.playSound(null, mob.blockPosition(),
+                            net.minecraft.sounds.SoundEvents.RAVAGER_DEATH,
+                            net.minecraft.sounds.SoundSource.HOSTILE, 1.3F, 0.45F);
+                }
             }
             ServerPlayer killer = event.getSource().getEntity() instanceof ServerPlayer sp ? sp : null;
             RoundManager.onWaveZombieKilled(level, killer);

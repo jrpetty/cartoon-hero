@@ -480,6 +480,8 @@ public final class RoundManager {
         }
 
         // A burst as it comes through the gate, so specialists arrive with weight.
+        // The two are pitched deliberately apart - a thin high cry versus a deep
+        // toll - so you can tell them apart by ear alone from down the bridge.
         double mx = mob.getX();
         double my = mob.getY();
         double mz = mob.getZ();
@@ -487,12 +489,14 @@ public final class RoundManager {
             level.sendParticles(ParticleTypes.FLAME, mx, my + 0.8, mz, 20, 0.4, 0.5, 0.4, 0.06);
             level.sendParticles(ParticleTypes.CRIT, mx, my + 0.8, mz, 14, 0.4, 0.5, 0.4, 0.1);
             level.playSound(null, mob.blockPosition(), net.minecraft.sounds.SoundEvents.RAVAGER_ROAR,
-                    SoundSource.HOSTILE, 0.7F, 1.6F);
+                    SoundSource.HOSTILE, 1.1F, 1.7F);
         } else {
             level.sendParticles(ParticleTypes.LARGE_SMOKE, mx, my + 1.0, mz, 24, 0.6, 0.7, 0.6, 0.02);
             level.sendParticles(ParticleTypes.SOUL_FIRE_FLAME, mx, my + 0.5, mz, 18, 0.5, 0.5, 0.5, 0.03);
+            level.playSound(null, mob.blockPosition(), net.minecraft.sounds.SoundEvents.RAVAGER_ROAR,
+                    SoundSource.HOSTILE, 1.2F, 0.4F);
             level.playSound(null, mob.blockPosition(), net.minecraft.sounds.SoundEvents.ANVIL_LAND,
-                    SoundSource.HOSTILE, 0.8F, 0.5F);
+                    SoundSource.HOSTILE, 0.7F, 0.5F);
         }
 
         // Call it out so players can react rather than be blindsided.
@@ -1670,6 +1674,8 @@ public final class RoundManager {
         long now = level.getGameTime();
 
         for (Mob mob : mobs) {
+            specialistApproachCue(level, mob, present);
+
             // Breakers are single-minded: no aggro, no provoking, no distractions.
             // The only way to stop one is to put it down.
             if (objective != null
@@ -1709,6 +1715,40 @@ public final class RoundManager {
             if (mob.getNavigation().isDone() || now % 40L == 0L) {
                 mob.getNavigation().moveTo(objective.getX() + 0.5, objective.getY(), objective.getZ() + 0.5, 1.0);
             }
+        }
+    }
+
+    /**
+     * A sparse "something is coming" cue for the two specialists, ridden off the
+     * existing 2-second retarget sweep so it costs nothing extra.
+     *
+     * Deliberately restrained: it only fires while the thing is still at range
+     * (so it's a warning, not a nag once it's on top of you), it's randomised so
+     * it never turns metronomic, and it's carried at a volume that reaches down
+     * the bridge without being shrill. Breakers keen; Sappers toll.
+     */
+    private static void specialistApproachCue(ServerLevel level, Mob mob, List<ServerPlayer> present) {
+        int role = mob.getPersistentData().getInt("aztecabyss_role");
+        if (role == ROLE_NORMAL || present.isEmpty()) {
+            return;
+        }
+        // Roughly every other sweep, so ~4s apart rather than a constant drone.
+        if (RNG.nextInt(2) != 0) {
+            return;
+        }
+        // Only while it's still approaching - once it's among you, you can see it.
+        ServerPlayer nearest = nearestTarget(present, mob.blockPosition());
+        if (nearest == null || nearest.distanceToSqr(mob) < 14.0 * 14.0) {
+            return;
+        }
+        if (role == ROLE_BREAKER) {
+            // Thin, high keen - urgent without being harsh.
+            level.playSound(null, mob.blockPosition(), net.minecraft.sounds.SoundEvents.RAVAGER_ROAR,
+                    SoundSource.HOSTILE, 1.4F, 1.9F);
+        } else {
+            // Deep, slow toll of something heavy and armoured.
+            level.playSound(null, mob.blockPosition(), net.minecraft.sounds.SoundEvents.ANVIL_LAND,
+                    SoundSource.HOSTILE, 1.6F, 0.45F);
         }
     }
 
