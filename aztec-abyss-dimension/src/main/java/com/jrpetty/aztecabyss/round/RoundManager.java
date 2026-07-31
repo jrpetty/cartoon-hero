@@ -256,7 +256,7 @@ public final class RoundManager {
                 } else if (game.getSpawnedThisRound() >= game.getKillsNeededThisRound() && game.getAliveZombies() <= 0) {
                     onRoundCleared(level);
                 }
-                updateBossBars();
+                updateBossBars(level);
             }
             default -> {
             }
@@ -321,7 +321,6 @@ public final class RoundManager {
         broadcastHud(level);
         for (ServerBossEvent bar : BOSS_BARS.values()) {
             bar.setName(Component.literal("§6✦ §fRound " + round + " §7— The Aztec Abyss"));
-            // (points are appended per-player in updateBossBars)
             bar.setColor(round >= 15 ? BossEvent.BossBarColor.RED : round >= 8 ? BossEvent.BossBarColor.YELLOW : BossEvent.BossBarColor.WHITE);
             bar.setProgress(0.0F);
             bar.setDarkenScreen(false);
@@ -2399,7 +2398,29 @@ public final class RoundManager {
         BOSS_BARS.put(player.getUUID(), bar);
     }
 
-    private static void updateBossBars() {
+    /**
+     * Refreshes every round bar, and on economy maps writes each player's own
+     * balance into their own bar.
+     *
+     * <p>Points were previously only ever shown in the message that fired when
+     * you bought something, which made the whole economy guesswork - you could
+     * not tell whether you were saving for the Crucible or nowhere near it. The
+     * bar is the right home for it: it is already per-player, already on screen,
+     * and needs no packet of its own.
+     */
+    private static void updateBossBars(ServerLevel level) {
+        if (game.getMap().hasEconomy()) {
+            for (Map.Entry<UUID, ServerBossEvent> e : BOSS_BARS.entrySet()) {
+                ServerPlayer p = level.getPlayerByUUID(e.getKey()) instanceof ServerPlayer sp ? sp : null;
+                if (p == null) {
+                    continue;
+                }
+                e.getValue().setName(Component.literal(
+                        "§6✦ §fRound " + game.getRound()
+                                + " §8| §e" + OutpostEconomy.points(e.getKey()) + " pts"
+                                + (game.isFogRound() ? " §8| §7≈ fog" : "")));
+            }
+        }
         float progress;
         if (game.isBossRound() && game.isBossActive()) {
             // During a boss round the bar tracks the Warden's remaining health.
