@@ -1,6 +1,7 @@
 package com.jrpetty.aztecabyss.maze;
 
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.util.RandomSource;
 import net.minecraft.world.level.block.Blocks;
@@ -25,8 +26,12 @@ import net.minecraft.world.level.block.state.BlockState;
  */
 public final class MazeBuilder {
 
-    /** Cells stamped per tick while a build is running. */
-    private static final int CELLS_PER_TICK = 64;
+    /**
+     * Cells stamped per tick. Lowered as the walls gained detail: each cell now
+     * writes noticeably more blocks, and a longer build is far better than a
+     * shorter one that stutters the server while it runs.
+     */
+    private static final int CELLS_PER_TICK = 24;
 
     private static final BlockState FLOOR = Blocks.MOSSY_STONE_BRICKS.defaultBlockState();
     private static final BlockState WALL = Blocks.STONE_BRICKS.defaultBlockState();
@@ -137,13 +142,146 @@ public final class MazeBuilder {
                     continue;
                 }
                 for (int y = MazeData.WALL_BASE_Y; y <= MazeData.WALL_TOP_Y; y++) {
-                    level.setBlock(new BlockPos(x, y, z), wallStone(rng), 2);
+                    level.setBlock(new BlockPos(x, y, z), wallBlock(x, y, z), 2);
                 }
             }
         }
         if (!glade) {
+            corridorFloor(level, cx, cz, openW, openE, openN, openS);
+            ivy(level, cx, cz, openW, openE, openN, openS);
             landmark(level, cx, cz, openW, openE, openN, openS);
         }
+    }
+
+    /**
+     * The face of the maze, and the single thing that decides whether it looks
+     * like a set or like a box.
+     *
+     * <p>Height does most of the work. The bottom courses are grimy and wet where
+     * the walls meet the ground, the middle is the weathered brick you spend the
+     * run staring at, and the top lightens so the walls read as tall from below.
+     * Vertical ribs every few blocks break up the flat, and everything is keyed
+     * off the block's own coordinates so the pattern is stable rather than
+     * static-noise - a wall you have seen before looks the way you remember it.
+     */
+    private static BlockState wallBlock(int x, int y, int z) {
+        int h = Math.floorMod(x * 73856093 ^ z * 19349663 ^ y * 83492791, 100);
+        int fromBase = y - MazeData.WALL_BASE_Y;
+        int height = MazeData.WALL_TOP_Y - MazeData.WALL_BASE_Y;
+
+        // Ribs: full-height pilasters every fifth block along the wall.
+        if (Math.floorMod(x, 5) == 0 && Math.floorMod(z, 5) == 0) {
+            return fromBase > height - 2
+                    ? Blocks.CHISELED_DEEPSLATE.defaultBlockState()
+                    : Blocks.DEEPSLATE_BRICKS.defaultBlockState();
+        }
+        // Cap course, so the tops silhouette instead of ending flat.
+        if (fromBase >= height - 1) {
+            return h < 40 ? Blocks.MOSSY_STONE_BRICK_SLAB.defaultBlockState()
+                    : Blocks.CHISELED_STONE_BRICKS.defaultBlockState();
+        }
+        // Damp, dirty footings.
+        if (fromBase <= 2) {
+            if (h < 30) {
+                return Blocks.MOSSY_COBBLESTONE.defaultBlockState();
+            }
+            return h < 55 ? Blocks.COBBLESTONE.defaultBlockState()
+                    : Blocks.MOSSY_STONE_BRICKS.defaultBlockState();
+        }
+        // Upper courses lighten, which makes the wall read as taller than it is.
+        if (fromBase > height * 2 / 3) {
+            return h < 12 ? Blocks.CRACKED_STONE_BRICKS.defaultBlockState()
+                    : h < 20 ? Blocks.CHISELED_STONE_BRICKS.defaultBlockState()
+                    : Blocks.STONE_BRICKS.defaultBlockState();
+        }
+        // The body of the wall.
+        if (h < 18) {
+            return Blocks.MOSSY_STONE_BRICKS.defaultBlockState();
+        }
+        if (h < 32) {
+            return Blocks.CRACKED_STONE_BRICKS.defaultBlockState();
+        }
+        if (h < 36) {
+            return Blocks.ANDESITE.defaultBlockState();
+        }
+        return Blocks.STONE_BRICKS.defaultBlockState();
+    }
+
+    /** Corridor underfoot: worn flags, grit, and moss creeping out of the joints. */
+    private static void corridorFloor(ServerLevel level, int cx, int cz,
+                                      boolean openW, boolean openE, boolean openN, boolean openS) {
+        for (int lx = 0; lx < MazeData.CELL; lx++) {
+            for (int lz = 0; lz < MazeData.CELL; lz++) {
+                if (!isCorridor(lx, lz, openW, openE, openN, openS)) {
+                    continue;
+                }
+                int x = cx * MazeData.CELL + lx;
+                int z = cz * MazeData.CELL + lz;
+                int h = Math.floorMod(x * 40503 ^ z * 26861, 100);
+                BlockState floor = h < 12 ? Blocks.MOSS_BLOCK.defaultBlockState()
+                        : h < 22 ? Blocks.GRAVEL.defaultBlockState()
+                        : h < 32 ? Blocks.COBBLESTONE.defaultBlockState()
+                        : h < 45 ? Blocks.MOSSY_STONE_BRICKS.defaultBlockState()
+                        : Blocks.STONE_BRICKS.defaultBlockState();
+                level.setBlock(new BlockPos(x, MazeData.FLOOR_Y, z), floor, 2);
+                if (h < 5) {
+                    level.setBlock(new BlockPos(x, MazeData.FLOOR_Y + 1, z),
+                            Blocks.MOSS_CARPET.defaultBlockState(), 2);
+                }
+            }
+        }
+    }
+
+    /**
+     * Ivy down the corridor walls - the single cheapest thing that stops the maze
+     * reading as a stone box. Hung from the wall face into the corridor air, so
+     * it only ever appears where somebody can actually see it.
+     */
+    private static void ivy(ServerLevel level, int cx, int cz,
+                            boolean openW, boolean openE, boolean openN, boolean openS) {
+        for (int across = MazeData.CORRIDOR_MIN; across <= MazeData.CORRIDOR_MAX; across++) {
+            hangIvy(level, cx, cz, across, !openN, Direction.NORTH);
+            hangIvy(level, cx, cz, across, !openS, Direction.SOUTH);
+            hangIvy(level, cx, cz, across, !openW, Direction.WEST);
+            hangIvy(level, cx, cz, across, !openE, Direction.EAST);
+        }
+    }
+
+    private static void hangIvy(ServerLevel level, int cx, int cz, int across,
+                                boolean hasWall, Direction wallSide) {
+        if (!hasWall) {
+            return;
+        }
+        boolean alongX = wallSide.getAxis() == Direction.Axis.Z;
+        int inner = wallSide == Direction.NORTH || wallSide == Direction.WEST
+                ? MazeData.CORRIDOR_MIN : MazeData.CORRIDOR_MAX;
+        int x = cx * MazeData.CELL + (alongX ? across : inner);
+        int z = cz * MazeData.CELL + (alongX ? inner : across);
+
+        int h = Math.floorMod(x * 15485863 ^ z * 32452843, 100);
+        if (h > 34) {
+            return;
+        }
+        // Vines attach to the face they are grown against, so the boolean is the
+        // side the wall is on - the opposite of the direction they hang toward.
+        BlockState vine = Blocks.VINE.defaultBlockState()
+                .setValue(sideProperty(wallSide), true);
+        int len = 2 + h % 5;
+        for (int i = 0; i < len; i++) {
+            BlockPos at = new BlockPos(x, MazeData.WALL_TOP_Y - 1 - i, z);
+            if (level.getBlockState(at).isAir()) {
+                level.setBlock(at, vine, 2);
+            }
+        }
+    }
+
+    private static net.minecraft.world.level.block.state.properties.BooleanProperty sideProperty(Direction d) {
+        return switch (d) {
+            case NORTH -> net.minecraft.world.level.block.state.properties.BlockStateProperties.NORTH;
+            case SOUTH -> net.minecraft.world.level.block.state.properties.BlockStateProperties.SOUTH;
+            case WEST -> net.minecraft.world.level.block.state.properties.BlockStateProperties.WEST;
+            default -> net.minecraft.world.level.block.state.properties.BlockStateProperties.EAST;
+        };
     }
 
     /** Which of the eight compass sections a cell belongs to. */
@@ -235,8 +373,9 @@ public final class MazeBuilder {
         return r < 7 ? WALL : r < 10 ? WALL_WORN : WALL_MOSS;
     }
 
-    /** Seals the outer rim so the only way out is an exit the day has opened. */
+    /** Seals the outer rim, then dresses the Glade. */
     private static void finish(ServerLevel level) {
+        GladeBuilder.build(level);
         int max = MazeData.SPAN - 1;
         for (int i = 0; i < MazeData.SPAN; i++) {
             for (int y = MazeData.WALL_BASE_Y; y <= MazeData.WALL_TOP_Y; y++) {

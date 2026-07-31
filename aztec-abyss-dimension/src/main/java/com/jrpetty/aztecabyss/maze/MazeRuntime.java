@@ -356,8 +356,18 @@ public final class MazeRuntime {
                 }
             }
             if (live) {
+                // The way out should be visible from a long way down a corridor.
                 level.setBlock(new BlockPos(p[0], MazeData.FLOOR_Y, p[2]),
                         Blocks.SEA_LANTERN.defaultBlockState(), 2);
+                for (int dy = 1; dy <= 4; dy++) {
+                    level.setBlock(new BlockPos(p[0], MazeData.WALL_BASE_Y + dy, p[2] + 1),
+                            Blocks.AIR.defaultBlockState(), 2);
+                }
+                level.setBlock(new BlockPos(p[0], MazeData.WALL_BASE_Y + 5, p[2]),
+                        Blocks.CHISELED_DEEPSLATE.defaultBlockState(), 2);
+                level.setBlock(new BlockPos(p[0], MazeData.WALL_BASE_Y + 4, p[2]),
+                        Blocks.LANTERN.defaultBlockState()
+                                .setValue(net.minecraft.world.level.block.state.properties.BlockStateProperties.HANGING, true), 2);
             }
         }
     }
@@ -374,10 +384,14 @@ public final class MazeRuntime {
                     int x = cx * MazeData.CELL + lx;
                     int z = cz * MazeData.CELL + lz;
                     for (int y = MazeData.WALL_BASE_Y; y <= MazeData.WALL_TOP_Y; y++) {
+                        // Closed, a door is a single great slab of polished stone
+                        // banded in chiselled courses - unmistakably a door, and
+                        // not to be confused with the wall either side of it.
+                        boolean band = ((y - MazeData.WALL_BASE_Y) % 4) == 0;
                         level.setBlock(new BlockPos(x, y, z), open
                                 ? Blocks.AIR.defaultBlockState()
-                                : (rng.nextInt(4) == 0 ? Blocks.CRACKED_STONE_BRICKS.defaultBlockState()
-                                : Blocks.STONE_BRICKS.defaultBlockState()), 2);
+                                : (band ? Blocks.CHISELED_DEEPSLATE.defaultBlockState()
+                                : Blocks.POLISHED_DEEPSLATE.defaultBlockState()), 2);
                     }
                 }
             }
