@@ -19,6 +19,12 @@ public record MapSelectPayload(int mapId) implements CustomPacketPayload {
     /** Sentinel the server sends to pop the picker open on the client. */
     public static final int OPEN = -1;
 
+    /**
+     * Sentinel meaning "not an arena at all - send me to the maze". Kept well
+     * clear of any real map index so adding arenas can never collide with it.
+     */
+    public static final int MAZE = 900;
+
     public static final Type<MapSelectPayload> TYPE =
             new Type<>(ResourceLocation.fromNamespaceAndPath(AztecAbyssConstants.MOD_ID, "map_select"));
 

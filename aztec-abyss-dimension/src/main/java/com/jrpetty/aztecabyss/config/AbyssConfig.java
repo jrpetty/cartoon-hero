@@ -103,6 +103,25 @@ public final class AbyssConfig {
                 .defineInRange("extractionChannelTicks", 40, 5, 600);
         b.pop();
 
+        b.push("maze");
+        GRIEVERS_ENABLED = b.comment("Grievers hunt the maze after dark.")
+                .define("grieversEnabled", true);
+        GRIEVER_BASE_CAP = b.comment("Grievers per runner in week one.")
+                .defineInRange("grieverBaseCapPerPlayer", 2, 0, 20);
+        GRIEVER_MAX_CAP = b.comment("Ceiling on Grievers per runner; the cap grows by one each week.")
+                .defineInRange("grieverMaxCapPerPlayer", 7, 0, 40);
+        GRIEVER_HEALTH = b.comment("Griever max health (a vanilla spider is 16).")
+                .defineInRange("grieverHealth", 60.0, 1.0, 1024.0);
+        GRIEVER_SPEED = b.comment("Griever movement speed (a vanilla spider is 0.3; below ~0.25 a runner outruns one).")
+                .defineInRange("grieverSpeed", 0.33, 0.05, 2.0);
+        GRIEVER_DAMAGE = b.comment("Griever attack damage.")
+                .defineInRange("grieverAttackDamage", 7.0, 0.0, 100.0);
+        MAZE_DEATH_PENALTY_SECONDS = b.comment("Seconds added to your run time each time you die in the maze. 0 disables.")
+                .defineInRange("mazeDeathPenaltySeconds", 30, 0, 3600);
+        MAZE_SHOW_BRIEFING = b.comment("Show newcomers the one-time maze rules message.")
+                .define("mazeShowBriefing", true);
+        b.pop();
+
         b.push("easteregg");
         ENABLE_RITUAL = b.comment("Enable the hidden brazier ritual and its secret reward.")
                 .define("enableRitual", true);
@@ -113,6 +132,15 @@ public final class AbyssConfig {
 
     private AbyssConfig() {
     }
+
+    public static final ModConfigSpec.BooleanValue GRIEVERS_ENABLED;
+    public static final ModConfigSpec.IntValue GRIEVER_BASE_CAP;
+    public static final ModConfigSpec.IntValue GRIEVER_MAX_CAP;
+    public static final ModConfigSpec.DoubleValue GRIEVER_HEALTH;
+    public static final ModConfigSpec.DoubleValue GRIEVER_SPEED;
+    public static final ModConfigSpec.DoubleValue GRIEVER_DAMAGE;
+    public static final ModConfigSpec.IntValue MAZE_DEATH_PENALTY_SECONDS;
+    public static final ModConfigSpec.BooleanValue MAZE_SHOW_BRIEFING;
 
     public static long cooldownMillis() {
         return REENTRY_COOLDOWN_HOURS.get() * 60L * 60L * 1000L;

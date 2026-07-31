@@ -13,6 +13,8 @@ import net.minecraft.world.phys.Vec3;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.neoforge.event.RegisterCommandsEvent;
+import net.neoforged.neoforge.event.entity.living.LivingDeathEvent;
+import net.neoforged.neoforge.event.entity.player.PlayerEvent;
 import net.neoforged.neoforge.event.level.LevelEvent;
 import net.neoforged.neoforge.event.tick.LevelTickEvent;
 
@@ -65,8 +67,41 @@ public final class MazeEvents {
                 .then(Commands.literal("enter").executes(ctx -> enter(ctx.getSource())))
                 .then(Commands.literal("leave").executes(ctx -> leave(ctx.getSource())))
                 .then(Commands.literal("status").executes(ctx -> status(ctx.getSource())))
-                .then(Commands.literal("section").executes(ctx -> section(ctx.getSource())));
+                .then(Commands.literal("section").executes(ctx -> section(ctx.getSource())))
+                .then(Commands.literal("leaderboard").executes(ctx -> leaderboard(ctx.getSource())))
+                .then(Commands.literal("top").executes(ctx -> leaderboard(ctx.getSource())))
+                .then(Commands.literal("stop").executes(ctx -> stop(ctx.getSource())))
+                .then(Commands.literal("griever").requires(src -> src.hasPermission(2))
+                        .executes(ctx -> spawnGriever(ctx.getSource())));
         event.getDispatcher().register(root);
+    }
+
+    /**
+     * Shared way in, used by both {@code /maze enter} and the portal picker.
+     * Refuses while the map is still going down rather than dropping someone
+     * into half a maze.
+     */
+    public static boolean sendToMaze(ServerPlayer player) {
+        if (player.getServer() == null) {
+            return false;
+        }
+        ServerLevel maze = player.getServer().getLevel(AztecAbyssConstants.MAZE_LEVEL_KEY);
+        if (maze == null) {
+            return false;
+        }
+        MazeBuilder.beginIfNeeded(maze);
+        if (MazeBuilder.isBuilding()) {
+            player.displayClientMessage(Component.literal(
+                    "§7The maze is still being raised — §e" + MazeBuilder.progressPercent()
+                            + "%§7. Try again in a moment."), true);
+            return false;
+        }
+        player.changeDimension(new DimensionTransition(maze,
+                new Vec3(MazeData.SPAWN_X + 0.5, MazeData.SPAWN_Y, MazeData.SPAWN_Z + 0.5),
+                Vec3.ZERO, 0.0F, 0.0F, DimensionTransition.DO_NOTHING));
+        player.displayClientMessage(Component.literal(
+                "§2§lTHE GLADE§r §7— " + MazeRuntime.status(maze)), false);
+        return true;
     }
 
     private static int enter(CommandSourceStack src) {
@@ -74,24 +109,7 @@ public final class MazeEvents {
         if (player == null || player.getServer() == null) {
             return 0;
         }
-        ServerLevel maze = player.getServer().getLevel(AztecAbyssConstants.MAZE_LEVEL_KEY);
-        if (maze == null) {
-            src.sendFailure(Component.literal("The maze dimension is not loaded."));
-            return 0;
-        }
-        MazeBuilder.beginIfNeeded(maze);
-        if (MazeBuilder.isBuilding()) {
-            src.sendSuccess(() -> Component.literal(
-                    "§7The maze is still being raised — §e" + MazeBuilder.progressPercent()
-                            + "%§7. Try again in a moment."), false);
-            return 0;
-        }
-        player.changeDimension(new DimensionTransition(maze,
-                new Vec3(MazeData.SPAWN_X + 0.5, MazeData.SPAWN_Y, MazeData.SPAWN_Z + 0.5),
-                Vec3.ZERO, 0.0F, 0.0F, DimensionTransition.DO_NOTHING));
-        player.displayClientMessage(Component.literal(
-                "§2§lTHE GLADE§r §7— " + MazeRuntime.status(maze)), false);
-        return 1;
+        return sendToMaze(player) ? 1 : 0;
     }
 
     private static int leave(CommandSourceStack src) {
@@ -113,6 +131,85 @@ public final class MazeEvents {
             return 0;
         }
         src.sendSuccess(() -> Component.literal("§6" + MazeRuntime.status(maze)), false);
+        return 1;
+    }
+
+    /**
+     * Dying in the maze costs time, not the run. The runner is put back in the
+     * Glade with their clock still going and a penalty on it.
+     */
+    @SubscribeEvent
+    public static void onDeath(LivingDeathEvent event) {
+        if (!(event.getEntity() instanceof ServerPlayer player)) {
+            if (event.getEntity() instanceof net.minecraft.world.entity.Mob mob
+                    && mob.level() instanceof ServerLevel lvl && isMaze(lvl)
+                    && Griever.isGriever(mob)) {
+                Griever.onDeath(lvl, mob);
+            }
+            return;
+        }
+        if (!(player.level() instanceof ServerLevel level) || !isMaze(level)) {
+            return;
+        }
+        MazeRuns.onDeath(player);
+    }
+
+    /** Respawning inside the maze puts you back in the Glade, not at world spawn. */
+    @SubscribeEvent
+    public static void onRespawn(PlayerEvent.PlayerRespawnEvent event) {
+        if (!(event.getEntity() instanceof ServerPlayer player)) {
+            return;
+        }
+        if (!(player.level() instanceof ServerLevel level) || !isMaze(level)) {
+            return;
+        }
+        player.teleportTo(level, MazeData.SPAWN_X + 0.5, MazeData.SPAWN_Y, MazeData.SPAWN_Z + 0.5,
+                java.util.Set.of(), 0.0F, 0.0F);
+    }
+
+    /** Leaving the dimension abandons whatever run was going. */
+    @SubscribeEvent
+    public static void onChangedDimension(PlayerEvent.PlayerChangedDimensionEvent event) {
+        if (event.getFrom().equals(AztecAbyssConstants.MAZE_LEVEL_KEY)) {
+            MazeRuns.abandon(event.getEntity().getUUID());
+        }
+    }
+
+    private static int leaderboard(CommandSourceStack src) {
+        java.util.List<MazeRuns.Record> top = MazeRuns.get(src.getServer()).top();
+        if (top.isEmpty()) {
+            src.sendSuccess(() -> Component.literal("§7Nobody has escaped the maze yet."), false);
+            return 1;
+        }
+        src.sendSuccess(() -> Component.literal("§6§l✦ FASTEST ESCAPES ✦"), false);
+        for (int i = 0; i < top.size(); i++) {
+            MazeRuns.Record r = top.get(i);
+            int rank = i + 1;
+            src.sendSuccess(() -> Component.literal("§e#" + rank + " §f" + r.name()
+                    + " §b" + MazeRuns.format(r.seconds())
+                    + " §7(day " + r.day() + ", " + r.layout()
+                    + (r.deaths() > 0 ? ", " + r.deaths() + " deaths" : "") + ")"), false);
+        }
+        return 1;
+    }
+
+    private static int stop(CommandSourceStack src) {
+        ServerPlayer player = src.getPlayer();
+        if (player == null) {
+            return 0;
+        }
+        MazeRuns.abandon(player.getUUID());
+        src.sendSuccess(() -> Component.literal("§7Run abandoned."), false);
+        return 1;
+    }
+
+    private static int spawnGriever(CommandSourceStack src) {
+        ServerPlayer player = src.getPlayer();
+        if (player == null || !(player.level() instanceof ServerLevel level) || !isMaze(level)) {
+            src.sendFailure(Component.literal("Only inside the maze."));
+            return 0;
+        }
+        Griever.spawnNear(level, player, net.minecraft.util.RandomSource.create());
         return 1;
     }
 

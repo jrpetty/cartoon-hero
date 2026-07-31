@@ -44,6 +44,15 @@ public final class MapSelectScreen extends Screen {
                 })
                 .bounds(this.width / 2 - 80, this.height - 42, 160, 20)
                 .build());
+        // The maze is deliberately set apart from the arena cards: no rounds, no
+        // rewards, no scoring in common with them.
+        addRenderableWidget(Button.builder(
+                        Component.literal("§5The Maze §8— a different game entirely"), b -> {
+                            PacketDistributor.sendToServer(new MapSelectPayload(MapSelectPayload.MAZE));
+                            onClose();
+                        })
+                .bounds(this.width / 2 - 110, this.height - 68, 220, 20)
+                .build());
     }
 
     /** The whole card is the click target, so selection feels like picking a tile. */

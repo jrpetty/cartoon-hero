@@ -48,6 +48,12 @@ public final class ModNetworking {
                 MapSelectPayload.STREAM_CODEC,
                 (payload, context) -> context.enqueueWork(() -> {
                     if (context.player() instanceof ServerPlayer sp) {
+                        // The maze is a different game, not another arena - it gets
+                        // routed straight there rather than recorded as a choice.
+                        if (payload.mapId() == MapSelectPayload.MAZE) {
+                            com.jrpetty.aztecabyss.maze.MazeEvents.sendToMaze(sp);
+                            return;
+                        }
                         int id = Math.max(0, Math.min(payload.mapId(),
                                 com.jrpetty.aztecabyss.worldgen.ArenaMap.values().length - 1));
                         sp.getPersistentData().putInt("aztecabyss_chosen_map", id);
