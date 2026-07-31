@@ -413,7 +413,12 @@ public final class RoundManager {
         return ROLE_NORMAL;
     }
 
-    /** Stamps a specialist's stats, look and name so it's readable in a crowd. */
+    /**
+     * Stamps a specialist's stats and - just as importantly - its look. Each role
+     * gets a distinct silhouette, a full themed armour set, a coloured outline
+     * glow (via a scoreboard team) and a permanent particle aura, so you can pick
+     * one out of a churning 100-mob horde at a glance and across a 100-block bridge.
+     */
     private static void applyRole(ServerLevel level, Mob mob, int role, List<ServerPlayer> present) {
         if (role == ROLE_NORMAL) {
             return;
@@ -422,34 +427,105 @@ public final class RoundManager {
         mob.setCustomNameVisible(true);
 
         if (role == ROLE_BREAKER) {
-            // Fast, fragile, single-minded.
+            // Lean, fast, fragile - a red streak sprinting down the bridge.
             scaleAttribute(mob, Attributes.MOVEMENT_SPEED, 1.45);
             scaleAttribute(mob, Attributes.MAX_HEALTH, 0.6);
+            setAttribute(mob, Attributes.KNOCKBACK_RESISTANCE, 0.0);
+            AttributeInstance scale = mob.getAttribute(Attributes.SCALE);
+            if (scale != null) {
+                scale.setBaseValue(0.85); // small and wiry
+            }
             mob.setHealth(mob.getMaxHealth());
-            mob.setCustomName(Component.literal("§c⇥ Breaker"));
-            mob.addEffect(new MobEffectInstance(MobEffects.MOVEMENT_SPEED, Integer.MAX_VALUE, 1, false, false));
+            mob.setCustomName(Component.literal("§c§l⇥ BREAKER"));
+            // Empty-handed - it isn't here to fight you, it's here to run past you.
+            equipNoDrop(mob, EquipmentSlot.MAINHAND, ItemStack.EMPTY);
+
+            // Blood-red leather - light armour for something built to run.
+            dyeAndEquip(mob, EquipmentSlot.HEAD, Items.LEATHER_HELMET, 0xB01818);
+            dyeAndEquip(mob, EquipmentSlot.CHEST, Items.LEATHER_CHESTPLATE, 0xB01818);
+            dyeAndEquip(mob, EquipmentSlot.LEGS, Items.LEATHER_LEGGINGS, 0x701010);
+            dyeAndEquip(mob, EquipmentSlot.FEET, Items.LEATHER_BOOTS, 0x701010);
+
+            // Speed particles trail it for free (client-side, no server cost).
+            mob.addEffect(new MobEffectInstance(MobEffects.MOVEMENT_SPEED, Integer.MAX_VALUE, 2, false, true));
             mob.addEffect(new MobEffectInstance(MobEffects.GLOWING, Integer.MAX_VALUE, 0, false, false));
+            tintOutline(level, mob, "aztecabyss_breaker", net.minecraft.ChatFormatting.RED);
         } else {
-            // Slow, tanky, and devastating if it reaches the Heart.
+            // A hulking armoured siege-engine of a thing.
             scaleAttribute(mob, Attributes.MOVEMENT_SPEED, 0.6);
             scaleAttribute(mob, Attributes.MAX_HEALTH, 2.2);
+            setAttribute(mob, Attributes.KNOCKBACK_RESISTANCE, 0.8);
             AttributeInstance armor = mob.getAttribute(Attributes.ARMOR);
             if (armor != null) {
                 armor.setBaseValue(Math.min(20.0, armor.getBaseValue() + 10.0));
             }
+            AttributeInstance scale = mob.getAttribute(Attributes.SCALE);
+            if (scale != null) {
+                scale.setBaseValue(1.45); // towers over the rank and file
+            }
             mob.setHealth(mob.getMaxHealth());
-            mob.setCustomName(Component.literal("§4⛏ Sapper"));
-            mob.setItemSlot(EquipmentSlot.HEAD, new ItemStack(Items.NETHERITE_HELMET));
-            mob.setDropChance(EquipmentSlot.HEAD, 0.0F);
+            mob.setCustomName(Component.literal("§4§l⛏ SAPPER"));
+
+            // Full netherite plate and a breaching axe.
+            equipNoDrop(mob, EquipmentSlot.HEAD, new ItemStack(Items.NETHERITE_HELMET));
+            equipNoDrop(mob, EquipmentSlot.CHEST, new ItemStack(Items.NETHERITE_CHESTPLATE));
+            equipNoDrop(mob, EquipmentSlot.LEGS, new ItemStack(Items.NETHERITE_LEGGINGS));
+            equipNoDrop(mob, EquipmentSlot.FEET, new ItemStack(Items.NETHERITE_BOOTS));
+            equipNoDrop(mob, EquipmentSlot.MAINHAND, new ItemStack(Items.NETHERITE_AXE));
+
+            // Angry red aura, again rendered client-side off the effect itself.
+            mob.addEffect(new MobEffectInstance(MobEffects.DAMAGE_BOOST, Integer.MAX_VALUE, 0, false, true));
             mob.addEffect(new MobEffectInstance(MobEffects.GLOWING, Integer.MAX_VALUE, 0, false, false));
+            tintOutline(level, mob, "aztecabyss_sapper", net.minecraft.ChatFormatting.DARK_RED);
+        }
+
+        // A burst as it comes through the gate, so specialists arrive with weight.
+        double mx = mob.getX();
+        double my = mob.getY();
+        double mz = mob.getZ();
+        if (role == ROLE_BREAKER) {
+            level.sendParticles(ParticleTypes.FLAME, mx, my + 0.8, mz, 20, 0.4, 0.5, 0.4, 0.06);
+            level.sendParticles(ParticleTypes.CRIT, mx, my + 0.8, mz, 14, 0.4, 0.5, 0.4, 0.1);
+            level.playSound(null, mob.blockPosition(), net.minecraft.sounds.SoundEvents.RAVAGER_ROAR,
+                    SoundSource.HOSTILE, 0.7F, 1.6F);
+        } else {
+            level.sendParticles(ParticleTypes.LARGE_SMOKE, mx, my + 1.0, mz, 24, 0.6, 0.7, 0.6, 0.02);
+            level.sendParticles(ParticleTypes.SOUL_FIRE_FLAME, mx, my + 0.5, mz, 18, 0.5, 0.5, 0.5, 0.03);
+            level.playSound(null, mob.blockPosition(), net.minecraft.sounds.SoundEvents.ANVIL_LAND,
+                    SoundSource.HOSTILE, 0.8F, 0.5F);
         }
 
         // Call it out so players can react rather than be blindsided.
         for (ServerPlayer p : present) {
             actionBar(p, role == ROLE_BREAKER
-                    ? "§c⇥ A Breaker is running for the Heart!"
-                    : "§4⛏ A Sapper is closing on the Heart — kill it first!");
+                    ? "§c§l⇥ BREAKER §7— running for the Heart!"
+                    : "§4§l⛏ SAPPER §7— kill it before it lands a blow!");
         }
+    }
+
+    /** Puts a mob on a coloured scoreboard team so its Glowing outline is tinted. */
+    private static void tintOutline(ServerLevel level, Mob mob, String teamName, net.minecraft.ChatFormatting colour) {
+        net.minecraft.world.scores.Scoreboard sb = level.getScoreboard();
+        net.minecraft.world.scores.PlayerTeam team = sb.getPlayerTeam(teamName);
+        if (team == null) {
+            team = sb.addPlayerTeam(teamName);
+            team.setColor(colour);
+            team.setSeeFriendlyInvisibles(false);
+        }
+        sb.addPlayerToTeam(mob.getStringUUID(), team);
+    }
+
+    private static void equipNoDrop(Mob mob, EquipmentSlot slot, ItemStack stack) {
+        mob.setItemSlot(slot, stack);
+        mob.setDropChance(slot, 0.0F);
+    }
+
+    /** Dyed leather piece, equipped with no drop chance. */
+    private static void dyeAndEquip(Mob mob, EquipmentSlot slot, net.minecraft.world.item.Item item, int rgb) {
+        ItemStack stack = new ItemStack(item);
+        stack.set(net.minecraft.core.component.DataComponents.DYED_COLOR,
+                new net.minecraft.world.item.component.DyedItemColor(rgb, false));
+        equipNoDrop(mob, slot, stack);
     }
 
     private static void equipWeapon(Mob mob, WaveMobs.Weapon weapon) {
@@ -1265,10 +1341,16 @@ public final class RoundManager {
     }
 
     private static void clearWaveMobs(ServerLevel level) {
+        net.minecraft.world.scores.Scoreboard sb = level.getScoreboard();
         level.getEntitiesOfClass(Mob.class,
                         game.getMap().bounds(),
                         m -> m.getPersistentData().getBoolean("aztecabyss_wave_mob"))
-                .forEach(m -> m.remove(Entity.RemovalReason.DISCARDED));
+                .forEach(m -> {
+                    // Drop specialists off their colour team so the scoreboard
+                    // doesn't accumulate dead UUIDs run after run.
+                    sb.removePlayerFromTeam(m.getStringUUID());
+                    m.remove(Entity.RemovalReason.DISCARDED);
+                });
         game.setAliveZombies(0);
     }
 

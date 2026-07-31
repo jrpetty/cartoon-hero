@@ -81,6 +81,11 @@ public final class AbyssEventHandler {
 
         // Any wave mob died (zombie, skeleton, creeper, ...): credit the killing participant.
         if (dying instanceof Mob mob && mob.getPersistentData().getBoolean("aztecabyss_wave_mob")) {
+            // Specialists sit on a colour team for their outline glow - take them
+            // back off it so the scoreboard doesn't fill with dead UUIDs.
+            if (mob.getPersistentData().getInt("aztecabyss_role") != 0) {
+                level.getScoreboard().removePlayerFromTeam(mob.getStringUUID());
+            }
             ServerPlayer killer = event.getSource().getEntity() instanceof ServerPlayer sp ? sp : null;
             RoundManager.onWaveZombieKilled(level, killer);
             return;
