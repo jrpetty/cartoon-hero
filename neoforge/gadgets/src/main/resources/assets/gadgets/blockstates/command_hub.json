@@ -1,6 +1,10 @@
 { "variants": {
-  "facing=north": { "model": "gadgets:block/command_hub" },
-  "facing=south": { "model": "gadgets:block/command_hub", "y": 180 },
-  "facing=west":  { "model": "gadgets:block/command_hub", "y": 270 },
-  "facing=east":  { "model": "gadgets:block/command_hub", "y": 90 }
+  "facing=north,alarm=false": { "model": "gadgets:block/command_hub" },
+  "facing=south,alarm=false": { "model": "gadgets:block/command_hub", "y": 180 },
+  "facing=west,alarm=false":  { "model": "gadgets:block/command_hub", "y": 270 },
+  "facing=east,alarm=false":  { "model": "gadgets:block/command_hub", "y": 90 },
+  "facing=north,alarm=true":  { "model": "gadgets:block/command_hub_alarm" },
+  "facing=south,alarm=true":  { "model": "gadgets:block/command_hub_alarm", "y": 180 },
+  "facing=west,alarm=true":   { "model": "gadgets:block/command_hub_alarm", "y": 270 },
+  "facing=east,alarm=true":   { "model": "gadgets:block/command_hub_alarm", "y": 90 }
 } }
