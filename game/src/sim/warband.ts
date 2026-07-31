@@ -98,6 +98,37 @@ function mergeBoard(pieces: Piece[], stash: string[]): { type: string; star: num
   return made;
 }
 
+/**
+ * Life lost when a warband is beaten, TFT-style: a flat toll that grows with
+ * the stage, plus one point per surviving enemy unit weighted by its star
+ * (a 3★ hurts three times as much as a 1★).
+ *
+ * The stage toll is what stops the early game from being decided by a couple of
+ * unlucky rounds, and what stops the late game from dragging.
+ */
+const STAGE_DAMAGE = [0, 0, 2, 5, 8, 11, 15, 20];
+export function stageOf(round: number): number { return Math.floor((round - 1) / 5) + 1; }
+export function stageBaseDamage(stage: number): number {
+  return STAGE_DAMAGE[Math.max(0, Math.min(stage, STAGE_DAMAGE.length - 1))];
+}
+/** Total life a defeat costs, before any commander shield. */
+export function roundDamage(round: number, survivorPower: number): number {
+  return stageBaseDamage(stageOf(round)) + survivorPower;
+}
+
+/**
+ * Gold paid for a run of wins *or* losses. Losing streaks pay too — that's the
+ * comeback lever: a warband being beaten every round is quietly banking for a
+ * level spike, so the lobby doesn't simply run away from whoever falls behind.
+ */
+const STREAK_GOLD = [0, 0, 1, 1, 2, 3];
+export function streakBonus(streak: number): number {
+  return STREAK_GOLD[Math.min(Math.abs(streak), STREAK_GOLD.length - 1)];
+}
+
+/** Bench slots — reserves beyond your deployed board, exactly like TFT's nine. */
+export const BENCH_SLOTS = 9;
+
 export class WarbandRun {
   private rng: RNG;
   round = 0;
@@ -291,12 +322,42 @@ export class WarbandRun {
 
   cost(type: string): number { return UNIT_TIER[type] ?? 1; }
 
+  /** Reserves currently on the bench (everything not deployed). */
+  benchCount(): number { return this.pieces.filter((p) => !p.deployed).length; }
+  /** Bench capacity — fixed, like TFT's nine slots. */
+  benchSlots(): number { return BENCH_SLOTS; }
+  /** True when the bench is full and no room remains for a plain buy. */
+  benchFull(): boolean { return this.benchCount() >= BENCH_SLOTS; }
+
+  /**
+   * Would buying this type immediately merge? Two 1★ copies already held means
+   * the third combines rather than taking a slot — so a full bench must never
+   * block the buy that would have freed it.
+   */
+  private wouldMerge(type: string): boolean {
+    return this.pieces.filter((p) => p.type === type && p.star === 1).length >= 2;
+  }
+
+  /** Whether a shop slot can be bought right now, and why not if it can't. */
+  canBuy(slot: number): { ok: boolean; reason?: "gold" | "bench" } {
+    if (this.phase !== "shop") return { ok: false };
+    const type = this.shop[slot];
+    if (!type) return { ok: false };
+    if (this.gold < this.cost(type)) return { ok: false, reason: "gold" };
+    // A full board *and* a full bench leaves nowhere to put it.
+    if (this.benchFull() && this.deployedCount() >= this.boardCap() && !this.wouldMerge(type)) {
+      return { ok: false, reason: "bench" };
+    }
+    return { ok: true };
+  }
+
   buy(slot: number): boolean {
     if (this.phase !== "shop") return false;
     const type = this.shop[slot];
     if (!type) return false;
     const c = this.cost(type);
     if (this.gold < c) return false;
+    if (!this.canBuy(slot).ok) return false;
     this.gold -= c;
     this.shop[slot] = null;
     this.takeFromPool(type); // claim the copy from the shared pool
@@ -457,8 +518,8 @@ export class WarbandRun {
     // Income: base + interest (1 per 10 gold, capped) + win/loss-streak bonus,
     // plus whatever the run's augments add.
     const interest = Math.min(this.interestCap(), Math.floor(this.gold / 10));
-    const streakBonus = Math.min(3, Math.abs(this.streak) >= 2 ? Math.floor(Math.abs(this.streak) / 2) + 1 : 0);
-    this.gold += 5 + interest + streakBonus + this.augSum((a) => a.gold) + (this.commander?.gold ?? 0);
+    const streak = streakBonus(this.streak);
+    this.gold += 5 + interest + streak + this.augSum((a) => a.gold) + (this.commander?.gold ?? 0);
     this.freeRerolls = this.commander?.freeRerolls ?? 0; // the perk refreshes every round
     // Augment-granted free XP (a levelling engine).
     const freeXp = this.augSum((a) => a.xp);
@@ -594,6 +655,18 @@ export class WarbandRun {
   sideOpts(): SideOpts {
     return { buff: this.warbandBuff(), traitBonus: this.traitBonusMap() };
   }
+
+  /**
+   * The worst a defeat this round could cost: the stage toll plus every enemy
+   * unit surviving. Shown before you commit, so the fight is an informed bet.
+   */
+  worstCaseDamage(): number {
+    const power = this.pendingOpp.reduce((n, u) => n + (u.star ?? 1), 0);
+    return Math.max(1, roundDamage(this.round, power) - (this.commander?.lossShield ?? 0));
+  }
+
+  /** Gold your current streak pays at the start of next round. */
+  streakGold(): number { return streakBonus(this.streak); }
 
   /** This round's battlefield modifiers — applied identically to both sides. */
   fieldOpts(): SideOpts {
@@ -747,11 +820,11 @@ export class WarbandRun {
     const foe = this.pendingFoe;
     if (!foe) { this.outcome = "win"; this.phase = "over"; return; }
     const won = res.winner === "A";
-    // Lose → damage scales with enemy survivors; a commander can blunt it.
-    const raw = 3 + res.powerB * 2;
+    // Stage toll + star-weighted survivors; a commander can blunt what you take.
+    const raw = roundDamage(this.round, res.powerB);
     const dmg = won ? 0 : Math.max(1, raw - (this.commander?.lossShield ?? 0));
     if (won) {
-      foe.life -= 3 + res.powerA * 2;
+      foe.life -= roundDamage(this.round, res.powerA);
       if (foe.life <= 0) { foe.life = 0; foe.alive = false; }
       this.streak = Math.max(1, this.streak + 1);
     } else {

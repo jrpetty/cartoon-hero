@@ -63,11 +63,18 @@ and watch it fight — the units, counters, armour and abilities are the real RT
 ones, not a separate ruleset.
 
 **The loop.** Each round you take income (5 base + interest, 1 per 10 gold banked,
-plus a win/loss-streak bonus), buy from a five-slot shop, and fight. Three copies
-of a unit merge into a 2★; three of those into a 3★. Levelling costs gold, and
-your **level is your board size** — so teching, rerolling and saving for interest
-all compete for the same coins. Lose a fight and you lose life; last warband
-standing wins.
+plus a streak bonus), buy from a five-slot shop, and fight. Three copies of a
+unit merge into a 2★; three of those into a 3★. Levelling costs gold, and your
+**level is your board size** — so teching, rerolling and saving for interest all
+compete for the same coins. Reserves sit on a fixed nine-slot bench. Lose a
+fight and you lose life; last warband standing wins.
+
+Defeat costs a stage toll that grows as the run goes on, plus one point per
+surviving enemy unit weighted by its star — so a 3★ left standing hurts three
+times as much as a 1★. The screen tells you the worst case before you commit.
+Streaks pay gold whether you're winning *or* losing: a warband being beaten
+every round is quietly banking for a level spike, so the lobby can't simply run
+away from whoever falls behind.
 
 - **Shared pool** — every warband in the lobby draws from one finite pool of unit
   copies, so contesting a comp genuinely starves your rivals (and you).

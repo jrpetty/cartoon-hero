@@ -13,7 +13,7 @@ import { drawUnit, setTeamColorResolver } from "../render/draw";
 import { Kind, Entity } from "../sim/types";
 import { TILE } from "../content/balance";
 import { UNITS } from "../content/units";
-import { WarbandRun, UNIT_TIER, Piece } from "../sim/warband";
+import { WarbandRun, UNIT_TIER, Piece, BENCH_SLOTS } from "../sim/warband";
 import { LiveBattle, GRID_COLS, GRID_ROWS, GRID_CELL } from "../sim/autobattle";
 import { traitsOf, Buff } from "../sim/traits";
 import { Item, applyItems, itemDef, isComponent, buildsInto } from "../sim/items";
@@ -333,7 +333,11 @@ export class WarbandScreen {
 
     // ---- bench (your pieces) ----
     const benchY = boardBottom + 8;
+    const benchUsed = run.benchCount();
     ui.text("Bench", boardX, benchY - 2, { size: 12, bold: true, color: "#9a917b" });
+    ui.text(`${benchUsed} / ${run.benchSlots()}`, boardX + 44, benchY - 2, {
+      size: 11, bold: true, color: run.benchFull() ? "#e0786a" : "#6f6a5c",
+    });
     if (this.selectedItem >= 0 && this.selectedItem < run.itemStash.length) {
       ui.text("Relic ready — click a unit to equip it", boardX + 52, benchY - 2, { size: 12, bold: true, color: "#ffd24a" });
     } else if (this.selectedItem >= run.itemStash.length) this.selectedItem = -1;
@@ -342,10 +346,22 @@ export class WarbandScreen {
     // field it, into the Sell box to sell it, or click with a relic to equip.
     const reserve = run.pieces.map((_, i) => i).filter((i) => !run.pieces[i].deployed);
     const cardW = 78;
-    const cardH = benchH - 6;
-    reserve.forEach((i, k) => {
+    const cardH = benchH - 14; // clear of the shop panel below
+    // A fixed rank of slots, so the bench reads as a real capacity you can fill.
+    for (let k = 0; k < BENCH_SLOTS; k++) {
       const cx = boardX + k * (cardW + 6);
-      if (cx + cardW > W - 16) return; // overflow guard (rare; bench is wide)
+      if (cx + cardW > W - 16) break;
+      const i = reserve[k];
+      if (i == null) {
+        // An empty slot: a dashed frame, so "how much room is left" is visible.
+        ctx.fillStyle = "rgba(0,0,0,0.22)";
+        this.roundRect(ctx, cx, benchY + 14, cardW, cardH, 6); ctx.fill();
+        ctx.strokeStyle = "rgba(255,255,255,0.09)"; ctx.lineWidth = 1;
+        ctx.setLineDash([4, 4]);
+        this.roundRect(ctx, cx + 0.5, benchY + 14.5, cardW - 1, cardH - 1, 6); ctx.stroke();
+        ctx.setLineDash([]);
+        continue;
+      }
       this.pieceCard(cx, benchY + 14, cardW, cardH, run.pieces[i], false, this.heldPiece === i);
       const over = ui.mx >= cx && ui.mx <= cx + cardW && ui.my >= benchY + 14 && ui.my <= benchY + 14 + cardH;
       if (run.phase === "shop" && over && !ui.pointerConsumed) {
@@ -355,9 +371,10 @@ export class WarbandScreen {
           this.heldPiece = i; this.heldFromBoard = false; this.grabbedThisPress = true; ui.pointerConsumed = true; audio.play("select");
         }
       }
-    });
-    if (run.pieces.length === 0) ui.text("Buy units from the shop below…", boardX, benchY + 40, { size: 13, color: "#9a917b" });
-    else if (reserve.length === 0) ui.text("(every unit is deployed — buy more or level up for a bigger board)", boardX, benchY + 40, { size: 12, color: "#6f6a5c" });
+    }
+    if (run.pieces.length === 0) {
+      ui.text("Buy units from the shop below…", boardX + BENCH_SLOTS * (cardW + 6) + 10, benchY + 40, { size: 12, color: "#9a917b" });
+    }
 
     // ---- shop / actions (bottom) ----
     const shopY = shopTop;
@@ -370,7 +387,10 @@ export class WarbandScreen {
       run.shop.forEach((type, i) => {
         const cx = bx + i * (sw + 8);
         const cy = shopY + 14;
-        if (type) this.shopCard(cx, cy, sw, 70, type, run.gold >= run.cost(type), run.poolCount(type), () => { if (run.buy(i)) audio.play("coin"); });
+        if (type) {
+          const can = run.canBuy(i);
+          this.shopCard(cx, cy, sw, 70, type, can.ok, run.poolCount(type), can.reason, () => { if (run.buy(i)) audio.play("coin"); });
+        }
         else { ctx.fillStyle = "rgba(0,0,0,0.25)"; ctx.fillRect(cx, cy, sw, 70); }
       });
       const rxx = bx + 5 * (120 + 8) + 8;
@@ -386,6 +406,15 @@ export class WarbandScreen {
         disabled: run.gold < 4 || run.level >= 9, size: 13,
         tooltip: ["+4 XP · bigger board", `Shop odds now: ${odds.map((o, i) => `T${i + 1} ${o}%`).filter((_, i) => odds[i] > 0).join("  ")}`],
       })) { if (run.buyXp()) audio.play("levelup"); }
+      // What this fight is actually worth risking, before you commit to it.
+      const worst = run.worstCaseDamage();
+      const sg = run.streakGold();
+      ui.text(`Defeat costs up to ${worst} life`, rxx + 138, shopY + 26, {
+        size: 11, bold: true, color: worst >= run.life ? "#e0564a" : "#e0a878",
+      });
+      ui.text(sg > 0 ? `Streak pays +${sg}g next round` : "No streak bonus yet", rxx + 138, shopY + 44, {
+        size: 11, color: sg > 0 ? "#7df2a9" : "#6f6a5c",
+      });
       if (ui.button("⚔ FIGHT", rxx, shopY + 92, 130, 36, { accent: true, size: 16, tooltip: ["Send your warband into the arena."] })) {
         if (run.beginFight()) {
           this.battle = new LiveBattle(run.boardUnits(), run.pendingOpp, run.pendingSeed, 30, run.sideOpts(), run.fieldOpts());
@@ -1619,7 +1648,10 @@ export class WarbandScreen {
     if (hover && this.heldPiece < 0) this.unitTip = { p, x: x + w + 6, y: y - 70 };
   }
 
-  private shopCard(x: number, y: number, w: number, h: number, type: string, affordable: boolean, poolLeft: number, onClick: () => void) {
+  private shopCard(
+    x: number, y: number, w: number, h: number, type: string, affordable: boolean,
+    poolLeft: number, blocked: "gold" | "bench" | undefined, onClick: () => void,
+  ) {
     const ctx = ui.ctx;
     const tier = UNIT_TIER[type] ?? 1;
     const col = TIER_COLOR[tier];
@@ -1648,8 +1680,12 @@ export class WarbandScreen {
     ctx.globalAlpha = affordable ? 1 : 0.45;
     this.styleGlyph(ctx, x + w - 15, y + oy + 15, 6, sd2);
     ctx.globalAlpha = 1;
-    // Copies left in the shared lobby pool.
-    ui.text(`${poolLeft} left`, x + w / 2, y + oy + h - 10, { align: "center", size: 9.5, color: poolLeft <= 3 ? "#e0786a" : "#8a8278" });
+    // Copies left in the shared lobby pool — or why this one can't be bought.
+    if (blocked === "bench") {
+      ui.text("bench full", x + w / 2, y + oy + h - 10, { align: "center", size: 9.5, bold: true, color: "#e0786a" });
+    } else {
+      ui.text(`${poolLeft} left`, x + w / 2, y + oy + h - 10, { align: "center", size: 9.5, color: poolLeft <= 3 ? "#e0786a" : "#8a8278" });
+    }
     // Gold coin with the cost.
     this.coin(ctx, x + w - 18, y + oy + h - 13, tier, affordable);
     if (hover) this.unitTip = { p: { type, star: 1, items: [] }, x: x + w + 6, y: y - 150 };

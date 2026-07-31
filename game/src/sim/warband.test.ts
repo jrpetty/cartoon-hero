@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { WarbandRun, UNIT_TIER } from "./warband";
+import { WarbandRun, UNIT_TIER, BENCH_SLOTS, stageOf, stageBaseDamage, roundDamage, streakBonus } from "./warband";
 import { AUGMENTS, AUGMENT_ROUNDS, augmentById, offerAugments, combinedBuff, combinedTraitBonus, tierForRound } from "./augments";
 import { isCreepRound, campForRound, campBoard } from "./creeps";
 import { RNG } from "../engine/rng";
@@ -649,6 +649,112 @@ describe("Warband battlefield conditions", () => {
     const f = run.fieldOpts();
     expect(f.buff).toBe(run.condition.all);
     expect(f.traitBuffs).toBe(run.condition.traits);
+  });
+});
+
+describe("Warband damage & streaks", () => {
+  it("charges a stage toll plus star-weighted survivors", () => {
+    expect(stageOf(1)).toBe(1);
+    expect(stageOf(5)).toBe(1);
+    expect(stageOf(6)).toBe(2);
+    expect(stageOf(11)).toBe(3);
+    // Stage 1 costs nothing but the survivors — early losses stay survivable.
+    expect(roundDamage(1, 0)).toBe(0);
+    expect(roundDamage(3, 4)).toBe(4);
+    // The toll grows with the stage, so late rounds actually close a run out.
+    expect(roundDamage(8, 4)).toBeGreaterThan(roundDamage(3, 4));
+    expect(roundDamage(20, 4)).toBeGreaterThan(roundDamage(8, 4));
+    // A 3★ survivor hurts three times as much as a 1★.
+    expect(roundDamage(6, 3) - roundDamage(6, 1)).toBe(2);
+    // It never runs away past the table's end.
+    expect(roundDamage(500, 2)).toBe(roundDamage(100, 2));
+  });
+
+  it("pays gold for losing streaks as well as winning ones", () => {
+    expect(streakBonus(0)).toBe(0);
+    expect(streakBonus(1)).toBe(0);
+    expect(streakBonus(2)).toBe(1);
+    expect(streakBonus(4)).toBe(2);
+    expect(streakBonus(9)).toBe(3); // capped
+    // Symmetric: falling behind banks gold, which is the comeback lever.
+    for (const n of [0, 1, 2, 3, 4, 5, 9]) expect(streakBonus(-n)).toBe(streakBonus(n));
+  });
+
+  it("previews the worst a defeat could cost, and the commander blunts it", () => {
+    const bare = new WarbandRun(81, null);
+    advanceTo(bare, 4);
+    const power = bare.pendingOpp.reduce((n, u) => n + (u.star ?? 1), 0);
+    expect(bare.worstCaseDamage()).toBe(roundDamage(bare.round, power));
+
+    const priest = new WarbandRun(81, "warpriest"); // −3 life on a defeat
+    advanceTo(priest, 4);
+    expect(priest.worstCaseDamage()).toBeLessThan(bare.worstCaseDamage());
+    expect(priest.worstCaseDamage()).toBeGreaterThanOrEqual(1); // never free
+  });
+
+  it("actually applies the formula when a fight is lost", () => {
+    const run = new WarbandRun(82, null);
+    advanceTo(run, 4);
+    run.pieces.length = 0; // no board at all → a guaranteed loss
+    const before = run.life;
+    run.fight();
+    if (run.lastResult && !run.lastResult.won && !run.lastResult.creep) {
+      expect(before - run.life).toBe(run.lastResult.dmg);
+      expect(run.lastResult.dmg).toBe(roundDamage(run.round, run.lastResult.foeLeft > 0 ? run.lastResult.dmg - stageBaseDamage(stageOf(run.round)) : 0));
+      expect(run.streak).toBeLessThan(0);
+      expect(run.streakGold()).toBe(streakBonus(run.streak));
+    }
+  });
+});
+
+describe("Warband bench", () => {
+  it("has a fixed nine slots", () => {
+    const run = new WarbandRun(83, null);
+    expect(BENCH_SLOTS).toBe(9);
+    expect(run.benchSlots()).toBe(9);
+    expect(run.benchCount()).toBe(0);
+    expect(run.benchFull()).toBe(false);
+  });
+
+  it("refuses a buy when board and bench are both full", () => {
+    const run = new WarbandRun(84, null);
+    run.gold = 500; run.level = 1; // board cap 1 → everything else benches
+    // Fill the bench with nine distinct types (no merges to free space).
+    const types = ["militia", "spearman", "scout", "raider", "archer", "skirmisher", "horseman", "javelin", "pikeman", "knight"];
+    for (const t of types) { run.shop = [t, t, t, t, t]; run.buy(0); }
+    expect(run.benchCount()).toBe(run.benchSlots());
+    expect(run.benchFull()).toBe(true);
+    // A further distinct type has nowhere to go.
+    run.shop = ["crossbow", null, null, null, null];
+    expect(run.canBuy(0)).toEqual({ ok: false, reason: "bench" });
+    const gold = run.gold;
+    expect(run.buy(0)).toBe(false);
+    expect(run.gold).toBe(gold); // and it costs nothing
+  });
+
+  it("still allows a buy that merges, even with a full bench", () => {
+    const run = new WarbandRun(85, null);
+    run.gold = 500; run.level = 1;
+    // Two militia (so a third merges) plus eight other types: ten pieces, one
+    // of which deploys at level 1, leaving the nine-slot bench exactly full.
+    run.shop = ["militia", "militia", "militia", "militia", "militia"];
+    run.buy(0); run.buy(1);
+    for (const t of ["spearman", "scout", "raider", "archer", "skirmisher", "horseman", "javelin", "pikeman"]) {
+      run.shop = [t, t, t, t, t]; run.buy(0);
+    }
+    expect(run.benchFull()).toBe(true);
+    // The third militia combines instead of taking a slot, so it's allowed.
+    run.shop = ["militia", null, null, null, null];
+    expect(run.canBuy(0).ok).toBe(true);
+    expect(run.buy(0)).toBe(true);
+    expect(run.pieces.some((p) => p.type === "militia" && p.star === 2)).toBe(true);
+  });
+
+  it("reports 'gold' rather than 'bench' when you simply can't afford it", () => {
+    const run = new WarbandRun(86, null);
+    run.gold = 0;
+    run.shop = ["hero", null, null, null, null];
+    expect(run.canBuy(0)).toEqual({ ok: false, reason: "gold" });
   });
 });
 
