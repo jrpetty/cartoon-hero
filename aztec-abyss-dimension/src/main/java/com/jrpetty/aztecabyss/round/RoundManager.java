@@ -1716,6 +1716,9 @@ public final class RoundManager {
                     sb.removePlayerFromTeam(m.getStringUUID());
                     m.remove(Entity.RemovalReason.DISCARDED);
                 });
+        // Uncollected power-ups go with them. They have an unlimited lifetime, so
+        // one left lying at the end of a run would still be there for the next.
+        OutpostPowerUps.clearDrops(level, game.getMap());
         game.setAliveZombies(0);
     }
 

@@ -164,6 +164,22 @@ public final class OutpostPowerUps {
         }
     }
 
+    /**
+     * Sweeps every uncollected drop off the floor.
+     *
+     * <p>Drops are given an unlimited lifetime so the rot timer above is the only
+     * thing that removes them - which means one lying unclaimed when a run ends
+     * would still be lying there when the next one starts, and the first player
+     * past it gets an Insta-Kill on round one for nothing. Called when the session
+     * tears down.
+     */
+    public static void clearDrops(ServerLevel level, ArenaMap map) {
+        for (ItemEntity item : level.getEntitiesOfClass(ItemEntity.class, map.bounds(),
+                e -> kindOf(e.getItem()) != null)) {
+            item.discard();
+        }
+    }
+
     private static Kind kindOf(ItemStack stack) {
         CustomData data = stack.get(DataComponents.CUSTOM_DATA);
         if (data == null) {
