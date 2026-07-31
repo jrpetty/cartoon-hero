@@ -9,6 +9,7 @@ import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.entity.SignBlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.BlockStateProperties;
+import net.minecraft.world.level.block.state.properties.Half;
 import net.minecraft.world.phys.AABB;
 
 /**
@@ -47,6 +48,10 @@ public final class OutpostBuilder {
     private static final int SHAFT_X = 8;
     /** Where the upper floor begins - west of this the hall is double height. */
     private static final int UPPER_EDGE = -2;
+    /** Walkable floor of the cellar, and the block course beneath it. */
+    private static final int CELLAR = -5;
+    /** East edge of the cellar and of the stair well that drops into it. */
+    private static final int CELLAR_EAST = 3;
 
     private static final int PEN_DEPTH = 6;
 
@@ -74,10 +79,11 @@ public final class OutpostBuilder {
     /** The standings slab on the hall's west wall. */
     public static final BlockPos MONUMENT = new BlockPos(CENTER_X - 12, FLOOR_Y, CENTER_Z - 2);
 
-    /** Which area each window belongs to: 0 hall, 1 back room, 2 upstairs. */
+    /** Which area each window belongs to. */
     public static final int AREA_HALL = 0;
     public static final int AREA_BACK = 1;
     public static final int AREA_UPSTAIRS = 2;
+    public static final int AREA_CELLAR = 3;
 
     /**
      * The ten windows. Ground-floor windows sit at head height on the outer
@@ -95,12 +101,16 @@ public final class OutpostBuilder {
             new BlockPos(CENTER_X + 9, FLOOR_Y + UPPER + 1, CENTER_Z - IN_Z - 1),  // 7 upstairs, north
             new BlockPos(CENTER_X + IN_X + 1, FLOOR_Y + UPPER + 1, CENTER_Z - 4),  // 8 upstairs, east
             new BlockPos(CENTER_X + 3, FLOOR_Y + UPPER + 1, CENTER_Z + IN_Z + 1),  // 9 upstairs, south
+            // Coal chutes at cellar floor level - no sill, so these come at you fast.
+            new BlockPos(CENTER_X - 10, FLOOR_Y + CELLAR, CENTER_Z + IN_Z + 1),    // 10 cellar, south
+            new BlockPos(CENTER_X - 3, FLOOR_Y + CELLAR, CENTER_Z + IN_Z + 1),     // 11 cellar, south
     };
 
     public static final Direction[] GATE_FACINGS = new Direction[]{
             Direction.WEST, Direction.WEST, Direction.NORTH, Direction.SOUTH,
             Direction.SOUTH, Direction.EAST,
             Direction.NORTH, Direction.NORTH, Direction.EAST, Direction.SOUTH,
+            Direction.SOUTH, Direction.SOUTH,
     };
 
     /** Which area each window opens into - a sealed area never spawns anything. */
@@ -108,23 +118,26 @@ public final class OutpostBuilder {
             AREA_HALL, AREA_HALL, AREA_HALL, AREA_HALL,
             AREA_BACK, AREA_BACK,
             AREA_UPSTAIRS, AREA_UPSTAIRS, AREA_UPSTAIRS, AREA_UPSTAIRS,
+            AREA_CELLAR, AREA_CELLAR,
     };
 
     public static final String[] GATE_LABELS = {
             "HALL-W1", "HALL-W2", "HALL-N", "HALL-S",
             "BACK-S", "BACK-E",
             "UP-N1", "UP-N2", "UP-E", "UP-S",
+            "CELLAR-W", "CELLAR-E",
     };
 
     /** The two rubble piles, indexed by the area each one opens. */
-    public static final BlockPos DEBRIS_BACK = new BlockPos(CENTER_X + DIVIDE_X, FLOOR_Y + 1, CENTER_Z);
-    public static final BlockPos DEBRIS_STAIRS = new BlockPos(CENTER_X + SHAFT_X, FLOOR_Y + 1, CENTER_Z + 8);
+    public static final BlockPos DEBRIS_BACK = new BlockPos(CENTER_X + DIVIDE_X, FLOOR_Y, CENTER_Z);
+    public static final BlockPos DEBRIS_STAIRS = new BlockPos(CENTER_X + SHAFT_X, FLOOR_Y, CENTER_Z + 8);
+    public static final BlockPos DEBRIS_CELLAR = new BlockPos(CENTER_X + 2, FLOOR_Y, CENTER_Z - 3);
 
     /** Four grave-candles, in the order they must be doused. Three sit behind rubble. */
     public static final BlockPos[] SEALS = new BlockPos[]{
             new BlockPos(CENTER_X - 11, FLOOR_Y + 1, CENTER_Z - 8),                 // hall
             new BlockPos(CENTER_X + 11, FLOOR_Y + 1, CENTER_Z - 8),                 // back room
-            new BlockPos(CENTER_X - 1, FLOOR_Y + UPPER + 1, CENTER_Z + 6),          // upstairs
+            new BlockPos(CENTER_X - 6, FLOOR_Y + CELLAR, CENTER_Z + 4),             // cellar
             new BlockPos(CENTER_X + 1, FLOOR_Y + UPPER + 1, CENTER_Z - 8),          // upstairs
     };
 
@@ -133,7 +146,7 @@ public final class OutpostBuilder {
 
     public static AABB bounds() {
         int r = IN_X + PEN_DEPTH + 4;
-        return new AABB(CENTER_X - r, FLOOR_Y - 6, CENTER_Z - r,
+        return new AABB(CENTER_X - r, FLOOR_Y + CELLAR - 8, CENTER_Z - r,
                 CENTER_X + r, FLOOR_Y + ROOF + 6, CENTER_Z + r);
     }
 
@@ -144,6 +157,7 @@ public final class OutpostBuilder {
     public static void build(ServerLevel level) {
         RandomSource rng = RandomSource.create(0x4E4143485431L);
         shell(level, rng);
+        cellar(level, rng);
         upperFloor(level, rng);
         divideWall(level);
         staircase(level);  // must follow the floor: it cuts the stairwell out of it
@@ -155,6 +169,7 @@ public final class OutpostBuilder {
         placeDebris(level);
         placeSeals(level);
         placeLoot(level);
+        detail(level, rng);
         // Sentinel under the extraction glyph: marks the Outpost as built.
         level.setBlock(EXTRACTION.below(), Blocks.GILDED_BLACKSTONE.defaultBlockState(), 2);
     }
@@ -163,7 +178,7 @@ public final class OutpostBuilder {
     private static void shell(ServerLevel level, RandomSource rng) {
         for (int x = -IN_X - 1; x <= IN_X + 1; x++) {
             for (int z = -IN_Z - 1; z <= IN_Z + 1; z++) {
-                for (int y = -1; y <= ROOF; y++) {
+                for (int y = CELLAR - 2; y <= ROOF; y++) {
                     level.setBlock(at(x, y, z), wallStone(rng), 2);
                 }
             }
@@ -176,6 +191,66 @@ public final class OutpostBuilder {
                 }
             }
         }
+    }
+
+    /**
+     * The cellar under the hall, and the stair well that drops into it.
+     *
+     * <p>Reached through a boarded-up hatch in the hall's north-east corner. Its
+     * two windows are coal chutes at floor level with no sill at all, so nothing
+     * has to climb to get in - which is what makes the cheapest loot on the map
+     * sit down here.
+     */
+    private static void cellar(ServerLevel level, RandomSource rng) {
+        // Hollow the cellar out under the hall.
+        for (int x = -IN_X; x <= CELLAR_EAST; x++) {
+            for (int z = -IN_Z; z <= IN_Z; z++) {
+                level.setBlock(at(x, CELLAR - 1, z), Blocks.DEEPSLATE_TILES.defaultBlockState(), 2);
+                for (int y = CELLAR; y <= -2; y++) {
+                    level.setBlock(at(x, y, z), Blocks.AIR.defaultBlockState(), 2);
+                }
+            }
+        }
+        // Drop the hall floor away over the stair well.
+        for (int x = 0; x <= CELLAR_EAST; x++) {
+            for (int z = -IN_Z; z <= -4; z++) {
+                level.setBlock(at(x, -1, z), Blocks.AIR.defaultBlockState(), 2);
+            }
+        }
+        // Five steps down, running north into the cellar's far corner.
+        for (int i = 0; i <= 4; i++) {
+            int z = -4 - i;
+            for (int x = 0; x <= CELLAR_EAST; x++) {
+                for (int y = CELLAR; y <= -1 - i; y++) {
+                    level.setBlock(at(x, y, z), y == -1 - i
+                            ? Blocks.DEEPSLATE_TILE_STAIRS.defaultBlockState()
+                            .setValue(BlockStateProperties.HORIZONTAL_FACING, Direction.NORTH)
+                            : Blocks.DEEPSLATE_BRICKS.defaultBlockState(), 2);
+                }
+            }
+        }
+        // Kerb round the opening so nobody walks into it in the dark, with the
+        // one hatch through it that the rubble seals.
+        for (int x = -1; x <= CELLAR_EAST + 1; x++) {
+            for (int y = 0; y < UPPER; y++) {
+                boolean hatch = x >= 1 && x <= CELLAR_EAST && y <= 2;
+                level.setBlock(at(x, y, -3), hatch ? Blocks.AIR.defaultBlockState() : WALL, 2);
+            }
+        }
+        for (int z = -IN_Z; z <= -3; z++) {
+            for (int y = 0; y < UPPER; y++) {
+                level.setBlock(at(-1, y, z), WALL, 2);
+            }
+        }
+        // Iron bars and damp: it reads as a cellar, not a second hall.
+        for (int z = -IN_Z + 1; z <= IN_Z - 1; z += 4) {
+            level.setBlock(at(-IN_X + 1, CELLAR + 2, z), Blocks.IRON_BARS.defaultBlockState(), 2);
+            if (rng.nextBoolean()) {
+                level.setBlock(at(-IN_X + 2, CELLAR, z), Blocks.COBWEB.defaultBlockState(), 2);
+            }
+        }
+        level.setBlock(at(-6, CELLAR + 3, 0), Blocks.SOUL_LANTERN.defaultBlockState()
+                .setValue(BlockStateProperties.HANGING, true), 2);
     }
 
     private static BlockState wallStone(RandomSource rng) {
@@ -279,6 +354,14 @@ public final class OutpostBuilder {
     }
 
     /** A sealed chamber behind every window. There is no outside to this map. */
+    /**
+     * A sealed chamber behind every window. There is no outside to this map.
+     *
+     * <p>Every chamber is filled solid before any of them is hollowed out. Doing
+     * it per-window would let a later pen's stonework backfill an earlier one -
+     * which matters here, because the cellar chutes sit almost directly beneath
+     * the hall's south windows.
+     */
     private static void buildPens(ServerLevel level) {
         for (int i = 0; i < GATES.length; i++) {
             BlockPos g = GATES[i];
@@ -292,6 +375,11 @@ public final class OutpostBuilder {
                     }
                 }
             }
+        }
+        for (int i = 0; i < GATES.length; i++) {
+            BlockPos g = GATES[i];
+            Direction out = GATE_FACINGS[i];
+            boolean spansX = out.getAxis() == Direction.Axis.Z;
             for (int d = 1; d <= PEN_DEPTH; d++) {
                 BlockPos row = g.relative(out, d);
                 for (int off = -2; off <= 2; off++) {
@@ -376,14 +464,17 @@ public final class OutpostBuilder {
     public static void placeDebris(ServerLevel level) {
         plug(level, DEBRIS_BACK, true, RUBBLE);
         plug(level, DEBRIS_STAIRS, true, RUBBLE);
+        plug(level, DEBRIS_CELLAR, false, RUBBLE);
     }
 
     /** Clears a rubble pile once it has been dug out. */
     public static void clearDebris(ServerLevel level, int area) {
-        if (area == AREA_BACK) {
-            plug(level, DEBRIS_BACK, true, Blocks.AIR.defaultBlockState());
-        } else {
-            plug(level, DEBRIS_STAIRS, true, Blocks.AIR.defaultBlockState());
+        switch (area) {
+            case AREA_BACK -> plug(level, DEBRIS_BACK, true, Blocks.AIR.defaultBlockState());
+            case AREA_UPSTAIRS -> plug(level, DEBRIS_STAIRS, true, Blocks.AIR.defaultBlockState());
+            case AREA_CELLAR -> plug(level, DEBRIS_CELLAR, false, Blocks.AIR.defaultBlockState());
+            default -> {
+            }
         }
     }
 
@@ -406,6 +497,9 @@ public final class OutpostBuilder {
         }
         if (within(pos, DEBRIS_STAIRS)) {
             return AREA_UPSTAIRS;
+        }
+        if (within(pos, DEBRIS_CELLAR)) {
+            return AREA_CELLAR;
         }
         return -1;
     }
@@ -430,9 +524,182 @@ public final class OutpostBuilder {
                 at(IN_X - 1, 0, -IN_Z + 2),          // back room
                 at(IN_X - 1, UPPER + 1, -IN_Z + 2),  // upstairs
                 at(UPPER_EDGE + 2, UPPER + 1, IN_Z - 1),
+                at(-IN_X + 1, CELLAR, IN_Z - 2),     // cellar
+                at(-5, CELLAR, -IN_Z + 2),           // cellar
         };
         for (BlockPos p : spots) {
             level.setBlock(p, Blocks.CHEST.defaultBlockState(), 2);
+        }
+    }
+
+    // ------------------------------------------------------------------
+    // Detail
+    // ------------------------------------------------------------------
+
+    /**
+     * The dressing pass. Everything here is scenery, but scenery is most of what
+     * makes a small dark box feel like somewhere people used to live and then
+     * had to leave in a hurry.
+     */
+    private static void detail(ServerLevel level, RandomSource rng) {
+        sandbags(level);
+        furniture(level);
+        collapsedRoof(level, rng);
+        bloodAndSoot(level, rng);
+        scrawls(level);
+        hangings(level, rng);
+    }
+
+    /** Sandbag emplacements thrown up under the ground-floor windows. */
+    private static void sandbags(ServerLevel level) {
+        for (int i = 0; i < GATES.length; i++) {
+            if (GATE_AREAS[i] == AREA_UPSTAIRS || GATE_AREAS[i] == AREA_CELLAR) {
+                continue;
+            }
+            BlockPos g = GATES[i];
+            Direction in = GATE_FACINGS[i].getOpposite();
+            boolean spansX = GATE_FACINGS[i].getAxis() == Direction.Axis.Z;
+            BlockPos inner = g.relative(in);
+            for (int off = -2; off <= 2; off++) {
+                if (off == 0) {
+                    continue; // leave the middle clear so you can still reach the boards
+                }
+                level.setBlock(cell(inner, spansX, off, -1),
+                        Blocks.PACKED_MUD.defaultBlockState(), 2);
+                if (Math.abs(off) == 1) {
+                    level.setBlock(cell(inner, spansX, off, 0),
+                            Blocks.MUD_BRICK_WALL.defaultBlockState(), 2);
+                }
+            }
+        }
+    }
+
+    /** What the last tenants left behind. */
+    private static void furniture(ServerLevel level) {
+        // Hall: a dead hearth, a work bench, a toppled barrel.
+        level.setBlock(at(-IN_X + 1, 0, 4), Blocks.CAMPFIRE.defaultBlockState()
+                .setValue(BlockStateProperties.LIT, false), 2);
+        level.setBlock(at(-IN_X + 1, 1, 4), Blocks.AIR.defaultBlockState(), 2);
+        level.setBlock(at(-IN_X + 1, 0, 6), Blocks.CRAFTING_TABLE.defaultBlockState(), 2);
+        level.setBlock(at(-IN_X + 2, 0, 7), Blocks.BARREL.defaultBlockState(), 2);
+        level.setBlock(at(-10, 0, -8), Blocks.DAMAGED_ANVIL.defaultBlockState(), 2);
+        level.setBlock(at(-4, 0, 8), Blocks.CAULDRON.defaultBlockState(), 2);
+        level.setBlock(at(-3, 0, -8), Blocks.POTTED_DEAD_BUSH.defaultBlockState(), 2);
+
+        // Back room: a field kitchen and a shelf of ruined books.
+        level.setBlock(at(DIVIDE_X + 2, 0, 3), Blocks.SMOKER.defaultBlockState(), 2);
+        level.setBlock(at(DIVIDE_X + 1, 0, 5), Blocks.BARREL.defaultBlockState(), 2);
+        level.setBlock(at(DIVIDE_X + 1, 0, -4), Blocks.BOOKSHELF.defaultBlockState(), 2);
+        level.setBlock(at(DIVIDE_X + 1, 1, -4), Blocks.CHISELED_BOOKSHELF.defaultBlockState(), 2);
+        level.setBlock(at(IN_X - 2, 0, 4), Blocks.FLETCHING_TABLE.defaultBlockState(), 2);
+
+        // Upstairs: bunks and a lookout's stool at the rail.
+        for (int z = -6; z <= 6; z += 4) {
+            level.setBlock(at(IN_X - 1, UPPER + 1, z), Blocks.OAK_TRAPDOOR.defaultBlockState()
+                    .setValue(BlockStateProperties.OPEN, false)
+                    .setValue(BlockStateProperties.HALF, Half.BOTTOM)
+                    .setValue(BlockStateProperties.HORIZONTAL_FACING, Direction.WEST), 2);
+        }
+        level.setBlock(at(UPPER_EDGE + 1, UPPER + 1, -2), Blocks.OAK_STAIRS.defaultBlockState()
+                .setValue(BlockStateProperties.HORIZONTAL_FACING, Direction.EAST), 2);
+        level.setBlock(at(UPPER_EDGE + 1, UPPER + 1, 3), Blocks.BARREL.defaultBlockState(), 2);
+
+        // Cellar: stores, and something that was being kept down here.
+        level.setBlock(at(-IN_X + 2, CELLAR, -6), Blocks.BARREL.defaultBlockState(), 2);
+        level.setBlock(at(-IN_X + 2, CELLAR + 1, -6), Blocks.BARREL.defaultBlockState(), 2);
+        level.setBlock(at(-IN_X + 3, CELLAR, -6), Blocks.DECORATED_POT.defaultBlockState(), 2);
+        level.setBlock(at(-8, CELLAR, 5), Blocks.SKELETON_SKULL.defaultBlockState(), 2);
+        level.setBlock(at(-9, CELLAR, 6), Blocks.BONE_BLOCK.defaultBlockState()
+                .setValue(BlockStateProperties.AXIS, Direction.Axis.X), 2);
+    }
+
+    /**
+     * A shell hole through the roof over the double-height hall, with the rafters
+     * left hanging. It is the one place the Abyss gets to look in at you.
+     */
+    private static void collapsedRoof(ServerLevel level, RandomSource rng) {
+        for (int x = -9; x <= -5; x++) {
+            for (int z = -3; z <= 2; z++) {
+                if (Math.abs(x + 7) + Math.abs(z) <= 4) {
+                    level.setBlock(at(x, ROOF, z), Blocks.AIR.defaultBlockState(), 2);
+                    level.setBlock(at(x, ROOF - 1, z), Blocks.AIR.defaultBlockState(), 2);
+                }
+            }
+        }
+        // Snapped rafters left jutting over the hole.
+        for (int x = -10; x <= -4; x++) {
+            if (rng.nextInt(3) != 0) {
+                level.setBlock(at(x, ROOF - 1, -4), BEAM, 2);
+            }
+            if (rng.nextInt(3) != 0) {
+                level.setBlock(at(x, ROOF - 1, 3), BEAM, 2);
+            }
+        }
+        // The pile of it on the floor below.
+        for (int x = -9; x <= -5; x++) {
+            for (int z = -2; z <= 1; z++) {
+                if (rng.nextInt(3) == 0) {
+                    level.setBlock(at(x, 0, z), Blocks.COBBLESTONE_SLAB.defaultBlockState(), 2);
+                }
+            }
+        }
+    }
+
+    /** Old stains and burn marks. Sparse - a little of this goes a long way. */
+    private static void bloodAndSoot(ServerLevel level, RandomSource rng) {
+        for (int n = 0; n < 26; n++) {
+            int x = -IN_X + rng.nextInt(IN_X * 2);
+            int z = -IN_Z + rng.nextInt(IN_Z * 2);
+            int y = rng.nextInt(3) == 0 ? UPPER + 1 : 0;
+            if (y == UPPER + 1 && x < UPPER_EDGE) {
+                continue;
+            }
+            if (level.getBlockState(at(x, y, z)).isAir()) {
+                level.setBlock(at(x, y, z), rng.nextInt(3) == 0
+                        ? Blocks.RED_CARPET.defaultBlockState()
+                        : Blocks.BROWN_CARPET.defaultBlockState(), 2);
+            }
+        }
+    }
+
+    /** Messages left on the walls by whoever was here before you. */
+    private static void scrawls(ServerLevel level) {
+        scrawl(level, at(-IN_X, 2, 0), Direction.EAST, "§4THEY COME", "§4THROUGH THE", "§4WINDOWS");
+        scrawl(level, at(-IN_X, 2, 7), Direction.EAST, "§8FIVE BOARDS", "§8EVERY ONE", "§8EVERY TIME");
+        scrawl(level, at(0, UPPER + 3, -IN_Z), Direction.SOUTH, "§8HIGH GROUND", "§8IS A LIE", "");
+        scrawl(level, at(-IN_X + 4, CELLAR + 2, -IN_Z), Direction.SOUTH, "§4WE SEALED", "§4THE CELLAR", "§4FOR A REASON");
+    }
+
+    private static void scrawl(ServerLevel level, BlockPos pos, Direction facing, String a, String b, String c) {
+        level.setBlock(pos, Blocks.OAK_WALL_SIGN.defaultBlockState()
+                .setValue(BlockStateProperties.HORIZONTAL_FACING, facing), 2);
+        if (level.getBlockEntity(pos) instanceof SignBlockEntity be) {
+            be.updateText(t -> t.setMessage(0, Component.literal(a))
+                    .setMessage(1, Component.literal(b))
+                    .setMessage(2, Component.literal(c)), true);
+        }
+    }
+
+    /** Chains, cobwebs and guttering candles across all four floors' worth of dark. */
+    private static void hangings(ServerLevel level, RandomSource rng) {
+        for (int n = 0; n < 18; n++) {
+            int x = -IN_X + rng.nextInt(IN_X * 2);
+            int z = -IN_Z + rng.nextInt(IN_Z * 2);
+            int ceil = x >= UPPER_EDGE ? UPPER + 4 : ROOF - 1;
+            if (level.getBlockState(at(x, ceil, z)).isAir()) {
+                level.setBlock(at(x, ceil, z), Blocks.CHAIN.defaultBlockState()
+                        .setValue(BlockStateProperties.AXIS, Direction.Axis.Y), 2);
+            }
+        }
+        BlockPos[] candles = {
+                at(-IN_X + 1, 1, -3), at(-5, 1, 7), at(DIVIDE_X + 3, 1, -6),
+                at(IN_X - 3, UPPER + 1, 5), at(-2, UPPER + 1, -6), at(-7, CELLAR, -2),
+        };
+        for (BlockPos c : candles) {
+            if (level.getBlockState(c).isAir()) {
+                level.setBlock(c, Blocks.CANDLE.defaultBlockState()
+                        .setValue(BlockStateProperties.LIT, true), 2);
+            }
         }
     }
 

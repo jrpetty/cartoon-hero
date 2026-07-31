@@ -235,7 +235,7 @@ public final class RoundManager {
                 boolean holding = tickExtraction(level, present);
                 long delay = game.getRound() == 0
                         ? AbyssConfig.FIRST_ROUND_DELAY_TICKS.get()
-                        : AbyssConfig.BETWEEN_ROUND_TICKS.get();
+                        : breatherTicks(game.getRound());
                 if (!holding && now - game.getPhaseChangedAt() >= delay) {
                     startRound(level, game.getRound() + 1);
                 }
@@ -295,6 +295,19 @@ public final class RoundManager {
             if (fogRound) {
                 title(p, "§7§lA CREEPING FOG ROLLS IN", "§8They'll be on you before you see them.");
                 level.playSound(null, p.blockPosition(), ModSounds.AMBIENT_DREAD.get(), SoundSource.HOSTILE, 1.0F, 0.5F);
+            } else if (game.getMap().isEndless()) {
+                // No finish line to count down to - milestones instead.
+                String sub;
+                if (bossRound) {
+                    sub = "§c§lSOMETHING BIG IS COMING";
+                } else if (round % 10 == 9) {
+                    sub = "§6" + game.getKillsNeededThisRound() + " incoming §7— a boss waits at " + (round + 1);
+                } else if (round == 21) {
+                    sub = "§c§lPAST THE LADDER §7— they stop growing and start getting worse";
+                } else {
+                    sub = "§7" + game.getKillsNeededThisRound() + " incoming";
+                }
+                title(p, "§4§lWAVE " + round, sub);
             } else {
                 title(p, "§4§lROUND " + round, round == max
                         ? "§c§lFINAL ROUND - GOOD LUCK"
@@ -317,8 +330,25 @@ public final class RoundManager {
         }
     }
 
-    /** Boss rounds: the mid-run gauntlet (10) and the final round. */
+    /**
+     * The gap between waves. On an endless map it closes as the run goes on -
+     * from ten seconds down to three by round forty - so the time you have to
+     * put boards back on shrinks exactly as the horde gets worse. It is the
+     * quietest of the difficulty levers and probably the cruellest.
+     */
+    private static long breatherTicks(int round) {
+        long base = AbyssConfig.BETWEEN_ROUND_TICKS.get();
+        if (!game.getMap().isEndless() || round <= 10) {
+            return base;
+        }
+        return Math.max(60L, base - (round - 10) * 4L);
+    }
+
+    /** Boss rounds: every tenth round on an endless map, else round 10 and the last. */
     private static boolean isBossRound(int round) {
+        if (game.getMap().isEndless()) {
+            return round > 0 && round % 10 == 0;
+        }
         return round == 10 || round == AbyssConfig.MAX_ROUND.get();
     }
 
@@ -486,8 +516,11 @@ public final class RoundManager {
 
         areaOpen[area] = true;
         com.jrpetty.aztecabyss.worldgen.OutpostBuilder.clearDebris(level, area);
-        String what = area == com.jrpetty.aztecabyss.worldgen.OutpostBuilder.AREA_BACK
-                ? "the back room" : "the stairs";
+        String what = switch (area) {
+            case com.jrpetty.aztecabyss.worldgen.OutpostBuilder.AREA_BACK -> "the back room";
+            case com.jrpetty.aztecabyss.worldgen.OutpostBuilder.AREA_CELLAR -> "the cellar";
+            default -> "the stairs";
+        };
         for (ServerPlayer p : participantPlayers(level)) {
             actionBar(p, "§6⚒ The way to §f" + what + "§6 is clear §7— and so are its windows");
             level.playSound(null, p.blockPosition(), net.minecraft.sounds.SoundEvents.ANVIL_LAND,
@@ -516,10 +549,13 @@ public final class RoundManager {
         if (game.getMap().objective() == null && !game.getMap().hasBarricades()) {
             return ROLE_NORMAL;
         }
-        if (round >= 6 && RNG.nextInt(100) < Math.min(6 + round, 20)) {
+        boolean endless = game.getMap().isEndless();
+        int sapperCap = endless ? 32 : 20;
+        int breakerCap = endless ? 42 : 30;
+        if (round >= 6 && RNG.nextInt(100) < Math.min(6 + round, sapperCap)) {
             return ROLE_SAPPER;
         }
-        if (round >= 3 && RNG.nextInt(100) < Math.min(10 + round * 2, 30)) {
+        if (round >= 3 && RNG.nextInt(100) < Math.min(10 + round * 2, breakerCap)) {
             return ROLE_BREAKER;
         }
         return ROLE_NORMAL;
@@ -657,9 +693,24 @@ public final class RoundManager {
         }
     }
 
+    /**
+     * Health past the soften point compounds instead of creeping, because a
+     * linear curve is outrun by player gear and endless rounds would stop
+     * mattering. 4.5% a round doubles roughly every fifteen: a round-40 zombie
+     * runs about eleven times base, round 50 about seventeen, round 60 about
+     * twenty-seven. Round 40 is meant to be a wall and round 60 heroic.
+     */
+    private static double healthCurve(int round) {
+        double linear = 1.0 + Math.min(round, SOFTEN_AFTER) * AbyssConfig.HEALTH_SCALE_PER_ROUND.get();
+        return round <= SOFTEN_AFTER ? linear : linear * Math.pow(1.045, round - SOFTEN_AFTER);
+    }
+
     private static void applyRoundScaling(Mob mob, int round, boolean brute) {
-        double healthMult = 1.0 + round * AbyssConfig.HEALTH_SCALE_PER_ROUND.get();
-        double dmgMult = 1.0 + round * AbyssConfig.DAMAGE_SCALE_PER_ROUND.get();
+        double healthMult = healthCurve(round) * game.getMap().difficultyMultiplier();
+        // Damage is capped where health is not. Solo death is final here, so a
+        // horde that one-shots you is a different (and worse) game than a horde
+        // that takes an age to put down.
+        double dmgMult = Math.min(1.0 + round * AbyssConfig.DAMAGE_SCALE_PER_ROUND.get(), 8.0);
         double speedMult = Math.min(1.0 + round * 0.02, 1.6);
 
         // Fog rounds: the horde looms a touch faster out of the murk.
@@ -683,6 +734,11 @@ public final class RoundManager {
         AttributeInstance armor = mob.getAttribute(Attributes.ARMOR);
         if (armor != null) {
             armor.setBaseValue(Math.min(20.0, round * 0.6));
+        }
+        // Late endless rounds get a standing knockback floor, so you can no
+        // longer simply bat the horde back off a window forever.
+        if (round > 25) {
+            setAttribute(mob, Attributes.KNOCKBACK_RESISTANCE, Math.min(0.6, (round - 25) * 0.02));
         }
         applyHordeLook(mob, round, brute);
         mob.setHealth(mob.getMaxHealth());
@@ -813,7 +869,11 @@ public final class RoundManager {
     }
 
     /** True when the current boss round is the final round (the Warden); otherwise it's the mid-boss Warlord. */
+    /** The bigger grade of boss: every thirtieth round endlessly, else the last. */
     private static boolean isFinaleBoss() {
+        if (game.getMap().isEndless()) {
+            return game.getRound() > 0 && game.getRound() % 30 == 0;
+        }
         return game.getRound() >= AbyssConfig.MAX_ROUND.get();
     }
 
@@ -1119,7 +1179,9 @@ public final class RoundManager {
     }
 
     private static void onRoundCleared(ServerLevel level) {
-        if (game.getRound() >= AbyssConfig.MAX_ROUND.get()) {
+        // Endless maps have no finish line - you leave with what you have, or
+        // you keep going until it takes you.
+        if (!game.getMap().isEndless() && game.getRound() >= AbyssConfig.MAX_ROUND.get()) {
             endGame(level, true);
             return;
         }
@@ -2026,8 +2088,11 @@ public final class RoundManager {
             if (open || effort <= 0.0f) {
                 continue;
             }
-            // One second of work per tick of this loop.
-            int fell = Barricade.addEffort(level, map, i, effort * (BARRICADE_INTERVAL / 20.0f));
+            // One second of work per tick of this loop, plus a late-run bite:
+            // by round 30 the horde works a board loose half again as fast.
+            float lateBite = 1.0f + Math.min(0.8f, Math.max(0, game.getRound() - 12) * 0.04f);
+            int fell = Barricade.addEffort(level, map, i,
+                    effort * (BARRICADE_INTERVAL / 20.0f) * lateBite);
             if (fell > 0) {
                 onBoardTorn(level, present, i, gate);
             }
@@ -2319,9 +2384,24 @@ public final class RoundManager {
         }
     }
 
+    /** Where head-count growth gives way to the horde simply getting worse. */
+    private static final int SOFTEN_AFTER = 20;
+
+    /**
+     * Wave size. Grows flat-out to round 20, then deliberately slows.
+     *
+     * <p>Past that point the difficulty has to come from what each mob is, not
+     * how many there are: a linearly-growing count turns round 50 into ten
+     * minutes of mopping up, and pins the concurrency ceiling for all of it.
+     */
     private static int totalZombies(int round) {
-        int base = AbyssConfig.BASE_ZOMBIES.get() + round * AbyssConfig.ZOMBIES_PER_ROUND.get();
-        return (int) Math.round(base * AbyssConfig.ROUND_SIZE_MULTIPLIER.get());
+        int per = AbyssConfig.ZOMBIES_PER_ROUND.get();
+        int base = AbyssConfig.BASE_ZOMBIES.get() + Math.min(round, SOFTEN_AFTER) * per;
+        if (round > SOFTEN_AFTER) {
+            base += (int) Math.round((round - SOFTEN_AFTER) * per * 0.35);
+        }
+        double lift = game.getMap().difficultyMultiplier();
+        return (int) Math.round(base * AbyssConfig.ROUND_SIZE_MULTIPLIER.get() * lift);
     }
 
     /**

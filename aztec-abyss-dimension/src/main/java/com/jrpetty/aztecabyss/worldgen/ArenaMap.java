@@ -50,9 +50,9 @@ public enum ArenaMap {
      */
     OUTPOST(
             "The Outpost",
-            "A bombed-out house, pitch dark. Four boarded windows to start — the other six, and every chest, are behind the rubble.",
-            "HARD",
-            0xFFD04040,
+            "Endless. A bombed-out house, pitch dark — twelve boarded windows across three floors, and no final round. Extract while you still can.",
+            "ENDLESS",
+            0xFFC03080,
             OutpostBuilder.ARRIVAL,
             OutpostBuilder.GATES,
             OutpostBuilder.GATE_FACINGS,
@@ -149,7 +149,25 @@ public enum ArenaMap {
 
     /** How many separately-sealed areas this map has. */
     public int areaCount() {
-        return this == OUTPOST ? 3 : 1;
+        return this == OUTPOST ? 4 : 1;
+    }
+
+    /**
+     * Whether this map runs forever. Endless maps have no final round and no
+     * victory screen - the only way to bank a run is to walk out on the
+     * extraction glyph while you still can, which makes every extra round a bet
+     * you are choosing to take.
+     */
+    public boolean isEndless() {
+        return this == OUTPOST;
+    }
+
+    /**
+     * A flat difficulty lift applied on top of the usual per-round scaling.
+     * The Outpost is meant to be the one you lose on.
+     */
+    public double difficultyMultiplier() {
+        return this == OUTPOST ? 1.15 : 1.0;
     }
 
     public BlockPos extraction() {
