@@ -297,7 +297,8 @@ apple.
 
 ## 3. Condition, serials and sleeves
 
-**Status:** agreed in full, **nothing built**. The largest outstanding item.
+**Status:** BUILT, with two knowing exceptions — see the audit at the end of
+this section. Was "agreed in full, nothing built"; that is long out of date.
 
 The idea: every card becomes a unique physical object with a history rather than
 an interchangeable copy. Two Creeper cards play identically, but one may be
@@ -378,18 +379,52 @@ edition — a Trophy does not get its own separate `000001`.
    shredder must refuse `000001`. Cheap now, painful to retrofit.
 4. **Trophy edition is the Gauntlet's reward** (§2) — visibly different,
    stat-identical, only obtainable by winning.
-5. **Pin the card order before building on it.** The `#12 / 81` catalogue number
+5. **Pin the card order before building on it.** *(done, v1.62.0 —
+   `MobCards.ORDER_FINGERPRINT` is checked at startup and warns loudly if the
+   declaration order has moved.)* The `#12 / 81` catalogue number
    is a *different thing* from a serial — it is the mob's fixed position in the
    set of 81, identical for every player, derived from declaration order in
    `MobCards`. Verified working (81 unique ordinals, 1–81, stable), but
    inserting a mob mid-list would silently renumber every card after it. Harmless
    today; bad once serials or a Hall of Fame depend on it.
 
+### Audit (v1.62.0) — what of this is real
+
+| Spec | State |
+|---|---|
+| Per-mob serials, atomic, never reused | `SerialRegistry` (SavedData) |
+| Six-digit padding, configurable | `CardIdentityService.serialDigits()` |
+| Unlocked by — UUID + name snapshot, immutable | `CardIdentity` |
+| Non-stackable cards | shipped — `stacksTo(1)` |
+| Condition, wear on hand entry only | `CardWear` + `ConditionTracker` |
+| Never faked by death/respawn/dimension/sync | `ConditionTracker.seed()` |
+| Card visibly degrades | 5 in-hand overlay stages + inspect overlay |
+| Sleeve — one item, one card, never wears | flag on the card, not a container |
+| Inspection with a Flip to the back | `CardInspectScreen` |
+| Editions, art only, shared serial run | `CardEdition`, Trophy frame |
+| Card order pinned | `ORDER_FINGERPRINT`, checked at startup |
+
+**Two knowing departures, not omissions:**
+
+1. **The sleeve is a flag, not a container.** The brief implies an item holding
+   a card. A nested ItemStack opens a duplication window on every insert and
+   remove; a flag cannot. The card stays one item through sleeving, so it is
+   still playable, displayable and tradeable as itself.
+2. **Counterfeits are detected by presence, not by ledger.** A card is authentic
+   if it carries a server-issued uid. Catching a *copied* uid would need a
+   registry of every uid ever issued, which grows without bound for the life of
+   the world. Renaming cannot forge a card; op-level NBT editing can clone one.
+   Worth revisiting only if that turns out to matter on a real server.
+
+Wear was also retuned in v1.58.0 against the brief's "first entry free, 5 points
+after": it is now **two** free handlings, and 5 points per **two** entries after
+that. The brief's rate meant a card you had held twice was already 95%.
+
 ---
 
 ## 4. Knowing what you're missing
 
-**Status:** designed, not built.
+**Status:** BUILT (v1.62.0).
 
 Today a missing mob shows a face-down card: you know *how many* you lack, not
 *which*, so you can't plan a hunt and "kill everything" is the only strategy.

@@ -576,8 +576,17 @@ public class CollectionBookScreen extends Screen {
                     drawCardAction(g, card, foil, cx, cy, cw, ch, mouseX, mouseY);
                 }
             } else {
-                CardRenderer.renderBack(g, font, cx, cy, cardScale);
-                if (hovered) g.renderOutline(cx - 2, cy - 2, cw + 4, ch + 4, 0x66FFFFFF);
+                // a card you are missing: a silhouette on its own set's scene,
+                // named only once you have actually killed one
+                boolean met = ClientCollection.killCount(card.id()) > 0;
+                CardRenderer.renderUnknown(g, font, card, cx, cy, cardScale,
+                        overlayOpen ? null
+                                : CardRenderer.portraitEntity(minecraft, card, entityCache), met);
+                if (hovered) {
+                    g.renderOutline(cx - 2, cy - 2, cw + 4, ch + 4, 0x99F9D849);
+                    hoveredCard = card;
+                    hoverRect = new int[]{cx - 2, cy - 2, cw + 4, ch + 4};
+                }
             }
         }
     }
@@ -698,8 +707,37 @@ public class CollectionBookScreen extends Screen {
                 Mth.clamp(mouseY + 12, 2, Math.max(2, height - h - 2))};
     }
 
+    /**
+     * What you may know about a card you have not collected: where it lives,
+     * its number in the set, how often it drops, and whether you have ever met
+     * one. Never its tier, its rarity or a single stat — those are the reward
+     * for finding it.
+     */
+    private void drawUnknownTooltip(GuiGraphics g, int mouseX, int mouseY, MobCard card) {
+        int kills = ClientCollection.killCount(card.id());
+        List<String> lines = new ArrayList<>();
+        List<Integer> colors = new ArrayList<>();
+        lines.add("Not in your collection");
+        colors.add(0xFF9A9083);
+        lines.add("No. " + (MobCards.ordinal(card.id()) + 1) + " / " + MobCards.ALL.size()
+                + (card.category() == null ? "" : "  ·  " + card.category().label()));
+        colors.add(0xFF6E6154);
+        lines.add(kills > 0
+                ? "You have hunted " + kills + " of these"
+                : "You have never met one");
+        colors.add(kills > 0 ? 0xFF1C7FA8 : 0xFF9A9083);
+        lines.add("Its card drops 1 in " + Math.round(1f / card.tier().cardDropChance()));
+        colors.add(0xFF6E6154);
+        drawHoverPanel(g, mouseX, mouseY,
+                kills > 0 ? card.displayName() : "? ? ? ?", 0xFF8A8072, lines, colors, hoverRect);
+    }
+
     /** Everything about a card, on hover: tier, the stats, the hunt, where it is. */
     private void drawCardTooltip(GuiGraphics g, int mouseX, int mouseY, MobCard card) {
+        if (!ClientCollection.has(card.id())) {
+            drawUnknownTooltip(g, mouseX, mouseY, card);
+            return;
+        }
         boolean foil = ClientCollection.displayedIsFoil(card.id());
         int level = ClientCollection.displayLevel(card.id(), foil);
         MobCard shown = card.upgraded(level);

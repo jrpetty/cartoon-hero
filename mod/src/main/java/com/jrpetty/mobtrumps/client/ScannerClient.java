@@ -144,7 +144,7 @@ public final class ScannerClient {
         }
 
         int panelW = 210;
-        int panelH = 72;
+        int panelH = 82;   // room for the drop-odds line under the status
         int px = (sw - panelW) / 2;
         int py = sh - panelH - 46;
         int tier = com.jrpetty.mobtrumps.client.CardRenderer.tierPrintColor(card) | 0xFF000000;
@@ -169,17 +169,25 @@ public final class ScannerClient {
         int threshold = card.tier().foilKillThreshold();
         String status;
         int statusColor;
+        boolean owned = ClientCollection.has(card.id());
         if (holo) {
             status = "Collected x" + have + "  ·  HOLO unlocked";
             statusColor = 0xFFC77BFF;
-        } else if (have > 0) {
+        } else if (owned) {
             status = "Collected x" + have + "  ·  holo at " + threshold + " (" + have + "/" + threshold + ")";
             statusColor = 0xFF55E06A;
         } else {
-            status = "NOT COLLECTED — hunt it to drop its card!";
+            status = "YOU STILL NEED THIS ONE";
             statusColor = 0xFFF9D849;
         }
         g.drawString(font, status, px + 8, py + 18, statusColor, false);
+
+        // Knowledge from presence: you are standing here looking at the thing,
+        // so the scanner tells you what it is actually worth killing for.
+        int oneIn = Math.round(1f / card.tier().cardDropChance());
+        String odds = "Card drops 1 in " + oneIn
+                + (have > 0 || owned ? "  ·  hunted " + have : "  ·  never hunted");
+        g.drawString(font, odds, px + 8, py + 28, 0xFF9AA0A6, false);
 
         // six stats in two columns
         Stat[] stats = Stat.values();
@@ -188,7 +196,7 @@ public final class ScannerClient {
             int col = i / 3;
             int row = i % 3;
             int tx = px + 8 + col * 102;
-            int ty = py + 32 + row * 12;
+            int ty = py + 42 + row * 12;
             Integer sc = MobCardItem.statColor(s).getColor();
             int color = (sc == null ? 0xFFFFFF : sc) | 0xFF000000;
             g.drawString(font, s.shortLabel, tx, ty, color, false);

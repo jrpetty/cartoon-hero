@@ -290,6 +290,92 @@ public final class CardRenderer {
     }
 
     /**
+     * A card you have not collected: the mob as a silhouette on its own
+     * category scene, with its stats blanked out.
+     *
+     * <p>A face-down card told you <em>how many</em> you were missing but never
+     * <em>which</em>, so the only strategy was to kill everything. A silhouette
+     * on a labelled backdrop is enough to recognise "something big, in the
+     * ocean" and go looking, while the moment of <em>oh, it's an Elder
+     * Guardian</em> stays yours.
+     *
+     * @param named true once you have killed this mob at least once — you have
+     *              met the thing, so hiding its name would just be coy
+     */
+    public static void renderUnknown(GuiGraphics g, Font font, MobCard card, int x, int y,
+                                     float scale, LivingEntity mob, boolean named) {
+        var pose = g.pose();
+        pose.pushPose();
+        pose.translate(x, y, 0);
+        pose.scale(scale, scale, 1f);
+
+        drawFrame(g, 0, com.jrpetty.mobtrumps.game.CardEdition.STANDARD);
+
+        pose.pushPose();
+        pose.translate(CARD_W / 2f, 11f, 0);
+        pose.scale(1.5f, 1.5f, 1f);
+        String name = named ? card.displayName() : "? ? ? ?";
+        g.drawString(font, name, -font.width(name) / 2, 0, named ? INK : 0xFF8A8072, false);
+        pose.popPose();
+
+        // the SET, not the tier — the set is the clue, the tier is the spoiler
+        String set = card.category() == null ? "Unidentified" : card.category().label();
+        g.drawString(font, set, (CARD_W - font.width(set)) / 2, 27, 0xFF8A8072, false);
+
+        // the scene, hazed back so the silhouette on top of it will read
+        CardBackground.draw(g, card.category(), 12, 38, CARD_W - 12, 116);
+        g.fill(12, 38, CARD_W - 12, 116, 0x66FFFFFF);
+        g.renderOutline(11, 37, CARD_W - 22, 116 - 38 + 2, KRAFT_DARK);
+
+        int rowY = 121;
+        for (Stat stat : Stat.values()) {
+            boolean blue = (rowY - 121) / ROW_H % 2 == 0;
+            g.fill(12, rowY, CARD_W - 12, rowY + ROW_H - 1, blue ? ROW_BLUE : ROW_GREEN);
+            g.drawString(font, stat.label.toUpperCase(Locale.ROOT), 16, rowY + 3,
+                    blue ? LABEL_BLUE : LABEL_GREEN, false);
+            g.drawString(font, "?", CARD_W - 20, rowY + 3, 0xFF9A9083, false);
+            rowY += ROW_H;
+        }
+        g.fill(12, rowY, CARD_W - 12, rowY + ROW_H - 1, ROW_GOLD);
+        g.drawString(font, "MOB RATING", 16, rowY + 3, INK, false);
+        g.drawString(font, "?", CARD_W - 20, rowY + 3, 0xFF9A9083, false);
+        rowY += ROW_H;
+
+        g.fill(12, rowY + 3, CARD_W - 12, CARD_H - 9, FACT_BG);
+        g.renderOutline(11, rowY + 2, CARD_W - 22, CARD_H - 9 - rowY - 3 + 2, KRAFT_DARK);
+        String fact = set + "  ·  " + (MobCards.ordinal(card.id()) + 1) + " / " + MobCards.ALL.size();
+        drawCenteredFit(g, font, fact, CARD_W / 2f, rowY + 5, CARD_W - 28, KRAFT_DARK);
+        pose.popPose();
+
+        // the mob itself, then blacked out — drawn in screen space so its
+        // scissor box stays true, exactly as a collected card's portrait is
+        int px1 = x + Math.round(13 * scale);
+        int py1 = y + Math.round(39 * scale);
+        int px2 = x + Math.round((CARD_W - 13) * scale);
+        int py2 = y + Math.round(115 * scale);
+        if (mob != null) {
+            int entityScale = Math.max(4, Math.round(
+                    Math.min(34f, 46f / Math.max(1.4f, mob.getBbHeight())) * scale));
+            try {
+                InventoryScreen.renderEntityInInventoryFollowsMouse(g, px1, py1, px2, py2,
+                        entityScale, 0.0625F, (px1 + px2) / 2, (py1 + py2) / 2 - Math.round(10 * scale),
+                        mob);
+            } catch (Exception ignored) {
+                // a misbehaving renderer must not crash the book
+            }
+        }
+        // one flat wash over scene and mob together: the mob was already the
+        // darkest thing in the box, so it drops to a silhouette while the
+        // hazed scene behind it stays legible
+        g.fill(px1, py1, px2, py2, 0xB4101018);
+        if (!named) {
+            String q = "?";
+            g.drawString(font, q, (px1 + px2) / 2 - font.width(q) / 2, (py1 + py2) / 2 - 4,
+                    0x80FFFFFF, false);
+        }
+    }
+
+    /**
      * The Trophy frame: a deep struck-gold border with a bronze bevel, a cream
      * pinline, laurel notches down both long edges and a lit gem in every
      * corner. Read next to the ivory standard frame it should be unmistakable

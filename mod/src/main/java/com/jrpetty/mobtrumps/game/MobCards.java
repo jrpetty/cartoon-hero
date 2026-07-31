@@ -119,6 +119,35 @@ public final class MobCards {
         return BY_ID.get(id.toLowerCase(Locale.ROOT));
     }
 
+    /**
+     * A stable fingerprint of the card ORDER, checked at startup.
+     *
+     * <p>The catalogue number ("No. 12 / 81") is the mob's fixed position in
+     * the set, derived from declaration order in this file. Serials, the
+     * collection book's paging and every saved deck are read against it.
+     * Inserting a mob mid-list would silently renumber every card after it —
+     * harmless the day it happens, wrong forever afterwards. This does not
+     * prevent that; it makes it impossible to do by accident and not notice.
+     */
+    public static final long ORDER_FINGERPRINT = -5084331604706219575L;
+
+    /** Recompute the fingerprint from the live list. */
+    public static long fingerprint() {
+        long h = 1125899906842597L;
+        for (MobCard card : ALL) {
+            for (int i = 0; i < card.id().length(); i++) {
+                h = 31 * h + card.id().charAt(i);
+            }
+            h = 31 * h + '/';
+        }
+        return h;
+    }
+
+    /** True if the card order still matches what everything else was built on. */
+    public static boolean orderIntact() {
+        return fingerprint() == ORDER_FINGERPRINT;
+    }
+
     /** Position of a card in the collection (0-based), or -1 if unknown. */
     public static int ordinal(String id) {
         if (id == null) return -1;

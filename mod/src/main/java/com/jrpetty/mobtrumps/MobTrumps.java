@@ -14,7 +14,22 @@ public class MobTrumps {
 
     public static final String MODID = "mobtrumps";
 
+    public static final org.slf4j.Logger LOGGER =
+            com.mojang.logging.LogUtils.getLogger();
+
     public MobTrumps(IEventBus modEventBus, ModContainer modContainer) {
+        // The catalogue number ("No. 12 / 81") is the mob's position in the
+        // declaration order, and serials, saved decks and the book's paging are
+        // all read against it. Inserting a mob mid-list silently renumbers
+        // every card after it, so say so loudly rather than let it pass.
+        if (!com.jrpetty.mobtrumps.game.MobCards.orderIntact()) {
+            LOGGER.warn("Mob Trumps: the card ORDER has changed ({} cards, fingerprint {}). "
+                            + "Catalogue numbers after the inserted mob have shifted. If this was "
+                            + "deliberate, update MobCards.ORDER_FINGERPRINT to {}L.",
+                    com.jrpetty.mobtrumps.game.MobCards.ALL.size(),
+                    com.jrpetty.mobtrumps.game.MobCards.ORDER_FINGERPRINT,
+                    com.jrpetty.mobtrumps.game.MobCards.fingerprint());
+        }
         ModItems.ITEMS.register(modEventBus);
         ModItems.DATA_COMPONENTS.register(modEventBus);
         ModItems.CREATIVE_MODE_TABS.register(modEventBus);
