@@ -35,6 +35,34 @@ neoForge {
     }
 }
 
+repositories {
+    mavenCentral()
+}
+
+// The game package is deliberately free of Minecraft, so its rules can be
+// tested for real rather than reasoned about. Tests inherit main's classpath
+// so anything compilable is testable, but nothing here needs a running game.
+sourceSets {
+    test {
+        compileClasspath += sourceSets.main.compileClasspath
+        runtimeClasspath += sourceSets.main.runtimeClasspath
+    }
+}
+
+dependencies {
+    testImplementation platform('org.junit:junit-bom:5.10.2')
+    testImplementation 'org.junit.jupiter:junit-jupiter'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+tasks.named('test') {
+    useJUnitPlatform()
+    testLogging {
+        events 'passed', 'failed', 'skipped'
+        exceptionFormat = 'full'
+    }
+}
+
 processResources {
     var replacements = [mod_version: mod_version]
     inputs.properties replacements

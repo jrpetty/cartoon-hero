@@ -24,9 +24,32 @@ jobs:
           distribution: temurin
           java-version: '21'
 
-      - name: Build mod jar
+      # Compiles the mod and runs the game-rule tests. `build` depends on
+      # `test`, so a broken rule fails here and never reaches a release.
+      - name: Build mod jar and run tests
         working-directory: mod
         run: ./gradlew --no-daemon build
+
+      - name: Publish test report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: mod/build/reports/tests/test
+          if-no-files-found: ignore
+
+      # Checks that only make sense against the packaged artifact: that no
+      # client-only class can reach a dedicated server, and that every model,
+      # texture and override actually resolves. Both are silent failures in
+      # game -- a crash on boot for one, the wrong card art for the other --
+      # so they gate the release rather than just reporting.
+      - name: Verify the packaged jar
+        working-directory: mod
+        run: |
+          JAR=$(ls build/libs/mobtrumps-*.jar | grep -v sources | head -1)
+          echo "Verifying $JAR"
+          python3 tools/checkdist.py "$JAR"
+          python3 tools/checkassets.py "$JAR" .
 
       - name: Upload jar artifact
         uses: actions/upload-artifact@v4

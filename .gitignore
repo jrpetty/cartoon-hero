@@ -6,3 +6,6 @@ mod/.gradle/
 mod/build/
 mod/run/
 mod/runs/
+
+# scratch argfiles written by tools/check.sh
+mod/javac.*.args

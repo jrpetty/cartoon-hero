@@ -12,6 +12,15 @@
 #      offline because it gives up before flow analysis
 #   3. the game rules themselves: card set, campaign decks, recycler economics
 #
+# Two further checks run against a BUILT jar rather than the source, because
+# what they look for only exists once things are packaged:
+#
+#   tools/checkdist.py   <jar>      client-only classes reachable on a server
+#   tools/checkassets.py <jar> .    missing models/textures, misordered overrides
+#
+# CI runs both before it will publish a release. The game rules also have a
+# real JUnit suite now (src/test/java), run by `./gradlew build`.
+#
 # Usage:  mod/tools/check.sh
 set -u
 cd "$(dirname "$0")/.." || exit 1

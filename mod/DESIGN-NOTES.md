@@ -493,6 +493,47 @@ A full checklist would fix that but cost the discovery.
 
 ---
 
+## 6. What is actually verified, and what isn't
+
+*(Added v1.66.0.)* This mod has never been run. Not once — it is built in an
+environment with no Minecraft in it, so everything below "it compiles" has to
+be earned some other way. Being honest about which claims are load-bearing
+matters more than the claims themselves.
+
+**Checked by machine, on every push.** `./gradlew build` runs the test suite
+before it will produce a jar, and the workflow then verifies the packaged jar
+before it will publish a release.
+
+| Check | What it would catch | Where |
+|---|---|---|
+| 43 JUnit tests over `game/` | Rule regressions: battle termination, card conservation, deck sizes, the wear ladder, the press's flat expected cost | `src/test/java` |
+| Card-list fingerprint | A mob inserted or reordered, which silently repoints every card's artwork after it | `MobCardsTest` |
+| `tools/checkdist.py` | A client-only class reachable from a dedicated server — crash on boot | packaged jar |
+| `tools/checkassets.py` | A missing model or texture, and a misordered override list — both silent, both render the wrong card | packaged jar |
+| `tools/check.sh` | Syntax, non-exhaustive switches | source |
+
+Each of these was verified by deliberately breaking the thing it watches and
+confirming it fails. Seven mutations of the game rules, three corruptions of
+the jar's assets, and one leaked client class — all caught. A check that has
+never failed is not known to work.
+
+**Not checked by anything.** Rendering, packet round-trips, block entity
+persistence, screen lifecycle, world upgrades from older saves, and anything
+involving two clients. The offline suite proves the rules are right; it cannot
+prove the game is playable, and every real bug found so far came from a
+screenshot rather than from a check. The recycler and the Hall of Fame in
+particular have never been seen running.
+
+**Known and deliberate.** A battle can end `NONE` — a genuine draw — when a
+tie sends the last cards on both sides into the pot, or when the round cap
+falls with the hands level. The screen says DRAW. Across 240,000 simulated
+battles it never occurred by chance, and the 500-round cap was never reached
+(longest observed: 368 rounds, on Easy, where random stat picks stop the game
+converging). Both are backstops, not routine endings, and the tests assert
+they stay that way.
+
+---
+
 ## Decisions already shipped (don't re-open without reason)
 
 | Decision | Version |
