@@ -10,7 +10,8 @@ import { WarbandFx } from "./warband_fx";
 import { audio } from "../engine/audio";
 import { PAL, withAlpha } from "../render/palette";
 import { drawUnit, setTeamColorResolver } from "../render/draw";
-import { Kind, Entity } from "../sim/types";
+import { Kind, Entity, Team, ArmorClass } from "../sim/types";
+import { makeEntity } from "../sim/world";
 import { TILE } from "../content/balance";
 import { UNITS } from "../content/units";
 import { WarbandRun, UNIT_TIER, Piece, BENCH_SLOTS } from "../sim/warband";
@@ -30,6 +31,8 @@ const STAR_MULT = [1, 1, 1.8, 3.2]; // hp/attack multiplier by star (matches the
 const shortName = (type: string) => (UNITS[type]?.name ?? type).split(" ")[0];
 const stars = (n: number) => "★".repeat(n);
 const BATTLE_SPEED = 2; // sim-time multiplier while watching a fight
+const INTRO_LEN = 1.4;  // seconds the VS clash banner holds before the charge
+const easeOut = (t: number) => 1 - Math.pow(1 - Math.max(0, Math.min(1, t)), 3);
 
 export class WarbandScreen {
   private selectedItem = -1; // index into the run's item stash, or -1
@@ -55,6 +58,10 @@ export class WarbandScreen {
   private augTip: { a: Augment; x: number; y: number } | null = null; // hovered owned augment
   private cmdTip: { c: WarbandCommander; x: number; y: number } | null = null; // hovered commander plate
   private condTip: { c: Condition; x: number; y: number } | null = null; // hovered battlefield chip
+  /** One reusable entity per unit type, so cards can draw the real sprite. */
+  private portraits = new Map<string, Entity>();
+  private introT = 0;   // VS clash banner countdown at the start of a fight
+  private resultT = -1; // victory/defeat flourish clock
   private scoutId = -1;   // opponent whose warband is being scouted, or -1
   private scoutRect = { x: 0, y: 0, w: 0, h: 0 }; // last frame's panel, to block clicks through it
   private augPick = -1;   // augment card under the cursor on the picker
@@ -277,7 +284,10 @@ export class WarbandScreen {
     if (this.fusion) { this.fusion.t += dt; if (this.fusion.t > 1.7) this.fusion = null; }
     if (picking) this.augT += dt; else this.augT = 0;
     // Advance the live fight in real (scaled) time, then bank the result.
-    if (run.phase === "battle" && this.battle) {
+    if (run.phase === "battle" && this.introT > 0) {
+      this.introT -= dt;   // the clash banner holds the fight for a beat
+      this.stepAccum = 0;
+    } else if (run.phase === "battle" && this.battle) {
       if (!this.battle.started) this.battle.begin(); // safety: always marching once fighting
       this.stepAccum += dt * 20 * BATTLE_SPEED; // 20 = SIM_HZ
       const n = Math.floor(this.stepAccum);
@@ -288,11 +298,18 @@ export class WarbandScreen {
     this.fx.update(dt);
     // Phase-transition stingers.
     if (run.phase !== this.prevPhase) {
-      if (run.phase === "battle") audio.play("alert");
-      else if (run.phase === "result" && run.lastResult) audio.play(run.lastResult.won ? "complete" : "collapse");
-      else if (run.phase === "shop") this.fx.clear();
+      if (run.phase === "battle") {
+        audio.play("alert");
+        this.introT = INTRO_LEN;
+        this.starUp = null; this.fusion = null; // shop flourishes don't follow you in
+      } else if (run.phase === "result" && run.lastResult) {
+        audio.play(run.lastResult.won ? "complete" : "collapse");
+        this.resultT = 0;
+        this.starUp = null; this.fusion = null;
+      } else if (run.phase === "shop") { this.fx.clear(); this.resultT = -1; }
       this.prevPhase = run.phase;
     }
+    if (this.resultT >= 0) this.resultT += dt;
 
     // ---- board title + enemy banner ----
     ui.text(`Your Warband  ·  ${run.deployedCount()} / ${run.deployCount()} deployed`, boardX, 80, { size: 14, bold: true, color: PAL.uiAccent });
@@ -362,7 +379,7 @@ export class WarbandScreen {
         ctx.setLineDash([]);
         continue;
       }
-      this.pieceCard(cx, benchY + 14, cardW, cardH, run.pieces[i], false, this.heldPiece === i);
+      this.pieceCard(cx, benchY + 14, cardW, cardH, run.pieces[i], false, time, this.heldPiece === i);
       const over = ui.mx >= cx && ui.mx <= cx + cardW && ui.my >= benchY + 14 && ui.my <= benchY + 14 + cardH;
       if (run.phase === "shop" && over && !ui.pointerConsumed) {
         const equipping = this.selectedItem >= 0 && this.selectedItem < run.itemStash.length;
@@ -383,15 +400,20 @@ export class WarbandScreen {
 
     if (run.phase === "shop") {
       ui.text("Shop", bx, shopY + 6, { size: 13, bold: true, color: PAL.uiAccent });
-      const sw = 120;
+      const sw = 120, sh = 108; // tall enough for the unit to actually be seen
       run.shop.forEach((type, i) => {
         const cx = bx + i * (sw + 8);
-        const cy = shopY + 14;
+        const cy = shopY + 12;
         if (type) {
           const can = run.canBuy(i);
-          this.shopCard(cx, cy, sw, 70, type, can.ok, run.poolCount(type), can.reason, () => { if (run.buy(i)) audio.play("coin"); });
+          this.shopCard(cx, cy, sw, sh, type, can.ok, run.poolCount(type), can.reason, time, () => { if (run.buy(i)) audio.play("coin"); });
         }
-        else { ctx.fillStyle = "rgba(0,0,0,0.25)"; ctx.fillRect(cx, cy, sw, 70); }
+        else {
+          // A bought-out slot still holds its place in the row.
+          ctx.fillStyle = "rgba(0,0,0,0.25)"; this.roundRect(ctx, cx, cy, sw, sh, 8); ctx.fill();
+          ctx.strokeStyle = "rgba(255,255,255,0.05)"; ctx.lineWidth = 1;
+          ctx.setLineDash([4, 4]); this.roundRect(ctx, cx + 0.5, cy + 0.5, sw - 1, sh - 1, 8); ctx.stroke(); ctx.setLineDash([]);
+        }
       });
       const rxx = bx + 5 * (120 + 8) + 8;
       const rc = run.rerollCost();
@@ -475,6 +497,8 @@ export class WarbandScreen {
     if (run.phase !== "shop") this.heldPiece = -1; // never carry a held unit out of setup
 
     // ---- overlays, back to front ----
+    if (run.phase === "battle" && this.introT > 0) this.drawIntro(boardX, boardY, boardW, boardH, run);
+    if (run.phase === "result" && run.lastResult) this.drawResultFlourish(W, H, run, time);
     this.drawStarUp(boardX, boardY, boardW, boardH);
     this.drawFusion(boardX, boardY, boardW, boardH);
     if (this.scoutId >= 0 && run.phase !== "over") this.drawScoutPanel(W, H, run, time);
@@ -1191,6 +1215,110 @@ export class WarbandScreen {
     }
   }
 
+  /**
+   * The clash: two plates slam in from opposite edges with a VS between them,
+   * holding the fight for a beat so a round starts as an event rather than
+   * units quietly beginning to walk.
+   */
+  private drawIntro(bx: number, by: number, bw: number, bh: number, run: WarbandRun) {
+    const ctx = ui.ctx;
+    const t = 1 - this.introT / INTRO_LEN; // 0 → 1 across the banner
+    const slide = easeOut(Math.min(1, t * 2.2));
+    const fade = t > 0.82 ? 1 - (t - 0.82) / 0.18 : 1; // clear out at the end
+    const cy = by + bh * 0.42;
+    const plateH = 56;
+
+    ctx.save();
+    ctx.globalAlpha = fade;
+    ctx.beginPath(); ctx.rect(bx, by, bw, bh); ctx.clip();
+    // A dark band behind the banner.
+    ctx.fillStyle = "rgba(6,4,2,0.72)";
+    ctx.fillRect(bx, cy - plateH / 2 - 10, bw, plateH + 20);
+
+    const drawPlate = (label: string, sub: string, colour: string, fromLeft: boolean) => {
+      const w = bw * 0.42;
+      const rest = fromLeft ? bx + bw * 0.5 - w - 26 : bx + bw * 0.5 + 26;
+      const off = (1 - slide) * (bw * 0.55) * (fromLeft ? -1 : 1);
+      const x = rest + off;
+      const g = ctx.createLinearGradient(x, 0, x + w, 0);
+      if (fromLeft) { g.addColorStop(0, withAlpha(colour, 0.06)); g.addColorStop(1, withAlpha(colour, 0.42)); }
+      else { g.addColorStop(0, withAlpha(colour, 0.42)); g.addColorStop(1, withAlpha(colour, 0.06)); }
+      ctx.fillStyle = g;
+      ctx.fillRect(x, cy - plateH / 2, w, plateH);
+      ctx.fillStyle = colour;
+      ctx.fillRect(fromLeft ? x + w - 2.5 : x, cy - plateH / 2, 2.5, plateH);
+      ui.text(label, fromLeft ? x + w - 16 : x + 16, cy - 2, {
+        align: fromLeft ? "right" : "left", size: 22, bold: true, color: "#f7efdc", font: "Georgia, serif",
+      });
+      ui.text(sub, fromLeft ? x + w - 16 : x + 16, cy + 18, {
+        align: fromLeft ? "right" : "left", size: 11.5, color: withAlpha(colour, 0.95),
+      });
+    };
+    drawPlate("YOUR WARBAND", `${run.deployedCount()} deployed · ${run.activeTraits().length} synergies`, "#7fb0e8", true);
+    drawPlate(run.pendingFoeName(), run.isCreepRound() ? "monster camp" : "rival warband", "#e0786a", false);
+
+    // The VS mark, punching in on its own beat.
+    const pop = 0.5 + easeOut(Math.min(1, Math.max(0, t - 0.16) * 3.4)) * 0.5;
+    ctx.save();
+    ctx.translate(bx + bw / 2, cy);
+    ctx.scale(pop, pop);
+    ctx.shadowColor = "#ffd24a"; ctx.shadowBlur = 24;
+    ui.text("VS", 0, 12, { align: "center", size: 40, bold: true, color: "#ffd24a", font: "Georgia, serif" });
+    ctx.restore();
+    ctx.restore();
+  }
+
+  /**
+   * The result flourish: rays and a scale-popped banner. Winning a round should
+   * feel like something, not read as a line of text in the shop bar.
+   */
+  private drawResultFlourish(W: number, H: number, run: WarbandRun, time: number) {
+    const r = run.lastResult;
+    if (!r || this.resultT < 0) return;
+    const ctx = ui.ctx;
+    const t = this.resultT;
+    const fade = t > 1.5 ? Math.max(0, 1 - (t - 1.5) / 0.6) : 1;
+    if (fade <= 0) return;
+    const cx = W / 2, cy = H * 0.34;
+    const col = r.won ? "#7df2a9" : "#e0564a";
+
+    ctx.save();
+    ctx.globalAlpha = fade;
+    // Radiant rays behind a win; a dull pall behind a loss.
+    if (r.won) {
+      ctx.save();
+      ctx.translate(cx, cy); ctx.rotate(time * 0.22); ctx.globalAlpha = fade * 0.1;
+      for (let i = 0; i < 14; i++) {
+        ctx.rotate((Math.PI * 2) / 14);
+        ctx.fillStyle = "#ffe9b0";
+        ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(Math.max(W, H) * 0.5, -22); ctx.lineTo(Math.max(W, H) * 0.5, 22); ctx.closePath(); ctx.fill();
+      }
+      ctx.restore();
+    }
+    const glow = ctx.createRadialGradient(cx, cy, 10, cx, cy, 300);
+    glow.addColorStop(0, withAlpha(col, 0.2)); glow.addColorStop(1, "rgba(0,0,0,0)");
+    ctx.fillStyle = glow; ctx.fillRect(0, 0, W, H);
+
+    // Scale-pop banner.
+    const pop = 1 + 0.5 * Math.exp(-t * 5) * Math.cos(t * 13);
+    ctx.save();
+    ctx.translate(cx, cy); ctx.scale(pop, pop); ctx.translate(-cx, -cy);
+    ctx.save();
+    ctx.shadowColor = col; ctx.shadowBlur = 26;
+    ui.text(r.won ? "VICTORY" : "DEFEAT", cx, cy, {
+      align: "center", size: 58, bold: true, color: r.won ? "#f7efdc" : "#e8bfb6", font: "Georgia, serif",
+    });
+    ctx.restore();
+    ui.text(
+      r.creep && r.won ? `${r.foe} cleared — ${r.relics} relic${r.relics === 1 ? "" : "s"} + ${r.gold}g`
+        : r.won ? `${r.foe} broken · ${r.youLeft} still standing`
+          : `${r.foe} holds · −${r.dmg} life`,
+      cx, cy + 34, { align: "center", size: 16, bold: true, color: col, font: "Georgia, serif" },
+    );
+    ctx.restore();
+    ctx.restore();
+  }
+
   /** A forge flourish when two components fuse into a full relic. */
   private drawFusion(bx: number, by: number, bw: number, bh: number) {
     if (!this.fusion) return;
@@ -1251,6 +1379,53 @@ export class WarbandScreen {
       align: "center", size: 17, bold: true, color: "#f7efdc", font: "Georgia, serif",
     });
     ctx.restore();
+    ctx.restore();
+  }
+
+  /**
+   * Draw a unit's actual animated sprite as a card portrait. This is the same
+   * `drawUnit` the arena uses, on a throwaway entity built from the unit
+   * definition — so a card shows the thing you're buying, idling and breathing,
+   * rather than a name and a number.
+   */
+  private portrait(ctx: CanvasRenderingContext2D, cx: number, cy: number, px: number, type: string, star: number, time: number) {
+    const def = UNITS[type];
+    if (!def) return;
+    let e = this.portraits.get(type);
+    if (!e) {
+      e = makeEntity();
+      e.type = type;
+      e.team = Team.Player;
+      e.x = 0; e.y = 0; e.prevX = 0; e.prevY = 0;
+      this.portraits.set(type, e);
+    }
+    // Refresh the fields the renderer reads (star tier changes the trim).
+    e.radius = def.radius;
+    e.maxHp = def.hp; e.hp = def.hp;
+    e.attack = def.attack; e.range = def.range;
+    e.attackInterval = def.attackInterval;
+    e.armor = def.armor; e.armorClass = def.armorClass ?? ArmorClass.Infantry;
+    e.speed = def.speed;
+    e.variantRarity = Math.max(0, Math.min(2, star - 1));
+    e.animPhase = time * 0.6 + type.length; // a gentle idle sway, offset per type
+    e.facing = -0.35;                       // three-quarter view, facing the reader
+    e.hitFlash = 0;
+    const scale = px / TILE;
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.scale(scale, scale);
+    ctx.translate(-e.x, -e.y);
+    try { drawUnit(ctx, e, time, 0); } catch { /* a bad sprite must never kill the frame */ }
+    ctx.restore();
+  }
+
+  /** A small stone plinth for a portrait to stand on. */
+  private plinth(ctx: CanvasRenderingContext2D, cx: number, cy: number, rx: number, color: string) {
+    ctx.save();
+    ctx.fillStyle = "rgba(0,0,0,0.4)";
+    ctx.beginPath(); ctx.ellipse(cx, cy, rx, rx * 0.34, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = withAlpha(color, 0.55); ctx.lineWidth = 1.2;
+    ctx.beginPath(); ctx.ellipse(cx, cy, rx, rx * 0.34, 0, 0, Math.PI * 2); ctx.stroke();
     ctx.restore();
   }
 
@@ -1622,7 +1797,7 @@ export class WarbandScreen {
     return `${run.round}:${run.pendingSeed}:${board}`;
   }
 
-  private pieceCard(x: number, y: number, w: number, h: number, p: Piece, deployed: boolean, held = false) {
+  private pieceCard(x: number, y: number, w: number, h: number, p: Piece, deployed: boolean, time: number, held = false) {
     const ctx = ui.ctx;
     const tier = UNIT_TIER[p.type] ?? 1;
     const hover = ui.mx >= x && ui.mx <= x + w && ui.my >= y && ui.my <= y + h;
@@ -1633,15 +1808,25 @@ export class WarbandScreen {
     ctx.fillStyle = g; this.roundRect(ctx, x, y, w, h, 6); ctx.fill();
     ctx.strokeStyle = withAlpha(TIER_COLOR[tier], hover ? 0.95 : 0.6);
     ctx.lineWidth = 1.5; this.roundRect(ctx, x + 0.75, y + 0.75, w - 1.5, h - 1.5, 6); ctx.stroke();
-    ui.text(shortName(p.type), x + w / 2, y + 18, { align: "center", size: 12, bold: true, color: "#e7ddc4" });
-    ui.text(stars(p.star), x + w / 2, y + 34, { align: "center", size: 13, color: p.star >= 3 ? "#ffd24a" : p.star === 2 ? "#cfe0ff" : "#9a917b" });
+    // The unit stands on the card; its name sits on a plate along the bottom.
+    ctx.save();
+    ctx.beginPath(); ctx.rect(x + 2, y + 2, w - 4, h - 18); ctx.clip();
+    this.plinth(ctx, x + w / 2, y + h - 24, 16, TIER_COLOR[tier]);
+    this.portrait(ctx, x + w / 2, y + h - 24, 33, p.type, p.star, time);
+    ctx.restore();
+    if (p.star >= 2) {
+      ui.text(stars(p.star), x + w / 2, y + 13, { align: "center", size: 11, color: p.star >= 3 ? "#ffd24a" : "#cfe0ff" });
+    }
+    ctx.fillStyle = "rgba(10,7,4,0.82)";
+    this.roundRect(ctx, x + 2, y + h - 17, w - 4, 15, 4); ctx.fill();
+    ui.text(shortName(p.type), x + w / 2, y + h - 6, { align: "center", size: 10.5, bold: true, color: "#e7ddc4" });
     // Equipped relics as mini icons along the bottom.
     let ix = x + 11;
     for (const id of p.items) {
       const it = itemDef(id); if (!it) continue;
-      ctx.fillStyle = "rgba(8,6,3,0.9)"; ctx.beginPath(); ctx.arc(ix, y + h - 8, 6, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = "rgba(8,6,3,0.9)"; ctx.beginPath(); ctx.arc(ix, y + 13, 6, 0, Math.PI * 2); ctx.fill();
       ctx.strokeStyle = it.color; ctx.lineWidth = 1; ctx.stroke();
-      this.itemIcon(ctx, ix, y + h - 8, 4.3, it);
+      this.itemIcon(ctx, ix, y + 13, 4.3, it);
       ix += 14;
     }
     ctx.globalAlpha = 1;
@@ -1650,7 +1835,7 @@ export class WarbandScreen {
 
   private shopCard(
     x: number, y: number, w: number, h: number, type: string, affordable: boolean,
-    poolLeft: number, blocked: "gold" | "bench" | undefined, onClick: () => void,
+    poolLeft: number, blocked: "gold" | "bench" | undefined, time: number, onClick: () => void,
   ) {
     const ctx = ui.ctx;
     const tier = UNIT_TIER[type] ?? 1;
@@ -1670,11 +1855,35 @@ export class WarbandScreen {
     // Tier accent bar along the top.
     ctx.fillStyle = withAlpha(col, affordable ? 1 : 0.5);
     ctx.fillRect(x + 6, y + oy + 4, w - 12, 2.5);
-    ui.text(shortName(type), x + w / 2, y + oy + 26, { align: "center", size: 14, bold: true, color: affordable ? "#f2e8d0" : "#6f6a5c" });
+    // The unit itself, standing on a lit plinth — the card's centrepiece.
+    const feet = y + oy + 58;
+    ctx.save();
+    ctx.globalAlpha = affordable ? 1 : 0.4;
+    // A soft pool of tier light behind the figure.
+    const halo = ctx.createRadialGradient(x + w / 2, feet - 14, 2, x + w / 2, feet - 14, 34);
+    halo.addColorStop(0, withAlpha(col, 0.3)); halo.addColorStop(1, "rgba(0,0,0,0)");
+    ctx.fillStyle = halo; ctx.fillRect(x + 2, y + oy + 8, w - 4, 62);
+    this.plinth(ctx, x + w / 2, feet, 21, col);
+    ctx.save();
+    ctx.beginPath(); ctx.rect(x + 3, y + oy + 8, w - 6, 54); ctx.clip();
+    this.portrait(ctx, x + w / 2, feet, 46, type, 1, time);
+    ctx.restore();
+    ctx.globalAlpha = 1;
+    ctx.restore();
+    const nm = shortName(type);
+    ui.text(nm, x + w / 2, y + oy + 78, {
+      align: "center", size: nm.length > 10 ? 11 : 13.5, bold: true,
+      color: affordable ? "#f2e8d0" : "#6f6a5c", font: "Georgia, serif",
+    });
+    // Synergies, centred under the name.
     const tt = traitsOf(type).slice(0, 2);
-    let txx = x + 10;
-    for (const tr of tt) { ui.text(tr.name, txx, y + oy + 44, { size: 9.5, color: affordable ? tr.color : withAlpha(tr.color, 0.5) }); txx += tr.name.length * 5.6 + 8; }
-    ui.text(`Tier ${tier}`, x + 10, y + oy + h - 10, { size: 10, color: withAlpha(col, affordable ? 1 : 0.5) });
+    const label = tt.map((t2) => t2.name).join(" · ");
+    if (label) {
+      ui.text(label, x + w / 2, y + oy + 92, {
+        align: "center", size: 9, color: affordable ? withAlpha(tt[0].color, 0.95) : withAlpha(tt[0].color, 0.45),
+      });
+    }
+    ui.text(`T${tier}`, x + 9, y + oy + h - 8, { size: 9.5, bold: true, color: withAlpha(col, affordable ? 1 : 0.5) });
     // How it opens a fight, as a corner mark — the name lives in the tooltip.
     const sd2 = styleDef(type);
     ctx.globalAlpha = affordable ? 1 : 0.45;
@@ -1682,12 +1891,12 @@ export class WarbandScreen {
     ctx.globalAlpha = 1;
     // Copies left in the shared lobby pool — or why this one can't be bought.
     if (blocked === "bench") {
-      ui.text("bench full", x + w / 2, y + oy + h - 10, { align: "center", size: 9.5, bold: true, color: "#e0786a" });
+      ui.text("bench full", x + w / 2, y + oy + h - 8, { align: "center", size: 9.5, bold: true, color: "#e0786a" });
     } else {
-      ui.text(`${poolLeft} left`, x + w / 2, y + oy + h - 10, { align: "center", size: 9.5, color: poolLeft <= 3 ? "#e0786a" : "#8a8278" });
+      ui.text(`${poolLeft} left`, x + w / 2, y + oy + h - 8, { align: "center", size: 9.5, color: poolLeft <= 3 ? "#e0786a" : "#8a8278" });
     }
     // Gold coin with the cost.
-    this.coin(ctx, x + w - 18, y + oy + h - 13, tier, affordable);
+    this.coin(ctx, x + w - 16, y + oy + h - 12, tier, affordable);
     if (hover) this.unitTip = { p: { type, star: 1, items: [] }, x: x + w + 6, y: y - 150 };
     if (hover && affordable && ui.clicked && !ui.pointerConsumed) { ui.pointerConsumed = true; onClick(); }
   }
