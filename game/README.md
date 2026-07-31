@@ -93,6 +93,11 @@ standing wins.
 - **Monster camps** — the opening round and every fifth round after it are PvE.
   The camp is visible while you set up, no player life is at stake, and clearing
   it drops relics and gold.
+- **Battlefield conditions** — every round is fought in some weather, on some
+  ground, and it hits *both* warbands equally: driving rain slackens bowstrings
+  (Marksmen weaker), deep mud bogs down a cavalry charge, still air lets siege
+  find its range. The question is never who got lucky, it's whether your comp
+  is the one that copes — and whether it's worth swapping a bench unit in.
 - **Scouting** — click any rival in the standings to see the warband they'd field
   right now, their level and their live synergies, and adapt before you spend.
 
@@ -129,5 +134,5 @@ renderer.
   post-match screens, and the Warband Tactics screen.
 - Warband Tactics lives in `src/sim/warband.ts` (run engine), `autobattle.ts`
   (headless + watchable battle resolution), `traits.ts`, `items.ts`,
-  `augments.ts`, `creeps.ts`, `carousel.ts`, `warband_commanders.ts`, drawn by
-  `src/ui/warband_screen.ts`.
+  `augments.ts`, `creeps.ts`, `carousel.ts`, `conditions.ts`,
+  `warband_commanders.ts`, drawn by `src/ui/warband_screen.ts`.

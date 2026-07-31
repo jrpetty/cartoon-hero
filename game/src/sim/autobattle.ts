@@ -73,6 +73,31 @@ type PosFn = (i: number, n: number, cx: number, cy: number, side: number) => { x
 export interface SideOpts {
   buff?: Buff;
   traitBonus?: Record<string, number>;
+  /** Buffs applied to units belonging to a trait — how conditions bite. */
+  traitBuffs?: Record<string, Buff>;
+}
+
+/** Merge a side's own modifiers with the battlefield ones that hit everybody. */
+export function mergeSideOpts(own?: SideOpts, field?: SideOpts): SideOpts | undefined {
+  if (!field) return own;
+  if (!own) return field;
+  const buff: Buff = { ...(own.buff ?? {}) };
+  for (const k of ["armor", "atk", "atkPct", "hp", "hpPct", "speedPct"] as const) {
+    if (field.buff?.[k]) buff[k] = (buff[k] ?? 0) + field.buff[k]!;
+  }
+  const traitBuffs: Record<string, Buff> = { ...(own.traitBuffs ?? {}) };
+  for (const [id, b] of Object.entries(field.traitBuffs ?? {})) {
+    const cur: Buff = { ...(traitBuffs[id] ?? {}) };
+    for (const k of ["armor", "atk", "atkPct", "hp", "hpPct", "speedPct"] as const) {
+      if (b[k]) cur[k] = (cur[k] ?? 0) + b[k]!;
+    }
+    traitBuffs[id] = cur;
+  }
+  return {
+    buff: Object.keys(buff).length ? buff : undefined,
+    traitBonus: own.traitBonus ?? field.traitBonus,
+    traitBuffs: Object.keys(traitBuffs).length ? traitBuffs : undefined,
+  };
 }
 
 function spawnArmy(w: World, units: ArenaUnit[], team: Team, side: number, posFn?: PosFn, opts?: SideOpts): EntityId[] {
@@ -107,6 +132,12 @@ function spawnArmy(w: World, units: ArenaUnit[], team: Team, side: number, posFn
     for (const at of myTraits) if (at.tier) applyBuff(u, at.tier.buff);
     if (au.items?.length) applyItems(u, au.items);
     if (opts?.buff) applyBuff(u, opts.buff); // run-wide augment buffs, last
+    if (opts?.traitBuffs) { // battlefield conditions, by trait membership
+      for (const t of traitsOf(au.type)) {
+        const b = opts.traitBuffs[t.id];
+        if (b) applyBuff(u, b);
+      }
+    }
     u.stance = Stance.Aggressive; // hunt — no economy, just fight
     u.variantRarity = star - 1; // a visual tier glow if rendered
     ids.push(u.id);
@@ -126,7 +157,8 @@ const alivePower = (w: World, team: Team): { count: number; power: number } => {
 };
 
 export function resolveBattle(
-  a: (UnitStack | ArenaUnit)[], b: (UnitStack | ArenaUnit)[], seed = 1, maxSeconds = 40, optsA?: SideOpts,
+  a: (UnitStack | ArenaUnit)[], b: (UnitStack | ArenaUnit)[], seed = 1, maxSeconds = 40,
+  optsA?: SideOpts, field?: SideOpts,
 ): BattleResult {
   const map = generateMap("open_plains", seed, 2);
   const w = new World(seed);
@@ -134,8 +166,8 @@ export function resolveBattle(
   const cx = w.worldW / 2;
   const cy = w.worldH / 2;
 
-  const idsA = spawnArmy(w, normalize(a), Team.Player, -1, undefined, optsA);
-  const idsB = spawnArmy(w, normalize(b), Team.Enemy, 1);
+  const idsA = spawnArmy(w, normalize(a), Team.Player, -1, undefined, mergeSideOpts(optsA, field));
+  const idsB = spawnArmy(w, normalize(b), Team.Enemy, 1, undefined, field);
   // March both lines into the centre so they actually clash.
   w.issueFormationMove(idsA, cx + 30, cy, false, true);
   w.issueFormationMove(idsB, cx - 30, cy, false, true);
@@ -198,14 +230,15 @@ export class LiveBattle {
   private _result: BattleResult | null = null;
   private mana = new Map<EntityId, number>(); // 0..1 ability charge per unit
 
-  constructor(a: (UnitStack | ArenaUnit)[], b: (UnitStack | ArenaUnit)[], seed = 1, maxSeconds = 30, optsA?: SideOpts) {
+  constructor(a: (UnitStack | ArenaUnit)[], b: (UnitStack | ArenaUnit)[], seed = 1, maxSeconds = 30,
+    optsA?: SideOpts, field?: SideOpts) {
     const map = generateMap("open_plains", seed, 2);
     this.world = new World(seed);
     this.world.init(map, [{}, {}], [1, 1], [0, 1]);
     this.cx = this.world.worldW / 2;
     this.cy = this.world.worldH / 2;
-    this.idsA = spawnArmy(this.world, normalize(a), Team.Player, -1, BOARD_LAYOUT, optsA);
-    this.idsB = spawnArmy(this.world, normalize(b), Team.Enemy, 1, BOARD_LAYOUT);
+    this.idsA = spawnArmy(this.world, normalize(a), Team.Player, -1, BOARD_LAYOUT, mergeSideOpts(optsA, field));
+    this.idsB = spawnArmy(this.world, normalize(b), Team.Enemy, 1, BOARD_LAYOUT, field);
     this.maxTicks = SIM_HZ * maxSeconds;
   }
 

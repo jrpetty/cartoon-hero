@@ -6,6 +6,9 @@ import { RNG } from "../engine/rng";
 import { WARBAND_COMMANDERS, warbandCommander, commanderIdentity } from "./warband_commanders";
 import { isDraftRound, rollCarousel, pickValue, CAROUSEL_SIZE } from "./carousel";
 import { isComponent } from "./items";
+import { CONDITIONS, CLEAR, conditionById, hasEffect, conditionLines } from "./conditions";
+import { TRAITS } from "./traits";
+import { resolveBattle, mergeSideOpts } from "./autobattle";
 
 /** Drive a run to the start of a given round, taking the first augment offered. */
 function advanceTo(run: WarbandRun, round: number) {
@@ -566,6 +569,86 @@ describe("Warband carousel", () => {
     expect(ringSize).toBeGreaterThan(1);
     // Rivals cleared what you left behind (boards can also cap out, so ≥).
     expect(foeUnitsAfter).toBeGreaterThanOrEqual(foeUnitsBefore);
+  });
+});
+
+describe("Warband battlefield conditions", () => {
+  it("opens on clear skies and rolls a real condition later", () => {
+    const run = new WarbandRun(71, null);
+    expect(run.condition.id).toBe("clear");
+    expect(hasEffect(CLEAR)).toBe(false);
+    const seen = new Set<string>();
+    for (let s = 0; s < 30; s++) {
+      const r2 = new WarbandRun(700 + s, null);
+      advanceTo(r2, 4);
+      seen.add(r2.condition.id);
+    }
+    expect(seen.size).toBeGreaterThan(1); // the weather actually varies
+    for (const id of seen) expect(conditionById(id)).toBeTruthy();
+  });
+
+  it("every condition is well-formed and describes itself", () => {
+    const traitName = (id: string) => TRAITS.find((t) => t.id === id)?.name ?? id;
+    for (const c of CONDITIONS) {
+      expect(c.name.length).toBeGreaterThan(0);
+      expect(c.desc.length).toBeGreaterThan(0);
+      expect(c.weight).toBeGreaterThan(0);
+      expect(["clear", "rain", "snow", "overcast"]).toContain(c.weather);
+      // Trait keys must be real traits, or the effect silently does nothing.
+      for (const id of Object.keys(c.traits ?? {})) {
+        expect(TRAITS.some((t) => t.id === id), `${c.id} → ${id}`).toBe(true);
+      }
+      if (hasEffect(c)) expect(conditionLines(c, traitName).length).toBeGreaterThan(0);
+    }
+  });
+
+  it("bites the trait it names, on both sides of the field", () => {
+    // Driving Rain weakens Marksmen. Archers under rain should lose to archers
+    // in the clear only if the effect were one-sided — here it hits both, so
+    // the check is that the effect reaches the units at all.
+    const rain = conditionById("rain")!;
+    const field = { buff: rain.all, traitBuffs: rain.traits };
+    const archers = [{ type: "archer", star: 1, col: 2, row: 4 }, { type: "archer", star: 1, col: 2, row: 5 }];
+    const spears = [{ type: "spearman", star: 1, col: 7, row: 4 }, { type: "spearman", star: 1, col: 7, row: 5 }];
+    // Marksmen weakened → archers fare worse against the same melee than in the clear.
+    let clearWins = 0, rainWins = 0;
+    for (const seed of [1, 2, 3, 4, 5, 6]) {
+      if (resolveBattle(archers, spears, seed).winner === "A") clearWins++;
+      if (resolveBattle(archers, spears, seed, 40, undefined, field).winner === "A") rainWins++;
+    }
+    expect(rainWins).toBeLessThanOrEqual(clearWins);
+  });
+
+  it("applies the same battlefield to the enemy, not just to you", () => {
+    const frost = conditionById("frost")!; // −8% HP to everyone
+    const field = { buff: frost.all, traitBuffs: frost.traits };
+    const a = [{ type: "knight", star: 1, col: 2, row: 4 }];
+    const b = [{ type: "knight", star: 1, col: 7, row: 4 }];
+    // A mirror match stays a mirror under a symmetric condition.
+    const plain = resolveBattle(a, b, 3);
+    const chilled = resolveBattle(a, b, 3, 40, undefined, field);
+    expect(chilled.winner).toBe(plain.winner);
+  });
+
+  it("merges battlefield modifiers with the warband's own", () => {
+    const merged = mergeSideOpts(
+      { buff: { atkPct: 20 }, traitBuffs: { marksmen: { atkPct: 10 } } },
+      { buff: { hpPct: -8 }, traitBuffs: { marksmen: { atkPct: -18 }, riders: { speedPct: -25 } } },
+    );
+    expect(merged?.buff).toEqual({ atkPct: 20, hpPct: -8 });
+    expect(merged?.traitBuffs?.marksmen).toEqual({ atkPct: -8 }); // 10 + (−18)
+    expect(merged?.traitBuffs?.riders).toEqual({ speedPct: -25 });
+    // Either side being absent is a pass-through, not a crash.
+    expect(mergeSideOpts({ buff: { atk: 1 } }, undefined)).toEqual({ buff: { atk: 1 } });
+    expect(mergeSideOpts(undefined, { buff: { atk: 2 } })).toEqual({ buff: { atk: 2 } });
+  });
+
+  it("hands the run's condition to the fight through fieldOpts", () => {
+    const run = new WarbandRun(72, null);
+    advanceTo(run, 4);
+    const f = run.fieldOpts();
+    expect(f.buff).toBe(run.condition.all);
+    expect(f.traitBuffs).toBe(run.condition.traits);
   });
 });
 

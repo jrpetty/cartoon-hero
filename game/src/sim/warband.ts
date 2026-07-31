@@ -14,6 +14,7 @@ import { CreepCamp, isCreepRound, campForRound, campBoard } from "./creeps";
 import { WarbandCommander, warbandCommander, offerCommanders } from "./warband_commanders";
 import { CarouselPick, isDraftRound, rollCarousel, pickValue } from "./carousel";
 import { UNIT_TIER, TIER_UNITS } from "./unit_tiers";
+import { Condition, rollCondition, CLEAR } from "./conditions";
 
 export { UNIT_TIER } from "./unit_tiers"; // re-exported: the screen and tests import it from here
 
@@ -121,6 +122,8 @@ export class WarbandRun {
   private freeRerolls = 0; // reset each round by the commander's perk
   // ---- the round's PvE camp, when this is a monster round ----
   pendingCamp: CreepCamp | null = null;
+  /** The weather and ground this round is fought on — it hits both warbands. */
+  condition: Condition = CLEAR;
   // ---- the shared draft, on carousel rounds ----
   /** What's still on the ring when your turn comes (rivals pick before you). */
   carousel: CarouselPick[] = [];
@@ -471,6 +474,7 @@ export class WarbandRun {
     // Lock in this round's matchup + battle seed now, so the board preview and
     // the live fight face the same warband (or camp).
     this.pendingSeed = this.rng.int(1, 1e9);
+    this.condition = rollCondition(this.rng, this.round);
     if (isCreepRound(this.round)) {
       // A PvE monster camp: no player life at stake, relics on the table.
       this.pendingCamp = campForRound(this.round);
@@ -591,6 +595,11 @@ export class WarbandRun {
     return { buff: this.warbandBuff(), traitBonus: this.traitBonusMap() };
   }
 
+  /** This round's battlefield modifiers — applied identically to both sides. */
+  fieldOpts(): SideOpts {
+    return { buff: this.condition.all, traitBuffs: this.condition.traits };
+  }
+
   /** Every run-wide buff (augments + commander) merged into one. */
   private warbandBuff(): Buff | undefined {
     const aug = combinedBuff(this.augments);
@@ -695,7 +704,7 @@ export class WarbandRun {
   fight(): void {
     if (this.phase !== "shop") return;
     if (!this.pendingFoe && !this.pendingCamp) { this.outcome = "win"; this.phase = "over"; return; }
-    this.applyOutcome(resolveBattle(this.boardUnits(), this.pendingOpp, this.pendingSeed, 40, this.sideOpts()));
+    this.applyOutcome(resolveBattle(this.boardUnits(), this.pendingOpp, this.pendingSeed, 40, this.sideOpts(), this.fieldOpts()));
   }
 
   /** Begin the watchable version of the fight (the screen renders + steps it). */

@@ -21,6 +21,8 @@ import { ABILITIES } from "../content/abilities";
 import { Augment, TIER_COLOR as AUG_COLOR } from "../sim/augments";
 import { WarbandCommander, commanderIdentity } from "../sim/warband_commanders";
 import { CarouselPick } from "../sim/carousel";
+import { Condition, hasEffect, conditionLines } from "../sim/conditions";
+import { TRAITS } from "../sim/traits";
 
 const TIER_COLOR = ["#888888", "#9aa8b4", "#4caf50", "#3a78d8", "#9b5cf0", "#e0a020"];
 const STAR_MULT = [1, 1, 1.8, 3.2]; // hp/attack multiplier by star (matches the battle sim)
@@ -51,6 +53,7 @@ export class WarbandScreen {
   private liveTip: { e: Entity; x: number; y: number } | null = null; // hovered unit mid-fight
   private augTip: { a: Augment; x: number; y: number } | null = null; // hovered owned augment
   private cmdTip: { c: WarbandCommander; x: number; y: number } | null = null; // hovered commander plate
+  private condTip: { c: Condition; x: number; y: number } | null = null; // hovered battlefield chip
   private scoutId = -1;   // opponent whose warband is being scouted, or -1
   private scoutRect = { x: 0, y: 0, w: 0, h: 0 }; // last frame's panel, to block clicks through it
   private augPick = -1;   // augment card under the cursor on the picker
@@ -254,7 +257,7 @@ export class WarbandScreen {
     if (run.phase === "shop" || run.phase === "augment" || run.phase === "draft") {
       const sig = this.sig(run);
       if (sig !== this.battleSig || !this.battle) {
-        this.battle = new LiveBattle(run.boardUnits(), run.pendingOpp, run.pendingSeed, 30, run.sideOpts());
+        this.battle = new LiveBattle(run.boardUnits(), run.pendingOpp, run.pendingSeed, 30, run.sideOpts(), run.fieldOpts());
         this.battleSig = sig;
       }
     }
@@ -292,6 +295,23 @@ export class WarbandScreen {
 
     // ---- board title + enemy banner ----
     ui.text(`Your Warband  ·  ${run.deployedCount()} / ${run.deployCount()} deployed`, boardX, 80, { size: 14, bold: true, color: PAL.uiAccent });
+    // ---- the round's battlefield condition ----
+    this.condTip = null;
+    {
+      const cond = run.condition;
+      const live = hasEffect(cond);
+      const label = cond.name;
+      const cw2 = 22 + label.length * 6.4;
+      const cx2 = boardX + 232, cy2 = 66;
+      const hovC = ui.mx >= cx2 && ui.mx <= cx2 + cw2 && ui.my >= cy2 && ui.my <= cy2 + 20;
+      ctx.fillStyle = withAlpha(cond.color, hovC ? 0.34 : live ? 0.2 : 0.12);
+      this.roundRect(ctx, cx2, cy2, cw2, 20, 5); ctx.fill();
+      ctx.strokeStyle = withAlpha(cond.color, hovC ? 0.95 : 0.5); ctx.lineWidth = 1;
+      this.roundRect(ctx, cx2 + 0.5, cy2 + 0.5, cw2 - 1, 19, 5); ctx.stroke();
+      this.weatherGlyph(ctx, cx2 + 12, cy2 + 10, 6, cond, time);
+      ui.text(label, cx2 + 22, cy2 + 14, { size: 11, bold: true, color: cond.color });
+      if (hovC) this.condTip = { c: cond, x: cx2, y: cy2 + 26 };
+    }
     if (run.isCreepRound()) {
       // A PvE camp round reads differently: loot on the line, not your life.
       const camp = run.pendingCamp!;
@@ -367,7 +387,7 @@ export class WarbandScreen {
       })) { if (run.buyXp()) audio.play("levelup"); }
       if (ui.button("⚔ FIGHT", rxx, shopY + 92, 130, 36, { accent: true, size: 16, tooltip: ["Send your warband into the arena."] })) {
         if (run.beginFight()) {
-          this.battle = new LiveBattle(run.boardUnits(), run.pendingOpp, run.pendingSeed);
+          this.battle = new LiveBattle(run.boardUnits(), run.pendingOpp, run.pendingSeed, 30, run.sideOpts(), run.fieldOpts());
           this.battle.begin();
           this.stepAccum = 0;
           this.heldPiece = -1;
@@ -429,7 +449,7 @@ export class WarbandScreen {
     this.drawFusion(boardX, boardY, boardW, boardH);
     if (this.scoutId >= 0 && run.phase !== "over") this.drawScoutPanel(W, H, run, time);
     if (picking) {
-      this.unitTip = null; this.itemTip = null; this.augTip = null; this.cmdTip = null;
+      this.unitTip = null; this.itemTip = null; this.augTip = null; this.cmdTip = null; this.condTip = null;
       if (run.phase === "commander") this.drawCommanderPicker(W, H, run, time);
       else if (run.phase === "draft") this.drawDraftPicker(W, H, run, time);
       else this.drawAugmentPicker(W, H, run, time);
@@ -439,6 +459,7 @@ export class WarbandScreen {
     this.drawLiveTip(W, H);
     this.drawAugTip(W, H);
     this.drawCmdTip(W, H);
+    this.drawCondTip(W, H);
     this.wasDown = down;
 
     return action;
@@ -908,6 +929,72 @@ export class WarbandScreen {
     if (ui.clicked) ui.pointerConsumed = true;
   }
 
+  /** A tiny weather mark for the condition chip: sun, rain, snow or cloud. */
+  private weatherGlyph(ctx: CanvasRenderingContext2D, cx: number, cy: number, r: number, c: Condition, time: number) {
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.fillStyle = c.color; ctx.strokeStyle = c.color; ctx.lineWidth = 1.2;
+    if (c.weather === "clear") {
+      ctx.beginPath(); ctx.arc(0, 0, r * 0.5, 0, Math.PI * 2); ctx.fill();
+      for (let i = 0; i < 8; i++) {
+        const a = (i / 8) * Math.PI * 2 + time * 0.25;
+        ctx.beginPath();
+        ctx.moveTo(Math.cos(a) * r * 0.7, Math.sin(a) * r * 0.7);
+        ctx.lineTo(Math.cos(a) * r, Math.sin(a) * r);
+        ctx.stroke();
+      }
+    } else {
+      // A cloud for everything else, with rain or snow beneath.
+      ctx.beginPath();
+      ctx.arc(-r * 0.35, -r * 0.1, r * 0.45, 0, Math.PI * 2);
+      ctx.arc(r * 0.2, -r * 0.2, r * 0.55, 0, Math.PI * 2);
+      ctx.arc(r * 0.55, r * 0.05, r * 0.35, 0, Math.PI * 2);
+      ctx.fill();
+      if (c.weather === "rain") {
+        for (const dx of [-0.4, 0.2, 0.7]) {
+          ctx.beginPath(); ctx.moveTo(dx * r, r * 0.5); ctx.lineTo(dx * r - r * 0.15, r * 1.05); ctx.stroke();
+        }
+      } else if (c.weather === "snow") {
+        for (const dx of [-0.4, 0.25, 0.75]) {
+          ctx.beginPath(); ctx.arc(dx * r, r * 0.8, r * 0.16, 0, Math.PI * 2); ctx.fill();
+        }
+      }
+    }
+    ctx.restore();
+  }
+
+  /** The battlefield tooltip: what the weather does, to whom, on both sides. */
+  private drawCondTip(W: number, H: number) {
+    if (!this.condTip) return;
+    const ctx = ui.ctx;
+    const c = this.condTip.c;
+    const traitName = (id: string) => TRAITS.find((t) => t.id === id)?.name ?? id;
+    const effects = conditionLines(c, traitName);
+    const desc = this.wrap(c.desc, 38);
+    const pw = 264;
+    const ph = 44 + desc.length * 15 + (effects.length ? 12 + effects.length * 16 : 0) + 20;
+    let px = this.condTip.x, py = this.condTip.y;
+    if (px + pw > W - 4) px = Math.max(4, W - pw - 4);
+    py = Math.max(4, Math.min(py, H - ph - 4));
+    ctx.save();
+    ctx.shadowColor = "rgba(0,0,0,0.6)"; ctx.shadowBlur = 14; ctx.shadowOffsetY = 4;
+    ctx.fillStyle = "rgba(18,14,9,0.98)"; this.roundRect(ctx, px, py, pw, ph, 9); ctx.fill();
+    ctx.restore();
+    ctx.strokeStyle = withAlpha(c.color, 0.95); ctx.lineWidth = 1.5;
+    this.roundRect(ctx, px + 0.75, py + 0.75, pw - 1.5, ph - 1.5, 9); ctx.stroke();
+    this.weatherGlyph(ctx, px + 20, py + 22, 9, c, 0);
+    ui.text(c.name, px + 38, py + 26, { size: 14.5, bold: true, color: c.color, font: "Georgia, serif" });
+    let ly = py + 46;
+    for (const ln of desc) { ui.text(ln, px + 14, ly, { size: 11, color: "#cabfa4" }); ly += 15; }
+    if (effects.length) {
+      ctx.strokeStyle = "rgba(255,255,255,0.09)"; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(px + 12, ly); ctx.lineTo(px + pw - 12, ly); ctx.stroke();
+      ly += 16;
+      for (const ln of effects) { ui.text("◆ " + ln, px + 14, ly, { size: 11.5, bold: true, color: "#e7ddc4" }); ly += 16; }
+    }
+    ui.text("Applies to both warbands.", px + 14, ly + 6, { size: 9.5, color: "#8a8278" });
+  }
+
   /** Tooltip for the run's commander plate — who they are and what they change. */
   private drawCmdTip(W: number, H: number) {
     if (!this.cmdTip) return;
@@ -1122,7 +1209,7 @@ export class WarbandScreen {
 
   /** The painterly stone arena: platform, team-tinted board, glowing centre line,
    *  vignette, ornate frame and flickering corner braziers. */
-  private drawArena(x: number, y: number, w: number, h: number, cellW: number, cellH: number, time: number) {
+  private drawArena(x: number, y: number, w: number, h: number, cellW: number, cellH: number, time: number, cond: Condition) {
     const ctx = ui.ctx;
     // Raised stone platform (drop shadow + base).
     ctx.save();
@@ -1165,6 +1252,51 @@ export class WarbandScreen {
     vg.addColorStop(0, "rgba(0,0,0,0)"); vg.addColorStop(1, "rgba(0,0,0,0.42)");
     ctx.fillStyle = vg; ctx.fillRect(x, y, w, h);
 
+    // ---- the round's weather, inside the arena ----
+    if (cond.weather !== "clear") {
+      ctx.save();
+      ctx.beginPath(); ctx.rect(x, y, w, h); ctx.clip();
+      // A colour wash for the sky.
+      const wash = cond.weather === "rain" ? "rgba(40,55,80,0.20)"
+        : cond.weather === "snow" ? "rgba(200,215,235,0.13)"
+          : "rgba(48,46,52,0.34)";
+      ctx.fillStyle = wash; ctx.fillRect(x, y, w, h);
+      // A breath of the condition's own colour, so mud reads brown and frost blue.
+      ctx.fillStyle = withAlpha(cond.color, 0.09); ctx.fillRect(x, y, w, h);
+      if (cond.weather === "rain") {
+        // Slanted streaks, marching on a fixed cycle so it stays smooth.
+        ctx.strokeStyle = "rgba(180,205,235,0.34)"; ctx.lineWidth = 1;
+        ctx.beginPath();
+        for (let i = 0; i < 90; i++) {
+          const sx0 = ((i * 137.5) % w);
+          const speed = 420 + (i % 5) * 90;
+          const sy0 = ((i * 61.7 + time * speed) % (h + 40)) - 20;
+          const len = 12 + (i % 4) * 4;
+          ctx.moveTo(x + sx0, y + sy0);
+          ctx.lineTo(x + sx0 - len * 0.32, y + sy0 + len);
+        }
+        ctx.stroke();
+      } else if (cond.weather === "snow") {
+        ctx.fillStyle = "rgba(235,244,255,0.62)";
+        for (let i = 0; i < 70; i++) {
+          const drift = Math.sin(time * 0.8 + i) * 14;
+          const sx0 = ((i * 149.3) % w) + drift;
+          const sy0 = ((i * 83.1 + time * 52) % (h + 20)) - 10;
+          const r = 1 + (i % 3) * 0.7;
+          ctx.beginPath(); ctx.arc(x + sx0, y + sy0, r, 0, Math.PI * 2); ctx.fill();
+        }
+      } else { // overcast — heavy cloud shadows drifting across the field
+        for (let i = 0; i < 5; i++) {
+          const cy2 = y + h * (0.12 + i * 0.19);
+          const cx2 = x + ((i * 337 + time * 20) % (w + 420)) - 210;
+          const g2 = ctx.createRadialGradient(cx2, cy2, 20, cx2, cy2, 210);
+          g2.addColorStop(0, "rgba(0,0,0,0.30)"); g2.addColorStop(1, "rgba(0,0,0,0)");
+          ctx.fillStyle = g2; ctx.fillRect(x, y, w, h);
+        }
+      }
+      ctx.restore();
+    }
+
     // Ornate frame + corner braziers.
     ctx.strokeStyle = "rgba(0,0,0,0.6)"; ctx.lineWidth = 4; ctx.strokeRect(x + 2, y + 2, w - 4, h - 4);
     ctx.strokeStyle = withAlpha("#caa56a", 0.5); ctx.lineWidth = 1.5; ctx.strokeRect(x + 5.5, y + 5.5, w - 11, h - 11);
@@ -1187,7 +1319,7 @@ export class WarbandScreen {
     const cellW = w / GRID_COLS;
     const cellH = h / GRID_ROWS;
 
-    this.drawArena(x, y, w, h, cellW, cellH, time);
+    this.drawArena(x, y, w, h, cellW, cellH, time, run.condition);
 
     if (!this.battle) return;
     const b = this.battle;
