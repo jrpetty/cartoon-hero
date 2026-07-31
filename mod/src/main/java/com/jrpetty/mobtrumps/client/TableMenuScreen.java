@@ -141,6 +141,12 @@ public class TableMenuScreen extends Screen {
         drawCenteredFitted(g, "CPU deck: same size as yours,", leftX + colW / 2, by + 2, colW - 12, TEXT_DIM);
         drawCenteredFitted(g, "mostly commons, one legendary", leftX + colW / 2, by + 12, colW - 12, TEXT_DIM);
         drawCenteredFitted(g, "and levelled to match your holos", leftX + colW / 2, by + 22, colW - 12, TEXT_DIM);
+        // a different game on the same cards, so it lives under the duel modes
+        // rather than in the deck row, which has no width left to give
+        int tw = by + 40;
+        g.fill(leftX + 8, tw - 6, leftX + colW - 8, tw - 5, 0x30FFFFFF);
+        modeButton(g, "twentyone", leftX + 8, tw, colW - 16, "TWENTY-ONE", 0,
+                "Call a stat, then the card turns", 0xFF7A5AA8, mouseX, mouseY, t);
 
         // --- VS PLAYER panel ---
         panel(g, rightX, panelTop, colW, panelH, "VS  PLAYER");
@@ -481,6 +487,9 @@ public class TableMenuScreen extends Screen {
                 minecraft.setScreen(new HallScreen());
             } else if (key.equals("campaign") && minecraft != null) {
                 minecraft.setScreen(new CampaignScreen());
+                return true;
+            } else if (key.equals("twentyone")) {
+                send(TableActionPayload.TWENTY_ONE, 0, false);
                 return true;
             } else if (key.equals("deck_edit") && minecraft != null) {
                 minecraft.setScreen(new DeckBuilderScreen(this));

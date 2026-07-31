@@ -82,6 +82,7 @@ public class MobTrumps {
                 TradeManager.handleLogout(player);
                 DraftManager.handleLogout(player);
                 TournamentManager.handleLogout(player);
+                BlackjackManager.handleLogout(player);
                 DuelTables.clearSeatsOf(player.getUUID());
                 TableBattleManager.clear(player.getUUID());
                 CampaignManager.clear(player.getUUID());

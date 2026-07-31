@@ -20,6 +20,7 @@ public record TableActionPayload(BlockPos pos, int action, int arg, boolean useD
     public static final int CHALLENGE = 1; // fight whoever is seated, in their mode
     public static final int CPU = 2;       // start a solo battle (arg = difficulty)
     public static final int STAND = 3;     // give up your seat
+    public static final int TWENTY_ONE = 4; // open the Twenty-One table
 
     public static final CustomPacketPayload.Type<TableActionPayload> TYPE =
             new CustomPacketPayload.Type<>(

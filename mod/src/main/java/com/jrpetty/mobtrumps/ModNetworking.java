@@ -83,6 +83,19 @@ public final class ModNetworking {
         registrar.playToClient(RecyclerResultPayload.TYPE, RecyclerResultPayload.STREAM_CODEC,
                 (payload, context) -> context.enqueueWork(
                         () -> com.jrpetty.mobtrumps.client.ClientRecycler.result(payload)));
+        // --- Twenty-One ---
+        registrar.playToClient(BlackjackMenuPayload.TYPE, BlackjackMenuPayload.STREAM_CODEC,
+                (payload, context) -> context.enqueueWork(
+                        () -> com.jrpetty.mobtrumps.client.ClientHooks.openBlackjack()));
+        registrar.playToClient(BlackjackSyncPayload.TYPE, BlackjackSyncPayload.STREAM_CODEC,
+                (payload, context) -> context.enqueueWork(
+                        () -> com.jrpetty.mobtrumps.client.ClientBlackjack.set(payload)));
+        registrar.playToServer(BlackjackActionPayload.TYPE, BlackjackActionPayload.STREAM_CODEC,
+                (payload, context) -> context.enqueueWork(() -> {
+                    if (context.player() instanceof net.minecraft.server.level.ServerPlayer sp) {
+                        BlackjackManager.handle(sp, payload.action(), payload.stat());
+                    }
+                }));
         registrar.playToServer(RecyclerActionPayload.TYPE, RecyclerActionPayload.STREAM_CODEC,
                 (payload, context) -> context.enqueueWork(() -> {
                     if (context.player() instanceof net.minecraft.server.level.ServerPlayer sp) {

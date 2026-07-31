@@ -126,6 +126,14 @@ public final class DuelTables {
                 tableSound(player, key, 1.1F);
                 TableBattleManager.start(player, difficulty, payload.useDeck());
             }
+            case TableActionPayload.TWENTY_ONE -> {
+                if (busy(player)) {
+                    player.sendSystemMessage(err("Finish your current game first."));
+                    return;
+                }
+                tableSound(player, key, 1.3F);
+                BlackjackManager.open(player);
+            }
             default -> {
             }
         }

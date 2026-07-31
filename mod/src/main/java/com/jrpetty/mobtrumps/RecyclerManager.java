@@ -53,7 +53,7 @@ public final class RecyclerManager {
     }
 
     /** Take exactly {@code want} fragments, or none at all. */
-    private static boolean takeFragments(ServerPlayer player, int want) {
+    public static boolean takeFragments(ServerPlayer player, int want) {
         if (want <= 0 || fragments(player) < want) {
             return false;
         }
@@ -70,7 +70,7 @@ public final class RecyclerManager {
         return left == 0;
     }
 
-    private static void giveFragments(ServerPlayer player, int count) {
+    public static void giveFragments(ServerPlayer player, int count) {
         int left = count;
         while (left > 0) {
             int stack = Math.min(64, left);
