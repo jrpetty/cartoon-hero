@@ -21,7 +21,7 @@ import net.minecraft.resources.ResourceLocation;
  * <p>Layout, low bits first: total (8) | up (8) | barricade summary (16). The
  * summary is itself packed - present flag (1) | gates standing open (4) |
  * percent of boards intact (7) - and is aggregate rather than per-gate because
- * the Crypt has eight windows, at which count a per-window gauge is unreadable
+ * the Outpost has ten windows, at which count a per-window gauge is unreadable
  * noise. Which one is going is carried by the callouts and the audio.
  */
 public record AbyssStatePayload(boolean inRun, int round, boolean fogRound,

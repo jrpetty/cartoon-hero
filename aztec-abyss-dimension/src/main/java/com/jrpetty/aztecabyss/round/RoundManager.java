@@ -134,6 +134,7 @@ public final class RoundManager {
                 abyssLevel.getWorldBorder().setSize(m.borderSize());
                 // Every gate goes back up for a fresh run, however last run ended.
                 Barricade.resetFor(abyssLevel, m);
+                resetAreas(abyssLevel, m);
                 LAST_REPAIR.clear();
             }
             game.setPhase(AbyssGame.Phase.BETWEEN_ROUNDS);
@@ -347,7 +348,7 @@ public final class RoundManager {
     private static void spawnWaveMob(ServerLevel level, List<ServerPlayer> present, int round, boolean brute) {
         // Every wave mob pours out of one of the active map's horde gates.
         BlockPos[] gates = game.getMap().gates();
-        int gateIndex = RNG.nextInt(gates.length);
+        int gateIndex = pickGate(game.getMap());
         BlockPos gate = gates[gateIndex];
         boolean penned = game.getMap().hasBarricades();
         boolean spreadAlongX = gate.getZ() != 0 || gates.length == 1;
@@ -415,6 +416,86 @@ public final class RoundManager {
     static final int ROLE_SAPPER = 2;
 
     /** How much objective damage each role deals per damage tick. */
+    /**
+     * Picks a window to spawn at, skipping any in a part of the map still sealed
+     * behind rubble. Without this, half the horde would climb into rooms the
+     * squad cannot reach and stand there until the round deadlocked.
+     */
+    private static int pickGate(com.jrpetty.aztecabyss.worldgen.ArenaMap map) {
+        int n = map.gates().length;
+        if (map.areaCount() <= 1) {
+            return RNG.nextInt(n);
+        }
+        int[] usable = new int[n];
+        int count = 0;
+        for (int i = 0; i < n; i++) {
+            if (isAreaOpen(map.gateArea(i))) {
+                usable[count++] = i;
+            }
+        }
+        return count == 0 ? 0 : usable[RNG.nextInt(count)];
+    }
+
+    // ------------------------------------------------------------------
+    // Sealed areas - rubble the squad digs out to open more of the map
+    // ------------------------------------------------------------------
+
+    /** Which areas of the active map have been opened. Area 0 is always open. */
+    private static boolean[] areaOpen = new boolean[]{true};
+    /** Spadefuls of rubble shifted so far, per area. */
+    private static final Map<Integer, Integer> DEBRIS_PROGRESS = new HashMap<>();
+    /** How many pulls it takes to clear a pile. */
+    private static final int DIG_PULLS = 5;
+
+    public static boolean isAreaOpen(int area) {
+        return area <= 0 || (area < areaOpen.length && areaOpen[area]);
+    }
+
+    private static void resetAreas(ServerLevel level, com.jrpetty.aztecabyss.worldgen.ArenaMap map) {
+        areaOpen = new boolean[Math.max(1, map.areaCount())];
+        areaOpen[0] = true;
+        DEBRIS_PROGRESS.clear();
+        if (map == com.jrpetty.aztecabyss.worldgen.ArenaMap.OUTPOST) {
+            com.jrpetty.aztecabyss.worldgen.OutpostBuilder.placeDebris(level);
+        }
+    }
+
+    /**
+     * Shifts a spadeful of rubble. Free, like boarding a window - the cost is the
+     * seconds you spend with your back to the room, and the fact that whatever is
+     * behind it starts coming through the moment you break it open.
+     */
+    public static boolean digDebris(ServerLevel level, ServerPlayer player, int area) {
+        if (!game.isParticipant(player.getUUID()) || isAreaOpen(area)) {
+            return false;
+        }
+        long now = level.getGameTime();
+        Long last = LAST_REPAIR.get(player.getUUID());
+        if (last != null && now - last < REPAIR_COOLDOWN_TICKS) {
+            return false;
+        }
+        LAST_REPAIR.put(player.getUUID(), now);
+
+        int pulls = DEBRIS_PROGRESS.merge(area, 1, Integer::sum);
+        barricadeSound(level, player.blockPosition(),
+                net.minecraft.sounds.SoundEvents.STONE_BREAK, 1.0F, 0.7F);
+        if (pulls < DIG_PULLS) {
+            actionBar(player, "§7Shifting rubble... §8(" + pulls + "/" + DIG_PULLS + ")");
+            return true;
+        }
+
+        areaOpen[area] = true;
+        com.jrpetty.aztecabyss.worldgen.OutpostBuilder.clearDebris(level, area);
+        String what = area == com.jrpetty.aztecabyss.worldgen.OutpostBuilder.AREA_BACK
+                ? "the back room" : "the stairs";
+        for (ServerPlayer p : participantPlayers(level)) {
+            actionBar(p, "§6⚒ The way to §f" + what + "§6 is clear §7— and so are its windows");
+            level.playSound(null, p.blockPosition(), net.minecraft.sounds.SoundEvents.ANVIL_LAND,
+                    SoundSource.BLOCKS, 0.7F, 0.8F);
+        }
+        return true;
+    }
+
     private static float roleHeartDamage(int role) {
         return switch (role) {
             case ROLE_BREAKER -> 2.0f;
@@ -721,12 +802,12 @@ public final class RoundManager {
     private static BlockPos bossSpawn() {
         return switch (game.getMap()) {
             case BRIDGE -> game.getMap().gates()[0].offset(0, 0, 4);
-            // Down the north arm, so it has to walk the length of the compound and
-            // the squad still has three other arms to scatter down when it slams.
-            case CRYPT -> new BlockPos(
-                    com.jrpetty.aztecabyss.worldgen.CryptBuilder.CENTER_X,
-                    com.jrpetty.aztecabyss.worldgen.CryptBuilder.FLOOR_Y + 1,
-                    com.jrpetty.aztecabyss.worldgen.CryptBuilder.CENTER_Z - 14);
+            // The double-height west end of the hall - the only room in the
+            // building with the headroom and the floor space for it.
+            case OUTPOST -> new BlockPos(
+                    com.jrpetty.aztecabyss.worldgen.OutpostBuilder.CENTER_X - 9,
+                    com.jrpetty.aztecabyss.worldgen.OutpostBuilder.FLOOR_Y + 1,
+                    com.jrpetty.aztecabyss.worldgen.OutpostBuilder.CENTER_Z + 2);
             default -> new BlockPos(0, AztecAbyssConstants.ARENA_FLOOR_Y + 1, 16);
         };
     }
@@ -1490,16 +1571,12 @@ public final class RoundManager {
     /** Drops a randomised supply cache somewhere on the open arena floor, flare and all. */
     private static void spawnSupplyCache(ServerLevel level, int round) {
         BlockPos pos;
-        if (game.getMap() == com.jrpetty.aztecabyss.worldgen.ArenaMap.CRYPT) {
-            // Down a random arm, clear of the junction so it isn't underfoot.
-            int arm = RNG.nextInt(4);
-            int out = 9 + RNG.nextInt(6);
-            int dx = arm == 0 ? out : arm == 1 ? -out : 0;
-            int dz = arm == 2 ? out : arm == 3 ? -out : 0;
+        if (game.getMap() == com.jrpetty.aztecabyss.worldgen.ArenaMap.OUTPOST) {
+            // In the hall, which is the one room always open to the squad.
             pos = new BlockPos(
-                    com.jrpetty.aztecabyss.worldgen.CryptBuilder.CENTER_X + dx,
-                    com.jrpetty.aztecabyss.worldgen.CryptBuilder.FLOOR_Y,
-                    com.jrpetty.aztecabyss.worldgen.CryptBuilder.CENTER_Z + dz);
+                    com.jrpetty.aztecabyss.worldgen.OutpostBuilder.CENTER_X - 6 - RNG.nextInt(5),
+                    com.jrpetty.aztecabyss.worldgen.OutpostBuilder.FLOOR_Y,
+                    com.jrpetty.aztecabyss.worldgen.OutpostBuilder.CENTER_Z - 4 + RNG.nextInt(9));
         } else if (game.getMap() == com.jrpetty.aztecabyss.worldgen.ArenaMap.BRIDGE) {
             // Lands on the island, near the fort, so it's grabbable between waves.
             double a = RNG.nextDouble() * Math.PI * 2.0;

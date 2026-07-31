@@ -65,11 +65,11 @@ public final class RitualHandler {
                     "§bA lantern gutters out.", "§8The lanterns flare back to life. Wrong one.");
             return;
         }
-        if (map == com.jrpetty.aztecabyss.worldgen.ArenaMap.CRYPT) {
+        if (map == com.jrpetty.aztecabyss.worldgen.ArenaMap.OUTPOST) {
             tryLanternSequence(level, player, game, clicked, event,
-                    com.jrpetty.aztecabyss.worldgen.CryptBuilder.SEALS,
-                    com.jrpetty.aztecabyss.worldgen.CryptBuilder.VAULT_SEAL,
-                    com.jrpetty.aztecabyss.worldgen.CryptBuilder.VAULT_CHEST,
+                    com.jrpetty.aztecabyss.worldgen.OutpostBuilder.SEALS,
+                    com.jrpetty.aztecabyss.worldgen.OutpostBuilder.VAULT_SEAL,
+                    com.jrpetty.aztecabyss.worldgen.OutpostBuilder.VAULT_CHEST,
                     "§bA grave-candle goes out.", "§8Wax runs black. Every candle relights.");
             return;
         }

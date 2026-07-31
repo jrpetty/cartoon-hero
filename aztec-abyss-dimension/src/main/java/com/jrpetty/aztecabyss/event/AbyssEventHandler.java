@@ -214,6 +214,8 @@ public final class AbyssEventHandler {
      * spend facing the wrong way with the arena at your back, which is the same
      * price the genre has always charged. Handled ahead of the block-break rules
      * because the gate frame is otherwise inert scenery.
+     *
+     * <p>Doubles as the rubble-digging handler on maps with sealed-off rooms.
      */
     @SubscribeEvent
     public void onRepairBarricade(net.neoforged.neoforge.event.entity.player.PlayerInteractEvent.RightClickBlock event) {
@@ -226,6 +228,16 @@ public final class AbyssEventHandler {
         com.jrpetty.aztecabyss.worldgen.ArenaMap map = RoundManager.game().getMap();
         if (!map.hasBarricades()) {
             return;
+        }
+        // Rubble first: a pile sits in a doorway, well clear of any window.
+        if (map == com.jrpetty.aztecabyss.worldgen.ArenaMap.OUTPOST) {
+            int area = com.jrpetty.aztecabyss.worldgen.OutpostBuilder.debrisAreaNear(event.getPos());
+            if (area >= 0 && !RoundManager.isAreaOpen(area)) {
+                RoundManager.digDebris(level, player, area);
+                event.setCanceled(true);
+                event.setCancellationResult(net.minecraft.world.InteractionResult.SUCCESS);
+                return;
+            }
         }
         int gate = com.jrpetty.aztecabyss.round.Barricade.gateIndexNear(map, event.getPos());
         if (gate < 0) {

@@ -35,7 +35,7 @@ public final class MonumentBuilder {
     public static void build(ServerLevel level) {
         buildAt(level, AztecAbyssConstants.MONUMENT_POS);
         buildAt(level, BRIDGE_MONUMENT);
-        buildAt(level, CryptBuilder.MONUMENT);
+        buildAt(level, OutpostBuilder.MONUMENT);
     }
 
     /**
@@ -80,7 +80,7 @@ public final class MonumentBuilder {
             ArenaMap map = maps[i];
             String shortName = switch (map) {
                 case BRIDGE -> "THE BRIDGE";
-                case CRYPT -> "THE CRYPT";
+                case OUTPOST -> "THE OUTPOST";
                 default -> "THE TEMPLE";
             };
             writeSign(level, new BlockPos(x, floorY + 3, cz), new String[]{

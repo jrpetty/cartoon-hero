@@ -44,20 +44,20 @@ public enum ArenaMap {
             220.0),
 
     /**
-     * A sealed burial compound built around the boarded windows: a cross of four
-     * short arms, eight windows clustered at the ends, nothing more than a
-     * four-second sprint from the middle.
+     * A derelict two-storey house built around the boarded windows: start sealed
+     * in one room, dig out the rubble to open the rest, and take on more windows
+     * than you can hold in exchange for everything worth having.
      */
-    CRYPT(
-            "The Crypt",
-            "Eight boarded windows and nowhere to run. Hold the compound, mend the boards, and pick which side you can afford to lose.",
+    OUTPOST(
+            "The Outpost",
+            "A bombed-out house, pitch dark. Four boarded windows to start — the other six, and every chest, are behind the rubble.",
             "HARD",
             0xFFD04040,
-            CryptBuilder.ARRIVAL,
-            CryptBuilder.GATES,
-            CryptBuilder.GATE_FACINGS,
-            CryptBuilder.EXTRACTION,
-            CryptBuilder.CENTER_X, CryptBuilder.CENTER_Z,
+            OutpostBuilder.ARRIVAL,
+            OutpostBuilder.GATES,
+            OutpostBuilder.GATE_FACINGS,
+            OutpostBuilder.EXTRACTION,
+            OutpostBuilder.CENTER_X, OutpostBuilder.CENTER_Z,
             80.0);
 
     private final String title;
@@ -123,18 +123,33 @@ public enum ArenaMap {
         return gateFacings;
     }
 
-    /** What to call a way in on this map - the Crypt has windows, not gates. */
+    /** What to call a way in on this map - the Outpost has windows, not gates. */
     public String gateNoun() {
-        return this == CRYPT ? "WINDOW" : "GATE";
+        return this == OUTPOST ? "WINDOW" : "GATE";
     }
 
     /** Short label for a gate, for HUD gauges and callouts. */
     public String gateLabel(int i) {
-        if (this == CRYPT) {
-            return i >= 0 && i < CryptBuilder.GATE_LABELS.length ? CryptBuilder.GATE_LABELS[i] : "?";
+        if (this == OUTPOST) {
+            return i >= 0 && i < OutpostBuilder.GATE_LABELS.length ? OutpostBuilder.GATE_LABELS[i] : "?";
         }
         String[] compass = {"NORTH", "SOUTH", "EAST", "WEST"};
         return i >= 0 && i < compass.length ? compass[i] : "?";
+    }
+
+    /**
+     * Which sealed-off area of the map a gate opens into. Areas that have not
+     * been dug out never spawn anything, so rubble genuinely holds the horde
+     * back rather than just holding you back.
+     */
+    public int gateArea(int i) {
+        return this == OUTPOST && i >= 0 && i < OutpostBuilder.GATE_AREAS.length
+                ? OutpostBuilder.GATE_AREAS[i] : 0;
+    }
+
+    /** How many separately-sealed areas this map has. */
+    public int areaCount() {
+        return this == OUTPOST ? 3 : 1;
     }
 
     public BlockPos extraction() {
@@ -165,22 +180,20 @@ public enum ArenaMap {
      * Whether the horde gates on this map are boarded up and have to be broken
      * through - and can be nailed back together by hunters.
      *
-     * <p>The Crypt is built around it - eight windows, all within a few seconds
-     * of the middle. The Temple carries it too, though at 134 blocks across its
-     * four gates are a long way apart, so it plays as the sparse version.
-     *
-     * <p>The Bridge deliberately does not: one gate, 135 blocks from the fort,
-     * so boarding it would mean abandoning the Heart to maintain something you
-     * cannot even see. That map already has its one thing to look after.
+     * <p>The Outpost alone. It is built around the mechanic - ten windows in one
+     * small house, all within seconds of each other. The Temple is deliberately
+     * left as it always was: an open ruin-field where the horde simply comes for
+     * you, with nothing to maintain. The Bridge has the Heart, which is already
+     * its one thing to look after.
      */
     public boolean hasBarricades() {
-        return this == TEMPLE || this == CRYPT;
+        return this == OUTPOST;
     }
 
     /** The volume wave mobs are tracked and swept within for this map. */
     public AABB bounds() {
-        if (this == CRYPT) {
-            return CryptBuilder.bounds();
+        if (this == OUTPOST) {
+            return OutpostBuilder.bounds();
         }
         if (this == BRIDGE) {
             return new AABB(

@@ -32,8 +32,11 @@ import net.minecraft.world.phys.AABB;
  */
 public final class Barricade {
 
-    /** Boards on a fully sound gate. Matches the six-plank barricades of the genre. */
-    public static final int MAX_BOARDS = 6;
+    /**
+     * Boards on a sound window. Five, not six - the first maps of the genre used
+     * five-plank barricades, and six only arrived later.
+     */
+    public static final int MAX_BOARDS = 5;
 
     /** How far the sealed gatehouse extends out behind the arch. */
     public static final int POCKET_DEPTH = 6;
@@ -52,18 +55,17 @@ public final class Barricade {
      * standing. Watching a gate come apart tells you how long it has left.
      */
     private static final int[][] BOARD_CELLS = {
-            {-1, 0, 0, 0},    // 0 - bottom plank: last to fall, first to go back up
-            {0, 1, 1, 1},     // 1
-            {-1, 2, 0, 2},    // 2
-            {0, 3, 1, 3},     // 3
-            {1, 0, 1, 2},     // 4 - right-hand upright brace
-            {-1, 1, -1, 3},   // 5 - left-hand upright brace: first to be ripped away
+            {-1, 0, 0, 0, 1, 0},   // 0 - bottom plank, full width: last to fall
+            {-1, 1, 0, 1},         // 1
+            {0, 2, 1, 2},          // 2 - staggered the other way
+            {-1, 3, 0, 3, 1, 3},   // 3 - top plank, full width
+            {1, 1, -1, 2},         // 4 - the cross-brace: first to be ripped away
     };
 
     /** Mismatched salvage rather than a matching set - these were nailed up in a hurry. */
     private static final Block[] BOARD_WOOD = {
             Blocks.OAK_TRAPDOOR, Blocks.SPRUCE_TRAPDOOR, Blocks.DARK_OAK_TRAPDOOR,
-            Blocks.OAK_TRAPDOOR, Blocks.SPRUCE_TRAPDOOR, Blocks.DARK_OAK_TRAPDOOR,
+            Blocks.OAK_TRAPDOOR, Blocks.SPRUCE_TRAPDOOR,
     };
 
     /** Boards remaining per gate. */
@@ -127,7 +129,7 @@ public final class Barricade {
         BlockPos[] gates = map.gates();
         for (int i = 0; i < gates.length; i++) {
             BlockPos g = gates[i];
-            // Deliberately tight on the span axis: the Crypt puts two windows six
+            // Deliberately tight on the span axis: the Outpost puts two windows six
             // blocks apart in one wall, and a generous box would mend the wrong one.
             boolean spansX = spansX(map, i);
             int along = Math.abs(spansX ? pos.getX() - g.getX() : pos.getZ() - g.getZ());
@@ -148,12 +150,33 @@ public final class Barricade {
         int n = map.gates().length;
         boards = new int[n];
         effort = new float[n];
-        if (!map.hasBarricades()) {
+        for (int i = 0; i < n; i++) {
+            if (map.hasBarricades()) {
+                boards[i] = MAX_BOARDS;
+                render(level, map, i);
+            } else {
+                // A map that used to be boarded and no longer is would otherwise
+                // keep last build's planks nailed across its gates forever. Only
+                // trapdoors are touched, so this can never eat real scenery.
+                stripLeftoverBoards(level, map, i);
+            }
+        }
+    }
+
+    /** Removes any board blocks still standing in a gate mouth, and nothing else. */
+    private static void stripLeftoverBoards(ServerLevel level, ArenaMap map, int gate) {
+        if (gate >= map.gates().length) {
             return;
         }
-        for (int i = 0; i < n; i++) {
-            boards[i] = MAX_BOARDS;
-            render(level, map, i);
+        BlockPos g = map.gates()[gate];
+        boolean spansX = spansX(map, gate);
+        for (int[] cells : BOARD_CELLS) {
+            for (int c = 0; c < cells.length; c += 2) {
+                BlockPos p = cell(g, spansX, cells[c], cells[c + 1]);
+                if (level.getBlockState(p).getBlock() instanceof net.minecraft.world.level.block.TrapDoorBlock) {
+                    level.setBlock(p, Blocks.AIR.defaultBlockState(), 3);
+                }
+            }
         }
     }
 
@@ -275,7 +298,7 @@ public final class Barricade {
      * Packs the whole barricade picture into sixteen bits for the HUD: how many
      * gates stand open, and what fraction of the boards are still up.
      *
-     * <p>Aggregate rather than per-gate because the Crypt has eight windows and a
+     * <p>Aggregate rather than per-gate because the Outpost has ten windows and a
      * per-window gauge at that count is unreadable noise - the callouts and the
      * audio already tell you which one is going.
      *

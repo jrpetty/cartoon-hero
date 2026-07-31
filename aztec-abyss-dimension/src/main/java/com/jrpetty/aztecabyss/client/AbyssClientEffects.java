@@ -208,7 +208,7 @@ public final class AbyssClientEffects {
     /**
      * One compact bar for the state of every way in: how much of the boarding is
      * still up, and how many are standing wide open. Aggregate on purpose - with
-     * eight windows on the Crypt a per-window readout is noise, and the callouts
+     * ten windows on the Outpost a per-window readout is noise, and the callouts
      * already name the one that's going.
      */
     private static String gateGauge(int percent, int open) {

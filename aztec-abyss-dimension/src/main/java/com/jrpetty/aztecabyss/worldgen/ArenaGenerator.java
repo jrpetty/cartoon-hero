@@ -50,7 +50,7 @@ public final class ArenaGenerator {
             if (!level.getBlockState(probe.above()).is(Blocks.POLISHED_BLACKSTONE_BRICKS)) {
                 buildMobGates(level);
             }
-            buildCryptIfNeeded(level);
+            buildOutpostIfNeeded(level);
             return; // already built
         }
 
@@ -66,20 +66,20 @@ public final class ArenaGenerator {
         placeLootChests(level);
         placeArrivalPortal(level);
         buildMobGates(level);
-        buildCryptIfNeeded(level);
+        buildOutpostIfNeeded(level);
         MonumentBuilder.build(level);
     }
 
     /**
-     * The Crypt sits far along X in the same dimension, like the bridge, so it
+     * The Outpost sits far along X in the same dimension, like the bridge, so it
      * needs no dimension of its own. Built on its own sentinel so it appears in
      * worlds generated before it existed.
      */
-    private static void buildCryptIfNeeded(ServerLevel level) {
-        if (level.getBlockState(CryptBuilder.EXTRACTION.below()).is(Blocks.GILDED_BLACKSTONE)) {
+    private static void buildOutpostIfNeeded(ServerLevel level) {
+        if (level.getBlockState(OutpostBuilder.EXTRACTION.below()).is(Blocks.GILDED_BLACKSTONE)) {
             return;
         }
-        CryptBuilder.build(level);
+        OutpostBuilder.build(level);
     }
 
     /**
