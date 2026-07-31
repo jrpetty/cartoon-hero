@@ -69,6 +69,9 @@ public final class ModNetworking {
         registrar.playToClient(RecyclerSyncPayload.TYPE, RecyclerSyncPayload.STREAM_CODEC,
                 (payload, context) -> context.enqueueWork(
                         () -> com.jrpetty.mobtrumps.client.ClientRecycler.set(payload.fragments())));
+        registrar.playToClient(RecyclerResultPayload.TYPE, RecyclerResultPayload.STREAM_CODEC,
+                (payload, context) -> context.enqueueWork(
+                        () -> com.jrpetty.mobtrumps.client.ClientRecycler.result(payload)));
         registrar.playToServer(RecyclerActionPayload.TYPE, RecyclerActionPayload.STREAM_CODEC,
                 (payload, context) -> context.enqueueWork(() -> {
                     if (context.player() instanceof net.minecraft.server.level.ServerPlayer sp) {

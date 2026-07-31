@@ -103,6 +103,7 @@ public final class RecyclerManager {
             s.shrink(1);
             giveFragments(player, paid);
             grind(player);
+            result(player, RecyclerResultPayload.SHRED, mobId, paid, 1);
             player.sendSystemMessage(Component.literal("Shredded " + (foil ? "a foil " : "")
                             + card.displayName() + " — " + paid + " fragment"
                             + (paid == 1 ? "" : "s") + ".")
@@ -113,6 +114,7 @@ public final class RecyclerManager {
         player.sendSystemMessage(Component.literal(
                         "The shredder will not take your only copy — file one in your book first.")
                 .withStyle(ChatFormatting.RED));
+        result(player, RecyclerResultPayload.REFUSED, mobId, 0, 0);
         return 0;
     }
 
@@ -137,6 +139,7 @@ public final class RecyclerManager {
         }
         giveFragments(player, paid);
         grind(player);
+        result(player, RecyclerResultPayload.SHRED_ALL, "", paid, cards);
         player.sendSystemMessage(Component.literal("Shredded " + cards + " spare"
                         + (cards == 1 ? "" : "s") + " — " + paid + " fragments.")
                 .withStyle(ChatFormatting.GREEN));
@@ -170,6 +173,7 @@ public final class RecyclerManager {
                     .withStyle(ChatFormatting.RED));
             player.serverLevel().playSound(null, player.getX(), player.getY(), player.getZ(),
                     SoundEvents.ITEM_BREAK, SoundSource.BLOCKS, 0.8F, 0.7F);
+            result(player, RecyclerResultPayload.PRINT_MISS, "", bet, 0);
             sync(player);
             return;
         }
@@ -193,7 +197,14 @@ public final class RecyclerManager {
                         .withStyle(ChatFormatting.GOLD, ChatFormatting.BOLD)));
         player.serverLevel().playSound(null, player.getX(), player.getY(), player.getZ(),
                 SoundEvents.PLAYER_LEVELUP, SoundSource.BLOCKS, 0.7F, 1.4F);
+        result(player, RecyclerResultPayload.PRINT_HIT, printed.id(), bet, 1);
         sync(player);
+    }
+
+    /** Tell the screen what happened so it can play it out. */
+    private static void result(ServerPlayer player, int kind, String mobId, int amount, int count) {
+        PacketDistributor.sendToPlayer(player,
+                new RecyclerResultPayload(kind, mobId == null ? "" : mobId, amount, count));
     }
 
     private static void grind(ServerPlayer player) {

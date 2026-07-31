@@ -66,6 +66,10 @@ public class RecyclerScreen extends Screen {
     private Tier tier = Tier.COMMON;
     private int stake = Recycler.MIN_STAKE;
     private long armedAt = -1;
+    /** When the current machine run started, or -1 when the machine is idle. */
+    private long runStart = -1;
+    private MobCard runCard;
+    private boolean runFoil;
 
     private final List<Spare> spares = new ArrayList<>();
     private final List<int[]> rowRects = new ArrayList<>();
@@ -92,11 +96,11 @@ public class RecyclerScreen extends Screen {
         super.init();
         // budget the preview column first, then give the list what is left, so
         // a narrow window loses the picture rather than clipping the controls
-        panelW = Math.min(384, width - 20);
-        panelH = Math.min(212, height - 56);
+        panelW = Math.min(410, width - 20);
+        panelH = Math.min(230, height - 56);
         panelX = (width - panelW) / 2;
         panelY = Math.max(30, (height - panelH) / 2);
-        previewW = panelW >= 300 ? 108 : 0;
+        previewW = panelW >= 310 ? 122 : 0;
         listX = panelX + 10;
         listW = panelW - 20 - (previewW > 0 ? previewW + 8 : 0);
         previewX = panelX + panelW - 10 - previewW;
@@ -223,14 +227,25 @@ public class RecyclerScreen extends Screen {
         drawScrollbar(g, listX + listW + 2, bodyTop(), bodyBottom() - bodyTop(),
                 spares.size(), rows(), scroll);
 
-        // the card itself, so you can see what you are about to destroy
+        // the machine itself: throat, drum, bar, tray
         if (previewW > 0) {
-            drawPreview(g, focus, mouseX, mouseY);
+            boolean running = runStart > 0;
+            float phase = running
+                    ? Mth.clamp((now - runStart) / (float) MachineView.RUN_MS, 0f, 1f) : -1f;
+            MobCard inJaws = running ? runCard : (focus == null ? null : focus.card());
+            boolean jawsFoil = running ? runFoil : (focus != null && focus.foil());
+            int payout = ClientRecycler.resolvedSince(runStart) ? ClientRecycler.amount()
+                    : (running ? 0 : (focus == null ? 0 : focus.value()));
+            MachineView.shredder(g, font, previewX, bodyTop(), previewW,
+                    bodyBottom() - bodyTop(), phase, inJaws,
+                    inJaws == null ? null
+                            : CardRenderer.portraitEntity(minecraft, inJaws, entityCache),
+                    jawsFoil, payout, now);
         }
 
         // Shred All arms before it fires: this is irreversible and it is one click
-        boolean on = !spares.isEmpty();
-        boolean armed = armedAt > 0 && now - armedAt < ARM_MS;
+        boolean on = !spares.isEmpty() && runStart < 0;
+        boolean armed = on && armedAt > 0 && now - armedAt < ARM_MS;
         String label = !on ? "Nothing to shred"
                 : armed ? "Click again to shred " + spares.size() + " cards"
                 : "Shred all " + spares.size() + "  ·  +" + total;
@@ -255,31 +270,6 @@ public class RecyclerScreen extends Screen {
             g.drawString(font, fit("click a row to shred one", bx - panelX - 16),
                     panelX + 10, by + 5, FAINT, false);
         }
-    }
-
-    /** The focused card, rendered at whatever scale the column allows. */
-    private void drawPreview(GuiGraphics g, Spare s, int mouseX, int mouseY) {
-        int px = previewX;
-        int py = bodyTop();
-        int ph = bodyBottom() - py;
-        g.fill(px, py, px + previewW, py + ph, SUNK);
-        if (s == null) {
-            g.drawString(font, "Point at a card", px + 8, py + ph / 2 - 10, FAINT, false);
-            g.drawString(font, "to see it.", px + 8, py + ph / 2, FAINT, false);
-            return;
-        }
-        float scale = Math.min((previewW - 12) / (float) CardRenderer.CARD_W,
-                (ph - 26) / (float) CardRenderer.CARD_H);
-        int cw = Math.round(CardRenderer.CARD_W * scale);
-        int cx = px + (previewW - cw) / 2;
-        LivingEntity mob = CardRenderer.portraitEntity(minecraft, s.card(), entityCache);
-        CardRenderer.renderCard(g, font, s.card(), 0, cx, py + 4, scale,
-                mouseX, mouseY, mob, s.foil(), false);
-        String worth = "+" + s.value() + " fragments";
-        g.drawString(font, worth, px + (previewW - font.width(worth)) / 2, py + ph - 18, GOLD, false);
-        String cond = CardCondition.label(s.condition());
-        g.drawString(font, cond, px + (previewW - font.width(cond)) / 2, py + ph - 8,
-                CardCondition.color(s.condition()) | 0xFF000000, false);
     }
 
     private void renderPress(GuiGraphics g, int mouseX, int mouseY, long now) {
@@ -340,22 +330,28 @@ public class RecyclerScreen extends Screen {
         g.drawString(font, fit("on average. Only the risk changes.", colW), col, y + 10, FAINT, false);
 
         if (previewW > 0) {
-            int px = previewX;
-            int py = bodyTop();
-            int ph = bodyBottom() - py;
-            g.fill(px, py, px + previewW, py + ph, SUNK);
-            float scale = Math.min((previewW - 12) / (float) CardRenderer.CARD_W,
-                    (ph - 26) / (float) CardRenderer.CARD_H);
-            int cw = Math.round(CardRenderer.CARD_W * scale);
-            CardRenderer.renderBack(g, font, px + (previewW - cw) / 2, py + 4, scale);
-            String pool = poolSize(tier) + " cards in this tier";
-            g.drawString(font, fit(pool, previewW - 8),
-                    px + 4, py + ph - 14, DIM, false);
+            boolean running = runStart > 0;
+            float phase = running
+                    ? Mth.clamp((now - runStart) / (float) MachineView.RUN_MS, 0f, 1f) : -1f;
+            boolean resolved = ClientRecycler.resolvedSince(runStart);
+            boolean hit = resolved && ClientRecycler.kind() == 2;   // PRINT_HIT
+            MobCard printed = resolved ? ClientRecycler.card() : null;
+            MachineView.press(g, font, previewX, bodyTop(), previewW,
+                    bodyBottom() - bodyTop(), phase, resolved, hit, printed,
+                    printed == null ? null
+                            : CardRenderer.portraitEntity(minecraft, printed, entityCache), now);
+            if (!running) {
+                String pool = poolSize(tier) + " cards in this tier";
+                g.drawString(font, fit(pool, previewW - 8), previewX + 4,
+                        bodyBottom() - 10, DIM, false);
+            }
         }
 
-        boolean afford = ClientRecycler.fragments() >= stake;
+        boolean afford = ClientRecycler.fragments() >= stake && runStart < 0;
         int by = panelY + panelH - 24;
-        String label = afford ? "PRINT  ·  " + stake : "Need " + stake + " fragments";
+        String label = runStart > 0 ? "Printing…"
+                : ClientRecycler.fragments() >= stake ? "PRINT  ·  " + stake
+                : "Need " + stake + " fragments";
         int bw = Math.max(180, font.width(label) + 26);
         int bx = panelX + (panelW - bw) / 2;
         actionRect = new int[]{bx, by, bw, 18};
@@ -364,6 +360,25 @@ public class RecyclerScreen extends Screen {
         g.renderOutline(bx, by, bw, 18, afford ? (hover ? GOLD : 0x66FFFFFF) : 0xFF3A3350);
         g.drawString(font, label, bx + (bw - font.width(label)) / 2, by + 5,
                 afford ? 0xFFFFFFFF : 0xFF6C6480, true);
+    }
+
+    /** True while a run is playing out; the controls are inert until it ends. */
+    private boolean busy(long now) {
+        if (runStart < 0) {
+            return false;
+        }
+        if (now - runStart >= MachineView.RUN_MS) {
+            runStart = -1;
+            return false;
+        }
+        return true;
+    }
+
+    private void startRun(long now, MobCard card, boolean foil) {
+        runStart = now;
+        runCard = card;
+        runFoil = foil;
+        ClientRecycler.clear();
     }
 
     /** Three letters that still read as the tier when the button is narrow. */
@@ -420,6 +435,9 @@ public class RecyclerScreen extends Screen {
         }
         int mx = (int) mouseX, my = (int) mouseY;
         long now = System.currentTimeMillis();
+        if (busy(now)) {
+            return true;   // the machine is running; let it finish
+        }
 
         if (mode == RecyclerManager.MODE_SHREDDER) {
             for (int r = 0; r < rowRects.size(); r++) {
@@ -427,6 +445,7 @@ public class RecyclerScreen extends Screen {
                     Spare s = spares.get(scroll + r);
                     PacketDistributor.sendToServer(
                             RecyclerActionPayload.shred(s.card().id(), s.foil()));
+                    startRun(now, s.card(), s.foil());
                     click(0.8f);
                     armedAt = -1;
                     return true;
@@ -439,6 +458,7 @@ public class RecyclerScreen extends Screen {
                     return true;
                 }
                 PacketDistributor.sendToServer(RecyclerActionPayload.shredAll());
+                startRun(now, spares.get(0).card(), spares.get(0).foil());
                 armedAt = -1;
                 click(0.5f);
                 return true;
@@ -477,6 +497,7 @@ public class RecyclerScreen extends Screen {
         }
         if (ClientRecycler.fragments() >= stake && inRect(mx, my, actionRect)) {
             PacketDistributor.sendToServer(RecyclerActionPayload.print(tier.ordinal(), stake));
+            startRun(now, null, false);
             click(1.3f);
             return true;
         }
@@ -531,6 +552,11 @@ public class RecyclerScreen extends Screen {
     public void tick() {
         super.tick();
         rebuild(); // the inventory is the source of truth and it changes under us
+        // hold the finished frame long enough to read, then go back to idle
+        if (runStart > 0 && System.currentTimeMillis() - runStart > MachineView.RUN_MS + 4000L) {
+            runStart = -1;
+            ClientRecycler.clear();
+        }
     }
 
     private void click(float pitch) {

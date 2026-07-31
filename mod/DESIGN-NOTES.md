@@ -40,7 +40,12 @@ case for free (a *misprint*, not "you lost your fragments").
   last copy, and cards currently in a deck. That removes most of the exploit
   surface.
 - **A machine, not a button** — hopper, visible grind, progress bar, fragments
-  stacking up. Same reasoning as the coin-flip animation.
+  stacking up. Same reasoning as the coin-flip animation. *(built v1.64.0, in
+  the screen rather than as a world hopper: the card rides down a funnel into a
+  toothed drum, the drum turns and throws sparks, a bar fills, and the fragments
+  pile into a tray. The press runs it in reverse — a blank sheet feeds through
+  the rollers and either a card rises out of the slot or the sheet comes out
+  torn and scorched.)*
 
 **The Printing Press**
 
