@@ -43,6 +43,12 @@ public final class StructuralManager {
 
     public static void forget(ServerLevel level) {
         STATES.remove(level);
+        SnowLoadScanner.forget(level);
+    }
+
+    /** Schedule an ordinary stability check for a position (used by the snow-load sweep). */
+    static void enqueueChange(ServerLevel level, long packedPos) {
+        state(level).enqueueChange(packedPos);
     }
 
     // ------------------------------------------------------------------ edit notifications
@@ -69,6 +75,10 @@ public final class StructuralManager {
     // ------------------------------------------------------------------ per-tick processing
 
     public static void tick(ServerLevel level) {
+        // Runs even on an otherwise idle level: weather changes the load on a roof without any
+        // block edit to notice, so the sweep is what turns snowfall into pending checks.
+        SnowLoadScanner.tick(level);
+
         LevelStructuralState st = STATES.get(level);
         if (st == null || st.idle()) {
             return;

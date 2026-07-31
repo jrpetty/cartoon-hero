@@ -1,11 +1,14 @@
 package dev.structint.world;
 
 import dev.structint.Config;
+import dev.structint.core.SnowLoad;
 import net.minecraft.core.BlockPos;
 import net.minecraft.tags.BlockTags;
 import net.minecraft.world.level.BlockGetter;
+import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.LiquidBlock;
 import net.minecraft.world.level.block.SlabBlock;
+import net.minecraft.world.level.block.SnowLayerBlock;
 import net.minecraft.world.level.block.StairBlock;
 import net.minecraft.world.level.block.state.BlockState;
 
@@ -84,6 +87,37 @@ public final class BlockClassifier {
     public static int spanOf(BlockState state) {
         Integer tagged = taggedSpan(state);
         return tagged != null ? tagged : Config.SPAN_GENERIC.get();
+    }
+
+    /**
+     * How deep the snow resting on a block is, in vanilla snow layers (0 when there is none).
+     * A snow <em>block</em> (and powder snow) counts as a full-depth cover.
+     */
+    public static int snowDepthOf(BlockState above) {
+        if (above.is(Blocks.SNOW)) {
+            return above.getValue(SnowLayerBlock.LAYERS);
+        }
+        if (above.is(Blocks.SNOW_BLOCK) || above.is(Blocks.POWDER_SNOW)) {
+            return SnowLoad.FULL_DEPTH;
+        }
+        return 0;
+    }
+
+    /** True when snow load is switched on at all — lets callers skip the look-up above a block. */
+    public static boolean snowLoadEnabled() {
+        return Config.SNOW_LOAD_LAYERS_PER_SPAN.get() > 0 && Config.SNOW_LOAD_MAX_PENALTY.get() > 0;
+    }
+
+    /** The span of {@code state} after the snow piled on top of it is taken into account. */
+    public static int spanUnderSnow(BlockState state, BlockState above) {
+        int base = spanOf(state);
+        if (!snowLoadEnabled()) {
+            return base;
+        }
+        return SnowLoad.loadedSpan(base, snowDepthOf(above),
+                Config.SNOW_LOAD_LAYERS_PER_SPAN.get(),
+                Config.SNOW_LOAD_MAX_PENALTY.get(),
+                Config.SNOW_LOAD_IMMUNE_MIN_SPAN.get());
     }
 
     /**

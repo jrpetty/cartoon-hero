@@ -83,7 +83,14 @@ public final class LevelGridAccess implements GridAccess {
 
     @Override
     public int maxSpanAt(int x, int y, int z) {
-        return BlockClassifier.spanOf(state(x, y, z));
+        BlockState state = state(x, y, z);
+        if (!BlockClassifier.snowLoadEnabled()) {
+            return BlockClassifier.spanOf(state);
+        }
+        // Snow resting on the block eats into how far it can carry. Reading one cell up is cheap
+        // and cached, and the penalty is a pure function of depth — clear the snow and the full
+        // span is back on the next check.
+        return BlockClassifier.spanUnderSnow(state, state(x, y + 1, z));
     }
 
     private BlockState state(int x, int y, int z) {

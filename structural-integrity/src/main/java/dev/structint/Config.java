@@ -18,6 +18,12 @@ public final class Config {
     public static final ModConfigSpec.BooleanValue COLLAPSE_WARNING_EFFECTS;
     public static final ModConfigSpec.IntValue COLLAPSE_WARN_DELAY_TICKS;
     public static final ModConfigSpec.DoubleValue COLLAPSE_IMPACT_DAMAGE_SCALE;
+    public static final ModConfigSpec.IntValue SNOW_LOAD_LAYERS_PER_SPAN;
+    public static final ModConfigSpec.IntValue SNOW_LOAD_MAX_PENALTY;
+    public static final ModConfigSpec.IntValue SNOW_LOAD_IMMUNE_MIN_SPAN;
+    public static final ModConfigSpec.IntValue SNOW_LOAD_SCAN_INTERVAL_TICKS;
+    public static final ModConfigSpec.IntValue SNOW_LOAD_SCAN_BUDGET;
+    public static final ModConfigSpec.IntValue SNOW_LOAD_SCAN_RADIUS_CHUNKS;
 
     // --- material spans -----------------------------------------------------------------
     public static final ModConfigSpec.IntValue SPAN_DIRT;
@@ -63,6 +69,37 @@ public final class Config {
                         "metal hits harder, dirt barely stings. This multiplies both the",
                         "damage-per-block-fallen and the damage cap. 0 disables impact damage.")
                 .defineInRange("collapseImpactDamageScale", 1.0, 0.0, 10.0);
+
+        b.comment("Snow load — snow piled on a block eats into the span it can carry, so roofs",
+                        "need clearing, a steeper pitch, or stronger material through a hard winter.",
+                        "A flat penalty from depth alone: no accumulating weight, and clearing the",
+                        "snow restores the original span immediately.")
+                .push("snowLoad");
+        SNOW_LOAD_LAYERS_PER_SPAN = b
+                .comment("Snow layers that cost one block of span (vanilla snow is 1-8 layers deep).",
+                        "0 disables snow load entirely.")
+                .defineInRange("layersPerSpan", 3, 0, 8);
+        SNOW_LOAD_MAX_PENALTY = b
+                .comment("Never take more than this many blocks of span, however deep the snow.")
+                .defineInRange("maxPenalty", 3, 0, 64);
+        SNOW_LOAD_IMMUNE_MIN_SPAN = b
+                .comment("Materials with a base span of at least this ignore snow entirely - with",
+                        "the default spans that is reinforced (12) and metal (20), while wood and",
+                        "stone roofs feel it.")
+                .defineInRange("immuneMinSpan", 12, 0, 256);
+        SNOW_LOAD_SCAN_INTERVAL_TICKS = b
+                .comment("Snow accumulates and melts without firing a block event, so laden blocks",
+                        "are re-checked by a periodic sweep. Ticks between sweeps (20 = 1 second).")
+                .defineInRange("scanIntervalTicks", 80, 20, 12000);
+        SNOW_LOAD_SCAN_BUDGET = b
+                .comment("Maximum managed blocks examined per sweep. A very large base is covered",
+                        "across several sweeps rather than in one spike.")
+                .defineInRange("scanBudget", 4096, 64, 262144);
+        SNOW_LOAD_SCAN_RADIUS_CHUNKS = b
+                .comment("Chunk radius around each player that the sweep considers. Snow only falls",
+                        "in ticking chunks near players, so this needs no more than that reach.")
+                .defineInRange("scanRadiusChunks", 4, 1, 32);
+        b.pop();
         b.pop();
 
         b.push("spans");

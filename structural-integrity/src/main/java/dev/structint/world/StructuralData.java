@@ -30,6 +30,16 @@ public final class StructuralData {
         return loadedChunk(level, pos) != null;
     }
 
+    /** @return the loaded chunk at these chunk coordinates, or {@code null} if it is not in memory. */
+    public static LevelChunk loadedChunk(ServerLevel level, int chunkX, int chunkZ) {
+        return (LevelChunk) level.getChunk(chunkX, chunkZ, ChunkStatus.FULL, false);
+    }
+
+    /** The managed-block record of an already-loaded chunk. */
+    public static ManagedBlocks managed(LevelChunk chunk) {
+        return chunk.getData(ModAttachments.MANAGED_BLOCKS.get());
+    }
+
     public static void setManaged(ServerLevel level, BlockPos pos, boolean managed) {
         LevelChunk chunk = loadedChunk(level, pos);
         if (chunk == null) {

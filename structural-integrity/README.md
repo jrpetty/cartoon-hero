@@ -38,6 +38,9 @@ clarity over realism*, *predictability over simulation*, and *local logic over g
   before it drops — failures are seen and heard, not instant.
 - Falling blocks **hurt what they land on**, scaled by material strength — dirt stings,
   stone lands like an anvil, a metal girder is worse. Configurable (`collapseImpactDamageScale`).
+- **Snow load**: snow piled on a roof eats into the span it can carry — a maxed wood roof
+  sheds its far edge in deep snow, while reinforced and metal shrug it off. Clear the snow
+  (or roof in something stronger) and the full span returns.
 - Overreach falls as a normal vanilla **falling block** — it drops, lands, and piles up. No
   debris, no ragdolls, no chunk-wide cascades.
 - Localized in **11 languages** (EN, ES, FR, DE, IT, PT-BR, RU, ZH-CN, JA, KO, PL).
@@ -351,8 +354,7 @@ deterministic, local, and gameplay-rule-first.
   `remainingReachAt` and a "support flipped" event for other mods/maps.
 
 **Environment as a span input**
-- **Snow load** — each snow layer subtracts a flat integer from a block's span (the disciplined,
-  non-accumulating way to admit "load from above"); a seasonal roof-upkeep loop.
+- ~~**Snow load**~~ — *shipped*: snow depth subtracts span, capped, with strong materials immune.
 - **Mineshaft integrity** — apply the cantilever rule to *mined-out* ceilings: player-dug tunnels
   wider than the ceiling's span cave in unless timbered. Integrity governs removal, not just building.
 - **Pre-stressed ruins / donated anchors** — worldgen structures born at reach 0 (stable until

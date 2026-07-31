@@ -91,6 +91,8 @@ public final class CoreSelfTest {
         testStepUpDoesNotResetSpan();
         testEvaluateSplitsStableAndUnsupported();
         testEvaluateFlagsOverBudget();
+        testSnowLoadPenalty();
+        testSnowLoadShortensCantilever();
 
         System.out.println();
         if (failures == 0) {
@@ -288,6 +290,43 @@ public final class CoreSelfTest {
         }
         for (int x = 5; x <= 8; x++) {
             check(doomed.contains(PackedPos.of(x, 5, 0)), "x=" + x + " is in the collapse set");
+        }
+    }
+
+    private static void testSnowLoadPenalty() {
+        System.out.println("snow load: depth costs span, capped, with strong materials immune");
+        // Defaults: one span per 3 layers, at most 3, immune from span 12 up.
+        check(SnowLoad.penalty(0, 3, 3) == 0, "bare block pays nothing");
+        check(SnowLoad.penalty(2, 3, 3) == 0, "a dusting (2 layers) is not yet a full span");
+        check(SnowLoad.penalty(3, 3, 3) == 1, "3 layers costs exactly 1 span");
+        check(SnowLoad.penalty(SnowLoad.FULL_DEPTH, 3, 3) == 2, "8 layers costs 2 spans");
+        check(SnowLoad.penalty(SnowLoad.FULL_DEPTH, 1, 3) == 3, "the cap holds at deep snow");
+        check(SnowLoad.penalty(SnowLoad.FULL_DEPTH, 0, 3) == 0, "layersPerSpan=0 disables snow load");
+
+        check(SnowLoad.loadedSpan(4, SnowLoad.FULL_DEPTH, 3, 3, 12) == 2, "wood 4 → 2 under full snow");
+        check(SnowLoad.loadedSpan(7, SnowLoad.FULL_DEPTH, 3, 3, 12) == 5, "stone 7 → 5 under full snow");
+        check(SnowLoad.loadedSpan(20, SnowLoad.FULL_DEPTH, 3, 3, 12) == 20, "metal 20 shrugs snow off");
+        check(SnowLoad.loadedSpan(4, 0, 3, 3, 12) == 4, "no snow leaves the span untouched");
+        check(SnowLoad.loadedSpan(1, SnowLoad.FULL_DEPTH, 1, 3, 12) == 0, "span never goes below 0");
+    }
+
+    private static void testSnowLoadShortensCantilever() {
+        System.out.println("snow load: a laden wood roof sheds the tail it could carry when bare");
+        int bare = Material.WOOD.maxSpan(); // 4
+        int laden = SnowLoad.loadedSpan(bare, SnowLoad.FULL_DEPTH, 3, 3, 12); // 2
+        check(laden == 2, "full snow takes wood from " + bare + " to 2");
+
+        FakeGrid g = new FakeGrid();
+        for (int y = 0; y <= 5; y++) {
+            g.anchor(0, y, 0);
+        }
+        g.beamX(1, 4, 5, 0, laden); // the same beam that stands bare, now snowed on
+        Set<Long> doomed = engine(g).findUnsupported(PackedPos.of(4, 5, 0));
+        for (int x = 1; x <= 2; x++) {
+            check(!doomed.contains(PackedPos.of(x, 5, 0)), "x=" + x + " still holds under snow");
+        }
+        for (int x = 3; x <= 4; x++) {
+            check(doomed.contains(PackedPos.of(x, 5, 0)), "x=" + x + " sheds under snow");
         }
     }
 }
