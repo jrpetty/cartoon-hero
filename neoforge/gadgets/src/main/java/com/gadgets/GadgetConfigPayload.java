@@ -120,6 +120,11 @@ public record GadgetConfigPayload(BlockPos pos, String key, int value, String te
                     hub.clearNodes();
                 }
             }
+            case "hub_log_clear" -> {
+                if (be instanceof CommandHubBlockEntity hub) {
+                    hub.clearEvents();
+                }
+            }
             case "hub_unlink" -> {
                 // Addressed as dimension@packedPos, so it unlinks the gadget the
                 // player actually clicked even if the board reordered in flight.

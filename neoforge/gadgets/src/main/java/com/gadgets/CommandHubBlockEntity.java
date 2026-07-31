@@ -2,6 +2,7 @@ package com.gadgets;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.HolderLookup;
@@ -52,6 +53,8 @@ public class CommandHubBlockEntity extends BlockEntity {
         public long b = 0; // counter: rate/hour  · monitor: alert threshold
         public long c = 0; // counter: total      · monitor: low flag (1/0)
         public long d = 0; // counter: stalled (1/0) · monitor: distinct item types
+        /** Alarm state at the last check, so the log only records the edges. */
+        public boolean wasAlarmed = false;
 
         /** True when this node is in a state the hub's alarm output should count. */
         public boolean alarmed() {
@@ -69,6 +72,7 @@ public class CommandHubBlockEntity extends BlockEntity {
             n.putLong("B", b);
             n.putLong("C", c);
             n.putLong("D2", d);
+            n.putBoolean("W", wasAlarmed);
             return n;
         }
 
@@ -83,11 +87,54 @@ public class CommandHubBlockEntity extends BlockEntity {
             node.b = n.getLong("B");
             node.c = n.getLong("C");
             node.d = n.getLong("D2");
+            node.wasAlarmed = n.getBoolean("W");
             return node;
         }
     }
 
+    /** Longest history kept; older entries fall off the end. */
+    public static final int MAX_EVENTS = 40;
+
+    /**
+     * One recorded change of state. The live board can only answer "what is
+     * wrong now" — this is what answers "what broke while I was away".
+     */
+    public record Event(long dayTime, int type, boolean raised, String label) {
+        CompoundTag toNbt() {
+            CompoundTag t = new CompoundTag();
+            t.putLong("T", dayTime);
+            t.putInt("Y", type);
+            t.putBoolean("R", raised);
+            t.putString("L", label);
+            return t;
+        }
+
+        static Event fromNbt(CompoundTag t) {
+            return new Event(t.getLong("T"), t.getInt("Y"), t.getBoolean("R"), t.getString("L"));
+        }
+
+        /** "stalled" / "recovered" / "low" / "restocked". */
+        public String what() {
+            if (type == TYPE_COUNTER) {
+                return raised ? "stalled" : "recovered";
+            }
+            return raised ? "ran low" : "restocked";
+        }
+
+        /** "Day 42 · 14:32" from a level's total day time. */
+        public String when() {
+            long day = dayTime / 24000L;
+            long inDay = dayTime % 24000L;
+            // Minecraft's day starts at 06:00, so t=0 is six in the morning.
+            long hour = (inDay / 1000L + 6L) % 24L;
+            long minute = (inDay % 1000L) * 60L / 1000L;
+            return String.format(Locale.ROOT, "Day %d · %02d:%02d", day, hour, minute);
+        }
+    }
+
     private final List<Node> nodes = new ArrayList<>();
+    /** Newest first, so the interesting end is the one you read. */
+    private final List<Event> events = new ArrayList<>();
     private String lastSync = "";
 
     public CommandHubBlockEntity(BlockPos pos, BlockState state) {
@@ -96,6 +143,31 @@ public class CommandHubBlockEntity extends BlockEntity {
 
     public List<Node> getNodes() {
         return nodes;
+    }
+
+    public List<Event> getEvents() {
+        return events;
+    }
+
+    public void clearEvents() {
+        events.clear();
+        setChanged();
+        sync();
+    }
+
+    /**
+     * Record an alarm edge. Only called for nodes that are online, so a chunk
+     * unloading never reads as "recovered" and reloading never reads as a fresh
+     * failure.
+     */
+    private void logEdge(Level level, Node n, boolean raised) {
+        String name = n.label.isBlank()
+                ? (n.type == TYPE_COUNTER ? "a counter" : "a stock monitor")
+                : n.label;
+        events.add(0, new Event(level.getDayTime(), n.type, raised, name));
+        while (events.size() > MAX_EVENTS) {
+            events.remove(events.size() - 1);
+        }
     }
 
     /** Link a gadget; returns false when the board is full or already linked. */
@@ -206,6 +278,15 @@ public class CommandHubBlockEntity extends BlockEntity {
             be.pruneDead(server);
             for (Node n : be.nodes) {
                 be.refresh(server, n);
+                // An offline node keeps its last known alarm state: an unloaded
+                // chunk is not evidence that anything changed.
+                if (n.online) {
+                    boolean now = n.alarmed();
+                    if (now != n.wasAlarmed) {
+                        be.logEdge(level, n, now);
+                        n.wasAlarmed = now;
+                    }
+                }
             }
         }
 
@@ -221,8 +302,11 @@ public class CommandHubBlockEntity extends BlockEntity {
             }
         }
 
-        // Push to clients only when the board actually changed.
-        String fingerprint = be.buildList().toString();
+        // Push to clients only when the board actually changed. The newest event
+        // is part of that: a log entry with no matching board change still needs
+        // to reach the screen.
+        String fingerprint = be.buildList() + "#" + be.events.size()
+                + (be.events.isEmpty() ? "" : "@" + be.events.get(0).dayTime());
         if (!fingerprint.equals(be.lastSync)) {
             be.lastSync = fingerprint;
             be.setChanged();
@@ -289,6 +373,11 @@ public class CommandHubBlockEntity extends BlockEntity {
     protected void saveAdditional(CompoundTag tag, HolderLookup.Provider registries) {
         super.saveAdditional(tag, registries);
         tag.put("Nodes", buildList());
+        ListTag log = new ListTag();
+        for (Event e : events) {
+            log.add(e.toNbt());
+        }
+        tag.put("Events", log);
     }
 
     @Override
@@ -298,6 +387,11 @@ public class CommandHubBlockEntity extends BlockEntity {
         ListTag list = tag.getList("Nodes", Tag.TAG_COMPOUND);
         for (int i = 0; i < Math.min(list.size(), MAX_NODES); i++) {
             nodes.add(Node.fromNbt(list.getCompound(i)));
+        }
+        events.clear();
+        ListTag log = tag.getList("Events", Tag.TAG_COMPOUND);
+        for (int i = 0; i < Math.min(log.size(), MAX_EVENTS); i++) {
+            events.add(Event.fromNbt(log.getCompound(i)));
         }
     }
 }

@@ -41,8 +41,13 @@ public class HubScreen extends GadgetScreen {
     /** Two-step guard so a stray click can never wipe the board. */
     private boolean armed = false;
 
+    /** False = the live board, true = the history log. */
+    private boolean showLog = false;
+    private int logPage = 0;
+
     private EditBox filterBox;
     private Button sortButton;
+    private Button viewButton;
     private Button prevButton;
     private Button nextButton;
     private Button clearButton;
@@ -80,7 +85,20 @@ public class HubScreen extends GadgetScreen {
     }
 
     private int maxPage() {
-        return Math.max(0, (visibleRows().size() - 1) / ROWS_PER_PAGE);
+        int items = showLog ? be.getEvents().size() : visibleRows().size();
+        return Math.max(0, (items - 1) / ROWS_PER_PAGE);
+    }
+
+    private int page() {
+        return Math.min(showLog ? logPage : page, maxPage());
+    }
+
+    private void setPage(int value) {
+        if (showLog) {
+            logPage = value;
+        } else {
+            page = value;
+        }
     }
 
     @Override
@@ -104,12 +122,23 @@ public class HubScreen extends GadgetScreen {
             page = 0;
         }).bounds(left + panelW - 118, top + CONTROLS_TOP, 106, 14).build());
 
-        prevButton = addRenderableWidget(Button.builder(Component.literal("◀"), b ->
-                page = Math.max(0, page - 1)).bounds(left + 12, top + panelH - 24, 20, 14).build());
-        nextButton = addRenderableWidget(Button.builder(Component.literal("▶"), b ->
-                page = Math.min(maxPage(), page + 1)).bounds(left + 36, top + panelH - 24, 20, 14).build());
+        viewButton = addRenderableWidget(Button.builder(Component.literal("Log"), b -> {
+            showLog = !showLog;
+            armed = false;
+        }).bounds(left + 166, top + CONTROLS_TOP, 44, 14).build());
 
+        prevButton = addRenderableWidget(Button.builder(Component.literal("◀"), b ->
+                setPage(Math.max(0, page() - 1))).bounds(left + 12, top + panelH - 24, 20, 14).build());
+        nextButton = addRenderableWidget(Button.builder(Component.literal("▶"), b ->
+                setPage(Math.min(maxPage(), page() + 1))).bounds(left + 36, top + panelH - 24, 20, 14).build());
+
+        // Doubles as the log's clear button, since the two views never share a
+        // moment: whichever is showing is the one this acts on.
         clearButton = addRenderableWidget(Button.builder(Component.literal("Disconnect all"), b -> {
+            if (showLog) {
+                send(be.getBlockPos(), "hub_log_clear", 0);
+                return;
+            }
             if (armed) {
                 send(be.getBlockPos(), "hub_clear", 0);
                 armed = false;
@@ -128,9 +157,10 @@ public class HubScreen extends GadgetScreen {
 
     @Override
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
-        if (button == 0) {
+        // The log draws no ✕ controls, so it must not hit-test for them either.
+        if (button == 0 && !showLog) {
             List<Integer> rows = visibleRows();
-            int start = Math.min(page, maxPage()) * ROWS_PER_PAGE;
+            int start = page() * ROWS_PER_PAGE;
             for (int i = start; i < Math.min(rows.size(), start + ROWS_PER_PAGE); i++) {
                 if (overClose(i - start, mouseX, mouseY)) {
                     CommandHubBlockEntity.Node n = be.getNodes().get(rows.get(i));
@@ -149,20 +179,25 @@ public class HubScreen extends GadgetScreen {
         List<CommandHubBlockEntity.Node> nodes = be.getNodes();
         List<Integer> rows = visibleRows();
         int maxPage = maxPage();
-        page = Math.min(page, maxPage);
+        int page = page();
+        setPage(page);
 
         // Widget state follows the data rather than being rebuilt with it.
         sortButton.setMessage(Component.literal("Sort: " + SORT_LABELS[sortMode]));
-        sortButton.active = !nodes.isEmpty();
+        sortButton.active = !showLog && !nodes.isEmpty();
+        sortButton.visible = !showLog;
+        filterBox.visible = !showLog;
+        viewButton.setMessage(Component.literal(showLog ? "Board" : "Log"));
         prevButton.active = page > 0;
         nextButton.active = page < maxPage;
-        clearButton.setMessage(Component.literal(armed ? "Confirm — clear all" : "Disconnect all"));
-        clearButton.active = !nodes.isEmpty();
+        clearButton.setMessage(Component.literal(showLog ? "Clear log"
+                : armed ? "Confirm — clear all" : "Disconnect all"));
+        clearButton.active = showLog ? !be.getEvents().isEmpty() : !nodes.isEmpty();
 
         super.render(gfx, mouseX, mouseY, delta);
         int x = left + 12;
 
-        // Totals bar.
+        // Totals bar — the same header in both views.
         int alarms = be.alarmCount();
         gfx.fill(left + 8, top + 18, left + panelW - 8, top + 32, TABLE_BG);
         gfx.drawString(font, nodes.size() + "/" + CommandHubBlockEntity.MAX_NODES + " linked", x, top + 21, AMBER, false);
@@ -170,6 +205,11 @@ public class HubScreen extends GadgetScreen {
                 left + 108, top + 21, AMBER, false);
         gfx.drawString(font, alarms == 0 ? "all clear" : alarms + " alert" + (alarms == 1 ? "" : "s"),
                 left + 226, top + 21, alarms == 0 ? GREEN : RED, false);
+
+        if (showLog) {
+            renderLog(gfx, x, page, maxPage);
+            return;
+        }
 
         if (nodes.isEmpty()) {
             gfx.drawString(font, "Nothing linked yet.", x, top + HEADER_TOP + 8, GRAY, false);
@@ -227,6 +267,39 @@ public class HubScreen extends GadgetScreen {
                     hot ? 0xFF3A2020 : 0xFF20242C);
             gfx.renderOutline(left + panelW - 26, y - 3, CLOSE_W, CLOSE_W, hot ? RED : FRAME);
             gfx.drawString(font, "✕", left + panelW - 21, y + 1, hot ? RED : GRAY, false);
+        }
+
+        if (maxPage > 0) {
+            gfx.drawString(font, (page + 1) + " / " + (maxPage + 1), left + 62, top + panelH - 21, GRAY, false);
+        }
+    }
+
+    /** The history view: what changed, and when, newest first. */
+    private void renderLog(GuiGraphics gfx, int x, int page, int maxPage) {
+        List<CommandHubBlockEntity.Event> events = be.getEvents();
+        if (events.isEmpty()) {
+            gfx.drawString(font, "Nothing has happened yet.", x, top + HEADER_TOP + 8, GRAY, false);
+            gfx.drawString(font, "Stalls and low stock get recorded here", x, top + HEADER_TOP + 22, GRAY, false);
+            gfx.drawString(font, "as they happen, so you can see what broke", x, top + HEADER_TOP + 34, GRAY, false);
+            gfx.drawString(font, "while you were away.", x, top + HEADER_TOP + 46, GRAY, false);
+            return;
+        }
+
+        gfx.drawString(font, "WHEN", x, top + HEADER_TOP, DIM, false);
+        gfx.drawString(font, "WHAT", left + 122, top + HEADER_TOP, DIM, false);
+
+        int start = page * ROWS_PER_PAGE;
+        for (int i = start; i < Math.min(events.size(), start + ROWS_PER_PAGE); i++) {
+            CommandHubBlockEntity.Event e = events.get(i);
+            int slot = i - start;
+            int y = top + ROW_TOP + slot * ROW_H;
+            if (slot % 2 == 0) {
+                gfx.fill(left + 8, y - 4, left + panelW - 8, y + 13, ROW_ALT);
+            }
+            gfx.drawString(font, "●", x, y, e.raised() ? RED : GREEN, false);
+            gfx.drawString(font, e.when(), x + 12, y, GRAY, false);
+            gfx.drawString(font, trim(e.label(), 22), left + 122, y, AMBER, false);
+            gfx.drawString(font, e.what(), left + 122, y + 9, e.raised() ? RED : GREEN, false);
         }
 
         if (maxPage > 0) {
