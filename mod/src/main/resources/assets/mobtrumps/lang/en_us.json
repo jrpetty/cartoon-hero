@@ -8,5 +8,8 @@
   "block.mobtrumps.dueling_table": "Dueling Table",
   "block.mobtrumps.holo_projector": "Holo Projector",
   "itemGroup.mobtrumps": "Mob Trumps",
-  "item.mobtrumps.card_sleeve": "Card Sleeve"
+  "item.mobtrumps.card_sleeve": "Card Sleeve",
+  "item.mobtrumps.card_fragment": "Card Fragment",
+  "block.mobtrumps.card_shredder": "Card Shredder",
+  "block.mobtrumps.printing_press": "Printing Press"
 }

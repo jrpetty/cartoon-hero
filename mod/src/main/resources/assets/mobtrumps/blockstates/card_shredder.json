@@ -1,0 +1,16 @@
+{
+  "variants": {
+    "facing=north": {
+      "model": "mobtrumps:block/card_shredder"
+    },
+    "facing=south": {
+      "model": "mobtrumps:block/card_shredder"
+    },
+    "facing=west": {
+      "model": "mobtrumps:block/card_shredder"
+    },
+    "facing=east": {
+      "model": "mobtrumps:block/card_shredder"
+    }
+  }
+}

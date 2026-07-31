@@ -11,7 +11,7 @@ import net.neoforged.neoforge.registries.DeferredHolder;
 import net.neoforged.neoforge.registries.DeferredItem;
 import net.neoforged.neoforge.registries.DeferredRegister;
 
-/** Blocks: the dueling table (starts a duel in-world) and the holo projector. */
+/** Blocks: the dueling table, the holo projector, and the two recycler machines. */
 public final class ModBlocks {
 
     public static final DeferredRegister.Blocks BLOCKS = DeferredRegister.createBlocks(MobTrumps.MODID);
@@ -32,6 +32,21 @@ public final class ModBlocks {
     public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<HoloProjectorBlockEntity>>
             HOLO_PROJECTOR_BE = BLOCK_ENTITIES.register("holo_projector",
             () -> BlockEntityType.Builder.of(HoloProjectorBlockEntity::new, HOLO_PROJECTOR.get()).build(null));
+
+    public static final DeferredBlock<CardShredderBlock> CARD_SHREDDER =
+            BLOCKS.register("card_shredder", () -> new CardShredderBlock(
+                    BlockBehaviour.Properties.of().mapColor(MapColor.METAL).strength(3.0F)
+                            .noOcclusion()));
+
+    public static final DeferredBlock<PrintingPressBlock> PRINTING_PRESS =
+            BLOCKS.register("printing_press", () -> new PrintingPressBlock(
+                    BlockBehaviour.Properties.of().mapColor(MapColor.COLOR_BROWN).strength(3.0F)
+                            .noOcclusion()));
+
+    public static final DeferredItem<BlockItem> CARD_SHREDDER_ITEM =
+            ModItems.ITEMS.registerSimpleBlockItem("card_shredder", CARD_SHREDDER);
+    public static final DeferredItem<BlockItem> PRINTING_PRESS_ITEM =
+            ModItems.ITEMS.registerSimpleBlockItem("printing_press", PRINTING_PRESS);
 
     public static final DeferredItem<BlockItem> DUELING_TABLE_ITEM =
             ModItems.ITEMS.registerSimpleBlockItem("dueling_table", DUELING_TABLE);

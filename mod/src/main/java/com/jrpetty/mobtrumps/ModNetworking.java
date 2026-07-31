@@ -63,6 +63,25 @@ public final class ModNetworking {
                         CampaignManager.begin(sp, payload.mission());
                     }
                 }));
+        registrar.playToClient(RecyclerMenuPayload.TYPE, RecyclerMenuPayload.STREAM_CODEC,
+                (payload, context) -> context.enqueueWork(
+                        () -> ClientHooks.openRecycler(payload.mode())));
+        registrar.playToClient(RecyclerSyncPayload.TYPE, RecyclerSyncPayload.STREAM_CODEC,
+                (payload, context) -> context.enqueueWork(
+                        () -> com.jrpetty.mobtrumps.client.ClientRecycler.set(payload.fragments())));
+        registrar.playToServer(RecyclerActionPayload.TYPE, RecyclerActionPayload.STREAM_CODEC,
+                (payload, context) -> context.enqueueWork(() -> {
+                    if (context.player() instanceof net.minecraft.server.level.ServerPlayer sp) {
+                        switch (payload.action()) {
+                            case RecyclerActionPayload.SHRED ->
+                                    RecyclerManager.shredOne(sp, payload.mobId(), payload.flags() == 1);
+                            case RecyclerActionPayload.SHRED_ALL -> RecyclerManager.shredAll(sp);
+                            case RecyclerActionPayload.PRINT ->
+                                    RecyclerManager.print(sp, payload.flags(), payload.stake());
+                            default -> { }
+                        }
+                    }
+                }));
         registrar.playToClient(StorageSyncPayload.TYPE, StorageSyncPayload.STREAM_CODEC,
                 (payload, context) -> context.enqueueWork(
                         () -> ClientCollection.setStorage(payload.stored(), payload.storedFoil())));

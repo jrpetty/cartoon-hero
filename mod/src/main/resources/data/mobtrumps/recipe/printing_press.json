@@ -1,0 +1,27 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "misc",
+  "pattern": [
+    "PPP",
+    "ISI",
+    "LLL"
+  ],
+  "key": {
+    "P": {
+      "item": "minecraft:paper"
+    },
+    "I": {
+      "item": "minecraft:iron_ingot"
+    },
+    "S": {
+      "item": "minecraft:smithing_table"
+    },
+    "L": {
+      "item": "minecraft:dark_oak_log"
+    }
+  },
+  "result": {
+    "id": "mobtrumps:printing_press",
+    "count": 1
+  }
+}

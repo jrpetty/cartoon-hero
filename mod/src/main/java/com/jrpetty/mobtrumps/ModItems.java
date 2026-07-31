@@ -67,6 +67,9 @@ public final class ModItems {
             ITEMS.register("card_sleeve", () -> new CardSleeveItem(new Item.Properties()));
     public static final DeferredItem<CardScannerItem> CARD_SCANNER =
             ITEMS.register("card_scanner", () -> new CardScannerItem(new Item.Properties().stacksTo(1)));
+    /** Pulped card stock. The currency of the shredder and the press. */
+    public static final DeferredItem<Item> CARD_FRAGMENT =
+            ITEMS.register("card_fragment", () -> new Item(new Item.Properties()));
 
     public static final DeferredHolder<CreativeModeTab, CreativeModeTab> TAB =
             CREATIVE_MODE_TABS.register("mobtrumps", () -> CreativeModeTab.builder()
@@ -78,6 +81,9 @@ public final class ModItems {
                         output.accept(CARD_SLEEVE.get());
                         output.accept(ModBlocks.DUELING_TABLE.get());
                         output.accept(ModBlocks.HOLO_PROJECTOR.get());
+                        output.accept(ModBlocks.CARD_SHREDDER.get());
+                        output.accept(ModBlocks.PRINTING_PRESS.get());
+                        output.accept(CARD_FRAGMENT.get());
                         // cards are earned by hunting mobs; every card is shown here for reference
                         for (MobCard card : MobCards.ALL) {
                             output.accept(MobCardItem.stackOf(card));

@@ -8,7 +8,8 @@ says otherwise.
 
 ## 1. Card recycler — dupes into fragments
 
-**Status:** designed, not built. Waiting on two decisions (see below).
+**Status:** BUILT (v1.63.0). The open questions were decided — see "Decided"
+below.
 
 Drop unwanted duplicate cards into a machine, get **card fragments** (or
 "scrap"), spend fragments for a card you don't own.
@@ -71,7 +72,26 @@ strictly cheaper, everyone minimum-bets, and the decision evaporates.
 **No refund on a failure.** A minimum stake of ~5 fragments is fine purely to
 stop one-fragment spam clogging the UI.
 
-### The one open question
+### Decided (v1.63.0)
+
+1. **Pure random of the tier.** The press does *not* lean toward cards you are
+   missing. It is for volume and trading; hunting is for completion. This is the
+   "already correct" branch of the question below, chosen deliberately: the
+   press being useless for your last two commons is the point, not a flaw.
+2. **Shred yield scales with condition** — a mint spare pays full, a ruined one
+   pays half, never below 1. Gives condition a second reason to exist and makes
+   a battered duplicate the obvious thing to pulp.
+3. **No special handling for low serials.** A card is a card; `CREEPER-000001`
+   can be shredded like any other. Recorded here because someone will
+   eventually do it.
+
+Also decided in the build: **"spare" means the mob is already filed in your
+Collection Book.** Since v1.59.0 the book is the record of what you own, so a
+loose card whose mob is filed is by definition a second copy, and pulping it
+cannot cost collection progress or a card the campaign needs. A card of a mob
+you have not filed is your only one and the machine refuses it.
+
+### The one open question (answered: pure random)
 
 A random card of the tier means **the press gets worse as your collection
 fills** — own 10 of the 12 commons and a successful print is only 17% likely to

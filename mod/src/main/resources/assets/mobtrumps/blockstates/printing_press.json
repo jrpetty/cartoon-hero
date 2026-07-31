@@ -1,0 +1,16 @@
+{
+  "variants": {
+    "facing=north": {
+      "model": "mobtrumps:block/printing_press"
+    },
+    "facing=south": {
+      "model": "mobtrumps:block/printing_press"
+    },
+    "facing=west": {
+      "model": "mobtrumps:block/printing_press"
+    },
+    "facing=east": {
+      "model": "mobtrumps:block/printing_press"
+    }
+  }
+}

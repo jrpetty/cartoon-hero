@@ -1,0 +1,150 @@
+{
+  "parent": "block/block",
+  "textures": {
+    "top": "minecraft:block/hopper_top",
+    "side": "minecraft:block/iron_block",
+    "head": "minecraft:block/hopper_outside",
+    "particle": "minecraft:block/iron_block"
+  },
+  "elements": [
+    {
+      "__comment": "body",
+      "from": [
+        1,
+        0,
+        1
+      ],
+      "to": [
+        15,
+        12,
+        15
+      ],
+      "faces": {
+        "down": {
+          "uv": [
+            1,
+            1,
+            15,
+            15
+          ],
+          "texture": "#side",
+          "cullface": "down"
+        },
+        "up": {
+          "uv": [
+            1,
+            1,
+            15,
+            15
+          ],
+          "texture": "#top"
+        },
+        "north": {
+          "uv": [
+            1,
+            4,
+            15,
+            16
+          ],
+          "texture": "#side"
+        },
+        "south": {
+          "uv": [
+            1,
+            4,
+            15,
+            16
+          ],
+          "texture": "#side"
+        },
+        "west": {
+          "uv": [
+            1,
+            4,
+            15,
+            16
+          ],
+          "texture": "#side"
+        },
+        "east": {
+          "uv": [
+            1,
+            4,
+            15,
+            16
+          ],
+          "texture": "#side"
+        }
+      }
+    },
+    {
+      "__comment": "head",
+      "from": [
+        3,
+        12,
+        3
+      ],
+      "to": [
+        13,
+        16,
+        13
+      ],
+      "faces": {
+        "down": {
+          "uv": [
+            3,
+            3,
+            13,
+            13
+          ],
+          "texture": "#head"
+        },
+        "up": {
+          "uv": [
+            3,
+            3,
+            13,
+            13
+          ],
+          "texture": "#head"
+        },
+        "north": {
+          "uv": [
+            3,
+            0,
+            13,
+            4
+          ],
+          "texture": "#head"
+        },
+        "south": {
+          "uv": [
+            3,
+            0,
+            13,
+            4
+          ],
+          "texture": "#head"
+        },
+        "west": {
+          "uv": [
+            3,
+            0,
+            13,
+            4
+          ],
+          "texture": "#head"
+        },
+        "east": {
+          "uv": [
+            3,
+            0,
+            13,
+            4
+          ],
+          "texture": "#head"
+        }
+      }
+    }
+  ]
+}
