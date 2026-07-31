@@ -194,6 +194,7 @@ public class TableMenuScreen extends Screen {
         String editLabel = "Edit Deck";
         String campLabel = "Campaign " + ClientCampaign.clearedCount()
                 + "/" + com.jrpetty.mobtrumps.game.CampaignDecks.count();
+        String hallLabel = "Hall";
         int rowLeft = barX + 8;
         int rowRight = barX + panelW - 44;   // the card fan lives past here
         int gap = 6;
@@ -202,16 +203,21 @@ public class TableMenuScreen extends Screen {
         // Budget the row before drawing any of it, then trim each label into
         // the width it was given. Shrinking labels and hoping was not enough:
         // whichever element measured widest still ran over its neighbour.
-        int rightCap = room * 55 / 100;
-        int campW = Math.min(font.width(campLabel) + 16, rightCap * 55 / 100);
-        int editW = Math.max(26, Math.min(font.width(editLabel) + 16, rightCap - campW - gap));
-        int campX = rowRight - campW;
+        int rightCap = room * 62 / 100;
+        int hallW = Math.min(font.width(hallLabel) + 14, rightCap / 5);
+        int campW = Math.min(font.width(campLabel) + 16, rightCap * 45 / 100);
+        int editW = Math.max(26, Math.min(font.width(editLabel) + 16,
+                rightCap - campW - hallW - gap * 2));
+        int hallX = rowRight - hallW;
+        int campX = hallX - gap - campW;
         int editX = campX - gap - editW;
 
         int leftRoom = Math.max(56, editX - gap - rowLeft);
         int myW = Math.min(font.width(myLabel) + 14, Math.max(24, leftRoom * 40 / 100));
         int randW = Math.max(24, leftRoom - myW - gap);
 
+        bigButton(g, "hall", hallX, barY + 17, hallW, 14, fit(hallLabel, hallW - 14),
+                0xFF8A6A1A, 0xFFB89228, mouseX, mouseY, true);
         bigButton(g, "campaign", campX, barY + 17, campW, 14, fit(campLabel, campW - 16),
                 0xFF5A3A8A, 0xFF7A52B4, mouseX, mouseY, true);
         bigButton(g, "deck_edit", editX, barY + 17, editW, 14, fit(editLabel, editW - 16),
@@ -442,6 +448,8 @@ public class TableMenuScreen extends Screen {
                 useMyDeck = true;
             } else if (key.equals("deck_rand")) {
                 useMyDeck = false;
+            } else if (key.equals("hall") && minecraft != null) {
+                minecraft.setScreen(new HallScreen());
             } else if (key.equals("campaign") && minecraft != null) {
                 minecraft.setScreen(new CampaignScreen());
                 return true;

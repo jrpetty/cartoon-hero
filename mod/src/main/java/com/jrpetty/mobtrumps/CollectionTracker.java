@@ -37,6 +37,9 @@ public final class CollectionTracker {
         if (isNew) {
             // a newly-collected mob may have completed its category
             CategoryRewards.checkAndAward(player);
+            if (player.getServer() != null) {
+                HallOfFame.get(player.getServer()).checkCompletion(player);
+            }
         }
         if (changed) {
             sync(player);

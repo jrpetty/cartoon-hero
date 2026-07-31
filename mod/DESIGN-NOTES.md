@@ -478,9 +478,14 @@ A full checklist would fix that but cost the discovery.
 - **Trump rules** — one ability per card drawn from what the mob is (Creeper
   pots both cards on a loss, Enderman swaps top for bottom, Wolf peeks at a
   stat). Toggleable per table so the classic game survives.
-- **Hall of Fame** — server-wide: rarest complete sets, first to finish each
-  category. Much more interesting once serials exist and "who owns
-  CREEPER-000001" is a real question.
+- **Hall of Fame** — *(built v1.65.0.)* Three server-wide records, all
+  append-only and permanent: who unlocked each mob's `000001`, who finished each
+  category first, and who has completed all 81. Recorded at the moment the
+  serial registry hands out number 1, so it is a fact about the world rather
+  than about anyone's inventory — it stays true after the card is traded, and
+  after it is shredded. A migrated card never claims a first, because its place
+  in history cannot be proven. Reached from the dueling table; fetched on
+  request rather than pushed, since these change rarely.
 
 ---
 

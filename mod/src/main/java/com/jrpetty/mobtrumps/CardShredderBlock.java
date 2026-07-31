@@ -56,6 +56,7 @@ public class CardShredderBlock extends HorizontalDirectionalBlock {
     protected InteractionResult useWithoutItem(BlockState state, Level level, BlockPos pos,
                                                Player player, BlockHitResult hit) {
         if (!level.isClientSide && player instanceof ServerPlayer sp) {
+            BlockReach.opened(sp, pos);
             RecyclerManager.open(sp, RecyclerManager.MODE_SHREDDER);
         }
         return InteractionResult.sidedSuccess(level.isClientSide);

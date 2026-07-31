@@ -3,6 +3,7 @@ package com.jrpetty.mobtrumps;
 import com.jrpetty.mobtrumps.client.ClientCollection;
 import com.jrpetty.mobtrumps.client.ClientHooks;
 import net.neoforged.neoforge.network.event.RegisterPayloadHandlersEvent;
+import net.neoforged.neoforge.network.PacketDistributor;
 import net.neoforged.neoforge.network.registration.PayloadRegistrar;
 
 public final class ModNetworking {
@@ -61,6 +62,16 @@ public final class ModNetworking {
                     if (context.player() instanceof net.minecraft.server.level.ServerPlayer sp
                             && payload.action() == CampaignActionPayload.BEGIN) {
                         CampaignManager.begin(sp, payload.mission());
+                    }
+                }));
+        registrar.playToClient(HallSyncPayload.TYPE, HallSyncPayload.STREAM_CODEC,
+                (payload, context) -> context.enqueueWork(
+                        () -> com.jrpetty.mobtrumps.client.ClientHall.set(payload)));
+        registrar.playToServer(HallRequestPayload.TYPE, HallRequestPayload.STREAM_CODEC,
+                (payload, context) -> context.enqueueWork(() -> {
+                    if (context.player() instanceof net.minecraft.server.level.ServerPlayer sp
+                            && sp.getServer() != null) {
+                        PacketDistributor.sendToPlayer(sp, HallOfFame.get(sp.getServer()).snapshot());
                     }
                 }));
         registrar.playToClient(RecyclerMenuPayload.TYPE, RecyclerMenuPayload.STREAM_CODEC,

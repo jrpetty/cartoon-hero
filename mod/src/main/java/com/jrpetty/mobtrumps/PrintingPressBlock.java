@@ -56,6 +56,7 @@ public class PrintingPressBlock extends HorizontalDirectionalBlock {
     protected InteractionResult useWithoutItem(BlockState state, Level level, BlockPos pos,
                                                Player player, BlockHitResult hit) {
         if (!level.isClientSide && player instanceof ServerPlayer sp) {
+            BlockReach.opened(sp, pos);
             RecyclerManager.open(sp, RecyclerManager.MODE_PRESS);
         }
         return InteractionResult.sidedSuccess(level.isClientSide);

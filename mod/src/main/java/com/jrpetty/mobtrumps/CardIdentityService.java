@@ -75,6 +75,11 @@ public final class CardIdentityService {
                 (edition == null ? CardEdition.STANDARD : edition).name(),
                 false));
         stack.set(ModItems.CARD_WEAR.get(), CardWear.PRISTINE);
+        // 000001 is a fact about the server, not about anyone's inventory: it
+        // stays true after the card is traded, and after it is shredded
+        if (serial == 1 && unlocker != null) {
+            HallOfFame.get(server).recordFirstPrint(mobId, unlocker);
+        }
         return stack;
     }
 

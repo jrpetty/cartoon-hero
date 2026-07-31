@@ -51,6 +51,7 @@ public final class DuelTables {
 
     /** Right-click on the table: send the client everything the menu needs. */
     public static void openMenu(BlockPos pos, ServerPlayer player) {
+        BlockReach.opened(player, pos);
         BlockPos key = pos.immutable();
         Seat seat = validSeat(key);
         String name = "";
@@ -78,6 +79,10 @@ public final class DuelTables {
 
     /** A menu choice arriving from the client. Everything is re-validated. */
     public static void handleAction(ServerPlayer player, TableActionPayload payload) {
+        // the table has to be the one the server opened, and still in reach
+        if (!BlockReach.canReach(player, payload.pos())) {
+            return;
+        }
         BlockPos key = payload.pos().immutable();
         if (key.distToCenterSqr(player.getX(), player.getY(), player.getZ()) > MAX_REACH_SQ) {
             return; // too far away to be a legitimate click

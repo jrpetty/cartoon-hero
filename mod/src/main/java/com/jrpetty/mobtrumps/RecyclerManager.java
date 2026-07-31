@@ -33,6 +33,7 @@ public final class RecyclerManager {
     private RecyclerManager() {
     }
 
+    /** Opened by the block, which has already recorded itself with BlockReach. */
     public static void open(ServerPlayer player, int mode) {
         PacketDistributor.sendToPlayer(player, new RecyclerMenuPayload(mode));
     }
@@ -91,6 +92,9 @@ public final class RecyclerManager {
 
     /** Shred one loose spare of this mob. Returns the fragments paid, or 0. */
     public static int shredOne(ServerPlayer player, String mobId, boolean foil) {
+        if (!BlockReach.canReach(player)) {
+            return 0;   // not standing at a shredder
+        }
         var inv = player.getInventory();
         for (int i = 0; i < inv.getContainerSize(); i++) {
             ItemStack s = inv.getItem(i);
@@ -120,6 +124,9 @@ public final class RecyclerManager {
 
     /** Shred every loose spare in the inventory in one pass. */
     public static int shredAll(ServerPlayer player) {
+        if (!BlockReach.canReach(player)) {
+            return 0;
+        }
         var inv = player.getInventory();
         int paid = 0;
         int cards = 0;
@@ -155,6 +162,9 @@ public final class RecyclerManager {
      * choice is about variance rather than about finding the best number.
      */
     public static void print(ServerPlayer player, int tierOrdinal, int stake) {
+        if (!BlockReach.canReach(player)) {
+            return;   // not standing at a press
+        }
         Tier[] tiers = Tier.values();
         if (tierOrdinal < 0 || tierOrdinal >= tiers.length) {
             return;

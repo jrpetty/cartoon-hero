@@ -33,6 +33,11 @@ public final class ClientHooks {
         Minecraft.getInstance().setScreen(new CampaignScreen());
     }
 
+    /** Open the server's Hall of Fame. */
+    public static void openHall() {
+        Minecraft.getInstance().setScreen(new HallScreen());
+    }
+
     /** Open a recycler machine: 0 = the shredder, 1 = the press. */
     public static void openRecycler(int mode) {
         Minecraft.getInstance().setScreen(new RecyclerScreen(mode));
