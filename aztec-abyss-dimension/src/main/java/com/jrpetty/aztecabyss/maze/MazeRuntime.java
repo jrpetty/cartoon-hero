@@ -70,6 +70,8 @@ public final class MazeRuntime {
     private static final Map<UUID, ServerBossEvent> BARS = new HashMap<>();
     /** Who has already been read the rules. */
     private static final java.util.Set<UUID> BRIEFED = new java.util.HashSet<>();
+    /** Who is currently caught outside the Glade for the night. */
+    private static final java.util.Set<UUID> NIGHT_OUT = new java.util.HashSet<>();
 
     private MazeRuntime() {
     }
@@ -168,6 +170,7 @@ public final class MazeRuntime {
             }
         }
 
+        MazeRace.tick(level);
         tickRunners(level, t);
         tickGrievers(level, t);
     }
@@ -193,9 +196,25 @@ public final class MazeRuntime {
 
             if (!inGlade && !MazeRuns.isRunning(p.getUUID())) {
                 MazeRuns.begin(level, p);
+                MazeAdvancements.grant(p, MazeAdvancements.ROOT);
+                MazeAdvancements.grant(p, MazeAdvancements.FIRST_RUN);
+            }
+            // Still out there when the doors shut, and still out there at dawn.
+            if (!inGlade && isNight(t)) {
+                NIGHT_OUT.add(p.getUUID());
+            } else if (!isNight(t) && NIGHT_OUT.remove(p.getUUID())) {
+                MazeAdvancements.grant(p, MazeAdvancements.SURVIVE_NIGHT);
             }
             if (layout != null && MazeRuns.isRunning(p.getUUID()) && atExit(at, layout)) {
-                MazeRuns.complete(level, p, layout);
+                int deaths = MazeRuns.deaths(p.getUUID());
+                int seconds = MazeRuns.complete(level, p, layout);
+                MazeAdvancements.grant(p, MazeAdvancements.FIRST_ESCAPE);
+                if (deaths == 0) {
+                    MazeAdvancements.grant(p, MazeAdvancements.CLEAN_ESCAPE);
+                }
+                if (seconds >= 0 && MazeRace.onEscape(level, p, seconds)) {
+                    MazeAdvancements.grant(p, MazeAdvancements.RACE_WIN);
+                }
                 sendHome(level, p);
             }
             updateBar(level, p, layout, t);
@@ -281,6 +300,12 @@ public final class MazeRuntime {
         }
         if (runners.isEmpty()) {
             return;
+        }
+        for (Mob g : loaded) {
+            if (g.getTarget() instanceof ServerPlayer tp
+                    && tp.hasEffect(net.minecraft.world.effect.MobEffects.INVISIBILITY)) {
+                g.setTarget(null);
+            }
         }
         int cap = Griever.capFor(level, runners.size());
         if (loaded.size() < cap && rng.nextInt(3) == 0) {

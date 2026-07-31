@@ -72,7 +72,10 @@ public final class MazeEvents {
                 .then(Commands.literal("top").executes(ctx -> leaderboard(ctx.getSource())))
                 .then(Commands.literal("stop").executes(ctx -> stop(ctx.getSource())))
                 .then(Commands.literal("griever").requires(src -> src.hasPermission(2))
-                        .executes(ctx -> spawnGriever(ctx.getSource())));
+                        .executes(ctx -> spawnGriever(ctx.getSource())))
+                .then(Commands.literal("race").requires(src -> src.hasPermission(2))
+                        .then(Commands.literal("start").executes(ctx -> raceStart(ctx.getSource())))
+                        .then(Commands.literal("stop").executes(ctx -> raceStop(ctx.getSource()))));
         event.getDispatcher().register(root);
     }
 
@@ -141,17 +144,47 @@ public final class MazeEvents {
     @SubscribeEvent
     public static void onDeath(LivingDeathEvent event) {
         if (!(event.getEntity() instanceof ServerPlayer player)) {
-            if (event.getEntity() instanceof net.minecraft.world.entity.Mob mob
-                    && mob.level() instanceof ServerLevel lvl && isMaze(lvl)
-                    && Griever.isGriever(mob)) {
-                Griever.onDeath(lvl, mob);
-            }
-            return;
+            return; // Grievers are handled by onGrieverKilled
         }
         if (!(player.level() instanceof ServerLevel level) || !isMaze(level)) {
             return;
         }
         MazeRuns.onDeath(player);
+    }
+
+    /** A dead Griever leaves the colour team, and sometimes a serum. */
+    @SubscribeEvent
+    public static void onGrieverKilled(LivingDeathEvent event) {
+        if (!(event.getEntity() instanceof net.minecraft.world.entity.Mob mob)
+                || !(mob.level() instanceof ServerLevel level) || !isMaze(level)
+                || !Griever.isGriever(mob)) {
+            return;
+        }
+        Griever.onDeath(level, mob);
+        boolean dropped = MazeSerum.maybeDrop(level, mob, net.minecraft.util.RandomSource.create());
+        if (event.getSource().getEntity() instanceof ServerPlayer killer) {
+            MazeAdvancements.grant(killer, MazeAdvancements.GRIEVER_SLAYER);
+            if (dropped) {
+                MazeAdvancements.grant(killer, MazeAdvancements.SERUM);
+            }
+        }
+    }
+
+    private static int raceStart(CommandSourceStack src) {
+        ServerLevel maze = src.getServer().getLevel(AztecAbyssConstants.MAZE_LEVEL_KEY);
+        if (maze == null || !MazeRace.start(maze)) {
+            src.sendFailure(Component.literal("Cannot start a race — nobody is in the maze, or one is already running."));
+            return 0;
+        }
+        return 1;
+    }
+
+    private static int raceStop(CommandSourceStack src) {
+        ServerLevel maze = src.getServer().getLevel(AztecAbyssConstants.MAZE_LEVEL_KEY);
+        if (maze != null) {
+            MazeRace.stop(maze, "cancelled");
+        }
+        return 1;
     }
 
     /** Respawning inside the maze puts you back in the Glade, not at world spawn. */
@@ -173,6 +206,10 @@ public final class MazeEvents {
         if (event.getFrom().equals(AztecAbyssConstants.MAZE_LEVEL_KEY)) {
             MazeRuns.abandon(event.getEntity().getUUID());
         }
+        if (event.getTo().equals(AztecAbyssConstants.MAZE_LEVEL_KEY)
+                && event.getEntity() instanceof ServerPlayer p) {
+            MazeAdvancements.grant(p, MazeAdvancements.ROOT);
+        }
     }
 
     private static int leaderboard(CommandSourceStack src) {
@@ -180,6 +217,11 @@ public final class MazeEvents {
         if (top.isEmpty()) {
             src.sendSuccess(() -> Component.literal("§7Nobody has escaped the maze yet."), false);
             return 1;
+        }
+        MazeRace race = MazeRace.get(src.getServer());
+        if (race.recordSeconds() > 0) {
+            src.sendSuccess(() -> Component.literal("§6🏁 Race record: §f" + race.recordName()
+                    + " §b" + MazeRuns.format(race.recordSeconds())), false);
         }
         src.sendSuccess(() -> Component.literal("§6§l✦ FASTEST ESCAPES ✦"), false);
         for (int i = 0; i < top.size(); i++) {

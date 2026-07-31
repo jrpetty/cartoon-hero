@@ -1,0 +1,25 @@
+{
+  "display": {
+    "icon": {
+      "id": "minecraft:torch",
+      "count": 1
+    },
+    "title": "Night in the Maze",
+    "description": "Be outside the Glade when the doors seal \u2014 and live to dawn.",
+    "frame": "goal",
+    "show_toast": true,
+    "announce_to_chat": true,
+    "hidden": false
+  },
+  "criteria": {
+    "granted": {
+      "trigger": "minecraft:impossible"
+    }
+  },
+  "requirements": [
+    [
+      "granted"
+    ]
+  ],
+  "parent": "aztecabyss:maze/first_run"
+}

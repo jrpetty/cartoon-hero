@@ -35,6 +35,26 @@ public final class MazeBuilder {
     private static final BlockState GLADE_GROUND = Blocks.GRASS_BLOCK.defaultBlockState();
     private static final BlockState BEDROCK = Blocks.BEDROCK.defaultBlockState();
 
+    /**
+     * One colour per compass section, banded into the corridor walls.
+     *
+     * <p>This is the answer to the one gap the handoff calls out by name: nothing
+     * in the maze rewarded charting it. Identical grey corridors in every
+     * direction make a map you cannot hold in your head. A colour per section
+     * means "I came in through the green" is a real sentence, and a Runner's
+     * account of a route becomes worth listening to.
+     */
+    private static final BlockState[] SECTION_COLOURS = {
+            Blocks.RED_TERRACOTTA.defaultBlockState(),
+            Blocks.ORANGE_TERRACOTTA.defaultBlockState(),
+            Blocks.YELLOW_TERRACOTTA.defaultBlockState(),
+            Blocks.LIME_TERRACOTTA.defaultBlockState(),
+            Blocks.CYAN_TERRACOTTA.defaultBlockState(),
+            Blocks.LIGHT_BLUE_TERRACOTTA.defaultBlockState(),
+            Blocks.PURPLE_TERRACOTTA.defaultBlockState(),
+            Blocks.MAGENTA_TERRACOTTA.defaultBlockState(),
+    };
+
     /** Cursor into the 96x96 cell grid; -1 means no build in progress. */
     private static int cursor = -1;
 
@@ -119,6 +139,70 @@ public final class MazeBuilder {
                 for (int y = MazeData.WALL_BASE_Y; y <= MazeData.WALL_TOP_Y; y++) {
                     level.setBlock(new BlockPos(x, y, z), wallStone(rng), 2);
                 }
+            }
+        }
+        if (!glade) {
+            landmark(level, cx, cz, openW, openE, openN, openS);
+        }
+    }
+
+    /** Which of the eight compass sections a cell belongs to. */
+    public static int sectionOf(int cx, int cz) {
+        int mid = MazeData.GRID / 2;
+        double angle = Math.atan2(cz - mid, cx - mid) + Math.PI;
+        return (int) Math.floor(angle / (Math.PI * 2.0) * 8.0) % 8;
+    }
+
+    /**
+     * Marks a cell with its section colour and, occasionally, something to
+     * remember it by.
+     *
+     * <p>Deterministic from the cell itself rather than from a running RNG, so
+     * the same corridor is marked the same way on every server and a route
+     * described by one player is followable by another.
+     */
+    private static void landmark(ServerLevel level, int cx, int cz,
+                                 boolean openW, boolean openE, boolean openN, boolean openS) {
+        int hash = Math.abs((cx * 73856093) ^ (cz * 19349663));
+        if (hash % 5 != 0) {
+            return;
+        }
+        BlockState colour = SECTION_COLOURS[sectionOf(cx, cz)];
+        int y = MazeData.WALL_BASE_Y + 2;
+
+        // A band set into whichever wall the corridor actually runs past, so it
+        // is always facing someone walking through.
+        for (int across = MazeData.CORRIDOR_MIN; across <= MazeData.CORRIDOR_MAX; across++) {
+            if (!openN) {
+                level.setBlock(new BlockPos(cx * MazeData.CELL + across, y,
+                        cz * MazeData.CELL + MazeData.CORRIDOR_MIN - 1), colour, 2);
+            }
+            if (!openS) {
+                level.setBlock(new BlockPos(cx * MazeData.CELL + across, y,
+                        cz * MazeData.CELL + MazeData.CORRIDOR_MAX + 1), colour, 2);
+            }
+            if (!openW) {
+                level.setBlock(new BlockPos(cx * MazeData.CELL + MazeData.CORRIDOR_MIN - 1, y,
+                        cz * MazeData.CELL + across), colour, 2);
+            }
+            if (!openE) {
+                level.setBlock(new BlockPos(cx * MazeData.CELL + MazeData.CORRIDOR_MAX + 1, y,
+                        cz * MazeData.CELL + across), colour, 2);
+            }
+        }
+
+        // One in five of those gets something with a silhouette, so a junction is
+        // recognisable from down the corridor and not just up close.
+        if (hash % 25 == 0) {
+            BlockPos centre = new BlockPos(cx * MazeData.CELL + MazeData.CORRIDOR_MIN,
+                    MazeData.FLOOR_Y + 1, cz * MazeData.CELL + MazeData.CORRIDOR_MIN);
+            int kind = (hash / 25) % 4;
+            switch (kind) {
+                case 0 -> level.setBlock(centre, Blocks.CHAIN.defaultBlockState(), 2);
+                case 1 -> level.setBlock(centre.above(2), Blocks.LANTERN.defaultBlockState()
+                        .setValue(net.minecraft.world.level.block.state.properties.BlockStateProperties.HANGING, true), 2);
+                case 2 -> level.setBlock(centre, Blocks.VINE.defaultBlockState(), 2);
+                default -> level.setBlock(centre, Blocks.COBWEB.defaultBlockState(), 2);
             }
         }
     }
