@@ -6,9 +6,11 @@
 
 import { RNG } from "../engine/rng";
 import { UNITS } from "../content/units";
-import { resolveBattle, UnitStack, ArenaUnit, BattleResult } from "./autobattle";
+import { resolveBattle, UnitStack, ArenaUnit, BattleResult, SideOpts } from "./autobattle";
 import { activeTraits, ActiveTrait } from "./traits";
 import { ITEM_IDS, MAX_ITEMS } from "./items";
+import { Augment, offerAugments, tierForRound, combinedBuff, combinedTraitBonus } from "./augments";
+import { CreepCamp, isCreepRound, campForRound, campBoard } from "./creeps";
 
 /** Shop tier (1 cheap/weak … 5 rare/strong); buying costs the tier in gold. */
 export const UNIT_TIER: Record<string, number> = {
@@ -68,8 +70,10 @@ function pickFavored(rng: RNG): string[] {
   return [...new Set(out)];
 }
 
-/** Combine any 3 same type+star into one of the next star (shared by all warbands). */
-function mergeBoard(pieces: Piece[], stash: string[]) {
+/** Combine any 3 same type+star into one of the next star (shared by all
+ *  warbands). Returns each star-up made, so the screen can celebrate it. */
+function mergeBoard(pieces: Piece[], stash: string[]): { type: string; star: number }[] {
+  const made: { type: string; star: number }[] = [];
   for (let star = 1; star <= 2; star++) {
     let changed = true;
     while (changed) {
@@ -89,11 +93,13 @@ function mergeBoard(pieces: Piece[], stash: string[]) {
           }
           pieces.push({ type, star: star + 1, items: carried.slice(0, MAX_ITEMS) });
           stash.push(...carried.slice(MAX_ITEMS)); // overflow relics go back to the stash
+          made.push({ type, star: star + 1 });
           changed = true;
         }
       }
     }
   }
+  return made;
 }
 
 export class WarbandRun {
@@ -108,9 +114,16 @@ export class WarbandRun {
   itemStash: string[] = []; // unequipped relics
   shop: (string | null)[] = [];
   opponents: Opponent[] = [];
-  phase: "shop" | "battle" | "result" | "over" = "shop";
+  phase: "augment" | "shop" | "battle" | "result" | "over" = "shop";
   outcome: "win" | "loss" | null = null;
-  lastResult: { won: boolean; foe: string; youLeft: number; foeLeft: number; dmg: number } | null = null;
+  lastResult: { won: boolean; foe: string; youLeft: number; foeLeft: number; dmg: number; relics: number; gold: number; creep: boolean } | null = null;
+  // ---- augments (TFT-style run-defining picks) ----
+  augments: Augment[] = [];
+  augmentOffer: Augment[] = [];
+  // ---- the round's PvE camp, when this is a monster round ----
+  pendingCamp: CreepCamp | null = null;
+  /** Set whenever pieces merge into a star-up, for the screen's celebration. */
+  lastMerge: { type: string; star: number } | null = null;
   // The round's matchup, fixed when the shop opens so the on-board preview shows
   // the real upcoming enemy and the live fight uses the same deterministic seed.
   pendingSeed = 0;
@@ -135,10 +148,51 @@ export class WarbandRun {
   // ---- economy / shop -------------------------------------------------------
   // You field exactly your level — levelling up is what unlocks another board
   // slot, so teching is a real tradeoff against buying/rerolling.
-  private boardCap(): number { return this.level; }
+  private boardCap(): number { return this.level + this.augSum((a) => a.boardSlots); }
 
   /** How many pieces deploy this round (for the screen's "deploying top N"). */
   deployCount(): number { return this.boardCap(); }
+
+  // ---- augment-modified economy knobs --------------------------------------
+  /** Sum a numeric field across every owned augment. */
+  private augSum(pick: (a: Augment) => number | undefined): number {
+    let n = 0;
+    for (const a of this.augments) n += pick(a) ?? 0;
+    return n;
+  }
+  /** What a reroll costs (augments can discount it). */
+  rerollCost(): number {
+    let c = REROLL_COST;
+    for (const a of this.augments) if (a.rerollCost != null) c = Math.min(c, a.rerollCost);
+    return c;
+  }
+  /** The interest cap — 5 gold unless an augment raises it. */
+  private interestCap(): number {
+    let cap = 5;
+    for (const a of this.augments) if (a.interestCap != null) cap = Math.max(cap, a.interestCap);
+    return cap;
+  }
+  /** How often a relic is earned (every N rounds; augments speed this up). */
+  private relicEvery(): number {
+    let n = 3;
+    for (const a of this.augments) if (a.relicEvery != null) n = Math.min(n, a.relicEvery);
+    return n;
+  }
+  /** This round's shop tier odds (%), for the level-up tooltip. */
+  shopOdds(): number[] { return TIER_ODDS[Math.min(this.level, MAX_LEVEL) - 1]; }
+  /** XP progress toward the next level, for the header bar. */
+  xpProgress(): { xp: number; need: number; max: boolean } {
+    if (this.level >= MAX_LEVEL) return { xp: 0, need: 0, max: true };
+    const from = XP_TO_LEVEL[this.level];
+    const to = XP_TO_LEVEL[this.level + 1];
+    return { xp: this.xp - from, need: to - from, max: false };
+  }
+  /** A TFT-style "stage-round" label, e.g. round 7 → "2-2". */
+  stageLabel(): string {
+    const stage = Math.floor((this.round - 1) / 5) + 1;
+    const step = ((this.round - 1) % 5) + 1;
+    return `${stage}-${step}`;
+  }
 
   private rollShop() {
     const odds = TIER_ODDS[Math.min(this.level, MAX_LEVEL) - 1];
@@ -168,8 +222,9 @@ export class WarbandRun {
   private refundToPool(type: string, star: number) { this.pool[type] = (this.pool[type] ?? 0) + Math.pow(3, star - 1); }
 
   reroll(): boolean {
-    if (this.phase !== "shop" || this.gold < REROLL_COST) return false;
-    this.gold -= REROLL_COST;
+    const cost = this.rerollCost();
+    if (this.phase !== "shop" || this.gold < cost) return false;
+    this.gold -= cost;
     this.rollShop();
     return true;
   }
@@ -212,7 +267,10 @@ export class WarbandRun {
   }
 
   /** Combine any 3 same type+star into one of the next star. */
-  private merge() { mergeBoard(this.pieces, this.itemStash); }
+  private merge() {
+    const made = mergeBoard(this.pieces, this.itemStash);
+    if (made.length) this.lastMerge = made[made.length - 1]; // the screen clears it after celebrating
+  }
 
   /** Equip a stashed relic onto a piece (max 3 per unit). */
   equipItem(stashIndex: number, pieceIndex: number): boolean {
@@ -336,26 +394,76 @@ export class WarbandRun {
   // ---- round / combat -------------------------------------------------------
   private startRound() {
     this.round++;
-    // Income: base + interest (1 per 10 gold, max 5) + win/loss-streak bonus.
-    const interest = Math.min(5, Math.floor(this.gold / 10));
+    // Income: base + interest (1 per 10 gold, capped) + win/loss-streak bonus,
+    // plus whatever the run's augments add.
+    const interest = Math.min(this.interestCap(), Math.floor(this.gold / 10));
     const streakBonus = Math.min(3, Math.abs(this.streak) >= 2 ? Math.floor(Math.abs(this.streak) / 2) + 1 : 0);
-    this.gold += 5 + interest + streakBonus;
+    this.gold += 5 + interest + streakBonus + this.augSum((a) => a.gold);
+    // Augment-granted free XP (a levelling engine).
+    const freeXp = this.augSum((a) => a.xp);
+    if (freeXp > 0) {
+      this.xp += freeXp;
+      while (this.level < MAX_LEVEL && this.xp >= XP_TO_LEVEL[this.level + 1]) this.level++;
+    }
     // A relic every few rounds — equip it to build a carry.
-    if (this.round % 3 === 2) this.itemStash.push(ITEM_IDS[this.rng.int(0, ITEM_IDS.length - 1)]);
+    if (this.round % this.relicEvery() === 2 % this.relicEvery()) this.grantRelic();
     this.rollShop();
     // Every living opponent runs its economy for the round (same rules as you).
     for (const o of this.opponents) if (o.alive) this.stepFoe(this.foeBrains[o.id]);
-    // Lock in this round's opponent + battle seed now, so the board preview and
-    // the live fight face the same warband.
-    const foes = this.livingFoes();
-    this.pendingFoe = foes.length ? foes[this.round % foes.length] : null;
+    // Lock in this round's matchup + battle seed now, so the board preview and
+    // the live fight face the same warband (or camp).
     this.pendingSeed = this.rng.int(1, 1e9);
-    this.pendingOpp = this.pendingFoe ? this.foeBoard(this.foeBrains[this.pendingFoe.id]) : [];
-    this.phase = "shop";
+    if (isCreepRound(this.round)) {
+      // A PvE monster camp: no player life at stake, relics on the table.
+      this.pendingCamp = campForRound(this.round);
+      this.pendingFoe = null;
+      this.pendingOpp = campBoard(this.pendingCamp);
+    } else {
+      this.pendingCamp = null;
+      const foes = this.livingFoes();
+      this.pendingFoe = foes.length ? foes[this.round % foes.length] : null;
+      this.pendingOpp = this.pendingFoe ? this.foeBoard(this.foeBrains[this.pendingFoe.id]) : [];
+    }
+    this.reconcile(); // a levelled board pulls up reserves before you see it
+    // An augment round pauses everything for the pick.
+    const tier = tierForRound(this.round);
+    if (tier && this.augmentOffer.length === 0) {
+      this.augmentOffer = offerAugments(this.rng, tier, this.augments.map((a) => a.id));
+      this.phase = "augment";
+    } else this.phase = "shop";
   }
 
-  /** Name of the warband you'll face this round (for the board's enemy banner). */
-  pendingFoeName(): string { return this.pendingFoe?.name ?? "—"; }
+  /** Add a random relic to the stash. */
+  private grantRelic() { this.itemStash.push(ITEM_IDS[this.rng.int(0, ITEM_IDS.length - 1)]); }
+
+  /**
+   * Take one of the three offered augments. Its one-off effects (bounty, life,
+   * relics) land immediately; the per-round and combat effects are read live.
+   */
+  pickAugment(index: number): boolean {
+    if (this.phase !== "augment") return false;
+    const a = this.augmentOffer[index];
+    if (!a) return false;
+    this.augments.push(a);
+    this.augmentOffer = [];
+    if (a.bounty) this.gold += a.bounty;
+    if (a.life) this.life = Math.min(100, this.life + a.life);
+    for (let i = 0; i < (a.relics ?? 0); i++) this.grantRelic();
+    this.reconcile(); // +board slots take effect at once
+    this.phase = "shop";
+    return true;
+  }
+
+  /** Name of the warband (or camp) you'll face this round. */
+  pendingFoeName(): string { return this.pendingCamp?.name ?? this.pendingFoe?.name ?? "—"; }
+
+  /** True when this round is a PvE monster camp rather than a player. */
+  isCreepRound(): boolean { return this.pendingCamp !== null; }
+
+  /** Warband-wide augment modifiers, for the battle resolver. */
+  sideOpts(): SideOpts {
+    return { buff: combinedBuff(this.augments), traitBonus: combinedTraitBonus(this.augments) };
+  }
 
   /**
    * Advance one opponent's economy a round, by the same rules the player plays:
@@ -429,14 +537,14 @@ export class WarbandRun {
   /** Resolve this round's fight instantly (headless — tests, AI, auto-play). */
   fight(): void {
     if (this.phase !== "shop") return;
-    if (!this.pendingFoe) { this.outcome = "win"; this.phase = "over"; return; }
-    this.applyOutcome(resolveBattle(this.boardUnits(), this.pendingOpp, this.pendingSeed));
+    if (!this.pendingFoe && !this.pendingCamp) { this.outcome = "win"; this.phase = "over"; return; }
+    this.applyOutcome(resolveBattle(this.boardUnits(), this.pendingOpp, this.pendingSeed, 40, this.sideOpts()));
   }
 
   /** Begin the watchable version of the fight (the screen renders + steps it). */
   beginFight(): boolean {
     if (this.phase !== "shop") return false;
-    if (!this.pendingFoe) { this.outcome = "win"; this.phase = "over"; return false; }
+    if (!this.pendingFoe && !this.pendingCamp) { this.outcome = "win"; this.phase = "over"; return false; }
     this.phase = "battle";
     return true;
   }
@@ -449,6 +557,27 @@ export class WarbandRun {
 
   /** Apply a battle result: damage, streak, off-screen thinning, win/lose check. */
   private applyOutcome(res: BattleResult): void {
+    // A PvE camp round: loot on a win, a small bite on a loss, no streak and no
+    // player eliminated either way.
+    const camp = this.pendingCamp;
+    if (camp) {
+      const wonCamp = res.winner === "A";
+      let relics = 0;
+      if (wonCamp) {
+        relics = camp.relics;
+        for (let i = 0; i < relics; i++) this.grantRelic();
+        this.gold += camp.gold;
+      } else this.life -= camp.bite;
+      this.thinTheHerd();
+      this.lastResult = {
+        won: wonCamp, foe: camp.name, youLeft: res.survivorsA, foeLeft: res.survivorsB,
+        dmg: wonCamp ? 0 : camp.bite, relics, gold: wonCamp ? camp.gold : 0, creep: true,
+      };
+      if (this.life <= 0) { this.life = 0; this.outcome = "loss"; this.phase = "over"; return; }
+      if (this.livingFoes().length === 0) { this.outcome = "win"; this.phase = "over"; return; }
+      this.phase = "result";
+      return;
+    }
     const foe = this.pendingFoe;
     if (!foe) { this.outcome = "win"; this.phase = "over"; return; }
     const won = res.winner === "A";
@@ -463,7 +592,7 @@ export class WarbandRun {
     }
     // The other living foes skirmish among themselves so the lobby thins out too.
     this.thinTheHerd();
-    this.lastResult = { won, foe: foe.name, youLeft: res.survivorsA, foeLeft: res.survivorsB, dmg };
+    this.lastResult = { won, foe: foe.name, youLeft: res.survivorsA, foeLeft: res.survivorsB, dmg, relics: 0, gold: 0, creep: false };
 
     if (this.life <= 0) { this.life = 0; this.outcome = "loss"; this.phase = "over"; return; }
     if (this.livingFoes().length === 0) { this.outcome = "win"; this.phase = "over"; return; }
@@ -486,17 +615,33 @@ export class WarbandRun {
   }
 
   /** Standings: every contestant (you + foes) by life, for the sidebar. */
-  standings(): { name: string; life: number; alive: boolean; you: boolean }[] {
+  standings(): { name: string; life: number; alive: boolean; you: boolean; id: number }[] {
     const all = [
-      { name: "You", life: this.life, alive: this.life > 0, you: true },
-      ...this.opponents.map((o) => ({ name: o.name, life: o.life, alive: o.alive, you: false })),
+      { name: "You", life: this.life, alive: this.life > 0, you: true, id: -1 },
+      ...this.opponents.map((o) => ({ name: o.name, life: o.life, alive: o.alive, you: false, id: o.id })),
     ];
     return all.sort((a, b) => Number(b.alive) - Number(a.alive) || b.life - a.life);
   }
 
   /** Active synergies on your currently-deployed warband (for the screen). */
   activeTraits(): ActiveTrait[] {
-    return activeTraits([...new Set(this.boardUnits().map((u) => u.type))]);
+    return activeTraits([...new Set(this.boardUnits().map((u) => u.type))], combinedTraitBonus(this.augments));
+  }
+
+  /**
+   * Scout a rival: the warband they'd field right now, plus their level and
+   * synergies. Lets you read the lobby and adapt — you can see who's building
+   * what before you commit your own gold.
+   */
+  scout(id: number): { name: string; level: number; life: number; alive: boolean; board: ArenaUnit[]; traits: ActiveTrait[] } | null {
+    const o = this.opponents[id];
+    const b = this.foeBrains[id];
+    if (!o || !b) return null;
+    const board = this.foeBoard(b);
+    return {
+      name: o.name, level: b.level, life: o.life, alive: o.alive, board,
+      traits: activeTraits([...new Set(board.map((u) => u.type))]),
+    };
   }
 
   /** Placement (1 = winner) once the run is over. */

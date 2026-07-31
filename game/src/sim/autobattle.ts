@@ -10,7 +10,7 @@ import { Kind, Stance, Team, EntityId } from "./types";
 import { generateMap } from "../maps/generator";
 import { UNITS } from "../content/units";
 import { SIM_HZ, SIM_DT } from "../content/balance";
-import { activeTraits, applyBuff, traitsOf, ActiveTrait } from "./traits";
+import { activeTraits, applyBuff, traitsOf, ActiveTrait, Buff } from "./traits";
 import { applyItems } from "./items";
 import { ABILITIES } from "../content/abilities";
 
@@ -66,13 +66,22 @@ const STAR_MULT = [1, 1, 1.8, 3.2]; // index by star (1..3)
 
 type PosFn = (i: number, n: number, cx: number, cy: number, side: number) => { x: number; y: number };
 
-function spawnArmy(w: World, units: ArenaUnit[], team: Team, side: number, posFn?: PosFn): EntityId[] {
+/**
+ * Warband-wide modifiers for one side — how a run's augments reach the fight.
+ * `buff` hits every unit; `traitBonus` adds virtual synergy counts (banners).
+ */
+export interface SideOpts {
+  buff?: Buff;
+  traitBonus?: Record<string, number>;
+}
+
+function spawnArmy(w: World, units: ArenaUnit[], team: Team, side: number, posFn?: PosFn, opts?: SideOpts): EntityId[] {
   const cx = w.worldW / 2;
   const cy = w.worldH / 2;
   const n = units.length;
   const ids: EntityId[] = [];
   // Active synergies for this side's composition (by distinct deployed types).
-  const traits = activeTraits([...new Set(units.map((u) => u.type))]);
+  const traits = activeTraits([...new Set(units.map((u) => u.type))], opts?.traitBonus);
   const buffByType = new Map<string, ActiveTrait[]>();
   units.forEach((au, i) => {
     if (!UNITS[au.type]) return;
@@ -97,6 +106,7 @@ function spawnArmy(w: World, units: ArenaUnit[], team: Team, side: number, posFn
     }
     for (const at of myTraits) if (at.tier) applyBuff(u, at.tier.buff);
     if (au.items?.length) applyItems(u, au.items);
+    if (opts?.buff) applyBuff(u, opts.buff); // run-wide augment buffs, last
     u.stance = Stance.Aggressive; // hunt — no economy, just fight
     u.variantRarity = star - 1; // a visual tier glow if rendered
     ids.push(u.id);
@@ -116,7 +126,7 @@ const alivePower = (w: World, team: Team): { count: number; power: number } => {
 };
 
 export function resolveBattle(
-  a: (UnitStack | ArenaUnit)[], b: (UnitStack | ArenaUnit)[], seed = 1, maxSeconds = 40,
+  a: (UnitStack | ArenaUnit)[], b: (UnitStack | ArenaUnit)[], seed = 1, maxSeconds = 40, optsA?: SideOpts,
 ): BattleResult {
   const map = generateMap("open_plains", seed, 2);
   const w = new World(seed);
@@ -124,7 +134,7 @@ export function resolveBattle(
   const cx = w.worldW / 2;
   const cy = w.worldH / 2;
 
-  const idsA = spawnArmy(w, normalize(a), Team.Player, -1);
+  const idsA = spawnArmy(w, normalize(a), Team.Player, -1, undefined, optsA);
   const idsB = spawnArmy(w, normalize(b), Team.Enemy, 1);
   // March both lines into the centre so they actually clash.
   w.issueFormationMove(idsA, cx + 30, cy, false, true);
@@ -188,13 +198,13 @@ export class LiveBattle {
   private _result: BattleResult | null = null;
   private mana = new Map<EntityId, number>(); // 0..1 ability charge per unit
 
-  constructor(a: (UnitStack | ArenaUnit)[], b: (UnitStack | ArenaUnit)[], seed = 1, maxSeconds = 30) {
+  constructor(a: (UnitStack | ArenaUnit)[], b: (UnitStack | ArenaUnit)[], seed = 1, maxSeconds = 30, optsA?: SideOpts) {
     const map = generateMap("open_plains", seed, 2);
     this.world = new World(seed);
     this.world.init(map, [{}, {}], [1, 1], [0, 1]);
     this.cx = this.world.worldW / 2;
     this.cy = this.world.worldH / 2;
-    this.idsA = spawnArmy(this.world, normalize(a), Team.Player, -1, BOARD_LAYOUT);
+    this.idsA = spawnArmy(this.world, normalize(a), Team.Player, -1, BOARD_LAYOUT, optsA);
     this.idsB = spawnArmy(this.world, normalize(b), Team.Enemy, 1, BOARD_LAYOUT);
     this.maxTicks = SIM_HZ * maxSeconds;
   }

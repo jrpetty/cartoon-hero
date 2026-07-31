@@ -55,6 +55,41 @@ Production build: `npm run build` (output in `dist/`), preview with `npm run pre
 | Mouse wheel | Zoom |
 | Esc | Cancel placement / pause menu |
 
+## Warband Tactics
+
+A second mode: an **auto-battler** in the spirit of *Teamfight Tactics*, played on
+the same deterministic combat sim. You draft a warband, place it on a 10×10 arena,
+and watch it fight — the units, counters, armour and abilities are the real RTS
+ones, not a separate ruleset.
+
+**The loop.** Each round you take income (5 base + interest, 1 per 10 gold banked,
+plus a win/loss-streak bonus), buy from a five-slot shop, and fight. Three copies
+of a unit merge into a 2★; three of those into a 3★. Levelling costs gold, and
+your **level is your board size** — so teching, rerolling and saving for interest
+all compete for the same coins. Lose a fight and you lose life; last warband
+standing wins.
+
+- **Shared pool** — every warband in the lobby draws from one finite pool of unit
+  copies, so contesting a comp genuinely starves your rivals (and you).
+- **Synergies** — deploying enough *distinct* types of a trait (Footmen, Marksmen,
+  Riders, War Engines, Pikes, Elite) activates escalating buffs. Traits overlap,
+  so drafting is a puzzle.
+- **Relics** — earned every few rounds; stack up to three on one unit to build a
+  carry.
+- **Augments** — three times a run (rounds 2, 5 and 9) the run pauses and offers
+  three of them, escalating silver → gold → prismatic. They bend the whole run:
+  economy engines, warband-wide stat spikes, extra board slots, or a banner that
+  makes a synergy count two units higher.
+- **Monster camps** — the opening round and every fifth round after it are PvE.
+  The camp is visible while you set up, no player life is at stake, and clearing
+  it drops relics and gold.
+- **Scouting** — click any rival in the standings to see the warband they'd field
+  right now, their level and their live synergies, and adapt before you spend.
+
+**Positioning matters:** drag units between the bench and your half of the board,
+swap cells, and drop onto the sell box to cash out. Front-rank placement decides
+who absorbs the charge.
+
 ## Test it
 
 ```bash
@@ -81,4 +116,7 @@ renderer.
 - `src/render` — painterly procedural renderer: cached terrain, per-type building
   and unit art, fog overlay, particles, screen shake.
 - `src/ui` — immediate-mode canvas UI: in-match HUD plus menu/setup/armory/
-  post-match screens.
+  post-match screens, and the Warband Tactics screen.
+- Warband Tactics lives in `src/sim/warband.ts` (run engine), `autobattle.ts`
+  (headless + watchable battle resolution), `traits.ts`, `items.ts`,
+  `augments.ts`, `creeps.ts`, drawn by `src/ui/warband_screen.ts`.

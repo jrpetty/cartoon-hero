@@ -75,12 +75,16 @@ export function traitsOf(type: string): Trait[] { return TYPE_TRAITS.get(type) ?
 
 export interface ActiveTrait { trait: Trait; count: number; tier: TraitTier | null; tierIndex: number; }
 
-/** Given the distinct deployed unit types, which traits are active and at what tier. */
-export function activeTraits(distinctTypes: string[]): ActiveTrait[] {
+/**
+ * Given the distinct deployed unit types, which traits are active and at what
+ * tier. `bonus` adds virtual counts per trait id — that's how a warband banner
+ * (augment) makes a synergy read as two extra units.
+ */
+export function activeTraits(distinctTypes: string[], bonus?: Record<string, number>): ActiveTrait[] {
   const set = new Set(distinctTypes);
   const out: ActiveTrait[] = [];
   for (const trait of TRAITS) {
-    const count = trait.types.reduce((n, t) => n + (set.has(t) ? 1 : 0), 0);
+    const count = trait.types.reduce((n, t) => n + (set.has(t) ? 1 : 0), 0) + (bonus?.[trait.id] ?? 0);
     if (count < trait.tiers[0].at) continue;
     let tier: TraitTier | null = null;
     let tierIndex = -1;

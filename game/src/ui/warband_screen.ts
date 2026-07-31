@@ -18,6 +18,7 @@ import { LiveBattle, GRID_COLS, GRID_ROWS, GRID_CELL } from "../sim/autobattle";
 import { traitsOf, Buff } from "../sim/traits";
 import { ITEMS, Item, applyItems } from "../sim/items";
 import { ABILITIES } from "../content/abilities";
+import { Augment, TIER_COLOR as AUG_COLOR } from "../sim/augments";
 
 const TIER_COLOR = ["#888888", "#9aa8b4", "#4caf50", "#3a78d8", "#9b5cf0", "#e0a020"];
 const STAR_MULT = [1, 1, 1.8, 3.2]; // hp/attack multiplier by star (matches the battle sim)
@@ -46,6 +47,13 @@ export class WarbandScreen {
   private itemTip: { id: string; x: number; y: number } | null = null;
   private unitTip: { p: Piece; x: number; y: number } | null = null;
   private liveTip: { e: Entity; x: number; y: number } | null = null; // hovered unit mid-fight
+  private augTip: { a: Augment; x: number; y: number } | null = null; // hovered owned augment
+  private scoutId = -1;   // opponent whose warband is being scouted, or -1
+  private scoutRect = { x: 0, y: 0, w: 0, h: 0 }; // last frame's panel, to block clicks through it
+  private augPick = -1;   // augment card under the cursor on the picker
+  private augT = 0;       // augment picker intro clock (card deal-in)
+  // A star-up celebration: set when the run reports a merge, fades on its own.
+  private starUp: { type: string; star: number; t: number } | null = null;
 
   draw(W: number, H: number, time: number, run: WarbandRun): "exit" | null {
     const ctx = ui.ctx;
@@ -75,7 +83,9 @@ export class WarbandScreen {
       ui.text(val, icon ? x + 16 : x, 43, { size: 18, bold: true, color: col });
       if (icon) icon();
     };
-    stat("ROUND", String(run.round), 280);
+    // TFT-style stage-round ("2-3") with the raw round number under it.
+    stat("STAGE", run.stageLabel(), 280);
+    ui.text(`round ${run.round}`, 280, 53, { size: 8.5, color: "#6f6a5c" });
     stat("GOLD", String(run.gold), 360, "#ffd24a", () => {
       ctx.save(); ctx.shadowColor = "#ffd24a"; ctx.shadowBlur = 6;
       const cg = ctx.createRadialGradient(364, 35, 1, 366, 37, 7);
@@ -84,24 +94,71 @@ export class WarbandScreen {
       ctx.strokeStyle = "#a8771e"; ctx.lineWidth = 1; ctx.beginPath(); ctx.arc(366, 37, 6.5, 0, Math.PI * 2); ctx.stroke();
     });
     stat("LEVEL", String(run.level), 452);
+    // XP progress toward the next level, right under the number.
+    {
+      const xp = run.xpProgress();
+      const bx2 = 443, by2 = 46, bw2 = 68;
+      ctx.fillStyle = "rgba(0,0,0,0.55)"; ctx.fillRect(bx2, by2, bw2, 4);
+      if (xp.max) {
+        ctx.fillStyle = "#ffd24a"; ctx.fillRect(bx2, by2, bw2, 4);
+        ui.text("MAX", bx2 + bw2, 22, { align: "right", size: 9, color: "#ffd24a" });
+      } else {
+        const cur = Math.max(0, xp.xp); // a hand-set level can sit below its own gate
+        ctx.fillStyle = "#7fb0e8"; ctx.fillRect(bx2, by2, bw2 * Math.max(0, Math.min(1, cur / xp.need)), 4);
+        ui.text(`${cur}/${xp.need}`, bx2 + bw2, 22, { align: "right", size: 9, color: "#8a8278" });
+      }
+    }
     stat("LIFE", String(run.life), 540, run.life <= 25 ? "#e0564a" : "#7df2a9");
     stat("STREAK", (run.streak > 0 ? "+" : "") + run.streak, 628, run.streak > 0 ? "#7df2a9" : run.streak < 0 ? "#e0a878" : "#9a917b");
-    if (ui.button("Quit Run", W - 120, 12, 100, 32, { danger: true, size: 13 })) action = "exit";
+    // While the augment modal is up nothing behind it may be clicked.
+    const picking = run.phase === "augment";
+    if (!picking && ui.button("Quit Run", W - 120, 12, 100, 32, { danger: true, size: 13 })) action = "exit";
 
     // ---- standings sidebar ----
     const sx = 12;
     let sy = 80;
     ui.text("Standings", sx, sy, { size: 14, bold: true, color: PAL.uiAccent });
+    ui.text("click to scout", sx + 74, sy, { size: 9.5, color: "#6f6a5c" });
     sy += 18;
     for (const s of run.standings()) {
       const h = 26;
-      ctx.fillStyle = s.you ? withAlpha(PAL.uiAccent, 0.16) : "rgba(0,0,0,0.25)";
+      const hov = !s.you && s.alive && ui.mx >= sx && ui.mx <= sx + 200 && ui.my >= sy && ui.my <= sy + h;
+      const open = s.id === this.scoutId;
+      ctx.fillStyle = s.you ? withAlpha(PAL.uiAccent, 0.16) : open ? withAlpha("#7fb0e8", 0.24) : hov ? "rgba(255,255,255,0.09)" : "rgba(0,0,0,0.25)";
       ctx.fillRect(sx, sy, 200, h);
+      if (open || hov) { ctx.strokeStyle = withAlpha("#7fb0e8", open ? 0.9 : 0.45); ctx.lineWidth = 1; ctx.strokeRect(sx + 0.5, sy + 0.5, 199, h - 1); }
+      // The warband you face this round gets a marker so you can read the matchup.
+      const next = !s.you && !run.isCreepRound() && s.name === run.pendingFoeName() && s.alive;
       ui.text((s.alive ? "" : "☠ ") + s.name, sx + 8, sy + 17, {
         size: 12, bold: s.you, color: s.alive ? (s.you ? "#ffe9b0" : "#e7ddc4") : "#6f6a5c",
       });
+      if (next) ui.text("⚔", sx + 96, sy + 17, { size: 12, color: "#e0786a" });
       ui.bar(sx + 110, sy + 9, 82, 9, Math.max(0, s.life) / 100, s.alive ? "#7df2a9" : "#5a554d");
+      ui.text(String(Math.max(0, s.life)), sx + 152, sy + 17, { align: "center", size: 9, bold: true, color: "rgba(6,10,6,0.85)" });
+      if (hov && !picking && ui.clicked && !ui.pointerConsumed) { ui.pointerConsumed = true; this.scoutId = open ? -1 : s.id; audio.play("ui"); }
       sy += h + 3;
+    }
+
+    // ---- augments you've taken this run ----
+    this.augTip = null;
+    if (run.augments.length) {
+      sy += 12;
+      ui.text("Augments", sx, sy, { size: 14, bold: true, color: PAL.uiAccent });
+      sy += 8;
+      run.augments.forEach((a, i) => {
+        const ay = sy + i * 30, aw = 200, ah = 26;
+        const col = AUG_COLOR[a.tier];
+        const hov = ui.mx >= sx && ui.mx <= sx + aw && ui.my >= ay && ui.my <= ay + ah;
+        const g2 = ctx.createLinearGradient(sx, 0, sx + aw, 0);
+        g2.addColorStop(0, withAlpha(col, hov ? 0.34 : 0.2)); g2.addColorStop(1, "rgba(12,9,5,0.6)");
+        ctx.fillStyle = g2; this.roundRect(ctx, sx, ay, aw, ah, 5); ctx.fill();
+        ctx.strokeStyle = withAlpha(col, hov ? 0.95 : 0.55); ctx.lineWidth = 1;
+        this.roundRect(ctx, sx + 0.5, ay + 0.5, aw - 1, ah - 1, 5); ctx.stroke();
+        this.augSigil(ctx, sx + 15, ay + 13, 8, a, time);
+        ui.text(this.clip(a.name, 22), sx + 30, ay + 17, { size: 11.5, bold: true, color: col });
+        if (hov) this.augTip = { a, x: sx + aw + 8, y: ay - 10 };
+      });
+      sy += run.augments.length * 30;
     }
 
     // ---- synergies ----
@@ -109,7 +166,7 @@ export class WarbandScreen {
     ui.text("Synergies", sx, sy, { size: 14, bold: true, color: PAL.uiAccent });
     sy += 16;
     const traits = run.activeTraits();
-    if (!traits.length) ui.text("— none active —", sx, sy + 6, { size: 11, color: "#6f6a5c" });
+    if (!traits.length) { ui.text("— none active —", sx, sy + 6, { size: 11, color: "#6f6a5c" }); sy += 16; }
     for (const at of traits) {
       const th = 30;
       ctx.fillStyle = withAlpha(at.trait.color, 0.14);
@@ -165,13 +222,21 @@ export class WarbandScreen {
 
     // Keep a battle world around for the current matchup: during shop it's a
     // static preview (both warbands standing on the board); FIGHT begins it.
-    if (run.phase === "shop") {
+    if (run.phase === "shop" || run.phase === "augment") {
       const sig = this.sig(run);
       if (sig !== this.battleSig || !this.battle) {
-        this.battle = new LiveBattle(run.boardUnits(), run.pendingOpp, run.pendingSeed);
+        this.battle = new LiveBattle(run.boardUnits(), run.pendingOpp, run.pendingSeed, 30, run.sideOpts());
         this.battleSig = sig;
       }
     }
+    // A merge happened → celebrate the star-up over the board.
+    if (run.lastMerge) {
+      this.starUp = { type: run.lastMerge.type, star: run.lastMerge.star, t: 0 };
+      run.lastMerge = null;
+      audio.play("levelup");
+    }
+    if (this.starUp) { this.starUp.t += dt; if (this.starUp.t > 1.6) this.starUp = null; }
+    if (run.phase === "augment") this.augT += dt; else this.augT = 0;
     // Advance the live fight in real (scaled) time, then bank the result.
     if (run.phase === "battle" && this.battle) {
       if (!this.battle.started) this.battle.begin(); // safety: always marching once fighting
@@ -192,7 +257,21 @@ export class WarbandScreen {
 
     // ---- board title + enemy banner ----
     ui.text(`Your Warband  ·  ${run.deployedCount()} / ${run.deployCount()} deployed`, boardX, 80, { size: 14, bold: true, color: PAL.uiAccent });
-    ui.text(`vs ${run.pendingFoeName()}`, boardX + boardW, 80, { size: 13, bold: true, align: "right", color: "#e0786a" });
+    if (run.isCreepRound()) {
+      // A PvE camp round reads differently: loot on the line, not your life.
+      const camp = run.pendingCamp!;
+      ui.text(`🐺 ${camp.name}`, boardX + boardW, 80, { size: 13, bold: true, align: "right", color: "#c8a86a" });
+      ui.text(`win → ${camp.relics} relic${camp.relics > 1 ? "s" : ""} + ${camp.gold}g`, boardX + boardW, 66, { size: 10.5, align: "right", color: "#9a917b" });
+    } else {
+      ui.text(`vs ${run.pendingFoeName()}`, boardX + boardW, 80, { size: 13, bold: true, align: "right", color: "#e0786a" });
+    }
+
+    // The scout panel floats over the left of the board — swallow the pointer
+    // there so a click on it never lands on a board cell underneath.
+    if (this.scoutId >= 0) {
+      const r = this.scoutRect;
+      if (ui.mx >= r.x && ui.mx <= r.x + r.w && ui.my >= r.y && ui.my <= r.y + r.h) ui.pointerConsumed = true;
+    }
 
     this.drawBoard(boardX, boardY, boardW, boardH, time, dt, run);
 
@@ -239,8 +318,14 @@ export class WarbandScreen {
         else { ctx.fillStyle = "rgba(0,0,0,0.25)"; ctx.fillRect(cx, cy, sw, 70); }
       });
       const rxx = bx + 5 * (120 + 8) + 8;
-      if (ui.button("Reroll  (2g)", rxx, shopY + 14, 130, 32, { disabled: run.gold < 2, size: 13, tooltip: ["New shop", "Costs 2 gold."] })) { if (run.reroll()) audio.play("ui"); }
-      if (ui.button(`Level Up  (4g)`, rxx, shopY + 52, 130, 32, { disabled: run.gold < 4 || run.level >= 9, size: 13, tooltip: ["+4 XP", "Raises board size & shop odds."] })) { if (run.buyXp()) audio.play("levelup"); }
+      const rc = run.rerollCost();
+      if (ui.button(`Reroll  (${rc}g)`, rxx, shopY + 14, 130, 32, { disabled: run.gold < rc, size: 13, tooltip: ["New shop", `Costs ${rc} gold.`] })) { if (run.reroll()) audio.play("ui"); }
+      // Level-up shows the shop odds it would unlock — the real reason to tech.
+      const odds = run.shopOdds();
+      if (ui.button(`Level Up  (4g)`, rxx, shopY + 52, 130, 32, {
+        disabled: run.gold < 4 || run.level >= 9, size: 13,
+        tooltip: ["+4 XP · bigger board", `Shop odds now: ${odds.map((o, i) => `T${i + 1} ${o}%`).filter((_, i) => odds[i] > 0).join("  ")}`],
+      })) { if (run.buyXp()) audio.play("levelup"); }
       if (ui.button("⚔ FIGHT", rxx, shopY + 92, 130, 36, { accent: true, size: 16, tooltip: ["Send your warband into the arena."] })) {
         if (run.beginFight()) {
           this.battle = new LiveBattle(run.boardUnits(), run.pendingOpp, run.pendingSeed);
@@ -254,13 +339,24 @@ export class WarbandScreen {
       ui.text(`vs ${run.pendingFoeName()}`, W / 2, shopY + 66, { align: "center", size: 14, color: "#d8cdb4" });
     } else if (run.phase === "result" && run.lastResult) {
       const r = run.lastResult;
-      ui.text(r.won ? `Victory vs ${r.foe}!` : `Defeat vs ${r.foe}`, W / 2, shopY + 30, {
+      const title = r.creep
+        ? (r.won ? `${r.foe} cleared!` : `${r.foe} drove you off`)
+        : (r.won ? `Victory vs ${r.foe}!` : `Defeat vs ${r.foe}`);
+      ui.text(title, W / 2, shopY + 30, {
         align: "center", size: 24, bold: true, color: r.won ? "#7df2a9" : "#e0564a", font: "Georgia, serif",
       });
-      ui.text(
-        r.won ? `${r.youLeft} of your warband survived.` : `You lost ${r.dmg} life (${r.foeLeft} enemies left standing).`,
-        W / 2, shopY + 58, { align: "center", size: 14, color: "#d8cdb4" },
-      );
+      if (r.creep && r.won) {
+        // Camp loot is the whole point of the round — spell it out.
+        ui.text(`Loot:  ${r.relics} relic${r.relics === 1 ? "" : "s"}  ·  ${r.gold} gold`,
+          W / 2, shopY + 58, { align: "center", size: 15, bold: true, color: "#ffd24a" });
+      } else {
+        ui.text(
+          r.won ? `${r.youLeft} of your warband survived.`
+            : r.creep ? `The camp holds. You lost ${r.dmg} life.`
+              : `You lost ${r.dmg} life (${r.foeLeft} enemies left standing).`,
+          W / 2, shopY + 58, { align: "center", size: 14, color: "#d8cdb4" },
+        );
+      }
       if (ui.button("Continue ▶", W / 2 - 80, shopY + 80, 160, 40, { accent: true, size: 16 })) run.next();
     }
 
@@ -288,12 +384,364 @@ export class WarbandScreen {
       ui.text(`${shortName(p.type)} ${stars(p.star)}`, cxp + cwd / 2, cyp + 18, { align: "center", size: 12, bold: true, color: "#ffe9b0" });
     }
     if (run.phase !== "shop") this.heldPiece = -1; // never carry a held unit out of setup
+
+    // ---- overlays, back to front ----
+    this.drawStarUp(boardX, boardY, boardW, boardH);
+    if (this.scoutId >= 0 && run.phase !== "over") this.drawScoutPanel(W, H, run, time);
+    if (picking) { this.unitTip = null; this.itemTip = null; this.augTip = null; this.drawAugmentPicker(W, H, run, time); }
     this.drawItemTip(W, H);
     this.drawUnitTip(W, H);
     this.drawLiveTip(W, H);
+    this.drawAugTip(W, H);
     this.wasDown = down;
 
     return action;
+  }
+
+  /** Greedy word-wrap to a character budget per line. */
+  private wrap(text: string, per: number): string[] {
+    const words = text.split(" ");
+    const lines: string[] = [];
+    let line = "";
+    for (const w of words) {
+      if (line && (line + " " + w).length > per) { lines.push(line); line = w; }
+      else line = line ? line + " " + w : w;
+    }
+    if (line) lines.push(line);
+    return lines;
+  }
+
+  /**
+   * A distinct procedural sigil per augment, picked from what the augment
+   * actually does — coins for economy, a blade for attack, a shield for bulk,
+   * a banner for board slots and synergies, a gem for relics.
+   */
+  private augSigil(ctx: CanvasRenderingContext2D, cx: number, cy: number, r: number, a: Augment, time: number) {
+    const col = AUG_COLOR[a.tier];
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.lineJoin = "round"; ctx.lineCap = "round";
+    ctx.fillStyle = col; ctx.strokeStyle = "rgba(0,0,0,0.55)"; ctx.lineWidth = Math.max(1, r * 0.14);
+    const h = r;
+    if (a.boardSlots) { // board slots: a rank of cells with a fresh one lighting up
+      const cw = h * 0.52, gap2 = h * 0.14;
+      for (let i = 0; i < 3; i++) {
+        const cxx = -cw - gap2 + i * (cw + gap2);
+        const fresh = i === 2;
+        ctx.fillStyle = fresh ? col : withAlpha(col, 0.28);
+        ctx.strokeStyle = withAlpha(col, 0.9); ctx.lineWidth = Math.max(1, r * 0.1);
+        ctx.beginPath(); ctx.rect(cxx - cw / 2, -cw / 2, cw, cw); ctx.fill(); ctx.stroke();
+        if (fresh) { // a plus on the new slot
+          ctx.strokeStyle = "rgba(20,15,8,0.9)"; ctx.lineWidth = Math.max(1.2, r * 0.14);
+          ctx.beginPath();
+          ctx.moveTo(cxx, -cw * 0.28); ctx.lineTo(cxx, cw * 0.28);
+          ctx.moveTo(cxx - cw * 0.28, 0); ctx.lineTo(cxx + cw * 0.28, 0); ctx.stroke();
+        }
+      }
+    } else if (a.traitBonus) { // banner on a pole
+      ctx.strokeStyle = "#6a4a2a"; ctx.lineWidth = r * 0.2;
+      ctx.beginPath(); ctx.moveTo(-h * 0.5, -h); ctx.lineTo(-h * 0.5, h); ctx.stroke();
+      ctx.fillStyle = col; ctx.strokeStyle = "rgba(0,0,0,0.55)"; ctx.lineWidth = Math.max(1, r * 0.11);
+      ctx.beginPath();
+      ctx.moveTo(-h * 0.5, -h * 0.85); ctx.lineTo(h * 0.85, -h * 0.85); ctx.lineTo(h * 0.5, -h * 0.2);
+      ctx.lineTo(h * 0.85, h * 0.45); ctx.lineTo(-h * 0.5, h * 0.45); ctx.closePath(); ctx.fill(); ctx.stroke();
+    } else if (a.relicEvery || a.relics) { // gem
+      ctx.beginPath();
+      ctx.moveTo(0, -h); ctx.lineTo(h * 0.85, -h * 0.2); ctx.lineTo(0, h); ctx.lineTo(-h * 0.85, -h * 0.2);
+      ctx.closePath(); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = "rgba(255,255,255,0.45)";
+      ctx.beginPath(); ctx.moveTo(0, -h); ctx.lineTo(h * 0.4, -h * 0.3); ctx.lineTo(0, 0); ctx.closePath(); ctx.fill();
+    } else if (a.gold || a.bounty || a.interestCap || a.rerollCost != null) { // coin stack
+      for (let i = 2; i >= 0; i--) {
+        const yy = h * 0.45 - i * h * 0.42;
+        const g = ctx.createRadialGradient(-r * 0.2, yy - r * 0.2, 1, 0, yy, r * 0.9);
+        g.addColorStop(0, "#ffe89a"); g.addColorStop(1, col);
+        ctx.fillStyle = g;
+        ctx.beginPath(); ctx.ellipse(0, yy, h * 0.85, h * 0.36, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.strokeStyle = "rgba(0,0,0,0.5)"; ctx.lineWidth = Math.max(1, r * 0.1); ctx.stroke();
+      }
+    } else if (a.xp) { // chevrons rising
+      ctx.strokeStyle = col; ctx.lineWidth = Math.max(1.5, r * 0.24); ctx.fillStyle = "transparent";
+      for (let i = 0; i < 3; i++) {
+        const yy = h * 0.6 - i * h * 0.55;
+        ctx.beginPath(); ctx.moveTo(-h * 0.7, yy); ctx.lineTo(0, yy - h * 0.45); ctx.lineTo(h * 0.7, yy); ctx.stroke();
+      }
+    } else if (a.life) { // heart
+      ctx.beginPath();
+      ctx.moveTo(0, h * 0.85);
+      ctx.bezierCurveTo(-h * 1.3, -h * 0.1, -h * 0.55, -h * 1.05, 0, -h * 0.35);
+      ctx.bezierCurveTo(h * 0.55, -h * 1.05, h * 1.3, -h * 0.1, 0, h * 0.85);
+      ctx.closePath(); ctx.fill(); ctx.stroke();
+    } else if (a.buff?.armor || a.buff?.hpPct || a.buff?.hp) { // shield
+      ctx.beginPath();
+      ctx.moveTo(0, -h); ctx.lineTo(h * 0.82, -h * 0.55); ctx.lineTo(h * 0.82, h * 0.2);
+      ctx.quadraticCurveTo(h * 0.82, h * 0.92, 0, h);
+      ctx.quadraticCurveTo(-h * 0.82, h * 0.92, -h * 0.82, h * 0.2);
+      ctx.lineTo(-h * 0.82, -h * 0.55); ctx.closePath(); ctx.fill(); ctx.stroke();
+    } else { // blade
+      ctx.beginPath();
+      ctx.moveTo(0, -h); ctx.lineTo(h * 0.24, -h * 0.15); ctx.lineTo(h * 0.24, h * 0.35);
+      ctx.lineTo(-h * 0.24, h * 0.35); ctx.lineTo(-h * 0.24, -h * 0.15); ctx.closePath(); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = "#caa56a";
+      ctx.beginPath(); ctx.rect(-h * 0.6, h * 0.33, h * 1.2, h * 0.2); ctx.fill(); ctx.stroke();
+    }
+    // Prismatic augments get a slow sparkle.
+    if (a.tier === "prismatic") {
+      const tw = 0.5 + 0.5 * Math.sin(time * 3 + cx * 0.1);
+      ctx.globalAlpha = 0.5 + tw * 0.5;
+      ctx.fillStyle = "#fff";
+      ctx.beginPath(); ctx.arc(h * 0.75, -h * 0.75, Math.max(0.8, r * 0.13), 0, Math.PI * 2); ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  /**
+   * The augment pick — a full-screen modal with three dealt-in cards. This is
+   * the run's fork in the road, so it gets the weight: dimmed board behind,
+   * tier-coloured cards, a sigil, and the exact effect spelled out.
+   */
+  private drawAugmentPicker(W: number, H: number, run: WarbandRun, time: number) {
+    const ctx = ui.ctx;
+    const offer = run.augmentOffer;
+    if (!offer.length) return;
+    const tier = offer[0].tier;
+    const tcol = AUG_COLOR[tier];
+
+    // Dim everything behind, with a warm pool of light behind the cards.
+    ctx.fillStyle = "rgba(5,4,2,0.82)"; ctx.fillRect(0, 0, W, H);
+    const glow = ctx.createRadialGradient(W / 2, H / 2, 40, W / 2, H / 2, Math.max(W, H) * 0.55);
+    glow.addColorStop(0, withAlpha(tcol, 0.16)); glow.addColorStop(1, "rgba(0,0,0,0)");
+    ctx.fillStyle = glow; ctx.fillRect(0, 0, W, H);
+
+    // Slow rotating rays for the prismatic pick — it should feel like an event.
+    if (tier === "prismatic") {
+      ctx.save();
+      ctx.translate(W / 2, H / 2); ctx.rotate(time * 0.12); ctx.globalAlpha = 0.085;
+      for (let i = 0; i < 12; i++) {
+        ctx.rotate(Math.PI / 6);
+        ctx.fillStyle = tcol;
+        ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(Math.max(W, H) * 0.7, -26); ctx.lineTo(Math.max(W, H) * 0.7, 26); ctx.closePath(); ctx.fill();
+      }
+      ctx.restore();
+    }
+
+    const gap = 24;
+    const cardW = Math.min(258, (W - 100 - gap * 2) / 3);
+    const cardH = Math.min(324, H * 0.5);
+    const totalW = cardW * offer.length + gap * (offer.length - 1);
+    const x0 = (W - totalW) / 2;
+    const cy = H / 2 - cardH / 2 + 24;
+
+    const titleT = Math.min(1, this.augT * 3);
+    ctx.globalAlpha = titleT;
+    ui.text("CHOOSE AN AUGMENT", W / 2, cy - 62, { align: "center", size: 30, bold: true, color: "#f2e8d0", font: "Georgia, serif" });
+    ui.text(`${tier.toUpperCase()} · shapes the rest of your run`, W / 2, cy - 38, { align: "center", size: 13, bold: true, color: tcol });
+    ctx.globalAlpha = 1;
+
+    this.augPick = -1;
+    offer.forEach((a, i) => {
+      // Staggered deal-in: slide up + fade, one card after another.
+      const t = Math.max(0, Math.min(1, (this.augT - i * 0.11) * 3.2));
+      const ease = 1 - Math.pow(1 - t, 3);
+      if (t <= 0) return;
+      const col = AUG_COLOR[a.tier];
+      const x = x0 + i * (cardW + gap);
+      const hov = ui.mx >= x && ui.mx <= x + cardW && ui.my >= cy && ui.my <= cy + cardH && t >= 1;
+      if (hov) this.augPick = i;
+      const lift = (hov ? -8 : 0) + (1 - ease) * 46;
+      const y = cy + lift;
+
+      ctx.save();
+      ctx.globalAlpha = ease;
+      // Card body.
+      ctx.save();
+      ctx.shadowColor = hov ? withAlpha(col, 0.75) : "rgba(0,0,0,0.65)";
+      ctx.shadowBlur = hov ? 30 : 16; ctx.shadowOffsetY = 6;
+      const g = ctx.createLinearGradient(0, y, 0, y + cardH);
+      g.addColorStop(0, withAlpha(col, hov ? 0.4 : 0.24));
+      g.addColorStop(0.42, "rgba(24,18,11,0.98)");
+      g.addColorStop(1, "rgba(12,9,5,0.99)");
+      ctx.fillStyle = g; this.roundRect(ctx, x, y, cardW, cardH, 13); ctx.fill();
+      ctx.restore();
+      ctx.strokeStyle = withAlpha(col, hov ? 1 : 0.7); ctx.lineWidth = hov ? 2.6 : 1.6;
+      this.roundRect(ctx, x + 1.5, y + 1.5, cardW - 3, cardH - 3, 12); ctx.stroke();
+
+      // Tier chip.
+      const chipW = 74;
+      ctx.fillStyle = withAlpha(col, 0.22);
+      this.roundRect(ctx, x + cardW / 2 - chipW / 2, y + 16, chipW, 17, 8); ctx.fill();
+      ui.text(a.tier.toUpperCase(), x + cardW / 2, y + 29, { align: "center", size: 9.5, bold: true, color: col });
+
+      // Sigil in a ring.
+      const sy2 = y + 92;
+      ctx.save();
+      ctx.shadowColor = withAlpha(col, 0.8); ctx.shadowBlur = hov ? 20 : 10;
+      ctx.strokeStyle = withAlpha(col, 0.5); ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.arc(x + cardW / 2, sy2, 36, 0, Math.PI * 2); ctx.stroke();
+      ctx.restore();
+      ctx.fillStyle = "rgba(0,0,0,0.35)";
+      ctx.beginPath(); ctx.arc(x + cardW / 2, sy2, 34, 0, Math.PI * 2); ctx.fill();
+      this.augSigil(ctx, x + cardW / 2, sy2, 21, a, time);
+
+      // Name + description.
+      const nm = a.name.length > 20 ? 15 : 18;
+      ui.text(a.name, x + cardW / 2, y + 158, { align: "center", size: nm, bold: true, color: "#f7efdc", font: "Georgia, serif" });
+      ctx.strokeStyle = withAlpha(col, 0.35); ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(x + 34, y + 172); ctx.lineTo(x + cardW - 34, y + 172); ctx.stroke();
+      let ly = y + 196;
+      for (const ln of this.wrap(a.desc, 30)) {
+        ui.text(ln, x + cardW / 2, ly, { align: "center", size: 12.5, color: "#d8cdb4" });
+        ly += 18;
+      }
+
+      // Take button.
+      const bw = cardW - 44, bh = 38, byy = y + cardH - bh - 18;
+      const bhov = ui.mx >= x + 22 && ui.mx <= x + 22 + bw && ui.my >= byy && ui.my <= byy + bh && t >= 1;
+      ctx.fillStyle = bhov ? withAlpha(col, 0.85) : withAlpha(col, 0.24);
+      this.roundRect(ctx, x + 22, byy, bw, bh, 8); ctx.fill();
+      ctx.strokeStyle = withAlpha(col, 0.95); ctx.lineWidth = 1.5;
+      this.roundRect(ctx, x + 22.75, byy + 0.75, bw - 1.5, bh - 1.5, 8); ctx.stroke();
+      ui.text("TAKE", x + cardW / 2, byy + 25, { align: "center", size: 15, bold: true, color: bhov ? "#1a1207" : col });
+      ctx.restore();
+
+      if ((hov || bhov) && ui.clicked && !ui.pointerConsumed) {
+        ui.pointerConsumed = true;
+        if (run.pickAugment(i)) { audio.play("levelup"); this.battleSig = ""; }
+      }
+    });
+    // Swallow any other click while the modal is up.
+    if (ui.clicked) ui.pointerConsumed = true;
+  }
+
+  /** Tooltip for an owned augment in the sidebar. */
+  private drawAugTip(W: number, H: number) {
+    if (!this.augTip) return;
+    const ctx = ui.ctx;
+    const a = this.augTip.a;
+    const col = AUG_COLOR[a.tier];
+    const lines = this.wrap(a.desc, 32);
+    const pw = 220, ph = 46 + lines.length * 16 + 10;
+    let px = this.augTip.x, py = this.augTip.y;
+    if (px + pw > W - 4) px = Math.max(4, this.augTip.x - pw - 220);
+    py = Math.max(4, Math.min(py, H - ph - 4));
+    ctx.save();
+    ctx.shadowColor = "rgba(0,0,0,0.6)"; ctx.shadowBlur = 14; ctx.shadowOffsetY = 4;
+    ctx.fillStyle = "rgba(18,14,9,0.98)"; this.roundRect(ctx, px, py, pw, ph, 9); ctx.fill();
+    ctx.restore();
+    ctx.strokeStyle = withAlpha(col, 0.95); ctx.lineWidth = 1.5;
+    this.roundRect(ctx, px + 0.75, py + 0.75, pw - 1.5, ph - 1.5, 9); ctx.stroke();
+    this.augSigil(ctx, px + 22, py + 24, 12, a, 0);
+    ui.text(a.name, px + 44, py + 22, { size: 14, bold: true, color: col, font: "Georgia, serif" });
+    ui.text(`${a.tier} augment`, px + 44, py + 36, { size: 9.5, color: "#8a8278" });
+    let ly = py + 58;
+    for (const ln of lines) { ui.text(ln, px + 14, ly, { size: 11.5, color: "#d8cdb4" }); ly += 16; }
+  }
+
+  /**
+   * The scout panel: what a rival would field right now, their level and their
+   * synergies — so you can read the lobby and adapt before spending gold.
+   */
+  private drawScoutPanel(W: number, H: number, run: WarbandRun, time: number) {
+    const s = run.scout(this.scoutId);
+    if (!s) { this.scoutId = -1; return; }
+    const ctx = ui.ctx;
+    // Group their board by type+star so it reads as a comp, not a pile.
+    const groups = new Map<string, { type: string; star: number; n: number }>();
+    for (const u of s.board) {
+      const k = `${u.type}:${u.star ?? 1}`;
+      const g = groups.get(k);
+      if (g) g.n++; else groups.set(k, { type: u.type, star: u.star ?? 1, n: 1 });
+    }
+    const rows = [...groups.values()].sort((a, b) => b.star - a.star || (UNIT_TIER[b.type] ?? 0) - (UNIT_TIER[a.type] ?? 0));
+    const pw = 300;
+    const ph = Math.min(H - 100, 78 + Math.max(1, rows.length) * 26 + (s.traits.length ? s.traits.length * 18 + 24 : 0));
+    const px = 224, py = 88;
+    this.scoutRect = { x: px, y: py, w: pw, h: ph };
+
+    ctx.save();
+    ctx.shadowColor = "rgba(0,0,0,0.7)"; ctx.shadowBlur = 24; ctx.shadowOffsetY = 8;
+    const g = ctx.createLinearGradient(0, py, 0, py + ph);
+    g.addColorStop(0, "rgba(26,22,14,0.99)"); g.addColorStop(1, "rgba(12,9,5,0.99)");
+    ctx.fillStyle = g; this.roundRect(ctx, px, py, pw, ph, 11); ctx.fill();
+    ctx.restore();
+    ctx.strokeStyle = withAlpha("#7fb0e8", 0.85); ctx.lineWidth = 1.8;
+    this.roundRect(ctx, px + 1, py + 1, pw - 2, ph - 2, 10); ctx.stroke();
+
+    ui.text(`🔭 ${s.name}`, px + 16, py + 26, { size: 17, bold: true, color: "#cfe0ff", font: "Georgia, serif" });
+    ui.text(s.alive ? `Level ${s.level}` : "eliminated", px + pw - 16, py + 26, { align: "right", size: 12, bold: true, color: s.alive ? "#e7ddc4" : "#6f6a5c" });
+    // Life bar.
+    ctx.fillStyle = "rgba(0,0,0,0.6)"; ctx.fillRect(px + 16, py + 36, pw - 32, 9);
+    ctx.fillStyle = s.alive ? "#7df2a9" : "#5a554d"; ctx.fillRect(px + 16, py + 36, (pw - 32) * Math.max(0, s.life) / 100, 9);
+    ui.text(`${Math.max(0, s.life)} life`, px + pw - 16, py + 58, { align: "right", size: 10.5, color: "#9a917b" });
+    ui.text(`${s.board.length} deployed`, px + 16, py + 58, { size: 10.5, color: "#9a917b" });
+
+    // Their comp.
+    ctx.strokeStyle = "rgba(255,255,255,0.08)"; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(px + 12, py + 68); ctx.lineTo(px + pw - 12, py + 68); ctx.stroke();
+    let y = py + 84;
+    if (!rows.length) ui.text("— no warband fielded yet —", px + 16, y, { size: 11.5, color: "#6f6a5c" });
+    for (const r of rows) {
+      if (y + 10 > py + ph) break;
+      const tier = UNIT_TIER[r.type] ?? 1;
+      ctx.fillStyle = withAlpha(TIER_COLOR[tier], 0.16);
+      this.roundRect(ctx, px + 14, y - 13, pw - 28, 22, 5); ctx.fill();
+      ctx.fillStyle = TIER_COLOR[tier]; ctx.fillRect(px + 14, y - 13, 3, 22);
+      ui.text(UNITS[r.type]?.name ?? r.type, px + 24, y + 3, { size: 12, bold: true, color: "#e7ddc4" });
+      ui.text(stars(r.star), px + pw - 54, y + 3, { align: "right", size: 11, color: r.star >= 3 ? "#ffd24a" : r.star === 2 ? "#cfe0ff" : "#9a917b" });
+      if (r.n > 1) ui.text(`×${r.n}`, px + pw - 24, y + 3, { align: "right", size: 11, bold: true, color: "#9a917b" });
+      y += 26;
+    }
+    // Their synergies.
+    if (s.traits.length && y + 24 < py + ph) {
+      ctx.strokeStyle = "rgba(255,255,255,0.08)"; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(px + 12, y - 4); ctx.lineTo(px + pw - 12, y - 4); ctx.stroke();
+      y += 14;
+      for (const at of s.traits) {
+        if (y + 6 > py + ph) break;
+        ui.text(`◆ ${at.trait.name} ×${at.count}`, px + 18, y, { size: 11, bold: true, color: at.trait.color });
+        ui.text(at.tier?.label ?? "", px + pw - 18, y, { align: "right", size: 9.5, color: "#8a8278" });
+        y += 18;
+      }
+    }
+    // Close.
+    const cbx = px + pw - 30, cby = py + 8;
+    const chov = ui.mx >= cbx && ui.mx <= cbx + 22 && ui.my >= cby && ui.my <= cby + 22;
+    ui.text("✕", cbx + 11, cby + 16, { align: "center", size: 15, bold: true, color: chov ? "#ff9a8a" : "#8a8278" });
+    if (ui.clicked && !ui.pointerConsumed) {
+      const inside = ui.mx >= px && ui.mx <= px + pw && ui.my >= py && ui.my <= py + ph;
+      if (chov || !inside) { ui.pointerConsumed = inside; this.scoutId = -1; }
+    }
+  }
+
+  /** A star-up flourish over the board when three pieces merge. */
+  private drawStarUp(bx: number, by: number, bw: number, bh: number) {
+    if (!this.starUp) return;
+    const ctx = ui.ctx;
+    const t = this.starUp.t / 1.6;
+    const a = Math.max(0, 1 - t);
+    const cx = bx + bw / 2, cy = by + bh * 0.32;
+    const col = this.starUp.star >= 3 ? "#ffd24a" : "#cfe0ff";
+    ctx.save();
+    ctx.globalAlpha = a;
+    // Expanding rings.
+    for (let i = 0; i < 3; i++) {
+      const rt = Math.max(0, t - i * 0.12);
+      const r = 20 + rt * 190;
+      ctx.strokeStyle = withAlpha(col, 0.5 * (1 - rt));
+      ctx.lineWidth = 3 * (1 - rt);
+      ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.stroke();
+    }
+    // Scale-pop text.
+    const pop = 1 + 0.4 * Math.exp(-t * 6) * Math.cos(t * 16);
+    ctx.translate(cx, cy); ctx.scale(pop, pop); ctx.translate(-cx, -cy);
+    ctx.save();
+    ctx.shadowColor = col; ctx.shadowBlur = 22;
+    ui.text(stars(this.starUp.star), cx, cy - 8, { align: "center", size: 34, bold: true, color: col });
+    ui.text(`${shortName(this.starUp.type).toUpperCase()} UPGRADED`, cx, cy + 22, {
+      align: "center", size: 17, bold: true, color: "#f7efdc", font: "Georgia, serif",
+    });
+    ctx.restore();
+    ctx.restore();
   }
 
   private roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
@@ -375,7 +823,13 @@ export class WarbandScreen {
    *  fight starts it reveals and renders the live, animated battle. */
   private drawBoard(x: number, y: number, w: number, h: number, time: number, dt: number, run: WarbandRun) {
     const ctx = ui.ctx;
-    const setup = run.phase === "shop";
+    // "Setup" is how the board *reads* (your side only, no health bars); it also
+    // covers the augment pause so the board doesn't flash back to the last fight.
+    // Placement itself stays shop-only.
+    const setup = run.phase === "shop" || run.phase === "augment";
+    const interactive = run.phase === "shop";
+    // Monster camps are never hidden — you get to plan against what you can see.
+    const reveal = run.isCreepRound();
     const cellW = w / GRID_COLS;
     const cellH = h / GRID_ROWS;
 
@@ -393,19 +847,23 @@ export class WarbandScreen {
     const mapY = (wy: number) => y + (wy - worldTop) * syk;
     const us = (cellH * 0.62) / TILE; // unit fits comfortably inside a cell
 
-    // ---- enemy fog (setup) ----
-    if (setup) {
+    // ---- enemy fog (setup) — camps stand in the open instead ----
+    if (setup && !reveal) {
       ctx.fillStyle = "rgba(8,5,3,0.66)";
       ctx.fillRect(x + w / 2 + 1.5, y + 1.5, w / 2 - 3, h - 3);
       ui.text("🔒 Enemy warband hidden", x + w * 0.74, y + 30, { align: "center", size: 15, bold: true, color: "#caa" });
-      ui.text("revealed when the battle begins", x + w * 0.74, y + 50, { align: "center", size: 12, color: "#8a8278" });
+      ui.text("scout a rival on the left to see theirs", x + w * 0.74, y + 50, { align: "center", size: 12, color: "#8a8278" });
+    } else if (setup && reveal) {
+      const camp = run.pendingCamp!;
+      ui.text(camp.name, x + w * 0.74, y + 26, { align: "center", size: 16, bold: true, color: "#c8a86a", font: "Georgia, serif" });
+      ui.text(camp.blurb, x + w * 0.74, y + 44, { align: "center", size: 11.5, color: "#8a8278" });
     }
 
     // ---- placement + sell interaction (setup only) ----
     const deployment = setup ? run.deployment() : [];
     this.unitTip = null;
     let heldEntityId = -1;
-    if (setup) {
+    if (interactive) {
       const hovC = Math.floor((ui.mx - x) / cellW);
       const hovR = Math.floor((ui.my - y) / cellH);
       const inPlayer = ui.mx >= x && ui.mx < x + w && ui.my >= y && ui.my < y + h && hovC >= 0 && hovC <= 4 && hovR >= 0 && hovR <= 9;
@@ -486,7 +944,7 @@ export class WarbandScreen {
 
     // ---- units + combat FX ----
     const ents = b.world.entities
-      .filter((e) => e.alive && e.kind === Kind.Unit && e.type !== "villager" && (!setup || e.team === 0))
+      .filter((e) => e.alive && e.kind === Kind.Unit && e.type !== "villager" && (!setup || reveal || e.team === 0))
       .sort((p, q) => p.y - q.y);
     // In setup, draw each unit at the EXACT centre of its assigned arena cell.
     // (The sim snaps spawn positions to its 32-unit nav grid, which doesn't line
@@ -501,6 +959,16 @@ export class WarbandScreen {
         const d = deployment[k];
         if (d) { cellByEnt.set(e.id, { col: d.col, row: d.row }); itemsByEnt.set(e.id, run.pieces[d.index].items); }
       });
+      // A revealed camp gets the same exact-cell treatment on the enemy half.
+      if (reveal) {
+        b.world.entities
+          .filter((e) => e.alive && e.kind === Kind.Unit && e.type !== "villager" && e.team !== 0)
+          .sort((p, q) => p.id - q.id)
+          .forEach((e, k) => {
+            const u = run.pendingOpp[k];
+            if (u?.col != null && u.row != null) cellByEnt.set(e.id, { col: u.col, row: u.row });
+          });
+      }
     }
     setTeamColorResolver(null);
     ctx.save();
