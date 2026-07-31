@@ -1784,6 +1784,9 @@ public final class RoundManager {
     /** Fraction of the Heart's total health restored per diamond. */
     private static final float REPAIR_FRACTION_PER_DIAMOND = 0.08f;
 
+    /** Fraction of the Heart's total health knitted back each between-round tick. */
+    private static final float REGEN_FRACTION_PER_TICK = 0.01f;
+
     /**
      * Feeds a diamond to the Heart to mend it. Deliberately costs the one thing
      * players actually want to walk away with, so patching the Heart is a real
@@ -1875,8 +1878,11 @@ public final class RoundManager {
                     warnHeartUnderAttack(present, heart);
                 }
             } else if (now % 60L == 0L && game.getPhase() == AbyssGame.Phase.BETWEEN_ROUNDS) {
-                // Slowly knits itself back together during the breather.
-                game.setObjectiveHealth(game.getObjectiveHealth() + 5.0f);
+                // Slowly knits itself back together during the breather. Kept as a
+                // fraction of the pool so retuning the Heart's health never silently
+                // changes how much of it the breather hands back.
+                game.setObjectiveHealth(game.getObjectiveHealth()
+                        + AbyssGame.OBJECTIVE_MAX_HEALTH * REGEN_FRACTION_PER_TICK);
             }
         }
 

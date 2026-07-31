@@ -42,7 +42,7 @@ public final class AbyssGame {
 
     // --- Defence objective (maps that have something to protect) ---
     /** Max health of the objective. */
-    public static final float OBJECTIVE_MAX_HEALTH = 500.0f;
+    public static final float OBJECTIVE_MAX_HEALTH = 200.0f;
     private float objectiveHealth = OBJECTIVE_MAX_HEALTH;
 
     // --- Boss-round state (rounds 10 and the final round summon the Warden) ---
