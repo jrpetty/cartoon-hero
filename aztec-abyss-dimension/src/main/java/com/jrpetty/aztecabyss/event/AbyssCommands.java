@@ -37,8 +37,37 @@ public final class AbyssCommands {
                         .executes(ctx -> leaderboard(ctx.getSource(), false))
                         .then(Commands.literal("solo").executes(ctx -> leaderboard(ctx.getSource(), false)))
                         .then(Commands.literal("multiplayer").executes(ctx -> leaderboard(ctx.getSource(), true)))
-                        .then(Commands.literal("mp").executes(ctx -> leaderboard(ctx.getSource(), true))));
+                        .then(Commands.literal("mp").executes(ctx -> leaderboard(ctx.getSource(), true))))
+                .then(Commands.literal("ready").requires(src -> src.hasPermission(2))
+                        .executes(ctx -> clearCooldown(ctx.getSource(), null))
+                        .then(Commands.argument("target", net.minecraft.commands.arguments.EntityArgument.player())
+                                .executes(ctx -> clearCooldown(ctx.getSource(),
+                                        net.minecraft.commands.arguments.EntityArgument.getPlayer(ctx, "target")))));
         event.getDispatcher().register(root);
+    }
+
+    /**
+     * {@code /abyss ready [player]} - clears every lockout standing between you
+     * and going back in: the arena re-entry cooldown and the maze's death
+     * lockout. Op-gated, and purely for testing; a twenty-hour wait between
+     * attempts makes iterating on a hunt impossible.
+     */
+    private static int clearCooldown(CommandSourceStack source, ServerPlayer target) throws
+            com.mojang.brigadier.exceptions.CommandSyntaxException {
+        ServerPlayer player = target != null ? target : source.getPlayerOrException();
+        RunState rs = player.getData(ModAttachments.RUN_STATE);
+        rs.setCooldownUntil(0L);
+        player.setData(ModAttachments.RUN_STATE, rs);
+        com.jrpetty.aztecabyss.network.ModNetworking.sendCooldown(player, 0L);
+        com.jrpetty.aztecabyss.maze.MazeRuns.clearLockout(player.getUUID());
+
+        String who = player.getGameProfile().getName();
+        source.sendSuccess(() -> Component.literal(
+                "§a✔ Cooldowns cleared for §f" + who + "§a — arena and maze."), true);
+        if (target != null) {
+            player.displayClientMessage(Component.literal("§a✔ Your Abyss cooldowns were cleared."), false);
+        }
+        return 1;
     }
 
     private static String fmtTime(int seconds) {

@@ -82,6 +82,11 @@ public final class MazeRuns extends SavedData {
         LIVE.clear();
     }
 
+    /** Drops a player's death lockout. Used by the testing command. */
+    public static void clearLockout(UUID id) {
+        LOCKOUT.remove(id);
+    }
+
     /**
      * Ends a run the hard way. The clock stops, the run is gone, and the lockout
      * starts - the caller is responsible for actually putting them out of the

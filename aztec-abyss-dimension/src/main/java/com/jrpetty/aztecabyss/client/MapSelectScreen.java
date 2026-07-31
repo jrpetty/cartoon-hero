@@ -19,7 +19,10 @@ import net.neoforged.neoforge.network.PacketDistributor;
 public final class MapSelectScreen extends Screen {
 
     private static final int CARD_W = 260;
-    private static final int CARD_H = 58;
+    /** Card chrome above the blurb (title row) and below it (record row). */
+    private static final int CARD_HEAD = 22;
+    private static final int CARD_FOOT = 18;
+    private static final int LINE_H = 10;
     private static final int GAP = 10;
 
     private final int[] bestRounds;
@@ -31,9 +34,31 @@ public final class MapSelectScreen extends Screen {
         this.bestRounds = bestRounds;
     }
 
-    private int cardTop() {
+    /**
+     * How tall a card has to be to hold its own blurb.
+     *
+     * <p>Cards used to be a fixed 58 high, which fitted a two-line blurb and
+     * quietly overlapped a three-line one - the third line landed straight on
+     * top of the record row. Height is now derived from the wrapped text, so a
+     * map can be described in as many lines as it needs.
+     */
+    private int cardHeight(ArenaMap map) {
+        int lines = this.font.split(Component.literal(map.blurb()), CARD_W - 20).size();
+        return CARD_HEAD + lines * LINE_H + CARD_FOOT;
+    }
+
+    /** Top edge of card {@code index}, stacking the variable heights above it. */
+    private int cardY(int index) {
         ArenaMap[] maps = ArenaMap.values();
-        return this.height / 2 - (maps.length * (CARD_H + GAP)) / 2 + 4;
+        int total = 0;
+        for (ArenaMap m : maps) {
+            total += cardHeight(m) + GAP;
+        }
+        int y = this.height / 2 - (total - GAP) / 2;
+        for (int i = 0; i < index; i++) {
+            y += cardHeight(maps[i]) + GAP;
+        }
+        return y;
     }
 
     @Override
@@ -59,11 +84,11 @@ public final class MapSelectScreen extends Screen {
     @Override
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
         int left = this.width / 2 - CARD_W / 2;
-        int top = cardTop();
         ArenaMap[] maps = ArenaMap.values();
         for (int i = 0; i < maps.length; i++) {
-            int y = top + i * (CARD_H + GAP);
-            if (mouseX >= left && mouseX <= left + CARD_W && mouseY >= y && mouseY <= y + CARD_H) {
+            int y = cardY(i);
+            int h = cardHeight(maps[i]);
+            if (mouseX >= left && mouseX <= left + CARD_W && mouseY >= y && mouseY <= y + h) {
                 selected = i;
                 if (this.minecraft != null) {
                     this.minecraft.getSoundManager().play(
@@ -92,29 +117,30 @@ public final class MapSelectScreen extends Screen {
 
         g.drawCenteredString(this.font, Component.literal("CHOOSE YOUR HUNT").withStyle(s -> s.withBold(true)),
                 cx, 26, 0xFFFFD24A);
-        g.drawCenteredString(this.font, Component.literal("Same rounds, same rewards — different battlefield."),
+        // Honest now that the Outpost runs endless rounds on its own economy.
+        g.drawCenteredString(this.font, Component.literal("Three battlefields. Three different games."),
                 cx, 40, 0xFF888888);
 
         ArenaMap[] maps = ArenaMap.values();
-        int top = cardTop();
         int left = cx - CARD_W / 2;
 
         for (int i = 0; i < maps.length; i++) {
             ArenaMap map = maps[i];
-            int y = top + i * (CARD_H + GAP);
+            int y = cardY(i);
+            int cardH = cardHeight(map);
             boolean isSelected = i == selected;
-            boolean hovered = mouseX >= left && mouseX <= left + CARD_W && mouseY >= y && mouseY <= y + CARD_H;
+            boolean hovered = mouseX >= left && mouseX <= left + CARD_W && mouseY >= y && mouseY <= y + cardH;
 
             // Card body, brightened when picked or hovered.
-            g.fill(left, y, left + CARD_W, y + CARD_H, isSelected ? 0xCC1A1410 : hovered ? 0xAA141414 : 0x99101010);
+            g.fill(left, y, left + CARD_W, y + cardH, isSelected ? 0xCC1A1410 : hovered ? 0xAA141414 : 0x99101010);
             int edge = isSelected ? 0xFFFFD24A : hovered ? 0xFF7A6A3A : 0xFF3A3A3A;
             g.fill(left, y, left + CARD_W, y + 1, edge);
-            g.fill(left, y + CARD_H - 1, left + CARD_W, y + CARD_H, edge);
-            g.fill(left, y, left + 1, y + CARD_H, edge);
-            g.fill(left + CARD_W - 1, y, left + CARD_W, y + CARD_H, edge);
+            g.fill(left, y + cardH - 1, left + CARD_W, y + cardH, edge);
+            g.fill(left, y, left + 1, y + cardH, edge);
+            g.fill(left + CARD_W - 1, y, left + CARD_W, y + cardH, edge);
             // Selected cards get a thick gold spine down the left.
             if (isSelected) {
-                g.fill(left + 1, y + 1, left + 4, y + CARD_H - 1, 0xFFFFD24A);
+                g.fill(left + 1, y + 1, left + 4, y + cardH - 1, 0xFFFFD24A);
             }
 
             // Title.
@@ -130,11 +156,11 @@ public final class MapSelectScreen extends Screen {
             g.drawString(this.font, Component.literal(tag), tagX + 4, y + 9, map.difficultyColor(), false);
 
             // Blurb, wrapped across the card.
-            int by = y + 22;
+            int by = y + CARD_HEAD;
             for (net.minecraft.util.FormattedCharSequence line
                     : this.font.split(Component.literal(map.blurb()), CARD_W - 20)) {
                 g.drawString(this.font, line, left + 10, by, 0xFF9A9A9A, false);
-                by += 10;
+                by += LINE_H;
             }
 
             // Personal best on this arena - the record to beat.
@@ -142,7 +168,7 @@ public final class MapSelectScreen extends Screen {
             String rec = best > 0 ? "Your best: Round " + best : "Never attempted";
             int recW = this.font.width(rec);
             g.drawString(this.font, Component.literal(rec),
-                    left + CARD_W - recW - 10, y + CARD_H - 13,
+                    left + CARD_W - recW - 10, y + cardH - 13,
                     best > 0 ? 0xFF6EC8FF : 0xFF666666, false);
         }
 
