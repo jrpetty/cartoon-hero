@@ -3,6 +3,7 @@ package com.jrpetty.mobtrumps.client;
 import com.jrpetty.mobtrumps.game.CampaignMission;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.util.Mth;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -65,6 +66,34 @@ public final class MissionArt {
         // scrim: dark at the foot of the banner so the title sits on it cleanly
         g.fillGradient(x, y + drawH - 26, x + drawW, y + drawH, 0x00120E1E, 0xF0120E1E);
         g.fill(x, y + drawH - 1, x + drawW, y + drawH, mission.anchor().accent());
+    }
+
+    /**
+     * The banner blown up to fill a whole screen, for a live mission.
+     *
+     * <p>Scaled to <em>cover</em> — one uniform factor, cropping whatever
+     * overhangs — so the scene never stretches out of shape. It is then pushed
+     * well back with a scrim and a vignette, because it is the room the game is
+     * happening in, not the game: the cards and the felt have to stay the
+     * brightest things on screen.
+     *
+     * @param dim extra darkening 0-255 on top of the standard scrim
+     */
+    public static void drawBackdrop(GuiGraphics g, CampaignMission mission,
+                                    int width, int height, int dim) {
+        float scale = Math.max(width / (float) ART_W, height / (float) ART_H);
+        int drawW = Math.max(width, Math.round(ART_W * scale));
+        int drawH = Math.max(height, Math.round(ART_H * scale));
+        int x = (width - drawW) / 2;
+        int y = (height - drawH) / 2;
+        g.blit(of(mission), x, y, drawW, drawH, 0f, 0f, ART_W, ART_H, ART_W, ART_H);
+
+        g.fill(0, 0, width, height, ((0x66 + Mth.clamp(dim, 0, 0x60)) << 24));
+        // vignette: darker at the edges so the middle of the table reads
+        g.fillGradient(0, 0, width, height / 3, 0x66000000, 0x00000000);
+        g.fillGradient(0, height * 2 / 3, width, height, 0x00000000, 0x77000000);
+        // and a tint of the mission's category, so the room has a colour
+        g.fill(0, 0, width, height, 0x18000000 | (mission.anchor().accent() & 0xFFFFFF));
     }
 
     /**

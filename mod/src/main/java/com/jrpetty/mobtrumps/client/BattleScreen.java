@@ -5,6 +5,8 @@ import com.jrpetty.mobtrumps.BattleSyncPayload;
 import com.jrpetty.mobtrumps.game.Difficulty;
 import com.jrpetty.mobtrumps.game.MobCard;
 import com.jrpetty.mobtrumps.game.MobCards;
+import com.jrpetty.mobtrumps.game.CampaignDecks;
+import com.jrpetty.mobtrumps.game.CampaignMission;
 import com.jrpetty.mobtrumps.game.Stat;
 import com.mojang.math.Axis;
 import net.minecraft.client.gui.GuiGraphics;
@@ -112,6 +114,11 @@ public class BattleScreen extends Screen {
         return ClientPrefs.lit(argb);
     }
 
+    /** The same colour at a different alpha. */
+    private static int translucent(int argb, int alpha) {
+        return (Mth.clamp(alpha, 0, 255) << 24) | (argb & 0x00FFFFFF);
+    }
+
     /** Fit two cards + a centre gap between the header and dock, then apply the size pref. */
     private float computeScale() {
         int dockY = height - DOCK_H;
@@ -133,7 +140,15 @@ public class BattleScreen extends Screen {
         int dockY = height - DOCK_H;
 
         // --- base felt + grain + a much gentler vignette than before ---
-        g.fillGradient(0, 0, width, height, lit(FELT_LIGHT), lit(FELT_DARK));
+        // A campaign mission is played in its own place: the briefing's scene
+        // becomes the room, pushed well back, with the felt table on top of it.
+        CampaignMission place = ClientBattle.campaignMission() > 0
+                ? CampaignDecks.byIndex(ClientBattle.campaignMission()) : null;
+        if (place != null) {
+            MissionArt.drawBackdrop(g, place, width, height, 0);
+        } else {
+            g.fillGradient(0, 0, width, height, lit(FELT_LIGHT), lit(FELT_DARK));
+        }
         for (int i = 0; i < 90; i++) {
             int sx = (i * 97 + 31) % Math.max(1, width);
             int sy = (i * 61 + 17) % Math.max(1, height);
@@ -169,7 +184,16 @@ public class BattleScreen extends Screen {
         int surfY0 = HEADER_H + 6;
         int surfY1 = dockY - 6;
         g.fill(surfX0 + 3, surfY0 + 4, surfX1 + 3, surfY1 + 4, 0x44000000); // drop shadow
-        g.fillGradient(surfX0, surfY0, surfX1, surfY1, lit(SURFACE_LIGHT), lit(SURFACE_DARK));
+        // in a mission the felt is laid ON the scene, so it lets the place
+        // show through instead of boxing it out to a border
+        if (place != null) {
+            g.fillGradient(surfX0, surfY0, surfX1, surfY1,
+                    translucent(lit(SURFACE_LIGHT), 0x62), translucent(lit(SURFACE_DARK), 0x8C));
+            g.renderOutline(surfX0, surfY0, surfX1 - surfX0, surfY1 - surfY0,
+                    place.anchor().accent());
+        } else {
+            g.fillGradient(surfX0, surfY0, surfX1, surfY1, lit(SURFACE_LIGHT), lit(SURFACE_DARK));
+        }
         g.renderOutline(surfX0, surfY0, surfX1 - surfX0, surfY1 - surfY0, GOLD_DIM);
         g.renderOutline(surfX0 + 2, surfY0 + 2, surfX1 - surfX0 - 4, surfY1 - surfY0 - 4, 0x55E9C46A);
         cornerTicks(g, surfX0, surfY0, surfX1, surfY1);
