@@ -16,7 +16,7 @@ describe("Warband screen placement", () => {
   const setup = () => {
     const ctx = createCanvas(W, H).getContext("2d") as unknown as CanvasRenderingContext2D;
     const s = new WarbandScreen();
-    const run = new WarbandRun(11);
+    const run = new WarbandRun(11, null);
     run.gold = 400; run.level = 6;
     for (const t of ["knight", "archer", "spearman", "militia", "horseman", "crossbow"]) {
       run.shop = [t, t, t, t, t]; run.buy(0); run.buy(1);
@@ -60,7 +60,7 @@ describe("Warband screen augments & scouting", () => {
   const harness = (seed = 11) => {
     const ctx = createCanvas(W, H).getContext("2d") as unknown as CanvasRenderingContext2D;
     const s = new WarbandScreen();
-    const run = new WarbandRun(seed);
+    const run = new WarbandRun(seed, null);
     let t = 0;
     const frame = (mx: number, my: number, clicked = false) => {
       t += 1 / 30; setMouseDown(false);
@@ -148,7 +148,7 @@ describe("Warband screen renders", () => {
     const ctx = createCanvas(1280, 760).getContext("2d") as unknown as CanvasRenderingContext2D;
     const begin = () => ui.begin(ctx, { mx: 0, my: 0, clicked: false, rightClicked: false, alt: false });
     const s = new WarbandScreen();
-    const run = new WarbandRun(5);
+    const run = new WarbandRun(5, null);
     run.gold = 80;
     run.shop = ["militia", "archer", "knight", "catapult", "hero"];
     run.buy(0); run.buy(1); run.buy(2);

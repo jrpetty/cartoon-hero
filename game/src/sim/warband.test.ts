@@ -3,6 +3,7 @@ import { WarbandRun, UNIT_TIER } from "./warband";
 import { AUGMENTS, AUGMENT_ROUNDS, augmentById, offerAugments, combinedBuff, combinedTraitBonus, tierForRound } from "./augments";
 import { isCreepRound, campForRound, campBoard } from "./creeps";
 import { RNG } from "../engine/rng";
+import { WARBAND_COMMANDERS, warbandCommander, commanderIdentity } from "./warband_commanders";
 
 /** Drive a run to the start of a given round, taking the first augment offered. */
 function advanceTo(run: WarbandRun, round: number) {
@@ -16,7 +17,7 @@ function advanceTo(run: WarbandRun, round: number) {
 
 describe("Warband Tactics run engine", () => {
   it("starts a run with gold, a shop, and seven opponents", () => {
-    const run = new WarbandRun(123);
+    const run = new WarbandRun(123, null);
     expect(run.gold).toBeGreaterThan(0);
     expect(run.shop.length).toBe(5);
     expect(run.opponents.length).toBe(7);
@@ -24,7 +25,7 @@ describe("Warband Tactics run engine", () => {
   });
 
   it("three identical buys merge into a 2-star, and three 2-stars into a 3-star", () => {
-    const run = new WarbandRun(1);
+    const run = new WarbandRun(1, null);
     run.gold = 99;
     // Force a known unit into every shop slot and buy 9 of them.
     for (let i = 0; i < 9; i++) {
@@ -40,7 +41,7 @@ describe("Warband Tactics run engine", () => {
   });
 
   it("buying XP raises the level (and board capacity)", () => {
-    const run = new WarbandRun(2);
+    const run = new WarbandRun(2, null);
     run.gold = 100;
     const lvl0 = run.level;
     for (let i = 0; i < 5; i++) run.buyXp();
@@ -48,7 +49,7 @@ describe("Warband Tactics run engine", () => {
   });
 
   it("higher level unlocks higher-tier units in the shop", () => {
-    const run = new WarbandRun(5);
+    const run = new WarbandRun(5, null);
     run.gold = 1e6;
     // At level 1, every shop unit is tier 1.
     run.level = 1;
@@ -67,7 +68,7 @@ describe("Warband Tactics run engine", () => {
   });
 
   it("a fight resolves and either damages a foe (win) or you (loss)", () => {
-    const run = new WarbandRun(7);
+    const run = new WarbandRun(7, null);
     run.gold = 50;
     run.shop = ["knight", "knight", "knight", "knight", "knight"];
     run.buy(0); run.buy(1); run.buy(2); // a little army
@@ -84,7 +85,7 @@ describe("Warband Tactics run engine", () => {
   });
 
   it("places units on distinct board cells and lets you move/swap them", () => {
-    const run = new WarbandRun(8);
+    const run = new WarbandRun(8, null);
     run.gold = 50; run.level = 4;
     run.shop = ["knight", "archer", "spearman", "militia", "horseman"];
     run.buy(0); run.buy(1); run.buy(2); run.buy(3);
@@ -109,7 +110,7 @@ describe("Warband Tactics run engine", () => {
   });
 
   it("shares a finite unit pool — buying depletes it, selling refunds copies", () => {
-    const run = new WarbandRun(2);
+    const run = new WarbandRun(2, null);
     run.gold = 99;
     const before = run.poolCount("militia");
     run.shop = ["militia", "militia", "militia", "militia", "militia"];
@@ -122,7 +123,7 @@ describe("Warband Tactics run engine", () => {
   });
 
   it("fields a reserve unit from the bench onto the board", () => {
-    const run = new WarbandRun(4);
+    const run = new WarbandRun(4, null);
     run.gold = 99; run.level = 2; // board cap = 2
     // Buy 4 distinct units → 2 auto-deploy (cap), 2 sit on the bench.
     run.shop = ["knight", "archer", "spearman", "militia", "raider"];
@@ -141,7 +142,7 @@ describe("Warband Tactics run engine", () => {
   });
 
   it("opponents run the same economy and field a warband that grows + stars up", () => {
-    const run = new WarbandRun(3);
+    const run = new WarbandRun(3, null);
     const sizes: number[] = [];
     let sawStarUp = false;
     let sawRelic = false;
@@ -168,7 +169,7 @@ describe("Warband Tactics run engine", () => {
   });
 
   it("a full auto-played run always terminates with a win or loss", () => {
-    const run = new WarbandRun(99);
+    const run = new WarbandRun(99, null);
     let guard = 0;
     while (run.phase !== "over" && guard++ < 200) {
       if (run.phase === "augment") {
@@ -190,7 +191,7 @@ describe("Warband Tactics run engine", () => {
 
 describe("Warband augments", () => {
   it("offers three distinct augments on an augment round and pauses for the pick", () => {
-    const run = new WarbandRun(11);
+    const run = new WarbandRun(11, null);
     advanceTo(run, AUGMENT_ROUNDS[0]);
     expect(run.round).toBe(AUGMENT_ROUNDS[0]);
     expect(run.phase).toBe("augment");
@@ -219,7 +220,7 @@ describe("Warband augments", () => {
   });
 
   it("board-slot augments field more units than your level alone", () => {
-    const run = new WarbandRun(12);
+    const run = new WarbandRun(12, null);
     run.gold = 200; run.level = 3;
     run.shop = ["knight", "archer", "spearman", "militia", "raider"];
     run.buy(0); run.buy(1); run.buy(2); run.buy(3); run.buy(4);
@@ -230,7 +231,7 @@ describe("Warband augments", () => {
   });
 
   it("economy augments change income, reroll price and interest", () => {
-    const run = new WarbandRun(13);
+    const run = new WarbandRun(13, null);
     expect(run.rerollCost()).toBe(2);
     run.augments.push(augmentById("quartermaster")!); // rerolls cost 1
     expect(run.rerollCost()).toBe(1);
@@ -241,7 +242,7 @@ describe("Warband augments", () => {
     run.gold = gold;
 
     // "King's Ransom" pays a bounty immediately and lifts the interest cap.
-    const rich = new WarbandRun(14);
+    const rich = new WarbandRun(14, null);
     advanceTo(rich, AUGMENT_ROUNDS[0]);
     rich.augmentOffer = [augmentById("kingsransom")!];
     const before = rich.gold;
@@ -256,7 +257,7 @@ describe("Warband augments", () => {
   });
 
   it("banner augments add virtual synergy counts, and buffs stack into one", () => {
-    const run = new WarbandRun(15);
+    const run = new WarbandRun(15, null);
     run.gold = 200; run.level = 2;
     run.shop = ["militia", "militia", "militia", "militia", "militia"];
     run.buy(0);
@@ -284,7 +285,7 @@ describe("Warband augments", () => {
 
 describe("Warband monster camps", () => {
   it("opens the run against a camp instead of a player", () => {
-    const run = new WarbandRun(21);
+    const run = new WarbandRun(21, null);
     expect(run.round).toBe(1);
     expect(run.isCreepRound()).toBe(true);
     expect(run.pendingCamp).not.toBeNull();
@@ -299,7 +300,7 @@ describe("Warband monster camps", () => {
     expect(isCreepRound(6)).toBe(true);
     expect(isCreepRound(2)).toBe(false);
     // Losing the opener with an empty board only takes the camp's small bite.
-    const run = new WarbandRun(22);
+    const run = new WarbandRun(22, null);
     const camp = run.pendingCamp!;
     const lifeBefore = run.life;
     run.fight();
@@ -313,7 +314,7 @@ describe("Warband monster camps", () => {
   });
 
   it("beating a camp drops relics and gold", () => {
-    const run = new WarbandRun(23);
+    const run = new WarbandRun(23, null);
     run.gold = 200; run.level = 9;
     // A crushing board so the opening camp definitely dies.
     run.shop = ["hero", "hero", "hero", "hero", "hero"];
@@ -337,9 +338,137 @@ describe("Warband monster camps", () => {
   });
 });
 
+describe("Warband commanders", () => {
+  it("opens the run on a commander choice, then plays on", () => {
+    const run = new WarbandRun(51); // no id → the pick is offered
+    expect(run.phase).toBe("commander");
+    expect(run.commanderOffer.length).toBe(3);
+    expect(new Set(run.commanderOffer.map((c) => c.id)).size).toBe(3);
+    expect(run.commander).toBeNull();
+    // Nothing may be bought until a commander leads.
+    run.gold = 50;
+    expect(run.reroll()).toBe(false);
+    expect(run.buyXp()).toBe(false);
+    const chosen = run.commanderOffer[0];
+    expect(run.pickCommander(0)).toBe(true);
+    expect(run.phase).toBe("shop");
+    expect(run.commander?.id).toBe(chosen.id);
+    expect(run.pickCommander(0)).toBe(false); // only once
+  });
+
+  it("every commander has a real identity and at least one lever", () => {
+    for (const c of WARBAND_COMMANDERS) {
+      const id = commanderIdentity(c);
+      expect(id, c.id).toBeTruthy();
+      expect(id.name.length).toBeGreaterThan(0);
+      expect(c.perk.length).toBeGreaterThan(0);
+      const levers = ["gold", "startGold", "interestCap", "freeRerolls", "boardSlots",
+        "shopLevelBonus", "fullRefund", "topTraitBonus", "lossShield", "buff"] as const;
+      expect(levers.some((k) => c[k] != null), c.id).toBe(true);
+    }
+    expect(warbandCommander("nope")).toBeUndefined();
+  });
+
+  it("the Steward's free reroll costs nothing and refreshes each round", () => {
+    const run = new WarbandRun(52, "steward");
+    expect(run.freeRerollsLeft()).toBe(1);
+    expect(run.rerollCost()).toBe(0);
+    run.gold = 10;
+    expect(run.reroll()).toBe(true);
+    expect(run.gold).toBe(10);            // the free one
+    expect(run.rerollCost()).toBe(2);
+    expect(run.reroll()).toBe(true);
+    expect(run.gold).toBe(8);             // now it's paid
+    // A new round refreshes it.
+    run.fight();
+    if (run.phase === "result") run.next();
+    if (run.phase === "augment") run.pickAugment(0);
+    expect(run.freeRerollsLeft()).toBe(1);
+  });
+
+  it("the Warden fields an extra unit from round one", () => {
+    const bare = new WarbandRun(53, null);
+    const warden = new WarbandRun(53, "warden");
+    expect(warden.deployCount()).toBe(bare.deployCount() + 1);
+    warden.gold = 200; warden.level = 3;
+    warden.shop = ["knight", "archer", "spearman", "militia", "raider"];
+    for (let i = 0; i < 5; i++) warden.buy(i);
+    expect(warden.deployment().length).toBe(4); // level 3 + 1
+  });
+
+  it("the Quartermaster refunds every copy sunk into a unit", () => {
+    const full = new WarbandRun(54, "quartermaster");
+    const bare = new WarbandRun(54, null);
+    for (const run of [full, bare]) {
+      run.gold = 99;
+      for (let i = 0; i < 3; i++) { run.shop = ["militia", "militia", "militia", "militia", "militia"]; run.buy(0); }
+    }
+    const two = full.pieces.findIndex((p) => p.star === 2);
+    expect(two).toBeGreaterThanOrEqual(0);
+    const fullBefore = full.gold, bareBefore = bare.gold;
+    full.sell(two);
+    bare.sell(bare.pieces.findIndex((p) => p.star === 2));
+    // A 2★ militia is three copies: full refund 3g vs the flat star price 2g.
+    expect(full.gold - fullBefore).toBe(3);
+    expect(bare.gold - bareBefore).toBe(2);
+  });
+
+  it("the Drillmaster's shop rolls a level above, and the Magnate banks harder", () => {
+    const drill = new WarbandRun(55, "drillmaster");
+    const bare = new WarbandRun(55, null);
+    // Level 2 odds are all tier 1; reading one level up must expose tier 2.
+    drill.level = 2; bare.level = 2;
+    expect(bare.shopOdds()[1]).toBe(0);
+    expect(drill.shopOdds()[1]).toBeGreaterThan(0);
+
+    const mag = new WarbandRun(56, "magnate");
+    const plain = new WarbandRun(56, null);
+    // The 10g purse is banked before the first income tick, so it immediately
+    // earns a point of interest on top.
+    expect(mag.gold - plain.gold).toBeGreaterThanOrEqual(10);
+    expect(mag.gold).toBe(plain.gold + 11);
+  });
+
+  it("the Banneret lifts whichever synergy is currently largest", () => {
+    const run = new WarbandRun(57, "banneret");
+    run.gold = 200; run.level = 4;
+    // Two Marksmen types → Marksmen is the biggest synergy at 2.
+    for (const ty of ["archer", "crossbow"]) { run.shop = [ty, ty, ty, ty, ty]; run.buy(0); }
+    const marks = run.activeTraits().find((t) => t.trait.id === "marksmen");
+    expect(marks?.count).toBe(3); // 2 owned + 1 from the commander
+    expect(run.sideOpts().traitBonus).toEqual({ marksmen: 1 });
+  });
+
+  it("the Warpriest blunts defeats and the Marshal buffs the whole warband", () => {
+    expect(warbandCommander("warpriest")!.lossShield).toBe(3);
+    const marshal = new WarbandRun(58, "marshal");
+    const buff = marshal.sideOpts().buff;
+    expect(buff?.hpPct).toBe(8);
+    expect(buff?.armor).toBe(2);
+    // A commander buff stacks with an augment buff rather than replacing it.
+    marshal.augments.push(augmentById("whetted")!); // +12% attack
+    const both = marshal.sideOpts().buff;
+    expect(both?.atkPct).toBe(12);
+    expect(both?.hpPct).toBe(8);
+  });
+
+  it("a full run led by a commander still terminates", () => {
+    const run = new WarbandRun(59);
+    let guard = 0;
+    while (run.phase !== "over" && guard++ < 200) {
+      if (run.phase === "commander") run.pickCommander(0);
+      else if (run.phase === "augment") run.pickAugment(0);
+      else if (run.phase === "shop") { if (run.gold >= 8) run.buyXp(); for (let s = 0; s < run.shop.length; s++) run.buy(s); run.fight(); }
+      else if (run.phase === "result") run.next();
+    }
+    expect(run.phase).toBe("over");
+    expect(run.commander).not.toBeNull();
+  }, 30000);
+});
+
 describe("Warband scouting", () => {
   it("reports a rival's level, life and the board they'd field", () => {
-    const run = new WarbandRun(31);
+    const run = new WarbandRun(31, null);
     advanceTo(run, 4); // let the lobby build boards
     const s = run.scout(0);
     expect(s).not.toBeNull();
@@ -354,7 +483,7 @@ describe("Warband scouting", () => {
   });
 
   it("standings carry the opponent id the scout panel needs", () => {
-    const run = new WarbandRun(32);
+    const run = new WarbandRun(32, null);
     const rows = run.standings();
     expect(rows.find((r) => r.you)!.id).toBe(-1);
     for (const r of rows.filter((x) => !x.you)) expect(run.scout(r.id)!.name).toBe(r.name);

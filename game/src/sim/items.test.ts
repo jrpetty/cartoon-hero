@@ -23,7 +23,7 @@ describe("Warband relics", () => {
   });
 
   it("equipping moves a relic onto a unit, capped at 3", () => {
-    const run = new WarbandRun(3);
+    const run = new WarbandRun(3, null);
     run.gold = 50;
     run.shop = ["militia", "militia", "militia", "militia", "militia"];
     run.buy(0);
@@ -37,7 +37,7 @@ describe("Warband relics", () => {
   });
 
   it("merging a star-up inherits the components' relics", () => {
-    const run = new WarbandRun(4);
+    const run = new WarbandRun(4, null);
     run.gold = 99;
     run.shop = ["archer", "archer", "archer", "archer", "archer"]; run.buy(0);
     run.itemStash = ["whetstone"]; run.equipItem(0, 0); // archer #1 ← Whetstone
@@ -91,7 +91,7 @@ describe("Warband components", () => {
   });
 
   it("equipping a second component onto a unit forges a relic in place", () => {
-    const run = new WarbandRun(31);
+    const run = new WarbandRun(31, null);
     run.gold = 50;
     run.shop = ["militia", "militia", "militia", "militia", "militia"];
     run.buy(0);
@@ -133,7 +133,7 @@ describe("Warband components", () => {
   });
 
   it("a run drops components as loot, and they fuse into relics over time", () => {
-    const run = new WarbandRun(41);
+    const run = new WarbandRun(41, null);
     run.gold = 200; run.level = 6;
     for (const ty of ["knight", "archer", "spearman"]) { run.shop = [ty, ty, ty, ty, ty]; run.buy(0); run.buy(1); }
     let sawComponent = false;

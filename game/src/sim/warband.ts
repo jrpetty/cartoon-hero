@@ -7,10 +7,11 @@
 import { RNG } from "../engine/rng";
 import { UNITS } from "../content/units";
 import { resolveBattle, UnitStack, ArenaUnit, BattleResult, SideOpts } from "./autobattle";
-import { activeTraits, ActiveTrait } from "./traits";
+import { activeTraits, ActiveTrait, Buff } from "./traits";
 import { COMPONENT_IDS, MAX_ITEMS, fuseComponents } from "./items";
 import { Augment, offerAugments, tierForRound, combinedBuff, combinedTraitBonus } from "./augments";
 import { CreepCamp, isCreepRound, campForRound, campBoard } from "./creeps";
+import { WarbandCommander, warbandCommander, offerCommanders } from "./warband_commanders";
 
 /** Shop tier (1 cheap/weak … 5 rare/strong); buying costs the tier in gold. */
 export const UNIT_TIER: Record<string, number> = {
@@ -114,12 +115,16 @@ export class WarbandRun {
   itemStash: string[] = []; // unequipped relics
   shop: (string | null)[] = [];
   opponents: Opponent[] = [];
-  phase: "augment" | "shop" | "battle" | "result" | "over" = "shop";
+  phase: "commander" | "augment" | "shop" | "battle" | "result" | "over" = "shop";
   outcome: "win" | "loss" | null = null;
   lastResult: { won: boolean; foe: string; youLeft: number; foeLeft: number; dmg: number; relics: number; gold: number; creep: boolean } | null = null;
   // ---- augments (TFT-style run-defining picks) ----
   augments: Augment[] = [];
   augmentOffer: Augment[] = [];
+  // ---- the commander leading this warband ----
+  commander: WarbandCommander | null = null;
+  commanderOffer: WarbandCommander[] = [];
+  private freeRerolls = 0; // reset each round by the commander's perk
   // ---- the round's PvE camp, when this is a monster round ----
   pendingCamp: CreepCamp | null = null;
   /** Set whenever pieces merge into a star-up, for the screen's celebration. */
@@ -134,7 +139,13 @@ export class WarbandRun {
   private foeBrains: FoeBrain[] = []; // each opponent's hidden economy
   private pool: Record<string, number> = {}; // shared lobby unit pool (you + foes draw from it)
 
-  constructor(seed = (Math.random() * 1e9) | 0) {
+  /**
+   * `commander` picks how the run opens:
+   *   omitted   → the run starts in the "commander" phase and you choose one
+   *   an id     → that commander leads, no pick
+   *   null      → no commander at all (used by tests that want bare rules)
+   */
+  constructor(seed = (Math.random() * 1e9) | 0, commander?: string | null) {
     this.rng = new RNG(seed);
     for (const [type, tier] of Object.entries(UNIT_TIER)) if (UNITS[type]) this.pool[type] = POOL_SIZE[tier] ?? 12;
     this.opponents = NAMES.map((name, id) => ({ id, name, life: 100, alive: true }));
@@ -144,13 +155,41 @@ export class WarbandRun {
       const rng = this.rng.fork(o.id + 1);
       return { gold: 2, level: 1, xp: 0, pieces: [], rng, favored: pickFavored(rng) };
     });
+    if (commander !== undefined && commander !== null) this.applyCommander(warbandCommander(commander) ?? null);
     this.startRound();
+    // With no commander named, the run opens on the choice.
+    if (commander === undefined) {
+      this.commanderOffer = offerCommanders(this.rng);
+      this.phase = "commander";
+    }
+  }
+
+  /** Take a commander for the run, applying its one-off effects. */
+  private applyCommander(c: WarbandCommander | null) {
+    this.commander = c;
+    if (!c) return;
+    if (c.startGold) this.gold += c.startGold;
+    this.freeRerolls = c.freeRerolls ?? 0;
+    this.reconcile(); // an extra board slot takes effect at once
+  }
+
+  /** Choose one of the offered commanders and begin the run properly. */
+  pickCommander(index: number): boolean {
+    if (this.phase !== "commander") return false;
+    const c = this.commanderOffer[index];
+    if (!c) return false;
+    this.applyCommander(c);
+    this.commanderOffer = [];
+    this.phase = "shop";
+    return true;
   }
 
   // ---- economy / shop -------------------------------------------------------
   // You field exactly your level — levelling up is what unlocks another board
   // slot, so teching is a real tradeoff against buying/rerolling.
-  private boardCap(): number { return this.level + this.augSum((a) => a.boardSlots); }
+  private boardCap(): number {
+    return this.level + this.augSum((a) => a.boardSlots) + (this.commander?.boardSlots ?? 0);
+  }
 
   /** How many pieces deploy this round (for the screen's "deploying top N"). */
   deployCount(): number { return this.boardCap(); }
@@ -162,17 +201,25 @@ export class WarbandRun {
     for (const a of this.augments) n += pick(a) ?? 0;
     return n;
   }
-  /** What a reroll costs (augments can discount it). */
+  /** What a reroll costs right now — free while the commander's rerolls last. */
   rerollCost(): number {
+    if (this.freeRerolls > 0) return 0;
     let c = REROLL_COST;
     for (const a of this.augments) if (a.rerollCost != null) c = Math.min(c, a.rerollCost);
     return c;
   }
-  /** The interest cap — 5 gold unless an augment raises it. */
+  /** Free rerolls left this round (for the shop button's label). */
+  freeRerollsLeft(): number { return this.freeRerolls; }
+  /** The interest cap — 5 gold unless an augment or commander raises it. */
   private interestCap(): number {
     let cap = 5;
     for (const a of this.augments) if (a.interestCap != null) cap = Math.max(cap, a.interestCap);
+    if (this.commander?.interestCap != null) cap = Math.max(cap, this.commander.interestCap);
     return cap;
+  }
+  /** The level the shop rolls at — a commander can read one level higher. */
+  private shopLevel(): number {
+    return Math.min(MAX_LEVEL, this.level + (this.commander?.shopLevelBonus ?? 0));
   }
   /** How often a relic is earned (every N rounds; augments speed this up). */
   private relicEvery(): number {
@@ -181,7 +228,7 @@ export class WarbandRun {
     return n;
   }
   /** This round's shop tier odds (%), for the level-up tooltip. */
-  shopOdds(): number[] { return TIER_ODDS[Math.min(this.level, MAX_LEVEL) - 1]; }
+  shopOdds(): number[] { return TIER_ODDS[this.shopLevel() - 1]; }
   /** XP progress toward the next level, for the header bar. */
   xpProgress(): { xp: number; need: number; max: boolean } {
     if (this.level >= MAX_LEVEL) return { xp: 0, need: 0, max: true };
@@ -197,7 +244,7 @@ export class WarbandRun {
   }
 
   private rollShop() {
-    const odds = TIER_ODDS[Math.min(this.level, MAX_LEVEL) - 1];
+    const odds = TIER_ODDS[this.shopLevel() - 1];
     this.shop = [];
     for (let i = 0; i < SHOP_SIZE; i++) this.shop.push(this.rollFromPool(odds, this.rng));
   }
@@ -226,7 +273,7 @@ export class WarbandRun {
   reroll(): boolean {
     const cost = this.rerollCost();
     if (this.phase !== "shop" || this.gold < cost) return false;
-    this.gold -= cost;
+    if (this.freeRerolls > 0) this.freeRerolls--; else this.gold -= cost;
     this.rollShop();
     return true;
   }
@@ -261,7 +308,10 @@ export class WarbandRun {
   sell(index: number): boolean {
     if (this.phase !== "shop" || index < 0 || index >= this.pieces.length) return false;
     const p = this.pieces[index];
-    this.gold += this.cost(p.type) * p.star;
+    // Normally a flat star price; the Quartermaster refunds every copy sunk in.
+    this.gold += this.commander?.fullRefund
+      ? this.cost(p.type) * Math.pow(3, p.star - 1)
+      : this.cost(p.type) * p.star;
     this.refundToPool(p.type, p.star); // its copies return to the shared pool
     this.pieces.splice(index, 1);
     this.reconcile(); // selling a board unit pulls up a reserve
@@ -406,7 +456,8 @@ export class WarbandRun {
     // plus whatever the run's augments add.
     const interest = Math.min(this.interestCap(), Math.floor(this.gold / 10));
     const streakBonus = Math.min(3, Math.abs(this.streak) >= 2 ? Math.floor(Math.abs(this.streak) / 2) + 1 : 0);
-    this.gold += 5 + interest + streakBonus + this.augSum((a) => a.gold);
+    this.gold += 5 + interest + streakBonus + this.augSum((a) => a.gold) + (this.commander?.gold ?? 0);
+    this.freeRerolls = this.commander?.freeRerolls ?? 0; // the perk refreshes every round
     // Augment-granted free XP (a levelling engine).
     const freeXp = this.augSum((a) => a.xp);
     if (freeXp > 0) {
@@ -470,7 +521,37 @@ export class WarbandRun {
 
   /** Warband-wide augment modifiers, for the battle resolver. */
   sideOpts(): SideOpts {
-    return { buff: combinedBuff(this.augments), traitBonus: combinedTraitBonus(this.augments) };
+    return { buff: this.warbandBuff(), traitBonus: this.traitBonusMap() };
+  }
+
+  /** Every run-wide buff (augments + commander) merged into one. */
+  private warbandBuff(): Buff | undefined {
+    const aug = combinedBuff(this.augments);
+    const cmd = this.commander?.buff;
+    if (!aug) return cmd;
+    if (!cmd) return aug;
+    const out: Buff = { ...aug };
+    for (const k of ["armor", "atk", "atkPct", "hp", "hpPct", "speedPct"] as const) {
+      if (cmd[k]) out[k] = (out[k] ?? 0) + cmd[k]!;
+    }
+    return out;
+  }
+
+  /**
+   * Synergy count bonuses: augment banners, plus the Banneret's perk, which
+   * finds whichever synergy is currently largest and lifts that one. Resolved
+   * live, so it follows your comp as it changes.
+   */
+  private traitBonusMap(): Record<string, number> | undefined {
+    const base = combinedTraitBonus(this.augments) ?? {};
+    const top = this.commander?.topTraitBonus ?? 0;
+    if (!top) return Object.keys(base).length ? base : undefined;
+    const out = { ...base };
+    const types = [...new Set(this.boardUnits().map((u) => u.type))];
+    let best: ActiveTrait | null = null;
+    for (const at of activeTraits(types, base)) if (!best || at.count > best.count) best = at;
+    if (best) out[best.trait.id] = (out[best.trait.id] ?? 0) + top;
+    return Object.keys(out).length ? out : undefined;
   }
 
   /**
@@ -590,7 +671,9 @@ export class WarbandRun {
     const foe = this.pendingFoe;
     if (!foe) { this.outcome = "win"; this.phase = "over"; return; }
     const won = res.winner === "A";
-    const dmg = won ? 0 : 3 + res.powerB * 2; // lose → take damage scaled by enemy survivors
+    // Lose → damage scales with enemy survivors; a commander can blunt it.
+    const raw = 3 + res.powerB * 2;
+    const dmg = won ? 0 : Math.max(1, raw - (this.commander?.lossShield ?? 0));
     if (won) {
       foe.life -= 3 + res.powerA * 2;
       if (foe.life <= 0) { foe.life = 0; foe.alive = false; }
@@ -634,7 +717,7 @@ export class WarbandRun {
 
   /** Active synergies on your currently-deployed warband (for the screen). */
   activeTraits(): ActiveTrait[] {
-    return activeTraits([...new Set(this.boardUnits().map((u) => u.type))], combinedTraitBonus(this.augments));
+    return activeTraits([...new Set(this.boardUnits().map((u) => u.type))], this.traitBonusMap());
   }
 
   /**

@@ -74,8 +74,14 @@ standing wins.
 - **Synergies** — deploying enough *distinct* types of a trait (Footmen, Marksmen,
   Riders, War Engines, Pikes, Elite) activates escalating buffs. Traits overlap,
   so drafting is a puzzle.
-- **Relics** — earned every few rounds; stack up to three on one unit to build a
-  carry.
+- **Commanders** — the run opens by choosing which of the realm's captains leads
+  your warband. The same roster you take into skirmish, but their warband perk
+  changes a *rule* rather than a stat: free rerolls, shop odds read a level
+  high, full-value sales, an extra board slot from round one, a synergy that
+  always counts higher, or defeats that cost less life.
+- **Relics** — loot drops as one of five *components*, each useful alone. Put two
+  on the same unit and they fuse into a full relic; all 15 pairs make something
+  distinct, and a unit holds three. Building a carry is a plan, not a handout.
 - **Augments** — three times a run (rounds 2, 5 and 9) the run pauses and offers
   three of them, escalating silver → gold → prismatic. They bend the whole run:
   economy engines, warband-wide stat spikes, extra board slots, or a banner that
@@ -119,4 +125,5 @@ renderer.
   post-match screens, and the Warband Tactics screen.
 - Warband Tactics lives in `src/sim/warband.ts` (run engine), `autobattle.ts`
   (headless + watchable battle resolution), `traits.ts`, `items.ts`,
-  `augments.ts`, `creeps.ts`, drawn by `src/ui/warband_screen.ts`.
+  `augments.ts`, `creeps.ts`, `warband_commanders.ts`, drawn by
+  `src/ui/warband_screen.ts`.

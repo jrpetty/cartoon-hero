@@ -19,6 +19,7 @@ import { traitsOf, Buff } from "../sim/traits";
 import { Item, applyItems, itemDef, isComponent, buildsInto } from "../sim/items";
 import { ABILITIES } from "../content/abilities";
 import { Augment, TIER_COLOR as AUG_COLOR } from "../sim/augments";
+import { WarbandCommander, commanderIdentity } from "../sim/warband_commanders";
 
 const TIER_COLOR = ["#888888", "#9aa8b4", "#4caf50", "#3a78d8", "#9b5cf0", "#e0a020"];
 const STAR_MULT = [1, 1, 1.8, 3.2]; // hp/attack multiplier by star (matches the battle sim)
@@ -48,6 +49,7 @@ export class WarbandScreen {
   private unitTip: { p: Piece; x: number; y: number } | null = null;
   private liveTip: { e: Entity; x: number; y: number } | null = null; // hovered unit mid-fight
   private augTip: { a: Augment; x: number; y: number } | null = null; // hovered owned augment
+  private cmdTip: { c: WarbandCommander; x: number; y: number } | null = null; // hovered commander plate
   private scoutId = -1;   // opponent whose warband is being scouted, or -1
   private scoutRect = { x: 0, y: 0, w: 0, h: 0 }; // last frame's panel, to block clicks through it
   private augPick = -1;   // augment card under the cursor on the picker
@@ -112,8 +114,8 @@ export class WarbandScreen {
     }
     stat("LIFE", String(run.life), 540, run.life <= 25 ? "#e0564a" : "#7df2a9");
     stat("STREAK", (run.streak > 0 ? "+" : "") + run.streak, 628, run.streak > 0 ? "#7df2a9" : run.streak < 0 ? "#e0a878" : "#9a917b");
-    // While the augment modal is up nothing behind it may be clicked.
-    const picking = run.phase === "augment";
+    // While a modal pick is up nothing behind it may be clicked.
+    const picking = run.phase === "augment" || run.phase === "commander";
     if (!picking && ui.button("Quit Run", W - 120, 12, 100, 32, { danger: true, size: 13 })) action = "exit";
 
     // ---- standings sidebar ----
@@ -139,6 +141,26 @@ export class WarbandScreen {
       ui.text(String(Math.max(0, s.life)), sx + 152, sy + 17, { align: "center", size: 9, bold: true, color: "rgba(6,10,6,0.85)" });
       if (hov && !picking && ui.clicked && !ui.pointerConsumed) { ui.pointerConsumed = true; this.scoutId = open ? -1 : s.id; audio.play("ui"); }
       sy += h + 3;
+    }
+
+    // ---- the commander leading this run ----
+    this.cmdTip = null;
+    if (run.commander) {
+      const id = commanderIdentity(run.commander);
+      const col = id?.color ?? "#caa56a";
+      sy += 12;
+      const ch = 40;
+      const cg = ctx.createLinearGradient(sx, 0, sx + 200, 0);
+      cg.addColorStop(0, withAlpha(col, 0.26)); cg.addColorStop(1, "rgba(12,9,5,0.6)");
+      ctx.fillStyle = cg; this.roundRect(ctx, sx, sy, 200, ch, 6); ctx.fill();
+      ctx.strokeStyle = withAlpha(col, 0.6); ctx.lineWidth = 1;
+      this.roundRect(ctx, sx + 0.5, sy + 0.5, 199, ch - 1, 6); ctx.stroke();
+      this.crest(ctx, sx + 22, sy + ch / 2, 14, run.commander, time);
+      ui.text(id?.name ?? run.commander.id, sx + 44, sy + 18, { size: 13, bold: true, color: "#f2e8d0", font: "Georgia, serif" });
+      ui.text(this.clip(id?.title ?? "", 22), sx + 44, sy + 32, { size: 10, color: col });
+      const hovC = ui.mx >= sx && ui.mx <= sx + 200 && ui.my >= sy && ui.my <= sy + ch;
+      if (hovC) this.cmdTip = { c: run.commander, x: sx + 208, y: sy - 6 };
+      sy += ch;
     }
 
     // ---- augments you've taken this run ----
@@ -248,7 +270,7 @@ export class WarbandScreen {
       audio.play("complete");
     }
     if (this.fusion) { this.fusion.t += dt; if (this.fusion.t > 1.7) this.fusion = null; }
-    if (run.phase === "augment") this.augT += dt; else this.augT = 0;
+    if (run.phase === "augment" || run.phase === "commander") this.augT += dt; else this.augT = 0;
     // Advance the live fight in real (scaled) time, then bank the result.
     if (run.phase === "battle" && this.battle) {
       if (!this.battle.started) this.battle.begin(); // safety: always marching once fighting
@@ -331,7 +353,11 @@ export class WarbandScreen {
       });
       const rxx = bx + 5 * (120 + 8) + 8;
       const rc = run.rerollCost();
-      if (ui.button(`Reroll  (${rc}g)`, rxx, shopY + 14, 130, 32, { disabled: run.gold < rc, size: 13, tooltip: ["New shop", `Costs ${rc} gold.`] })) { if (run.reroll()) audio.play("ui"); }
+      const freeR = run.freeRerollsLeft();
+      if (ui.button(freeR > 0 ? `Reroll  (FREE ×${freeR})` : `Reroll  (${rc}g)`, rxx, shopY + 14, 130, 32, {
+        disabled: run.gold < rc, size: 13, accent: freeR > 0,
+        tooltip: ["New shop", freeR > 0 ? "Your commander covers this one." : `Costs ${rc} gold.`],
+      })) { if (run.reroll()) audio.play("ui"); }
       // Level-up shows the shop odds it would unlock — the real reason to tech.
       const odds = run.shopOdds();
       if (ui.button(`Level Up  (4g)`, rxx, shopY + 52, 130, 32, {
@@ -401,11 +427,16 @@ export class WarbandScreen {
     this.drawStarUp(boardX, boardY, boardW, boardH);
     this.drawFusion(boardX, boardY, boardW, boardH);
     if (this.scoutId >= 0 && run.phase !== "over") this.drawScoutPanel(W, H, run, time);
-    if (picking) { this.unitTip = null; this.itemTip = null; this.augTip = null; this.drawAugmentPicker(W, H, run, time); }
+    if (picking) {
+      this.unitTip = null; this.itemTip = null; this.augTip = null; this.cmdTip = null;
+      if (run.phase === "commander") this.drawCommanderPicker(W, H, run, time);
+      else this.drawAugmentPicker(W, H, run, time);
+    }
     this.drawItemTip(W, H);
     this.drawUnitTip(W, H);
     this.drawLiveTip(W, H);
     this.drawAugTip(W, H);
+    this.drawCmdTip(W, H);
     this.wasDown = down;
 
     return action;
@@ -624,6 +655,179 @@ export class WarbandScreen {
     });
     // Swallow any other click while the modal is up.
     if (ui.clicked) ui.pointerConsumed = true;
+  }
+
+  /**
+   * A commander's heraldic crest: a shield bearing a charge picked from what
+   * their perk actually does, over their own colour.
+   */
+  private crest(ctx: CanvasRenderingContext2D, cx: number, cy: number, r: number, c: WarbandCommander, time: number) {
+    const id = commanderIdentity(c);
+    const col = id?.color ?? "#caa56a";
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.lineJoin = "round"; ctx.lineCap = "round";
+    // Shield.
+    const h = r;
+    const g = ctx.createLinearGradient(0, -h, 0, h);
+    g.addColorStop(0, withAlpha(col, 0.95)); g.addColorStop(1, withAlpha(col, 0.45));
+    ctx.fillStyle = g; ctx.strokeStyle = "rgba(0,0,0,0.55)"; ctx.lineWidth = Math.max(1.4, r * 0.09);
+    ctx.beginPath();
+    ctx.moveTo(-h * 0.78, -h * 0.85); ctx.lineTo(h * 0.78, -h * 0.85); ctx.lineTo(h * 0.78, h * 0.15);
+    ctx.quadraticCurveTo(h * 0.78, h * 0.9, 0, h);
+    ctx.quadraticCurveTo(-h * 0.78, h * 0.9, -h * 0.78, h * 0.15);
+    ctx.closePath(); ctx.fill(); ctx.stroke();
+    // Charge — the perk, as a symbol.
+    ctx.fillStyle = "rgba(16,11,6,0.86)"; ctx.strokeStyle = "rgba(16,11,6,0.86)";
+    ctx.lineWidth = Math.max(1.4, r * 0.13);
+    const s = h * 0.46;
+    if (c.freeRerolls) { // cycling arrows
+      ctx.beginPath(); ctx.arc(0, 0, s, 0.6, Math.PI * 1.6); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(-s * 0.1, -s * 1.15); ctx.lineTo(s * 0.45, -s * 0.75); ctx.lineTo(-s * 0.25, -s * 0.4); ctx.closePath(); ctx.fill();
+    } else if (c.fullRefund || c.gold || c.startGold) { // coin
+      ctx.beginPath(); ctx.arc(0, 0, s * 0.9, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = withAlpha(col, 0.95);
+      ctx.beginPath(); ctx.arc(0, 0, s * 0.42, 0, Math.PI * 2); ctx.fill();
+    } else if (c.boardSlots) { // a rank of cells, one new
+      const cw = s * 0.62;
+      for (let i = 0; i < 3; i++) {
+        ctx.beginPath(); ctx.rect(-cw * 1.6 + i * cw * 1.15, -cw / 2, cw, cw);
+        if (i === 2) ctx.fill(); else ctx.stroke();
+      }
+    } else if (c.shopLevelBonus) { // upward chevrons
+      for (let i = 0; i < 2; i++) {
+        const yy = s * 0.5 - i * s * 0.75;
+        ctx.beginPath(); ctx.moveTo(-s * 0.8, yy); ctx.lineTo(0, yy - s * 0.6); ctx.lineTo(s * 0.8, yy); ctx.stroke();
+      }
+    } else if (c.topTraitBonus) { // a banner
+      ctx.beginPath(); ctx.moveTo(-s * 0.5, -s); ctx.lineTo(-s * 0.5, s); ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(-s * 0.5, -s * 0.9); ctx.lineTo(s * 0.85, -s * 0.9); ctx.lineTo(s * 0.5, -s * 0.35);
+      ctx.lineTo(s * 0.85, s * 0.2); ctx.lineTo(-s * 0.5, s * 0.2); ctx.closePath(); ctx.fill();
+    } else if (c.lossShield) { // a cross
+      ctx.beginPath();
+      ctx.moveTo(0, -s); ctx.lineTo(0, s); ctx.moveTo(-s * 0.7, -s * 0.25); ctx.lineTo(s * 0.7, -s * 0.25);
+      ctx.stroke();
+    } else { // crossed swords — the drilled warband
+      for (const dir of [-1, 1]) {
+        ctx.beginPath(); ctx.moveTo(dir * -s * 0.8, s * 0.8); ctx.lineTo(dir * s * 0.8, -s * 0.9); ctx.stroke();
+      }
+    }
+    ctx.restore();
+    // A slow sheen across the shield.
+    const sheen = 0.5 + 0.5 * Math.sin(time * 1.6 + cx * 0.05);
+    ctx.save();
+    ctx.globalAlpha = 0.1 + sheen * 0.12;
+    ctx.fillStyle = "#fff";
+    ctx.beginPath(); ctx.ellipse(cx - r * 0.3, cy - r * 0.45, r * 0.28, r * 0.5, -0.5, 0, Math.PI * 2); ctx.fill();
+    ctx.restore();
+  }
+
+  /**
+   * The opening choice of the run: which commander leads your warband. Same
+   * card language as the augment pick, but heraldic — these are the realm's
+   * captains, and the perk is a rule of the run rather than a stat.
+   */
+  private drawCommanderPicker(W: number, H: number, run: WarbandRun, time: number) {
+    const ctx = ui.ctx;
+    const offer = run.commanderOffer;
+    if (!offer.length) return;
+
+    ctx.fillStyle = "rgba(5,4,2,0.86)"; ctx.fillRect(0, 0, W, H);
+    const glow = ctx.createRadialGradient(W / 2, H / 2, 40, W / 2, H / 2, Math.max(W, H) * 0.55);
+    glow.addColorStop(0, withAlpha("#caa56a", 0.15)); glow.addColorStop(1, "rgba(0,0,0,0)");
+    ctx.fillStyle = glow; ctx.fillRect(0, 0, W, H);
+
+    const gap = 24;
+    const cardW = Math.min(266, (W - 100 - gap * 2) / 3);
+    const cardH = Math.min(348, H * 0.56);
+    const totalW = cardW * offer.length + gap * (offer.length - 1);
+    const x0 = (W - totalW) / 2;
+    const cy = H / 2 - cardH / 2 + 22;
+
+    ctx.globalAlpha = Math.min(1, this.augT * 3);
+    ui.text("WHO LEADS YOUR WARBAND?", W / 2, cy - 60, { align: "center", size: 30, bold: true, color: "#f2e8d0", font: "Georgia, serif" });
+    ui.text("Their command changes a rule of the whole run.", W / 2, cy - 36, { align: "center", size: 13, bold: true, color: "#caa56a" });
+    ctx.globalAlpha = 1;
+
+    offer.forEach((c, i) => {
+      const t = Math.max(0, Math.min(1, (this.augT - i * 0.11) * 3.2));
+      const ease = 1 - Math.pow(1 - t, 3);
+      if (t <= 0) return;
+      const id = commanderIdentity(c);
+      const col = id?.color ?? "#caa56a";
+      const x = x0 + i * (cardW + gap);
+      const hov = ui.mx >= x && ui.mx <= x + cardW && ui.my >= cy && ui.my <= cy + cardH && t >= 1;
+      const y = cy + (hov ? -8 : 0) + (1 - ease) * 46;
+
+      ctx.save();
+      ctx.globalAlpha = ease;
+      ctx.save();
+      ctx.shadowColor = hov ? withAlpha(col, 0.75) : "rgba(0,0,0,0.65)";
+      ctx.shadowBlur = hov ? 30 : 16; ctx.shadowOffsetY = 6;
+      const g = ctx.createLinearGradient(0, y, 0, y + cardH);
+      g.addColorStop(0, withAlpha(col, hov ? 0.38 : 0.22));
+      g.addColorStop(0.45, "rgba(24,18,11,0.98)");
+      g.addColorStop(1, "rgba(12,9,5,0.99)");
+      ctx.fillStyle = g; this.roundRect(ctx, x, y, cardW, cardH, 13); ctx.fill();
+      ctx.restore();
+      ctx.strokeStyle = withAlpha(col, hov ? 1 : 0.7); ctx.lineWidth = hov ? 2.6 : 1.6;
+      this.roundRect(ctx, x + 1.5, y + 1.5, cardW - 3, cardH - 3, 12); ctx.stroke();
+
+      this.crest(ctx, x + cardW / 2, y + 74, 40, c, time);
+
+      ui.text(id?.name ?? c.id, x + cardW / 2, y + 148, { align: "center", size: 20, bold: true, color: "#f7efdc", font: "Georgia, serif" });
+      ui.text(id?.title ?? "", x + cardW / 2, y + 168, { align: "center", size: 12, bold: true, color: col });
+      ctx.strokeStyle = withAlpha(col, 0.35); ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(x + 34, y + 182); ctx.lineTo(x + cardW - 34, y + 182); ctx.stroke();
+      let ly = y + 206;
+      for (const ln of this.wrap(c.perk, 30)) {
+        ui.text(ln, x + cardW / 2, ly, { align: "center", size: 12.5, color: "#d8cdb4" });
+        ly += 18;
+      }
+
+      const bw = cardW - 44, bh = 38, byy = y + cardH - bh - 18;
+      const bhov = ui.mx >= x + 22 && ui.mx <= x + 22 + bw && ui.my >= byy && ui.my <= byy + bh && t >= 1;
+      ctx.fillStyle = bhov ? withAlpha(col, 0.85) : withAlpha(col, 0.24);
+      this.roundRect(ctx, x + 22, byy, bw, bh, 8); ctx.fill();
+      ctx.strokeStyle = withAlpha(col, 0.95); ctx.lineWidth = 1.5;
+      this.roundRect(ctx, x + 22.75, byy + 0.75, bw - 1.5, bh - 1.5, 8); ctx.stroke();
+      ui.text("LEAD", x + cardW / 2, byy + 25, { align: "center", size: 15, bold: true, color: bhov ? "#1a1207" : col });
+      ctx.restore();
+
+      if ((hov || bhov) && ui.clicked && !ui.pointerConsumed) {
+        ui.pointerConsumed = true;
+        if (run.pickCommander(i)) { audio.play("levelup"); this.battleSig = ""; }
+      }
+    });
+    if (ui.clicked) ui.pointerConsumed = true;
+  }
+
+  /** Tooltip for the run's commander plate — who they are and what they change. */
+  private drawCmdTip(W: number, H: number) {
+    if (!this.cmdTip) return;
+    const ctx = ui.ctx;
+    const c = this.cmdTip.c;
+    const id = commanderIdentity(c);
+    const col = id?.color ?? "#caa56a";
+    const lines = this.wrap(c.perk, 34);
+    const pw = 236, ph = 62 + lines.length * 16 + 10;
+    let px = this.cmdTip.x, py = this.cmdTip.y;
+    if (px + pw > W - 4) px = Math.max(4, this.cmdTip.x - pw - 216);
+    py = Math.max(4, Math.min(py, H - ph - 4));
+    ctx.save();
+    ctx.shadowColor = "rgba(0,0,0,0.6)"; ctx.shadowBlur = 14; ctx.shadowOffsetY = 4;
+    ctx.fillStyle = "rgba(18,14,9,0.98)"; this.roundRect(ctx, px, py, pw, ph, 9); ctx.fill();
+    ctx.restore();
+    ctx.strokeStyle = withAlpha(col, 0.95); ctx.lineWidth = 1.5;
+    this.roundRect(ctx, px + 0.75, py + 0.75, pw - 1.5, ph - 1.5, 9); ctx.stroke();
+    this.crest(ctx, px + 26, py + 30, 18, c, 0);
+    ui.text(id?.name ?? c.id, px + 52, py + 24, { size: 15, bold: true, color: "#f2e8d0", font: "Georgia, serif" });
+    ui.text(id?.title ?? "", px + 52, py + 40, { size: 10.5, color: col });
+    ctx.strokeStyle = "rgba(255,255,255,0.09)"; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(px + 12, py + 52); ctx.lineTo(px + pw - 12, py + 52); ctx.stroke();
+    let ly = py + 70;
+    for (const ln of lines) { ui.text(ln, px + 14, ly, { size: 11.5, color: "#d8cdb4" }); ly += 16; }
   }
 
   /** Tooltip for an owned augment in the sidebar. */
