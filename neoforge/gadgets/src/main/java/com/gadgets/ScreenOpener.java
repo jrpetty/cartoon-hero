@@ -17,6 +17,7 @@ public final class ScreenOpener {
     public static Consumer<BlockEntity> MONITOR = be -> {};
     public static Consumer<BlockEntity> HUB_MONITOR = be -> {};
     public static Consumer<BlockEntity> GRAND = be -> {};
+    public static Consumer<BlockEntity> GAUGE = be -> {};
 
     private ScreenOpener() {
     }

@@ -104,7 +104,7 @@ public class GrandDisplayRenderer implements BlockEntityRenderer<GrandDisplayBlo
             float y = top + row * rowH;
             boolean alarmed = n.alarmed();
             String name = n.label.isBlank()
-                    ? (n.type == CommandHubBlockEntity.TYPE_COUNTER ? "counter" : "stock")
+                    ? CommandHubBlockEntity.kindOf(n.type)
                     : n.label;
             String value = reading(n);
 
@@ -157,6 +157,9 @@ public class GrandDisplayRenderer implements BlockEntityRenderer<GrandDisplayBlo
         }
         if (n.type == CommandHubBlockEntity.TYPE_COUNTER) {
             return n.alarmed() ? "STALLED" : ItemCounterBlockEntity.compact(n.a) + "/m";
+        }
+        if (n.type != CommandHubBlockEntity.TYPE_MONITOR) {
+            return n.alarmed() ? n.d + "% LOW" : n.d + "%";
         }
         return n.alarmed()
                 ? ItemCounterBlockEntity.compact(n.a) + " LOW"

@@ -41,6 +41,18 @@ public class CommandHubBlockEntity extends BlockEntity {
 
     public static final int TYPE_COUNTER = 0;
     public static final int TYPE_MONITOR = 1;
+    public static final int TYPE_FLUID = 2;
+    public static final int TYPE_ENERGY = 3;
+
+    /** Short word for a node's kind, used on every board and screen. */
+    public static String kindOf(int type) {
+        return switch (type) {
+            case TYPE_MONITOR -> "stock";
+            case TYPE_FLUID -> "fluid";
+            case TYPE_ENERGY -> "energy";
+            default -> "counter";
+        };
+    }
 
     /** One linked gadget and its latest snapshot (also the sync format). */
     public static class Node {
@@ -49,10 +61,10 @@ public class CommandHubBlockEntity extends BlockEntity {
         public long pos = 0L;
         public boolean online = false;
         public String label = "";
-        public long a = 0; // counter: rate/min   · monitor: stock count
-        public long b = 0; // counter: rate/hour  · monitor: alert threshold
-        public long c = 0; // counter: total      · monitor: low flag (1/0)
-        public long d = 0; // counter: stalled (1/0) · monitor: distinct item types
+        public long a = 0; // counter: rate/min   · monitor: stock  · gauge: stored
+        public long b = 0; // counter: rate/hour  · monitor: alert  · gauge: capacity
+        public long c = 0; // counter: total      · low flag (1/0) for everything else
+        public long d = 0; // counter: stalled    · monitor: types  · gauge: percent
         /** Alarm state at the last check, so the log only records the edges. */
         public boolean wasAlarmed = false;
 
@@ -113,12 +125,15 @@ public class CommandHubBlockEntity extends BlockEntity {
             return new Event(t.getLong("T"), t.getInt("Y"), t.getBoolean("R"), t.getString("L"));
         }
 
-        /** "stalled" / "recovered" / "low" / "restocked". */
+        /** "stalled" / "recovered" / "ran low" / "refilled". */
         public String what() {
             if (type == TYPE_COUNTER) {
                 return raised ? "stalled" : "recovered";
             }
-            return raised ? "ran low" : "restocked";
+            if (type == TYPE_MONITOR) {
+                return raised ? "ran low" : "restocked";
+            }
+            return raised ? "ran low" : "refilled";
         }
 
         /** "Day 42 · 14:32" from a level's total day time. */
@@ -161,9 +176,7 @@ public class CommandHubBlockEntity extends BlockEntity {
      * failure.
      */
     private void logEdge(Level level, Node n, boolean raised) {
-        String name = n.label.isBlank()
-                ? (n.type == TYPE_COUNTER ? "a counter" : "a stock monitor")
-                : n.label;
+        String name = n.label.isBlank() ? "a " + kindOf(n.type) + " gadget" : n.label;
         events.add(0, new Event(level.getDayTime(), n.type, raised, name));
         while (events.size() > MAX_EVENTS) {
             events.remove(events.size() - 1);
@@ -226,7 +239,8 @@ public class CommandHubBlockEntity extends BlockEntity {
                 return false; // unloaded is "offline", never "deleted"
             }
             BlockEntity there = w.getBlockEntity(p);
-            return !(there instanceof ItemCounterBlockEntity || there instanceof StockMonitorBlockEntity);
+            return !(there instanceof ItemCounterBlockEntity || there instanceof StockMonitorBlockEntity
+                    || there instanceof HubGauge);
         });
     }
 
@@ -338,6 +352,14 @@ public class CommandHubBlockEntity extends BlockEntity {
             n.b = monitor.getThreshold();
             n.c = monitor.isLow() ? 1 : 0;
             n.d = monitor.getDistinctTypes();
+        } else if (w.getBlockEntity(p) instanceof HubGauge gauge) {
+            n.online = true;
+            n.type = gauge.gaugeType();
+            n.label = gauge.displayName();
+            n.a = gauge.gaugeStored();
+            n.b = gauge.gaugeCapacity();
+            n.c = gauge.isLow() ? 1 : 0;
+            n.d = gauge.percent();
         }
     }
 

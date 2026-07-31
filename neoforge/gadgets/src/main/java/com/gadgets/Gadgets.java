@@ -113,6 +113,12 @@ public class Gadgets {
     public static final DeferredBlock<Block> COMMAND_HUB_MONITOR = BLOCKS.register("command_hub_monitor",
             () -> new CommandHubMonitorBlock(BlockBehaviour.Properties.of()
                     .strength(1.5F).requiresCorrectToolForDrops().sound(SoundType.METAL).noOcclusion()));
+    public static final DeferredBlock<Block> FLUID_MONITOR = BLOCKS.register("fluid_monitor",
+            () -> new FluidMonitorBlock(BlockBehaviour.Properties.of()
+                    .strength(1.5F).requiresCorrectToolForDrops().sound(SoundType.METAL).noOcclusion()));
+    public static final DeferredBlock<Block> ENERGY_MONITOR = BLOCKS.register("energy_monitor",
+            () -> new EnergyMonitorBlock(BlockBehaviour.Properties.of()
+                    .strength(1.5F).requiresCorrectToolForDrops().sound(SoundType.METAL).noOcclusion()));
     public static final DeferredBlock<Block> GRAND_DISPLAY = BLOCKS.register("grand_display",
             () -> new GrandDisplayBlock(BlockBehaviour.Properties.of()
                     .strength(1.5F).requiresCorrectToolForDrops().sound(SoundType.METAL).noOcclusion()));
@@ -138,6 +144,12 @@ public class Gadgets {
     public static final DeferredItem<?> COMMAND_HUB_ITEM = ITEMS.register("command_hub", () -> new TooltipBlockItem(COMMAND_HUB.get(), new Item.Properties(),
             "tip.gadgets.command_hub.1", "tip.gadgets.command_hub.2", "tip.gadgets.command_hub.3",
             "tip.gadgets.command_hub.4"));
+    public static final DeferredItem<?> FLUID_MONITOR_ITEM = ITEMS.register("fluid_monitor",
+            () -> new TooltipBlockItem(FLUID_MONITOR.get(), new Item.Properties(),
+                    "tip.gadgets.fluid_monitor.1", "tip.gadgets.fluid_monitor.2", "tip.gadgets.fluid_monitor.3"));
+    public static final DeferredItem<?> ENERGY_MONITOR_ITEM = ITEMS.register("energy_monitor",
+            () -> new TooltipBlockItem(ENERGY_MONITOR.get(), new Item.Properties(),
+                    "tip.gadgets.energy_monitor.1", "tip.gadgets.energy_monitor.2", "tip.gadgets.energy_monitor.3"));
     public static final DeferredItem<?> GRAND_DISPLAY_ITEM = ITEMS.register("grand_display",
             () -> new TooltipBlockItem(GRAND_DISPLAY.get(), new Item.Properties(),
                     "tip.gadgets.grand_display.1", "tip.gadgets.grand_display.2",
@@ -203,6 +215,12 @@ public class Gadgets {
     public static final Supplier<BlockEntityType<CommandHubMonitorBlockEntity>> COMMAND_HUB_MONITOR_BE =
             BLOCK_ENTITIES.register("command_hub_monitor",
                     () -> BlockEntityType.Builder.of(CommandHubMonitorBlockEntity::new, COMMAND_HUB_MONITOR.get()).build(null));
+    public static final Supplier<BlockEntityType<FluidMonitorBlockEntity>> FLUID_MONITOR_BE =
+            BLOCK_ENTITIES.register("fluid_monitor",
+                    () -> BlockEntityType.Builder.of(FluidMonitorBlockEntity::new, FLUID_MONITOR.get()).build(null));
+    public static final Supplier<BlockEntityType<EnergyMonitorBlockEntity>> ENERGY_MONITOR_BE =
+            BLOCK_ENTITIES.register("energy_monitor",
+                    () -> BlockEntityType.Builder.of(EnergyMonitorBlockEntity::new, ENERGY_MONITOR.get()).build(null));
     public static final Supplier<BlockEntityType<GrandDisplayBlockEntity>> GRAND_DISPLAY_BE =
             BLOCK_ENTITIES.register("grand_display",
                     () -> BlockEntityType.Builder.of(GrandDisplayBlockEntity::new, GRAND_DISPLAY.get()).build(null));
@@ -229,6 +247,8 @@ public class Gadgets {
                         output.accept(TRASH_CAN_ITEM.get());
                         output.accept(COMMAND_HUB_ITEM.get());
                         output.accept(COMMAND_HUB_MONITOR_ITEM.get());
+                        output.accept(FLUID_MONITOR_ITEM.get());
+                        output.accept(ENERGY_MONITOR_ITEM.get());
                         output.accept(GRAND_DISPLAY_ITEM.get());
                         output.accept(MONITOR_WAND.get());
                         output.accept(WIRELESS_REMOTE.get());

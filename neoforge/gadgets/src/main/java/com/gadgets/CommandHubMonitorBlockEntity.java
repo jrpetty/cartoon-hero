@@ -263,6 +263,14 @@ public class CommandHubMonitorBlockEntity extends BlockEntity {
             b = counter.getRateHour();
             c = counter.getTotal();
             d = counter.isStalled() ? 1 : 0;
+        } else if (w.getBlockEntity(p) instanceof HubGauge gauge) {
+            type = gauge.gaugeType();
+            online = true;
+            label = gauge.displayName();
+            a = gauge.gaugeStored();
+            b = gauge.gaugeCapacity();
+            c = gauge.isLow() ? 1 : 0;
+            d = gauge.percent();
         } else if (w.getBlockEntity(p) instanceof StockMonitorBlockEntity monitor) {
             type = CommandHubBlockEntity.TYPE_MONITOR;
             online = true;

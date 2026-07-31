@@ -88,6 +88,11 @@ public record GadgetConfigPayload(BlockPos pos, String key, int value, String te
                     counter.resetStats();
                 }
             }
+            case "gauge_threshold" -> {
+                if (be instanceof HubGauge gauge) {
+                    gauge.setThreshold(p.value());
+                }
+            }
             case "monitor_threshold" -> {
                 if (be instanceof StockMonitorBlockEntity monitor) {
                     monitor.setThreshold(p.value());
@@ -113,6 +118,8 @@ public record GadgetConfigPayload(BlockPos pos, String key, int value, String te
                     counter.setCustomName(name);
                 } else if (be instanceof StockMonitorBlockEntity monitor) {
                     monitor.setCustomName(name);
+                } else if (be instanceof HubGauge gauge) {
+                    gauge.setCustomName(name);
                 }
             }
             case "hub_clear" -> {

@@ -50,7 +50,7 @@ public class MonitorWandItem extends Item {
         BlockEntity be = level.getBlockEntity(pos);
         boolean isGadget = be instanceof CommandHubBlockEntity || be instanceof ItemCounterBlockEntity
                 || be instanceof StockMonitorBlockEntity || be instanceof CommandHubMonitorBlockEntity
-                || be instanceof GrandDisplayBlockEntity;
+                || be instanceof GrandDisplayBlockEntity || be instanceof HubGauge;
         if (!isGadget) {
             return false; // not a wand target — let the block behave normally
         }
@@ -91,7 +91,8 @@ public class MonitorWandItem extends Item {
                 say(level, player, pos, Component.literal("Grand Display ▸ linked to hub — right-click it to set the layout")
                         .withStyle(ChatFormatting.GREEN));
             }
-        } else if (be instanceof ItemCounterBlockEntity || be instanceof StockMonitorBlockEntity) {
+        } else if (be instanceof ItemCounterBlockEntity || be instanceof StockMonitorBlockEntity
+                || be instanceof HubGauge) {
             if (player.isShiftKeyDown()) {
                 unlinkFromHub(level, player, stack, dim, pos);
             } else {
@@ -114,8 +115,14 @@ public class MonitorWandItem extends Item {
                     .withStyle(ChatFormatting.RED));
             return;
         }
-        int type = node instanceof ItemCounterBlockEntity
-                ? CommandHubBlockEntity.TYPE_COUNTER : CommandHubBlockEntity.TYPE_MONITOR;
+        int type;
+        if (node instanceof ItemCounterBlockEntity) {
+            type = CommandHubBlockEntity.TYPE_COUNTER;
+        } else if (node instanceof HubGauge gauge) {
+            type = gauge.gaugeType();
+        } else {
+            type = CommandHubBlockEntity.TYPE_MONITOR;
+        }
         if (hub.addNode(type, nodeDim, nodePos)) {
             say(level, player, nodePos, Component.literal("Wand ▸ linked to hub (" + hub.nodeCount() + "/"
                     + CommandHubBlockEntity.MAX_NODES + ")").withStyle(ChatFormatting.GREEN));

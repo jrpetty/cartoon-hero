@@ -66,12 +66,19 @@ public class CommandHubMonitorRenderer implements BlockEntityRenderer<CommandHub
             line(pose, buffers, ItemCounterBlockEntity.compact(be.a()) + "/m", -4.0F, BIG, stalled ? LOW : VALUE);
             line(pose, buffers, stalled ? "STALLED" : ItemCounterBlockEntity.compact(be.b()) + "/h  ·  "
                     + ItemCounterBlockEntity.compact(be.c()) + " tot", 16.0F, SMALL, stalled ? LOW : SUB);
-        } else {
+        } else if (be.sourceType() == CommandHubBlockEntity.TYPE_MONITOR) {
             // Mirrors the Stock Monitor: the count headline, then the alert state.
             boolean low = be.c() != 0;
             line(pose, buffers, trim(be.sourceLabel()), -18.0F, SMALL, NAME);
             line(pose, buffers, ItemCounterBlockEntity.compact(be.a()), -4.0F, BIG, low ? LOW : VALUE);
             line(pose, buffers, low ? "LOW  <" + be.b() : be.d() + " types", 16.0F, SMALL, low ? LOW : OK);
+        } else {
+            // Fluid and energy gauges: fill percentage over the raw amounts.
+            boolean low = be.c() != 0;
+            line(pose, buffers, trim(be.sourceLabel()), -18.0F, SMALL, NAME);
+            line(pose, buffers, be.d() + "%", -4.0F, BIG, low ? LOW : VALUE);
+            line(pose, buffers, ItemCounterBlockEntity.compact(be.a()) + " / "
+                    + ItemCounterBlockEntity.compact(be.b()), 16.0F, SMALL, low ? LOW : OK);
         }
         pose.popPose();
     }

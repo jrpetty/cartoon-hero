@@ -237,8 +237,7 @@ public class HubScreen extends GadgetScreen {
             }
 
             BlockPos p = BlockPos.of(n.pos);
-            boolean counter = n.type == CommandHubBlockEntity.TYPE_COUNTER;
-            String kind = counter ? "counter" : "stock";
+            String kind = CommandHubBlockEntity.kindOf(n.type);
             String name = n.label.isBlank() ? "(unnamed " + kind + ")" : n.label;
             boolean alarmed = n.alarmed();
 
@@ -250,14 +249,20 @@ public class HubScreen extends GadgetScreen {
 
             if (!n.online) {
                 gfx.drawString(font, "offline (unloaded)", left + 150, y, GRAY, false);
-            } else if (counter) {
+            } else if (n.type == CommandHubBlockEntity.TYPE_COUNTER) {
                 gfx.drawString(font, ItemCounterBlockEntity.compact(n.a) + "/m", left + 150, y, alarmed ? RED : AMBER, false);
                 gfx.drawString(font, alarmed ? "STALLED — no items" : ItemCounterBlockEntity.compact(n.b)
                                 + "/h · " + ItemCounterBlockEntity.compact(n.c) + " tot", left + 150, y + 9,
                         alarmed ? RED : GRAY, false);
-            } else {
+            } else if (n.type == CommandHubBlockEntity.TYPE_MONITOR) {
                 gfx.drawString(font, ItemCounterBlockEntity.fmt(n.a), left + 150, y, alarmed ? RED : GREEN, false);
                 gfx.drawString(font, alarmed ? "LOW  < " + n.b : n.d + " types",
+                        left + 150, y + 9, alarmed ? RED : GRAY, false);
+            } else {
+                // Fluid and energy both read as a fill percentage.
+                gfx.drawString(font, n.d + "%", left + 150, y, alarmed ? RED : GREEN, false);
+                gfx.drawString(font, ItemCounterBlockEntity.compact(n.a) + " / "
+                                + ItemCounterBlockEntity.compact(n.b),
                         left + 150, y + 9, alarmed ? RED : GRAY, false);
             }
 

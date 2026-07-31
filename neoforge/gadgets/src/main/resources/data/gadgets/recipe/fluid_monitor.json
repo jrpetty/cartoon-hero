@@ -1,0 +1,12 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "redstone",
+  "group": "gadgets",
+  "pattern": [ "III", "IBI", "IRI" ],
+  "key": {
+    "I": { "item": "minecraft:iron_ingot" },
+    "B": { "item": "minecraft:bucket" },
+    "R": { "item": "minecraft:redstone" }
+  },
+  "result": { "id": "gadgets:fluid_monitor", "count": 1 }
+}

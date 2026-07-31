@@ -87,7 +87,7 @@ public class HubMonitorScreen extends GadgetScreen {
             int y = top + 34 + (i - start) * ROW_H;
             boolean showing = be.isShowing(choice);
             BlockPos p = BlockPos.of(choice.pos());
-            String kind = choice.type() == CommandHubBlockEntity.TYPE_COUNTER ? "counter" : "stock";
+            String kind = CommandHubBlockEntity.kindOf(choice.type());
             String name = choice.label().isBlank() ? "(unnamed " + kind + ")" : choice.label();
 
             String dot = choice.alarmed() ? "● " : "";

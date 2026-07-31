@@ -1,0 +1,8 @@
+{ "variants": {
+  "facing=down":  { "model": "gadgets:block/fluid_monitor", "x": 90 },
+  "facing=up":    { "model": "gadgets:block/fluid_monitor", "x": 270 },
+  "facing=north": { "model": "gadgets:block/fluid_monitor" },
+  "facing=south": { "model": "gadgets:block/fluid_monitor", "y": 180 },
+  "facing=west":  { "model": "gadgets:block/fluid_monitor", "y": 270 },
+  "facing=east":  { "model": "gadgets:block/fluid_monitor", "y": 90 }
+} }
