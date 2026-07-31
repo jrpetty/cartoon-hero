@@ -20,6 +20,7 @@ import { Item, applyItems, itemDef, isComponent, buildsInto } from "../sim/items
 import { ABILITIES } from "../content/abilities";
 import { Augment, TIER_COLOR as AUG_COLOR } from "../sim/augments";
 import { WarbandCommander, commanderIdentity } from "../sim/warband_commanders";
+import { CarouselPick } from "../sim/carousel";
 
 const TIER_COLOR = ["#888888", "#9aa8b4", "#4caf50", "#3a78d8", "#9b5cf0", "#e0a020"];
 const STAR_MULT = [1, 1, 1.8, 3.2]; // hp/attack multiplier by star (matches the battle sim)
@@ -115,7 +116,7 @@ export class WarbandScreen {
     stat("LIFE", String(run.life), 540, run.life <= 25 ? "#e0564a" : "#7df2a9");
     stat("STREAK", (run.streak > 0 ? "+" : "") + run.streak, 628, run.streak > 0 ? "#7df2a9" : run.streak < 0 ? "#e0a878" : "#9a917b");
     // While a modal pick is up nothing behind it may be clicked.
-    const picking = run.phase === "augment" || run.phase === "commander";
+    const picking = run.phase === "augment" || run.phase === "commander" || run.phase === "draft";
     if (!picking && ui.button("Quit Run", W - 120, 12, 100, 32, { danger: true, size: 13 })) action = "exit";
 
     // ---- standings sidebar ----
@@ -250,7 +251,7 @@ export class WarbandScreen {
 
     // Keep a battle world around for the current matchup: during shop it's a
     // static preview (both warbands standing on the board); FIGHT begins it.
-    if (run.phase === "shop" || run.phase === "augment") {
+    if (run.phase === "shop" || run.phase === "augment" || run.phase === "draft") {
       const sig = this.sig(run);
       if (sig !== this.battleSig || !this.battle) {
         this.battle = new LiveBattle(run.boardUnits(), run.pendingOpp, run.pendingSeed, 30, run.sideOpts());
@@ -270,7 +271,7 @@ export class WarbandScreen {
       audio.play("complete");
     }
     if (this.fusion) { this.fusion.t += dt; if (this.fusion.t > 1.7) this.fusion = null; }
-    if (run.phase === "augment" || run.phase === "commander") this.augT += dt; else this.augT = 0;
+    if (picking) this.augT += dt; else this.augT = 0;
     // Advance the live fight in real (scaled) time, then bank the result.
     if (run.phase === "battle" && this.battle) {
       if (!this.battle.started) this.battle.begin(); // safety: always marching once fighting
@@ -430,6 +431,7 @@ export class WarbandScreen {
     if (picking) {
       this.unitTip = null; this.itemTip = null; this.augTip = null; this.cmdTip = null;
       if (run.phase === "commander") this.drawCommanderPicker(W, H, run, time);
+      else if (run.phase === "draft") this.drawDraftPicker(W, H, run, time);
       else this.drawAugmentPicker(W, H, run, time);
     }
     this.drawItemTip(W, H);
@@ -803,6 +805,109 @@ export class WarbandScreen {
     if (ui.clicked) ui.pointerConsumed = true;
   }
 
+  /**
+   * The carousel: the shared draft. Units ride out already carrying a
+   * component, and the warbands below you in the standings have already taken
+   * theirs — so the ring you see is what the field left behind.
+   */
+  private drawDraftPicker(W: number, H: number, run: WarbandRun, time: number) {
+    const ctx = ui.ctx;
+    const ring = run.carousel;
+    if (!ring.length) return;
+
+    ctx.fillStyle = "rgba(5,4,2,0.85)"; ctx.fillRect(0, 0, W, H);
+    const glow = ctx.createRadialGradient(W / 2, H / 2, 40, W / 2, H / 2, Math.max(W, H) * 0.55);
+    glow.addColorStop(0, withAlpha("#7fb0e8", 0.14)); glow.addColorStop(1, "rgba(0,0,0,0)");
+    ctx.fillStyle = glow; ctx.fillRect(0, 0, W, H);
+
+    const gap = 14;
+    const cardW = Math.min(150, (W - 120 - gap * (ring.length - 1)) / ring.length);
+    const cardH = 236;
+    const totalW = cardW * ring.length + gap * (ring.length - 1);
+    const x0 = (W - totalW) / 2;
+    const cy = H / 2 - cardH / 2 + 16;
+
+    ctx.globalAlpha = Math.min(1, this.augT * 3);
+    ui.text("THE CAROUSEL", W / 2, cy - 62, { align: "center", size: 30, bold: true, color: "#f2e8d0", font: "Georgia, serif" });
+    ui.text(
+      run.draftAhead > 0
+        ? `${run.draftAhead} warband${run.draftAhead === 1 ? "" : "s"} below you picked first — take what's left.`
+        : "You're last in the standings, so you pick first. Take the best of it.",
+      W / 2, cy - 38, { align: "center", size: 13, bold: true, color: run.draftAhead > 0 ? "#e0a878" : "#7df2a9" },
+    );
+    ctx.globalAlpha = 1;
+
+    ring.forEach((p, i) => {
+      const t = Math.max(0, Math.min(1, (this.augT - i * 0.07) * 3.4));
+      const ease = 1 - Math.pow(1 - t, 3);
+      if (t <= 0) return;
+      const tier = UNIT_TIER[p.type] ?? 1;
+      const col = TIER_COLOR[tier];
+      const it = itemDef(p.item);
+      const x = x0 + i * (cardW + gap);
+      const hov = ui.mx >= x && ui.mx <= x + cardW && ui.my >= cy && ui.my <= cy + cardH && t >= 1;
+      // The ring drifts, so it reads as a carousel rather than a row of cards.
+      const drift = Math.sin(time * 0.9 + i * 0.7) * 4;
+      const y = cy + (hov ? -10 : 0) + drift + (1 - ease) * 40;
+
+      ctx.save();
+      ctx.globalAlpha = ease;
+      ctx.save();
+      ctx.shadowColor = hov ? withAlpha(col, 0.8) : "rgba(0,0,0,0.65)";
+      ctx.shadowBlur = hov ? 26 : 14; ctx.shadowOffsetY = 5;
+      const g = ctx.createLinearGradient(0, y, 0, y + cardH);
+      g.addColorStop(0, withAlpha(col, hov ? 0.42 : 0.24));
+      g.addColorStop(0.5, "rgba(24,18,11,0.98)");
+      g.addColorStop(1, "rgba(12,9,5,0.99)");
+      ctx.fillStyle = g; this.roundRect(ctx, x, y, cardW, cardH, 11); ctx.fill();
+      ctx.restore();
+      ctx.strokeStyle = withAlpha(col, hov ? 1 : 0.7); ctx.lineWidth = hov ? 2.4 : 1.5;
+      this.roundRect(ctx, x + 1.25, y + 1.25, cardW - 2.5, cardH - 2.5, 10); ctx.stroke();
+
+      // The component it carries, on a plinth at the top.
+      if (it) {
+        ctx.save();
+        ctx.shadowColor = withAlpha(it.color, 0.9); ctx.shadowBlur = hov ? 18 : 9;
+        ctx.fillStyle = "rgba(8,6,3,0.9)";
+        ctx.beginPath(); ctx.arc(x + cardW / 2, y + 44, 25, 0, Math.PI * 2); ctx.fill();
+        ctx.strokeStyle = withAlpha(it.color, 0.95); ctx.lineWidth = 1.5;
+        ctx.setLineDash([4, 3]); ctx.stroke(); ctx.setLineDash([]);
+        ctx.restore();
+        this.itemIcon(ctx, x + cardW / 2, y + 44, 14, it);
+        ui.text(it.name, x + cardW / 2, y + 84, { align: "center", size: 10.5, bold: true, color: it.color });
+        ui.text(it.desc, x + cardW / 2, y + 97, { align: "center", size: 9, color: "#8a8278" });
+      }
+
+      ctx.strokeStyle = withAlpha(col, 0.3); ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(x + 18, y + 108); ctx.lineTo(x + cardW - 18, y + 108); ctx.stroke();
+
+      const nm = shortName(p.type);
+      ui.text(nm, x + cardW / 2, y + 132, { align: "center", size: nm.length > 9 ? 12 : 14.5, bold: true, color: "#f7efdc", font: "Georgia, serif" });
+      ui.text(`Tier ${tier}`, x + cardW / 2, y + 150, { align: "center", size: 10, color: col });
+      // Its synergies, so you can draft toward a comp.
+      let ty = y + 170;
+      for (const tr of traitsOf(p.type).slice(0, 2)) {
+        ui.text(`◆ ${tr.name}`, x + cardW / 2, ty, { align: "center", size: 9.5, color: tr.color });
+        ty += 13;
+      }
+
+      const bw = cardW - 26, bh = 30, byy = y + cardH - bh - 14;
+      const bhov = ui.mx >= x + 13 && ui.mx <= x + 13 + bw && ui.my >= byy && ui.my <= byy + bh && t >= 1;
+      ctx.fillStyle = bhov ? withAlpha(col, 0.85) : withAlpha(col, 0.22);
+      this.roundRect(ctx, x + 13, byy, bw, bh, 7); ctx.fill();
+      ctx.strokeStyle = withAlpha(col, 0.95); ctx.lineWidth = 1.4;
+      this.roundRect(ctx, x + 13.7, byy + 0.7, bw - 1.4, bh - 1.4, 7); ctx.stroke();
+      ui.text("TAKE", x + cardW / 2, byy + 20, { align: "center", size: 13, bold: true, color: bhov ? "#1a1207" : col });
+      ctx.restore();
+
+      if ((hov || bhov) && ui.clicked && !ui.pointerConsumed) {
+        ui.pointerConsumed = true;
+        if (run.takeCarousel(i)) { audio.play("coin"); this.battleSig = ""; }
+      }
+    });
+    if (ui.clicked) ui.pointerConsumed = true;
+  }
+
   /** Tooltip for the run's commander plate — who they are and what they change. */
   private drawCmdTip(W: number, H: number) {
     if (!this.cmdTip) return;
@@ -1075,7 +1180,7 @@ export class WarbandScreen {
     // "Setup" is how the board *reads* (your side only, no health bars); it also
     // covers the augment pause so the board doesn't flash back to the last fight.
     // Placement itself stays shop-only.
-    const setup = run.phase === "shop" || run.phase === "augment";
+    const setup = run.phase === "shop" || run.phase === "augment" || run.phase === "draft";
     const interactive = run.phase === "shop";
     // Monster camps are never hidden — you get to plan against what you can see.
     const reveal = run.isCreepRound();

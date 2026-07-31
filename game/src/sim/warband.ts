@@ -12,17 +12,11 @@ import { COMPONENT_IDS, MAX_ITEMS, fuseComponents } from "./items";
 import { Augment, offerAugments, tierForRound, combinedBuff, combinedTraitBonus } from "./augments";
 import { CreepCamp, isCreepRound, campForRound, campBoard } from "./creeps";
 import { WarbandCommander, warbandCommander, offerCommanders } from "./warband_commanders";
+import { CarouselPick, isDraftRound, rollCarousel, pickValue } from "./carousel";
+import { UNIT_TIER, TIER_UNITS } from "./unit_tiers";
 
-/** Shop tier (1 cheap/weak … 5 rare/strong); buying costs the tier in gold. */
-export const UNIT_TIER: Record<string, number> = {
-  militia: 1, spearman: 1, scout: 1, raider: 1,
-  archer: 2, skirmisher: 2, horseman: 2, javelin: 2, pikeman: 2,
-  knight: 3, crossbow: 3, twohand: 3,
-  handcannon: 4, monk: 4, catapult: 4,
-  ram: 5, trebuchet: 5, hero: 5,
-};
-const TIER_UNITS: string[][] = [[], [], [], [], [], []]; // index by tier
-for (const [type, tier] of Object.entries(UNIT_TIER)) if (UNITS[type]) TIER_UNITS[tier].push(type);
+export { UNIT_TIER } from "./unit_tiers"; // re-exported: the screen and tests import it from here
+
 
 /** Copies of each unit type in the shared lobby pool, by tier (1..5). Cheaper
  *  units are plentiful; carries are scarce — so contesting a comp is real. */
@@ -115,7 +109,7 @@ export class WarbandRun {
   itemStash: string[] = []; // unequipped relics
   shop: (string | null)[] = [];
   opponents: Opponent[] = [];
-  phase: "commander" | "augment" | "shop" | "battle" | "result" | "over" = "shop";
+  phase: "commander" | "augment" | "draft" | "shop" | "battle" | "result" | "over" = "shop";
   outcome: "win" | "loss" | null = null;
   lastResult: { won: boolean; foe: string; youLeft: number; foeLeft: number; dmg: number; relics: number; gold: number; creep: boolean } | null = null;
   // ---- augments (TFT-style run-defining picks) ----
@@ -127,6 +121,11 @@ export class WarbandRun {
   private freeRerolls = 0; // reset each round by the commander's perk
   // ---- the round's PvE camp, when this is a monster round ----
   pendingCamp: CreepCamp | null = null;
+  // ---- the shared draft, on carousel rounds ----
+  /** What's still on the ring when your turn comes (rivals pick before you). */
+  carousel: CarouselPick[] = [];
+  /** How many rivals took their pick ahead of you — you're that far down. */
+  draftAhead = 0;
   /** Set whenever pieces merge into a star-up, for the screen's celebration. */
   lastMerge: { type: string; star: number } | null = null;
   /** Set whenever two components fuse into a relic, for the screen's flourish. */
@@ -484,13 +483,81 @@ export class WarbandRun {
       this.pendingOpp = this.pendingFoe ? this.foeBoard(this.foeBrains[this.pendingFoe.id]) : [];
     }
     this.reconcile(); // a levelled board pulls up reserves before you see it
-    // An augment round pauses everything for the pick.
+    // An augment round pauses everything for the pick; so does a draft round.
     const tier = tierForRound(this.round);
     if (tier && this.augmentOffer.length === 0) {
       this.augmentOffer = offerAugments(this.rng, tier, this.augments.map((a) => a.id));
       this.phase = "augment";
+    } else if (isDraftRound(this.round)) {
+      this.openDraft();
     } else this.phase = "shop";
   }
+
+  /**
+   * Open the carousel. Everyone weaker than you takes their pick first — the
+   * greedy best each time — so a leading warband chooses from the remainder.
+   */
+  private openDraft() {
+    const ring = rollCarousel(this.rng, this.round);
+    const weaker = this.livingFoes().filter((o) => o.life < this.life);
+    this.draftAhead = Math.min(weaker.length, Math.max(0, ring.length - 1)); // always leave one choice
+    // The warbands ahead of you take the strongest options.
+    const ordered = [...ring].sort((a, b) => pickValue(b) - pickValue(a));
+    const taken = new Set<CarouselPick>();
+    for (let i = 0; i < this.draftAhead; i++) {
+      const pick = ordered[i];
+      taken.add(pick);
+      // Whoever took it actually gets it, so the lobby scales off the draft too.
+      const foe = weaker[i];
+      if (foe) {
+        const b = this.foeBrains[foe.id];
+        this.takeFromPool(pick.type);
+        b.pieces.push({ type: pick.type, star: pick.star, items: [pick.item] });
+        mergeBoard(b.pieces, []);
+        this.equipFoeSpare(b);
+      }
+    }
+    this.carousel = ring.filter((p) => !taken.has(p));
+    this.phase = "draft";
+  }
+
+  /** Fuse any loose pair an opponent is now holding after a draft pick. */
+  private equipFoeSpare(b: FoeBrain) {
+    for (const p of b.pieces) fuseComponents(p.items);
+  }
+
+  /**
+   * Take one of the units left on the carousel. It joins your warband with its
+   * component already equipped, then the rest of the field clears the ring.
+   */
+  takeCarousel(index: number): boolean {
+    if (this.phase !== "draft") return false;
+    const pick = this.carousel[index];
+    if (!pick) return false;
+    this.takeFromPool(pick.type);
+    this.pieces.push({ type: pick.type, star: pick.star, items: [pick.item] });
+    this.merge();
+    for (const p of this.pieces) if (fuseComponents(p.items)) this.lastFusion = { item: p.items[p.items.length - 1], type: p.type };
+    this.reconcile();
+    // Everyone stronger than you sweeps up what's left.
+    const rest = this.carousel.filter((_, i) => i !== index);
+    const stronger = this.livingFoes().filter((o) => o.life >= this.life);
+    rest.sort((a, b) => pickValue(b) - pickValue(a));
+    stronger.slice(0, rest.length).forEach((foe, i) => {
+      const b = this.foeBrains[foe.id];
+      this.takeFromPool(rest[i].type);
+      b.pieces.push({ type: rest[i].type, star: rest[i].star, items: [rest[i].item] });
+      mergeBoard(b.pieces, []);
+      this.equipFoeSpare(b);
+    });
+    this.carousel = [];
+    this.draftAhead = 0;
+    this.phase = "shop";
+    return true;
+  }
+
+  /** True when the carousel is waiting on your pick. */
+  isDraftRound(): boolean { return isDraftRound(this.round); }
 
   /** Add a random component to the stash — two on one unit fuse into a relic. */
   private grantRelic() { this.itemStash.push(COMPONENT_IDS[this.rng.int(0, COMPONENT_IDS.length - 1)]); }

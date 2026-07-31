@@ -139,6 +139,7 @@ describe("Warband components", () => {
     let sawComponent = false;
     for (let r = 0; r < 16 && run.phase !== "over"; r++) {
       if (run.phase === "augment") { run.pickAugment(0); continue; }
+      if (run.phase === "draft") { run.takeCarousel(0); continue; }
       if (run.itemStash.some((id) => isComponent(id))) sawComponent = true;
       // Equip everything we have onto the first unit that has room.
       while (run.itemStash.length && run.phase === "shop") {

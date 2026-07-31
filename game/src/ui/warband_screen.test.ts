@@ -82,6 +82,7 @@ describe("Warband screen augments & scouting", () => {
     // Play forward to the first augment round.
     let guard = 0;
     while (run.phase !== "augment" && guard++ < 50) {
+      if (run.phase === "draft") { run.takeCarousel(0); continue; }
       if (run.phase === "shop") run.fight();
       if (run.phase === "result") run.next();
     }
@@ -97,6 +98,7 @@ describe("Warband screen augments & scouting", () => {
     const { run, frame } = harness(11);
     let guard = 0;
     while (run.phase !== "augment" && guard++ < 50) {
+      if (run.phase === "draft") { run.takeCarousel(0); continue; }
       if (run.phase === "shop") run.fight();
       if (run.phase === "result") run.next();
     }
@@ -135,6 +137,7 @@ describe("Warband screen augments & scouting", () => {
     // …then the augment picker.
     let guard = 0;
     while (run.phase !== "augment" && guard++ < 50) {
+      if (run.phase === "draft") { run.takeCarousel(0); continue; }
       if (run.phase === "result") run.next();
       if (run.phase === "shop") run.fight();
     }

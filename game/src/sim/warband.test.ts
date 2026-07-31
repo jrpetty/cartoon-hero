@@ -4,12 +4,15 @@ import { AUGMENTS, AUGMENT_ROUNDS, augmentById, offerAugments, combinedBuff, com
 import { isCreepRound, campForRound, campBoard } from "./creeps";
 import { RNG } from "../engine/rng";
 import { WARBAND_COMMANDERS, warbandCommander, commanderIdentity } from "./warband_commanders";
+import { isDraftRound, rollCarousel, pickValue, CAROUSEL_SIZE } from "./carousel";
+import { isComponent } from "./items";
 
 /** Drive a run to the start of a given round, taking the first augment offered. */
 function advanceTo(run: WarbandRun, round: number) {
   let guard = 0;
   while (run.round < round && run.phase !== "over" && guard++ < 200) {
     if (run.phase === "augment") { run.pickAugment(0); continue; }
+    if (run.phase === "draft") { run.takeCarousel(0); continue; }
     if (run.phase === "shop") run.fight();
     if (run.phase === "result") run.next();
   }
@@ -152,6 +155,7 @@ describe("Warband Tactics run engine", () => {
     run.buy(0); run.buy(2); run.buy(3);
     for (let r = 0; r < 22 && run.phase !== "over"; r++) {
       if (run.phase === "augment") { run.pickAugment(0); continue; }
+      if (run.phase === "draft") { run.takeCarousel(0); continue; }
       // Only sample real player rounds — PvE camp boards are scripted, not drafted.
       if (!run.isCreepRound()) {
         sizes.push(run.pendingOpp.length); // the upcoming opponent's deployed board
@@ -174,6 +178,8 @@ describe("Warband Tactics run engine", () => {
     while (run.phase !== "over" && guard++ < 200) {
       if (run.phase === "augment") {
         run.pickAugment(0);
+      } else if (run.phase === "draft") {
+        run.takeCarousel(0);
       } else if (run.phase === "shop") {
         // Greedy auto-play: level when rich, else buy the first affordable unit, then fight.
         if (run.gold >= 8) run.buyXp();
@@ -458,12 +464,109 @@ describe("Warband commanders", () => {
     while (run.phase !== "over" && guard++ < 200) {
       if (run.phase === "commander") run.pickCommander(0);
       else if (run.phase === "augment") run.pickAugment(0);
+      else if (run.phase === "draft") run.takeCarousel(0);
       else if (run.phase === "shop") { if (run.gold >= 8) run.buyXp(); for (let s = 0; s < run.shop.length; s++) run.buy(s); run.fight(); }
       else if (run.phase === "result") run.next();
     }
     expect(run.phase).toBe("over");
     expect(run.commander).not.toBeNull();
   }, 30000);
+});
+
+describe("Warband carousel", () => {
+  it("opens a shared draft on its round, every unit carrying a component", () => {
+    const run = new WarbandRun(61, null);
+    advanceTo(run, 3);
+    expect(run.round).toBe(3);
+    expect(isDraftRound(3)).toBe(true);
+    expect(run.phase).toBe("draft");
+    expect(run.carousel.length).toBeGreaterThan(0);
+    for (const p of run.carousel) {
+      expect(UNIT_TIER[p.type]).toBeGreaterThan(0);
+      expect(isComponent(p.item)).toBe(true);
+      expect(p.star).toBe(1);
+    }
+    // The draft blocks the shop until you take something.
+    run.gold = 50;
+    expect(run.reroll()).toBe(false);
+    expect(run.buyXp()).toBe(false);
+  });
+
+  it("gives you the unit with its component already equipped", () => {
+    const run = new WarbandRun(62, null);
+    advanceTo(run, 3);
+    const want = run.carousel[0];
+    const before = run.pieces.length;
+    const pool = run.poolCount(want.type);
+    expect(run.takeCarousel(0)).toBe(true);
+    expect(run.phase).toBe("shop");
+    expect(run.pieces.length).toBeGreaterThan(before - 1);
+    // It arrived carrying its component (or already fused/merged it).
+    const mine = run.pieces.find((p) => p.type === want.type);
+    expect(mine).toBeTruthy();
+    // Drawn from the shared pool — and rivals sweeping the rest of the ring can
+    // take further copies of the same type, so this is a floor not an equality.
+    expect(run.poolCount(want.type)).toBeLessThanOrEqual(pool - 1);
+    expect(run.carousel.length).toBe(0);
+    expect(run.takeCarousel(0)).toBe(false); // only once
+  });
+
+  it("makes the leader pick last — weaker warbands go first", () => {
+    // Top of the lobby: every living rival is weaker, so they all pick ahead.
+    const leader = new WarbandRun(63, null);
+    advanceTo(leader, 3);
+    for (const o of leader.opponents) o.life = 20;
+    leader.life = 100;
+    const relead = new WarbandRun(63, null);
+    advanceTo(relead, 3);
+    for (const o of relead.opponents) o.life = 20;
+    relead.life = 100;
+    // Re-open the draft now the lobby's life totals say we're in front.
+    (relead as unknown as { openDraft: () => void }).openDraft();
+    expect(relead.draftAhead).toBeGreaterThan(0);
+    expect(relead.carousel.length).toBeLessThan(CAROUSEL_SIZE);
+
+    // Bottom of the lobby: nobody is weaker, so you pick from the full ring.
+    const last = new WarbandRun(63, null);
+    advanceTo(last, 3);
+    for (const o of last.opponents) o.life = 100;
+    last.life = 5;
+    (last as unknown as { openDraft: () => void }).openDraft();
+    expect(last.draftAhead).toBe(0);
+    expect(last.carousel.length).toBe(CAROUSEL_SIZE);
+  });
+
+  it("always leaves you at least one option, even dead last in a full lobby", () => {
+    const run = new WarbandRun(64, null);
+    advanceTo(run, 3);
+    for (const o of run.opponents) { o.life = 1; o.alive = true; }
+    run.life = 100;
+    (run as unknown as { openDraft: () => void }).openDraft();
+    expect(run.carousel.length).toBeGreaterThanOrEqual(1);
+    expect(run.takeCarousel(0)).toBe(true);
+  });
+
+  it("scales the tiers on offer as the run goes on", () => {
+    const rng = new RNG(9);
+    const early = rollCarousel(rng, 3).map((p) => UNIT_TIER[p.type]);
+    const late = rollCarousel(rng, 18).map((p) => UNIT_TIER[p.type]);
+    expect(Math.max(...early)).toBeLessThanOrEqual(2);
+    expect(Math.min(...late)).toBeGreaterThanOrEqual(4);
+    expect(pickValue({ type: "hero", star: 1, item: "blade" }))
+      .toBeGreaterThan(pickValue({ type: "militia", star: 1, item: "blade" }));
+  });
+
+  it("the rest of the ring goes to the field, so the lobby drafts too", () => {
+    const run = new WarbandRun(65, null);
+    advanceTo(run, 3);
+    const ringSize = run.carousel.length;
+    const foeUnitsBefore = run.opponents.reduce((n, o) => n + (run.scout(o.id)?.board.length ?? 0), 0);
+    run.takeCarousel(0);
+    const foeUnitsAfter = run.opponents.reduce((n, o) => n + (run.scout(o.id)?.board.length ?? 0), 0);
+    expect(ringSize).toBeGreaterThan(1);
+    // Rivals cleared what you left behind (boards can also cap out, so ≥).
+    expect(foeUnitsAfter).toBeGreaterThanOrEqual(foeUnitsBefore);
+  });
 });
 
 describe("Warband scouting", () => {

@@ -86,6 +86,10 @@ standing wins.
   three of them, escalating silver → gold → prismatic. They bend the whole run:
   economy engines, warband-wide stat spikes, extra board slots, or a banner that
   makes a synergy count two units higher.
+- **The carousel** — every fifth round a ring of units rides out, each already
+  carrying a component, and the whole lobby drafts from it. Pick order runs from
+  the weakest warband to the strongest, so leading means choosing from what the
+  field left behind. It is the mode's catch-up mechanic.
 - **Monster camps** — the opening round and every fifth round after it are PvE.
   The camp is visible while you set up, no player life is at stake, and clearing
   it drops relics and gold.
@@ -125,5 +129,5 @@ renderer.
   post-match screens, and the Warband Tactics screen.
 - Warband Tactics lives in `src/sim/warband.ts` (run engine), `autobattle.ts`
   (headless + watchable battle resolution), `traits.ts`, `items.ts`,
-  `augments.ts`, `creeps.ts`, `warband_commanders.ts`, drawn by
+  `augments.ts`, `creeps.ts`, `carousel.ts`, `warband_commanders.ts`, drawn by
   `src/ui/warband_screen.ts`.
