@@ -14,6 +14,7 @@ import { CreepCamp, isCreepRound, campForRound, campBoard } from "./creeps";
 import { WarbandCommander, warbandCommander, offerCommanders } from "./warband_commanders";
 import { CarouselPick, isDraftRound, rollCarousel, pickValue } from "./carousel";
 import { UNIT_TIER, TIER_UNITS } from "./unit_tiers";
+import { styleOf } from "../content/battle_styles";
 import { Condition, rollCondition, CLEAR } from "./conditions";
 
 export { UNIT_TIER } from "./unit_tiers"; // re-exported: the screen and tests import it from here
@@ -53,7 +54,12 @@ const ENEMY_CELLS: { c: number; r: number }[] = [];
 for (const c of [5, 6, 7, 8, 9]) for (const r of ROW_ORDER) ENEMY_CELLS.push({ c, r });
 
 /** An AI opponent's hidden economy — identical rules to the player's. */
-interface FoeBrain { gold: number; level: number; xp: number; pieces: Piece[]; rng: RNG; favored: string[]; }
+type FoePlay = "economist" | "aggressor" | "roller";
+interface FoeBrain {
+  gold: number; level: number; xp: number; pieces: Piece[]; rng: RNG; favored: string[];
+  /** How this warband plays: bank for interest, rush levels, or roll for stars. */
+  play: FoePlay;
+}
 
 const NAMES = ["Ironclad", "Crimson", "Verdant", "Stormcrow", "Ashveil", "Goldhand", "Nightfall"];
 
@@ -129,6 +135,60 @@ export function streakBonus(streak: number): number {
 /** Bench slots — reserves beyond your deployed board, exactly like TFT's nine. */
 export const BENCH_SLOTS = 9;
 
+/**
+ * Lay a warband out by what each unit *does* in a fight rather than by how
+ * strong it is. Vanguards and Line troops take the front rank, Flankers sit
+ * just behind them on the outside rows, Artillery goes to the very back, and
+ * Infiltrators start at the back too (they leap regardless, so the back rank is
+ * the safest place to stage them).
+ *
+ * `side` is +1 for the enemy half (cols 5..9) and −1 for the player's (0..4).
+ * A board that puts a trebuchet on the front line is the single most obvious
+ * tell of a dumb opponent, and this is what removes it.
+ */
+export function placeByStyle(pieces: Piece[], side: 1 | -1): ArenaUnit[] {
+  // Depth 0 = closest to the centre line, 4 = furthest back.
+  const depthFor: Record<string, number> = {
+    vanguard: 0, line: 1, flanker: 1, artillery: 3, infiltrator: 4,
+  };
+  // Rows fill from the middle outward, except Flankers which want the edges.
+  const midRows = [4, 5, 3, 6, 2, 7, 1, 8, 0, 9];
+  const edgeRows = [0, 9, 1, 8, 2, 7, 3, 6, 4, 5];
+  const used = new Set<string>();
+  const out: ArenaUnit[] = [];
+  // Front ranks first so the wall is placed before anything behind it.
+  const ordered = [...pieces].sort((p, q) => {
+    const dp = depthFor[styleOf(p.type)] ?? 1;
+    const dq = depthFor[styleOf(q.type)] ?? 1;
+    return dp - dq || q.star - p.star;
+  });
+  for (const p of ordered) {
+    const style = styleOf(p.type);
+    const wantDepth = depthFor[style] ?? 1;
+    const rows = style === "flanker" ? edgeRows : midRows;
+    let placed = false;
+    // Try the preferred depth, then step backwards, then forwards.
+    const depths = [wantDepth];
+    for (let d = 1; d < 5; d++) {
+      if (wantDepth + d < 5) depths.push(wantDepth + d);
+      if (wantDepth - d >= 0) depths.push(wantDepth - d);
+    }
+    for (const d of depths) {
+      const col = side === 1 ? 5 + d : 4 - d;
+      for (const row of rows) {
+        const key = `${col},${row}`;
+        if (used.has(key)) continue;
+        used.add(key);
+        out.push({ type: p.type, star: p.star, items: p.items, col, row });
+        placed = true;
+        break;
+      }
+      if (placed) break;
+    }
+  }
+  return out;
+}
+
 export class WarbandRun {
   private rng: RNG;
   round = 0;
@@ -184,9 +244,14 @@ export class WarbandRun {
     this.opponents = NAMES.map((name, id) => ({ id, name, life: 100, alive: true }));
     // Every opponent runs the exact same economy as the player, from the same
     // starting point (2 gold, level 1, empty board), on its own seeded stream.
+    const PLAYS: FoePlay[] = ["economist", "aggressor", "roller"];
     this.foeBrains = this.opponents.map((o) => {
       const rng = this.rng.fork(o.id + 1);
-      return { gold: 2, level: 1, xp: 0, pieces: [], rng, favored: pickFavored(rng) };
+      return {
+        gold: 2, level: 1, xp: 0, pieces: [], rng,
+        favored: pickFavored(rng),
+        play: PLAYS[o.id % PLAYS.length], // a spread of styles across the lobby
+      };
     });
     if (commander !== undefined && commander !== null) this.applyCommander(warbandCommander(commander) ?? null);
     this.startRound();
@@ -714,12 +779,14 @@ export class WarbandRun {
   private stepFoe(b: FoeBrain) {
     b.gold += 5 + Math.min(5, Math.floor(b.gold / 10)); // base + interest (same formula)
     if (this.round % 3 === 2) this.equipFoeRelic(b); // a relic every few rounds, like you
-    const targetLevel = Math.min(MAX_LEVEL, 1 + Math.floor(this.round * 0.7));
-    // Bank toward the max-interest breakpoint as the game goes — early rounds it
-    // spends freely to build a board; later it keeps gold working for interest
-    // and only buys upgrades / rerolls down to the reserve.
-    const reserve = Math.min(50, Math.max(0, (this.round - 2) * 8));
-    let rerolls = 2 + Math.floor(this.round / 2);
+    // Personality shapes the three levers every warband pulls: how hard it banks
+    // for interest, how fast it techs, and how much it rolls for star-ups.
+    const play = b.play;
+    const levelPace = play === "aggressor" ? 0.85 : play === "roller" ? 0.62 : 0.72;
+    const targetLevel = Math.min(MAX_LEVEL, 1 + Math.floor(this.round * levelPace));
+    const reserveCap = play === "economist" ? 50 : play === "roller" ? 20 : 30;
+    const reserve = Math.min(reserveCap, Math.max(0, (this.round - 2) * 8));
+    let rerolls = (play === "roller" ? 5 : 2) + Math.floor(this.round / 2);
     let guard = 0;
     while (guard++ < 160) {
       // Tech toward the curve when it can afford to and stay above reserve.
@@ -736,9 +803,7 @@ export class WarbandRun {
         if (!type) continue;
         const c = UNIT_TIER[type];
         if (b.gold - c < reserve) continue;
-        const owned = b.pieces.filter((p) => p.type === type && p.star < 3).length;
-        // Buy if it fills out a thin board, belongs to the comp, or completes a merge.
-        if (!(needBodies || b.favored.includes(type) || owned >= 1)) continue;
+        if (this.buyValue(b, type) <= 0 && !needBodies) continue;
         b.gold -= c; this.takeFromPool(type); b.pieces.push({ type, star: 1, items: [] }); mergeBoard(b.pieces, []);
         bought = true;
       }
@@ -746,6 +811,59 @@ export class WarbandRun {
         if (rerolls > 0 && b.gold - REROLL_COST >= reserve) { b.gold -= REROLL_COST; rerolls--; continue; }
         break; // nothing worth buying and out of rerolls → bank the rest for interest
       }
+    }
+    this.trimFoeBench(b);
+  }
+
+  /**
+   * How much a warband wants a given unit right now. This is what turns the
+   * opponents from "buy anything on the list" into drafters: completing a merge
+   * is worth the most, then advancing a synergy toward its next breakpoint,
+   * then sticking to the comp identity they opened with.
+   */
+  private buyValue(b: FoeBrain, type: string): number {
+    let value = 0;
+    const copies = b.pieces.filter((p) => p.type === type && p.star < 3).length;
+    if (copies >= 2) value += 10;      // this buy stars something up
+    else if (copies === 1) value += 4; // halfway to a star-up
+    if (b.favored.includes(type)) value += 3;
+    // Does it push a synergy over its next breakpoint?
+    const owned = new Set(b.pieces.map((p) => p.type));
+    if (!owned.has(type)) {
+      const before = activeTraits([...owned]);
+      const after = activeTraits([...owned, type]);
+      for (const at of after) {
+        const was = before.find((x) => x.trait.id === at.trait.id);
+        if (!was) value += 5;                              // switched a synergy on
+        else if (at.tierIndex > was.tierIndex) value += 6; // pushed it up a tier
+      }
+    }
+    // Late on, a scarce high tier is worth taking on principle.
+    if (this.round > 8 && (UNIT_TIER[type] ?? 1) >= 4) value += 2;
+    return value;
+  }
+
+  /**
+   * Sell what a warband will never field. Without this an opponent hoards
+   * 1★ chaff it drafted early and never converts it back into gold.
+   */
+  private trimFoeBench(b: FoeBrain) {
+    if (this.round < 6) return; // early on, everything is still a merge in progress
+    const keep = b.level + 4; // its board plus a working bench
+    if (b.pieces.length <= keep) return;
+    const ranked = [...b.pieces].sort((p, q) =>
+      q.star - p.star || (UNIT_TIER[q.type] ?? 0) - (UNIT_TIER[p.type] ?? 0) || q.items.length - p.items.length);
+    for (const dead of ranked.slice(keep)) {
+      // Never sell a copy that is one buy away from a star-up — that was the
+      // difference between trimming chaff and dismantling your own board.
+      const sameKind = b.pieces.filter((p) => p.type === dead.type && p.star === dead.star).length;
+      if (sameKind >= 2) continue;
+      if (dead.items.length) continue; // nor anything carrying relics
+      const i = b.pieces.indexOf(dead);
+      if (i < 0) continue;
+      b.pieces.splice(i, 1);
+      b.gold += (UNIT_TIER[dead.type] ?? 1) * dead.star;
+      this.refundToPool(dead.type, dead.star); // its copies go back to the lobby
     }
   }
 
@@ -762,13 +880,10 @@ export class WarbandRun {
   /** An opponent's deployed warband — its strongest pieces (with relics) on its half. */
   private foeBoard(b: FoeBrain): ArenaUnit[] {
     const cap = b.level; // same rule the player plays by
-    return [...b.pieces]
+    const fielded = [...b.pieces]
       .sort((p, q) => q.star - p.star || (UNIT_TIER[q.type] ?? 0) - (UNIT_TIER[p.type] ?? 0))
-      .slice(0, cap)
-      .map((p, i) => {
-        const cell = ENEMY_CELLS[Math.min(i, ENEMY_CELLS.length - 1)];
-        return { type: p.type, star: p.star, items: p.items, col: cell.c, row: cell.r };
-      });
+      .slice(0, cap);
+    return placeByStyle(fielded, 1);
   }
 
   private livingFoes(): Opponent[] { return this.opponents.filter((o) => o.alive); }
@@ -845,7 +960,13 @@ export class WarbandRun {
     for (const o of this.livingFoes()) {
       if (this.rng.range(0, 1) < 0.35) {
         o.life -= this.rng.int(4, 10) + Math.floor(this.round / 2);
-        if (o.life <= 0) { o.life = 0; o.alive = false; }
+        // Attrition never decides the run: the last warband standing has to be
+        // beaten in the arena, not quietly whittled away off-screen. Without
+        // this the lobby can empty on the same round you die, leaving nobody.
+        if (o.life <= 0) {
+          if (this.livingFoes().length <= 1) { o.life = 1; continue; }
+          o.life = 0; o.alive = false;
+        }
       }
     }
   }

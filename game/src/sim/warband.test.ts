@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { WarbandRun, UNIT_TIER, BENCH_SLOTS, stageOf, stageBaseDamage, roundDamage, streakBonus } from "./warband";
+import { WarbandRun, UNIT_TIER, BENCH_SLOTS, stageOf, stageBaseDamage, roundDamage, streakBonus, placeByStyle } from "./warband";
+import { styleOf } from "../content/battle_styles";
 import { AUGMENTS, AUGMENT_ROUNDS, augmentById, offerAugments, combinedBuff, combinedTraitBonus, tierForRound } from "./augments";
 import { isCreepRound, campForRound, campBoard } from "./creeps";
 import { RNG } from "../engine/rng";
@@ -756,6 +757,108 @@ describe("Warband bench", () => {
     run.shop = ["hero", null, null, null, null];
     expect(run.canBuy(0)).toEqual({ ok: false, reason: "gold" });
   });
+});
+
+describe("Warband opponent intelligence", () => {
+  it("puts artillery at the back and the wall at the front", () => {
+    const pieces = [
+      { type: "trebuchet", star: 1, items: [] },
+      { type: "crossbow", star: 1, items: [] },
+      { type: "spearman", star: 1, items: [] },
+      { type: "militia", star: 1, items: [] },
+      { type: "knight", star: 1, items: [] },
+      { type: "scout", star: 1, items: [] },
+    ];
+    const board = placeByStyle(pieces, 1);
+    const at = (t: string) => board.find((u) => u.type === t)!;
+    // Enemy half: col 5 is the front line, col 9 the back rank.
+    expect(at("spearman").col).toBe(5);
+    expect(at("militia").col).toBe(5);
+    // Near the back, not at it — the last rank is out of a crossbow's own range.
+    expect(at("trebuchet").col).toBe(8);
+    expect(at("crossbow").col).toBe(8);
+    // Siege must never end up in front of the infantry — the old giveaway.
+    expect(at("trebuchet").col!).toBeGreaterThan(at("spearman").col!);
+    expect(at("crossbow").col!).toBeGreaterThan(at("militia").col!);
+    // Flankers take the outside rows.
+    expect([0, 9]).toContain(at("knight").row);
+    // Every unit gets its own cell.
+    expect(new Set(board.map((u) => `${u.col},${u.row}`)).size).toBe(board.length);
+  });
+
+  it("mirrors the layout for the player's half", () => {
+    const board = placeByStyle(
+      [{ type: "trebuchet", star: 1, items: [] }, { type: "spearman", star: 1, items: [] }], -1,
+    );
+    const at = (t: string) => board.find((u) => u.type === t)!;
+    expect(at("spearman").col).toBe(4);  // front line on the left half
+    expect(at("trebuchet").col).toBe(1); // near the back
+    for (const u of board) { expect(u.col!).toBeGreaterThanOrEqual(0); expect(u.col!).toBeLessThanOrEqual(4); }
+  });
+
+  it("still places a warband bigger than one rank", () => {
+    const many = Array.from({ length: 9 }, () => ({ type: "spearman", star: 1, items: [] }));
+    const board = placeByStyle(many, 1);
+    expect(board.length).toBe(9);
+    expect(new Set(board.map((u) => `${u.col},${u.row}`)).size).toBe(9);
+  });
+
+  it("actually fields role-sorted boards in a real run", () => {
+    const run = new WarbandRun(91, null);
+    advanceTo(run, 12);
+    let checked = 0;
+    for (const o of run.opponents.filter((x) => x.alive)) {
+      const board = run.scout(o.id)!.board;
+      const front = board.filter((u) => styleOf(u.type) === "vanguard").map((u) => u.col!);
+      const back = board.filter((u) => styleOf(u.type) === "artillery").map((u) => u.col!);
+      if (front.length && back.length) {
+        expect(Math.min(...back)).toBeGreaterThan(Math.max(...front));
+        checked++;
+      }
+    }
+    expect(checked).toBeGreaterThan(0); // the situation actually arose
+  });
+
+  it("drafts toward merges and synergies rather than at random", () => {
+    const run = new WarbandRun(92, null);
+    advanceTo(run, 14);
+    let sawStarUp = false;
+    let sawSynergy = false;
+    for (const o of run.opponents.filter((x) => x.alive)) {
+      const s = run.scout(o.id)!;
+      if (s.board.some((u) => (u.star ?? 1) >= 2)) sawStarUp = true;
+      if (s.traits.length > 0) sawSynergy = true;
+    }
+    expect(sawStarUp).toBe(true);
+    expect(sawSynergy).toBe(true); // boards cohere into real comps
+  });
+
+  it("spreads distinct play styles across the lobby", () => {
+    const run = new WarbandRun(93, null);
+    const brains = (run as unknown as { foeBrains: { play: string }[] }).foeBrains;
+    expect(new Set(brains.map((b) => b.play)).size).toBeGreaterThan(1);
+  });
+
+  it("off-screen attrition never eliminates the last opponent", () => {
+    const run = new WarbandRun(94, null);
+    // Leave a single rival on one life, then thin the herd many times.
+    for (const o of run.opponents.slice(1)) { o.alive = false; o.life = 0; }
+    run.opponents[0].life = 1;
+    const thin = (run as unknown as { thinTheHerd: () => void }).thinTheHerd.bind(run);
+    for (let i = 0; i < 200; i++) thin();
+    expect(run.opponents[0].alive).toBe(true);
+    // So a finished run always has somebody left standing at the top.
+    const auto = new WarbandRun(95, null);
+    let guard = 0;
+    while (auto.phase !== "over" && guard++ < 300) {
+      if (auto.phase === "augment") auto.pickAugment(0);
+      else if (auto.phase === "draft") auto.takeCarousel(0);
+      else if (auto.phase === "shop") auto.fight();
+      else if (auto.phase === "result") auto.next();
+    }
+    expect(auto.phase).toBe("over");
+    expect(auto.standings()[0].alive).toBe(true);
+  }, 30000);
 });
 
 describe("Warband scouting", () => {

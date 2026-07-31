@@ -175,7 +175,10 @@ export function openingOrders(
     if (!e || !e.alive) continue;
     switch (styleOf(e.type)) {
       case "artillery":
-        break; // stands its ground and shoots from where you placed it
+        // Stands its ground and shoots from where you placed it. Deliberately
+        // no creep-into-range: the enemy closes the distance for you, and
+        // stepping forward only walks the crew into archer fire.
+        break;
       case "vanguard":
         w.issueMove([id], cx + dir * VANGUARD_DEPTH, e.y, false, true);
         break;

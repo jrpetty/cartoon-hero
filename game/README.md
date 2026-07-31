@@ -113,6 +113,12 @@ away from whoever falls behind.
   (Marksmen weaker), deep mud bogs down a cavalry charge, still air lets siege
   find its range. The question is never who got lucky, it's whether your comp
   is the one that copes — and whether it's worth swapping a bench unit in.
+- **Opponents that draft** — the seven rivals run the same economy you do, but
+  they now play it properly: they lay their boards out by battle role (the wall
+  in front, artillery behind it, flankers on the outside rows), score every buy
+  by whether it completes a star-up or pushes a synergy over its next
+  breakpoint, sell chaff they will never field, and split across three play
+  styles — banking for interest, rushing levels, or rolling for star-ups.
 - **Scouting** — click any rival in the standings to see the warband they'd field
   right now, their level and their live synergies, and adapt before you spend.
 

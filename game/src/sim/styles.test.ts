@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { LiveBattle, resolveBattle, GRID_CELL } from "./autobattle";
 import { UNIT_STYLE, BATTLE_STYLES, styleOf, styleDef, BattleStyle } from "../content/battle_styles";
 import { UNITS } from "../content/units";
+import { placeByStyle } from "./warband";
 import { Kind, Team } from "./types";
 
 /** Every living unit of a team in a live battle, sorted by id (= spawn order). */
@@ -107,6 +108,34 @@ describe("Battle styles", () => {
     const r1 = resolveBattle(a, c, 21);
     const r2 = resolveBattle(a, c, 21);
     expect(r1).toEqual(r2);
+  });
+
+  it("a role-sorted board beats the same units laid out by raw strength", () => {
+    // The old layout sorted by star then tier and filled the front rank first,
+    // which put a trebuchet ahead of the infantry. This is the head-to-head
+    // proof that placing by role is worth doing.
+    const comp = [
+      { type: "trebuchet", star: 1, items: [] },
+      { type: "crossbow", star: 1, items: [] },
+      { type: "handcannon", star: 1, items: [] },
+      { type: "spearman", star: 1, items: [] },
+      { type: "militia", star: 1, items: [] },
+      { type: "pikeman", star: 1, items: [] },
+    ];
+    const ROW_ORDER = [4, 5, 3, 6, 2, 7, 1, 8, 0, 9];
+    const byStrength = [...comp]
+      .sort((p, q) => q.star - p.star || (UNITS[q.type]?.hp ?? 0) - (UNITS[p.type]?.hp ?? 0))
+      .map((p, i) => ({
+        type: p.type, star: p.star, items: p.items,
+        col: 5 + Math.floor(i / ROW_ORDER.length), row: ROW_ORDER[i % ROW_ORDER.length],
+      }));
+    const byRole = placeByStyle(comp, -1);
+    let roleWins = 0;
+    const seeds = [1, 2, 3, 4, 5, 6, 7];
+    for (const seed of seeds) {
+      if (resolveBattle(byRole, byStrength, seed).winner === "A") roleWins++;
+    }
+    expect(roleWins).toBeGreaterThan(seeds.length / 2);
   });
 
   it("Infiltrators punish an undefended backline more than a guarded one", () => {
