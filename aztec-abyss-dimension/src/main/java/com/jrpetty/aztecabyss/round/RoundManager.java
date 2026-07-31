@@ -1518,12 +1518,17 @@ public final class RoundManager {
      */
     /** Hands back the vault and pays out materials on the way out of the Outpost. */
     private static void settleOutpost(ServerPlayer player, int round) {
-        if (!game.getMap().hasEconomy() || player.getServer() == null
-                || !OutpostEconomy.hasVault(player.getServer(), player.getUUID())) {
+        if (!game.getMap().hasEconomy() || player.getServer() == null) {
+            return;
+        }
+        // Draughts come off first and unconditionally. Ironhide and Quickhand are
+        // permanent attribute modifiers - they serialise with the player - so if
+        // they are ever left on, they follow someone into the overworld for good.
+        Draughts.clear(player);
+        if (!OutpostEconomy.hasVault(player.getServer(), player.getUUID())) {
             return; // nothing held at the door means this run was already settled
         }
         String paid = OutpostEconomy.payoutSummary(round);
-        Draughts.clear(player);
         OutpostEconomy.leave(player, round);
         player.displayClientMessage(Component.literal(
                 "§7Your gear is back. §fThe Outpost paid out: " + paid), false);
@@ -1624,6 +1629,10 @@ public final class RoundManager {
         rs.setCooldownUntil(System.currentTimeMillis() + AbyssConfig.cooldownMillis());
         rs.clearRun();
         player.setData(ModAttachments.RUN_STATE, rs);
+        // Strip the draughts while we still have a live player to strip them from.
+        // Logging out is otherwise a way to walk Ironhide's extra hearts home. The
+        // vault is settled on the way back in, where inventory writes actually stick.
+        Draughts.clear(player);
         game.removeParticipant(player.getUUID());
         cleanupBar(player);
         if (game.getParticipants().isEmpty()) {
@@ -1651,6 +1660,19 @@ public final class RoundManager {
         if (player.level().dimension().equals(AztecAbyssConstants.ABYSS_LEVEL_KEY)) {
             player.changeDimension(AbyssTeleporter.toFixedHome(homeLevel, returnPos));
         }
+
+        // If they vanished mid-Outpost, their real gear is still in the vault and
+        // the loadout they bought is still in their hands. Settle it here rather
+        // than at logout: this is the point where the player is fully live and an
+        // inventory write is certain to survive the next save.
+        Draughts.clear(player);
+        if (OutpostEconomy.hasVault(server, player.getUUID())) {
+            String paid = OutpostEconomy.payoutSummary(round);
+            OutpostEconomy.leave(player, round);
+            player.displayClientMessage(Component.literal(
+                    "§7The Outpost held your gear while you were gone. §fIt paid out: " + paid), false);
+        }
+
         spawnRewardChest(homeLevel, returnPos, RewardTable.rewardsFor(round, false, false));
         player.displayClientMessage(Component.literal("§cYou left the Abyss mid-run on Round " + round
                 + ". Your reward is waiting by your portal."), false);
