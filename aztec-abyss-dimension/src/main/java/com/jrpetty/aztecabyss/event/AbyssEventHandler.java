@@ -99,6 +99,7 @@ public final class AbyssEventHandler {
             }
             ServerPlayer killer = event.getSource().getEntity() instanceof ServerPlayer sp ? sp : null;
             RoundManager.onWaveZombieKilled(level, killer);
+            RoundManager.rollPowerUp(level, mob);
             return;
         }
 
@@ -188,6 +189,10 @@ public final class AbyssEventHandler {
             }
             if (mult > 1.0F) {
                 event.setAmount(event.getAmount() * mult);
+            }
+            // Insta-Kill trumps everything: anything in the wave dies to one hit.
+            if (RoundManager.instaKillActive(level)) {
+                event.setAmount(Math.max(event.getAmount(), mob.getMaxHealth() * 2.0F));
             }
         }
     }

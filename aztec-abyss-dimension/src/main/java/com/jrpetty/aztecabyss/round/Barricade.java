@@ -200,6 +200,25 @@ public final class Barricade {
         return n;
     }
 
+    /**
+     * Puts every board on every gate back. Returns how many boards that took,
+     * so the caller can pay out in proportion to how bad things were.
+     */
+    public static int restoreAll(ServerLevel level, ArenaMap map) {
+        int restored = 0;
+        for (int i = 0; i < boards.length; i++) {
+            int missing = MAX_BOARDS - boards[i];
+            if (missing <= 0) {
+                continue;
+            }
+            boards[i] = MAX_BOARDS;
+            effort[i] = 0.0f;
+            render(level, map, i);
+            restored += missing;
+        }
+        return restored;
+    }
+
     /** How many boards are missing across every gate - the size of the repair job. */
     public static int missingBoards() {
         int n = 0;

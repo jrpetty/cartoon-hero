@@ -108,6 +108,7 @@ public final class RoundManager {
         }
         HEART_BARS.clear();
         LAST_HUD_STAMP.clear();
+        OutpostPowerUps.reset();
         game = new AbyssGame();
     }
 
@@ -230,6 +231,9 @@ public final class RoundManager {
         }
         if (game.getMap().hasBarricades() && now % BARRICADE_INTERVAL == 0L) {
             tickBarricades(level, present);
+        }
+        if (game.getMap().hasEconomy() && now % 10L == 0L) {
+            OutpostPowerUps.tick(level, present);
         }
         switch (game.getPhase()) {
             case BETWEEN_ROUNDS -> {
@@ -1189,6 +1193,9 @@ public final class RoundManager {
         if (OutpostShop.hasPerk(held, OutpostShop.Perk.SCAVENGER)) {
             pts += pts / 2;
         }
+        if (OutpostPowerUps.doublePoints(level)) {
+            pts *= 2;
+        }
         OutpostEconomy.award(killer, pts);
         if (OutpostShop.hasPerk(held, OutpostShop.Perk.SIPHON)) {
             killer.heal(2.0F);
@@ -1197,9 +1204,24 @@ public final class RoundManager {
 
     /** Points for a hit that did not finish the job. */
     public static void onWaveMobHurt(ServerPlayer attacker) {
-        if (game.getMap().hasEconomy()) {
-            OutpostEconomy.award(attacker, OutpostEconomy.POINTS_HIT);
+        if (!game.getMap().hasEconomy()) {
+            return;
         }
+        int pts = OutpostEconomy.POINTS_HIT;
+        if (attacker.level() instanceof ServerLevel sl && OutpostPowerUps.doublePoints(sl)) {
+            pts *= 2;
+        }
+        OutpostEconomy.award(attacker, pts);
+    }
+
+    /** Whether a one-hit-kill drop is running right now. */
+    public static boolean instaKillActive(ServerLevel level) {
+        return game.getMap().hasEconomy() && OutpostPowerUps.instaKill(level);
+    }
+
+    /** Rolls a power-up from a dead wave mob. */
+    public static void rollPowerUp(ServerLevel level, Mob mob) {
+        OutpostPowerUps.maybeDrop(level, mob, RNG);
     }
 
     private static void onRoundCleared(ServerLevel level) {
@@ -2418,7 +2440,8 @@ public final class RoundManager {
                 e.getValue().setName(Component.literal(
                         "§6✦ §fRound " + game.getRound()
                                 + " §8| §e" + OutpostEconomy.points(e.getKey()) + " pts"
-                                + (game.isFogRound() ? " §8| §7≈ fog" : "")));
+                                + (game.isFogRound() ? " §8| §7≈ fog" : "")
+                                + OutpostPowerUps.hudFragment(level)));
             }
         }
         float progress;
