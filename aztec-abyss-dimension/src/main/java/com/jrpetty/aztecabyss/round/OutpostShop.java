@@ -48,9 +48,9 @@ public final class OutpostShop {
      * game mode knows about - boards, windows, points, the horde's specialists.
      */
     public enum Perk {
-        BOARDWRIGHT("Boardwright", "§7Boards go back on with no pause between them."),
+        LAST_STAND("Last Stand", "§7+40% damage while under a third of your health."),
         SCAVENGER("Scavenger", "§7Half again as many points from every kill."),
-        RAMPART("Rampart", "§7+25% damage while you are stood at a window."),
+        RAMPART("Rampart", "§7+25% damage while you are stood in a breach."),
         SIPHON("Siphon", "§7Every kill gives a heart back."),
         BREAKERS_BANE("Breaker's Bane", "§7Double damage to Breakers and Sappers.");
 

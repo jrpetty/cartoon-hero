@@ -123,9 +123,9 @@ public enum ArenaMap {
         return gateFacings;
     }
 
-    /** What to call a way in on this map - the Outpost has windows, not gates. */
+    /** What to call a way in on this map - the Outpost has breaches, not gates. */
     public String gateNoun() {
-        return this == OUTPOST ? "WINDOW" : "GATE";
+        return this == OUTPOST ? "BREACH" : "GATE";
     }
 
     /** Short label for a gate, for HUD gauges and callouts. */
@@ -204,8 +204,25 @@ public enum ArenaMap {
      * you, with nothing to maintain. The Bridge has the Heart, which is already
      * its one thing to look after.
      */
-    public boolean hasBarricades() {
+    /**
+     * Whether the horde materialises in a sealed chamber behind each way in.
+     *
+     * <p>Kept separate from {@link #hasBarricades()} on purpose. The two used to
+     * be the same question, and when the boards went the pens would have gone
+     * with them - dropping the whole horde straight into the room instead of
+     * behind the breaches, with no walk-up and nowhere for the sound to come
+     * from. The pens are the better half of that mechanic and they outlive the
+     * boards.
+     */
+    public boolean hasPens() {
         return this == OUTPOST;
+    }
+
+    public boolean hasBarricades() {
+        // Nothing does any more. The Outpost's windows became open breaches: you
+        // walk through them, and so does everything else, which makes the map a
+        // question of where you stand rather than what you have nailed shut.
+        return false;
     }
 
     /**

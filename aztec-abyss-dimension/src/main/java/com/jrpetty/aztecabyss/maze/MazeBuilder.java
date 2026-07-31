@@ -235,7 +235,7 @@ public final class MazeBuilder {
                 int z = cz * MazeData.CELL + lz;
                 int h = Math.floorMod(x * 40503 ^ z * 26861, 100);
                 BlockState floor = h < 12 ? Blocks.MOSS_BLOCK.defaultBlockState()
-                        : h < 22 ? Blocks.GRAVEL.defaultBlockState()
+                        : h < 22 ? Blocks.COBBLED_DEEPSLATE.defaultBlockState()
                         : h < 32 ? Blocks.COBBLESTONE.defaultBlockState()
                         : h < 45 ? Blocks.MOSSY_STONE_BRICKS.defaultBlockState()
                         : Blocks.STONE_BRICKS.defaultBlockState();

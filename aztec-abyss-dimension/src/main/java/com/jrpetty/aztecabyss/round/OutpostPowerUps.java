@@ -50,7 +50,7 @@ public final class OutpostPowerUps {
     private static final String TAG = "aztecabyss_powerup";
 
     public enum Kind {
-        CARPENTER("§6§lCARPENTER", "§eEvery window boarded", Items.OAK_PLANKS),
+        AEGIS("§6§lAEGIS", "§eEveryone back on their feet", Items.SHIELD),
         DOUBLE_POINTS("§b§lDOUBLE POINTS", "§bTwice the take", Items.GOLD_INGOT),
         INSTA_KILL("§c§lINSTA-KILL", "§cOne hit is enough", Items.BLAZE_POWDER),
         PURGE("§d§lPURGE", "§dThe room empties", Items.TNT);
@@ -203,7 +203,7 @@ public final class OutpostPowerUps {
         }
         long now = level.getGameTime();
         switch (kind) {
-            case CARPENTER -> carpenter(level, present);
+            case AEGIS -> aegis(level, present);
             case DOUBLE_POINTS -> doublePointsUntil = now + DURATION_TICKS;
             case INSTA_KILL -> instaKillUntil = now + DURATION_TICKS;
             case PURGE -> purge(level, present);
@@ -211,23 +211,33 @@ public final class OutpostPowerUps {
         for (ServerPlayer p : present) {
             p.displayClientMessage(Component.literal(kind.title + " §r§7— " + kind.blurb), false);
             level.playSound(null, p.blockPosition(), SoundEvents.BEACON_ACTIVATE,
-                    SoundSource.PLAYERS, 1.0F, kind == Kind.CARPENTER ? 0.8F : 1.4F);
+                    SoundSource.PLAYERS, 1.0F, kind == Kind.AEGIS ? 0.8F : 1.4F);
         }
     }
 
     /**
-     * Carpenter: every window on the map goes back to full, wherever it is and
-     * whoever is nowhere near it. Pays a little for each board, so it is worth
-     * most exactly when the map is in the worst state.
+     * Aegis: everyone goes back to full and takes half damage for a while.
+     *
+     * <p>This is the slot Carpenter used to hold. Carpenter re-boarded every
+     * window at once, which was the best drop in the set right up until the
+     * windows became open breaches and there was nothing left to nail shut.
+     *
+     * <p>The slot still needs to do the same <em>job</em>, though: be the drop
+     * that turns a round you are losing rather than one you are already winning.
+     * On an open map the way you lose is being worn down in the middle of the
+     * floor with no wall to put your back to, so the rescue is health - given to
+     * the whole squad at once, wherever they are stood.
      */
-    private static void carpenter(ServerLevel level, List<ServerPlayer> present) {
-        ArenaMap map = RoundManager.game().getMap();
-        int restored = Barricade.restoreAll(level, map);
+    private static void aegis(ServerLevel level, List<ServerPlayer> present) {
         for (ServerPlayer p : present) {
-            OutpostEconomy.award(p, restored * 2);
+            p.heal(p.getMaxHealth());
+            p.addEffect(new net.minecraft.world.effect.MobEffectInstance(
+                    net.minecraft.world.effect.MobEffects.DAMAGE_RESISTANCE, 300, 1, false, true));
+            level.sendParticles(ParticleTypes.END_ROD, p.getX(), p.getY() + 1.0, p.getZ(),
+                    30, 0.5, 0.8, 0.5, 0.03);
         }
-        BlockPos any = map.gates().length > 0 ? map.gates()[0] : BlockPos.ZERO;
-        level.playSound(null, any, SoundEvents.WOOD_PLACE, SoundSource.BLOCKS, 1.6F, 0.9F);
+        BlockPos any = present.isEmpty() ? BlockPos.ZERO : present.get(0).blockPosition();
+        level.playSound(null, any, SoundEvents.BEACON_ACTIVATE, SoundSource.BLOCKS, 1.6F, 0.7F);
     }
 
     /** Purge: the room empties, and it pays as though you had earned it. */

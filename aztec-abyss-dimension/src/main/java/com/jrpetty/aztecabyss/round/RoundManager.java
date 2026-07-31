@@ -391,13 +391,13 @@ public final class RoundManager {
         BlockPos[] gates = game.getMap().gates();
         int gateIndex = pickGate(game.getMap());
         BlockPos gate = gates[gateIndex];
-        boolean penned = game.getMap().hasBarricades();
+        boolean penned = game.getMap().hasPens();
         boolean spreadAlongX = gate.getZ() != 0 || gates.length == 1;
         int jitter = RNG.nextInt(5) - 2;
         BlockPos pos;
         if (penned) {
-            // Materialise inside the sealed gatehouse, back from the boards, so
-            // there is a walk-up before the tearing starts.
+            // Materialise deep in the sealed chamber behind the breach, so there
+            // is a walk-up out of the dark before anything reaches the room.
             BlockPos pen = Barricade.penSpawn(game.getMap(), gateIndex);
             int j = RNG.nextInt(3) - 1;
             pos = Barricade.spansX(game.getMap(), gateIndex)
@@ -2247,8 +2247,7 @@ public final class RoundManager {
             return false;
         }
         long now = level.getGameTime();
-        boolean quick = OutpostShop.hasPerk(player.getMainHandItem(), OutpostShop.Perk.BOARDWRIGHT)
-                || Draughts.has(player.getUUID(), Draughts.Draught.QUICKHAND);
+        boolean quick = Draughts.has(player.getUUID(), Draughts.Draught.QUICKHAND);
         Long last = LAST_REPAIR.get(player.getUUID());
         if (!quick && last != null && now - last < REPAIR_COOLDOWN_TICKS) {
             return false; // still hammering the previous one

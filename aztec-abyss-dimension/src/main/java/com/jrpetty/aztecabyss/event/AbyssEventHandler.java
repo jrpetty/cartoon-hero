@@ -187,6 +187,13 @@ public final class AbyssEventHandler {
                     && nearAWindow(attacker)) {
                 mult *= 1.25F;
             }
+            // Last Stand: worth most in the exact situation it is named for, and
+            // worth nothing while you are comfortable.
+            if (com.jrpetty.aztecabyss.round.OutpostShop.hasPerk(held,
+                    com.jrpetty.aztecabyss.round.OutpostShop.Perk.LAST_STAND)
+                    && attacker.getHealth() < attacker.getMaxHealth() / 3.0F) {
+                mult *= 1.4F;
+            }
             mult *= com.jrpetty.aztecabyss.round.Draughts.damageMultiplier(attacker.getUUID());
             if (mult > 1.0F) {
                 event.setAmount(event.getAmount() * mult);
@@ -265,7 +272,11 @@ public final class AbyssEventHandler {
             return;
         }
         com.jrpetty.aztecabyss.worldgen.ArenaMap map = RoundManager.game().getMap();
-        if (!map.hasBarricades()) {
+        // Gated on the economy as well as the boards. Everything below - the wall
+        // buys, the Box, the Draughts, the Crucible - lives in this handler, so
+        // checking only for barricades would take the whole shop out with them
+        // the moment a map stopped having boards.
+        if (!map.hasEconomy() && !map.hasBarricades()) {
             return;
         }
         // Shop fronts and the Crucible come before the boards: both sit on walls

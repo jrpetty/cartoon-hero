@@ -35,19 +35,26 @@ public final class OutpostBuilder {
     public static final int CENTER_Z = 0;
     public static final int FLOOR_Y = 64;
 
-    /** Interior extents of the building, relative to centre. */
-    private static final int IN_X = 12;
-    private static final int IN_Z = 9;
+    /**
+     * Interior extents of the building, relative to centre.
+     *
+     * <p>Roughly doubled in floor area over the first cut, which was too tight to
+     * fight in: with a horde coming through five openings there was nowhere to
+     * back off to, and backing off is the whole skill of the mode. The ceilings
+     * went up with it - a room that is wide but low still plays as a corridor.
+     */
+    private static final int IN_X = 17;
+    private static final int IN_Z = 13;
     /** Ground-floor head height, and the slab level of the upper floor. */
-    private static final int UPPER = 6;
+    private static final int UPPER = 7;
     /** Roof height. */
-    private static final int ROOF = 12;
+    private static final int ROOF = 15;
     /** The dividing wall between hall and back room. */
-    private static final int DIVIDE_X = 4;
+    private static final int DIVIDE_X = 6;
     /** West wall of the stairwell shaft, which sits in the back room's far corner. */
-    private static final int SHAFT_X = 8;
+    private static final int SHAFT_X = 11;
     /** Where the upper floor begins - west of this the hall is double height. */
-    private static final int UPPER_EDGE = -2;
+    private static final int UPPER_EDGE = -4;
     /** Walkable floor of the cellar, and the block course beneath it. */
     private static final int CELLAR = -5;
     /** East edge of the cellar and of the stair well that drops into it. */
@@ -144,19 +151,19 @@ public final class OutpostBuilder {
      * no pen ever sits directly on top of another.
      */
     public static final BlockPos[] GATES = new BlockPos[]{
-            new BlockPos(CENTER_X - IN_X - 1, FLOOR_Y + 1, CENTER_Z - 5),   // 0 hall, west
-            new BlockPos(CENTER_X - IN_X - 1, FLOOR_Y + 1, CENTER_Z + 5),   // 1 hall, west
-            new BlockPos(CENTER_X - 8, FLOOR_Y + 1, CENTER_Z - IN_Z - 1),   // 2 hall, north
-            new BlockPos(CENTER_X - 8, FLOOR_Y + 1, CENTER_Z + IN_Z + 1),   // 3 hall, south
-            new BlockPos(CENTER_X + 6, FLOOR_Y + 1, CENTER_Z + IN_Z + 1),   // 4 back room, south
-            new BlockPos(CENTER_X + IN_X + 1, FLOOR_Y + 1, CENTER_Z - 5),   // 5 back room, east
-            new BlockPos(CENTER_X + 2, FLOOR_Y + UPPER + 1, CENTER_Z - IN_Z - 1),  // 6 upstairs, north
-            new BlockPos(CENTER_X + 9, FLOOR_Y + UPPER + 1, CENTER_Z - IN_Z - 1),  // 7 upstairs, north
-            new BlockPos(CENTER_X + IN_X + 1, FLOOR_Y + UPPER + 1, CENTER_Z - 4),  // 8 upstairs, east
-            new BlockPos(CENTER_X + 3, FLOOR_Y + UPPER + 1, CENTER_Z + IN_Z + 1),  // 9 upstairs, south
-            // Coal chutes at cellar floor level - no sill, so these come at you fast.
-            new BlockPos(CENTER_X - 10, FLOOR_Y + CELLAR, CENTER_Z + IN_Z + 1),    // 10 cellar, south
-            new BlockPos(CENTER_X - 3, FLOOR_Y + CELLAR, CENTER_Z + IN_Z + 1),     // 11 cellar, south
+            new BlockPos(CENTER_X - IN_X - 1, FLOOR_Y, CENTER_Z - 7),   // 0 hall, west
+            new BlockPos(CENTER_X - IN_X - 1, FLOOR_Y, CENTER_Z + 7),   // 1 hall, west
+            new BlockPos(CENTER_X - 12, FLOOR_Y, CENTER_Z - IN_Z - 1),  // 2 hall, north
+            new BlockPos(CENTER_X - 12, FLOOR_Y, CENTER_Z + IN_Z + 1),  // 3 hall, south
+            new BlockPos(CENTER_X + 10, FLOOR_Y, CENTER_Z + IN_Z + 1),  // 4 back room, south
+            new BlockPos(CENTER_X + IN_X + 1, FLOOR_Y, CENTER_Z - 7),   // 5 back room, east
+            new BlockPos(CENTER_X + 2, FLOOR_Y + UPPER + 1, CENTER_Z - IN_Z - 1),   // 6 upstairs, north
+            new BlockPos(CENTER_X + 12, FLOOR_Y + UPPER + 1, CENTER_Z - IN_Z - 1),  // 7 upstairs, north
+            new BlockPos(CENTER_X + IN_X + 1, FLOOR_Y + UPPER + 1, CENTER_Z - 5),   // 8 upstairs, east
+            new BlockPos(CENTER_X + 5, FLOOR_Y + UPPER + 1, CENTER_Z + IN_Z + 1),   // 9 upstairs, south
+            // Cellar breaches, level with its floor.
+            new BlockPos(CENTER_X - 14, FLOOR_Y + CELLAR, CENTER_Z + IN_Z + 1),     // 10 cellar, south
+            new BlockPos(CENTER_X - 4, FLOOR_Y + CELLAR, CENTER_Z + IN_Z + 1),      // 11 cellar, south
     };
 
     public static final Direction[] GATE_FACINGS = new Direction[]{
@@ -538,12 +545,18 @@ public final class OutpostBuilder {
             }
         }
         // Open the floor above the shaft so the flight actually emerges.
-        for (int x = SHAFT_X + 1; x <= IN_X; x++) {
-            for (int z = 3; z <= IN_Z; z++) {
+        //
+        // The near edge has to be derived, not written down. One step is climbed
+        // per course, so the flight arrives at z = IN_Z - UPPER, and the boards
+        // have to start one block short of that or the stairs come up into a
+        // hole. This used to be the literal 3, which was only ever right because
+        // IN_Z - UPPER happened to equal 3 at the building's first size.
+        for (int z = IN_Z - UPPER; z <= IN_Z; z++) {
+            for (int x = SHAFT_X + 1; x <= IN_X; x++) {
                 level.setBlock(at(x, UPPER, z), Blocks.AIR.defaultBlockState(), 2);
             }
         }
-        // Six steps climbing north, landing on the boards at z = 2.
+        // One step per course, climbing north onto the landing.
         for (int i = 0; i < UPPER; i++) {
             int z = IN_Z - 1 - i;
             for (int x = SHAFT_X + 2; x <= IN_X; x++) {
@@ -558,21 +571,46 @@ public final class OutpostBuilder {
     }
 
     /**
-     * Cuts the ten windows: three wide, four tall, a sill left at floor level so
-     * they read as something to be climbed through.
+     * The breaches: torn-open holes in the outer walls, level with the floor.
+     *
+     * <p>These used to be boarded windows at head height, which meant a sill you
+     * had to vault and a repair minigame at every one. They are now simply gaps -
+     * five wide and five high, walkable straight through in both directions. You
+     * can leave through one; so can everything else, and everything else is
+     * already stood in the dark on the far side of it.
+     *
+     * <p>The edges are deliberately ragged rather than a clean rectangle. A
+     * perfectly square hole in a wall reads as a doorway somebody built, and
+     * these are meant to read as damage.
      */
     private static void cutWindows(ServerLevel level) {
         for (int i = 0; i < GATES.length; i++) {
             BlockPos g = GATES[i];
             boolean spansX = GATE_FACINGS[i].getAxis() == Direction.Axis.Z;
-            for (int off = -1; off <= 1; off++) {
-                for (int dy = 0; dy <= 3; dy++) {
+            for (int off = -2; off <= 2; off++) {
+                // The opening tapers at its edges, so the hole has a shape.
+                int top = Math.abs(off) == 2 ? 3 : 4;
+                for (int dy = 0; dy <= top; dy++) {
                     level.setBlock(cell(g, spansX, off, dy), Blocks.AIR.defaultBlockState(), 2);
                 }
             }
-            // Timber lintel over each opening.
-            for (int off = -2; off <= 2; off++) {
-                level.setBlock(cell(g, spansX, off, 4), BEAM, 2);
+            // Snapped masonry around the mouth of the breach.
+            for (int off = -3; off <= 3; off++) {
+                if (Math.abs(off) == 3) {
+                    level.setBlock(cell(g, spansX, off, 0), RUBBLE, 2);
+                    continue;
+                }
+                int lintel = Math.abs(off) == 2 ? 4 : 5;
+                level.setBlock(cell(g, spansX, off, lintel),
+                        Deco.chance(g.getX() + off, g.getY(), g.getZ(), 0x51, 0.5f)
+                                ? BEAM : Blocks.CRACKED_STONE_BRICKS.defaultBlockState(), 2);
+            }
+            // Spoil on the floor where the wall came down.
+            for (int off = -1; off <= 1; off++) {
+                if (Deco.chance(g.getX() + off * 3, g.getY(), g.getZ() + off, 0x77, 0.55f)) {
+                    Deco.onFloor(level, cell(g, spansX, off, 0),
+                            Blocks.COBBLESTONE_SLAB.defaultBlockState());
+                }
             }
         }
     }
@@ -593,8 +631,8 @@ public final class OutpostBuilder {
             boolean spansX = out.getAxis() == Direction.Axis.Z;
             for (int d = 1; d <= PEN_DEPTH + 1; d++) {
                 BlockPos row = g.relative(out, d);
-                for (int off = -3; off <= 3; off++) {
-                    for (int y = -2; y <= 5; y++) {
+                for (int off = -4; off <= 4; off++) {
+                    for (int y = -2; y <= 7; y++) {
                         level.setBlock(cell(row, spansX, off, y), WALL_PLAIN, 2);
                     }
                 }
@@ -604,13 +642,17 @@ public final class OutpostBuilder {
             BlockPos g = GATES[i];
             Direction out = GATE_FACINGS[i];
             boolean spansX = out.getAxis() == Direction.Axis.Z;
+            // Carved from the gate's own level upward, so the pen floor lines up
+            // exactly with the floor inside. A breach you can walk through in one
+            // direction and not the other would be worse than a window.
             for (int d = 1; d <= PEN_DEPTH; d++) {
                 BlockPos row = g.relative(out, d);
-                for (int off = -2; off <= 2; off++) {
-                    for (int y = -1; y <= 3; y++) {
+                for (int off = -3; off <= 3; off++) {
+                    for (int y = 0; y <= 4; y++) {
                         level.setBlock(cell(row, spansX, off, y), Blocks.AIR.defaultBlockState(), 2);
                     }
                 }
+                level.setBlock(cell(row, spansX, 0, -1), Blocks.SOUL_SOIL.defaultBlockState(), 2);
             }
             BlockPos back = g.relative(out, PEN_DEPTH - 1);
             level.setBlock(cell(back, spansX, 0, -2), Blocks.SOUL_SOIL.defaultBlockState(), 2);
@@ -784,13 +826,16 @@ public final class OutpostBuilder {
             Direction in = GATE_FACINGS[i].getOpposite();
             boolean spansX = GATE_FACINGS[i].getAxis() == Direction.Axis.Z;
             BlockPos inner = g.relative(in);
-            for (int off = -2; off <= 2; off++) {
-                if (off == 0) {
-                    continue; // leave the middle clear so you can still reach the boards
+            // Only ever at the shoulders of a breach. The middle three blocks stay
+            // completely clear - a breach you have to squeeze through is just a
+            // window again, and walking straight out of one is now the point.
+            for (int off = -3; off <= 3; off++) {
+                if (Math.abs(off) < 2) {
+                    continue;
                 }
                 level.setBlock(cell(inner, spansX, off, -1),
                         Blocks.PACKED_MUD.defaultBlockState(), 2);
-                if (Math.abs(off) == 1) {
+                if (Math.abs(off) == 3) {
                     level.setBlock(cell(inner, spansX, off, 0),
                             Blocks.MUD_BRICK_WALL.defaultBlockState(), 2);
                 }

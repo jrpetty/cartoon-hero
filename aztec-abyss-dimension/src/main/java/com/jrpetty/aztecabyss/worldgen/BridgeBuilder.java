@@ -125,7 +125,7 @@ public final class BridgeBuilder {
         return switch (rng.nextInt(6)) {
             case 0 -> Blocks.COARSE_DIRT.defaultBlockState();
             case 1 -> Blocks.PODZOL.defaultBlockState();
-            case 2 -> Blocks.GRAVEL.defaultBlockState();
+            case 2 -> Blocks.ROOTED_DIRT.defaultBlockState();
             case 3 -> Blocks.ANDESITE.defaultBlockState();
             default -> Blocks.STONE.defaultBlockState();
         };
