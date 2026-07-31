@@ -119,6 +119,21 @@ public enum ArenaMap {
         return this == BRIDGE ? BridgeBuilder.HEART : null;
     }
 
+    /**
+     * Whether the horde gates on this map are boarded up and have to be broken
+     * through - and can be nailed back together by hunters.
+     *
+     * <p>Temple only, and deliberately so. Its four gates surround you, which is
+     * exactly the shape barricades need: more gates than you can hold, so every
+     * round is a question of which two you concede. The Bridge is the opposite -
+     * one gate, 135 blocks from the fort, so boarding it would mean abandoning
+     * the Heart to maintain something you cannot see. Each map gets one thing to
+     * look after, and they stay different games because of it.
+     */
+    public boolean hasBarricades() {
+        return this == TEMPLE;
+    }
+
     /** The volume wave mobs are tracked and swept within for this map. */
     public AABB bounds() {
         if (this == BRIDGE) {

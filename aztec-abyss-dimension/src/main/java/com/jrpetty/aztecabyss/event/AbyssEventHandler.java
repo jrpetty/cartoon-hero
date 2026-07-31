@@ -207,6 +207,35 @@ public final class AbyssEventHandler {
         event.setCancellationResult(net.minecraft.world.InteractionResult.SUCCESS);
     }
 
+    /**
+     * Right-clicking a boarded gate nails another board back on.
+     *
+     * <p>Free, and deliberately so: the price is the second and a quarter you
+     * spend facing the wrong way with the arena at your back, which is the same
+     * price the genre has always charged. Handled ahead of the block-break rules
+     * because the gate frame is otherwise inert scenery.
+     */
+    @SubscribeEvent
+    public void onRepairBarricade(net.neoforged.neoforge.event.entity.player.PlayerInteractEvent.RightClickBlock event) {
+        if (!(event.getLevel() instanceof ServerLevel level) || !inAbyss(level)) {
+            return;
+        }
+        if (!(event.getEntity() instanceof ServerPlayer player)) {
+            return;
+        }
+        com.jrpetty.aztecabyss.worldgen.ArenaMap map = RoundManager.game().getMap();
+        if (!map.hasBarricades()) {
+            return;
+        }
+        int gate = com.jrpetty.aztecabyss.round.Barricade.gateIndexNear(map, event.getPos());
+        if (gate < 0) {
+            return;
+        }
+        RoundManager.repairBarricade(level, player, gate);
+        event.setCanceled(true);
+        event.setCancellationResult(net.minecraft.world.InteractionResult.SUCCESS);
+    }
+
     @SubscribeEvent
     public void onUseAbility(net.neoforged.neoforge.event.entity.player.PlayerInteractEvent.RightClickItem event) {
         if (!(event.getLevel() instanceof ServerLevel level) || !inAbyss(level)) {

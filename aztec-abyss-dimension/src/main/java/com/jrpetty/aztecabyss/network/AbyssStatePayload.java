@@ -14,11 +14,16 @@ import net.minecraft.resources.ResourceLocation;
  * this is a special fog round (pea-soup mist), how many enemies remain, the
  * squad's up/total headcount, and the viewer's own kill tally this run.
  *
- * {@code playersPacked} packs up-count and total-count into one int to keep the
- * composite codec within its 6-pair ceiling.
+ * {@code packed} carries three things in one int - up-count, total-count and the
+ * board count on each of up to four horde gates - because the composite codec
+ * tops out at six field pairs and this payload is already at all six.
+ *
+ * <p>Layout, low bits first: total (8) | up (8) | gate boards (4 x 4). A gate
+ * nibble of {@code 0xF} means the active map has no barricades at all, which is
+ * how the client knows to leave that row off the HUD entirely.
  */
 public record AbyssStatePayload(boolean inRun, int round, boolean fogRound,
-                                int enemiesRemaining, int playersPacked, int myKills)
+                                int enemiesRemaining, int packed, int myKills)
         implements CustomPacketPayload {
 
     public static final Type<AbyssStatePayload> TYPE =
@@ -30,20 +35,33 @@ public record AbyssStatePayload(boolean inRun, int round, boolean fogRound,
                     ByteBufCodecs.VAR_INT, AbyssStatePayload::round,
                     ByteBufCodecs.BOOL, AbyssStatePayload::fogRound,
                     ByteBufCodecs.VAR_INT, AbyssStatePayload::enemiesRemaining,
-                    ByteBufCodecs.VAR_INT, AbyssStatePayload::playersPacked,
+                    ByteBufCodecs.VAR_INT, AbyssStatePayload::packed,
                     ByteBufCodecs.VAR_INT, AbyssStatePayload::myKills,
                     AbyssStatePayload::new);
 
-    public static int packPlayers(int up, int total) {
-        return (up << 8) | (total & 0xFF);
+    /** Nibble value meaning "no barricades on this map". */
+    public static final int NO_GATE = 0xF;
+
+    public static int pack(int up, int total, int gateBoardsPacked) {
+        return ((gateBoardsPacked & 0xFFFF) << 16) | ((up & 0xFF) << 8) | (total & 0xFF);
     }
 
     public int playersUp() {
-        return playersPacked >> 8;
+        return (packed >> 8) & 0xFF;
     }
 
     public int playersTotal() {
-        return playersPacked & 0xFF;
+        return packed & 0xFF;
+    }
+
+    /** Boards left on gate {@code i}, or {@link #NO_GATE} if this map has none. */
+    public int gateBoards(int i) {
+        return (packed >>> (16 + i * 4)) & 0xF;
+    }
+
+    /** Whether the active map has boarded gates worth showing on the HUD. */
+    public boolean hasGates() {
+        return gateBoards(0) != NO_GATE;
     }
 
     @Override

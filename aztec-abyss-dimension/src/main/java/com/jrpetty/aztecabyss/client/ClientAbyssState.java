@@ -19,6 +19,9 @@ public final class ClientAbyssState {
     private static volatile int playersTotal = 0;
     private static volatile int myKills = 0;
 
+    /** Boards left on each horde gate, or empty on maps without barricades. */
+    private static volatile int[] gateBoards = new int[0];
+
     /** Whether the live HUD panel is shown (toggled by the keybind). */
     private static volatile boolean hudVisible = true;
 
@@ -39,6 +42,25 @@ public final class ClientAbyssState {
         playersUp = payload.playersUp();
         playersTotal = payload.playersTotal();
         myKills = payload.myKills();
+        if (!payload.hasGates()) {
+            gateBoards = new int[0];
+        } else {
+            int[] g = new int[4];
+            int n = 0;
+            for (int i = 0; i < 4; i++) {
+                int v = payload.gateBoards(i);
+                if (v == AbyssStatePayload.NO_GATE) {
+                    break;
+                }
+                g[n++] = v;
+            }
+            gateBoards = java.util.Arrays.copyOf(g, n);
+        }
+    }
+
+    /** Boards left per horde gate; empty when the active map has no barricades. */
+    public static int[] getGateBoards() {
+        return gateBoards;
     }
 
     public static void openRecap(RunRecapPayload payload) {

@@ -205,6 +205,37 @@ public final class AbyssClientEffects {
         g.drawString(font, label, x, y, 0xFFFFFF, true);
     }
 
+    private static final String[] GATE_LABELS = {"N", "S", "E", "W"};
+
+    /**
+     * One compact row showing every horde gate as a run of filled and missing
+     * boards, so a glance tells you which side is about to give. Colour carries
+     * the urgency; the bar carries how long you have.
+     */
+    private static String gateGauge(int[] gates) {
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < gates.length && i < GATE_LABELS.length; i++) {
+            int boards = gates[i];
+            String colour = boards == 0 ? "§4" : boards <= 2 ? "§c" : boards <= 4 ? "§e" : "§a";
+            if (i > 0) {
+                sb.append(" ");
+            }
+            sb.append("§7").append(GATE_LABELS[i]).append(colour);
+            if (boards == 0) {
+                sb.append("✖");
+                continue;
+            }
+            for (int b = 0; b < boards; b++) {
+                sb.append("|");
+            }
+            sb.append("§8");
+            for (int b = boards; b < com.jrpetty.aztecabyss.round.Barricade.MAX_BOARDS; b++) {
+                sb.append("|");
+            }
+        }
+        return sb.toString();
+    }
+
     /** The live run HUD panel: round, enemies remaining, squad headcount, personal kills. */
     private static void drawHud(net.minecraft.client.gui.GuiGraphics g, Minecraft mc) {
         net.minecraft.client.gui.Font font = mc.font;
@@ -231,6 +262,11 @@ public final class AbyssClientEffects {
         }
         if (total > 1) {
             lines.add(net.minecraft.network.chat.Component.literal("§c❤ §fSquad: §a" + up + "§7/" + total + " up"));
+        }
+        int[] gates = ClientAbyssState.getGateBoards();
+        if (gates.length > 0) {
+            lines.add(net.minecraft.network.chat.Component.literal("§6⌸ §fGates"));
+            lines.add(net.minecraft.network.chat.Component.literal(gateGauge(gates)));
         }
         lines.add(net.minecraft.network.chat.Component.literal("§b✦ §fKills: §b" + kills));
 

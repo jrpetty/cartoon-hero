@@ -40,6 +40,16 @@ public final class ArenaGenerator {
 
         BlockState sentinel = level.getBlockState(AztecAbyssConstants.TEMPLE_CENTER);
         if (sentinel.is(Blocks.GILDED_BLACKSTONE)) {
+            // Arena is already standing, but a world generated before the gates
+            // were boarded has arches with nothing behind them - and a free-standing
+            // arch pens nothing, you just walk around it. Retro-fit the gatehouses
+            // rather than making players delete the dimension to get the feature.
+            BlockPos probe = AztecAbyssConstants.MOB_GATES[0]
+                    .relative(com.jrpetty.aztecabyss.round.Barricade.outward(AztecAbyssConstants.MOB_GATES[0]),
+                            com.jrpetty.aztecabyss.round.Barricade.POCKET_DEPTH);
+            if (!level.getBlockState(probe.above()).is(Blocks.POLISHED_BLACKSTONE_BRICKS)) {
+                buildMobGates(level);
+            }
             return; // already built
         }
 
@@ -111,13 +121,88 @@ public final class ArenaGenerator {
                     }
                 }
             }
-            // Hanging chains and a keystone banner-slab over the arch.
-            for (int off = -1; off <= 1; off++) {
+            // Hanging chains flanking the arch. They sit on the pillar line rather
+            // than in the mouth itself, because the mouth belongs to the boards.
+            for (int off = -2; off <= 2; off += 4) {
                 int x = onZAxis ? gx + off : gx;
                 int z = onZAxis ? gz : gz + off;
                 level.setBlock(new BlockPos(x, gy + 3, z), Blocks.CHAIN.defaultBlockState()
                         .setValue(BlockStateProperties.AXIS, Direction.Axis.Y), 3);
             }
+
+            buildGatehouse(level, gate);
+        }
+    }
+
+    /**
+     * The sealed pen behind each arch that the horde spawns into.
+     *
+     * <p>This is what turns the boards from decoration into a mechanic. The arch
+     * on its own is a free-standing structure in an open field - anything penned
+     * by it would simply walk around. So each gate gets a roofed, walled
+     * gatehouse whose only way out is the boarded mouth: no flanking it, no
+     * climbing it (spiders), no flying over it (phantoms). Everything that
+     * reaches the arena comes through the boards.
+     *
+     * <p>It doubles as atmosphere - you can see them massing in the dark behind
+     * the planks, lit from below by soul fire, before a single board comes off.
+     */
+    private static void buildGatehouse(ServerLevel level, BlockPos gate) {
+        boolean onZAxis = gate.getX() == 0;
+        Direction out = com.jrpetty.aztecabyss.round.Barricade.outward(gate);
+        int half = com.jrpetty.aztecabyss.round.Barricade.POCKET_HALF_WIDTH;
+        int depth = com.jrpetty.aztecabyss.round.Barricade.POCKET_DEPTH;
+        int gy = gate.getY();
+
+        BlockState shell = Blocks.POLISHED_BLACKSTONE_BRICKS.defaultBlockState();
+        BlockState trim = Blocks.GILDED_BLACKSTONE.defaultBlockState();
+
+        for (int d = 0; d <= depth; d++) {
+            BlockPos row = gate.relative(out, d);
+            for (int off = -half; off <= half; off++) {
+                int x = onZAxis ? row.getX() + off : row.getX();
+                int z = onZAxis ? row.getZ() : row.getZ() + off;
+
+                // Floor: scorched ground the whole way back.
+                level.setBlock(new BlockPos(x, gy - 1, z), Blocks.BLACKSTONE.defaultBlockState(), 3);
+
+                boolean sideWall = Math.abs(off) == half;
+                boolean backWall = d == depth;
+                if (d > 0 && (sideWall || backWall)) {
+                    for (int dy = 0; dy < 6; dy++) {
+                        level.setBlock(new BlockPos(x, gy + dy, z), shell, 3);
+                    }
+                } else if (d > 0) {
+                    // Hollow interior - clear whatever the arena floor left behind.
+                    for (int dy = 0; dy < 5; dy++) {
+                        level.setBlock(new BlockPos(x, gy + dy, z), Blocks.AIR.defaultBlockState(), 3);
+                    }
+                }
+
+                // Roof. Started one block out so it never eats the arch or its towers.
+                if (d > 0) {
+                    level.setBlock(new BlockPos(x, gy + 5, z), d == depth || sideWall ? trim : shell, 3);
+                }
+            }
+
+            // Seal the strip directly above the lintel, where the arch stops and
+            // the pen has not started - otherwise there is a slot to fly out of.
+            if (d == 0) {
+                for (int off = -half; off <= half; off++) {
+                    int x = onZAxis ? row.getX() + off : row.getX();
+                    int z = onZAxis ? row.getZ() : row.getZ() + off;
+                    level.setBlock(new BlockPos(x, gy + 5, z), shell, 3);
+                }
+            }
+        }
+
+        // Soul fire in the back corners: they arrive out of the dark, underlit.
+        for (int off = -half + 1; off <= half - 1; off += (half - 1) * 2) {
+            BlockPos back = gate.relative(out, depth - 1);
+            int x = onZAxis ? back.getX() + off : back.getX();
+            int z = onZAxis ? back.getZ() : back.getZ() + off;
+            level.setBlock(new BlockPos(x, gy - 1, z), Blocks.SOUL_SOIL.defaultBlockState(), 3);
+            level.setBlock(new BlockPos(x, gy, z), Blocks.SOUL_FIRE.defaultBlockState(), 3);
         }
     }
 

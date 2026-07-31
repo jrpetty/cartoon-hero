@@ -132,6 +132,9 @@ public final class RoundManager {
                 com.jrpetty.aztecabyss.worldgen.ArenaMap m = game.getMap();
                 abyssLevel.getWorldBorder().setCenter(m.borderCenterX(), m.borderCenterZ());
                 abyssLevel.getWorldBorder().setSize(m.borderSize());
+                // Every gate goes back up for a fresh run, however last run ended.
+                Barricade.resetFor(abyssLevel, m);
+                LAST_REPAIR.clear();
             }
             game.setPhase(AbyssGame.Phase.BETWEEN_ROUNDS);
             game.setRound(0);
@@ -220,6 +223,9 @@ public final class RoundManager {
         if (game.getMap().objective() != null) {
             tickObjective(level, present);
             updateHeartBars();
+        }
+        if (game.getMap().hasBarricades() && now % BARRICADE_INTERVAL == 0L) {
+            tickBarricades(level, present);
         }
         switch (game.getPhase()) {
             case BETWEEN_ROUNDS -> {
@@ -341,10 +347,21 @@ public final class RoundManager {
     private static void spawnWaveMob(ServerLevel level, List<ServerPlayer> present, int round, boolean brute) {
         // Every wave mob pours out of one of the active map's horde gates.
         BlockPos[] gates = game.getMap().gates();
-        BlockPos gate = gates[RNG.nextInt(gates.length)];
+        int gateIndex = RNG.nextInt(gates.length);
+        BlockPos gate = gates[gateIndex];
+        boolean penned = game.getMap().hasBarricades();
         boolean spreadAlongX = gate.getZ() != 0 || gates.length == 1;
         int jitter = RNG.nextInt(5) - 2;
-        BlockPos pos = spreadAlongX ? gate.offset(jitter, 0, 0) : gate.offset(0, 0, jitter);
+        BlockPos pos;
+        if (penned) {
+            // Materialise inside the sealed gatehouse, back from the boards, so
+            // there is a walk-up before the tearing starts.
+            BlockPos pen = Barricade.penSpawn(gate);
+            int j = RNG.nextInt(3) - 1;
+            pos = spreadAlongX ? pen.offset(j, 0, 0) : pen.offset(0, 0, j);
+        } else {
+            pos = spreadAlongX ? gate.offset(jitter, 0, 0) : gate.offset(0, 0, jitter);
+        }
         level.sendParticles(net.minecraft.core.particles.ParticleTypes.PORTAL,
                 pos.getX() + 0.5, pos.getY() + 1.0, pos.getZ() + 0.5, 12, 0.4, 0.8, 0.4, 0.05);
 
@@ -360,13 +377,23 @@ public final class RoundManager {
         mob.setPersistenceRequired();
         mob.getPersistentData().putBoolean("aztecabyss_wave_mob", true);
         mob.getPersistentData().putLong("aztecabyss_gate_tick", level.getGameTime());
+        // -1 means "loose in the arena". Always written, because an unset int reads
+        // back as 0 and would masquerade as the north gate.
+        mob.getPersistentData().putInt("aztecabyss_gate_index", penned ? gateIndex : -1);
+        if (penned) {
+            mob.getPersistentData().putLong("aztecabyss_penned_at", level.getGameTime());
+        }
 
         // On maps with something to defend, some of the horde comes specifically
         // for it - these are the ones that punish you for not watching the Heart.
         int role = rollRole(round);
         applyRole(level, mob, role, present);
 
-        if (role != ROLE_BREAKER) {
+        if (penned) {
+            // Nothing penned gets a player target - the boards are the only thing
+            // in front of it, and the barricade tick drives it from here.
+            mob.setTarget(null);
+        } else if (role != ROLE_BREAKER) {
             // Breakers never look at players; everything else opens on the nearest.
             ServerPlayer target = nearestTarget(present, pos);
             if (target != null) {
@@ -401,7 +428,10 @@ public final class RoundManager {
      * rounds live or die on how fast you can pick them out of the crowd.
      */
     private static int rollRole(int round) {
-        if (game.getMap().objective() == null) {
+        // Specialists need something to specialise against: a Heart to break, or
+        // boards to tear. On the Temple they are the ones that get through the
+        // gate you thought you were holding.
+        if (game.getMap().objective() == null && !game.getMap().hasBarricades()) {
             return ROLE_NORMAL;
         }
         if (round >= 6 && RNG.nextInt(100) < Math.min(6 + round, 20)) {
@@ -729,6 +759,11 @@ public final class RoundManager {
         boss.setPersistenceRequired();
         boss.getPersistentData().putBoolean("aztecabyss_wave_mob", true); // for arena cleanup
         boss.getPersistentData().putBoolean("aztecabyss_boss", true);
+        // The boss is a wave mob for cleanup purposes, so it passes through every
+        // sweep that filters on that flag. An unwritten gate index reads back as 0
+        // - the north gate - which would quietly hand the Warden to the barricade
+        // logic. Say "loose in the arena" out loud.
+        boss.getPersistentData().putInt("aztecabyss_gate_index", -1);
         // Always trackable - the boss is huge and the arena is dark.
         boss.addEffect(new MobEffectInstance(MobEffects.GLOWING, Integer.MAX_VALUE, 0, false, false));
         level.addFreshEntity(boss);
@@ -1005,6 +1040,21 @@ public final class RoundManager {
         game.setPhaseChangedAt(level.getGameTime());
         game.setFogRound(false); // mist clears in the breather
         broadcastHud(level);
+
+        // Nothing mends the gates on its own - that is what the breather is for.
+        // Say so plainly, because the cost of forgetting is a round you can't win.
+        if (game.getMap().hasBarricades()) {
+            int missing = Barricade.missingBoards();
+            if (missing > 0) {
+                int open = Barricade.openCount();
+                String msg = open > 0
+                        ? "§c⚒ " + open + " gate" + (open > 1 ? "s" : "") + " standing open §7— board them before the next wave"
+                        : "§e⚒ " + missing + " board" + (missing > 1 ? "s" : "") + " gone §7— right-click a gate to mend it";
+                for (ServerPlayer p : participantPlayers(level)) {
+                    actionBar(p, msg);
+                }
+            }
+        }
 
         // Every fifth cleared round drops a randomised supply cache to keep long runs going.
         if (game.getRound() % 5 == 0) {
@@ -1545,17 +1595,26 @@ public final class RoundManager {
         int enemies = game.isBossRound()
                 ? game.getAliveZombies()
                 : Math.max(0, game.getKillsNeededThisRound() - game.getKillsThisRound());
+        int gateBoards = Barricade.packed(game.getMap());
         for (ServerPlayer p : present) {
             int myKills = p.getData(ModAttachments.RUN_STATE).getKillsThisRun();
 
             // Only push the HUD when something a player can actually see changed;
-            // this used to fire twice a second per player regardless.
-            long stamp = (((long) game.getRound() * 1000L + enemies) * 100L + up) * 10000L
-                    + myKills + (game.isFogRound() ? 1L : 0L) * 100000000L + total * 1000000L;
+            // this used to fire twice a second per player regardless. Rolled as a
+            // multiplicative hash rather than the old hand-placed decimal offsets,
+            // which had started to overlap once there were this many fields - and
+            // gate boards have to be in it, or a board falling would never show.
+            long stamp = game.getRound();
+            stamp = stamp * 8191L + enemies;
+            stamp = stamp * 8191L + up;
+            stamp = stamp * 8191L + total;
+            stamp = stamp * 8191L + myKills;
+            stamp = stamp * 8191L + gateBoards;
+            stamp = stamp * 2L + (game.isFogRound() ? 1L : 0L);
             Long last = LAST_HUD_STAMP.get(p.getUUID());
             if (last == null || last != stamp) {
                 LAST_HUD_STAMP.put(p.getUUID(), stamp);
-                ModNetworking.sendHud(p, game.getRound(), game.isFogRound(), enemies, up, total, myKills);
+                ModNetworking.sendHud(p, game.getRound(), game.isFogRound(), enemies, up, total, myKills, gateBoards);
             }
 
             // Squad panel only matters in co-op - skip the whole build solo.
@@ -1642,6 +1701,12 @@ public final class RoundManager {
             if (mob.getPersistentData().getBoolean("aztecabyss_boss")) {
                 continue;
             }
+            // Penned mobs stand at the boards for as long as it takes; that is the
+            // mechanic, not a glitch. The barricade tick keeps their clock fresh,
+            // and this is the belt to that pair of braces.
+            if (mob.getPersistentData().getInt("aztecabyss_gate_index") >= 0) {
+                continue;
+            }
             long since = now - mob.getPersistentData().getLong("aztecabyss_gate_tick");
             if (since < STUCK_TICKS) {
                 continue;
@@ -1674,6 +1739,12 @@ public final class RoundManager {
         long now = level.getGameTime();
 
         for (Mob mob : mobs) {
+            // Anything still behind the boards belongs to the barricade tick - it
+            // has no business being pointed at a player it cannot reach.
+            if (mob.getPersistentData().getInt("aztecabyss_gate_index") >= 0) {
+                continue;
+            }
+
             specialistApproachCue(level, mob, present);
 
             // Breakers are single-minded: no aggro, no provoking, no distractions.
@@ -1776,6 +1847,182 @@ public final class RoundManager {
         }
         mob.getPersistentData().putLong("aztecabyss_provoked_until", gameTime + PROVOKE_TICKS);
         mob.setTarget(by);
+    }
+
+    // ------------------------------------------------------------------
+    // Barricades - the boarded gates on maps that have them
+    // ------------------------------------------------------------------
+
+    /** How often the boards are worked, in ticks. One second is plenty. */
+    private static final int BARRICADE_INTERVAL = 20;
+    /** How close a penned mob has to be to the mouth to be working on the boards. */
+    private static final double TEAR_REACH = 3.0;
+    /** Effort per second by role: Breakers rip, Sappers heave, the rest just claw. */
+    private static final float TEAR_RATE_NORMAL = 1.0f;
+    private static final float TEAR_RATE_BREAKER = 2.0f;
+    private static final float TEAR_RATE_SAPPER = 1.6f;
+    /** A penned mob's patience, in ticks, before it starts tearing in earnest. */
+    private static final long RAGE_TICKS = 600L;   // 30s -> doubles
+    private static final long BERSERK_TICKS = 1200L; // 60s -> six times
+
+    /** How long a player must wait between nailing boards back on. */
+    private static final int REPAIR_COOLDOWN_TICKS = 25;
+    private static final Map<UUID, Long> LAST_REPAIR = new HashMap<>();
+
+    /**
+     * Works every boarded gate: penned mobs walk up, tear, and are turned loose
+     * into the arena the moment the last board comes off.
+     *
+     * <p>The escalation is the important part. A single mob against a dedicated
+     * repairer would otherwise be a stalemate, and a stalemate here is fatal -
+     * the round can never end while anything is still penned. So patience runs
+     * out: after thirty seconds a held mob tears twice as fast, after a minute
+     * six times, which outruns any number of hands on the boards. Barricades buy
+     * time, and only time. They are never a way to win the round.
+     *
+     * <p>Costs four small box queries a second and nothing else; blocks are only
+     * written when a board actually changes.
+     */
+    private static void tickBarricades(ServerLevel level, List<ServerPlayer> present) {
+        com.jrpetty.aztecabyss.worldgen.ArenaMap map = game.getMap();
+        BlockPos[] gates = map.gates();
+        long now = level.getGameTime();
+        for (int i = 0; i < gates.length; i++) {
+            final int gateIndex = i;
+            BlockPos gate = gates[i];
+            List<Mob> penned = level.getEntitiesOfClass(Mob.class, Barricade.penBounds(gate),
+                    m -> m.getPersistentData().getBoolean("aztecabyss_wave_mob")
+                            && !m.getPersistentData().getBoolean("aztecabyss_boss")
+                            && m.getPersistentData().getInt("aztecabyss_gate_index") == gateIndex);
+            if (penned.isEmpty()) {
+                continue;
+            }
+
+            boolean open = Barricade.isOpen(i);
+            float effort = 0.0f;
+            for (Mob mob : penned) {
+                // Penned mobs stand still by design - keep the stuck-sweep off them
+                // or they'll be teleported away mid-tear and read as vanishing.
+                mob.getPersistentData().putLong("aztecabyss_gate_tick", now);
+
+                if (open) {
+                    releaseFromPen(level, mob, present);
+                    continue;
+                }
+
+                mob.setTarget(null);
+                double distSqr = mob.distanceToSqr(gate.getX() + 0.5, gate.getY(), gate.getZ() + 0.5);
+                if (distSqr > TEAR_REACH * TEAR_REACH) {
+                    // Still walking up to the boards.
+                    if (mob.getNavigation().isDone()) {
+                        mob.getNavigation().moveTo(gate.getX() + 0.5, gate.getY(), gate.getZ() + 0.5, 1.0);
+                    }
+                    continue;
+                }
+
+                mob.getNavigation().stop();
+                mob.getLookControl().setLookAt(gate.getX() + 0.5, gate.getY() + 1.5, gate.getZ() + 0.5);
+                mob.swing(net.minecraft.world.InteractionHand.MAIN_HAND);
+
+                long held = now - mob.getPersistentData().getLong("aztecabyss_penned_at");
+                float rage = held >= BERSERK_TICKS ? 6.0f : held >= RAGE_TICKS ? 2.0f : 1.0f;
+                effort += roleTearRate(mob.getPersistentData().getInt("aztecabyss_role")) * rage;
+            }
+
+            if (open || effort <= 0.0f) {
+                continue;
+            }
+            // One second of work per tick of this loop.
+            int fell = Barricade.addEffort(level, map, i, effort * (BARRICADE_INTERVAL / 20.0f));
+            if (fell > 0) {
+                onBoardTorn(level, present, i, gate);
+            }
+        }
+    }
+
+    private static float roleTearRate(int role) {
+        return switch (role) {
+            case ROLE_BREAKER -> TEAR_RATE_BREAKER;
+            case ROLE_SAPPER -> TEAR_RATE_SAPPER;
+            default -> TEAR_RATE_NORMAL;
+        };
+    }
+
+    /** A board just came off: sound it, and call out a gate that's nearly gone. */
+    private static void onBoardTorn(ServerLevel level, List<ServerPlayer> present, int gateIndex, BlockPos gate) {
+        int left = Barricade.count(gateIndex);
+        barricadeSound(level, gate, net.minecraft.sounds.SoundEvents.WOOD_BREAK, 1.6F, 0.7F);
+
+        if (left == 0) {
+            // The gate is open. This is the loud moment.
+            barricadeSound(level, gate, net.minecraft.sounds.SoundEvents.RAVAGER_ROAR, 1.5F, 0.6F);
+            for (ServerPlayer p : present) {
+                actionBar(p, "§4§l✖ THE " + Barricade.gateName(gateIndex) + " GATE IS OPEN");
+                level.playSound(null, p.blockPosition(), net.minecraft.sounds.SoundEvents.ANVIL_LAND,
+                        SoundSource.HOSTILE, 0.8F, 0.5F);
+            }
+        } else if (left == 1) {
+            for (ServerPlayer p : present) {
+                actionBar(p, "§c⚠ The §f" + Barricade.gateName(gateIndex) + "§c gate is about to fall");
+            }
+        }
+    }
+
+    /** Turns a mob loose into the arena once its gate has been stripped. */
+    private static void releaseFromPen(ServerLevel level, Mob mob, List<ServerPlayer> present) {
+        mob.getPersistentData().putInt("aztecabyss_gate_index", -1);
+        // Clambering through the gap costs it a moment - the reward for having
+        // held the gate as long as you did.
+        mob.addEffect(new MobEffectInstance(MobEffects.MOVEMENT_SLOWDOWN, 25, 2, false, false));
+        ServerPlayer target = nearestTarget(present, mob.blockPosition());
+        if (target != null && mob.getPersistentData().getInt("aztecabyss_role") != ROLE_BREAKER) {
+            mob.setTarget(target);
+        }
+    }
+
+    /**
+     * Nails one board back onto a gate. Free by design: the price is the seconds
+     * you spend stood at the mouth with your back to the arena, not an item.
+     *
+     * @return true if a board actually went back on
+     */
+    public static boolean repairBarricade(ServerLevel level, ServerPlayer player, int gateIndex) {
+        com.jrpetty.aztecabyss.worldgen.ArenaMap map = game.getMap();
+        if (!map.hasBarricades() || !game.isParticipant(player.getUUID())) {
+            return false;
+        }
+        long now = level.getGameTime();
+        Long last = LAST_REPAIR.get(player.getUUID());
+        if (last != null && now - last < REPAIR_COOLDOWN_TICKS) {
+            return false; // still hammering the previous one
+        }
+        if (Barricade.count(gateIndex) >= Barricade.MAX_BOARDS) {
+            actionBar(player, "§7The " + Barricade.gateName(gateIndex) + " gate is sound.");
+            return false;
+        }
+        LAST_REPAIR.put(player.getUUID(), now);
+        if (!Barricade.repair(level, map, gateIndex)) {
+            return false;
+        }
+        int left = Barricade.count(gateIndex);
+        BlockPos gate = map.gates()[gateIndex];
+        barricadeSound(level, gate, net.minecraft.sounds.SoundEvents.WOOD_PLACE, 1.2F, 0.9F);
+        actionBar(player, left >= Barricade.MAX_BOARDS
+                ? "§a✔ The " + Barricade.gateName(gateIndex) + " gate is sound again"
+                : "§e⚒ Board " + left + "§7/" + Barricade.MAX_BOARDS + " §e- "
+                        + Barricade.gateName(gateIndex) + " gate");
+        return true;
+    }
+
+    /**
+     * All barricade audio goes through here, typed as a plain {@link SoundEvent}.
+     * The sound constants in this mapping are a mix of bare events and holders,
+     * and mixing the two has cost us builds before; funnelling them through one
+     * signature makes any such mismatch a one-line fix instead of a hunt.
+     */
+    private static void barricadeSound(ServerLevel level, BlockPos pos,
+                                       net.minecraft.sounds.SoundEvent sound, float volume, float pitch) {
+        level.playSound(null, pos, sound, SoundSource.HOSTILE, volume, pitch);
     }
 
     /** How often the objective is sampled, in ticks. */

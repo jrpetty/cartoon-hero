@@ -72,15 +72,19 @@ public final class ModNetworking {
     }
 
     public static void sendState(ServerPlayer player, boolean inRun, int round, boolean fogRound) {
-        PacketDistributor.sendToPlayer(player, new AbyssStatePayload(inRun, round, fogRound, 0, 0, 0));
+        // No gate figures in this lightweight form - mark them absent rather than
+        // letting a zeroed int read as "every gate is wide open".
+        PacketDistributor.sendToPlayer(player, new AbyssStatePayload(
+                inRun, round, fogRound, 0, AbyssStatePayload.pack(0, 0, 0xFFFF), 0));
     }
 
     /** Full in-run state including the live HUD figures. */
     public static void sendHud(ServerPlayer player, int round, boolean fogRound,
-                               int enemiesRemaining, int playersUp, int playersTotal, int myKills) {
+                               int enemiesRemaining, int playersUp, int playersTotal, int myKills,
+                               int gateBoardsPacked) {
         PacketDistributor.sendToPlayer(player, new AbyssStatePayload(
                 true, round, fogRound, enemiesRemaining,
-                AbyssStatePayload.packPlayers(playersUp, playersTotal), myKills));
+                AbyssStatePayload.pack(playersUp, playersTotal, gateBoardsPacked), myKills));
     }
 
     /** Pushes the player's re-entry cooldown deadline so their screen can count it down. */
