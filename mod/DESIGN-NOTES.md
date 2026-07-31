@@ -473,11 +473,15 @@ A full checklist would fix that but cost the discovery.
 
 ## 5. Smaller ideas, not yet explored
 
-- **Trading Post** — dupes as credit toward sealed packs, or one specific
-  missing card at a steep markup. Overlaps heavily with §1; probably one feature.
-- **Trump rules** — one ability per card drawn from what the mob is (Creeper
+- **Trading Post** — ~~dupes as credit toward sealed packs~~ **superseded** by
+  the recycler (§1), which is the same loop and is built.
+- **A trade GUI** — **DECLINED.** Trading works as a chat command
+  (`/mobtrumps trade <player>`, escrowed, 60s expiry) and that is deliberate;
+  it does not need a screen. Do not re-propose.
+- **Trump rules** — ~~one ability per card drawn from what the mob is (Creeper
   pots both cards on a loss, Enderman swaps top for bottom, Wolf peeks at a
-  stat). Toggleable per table so the classic game survives.
+  stat)~~ **DECLINED.** Asked for and turned down. Do not re-propose: the game
+  stays classic Top Trumps, where the only thing on a card is its numbers.
 - **Hall of Fame** — *(built v1.65.0.)* Three server-wide records, all
   append-only and permanent: who unlocked each mob's `000001`, who finished each
   category first, and who has completed all 81. Recorded at the moment the
