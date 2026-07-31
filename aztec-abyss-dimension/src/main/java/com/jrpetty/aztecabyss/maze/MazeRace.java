@@ -79,6 +79,19 @@ public final class MazeRace extends SavedData {
         return true;
     }
 
+    /**
+     * Takes a runner out of the field - they died, and the maze has put them out.
+     * If that empties the field the race is over; nobody is left to win it.
+     */
+    public static void dropOut(ServerLevel level, UUID id) {
+        if (!active || !FIELD.remove(id)) {
+            return;
+        }
+        if (FIELD.isEmpty()) {
+            stop(level, "over — the maze took the whole field");
+        }
+    }
+
     public static void stop(ServerLevel level, String why) {
         if (!active) {
             return;

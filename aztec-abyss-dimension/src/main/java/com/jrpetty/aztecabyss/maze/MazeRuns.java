@@ -27,10 +27,10 @@ import java.util.UUID;
  * per-player, not per-session: two people in the maze are on two clocks, and
  * either can be mid-run while the other is not.
  *
- * <p>Dying does not end a run. It costs you thirty seconds - the handoff's
- * default - and puts you back in the Glade. That is the more interesting rule:
- * an escape is still an escape, but a sloppy one is worth less, so a runner who
- * has died twice has a real reason to keep going rather than reset.
+ * <p>Dying ends it. You are put out of the dimension entirely and locked out for
+ * a spell before you can come back. That makes every corridor a real decision
+ * rather than an inconvenience: there is no grinding an escape out across three
+ * deaths, and a time on the board is a time nobody died for.
  *
  * <p>Only the ten fastest escapes are kept, and they persist with the world.
  */
@@ -48,6 +48,8 @@ public final class MazeRuns extends SavedData {
     }
 
     private static final Map<UUID, Live> LIVE = new HashMap<>();
+    /** Epoch millis each player may next enter the maze. */
+    private static final Map<UUID, Long> LOCKOUT = new HashMap<>();
 
     private final List<Record> records = new ArrayList<>();
 
@@ -80,18 +82,34 @@ public final class MazeRuns extends SavedData {
         LIVE.clear();
     }
 
-    /** Adds the death penalty and keeps the clock running. */
+    /**
+     * Ends a run the hard way. The clock stops, the run is gone, and the lockout
+     * starts - the caller is responsible for actually putting them out of the
+     * dimension, because that has to wait for the respawn.
+     */
     public static void onDeath(ServerPlayer player) {
-        Live live = LIVE.get(player.getUUID());
-        if (live == null) {
-            return;
+        boolean wasRunning = LIVE.remove(player.getUUID()) != null;
+        int lock = AbyssConfig.MAZE_DEATH_LOCKOUT_SECONDS.get();
+        if (lock > 0) {
+            LOCKOUT.put(player.getUUID(), System.currentTimeMillis() + lock * 1000L);
         }
-        LIVE.put(player.getUUID(), new Live(live.startedTick(), live.deaths() + 1, live.leftGlade()));
-        int penalty = AbyssConfig.MAZE_DEATH_PENALTY_SECONDS.get();
-        if (penalty > 0) {
-            player.displayClientMessage(Component.literal(
-                    "§c✖ Caught. §7+" + penalty + "s on your run — the clock is still going."), false);
+        player.displayClientMessage(Component.literal(wasRunning
+                ? "§4✖ The maze took you. §7Your run is over."
+                : "§4✖ The maze took you."), false);
+    }
+
+    /** Seconds until this player may go back in, or 0. */
+    public static int lockoutRemaining(UUID id) {
+        Long until = LOCKOUT.get(id);
+        if (until == null) {
+            return 0;
         }
+        long left = until - System.currentTimeMillis();
+        if (left <= 0) {
+            LOCKOUT.remove(id);
+            return 0;
+        }
+        return (int) ((left + 999L) / 1000L);
     }
 
     /** Elapsed seconds including death penalties, or -1 if not running. */
@@ -100,8 +118,7 @@ public final class MazeRuns extends SavedData {
         if (live == null) {
             return -1;
         }
-        int raw = (int) ((level.getGameTime() - live.startedTick()) / 20L);
-        return raw + live.deaths() * AbyssConfig.MAZE_DEATH_PENALTY_SECONDS.get();
+        return (int) ((level.getGameTime() - live.startedTick()) / 20L);
     }
 
     public static int deaths(UUID id) {

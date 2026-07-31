@@ -92,6 +92,12 @@ public final class MazeEvents {
         if (maze == null) {
             return false;
         }
+        int lock = MazeRuns.lockoutRemaining(player.getUUID());
+        if (lock > 0) {
+            player.displayClientMessage(Component.literal(
+                    "§cThe maze is not done with you yet — §7" + lock + "s."), true);
+            return false;
+        }
         MazeBuilder.beginIfNeeded(maze);
         if (MazeBuilder.isBuilding()) {
             player.displayClientMessage(Component.literal(
@@ -150,7 +156,12 @@ public final class MazeEvents {
             return;
         }
         MazeRuns.onDeath(player);
+        MazeRace.dropOut(level, player.getUUID());
+        DIED_IN_MAZE.add(player.getUUID());
     }
+
+    /** Who died in the maze and is owed a trip out of it on respawn. */
+    private static final java.util.Set<java.util.UUID> DIED_IN_MAZE = new java.util.HashSet<>();
 
     /** A dead Griever leaves the colour team, and sometimes a serum. */
     @SubscribeEvent
@@ -187,17 +198,33 @@ public final class MazeEvents {
         return 1;
     }
 
-    /** Respawning inside the maze puts you back in the Glade, not at world spawn. */
+    /**
+     * Dying in the maze puts you out of it.
+     *
+     * <p>Handled on respawn rather than on death because a dead player cannot be
+     * moved anywhere useful. Vanilla may already have respawned them outside -
+     * with no bed they land at world spawn - but it may not, so this is explicit
+     * either way rather than relying on where the respawn happened to put them.
+     */
     @SubscribeEvent
     public static void onRespawn(PlayerEvent.PlayerRespawnEvent event) {
-        if (!(event.getEntity() instanceof ServerPlayer player)) {
+        if (!(event.getEntity() instanceof ServerPlayer player)
+                || !DIED_IN_MAZE.remove(player.getUUID())) {
             return;
         }
-        if (!(player.level() instanceof ServerLevel level) || !isMaze(level)) {
+        if (player.getServer() == null) {
             return;
         }
-        player.teleportTo(level, MazeData.SPAWN_X + 0.5, MazeData.SPAWN_Y, MazeData.SPAWN_Z + 0.5,
-                java.util.Set.of(), 0.0F, 0.0F);
+        ServerLevel home = player.getServer().overworld();
+        if (player.level() != home) {
+            player.changeDimension(new DimensionTransition(home,
+                    Vec3.atBottomCenterOf(home.getSharedSpawnPos()),
+                    Vec3.ZERO, 0.0F, 0.0F, DimensionTransition.DO_NOTHING));
+        }
+        int lock = MazeRuns.lockoutRemaining(player.getUUID());
+        player.displayClientMessage(Component.literal(lock > 0
+                ? "§7The walls put you out. §8You can go back in in " + lock + "s."
+                : "§7The walls put you out."), false);
     }
 
     /** Leaving the dimension abandons whatever run was going. */

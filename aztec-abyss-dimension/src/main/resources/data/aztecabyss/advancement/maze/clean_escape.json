@@ -1,11 +1,11 @@
 {
   "display": {
     "icon": {
-      "id": "minecraft:feather",
+      "id": "minecraft:torch",
       "count": 1
     },
-    "title": "Not a Scratch",
-    "description": "Escape without dying once.",
+    "title": "Night Runner",
+    "description": "Reach the exit after the doors have already sealed.",
     "frame": "challenge",
     "show_toast": true,
     "announce_to_chat": true,

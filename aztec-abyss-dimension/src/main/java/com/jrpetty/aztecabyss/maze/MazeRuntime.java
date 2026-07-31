@@ -206,10 +206,10 @@ public final class MazeRuntime {
                 MazeAdvancements.grant(p, MazeAdvancements.SURVIVE_NIGHT);
             }
             if (layout != null && MazeRuns.isRunning(p.getUUID()) && atExit(at, layout)) {
-                int deaths = MazeRuns.deaths(p.getUUID());
                 int seconds = MazeRuns.complete(level, p, layout);
                 MazeAdvancements.grant(p, MazeAdvancements.FIRST_ESCAPE);
-                if (deaths == 0) {
+                if (isNight(t)) {
+                    // Out through a maze that has already sealed behind you.
                     MazeAdvancements.grant(p, MazeAdvancements.CLEAN_ESCAPE);
                 }
                 if (seconds >= 0 && MazeRace.onEscape(level, p, seconds)) {
@@ -250,7 +250,9 @@ public final class MazeRuntime {
         p.displayClientMessage(Component.literal(
                 "§7The walls move every night, and the way out moves with them. §cGrievers hunt after dark."), false);
         p.displayClientMessage(Component.literal(
-                "§8Dying costs you time, not your run. §7/maze status · /maze leaderboard"), false);
+                "§c§lDie and the walls put you out. §8There is no second try at a run."), false);
+        p.displayClientMessage(Component.literal(
+                "§8/maze status · /maze leaderboard"), false);
     }
 
     /** The status bar: day, layout, doors, and your own clock if one is running. */

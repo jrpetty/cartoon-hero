@@ -116,8 +116,8 @@ public final class AbyssConfig {
                 .defineInRange("grieverSpeed", 0.33, 0.05, 2.0);
         GRIEVER_DAMAGE = b.comment("Griever attack damage.")
                 .defineInRange("grieverAttackDamage", 7.0, 0.0, 100.0);
-        MAZE_DEATH_PENALTY_SECONDS = b.comment("Seconds added to your run time each time you die in the maze. 0 disables.")
-                .defineInRange("mazeDeathPenaltySeconds", 30, 0, 3600);
+        MAZE_DEATH_LOCKOUT_SECONDS = b.comment("Seconds you are locked out of the maze after dying in it. 0 lets you walk straight back in.")
+                .defineInRange("mazeDeathLockoutSeconds", 60, 0, 3600);
         MAZE_SHOW_BRIEFING = b.comment("Show newcomers the one-time maze rules message.")
                 .define("mazeShowBriefing", true);
         b.pop();
@@ -139,7 +139,7 @@ public final class AbyssConfig {
     public static final ModConfigSpec.DoubleValue GRIEVER_HEALTH;
     public static final ModConfigSpec.DoubleValue GRIEVER_SPEED;
     public static final ModConfigSpec.DoubleValue GRIEVER_DAMAGE;
-    public static final ModConfigSpec.IntValue MAZE_DEATH_PENALTY_SECONDS;
+    public static final ModConfigSpec.IntValue MAZE_DEATH_LOCKOUT_SECONDS;
     public static final ModConfigSpec.BooleanValue MAZE_SHOW_BRIEFING;
 
     public static long cooldownMillis() {
