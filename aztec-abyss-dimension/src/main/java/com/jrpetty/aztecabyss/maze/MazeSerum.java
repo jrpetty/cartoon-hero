@@ -41,14 +41,15 @@ public final class MazeSerum {
     /** The serum itself. */
     public static ItemStack create() {
         ItemStack stack = new ItemStack(Items.POTION);
+        // Three fields, not four: the custom-name component only arrives in
+        // 1.21.2, and this builds against 1.21.1.
         stack.set(DataComponents.POTION_CONTENTS, new PotionContents(
                 Optional.empty(),
                 Optional.of(0x7FBF3F), // sickly Griever green
                 List.of(
                         new MobEffectInstance(MobEffects.INVISIBILITY, 300, 0, false, true),
                         new MobEffectInstance(MobEffects.NIGHT_VISION, 600, 0, false, true),
-                        new MobEffectInstance(MobEffects.MOVEMENT_SPEED, 300, 1, false, true)),
-                Optional.empty()));
+                        new MobEffectInstance(MobEffects.MOVEMENT_SPEED, 300, 1, false, true))));
         stack.set(DataComponents.CUSTOM_NAME,
                 Component.literal("§2§lGriever Serum"));
         stack.set(DataComponents.LORE, new net.minecraft.world.item.component.ItemLore(
