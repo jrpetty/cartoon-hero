@@ -568,16 +568,85 @@ public final class RoundManager {
         if (armor != null) {
             armor.setBaseValue(Math.min(20.0, round * 0.6));
         }
+        applyHordeLook(mob, round, brute);
+        mob.setHealth(mob.getMaxHealth());
+    }
+
+    /**
+     * Dresses the rank-and-file so the horde reads as an army of the Abyss rather
+     * than a vanilla night spawn, and so a glance tells you roughly how deep you
+     * are: ragged and bare-headed early, blackened mail by the midgame, scorched
+     * plate and burning eyes by the end. Cosmetic only - nothing drops.
+     */
+    private static void applyHordeLook(Mob mob, int round, boolean brute) {
         if (brute) {
+            // A towering champion: oversized, crowned, wreathed in its own fire.
             AttributeInstance scale = mob.getAttribute(Attributes.SCALE);
             if (scale != null) {
                 scale.setBaseValue(1.8);
             }
-            mob.setItemSlot(EquipmentSlot.HEAD, new ItemStack(Items.GOLDEN_HELMET));
-            mob.setDropChance(EquipmentSlot.HEAD, 0.0F);
+            equipNoDrop(mob, EquipmentSlot.HEAD, new ItemStack(Items.GOLDEN_HELMET));
+            dyeAndEquip(mob, EquipmentSlot.CHEST, Items.LEATHER_CHESTPLATE, 0x2A0D0D);
+            dyeAndEquip(mob, EquipmentSlot.LEGS, Items.LEATHER_LEGGINGS, 0x2A0D0D);
+            equipNoDrop(mob, EquipmentSlot.FEET, new ItemStack(Items.GOLDEN_BOOTS));
+            mob.setCustomName(Component.literal("§6§lBRUTE"));
+            mob.setCustomNameVisible(false); // only readable up close, via the nameplate
             mob.addEffect(new MobEffectInstance(MobEffects.DAMAGE_RESISTANCE, Integer.MAX_VALUE, 0, false, false));
+            mob.addEffect(new MobEffectInstance(MobEffects.FIRE_RESISTANCE, Integer.MAX_VALUE, 0, false, true));
+            return;
         }
-        mob.setHealth(mob.getMaxHealth());
+
+        // Slight size jitter so a crowd doesn't look like clones.
+        AttributeInstance scale = mob.getAttribute(Attributes.SCALE);
+        if (scale != null) {
+            scale.setBaseValue(0.94 + RNG.nextDouble() * 0.16);
+        }
+
+        if (round <= 5) {
+            // Early: mostly bare and ragged, the odd scrap of dark cloth.
+            if (RNG.nextInt(3) == 0) {
+                dyeAndEquip(mob, EquipmentSlot.HEAD, Items.LEATHER_HELMET, 0x241C1C);
+            }
+            if (RNG.nextInt(4) == 0) {
+                dyeAndEquip(mob, EquipmentSlot.CHEST, Items.LEATHER_CHESTPLATE, 0x2E2323);
+            }
+        } else if (round <= 11) {
+            // Midgame: blackened mail and soot-stained leather.
+            if (RNG.nextBoolean()) {
+                equipNoDrop(mob, EquipmentSlot.HEAD, new ItemStack(Items.CHAINMAIL_HELMET));
+            } else {
+                dyeAndEquip(mob, EquipmentSlot.HEAD, Items.LEATHER_HELMET, 0x1C1616);
+            }
+            if (RNG.nextInt(3) != 0) {
+                dyeAndEquip(mob, EquipmentSlot.CHEST, Items.LEATHER_CHESTPLATE, 0x1C1616);
+            }
+            if (RNG.nextInt(3) == 0) {
+                equipNoDrop(mob, EquipmentSlot.LEGS, new ItemStack(Items.CHAINMAIL_LEGGINGS));
+            }
+        } else {
+            // Late: scorched plate and glowing eyes coming out of the dark.
+            equipNoDrop(mob, EquipmentSlot.HEAD, new ItemStack(
+                    RNG.nextBoolean() ? Items.IRON_HELMET : Items.CHAINMAIL_HELMET));
+            equipNoDrop(mob, EquipmentSlot.CHEST, new ItemStack(Items.IRON_CHESTPLATE));
+            if (RNG.nextBoolean()) {
+                equipNoDrop(mob, EquipmentSlot.LEGS, new ItemStack(Items.IRON_LEGGINGS));
+            }
+            if (RNG.nextInt(4) == 0) {
+                equipNoDrop(mob, EquipmentSlot.FEET, new ItemStack(Items.IRON_BOOTS));
+            }
+            // A faint ember aura on the deepest rounds.
+            if (round >= 16 && RNG.nextInt(3) == 0) {
+                mob.addEffect(new MobEffectInstance(MobEffects.FIRE_RESISTANCE, Integer.MAX_VALUE, 0, false, true));
+            }
+        }
+
+        // Worn armour contributes real armour points, so pull the scaling
+        // attribute back down - this pass is meant to change how the horde looks,
+        // not quietly make it tankier than the tuning intends.
+        AttributeInstance armor = mob.getAttribute(Attributes.ARMOR);
+        if (armor != null && round > 5) {
+            armor.setBaseValue(armor.getBaseValue() * (round > 11 ? 0.25 : 0.6));
+        }
     }
 
     private static void scaleAttribute(Mob mob, net.minecraft.core.Holder<net.minecraft.world.entity.ai.attributes.Attribute> attr, double mult) {
@@ -1672,8 +1741,8 @@ public final class RoundManager {
     /** How often the objective is sampled, in ticks. */
     private static final int OBJECTIVE_INTERVAL = 10;
 
-    /** Health restored per diamond fed to the Heart. */
-    private static final float REPAIR_PER_DIAMOND = 25.0f;
+    /** Fraction of the Heart's total health restored per diamond. */
+    private static final float REPAIR_FRACTION_PER_DIAMOND = 0.08f;
 
     /**
      * Feeds a diamond to the Heart to mend it. Deliberately costs the one thing
@@ -1690,7 +1759,8 @@ public final class RoundManager {
             actionBar(player, "§7The Heart is already whole.");
             return false;
         }
-        game.setObjectiveHealth(game.getObjectiveHealth() + REPAIR_PER_DIAMOND);
+        game.setObjectiveHealth(game.getObjectiveHealth()
+                + AbyssGame.OBJECTIVE_MAX_HEALTH * REPAIR_FRACTION_PER_DIAMOND);
 
         BlockPos heart = game.getMap().objective();
         level.sendParticles(ParticleTypes.HAPPY_VILLAGER,
