@@ -86,6 +86,54 @@ def main(jar_path, root="."):
         notes.append("%d models, %d textures, %d override entries"
                      % (len(models), len(textures), overrides_seen))
 
+        # A blockstate pointing at a model that isn't there gives you a
+        # purple-and-black cube, with nothing in the log.
+        states = sorted(e for e in entries
+                        if e.startswith("assets/%s/blockstates/" % NS) and e.endswith(".json"))
+        for s in states:
+            try:
+                doc = json.loads(z.read(s))
+            except ValueError as exc:
+                fails.append("%s: not valid JSON (%s)" % (s, exc))
+                continue
+            refs = set()
+            for variant in (doc.get("variants") or {}).values():
+                for entry in (variant if isinstance(variant, list) else [variant]):
+                    refs.add(entry["model"])
+            for part in (doc.get("multipart") or []):
+                apply = part["apply"]
+                for entry in (apply if isinstance(apply, list) else [apply]):
+                    refs.add(entry["model"])
+            for ref in refs:
+                if not have_model(ref):
+                    fails.append("%s: missing model %s" % (s, ref))
+        notes.append("%d blockstates, all model references resolve" % len(states))
+
+        # A registered item or block with no translation shows its raw key
+        # ("item.mobtrumps.card_sleeve") in every tooltip and inventory slot.
+        lang_path = "assets/%s/lang/en_us.json" % NS
+        if lang_path not in entries:
+            fails.append("no en_us.json — every name in the mod would show as a raw key")
+        else:
+            lang = json.loads(z.read(lang_path))
+            registered = []
+            for src, prefix in (("ModItems.java", "item"), ("ModBlocks.java", "block")):
+                try:
+                    with open("%s/src/main/java/com/jrpetty/mobtrumps/%s" % (root, src),
+                              encoding="utf-8") as fh:
+                        body = fh.read()
+                except OSError:
+                    continue
+                pattern = (r"ITEMS\.register\(\s*\"([a-z0-9_]+)\"" if prefix == "item"
+                           else r"BLOCKS\.register\(\s*\"([a-z0-9_]+)\"")
+                for name in re.findall(pattern, body):
+                    registered.append("%s.%s.%s" % (prefix, NS, name))
+            for key in registered:
+                if key not in lang:
+                    fails.append("no translation for %s — it will show as a raw key" % key)
+            if registered:
+                notes.append("%d registered names, all translated" % len(registered))
+
         for m, doc in docs.items():
             ovs = doc.get("overrides") or []
             if not ovs:
