@@ -67,6 +67,10 @@ public class GuessWhoScreen extends Screen {
     private int panelX;
     private int panelW;
     private float tileScale;
+    /** Foot of the question panel — above the preview dock, never behind it. */
+    private int panelBottom;
+    private int previewH;
+    private float previewScale;
 
     private final List<int[]> questionRects = new ArrayList<>();
     private final List<Integer> questionIndex = new ArrayList<>();
@@ -110,6 +114,34 @@ public class GuessWhoScreen extends Screen {
      * fits gave 46 across and 2 down on a large window, which is a strip of
      * faces rather than something you can scan.
      */
+    /**
+     * Split the right-hand column between the questions and the preview dock.
+     *
+     * <p>The dock is reserved whether or not anything is hovered, so the
+     * question list never jumps as the cursor crosses the board, and — the
+     * point of the exercise — the preview cannot come down on top of a question
+     * you were about to click. The questions keep the majority of the column;
+     * the dock takes what is genuinely spare, down to a floor at which the
+     * preview is still meaningfully larger than a board tile.
+     */
+    private void solveDock() {
+        int columnTop = 34;
+        int columnBottom = height - 26;
+        // search box, four question rows and the rule above the answer log
+        int minPanelBody = 117;
+        int spare = columnBottom - columnTop - minPanelBody;
+        // the card sits at the left of the dock with the name beside it rather
+        // than beneath, so the card gets the dock's whole height — on a short
+        // window that is the difference between a thumbnail and a card
+        float ds = Math.min(0.52f, Math.min((panelW * 0.55f - 10) / CardRenderer.CARD_W,
+                (spare - 8) / (float) CardRenderer.CARD_H));
+        ds = Mth.clamp(ds, 0.13f, 0.52f);
+        previewH = Math.min(Math.round(CardRenderer.CARD_H * ds) + 8,
+                (columnBottom - columnTop) * 45 / 100);
+        previewScale = Math.max(0.13f, (previewH - 8) / (float) CardRenderer.CARD_H);
+        panelBottom = columnBottom - previewH;
+    }
+
     private void solveBoard() {
         int availW = panelX - 16;
         int availH = height - 74;
@@ -162,6 +194,7 @@ public class GuessWhoScreen extends Screen {
         g.fill(0, 0, width, 2, GOLD_DIM);
         g.fill(0, height - 2, width, height, GOLD_DIM);
 
+        solveDock();
         solveBoard();
         long since = System.currentTimeMillis() - ClientGuessWho.changedAt();
         boolean playing = ClientGuessWho.playing();
@@ -172,12 +205,13 @@ public class GuessWhoScreen extends Screen {
         drawFooter(g, mouseX, mouseY, playing);
         if (ClientGuessWho.picking()) {
             // nothing to ask yet — the panel is a preview of what is coming
-            g.fill(panelX, 34, panelX + panelW, height - 26, 0x99000000);
-            g.drawString(font, "questions unlock", panelX + 8, height / 2 - 10, DIM, false);
-            g.drawString(font, "once both have hidden", panelX + 8, height / 2, DIM, false);
+            g.fill(panelX, 34, panelX + panelW, panelBottom, 0x99000000);
+            int vy = (34 + panelBottom) / 2;
+            g.drawString(font, "questions unlock", panelX + 8, vy - 10, DIM, false);
+            g.drawString(font, "once both have hidden", panelX + 8, vy, DIM, false);
         }
-        // last, so it sits over the panel and the picking veil — while you are
-        // choosing your own hidden mob is exactly when you want a good look
+        // the dock is below the veil's reach, so the mob you are considering
+        // hiding is still legible while you choose it
         drawPreview(g);
     }
 
@@ -282,14 +316,14 @@ public class GuessWhoScreen extends Screen {
 
     /** Search box, the question catalogue, and the answers so far. */
     private void drawPanel(GuiGraphics g, int mouseX, int mouseY, boolean playing) {
-        g.fill(panelX, 34, panelX + panelW, height - 26, PANEL);
-        g.renderOutline(panelX, 34, panelW, height - 60, EDGE);
+        g.fill(panelX, 34, panelX + panelW, panelBottom, PANEL);
+        g.renderOutline(panelX, 34, panelW, panelBottom - 34, EDGE);
         g.fill(panelX, 34, panelX + panelW, 36, GOLD_DIM);
 
         List<GuessQuestion.Template> hits = GuessQuestion.search(search.getValue());
         int listTop = 60;
-        int logH = Math.min(64, Math.max(0, (height - 26 - listTop) / 3));
-        int listBottom = height - 30 - logH;
+        int logH = Math.min(40, Math.max(0, (panelBottom - listTop) / 4));
+        int listBottom = panelBottom - 4 - logH;
         int rowH = 16;
         int visible = Math.max(1, (listBottom - listTop) / rowH);
         scroll = Mth.clamp(scroll, 0, Math.max(0, hits.size() - visible));
@@ -354,7 +388,7 @@ public class GuessWhoScreen extends Screen {
         g.fill(panelX + 3, listBottom + 2, panelX + panelW - 3, listBottom + 3, 0x30FFFFFF);
         List<ClientGuessWho.Asked> log = ClientGuessWho.log();
         int ly = listBottom + 6;
-        for (int i = log.size() - 1; i >= 0 && ly < height - 30; i--) {
+        for (int i = log.size() - 1; i >= 0 && ly < panelBottom - 4; i--) {
             ClientGuessWho.Asked a = log.get(i);
             if (a.template() < 0 || a.template() >= GuessQuestion.TEMPLATES.size()) {
                 continue;
@@ -432,37 +466,34 @@ public class GuessWhoScreen extends Screen {
      * faces you are trying to compare.
      */
     private void drawPreview(GuiGraphics g) {
-        if (hoveredMob == null) {
-            return;
-        }
-        MobCard card = MobCards.byId(hoveredMob);
-        if (card == null) {
-            return;
-        }
-        // a budget rather than a guess: the popup may claim at most a third of
-        // the width and not quite half the height, so it never buries the board
-        float scale = Math.min(0.58f, Math.min(width * 0.30f / CardRenderer.CARD_W,
-                height * 0.44f / CardRenderer.CARD_H));
-        scale = Math.max(0.22f, scale);
-        int cw = Math.round(CardRenderer.CARD_W * scale);
-        int ch = Math.round(CardRenderer.CARD_H * scale);
-        int padX = 7;
-        int nameH = 13;
-        int boxW = cw + padX * 2;
-        int boxH = ch + nameH + 10;
-        int bx = width - boxW - 6;
-        int by = height - boxH - 6;
+        int top = panelBottom + 2;
+        int bottom = height - 26;
+        g.fill(panelX, top, panelX + panelW, bottom, PANEL);
+        g.renderOutline(panelX, top, panelW, bottom - top, EDGE);
 
-        // a solid backing, because it sits over the board and the question panel
-        g.fill(bx - 2, by - 2, bx + boxW + 2, by + boxH + 2, 0xF2080610);
-        g.renderOutline(bx - 2, by - 2, boxW + 4, boxH + 4, GOLD_DIM);
-        g.renderOutline(bx - 1, by - 1, boxW + 2, boxH + 2, 0x66000000);
+        MobCard card = hoveredMob == null ? null : MobCards.byId(hoveredMob);
+        if (card == null) {
+            String hint = fit("hover a face", panelW - 10);
+            g.drawString(font, hint, panelX + (panelW - font.width(hint)) / 2,
+                    (top + bottom) / 2 - 4, FAINT, false);
+            return;
+        }
+
+        int cw = Math.round(CardRenderer.CARD_W * previewScale);
+        int ch = Math.round(CardRenderer.CARD_H * previewScale);
+        int cx = panelX + 5;
+        int cy = top + 3;
+        g.renderOutline(cx - 2, cy - 2, cw + 4, ch + 4, GOLD_DIM);
 
         LivingEntity mob = CardRenderer.portraitEntity(minecraft, card, entityCache);
-        CardRenderer.renderCard(g, font, card, bx + padX, by + 5, scale, -1, -1, mob, false, false);
+        CardRenderer.renderCard(g, font, card, cx, cy, previewScale, -1, -1, mob, false, false);
 
-        String name = fit(card.displayName(), boxW - 8);
-        g.drawString(font, name, bx + (boxW - font.width(name)) / 2, by + 5 + ch + 3, INK, true);
+        int tx = cx + cw + 6;
+        int tw = panelX + panelW - 4 - tx;
+        int ty = cy + Math.max(0, (ch - 20) / 2);
+        boolean alive = ClientGuessWho.isAlive(card.id());
+        g.drawString(font, fit(card.displayName(), tw), tx, ty, alive ? INK : DIM, true);
+        g.drawString(font, alive ? "still in" : "struck off", tx, ty + 11, alive ? YES : NO, false);
     }
 
     private List<MobCard> aliveCards() {
