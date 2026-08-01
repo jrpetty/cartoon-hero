@@ -263,6 +263,13 @@ public final class Ruleset {
                 if (entity.isEmpty()) {
                     continue;
                 }
+                // Same trap as a mistyped spawner: an id nothing matches produces a
+                // mob table entry that can never turn up, and the round just feels
+                // thin for reasons nobody can point at.
+                if (net.minecraft.world.entity.EntityType.byString(entity).isEmpty()) {
+                    b.warnings.add("mobs: no entity called '" + entity + "'");
+                    continue;
+                }
                 JsonObject attrs = obj(m, "attributes");
                 JsonObject gear = obj(m, "equipment");
                 b.mobs.add(new MobEntry(

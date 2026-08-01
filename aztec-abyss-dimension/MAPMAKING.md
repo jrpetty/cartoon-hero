@@ -64,7 +64,7 @@ and `[Perk] id=ironhide` mean the same thing. Facing comes from the sign.
 | `[Upgrade]` | `price=` | climbs the material ladder |
 | `[Loot]` | `tier=` | supply cache, once per round |
 | `[Zone]` | `effect=` `radius=` `amp=` | effect while you stand in it |
-| `[Spawner]` | *entity id* `count=` `round=` `every=` `health=` | hand-placed enemies |
+| `[Spawner]` | *entity id* `count=` `round=` `every=` `health=` `damage=` | hand-placed enemies |
 | `[Boss]` | *entity id* `every=` `health=` | boss on a cycle |
 | `[Trap]` | `cost=` `damage=` `radius=` `seconds=` `cooldown=` | pay to make a piece of the map lethal for a while |
 | `[Teleport]` | `id=` | two pads sharing an id link to each other |
@@ -93,6 +93,8 @@ you buy is more ground **and** more directions it comes from.
 ## Tuning without retyping
 
 ```
+/arena mobs                every entity a spawner or mob table can use
+/arena mobs husk           narrow it
 /arena look                what is this marker, and what are its options
 /arena set price 1400      changes whatever marker you are looking at
 /arena set area cellar

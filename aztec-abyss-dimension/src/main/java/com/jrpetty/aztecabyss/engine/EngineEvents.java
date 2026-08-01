@@ -225,6 +225,11 @@ public final class EngineEvents {
                                                         com.mojang.brigadier.arguments.StringArgumentType.getString(ctx, "name"),
                                                         com.mojang.brigadier.arguments.StringArgumentType.getString(ctx, "field"),
                                                         com.mojang.brigadier.arguments.StringArgumentType.getString(ctx, "value")))))))
+                .then(Commands.literal("mobs")
+                        .executes(ctx -> mobs(ctx.getSource(), ""))
+                        .then(Commands.argument("filter", com.mojang.brigadier.arguments.StringArgumentType.word())
+                                .executes(ctx -> mobs(ctx.getSource(),
+                                        com.mojang.brigadier.arguments.StringArgumentType.getString(ctx, "filter")))))
                 .then(Commands.literal("status")
                         .executes(ctx -> {
                             EngineArena a = EngineArena.active();
@@ -496,6 +501,51 @@ public final class EngineEvents {
             return 0;
         }
         source.sendSuccess(() -> Component.literal("§a✔ Put back."), false);
+        return 1;
+    }
+
+    /**
+     * {@code /arena mobs [filter]} - every entity a spawner or mob table can use.
+     *
+     * <p>Spawners accept any entity id, which is generous and completely
+     * undiscoverable: there was no way to find out what to type, and a wrong guess
+     * failed silently. Listing them turns "what can I put in this" from guesswork
+     * into a question with an answer, and includes anything another mod has added
+     * because it reads the live registry rather than a list I wrote down.
+     */
+    private static int mobs(CommandSourceStack source, String filter) {
+        String needle = filter.toLowerCase(java.util.Locale.ROOT);
+        java.util.List<String> found = new java.util.ArrayList<>();
+        for (net.minecraft.world.entity.EntityType<?> type
+                : net.minecraft.core.registries.BuiltInRegistries.ENTITY_TYPE) {
+            // Living things only. Listing arrows and boats would bury the answer.
+            if (type.getCategory() == net.minecraft.world.entity.MobCategory.MISC) {
+                continue;
+            }
+            String id = net.minecraft.core.registries.BuiltInRegistries.ENTITY_TYPE
+                    .getKey(type).toString();
+            if (needle.isEmpty() || id.contains(needle)) {
+                found.add(id);
+            }
+        }
+        java.util.Collections.sort(found);
+        if (found.isEmpty()) {
+            source.sendSuccess(() -> Component.literal(
+                    "§7Nothing matches §f" + filter + "§7."), false);
+            return 1;
+        }
+        int shown = Math.min(found.size(), 40);
+        source.sendSuccess(() -> Component.literal("§6— " + found.size()
+                + (needle.isEmpty() ? " spawnable entities" : " matching '" + filter + "'")
+                + (found.size() > shown ? ", first " + shown : "") + " —"), false);
+        for (int i = 0; i < shown; i++) {
+            String id = found.get(i);
+            source.sendSuccess(() -> Component.literal("§7" + id), false);
+        }
+        if (found.size() > shown) {
+            source.sendSuccess(() -> Component.literal(
+                    "§8Narrow it with §f/arena mobs <part of a name>"), false);
+        }
         return 1;
     }
 

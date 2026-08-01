@@ -137,6 +137,23 @@ public final class MapScan {
             }
         }
 
+        // An entity id that does not exist spawns nothing at all, silently. A map
+        // with a typo in one reads as a spawner that simply never fires, which is
+        // indistinguishable from a spawner the author configured for a later round.
+        for (String kind : new String[]{"spawner", "boss"}) {
+            for (Marker m : scan.of(kind)) {
+                String id = m.arg("id", m.arg("value", ""));
+                if (id.isEmpty()) {
+                    problems.add("§e[" + kind + "] at §f" + m.pos().getX() + ", " + m.pos().getZ()
+                            + "§e names no entity — put one on line 2.");
+                } else if (net.minecraft.world.entity.EntityType.byString(id).isEmpty()) {
+                    problems.add("§c[" + kind + "] at §f" + m.pos().getX() + ", " + m.pos().getZ()
+                            + "§c: no entity called §f" + id
+                            + "§c. Run §f/arena mobs " + id.replace("minecraft:", "") + "§c.");
+                }
+            }
+        }
+
         for (BlockPos bad : scan.brokenDealers()) {
             problems.add("§cDealer at §f" + bad.getX() + ", " + bad.getY() + ", " + bad.getZ()
                     + "§c will not sell — check the item id on line 2 and that line 3 "
