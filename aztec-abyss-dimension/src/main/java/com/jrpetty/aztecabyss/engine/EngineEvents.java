@@ -89,6 +89,21 @@ public final class EngineEvents {
                         .then(Commands.argument("name", com.mojang.brigadier.arguments.StringArgumentType.string())
                                 .executes(ctx -> load(ctx.getSource(),
                                         com.mojang.brigadier.arguments.StringArgumentType.getString(ctx, "name")))))
+                .then(Commands.literal("play")
+                        .executes(ctx -> play(ctx.getSource(), 64, "built-in"))
+                        .then(Commands.argument("ruleset", com.mojang.brigadier.arguments.StringArgumentType.string())
+                                .executes(ctx -> play(ctx.getSource(), 64,
+                                        com.mojang.brigadier.arguments.StringArgumentType.getString(ctx, "ruleset")))
+                                .then(Commands.argument("radius", com.mojang.brigadier.arguments.IntegerArgumentType.integer(8, 256))
+                                        .executes(ctx -> play(ctx.getSource(),
+                                                com.mojang.brigadier.arguments.IntegerArgumentType.getInteger(ctx, "radius"),
+                                                com.mojang.brigadier.arguments.StringArgumentType.getString(ctx, "ruleset"))))))
+                .then(Commands.literal("stop")
+                        .executes(ctx -> {
+                            EngineArena.stop(true);
+                            ctx.getSource().sendSuccess(() -> Component.literal("§7Run stopped."), true);
+                            return 1;
+                        }))
                 .then(Commands.literal("rules")
                         .executes(ctx -> rules(ctx.getSource(), null))
                         .then(Commands.argument("id", com.mojang.brigadier.arguments.StringArgumentType.string())
@@ -190,6 +205,39 @@ public final class EngineEvents {
             source.sendSuccess(() -> Component.literal(line), false);
         }
         return 1;
+    }
+
+    /** {@code /arena play [ruleset] [radius]} - runs a game on the build around you. */
+    private static int play(CommandSourceStack source, int radius, String rulesetId) {
+        ServerPlayer player = source.getPlayer();
+        if (player == null || !(source.getLevel() instanceof ServerLevel level)) {
+            return 0;
+        }
+        String error = EngineArena.start(level, player, radius, rulesetId);
+        if (error != null) {
+            source.sendFailure(Component.literal(error));
+            return 0;
+        }
+        source.sendSuccess(() -> Component.literal(
+                "§a✔ Running on §f" + rulesetId + "§a. §7/arena stop to end it."), true);
+        return 1;
+    }
+
+    /** Drives the engine's own round loop. */
+    @SubscribeEvent
+    public static void onLevelTick(net.neoforged.neoforge.event.tick.LevelTickEvent.Post event) {
+        if (event.getLevel() instanceof ServerLevel level) {
+            EngineArena.tickActive(level);
+        }
+    }
+
+    /** Pays out for kills made during an engine run. */
+    @SubscribeEvent
+    public static void onMobKilled(net.neoforged.neoforge.event.entity.living.LivingDeathEvent event) {
+        if (event.getEntity() instanceof net.minecraft.world.entity.Mob mob
+                && event.getSource().getEntity() instanceof ServerPlayer killer) {
+            EngineArena.onKill(mob, killer);
+        }
     }
 
     /** A box centred on the caller, tall enough to catch a whole build. */
