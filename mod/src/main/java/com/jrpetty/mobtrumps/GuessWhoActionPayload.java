@@ -22,6 +22,8 @@ public record GuessWhoActionPayload(int action, int template, int value, String 
     public static final int ASK = 1;
     public static final int GUESS = 2;
     public static final int LEAVE = 3;
+    /** Choose the mob your opponent has to find. */
+    public static final int PICK = 4;
 
     public static GuessWhoActionPayload newGame() {
         return new GuessWhoActionPayload(NEW_GAME, 0, 0, "");
@@ -33,6 +35,10 @@ public record GuessWhoActionPayload(int action, int template, int value, String 
 
     public static GuessWhoActionPayload guess(String mobId) {
         return new GuessWhoActionPayload(GUESS, 0, 0, mobId);
+    }
+
+    public static GuessWhoActionPayload pick(String mobId) {
+        return new GuessWhoActionPayload(PICK, 0, 0, mobId);
     }
 
     public static GuessWhoActionPayload leave() {

@@ -28,6 +28,9 @@ public final class ClientGuessWho {
     private static volatile Set<String> justEliminated = Set.of();
     private static volatile List<Asked> log = List.of();
     private static volatile String secret = "";
+    private static volatile String opponentName = "";
+    private static volatile int opponentLeft;
+    private static volatile int opponentAsked;
     private static volatile long changedAt;
 
     private ClientGuessWho() {
@@ -57,6 +60,17 @@ public final class ClientGuessWho {
             }
         }
         log = List.copyOf(parsed);
+        String opp = payload.opponent() == null ? "" : payload.opponent();
+        if (opp.isEmpty()) {
+            opponentName = "";
+            opponentLeft = 0;
+            opponentAsked = 0;
+        } else {
+            String[] bits = opp.split("\\|", 3);
+            opponentName = bits[0];
+            opponentLeft = bits.length > 1 ? parse(bits[1]) : 0;
+            opponentAsked = bits.length > 2 ? parse(bits[2]) : 0;
+        }
         changedAt = System.currentTimeMillis();
     }
 
@@ -93,7 +107,48 @@ public final class ClientGuessWho {
         return changedAt;
     }
 
+    private static int parse(String s) {
+        try {
+            return Integer.parseInt(s);
+        } catch (NumberFormatException e) {
+            return 0;
+        }
+    }
+
+    /** Empty when playing the house. */
+    public static String opponentName() {
+        return opponentName;
+    }
+
+    public static int opponentLeft() {
+        return opponentLeft;
+    }
+
+    public static int opponentAsked() {
+        return opponentAsked;
+    }
+
+    public static boolean versusPlayer() {
+        return !opponentName.isEmpty();
+    }
+
+    /** Choosing the mob the opponent will hunt. */
+    public static boolean picking() {
+        return phase == com.jrpetty.mobtrumps.GuessWhoManager.PHASE_PICKING;
+    }
+
+    public static boolean waitingOnThem() {
+        return phase == com.jrpetty.mobtrumps.GuessWhoManager.PHASE_WAITING
+                || phase == com.jrpetty.mobtrumps.GuessWhoManager.PHASE_THEIR_TURN;
+    }
+
+    /** True when it is your move and you may ask or name. */
     public static boolean playing() {
-        return phase == com.jrpetty.mobtrumps.GuessWhoManager.PHASE_PLAYING;
+        return phase == com.jrpetty.mobtrumps.GuessWhoManager.PHASE_YOUR_TURN;
+    }
+
+    public static boolean over() {
+        return phase == com.jrpetty.mobtrumps.GuessWhoManager.PHASE_WON
+                || phase == com.jrpetty.mobtrumps.GuessWhoManager.PHASE_LOST;
     }
 }

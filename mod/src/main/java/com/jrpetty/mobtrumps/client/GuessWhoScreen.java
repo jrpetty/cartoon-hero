@@ -170,6 +170,12 @@ public class GuessWhoScreen extends Screen {
         drawBoard(g, mouseX, mouseY, since, playing);
         drawPanel(g, mouseX, mouseY, playing);
         drawFooter(g, mouseX, mouseY, playing);
+        if (ClientGuessWho.picking()) {
+            // nothing to ask yet — the panel is a preview of what is coming
+            g.fill(panelX, 34, panelX + panelW, height - 26, 0x99000000);
+            g.drawString(font, "questions unlock", panelX + 8, height / 2 - 10, DIM, false);
+            g.drawString(font, "once both have hidden", panelX + 8, height / 2, DIM, false);
+        }
     }
 
     private void drawHeader(GuiGraphics g) {
@@ -180,11 +186,37 @@ public class GuessWhoScreen extends Screen {
         g.drawString(font, "GUESS WHO", 0, 0, GOLD, true);
         pose.popPose();
 
+        if (ClientGuessWho.picking()) {
+            g.drawString(font, "PICK THE MOB "
+                            + ClientGuessWho.opponentName().toUpperCase(java.util.Locale.ROOT)
+                            + " HAS TO FIND", 12, 26, GOLD, false);
+            return;
+        }
         int left = ClientGuessWho.aliveCount();
         String count = left + (left == 1 ? " face left" : " faces left");
         g.drawString(font, count, 12, 26, left <= 2 ? GOLD : DIM, false);
+        int x = 12 + font.width(count) + 12;
         String asked = ClientGuessWho.asked() + " asked";
-        g.drawString(font, asked, 12 + font.width(count) + 12, 26, DIM, false);
+        g.drawString(font, asked, x, 26, DIM, false);
+        x += font.width(asked) + 14;
+
+        if (ClientGuessWho.versusPlayer()) {
+            // how the other side is getting on, so a race feels like a race
+            String them = "vs " + ClientGuessWho.opponentName() + " — "
+                    + ClientGuessWho.opponentLeft() + " left, "
+                    + ClientGuessWho.opponentAsked() + " asked";
+            g.drawString(font, them, x, 26, FAINT, false);
+            String turn = ClientGuessWho.waitingOnThem() ? "THEIR TURN"
+                    : ClientGuessWho.playing() ? "YOUR TURN" : "";
+            if (!turn.isEmpty()) {
+                boolean mine = ClientGuessWho.playing();
+                int tw = font.width(turn) + 10;
+                int tx = panelX - tw - 8;
+                g.fill(tx, 22, tx + tw, 34, mine ? 0x442E7D46 : 0x44000000);
+                g.renderOutline(tx, 22, tw, 12, mine ? YES : EDGE);
+                g.drawString(font, turn, tx + 5, 24, mine ? YES : DIM, false);
+            }
+        }
     }
 
     /** The eighty-one faces. Struck-off ones turn face down where they stand. */
@@ -206,7 +238,8 @@ public class GuessWhoScreen extends Screen {
                     : (alive ? 0f : 1f);
 
             boolean isSecret = !secret.isEmpty() && secret.equals(card.id());
-            boolean hover = playing && alive && mouseX >= x && mouseX < x + tileW
+            boolean selectable = playing || ClientGuessWho.picking();
+            boolean hover = selectable && alive && mouseX >= x && mouseX < x + tileW
                     && mouseY >= y && mouseY < y + tileH;
             if (hover) {
                 hoveredMob = card.id();
@@ -349,6 +382,18 @@ public class GuessWhoScreen extends Screen {
         cancelRect = null;
         int y = height - 22;
 
+        if (ClientGuessWho.picking()) {
+            g.drawString(font, "click any face to hide it — every one of the 81 can be found",
+                    12, y + 4, GOLD, false);
+            return;
+        }
+        if (ClientGuessWho.waitingOnThem()) {
+            String msg = ClientGuessWho.aliveCount() == MobCards.ALL.size()
+                    ? "waiting for " + ClientGuessWho.opponentName() + " to hide one…"
+                    : ClientGuessWho.opponentName() + " is thinking…";
+            g.drawString(font, msg, 12, y + 4, DIM, false);
+            return;
+        }
         if (!playing) {
             String secret = ClientGuessWho.secret();
             MobCard card = MobCards.byId(secret);
@@ -358,8 +403,13 @@ public class GuessWhoScreen extends Screen {
                             + " in " + ClientGuessWho.asked() + " questions"
                     : "IT WAS " + (card == null ? "?" : card.displayName().toUpperCase());
             g.drawString(font, text, 12, y + 4, won ? YES : NO, true);
-            newGameRect = new int[]{width / 2 - 50, y, 100, 16};
-            button(g, newGameRect, "NEW BOARD", mouseX, mouseY, true);
+            if (!ClientGuessWho.versusPlayer()) {
+                newGameRect = new int[]{width / 2 - 50, y, 100, 16};
+                button(g, newGameRect, "NEW BOARD", mouseX, mouseY, true);
+            } else {
+                g.drawString(font, "/mobtrumps guesswho <player> to play again",
+                        width / 2 - 90, y + 4, FAINT, false);
+            }
             return;
         }
 
@@ -450,6 +500,11 @@ public class GuessWhoScreen extends Screen {
                     send(GuessWhoActionPayload.ask(idx, valueFor(idx, t)));
                     click();
                 }
+                return true;
+            }
+            if (ClientGuessWho.picking() && hoveredMob != null) {
+                send(GuessWhoActionPayload.pick(hoveredMob));
+                click();
                 return true;
             }
             if (ClientGuessWho.playing() && hoveredMob != null) {

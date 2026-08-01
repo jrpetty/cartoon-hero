@@ -15,14 +15,15 @@ import java.util.List;
  * computed on the server after each answer and simply drawn by the client, which
  * is what makes the elimination impossible to dodge.
  *
- * @param phase  0 playing, 1 found it, 2 named the wrong one
- * @param asked  how many questions have been spent
- * @param alive  mob ids still possible
- * @param log    "templateIndex|value|1 or 0" per question asked
- * @param secret the hidden mob — empty until the game is over
+ * @param phase    see the PHASE_ constants on {@code GuessWhoManager}
+ * @param asked    how many questions have been spent
+ * @param alive    mob ids still possible
+ * @param log      "templateIndex|value|1 or 0" per question asked
+ * @param secret   the hidden mob — empty until the game is over
+ * @param opponent "name|facesTheyHaveLeft|questionsTheyHaveAsked", empty when solo
  */
 public record GuessWhoSyncPayload(int phase, int asked, List<String> alive,
-                                  List<String> log, String secret)
+                                  List<String> log, String secret, String opponent)
         implements CustomPacketPayload {
 
     public static final CustomPacketPayload.Type<GuessWhoSyncPayload> TYPE =
@@ -36,6 +37,7 @@ public record GuessWhoSyncPayload(int phase, int asked, List<String> alive,
                     ByteBufCodecs.STRING_UTF8.apply(ByteBufCodecs.list()), GuessWhoSyncPayload::alive,
                     ByteBufCodecs.STRING_UTF8.apply(ByteBufCodecs.list()), GuessWhoSyncPayload::log,
                     ByteBufCodecs.STRING_UTF8, GuessWhoSyncPayload::secret,
+                    ByteBufCodecs.STRING_UTF8, GuessWhoSyncPayload::opponent,
                     GuessWhoSyncPayload::new);
 
     @Override

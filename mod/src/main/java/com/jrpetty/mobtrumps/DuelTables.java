@@ -132,7 +132,7 @@ public final class DuelTables {
                     return;
                 }
                 tableSound(player, key, 1.2F);
-                GuessWhoManager.open(player);
+                GuessWhoManager.openSolo(player);
             }
             case TableActionPayload.TWENTY_ONE -> {
                 if (busy(player)) {

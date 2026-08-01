@@ -560,11 +560,20 @@ which Minecraft never renders.
 
 ## 7. Guess Who — eighty-one faces, one hidden
 
-*(Built v1.72.0. Against the house for now; two players hiding a mob from each
-other is the same machinery with a second board.)*
+*(Built v1.72.0. Two-player added v1.73.0.)*
 
-The server hides a mob. You narrow it down with questions from a fixed
-catalogue, then name it. Right wins, wrong ends the board.
+**Against a player** is the real game: each of you picks the mob the other has
+to find, then you take turns asking. `/mobtrumps guesswho <player>` challenges;
+they accept from chat, you both pick, and the challenger moves first. **Against
+the house** hides a random one, from the dueling table, for when nobody else is
+about.
+
+**Choosing your opponent's mob only works because traits exist.** Before them
+Skeleton and Zombie, Bogged and Stray, and Cow and Sheep were identical on every
+stat and category, so a free choice meant everyone hid one of those six and every
+game ended in a coin flip. All 81 are separable now, and the spread between the
+easiest and hardest to corner is a single question — so there is no hiding place
+to abuse.
 
 **The elimination is server-side, and that is the whole design.** A question
 arrives as "template 4, value 7"; the server answers it against the mob it is

@@ -118,6 +118,17 @@ public final class BattleCommands {
                                         .executes(ctx -> DuelManager.challenge(
                                                 ctx.getSource().getPlayerOrException(),
                                                 EntityArgument.getPlayer(ctx, "player"), false, 5)))))
+                .then(Commands.literal("guesswho")
+                        .then(Commands.literal("accept")
+                                .executes(ctx -> GuessWhoManager.accept(
+                                        ctx.getSource().getPlayerOrException())))
+                        .then(Commands.literal("decline")
+                                .executes(ctx -> GuessWhoManager.decline(
+                                        ctx.getSource().getPlayerOrException())))
+                        .then(Commands.argument("player", EntityArgument.player())
+                                .executes(ctx -> GuessWhoManager.challenge(
+                                        ctx.getSource().getPlayerOrException(),
+                                        EntityArgument.getPlayer(ctx, "player")))))
                 .then(Commands.literal("queue")
                         .executes(ctx -> DuelManager.queue(ctx.getSource().getPlayerOrException()))
                         .then(Commands.literal("leave")
