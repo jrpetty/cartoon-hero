@@ -160,8 +160,47 @@ public final class EngineArena {
         current.bossPoints.addAll(scan.of("boss"));
         current.extract = scan.first("extract");
         current.consumeMarkers(scan);
+        // Everyone already stood in the map is in it. Making each player type a
+        // command to be included in a fight happening around them is the kind of
+        // friction that turns a co-op mode into a single-player one by accident.
         current.join(player);
+        for (ServerPlayer other : level.players()) {
+            if (other != player && box.isInside(other.blockPosition())) {
+                current.join(other);
+            }
+        }
         current.beginRound(1);
+        return null;
+    }
+
+    /**
+     * Joins a run already in progress.
+     *
+     * <p>Late joiners start on the round the squad is on, not at round one - the
+     * alternative is either a private difficulty curve for one player or a reset
+     * that punishes everyone else for their arriving. They do get the starting
+     * money, because turning up to round twelve with nothing is not a challenge,
+     * it is a spectator seat.
+     *
+     * @return an error to show, or null on success
+     */
+    public static String joinRun(ServerPlayer player) {
+        EngineArena a = current;
+        if (a == null || !a.running) {
+            return "No run in progress.";
+        }
+        if (a.participants.contains(player.getUUID())) {
+            return "You are already in it.";
+        }
+        if (a.fallen.contains(player.getUUID())) {
+            return "You died in this run. Wait for the next one.";
+        }
+        a.join(player);
+        for (ServerPlayer p : a.players()) {
+            p.displayClientMessage(Component.literal(
+                    "§e" + player.getGameProfile().getName() + " joined on round §f"
+                            + a.round + "§e."), false);
+        }
         return null;
     }
 

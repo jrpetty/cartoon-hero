@@ -232,6 +232,24 @@ public final class EngineEvents {
                                 .executes(ctx -> rules(ctx.getSource(),
                                         com.mojang.brigadier.arguments.StringArgumentType.getString(ctx, "id")))));
         event.getDispatcher().register(arena);
+
+        // Its own root, deliberately. Everything under /arena is authoring and is
+        // gated behind op; joining a game is the one thing an ordinary player
+        // needs to be able to do, and a co-op command only ops can run is not one.
+        event.getDispatcher().register(Commands.literal("arenajoin")
+                .executes(ctx -> {
+                    ServerPlayer p = ctx.getSource().getPlayer();
+                    if (p == null) {
+                        return 0;
+                    }
+                    String error = EngineArena.joinRun(p);
+                    if (error != null) {
+                        ctx.getSource().sendFailure(Component.literal(error));
+                        return 0;
+                    }
+                    ctx.getSource().sendSuccess(() -> Component.literal("§a✔ You are in."), false);
+                    return 1;
+                }));
     }
 
     /**
