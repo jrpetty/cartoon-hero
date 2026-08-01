@@ -39,13 +39,15 @@ public record Marker(String kind, BlockPos pos, Direction facing, Map<String, St
     /**
      * Markers that are instructions only, and are deleted once read.
      *
-     * <p>{@code loot} is deliberately absent even though it looks like scenery:
-     * a supply cache is claimed by right-clicking it, so deleting its sign on load
-     * would remove the only thing a player can interact with. Anything the engine
-     * merely needs to <em>know</em> gets consumed; anything a player touches stays.
+     * <p>{@code loot} and {@code extract} are deliberately absent even though they
+     * look like scenery. A supply cache is claimed by right-clicking it, and an
+     * extraction point is somewhere a player has to be able to find and stand on -
+     * deleting either sign removes the only thing telling anyone it is there.
+     * Anything the engine merely needs to <em>know</em> gets consumed; anything a
+     * player touches, or has to go to, stays.
      */
     private static final java.util.Set<String> CONSUMED = java.util.Set.of(
-            "spawn", "extract", "horde", "pen", "boss", "powerup", "zone", "spawner");
+            "spawn", "horde", "pen", "boss", "powerup", "zone", "spawner");
 
     /**
      * Whether this marker is scaffolding rather than furniture.

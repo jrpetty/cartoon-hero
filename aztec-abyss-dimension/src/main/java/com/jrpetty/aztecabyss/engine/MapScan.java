@@ -114,7 +114,8 @@ public final class MapScan {
         }
 
         if (scan.count("extract") == 0) {
-            problems.add("§eNo §f[Extract]§e marker — players can only leave by dying.");
+            problems.add("§eNo §f[Extract]§e marker — this map has no way to win, "
+                    + "only a way to lose. Players can leave it only by dying.");
         }
 
         // A sealed area with no door is a room nobody can ever reach.

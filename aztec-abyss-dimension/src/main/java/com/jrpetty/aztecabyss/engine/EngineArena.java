@@ -81,6 +81,13 @@ public final class EngineArena {
     /** Loot caches already emptied this round. */
     private final java.util.Set<BlockPos> lootTaken = new java.util.HashSet<>();
     private final Director director;
+    /** Where a run can be banked, or null if this map has no way out. */
+    private Marker extract;
+    /** Ticks each player has spent stood on the extraction point. */
+    private final java.util.Map<UUID, Integer> extracting = new java.util.HashMap<>();
+
+    /** How long you must stand still on the glyph. */
+    private static final int EXTRACT_TICKS = 100;
 
     private EngineArena(ServerLevel level, String mapName, Ruleset rules,
                         BlockPos spawn, List<Marker> hordes, BoundingBox bounds) {
@@ -136,6 +143,7 @@ public final class EngineArena {
         current.zones.addAll(scan.of("zone"));
         current.spawners.addAll(scan.of("spawner"));
         current.bossPoints.addAll(scan.of("boss"));
+        current.extract = scan.first("extract");
         current.consumeMarkers(scan);
         current.join(player);
         current.beginRound(1);
@@ -239,9 +247,14 @@ public final class EngineArena {
         }
 
         if (breather > 0) {
+            tickExtraction(present);
             breather--;
+            // The bar is the only place a player reliably looks, so it is where
+            // the way out gets advertised - an extraction nobody knows about is
+            // the same as not having one.
             bar.setName(Component.literal("§7Next round in §f"
-                    + Math.max(1, breather / 20) + "s"));
+                    + Math.max(1, breather / 20) + "s"
+                    + (extract != null ? " §8| §6extract point is open" : "")));
             bar.setProgress(1.0F - (breather / (float) Math.max(1, rules.breatherFor(round))));
             if (breather == 0) {
                 beginRound(round + 1);
@@ -267,6 +280,55 @@ public final class EngineArena {
                 + (alive.size() + leftToSpawn) + "§7 left"));
         int total = Math.max(1, rules.countFor(round));
         bar.setProgress(Math.max(0.0F, Math.min(1.0F, (alive.size() + leftToSpawn) / (float) total)));
+    }
+
+    /**
+     * Banking a run: stand on the extraction glyph between rounds.
+     *
+     * <p>Without this an engine map has no way to win. You play until you die, and
+     * a game whose only ending is failure teaches players that survival was never
+     * the point - so there is nothing to be careful about and no reason to stop on
+     * a good round. Extraction makes leaving a decision, which is what gives
+     * staying any weight.
+     *
+     * <p>Only between rounds, and only while stood still. Bailing out of a fight
+     * you are losing would make it a panic button rather than a judgement call,
+     * and the interesting version of the question is asked in the quiet: you have
+     * what you have, and the next round is bigger.
+     */
+    private void tickExtraction(List<ServerPlayer> present) {
+        if (extract == null) {
+            return;
+        }
+        double range = Math.max(1, extract.intArg("radius", 2));
+        for (ServerPlayer p : present) {
+            boolean onIt = p.blockPosition().distSqr(extract.pos()) <= range * range;
+            if (!onIt) {
+                extracting.remove(p.getUUID());
+                continue;
+            }
+            int held = extracting.merge(p.getUUID(), 1, Integer::sum);
+            if (held < EXTRACT_TICKS) {
+                if (held % 10 == 0) {
+                    p.displayClientMessage(Component.literal(
+                            "§6Extracting… §f" + (held * 100 / EXTRACT_TICKS) + "%"), true);
+                }
+                continue;
+            }
+            bankRun();
+            return;
+        }
+    }
+
+    /** Ends the run as a success, and tells the script layer it happened. */
+    private void bankRun() {
+        int reached = round;
+        for (ServerPlayer p : players()) {
+            p.displayClientMessage(Component.literal(
+                    "§6§lOUT. §r§7Banked on round §f" + reached + "§7."), false);
+        }
+        Script.fire(this, level, rules.id, "extracted", null);
+        stop(false);
     }
 
     private void beginRound(int n) {
