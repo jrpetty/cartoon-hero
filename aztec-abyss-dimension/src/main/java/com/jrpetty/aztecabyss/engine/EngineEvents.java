@@ -142,6 +142,26 @@ public final class EngineEvents {
                             ctx.getSource().sendSuccess(() -> Component.literal("§7Run stopped."), true);
                             return 1;
                         }))
+                .then(Commands.literal("maps")
+                        .executes(ctx -> maps(ctx.getSource())))
+                .then(Commands.literal("info")
+                        .then(Commands.argument("name", com.mojang.brigadier.arguments.StringArgumentType.word())
+                                .executes(ctx -> info(ctx.getSource(),
+                                        com.mojang.brigadier.arguments.StringArgumentType.getString(ctx, "name")))))
+                .then(Commands.literal("meta")
+                        .then(Commands.argument("name", com.mojang.brigadier.arguments.StringArgumentType.word())
+                                .then(Commands.argument("field", com.mojang.brigadier.arguments.StringArgumentType.word())
+                                        .suggests((c, sb) -> {
+                                            for (String f : new String[]{"title", "author", "blurb", "difficulty", "ruleset"}) {
+                                                sb.suggest(f);
+                                            }
+                                            return sb.buildFuture();
+                                        })
+                                        .then(Commands.argument("value", com.mojang.brigadier.arguments.StringArgumentType.greedyString())
+                                                .executes(ctx -> meta(ctx.getSource(),
+                                                        com.mojang.brigadier.arguments.StringArgumentType.getString(ctx, "name"),
+                                                        com.mojang.brigadier.arguments.StringArgumentType.getString(ctx, "field"),
+                                                        com.mojang.brigadier.arguments.StringArgumentType.getString(ctx, "value")))))))
                 .then(Commands.literal("director")
                         .executes(ctx -> {
                             EngineArena a = EngineArena.active();
@@ -257,6 +277,64 @@ public final class EngineEvents {
         return 1;
     }
 
+    /** {@code /arena maps} - every map this world knows about. */
+    private static int maps(CommandSourceStack source) {
+        if (source.getServer() == null) {
+            return 0;
+        }
+        var all = MapManifest.listAll(source.getServer());
+        if (all.isEmpty()) {
+            source.sendSuccess(() -> Component.literal(
+                    "§7No maps yet. Build one, then §f/arena create <name>§7."), false);
+            return 1;
+        }
+        source.sendSuccess(() -> Component.literal("§6— " + all.size() + " maps —"), false);
+        for (MapManifest m : all) {
+            source.sendSuccess(() -> Component.literal(m.line()), false);
+        }
+        return 1;
+    }
+
+    private static int info(CommandSourceStack source, String name) {
+        if (source.getServer() == null) {
+            return 0;
+        }
+        MapManifest m = MapManifest.load(source.getServer(), name);
+        if (m == null) {
+            source.sendFailure(Component.literal("No map called '" + name + "'."));
+            return 0;
+        }
+        source.sendSuccess(() -> Component.literal("§6" + m.title() + " §8v" + m.version()), false);
+        source.sendSuccess(() -> Component.literal("§7by §f" + m.author()), false);
+        source.sendSuccess(() -> Component.literal("§7" + m.blurb()), false);
+        source.sendSuccess(() -> Component.literal(
+                "§7Difficulty §f" + m.difficulty() + "§7, ruleset §f" + m.ruleset()), false);
+        return 1;
+    }
+
+    /**
+     * {@code /arena meta <name> <field> <value>} - edits a map's details.
+     *
+     * <p>Bumps the version on every change, because a map that has been shared and
+     * then revised needs to be able to say so; two files with the same name and
+     * different contents is the oldest problem in map distribution.
+     */
+    private static int meta(CommandSourceStack source, String name, String field, String value) {
+        if (source.getServer() == null) {
+            return 0;
+        }
+        MapManifest m = MapManifest.load(source.getServer(), name);
+        if (m == null) {
+            source.sendFailure(Component.literal("No map called '" + name + "'."));
+            return 0;
+        }
+        MapManifest updated = m.with(field, value).bumped();
+        MapManifest.save(source.getServer(), updated);
+        source.sendSuccess(() -> Component.literal(
+                "§a✔ " + field + " → §f" + value + " §8(now v" + updated.version() + ")"), true);
+        return 1;
+    }
+
     /** {@code /arena workshop} - into the empty lit void, in creative. */
     private static int workshop(CommandSourceStack source) {
         ServerPlayer player = source.getPlayer();
@@ -344,8 +422,18 @@ public final class EngineEvents {
             source.sendFailure(Component.literal("Could not write that map to disk."));
             return 0;
         }
+        // Re-saving an existing map keeps its details and bumps the version; a
+        // first save mints one. Overwriting a title someone wrote because they
+        // pressed save again would be the rudest possible behaviour here.
+        MapManifest existing = MapManifest.load(source.getServer(), name);
+        MapManifest manifest = existing != null
+                ? existing.bumped()
+                : MapManifest.fresh(name, player.getGameProfile().getName());
+        MapManifest.save(source.getServer(), manifest);
+
         source.sendSuccess(() -> Component.literal(
-                "§a✔ Created §f" + name + "§a — " + BuildTools.spanText(box)
+                "§a✔ Created §f" + manifest.title() + "§a v" + manifest.version()
+                        + " — " + BuildTools.spanText(box)
                         + ", " + scan.all().size() + " markers."), true);
         source.sendSuccess(() -> Component.literal(
                 "§7Written to §fgenerated/" + MapStore.LOCAL + "/structures/" + name + ".nbt"), false);
