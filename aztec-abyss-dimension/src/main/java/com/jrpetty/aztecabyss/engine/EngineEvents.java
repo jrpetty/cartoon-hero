@@ -64,6 +64,70 @@ public final class EngineEvents {
                                                 com.mojang.brigadier.arguments.StringArgumentType.getString(ctx, "currency"),
                                                 com.mojang.brigadier.arguments.IntegerArgumentType.getInteger(ctx, "amount"))))));
         event.getDispatcher().register(wallet);
+
+        LiteralArgumentBuilder<CommandSourceStack> arena = Commands.literal("arena")
+                .requires(s -> s.hasPermission(2))
+                .then(Commands.literal("scan")
+                        .executes(ctx -> scan(ctx.getSource(), 64))
+                        .then(Commands.argument("radius", com.mojang.brigadier.arguments.IntegerArgumentType.integer(8, 256))
+                                .executes(ctx -> scan(ctx.getSource(),
+                                        com.mojang.brigadier.arguments.IntegerArgumentType.getInteger(ctx, "radius")))))
+                .then(Commands.literal("validate")
+                        .executes(ctx -> validate(ctx.getSource(), 64))
+                        .then(Commands.argument("radius", com.mojang.brigadier.arguments.IntegerArgumentType.integer(8, 256))
+                                .executes(ctx -> validate(ctx.getSource(),
+                                        com.mojang.brigadier.arguments.IntegerArgumentType.getInteger(ctx, "radius")))));
+        event.getDispatcher().register(arena);
+    }
+
+    /** A box centred on the caller, tall enough to catch a whole build. */
+    private static net.minecraft.world.level.levelgen.structure.BoundingBox around(
+            ServerPlayer player, int radius) {
+        net.minecraft.core.BlockPos at = player.blockPosition();
+        return new net.minecraft.world.level.levelgen.structure.BoundingBox(
+                at.getX() - radius, player.level().getMinBuildHeight(), at.getZ() - radius,
+                at.getX() + radius, player.level().getMaxBuildHeight() - 1, at.getZ() + radius);
+    }
+
+    /** {@code /arena scan} - what the engine can see from where you are stood. */
+    private static int scan(CommandSourceStack source, int radius) {
+        ServerPlayer player = source.getPlayer();
+        if (player == null || !(source.getLevel() instanceof ServerLevel level)) {
+            return 0;
+        }
+        MapScan.Result result = MapScan.scan(level, around(player, radius));
+        if (result.all().isEmpty()) {
+            source.sendSuccess(() -> Component.literal(
+                    "§7Nothing found within " + radius + " blocks. Markers are signs whose "
+                            + "first line is a kind in brackets, like §f[Spawn]§7."), false);
+            return 1;
+        }
+        source.sendSuccess(() -> Component.literal(
+                "§6— " + result.all().size() + " markers within " + radius + " blocks —"), false);
+        result.byKind().forEach((kind, list) -> source.sendSuccess(() -> Component.literal(
+                "§e" + list.size() + "§7 × §f[" + kind + "]"), false));
+        return 1;
+    }
+
+    /** {@code /arena validate} - would this actually play? */
+    private static int validate(CommandSourceStack source, int radius) {
+        ServerPlayer player = source.getPlayer();
+        if (player == null || !(source.getLevel() instanceof ServerLevel level)) {
+            return 0;
+        }
+        MapScan.Result result = MapScan.scan(level, around(player, radius));
+        java.util.List<String> problems = MapScan.validate(result);
+        if (problems.isEmpty()) {
+            source.sendSuccess(() -> Component.literal(
+                    "§a✔ Playable. §7" + result.all().size() + " markers, "
+                            + result.count("horde") + " ways in."), false);
+            return 1;
+        }
+        source.sendSuccess(() -> Component.literal("§6— " + problems.size() + " to fix —"), false);
+        for (String p : problems) {
+            source.sendSuccess(() -> Component.literal(" " + p), false);
+        }
+        return 1;
     }
 
     /** {@code /wallet} - what you are carrying, in every currency that exists. */
