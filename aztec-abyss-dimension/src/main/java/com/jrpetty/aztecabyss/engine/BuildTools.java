@@ -113,7 +113,7 @@ public final class BuildTools {
     /** Every marker the engine understands, for the palette and for tab-completion. */
     public static final String[] KINDS = {
             "spawn", "extract", "horde", "pen", "boss", "loot", "powerup",
-            "dealer", "door", "box", "perk", "upgrade", "zone", "spawner"
+            "dealer", "door", "box", "perk", "upgrade", "zone", "spawner", "trap", "teleport"
     };
 
     /**
@@ -171,6 +171,8 @@ public final class BuildTools {
             case "upgrade" -> "price=5000";
             case "boss" -> "minecraft:warden";
             case "spawner" -> "minecraft:skeleton";
+            case "trap" -> "cost=1000 damage=12";
+            case "teleport" -> "id=a";
             default -> "";
         };
     }

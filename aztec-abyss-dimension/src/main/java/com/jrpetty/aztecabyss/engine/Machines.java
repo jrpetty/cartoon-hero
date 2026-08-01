@@ -89,6 +89,7 @@ public final class Machines {
             case "perk" -> perk(level, player, marker);
             case "upgrade" -> upgrade(level, player, marker);
             case "loot" -> loot(level, player, marker);
+            case "trap" -> trap(level, player, marker);
             default -> false;
         };
     }
@@ -320,6 +321,47 @@ public final class Machines {
         }
         level.playSound(null, m.pos(), SoundEvents.BEACON_ACTIVATE, SoundSource.BLOCKS, 0.7F, 1.6F);
         player.displayClientMessage(Component.literal("§a✔ Supplies."), true);
+        return true;
+    }
+
+    /**
+     * A trap: pay to make a piece of the map lethal for a while.
+     *
+     * <pre>
+     *   [Trap]
+     *   cost=1000
+     *   damage=12 radius=5 seconds=10
+     * </pre>
+     *
+     * <p>The cooldown matters more than the damage. A trap you can re-arm the
+     * instant it stops is a wall the horde simply cannot cross, and the map stops
+     * being about where you stand. Paying again is meant to be a decision about
+     * timing, not a tax on a permanent kill zone.
+     */
+    private static boolean trap(ServerLevel level, ServerPlayer player, Marker m) {
+        EngineArena arena = EngineArena.active();
+        if (arena == null) {
+            player.displayClientMessage(Component.literal("§7No run in progress."), true);
+            return true;
+        }
+        int seconds = Math.max(1, Math.min(60, m.intArg("seconds", 10)));
+        int cooldown = Math.max(0, Math.min(600, m.intArg("cooldown", 45)));
+        long now = level.getGameTime();
+        // Check availability before charging, so a refusal never costs anything.
+        String refusal = arena.trapUnavailable(m.pos(), now);
+        if (refusal != null) {
+            player.displayClientMessage(Component.literal(refusal), true);
+            return true;
+        }
+        int price = m.intArg("cost", m.intArg("price", 1000));
+        if (!pay(player, m, price, "Arming that")) {
+            return true;
+        }
+        arena.armTrap(m.pos(), seconds, cooldown);
+        level.playSound(null, m.pos(), SoundEvents.BEACON_ACTIVATE, SoundSource.BLOCKS, 1.2F, 0.6F);
+        for (ServerPlayer p : level.players()) {
+            p.displayClientMessage(Component.literal("§6Something has been switched on."), true);
+        }
         return true;
     }
 

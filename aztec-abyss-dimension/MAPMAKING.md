@@ -66,6 +66,8 @@ and `[Perk] id=ironhide` mean the same thing. Facing comes from the sign.
 | `[Zone]` | `effect=` `radius=` `amp=` | effect while you stand in it |
 | `[Spawner]` | *entity id* `count=` `round=` `every=` `health=` | hand-placed enemies |
 | `[Boss]` | *entity id* `every=` `health=` | boss on a cycle |
+| `[Trap]` | `cost=` `damage=` `radius=` `seconds=` `cooldown=` | pay to make a piece of the map lethal for a while |
+| `[Teleport]` | `id=` | two pads sharing an id link to each other |
 
 **Dealers are positional**, because they are a shop front you read at a glance:
 
@@ -172,6 +174,10 @@ map's default.
             { "spawn": { "id": "minecraft:warden", "at": "boss", "health": 600 } } ] }
 ]
 ```
+
+Mobs can take a `role` as well as attributes, for behaviour numbers cannot
+express: `runner` closes distance, `brute` shrugs off hits but lumbers, `leaper`
+comes over what you were hiding behind, `armoured` is very hard to hurt.
 
 **Events:** `run_start`, `round_start`, `round_end`, `mob_killed`, `extracted`.
 **Conditions:** `round` with `equals` / `at_least` / `at_most` / `every`, and `area_open`.

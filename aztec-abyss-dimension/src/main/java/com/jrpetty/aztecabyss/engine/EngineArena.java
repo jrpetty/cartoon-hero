@@ -82,6 +82,14 @@ public final class EngineArena {
     private final List<Marker> bossPoints = new ArrayList<>();
     /** Optional out-of-sight spawn chambers, paired to the nearest way in. */
     private final List<Marker> pens = new ArrayList<>();
+    private final List<Marker> teleports = new ArrayList<>();
+    private final List<Marker> traps = new ArrayList<>();
+    /** Armed traps: position to the game time they stop burning. */
+    private final java.util.Map<BlockPos, Long> trapsActive = new java.util.HashMap<>();
+    /** Traps cooling down, so one purchase is not a permanent kill zone. */
+    private final java.util.Map<BlockPos, Long> trapsCooling = new java.util.HashMap<>();
+    /** Players who just teleported, so a pad does not bounce them straight back. */
+    private final java.util.Map<UUID, Long> teleportCooldown = new java.util.HashMap<>();
     /** Loot caches already emptied this round. */
     private final java.util.Set<BlockPos> lootTaken = new java.util.HashSet<>();
     private final Director director;
@@ -192,6 +200,8 @@ public final class EngineArena {
         current.spawners.addAll(scan.of("spawner"));
         current.bossPoints.addAll(scan.of("boss"));
         current.pens.addAll(scan.of("pen"));
+        current.teleports.addAll(scan.of("teleport"));
+        current.traps.addAll(scan.of("trap"));
         current.extract = scan.first("extract");
         EnginePowerUps.reset();
         current.consumeMarkers(scan);
@@ -346,6 +356,8 @@ public final class EngineArena {
         }
 
         refreshBars(present);
+        tickTraps();
+        tickTeleports(present);
         if (rules.powerupChance > 0) {
             EnginePowerUps.tick(level, present, bounds);
         }
@@ -638,6 +650,127 @@ public final class EngineArena {
         restore.clear();
     }
 
+    /**
+     * Arms a trap, if it is not already burning or cooling.
+     *
+     * @return a message for the buyer, or null if it fired
+     */
+    /** Why this trap cannot be armed right now, or null if it can. */
+    public String trapUnavailable(BlockPos at, long now) {
+        if (trapsActive.getOrDefault(at, 0L) > now) {
+            return "§7That is already running.";
+        }
+        if (trapsCooling.getOrDefault(at, 0L) > now) {
+            return "§7Still cooling — §f" + ((trapsCooling.get(at) - now) / 20) + "s§7.";
+        }
+        return null;
+    }
+
+    /** Arms a trap. Availability is checked separately, before the player pays. */
+    public void armTrap(BlockPos at, int seconds, int cooldownSeconds) {
+        long now = level.getGameTime();
+        trapsActive.put(at.immutable(), now + seconds * 20L);
+        trapsCooling.put(at.immutable(), now + (seconds + cooldownSeconds) * 20L);
+    }
+
+    /** Burns anything standing in an armed trap. */
+    private void tickTraps() {
+        if (trapsActive.isEmpty() || level.getGameTime() % 10L != 0L) {
+            return;
+        }
+        long now = level.getGameTime();
+        for (Marker t : traps) {
+            Long until = trapsActive.get(t.pos());
+            if (until == null || until <= now) {
+                continue;
+            }
+            double radius = Math.max(1, t.intArg("radius", 4));
+            float damage = Math.max(1, t.intArg("damage", 10));
+            level.sendParticles(net.minecraft.core.particles.ParticleTypes.FLAME,
+                    t.pos().getX() + 0.5, t.pos().getY() + 1.0, t.pos().getZ() + 0.5,
+                    12, radius / 2.0, 0.5, radius / 2.0, 0.01);
+            for (Mob m : alive) {
+                if (m.isAlive() && m.blockPosition().distSqr(t.pos()) <= radius * radius) {
+                    m.hurt(level.damageSources().magic(), damage);
+                }
+            }
+        }
+    }
+
+    /**
+     * Paired pads. Stepping on one puts you on the other.
+     *
+     * <p>The cooldown is the whole trick: without it the destination pad sends you
+     * straight back, and a player stands there flickering between two rooms until
+     * something kills them.
+     */
+    private void tickTeleports(List<ServerPlayer> present) {
+        if (teleports.size() < 2) {
+            return;
+        }
+        long now = level.getGameTime();
+        for (ServerPlayer p : present) {
+            if (teleportCooldown.getOrDefault(p.getUUID(), 0L) > now) {
+                continue;
+            }
+            for (Marker pad : teleports) {
+                if (p.blockPosition().distSqr(pad.pos()) > 2.25) {
+                    continue;
+                }
+                Marker other = partnerOf(pad);
+                if (other == null) {
+                    continue;
+                }
+                p.teleportTo(level, other.pos().getX() + 0.5, other.pos().getY() + 1,
+                        other.pos().getZ() + 0.5, java.util.Set.of(), p.getYRot(), 0.0F);
+                teleportCooldown.put(p.getUUID(), now + 60L);
+                level.playSound(null, other.pos(), SoundEvents.PORTAL_TRAVEL,
+                        SoundSource.PLAYERS, 0.4F, 1.6F);
+                break;
+            }
+        }
+    }
+
+    /** The other pad sharing this one's id. */
+    private Marker partnerOf(Marker pad) {
+        String id = pad.arg("id", pad.arg("value", ""));
+        for (Marker other : teleports) {
+            if (other != pad && other.arg("id", other.arg("value", "")).equals(id)) {
+                return other;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * What a mob's role does to it.
+     *
+     * <p>The field was being parsed and thrown away. Roles are worth having only
+     * if they express something attributes cannot - an author can already set
+     * health and speed directly - so each one is a behaviour package rather than a
+     * number: a brute that shrugs off hits but lumbers, a runner that closes
+     * distance, a leaper that comes over the thing you were hiding behind.
+     */
+    private void applyRole(Mob mob, String role) {
+        switch (role == null ? "" : role) {
+            case "runner" -> mob.addEffect(new net.minecraft.world.effect.MobEffectInstance(
+                    net.minecraft.world.effect.MobEffects.MOVEMENT_SPEED, Integer.MAX_VALUE, 1, false, false));
+            case "brute" -> {
+                mob.addEffect(new net.minecraft.world.effect.MobEffectInstance(
+                        net.minecraft.world.effect.MobEffects.DAMAGE_RESISTANCE, Integer.MAX_VALUE, 1, false, false));
+                mob.addEffect(new net.minecraft.world.effect.MobEffectInstance(
+                        net.minecraft.world.effect.MobEffects.MOVEMENT_SLOWDOWN, Integer.MAX_VALUE, 0, false, false));
+            }
+            case "leaper" -> mob.addEffect(new net.minecraft.world.effect.MobEffectInstance(
+                    net.minecraft.world.effect.MobEffects.JUMP, Integer.MAX_VALUE, 3, false, false));
+            case "armoured", "armored" -> mob.addEffect(new net.minecraft.world.effect.MobEffectInstance(
+                    net.minecraft.world.effect.MobEffects.DAMAGE_RESISTANCE, Integer.MAX_VALUE, 2, false, false));
+            default -> {
+                // "grunt" and anything unrecognised: an ordinary one.
+            }
+        }
+    }
+
     /** Kills everything currently in the wave. Used by the Purge drop. */
     public void purge() {
         for (Mob m : alive) {
@@ -856,6 +989,7 @@ public final class EngineArena {
         setAttr(mob, Attributes.MOVEMENT_SPEED, pick.speed());
         setAttr(mob, Attributes.ATTACK_DAMAGE, pick.attackDamage() * damageMul);
         mob.setHealth(mob.getMaxHealth());
+        applyRole(mob, pick.role());
         equip(mob, pick);
         mob.getPersistentData().putBoolean("aztecabyss_engine_mob", true);
         mob.setPersistenceRequired();
