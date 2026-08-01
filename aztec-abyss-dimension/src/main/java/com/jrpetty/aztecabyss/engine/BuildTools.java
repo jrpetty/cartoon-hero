@@ -113,7 +113,7 @@ public final class BuildTools {
     /** Every marker the engine understands, for the palette and for tab-completion. */
     public static final String[] KINDS = {
             "spawn", "extract", "horde", "pen", "boss", "loot", "powerup",
-            "dealer", "door", "box", "perk", "upgrade", "zone"
+            "dealer", "door", "box", "perk", "upgrade", "zone", "spawner"
     };
 
     /**
@@ -164,9 +164,13 @@ public final class BuildTools {
             case "dealer" -> "minecraft:iron_sword";
             case "horde" -> "area=start";
             case "door" -> "area=back cost=1500";
-            case "perk" -> "ironhide";
-            case "zone" -> "id=flooded";
+            case "perk" -> "minecraft:health_boost";
+            case "zone" -> "effect=minecraft:slowness";
             case "loot" -> "tier=1";
+            case "box" -> "price=950";
+            case "upgrade" -> "price=5000";
+            case "boss" -> "minecraft:warden";
+            case "spawner" -> "minecraft:skeleton";
             default -> "";
         };
     }

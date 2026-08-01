@@ -40,14 +40,21 @@ public final class EngineEvents {
         if (!(level.getBlockEntity(event.getPos()) instanceof SignBlockEntity sign)) {
             return;
         }
-        if (!DealerSign.isDealer(sign)) {
-            return;
-        }
         // Sneaking is left alone so an author can still edit their own sign.
         if (player.isShiftKeyDown()) {
             return;
         }
-        if (DealerSign.buy(level, player, sign)) {
+        if (DealerSign.isDealer(sign)) {
+            if (DealerSign.buy(level, player, sign)) {
+                event.setCanceled(true);
+                event.setCancellationResult(net.minecraft.world.InteractionResult.SUCCESS);
+            }
+            return;
+        }
+        // Everything else the player can walk up to and pay: doors, the box, perk
+        // machines, the upgrade bench, supply caches.
+        Marker marker = Marker.parse(sign, level.getBlockState(event.getPos()));
+        if (marker != null && Machines.use(level, player, marker)) {
             event.setCanceled(true);
             event.setCancellationResult(net.minecraft.world.InteractionResult.SUCCESS);
         }

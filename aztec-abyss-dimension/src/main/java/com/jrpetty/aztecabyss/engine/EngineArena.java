@@ -65,6 +65,22 @@ public final class EngineArena {
     private int breather = 0;
     private boolean running = true;
 
+    /**
+     * Which areas have been paid open.
+     *
+     * <p>"start" is open from the first round and everything else has to be bought
+     * through a {@code [Door]}. That is the whole shape of a map like this: you
+     * begin in one room you can hold, and every extra room you unlock is more
+     * ground worth having and more directions the horde arrives from. Opening the
+     * map is a decision, not a formality.
+     */
+    private final java.util.Set<String> openAreas = new java.util.HashSet<>(java.util.Set.of("start", ""));
+    private final List<Marker> zones = new ArrayList<>();
+    private final List<Marker> spawners = new ArrayList<>();
+    private final List<Marker> bossPoints = new ArrayList<>();
+    /** Loot caches already emptied this round. */
+    private final java.util.Set<BlockPos> lootTaken = new java.util.HashSet<>();
+
     private EngineArena(ServerLevel level, String mapName, Ruleset rules,
                         BlockPos spawn, List<Marker> hordes, BoundingBox bounds) {
         this.level = level;
@@ -115,6 +131,9 @@ public final class EngineArena {
         stop(false);
         current = new EngineArena(level, "Custom Arena", rules,
                 spawnMarker.pos(), scan.of("horde"), box);
+        current.zones.addAll(scan.of("zone"));
+        current.spawners.addAll(scan.of("spawner"));
+        current.bossPoints.addAll(scan.of("boss"));
         current.consumeMarkers(scan);
         current.join(player);
         current.beginRound(1);
@@ -212,6 +231,7 @@ public final class EngineArena {
         }
 
         alive.removeIf(m -> !m.isAlive());
+        tickZones(present);
 
         if (breather > 0) {
             breather--;
@@ -242,6 +262,9 @@ public final class EngineArena {
         round = n;
         leftToSpawn = rules.countFor(n);
         breather = 0;
+        lootTaken.clear();
+        runSpawners();
+        maybeBoss();
         for (ServerPlayer p : players()) {
             p.displayClientMessage(Component.literal("§c§lROUND " + n), true);
             level.playSound(null, p.blockPosition(), SoundEvents.WARDEN_ROAR,
@@ -269,8 +292,126 @@ public final class EngineArena {
      * three times a zombie's health is still three times a zombie's health at
      * round forty.
      */
+    // ------------------------------------------------------------------
+    // Areas, zones and caches
+    // ------------------------------------------------------------------
+
+    public boolean isAreaOpen(String area) {
+        return openAreas.contains(area.toLowerCase(java.util.Locale.ROOT));
+    }
+
+    public void openArea(String area) {
+        openAreas.add(area.toLowerCase(java.util.Locale.ROOT));
+    }
+
+    /** True the first time a cache is claimed each round. */
+    public boolean claimLoot(BlockPos pos) {
+        return lootTaken.add(pos.immutable());
+    }
+
+    /** The horde markers currently allowed to send anything. */
+    private List<Marker> liveHordes() {
+        List<Marker> live = new ArrayList<>();
+        for (Marker h : hordes) {
+            if (isAreaOpen(h.arg("area", ""))) {
+                live.add(h);
+            }
+        }
+        // A map whose every horde marker sits behind a door would otherwise stall
+        // on round one with nothing able to spawn and nothing able to be killed.
+        return live.isEmpty() ? hordes : live;
+    }
+
+    private void tickZones(List<ServerPlayer> present) {
+        if (zones.isEmpty()) {
+            return;
+        }
+        for (Marker zone : zones) {
+            int radius = zone.intArg("radius", 8);
+            int r2 = radius * radius;
+            for (ServerPlayer p : present) {
+                if (p.blockPosition().distSqr(zone.pos()) <= r2) {
+                    Machines.applyZone(p, zone);
+                }
+            }
+        }
+    }
+
+    /**
+     * Hand-placed enemies, for the fights a weighted table cannot describe.
+     *
+     * <pre>
+     *   [Spawner]
+     *   minecraft:skeleton
+     *   count=4 round=5 every=5
+     * </pre>
+     */
+    private void runSpawners() {
+        for (Marker s : spawners) {
+            int from = s.intArg("round", 1);
+            int every = Math.max(0, s.intArg("every", 0));
+            boolean due = round == from || (every > 0 && round > from && (round - from) % every == 0);
+            if (!due) {
+                continue;
+            }
+            String id = s.arg("id", s.arg("value", "minecraft:zombie"));
+            int count = Math.max(1, Math.min(32, s.intArg("count", 1)));
+            for (int i = 0; i < count; i++) {
+                spawnAt(id, s.pos(), s.intArg("health", 0), s.intArg("damage", 0));
+            }
+        }
+    }
+
+    /** Boss rounds, if the map marked somewhere for one to come in. */
+    private void maybeBoss() {
+        if (bossPoints.isEmpty()) {
+            return;
+        }
+        for (Marker b : bossPoints) {
+            int every = Math.max(0, b.intArg("every", 10));
+            if (every == 0 || round % every != 0) {
+                continue;
+            }
+            String id = b.arg("id", b.arg("value", "minecraft:warden"));
+            spawnAt(id, b.pos(), b.intArg("health", 0), b.intArg("damage", 0));
+            for (ServerPlayer p : players()) {
+                p.displayClientMessage(Component.literal(
+                        "§4§lSOMETHING ELSE IS COMING"), false);
+            }
+        }
+    }
+
+    /** Puts one named entity at a point, optionally overriding its numbers. */
+    private void spawnAt(String entityId, BlockPos at, int health, int damage) {
+        var type = EntityType.byString(entityId);
+        if (type.isEmpty()) {
+            return;
+        }
+        Entity entity = type.get().create(level);
+        if (!(entity instanceof Mob mob)) {
+            return;
+        }
+        mob.moveTo(at.getX() + 0.5, at.getY(), at.getZ() + 0.5, rng.nextFloat() * 360.0F, 0.0F);
+        if (health > 0) {
+            setAttr(mob, Attributes.MAX_HEALTH, Math.min(1024, health));
+        }
+        if (damage > 0) {
+            setAttr(mob, Attributes.ATTACK_DAMAGE, Math.min(256, damage));
+        }
+        mob.setHealth(mob.getMaxHealth());
+        mob.getPersistentData().putBoolean("aztecabyss_engine_mob", true);
+        mob.setPersistenceRequired();
+        level.addFreshEntity(mob);
+        ServerPlayer target = nearestPlayer(at);
+        if (target != null) {
+            mob.setTarget(target);
+        }
+        alive.add(mob);
+    }
+
     private void spawnOne() {
-        Marker gate = hordes.get(rng.nextInt(hordes.size()));
+        List<Marker> live = liveHordes();
+        Marker gate = live.get(rng.nextInt(live.size()));
         Ruleset.MobEntry pick = pickMob();
         if (pick == null) {
             leftToSpawn = 0;

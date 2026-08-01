@@ -36,9 +36,16 @@ import java.util.Map;
  */
 public record Marker(String kind, BlockPos pos, Direction facing, Map<String, String> args) {
 
-    /** Markers that are instructions only, and are deleted once read. */
+    /**
+     * Markers that are instructions only, and are deleted once read.
+     *
+     * <p>{@code loot} is deliberately absent even though it looks like scenery:
+     * a supply cache is claimed by right-clicking it, so deleting its sign on load
+     * would remove the only thing a player can interact with. Anything the engine
+     * merely needs to <em>know</em> gets consumed; anything a player touches stays.
+     */
     private static final java.util.Set<String> CONSUMED = java.util.Set.of(
-            "spawn", "extract", "horde", "pen", "boss", "loot", "powerup", "zone");
+            "spawn", "extract", "horde", "pen", "boss", "powerup", "zone", "spawner");
 
     /**
      * Whether this marker is scaffolding rather than furniture.
