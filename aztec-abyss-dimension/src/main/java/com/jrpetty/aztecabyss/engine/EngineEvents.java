@@ -142,6 +142,25 @@ public final class EngineEvents {
                             ctx.getSource().sendSuccess(() -> Component.literal("§7Run stopped."), true);
                             return 1;
                         }))
+                .then(Commands.literal("copy")
+                        .executes(ctx -> copy(ctx.getSource())))
+                .then(Commands.literal("paste")
+                        .executes(ctx -> paste(ctx.getSource(), 0, ""))
+                        .then(Commands.argument("rotate", com.mojang.brigadier.arguments.IntegerArgumentType.integer(0, 359))
+                                .executes(ctx -> paste(ctx.getSource(),
+                                        com.mojang.brigadier.arguments.IntegerArgumentType.getInteger(ctx, "rotate"), ""))
+                                .then(Commands.argument("mirror", com.mojang.brigadier.arguments.StringArgumentType.word())
+                                        .suggests((c, sb) -> {
+                                            sb.suggest("none");
+                                            sb.suggest("x");
+                                            sb.suggest("z");
+                                            return sb.buildFuture();
+                                        })
+                                        .executes(ctx -> paste(ctx.getSource(),
+                                                com.mojang.brigadier.arguments.IntegerArgumentType.getInteger(ctx, "rotate"),
+                                                com.mojang.brigadier.arguments.StringArgumentType.getString(ctx, "mirror"))))))
+                .then(Commands.literal("undo")
+                        .executes(ctx -> undo(ctx.getSource())))
                 .then(Commands.literal("maps")
                         .executes(ctx -> maps(ctx.getSource())))
                 .then(Commands.literal("info")
@@ -274,6 +293,67 @@ public final class EngineEvents {
                     r.breatherFor(round) / 20.0);
             source.sendSuccess(() -> Component.literal(line), false);
         }
+        return 1;
+    }
+
+    /** {@code /arena copy} - the wand selection into your clipboard. */
+    private static int copy(CommandSourceStack source) {
+        ServerPlayer player = source.getPlayer();
+        if (player == null || !(source.getLevel() instanceof ServerLevel level)) {
+            return 0;
+        }
+        var box = BuildTools.selectionOf(player);
+        if (box == null) {
+            source.sendFailure(Component.literal("Pick both corners with the Map Wand first."));
+            return 0;
+        }
+        if (!Clipboard.copy(level, player, box)) {
+            source.sendFailure(Component.literal(
+                    "That selection is too large to copy — keep it under "
+                            + Clipboard.MAX_VOLUME + " blocks."));
+            return 0;
+        }
+        var size = Clipboard.sizeOf(player);
+        source.sendSuccess(() -> Component.literal(
+                "§a✔ Copied §f" + size.getX() + " × " + size.getY() + " × " + size.getZ()), false);
+        return 1;
+    }
+
+    /**
+     * {@code /arena paste [rotate] [mirror]} - places it at your feet.
+     *
+     * <p>Rotation and mirroring are vanilla's own structure settings, so a pasted
+     * corner behaves exactly like a loaded map: stairs turn the right way and
+     * signs keep their text, with no second code path to disagree.
+     */
+    private static int paste(CommandSourceStack source, int degrees, String mirror) {
+        ServerPlayer player = source.getPlayer();
+        if (player == null || !(source.getLevel() instanceof ServerLevel level)) {
+            return 0;
+        }
+        int placed = Clipboard.paste(level, player, player.blockPosition(),
+                Clipboard.rotationOf(degrees), Clipboard.mirrorOf(mirror));
+        if (placed < 0) {
+            source.sendFailure(Component.literal("Nothing copied yet — /arena copy first."));
+            return 0;
+        }
+        source.sendSuccess(() -> Component.literal(
+                "§a✔ Pasted" + (degrees != 0 ? " rotated " + degrees + "°" : "")
+                        + (mirror.isEmpty() || mirror.equals("none") ? "" : " mirrored " + mirror)
+                        + " §8— /arena undo to take it back"), false);
+        return 1;
+    }
+
+    private static int undo(CommandSourceStack source) {
+        ServerPlayer player = source.getPlayer();
+        if (player == null || !(source.getLevel() instanceof ServerLevel level)) {
+            return 0;
+        }
+        if (!Clipboard.undo(level, player)) {
+            source.sendFailure(Component.literal("Nothing to undo."));
+            return 0;
+        }
+        source.sendSuccess(() -> Component.literal("§a✔ Put back."), false);
         return 1;
     }
 
