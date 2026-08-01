@@ -100,6 +100,20 @@ public final class EngineArena {
      */
     private final java.util.Set<UUID> fallen = new java.util.HashSet<>();
 
+    /**
+     * Which player object currently holds the bar, per participant.
+     *
+     * <p>A boss bar keeps references to {@code ServerPlayer} objects, and logging
+     * out and back in produces a <em>new</em> object for the same person. So a
+     * participant who relogged mid-run lost their round bar permanently and had
+     * no way to get it back - they were still in the run, still being attacked,
+     * with nothing on screen telling them what round it was or how many were
+     * left. Tracking who holds it lets the stale reference be swapped for the
+     * live one, and only when it actually changes, so this costs no packets in
+     * the normal case.
+     */
+    private final java.util.Map<UUID, ServerPlayer> barred = new java.util.HashMap<>();
+
     /** Game time of the last thing that counted as progress. */
     private long lastProgress = 0L;
     /** How long a round may make no progress before the stragglers are fetched. */
@@ -160,6 +174,7 @@ public final class EngineArena {
         current.spawners.addAll(scan.of("spawner"));
         current.bossPoints.addAll(scan.of("boss"));
         current.extract = scan.first("extract");
+        EnginePowerUps.reset();
         current.consumeMarkers(scan);
         // Everyone already stood in the map is in it. Making each player type a
         // command to be included in a fight happening around them is the kind of
@@ -250,6 +265,7 @@ public final class EngineArena {
                 m.discard();
             }
         }
+        EnginePowerUps.clearDrops(current.level, current.bounds);
         current.bar.removeAllPlayers();
         current.running = false;
         current = null;
@@ -309,6 +325,10 @@ public final class EngineArena {
             return;
         }
 
+        refreshBars(present);
+        if (rules.powerupChance > 0) {
+            EnginePowerUps.tick(level, present, bounds);
+        }
         alive.removeIf(m -> !m.isAlive());
         tickZones(present);
         if (level.getGameTime() % 20L == 0L) {
@@ -575,6 +595,18 @@ public final class EngineArena {
         return lootTaken.add(pos.immutable());
     }
 
+    /** Kills everything currently in the wave. Used by the Purge drop. */
+    public void purge() {
+        for (Mob m : alive) {
+            if (m.isAlive()) {
+                level.sendParticles(net.minecraft.core.particles.ParticleTypes.SOUL,
+                        m.getX(), m.getY() + 0.5, m.getZ(), 6, 0.3, 0.5, 0.3, 0.02);
+                m.hurt(level.damageSources().magic(), Float.MAX_VALUE);
+            }
+        }
+        lastProgress = level.getGameTime();
+    }
+
     /** The horde markers currently allowed to send anything. */
     private List<Marker> liveHordes() {
         List<Marker> live = new ArrayList<>();
@@ -835,6 +867,21 @@ public final class EngineArena {
      * That is the right list for telling people what happened and the wrong one
      * for anything the run acts on - hence both, named for what they are.
      */
+    /** Hands the round bar to whichever player object is currently live. */
+    private void refreshBars(List<ServerPlayer> present) {
+        for (ServerPlayer p : present) {
+            ServerPlayer held = barred.get(p.getUUID());
+            if (held == p) {
+                continue;
+            }
+            if (held != null) {
+                bar.removePlayer(held);
+            }
+            bar.addPlayer(p);
+            barred.put(p.getUUID(), p);
+        }
+    }
+
     private List<ServerPlayer> livingPlayers() {
         List<ServerPlayer> out = new ArrayList<>();
         for (ServerPlayer p : players()) {
@@ -872,8 +919,13 @@ public final class EngineArena {
             return;
         }
         if (a.rules.economyEnabled) {
-            Currency.byId(a.rules.defaultCurrency).award(killer, a.rules.pointsKill);
+            int paid = a.rules.pointsKill;
+            if (EnginePowerUps.doublePoints(a.level)) {
+                paid *= 2;
+            }
+            Currency.byId(a.rules.defaultCurrency).award(killer, paid);
         }
+        EnginePowerUps.maybeDrop(a.level, mob, a.rules.powerupChance, a.rng);
         // A kill is progress, which resets the stall clock. Without this a long
         // hard round with a slow weapon would be mistaken for a stuck one.
         a.lastProgress = a.level.getGameTime();

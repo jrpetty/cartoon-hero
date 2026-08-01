@@ -740,6 +740,31 @@ public final class EngineEvents {
         }
     }
 
+    /**
+     * Insta-Kill: anything in the wave dies to one hit while it is up.
+     *
+     * <p>Uses the same event the rest of the mod already hooks for damage, rather
+     * than a second one that might behave differently. Raising the amount past the
+     * target's maximum health is deliberate - overkill rather than a flag - so it
+     * works on anything a map cares to spawn without the engine needing to know
+     * what that is.
+     */
+    @SubscribeEvent
+    public static void onEngineDamage(
+            net.neoforged.neoforge.event.entity.living.LivingIncomingDamageEvent event) {
+        if (!(event.getEntity() instanceof net.minecraft.world.entity.Mob mob)
+                || !(event.getEntity().level() instanceof ServerLevel level)) {
+            return;
+        }
+        if (!mob.getPersistentData().getBoolean("aztecabyss_engine_mob")) {
+            return;
+        }
+        if (EnginePowerUps.instaKill(level)
+                && event.getSource().getEntity() instanceof ServerPlayer) {
+            event.setAmount(Math.max(event.getAmount(), mob.getMaxHealth() * 2.0F));
+        }
+    }
+
     /** Pays out for kills made during an engine run. */
     @SubscribeEvent
     public static void onMobKilled(net.neoforged.neoforge.event.entity.living.LivingDeathEvent event) {

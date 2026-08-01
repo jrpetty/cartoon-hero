@@ -60,6 +60,9 @@ public final class Ruleset {
     public final int pointsHeadshot;
     public final boolean stripInventory;
 
+    /** One kill in this many leaves a drop. Zero switches power-ups off. */
+    public final int powerupChance;
+
     public final boolean directorEnabled;
     public final float directorTarget;
     public final float directorMinPace;
@@ -110,6 +113,7 @@ public final class Ruleset {
         this.pointsKill = b.pointsKill;
         this.pointsHeadshot = b.pointsHeadshot;
         this.stripInventory = b.stripInventory;
+        this.powerupChance = b.powerupChance;
         this.directorEnabled = b.directorEnabled;
         this.directorTarget = b.directorTarget;
         this.directorMinPace = b.directorMinPace;
@@ -154,6 +158,7 @@ public final class Ruleset {
         int pointsKill = 50;
         int pointsHeadshot = 25;
         boolean stripInventory = false;
+        int powerupChance = 0;
         boolean directorEnabled = false;
         float directorTarget = 0.55f;
         float directorMinPace = 0.5f;
@@ -179,7 +184,8 @@ public final class Ruleset {
         b.id = id;
 
         checkKeys(root, "", b.warnings,
-                "rounds", "economy", "mobs", "currencies", "director", "script");
+                "rounds", "economy", "mobs", "currencies", "director", "script", "powerups");
+        checkKeys(obj(root, "powerups"), "powerups", b.warnings, "one_in");
 
         JsonObject rounds = obj(root, "rounds");
         checkKeys(rounds, "rounds", b.warnings,
@@ -230,6 +236,11 @@ public final class Ruleset {
             b.pointsKill = clampInt(intOf(economy, "kill", b.pointsKill), 0, 100000);
             b.pointsHeadshot = clampInt(intOf(economy, "headshot", b.pointsHeadshot), 0, 100000);
             b.stripInventory = bool(economy, "strip_inventory_on_entry", b.stripInventory);
+        }
+
+        JsonObject powerups = obj(root, "powerups");
+        if (powerups != null) {
+            b.powerupChance = clampInt(intOf(powerups, "one_in", 0), 0, 100000);
         }
 
         JsonObject director = obj(root, "director");

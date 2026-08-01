@@ -1,23 +1,34 @@
 {
   "_comment": "Endless, with the Director on. Difficulty tracks how the squad is actually doing rather than what round it is, so this stays a fight for good players and a survivable one for the rest.",
-
   "rounds": {
     "mode": "endless",
     "base_count": 10,
     "per_round": 5,
     "concurrent_cap": 90,
-    "health": { "per_round": 0.24, "soften_after": 18, "exponent": 1.06 },
-    "damage": { "per_round": 0.18, "cap": 10.0 },
-    "breather": { "start_ticks": 160, "min_ticks": 40, "tighten_by_round": 30 }
+    "health": {
+      "per_round": 0.24,
+      "soften_after": 18,
+      "exponent": 1.06
+    },
+    "damage": {
+      "per_round": 0.18,
+      "cap": 10.0
+    },
+    "breather": {
+      "start_ticks": 160,
+      "min_ticks": 40,
+      "tighten_by_round": 30
+    }
   },
-
   "director": {
     "enabled": true,
     "target_pressure": 0.6,
     "min_pace": 0.5,
     "max_pace": 2.0
   },
-
+  "powerups": {
+    "one_in": 45
+  },
   "economy": {
     "enabled": true,
     "currency": "points",
@@ -26,74 +37,155 @@
     "headshot": 30,
     "strip_inventory_on_entry": true
   },
-
   "mobs": [
     {
       "id": "minecraft:zombie",
       "weight": 50,
       "from_round": 1,
-      "attributes": { "max_health": 24, "movement_speed": 0.26, "attack_damage": 4 }
+      "attributes": {
+        "max_health": 24,
+        "movement_speed": 0.26,
+        "attack_damage": 4
+      }
     },
     {
       "id": "minecraft:husk",
       "weight": 25,
       "from_round": 4,
-      "attributes": { "max_health": 50, "movement_speed": 0.28, "attack_damage": 7 },
-      "equipment": { "head": "minecraft:iron_helmet", "mainhand": "minecraft:iron_shovel" }
+      "attributes": {
+        "max_health": 50,
+        "movement_speed": 0.28,
+        "attack_damage": 7
+      },
+      "equipment": {
+        "head": "minecraft:iron_helmet",
+        "mainhand": "minecraft:iron_shovel"
+      }
     },
     {
       "id": "minecraft:drowned",
       "weight": 15,
       "from_round": 8,
-      "attributes": { "max_health": 60, "movement_speed": 0.25, "attack_damage": 8 }
+      "attributes": {
+        "max_health": 60,
+        "movement_speed": 0.25,
+        "attack_damage": 8
+      }
     },
     {
       "id": "minecraft:zombified_piglin",
       "weight": 10,
       "from_round": 15,
-      "attributes": { "max_health": 90, "movement_speed": 0.30, "attack_damage": 10 },
-      "equipment": { "mainhand": "minecraft:golden_axe" }
+      "attributes": {
+        "max_health": 90,
+        "movement_speed": 0.3,
+        "attack_damage": 10
+      },
+      "equipment": {
+        "mainhand": "minecraft:golden_axe"
+      }
     }
   ],
-
   "script": [
     {
       "on": "run_start",
       "do": [
-        { "title": { "main": "§4NO LAST ROUND", "sub": "Leave while you still can" } }
+        {
+          "title": {
+            "main": "§4NO LAST ROUND",
+            "sub": "Leave while you still can"
+          }
+        }
       ]
     },
     {
       "on": "round_start",
-      "when": { "round": { "every": 10 } },
+      "when": {
+        "round": {
+          "every": 10
+        }
+      },
       "do": [
-        { "title": { "main": "§4§lSOMETHING ELSE" } },
-        { "sound": { "id": "minecraft:entity.warden_emerge", "pitch": 0.8 } },
-        { "spawn": { "id": "minecraft:ravager", "at": "boss", "health": 220 } }
+        {
+          "title": {
+            "main": "§4§lSOMETHING ELSE"
+          }
+        },
+        {
+          "sound": {
+            "id": "minecraft:entity.warden_emerge",
+            "pitch": 0.8
+          }
+        },
+        {
+          "spawn": {
+            "id": "minecraft:ravager",
+            "at": "boss",
+            "health": 220
+          }
+        }
       ]
     },
     {
       "on": "round_start",
-      "when": { "round": { "at_least": 25 } },
+      "when": {
+        "round": {
+          "at_least": 25
+        }
+      },
       "do": [
-        { "effect": { "id": "minecraft:darkness", "seconds": 6 } }
+        {
+          "effect": {
+            "id": "minecraft:darkness",
+            "seconds": 6
+          }
+        }
       ]
     },
     {
       "on": "round_end",
-      "when": { "round": { "every": 5 } },
+      "when": {
+        "round": {
+          "every": 5
+        }
+      },
       "do": [
-        { "award": { "amount": 250 } },
-        { "actionbar": "§7The dark pays you to keep going." }
+        {
+          "award": {
+            "amount": 250
+          }
+        },
+        {
+          "actionbar": "§7The dark pays you to keep going."
+        }
       ]
     },
     {
       "on": "extracted",
       "do": [
-        { "title": { "main": "§6BANKED", "sub": "You chose the moment" } },
-        { "give": { "id": "minecraft:diamond", "count": 6 } },
-        { "give": { "id": "minecraft:gold_ingot", "count": 16 } },
-        { "sound": { "id": "minecraft:block.beacon.activate" } }
+        {
+          "title": {
+            "main": "§6BANKED",
+            "sub": "You chose the moment"
+          }
+        },
+        {
+          "give": {
+            "id": "minecraft:diamond",
+            "count": 6
+          }
+        },
+        {
+          "give": {
+            "id": "minecraft:gold_ingot",
+            "count": 16
+          }
+        },
+        {
+          "sound": {
+            "id": "minecraft:block.beacon.activate"
+          }
+        }
       ]
     }
   ]
