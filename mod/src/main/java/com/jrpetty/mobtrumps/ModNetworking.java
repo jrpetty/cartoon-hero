@@ -83,6 +83,20 @@ public final class ModNetworking {
         registrar.playToClient(RecyclerResultPayload.TYPE, RecyclerResultPayload.STREAM_CODEC,
                 (payload, context) -> context.enqueueWork(
                         () -> com.jrpetty.mobtrumps.client.ClientRecycler.result(payload)));
+        // --- Guess Who ---
+        registrar.playToClient(GuessWhoMenuPayload.TYPE, GuessWhoMenuPayload.STREAM_CODEC,
+                (payload, context) -> context.enqueueWork(
+                        () -> com.jrpetty.mobtrumps.client.ClientHooks.openGuessWho()));
+        registrar.playToClient(GuessWhoSyncPayload.TYPE, GuessWhoSyncPayload.STREAM_CODEC,
+                (payload, context) -> context.enqueueWork(
+                        () -> com.jrpetty.mobtrumps.client.ClientGuessWho.set(payload)));
+        registrar.playToServer(GuessWhoActionPayload.TYPE, GuessWhoActionPayload.STREAM_CODEC,
+                (payload, context) -> context.enqueueWork(() -> {
+                    if (context.player() instanceof net.minecraft.server.level.ServerPlayer sp) {
+                        GuessWhoManager.handle(sp, payload.action(), payload.template(),
+                                payload.value(), payload.mobId());
+                    }
+                }));
         // --- Twenty-One ---
         registrar.playToClient(BlackjackMenuPayload.TYPE, BlackjackMenuPayload.STREAM_CODEC,
                 (payload, context) -> context.enqueueWork(

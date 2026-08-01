@@ -126,6 +126,14 @@ public final class DuelTables {
                 tableSound(player, key, 1.1F);
                 TableBattleManager.start(player, difficulty, payload.useDeck());
             }
+            case TableActionPayload.GUESS_WHO -> {
+                if (busy(player)) {
+                    player.sendSystemMessage(err("Finish your current game first."));
+                    return;
+                }
+                tableSound(player, key, 1.2F);
+                GuessWhoManager.open(player);
+            }
             case TableActionPayload.TWENTY_ONE -> {
                 if (busy(player)) {
                     player.sendSystemMessage(err("Finish your current game first."));

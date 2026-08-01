@@ -38,6 +38,11 @@ public final class ClientHooks {
         Minecraft.getInstance().setScreen(new HallScreen());
     }
 
+    /** Open the Guess Who board. */
+    public static void openGuessWho() {
+        Minecraft.getInstance().setScreen(new GuessWhoScreen());
+    }
+
     /** Open the Twenty-One table. */
     public static void openBlackjack() {
         Minecraft.getInstance().setScreen(new BlackjackScreen());

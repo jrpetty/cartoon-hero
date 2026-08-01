@@ -145,8 +145,10 @@ public class TableMenuScreen extends Screen {
         // rather than in the deck row, which has no width left to give
         int tw = by + 40;
         g.fill(leftX + 8, tw - 6, leftX + colW - 8, tw - 5, 0x30FFFFFF);
-        modeButton(g, "twentyone", leftX + 8, tw, colW - 16, "TWENTY-ONE", 0,
+        tw = modeButton(g, "twentyone", leftX + 8, tw, colW - 16, "TWENTY-ONE", 0,
                 "Call a stat, then the card turns", 0xFF7A5AA8, mouseX, mouseY, t);
+        modeButton(g, "guesswho", leftX + 8, tw, colW - 16, "GUESS WHO", 0,
+                "Narrow 81 mobs down to one", 0xFF2E6E8A, mouseX, mouseY, t);
 
         // --- VS PLAYER panel ---
         panel(g, rightX, panelTop, colW, panelH, "VS  PLAYER");
@@ -490,6 +492,9 @@ public class TableMenuScreen extends Screen {
                 return true;
             } else if (key.equals("twentyone")) {
                 send(TableActionPayload.TWENTY_ONE, 0, false);
+                return true;
+            } else if (key.equals("guesswho")) {
+                send(TableActionPayload.GUESS_WHO, 0, false);
                 return true;
             } else if (key.equals("deck_edit") && minecraft != null) {
                 minecraft.setScreen(new DeckBuilderScreen(this));

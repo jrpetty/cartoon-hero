@@ -558,7 +558,46 @@ which Minecraft never renders.
 
 ---
 
-## 7. What is actually verified, and what isn't
+## 7. Guess Who — eighty-one faces, one hidden
+
+*(Built v1.72.0. Against the house for now; two players hiding a mob from each
+other is the same machinery with a second board.)*
+
+The server hides a mob. You narrow it down with questions from a fixed
+catalogue, then name it. Right wins, wrong ends the board.
+
+**The elimination is server-side, and that is the whole design.** A question
+arrives as "template 4, value 7"; the server answers it against the mob it is
+hiding, strikes off every face that would have answered the other way, and sends
+back what survives. The client draws that set and decides nothing. So a player
+cannot decline to eliminate a card they would rather keep, cannot miscount in
+their own favour, and a modified client cannot ask what the mob is — the only
+reply it ever receives is a yes, a no, and a shorter list of faces. The hidden
+mob's id does not cross the wire until the board is over.
+
+**The catalogue is 36 rows**, not 144: a threshold row carries its number
+separately, so "Is its Health less than [5]?" is one row with a value box rather
+than ten near-identical rows. Search filters by the row's words. A question every
+remaining face answers the same way is greyed out, because spending a turn on it
+would tell you nothing.
+
+**Measured:** 74 genuinely distinct questions, every one of the 81 isolable, a
+mean of 6.42 questions against a floor of log2(81) = 6.34, never more than 7.
+
+**Payout ladder** — 24 fragments in 5 questions or fewer, 12 by 7, 6 by 10, 2
+after. Six or seven is a good game, so the top rung is for the rare sharp one
+without making a normal board feel like a failure.
+
+**Presentation.** Struck-off faces turn face down where they stand, staggered
+across the board so the answer sweeps rather than snaps. Naming a face needs a
+confirm, because a misclick should not end a board. The grid is solved from the
+space left beside the question panel, choosing the arrangement whose shape best
+matches that space — taking the widest row that fit produced 46 across and 2
+down on a large window, which is a strip of faces rather than a board.
+
+---
+
+## 8. What is actually verified, and what isn't
 
 *(Added v1.66.0.)* This mod has never been run. Not once — it is built in an
 environment with no Minecraft in it, so everything below "it compiles" has to
