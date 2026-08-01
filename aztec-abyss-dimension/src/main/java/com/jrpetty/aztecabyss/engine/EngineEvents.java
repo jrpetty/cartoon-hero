@@ -76,8 +76,79 @@ public final class EngineEvents {
                         .executes(ctx -> validate(ctx.getSource(), 64))
                         .then(Commands.argument("radius", com.mojang.brigadier.arguments.IntegerArgumentType.integer(8, 256))
                                 .executes(ctx -> validate(ctx.getSource(),
-                                        com.mojang.brigadier.arguments.IntegerArgumentType.getInteger(ctx, "radius")))));
+                                        com.mojang.brigadier.arguments.IntegerArgumentType.getInteger(ctx, "radius")))))
+                .then(Commands.literal("save")
+                        .then(Commands.argument("name", com.mojang.brigadier.arguments.StringArgumentType.word())
+                                .executes(ctx -> save(ctx.getSource(),
+                                        com.mojang.brigadier.arguments.StringArgumentType.getString(ctx, "name"), 48))
+                                .then(Commands.argument("radius", com.mojang.brigadier.arguments.IntegerArgumentType.integer(8, 128))
+                                        .executes(ctx -> save(ctx.getSource(),
+                                                com.mojang.brigadier.arguments.StringArgumentType.getString(ctx, "name"),
+                                                com.mojang.brigadier.arguments.IntegerArgumentType.getInteger(ctx, "radius"))))))
+                .then(Commands.literal("load")
+                        .then(Commands.argument("name", com.mojang.brigadier.arguments.StringArgumentType.string())
+                                .executes(ctx -> load(ctx.getSource(),
+                                        com.mojang.brigadier.arguments.StringArgumentType.getString(ctx, "name")))));
         event.getDispatcher().register(arena);
+    }
+
+    /**
+     * {@code /arena save <name> [radius]} - writes the build around you to disk.
+     *
+     * <p>Lands in {@code <world>/generated/abyss_local/structures/<name>.nbt},
+     * which is already the right shape and the right place to be copied straight
+     * into a datapack.
+     */
+    private static int save(CommandSourceStack source, String name, int radius) {
+        ServerPlayer player = source.getPlayer();
+        if (player == null || !(source.getLevel() instanceof ServerLevel level)) {
+            return 0;
+        }
+        net.minecraft.core.BlockPos origin = MapStore.originFor(level, player.blockPosition(), radius);
+        boolean ok = MapStore.save(level, name, player.blockPosition(), radius);
+        if (!ok) {
+            source.sendFailure(Component.literal("Could not write that structure to disk."));
+            return 0;
+        }
+        MapScan.Result scan = MapScan.scan(level, around(player, radius));
+        source.sendSuccess(() -> Component.literal(
+                "§a✔ Saved §f" + name + "§a — " + (radius * 2 + 1) + " blocks across, "
+                        + scan.all().size() + " markers, from §7"
+                        + origin.getX() + ", " + origin.getY() + ", " + origin.getZ()), true);
+        source.sendSuccess(() -> Component.literal(
+                "§7Find it in §fgenerated/" + MapStore.LOCAL + "/structures/§7 in your world folder."),
+                false);
+        return 1;
+    }
+
+    /** {@code /arena load <name>} - places a saved build, then checks it over. */
+    private static int load(CommandSourceStack source, String name) {
+        ServerPlayer player = source.getPlayer();
+        if (player == null || !(source.getLevel() instanceof ServerLevel level)) {
+            return 0;
+        }
+        net.minecraft.core.BlockPos origin = player.blockPosition();
+        int placed = MapStore.load(level, name, origin);
+        if (placed < 0) {
+            source.sendFailure(Component.literal(
+                    "No structure called '" + name + "'. Try the full id, like "
+                            + "mypack:my_map/piece_0."));
+            return 0;
+        }
+        source.sendSuccess(() -> Component.literal(
+                "§a✔ Placed §f" + name + "§a at your feet."), true);
+
+        var box = MapStore.boundsOf(level, name, origin);
+        if (box != null) {
+            java.util.List<String> problems = MapScan.validate(MapScan.scan(level, box));
+            if (problems.isEmpty()) {
+                source.sendSuccess(() -> Component.literal("§a✔ It validates — this will play."), false);
+            } else {
+                source.sendSuccess(() -> Component.literal(
+                        "§e" + problems.size() + " thing(s) to fix — run §f/arena validate"), false);
+            }
+        }
+        return 1;
     }
 
     /** A box centred on the caller, tall enough to catch a whole build. */
