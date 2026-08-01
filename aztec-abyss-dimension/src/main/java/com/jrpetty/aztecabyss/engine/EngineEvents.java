@@ -88,7 +88,12 @@ public final class EngineEvents {
                 .then(Commands.literal("load")
                         .then(Commands.argument("name", com.mojang.brigadier.arguments.StringArgumentType.string())
                                 .executes(ctx -> load(ctx.getSource(),
-                                        com.mojang.brigadier.arguments.StringArgumentType.getString(ctx, "name")))));
+                                        com.mojang.brigadier.arguments.StringArgumentType.getString(ctx, "name")))))
+                .then(Commands.literal("rules")
+                        .executes(ctx -> rules(ctx.getSource(), null))
+                        .then(Commands.argument("id", com.mojang.brigadier.arguments.StringArgumentType.string())
+                                .executes(ctx -> rules(ctx.getSource(),
+                                        com.mojang.brigadier.arguments.StringArgumentType.getString(ctx, "id")))));
         event.getDispatcher().register(arena);
     }
 
@@ -147,6 +152,42 @@ public final class EngineEvents {
                 source.sendSuccess(() -> Component.literal(
                         "§e" + problems.size() + " thing(s) to fix — run §f/arena validate"), false);
             }
+        }
+        return 1;
+    }
+
+    /**
+     * {@code /arena rules [id]} - what is loaded, and what a given round works out to.
+     *
+     * <p>The per-round readout is the useful half. A scaling curve written as four
+     * numbers in a file is impossible to picture; the same curve printed as the
+     * health and damage multipliers at rounds 1, 10, 25 and 50 tells you instantly
+     * whether you have built a fair fight or a wall.
+     */
+    private static int rules(CommandSourceStack source, String id) {
+        if (id == null) {
+            var all = RulesetLoader.all();
+            if (all.isEmpty()) {
+                source.sendSuccess(() -> Component.literal(
+                        "§7No rulesets loaded. Put one at §fdata/<you>/abyss_ruleset/<name>.json§7 "
+                                + "in a datapack and run §f/reload§7."), false);
+                return 1;
+            }
+            source.sendSuccess(() -> Component.literal("§6— " + all.size() + " rulesets —"), false);
+            all.forEach((key, r) -> source.sendSuccess(() -> Component.literal(
+                    "§f" + key + " §8— " + (r.endless ? "endless" : "to round " + r.finalRound)
+                            + ", " + r.mobs.size() + " mob types"), false));
+            return 1;
+        }
+        Ruleset r = RulesetLoader.byId(id);
+        source.sendSuccess(() -> Component.literal("§6— " + r.id + " —"), false);
+        for (int round : new int[]{1, 10, 25, 50}) {
+            int n = r.countFor(round);
+            String line = String.format(java.util.Locale.ROOT,
+                    "§7Round §f%d§7: §f%d§7 mobs, health §f×%.2f§7, damage §f×%.2f§7, breather §f%.1fs",
+                    round, n, r.healthMultiplier(round), r.damageMultiplier(round),
+                    r.breatherFor(round) / 20.0);
+            source.sendSuccess(() -> Component.literal(line), false);
         }
         return 1;
     }
