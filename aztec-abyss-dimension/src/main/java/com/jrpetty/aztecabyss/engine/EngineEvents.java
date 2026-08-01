@@ -142,6 +142,17 @@ public final class EngineEvents {
                             ctx.getSource().sendSuccess(() -> Component.literal("§7Run stopped."), true);
                             return 1;
                         }))
+                .then(Commands.literal("director")
+                        .executes(ctx -> {
+                            EngineArena a = EngineArena.active();
+                            if (a == null) {
+                                ctx.getSource().sendFailure(Component.literal("No run in progress."));
+                                return 0;
+                            }
+                            ctx.getSource().sendSuccess(
+                                    () -> Component.literal(a.director().describe()), false);
+                            return 1;
+                        }))
                 .then(Commands.literal("rules")
                         .executes(ctx -> rules(ctx.getSource(), null))
                         .then(Commands.argument("id", com.mojang.brigadier.arguments.StringArgumentType.string())

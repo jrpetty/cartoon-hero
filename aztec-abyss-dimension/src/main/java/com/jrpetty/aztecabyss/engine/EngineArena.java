@@ -80,6 +80,7 @@ public final class EngineArena {
     private final List<Marker> bossPoints = new ArrayList<>();
     /** Loot caches already emptied this round. */
     private final java.util.Set<BlockPos> lootTaken = new java.util.HashSet<>();
+    private final Director director;
 
     private EngineArena(ServerLevel level, String mapName, Ruleset rules,
                         BlockPos spawn, List<Marker> hordes, BoundingBox bounds) {
@@ -91,6 +92,7 @@ public final class EngineArena {
         this.bounds = bounds;
         this.bar = new ServerBossEvent(Component.literal(mapName),
                 BossEvent.BossBarColor.RED, BossEvent.BossBarOverlay.PROGRESS);
+        this.director = new Director(rules);
     }
 
     public static EngineArena active() {
@@ -232,6 +234,9 @@ public final class EngineArena {
 
         alive.removeIf(m -> !m.isAlive());
         tickZones(present);
+        if (level.getGameTime() % 20L == 0L) {
+            director.sample(present);
+        }
 
         if (breather > 0) {
             breather--;
@@ -244,8 +249,14 @@ public final class EngineArena {
             return;
         }
 
-        if (leftToSpawn > 0 && level.getGameTime() % SPAWN_INTERVAL_TICKS == 0
-                && alive.size() < rules.concurrentCap) {
+        // The Director works on pacing only: how often the next one arrives and how
+        // many may be on the floor at once. It never touches what a mob is, because
+        // a zombie that is quietly weaker teaches players their weapons are
+        // unreliable, whereas a gap in the stream just reads as a lull.
+        float pace = director.pace();
+        int interval = Math.max(4, Math.round(SPAWN_INTERVAL_TICKS / pace));
+        int cap = Math.max(4, Math.round(rules.concurrentCap * Math.min(1.5f, Math.max(0.5f, pace))));
+        if (leftToSpawn > 0 && level.getGameTime() % interval == 0 && alive.size() < cap) {
             spawnOne();
         }
         if (leftToSpawn <= 0 && alive.isEmpty()) {
@@ -263,6 +274,7 @@ public final class EngineArena {
         leftToSpawn = rules.countFor(n);
         breather = 0;
         lootTaken.clear();
+        director.onRoundStart();
         runSpawners();
         maybeBoss();
         // run_start is an extra on top of round one, not a replacement for it -
@@ -335,6 +347,11 @@ public final class EngineArena {
     /** The ruleset this run is being played under, for script lookups. */
     public String rulesetId() {
         return rules.id;
+    }
+
+    /** Exposed for authors tuning a map, never shown to players in play. */
+    public Director director() {
+        return director;
     }
 
     public boolean isAreaOpen(String area) {

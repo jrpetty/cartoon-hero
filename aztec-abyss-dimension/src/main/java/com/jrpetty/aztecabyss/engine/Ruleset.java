@@ -60,6 +60,11 @@ public final class Ruleset {
     public final int pointsHeadshot;
     public final boolean stripInventory;
 
+    public final boolean directorEnabled;
+    public final float directorTarget;
+    public final float directorMinPace;
+    public final float directorMaxPace;
+
     public final List<MobEntry> mobs;
 
     /** One kind of thing that can turn up in a wave. */
@@ -89,6 +94,10 @@ public final class Ruleset {
         this.pointsKill = b.pointsKill;
         this.pointsHeadshot = b.pointsHeadshot;
         this.stripInventory = b.stripInventory;
+        this.directorEnabled = b.directorEnabled;
+        this.directorTarget = b.directorTarget;
+        this.directorMinPace = b.directorMinPace;
+        this.directorMaxPace = b.directorMaxPace;
         this.mobs = List.copyOf(b.mobs);
     }
 
@@ -113,6 +122,10 @@ public final class Ruleset {
         int pointsKill = 50;
         int pointsHeadshot = 25;
         boolean stripInventory = false;
+        boolean directorEnabled = false;
+        float directorTarget = 0.55f;
+        float directorMinPace = 0.5f;
+        float directorMaxPace = 2.0f;
         List<MobEntry> mobs = new ArrayList<>();
     }
 
@@ -167,6 +180,14 @@ public final class Ruleset {
             b.pointsKill = clampInt(intOf(economy, "kill", b.pointsKill), 0, 100000);
             b.pointsHeadshot = clampInt(intOf(economy, "headshot", b.pointsHeadshot), 0, 100000);
             b.stripInventory = bool(economy, "strip_inventory_on_entry", b.stripInventory);
+        }
+
+        JsonObject director = obj(root, "director");
+        if (director != null) {
+            b.directorEnabled = bool(director, "enabled", false);
+            b.directorTarget = (float) clamp(dbl(director, "target_pressure", b.directorTarget), 0.05, 0.95);
+            b.directorMinPace = (float) clamp(dbl(director, "min_pace", b.directorMinPace), 0.2, 1.0);
+            b.directorMaxPace = (float) clamp(dbl(director, "max_pace", b.directorMaxPace), 1.0, 4.0);
         }
 
         JsonArray mobs = root.has("mobs") && root.get("mobs").isJsonArray()
