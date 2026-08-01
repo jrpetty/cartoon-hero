@@ -142,6 +142,18 @@ public class CollectionBookScreen extends Screen {
     private Chip cardAction;
     private EditBox search;
 
+    /**
+     * Whether the spread is turned face-down. The back is the one piece of the
+     * card art you otherwise only glimpse across a duel table, so the book can
+     * turn its cards over to look at it — a viewing mode, not an editing one:
+     * while a spread is face-down nothing on it can be clicked.
+     */
+    private boolean backsUp;
+    /** When the turn started, so the cards flip in a wave rather than all at once. */
+    private long flipAt;
+    private static final long CARD_FLIP_MS = 300L;
+    private static final long CARD_FLIP_STAGGER = 45L;
+
     private int cardSpreads;
     private int spreadCount;
     private int cellW, cellH, gridTop, leftGridX, rightGridX, pageW, pageBottom;
@@ -312,9 +324,12 @@ public class CollectionBookScreen extends Screen {
         int statsW = font.width("Stats") + 8;
         int statsX = panelX + panelW - 12 - statsW;
         chips.add(new Chip("stats", statsX, y, statsW, 12));
+        int backsW = font.width(backsLabel()) + 8;
+        int backsX = statsX - backsW - 4;
+        chips.add(new Chip("backs", backsX, y, backsW, 12));
         String sortLabel = "Sort: " + sort.label;
         int sortW = font.width(sortLabel) + 8;
-        int sortX = statsX - sortW - 4;
+        int sortX = backsX - sortW - 4;
         chips.add(new Chip("sort", sortX, y, sortW, 12));
         int deckW = font.width("Deck") + 8;
         int deckX = sortX - deckW - 4;
@@ -534,59 +549,114 @@ public class CollectionBookScreen extends Screen {
             int[] p = slotPos(s);
             int cx = p[0], cy = p[1];
             g.fill(cx + 2, cy + 3, cx + cw + 4, cy + ch + 5, 0x44000000);
-            boolean hovered = !overlayOpen
+
+            // the turn: each card squashes through its own edge, a beat after
+            // the one before it, so the page rolls over rather than blinking
+            float turn = flipAt == 0 ? 1f : Mth.clamp(
+                    (System.currentTimeMillis() - flipAt - s * CARD_FLIP_STAGGER)
+                            / (float) CARD_FLIP_MS, 0f, 1f);
+            // a card you do not own has no back to show — it stays a silhouette
+            boolean showBack = (turn >= 0.5f ? backsUp : !backsUp)
+                    && ClientCollection.has(card.id());
+            if (turn < 1f) {
+                var pose = g.pose();
+                pose.pushPose();
+                pose.translate(cx + cw / 2f, 0, 0);
+                pose.scale(Math.max(0.02f, Math.abs((float) Math.cos(turn * Math.PI))), 1f, 1f);
+                pose.translate(-(cx + cw / 2f), 0, 0);
+                try {
+                    if (showBack) {
+                        drawBackSlot(g, card, cx, cy, cw, ch);
+                    } else {
+                        drawFrontSlot(g, card, cx, cy, cw, ch, false, overlayOpen, mouseX, mouseY);
+                    }
+                } finally {
+                    pose.popPose();
+                }
+                continue;
+            }
+            // face-down is a viewing mode: nothing on the spread reacts to hover
+            boolean hovered = !overlayOpen && !backsUp
                     && mouseX >= cx && mouseX < cx + cw && mouseY >= cy && mouseY < cy + ch;
-            if (ClientCollection.has(card.id())) {
-                // while an overlay is open, skip grid mobs entirely — their 3D
-                // depth writes would poke through the panel drawn on top
-                LivingEntity mob = overlayOpen ? null
-                        : CardRenderer.portraitEntity(minecraft, card, entityCache);
-                boolean foil = ClientCollection.displayedIsFoil(card.id());
-                int level = ClientCollection.displayLevel(card.id(), foil);
-                // only the hovered card comes alive and follows the cursor
-                CardRenderer.renderCard(g, font, card, level, cx, cy, cardScale,
-                        mouseX, mouseY, mob, foil, hovered);
-                // a small stack tab if more than one variant is owned
-                if (ClientCollection.variantCount(card.id()) > 1) {
-                    g.fill(cx + cw - 6, cy - 3, cx + cw + 2, cy + 4, CardRenderer.KRAFT_DARK);
-                    g.fill(cx + cw - 8, cy - 1, cx + cw, cy + 6, 0xFFF3E2A7);
-                }
-                // a green "filed in binder" tab on the bottom-left corner
-                if (ClientCollection.isStored(card.id())) {
-                    g.fill(cx - 2, cy + ch - 4, cx + 6, cy + ch + 3, CardRenderer.KRAFT_DARK);
-                    g.fill(cx - 1, cy + ch - 3, cx + 5, cy + ch + 2, 0xFF55A82F);
-                }
-                // how many of this mob you've hunted, bottom-right (settings)
-                int copies = ClientCollection.killCount(card.id());
-                if (copies > 0 && ClientPrefs.killCounter()) {
-                    String badge = "x" + copies;
-                    int bw = font.width(badge);
-                    int bx = cx + cw - bw - 2;
-                    int by = cy + ch - 9;
-                    g.fill(bx - 2, by - 1, cx + cw + 1, by + 9, 0xC0101010);
-                    g.drawString(font, badge, bx, by, 0xFFF3E2A7, false);
-                }
-                if (hovered) {
-                    g.renderOutline(cx - 2, cy - 2, cw + 4, ch + 4, 0xFFF9D849);
-                    g.renderOutline(cx - 3, cy - 3, cw + 6, ch + 6, 0x66F9D849);
-                    hoveredCard = card;
-                    // the cell INCLUDING its File/Take control, so the tooltip
-                    // is never placed over the button it is telling you about
-                    hoverRect = new int[]{cx - 2, cy - 2, cw + 4, ch + 16};
-                    drawCardAction(g, card, foil, cx, cy, cw, ch, mouseX, mouseY);
-                }
-            } else {
-                // a card you are missing: a silhouette on its own set's scene,
-                // named only once you have actually killed one
-                boolean met = ClientCollection.killCount(card.id()) > 0;
-                CardRenderer.renderUnknown(g, font, card, cx, cy, cardScale,
-                        overlayOpen ? null
-                                : CardRenderer.portraitEntity(minecraft, card, entityCache), met);
-                if (hovered) {
-                    g.renderOutline(cx - 2, cy - 2, cw + 4, ch + 4, 0x99F9D849);
-                    hoveredCard = card;
-                    hoverRect = new int[]{cx - 2, cy - 2, cw + 4, ch + 4};
-                }
+            if (showBack) {
+                drawBackSlot(g, card, cx, cy, cw, ch);
+                continue;
+            }
+            drawFrontSlot(g, card, cx, cy, cw, ch, hovered, overlayOpen, mouseX, mouseY);
+        }
+    }
+
+    /**
+     * The back of an owned card at grid size, with its name on a plate beneath
+     * so a face-down spread is still navigable. The back art is identical on
+     * every card by design — it is the deck's own livery, and seeing nine of
+     * them lined up is the point of turning the page over.
+     */
+    private void drawBackSlot(GuiGraphics g, MobCard card, int cx, int cy, int cw, int ch) {
+        CardRenderer.renderBack(g, font, cx, cy, cardScale);
+        String name = card.displayName();
+        int nw = font.width(name);
+        if (nw + 6 > cw) {
+            return; // no room to letter it without printing over the neighbour
+        }
+        int by = cy + ch - 12;
+        g.fill(cx + (cw - nw) / 2 - 3, by - 1, cx + (cw + nw) / 2 + 3, by + 9, 0xC0140F0A);
+        g.drawString(font, name, cx + (cw - nw) / 2, by, 0xFFE3C071, false);
+    }
+
+    /** One card the right way up — exactly what the grid drew before the flip. */
+    private void drawFrontSlot(GuiGraphics g, MobCard card, int cx, int cy, int cw, int ch,
+                               boolean hovered, boolean overlayOpen, int mouseX, int mouseY) {
+        if (ClientCollection.has(card.id())) {
+            // while an overlay is open, skip grid mobs entirely — their 3D
+            // depth writes would poke through the panel drawn on top
+            LivingEntity mob = overlayOpen ? null
+                    : CardRenderer.portraitEntity(minecraft, card, entityCache);
+            boolean foil = ClientCollection.displayedIsFoil(card.id());
+            int level = ClientCollection.displayLevel(card.id(), foil);
+            // only the hovered card comes alive and follows the cursor
+            CardRenderer.renderCard(g, font, card, level, cx, cy, cardScale,
+                    mouseX, mouseY, mob, foil, hovered);
+            // a small stack tab if more than one variant is owned
+            if (ClientCollection.variantCount(card.id()) > 1) {
+                g.fill(cx + cw - 6, cy - 3, cx + cw + 2, cy + 4, CardRenderer.KRAFT_DARK);
+                g.fill(cx + cw - 8, cy - 1, cx + cw, cy + 6, 0xFFF3E2A7);
+            }
+            // a green "filed in binder" tab on the bottom-left corner
+            if (ClientCollection.isStored(card.id())) {
+                g.fill(cx - 2, cy + ch - 4, cx + 6, cy + ch + 3, CardRenderer.KRAFT_DARK);
+                g.fill(cx - 1, cy + ch - 3, cx + 5, cy + ch + 2, 0xFF55A82F);
+            }
+            // how many of this mob you've hunted, bottom-right (settings)
+            int copies = ClientCollection.killCount(card.id());
+            if (copies > 0 && ClientPrefs.killCounter()) {
+                String badge = "x" + copies;
+                int bw = font.width(badge);
+                int bx = cx + cw - bw - 2;
+                int by = cy + ch - 9;
+                g.fill(bx - 2, by - 1, cx + cw + 1, by + 9, 0xC0101010);
+                g.drawString(font, badge, bx, by, 0xFFF3E2A7, false);
+            }
+            if (hovered) {
+                g.renderOutline(cx - 2, cy - 2, cw + 4, ch + 4, 0xFFF9D849);
+                g.renderOutline(cx - 3, cy - 3, cw + 6, ch + 6, 0x66F9D849);
+                hoveredCard = card;
+                // the cell INCLUDING its File/Take control, so the tooltip
+                // is never placed over the button it is telling you about
+                hoverRect = new int[]{cx - 2, cy - 2, cw + 4, ch + 16};
+                drawCardAction(g, card, foil, cx, cy, cw, ch, mouseX, mouseY);
+            }
+        } else {
+            // a card you are missing: a silhouette on its own set's scene,
+            // named only once you have actually killed one
+            boolean met = ClientCollection.killCount(card.id()) > 0;
+            CardRenderer.renderUnknown(g, font, card, cx, cy, cardScale,
+                    overlayOpen ? null
+                            : CardRenderer.portraitEntity(minecraft, card, entityCache), met);
+            if (hovered) {
+                g.renderOutline(cx - 2, cy - 2, cw + 4, ch + 4, 0x99F9D849);
+                hoveredCard = card;
+                hoverRect = new int[]{cx - 2, cy - 2, cw + 4, ch + 4};
             }
         }
     }
@@ -1231,6 +1301,7 @@ public class CollectionBookScreen extends Screen {
         for (Chip chip : chips) {
             boolean active = switch (chip.key()) {
                 case "stats" -> statsOpen;
+                case "backs" -> backsUp;
                 case "sort", "deck", "store" -> false;
                 default -> chip.key().equals("f_" + filter.name());
             };
@@ -1240,6 +1311,7 @@ public class CollectionBookScreen extends Screen {
             g.renderOutline(chip.x(), chip.y(), chip.w(), chip.h(), CardRenderer.KRAFT_DARK);
             String label = switch (chip.key()) {
                 case "stats" -> "Stats";
+                case "backs" -> backsLabel();
                 case "sort" -> "Sort: " + sort.label;
                 case "deck" -> "Deck";
                 case "store" -> "Store";
@@ -1345,6 +1417,12 @@ public class CollectionBookScreen extends Screen {
     }
 
     private boolean clickCard(double mouseX, double mouseY) {
+        if (backsUp) {
+            // face-down, the spread is for looking at. Clicking a back turns the
+            // page back over rather than doing something to a card you can't see.
+            turnSpread();
+            return true;
+        }
         // the File / Take out pill sits on top of the card and wins the click
         if (cardAction != null && cardAction.hit(mouseX, mouseY)) {
             String key = cardAction.key();
@@ -1429,9 +1507,27 @@ public class CollectionBookScreen extends Screen {
         pickerMob = null;
     }
 
+    private String backsLabel() {
+        return backsUp ? "Fronts" : "Backs";
+    }
+
+    /** Turn the spread over. The chip relabels itself, so the row is re-laid out. */
+    private void turnSpread() {
+        backsUp = !backsUp;
+        flipAt = System.currentTimeMillis();
+        hoveredCard = null;
+        cardAction = null;
+        layoutChips();
+        if (minecraft != null) {
+            minecraft.getSoundManager().play(
+                    SimpleSoundInstance.forUI(SoundEvents.BOOK_PAGE_TURN, 1.2f));
+        }
+    }
+
     private void onChip(String key) {
         switch (key) {
             case "stats" -> statsOpen = true;
+            case "backs" -> { turnSpread(); return; }
             case "deck" -> { if (minecraft != null) minecraft.setScreen(new DeckBuilderScreen(this)); }
             case "store" -> PacketDistributor.sendToServer(StorageActionPayload.depositAll());
             case "sort" -> { sort = Sort.values()[(sort.ordinal() + 1) % Sort.values().length]; layoutChips(); rebuild(); }
@@ -1458,6 +1554,12 @@ public class CollectionBookScreen extends Screen {
         if (eggPicker != null && keyCode == 256) { eggPicker = null; return true; }
         if (statsOpen && keyCode == 256) { statsOpen = false; return true; }
         if (search.isFocused() && search.keyPressed(keyCode, scanCode, modifiers)) return true;
+        // not while typing: EditBox reports letters through charTyped, so a bare
+        // keyCode check here would eat the F out of a search for "fox"
+        if (keyCode == 70 && section() == Section.CARDS && !search.isFocused()) {
+            turnSpread();
+            return true;
+        }
         if (keyCode == 263 && spread > 0) { flip(-1); return true; }
         if (keyCode == 262 && spread < spreadCount - 1) { flip(1); return true; }
         return super.keyPressed(keyCode, scanCode, modifiers);
@@ -1471,6 +1573,8 @@ public class CollectionBookScreen extends Screen {
 
     private void flip(int direction) {
         spread += direction;
+        // a fresh page is settled, not caught mid-turn from the last one
+        flipAt = 0;
         layoutChips();
         clickSound();
     }
