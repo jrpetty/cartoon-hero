@@ -37,11 +37,21 @@ public final class EngineEvents {
                 || !(event.getEntity() instanceof ServerPlayer player)) {
             return;
         }
+        if (event.isCanceled()) {
+            return; // something upstream already claimed this click
+        }
         if (!(level.getBlockEntity(event.getPos()) instanceof SignBlockEntity sign)) {
             return;
         }
         // Sneaking is left alone so an author can still edit their own sign.
         if (player.isShiftKeyDown()) {
+            return;
+        }
+        // The wand owns the click while it is held. Both this and the wand handler
+        // listen for the same event, so without this an author marking out a
+        // corner near a shop would set the corner *and* buy whatever the shop was
+        // selling - and the wand is in your hand for the whole of map-building.
+        if (BuildTools.isWand(player.getMainHandItem())) {
             return;
         }
         if (DealerSign.isDealer(sign)) {
