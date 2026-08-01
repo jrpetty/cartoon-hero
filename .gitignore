@@ -8,4 +8,8 @@ mod/run/
 mod/runs/
 
 # scratch argfiles written by tools/check.sh
-mod/javac.*.args
+**/javac.*.args
+
+# downloaded release jars and throwaway layout mockups
+mobtrumps-*.jar
+gw_hover_*.png

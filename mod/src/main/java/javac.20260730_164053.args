@@ -1,7 +1,0 @@
--nowarn
--proc:none
--Xmaxerrs
-100000
--d
-/tmp/claude-0/-home-user-cartoon-hero/2b3544f1-09f7-519b-9136-599228302cdc/scratchpad/all
-@/tmp/claude-0/-home-user-cartoon-hero/2b3544f1-09f7-519b-9136-599228302cdc/scratchpad/srcs.txt
