@@ -114,7 +114,7 @@ public class GuessWhoScreen extends Screen {
         int availW = panelX - 16;
         int availH = height - 74;
         int total = MobCards.ALL.size();
-        for (float scale = 0.20f; scale >= 0.055f; scale -= 0.005f) {
+        for (float scale = 0.28f; scale >= 0.055f; scale -= 0.005f) {
             int tw = Math.max(8, Math.round(CardRenderer.CARD_W * scale));
             int th = Math.max(11, Math.round(CardRenderer.CARD_H * scale));
             int maxCols = Math.max(1, (availW + 2) / (tw + 2));
