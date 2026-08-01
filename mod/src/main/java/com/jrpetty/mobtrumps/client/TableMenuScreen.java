@@ -130,6 +130,7 @@ public class TableMenuScreen extends Screen {
         int panelH = height - panelTop - 64;
 
         // --- VS AI panel ---
+        solveModeColumn(panelH);
         panel(g, leftX, panelTop, colW, panelH, "VS  AI");
         int by = panelTop + 22;
         by = modeButton(g, "cpu_0", leftX + 8, by, colW - 16, "EASY", 1,
@@ -138,17 +139,21 @@ public class TableMenuScreen extends Screen {
                 "Leads its best stat", 0xFF2A5F8A, mouseX, mouseY, t);
         by = modeButton(g, "cpu_2", leftX + 8, by, colW - 16, "HARD", 3,
                 "Reads the odds & bluffs", 0xFF8A3A2E, mouseX, mouseY, t);
-        drawCenteredFitted(g, "CPU deck: same size as yours,", leftX + colW / 2, by + 2, colW - 12, TEXT_DIM);
-        drawCenteredFitted(g, "mostly commons, one legendary", leftX + colW / 2, by + 12, colW - 12, TEXT_DIM);
-        drawCenteredFitted(g, "and levelled to match your holos", leftX + colW / 2, by + 22, colW - 12, TEXT_DIM);
-        // a different game on the same cards, so it lives under the duel modes
-        // rather than in the deck row, which has no width left to give
-        int tw = by + 40;
+        if (showCpuNotes) {
+            drawCenteredFitted(g, "CPU deck: same size as yours,", leftX + colW / 2, by + 2, colW - 12, TEXT_DIM);
+            drawCenteredFitted(g, "mostly commons, one legendary", leftX + colW / 2, by + 12, colW - 12, TEXT_DIM);
+            drawCenteredFitted(g, "and levelled to match your holos", leftX + colW / 2, by + 22, colW - 12, TEXT_DIM);
+        }
+        // a different game on the same cards, so these live under the duel
+        // modes rather than in the deck row, which has no width left to give
+        int tw = by + (showCpuNotes ? 40 : 8);
         g.fill(leftX + 8, tw - 6, leftX + colW - 8, tw - 5, 0x30FFFFFF);
         tw = modeButton(g, "twentyone", leftX + 8, tw, colW - 16, "TWENTY-ONE", 0,
                 "Call a stat, then the card turns", 0xFF7A5AA8, mouseX, mouseY, t);
-        modeButton(g, "guesswho", leftX + 8, tw, colW - 16, "GUESS WHO", 0,
+        tw = modeButton(g, "guesswho", leftX + 8, tw, colW - 16, "GUESS WHO", 0,
                 "Narrow 81 mobs down to one", 0xFF2E6E8A, mouseX, mouseY, t);
+        modeButton(g, "bluff", leftX + 8, tw, colW - 16, "MOB BLUFF", 0,
+                "Play face down and lie about it", 0xFF2C6E49, mouseX, mouseY, t);
 
         // --- VS PLAYER panel ---
         panel(g, rightX, panelTop, colW, panelH, "VS  PLAYER");
@@ -283,9 +288,48 @@ public class TableMenuScreen extends Screen {
      * A mode row: identity stripe, bold label, difficulty pips, description,
      * layered gold glow + a nudging chevron on hover. Returns the next y.
      */
+    /**
+     * Height of one mode button, and whether the CPU deck notes are shown.
+     *
+     * <p>Solved per frame from the space in the column. Six buttons at a fixed
+     * twenty-six pixels plus three lines of notes needed a four-hundred pixel
+     * window; below that the list simply ran out through the bottom of the
+     * panel. It ran over even before Mob Bluff was added a sixth button — that
+     * just made it obvious.
+     */
+    private int modeH = 26;
+    private int modeGap = 5;
+    private boolean showCpuNotes = true;
+
+    /**
+     * Pick the tallest buttons that fit: full height with the notes first, then
+     * without them, then progressively shorter buttons and tighter gaps. The
+     * last rung is deliberately cramped rather than off-screen — a squashed
+     * button can still be read and clicked, and one below the panel cannot.
+     */
+    private void solveModeColumn(int panelH) {
+        int avail = panelH - 22;
+        int[][] rungs = {{26, 5}, {24, 5}, {22, 4}, {20, 4}, {18, 3}, {16, 3},
+                {14, 2}, {13, 1}, {12, 1}, {11, 1}};
+        for (int[] rung : rungs) {
+            for (boolean notes : new boolean[]{true, false}) {
+                int need = 6 * (rung[0] + rung[1]) + (notes ? 32 : 0) + 12;
+                if (need <= avail) {
+                    modeH = rung[0];
+                    modeGap = rung[1];
+                    showCpuNotes = notes;
+                    return;
+                }
+            }
+        }
+        modeH = 11;
+        modeGap = 1;
+        showCpuNotes = false;
+    }
+
     private int modeButton(GuiGraphics g, String key, int x, int y, int w, String label,
                            int pips, String desc, int base, int mouseX, int mouseY, long t) {
-        int h = 26;
+        int h = modeH;
         Btn btn = new Btn(key, x, y, w, h, true);
         buttons.add(btn);
         boolean hover = btn.hit(mouseX, mouseY);
@@ -306,12 +350,14 @@ public class TableMenuScreen extends Screen {
         }
         // shrink the description to fit rather than letting it bleed past the
         // card's right edge, which is what "…this game only" used to do
-        drawFitted(g, desc, x + 8, y + 15, w - 18, hover ? 0xFFEFE8D0 : TEXT_DIM);
+        if (h >= 22) {
+            drawFitted(g, desc, x + 8, y + 15, w - 18, hover ? 0xFFEFE8D0 : TEXT_DIM);
+        }
         if (hover) {
             int nudge = (int) (2 * Math.sin(t / 150.0));
-            g.drawString(font, ">", x + w - 11 + nudge, y + 9, GOLD, true);
+            g.drawString(font, ">", x + w - 11 + nudge, y + h / 2 - 4, GOLD, true);
         }
-        return y + h + 5;
+        return y + h + modeGap;
     }
 
     private void bigButton(GuiGraphics g, String key, int x, int y, int w, int h, String label,
@@ -495,6 +541,9 @@ public class TableMenuScreen extends Screen {
                 return true;
             } else if (key.equals("guesswho")) {
                 send(TableActionPayload.GUESS_WHO, 0, false);
+                return true;
+            } else if (key.equals("bluff")) {
+                send(TableActionPayload.BLUFF, 0, false);
                 return true;
             } else if (key.equals("deck_edit") && minecraft != null) {
                 minecraft.setScreen(new DeckBuilderScreen(this));

@@ -97,6 +97,19 @@ public final class ModNetworking {
                                 payload.value(), payload.mobId());
                     }
                 }));
+        // --- Bluff ---
+        registrar.playToClient(BluffMenuPayload.TYPE, BluffMenuPayload.STREAM_CODEC,
+                (payload, context) -> context.enqueueWork(
+                        () -> com.jrpetty.mobtrumps.client.ClientHooks.openBluff()));
+        registrar.playToClient(BluffSyncPayload.TYPE, BluffSyncPayload.STREAM_CODEC,
+                (payload, context) -> context.enqueueWork(
+                        () -> com.jrpetty.mobtrumps.client.ClientBluff.set(payload)));
+        registrar.playToServer(BluffActionPayload.TYPE, BluffActionPayload.STREAM_CODEC,
+                (payload, context) -> context.enqueueWork(() -> {
+                    if (context.player() instanceof net.minecraft.server.level.ServerPlayer sp) {
+                        BluffManager.handle(sp, payload.action(), payload.picks(), payload.stake());
+                    }
+                }));
         // --- Twenty-One ---
         registrar.playToClient(BlackjackMenuPayload.TYPE, BlackjackMenuPayload.STREAM_CODEC,
                 (payload, context) -> context.enqueueWork(

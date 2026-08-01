@@ -32,8 +32,18 @@ import java.util.Random;
  */
 public final class Bluff {
 
-    /** Cards dealt to each player. */
+    /** Cards dealt to each player at a three or four seat table. */
     public static final int HAND_SIZE = 8;
+    /**
+     * Heads-up hands are smaller. With eight cards each a two-player game ran
+     * eighty-three moves against fifty-five for a four-player one — the same
+     * cards go round twice as often when only two people are shedding them.
+     */
+    public static final int HAND_SIZE_HEADS_UP = 6;
+
+    public static int handSizeFor(int seats) {
+        return seats <= 2 ? HAND_SIZE_HEADS_UP : HAND_SIZE;
+    }
     /** Most cards that may go down in one play. */
     public static final int MAX_PLAY = 3;
     /** Seats, including yours. */
@@ -192,6 +202,8 @@ public final class Bluff {
 
     private final List<List<MobCard>> hands = new ArrayList<>();
     private final List<MobCard> pile = new ArrayList<>();
+    /** Cards discarded as catch bonuses — out of the game, kept for accounting. */
+    private final List<MobCard> burnt = new ArrayList<>();
     private final Random random;
     private final int seats;
 
@@ -217,12 +229,14 @@ public final class Bluff {
     private void deal() {
         hands.clear();
         pile.clear();
+        burnt.clear();
         List<MobCard> deck = new ArrayList<>(MobCards.ALL);
         Collections.shuffle(deck, random);
         int at = 0;
         for (int s = 0; s < seats; s++) {
-            List<MobCard> hand = new ArrayList<>(deck.subList(at, at + HAND_SIZE));
-            at += HAND_SIZE;
+            int deal = handSizeFor(seats);
+            List<MobCard> hand = new ArrayList<>(deck.subList(at, at + deal));
+            at += deal;
             hand.sort(java.util.Comparator.comparing(MobCard::displayName));
             hands.add(hand);
         }
@@ -258,6 +272,11 @@ public final class Bluff {
 
     public int pileSize() {
         return pile.size();
+    }
+
+    /** Cards thrown away by catchers. Never come back. */
+    public int burntCount() {
+        return burnt.size();
     }
 
     public int handSize(int seat) {
@@ -360,11 +379,50 @@ public final class Bluff {
                 break;
             }
         }
+        // The two outcomes are deliberately lopsided. A caught liar eats the
+        // WHOLE pile, so a long quiet round is a growing bomb and lying late is
+        // the most dangerous thing you can do. A wrong challenger only eats the
+        // cards they actually called — a play of one to three.
+        //
+        // They used to cost the same, and that made challenging bad for the
+        // person doing it and good for everyone else: roughly minus one and
+        // three quarter cards in expectation, so at a four-player table a seat
+        // that simply never challenged beat one that played properly, 31% to
+        // 25% against a fair 25%. Somebody has to be willing to call, or the
+        // whole game is just people quietly putting cards down.
         int loser = lying ? lastSeat : seat;
-        lastReveal = new Reveal(seat, lastSeat, List.copyOf(shown), claim, lying, pile.size());
-        hands.get(loser).addAll(pile);
+        List<MobCard> forfeit = lying ? List.copyOf(pile) : List.copyOf(shown);
+        lastReveal = new Reveal(seat, lastSeat, List.copyOf(shown), claim, lying, forfeit.size());
+        hands.get(loser).addAll(forfeit);
         hands.get(loser).sort(java.util.Comparator.comparing(MobCard::displayName));
-        pile.clear();
+        if (!lying) {
+            // the called cards leave the pile with the challenger; the rest of
+            // the pile stays on the table for whoever gets caught next
+            pile.subList(pile.size() - lastCount, pile.size()).clear();
+        } else {
+            pile.clear();
+        }
+
+        // Catching a liar throws one of your own cards away for good.
+        //
+        // Without it, challenging was pure downside for the challenger and pure
+        // upside for everyone else at the table: a seat that simply never
+        // challenged won 33% of four-player games against a fair 25%, because
+        // the other three did the dangerous work and ate the piles. Paying the
+        // catcher is what makes the risk worth taking.
+        if (lying && !hands.get(seat).isEmpty()) {
+            MobCard binned = hands.get(seat).remove(hands.get(seat).size() - 1);
+            burnt.add(binned);
+            log.add("Seat " + seat + " discards " + binned.displayName() + " for the catch");
+            if (hands.get(seat).isEmpty()) {
+                winner = seat;
+                log.add("Seat " + winner + " shed their last card catching a liar — they win.");
+                pendingOut = -1;
+                lastSeat = -1;
+                lastCount = 0;
+                return true;
+            }
+        }
         log.add(lying
                 ? "Seat " + seat + " caught seat " + lastSeat + " — seat " + loser + " takes the pile"
                 : "Seat " + seat + " was wrong — takes the pile");

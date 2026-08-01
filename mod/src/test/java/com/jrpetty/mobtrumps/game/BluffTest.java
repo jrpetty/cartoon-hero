@@ -149,7 +149,7 @@ class BluffTest {
         assertFalse(g.play(seat, List.of(1, 1)), "the same card twice");
         assertFalse(g.play(seat, List.of(99)), "off the end of the hand");
         assertTrue(g.play(seat, List.of(0, 1)), "a legal play");
-        assertEquals(Bluff.HAND_SIZE - 2, g.handSize(seat));
+        assertEquals(Bluff.handSizeFor(g.seats()) - 2, g.handSize(seat));
     }
 
     @Test
@@ -164,26 +164,55 @@ class BluffTest {
         assertFalse(fresh.challenge(fresh.turn()));
     }
 
+    /**
+     * A caught liar eats the whole pile; a wrong challenger eats only the cards
+     * they called. That asymmetry is what makes challenging worth doing — see
+     * the note in {@link Bluff#challenge}.
+     */
     @Test
-    void theWholePileGoesToTheLoser() {
-        Bluff g = game(23);
-        int a = g.turn();
-        g.play(a, List.of(0, 1));
-        int b = g.turn();
-        g.play(b, List.of(0, 1, 2));
-        assertEquals(5, g.pileSize());
-        int c = g.turn();
-        int before = g.handSize(c);
-        int accusedBefore = g.handSize(b);
-        g.challenge(c);
-        int taken = g.lastReveal().pileTaken();
-        assertEquals(5, taken);
-        if (g.lastReveal().wasLying()) {
-            assertEquals(accusedBefore + 5, g.handSize(b));
-        } else {
-            assertEquals(before + 5, g.handSize(c));
+    void aCaughtLiarEatsThePileAndAWrongChallengerOnlyWhatTheyCalled() {
+        boolean sawLie = false;
+        boolean sawTruth = false;
+        for (long seed = 0; seed < 200 && !(sawLie && sawTruth); seed++) {
+            Bluff g = game(seed);
+            int a = g.turn();
+            g.play(a, List.of(0, 1));
+            int b = g.turn();
+            g.play(b, List.of(0, 1, 2));
+            assertEquals(5, g.pileSize());
+            int c = g.turn();
+            int challengerBefore = g.handSize(c);
+            int accusedBefore = g.handSize(b);
+            assertTrue(g.challenge(c));
+            if (g.lastReveal().wasLying()) {
+                sawLie = true;
+                assertEquals(5, g.lastReveal().pileTaken(), "the liar takes everything");
+                assertEquals(accusedBefore + 5, g.handSize(b));
+                assertEquals(0, g.pileSize());
+                // and the catcher paid themselves one card
+                assertEquals(challengerBefore - 1, g.handSize(c));
+                assertEquals(1, g.burntCount());
+            } else {
+                sawTruth = true;
+                assertEquals(3, g.lastReveal().pileTaken(), "only the called cards");
+                assertEquals(challengerBefore + 3, g.handSize(c));
+                assertEquals(2, g.pileSize(), "the rest of the pile stays on the table");
+                assertEquals(0, g.burntCount(), "no bonus for a wrong call");
+            }
         }
-        assertEquals(0, g.pileSize());
+        assertTrue(sawLie, "never saw a caught lie across 200 deals");
+        assertTrue(sawTruth, "never saw a wrong challenge across 200 deals");
+    }
+
+    @Test
+    void headsUpHandsAreSmallerThanTableHands() {
+        assertEquals(Bluff.HAND_SIZE_HEADS_UP, Bluff.handSizeFor(2));
+        assertEquals(Bluff.HAND_SIZE, Bluff.handSizeFor(3));
+        assertEquals(Bluff.HAND_SIZE, Bluff.handSizeFor(4));
+        assertTrue(Bluff.HAND_SIZE_HEADS_UP < Bluff.HAND_SIZE);
+        Bluff duel = new Bluff(2, new Random(1));
+        assertEquals(Bluff.HAND_SIZE_HEADS_UP, duel.handSize(0));
+        assertEquals(Bluff.HAND_SIZE_HEADS_UP, duel.handSize(1));
     }
 
     @Test
@@ -249,8 +278,9 @@ class BluffTest {
             for (int q = 0; q < g.seats(); q++) {
                 seen.addAll(g.hand(q));
             }
-            int total = seen.size() + g.pileSize();
-            assertEquals(g.seats() * Bluff.HAND_SIZE, total, "cards went missing at move " + i);
+            int total = seen.size() + g.pileSize() + g.burntCount();
+            assertEquals(g.seats() * Bluff.handSizeFor(g.seats()), total,
+                    "cards went missing at move " + i);
             assertEquals(seen.stream().distinct().count(), seen.size(), "a card was duplicated");
         }
     }
@@ -260,7 +290,7 @@ class BluffTest {
         Bluff g = new Bluff(4, new Random(37));
         List<MobCard> all = new ArrayList<>();
         for (int s = 0; s < g.seats(); s++) {
-            assertEquals(Bluff.HAND_SIZE, g.handSize(s));
+            assertEquals(Bluff.handSizeFor(g.seats()), g.handSize(s));
             all.addAll(g.hand(s));
         }
         assertEquals(all.size(), all.stream().distinct().count());
