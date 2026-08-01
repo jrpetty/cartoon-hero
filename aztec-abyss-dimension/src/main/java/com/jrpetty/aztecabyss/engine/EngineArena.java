@@ -89,6 +89,21 @@ public final class EngineArena {
     /** How long you must stand still on the glyph. */
     private static final int EXTRACT_TICKS = 100;
 
+    /**
+     * Players who have died. They stay out for the rest of the run.
+     *
+     * <p>Without this, death was only ever temporary: the tick loop filtered on
+     * {@code isDeadOrDying()}, which stops being true the moment somebody clicks
+     * respawn. They would then quietly rejoin a run they had already lost, from
+     * wherever the world put them, with the round continuing around them.
+     */
+    private final java.util.Set<UUID> fallen = new java.util.HashSet<>();
+
+    /** Game time of the last thing that counted as progress. */
+    private long lastProgress = 0L;
+    /** How long a round may make no progress before the stragglers are fetched. */
+    private static final long STALL_TICKS = 300L;
+
     private EngineArena(ServerLevel level, String mapName, Ruleset rules,
                         BlockPos spawn, List<Marker> hordes, BoundingBox bounds) {
         this.level = level;
@@ -229,8 +244,16 @@ public final class EngineArena {
             stop(false);
             return;
         }
-        // Anyone who has died is out. When the last one goes, so does the run.
-        present.removeIf(p -> p.isDeadOrDying() || !p.level().dimension().equals(level.dimension()));
+        // Anyone who has died is out, and stays out - respawning does not put you
+        // back in a run you already lost.
+        for (ServerPlayer p : present) {
+            if (p.isDeadOrDying()) {
+                fallen.add(p.getUUID());
+                bar.removePlayer(p);
+            }
+        }
+        present.removeIf(p -> fallen.contains(p.getUUID())
+                || !p.level().dimension().equals(level.dimension()));
         if (present.isEmpty()) {
             for (ServerPlayer p : players()) {
                 p.displayClientMessage(Component.literal(
@@ -275,6 +298,15 @@ public final class EngineArena {
         if (leftToSpawn <= 0 && alive.isEmpty()) {
             endRound();
             return;
+        }
+        // A round ends when the last one dies, which means one that cannot be
+        // reached ends nothing - and the run sits there forever with two zombies
+        // wedged in a pen and no way to finish. This is the single most likely way
+        // for a hand-built map to lock up, because it needs only one doorway an
+        // author did not notice was too narrow.
+        if (leftToSpawn <= 0 && !alive.isEmpty()
+                && level.getGameTime() - lastProgress > STALL_TICKS) {
+            fetchStragglers(present);
         }
         bar.setName(Component.literal("§c§lROUND " + round + " §r§7— §f"
                 + (alive.size() + leftToSpawn) + "§7 left"));
@@ -331,11 +363,45 @@ public final class EngineArena {
         stop(false);
     }
 
+    /**
+     * Drags whatever is left of a stalled round to the players.
+     *
+     * <p>Deliberately a teleport rather than killing them off. Quietly deleting
+     * the last two zombies would end the round and hide the fault, and the author
+     * would ship a map with a hole in it. Dropping them at somebody's feet ends
+     * the stall and is unmistakably something going wrong, which is the correct
+     * amount of noise for a bug in a map.
+     */
+    private void fetchStragglers(List<ServerPlayer> present) {
+        if (present.isEmpty()) {
+            return;
+        }
+        ServerPlayer target = present.get(rng.nextInt(present.size()));
+        BlockPos at = target.blockPosition();
+        int moved = 0;
+        for (Mob m : alive) {
+            if (!m.isAlive()) {
+                continue;
+            }
+            m.teleportTo(at.getX() + rng.nextInt(5) - 2, at.getY(), at.getZ() + rng.nextInt(5) - 2);
+            m.setTarget(target);
+            moved++;
+        }
+        lastProgress = level.getGameTime();
+        if (moved > 0) {
+            for (ServerPlayer p : present) {
+                p.displayClientMessage(Component.literal(
+                        "§8The last of them could not find you. They have been brought in."), true);
+            }
+        }
+    }
+
     private void beginRound(int n) {
         round = n;
         leftToSpawn = rules.countFor(n);
         breather = 0;
         lootTaken.clear();
+        lastProgress = level.getGameTime();
         director.onRoundStart();
         runSpawners();
         maybeBoss();
@@ -653,6 +719,9 @@ public final class EngineArena {
         if (a.rules.economyEnabled) {
             Currency.byId(a.rules.defaultCurrency).award(killer, a.rules.pointsKill);
         }
+        // A kill is progress, which resets the stall clock. Without this a long
+        // hard round with a slow weapon would be mistaken for a stuck one.
+        a.lastProgress = a.level.getGameTime();
         Script.fire(a, a.level, a.rules.id, "mob_killed", killer);
     }
 
