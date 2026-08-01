@@ -215,6 +215,19 @@ public final class EngineEvents {
                                                         com.mojang.brigadier.arguments.StringArgumentType.getString(ctx, "name"),
                                                         com.mojang.brigadier.arguments.StringArgumentType.getString(ctx, "field"),
                                                         com.mojang.brigadier.arguments.StringArgumentType.getString(ctx, "value")))))))
+                .then(Commands.literal("status")
+                        .executes(ctx -> {
+                            EngineArena a = EngineArena.active();
+                            if (a == null) {
+                                ctx.getSource().sendSuccess(() -> Component.literal(
+                                        "§7No run in progress. §f/arena play§7 to start one."), false);
+                                return 1;
+                            }
+                            for (String line : a.status()) {
+                                ctx.getSource().sendSuccess(() -> Component.literal(line), false);
+                            }
+                            return 1;
+                        }))
                 .then(Commands.literal("director")
                         .executes(ctx -> {
                             EngineArena a = EngineArena.active();

@@ -1,6 +1,7 @@
 package com.jrpetty.aztecabyss.engine;
 
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
@@ -211,11 +212,17 @@ public final class EngineArena {
      * dressing nobody asked for. The dealers stay, because those are the shop.
      */
     private void consumeMarkers(MapScan.Result scan) {
-        for (Marker m : scan.all()) {
-            if (m.consumedOnLoad()) {
-                level.setBlock(m.pos(), net.minecraft.world.level.block.Blocks.AIR.defaultBlockState(), 2);
-            }
-        }
+        // Deliberately does nothing now, and the method is kept so the intent is
+        // recorded rather than silently dropped.
+        //
+        // Marker signs used to be deleted when a run started, on the reasoning
+        // that a [Horde] sign nailed to a wall is scaffolding nobody wants to look
+        // at. That was wrong in the worst way: the markers are how a map is
+        // *defined*, so destroying them meant the second /arena play on the same
+        // map found no [Spawn] and refused to start. Every map was single-use and
+        // had to be rebuilt to be replayed.
+        //
+        // Tidiness is not worth that. The signs stay.
     }
 
     private void join(ServerPlayer player) {
@@ -521,6 +528,32 @@ public final class EngineArena {
         return director;
     }
 
+    /**
+     * Everything the engine currently believes, in one readout.
+     *
+     * <p>Worth having because almost every "it does not work" in a system like
+     * this is really "it is doing something I cannot see". A round that will not
+     * advance, a horde that never arrives, a door that changes nothing - each has
+     * a different cause and they all look identical from inside the game.
+     */
+    public java.util.List<String> status() {
+        java.util.List<String> out = new ArrayList<>();
+        out.add("§6Round §f" + round + "§7, ruleset §f" + rules.id);
+        out.add("§7Alive §f" + alive.size() + "§7, still to spawn §f" + leftToSpawn
+                + "§7, breather §f" + (breather / 20) + "s");
+        out.add("§7Players §f" + participants.size() + "§7, fallen §f" + fallen.size());
+        out.add("§7Ways in §f" + liveHordes().size() + "§7 of §f" + hordes.size()
+                + "§7 (areas open: §f" + String.join(", ", openAreas).trim() + "§7)");
+        out.add("§7Extract " + (extract == null ? "§cnone on this map" : "§aset"));
+        out.add(director.describe());
+        long stalled = level.getGameTime() - lastProgress;
+        if (leftToSpawn <= 0 && !alive.isEmpty() && stalled > 60) {
+            out.add("§e⚠ No progress for " + (stalled / 20) + "s — "
+                    + "something may be unable to reach you.");
+        }
+        return out;
+    }
+
     public boolean isAreaOpen(String area) {
         return openAreas.contains(area.toLowerCase(java.util.Locale.ROOT));
     }
@@ -634,6 +667,53 @@ public final class EngineArena {
         alive.add(mob);
     }
 
+    /**
+     * Finds somewhere a mob can actually stand near a horde marker.
+     *
+     * <p>This used to be "two blocks behind the sign", which was wrong in a way
+     * that broke every wall-mounted marker on every map. A wall sign's facing
+     * points <em>away</em> from the wall - that is the side you read it from - so
+     * stepping backwards from it walks straight into the stone it is nailed to.
+     * Mobs were being spawned inside solid blocks, where they suffocate or get
+     * shoved out somewhere arbitrary.
+     *
+     * <p>So the position is searched for rather than calculated: the marker itself
+     * first, then progressively further out along the way it faces, then a step to
+     * either side. A candidate has to have room for a body and something
+     * underneath to stand on.
+     */
+    private BlockPos spawnPointFor(Marker gate) {
+        Direction out = gate.facing();
+        Direction side = out.getClockWise();
+        BlockPos base = gate.pos();
+        for (int distance = 0; distance <= 4; distance++) {
+            for (int lateral = 0; lateral <= 2; lateral++) {
+                for (int sign = -1; sign <= 1; sign += 2) {
+                    BlockPos candidate = base.relative(out, distance)
+                            .relative(side, lateral * sign);
+                    if (standable(candidate)) {
+                        return candidate;
+                    }
+                    if (lateral == 0) {
+                        break; // no point testing the same block twice
+                    }
+                }
+            }
+        }
+        return null;
+    }
+
+    /** Room for a mob, and a floor beneath it. */
+    private boolean standable(BlockPos pos) {
+        if (!level.getBlockState(pos).getCollisionShape(level, pos).isEmpty()) {
+            return false;
+        }
+        if (!level.getBlockState(pos.above()).getCollisionShape(level, pos.above()).isEmpty()) {
+            return false;
+        }
+        return !level.getBlockState(pos.below()).getCollisionShape(level, pos.below()).isEmpty();
+    }
+
     private void spawnOne() {
         List<Marker> live = liveHordes();
         Marker gate = live.get(rng.nextInt(live.size()));
@@ -652,8 +732,13 @@ public final class EngineArena {
             leftToSpawn--;
             return;
         }
-        // Just behind the marker, so they walk in rather than appearing on top of you.
-        BlockPos at = gate.pos().relative(gate.facing().getOpposite(), 2);
+        BlockPos at = spawnPointFor(gate);
+        if (at == null) {
+            // Nowhere to put it. Better to skip one than to bury it in stone,
+            // which would leave the round waiting on something that cannot move.
+            leftToSpawn--;
+            return;
+        }
         mob.moveTo(at.getX() + 0.5, at.getY(), at.getZ() + 0.5, rng.nextFloat() * 360.0F, 0.0F);
 
         double healthMul = rules.healthMultiplier(round);
