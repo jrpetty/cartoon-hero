@@ -489,9 +489,17 @@ public final class EngineArena {
     // Areas, zones and caches
     // ------------------------------------------------------------------
 
-    /** Participants, for scripts to talk to. */
+    /**
+     * Who a script's actions apply to: the living.
+     *
+     * <p>A script that heals "all" should not be healing the dead, and one that
+     * spawns something at a player should not pick one who is no longer in the
+     * run. Messages to everyone including the fallen are the exception, and the
+     * round loop sends those directly.
+     */
     public List<ServerPlayer> playersPublic() {
-        return players();
+        List<ServerPlayer> living = livingPlayers();
+        return living.isEmpty() ? players() : living;
     }
 
     /** Adopts a script-spawned mob so the round still counts it. */
@@ -820,10 +828,33 @@ public final class EngineArena {
         }
     }
 
+    /**
+     * Participants still actually in the fight.
+     *
+     * <p>{@link #players()} is everyone who ever joined, which includes the dead.
+     * That is the right list for telling people what happened and the wrong one
+     * for anything the run acts on - hence both, named for what they are.
+     */
+    private List<ServerPlayer> livingPlayers() {
+        List<ServerPlayer> out = new ArrayList<>();
+        for (ServerPlayer p : players()) {
+            if (!fallen.contains(p.getUUID())
+                    && p.level().dimension().equals(level.dimension())
+                    && !p.isDeadOrDying()) {
+                out.add(p);
+            }
+        }
+        return out;
+    }
+
     private ServerPlayer nearestPlayer(BlockPos from) {
         ServerPlayer best = null;
         double bestDist = Double.MAX_VALUE;
-        for (ServerPlayer p : players()) {
+        // Living only. Targeting the whole participant list meant a mob would
+        // lock onto somebody who had already died and respawned somewhere else -
+        // so in co-op the horde would walk away from the people still fighting
+        // and go stand near a corpse's respawn point.
+        for (ServerPlayer p : livingPlayers()) {
             double d = p.blockPosition().distSqr(from);
             if (d < bestDist) {
                 bestDist = d;
