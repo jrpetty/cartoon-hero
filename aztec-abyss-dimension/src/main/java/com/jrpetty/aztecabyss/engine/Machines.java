@@ -153,8 +153,17 @@ public final class Machines {
         return true;
     }
 
-    /** Punches a doorway through the wall the sign is on. */
+    /**
+     * Punches a doorway through the wall the sign is on.
+     *
+     * <p>Every block goes through the arena's tracked write, so the doorway - and
+     * the sign itself - come back when the run ends. Without that, buying a door
+     * permanently rebuilt the map: the wall stayed open and the sign that sold it
+     * was gone, so the next run started with that area already unlocked and no way
+     * to gate it again.
+     */
     private static void carve(ServerLevel level, BlockPos signPos, Direction facing, int width, int height) {
+        EngineArena arena = EngineArena.active();
         Direction across = facing.getClockWise();
         int half = Math.max(0, width / 2);
         // Two blocks deep, so a doorway in a thick wall actually goes through.
@@ -163,11 +172,21 @@ public final class Machines {
                 for (int h = 0; h < height; h++) {
                     BlockPos at = signPos.relative(facing.getOpposite(), depth)
                             .relative(across, w).above(h);
-                    level.setBlock(at, Blocks.AIR.defaultBlockState(), 2);
+                    if (arena != null) {
+                        arena.setTracked(at, Blocks.AIR.defaultBlockState());
+                    } else {
+                        level.setBlock(at, Blocks.AIR.defaultBlockState(), 2);
+                    }
                 }
             }
         }
-        level.setBlock(signPos, Blocks.AIR.defaultBlockState(), 2);
+        // The sign goes too, so a door cannot be bought twice - but tracked, so it
+        // is standing again for the next run.
+        if (arena != null) {
+            arena.setTracked(signPos, Blocks.AIR.defaultBlockState());
+        } else {
+            level.setBlock(signPos, Blocks.AIR.defaultBlockState(), 2);
+        }
     }
 
     // ------------------------------------------------------------------

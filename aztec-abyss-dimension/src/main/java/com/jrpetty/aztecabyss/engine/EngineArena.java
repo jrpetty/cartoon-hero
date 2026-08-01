@@ -15,6 +15,7 @@ import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.ai.attributes.AttributeInstance;
 import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.levelgen.structure.BoundingBox;
 import net.minecraft.server.level.ServerBossEvent;
 
@@ -113,6 +114,21 @@ public final class EngineArena {
      * the normal case.
      */
     private final java.util.Map<UUID, ServerPlayer> barred = new java.util.HashMap<>();
+
+    /**
+     * Every block this run changed, and what was there before it.
+     *
+     * <p>Playing a map used to wear it out. Buying a door carved a permanent hole
+     * in the wall and deleted the sign that sold it, so the second run on the same
+     * map started with that area already open and no way to gate it again - and
+     * area-gating is the best mechanic the engine has. Three or four runs and a
+     * carefully sealed map was one open room.
+     *
+     * <p>So the engine records what it overwrites and puts it back when the run
+     * ends. A map is a fixture, not a consumable: the hundredth run on it is the
+     * same game as the first.
+     */
+    private final java.util.LinkedHashMap<BlockPos, BlockState> restore = new java.util.LinkedHashMap<>();
 
     /** Game time of the last thing that counted as progress. */
     private long lastProgress = 0L;
@@ -266,6 +282,7 @@ public final class EngineArena {
             }
         }
         EnginePowerUps.clearDrops(current.level, current.bounds);
+        current.restoreWorld();
         current.bar.removeAllPlayers();
         current.running = false;
         current = null;
@@ -593,6 +610,29 @@ public final class EngineArena {
     /** True the first time a cache is claimed each round. */
     public boolean claimLoot(BlockPos pos) {
         return lootTaken.add(pos.immutable());
+    }
+
+    /**
+     * Changes a block and remembers what was there.
+     *
+     * <p>Everything the engine writes during a run goes through here. The first
+     * value recorded for a position wins, so a block changed twice still reverts
+     * to what the author built rather than to an intermediate state.
+     */
+    public void setTracked(BlockPos pos, BlockState state) {
+        BlockPos key = pos.immutable();
+        if (!restore.containsKey(key)) {
+            restore.put(key, level.getBlockState(key));
+        }
+        level.setBlock(key, state, 3);
+    }
+
+    /** Puts the map back exactly as the author left it. */
+    private void restoreWorld() {
+        for (java.util.Map.Entry<BlockPos, BlockState> e : restore.entrySet()) {
+            level.setBlock(e.getKey(), e.getValue(), 3);
+        }
+        restore.clear();
     }
 
     /** Kills everything currently in the wave. Used by the Purge drop. */

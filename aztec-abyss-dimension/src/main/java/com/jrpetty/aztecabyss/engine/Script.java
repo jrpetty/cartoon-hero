@@ -328,7 +328,15 @@ public final class Script {
             return;
         }
         BlockState state = BuiltInRegistries.BLOCK.get(rl).defaultBlockState();
-        level.setBlock(new BlockPos(intOf(o, "x", 0), intOf(o, "y", 0), intOf(o, "z", 0)), state, 2);
+        BlockPos at = new BlockPos(intOf(o, "x", 0), intOf(o, "y", 0), intOf(o, "z", 0));
+        // Tracked, so a script that reshapes the map during a run does not leave
+        // the map reshaped for the next one.
+        EngineArena arena = EngineArena.active();
+        if (arena != null) {
+            arena.setTracked(at, state);
+        } else {
+            level.setBlock(at, state, 2);
+        }
     }
 
     // ------------------------------------------------------------------
