@@ -118,15 +118,6 @@ public final class BattleCommands {
                                         .executes(ctx -> DuelManager.challenge(
                                                 ctx.getSource().getPlayerOrException(),
                                                 EntityArgument.getPlayer(ctx, "player"), false, 5)))))
-                .then(Commands.literal("trade")
-                        .then(Commands.literal("accept")
-                                .executes(ctx -> TradeManager.accept(ctx.getSource().getPlayerOrException())))
-                        .then(Commands.literal("decline")
-                                .executes(ctx -> TradeManager.decline(ctx.getSource().getPlayerOrException())))
-                        .then(Commands.argument("player", EntityArgument.player())
-                                .executes(ctx -> TradeManager.offer(
-                                        ctx.getSource().getPlayerOrException(),
-                                        EntityArgument.getPlayer(ctx, "player")))))
                 .then(Commands.literal("queue")
                         .executes(ctx -> DuelManager.queue(ctx.getSource().getPlayerOrException()))
                         .then(Commands.literal("leave")

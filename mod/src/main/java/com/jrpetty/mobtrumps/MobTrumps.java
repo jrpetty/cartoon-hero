@@ -79,7 +79,6 @@ public class MobTrumps {
         NeoForge.EVENT_BUS.addListener((PlayerEvent.PlayerLoggedOutEvent event) -> {
             if (event.getEntity() instanceof ServerPlayer player) {
                 DuelManager.handleLogout(player);
-                TradeManager.handleLogout(player);
                 DraftManager.handleLogout(player);
                 TournamentManager.handleLogout(player);
                 BlackjackManager.handleLogout(player);

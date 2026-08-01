@@ -42,6 +42,24 @@ public final class Blackjack {
     public static final int TARGET = 21;
 
     /**
+     * What may be wagered on a hand. A win pays the stake back and matches it.
+     *
+     * <p>A ladder rather than a free number: the odds do not shift with the size
+     * of the bet, only the variance does, so the real choice is how big a swing
+     * you want. Doubling each rung keeps that legible. Lives here, with the
+     * rules, so the screen and the table read it from the same place.
+     */
+    public static final int[] STAKES = {2, 4, 8, 16, 32, 64};
+
+    /** Where a player starts on the ladder. */
+    public static final int DEFAULT_STAKE = 2;
+
+    /** A legal rung, whatever a client asks for. */
+    public static int clampStakeIndex(int index) {
+        return Math.max(0, Math.min(STAKES.length - 1, index));
+    }
+
+    /**
      * The dealer draws below this. Far above a casino's 17 because a player who
      * may repeat a stat can nurse a hand upward almost without risk: measured,
      * a dealer standing on 17 leaves the player a 36% edge, on 19 a 9% one. At

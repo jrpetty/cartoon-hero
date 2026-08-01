@@ -32,10 +32,12 @@ import java.util.concurrent.ThreadLocalRandom;
  */
 public final class BlackjackManager {
 
-    /** What a hand costs to sit down for, and what a win pays back. */
-    public static final int STAKE = 8;
-
     private static final Map<UUID, Blackjack> TABLES = new ConcurrentHashMap<>();
+    /** The stake each player last chose, remembered between hands. */
+    private static final Map<UUID, Integer> STAKE_CHOICE = new ConcurrentHashMap<>();
+    /** What the hand in progress was actually staked at, so a later change cannot
+     *  alter what an already-dealt hand pays out. */
+    private static final Map<UUID, Integer> WAGERED = new ConcurrentHashMap<>();
 
     private BlackjackManager() {
     }
@@ -57,9 +59,33 @@ public final class BlackjackManager {
             case BlackjackActionPayload.CALL -> call(player, statOrdinal);
             case BlackjackActionPayload.STAND -> stand(player);
             case BlackjackActionPayload.LEAVE -> TABLES.remove(player.getUUID());
+            case BlackjackActionPayload.SET_STAKE -> setStake(player, statOrdinal);
             default -> {
             }
         }
+    }
+
+    /** The stake a player is currently betting, in fragments. */
+    public static int stakeOf(ServerPlayer player) {
+        return Blackjack.STAKES[stakeIndex(player)];
+    }
+
+    private static int stakeIndex(ServerPlayer player) {
+        return Blackjack.clampStakeIndex(
+                STAKE_CHOICE.getOrDefault(player.getUUID(), Blackjack.DEFAULT_STAKE));
+    }
+
+    /**
+     * Change the wager. Refused mid-hand: the stake is taken when the hand is
+     * dealt, so allowing a change afterwards would let a player raise a winning
+     * hand and shrink a losing one.
+     */
+    private static void setStake(ServerPlayer player, int index) {
+        if (isPlaying(player) || index < 0 || index >= Blackjack.STAKES.length) {
+            return;
+        }
+        STAKE_CHOICE.put(player.getUUID(), index);
+        send(player);
     }
 
     private static void deal(ServerPlayer player) {
@@ -69,12 +95,16 @@ public final class BlackjackManager {
         if (isPlaying(player)) {
             return; // already in a hand; finish it first
         }
-        if (!RecyclerManager.takeFragments(player, STAKE)) {
+        int stake = stakeOf(player);
+        if (!RecyclerManager.takeFragments(player, stake)) {
             player.sendSystemMessage(Component.literal(
-                            "You need " + STAKE + " fragments to sit down.")
+                            "You need " + stake + " fragments to bet that much.")
                     .withStyle(ChatFormatting.RED));
             return;
         }
+        // remember what was actually staked, so the payout cannot drift if the
+        // player changes their bet before the next deal
+        WAGERED.put(player.getUUID(), stake);
         TABLES.put(player.getUUID(), new Blackjack(ThreadLocalRandom.current()));
         player.serverLevel().playSound(null, player.getX(), player.getY(), player.getZ(),
                 SoundEvents.BOOK_PAGE_TURN, SoundSource.PLAYERS, 0.7F, 1.4F);
@@ -122,17 +152,18 @@ public final class BlackjackManager {
      * to hand the player an edge, and a table nobody can lose at is not a table.
      */
     private static void payOut(ServerPlayer player, Blackjack game) {
+        int stake = WAGERED.getOrDefault(player.getUUID(), stakeOf(player));
         switch (game.result()) {
             case PLAYER_WIN -> {
-                RecyclerManager.giveFragments(player, STAKE * 2);
+                RecyclerManager.giveFragments(player, stake * 2);
                 StatsTracker.bump(player, "twentyone_wins");
                 player.sendSystemMessage(Component.literal(
                                 "Twenty-One: " + game.playerTotal() + " beats "
-                                        + describeDealer(game) + " — you win " + STAKE + ".")
+                                        + describeDealer(game) + " — you win " + stake + ".")
                         .withStyle(ChatFormatting.GREEN));
             }
             case PUSH -> {
-                RecyclerManager.giveFragments(player, STAKE);
+                RecyclerManager.giveFragments(player, stake);
                 player.sendSystemMessage(Component.literal(
                                 "Twenty-One: both on " + game.playerTotal() + " — stake returned.")
                         .withStyle(ChatFormatting.YELLOW));
@@ -141,9 +172,10 @@ public final class BlackjackManager {
                             "Twenty-One: " + (game.playerBust()
                                     ? "bust on " + game.playerTotal()
                                     : game.playerTotal() + " loses to " + describeDealer(game))
-                                    + " — " + STAKE + " fragments gone.")
+                                    + " — " + stake + " fragments gone.")
                     .withStyle(ChatFormatting.RED));
         }
+        WAGERED.remove(player.getUUID());
         StatsTracker.bump(player, "twentyone_played");
     }
 
@@ -166,7 +198,8 @@ public final class BlackjackManager {
         if (game == null) {
             PacketDistributor.sendToPlayer(player, new BlackjackSyncPayload(
                     BlackjackSyncPayload.PHASE_DONE, BlackjackSyncPayload.RESULT_NONE,
-                    List.of(0, 0, 0, RecyclerManager.fragments(player), STAKE),
+                    List.of(0, 0, 0, RecyclerManager.fragments(player),
+                            stakeOf(player), stakeIndex(player)),
                     List.of(), List.of()));
             return;
         }
@@ -188,13 +221,16 @@ public final class BlackjackManager {
         PacketDistributor.sendToPlayer(player, new BlackjackSyncPayload(
                 phase, result,
                 List.of(game.playerTotal(), game.dealerTotal(), game.drawsTaken(),
-                        RecyclerManager.fragments(player), STAKE),
+                        RecyclerManager.fragments(player),
+                        WAGERED.getOrDefault(player.getUUID(), stakeOf(player)),
+                        stakeIndex(player)),
                 encode(game.playerDraws()), dealer));
     }
 
     /** Drop a player's table when they log out; an unfinished hand is forfeit. */
     public static void handleLogout(ServerPlayer player) {
         TABLES.remove(player.getUUID());
+        WAGERED.remove(player.getUUID());
     }
 
 }

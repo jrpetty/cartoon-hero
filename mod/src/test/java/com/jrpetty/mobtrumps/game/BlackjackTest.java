@@ -242,6 +242,27 @@ class BlackjackTest {
     }
 
     @Test
+    void theStakeLadderIsSaneAndAlwaysLandsOnARung() {
+        assertTrue(Blackjack.STAKES.length >= 3, "a ladder needs rungs to choose between");
+        for (int i = 1; i < Blackjack.STAKES.length; i++) {
+            assertTrue(Blackjack.STAKES[i] > Blackjack.STAKES[i - 1],
+                    "the stake ladder is not ascending");
+        }
+        assertTrue(Blackjack.STAKES[0] > 0, "a free hand is not a wager");
+        // whatever a client sends, it must resolve to a real rung
+        for (int asked = -50; asked <= 50; asked++) {
+            int i = Blackjack.clampStakeIndex(asked);
+            assertTrue(i >= 0 && i < Blackjack.STAKES.length,
+                    "asking for stake index " + asked + " gave " + i);
+        }
+        assertEquals(0, Blackjack.clampStakeIndex(-1));
+        assertEquals(Blackjack.STAKES.length - 1, Blackjack.clampStakeIndex(999));
+        assertTrue(Blackjack.DEFAULT_STAKE >= 0
+                        && Blackjack.DEFAULT_STAKE < Blackjack.STAKES.length,
+                "the default stake is not on the ladder");
+    }
+
+    @Test
     void attackIsTheNibbleAndFarmableIsTheGamble() {
         // the two ends the whole game hangs on, pinned so a card edit cannot
         // quietly flatten the choice

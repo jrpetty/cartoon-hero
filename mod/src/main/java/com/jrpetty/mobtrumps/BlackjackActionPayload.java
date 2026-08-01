@@ -20,6 +20,8 @@ public record BlackjackActionPayload(int action, int stat) implements CustomPack
     public static final int CALL = 1;
     public static final int STAND = 2;
     public static final int LEAVE = 3;
+    /** Choose what to wager. {@code stat} carries the index into the stake ladder. */
+    public static final int SET_STAKE = 4;
 
     public static BlackjackActionPayload deal() {
         return new BlackjackActionPayload(DEAL, 0);
@@ -35,6 +37,10 @@ public record BlackjackActionPayload(int action, int stat) implements CustomPack
 
     public static BlackjackActionPayload leave() {
         return new BlackjackActionPayload(LEAVE, 0);
+    }
+
+    public static BlackjackActionPayload setStake(int index) {
+        return new BlackjackActionPayload(SET_STAKE, index);
     }
 
     public static final CustomPacketPayload.Type<BlackjackActionPayload> TYPE =

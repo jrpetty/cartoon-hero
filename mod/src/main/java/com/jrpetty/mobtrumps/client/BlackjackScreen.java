@@ -57,6 +57,8 @@ public class BlackjackScreen extends Screen {
 
     private final Map<String, LivingEntity> entityCache = new HashMap<>();
     private final int[][] statRects = new int[Stat.values().length][];
+    private final int[][] stakeRects =
+            new int[Blackjack.STAKES.length][];
     private int[] dealRect;
     private int[] standRect;
     private int hovered = -1;
@@ -220,7 +222,7 @@ public class BlackjackScreen extends Screen {
         int cardsBottom = cardsTop + Math.max(1, rows) * (cardH + CAPTION_H + 4);
 
         // --- the six calls ----------------------------------------------------
-        int listW = Math.min(240, width - 20);
+        final int listW = Math.min(240, width - 20);
         int listX0 = width / 2 - listW / 2;
         int listX1 = listX0 + listW;
         int colW = (listW - (statCols - 1) * 4) / statCols;
@@ -253,13 +255,39 @@ public class BlackjackScreen extends Screen {
 
         // --- buttons -----------------------------------------------------------
         int by = listY + statRows * rowH + 6;
-        dealRect = new int[]{listX0, by, 130, 15};
-        standRect = new int[]{listX1 - 78, by, 78, 15};
         if (live) {
+            standRect = new int[]{listX1 - 78, by, 78, 15};
+            dealRect = null;
             button(g, standRect, "STAND", mouseX, mouseY, true);
         } else {
-            button(g, dealRect, "DEAL  (" + ClientBlackjack.stake() + ")", mouseX, mouseY,
+            standRect = null;
+            // the wager, then DEAL. Chips rather than a typed number: the odds do
+            // not change with the size of the bet, only the swing, so the choice
+            // is how big a swing you want and six rungs say that clearly.
+            int chips = Blackjack.STAKES.length;
+            int dealW = 62;
+            int chipW = Math.max(16, (listW - dealW - 6 - (chips - 1) * 2) / chips);
+            for (int i = 0; i < chips; i++) {
+                int cx = listX0 + i * (chipW + 2);
+                stakeRects[i] = new int[]{cx, by, chipW, 15};
+                int amount = Blackjack.STAKES[i];
+                boolean picked = i == ClientBlackjack.stakeIndex();
+                boolean afford = ClientBlackjack.fragments() >= amount;
+                boolean over = mouseX >= cx && mouseX < cx + chipW
+                        && mouseY >= by && mouseY < by + 15;
+                g.fill(cx, by, cx + chipW, by + 15,
+                        picked ? 0xFF6A5320 : !afford ? 0x18000000
+                                : over ? 0x3AE9C46A : 0x22000000);
+                g.renderOutline(cx, by, chipW, 15,
+                        picked ? GOLD : afford ? EDGE : 0xFF2A3A32);
+                String label = String.valueOf(amount);
+                g.drawString(font, label, cx + (chipW - font.width(label)) / 2, by + 4,
+                        picked ? GOLD : afford ? INK : 0xFF4E6A5C, false);
+            }
+            dealRect = new int[]{listX1 - dealW, by, dealW, 15};
+            button(g, dealRect, "DEAL", mouseX, mouseY,
                     ClientBlackjack.fragments() >= ClientBlackjack.stake());
+            g.drawString(font, "WAGER", listX0, by - 10, GOLD_DIM, false);
         }
 
         // --- result, once the dealer has finished turning its hand -------------
@@ -415,14 +443,37 @@ public class BlackjackScreen extends Screen {
                     click();
                     return true;
                 }
-            } else if (hit(dealRect, mouseX, mouseY)
-                    && ClientBlackjack.fragments() >= ClientBlackjack.stake()) {
-                send(BlackjackActionPayload.deal());
-                click();
-                return true;
+            } else {
+                for (int i = 0; i < stakeRects.length; i++) {
+                    if (hit(stakeRects[i], mouseX, mouseY)
+                            && ClientBlackjack.fragments() >= Blackjack.STAKES[i]) {
+                        send(BlackjackActionPayload.setStake(i));
+                        click();
+                        return true;
+                    }
+                }
+                if (hit(dealRect, mouseX, mouseY)
+                        && ClientBlackjack.fragments() >= ClientBlackjack.stake()) {
+                    send(BlackjackActionPayload.deal());
+                    click();
+                    return true;
+                }
             }
         }
         return super.mouseClicked(mouseX, mouseY, button);
+    }
+
+    @Override
+    public boolean mouseScrolled(double mouseX, double mouseY, double dx, double dy) {
+        if (!ClientBlackjack.inHand() && dy != 0) {
+            int next = ClientBlackjack.stakeIndex() + (int) Math.signum(dy);
+            next = Mth.clamp(next, 0, Blackjack.STAKES.length - 1);
+            if (next != ClientBlackjack.stakeIndex()) {
+                send(BlackjackActionPayload.setStake(next));
+            }
+            return true;
+        }
+        return super.mouseScrolled(mouseX, mouseY, dx, dy);
     }
 
     @Override

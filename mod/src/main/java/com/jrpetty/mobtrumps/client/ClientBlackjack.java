@@ -22,6 +22,7 @@ public final class ClientBlackjack {
     private static volatile int drawsTaken;
     private static volatile int fragments;
     private static volatile int stake;
+    private static volatile int stakeIndex;
     private static volatile List<Draw> player = List.of();
     private static volatile List<Draw> dealer = List.of();
     private static volatile long changedAt;
@@ -39,6 +40,7 @@ public final class ClientBlackjack {
         drawsTaken = at(payload.nums(), 2);
         fragments = at(payload.nums(), 3);
         stake = at(payload.nums(), 4);
+        stakeIndex = at(payload.nums(), 5);
         player = decode(payload.player());
         dealer = decode(payload.dealer());
         if (playerTotal != previous || dealer.size() != previousDealer) {
@@ -89,6 +91,11 @@ public final class ClientBlackjack {
 
     public static int stake() {
         return stake;
+    }
+
+    /** Which rung of the stake ladder is selected. */
+    public static int stakeIndex() {
+        return stakeIndex;
     }
 
     public static List<Draw> playerDraws() {

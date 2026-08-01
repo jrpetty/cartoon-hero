@@ -475,9 +475,13 @@ A full checklist would fix that but cost the discovery.
 
 - **Trading Post** — ~~dupes as credit toward sealed packs~~ **superseded** by
   the recycler (§1), which is the same loop and is built.
-- **A trade GUI** — **DECLINED.** Trading works as a chat command
-  (`/mobtrumps trade <player>`, escrowed, 60s expiry) and that is deliberate;
-  it does not need a screen. Do not re-propose.
+- **Trading** — **REMOVED (v1.71.0).** The chat-command trade
+  (`/mobtrumps trade <player>`) and its GUI were both declined, and then trading
+  itself was. `TradeManager` and the command are deleted. This also closes the
+  blind-trade problem serials had created — an offer showed only a card's name,
+  never its condition or serial, and the offerer never saw what they were
+  getting at all — by removing the surface rather than patching it.
+  Do not re-propose.
 - **Trump rules** — ~~one ability per card drawn from what the mob is (Creeper
   pots both cards on a loss, Enderman swaps top for bottom, Wolf peeks at a
   stat)~~ **DECLINED.** Asked for and turned down. Do not re-propose: the game
@@ -524,6 +528,12 @@ the balance moved onto the dealer instead:
   straight back.
 - **A shoe of all 81, not your own deck**, which could be stacked with
   zero-Attack mobs until the bet stopped being a bet.
+- **The wager is a ladder — 2 / 4 / 8 / 16 / 32 / 64** *(v1.71.0)*, not a typed
+  number. The odds do not shift with the size of the bet, only the variance, so
+  the real choice is how big a swing you want; six doubling rungs say that and a
+  free number does not. The stake is taken when the hand is dealt and remembered
+  against that hand, so changing your bet afterwards cannot raise a winning hand
+  or shrink a losing one.
 
 **No odds are shown** *(changed v1.69.0)*. The first build printed each stat's
 spread and its live bust chance, on the reasoning that hiding them made the game
