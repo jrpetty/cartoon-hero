@@ -80,6 +80,8 @@ public final class EngineArena {
     private final List<Marker> zones = new ArrayList<>();
     private final List<Marker> spawners = new ArrayList<>();
     private final List<Marker> bossPoints = new ArrayList<>();
+    /** Optional out-of-sight spawn chambers, paired to the nearest way in. */
+    private final List<Marker> pens = new ArrayList<>();
     /** Loot caches already emptied this round. */
     private final java.util.Set<BlockPos> lootTaken = new java.util.HashSet<>();
     private final Director director;
@@ -189,6 +191,7 @@ public final class EngineArena {
         current.zones.addAll(scan.of("zone"));
         current.spawners.addAll(scan.of("spawner"));
         current.bossPoints.addAll(scan.of("boss"));
+        current.pens.addAll(scan.of("pen"));
         current.extract = scan.first("extract");
         EnginePowerUps.reset();
         current.consumeMarkers(scan);
@@ -763,6 +766,18 @@ public final class EngineArena {
      * underneath to stand on.
      */
     private BlockPos spawnPointFor(Marker gate) {
+        // A [Pen] near this way in means the author built somewhere for the horde
+        // to arrive out of sight, so use it. That is the difference between mobs
+        // blinking into existence in front of you and mobs walking out of a dark
+        // room - the same fight, told better.
+        Marker pen = nearestPen(gate.pos());
+        if (pen != null) {
+            for (int dy = 0; dy <= 2; dy++) {
+                if (standable(pen.pos().above(dy))) {
+                    return pen.pos().above(dy);
+                }
+            }
+        }
         Direction out = gate.facing();
         Direction side = out.getClockWise();
         BlockPos base = gate.pos();
@@ -781,6 +796,20 @@ public final class EngineArena {
             }
         }
         return null;
+    }
+
+    /** The closest pen to a way in, if one is near enough to have been meant for it. */
+    private Marker nearestPen(BlockPos gate) {
+        Marker best = null;
+        double bestDist = 16 * 16;
+        for (Marker p : pens) {
+            double d = p.pos().distSqr(gate);
+            if (d <= bestDist) {
+                bestDist = d;
+                best = p;
+            }
+        }
+        return best;
     }
 
     /** Room for a mob, and a floor beneath it. */

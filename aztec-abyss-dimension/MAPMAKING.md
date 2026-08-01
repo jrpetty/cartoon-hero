@@ -16,6 +16,7 @@ Build a floor and some walls. Then:
 ```
 /arena marker spawn        place it where players start
 /arena marker horde        place three or four, on the walls, facing inward
+/arena marker pen          optional: behind a horde marker, so they walk in unseen
 /arena marker extract      place it somewhere you have to walk to
 /arena marker dealer       place it, then edit lines 2 and 3
 ```
@@ -54,6 +55,7 @@ and `[Perk] id=ironhide` mean the same thing. Facing comes from the sign.
 |---|---|---|
 | `[Spawn]` | — | where players arrive. **Required** |
 | `[Horde]` | `area=` | a way in. **At least one required** |
+| `[Pen]` | — | put one behind a `[Horde]` and the horde arrives there, out of sight, and walks in |
 | `[Extract]` | `radius=` | stand on it between rounds to bank the run |
 | `[Door]` | `area=` `cost=` `currency=` `width=` `height=` | buys an area open, punches the doorway |
 | `[Dealer]` | *(positional — see below)* | sells an item |
