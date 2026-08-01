@@ -140,6 +140,8 @@ public class BluffScreen extends Screen {
     private int gap;
     private int handX;
     private int hovered = -1;
+    /** The card to open over the table this frame, or null. */
+    private MobCard inspecting;
 
     private int[] playRect;
     private int[] challengeRect;
@@ -245,6 +247,7 @@ public class BluffScreen extends Screen {
         passRect = null;
         newRect = null;
         hovered = -1;
+        inspecting = null;
 
         if (ClientBluff.idle()) {
             TableArt.felt(g, width, height, width / 2, height / 2);
@@ -268,6 +271,9 @@ public class BluffScreen extends Screen {
         drawLog(g);
         drawHand(g, hand, mouseX, mouseY);
         drawControls(g, mouseX, mouseY);
+        if (inspecting != null) {
+            drawInspect(g, inspecting);
+        }
         if (ClientBluff.over()) {
             drawResult(g, mouseX, mouseY);
         }
@@ -610,10 +616,8 @@ public class BluffScreen extends Screen {
         }
 
         if (hovered >= 0) {
-            int hx = handX + hovered * gap;
-            int hy = cardY(hovered, hand.size())
-                    - (picked.contains(hovered) ? LIFT : HOVER_LIFT);
-            drawStatPanel(g, hand.get(hovered), hx + cardW / 2, hy);
+            // drawn after everything else, so it is over the table and not in it
+            inspecting = hand.get(hovered);
         } else {
             g.drawCenteredString(font, "hover a card for its numbers", width / 2,
                     handY + cardH + 3, FAINT);
@@ -621,59 +625,63 @@ public class BluffScreen extends Screen {
     }
 
     /**
-     * The hovered card's numbers, at a size they can actually be read at.
+     * The hovered card, shown as the card — the real one, drawn by
+     * {@link CardRenderer} with its live mob, at a size its own printed stats
+     * can be read at.
      *
-     * <p>A card in hand is sixty-one pixels wide at best. Its stat table IS
-     * drawn — {@code CardRenderer} draws the whole card — but at that scale the
-     * text is three pixels tall, and a card would have to be 133x184 before the
-     * font cleared seven. That does not fit beside a hand on a 240-pixel screen,
-     * so scaling the card up is not the answer: the numbers get their own panel
-     * at full font size instead.
+     * <p>An earlier version of this drew a bespoke panel of numbers instead,
+     * on the reasoning that a card big enough to read could not fit. That was
+     * measured against the wrong thing: it does not have to fit <em>beside</em>
+     * the hand, only over the table. As an overlay it clears 7px stat text at
+     * every window size the game runs at, so there is no reason to redraw in a
+     * panel what the card already says itself.
      *
-     * <p>The stat the round's claim turns on is picked out, because that is the
-     * only one the decision in front of the player actually depends on.
+     * <p>The row the round's claim turns on gets a bracket, because that is the
+     * only number the decision in front of the player depends on.
      */
-    private void drawStatPanel(GuiGraphics g, MobCard card, int anchorX, int cardTop) {
-        Stat[] stats = Stat.values();
-        Stat subject = claimStat();
+    private void drawInspect(GuiGraphics g, MobCard card) {
+        float scale = Math.min(0.85f, Math.min((width - 24) / (float) CardRenderer.CARD_W,
+                (height - 46) / (float) CardRenderer.CARD_H));
+        int cw = Math.round(CardRenderer.CARD_W * scale);
+        int ch = Math.round(CardRenderer.CARD_H * scale);
         boolean answers = ClientBluff.claim().matches(card);
-        String name = card.displayName();
-        String tier = card.tier().label();
+        int accent = answers ? GOOD : BAD;
+
+        int block = 12 + ch + 13;
+        int top = Math.max(RAIL + 3, (height - block) / 2);
+        int x = (width - cw) / 2;
+        int y = top + 12;
+
+        // the table goes quiet behind it, so the card is the only thing to read
+        g.fill(0, 0, width, height, 0xB4000000);
+        TableArt.pool(g, width / 2, height / 2, Math.max(cw, ch), accent, 0x1E);
+
+        // the claim stays on screen — it is what the card is being judged against
+        String claim = fit(ClientBluff.claim().text(), width - 20);
+        g.drawCenteredString(font, claim, width / 2, top, BRASS_HI);
+
+        g.fill(x + 3, y + 4, x + cw + 4, y + ch + 5, 0x88000000);
+        LivingEntity mob = CardRenderer.portraitEntity(minecraft, card, entityCache);
+        CardRenderer.renderCard(g, font, card, x, y, scale, -1, -1, mob, false, true);
+        g.renderOutline(x - 1, y - 1, cw + 2, ch + 2, accent);
+
+        // bracket the stat the claim is about, in the card's own row geometry
+        Stat subject = claimStat();
+        if (subject != null) {
+            int row = subject.ordinal();
+            int ry = y + Math.round((CardRenderer.STAT_TOP + row * CardRenderer.ROW_H) * scale);
+            int rh = Math.max(3, Math.round(CardRenderer.ROW_H * scale));
+            g.renderOutline(x + 2, ry, cw - 4, rh, BRASS);
+            g.fill(x - 4, ry, x - 1, ry + rh, BRASS);
+            g.fill(x + cw + 1, ry, x + cw + 4, ry + rh, BRASS);
+        }
+
         String foot = answers ? "ANSWERS YES" : "ANSWERS NO";
-
-        int labels = 0;
-        for (Stat stat : stats) {
-            labels = Math.max(labels, font.width(stat.label.toUpperCase(Locale.ROOT)));
-        }
-        int body = labels + 16 + font.width("00");
-        int w = Math.max(Math.max(body, font.width(name)), Math.max(font.width(tier),
-                font.width(foot))) + 14;
-        int h = 6 + 10 + 10 + 3 + stats.length * 10 + 3 + 11 + 5;
-
-        int x = Mth.clamp(anchorX - w / 2, RAIL + 2, Math.max(RAIL + 2, width - w - RAIL - 2));
-        int y = Math.max(RAIL + 2, cardTop - h - 6);
-
-        TableArt.plate(g, x, y, w, h, answers ? GOOD : BAD);
-        int ty = y + 5;
-        g.drawString(font, name, x + 7, ty, INK, false);
-        ty += 10;
-        g.drawString(font, tier, x + 7, ty, BRASS_DIM, false);
-        ty += 12;
-        for (Stat stat : stats) {
-            boolean lit = stat == subject;
-            String label = stat.label.toUpperCase(Locale.ROOT);
-            String value = String.valueOf(card.stat(stat));
-            if (lit) {
-                g.fill(x + 4, ty - 1, x + w - 4, ty + 9, 0x33E9C46A);
-            }
-            g.drawString(font, label, x + 7, ty, lit ? BRASS_HI : DIM, false);
-            g.drawString(font, value, x + w - 7 - font.width(value), ty,
-                    lit ? BRASS_HI : INK, false);
-            ty += 10;
-        }
-        ty += 2;
-        g.fill(x + 4, ty - 2, x + w - 4, ty - 1, BRASS_DARK);
-        g.drawCenteredString(font, foot, x + w / 2, ty, answers ? GOOD : BAD);
+        int fw = font.width(foot) + 16;
+        int fx = width / 2 - fw / 2;
+        int fy = y + ch + 2;
+        TableArt.bevel(g, fx, fy, fw, 11, TableArt.alpha(accent, 0x44), 0x22FFFFFF, 0x55000000);
+        g.drawCenteredString(font, foot, width / 2, fy + 2, accent);
     }
 
     /** The stat the round's claim turns on, or null when it is not a threshold. */

@@ -62,7 +62,10 @@ public final class CardRenderer {
     private static final int BORDER_IVORY = 0xFFF2EEE3;
     private static final int PIN_GOLD = 0xFFD9B45B;
 
-    private static final int ROW_H = 13;
+    /** Height of one stat row, and the y its table starts at, in card space.
+     *  Public so an overlay can bracket a row without guessing at the layout. */
+    public static final int ROW_H = 13;
+    public static final int STAT_TOP = 121;
 
     private CardRenderer() {
     }
@@ -134,7 +137,7 @@ public final class CardRenderer {
         g.renderOutline(11, 37, CARD_W - 22, 116 - 38 + 2, KRAFT_DARK);
 
         // stat table — boosted values with a green +N tag on upgraded stats
-        int rowY = 121;
+        int rowY = STAT_TOP;
         int total = 0;
         Stat[] stats = Stat.values();
         for (int i = 0; i < stats.length; i++) {
@@ -327,7 +330,7 @@ public final class CardRenderer {
         g.fill(12, 38, CARD_W - 12, 116, 0x66FFFFFF);
         g.renderOutline(11, 37, CARD_W - 22, 116 - 38 + 2, KRAFT_DARK);
 
-        int rowY = 121;
+        int rowY = STAT_TOP;
         for (Stat stat : Stat.values()) {
             boolean blue = (rowY - 121) / ROW_H % 2 == 0;
             g.fill(12, rowY, CARD_W - 12, rowY + ROW_H - 1, blue ? ROW_BLUE : ROW_GREEN);
