@@ -6,6 +6,7 @@ import { SkirmishAI, armyTargetPriority } from "./skirmish_ai";
 import { DIFFICULTIES, DIFFICULTY_IDS } from "./difficulty";
 import { SIM_DT, SIM_HZ, TILE } from "../content/balance";
 import { BUILDINGS } from "../content/buildings";
+import { UPGRADES } from "../content/tech";
 
 describe("Difficulty tiers", () => {
   it("has five tiers, all fully specified, Conqueror the hardest", () => {
@@ -136,4 +137,22 @@ describe("Conqueror AI plays a real game", () => {
     expect(enemyAttacked).toBe(true); // launched a wave (focus-fire path exercised)
     expect(w.player(Team.Enemy).defeated).toBe(false);
   }, 60000);
+});
+
+describe("AI research", () => {
+  it("researches beyond the Blacksmith — economy techs included", () => {
+    const w = new World(7);
+    w.init(generateMap("open_plains", 7, 2), [{}, {}], [1, 1]);
+    const ai = new SkirmishAI(w, Team.Enemy, DIFFICULTIES.warlord);
+    for (let i = 0; i < SIM_HZ * 60 * 14; i++) { w.tick(); ai.update(SIM_DT); w.drainEvents(); }
+    const got = [...w.player(Team.Enemy).upgrades];
+    expect(got.length).toBeGreaterThan(0);
+    // It used to only ever look at the Blacksmith, so every tech housed
+    // anywhere else was effectively player-only. At least one must now come
+    // from somewhere else.
+    const elsewhere = got.filter((id) => UPGRADES[id] && UPGRADES[id].researchedAt !== "blacksmith");
+    expect(elsewhere.length, `only researched: ${got.join(", ")}`).toBeGreaterThan(0);
+    // And it never researches something its age doesn't allow.
+    for (const id of got) expect(w.player(Team.Enemy).age).toBeGreaterThanOrEqual(UPGRADES[id].age);
+  }, 90000);
 });

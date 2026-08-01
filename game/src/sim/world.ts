@@ -403,7 +403,7 @@ export class World {
     e.range = def.range + (def.armorClass === ArmorClass.Archer ? bn.archerRangeBonus : 0);
     e.attackInterval = def.attackInterval;
     e.speed = def.speed * (RARITY_SPEED_MULT[rarity] ?? 1) * spdBoon;
-    e.visionRange = def.visionRange * bn.visionMult;
+    e.visionRange = def.visionRange * bn.visionMult * (1 + this.teamUpgradeSum(team, "vision"));
     e.radius = def.radius;
     e.armorClass = def.armorClass;
   }
@@ -1093,19 +1093,20 @@ export class World {
     const p = this.players[team];
     if (!p || !this.hasBuilding(team, "market")) return false;
     const r = p.resources;
+    const yield_ = 75 + this.teamUpgradeSum(team, "trade"); // Caravan
     switch (action) {
       case "sell_wood":
         if (r.wood < 100) return false;
-        r.wood -= 100; r.gold += 75; return true;
+        r.wood -= 100; r.gold += yield_; return true;
       case "sell_food":
         if (r.food < 100) return false;
-        r.food -= 100; r.gold += 75; return true;
+        r.food -= 100; r.gold += yield_; return true;
       case "buy_wood":
         if (r.gold < 100) return false;
-        r.gold -= 100; r.wood += 75; return true;
+        r.gold -= 100; r.wood += yield_; return true;
       case "buy_food":
         if (r.gold < 100) return false;
-        r.gold -= 100; r.food += 75; return true;
+        r.gold -= 100; r.food += yield_; return true;
     }
   }
 
@@ -1609,7 +1610,8 @@ export class World {
     e.animPhase += SIM_DT * 2;
     if (b.buildState !== BuildState.Done) {
       const pp = this.players[e.team];
-      const mult = (pp?.econMult ?? 1) * (pp?.buildMult ?? 1); // commander build speed
+      const mult = (pp?.econMult ?? 1) * (pp?.buildMult ?? 1) // commander build speed
+        * (1 + this.teamUpgradeSum(b.team, "build")); // Treadmill Crane
       b.buildProgress += (SIM_DT / bdef.buildTime) * mult;
       b.hp = Math.min(b.maxHp, b.hp + (b.maxHp * 0.92 * SIM_DT * mult) / bdef.buildTime);
       b.buildState = BuildState.UnderConstruction;
@@ -1926,6 +1928,22 @@ export class World {
   }
 
   // Damage -------------------------------------------------------------------
+
+  /**
+   * Total amount from researched upgrades of a team-wide kind (vision, build
+   * speed, trade rate) — these apply to the whole realm rather than to a unit
+   * class, so they skip the appliesTo matching the combat techs use.
+   */
+  private teamUpgradeSum(team: Team, kind: "vision" | "build" | "trade"): number {
+    const p = this.players[team];
+    if (!p) return 0;
+    let total = 0;
+    for (const upId of p.upgrades) {
+      const up = UPGRADES[upId];
+      if (up?.kind === kind) total += up.amount;
+    }
+    return total;
+  }
 
   /** Attack value including tech/age bonuses and RPS bonus vs the target. */
   /** Movement speed including ability buffs (Charge / Brace) and Caltrops slow. */

@@ -501,16 +501,22 @@ export class SkirmishAI {
     // 6. Military/tech buildings + age advances per the build order.
     this.buildOrder(p, base, villagers.length);
 
-    // 7. Blacksmith upgrades when comfortable.
-    if (p.age >= 1 && p.resources.gold > 280) {
-      const smith = this.myBuildings("blacksmith")[0];
-      if (smith && smith.productionQueue.length === 0) {
-        for (const id of Object.keys(UPGRADES)) {
-          if (!p.upgrades.has(id)) {
-            if (this.world.research(this.team, smith.id, id)) break;
-          }
-        }
-      }
+    // 7. Research, wherever it lives. This used to look only at the Blacksmith,
+    //    which meant the AI never took a single economy tech — the Mill, Lumber
+    //    Camp, Mining Camp, Town Centre, Stable, Archery Range and Market lines
+    //    were all player-only. Now it researches from any building it owns,
+    //    keeping enough in hand that teching never starves unit production.
+    for (const id of Object.keys(UPGRADES)) {
+      const up = UPGRADES[id];
+      if (p.upgrades.has(id) || p.age < up.age) continue;
+      if (!this.world.canAfford(p.resources, up.cost)) continue;
+      // A working float, so it doesn't spend its army money on research.
+      if (p.resources.gold < up.cost.gold + 200) continue;
+      if (p.resources.food < up.cost.food + 150) continue;
+      if (p.resources.wood < up.cost.wood + 150) continue;
+      const host = this.myBuildings(up.researchedAt).find((b) => b.productionQueue.length === 0);
+      if (!host) continue;
+      if (this.world.research(this.team, host.id, id)) break;
     }
 
     // 8. Expansion town center.

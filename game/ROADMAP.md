@@ -34,12 +34,19 @@ at the top of each section.
   units currently sharing draws (twohand/militia, pikeman/spearman, scout/raider,
   javelin/skirmisher, handcannon/crossbow).
 
-## Upgrades (to design/build)
-- **Unit-line upgrades** (research that improves a whole class): Long Swords,
-  Pikes, Cavalier, Heavy Cav Archer, etc.
-- **Economy upgrades** (Mill/Lumber/Mining/Market): Horse Collar (farm food),
-  Bow Saw (wood), Gold Mining (gold), Caravan (trade), Loom (villager survive),
-  Town Watch (vision), Treadmill Crane (build speed).
+## Upgrades
+- Done: Long Swords, Pikes, Cavalier (Stable, Knight +25 HP), Heavy Cavalry
+  Archer (Archery Range, Horseman +3 attack); Horse Collar / Bow Saw / Gold
+  Mining; **Loom** (TC, villager +15 HP), **Town Watch** (TC, +25% vision),
+  **Treadmill Crane** (TC, +20% build/repair), **Caravan** (Market, trades
+  return 85 not 75).
+- The upgrade schema gained three team-wide kinds — `vision`, `build`, `trade`
+  — that skip the appliesTo matching the combat techs use.
+- **The AI only ever researched at the Blacksmith**, so every economy tech was
+  effectively player-only. It now researches from any building it owns, keeping
+  a float so teching doesn't starve unit production.
+- Backlog: more unit-line elites; a University-style building if the TC list
+  gets crowded.
 
 ## Game modes (NEXT BIG BUILD — decisions locked, build in this order)
 1. **Survival / Horde** — **co-op**: you + 1–3 AI allies vs escalating AI waves
@@ -56,8 +63,41 @@ at the top of each section.
 - Unit-tech upgrades: Husbandry, Bloodlines, Long Swords, Pikes (Blacksmith);
   Horse Collar / Bow Saw / Gold Mining (Mill / Lumber Camp / Mining Camp).
 
+## Balance — measured, not guessed
+`src/sim/balance.test.ts` runs every unit against the whole roster at equal
+gold, on a fixed layout with seeded fights, and reports a win matrix. Findings
+from the first pass:
+
+- **The Knight was never the problem.** It measured 58% — mid-table. The
+  suspicion in this file was wrong.
+- **The counter triangle was lopsided.** Anti-cavalry bonuses were huge (spear
+  +25, pike +38) while anti-infantry was noise (archer +3, crossbow +4), so
+  infantry had no real counter. Now Archer +5, Crossbow +9, Hand Cannoneer +14,
+  and the Archer is 10 wood cheaper — archers are a numbers unit, so cost is
+  the lever that helps them en masse.
+- **The Two-Handed Swordsman was the actual outlier** — 100% win rate, the best
+  army HP *and* DPS in its bracket, beating even its counters. Now 130 gold
+  (was 100), 95 HP (was 110), 12 attack (was 13), 1 armour (was 2). Pikeman
+  also went up 10 food; it had the largest army HP on the board.
+
+**Nothing in the sim kites.** Units close and trade, so massed archers lose a
+head-on fight with massed infantry however the bonus is tuned — and pushing the
+bonus far enough to change that also lets one archer beat one swordsman, which
+breaks the anti-kite invariant in world.test.ts. That tension is real and was
+hit during this pass. So "archers melt infantry" is a claim about a *line*, not
+a duel: what the bonus buys is that archers behind a spear screen beat the same
+archers standing alone, which is what balance.test.ts now asserts.
+
+Spread went from 0.9–100% to 20–77%. The specialists (Spearman 29%, Skirmisher
+36%) sit low on purpose — they read badly in pure-comp fights and well in mixed
+ones. The bounds encode "nothing unbeatable, nothing dead weight" rather than
+parity, because the metric has a known melee bias.
+
 ## Bigger / later
-- **Multiplayer (PvP)** — the real replayability unlock. Deterministic sim
-  already supports it architecturally. Not now.
-- A real balance pass (Knight is likely a touch overtuned; widen the late-game
-  unit meta beyond Knight + Spear/Pike).
+- **Naval** — water is currently only an impassable wall, and the Islands
+  preset (55% water) is a maze rather than a naval map. Dock, transport,
+  war galley + AI. The largest genuinely-missing pillar.
+- **Battlemage** and **Trade Cart** remain the open content items.
+- **Multiplayer (PvP)** — the whole net stack (lockstep, WebRTC, WS, lobby,
+  session) is written and unused. Needs a signalling server to host, so it
+  can't live in the single-file build. Not now.

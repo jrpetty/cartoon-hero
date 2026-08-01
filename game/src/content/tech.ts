@@ -43,7 +43,8 @@ export interface UpgradeDef {
   cost: { food: number; wood: number; gold: number };
   time: number;
   age: number;
-  kind: "attack" | "armor" | "hp" | "speed" | "bonus" | "econ";
+  /** "vision", "build" and "trade" are team-wide and ignore appliesTo. */
+  kind: "attack" | "armor" | "hp" | "speed" | "bonus" | "econ" | "vision" | "build" | "trade";
   /** Which armor classes it benefits. */
   appliesTo: string[];
   /** Or specific unit ids (per-unit "elite" upgrades). */
@@ -205,5 +206,41 @@ export const UPGRADES: Record<string, UpgradeDef> = {
     id: "gold_mining", name: "Gold Mining", desc: "Villagers mine gold 18% faster. (Feudal Age)",
     cost: { food: 100, wood: 0, gold: 0 }, time: 25, age: 1,
     kind: "econ", appliesTo: [], resource: "gold", amount: 0.18, researchedAt: "mining_camp",
+  },
+
+  // --- Town Centre: the survivability / quality-of-life line ----------------
+  loom: {
+    id: "loom", name: "Loom", desc: "Villagers gain +15 HP — raids stop being free. (Dark Age)",
+    cost: { food: 0, wood: 0, gold: 50 }, time: 20, age: 0,
+    kind: "hp", appliesTo: [], appliesToUnits: ["villager"], amount: 15, researchedAt: "town_center",
+  },
+  town_watch: {
+    id: "town_watch", name: "Town Watch", desc: "Everything you own sees 25% further. (Feudal Age)",
+    cost: { food: 75, wood: 0, gold: 0 }, time: 25, age: 1,
+    kind: "vision", appliesTo: [], amount: 0.25, researchedAt: "town_center",
+  },
+  treadmill_crane: {
+    id: "treadmill_crane", name: "Treadmill Crane", desc: "Villagers build and repair 20% faster. (Castle Age)",
+    cost: { food: 0, wood: 200, gold: 0 }, time: 30, age: 2,
+    kind: "build", appliesTo: [], amount: 0.2, researchedAt: "town_center",
+  },
+
+  // --- Market: make trading worth the building -----------------------------
+  caravan: {
+    id: "caravan", name: "Caravan", desc: "Market trades return 85 instead of 75. (Castle Age)",
+    cost: { food: 0, wood: 150, gold: 0 }, time: 30, age: 2,
+    kind: "trade", appliesTo: [], amount: 10, researchedAt: "market",
+  },
+
+  // --- Elite lines for the mounted units ------------------------------------
+  cavalier: {
+    id: "cavalier", name: "Cavalier", desc: "Knights gain +25 HP. (Castle Age)",
+    cost: { food: 300, wood: 0, gold: 150 }, time: 40, age: 2,
+    kind: "hp", appliesTo: [], appliesToUnits: ["knight"], amount: 25, researchedAt: "stable",
+  },
+  heavy_cav_archer: {
+    id: "heavy_cav_archer", name: "Heavy Cavalry Archer", desc: "Horsemen gain +3 attack. (Castle Age)",
+    cost: { food: 200, wood: 0, gold: 150 }, time: 40, age: 2,
+    kind: "attack", appliesTo: [], appliesToUnits: ["horseman"], amount: 3, researchedAt: "archery_range",
   },
 };
