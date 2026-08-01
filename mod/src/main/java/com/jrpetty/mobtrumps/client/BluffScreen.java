@@ -3,7 +3,9 @@ package com.jrpetty.mobtrumps.client;
 import com.jrpetty.mobtrumps.BluffActionPayload;
 import com.jrpetty.mobtrumps.BluffManager;
 import com.jrpetty.mobtrumps.game.Bluff;
+import com.jrpetty.mobtrumps.game.GuessQuestion;
 import com.jrpetty.mobtrumps.game.MobCard;
+import com.jrpetty.mobtrumps.game.Stat;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.resources.sounds.SimpleSoundInstance;
@@ -608,14 +610,79 @@ public class BluffScreen extends Screen {
         }
 
         if (hovered >= 0) {
-            MobCard card = hand.get(hovered);
-            boolean matches = ClientBluff.claim().matches(card);
-            String note = card.displayName() + (matches ? "  ·  answers YES" : "  ·  answers NO");
-            // exactly the strip between the hand's rail and the button row —
-            // at +7 this was printed straight through the buttons
-            g.drawCenteredString(font, fit(note, width - 16), width / 2, handY + cardH + 3,
-                    matches ? GOOD : BAD);
+            int hx = handX + hovered * gap;
+            int hy = cardY(hovered, hand.size())
+                    - (picked.contains(hovered) ? LIFT : HOVER_LIFT);
+            drawStatPanel(g, hand.get(hovered), hx + cardW / 2, hy);
+        } else {
+            g.drawCenteredString(font, "hover a card for its numbers", width / 2,
+                    handY + cardH + 3, FAINT);
         }
+    }
+
+    /**
+     * The hovered card's numbers, at a size they can actually be read at.
+     *
+     * <p>A card in hand is sixty-one pixels wide at best. Its stat table IS
+     * drawn — {@code CardRenderer} draws the whole card — but at that scale the
+     * text is three pixels tall, and a card would have to be 133x184 before the
+     * font cleared seven. That does not fit beside a hand on a 240-pixel screen,
+     * so scaling the card up is not the answer: the numbers get their own panel
+     * at full font size instead.
+     *
+     * <p>The stat the round's claim turns on is picked out, because that is the
+     * only one the decision in front of the player actually depends on.
+     */
+    private void drawStatPanel(GuiGraphics g, MobCard card, int anchorX, int cardTop) {
+        Stat[] stats = Stat.values();
+        Stat subject = claimStat();
+        boolean answers = ClientBluff.claim().matches(card);
+        String name = card.displayName();
+        String tier = card.tier().label();
+        String foot = answers ? "ANSWERS YES" : "ANSWERS NO";
+
+        int labels = 0;
+        for (Stat stat : stats) {
+            labels = Math.max(labels, font.width(stat.label.toUpperCase(Locale.ROOT)));
+        }
+        int body = labels + 16 + font.width("00");
+        int w = Math.max(Math.max(body, font.width(name)), Math.max(font.width(tier),
+                font.width(foot))) + 14;
+        int h = 6 + 10 + 10 + 3 + stats.length * 10 + 3 + 11 + 5;
+
+        int x = Mth.clamp(anchorX - w / 2, RAIL + 2, Math.max(RAIL + 2, width - w - RAIL - 2));
+        int y = Math.max(RAIL + 2, cardTop - h - 6);
+
+        TableArt.plate(g, x, y, w, h, answers ? GOOD : BAD);
+        int ty = y + 5;
+        g.drawString(font, name, x + 7, ty, INK, false);
+        ty += 10;
+        g.drawString(font, tier, x + 7, ty, BRASS_DIM, false);
+        ty += 12;
+        for (Stat stat : stats) {
+            boolean lit = stat == subject;
+            String label = stat.label.toUpperCase(Locale.ROOT);
+            String value = String.valueOf(card.stat(stat));
+            if (lit) {
+                g.fill(x + 4, ty - 1, x + w - 4, ty + 9, 0x33E9C46A);
+            }
+            g.drawString(font, label, x + 7, ty, lit ? BRASS_HI : DIM, false);
+            g.drawString(font, value, x + w - 7 - font.width(value), ty,
+                    lit ? BRASS_HI : INK, false);
+            ty += 10;
+        }
+        ty += 2;
+        g.fill(x + 4, ty - 2, x + w - 4, ty - 1, BRASS_DARK);
+        g.drawCenteredString(font, foot, x + w / 2, ty, answers ? GOOD : BAD);
+    }
+
+    /** The stat the round's claim turns on, or null when it is not a threshold. */
+    private static Stat claimStat() {
+        int index = ClientBluff.claim().a();
+        if (index < 0 || index >= GuessQuestion.TEMPLATES.size()) {
+            return null;
+        }
+        return GuessQuestion.TEMPLATES.get(index).stat();
     }
 
     /** Swear / Challenge / Let them go. */
