@@ -142,6 +142,22 @@ public final class EngineEvents {
                             ctx.getSource().sendSuccess(() -> Component.literal("§7Run stopped."), true);
                             return 1;
                         }))
+                .then(Commands.literal("set")
+                        .then(Commands.argument("key", com.mojang.brigadier.arguments.StringArgumentType.word())
+                                .then(Commands.argument("value", com.mojang.brigadier.arguments.StringArgumentType.greedyString())
+                                        .executes(ctx -> setOn(ctx.getSource(),
+                                                com.mojang.brigadier.arguments.StringArgumentType.getString(ctx, "key"),
+                                                com.mojang.brigadier.arguments.StringArgumentType.getString(ctx, "value"))))))
+                .then(Commands.literal("look")
+                        .executes(ctx -> {
+                            ServerPlayer p = ctx.getSource().getPlayer();
+                            if (p == null || !(ctx.getSource().getLevel() instanceof ServerLevel l)) {
+                                return 0;
+                            }
+                            ctx.getSource().sendSuccess(
+                                    () -> Component.literal(MarkerEdit.describe(l, p)), false);
+                            return 1;
+                        }))
                 .then(Commands.literal("prefab")
                         .then(Commands.literal("save")
                                 .then(Commands.argument("name", com.mojang.brigadier.arguments.StringArgumentType.word())
@@ -311,6 +327,17 @@ public final class EngineEvents {
                     r.breatherFor(round) / 20.0);
             source.sendSuccess(() -> Component.literal(line), false);
         }
+        return 1;
+    }
+
+    /** {@code /arena set <key> <value>} - retunes the marker you are looking at. */
+    private static int setOn(CommandSourceStack source, String key, String value) {
+        ServerPlayer player = source.getPlayer();
+        if (player == null || !(source.getLevel() instanceof ServerLevel level)) {
+            return 0;
+        }
+        String result = MarkerEdit.set(level, player, key, value);
+        source.sendSuccess(() -> Component.literal(result), false);
         return 1;
     }
 
