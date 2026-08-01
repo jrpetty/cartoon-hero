@@ -67,6 +67,22 @@ public final class Ruleset {
 
     public final List<MobEntry> mobs;
 
+    /**
+     * Keys the parser did not recognise.
+     *
+     * <p>Lenient parsing - every field defaulting rather than failing - is what
+     * lets a four-line ruleset work and stops a new engine field breaking an old
+     * file. It also silently swallows typos: write {@code basecount} instead of
+     * {@code base_count} and the file looks perfect and plays as though you had
+     * written nothing. That is the worst failure mode a config format has, because
+     * there is no symptom to chase.
+     *
+     * <p>So unrecognised keys are collected rather than ignored, and reported by
+     * {@code /arena rules}. Still not an error - a map written for a later engine
+     * must keep working - but never invisible.
+     */
+    public final List<String> warnings;
+
     /** One kind of thing that can turn up in a wave. */
     public record MobEntry(String entityId, int weight, int fromRound, String role,
                            double maxHealth, double speed, double attackDamage,
@@ -99,6 +115,22 @@ public final class Ruleset {
         this.directorMinPace = b.directorMinPace;
         this.directorMaxPace = b.directorMaxPace;
         this.mobs = List.copyOf(b.mobs);
+        this.warnings = List.copyOf(b.warnings);
+    }
+
+    /** Flags any key in an object that the parser has no meaning for. */
+    private static void checkKeys(JsonObject o, String section, List<String> out, String... known) {
+        if (o == null) {
+            return;
+        }
+        java.util.Set<String> allowed = new java.util.HashSet<>(java.util.Arrays.asList(known));
+        for (String key : o.keySet()) {
+            // A leading underscore is the conventional way to write a note in a
+            // JSON file that has nowhere else to put one, so those stay silent.
+            if (!allowed.contains(key) && !key.startsWith("_")) {
+                out.add(section + "." + key);
+            }
+        }
     }
 
     private static final class Builder {
@@ -127,6 +159,7 @@ public final class Ruleset {
         float directorMinPace = 0.5f;
         float directorMaxPace = 2.0f;
         List<MobEntry> mobs = new ArrayList<>();
+        List<String> warnings = new ArrayList<>();
     }
 
     /** The stock game, for a map that names no ruleset at all. */
@@ -145,7 +178,24 @@ public final class Ruleset {
         Builder b = new Builder();
         b.id = id;
 
+        checkKeys(root, "", b.warnings,
+                "rounds", "economy", "mobs", "currencies", "director", "script");
+
         JsonObject rounds = obj(root, "rounds");
+        checkKeys(rounds, "rounds", b.warnings,
+                "mode", "final_round", "base_count", "per_round", "concurrent_cap",
+                "health", "damage", "breather");
+        checkKeys(obj(rounds == null ? root : rounds, "health"), "rounds.health", b.warnings,
+                "per_round", "soften_after", "exponent");
+        checkKeys(obj(rounds == null ? root : rounds, "damage"), "rounds.damage", b.warnings,
+                "per_round", "cap");
+        checkKeys(obj(rounds == null ? root : rounds, "breather"), "rounds.breather", b.warnings,
+                "start_ticks", "min_ticks", "tighten_by_round");
+        checkKeys(obj(root, "economy"), "economy", b.warnings,
+                "enabled", "currency", "hit", "kill", "headshot", "strip_inventory_on_entry");
+        checkKeys(obj(root, "director"), "director", b.warnings,
+                "enabled", "target_pressure", "min_pace", "max_pace");
+
         if (rounds != null) {
             b.endless = "endless".equalsIgnoreCase(str(rounds, "mode", "finite"));
             b.finalRound = clampInt(intOf(rounds, "final_round", b.finalRound), 0, 10000);

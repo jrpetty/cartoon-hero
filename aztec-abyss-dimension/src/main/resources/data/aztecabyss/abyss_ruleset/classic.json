@@ -1,0 +1,64 @@
+{
+  "_comment": "A finite twenty-round survival with a points economy. The closest thing to a stock game, and the one to copy first.",
+
+  "rounds": {
+    "mode": "finite",
+    "final_round": 20,
+    "base_count": 6,
+    "per_round": 4,
+    "concurrent_cap": 60,
+    "health": { "per_round": 0.18, "soften_after": 20, "exponent": 1.045 },
+    "damage": { "per_round": 0.14, "cap": 8.0 },
+    "breather": { "start_ticks": 200, "min_ticks": 80, "tighten_by_round": 20 }
+  },
+
+  "economy": {
+    "enabled": true,
+    "currency": "points",
+    "hit": 10,
+    "kill": 50,
+    "headshot": 25
+  },
+
+  "mobs": [
+    {
+      "id": "minecraft:zombie",
+      "weight": 70,
+      "from_round": 1,
+      "role": "grunt",
+      "attributes": { "max_health": 20, "movement_speed": 0.24, "attack_damage": 3 }
+    },
+    {
+      "id": "minecraft:husk",
+      "weight": 20,
+      "from_round": 5,
+      "role": "breaker",
+      "attributes": { "max_health": 40, "movement_speed": 0.27, "attack_damage": 5 },
+      "equipment": { "head": "minecraft:iron_helmet" }
+    },
+    {
+      "id": "minecraft:zombie",
+      "weight": 10,
+      "from_round": 10,
+      "role": "runner",
+      "attributes": { "max_health": 16, "movement_speed": 0.38, "attack_damage": 4 }
+    }
+  ],
+
+  "script": [
+    {
+      "on": "run_start",
+      "do": [
+        { "title": { "main": "§cHOLD", "sub": "Twenty rounds. No more than that." } }
+      ]
+    },
+    {
+      "on": "round_start",
+      "when": { "round": { "every": 5 } },
+      "do": [
+        { "actionbar": "§7Something heavier is coming." },
+        { "sound": { "id": "minecraft:entity.warden_roar", "pitch": 0.7 } }
+      ]
+    }
+  ]
+}

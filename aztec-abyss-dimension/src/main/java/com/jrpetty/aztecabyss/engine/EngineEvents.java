@@ -319,6 +319,11 @@ public final class EngineEvents {
         }
         Ruleset r = RulesetLoader.byId(id);
         source.sendSuccess(() -> Component.literal("§6— " + r.id + " —"), false);
+        for (String unknown : r.warnings) {
+            source.sendSuccess(() -> Component.literal(
+                    "§e⚠ unrecognised key §f" + unknown
+                            + " §7— check the spelling; it is being ignored"), false);
+        }
         for (int round : new int[]{1, 10, 25, 50}) {
             int n = r.countFor(round);
             String line = String.format(java.util.Locale.ROOT,

@@ -1,0 +1,72 @@
+{
+  "_comment": "Money is a real item. Scrap takes inventory space, can be thrown to a teammate across the map, and lies on the floor where you died for whoever dares go and get it. Same engine, different game.",
+
+  "rounds": {
+    "mode": "endless",
+    "base_count": 8,
+    "per_round": 4,
+    "concurrent_cap": 70,
+    "health": { "per_round": 0.20, "soften_after": 20, "exponent": 1.05 },
+    "damage": { "per_round": 0.15, "cap": 8.0 },
+    "breather": { "start_ticks": 240, "min_ticks": 60, "tighten_by_round": 25 }
+  },
+
+  "currencies": [
+    {
+      "id": "scrap",
+      "name": "Scrap",
+      "symbol": "⚙",
+      "colour": "§7",
+      "backing": "item",
+      "item": "minecraft:iron_nugget"
+    }
+  ],
+
+  "economy": {
+    "enabled": true,
+    "currency": "scrap",
+    "hit": 0,
+    "kill": 3,
+    "headshot": 2
+  },
+
+  "mobs": [
+    {
+      "id": "minecraft:zombie",
+      "weight": 60,
+      "from_round": 1,
+      "attributes": { "max_health": 22, "movement_speed": 0.25, "attack_damage": 4 }
+    },
+    {
+      "id": "minecraft:skeleton",
+      "weight": 25,
+      "from_round": 3,
+      "attributes": { "max_health": 26, "movement_speed": 0.26, "attack_damage": 3 },
+      "equipment": { "mainhand": "minecraft:bow" }
+    },
+    {
+      "id": "minecraft:husk",
+      "weight": 15,
+      "from_round": 7,
+      "attributes": { "max_health": 55, "movement_speed": 0.27, "attack_damage": 7 }
+    }
+  ],
+
+  "script": [
+    {
+      "on": "run_start",
+      "do": [
+        { "title": { "main": "§7SCAVENGE", "sub": "Your money is in your pockets" } },
+        { "give": { "id": "minecraft:iron_nugget", "count": 32 } }
+      ]
+    },
+    {
+      "on": "round_end",
+      "when": { "round": { "every": 3 } },
+      "do": [
+        { "actionbar": "§7Salvage in the quiet." },
+        { "give": { "id": "minecraft:iron_nugget", "count": 8 } }
+      ]
+    }
+  ]
+}
