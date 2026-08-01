@@ -546,7 +546,9 @@ public final class CardRenderer {
         g.drawString(font, label, -font.width(label) / 2, 0, BACK_TEXT, false);
         pose.popPose();
 
-        String strap = "COLLECT · BATTLE · TRADE";
+        // not TRADE — trading was taken out, and the back of every card in the
+        // deck is the last place to keep advertising a feature that is gone
+        String strap = "COLLECT · BATTLE · COMPLETE";
         pose.pushPose();
         pose.translate(cx, 210f, 0);
         pose.scale(0.7f, 0.7f, 1f);

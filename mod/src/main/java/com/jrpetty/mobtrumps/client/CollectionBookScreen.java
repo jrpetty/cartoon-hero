@@ -459,6 +459,14 @@ public class CollectionBookScreen extends Screen {
             hint = hoveredAward.title() + " — " + hoveredAward.description()
                     + "   ·   " + hoveredAward.rewardLabel();
             hintColor = 0xFFF3E2A7;
+        } else if (backsUp && section == Section.CARDS) {
+            // face-down, the footer does the naming — the back is the same on
+            // every card by design and a label printed on it would sit right
+            // across the wordmark it exists to show off
+            hint = hoveredCard != null
+                    ? hoveredCard.displayName()
+                    : "Face-down  ·  hover a card to name it  ·  F or click to turn back";
+            hintColor = hoveredCard != null ? 0xFFE3C071 : 0xFFAAAAAA;
         } else {
             hint = switch (section) {
                 case CARDS -> "Click a card to view it  ·  hover it to File or Take out";
@@ -566,7 +574,7 @@ public class CollectionBookScreen extends Screen {
                 pose.translate(-(cx + cw / 2f), 0, 0);
                 try {
                     if (showBack) {
-                        drawBackSlot(g, card, cx, cy, cw, ch);
+                        CardRenderer.renderBack(g, font, cx, cy, cardScale);
                     } else {
                         drawFrontSlot(g, card, cx, cy, cw, ch, false, overlayOpen, mouseX, mouseY);
                     }
@@ -575,33 +583,23 @@ public class CollectionBookScreen extends Screen {
                 }
                 continue;
             }
-            // face-down is a viewing mode: nothing on the spread reacts to hover
-            boolean hovered = !overlayOpen && !backsUp
+            boolean hovered = !overlayOpen
                     && mouseX >= cx && mouseX < cx + cw && mouseY >= cy && mouseY < cy + ch;
             if (showBack) {
-                drawBackSlot(g, card, cx, cy, cw, ch);
+                // the back is identical on every card by design — it is the
+                // deck's own livery, and seeing nine lined up is the point of
+                // turning the page over, so nothing is printed on top of it
+                CardRenderer.renderBack(g, font, cx, cy, cardScale);
+                // face-down, hovering only names the card — the footer says which
+                // it is, and nothing on the spread can be acted on
+                if (hovered) {
+                    g.renderOutline(cx - 2, cy - 2, cw + 4, ch + 4, 0xFFE3C071);
+                    hoveredCard = card;
+                }
                 continue;
             }
             drawFrontSlot(g, card, cx, cy, cw, ch, hovered, overlayOpen, mouseX, mouseY);
         }
-    }
-
-    /**
-     * The back of an owned card at grid size, with its name on a plate beneath
-     * so a face-down spread is still navigable. The back art is identical on
-     * every card by design — it is the deck's own livery, and seeing nine of
-     * them lined up is the point of turning the page over.
-     */
-    private void drawBackSlot(GuiGraphics g, MobCard card, int cx, int cy, int cw, int ch) {
-        CardRenderer.renderBack(g, font, cx, cy, cardScale);
-        String name = card.displayName();
-        int nw = font.width(name);
-        if (nw + 6 > cw) {
-            return; // no room to letter it without printing over the neighbour
-        }
-        int by = cy + ch - 12;
-        g.fill(cx + (cw - nw) / 2 - 3, by - 1, cx + (cw + nw) / 2 + 3, by + 9, 0xC0140F0A);
-        g.drawString(font, name, cx + (cw - nw) / 2, by, 0xFFE3C071, false);
     }
 
     /** One card the right way up — exactly what the grid drew before the flip. */

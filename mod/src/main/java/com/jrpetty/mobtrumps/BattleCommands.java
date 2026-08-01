@@ -514,10 +514,8 @@ public final class BattleCommands {
                 .append(Component.literal("every mob you kill drops its card. Kill enough of one "
                                 + "mob to unlock its boosted holographic!")
                         .withStyle(ChatFormatting.DARK_GRAY)));
-        player.sendSystemMessage(Component.literal("  Trade / combine: ")
+        player.sendSystemMessage(Component.literal("  Combine duplicates: ")
                 .withStyle(ChatFormatting.GRAY)
-                .append(Component.literal("/mobtrumps trade <player>").withStyle(ChatFormatting.AQUA))
-                .append(Component.literal("  ·  ").withStyle(ChatFormatting.DARK_GRAY))
                 .append(Component.literal("/mobtrumps foil").withStyle(ChatFormatting.AQUA))
                 .append(Component.literal(" (4 dupes → 1 foil)").withStyle(ChatFormatting.DARK_GRAY)));
         player.sendSystemMessage(Component.literal("  Build a deck: ")
