@@ -142,6 +142,24 @@ public final class EngineEvents {
                             ctx.getSource().sendSuccess(() -> Component.literal("§7Run stopped."), true);
                             return 1;
                         }))
+                .then(Commands.literal("prefab")
+                        .then(Commands.literal("save")
+                                .then(Commands.argument("name", com.mojang.brigadier.arguments.StringArgumentType.word())
+                                        .executes(ctx -> prefabSave(ctx.getSource(),
+                                                com.mojang.brigadier.arguments.StringArgumentType.getString(ctx, "name")))))
+                        .then(Commands.literal("place")
+                                .then(Commands.argument("name", com.mojang.brigadier.arguments.StringArgumentType.word())
+                                        .executes(ctx -> prefabPlace(ctx.getSource(),
+                                                com.mojang.brigadier.arguments.StringArgumentType.getString(ctx, "name"), 0, ""))
+                                        .then(Commands.argument("rotate", com.mojang.brigadier.arguments.IntegerArgumentType.integer(0, 359))
+                                                .executes(ctx -> prefabPlace(ctx.getSource(),
+                                                        com.mojang.brigadier.arguments.StringArgumentType.getString(ctx, "name"),
+                                                        com.mojang.brigadier.arguments.IntegerArgumentType.getInteger(ctx, "rotate"), ""))
+                                                .then(Commands.argument("mirror", com.mojang.brigadier.arguments.StringArgumentType.word())
+                                                        .executes(ctx -> prefabPlace(ctx.getSource(),
+                                                                com.mojang.brigadier.arguments.StringArgumentType.getString(ctx, "name"),
+                                                                com.mojang.brigadier.arguments.IntegerArgumentType.getInteger(ctx, "rotate"),
+                                                                com.mojang.brigadier.arguments.StringArgumentType.getString(ctx, "mirror"))))))))
                 .then(Commands.literal("copy")
                         .executes(ctx -> copy(ctx.getSource())))
                 .then(Commands.literal("paste")
@@ -293,6 +311,57 @@ public final class EngineEvents {
                     r.breatherFor(round) / 20.0);
             source.sendSuccess(() -> Component.literal(line), false);
         }
+        return 1;
+    }
+
+    /**
+     * {@code /arena prefab save <name>} - the selection, kept as a reusable part.
+     *
+     * <p>The clipboard solves symmetry within one sitting; this solves reuse
+     * across all of them. A shop kiosk, a gate assembly, a stair block worth
+     * copying - built once, named, and stamped into every map afterwards. It is
+     * the difference between a tool and a library.
+     */
+    private static int prefabSave(CommandSourceStack source, String name) {
+        ServerPlayer player = source.getPlayer();
+        if (player == null || !(source.getLevel() instanceof ServerLevel level)) {
+            return 0;
+        }
+        var box = BuildTools.selectionOf(player);
+        if (box == null) {
+            source.sendFailure(Component.literal("Pick both corners with the Map Wand first."));
+            return 0;
+        }
+        if (BuildTools.volumeOf(box) > Clipboard.MAX_VOLUME) {
+            source.sendFailure(Component.literal(
+                    "That is too big for a part — prefabs are meant to be pieces, not maps."));
+            return 0;
+        }
+        if (!MapStore.savePrefab(level, name, box)) {
+            source.sendFailure(Component.literal("Could not write that prefab."));
+            return 0;
+        }
+        MapScan.Result scan = MapScan.scan(level, box);
+        source.sendSuccess(() -> Component.literal(
+                "§a✔ Prefab §f" + name + "§a — " + BuildTools.spanText(box)
+                        + (scan.all().isEmpty() ? "" : ", " + scan.all().size() + " markers included")), true);
+        return 1;
+    }
+
+    /** {@code /arena prefab place <name> [rotate] [mirror]}. */
+    private static int prefabPlace(CommandSourceStack source, String name, int degrees, String mirror) {
+        ServerPlayer player = source.getPlayer();
+        if (player == null || !(source.getLevel() instanceof ServerLevel level)) {
+            return 0;
+        }
+        int placed = MapStore.placePrefab(level, name, player.blockPosition(),
+                Clipboard.rotationOf(degrees), Clipboard.mirrorOf(mirror));
+        if (placed < 0) {
+            source.sendFailure(Component.literal("No prefab called '" + name + "'."));
+            return 0;
+        }
+        source.sendSuccess(() -> Component.literal(
+                "§a✔ Placed §f" + name + (degrees != 0 ? "§a rotated " + degrees + "°" : "")), false);
         return 1;
     }
 

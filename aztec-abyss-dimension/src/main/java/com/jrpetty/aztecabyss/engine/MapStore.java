@@ -40,6 +40,59 @@ public final class MapStore {
     /** Namespace used for saves made in-game, to keep them clear of datapack maps. */
     public static final String LOCAL = "abyss_local";
 
+    /**
+     * Namespace for prefabs - reusable parts rather than whole maps.
+     *
+     * <p>Kept separate from maps on purpose. A parts library and a map library are
+     * browsed for different reasons and at different moments, and a list that
+     * mixes "Blood Harbour" with "shop kiosk" is useful for neither.
+     */
+    public static final String PREFAB = "abyss_prefab";
+
+    public static ResourceLocation prefabId(String name) {
+        String cleaned = name.toLowerCase(java.util.Locale.ROOT)
+                .replaceAll("[^a-z0-9_/.-]", "_");
+        return ResourceLocation.fromNamespaceAndPath(PREFAB, cleaned);
+    }
+
+    /** Saves a region as a named, reusable part. */
+    public static boolean savePrefab(ServerLevel level, String name,
+                                     net.minecraft.world.level.levelgen.structure.BoundingBox box) {
+        StructureTemplateManager mgr = level.getStructureManager();
+        ResourceLocation id = prefabId(name);
+        StructureTemplate template = mgr.getOrCreate(id);
+        BlockPos origin = new BlockPos(box.minX(), box.minY(), box.minZ());
+        Vec3i size = new Vec3i(
+                box.maxX() - box.minX() + 1,
+                box.maxY() - box.minY() + 1,
+                box.maxZ() - box.minZ() + 1);
+        template.fillFromWorld(level, origin, size, true, Blocks.STRUCTURE_VOID);
+        template.setAuthor("abyss");
+        return mgr.save(id);
+    }
+
+    /**
+     * Stamps a prefab into the world, oriented.
+     *
+     * @return blocks covered, or -1 if there is no prefab by that name
+     */
+    public static int placePrefab(ServerLevel level, String name, BlockPos at,
+                                  net.minecraft.world.level.block.Rotation rotation,
+                                  net.minecraft.world.level.block.Mirror mirror) {
+        Optional<StructureTemplate> found = level.getStructureManager().get(prefabId(name));
+        if (found.isEmpty()) {
+            return -1;
+        }
+        StructureTemplate template = found.get();
+        StructurePlaceSettings settings = new StructurePlaceSettings()
+                .setRotation(rotation)
+                .setMirror(mirror)
+                .setIgnoreEntities(false);
+        template.placeInWorld(level, at, at, settings, RandomSource.create(), 2);
+        Vec3i size = template.getSize();
+        return size.getX() * size.getY() * size.getZ();
+    }
+
     /** How far below the author's feet a save reaches, for floors and cellars. */
     private static final int BELOW = 8;
     /** How tall a save is by default. */
