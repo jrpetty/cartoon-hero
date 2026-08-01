@@ -176,6 +176,9 @@ public class GuessWhoScreen extends Screen {
             g.drawString(font, "questions unlock", panelX + 8, height / 2 - 10, DIM, false);
             g.drawString(font, "once both have hidden", panelX + 8, height / 2, DIM, false);
         }
+        // last, so it sits over the panel and the picking veil — while you are
+        // choosing your own hidden mob is exactly when you want a good look
+        drawPreview(g);
     }
 
     private void drawHeader(GuiGraphics g) {
@@ -275,18 +278,6 @@ public class GuessWhoScreen extends Screen {
             }
         }
 
-        if (hoveredMob != null) {
-            MobCard card = MobCards.byId(hoveredMob);
-            if (card != null) {
-                String label = card.displayName();
-                int w = font.width(label) + 8;
-                int tx = Mth.clamp(mouseX - w / 2, 2, width - w - 2);
-                int ty = Math.max(2, mouseY - 14);
-                g.fill(tx, ty, tx + w, ty + 11, 0xE8000000);
-                g.renderOutline(tx, ty, w, 11, GOLD_DIM);
-                g.drawString(font, label, tx + 4, ty + 2, INK, false);
-            }
-        }
     }
 
     /** Search box, the question catalogue, and the answers so far. */
@@ -428,6 +419,50 @@ public class GuessWhoScreen extends Screen {
             g.drawString(font, "click a face to name it  ·  ask questions on the right",
                     12, y + 4, FAINT, false);
         }
+    }
+
+    /**
+     * The hovered mob, shown big in the bottom-right corner.
+     *
+     * <p>A board tile is barely fifty pixels across, which is enough to
+     * recognise a mob you already know and not enough to read one you do not.
+     * The preview is the same card at a size where the portrait and the numbers
+     * are legible, parked in a corner rather than chasing the cursor — a tooltip
+     * that follows the mouse across a grid of eighty-one tiles covers the very
+     * faces you are trying to compare.
+     */
+    private void drawPreview(GuiGraphics g) {
+        if (hoveredMob == null) {
+            return;
+        }
+        MobCard card = MobCards.byId(hoveredMob);
+        if (card == null) {
+            return;
+        }
+        // a budget rather than a guess: the popup may claim at most a third of
+        // the width and not quite half the height, so it never buries the board
+        float scale = Math.min(0.58f, Math.min(width * 0.30f / CardRenderer.CARD_W,
+                height * 0.44f / CardRenderer.CARD_H));
+        scale = Math.max(0.22f, scale);
+        int cw = Math.round(CardRenderer.CARD_W * scale);
+        int ch = Math.round(CardRenderer.CARD_H * scale);
+        int padX = 7;
+        int nameH = 13;
+        int boxW = cw + padX * 2;
+        int boxH = ch + nameH + 10;
+        int bx = width - boxW - 6;
+        int by = height - boxH - 6;
+
+        // a solid backing, because it sits over the board and the question panel
+        g.fill(bx - 2, by - 2, bx + boxW + 2, by + boxH + 2, 0xF2080610);
+        g.renderOutline(bx - 2, by - 2, boxW + 4, boxH + 4, GOLD_DIM);
+        g.renderOutline(bx - 1, by - 1, boxW + 2, boxH + 2, 0x66000000);
+
+        LivingEntity mob = CardRenderer.portraitEntity(minecraft, card, entityCache);
+        CardRenderer.renderCard(g, font, card, bx + padX, by + 5, scale, -1, -1, mob, false, false);
+
+        String name = fit(card.displayName(), boxW - 8);
+        g.drawString(font, name, bx + (boxW - font.width(name)) / 2, by + 5 + ch + 3, INK, true);
     }
 
     private List<MobCard> aliveCards() {
