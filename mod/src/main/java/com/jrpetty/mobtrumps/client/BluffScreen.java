@@ -21,31 +21,37 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 
+import static com.jrpetty.mobtrumps.client.TableArt.BAD;
+import static com.jrpetty.mobtrumps.client.TableArt.BRASS;
+import static com.jrpetty.mobtrumps.client.TableArt.BRASS_DARK;
+import static com.jrpetty.mobtrumps.client.TableArt.BRASS_DIM;
+import static com.jrpetty.mobtrumps.client.TableArt.BRASS_HI;
+import static com.jrpetty.mobtrumps.client.TableArt.DIM;
+import static com.jrpetty.mobtrumps.client.TableArt.FAINT;
+import static com.jrpetty.mobtrumps.client.TableArt.GOOD;
+import static com.jrpetty.mobtrumps.client.TableArt.INK;
+import static com.jrpetty.mobtrumps.client.TableArt.RAIL;
+
 /**
- * The Bluff table: your hand along the bottom, the other seats across the top,
- * the claim in the middle and a pile of face-down cards under it.
+ * The Bluff table.
  *
- * <p>The screen knows only what the server has told it, which is your own cards
- * and everyone else's hand <em>counts</em>. It cannot show you what is in the
- * pile because it does not know, and that is the game — the Challenge button is
- * the only way to find out, and it costs you if you are wrong.
+ * <p>Laid out as a real one: a timber rail around the edge, a pool of light
+ * over the middle of the felt, the other players ranged across the top behind
+ * brass name plates, the round's claim hanging above the table on a board, the
+ * pile scattered face down beneath it, and your own hand fanned along the
+ * bottom.
  *
- * <p>Cards you have selected lift out of your hand rather than highlighting in
- * place, so what you are about to swear to is unmistakable before you commit.
+ * <p>The screen knows only what the server has told it — your cards, and
+ * everyone else's hand <em>counts</em>. It cannot show you what is in the pile
+ * because it does not know, and that is the game.
+ *
+ * <p><b>Nothing carrying a live mob model is ever rotated.</b> The fan in your
+ * hand comes from an arc and an overlap rather than from turning each card,
+ * because every rotation elsewhere in this mod is applied to flat fills and a
+ * spinning entity render is not a thing to find out about in a release. The
+ * card backs — opponents' hands, the pile — are pure rectangles, so those turn.
  */
 public class BluffScreen extends Screen {
-
-    private static final int FELT_1 = 0xFF1B3A2E;
-    private static final int FELT_0 = 0xFF0C1C16;
-    private static final int GOLD = 0xFFE9C46A;
-    private static final int GOLD_DIM = 0xFF8A6A2A;
-    private static final int INK = 0xFFF2ECDD;
-    private static final int DIM = 0xFF8FA79A;
-    private static final int FAINT = 0xFF52685D;
-    private static final int GOOD = 0xFF6BE87A;
-    private static final int BAD = 0xFFF0625A;
-    private static final int PANEL = 0xE00B1710;
-    private static final int EDGE = 0xFF2C4A3C;
 
     /** How long a revealed challenge stays lit before it stops flashing. */
     private static final long FLASH_MS = 1400L;
@@ -56,11 +62,70 @@ public class BluffScreen extends Screen {
      */
     private static final float MIN_OVERLAP = 0.34f;
     /**
-     * Top of the band between the pile and the hand, where a reveal goes.
-     * Clears the pile's own caption, which sits at y=130 — at 136 the revealed
-     * cards were printed straight through "7 cards face down".
+     * Largest a card in hand may be drawn. Lowered from 0.42 because the hand
+     * was eating the room the reveal needed: at 640x360 a full-size hand left a
+     * twenty-two pixel band, which is under the floor, so the cards a challenge
+     * turned over were never shown at the commonest window size in the game.
      */
-    private static final int REVEAL_TOP = 144;
+    private static final float HAND_SCALE_CAP = 0.36f;
+    /** First row below the opponents' fanned hands. */
+    private static final int MID_TOP = 64;
+
+    // The middle of the table — claim board, who swore what, the heap, and the
+    // band a reveal is turned over in — is SOLVED, not laid out from fixed
+    // constants. Fixed ones fit at 640x360 and ran the pile's caption straight
+    // through the player's own hand at 320x240, because the space between the
+    // opponents and the hand is barely seventy pixels there and the pieces want
+    // a hundred. What gets dropped goes in order of what a player can least
+    // afford to lose: the heap's picture before its count, and the "swore to"
+    // line before either.
+    private int claimY;
+    private int claimH;
+    /** -1 when there is no room for it. */
+    private int sworeY;
+    /** -1 when the heap is reduced to its caption. */
+    private int pileCy;
+    private int pileCapY;
+    private int revealTop;
+    private int revealBand;
+
+    /**
+     * Smallest band worth turning cards over in; below this, the ribbon alone.
+     * Counts the ribbon's own {@value #VERDICT_H} pixels, since the verdict is
+     * part of the reveal and not something extra underneath it — centring the
+     * cards alone and then adding the ribbon pushed it into the hand.
+     */
+    private static final int MIN_REVEAL_BAND = 42;
+    private static final int VERDICT_H = 12;
+
+    private void solveMiddle() {
+        int bottom = handTop() - 2;
+        int space = bottom - MID_TOP;
+        claimH = space >= 96 ? 30 : 24;
+        claimY = MID_TOP;
+        int y = claimY + claimH + 2;
+
+        sworeY = space >= claimH + 46 ? y : -1;
+        if (sworeY >= 0) {
+            y += 10;
+        }
+        if (space >= claimH + 46) {
+            pileCy = y + 11;
+            y += 24;
+        } else {
+            pileCy = -1;
+        }
+        pileCapY = y;
+        y += 13;
+        revealTop = y + 2;
+        revealBand = bottom - revealTop;
+    }
+    /** How far the middle of the fan rises above its ends. */
+    private static final int ARC = 9;
+    /** How far a chosen card lifts out of the hand. */
+    private static final int LIFT = 15;
+    /** ...and a hovered one. */
+    private static final int HOVER_LIFT = 6;
 
     private final Map<String, LivingEntity> entityCache = new HashMap<>();
     /** Indices into the hand that are lifted, ready to be sworn to. */
@@ -95,6 +160,13 @@ public class BluffScreen extends Screen {
         picked.clear();
     }
 
+    private static float breath(long period) {
+        if (ClientPrefs.reducedMotion()) {
+            return 0.5f;
+        }
+        return 0.5f + 0.5f * (float) Math.sin(System.currentTimeMillis() / (double) period);
+    }
+
     /**
      * Fit the hand across the bottom.
      *
@@ -110,7 +182,7 @@ public class BluffScreen extends Screen {
         // overlap we allow, and short enough to leave the claim and pile alone
         float byWidth = avail / (1f + MIN_OVERLAP * (n - 1)) / CardRenderer.CARD_W;
         float byHeight = (height - 200) / (float) CardRenderer.CARD_H;
-        handScale = Mth.clamp(Math.min(byWidth, byHeight), 0.13f, 0.42f);
+        handScale = Mth.clamp(Math.min(byWidth, byHeight), 0.13f, HAND_SCALE_CAP);
         cardW = Math.round(CardRenderer.CARD_W * handScale);
         cardH = Math.round(CardRenderer.CARD_H * handScale);
 
@@ -131,12 +203,38 @@ public class BluffScreen extends Screen {
         handY = height - cardH - 40;
     }
 
+    /**
+     * The resting height of card {@code i}, following the fan's curve.
+     *
+     * <p>Drawing and hit-testing both come through here, so a card can never be
+     * somewhere other than where it can be clicked.
+     */
+    /**
+     * The highest pixel the hand can reach — the arc's crown, plus the lift a
+     * chosen card takes.
+     *
+     * <p>Everything above the hand is spaced against this and not against
+     * {@link #handY}. Measuring from the resting line let the reveal's verdict
+     * ribbon be drawn straight through the cards a player had just picked up,
+     * and a layout sweep passed it, because the sweep made the same mistake.
+     */
+    private int handTop() {
+        return handY - Math.min(ARC, Math.round(cardH * 0.16f)) - LIFT - HOVER_LIFT;
+    }
+
+    private int cardY(int i, int count) {
+        if (count <= 1) {
+            return handY;
+        }
+        float centre = (count - 1) / 2f;
+        float t = (i - centre) / centre;
+        int arc = Math.min(ARC, Math.round(cardH * 0.16f));
+        return handY - Math.round(arc * (1f - t * t));
+    }
+
     @Override
     public void render(GuiGraphics g, int mouseX, int mouseY, float partialTick) {
         super.render(g, mouseX, mouseY, partialTick);
-        g.fillGradient(0, 0, width, height, FELT_1, FELT_0);
-        g.fill(0, 0, width, 2, GOLD_DIM);
-        g.fill(0, height - 2, width, height, GOLD_DIM);
 
         stakeRects.clear();
         seatRects.clear();
@@ -147,93 +245,114 @@ public class BluffScreen extends Screen {
         hovered = -1;
 
         if (ClientBluff.idle()) {
+            TableArt.felt(g, width, height, width / 2, height / 2);
+            TableArt.rail(g, width, height);
             drawLobby(g, mouseX, mouseY);
             return;
         }
 
         List<MobCard> hand = ClientBluff.hand();
         solveHand(hand.size());
+        solveMiddle();
+
+        // the light hangs over the pile, which is where the game happens
+        TableArt.felt(g, width, height, width / 2, 112);
+        TableArt.rail(g, width, height);
 
         drawOpponents(g);
         drawClaim(g);
         drawPile(g);
         drawReveal(g);
+        drawLog(g);
         drawHand(g, hand, mouseX, mouseY);
         drawControls(g, mouseX, mouseY);
-        drawLog(g);
         if (ClientBluff.over()) {
             drawResult(g, mouseX, mouseY);
         }
     }
 
-    /** Before a hand is dealt: table size, stake, and the rules in three lines. */
+    /** Before a hand is dealt: the rules, the table size and the stake. */
     private void drawLobby(GuiGraphics g, int mouseX, int mouseY) {
-        int pw = Math.min(320, width - 20);
-        int ph = Math.min(200, height - 20);
+        int pw = Math.min(330, width - RAIL * 2 - 8);
+        int ph = Math.min(214, height - RAIL * 2 - 8);
         int px = (width - pw) / 2;
         int py = (height - ph) / 2;
-        g.fill(px, py, px + pw, py + ph, PANEL);
-        g.renderOutline(px, py, pw, ph, GOLD_DIM);
-        g.fill(px, py, px + pw, py + 1, GOLD);
+        TableArt.pool(g, width / 2, py + 30, pw, BRASS, 0x1E);
+        TableArt.plate(g, px, py, pw, ph, BRASS_DIM);
+
+        // Everything below the masthead is measured against what is left, so a
+        // short window drops explanation rather than printing the stake row
+        // through the Deal button — which is what a fixed layout did at 200px.
+        String[] rules = {
+                "A question turns up. Put cards down that answer",
+                "YES to it — or lie and hope nobody calls it.",
+                "Call the play before yours: catch a liar and they",
+                "eat the pile, get it wrong and you eat what you",
+                "called. Empty your hand to win."};
+        int head = 46;
+        int rows = 22 + 22 + 30;  // players, stake, deal
+        int forRules = ph - head - rows - 12;
+        int lines = Mth.clamp(forRules / 10, 0, rules.length);
 
         var pose = g.pose();
         pose.pushPose();
-        pose.translate(px + 12f, py + 10f, 0);
-        pose.scale(1.5f, 1.5f, 1f);
-        g.drawString(font, "MOB BLUFF", 0, 0, GOLD, true);
+        pose.translate(px + pw / 2f, py + 10f, 0);
+        pose.scale(1.7f, 1.7f, 1f);
+        String title = "MOB BLUFF";
+        g.drawString(font, title, -font.width(title) / 2, 0, BRASS, true);
         pose.popPose();
+        g.fill(px + 20, py + 30, px + pw - 20, py + 31, BRASS_DARK);
+        g.drawCenteredString(font, "say it with a straight face", width / 2, py + 34, FAINT);
 
-        int y = py + 34;
-        for (String line : new String[]{
-                "A question is turned up. Put cards down face",
-                "for it — or lie. Call the play before yours and",
-                "the liar eats the pile. Wrong, and you do.",
-                "Empty your hand to win."}) {
-            g.drawString(font, line, px + 12, y, DIM, false);
-            y += 11;
+        int y = py + head;
+        for (int i = 0; i < lines; i++) {
+            g.drawString(font, fit(rules[i], pw - 24), px + 14, y, DIM, false);
+            y += 10;
         }
 
-        y += 8;
-        g.drawString(font, "PLAYERS", px + 12, y, GOLD, false);
-        int bx = px + 74;
+        // the two chooser rows sit above the Deal button, never over it
+        int dealY = py + ph - 28;
+        int stakeY = dealY - 24;
+        int seatY = stakeY - 22;
+        y = Math.max(y + 6, Math.min(seatY, py + head + lines * 10 + 6));
+        seatY = Math.max(y, seatY);
+        stakeY = seatY + 22;
+
+        g.drawString(font, "PLAYERS", px + 14, seatY + 3, BRASS_DIM, false);
+        int bx = px + 76;
         for (int n = Bluff.MIN_SEATS; n <= Bluff.MAX_SEATS; n++) {
-            int bw = 24;
+            int bw = 26;
             boolean on = ClientBluff.seats() == n;
-            boolean hot = inRect(mouseX, mouseY, new int[]{bx, y - 3, bw, 14});
-            g.fill(bx, y - 3, bx + bw, y + 11, on ? 0xFF2C6E49 : (hot ? 0xFF203A2E : 0xFF16261E));
-            g.renderOutline(bx, y - 3, bw, 14, on ? GOLD : EDGE);
-            g.drawCenteredString(font, String.valueOf(n), bx + bw / 2, y, on ? INK : DIM);
-            seatRects.add(new int[]{bx, y - 3, bw, 14, n});
-            bx += bw + 4;
+            boolean hot = inRect(mouseX, mouseY, new int[]{bx, seatY, bw, 15});
+            TableArt.button(g, bx, seatY, bw, 15, on ? 0xFF2C6E49 : 0xFF23382E, hot, true);
+            g.drawCenteredString(font, String.valueOf(n), bx + bw / 2, seatY + 4, on ? INK : DIM);
+            seatRects.add(new int[]{bx, seatY, bw, 15, n});
+            bx += bw + 5;
         }
 
-        y += 22;
-        g.drawString(font, "STAKE", px + 12, y, GOLD, false);
-        bx = px + 74;
+        g.drawString(font, "STAKE", px + 14, stakeY + 3, BRASS_DIM, false);
+        bx = px + 76;
         for (int i = 0; i < BluffManager.STAKES.length; i++) {
             String label = String.valueOf(BluffManager.STAKES[i]);
-            int bw = font.width(label) + 10;
+            int bw = font.width(label) + 12;
             boolean on = ClientBluff.stakeIndex() == i;
-            boolean hot = inRect(mouseX, mouseY, new int[]{bx, y - 3, bw, 14});
-            g.fill(bx, y - 3, bx + bw, y + 11, on ? 0xFF2C6E49 : (hot ? 0xFF203A2E : 0xFF16261E));
-            g.renderOutline(bx, y - 3, bw, 14, on ? GOLD : EDGE);
-            g.drawString(font, label, bx + 5, y, on ? INK : DIM, false);
-            stakeRects.add(new int[]{bx, y - 3, bw, 14, i});
+            boolean hot = inRect(mouseX, mouseY, new int[]{bx, stakeY, bw, 15});
+            TableArt.button(g, bx, stakeY, bw, 15, on ? 0xFF2C6E49 : 0xFF23382E, hot, true);
+            g.drawCenteredString(font, label, bx + bw / 2, stakeY + 4, on ? INK : DIM);
+            stakeRects.add(new int[]{bx, stakeY, bw, 15, i});
             bx += bw + 4;
         }
 
         String deal = "DEAL  ·  " + ClientBluff.stake() + " fragments";
-        int dw = font.width(deal) + 24;
+        int dw = Math.min(pw - 24, font.width(deal) + 30);
         int dx = px + (pw - dw) / 2;
-        int dy = py + ph - 26;
-        boolean hot = inRect(mouseX, mouseY, new int[]{dx, dy, dw, 18});
-        g.fill(dx, dy, dx + dw, dy + 18, hot ? 0xFF3C8F5F : 0xFF2C6E49);
-        g.renderOutline(dx, dy, dw, 18, hot ? GOLD : GOLD_DIM);
-        g.drawCenteredString(font, deal, dx + dw / 2, dy + 5, INK);
-        newRect = new int[]{dx, dy, dw, 18};
+        boolean hot = inRect(mouseX, mouseY, new int[]{dx, dealY, dw, 20});
+        TableArt.button(g, dx, dealY, dw, 20, 0xFF2C6E49, hot, true);
+        g.drawCenteredString(font, fit(deal, dw - 8), dx + dw / 2, dealY + 6, INK);
+        newRect = new int[]{dx, dealY, dw, 20};
     }
 
-    /** The other seats, as a name, a card count and a row of card backs. */
+    /** The other players: a brass name plate and a fan of backs for each. */
     private void drawOpponents(GuiGraphics g) {
         int seats = ClientBluff.seats();
         int mine = ClientBluff.mySeat();
@@ -246,79 +365,125 @@ public class BluffScreen extends Screen {
         if (others.isEmpty()) {
             return;
         }
-        int slot = width / others.size();
+        int slot = (width - RAIL * 2) / others.size();
         for (int i = 0; i < others.size(); i++) {
             int seat = others.get(i);
-            int cx = slot * i + slot / 2;
-            int y = 8;
+            int cx = RAIL + slot * i + slot / 2;
             boolean acting = ClientBluff.turn() == seat;
             boolean pending = ClientBluff.pendingOut() == seat;
             int count = ClientBluff.handSize(seat);
+            int accent = pending ? BAD : acting ? BRASS : BRASS_DARK;
 
-            String name = ClientBluff.seatName(seat);
-            int color = pending ? BAD : acting ? GOLD : DIM;
-            g.drawCenteredString(font, name.toUpperCase(Locale.ROOT), cx, y, color);
+            if (acting || pending) {
+                // a lamp over whoever the table is waiting on
+                int glow = pending ? BAD : BRASS;
+                TableArt.pool(g, cx, 30, 46, glow, Math.round(0x22 * (0.55f + 0.45f * breath(620))));
+            }
+
+            String name = ClientBluff.seatName(seat).toUpperCase(Locale.ROOT);
+            int pw = Math.min(slot - 8, Math.max(58, font.width(name) + 22));
+            TableArt.plate(g, cx - pw / 2, RAIL + 4, pw, 22, accent);
+            g.drawCenteredString(font, fit(name, pw - 8), cx, RAIL + 7, acting ? INK : DIM);
             String sub = count + (count == 1 ? " card" : " cards");
-            g.drawCenteredString(font, sub, cx, y + 11, count <= 2 ? GOLD : FAINT);
+            g.drawCenteredString(font, sub, cx, RAIL + 17, count <= 2 ? BRASS : FAINT);
 
-            // a fan of backs, one per card, capped so a big hand stays on screen
-            int show = Math.min(count, 12);
-            int bw = 7;
-            int step = show > 8 ? 5 : 7;
-            int span = show == 0 ? 0 : (show - 1) * step + bw;
-            int bx = cx - span / 2;
+            // their hand, turned as if held: a shallow fan of backs
+            int show = Math.min(count, 11);
+            if (show == 0) {
+                continue;
+            }
+            // capped at 13 so the deepest fan still stops short of the claim
+            // board hanging at y=66; a 15px back put the middle seat's cards
+            // through the top of it
+            int bw = Math.max(9, Math.min(13, (slot - 20) / Math.max(4, show)));
+            int bh = Math.round(bw * 1.35f);
+            int step = Math.max(4, bw - (show > 6 ? 5 : 3));
+            int fanY = RAIL + 36 + bh / 2;
             for (int c = 0; c < show; c++) {
-                int x = bx + c * step;
-                g.fill(x, y + 23, x + bw, y + 34, 0xFF241C4A);
-                g.renderOutline(x, y + 23, bw, 11, pending ? BAD : GOLD_DIM);
+                float t = show == 1 ? 0 : (c / (float) (show - 1)) * 2f - 1f;
+                int bx = cx + Math.round(t * (show - 1) * step / 2f);
+                int lift = Math.round(3 * (1 - t * t));
+                TableArt.back(g, bx, fanY - lift, bw, bh, t * 13f,
+                        pending ? BAD : BRASS_DARK);
             }
             if (count > show) {
-                g.drawCenteredString(font, "+" + (count - show), cx, y + 36, FAINT);
-            }
-            if (acting) {
-                g.renderOutline(cx - span / 2 - 3, y + 20, span + 6, 17, GOLD);
+                // beside the fan, not beneath it — beneath is the claim board
+                int span = (show - 1) * step;
+                g.drawString(font, "+" + (count - show), cx + span / 2 + 4,
+                        fanY - 4, FAINT, false);
             }
         }
     }
 
-    /** The round's claim, which every card played is sworn to answer YES to. */
+    /** The round's claim, on a board hung over the table. */
     private void drawClaim(GuiGraphics g) {
-        int y = 62;
         String text = ClientBluff.claim().text();
-        int w = Math.min(width - 28, font.width(text) + 24);
+        String caption = "EVERY CARD PLAYED SWEARS TO";
+        int y = claimY;
+        int h = claimH;
+        // A short claim used to make a board narrower than its own caption, and
+        // "EVERY CARD PLAYED SWEARS TO" hung out over both edges of it. The
+        // board is sized to whichever line is wider, and when it has been
+        // compressed there is only room for one, so the caption goes.
+        boolean captioned = h >= 28;
+        int widest = font.width(text);
+        if (captioned) {
+            widest = Math.max(widest, font.width(caption));
+        }
+        int w = Math.min(width - 30, widest + 30);
         int x = (width - w) / 2;
-        g.fill(x, y, x + w, y + 30, PANEL);
-        g.renderOutline(x, y, w, 30, GOLD_DIM);
-        g.drawCenteredString(font, "EVERY CARD PLAYED CLAIMS", width / 2, y + 4, FAINT);
-        String fitted = fit(text, w - 12);
-        g.drawCenteredString(font, fitted, width / 2, y + 16, GOLD);
+
+        TableArt.pool(g, width / 2, y + h / 2, w, BRASS, 0x1A);
+        // the two hangers up to the rail, so it reads as suspended
+        for (int hx : new int[]{x + 14, x + w - 15}) {
+            g.fill(hx, RAIL, hx + 1, y, BRASS_DARK);
+            g.fill(hx, y - 3, hx + 2, y + 1, BRASS_DIM);
+        }
+        TableArt.plate(g, x, y, w, h, BRASS_DIM);
+        g.fill(x + 4, y + 3, x + w - 4, y + 4, BRASS_DARK);
+        if (captioned) {
+            g.drawCenteredString(font, fit(caption, w - 10), width / 2, y + 6, FAINT);
+            g.drawCenteredString(font, fit(text, w - 10), width / 2, y + h - 12, BRASS_HI);
+        } else {
+            g.drawCenteredString(font, fit(text, w - 10), width / 2, y + (h - 8) / 2, BRASS_HI);
+        }
     }
 
-    /** The face-down pile. Its size is the stake on the next challenge. */
+    /** The face-down pile. Its size is what a challenge is played for. */
     private void drawPile(GuiGraphics g) {
         int count = ClientBluff.pile();
-        int cy = 104;
-        String label = count == 0 ? "no cards on the table"
+        int cy = pileCy;
+        if (count > 0 && cy > 0) {
+            // a shadow on the felt under the heap
+            int spread = Math.min(34, 14 + count);
+            g.fill(width / 2 - spread, cy + 8, width / 2 + spread, cy + 15, 0x44000000);
+            int show = Math.min(count, 12);
+            for (int i = 0; i < show; i++) {
+                // deterministic scatter — the same pile must not twitch per frame
+                int a = (i * 73) % 31 - 15;
+                int b = (i * 149) % 17 - 8;
+                float deg = ((i * 97) % 37) - 18;
+                TableArt.back(g, width / 2 + a, cy - i + b / 3, 27, 21, deg, BRASS_DARK);
+            }
+        }
+        String label = count == 0 ? "nothing on the table yet"
                 : count + (count == 1 ? " card face down" : " cards face down");
-        g.drawCenteredString(font, label, width / 2, cy + 26, count >= 5 ? GOLD : FAINT);
-        if (count == 0) {
-            return;
-        }
-        // a scattered stack, deepest at the bottom
-        int show = Math.min(count, 10);
-        for (int i = 0; i < show; i++) {
-            int off = i * 2;
-            int w = 26;
-            int h = 20;
-            int x = width / 2 - w / 2 + ((i % 3) - 1) * 2;
-            int y = cy - off / 2;
-            g.fill(x, y, x + w, y + h, 0xFF241C4A);
-            g.renderOutline(x, y, w, h, GOLD_DIM);
-        }
+        int lw = font.width(label) + 14;
+        int lx = width / 2 - lw / 2;
+        TableArt.bevel(g, lx, pileCapY, lw, 12, count >= 5 ? 0xFF3A2C10 : 0xFF1A2A22,
+                0x33FFFFFF, 0x55000000);
+        g.renderOutline(lx, pileCapY, lw, 12, count >= 5 ? BRASS_DIM : BRASS_DARK);
+        g.drawCenteredString(font, label, width / 2, pileCapY + 2,
+                count >= 5 ? BRASS_HI : DIM);
+
         int last = ClientBluff.lastCount();
         if (last > 0 && ClientBluff.lastSeat() >= 0) {
-            String who = ClientBluff.seatName(ClientBluff.lastSeat());
-            g.drawCenteredString(font, who + " put down " + last, width / 2, cy - 14, DIM);
+            // under the claim board, not above the pile — above the pile put it
+            // inside the board's own frame
+            if (sworeY >= 0) {
+                String who = ClientBluff.seatName(ClientBluff.lastSeat()) + " swore to " + last;
+                g.drawCenteredString(font, fit(who, width - 20), width / 2, sworeY, DIM);
+            }
         }
     }
 
@@ -337,51 +502,76 @@ public class BluffScreen extends Screen {
         // drawn at a fixed size and dropped when it does not fit. It used to be
         // fixed at 0.30, which silently showed nothing at all on a 640x360
         // window — the one frame a player actually wants to see.
-        int top = REVEAL_TOP;
-        int band = handY - 14 - top - 10; // 10 for the verdict line beneath
-        if (band < 22) {
-            return; // genuinely no room; the log and the verdict still say it
-        }
-        float scale = Math.min(0.30f, Math.min(band / (float) CardRenderer.CARD_H,
-                (width - 40f) / (shown.size() * (CardRenderer.CARD_W + 14f))));
+        int band = revealBand;
+        int usable = band - VERDICT_H;
+        float scale = band < MIN_REVEAL_BAND ? 0f
+                : Math.min(0.30f, Math.min(usable / (float) CardRenderer.CARD_H,
+                        (width - 40f) / (shown.size() * (CardRenderer.CARD_W + 14f))));
         if (scale < 0.10f) {
+            // No room to turn the cards over on screen — but the outcome is the
+            // one thing a player must never be left guessing at. The ribbon
+            // takes the pile's caption slot, which this paints over: the count
+            // of face-down cards and the verdict on the last play are never
+            // both the thing you need to read.
+            drawVerdict(g, pileCapY, lying, accent);
             return;
         }
         int cw = Math.round(CardRenderer.CARD_W * scale);
         int ch = Math.round(CardRenderer.CARD_H * scale);
-        int span = shown.size() * (cw + 4) - 4;
+        int span = shown.size() * (cw + 5) - 5;
         int x = (width - span) / 2;
-        int y = top + Math.max(0, (band - ch) / 2);
-        String head = ClientBluff.seatName(ClientBluff.revealChallenger()) + " called "
-                + ClientBluff.seatName(ClientBluff.revealAccused());
-        g.drawCenteredString(font, head, width / 2, y - 12, DIM);
+        int y = revealTop + Math.max(0, (usable - ch) / 2);
+
+        TableArt.pool(g, width / 2, y + ch / 2, span, accent, 0x1C);
         for (int i = 0; i < shown.size(); i++) {
             MobCard card = shown.get(i);
-            int cx = x + i * (cw + 4);
+            int cx = x + i * (cw + 5);
+            boolean matched = ClientBluff.claim().matches(card);
+            int edge = matched ? GOOD : BAD;
+            g.fill(cx + 1, y + 2, cx + cw + 2, y + ch + 3, 0x66000000);
             LivingEntity mob = CardRenderer.portraitEntity(minecraft, card, entityCache);
             CardRenderer.renderCard(g, font, card, cx, y, scale, -1, -1, mob, false, false);
-            boolean matched = ClientBluff.claim().matches(card);
-            g.renderOutline(cx - 1, y - 1, cw + 2, ch + 2, matched ? GOOD : BAD);
+            g.renderOutline(cx - 1, y - 1, cw + 2, ch + 2, edge);
             if (since < FLASH_MS && (since / 180) % 2 == 0) {
-                g.renderOutline(cx - 2, y - 2, cw + 4, ch + 4, matched ? GOOD : BAD);
+                g.renderOutline(cx - 2, y - 2, cw + 4, ch + 4, TableArt.alpha(edge, 0xAA));
             }
+            // a shape as well as a colour, for anyone who cannot separate red
+            // from green — and drawn, because the font has no tick glyph
+            g.fill(cx + 1, y + 1, cx + 8, y + 8, 0xAA000000);
+            TableArt.mark(g, cx + 2, y + 2, matched, edge);
         }
-        String verdict = lying
-                ? "CAUGHT — " + ClientBluff.revealTaken() + " cards to "
-                        + ClientBluff.seatName(ClientBluff.revealAccused())
-                : "HONEST — " + ClientBluff.revealTaken() + " cards to "
-                        + ClientBluff.seatName(ClientBluff.revealChallenger());
-        g.drawCenteredString(font, verdict, width / 2, y + ch + 4, accent);
+        drawVerdict(g, y + ch + 1, lying, accent);
     }
 
-    /** Your hand. Picked cards lift clear of the row. */
+    /** Who ended up eating what, on a ribbon. */
+    private void drawVerdict(GuiGraphics g, int vy, boolean lying, int accent) {
+        String verdict = lying
+                ? "CAUGHT — " + ClientBluff.revealTaken() + " to "
+                        + ClientBluff.seatName(ClientBluff.revealAccused())
+                : "HONEST — " + ClientBluff.revealTaken() + " to "
+                        + ClientBluff.seatName(ClientBluff.revealChallenger());
+        verdict = fit(verdict, width - 30);
+        int vw = font.width(verdict) + 14;
+        int vx = width / 2 - vw / 2;
+        TableArt.bevel(g, vx, vy, vw, 11, TableArt.alpha(accent, 0x33), 0x22FFFFFF, 0x55000000);
+        g.drawCenteredString(font, verdict, width / 2, vy + 2, accent);
+    }
+
+    /** Your hand, fanned. Picked cards lift clear of the row. */
     private void drawHand(GuiGraphics g, List<MobCard> hand, int mouseX, int mouseY) {
+        if (hand.isEmpty()) {
+            return;
+        }
+        // a rail under the hand, to sit the cards on rather than float them
+        g.fill(RAIL, handY + cardH + 1, width - RAIL, handY + cardH + 2, BRASS_DARK);
+        TableArt.pool(g, width / 2, handY + cardH, width / 2, BRASS, 0x12);
+
+        // topmost card wins the hover, which is the one you can actually see
         for (int i = 0; i < hand.size(); i++) {
             int x = handX + i * gap;
-            int y = handY - (picked.contains(i) ? 14 : 0);
-            boolean over = mouseX >= x && mouseX < x + (i == hand.size() - 1 ? cardW : gap)
-                    && mouseY >= y && mouseY < y + cardH;
-            if (over) {
+            int visible = i == hand.size() - 1 ? cardW : gap;
+            int y = cardY(i, hand.size()) - (picked.contains(i) ? 15 : 0);
+            if (mouseX >= x && mouseX < x + visible && mouseY >= y && mouseY < y + cardH) {
                 hovered = i;
             }
         }
@@ -389,14 +579,19 @@ public class BluffScreen extends Screen {
             MobCard card = hand.get(i);
             int x = handX + i * gap;
             boolean lifted = picked.contains(i);
-            int y = handY - (lifted ? 14 : 0) - (hovered == i && !lifted ? 5 : 0);
+            boolean hot = hovered == i;
+            int y = cardY(i, hand.size()) - (lifted ? 15 : 0) - (hot && !lifted ? 6 : 0);
+            g.fill(x + 2, y + 3, x + cardW + 3, y + cardH + 4, 0x66000000);
             LivingEntity mob = CardRenderer.portraitEntity(minecraft, card, entityCache);
-            g.fill(x + 2, y + 3, x + cardW + 3, y + cardH + 4, 0x55000000);
             CardRenderer.renderCard(g, font, card, x, y, handScale, mouseX, mouseY, mob,
-                    false, hovered == i);
+                    false, hot);
             if (lifted) {
-                g.renderOutline(x - 2, y - 2, cardW + 4, cardH + 4, GOLD);
-                g.renderOutline(x - 1, y - 1, cardW + 2, cardH + 2, 0x66E9C46A);
+                int pulse = Math.round(0x50 + 0x40 * breath(500));
+                g.renderOutline(x - 2, y - 2, cardW + 4, cardH + 4, BRASS);
+                g.renderOutline(x - 3, y - 3, cardW + 6, cardH + 6,
+                        TableArt.alpha(BRASS, pulse));
+            } else if (hot) {
+                g.renderOutline(x - 1, y - 1, cardW + 2, cardH + 2, BRASS_DIM);
             }
             // Whether this card actually answers the claim: your own cards are
             // yours to see, and the whole decision is which of them to swear to.
@@ -407,77 +602,90 @@ public class BluffScreen extends Screen {
             // hand grew past about a dozen.
             boolean matches = ClientBluff.claim().matches(card);
             int tick = matches ? GOOD : BAD;
+            g.fill(x + 2, y + 2, x + 7, y + 7, 0xAA000000);
             g.fill(x + 2, y + 2, x + 6, y + 6, tick);
             g.fill(x + 2, y + 2, x + 6, y + 3, 0x66FFFFFF);
         }
+
+        if (hovered >= 0) {
+            MobCard card = hand.get(hovered);
+            boolean matches = ClientBluff.claim().matches(card);
+            String note = card.displayName() + (matches ? "  ·  answers YES" : "  ·  answers NO");
+            // exactly the strip between the hand's rail and the button row —
+            // at +7 this was printed straight through the buttons
+            g.drawCenteredString(font, fit(note, width - 16), width / 2, handY + cardH + 3,
+                    matches ? GOOD : BAD);
+        }
     }
 
-    /** Play / Challenge / Let them go, and the stake line. */
+    /** Swear / Challenge / Let them go. */
     private void drawControls(GuiGraphics g, int mouseX, int mouseY) {
-        int y = height - 30;
-        boolean mine = ClientBluff.myTurn();
-        boolean pending = ClientBluff.atMatchPoint();
-
+        int y = height - 28;
         if (ClientBluff.over()) {
             return;
         }
-        if (!mine) {
-            g.drawCenteredString(font, ClientBluff.seatName(ClientBluff.turn()) + " is thinking…",
-                    width / 2, y + 5, DIM);
+        if (!ClientBluff.myTurn()) {
+            // the dots are appended, not sliced off the end — slicing ate into
+            // "thinking" itself whenever the count was below three
+            int dots = (int) ((System.currentTimeMillis() / 400) % 4);
+            String who = ClientBluff.seatName(ClientBluff.turn()) + " is thinking"
+                    + ".".repeat(ClientPrefs.reducedMotion() ? 3 : dots);
+            g.drawCenteredString(font, who, width / 2, y + 5, DIM);
             return;
         }
 
-        List<int[]> buttons = new ArrayList<>();
+        boolean pending = ClientBluff.atMatchPoint();
         List<String> labels = new ArrayList<>();
-        List<Boolean> enabled = new ArrayList<>();
-
+        List<Boolean> on = new ArrayList<>();
         if (pending) {
             labels.add("Let them go");
-            enabled.add(true);
+            on.add(true);
         } else {
-            labels.add(picked.isEmpty() ? "Pick cards" : "Swear to " + picked.size());
-            enabled.add(!picked.isEmpty());
+            labels.add(picked.isEmpty() ? "Pick cards to swear to" : "SWEAR TO " + picked.size());
+            on.add(!picked.isEmpty());
         }
         if (ClientBluff.canChallenge()) {
-            labels.add("Challenge");
-            enabled.add(true);
+            labels.add("CHALLENGE");
+            on.add(true);
         }
 
         int total = 0;
         for (String label : labels) {
-            total += font.width(label) + 24 + 6;
+            total += font.width(label) + 30 + 8;
         }
         int x = (width - total) / 2;
+        List<int[]> rects = new ArrayList<>();
         for (int i = 0; i < labels.size(); i++) {
             String label = labels.get(i);
-            int bw = font.width(label) + 24;
-            int[] rect = {x, y, bw, 18};
-            boolean on = enabled.get(i);
-            boolean hot = on && inRect(mouseX, mouseY, rect);
-            boolean danger = label.equals("Challenge");
-            int fill = !on ? 0xFF1A2A22
-                    : danger ? (hot ? 0xFF8E3A34 : 0xFF6A2A26)
-                    : (hot ? 0xFF3C8F5F : 0xFF2C6E49);
-            g.fill(x, y, x + bw, y + 18, fill);
-            g.renderOutline(x, y, bw, 18, on ? (hot ? GOLD : GOLD_DIM) : EDGE);
-            g.drawCenteredString(font, label, x + bw / 2, y + 5, on ? INK : FAINT);
-            buttons.add(rect);
-            x += bw + 6;
+            int bw = font.width(label) + 30;
+            int[] rect = {x, y, bw, 20};
+            boolean enabled = on.get(i);
+            boolean hot = enabled && inRect(mouseX, mouseY, rect);
+            boolean danger = label.equals("CHALLENGE");
+            if (danger) {
+                // the risky move gets a heartbeat, not just a colour
+                TableArt.pool(g, x + bw / 2, y + 10, bw, BAD,
+                        Math.round(0x1E * (0.4f + 0.6f * breath(560))));
+            }
+            TableArt.button(g, x, y, bw, 20, danger ? 0xFF8A322B : 0xFF2C6E49, hot, enabled);
+            g.drawCenteredString(font, label, x + bw / 2, y + 6, enabled ? INK : FAINT);
+            rects.add(rect);
+            x += bw + 8;
         }
         int at = 0;
         if (pending) {
-            passRect = buttons.get(at++);
+            passRect = rects.get(at++);
         } else {
-            playRect = buttons.get(at++);
+            playRect = rects.get(at++);
         }
-        if (ClientBluff.canChallenge() && at < buttons.size()) {
-            challengeRect = buttons.get(at);
+        if (ClientBluff.canChallenge() && at < rects.size()) {
+            challengeRect = rects.get(at);
         }
 
         if (pending) {
-            g.drawCenteredString(font, ClientBluff.seatName(ClientBluff.pendingOut())
-                    + " is one move from winning — call it or let it stand",
-                    width / 2, y - 12, BAD);
+            String warn = ClientBluff.seatName(ClientBluff.pendingOut())
+                    + " is one move from winning — call it, or let it stand";
+            g.drawCenteredString(font, fit(warn, width - 20), width / 2, y - 13, BAD);
         }
     }
 
@@ -487,47 +695,59 @@ public class BluffScreen extends Screen {
         if (lines.isEmpty()) {
             return;
         }
-        // A lifted card rises fourteen pixels above the hand, so the log stops
+        // A lifted card rises fifteen pixels above the hand, so the log stops
         // short of that and not of the resting row — it used to be drawn over
         // the top of whichever cards you had just selected.
-        int bottom = handY - 18;
-        int room = (bottom - REVEAL_TOP) / 10;
-        int max = Math.min(Math.min(6, lines.size()), room);
+        int bottom = handTop() - 2;
+        int room = (bottom - revealTop) / 10;
+        int max = Math.min(Math.min(5, lines.size()), room);
         if (max <= 0) {
             return;
         }
+        int wide = Math.min(146, width / 3);
         int y = bottom - max * 10;
-        int wide = Math.min(150, width / 3);
+        g.fill(RAIL + 2, y - 4, RAIL + 6 + wide, bottom, 0x40000000);
+        g.fill(RAIL + 2, y - 4, RAIL + 3, bottom, BRASS_DARK);
         for (int i = 0; i < max; i++) {
             String line = lines.get(lines.size() - max + i);
-            g.drawString(font, fit(line, wide), 8, y + i * 10, i == max - 1 ? DIM : FAINT, false);
+            g.drawString(font, fit(line, wide), RAIL + 8, y + i * 10,
+                    i == max - 1 ? DIM : FAINT, false);
         }
     }
 
     private void drawResult(GuiGraphics g, int mouseX, int mouseY) {
-        int pw = Math.min(260, width - 20);
-        int ph = 84;
+        g.fill(0, 0, width, height, 0xC0000000);
+        boolean won = ClientBluff.won();
+        int accent = won ? GOOD : BAD;
+        int pw = Math.min(280, width - 24);
+        int ph = 92;
         int px = (width - pw) / 2;
         int py = (height - ph) / 2;
-        g.fill(0, 0, width, height, 0xB0000000);
-        g.fill(px, py, px + pw, py + ph, PANEL);
-        g.renderOutline(px, py, pw, ph, ClientBluff.won() ? GOOD : BAD);
-        String head = ClientBluff.won() ? "YOU WENT OUT" : "BEATEN";
-        g.drawCenteredString(font, head, width / 2, py + 12, ClientBluff.won() ? GOOD : BAD);
-        String sub = ClientBluff.won()
+        TableArt.pool(g, width / 2, height / 2, pw, accent, 0x28);
+        TableArt.plate(g, px, py, pw, ph, accent);
+
+        var pose = g.pose();
+        pose.pushPose();
+        pose.translate(width / 2f, py + 12f, 0);
+        pose.scale(1.4f, 1.4f, 1f);
+        String head = won ? "YOU WENT OUT" : "BEATEN";
+        g.drawString(font, head, -font.width(head) / 2, 0, accent, true);
+        pose.popPose();
+
+        String sub = won
                 ? "+" + (ClientBluff.stake() * ClientBluff.seats()) + " fragments"
                 : ClientBluff.seatName(ClientBluff.winner()) + " emptied their hand first";
-        g.drawCenteredString(font, fit(sub, pw - 16), width / 2, py + 28, INK);
+        g.drawCenteredString(font, fit(sub, pw - 16), width / 2, py + 34, INK);
+        g.fill(px + 24, py + 48, px + pw - 24, py + 49, BRASS_DARK);
 
         String again = "Deal again";
-        int bw = font.width(again) + 24;
+        int bw = font.width(again) + 30;
         int bx = px + (pw - bw) / 2;
-        int by = py + ph - 26;
-        boolean hot = inRect(mouseX, mouseY, new int[]{bx, by, bw, 18});
-        g.fill(bx, by, bx + bw, by + 18, hot ? 0xFF3C8F5F : 0xFF2C6E49);
-        g.renderOutline(bx, by, bw, 18, hot ? GOLD : GOLD_DIM);
-        g.drawCenteredString(font, again, bx + bw / 2, by + 5, INK);
-        newRect = new int[]{bx, by, bw, 18};
+        int by = py + ph - 28;
+        boolean hot = inRect(mouseX, mouseY, new int[]{bx, by, bw, 20});
+        TableArt.button(g, bx, by, bw, 20, 0xFF2C6E49, hot, true);
+        g.drawCenteredString(font, again, bx + bw / 2, by + 6, INK);
+        newRect = new int[]{bx, by, bw, 20};
     }
 
     @Override
@@ -541,41 +761,48 @@ public class BluffScreen extends Screen {
         for (int[] rect : seatRects) {
             if (inRect(mx, my, rect)) {
                 send(BluffActionPayload.seats(rect[4]));
+                click(1.0f);
                 return true;
             }
         }
         for (int[] rect : stakeRects) {
             if (inRect(mx, my, rect)) {
                 send(BluffActionPayload.stake(rect[4]));
+                click(1.0f);
                 return true;
             }
         }
         if (newRect != null && inRect(mx, my, newRect)) {
             picked.clear();
             send(BluffActionPayload.newGame());
+            click(1.2f);
             return true;
         }
         if (challengeRect != null && inRect(mx, my, challengeRect)) {
             picked.clear();
             send(BluffActionPayload.challenge());
+            click(0.7f);
             return true;
         }
         if (passRect != null && inRect(mx, my, passRect)) {
             picked.clear();
             send(BluffActionPayload.pass());
+            click(0.9f);
             return true;
         }
         if (playRect != null && inRect(mx, my, playRect) && !picked.isEmpty()) {
             send(BluffActionPayload.play(new ArrayList<>(picked)));
             picked.clear();
+            click(1.1f);
             return true;
         }
         if (hovered >= 0 && ClientBluff.myTurn() && !ClientBluff.atMatchPoint()) {
             if (picked.contains(hovered)) {
                 picked.remove(hovered);
+                click(0.9f);
             } else if (picked.size() < Bluff.MAX_PLAY) {
                 picked.add(hovered);
-                click();
+                click(1.4f);
             }
             return true;
         }
@@ -613,10 +840,10 @@ public class BluffScreen extends Screen {
         PacketDistributor.sendToServer(payload);
     }
 
-    private void click() {
+    private void click(float pitch) {
         if (minecraft != null) {
             minecraft.getSoundManager().play(
-                    SimpleSoundInstance.forUI(SoundEvents.UI_BUTTON_CLICK.value(), 1.4f));
+                    SimpleSoundInstance.forUI(SoundEvents.UI_BUTTON_CLICK.value(), pitch));
         }
     }
 
