@@ -265,6 +265,12 @@ public final class EngineArena {
         lootTaken.clear();
         runSpawners();
         maybeBoss();
+        // run_start is an extra on top of round one, not a replacement for it -
+        // a rule listening for round_start should hear about every round.
+        if (n == 1) {
+            Script.fire(this, level, rules.id, "run_start", null);
+        }
+        Script.fire(this, level, rules.id, "round_start", null);
         for (ServerPlayer p : players()) {
             p.displayClientMessage(Component.literal("§c§lROUND " + n), true);
             level.playSound(null, p.blockPosition(), SoundEvents.WARDEN_ROAR,
@@ -281,6 +287,7 @@ public final class EngineArena {
             stop(false);
             return;
         }
+        Script.fire(this, level, rules.id, "round_end", null);
         breather = Math.max(1, rules.breatherFor(round));
     }
 
@@ -295,6 +302,40 @@ public final class EngineArena {
     // ------------------------------------------------------------------
     // Areas, zones and caches
     // ------------------------------------------------------------------
+
+    /** Participants, for scripts to talk to. */
+    public List<ServerPlayer> playersPublic() {
+        return players();
+    }
+
+    /** Adopts a script-spawned mob so the round still counts it. */
+    public void adopt(Mob mob) {
+        alive.add(mob);
+    }
+
+    /**
+     * Resolves an action's {@code at} to a position.
+     *
+     * <p>Scripts name places the way an author thinks about them - "boss", "spawn"
+     * - rather than in coordinates, for the same reason markers do. A script that
+     * hardcoded numbers would break the moment the map moved.
+     */
+    public BlockPos scriptAnchor(String name) {
+        return switch (name == null ? "boss" : name.toLowerCase(java.util.Locale.ROOT)) {
+            case "spawn" -> spawn;
+            case "horde" -> hordes.isEmpty() ? spawn : hordes.get(rng.nextInt(hordes.size())).pos();
+            case "player" -> {
+                List<ServerPlayer> ps = players();
+                yield ps.isEmpty() ? spawn : ps.get(0).blockPosition();
+            }
+            default -> bossPoints.isEmpty() ? spawn : bossPoints.get(0).pos();
+        };
+    }
+
+    /** The ruleset this run is being played under, for script lookups. */
+    public String rulesetId() {
+        return rules.id;
+    }
 
     public boolean isAreaOpen(String area) {
         return openAreas.contains(area.toLowerCase(java.util.Locale.ROOT));
@@ -533,6 +574,7 @@ public final class EngineArena {
         if (a.rules.economyEnabled) {
             Currency.byId(a.rules.defaultCurrency).award(killer, a.rules.pointsKill);
         }
+        Script.fire(a, a.level, a.rules.id, "mob_killed", killer);
     }
 
     public int round() {

@@ -229,7 +229,8 @@ public final class EngineEvents {
             source.sendSuccess(() -> Component.literal("§6— " + all.size() + " rulesets —"), false);
             all.forEach((key, r) -> source.sendSuccess(() -> Component.literal(
                     "§f" + key + " §8— " + (r.endless ? "endless" : "to round " + r.finalRound)
-                            + ", " + r.mobs.size() + " mob types"), false));
+                            + ", " + r.mobs.size() + " mob types, "
+                            + Script.ruleCount(key) + " script rules"), false));
             return 1;
         }
         Ruleset r = RulesetLoader.byId(id);

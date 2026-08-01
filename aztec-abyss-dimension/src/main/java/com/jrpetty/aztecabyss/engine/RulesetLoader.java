@@ -41,6 +41,7 @@ public final class RulesetLoader extends SimpleJsonResourceReloadListener {
     protected void apply(Map<ResourceLocation, JsonElement> files,
                          ResourceManager manager, ProfilerFiller profiler) {
         LOADED.clear();
+        Script.clear();
         // Currencies are declared by rulesets, so they are rebuilt from scratch on
         // every reload - otherwise a currency deleted from a file would linger in
         // memory and keep working, which is the worst kind of stale.
@@ -54,6 +55,7 @@ public final class RulesetLoader extends SimpleJsonResourceReloadListener {
             Ruleset rules = Ruleset.parse(key, element.getAsJsonObject());
             LOADED.put(key, rules);
             readCurrencies(element.getAsJsonObject());
+            Script.load(key, element.getAsJsonObject());
         });
     }
 
