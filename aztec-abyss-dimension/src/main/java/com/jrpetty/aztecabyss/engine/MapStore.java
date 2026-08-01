@@ -87,6 +87,29 @@ public final class MapStore {
     }
 
     /**
+     * Captures an exact box - what the Map Wand selects.
+     *
+     * <p>Preferred over the radius form for anything real. A radius is a guess
+     * that either clips the far corner of a build or drags in a hundred blocks of
+     * whatever was standing next to it; two corners are what the author actually
+     * meant.
+     */
+    public static boolean saveRegion(ServerLevel level, String name,
+                                     net.minecraft.world.level.levelgen.structure.BoundingBox box) {
+        StructureTemplateManager mgr = level.getStructureManager();
+        ResourceLocation id = idFor(name);
+        StructureTemplate template = mgr.getOrCreate(id);
+        BlockPos origin = new BlockPos(box.minX(), box.minY(), box.minZ());
+        Vec3i size = new Vec3i(
+                box.maxX() - box.minX() + 1,
+                box.maxY() - box.minY() + 1,
+                box.maxZ() - box.minZ() + 1);
+        template.fillFromWorld(level, origin, size, true, Blocks.STRUCTURE_VOID);
+        template.setAuthor("abyss");
+        return mgr.save(id);
+    }
+
+    /**
      * Places a saved region back into the world, and reports how many markers it
      * brought with it.
      *

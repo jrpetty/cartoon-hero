@@ -1,0 +1,12 @@
+{
+  "type": "aztecabyss:workshop",
+  "generator": {
+    "type": "minecraft:flat",
+    "settings": {
+      "biome": "aztecabyss:glade",
+      "lakes": false,
+      "features": false,
+      "layers": []
+    }
+  }
+}

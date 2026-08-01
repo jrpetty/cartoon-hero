@@ -91,11 +91,16 @@ public final class EngineArena {
      * @return an error to show the player, or null if it started
      */
     public static String start(ServerLevel level, ServerPlayer player, int radius, String rulesetId) {
-        BoundingBox box = new BoundingBox(
+        return startIn(level, player, new BoundingBox(
                 player.blockPosition().getX() - radius, level.getMinBuildHeight(),
                 player.blockPosition().getZ() - radius,
                 player.blockPosition().getX() + radius, level.getMaxBuildHeight() - 1,
-                player.blockPosition().getZ() + radius);
+                player.blockPosition().getZ() + radius), rulesetId);
+    }
+
+    /** Runs a game inside an explicit box - what a wand selection plays. */
+    public static String startIn(ServerLevel level, ServerPlayer player,
+                                 BoundingBox box, String rulesetId) {
         MapScan.Result scan = MapScan.scan(level, box);
 
         Marker spawnMarker = scan.first("spawn");

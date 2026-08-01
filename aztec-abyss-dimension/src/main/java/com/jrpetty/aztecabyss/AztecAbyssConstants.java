@@ -34,6 +34,19 @@ public final class AztecAbyssConstants {
             ResourceLocation.fromNamespaceAndPath(MOD_ID, "maze")
     );
 
+    /**
+     * The Workshop: an empty, permanently lit void for building maps in.
+     *
+     * <p>Its own dimension rather than a corner of an existing one, because a map
+     * under construction wants none of what a world provides - no terrain to
+     * build around or clear away, no day, no weather, no wandering mobs, and no
+     * chance of a half-finished arena being stamped over by something else.
+     */
+    public static final ResourceKey<Level> WORKSHOP_LEVEL_KEY = ResourceKey.create(
+            Registries.DIMENSION,
+            ResourceLocation.fromNamespaceAndPath(MOD_ID, "workshop")
+    );
+
     // ------------------------------------------------------------------
     // Arena layout - all fixed, all deterministic. Do not randomize.
     // ------------------------------------------------------------------

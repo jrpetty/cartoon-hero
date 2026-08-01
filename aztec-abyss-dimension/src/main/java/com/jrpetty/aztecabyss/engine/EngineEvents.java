@@ -89,6 +89,29 @@ public final class EngineEvents {
                         .then(Commands.argument("name", com.mojang.brigadier.arguments.StringArgumentType.string())
                                 .executes(ctx -> load(ctx.getSource(),
                                         com.mojang.brigadier.arguments.StringArgumentType.getString(ctx, "name")))))
+                .then(Commands.literal("workshop")
+                        .executes(ctx -> workshop(ctx.getSource())))
+                .then(Commands.literal("wand")
+                        .executes(ctx -> giveWand(ctx.getSource())))
+                .then(Commands.literal("marker")
+                        .then(Commands.argument("kind", com.mojang.brigadier.arguments.StringArgumentType.word())
+                                .suggests((c, sb) -> {
+                                    for (String k : BuildTools.KINDS) {
+                                        sb.suggest(k);
+                                    }
+                                    return sb.buildFuture();
+                                })
+                                .executes(ctx -> giveMarker(ctx.getSource(),
+                                        com.mojang.brigadier.arguments.StringArgumentType.getString(ctx, "kind")))))
+                .then(Commands.literal("create")
+                        .then(Commands.argument("name", com.mojang.brigadier.arguments.StringArgumentType.word())
+                                .executes(ctx -> create(ctx.getSource(),
+                                        com.mojang.brigadier.arguments.StringArgumentType.getString(ctx, "name")))))
+                .then(Commands.literal("test")
+                        .executes(ctx -> test(ctx.getSource(), "built-in"))
+                        .then(Commands.argument("ruleset", com.mojang.brigadier.arguments.StringArgumentType.string())
+                                .executes(ctx -> test(ctx.getSource(),
+                                        com.mojang.brigadier.arguments.StringArgumentType.getString(ctx, "ruleset")))))
                 .then(Commands.literal("play")
                         .executes(ctx -> play(ctx.getSource(), 64, "built-in"))
                         .then(Commands.argument("ruleset", com.mojang.brigadier.arguments.StringArgumentType.string())
@@ -101,6 +124,14 @@ public final class EngineEvents {
                 .then(Commands.literal("stop")
                         .executes(ctx -> {
                             EngineArena.stop(true);
+                            ServerPlayer p = ctx.getSource().getPlayer();
+                            // Testing drops you into survival; ending a test in the
+                            // Workshop should hand the build tools straight back
+                            // rather than leaving you punching stone.
+                            if (p != null && p.level().dimension()
+                                    .equals(AztecAbyssConstants.WORKSHOP_LEVEL_KEY)) {
+                                p.setGameMode(net.minecraft.world.level.GameType.CREATIVE);
+                            }
                             ctx.getSource().sendSuccess(() -> Component.literal("§7Run stopped."), true);
                             return 1;
                         }))
@@ -207,6 +238,134 @@ public final class EngineEvents {
         return 1;
     }
 
+    /** {@code /arena workshop} - into the empty lit void, in creative. */
+    private static int workshop(CommandSourceStack source) {
+        ServerPlayer player = source.getPlayer();
+        if (player == null || source.getServer() == null) {
+            return 0;
+        }
+        ServerLevel shop = source.getServer().getLevel(AztecAbyssConstants.WORKSHOP_LEVEL_KEY);
+        if (shop == null) {
+            source.sendFailure(Component.literal("The Workshop dimension is not loaded."));
+            return 0;
+        }
+        // A platform to stand on, because the Workshop is genuinely empty and the
+        // alternative is arriving in a void and falling out of your own map.
+        net.minecraft.core.BlockPos pad = new net.minecraft.core.BlockPos(0, 64, 0);
+        for (int x = -8; x <= 8; x++) {
+            for (int z = -8; z <= 8; z++) {
+                shop.setBlock(pad.offset(x, -1, z),
+                        net.minecraft.world.level.block.Blocks.SMOOTH_STONE.defaultBlockState(), 2);
+            }
+        }
+        player.teleportTo(shop, pad.getX() + 0.5, pad.getY(), pad.getZ() + 0.5,
+                java.util.Set.of(), 0.0F, 0.0F);
+        player.setGameMode(net.minecraft.world.level.GameType.CREATIVE);
+        player.displayClientMessage(Component.literal(
+                "§6The Workshop. §7Build here, then §f/arena wand§7 to mark out the map."), false);
+        return 1;
+    }
+
+    private static int giveWand(CommandSourceStack source) {
+        ServerPlayer player = source.getPlayer();
+        if (player == null) {
+            return 0;
+        }
+        if (!player.getInventory().add(BuildTools.wand())) {
+            player.drop(BuildTools.wand(), false);
+        }
+        source.sendSuccess(() -> Component.literal(
+                "§6Map Wand. §7Left-click one corner, right-click the other."), false);
+        return 1;
+    }
+
+    private static int giveMarker(CommandSourceStack source, String kind) {
+        ServerPlayer player = source.getPlayer();
+        if (player == null) {
+            return 0;
+        }
+        String clean = kind.toLowerCase(java.util.Locale.ROOT);
+        net.minecraft.world.item.ItemStack sign =
+                BuildTools.markerSign(clean, BuildTools.hintFor(clean));
+        if (!player.getInventory().add(sign)) {
+            player.drop(sign, false);
+        }
+        source.sendSuccess(() -> Component.literal(
+                "§6[" + clean + "] §7marker — place it, that is the whole step."), false);
+        return 1;
+    }
+
+    /**
+     * {@code /arena create <name>} - turns the wand selection into a map file.
+     *
+     * <p>Validates before it writes. Saving a map with no spawn point is a file
+     * that will disappoint someone later, and the moment to say so is now.
+     */
+    private static int create(CommandSourceStack source, String name) {
+        ServerPlayer player = source.getPlayer();
+        if (player == null || !(source.getLevel() instanceof ServerLevel level)) {
+            return 0;
+        }
+        var box = BuildTools.selectionOf(player);
+        if (box == null) {
+            source.sendFailure(Component.literal(
+                    "Pick both corners with the Map Wand first — /arena wand."));
+            return 0;
+        }
+        long volume = BuildTools.volumeOf(box);
+        if (volume > 8_000_000L) {
+            source.sendFailure(Component.literal(
+                    "That selection is " + volume + " blocks. Keep it under 8,000,000."));
+            return 0;
+        }
+        MapScan.Result scan = MapScan.scan(level, box);
+        java.util.List<String> problems = MapScan.validate(scan);
+
+        if (!MapStore.saveRegion(level, name, box)) {
+            source.sendFailure(Component.literal("Could not write that map to disk."));
+            return 0;
+        }
+        source.sendSuccess(() -> Component.literal(
+                "§a✔ Created §f" + name + "§a — " + BuildTools.spanText(box)
+                        + ", " + scan.all().size() + " markers."), true);
+        source.sendSuccess(() -> Component.literal(
+                "§7Written to §fgenerated/" + MapStore.LOCAL + "/structures/" + name + ".nbt"), false);
+        if (problems.isEmpty()) {
+            source.sendSuccess(() -> Component.literal(
+                    "§a✔ It validates. §7/arena test to play it."), false);
+        } else {
+            source.sendSuccess(() -> Component.literal(
+                    "§e" + problems.size() + " thing(s) to fix before it plays well:"), false);
+            for (String p : problems) {
+                source.sendSuccess(() -> Component.literal(" " + p), false);
+            }
+        }
+        return 1;
+    }
+
+    /** {@code /arena test} - play the selection exactly as the mod would run it. */
+    private static int test(CommandSourceStack source, String rulesetId) {
+        ServerPlayer player = source.getPlayer();
+        if (player == null || !(source.getLevel() instanceof ServerLevel level)) {
+            return 0;
+        }
+        var box = BuildTools.selectionOf(player);
+        if (box == null) {
+            source.sendFailure(Component.literal(
+                    "No selection. Mark the map out with the Map Wand first."));
+            return 0;
+        }
+        String error = EngineArena.startIn(level, player, box, rulesetId);
+        if (error != null) {
+            source.sendFailure(Component.literal(error));
+            return 0;
+        }
+        player.setGameMode(net.minecraft.world.level.GameType.SURVIVAL);
+        source.sendSuccess(() -> Component.literal(
+                "§a✔ Testing on §f" + rulesetId + "§a. §7/arena stop to end and go back to building."), true);
+        return 1;
+    }
+
     /** {@code /arena play [ruleset] [radius]} - runs a game on the build around you. */
     private static int play(CommandSourceStack source, int radius, String rulesetId) {
         ServerPlayer player = source.getPlayer();
@@ -221,6 +380,27 @@ public final class EngineEvents {
         source.sendSuccess(() -> Component.literal(
                 "§a✔ Running on §f" + rulesetId + "§a. §7/arena stop to end it."), true);
         return 1;
+    }
+
+    /** Left-click with the wand: first corner. Cancelled so it does not break blocks. */
+    @SubscribeEvent
+    public static void onWandLeft(PlayerInteractEvent.LeftClickBlock event) {
+        if (event.getEntity() instanceof ServerPlayer player
+                && BuildTools.isWand(player.getMainHandItem())) {
+            BuildTools.setCorner(player, event.getPos(), true);
+            event.setCanceled(true);
+        }
+    }
+
+    /** Right-click with the wand: second corner. */
+    @SubscribeEvent
+    public static void onWandRight(PlayerInteractEvent.RightClickBlock event) {
+        if (event.getEntity() instanceof ServerPlayer player
+                && BuildTools.isWand(player.getMainHandItem())) {
+            BuildTools.setCorner(player, event.getPos(), false);
+            event.setCanceled(true);
+            event.setCancellationResult(net.minecraft.world.InteractionResult.SUCCESS);
+        }
     }
 
     /** Drives the engine's own round loop. */
