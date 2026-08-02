@@ -214,11 +214,9 @@ public final class MapSelectScreen extends Screen {
         int cx = this.width / 2;
 
         g.drawCenteredString(this.font, Component.literal("CHOOSE YOUR HUNT").withStyle(s -> s.withBold(true)),
-                cx, 26, 0xFFFFD24A);
-        // Honest about what is actually on the menu: three arenas, the maze, and
-        // the tools to add a fourth arena yourself.
+                cx, 24, 0xFFFFD24A);
         g.drawCenteredString(this.font, Component.literal("Three battlefields, a maze — or build your own."),
-                cx, 40, 0xFF888888);
+                cx, 38, 0xFFB6B0A2);
 
         ArenaMap[] maps = ArenaMap.values();
         int left = cx - CARD_W / 2;
@@ -230,45 +228,48 @@ public final class MapSelectScreen extends Screen {
             boolean isSelected = i == selected;
             boolean hovered = mouseX >= left && mouseX <= left + CARD_W && mouseY >= y && mouseY <= y + cardH;
 
-            // Card body, brightened when picked or hovered.
-            g.fill(left, y, left + CARD_W, y + cardH, isSelected ? 0xCC1A1410 : hovered ? 0xAA141414 : 0x99101010);
-            int edge = isSelected ? 0xFFFFD24A : hovered ? 0xFF7A6A3A : 0xFF3A3A3A;
+            // Opaque card bodies. These were 0x99-0xCC alpha, which let the ground
+            // through and made every card a slightly different muddy grey
+            // depending on what was behind it. A card is a surface, not a tint.
+            g.fill(left, y, left + CARD_W, y + cardH,
+                    isSelected ? 0xFF241C12 : hovered ? 0xFF1C1C1C : 0xFF121212);
+            int edge = isSelected ? 0xFFFFD24A : hovered ? 0xFF9A8A5A : 0xFF4A4A4A;
             g.fill(left, y, left + CARD_W, y + 1, edge);
             g.fill(left, y + cardH - 1, left + CARD_W, y + cardH, edge);
             g.fill(left, y, left + 1, y + cardH, edge);
             g.fill(left + CARD_W - 1, y, left + CARD_W, y + cardH, edge);
-            // Selected cards get a thick gold spine down the left.
             if (isSelected) {
                 g.fill(left + 1, y + 1, left + 4, y + cardH - 1, 0xFFFFD24A);
             }
 
-            // Title.
+            // Every string below is drawn WITH its shadow. Minecraft's font is
+            // designed around that shadow; without it small text on a dark ground
+            // goes thin and shimmers, which is most of why this screen was hard to
+            // read. It was passing false everywhere.
             g.drawString(this.font, Component.literal(map.title()).withStyle(s -> s.withBold(true)),
-                    left + 10, y + 8, isSelected ? 0xFFFFE9A8 : 0xFFDDDDDD, false);
+                    left + 10, y + 8, isSelected ? 0xFFFFF0C8 : 0xFFF2F2F2, true);
 
-            // Difficulty pill, right-aligned.
             String tag = map.difficulty();
             int tagW = this.font.width(tag) + 8;
             int tagX = left + CARD_W - tagW - 8;
-            g.fill(tagX, y + 6, tagX + tagW, y + 18, 0x66000000);
+            g.fill(tagX, y + 6, tagX + tagW, y + 18, 0xFF000000);
             g.fill(tagX, y + 6, tagX + tagW, y + 7, map.difficultyColor());
-            g.drawString(this.font, Component.literal(tag), tagX + 4, y + 9, map.difficultyColor(), false);
+            g.drawString(this.font, Component.literal(tag), tagX + 4, y + 9,
+                    map.difficultyColor(), true);
 
-            // Blurb, wrapped across the card.
             int by = y + CARD_HEAD;
             for (net.minecraft.util.FormattedCharSequence line
                     : this.font.split(Component.literal(map.blurb()), CARD_W - 20)) {
-                g.drawString(this.font, line, left + 10, by, 0xFF9A9A9A, false);
+                g.drawString(this.font, line, left + 10, by, 0xFFC8C4BA, true);
                 by += LINE_H;
             }
 
-            // Personal best on this arena - the record to beat.
             int best = (i < bestRounds.length) ? bestRounds[i] : 0;
             String rec = best > 0 ? "Your best: Round " + best : "Never attempted";
             int recW = this.font.width(rec);
             g.drawString(this.font, Component.literal(rec),
                     left + CARD_W - recW - 10, y + cardH - 13,
-                    best > 0 ? 0xFF6EC8FF : 0xFF666666, false);
+                    best > 0 ? 0xFF7FD4FF : 0xFF8A8A8A, true);
         }
 
         super.render(g, mouseX, mouseY, partialTick);

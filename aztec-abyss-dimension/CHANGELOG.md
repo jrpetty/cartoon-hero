@@ -13,6 +13,21 @@ behaviour that was already there · **docs**
 
 ## Unreleased
 
+### The portal screen was unreadable
+
+- **fix** Every string on the picker was drawn with `dropShadow = false`.
+  Minecraft's font is designed around that shadow; without it, small text on a
+  dark ground goes thin and shimmers. That was the "fizzy", and the blur was only
+  half the story.
+- **fix** Card bodies were `0x99`–`0xCC` alpha, so each one was a slightly
+  different muddy grey depending on what happened to be behind it. Opaque now — a
+  card is a surface, not a tint.
+- **change** Contrast raised throughout: blurbs `0x9A9A9A` → `0xC8C4BA`, titles to
+  near-white, "Never attempted" off near-black. The difficulty pill is solid
+  rather than `0x66` alpha.
+- **fix** Same shadow and contrast problems fixed on the Records screen, which had
+  inherited them.
+
 ### Griever gets a face
 
 - **feat** `GrieverLayer` — dark segmented plate over the whole model and eight

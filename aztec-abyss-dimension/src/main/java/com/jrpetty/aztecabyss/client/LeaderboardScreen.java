@@ -103,10 +103,10 @@ public class LeaderboardScreen extends Screen {
 
         String key = mapKeys.get(Math.min(page, mapKeys.size() - 1));
         g.drawCenteredString(this.font, Component.literal(maps.getOrDefault(key, key)),
-                cx, 36, 0xFFE8E4DA);
+                cx, 36, 0xFFF2F2F2);
         if (mapKeys.size() > 1) {
             g.drawCenteredString(this.font, Component.literal(
-                    (page + 1) + " / " + mapKeys.size()), cx, this.height - 44, 0xFF666666);
+                    (page + 1) + " / " + mapKeys.size()), cx, this.height - 44, 0xFF9A9A9A);
         }
 
         column(g, cx - 175, key + "#solo", "SOLO");
@@ -118,12 +118,12 @@ public class LeaderboardScreen extends Screen {
     /** One board. Ten places is as many as anybody reads. */
     private void column(GuiGraphics g, int left, String boardKey, String heading) {
         g.drawString(this.font, Component.literal(heading).withStyle(s -> s.withBold(true)),
-                left, 58, 0xFFFFD24A, false);
+                left, 58, 0xFFFFD24A, true);
         g.fill(left, 70, left + 160, 71, 0xFF3A3A3A);
 
         List<String> rows = boards.getOrDefault(boardKey, List.of());
         if (rows.isEmpty()) {
-            g.drawString(this.font, Component.literal("— nobody yet —"), left, 80, 0xFF555555, false);
+            g.drawString(this.font, Component.literal("— nobody yet —"), left, 80, 0xFF8A8A8A, true);
             return;
         }
         int y = 80;
@@ -140,13 +140,13 @@ public class LeaderboardScreen extends Screen {
                 case 0 -> 0xFFFFD24A;
                 case 1 -> 0xFFCCCCCC;
                 case 2 -> 0xFFC08040;
-                default -> 0xFF9A9A9A;
+                default -> 0xFFD4D4D4;
             };
-            g.drawString(this.font, Component.literal(place + "."), left, y, colour, false);
-            g.drawString(this.font, Component.literal(name), left + 20, y, colour, false);
-            g.drawString(this.font, Component.literal(score), left + 108, y, colour, false);
+            g.drawString(this.font, Component.literal(place + "."), left, y, colour, true);
+            g.drawString(this.font, Component.literal(name), left + 20, y, colour, true);
+            g.drawString(this.font, Component.literal(score), left + 108, y, colour, true);
             if (!party.isEmpty() && !party.equals("1")) {
-                g.drawString(this.font, Component.literal("§8×" + party), left + 150, y, 0xFF555555, false);
+                g.drawString(this.font, Component.literal("§8×" + party), left + 150, y, 0xFF8A8A8A, true);
             }
             y += 11;
         }
