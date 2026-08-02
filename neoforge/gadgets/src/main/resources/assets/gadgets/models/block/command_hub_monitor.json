@@ -7,25 +7,131 @@
   "elements": [
     {
       "name": "back",
-      "from": [0, 0, 1], "to": [16, 16, 4],
+      "from": [
+        0,
+        0,
+        13
+      ],
+      "to": [
+        16,
+        16,
+        16
+      ],
       "faces": {
-        "north": { "uv": [0, 0, 16, 16], "texture": "#frame" },
-        "south": { "uv": [0, 0, 16, 16], "texture": "#frame" },
-        "east":  { "uv": [1, 0, 4, 16], "texture": "#frame" },
-        "west":  { "uv": [1, 0, 4, 16], "texture": "#frame" },
-        "up":    { "uv": [0, 1, 16, 4], "texture": "#frame" },
-        "down":  { "uv": [0, 1, 16, 4], "texture": "#frame" }
+        "north": {
+          "uv": [
+            0,
+            0,
+            16,
+            16
+          ],
+          "texture": "#frame"
+        },
+        "south": {
+          "uv": [
+            0,
+            0,
+            16,
+            16
+          ],
+          "texture": "#frame"
+        },
+        "east": {
+          "uv": [
+            1,
+            0,
+            4,
+            16
+          ],
+          "texture": "#frame"
+        },
+        "west": {
+          "uv": [
+            1,
+            0,
+            4,
+            16
+          ],
+          "texture": "#frame"
+        },
+        "up": {
+          "uv": [
+            0,
+            1,
+            16,
+            4
+          ],
+          "texture": "#frame"
+        },
+        "down": {
+          "uv": [
+            0,
+            1,
+            16,
+            4
+          ],
+          "texture": "#frame"
+        }
       }
     },
     {
       "name": "glass",
-      "from": [1, 1, 0], "to": [15, 15, 1],
+      "from": [
+        1,
+        1,
+        12
+      ],
+      "to": [
+        15,
+        15,
+        13
+      ],
       "faces": {
-        "north": { "uv": [1, 1, 15, 15], "texture": "#screen" },
-        "east":  { "uv": [0, 1, 1, 15], "texture": "#frame" },
-        "west":  { "uv": [0, 1, 1, 15], "texture": "#frame" },
-        "up":    { "uv": [1, 0, 15, 1], "texture": "#frame" },
-        "down":  { "uv": [1, 0, 15, 1], "texture": "#frame" }
+        "north": {
+          "uv": [
+            1,
+            1,
+            15,
+            15
+          ],
+          "texture": "#screen"
+        },
+        "east": {
+          "uv": [
+            0,
+            1,
+            1,
+            15
+          ],
+          "texture": "#frame"
+        },
+        "west": {
+          "uv": [
+            0,
+            1,
+            1,
+            15
+          ],
+          "texture": "#frame"
+        },
+        "up": {
+          "uv": [
+            1,
+            0,
+            15,
+            1
+          ],
+          "texture": "#frame"
+        },
+        "down": {
+          "uv": [
+            1,
+            0,
+            15,
+            1
+          ],
+          "texture": "#frame"
+        }
       }
     }
   ]

@@ -30,6 +30,9 @@ public class CommandHubMonitorRenderer implements BlockEntityRenderer<CommandHub
     /** Text scale for the headline number — deliberately large to read at range. */
     private static final float BIG = 0.026F;
 
+    /** Depth of the model's glass, from the block centre along FACING. */
+    private static final float GLASS_Z = 0.5F - 12.0F / 16.0F;
+
     private final Font font;
 
     public CommandHubMonitorRenderer(BlockEntityRendererProvider.Context ctx) {
@@ -48,7 +51,10 @@ public class CommandHubMonitorRenderer implements BlockEntityRenderer<CommandHub
         pose.pushPose();
         pose.translate(0.5, 0.5, 0.5);
         pose.mulPose(Axis.YP.rotationDegrees(-front.toYRot()));
-        pose.translate(0.0, 0.0, 0.505);
+        // The glass sits twelve pixels back from the front of the block space,
+        // because the panel hangs off the wall behind it rather than off the
+        // face nearest you. The readout goes a hair proud of that glass.
+        pose.translate(0.0, 0.0, GLASS_Z + 0.005);
 
         if (!be.isHubLinked()) {
             line(pose, buffers, "NO HUB", 0.0F, SMALL, IDLE);

@@ -31,16 +31,17 @@ public class CommandHubMonitorBlock extends HorizontalDirectionalBlock implement
     public static final MapCodec<CommandHubMonitorBlock> CODEC = simpleCodec(CommandHubMonitorBlock::new);
 
     /**
-     * The 4-pixel slab the model actually occupies, against the facing side.
-     * Without this the panel kept a full cube's outline and collision, so you
-     * bumped into an invisible block standing where the screen visibly isn't.
-     * Indexed by {@link Direction#get2DDataValue()}: south, west, north, east.
+     * The 4-pixel slab the model occupies. It hangs off the wall behind the
+     * panel — the side opposite FACING — so the shape is on that side too, not
+     * the side the screen looks out of. Without a shape at all the panel kept a
+     * full cube's outline and collision and you bumped into thin air in front
+     * of it. Indexed by {@link Direction#get2DDataValue()}: south, west, north, east.
      */
     private static final VoxelShape[] PANEL = {
-            Block.box(0, 0, 12, 16, 16, 16), // facing south
-            Block.box(0, 0, 0, 4, 16, 16),   // facing west
-            Block.box(0, 0, 0, 16, 16, 4),   // facing north
-            Block.box(12, 0, 0, 16, 16, 16), // facing east
+            Block.box(0, 0, 0, 16, 16, 4),   // facing south — mounted on the north wall
+            Block.box(12, 0, 0, 16, 16, 16), // facing west  — mounted on the east wall
+            Block.box(0, 0, 12, 16, 16, 16), // facing north — mounted on the south wall
+            Block.box(0, 0, 0, 4, 16, 16),   // facing east  — mounted on the west wall
     };
 
     public CommandHubMonitorBlock(Properties properties) {
@@ -66,7 +67,15 @@ public class CommandHubMonitorBlock extends HorizontalDirectionalBlock implement
     @Nullable
     @Override
     public BlockState getStateForPlacement(BlockPlaceContext ctx) {
-        return defaultBlockState().setValue(FACING, ctx.getHorizontalDirection().getOpposite());
+        // Hang it off the wall that was actually clicked, so it sits flush
+        // against that block and looks back out of it. Clicking a floor or a
+        // ceiling gives no wall to hang from, so those fall back to simply
+        // facing the player.
+        Direction clicked = ctx.getClickedFace();
+        Direction front = clicked.getAxis().isHorizontal()
+                ? clicked
+                : ctx.getHorizontalDirection().getOpposite();
+        return defaultBlockState().setValue(FACING, front);
     }
 
     @Override
