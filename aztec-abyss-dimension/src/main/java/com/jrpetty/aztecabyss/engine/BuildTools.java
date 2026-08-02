@@ -212,6 +212,7 @@ public final class BuildTools {
             case "teleport" -> "id=a";
             case "objective" -> "defend hp=600";
             case "region" -> "id=vault radius=5";
+            case "spawn" -> "";
             default -> "";
         };
     }

@@ -1,0 +1,36 @@
+{
+  "rounds": { "mode": "free" },
+  "economy": { "enabled": false },
+  "script": [
+    { "on": "run_start",
+      "do": [ { "balance_teams": 1 },
+              { "teleport_to_spawn": 1 },
+              { "title": { "main": "§lCAPTURE", "sub": "Three captures wins" } },
+              { "set_bar": "§cRed §f0 §8— §f0 §9Blue" } ] },
+
+    { "on": "region_enter", "when": { "region": "blue_flag", "team": "red" },
+      "do": [ { "set_my_var": { "name": "carrying", "to": 1 } },
+              { "team_message": { "team": "blue", "text": "§c⚑ They have your flag." } },
+              { "actionbar": "§6You have the flag — get it home" } ] },
+
+    { "on": "region_enter", "when": { "region": "red_flag", "team": "blue" },
+      "do": [ { "set_my_var": { "name": "carrying", "to": 1 } },
+              { "team_message": { "team": "red", "text": "§9⚑ They have your flag." } },
+              { "actionbar": "§6You have the flag — get it home" } ] },
+
+    { "on": "region_enter", "when": { "region": "red_base", "team": "red", "my_var": { "name": "carrying", "at_least": 1 } },
+      "do": [ { "set_my_var": { "name": "carrying", "to": 0 } },
+              { "add_team_var": { "team": "red", "name": "score", "by": 1 } },
+              { "message": "§c⚑ Red scores." } ] },
+
+    { "on": "region_enter", "when": { "region": "blue_base", "team": "blue", "my_var": { "name": "carrying", "at_least": 1 } },
+      "do": [ { "set_my_var": { "name": "carrying", "to": 0 } },
+              { "add_team_var": { "team": "blue", "name": "score", "by": 1 } },
+              { "message": "§9⚑ Blue scores." } ] },
+
+    { "on": "tick", "when": { "team_var": { "team": "red", "name": "score", "at_least": 3 } },
+      "do": [ { "win": { "title": "§c§lRED TAKES IT" } } ] },
+    { "on": "tick", "when": { "team_var": { "team": "blue", "name": "score", "at_least": 3 } },
+      "do": [ { "win": { "title": "§9§lBLUE TAKES IT" } } ] }
+  ]
+}

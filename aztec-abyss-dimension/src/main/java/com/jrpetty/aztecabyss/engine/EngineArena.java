@@ -125,6 +125,38 @@ public final class EngineArena {
     private final java.util.Map<UUID, java.util.Set<String>> inRegion = new java.util.HashMap<>();
     /** What this run remembers. */
     private final Vars vars = new Vars();
+    /** Sides, if the map declared any. */
+    private Teams teams;
+    /** Team spawn points, by team id. */
+    private final java.util.Map<String, Marker> teamSpawns = new java.util.HashMap<>();
+
+    public Teams teams() {
+        if (teams == null) {
+            teams = new Teams(level);
+        }
+        return teams;
+    }
+
+    /**
+     * Where a given player starts.
+     *
+     * <p>A team spawn if their side has one, the map's single spawn otherwise. The
+     * fallback matters: a map that declares teams but only marks one spawn should
+     * still be playable, just symmetrical, rather than dropping half the players
+     * into the void.
+     */
+    public BlockPos spawnFor(ServerPlayer player) {
+        if (teams != null) {
+            String side = teams.teamOf(player);
+            if (side != null) {
+                Marker m = teamSpawns.get(side);
+                if (m != null) {
+                    return m.pos();
+                }
+            }
+        }
+        return spawn;
+    }
     private final List<Marker> traps = new ArrayList<>();
     /** Armed traps: position to the game time they stop burning. */
     private final java.util.Map<BlockPos, Long> trapsActive = new java.util.HashMap<>();
@@ -269,6 +301,14 @@ public final class EngineArena {
         current.pens.addAll(scan.of("pen"));
         current.teleports.addAll(scan.of("teleport"));
         current.regions.addAll(scan.of("region"));
+        // A [Spawn] carrying team= is that side's spawn rather than the map's.
+        for (Marker sp : scan.of("spawn")) {
+            String team = sp.arg("team", "").toLowerCase(java.util.Locale.ROOT);
+            if (!team.isEmpty()) {
+                current.teamSpawns.put(team, sp);
+                current.teams().define(team, null);
+            }
+        }
         current.traps.addAll(scan.of("trap"));
         Marker objectiveMarker = scan.first("objective");
         if (objectiveMarker != null) {
@@ -372,6 +412,9 @@ public final class EngineArena {
         current.recordResult();
         current.vars.clear();
         current.inRegion.clear();
+        if (current.teams != null) {
+            current.teams.clear();
+        }
         for (Mob m : current.alive) {
             if (m.isAlive()) {
                 m.discard();

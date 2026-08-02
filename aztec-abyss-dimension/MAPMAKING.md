@@ -286,6 +286,41 @@ Free mode gets two things of its own:
 `aztecabyss:heist` ships as a worked example: three idols, one way out, five
 minutes. It is about thirty lines and it is a complete game.
 
+### Teams — sides
+
+The engine had exactly one relationship between players: everybody on the same
+side, permanently. That is not a limitation of the arena mode, it is the absence
+of a concept — and it ruled out every game where the answer to "who is against
+you" is anything but the horde.
+
+```
+[Spawn]
+team=red
+```
+
+A `[Spawn]` carrying `team=` is that side's spawn. A map that declares teams but
+marks only one spawn still plays — it is just symmetrical.
+
+**Actions:** `join_team`, `balance_teams`, `team_message`, `add_team_var`,
+`set_team_var`, `teleport_to_spawn`
+**Conditions:** `team` (which side triggered this), `team_var`
+
+```json
+{ "on": "region_enter", "when": { "region": "blue_flag", "team": "red" },
+  "do": [ { "set_my_var": { "name": "carrying", "to": 1 } },
+          { "team_message": { "team": "blue", "text": "§c⚑ They have your flag." } } ] }
+```
+
+Membership rides vanilla's scoreboard teams, which buys name colouring, glow, and
+**friendly fire off** without reimplementing any of them. `balance_teams` always
+fills the smallest side rather than round-robin, so someone joining a run already
+under way lands where they are needed.
+
+A team score is a normal variable under a prefixed name — `team:red:score` — so
+everything that already reads variables keeps working.
+
+`aztecabyss:capture` ships as a worked example: capture the flag, three to win.
+
 ### Variables — what a run remembers
 
 The script layer could do a lot and could not **count**. Every rule was a reflex,

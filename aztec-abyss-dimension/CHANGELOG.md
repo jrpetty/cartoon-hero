@@ -13,6 +13,26 @@ behaviour that was already there · **docs**
 
 ## Unreleased
 
+### Teams — the engine learns that players can be on different sides
+
+- **feat** `Teams` — named sides with colours, membership and even balancing.
+  Previously every player was on the same side permanently, which is not a
+  limitation of the arena mode but the absence of a concept: capture the flag,
+  team deathmatch, hunters and runners, infection and attack/defend were all one
+  idea away and none were reachable.
+- **feat** `[Spawn] team=` marks a side's spawn; a map with teams but one spawn
+  still plays, symmetrically.
+- **feat** Actions `join_team`, `balance_teams`, `team_message`, `add_team_var`,
+  `set_team_var`, `teleport_to_spawn`. Conditions `team` and `team_var`.
+- **change** Membership rides vanilla scoreboard teams, buying name colouring,
+  glow and friendly-fire-off for free rather than reimplementing three systems.
+- **change** `balance_teams` fills smallest-first, not round-robin — round-robin is
+  only even if everybody arrives at once, which on a server never happens.
+- **change** Team scores are normal variables under a prefixed name
+  (`team:red:score`), so every existing condition and readout keeps working.
+- **feat** `aztecabyss:capture` ships as a worked example — capture the flag,
+  three to win.
+
 ### Free mode — the engine can host a game with no horde in it
 
 - **fix/feat** `startIn` **refused** any map without `[Horde]` markers. That single

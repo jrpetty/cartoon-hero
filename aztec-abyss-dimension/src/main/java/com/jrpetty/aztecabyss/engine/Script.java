@@ -198,6 +198,34 @@ public final class Script {
                 return false;
             }
         }
+        // Which side triggered this. "team": "red" on a region_enter is the whole
+        // of "when a blue player reaches the red flag".
+        if (when.has("team")) {
+            if (who == null || !arena.teams().isOn(who, str(when, "team", ""))) {
+                return false;
+            }
+        }
+        if (when.has("team_var") && when.get("team_var").isJsonObject()) {
+            JsonObject tv = when.getAsJsonObject("team_var");
+            String team = str(tv, "team", "");
+            if (team.isEmpty() && who != null) {
+                team = arena.teams().teamOf(who);
+            }
+            if (team == null || team.isEmpty()) {
+                return false;
+            }
+            JsonObject shim = new JsonObject();
+            shim.addProperty("name", "team:" + team.toLowerCase(Locale.ROOT)
+                    + ":" + str(tv, "name", ""));
+            for (String c : new String[]{"equals", "at_least", "at_most"}) {
+                if (tv.has(c)) {
+                    shim.addProperty(c, intOf(tv, c, 0));
+                }
+            }
+            if (!varMatches(shim, arena, who, false)) {
+                return false;
+            }
+        }
         if (when.has("area_open")) {
             return arena.isAreaOpen(str(when, "area_open", ""));
         }
@@ -234,6 +262,59 @@ public final class Script {
     // ------------------------------------------------------------------
     // Actions
     // ------------------------------------------------------------------
+
+    /** {@code { "team_message": { "team": "red", "text": "The flag is out" } }} */
+    private static void teamMessage(EngineArena arena, JsonElement body) {
+        if (!body.isJsonObject()) {
+            return;
+        }
+        JsonObject o = body.getAsJsonObject();
+        String team = str(o, "team", "");
+        String text = str(o, "text", "");
+        if (team.isEmpty() || text.isEmpty()) {
+            return;
+        }
+        for (ServerPlayer p : arena.teams().membersOf(team, arena.everyone())) {
+            p.displayClientMessage(net.minecraft.network.chat.Component.literal(text), false);
+        }
+    }
+
+    /**
+     * A variable scoped to a side, stored as a normal variable under a prefixed
+     * name.
+     *
+     * <p>Deliberately not a third storage scope. A team score is a run variable
+     * whose name happens to mention a team, and adding a parallel map for it would
+     * mean every condition, action and readout learning about a distinction that
+     * does not exist underneath. {@code team:red:score} is a name, and everything
+     * that already reads names keeps working.
+     */
+    private static void teamVar(EngineArena arena, ServerPlayer who,
+                                JsonElement body, boolean absolute) {
+        if (!body.isJsonObject()) {
+            return;
+        }
+        JsonObject o = body.getAsJsonObject();
+        String name = str(o, "name", "");
+        if (name.isEmpty()) {
+            return;
+        }
+        // "team" names a side outright; leaving it off means whoever triggered it.
+        String team = str(o, "team", "");
+        if (team.isEmpty() && who != null) {
+            team = arena.teams().teamOf(who);
+        }
+        if (team == null || team.isEmpty()) {
+            return;
+        }
+        String key = "team:" + team.toLowerCase(Locale.ROOT) + ":" + name;
+        int amount = intOf(o, absolute ? "to" : "by", absolute ? 0 : 1);
+        if (absolute) {
+            arena.vars().set(key, amount);
+        } else {
+            arena.vars().add(key, amount);
+        }
+    }
 
     /** {@code { "add_var": { "name": "flags", "by": 1 } }} */
     private static void varAction(EngineArena arena, ServerPlayer who,
@@ -310,6 +391,22 @@ public final class Script {
                 case "set_my_var" -> varAction(arena, who, body, true, true);
                 case "add_my_var" -> varAction(arena, who, body, true, false);
                 case "set_bar" -> arena.setBarText(asText(body));
+                case "join_team" -> {
+                    if (who != null) {
+                        arena.teams().join(who, asText(body));
+                    }
+                }
+                case "balance_teams" -> arena.teams().balance(arena.everyone());
+                case "team_message" -> teamMessage(arena, body);
+                case "add_team_var" -> teamVar(arena, who, body, false);
+                case "set_team_var" -> teamVar(arena, who, body, true);
+                case "teleport_to_spawn" -> {
+                    if (who != null) {
+                        BlockPos at = arena.spawnFor(who);
+                        who.teleportTo(level, at.getX() + 0.5, at.getY() + 1, at.getZ() + 0.5,
+                                java.util.Set.of(), who.getYRot(), 0.0F);
+                    }
+                }
                 case "win" -> finish(arena, level, body, true);
                 case "lose" -> finish(arena, level, body, false);
                 default -> {
