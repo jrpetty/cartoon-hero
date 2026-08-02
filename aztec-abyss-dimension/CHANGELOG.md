@@ -13,6 +13,24 @@ behaviour that was already there · **docs**
 
 ## Unreleased
 
+### Free mode — the engine can host a game with no horde in it
+
+- **fix/feat** `startIn` **refused** any map without `[Horde]` markers. That single
+  guard made round-survival not one mode but the only thing the engine could
+  express — a race, an escape room, a heist and a puzzle have no horde by
+  definition, so no amount of scripting could reach them.
+- **feat** `"rounds": { "mode": "free" }` — no rounds, nothing spawns, no wave.
+  The map is regions, variables and script; the script ends it.
+- **feat** `tick` event, once a second — the only recurring event a map without
+  rounds has, and what a deadline hangs off.
+- **feat** `set_bar` action and an automatic run clock, so a race has a time
+  without the author building one.
+- **feat** `seconds` condition with `at_least` / `at_most`.
+- **feat** `aztecabyss:heist` ships as a worked example — three idols, one way out,
+  five minutes, ~30 lines, a complete game with no Java.
+- **change** Validation now calls a missing horde a warning that names free mode,
+  not an error.
+
 ### Variables and regions — the engine stops being only an arena
 
 - **feat** `Vars` — run-scoped and per-player integers. The script layer could do

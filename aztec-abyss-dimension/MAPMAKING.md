@@ -254,6 +254,38 @@ x1
 Limits are per run and per sign, not per player: one netherite sword means the
 squad gets one, which is a decision they have to make together.
 
+### Free mode — a game that is not an arena
+
+```json
+"rounds": { "mode": "free" }
+```
+
+No rounds. No horde. Nothing spawns on its own and no wave ever begins — the map
+is driven entirely by regions, variables and script, and it ends when the script
+says so.
+
+The engine used to **refuse** a map with no `[Horde]` markers, which quietly made
+round-survival not one mode but the only thing that could exist. A race, an escape
+room, a heist and a puzzle all have no horde by definition.
+
+Everything else still works — shops, doors, traps, teleports, perks — because none
+of it was ever really about rounds.
+
+Free mode gets two things of its own:
+
+- **`tick`** — fires once a second. The only recurring event a map without rounds
+  has, and what a deadline or a "have they got them all yet" check hangs off.
+- **`set_bar`** — you write the bar. The run clock is appended automatically, so a
+  race has a time without you building one.
+
+```json
+{ "on": "tick", "when": { "seconds": { "at_least": 300 } },
+  "do": [ { "lose": { "title": "§4§lTOO SLOW" } } ] }
+```
+
+`aztecabyss:heist` ships as a worked example: three idols, one way out, five
+minutes. It is about thirty lines and it is a complete game.
+
 ### Variables — what a run remembers
 
 The script layer could do a lot and could not **count**. Every rule was a reflex,

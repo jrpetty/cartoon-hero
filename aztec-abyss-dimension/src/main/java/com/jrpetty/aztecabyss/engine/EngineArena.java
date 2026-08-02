@@ -85,6 +85,19 @@ public final class EngineArena {
     private final ServerBossEvent bar;
     private final RandomSource rng = RandomSource.create();
 
+    /** Elapsed run time in ticks, for free mode's clock and the board's tie-break. */
+    private int elapsed = 0;
+    /** What free mode shows on the bar. Set by script; the clock is appended. */
+    private String barText = "";
+
+    public void setBarText(String text) {
+        this.barText = text == null ? "" : text;
+    }
+
+    public int elapsedSeconds() {
+        return elapsed / 20;
+    }
+
     private int round = 0;
     private int leftToSpawn = 0;
     private int breather = 0;
@@ -237,10 +250,15 @@ public final class EngineArena {
         if (spawnMarker == null) {
             return "This map has no [Spawn] marker. Run /arena validate to see what else is missing.";
         }
-        if (scan.of("horde").isEmpty()) {
-            return "This map has no [Horde] markers, so nothing could ever attack.";
-        }
         Ruleset rules = RulesetLoader.byId(rulesetId);
+        // A free-mode map is allowed to have nothing that attacks. That is the
+        // entire point of it: a race, an escape room and a heist have no horde by
+        // definition, and refusing them here made round-survival not one mode but
+        // the only thing the engine could express.
+        if (!rules.free && scan.of("horde").isEmpty()) {
+            return "This map has no [Horde] markers, so nothing could ever attack. "
+                    + "(A ruleset with \"mode\": \"free\" does not need any.)";
+        }
 
         stop(false);
         current = new EngineArena(level, "Custom Arena", rules,
@@ -269,7 +287,14 @@ public final class EngineArena {
                 current.join(other);
             }
         }
-        current.beginRound(1);
+        if (rules.free) {
+            // No round ever begins. run_start is the only thing that fires, and
+            // from there the map is on its own.
+            current.bar.setName(Component.literal("§6" + rules.id));
+            Script.fire(current, level, rules.id, "run_start", player);
+        } else {
+            current.beginRound(1);
+        }
         return null;
     }
 
@@ -446,18 +471,29 @@ public final class EngineArena {
                 || !p.level().dimension().equals(level.dimension()));
         if (present.isEmpty()) {
             for (ServerPlayer p : players()) {
-                p.displayClientMessage(Component.literal(
-                        "§c§lDOWN. §r§7You reached round §f" + round + "§7."), false);
+                p.displayClientMessage(Component.literal(rules.free
+                        ? "§c§lDOWN. §r§7You lasted §f" + MazeStyleTime.of(elapsed / 20) + "§7."
+                        : "§c§lDOWN. §r§7You reached round §f" + round + "§7."), false);
             }
             stop(false);
             return;
         }
+        elapsed++;
 
         refreshBars(present);
         tickDowned(present);
         tickObjective(present);
         tickPrompts(present);
         tickRegions(present);
+
+        // Free mode stops here. No breather, no wave, no round ever begins - the
+        // map is the script, and the script ends it. Everything above this line is
+        // still live, because shops, doors, traps, regions and variables were
+        // never really about rounds.
+        if (rules.free) {
+            tickFreeBar(present);
+            return;
+        }
         tickTraps();
         tickTeleports(present);
         if (rules.powerupChance > 0 && (special == null || !special.noPowerups())) {
@@ -942,6 +978,41 @@ public final class EngineArena {
             case "loot" -> "§aSupplies §8(right-click)";
             default -> "";
         };
+    }
+
+    /**
+     * Free mode's bar: whatever the map says, and how long you have been at it.
+     *
+     * <p>A run with no rounds still needs one line that is always true, and a
+     * clock is the only thing every non-arena game has in common. The map can
+     * write the rest with {@code set_bar} - "3 of 5 idols", "reach the roof",
+     * "42 seconds left" - and the clock is appended so a race has a time without
+     * the author having to build one.
+     */
+    private void tickFreeBar(List<ServerPlayer> present) {
+        if (elapsed % 20 != 0) {
+            return;
+        }
+        // A free-mode map has no round to hang rules off, so this is the only
+        // recurring event it gets. Once a second, which is as fine-grained as a
+        // deadline or a "have they collected them all yet" check ever needs, and
+        // cheap enough that a map full of rules cannot make it hurt.
+        Script.fire(this, level, rules.id, "tick", present.isEmpty() ? null : present.get(0));
+
+        String clock = MazeStyleTime.of(elapsed / 20);
+        bar.setName(Component.literal(barText.isEmpty()
+                ? "§6" + clock
+                : barText + " §8| §7" + clock));
+        bar.setProgress(1.0F);
+    }
+
+    /** m:ss, which is how anybody reads a run time. */
+    static final class MazeStyleTime {
+        static String of(int seconds) {
+            int m = seconds / 60;
+            int s = seconds % 60;
+            return m + ":" + (s < 10 ? "0" + s : String.valueOf(s));
+        }
     }
 
     public Vars vars() {

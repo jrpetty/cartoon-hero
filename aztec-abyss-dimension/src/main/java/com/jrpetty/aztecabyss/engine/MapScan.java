@@ -122,7 +122,9 @@ public final class MapScan {
         }
 
         if (scan.count("horde") == 0) {
-            problems.add("§cNo §f[Horde]§c markers — nothing can ever attack.");
+            problems.add("§eNo §f[Horde]§e markers — nothing will attack. "
+                    + "Fine for a §ffree§e-mode map (a race, a heist, an escape room); "
+                    + "wrong for anything that expects a horde.");
         }
 
         if (scan.count("extract") == 0) {

@@ -186,6 +186,18 @@ public final class Script {
                 return false;
             }
         }
+        // Elapsed run time, so a free-mode map can have a deadline without
+        // building its own clock out of variables.
+        if (when.has("seconds") && when.get("seconds").isJsonObject()) {
+            JsonObject t = when.getAsJsonObject("seconds");
+            int now = arena.elapsedSeconds();
+            if (t.has("at_least") && now < intOf(t, "at_least", 0)) {
+                return false;
+            }
+            if (t.has("at_most") && now > intOf(t, "at_most", Integer.MAX_VALUE)) {
+                return false;
+            }
+        }
         if (when.has("area_open")) {
             return arena.isAreaOpen(str(when, "area_open", ""));
         }
@@ -297,6 +309,7 @@ public final class Script {
                 case "add_var" -> varAction(arena, who, body, false, false);
                 case "set_my_var" -> varAction(arena, who, body, true, true);
                 case "add_my_var" -> varAction(arena, who, body, true, false);
+                case "set_bar" -> arena.setBarText(asText(body));
                 case "win" -> finish(arena, level, body, true);
                 case "lose" -> finish(arena, level, body, false);
                 default -> {

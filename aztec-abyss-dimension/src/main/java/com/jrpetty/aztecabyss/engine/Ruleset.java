@@ -40,6 +40,21 @@ public final class Ruleset {
 
     public final String id;
     public final boolean endless;
+
+    /**
+     * A run with no rounds and no horde at all.
+     *
+     * <p>The engine refused to start a map that had no {@code [Horde]} markers,
+     * which quietly made "round-survival" not a mode but the only thing that could
+     * exist. A race, an escape room, a heist and a puzzle all have no horde by
+     * definition, so all of them were unreachable no matter what else was added.
+     *
+     * <p>In free mode nothing spawns on its own and no round ever begins. The map
+     * is driven entirely by regions, variables and script, and the run ends when
+     * the script says it does. Everything else - shops, doors, traps, the whole
+     * marker set - still works, because none of it was ever really about rounds.
+     */
+    public final boolean free;
     public final int finalRound;
     public final int baseCount;
     public final int perRound;
@@ -147,6 +162,7 @@ public final class Ruleset {
     private Ruleset(Builder b) {
         this.id = b.id;
         this.endless = b.endless;
+        this.free = b.free;
         this.finalRound = b.finalRound;
         this.baseCount = b.baseCount;
         this.perRound = b.perRound;
@@ -199,6 +215,7 @@ public final class Ruleset {
     private static final class Builder {
         String id = "default";
         boolean endless = false;
+        boolean free = false;
         int finalRound = 20;
         int baseCount = 6;
         int perRound = 4;
@@ -272,7 +289,9 @@ public final class Ruleset {
                 "enabled", "target_pressure", "min_pace", "max_pace");
 
         if (rounds != null) {
-            b.endless = "endless".equalsIgnoreCase(str(rounds, "mode", "finite"));
+            String mode = str(rounds, "mode", "finite");
+            b.endless = "endless".equalsIgnoreCase(mode);
+            b.free = "free".equalsIgnoreCase(mode);
             b.finalRound = clampInt(intOf(rounds, "final_round", b.finalRound), 0, 10000);
             b.baseCount = clampInt(intOf(rounds, "base_count", b.baseCount), 1, 200);
             b.perRound = clampInt(intOf(rounds, "per_round", b.perRound), 0, 200);
