@@ -108,6 +108,42 @@ public record Marker(String kind, BlockPos pos, Direction facing, Map<String, St
         return new Marker(kind, sign.getBlockPos().immutable(), facing, args);
     }
 
+    /**
+     * Reads a Marker Block as a marker.
+     *
+     * <p>The same grammar as a sign, over eight long lines instead of four short
+     * ones. Deliberately a second entry point into one parser rather than a second
+     * parser: an author who learned markers on signs already knows this, and a map
+     * mixing the two reads identically to the engine.
+     */
+    public static Marker parse(com.jrpetty.aztecabyss.block.MarkerBlockEntity block, BlockState state) {
+        String kind = block.kind().toLowerCase(Locale.ROOT);
+        if (kind.isEmpty()) {
+            return null;
+        }
+        Map<String, String> args = new HashMap<>();
+        java.util.List<String> lines = block.lines();
+        for (int i = 1; i < lines.size(); i++) {
+            absorb(lines.get(i), args);
+        }
+        Direction facing = state.hasProperty(BlockStateProperties.HORIZONTAL_FACING)
+                ? state.getValue(BlockStateProperties.HORIZONTAL_FACING)
+                : Direction.NORTH;
+        return new Marker(kind, block.getBlockPos().immutable(), facing, args);
+    }
+
+    /** One line of {@code key=value} tokens into the argument map. */
+    private static void absorb(String line, Map<String, String> args) {
+        for (String token : line.trim().split("\\s+")) {
+            int eq = token.indexOf('=');
+            if (eq > 0 && eq < token.length() - 1) {
+                args.put(token.substring(0, eq).toLowerCase(Locale.ROOT), token.substring(eq + 1));
+            } else if (!token.isBlank() && !args.containsKey("value")) {
+                args.put("value", token);
+            }
+        }
+    }
+
     private static String text(SignBlockEntity sign, int index) {
         Component c = sign.getFrontText().getMessage(index, false);
         return c.getString().trim();

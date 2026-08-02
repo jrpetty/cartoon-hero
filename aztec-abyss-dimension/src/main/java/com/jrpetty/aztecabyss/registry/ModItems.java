@@ -14,6 +14,17 @@ public final class ModItems {
     public static final DeferredRegister.Items ITEMS =
             DeferredRegister.createItems(AztecAbyssConstants.MOD_ID);
 
+    /**
+     * The Marker Block's item form.
+     *
+     * <p>Registered rather than handed out as a data-component-carrying vanilla
+     * item, which is how the wand and the old marker signs work. That trick stops
+     * being available the moment the thing you are placing is a block of your own:
+     * a block needs an item that places it.
+     */
+    public static final net.neoforged.neoforge.registries.DeferredItem<net.minecraft.world.item.BlockItem> MARKER =
+            ITEMS.registerSimpleBlockItem("marker", ModBlocks.MARKER);
+
     private ModItems() {
     }
 

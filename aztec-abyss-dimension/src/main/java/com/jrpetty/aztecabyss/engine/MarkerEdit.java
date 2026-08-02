@@ -57,9 +57,16 @@ public final class MarkerEdit {
      * @return a message describing what happened, never null
      */
     public static String set(ServerLevel level, ServerPlayer player, String key, String value) {
+        // Marker Blocks first: they are the newer surface and the one an author is
+        // more likely to be pointing at, and unlike a sign they have room to hold
+        // whatever is being set without truncating it.
+        String onBlock = setOnBlock(level, player, key, value);
+        if (onBlock != null) {
+            return onBlock;
+        }
         SignBlockEntity sign = targeted(level, player);
         if (sign == null) {
-            return "§cLook at a marker sign first.";
+            return "§cLook at a marker first.";
         }
         Marker marker = Marker.parse(sign, level.getBlockState(sign.getBlockPos()));
         if (marker == null) {
@@ -81,6 +88,51 @@ public final class MarkerEdit {
             args.put(k, value);
         }
         write(level, sign, "[" + marker.kind() + "]", argLines(args));
+        return "§a✔ " + marker.kind() + " · §f" + k + " §7→ §f" + value;
+    }
+
+    /** The Marker Block a player is pointing at, or null. */
+    public static com.jrpetty.aztecabyss.block.MarkerBlockEntity targetedBlock(
+            ServerLevel level, ServerPlayer player) {
+        var hit = player.pick(REACH, 0.0F, false);
+        if (!(hit instanceof net.minecraft.world.phys.BlockHitResult block)) {
+            return null;
+        }
+        return level.getBlockEntity(block.getBlockPos())
+                instanceof com.jrpetty.aztecabyss.block.MarkerBlockEntity be ? be : null;
+    }
+
+    /**
+     * {@code /arena set} against a Marker Block.
+     *
+     * <p>Rewrites the argument lines and leaves the kind alone, exactly as the sign
+     * path does - but writes them back over as many lines as it takes rather than
+     * packing everything into three. A spawner with six options stays one option
+     * per line and stays readable.
+     *
+     * @return the message to show, or null if the player is not looking at one
+     */
+    private static String setOnBlock(ServerLevel level, ServerPlayer player,
+                                     String key, String value) {
+        com.jrpetty.aztecabyss.block.MarkerBlockEntity be = targetedBlock(level, player);
+        if (be == null) {
+            return null;
+        }
+        Marker marker = Marker.parse(be, level.getBlockState(be.getBlockPos()));
+        if (marker == null) {
+            return "§cThat Marker Block has no kind — line 1 needs one in brackets.";
+        }
+        String k = key.toLowerCase(Locale.ROOT);
+        Map<String, String> args = new LinkedHashMap<>(marker.args());
+        if (value.equalsIgnoreCase("-") || value.isEmpty()) {
+            args.remove(k);
+        } else {
+            args.put(k, value);
+        }
+        java.util.List<String> lines = new java.util.ArrayList<>();
+        lines.add("[" + marker.kind() + "]");
+        args.forEach((a, b) -> lines.add(a + "=" + b));
+        be.setLines(lines);
         return "§a✔ " + marker.kind() + " · §f" + k + " §7→ §f" + value;
     }
 
@@ -157,9 +209,20 @@ public final class MarkerEdit {
 
     /** Reads back what a marker currently says, for the inspector. */
     public static String describe(ServerLevel level, ServerPlayer player) {
+        com.jrpetty.aztecabyss.block.MarkerBlockEntity be = targetedBlock(level, player);
+        if (be != null) {
+            Marker m = Marker.parse(be, level.getBlockState(be.getBlockPos()));
+            if (m == null) {
+                return "§7That Marker Block has no kind on line 1.";
+            }
+            StringBuilder sb = new StringBuilder("§b[" + m.kind() + "]§7 facing "
+                    + m.facing().getName() + " §8(block)");
+            m.args().forEach((k, v) -> sb.append(" §8| §f").append(k).append("§7=").append(v));
+            return sb.toString();
+        }
         SignBlockEntity sign = targeted(level, player);
         if (sign == null) {
-            return "§7Look at a marker sign.";
+            return "§7Look at a marker.";
         }
         Marker marker = Marker.parse(sign, level.getBlockState(sign.getBlockPos()));
         if (marker == null) {

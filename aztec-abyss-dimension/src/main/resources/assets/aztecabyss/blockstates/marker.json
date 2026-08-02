@@ -1,0 +1,8 @@
+{
+  "variants": {
+    "facing=north": { "model": "aztecabyss:block/marker" },
+    "facing=south": { "model": "aztecabyss:block/marker" },
+    "facing=east":  { "model": "aztecabyss:block/marker" },
+    "facing=west":  { "model": "aztecabyss:block/marker" }
+  }
+}

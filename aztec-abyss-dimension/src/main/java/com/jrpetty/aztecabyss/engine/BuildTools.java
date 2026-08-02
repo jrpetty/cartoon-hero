@@ -153,6 +153,42 @@ public final class BuildTools {
         return stack;
     }
 
+    /**
+     * A Marker Block that arrives already written, the same way the signs did.
+     *
+     * <p>Block-entity data rides on the item and lands in the block it places, so
+     * {@code /arena marker spawner} gives you something you place once and are
+     * done with - no typing, nothing to spell wrong, and now no line length to
+     * work around either.
+     */
+    public static ItemStack markerBlock(String kind, String secondLine) {
+        ItemStack stack = new ItemStack(
+                com.jrpetty.aztecabyss.registry.ModItems.MARKER.get());
+
+        ListTag lines = new ListTag();
+        lines.add(StringTag.valueOf("[" + kind + "]"));
+        if (secondLine != null && !secondLine.isEmpty()) {
+            lines.add(StringTag.valueOf(secondLine));
+        }
+
+        CompoundTag be = new CompoundTag();
+        be.putString("id", "aztecabyss:marker");
+        be.put("Lines", lines);
+        stack.set(DataComponents.BLOCK_ENTITY_DATA, CustomData.of(be));
+
+        CompoundTag mark = new CompoundTag();
+        mark.putString(KIT_TAG, kind);
+        stack.set(DataComponents.CUSTOM_DATA, CustomData.of(mark));
+
+        stack.set(DataComponents.CUSTOM_NAME,
+                Component.literal("§b[" + kind + "]§r §7marker"));
+        stack.set(DataComponents.LORE, new ItemLore(List.of(
+                Component.literal("§7Place it. Invisible in survival."),
+                Component.literal("§8/arena line <n> <text> to write it"),
+                Component.literal("§88 lines, 256 characters each"))));
+        return stack;
+    }
+
     /** Sign messages are stored as JSON text, so even a bare word needs wrapping. */
     private static String json(String text) {
         return "{\"text\":\"" + text.replace("\\", "\\\\").replace("\"", "\\\"") + "\"}";

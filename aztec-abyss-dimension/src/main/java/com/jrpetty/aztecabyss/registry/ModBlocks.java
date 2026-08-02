@@ -34,6 +34,24 @@ public final class ModBlocks {
             )
     );
 
+    /**
+     * The Marker Block - what an author places instead of a sign.
+     *
+     * <p>Unbreakable strength would be wrong: an author has to be able to take one
+     * back off a wall. Instant-break instead, and no loot table only because the
+     * item is handed out by command rather than mined.
+     */
+    public static final DeferredBlock<com.jrpetty.aztecabyss.block.MarkerBlock> MARKER =
+            BLOCKS.register("marker",
+                    () -> new com.jrpetty.aztecabyss.block.MarkerBlock(
+                            BlockBehaviour.Properties.of()
+                                    .mapColor(MapColor.NONE)
+                                    .noCollission()
+                                    .noOcclusion()
+                                    .instabreak()
+                                    .sound(SoundType.WOOD)
+                                    .noLootTable()));
+
     private ModBlocks() {
     }
 

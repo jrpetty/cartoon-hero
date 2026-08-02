@@ -120,6 +120,12 @@ public final class EngineEvents {
                                 })
                                 .executes(ctx -> giveMarker(ctx.getSource(),
                                         com.mojang.brigadier.arguments.StringArgumentType.getString(ctx, "kind")))))
+                .then(Commands.literal("line")
+                        .then(Commands.argument("n", com.mojang.brigadier.arguments.IntegerArgumentType.integer(1, 8))
+                                .then(Commands.argument("text", com.mojang.brigadier.arguments.StringArgumentType.greedyString())
+                                        .executes(ctx -> markerLine(ctx.getSource(),
+                                                com.mojang.brigadier.arguments.IntegerArgumentType.getInteger(ctx, "n"),
+                                                com.mojang.brigadier.arguments.StringArgumentType.getString(ctx, "text"))))))
                 .then(Commands.literal("create")
                         .then(Commands.argument("name", com.mojang.brigadier.arguments.StringArgumentType.word())
                                 .executes(ctx -> create(ctx.getSource(),
@@ -707,14 +713,58 @@ public final class EngineEvents {
             return 0;
         }
         String clean = kind.toLowerCase(java.util.Locale.ROOT);
-        net.minecraft.world.item.ItemStack sign =
-                BuildTools.markerSign(clean, BuildTools.hintFor(clean));
-        if (!player.getInventory().add(sign)) {
-            player.drop(sign, false);
+        // Dealers stay signs. A dealer is the one marker a player is meant to walk
+        // up to and read, so making it invisible would hide the shop rather than
+        // tidy the map. Everything else is an instruction to the engine and has no
+        // business being visible at all.
+        net.minecraft.world.item.ItemStack stack = clean.equals("dealer")
+                ? BuildTools.markerSign(clean, BuildTools.hintFor(clean))
+                : BuildTools.markerBlock(clean, BuildTools.hintFor(clean));
+        if (!player.getInventory().add(stack)) {
+            player.drop(stack, false);
         }
         source.sendSuccess(() -> Component.literal(
                 "§6[" + clean + "] §7marker — place it, that is the whole step."), false);
+        if (!clean.equals("dealer")) {
+            source.sendSuccess(() -> Component.literal(
+                    "§8Invisible in survival. §f/arena line <n> <text>§8 to write past a sign's limits."), false);
+        }
         return 1;
+    }
+
+    /**
+     * {@code /arena line <n> <text>} - writes one line of the marker you are facing.
+     *
+     * <p>This is where the character limit actually goes away. The sign's cap was
+     * never in the format, it was in the editing screen; a command argument has no
+     * such cap, so a spawner's whole configuration goes on one line and stays
+     * readable.
+     */
+    private static int markerLine(CommandSourceStack source, int index, String text) {
+        ServerPlayer player = source.getPlayer();
+        if (player == null || !(source.getLevel() instanceof ServerLevel level)) {
+            return 0;
+        }
+        com.jrpetty.aztecabyss.block.MarkerBlockEntity be = lookedAtMarker(player, level);
+        if (be == null) {
+            source.sendFailure(Component.literal(
+                    "Look at a Marker Block. (Signs are edited by hand, as always.)"));
+            return 0;
+        }
+        be.setLine(index - 1, text);
+        source.sendSuccess(() -> Component.literal(
+                "§6Line " + index + " §7= §f" + text), false);
+        return 1;
+    }
+
+    /** The Marker Block a player is pointing at, within reach, or null. */
+    static com.jrpetty.aztecabyss.block.MarkerBlockEntity lookedAtMarker(ServerPlayer player, ServerLevel level) {
+        net.minecraft.world.phys.HitResult hit = player.pick(6.0, 0.0F, false);
+        if (!(hit instanceof net.minecraft.world.phys.BlockHitResult bhr)) {
+            return null;
+        }
+        return level.getBlockEntity(bhr.getBlockPos())
+                instanceof com.jrpetty.aztecabyss.block.MarkerBlockEntity be ? be : null;
     }
 
     /**

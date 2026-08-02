@@ -71,16 +71,28 @@ public final class MapScan {
                 for (Map.Entry<BlockPos, net.minecraft.world.level.block.entity.BlockEntity> e
                         : chunk.getBlockEntities().entrySet()) {
                     BlockPos pos = e.getKey();
-                    if (!box.isInside(pos) || !(e.getValue() instanceof SignBlockEntity sign)) {
+                    if (!box.isInside(pos)) {
                         continue;
                     }
-                    Marker m = Marker.parse(sign, level.getBlockState(pos));
+                    // Both authoring surfaces feed one parser. A map may mix them
+                    // freely - an old build full of signs keeps working, and a new
+                    // one can use blocks throughout.
+                    Marker m;
+                    SignBlockEntity sign = null;
+                    if (e.getValue() instanceof SignBlockEntity s) {
+                        sign = s;
+                        m = Marker.parse(s, level.getBlockState(pos));
+                    } else if (e.getValue() instanceof com.jrpetty.aztecabyss.block.MarkerBlockEntity mb) {
+                        m = Marker.parse(mb, level.getBlockState(pos));
+                    } else {
+                        continue;
+                    }
                     if (m == null) {
                         continue;
                     }
                     all.add(m);
                     byKind.computeIfAbsent(m.kind(), k -> new ArrayList<>()).add(m);
-                    if (m.kind().equals("dealer") && DealerSign.parse(sign) == null) {
+                    if (m.kind().equals("dealer") && sign != null && DealerSign.parse(sign) == null) {
                         brokenDealers.add(pos.immutable());
                     }
                 }

@@ -21,6 +21,7 @@ public final class AztecAbyssMod {
     public AztecAbyssMod(IEventBus modEventBus, ModContainer modContainer) {
         ModBlocks.register(modEventBus);
         ModItems.register(modEventBus);
+        com.jrpetty.aztecabyss.registry.ModBlockEntities.register(modEventBus);
         ModParticles.register(modEventBus);
         ModSounds.register(modEventBus);
         ModAttachments.register(modEventBus);
