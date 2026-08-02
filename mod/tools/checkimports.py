@@ -59,9 +59,58 @@ for path in files:
             continue
         bad.append((path, name, sorted(pkgs)))
 
-if bad:
-    print("FAIL  a class is used without an import:")
-    for path, name, pkgs in bad:
-        print(f"   {path}: {name}  (declared in {', '.join(pkgs)})")
+# --- second pass: OurClass.method(...) where OurClass has no such method ---
+#
+# The other half of the same blind spot. Twice now an edit has silently failed
+# to apply while a caller was written against it, and check.sh reported clean
+# because javac gives up on files with unresolvable Minecraft imports. This
+# only ever looks at classes we own, and only complains when the name appears
+# NOWHERE in the target file, so inheritance and overloads cannot trip it.
+decls = {}
+for path in files:
+    src = open(path, encoding="utf-8").read()
+    simple = os.path.basename(path)[:-5]
+    found = set(re.findall(r"\b(\w+)\s*\(", src))
+    # implicit members every enum and every object has
+    found |= {"values", "valueOf", "ordinal", "name", "compareTo", "equals",
+              "hashCode", "toString", "getClass", "describeConstable"}
+    # record components are accessors but are declared in the header, not as
+    # methods — pull them out of every record declaration in the file
+    for header in re.findall(r"\brecord\s+\w+\s*\(([^)]*)\)", src, re.S):
+        for part in header.split(","):
+            bits = part.strip().split()
+            if len(bits) >= 2:
+                found.add(bits[-1].strip())
+    decls[simple] = found
+    # a class that extends something outside our tree could inherit anything
+    ext = re.search(r"\bclass\s+" + simple + r"\b[^{]*\bextends\s+([\w.]+)", src)
+    decls[simple + "!extends"] = ext.group(1).rsplit(".", 1)[-1] if ext else None
+
+missing = []
+for path in files:
+    src = open(path, encoding="utf-8").read()
+    body = re.sub(r"//[^\n]*", "", src)
+    body = re.sub(r"/\*.*?\*/", "", body, flags=re.S)
+    body = re.sub(r'"(?:\\.|[^"\\])*"', '""', body)
+    me = os.path.basename(path)[:-5]
+    for cls, method in re.findall(r"(?<![\w.])([A-Z]\w+)\.(\w+)\s*\(", body):
+        if cls not in decls or cls == me:
+            continue
+        if decls.get(cls + "!extends") is not None:
+            continue          # inherits from outside; cannot judge
+        if method in decls[cls]:
+            continue
+        missing.append((path, cls, method))
+
+if bad or missing:
+    if bad:
+        print("FAIL  a class is used without an import:")
+        for path, name, pkgs in bad:
+            print(f"   {path}: {name}  (declared in {', '.join(pkgs)})")
+    if missing:
+        print("FAIL  a method is called that its class does not declare:")
+        for path, cls, method in sorted(set(missing)):
+            print(f"   {path}: {cls}.{method}(...)")
     sys.exit(1)
-print(f"PASS  {len(files)} files: every one of our own classes used is imported.")
+print(f"PASS  {len(files)} files: our classes are imported, and every method "
+      f"called on one exists.")
