@@ -193,6 +193,11 @@ Downed needs someone able to reach you — solo death stays final unless you set
 `"solo": true`. Special rounds filter the mob table you already wrote, so give
 your mobs `role`s for them to select on.
 
+When two apply at once the **rarer one wins** — round 10 above is heavy, not
+fast, because every tenth round is also a fifth. Order in the file does not
+matter. A filter that matches nothing in your mob table is ignored rather than
+stalling the round.
+
 ### Currencies
 
 ```json

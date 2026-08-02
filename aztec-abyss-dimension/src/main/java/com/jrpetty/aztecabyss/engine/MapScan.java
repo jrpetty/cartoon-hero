@@ -154,6 +154,52 @@ public final class MapScan {
             }
         }
 
+        // An objective is the one marker whose failure is completely mute. A
+        // misspelled type does nothing at all; a misspelled item on a collect
+        // objective answers every hand-in with "nothing to hand in", which reads
+        // as the player carrying the wrong thing rather than the map naming a
+        // thing that does not exist.
+        if (scan.count("objective") > 1) {
+            problems.add("§e" + scan.count("objective") + " §f[Objective]§e markers — "
+                    + "only the first is used.");
+        }
+        for (Marker m : scan.of("objective")) {
+            String where = " at §f" + m.pos().getX() + ", " + m.pos().getZ();
+            String type = m.arg("type", m.arg("value", "")).toLowerCase(Locale.ROOT);
+            if (!type.equals("defend") && !type.equals("hold") && !type.equals("collect")) {
+                problems.add("§c[objective]" + where + "§c: §f"
+                        + (type.isEmpty() ? "(nothing)" : type)
+                        + "§c is not a kind. Line 2 must start §fdefend§c, §fhold§c or §fcollect§c.");
+                continue;
+            }
+            if (type.equals("collect")) {
+                String id = m.arg("item", "minecraft:gold_ingot");
+                var rl = net.minecraft.resources.ResourceLocation.tryParse(id.toLowerCase(Locale.ROOT));
+                if (rl == null || !net.minecraft.core.registries.BuiltInRegistries.ITEM.containsKey(rl)) {
+                    problems.add("§c[objective]" + where + "§c: no item called §f" + id
+                            + "§c — every hand-in will be refused.");
+                }
+            }
+        }
+
+        // A teleport pad only does anything if something else shares its id, so a
+        // lone pad is a piece of map furniture the author believes is a door.
+        Map<String, Integer> padIds = new LinkedHashMap<>();
+        for (Marker t : scan.of("teleport")) {
+            String id = t.arg("id", t.arg("value", "")).toLowerCase(Locale.ROOT);
+            padIds.merge(id, 1, Integer::sum);
+        }
+        padIds.forEach((id, n) -> {
+            String named = id.isEmpty() ? "(no id)" : id;
+            if (n == 1) {
+                problems.add("§e[teleport] §f" + named + "§e is on its own — a pad goes "
+                        + "nowhere until a second one shares its §fid=§e.");
+            } else if (n > 2) {
+                problems.add("§e" + n + " §f[teleport]§e pads share §f" + named
+                        + "§e — each one sends to whichever of the others it finds first.");
+            }
+        });
+
         for (BlockPos bad : scan.brokenDealers()) {
             problems.add("§cDealer at §f" + bad.getX() + ", " + bad.getY() + ", " + bad.getZ()
                     + "§c will not sell — check the item id on line 2 and that line 3 "

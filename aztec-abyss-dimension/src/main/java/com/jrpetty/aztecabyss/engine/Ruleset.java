@@ -391,14 +391,29 @@ public final class Ruleset {
         return Math.min(1.0 + round * damagePerRound, damageCap);
     }
 
-    /** The special round in force at this round, or null. */
+    /**
+     * The special round in force at this round, or null.
+     *
+     * <p>Where several apply at once the rarest wins, and that rule is the whole
+     * point of this method. Taking the first match instead looks harmless and is
+     * not: every multiple of ten is also a multiple of five, so a file listing
+     * {@code every: 5} above {@code every: 10} - which is the obvious order to
+     * write them in, and the order the documentation used - gives the ten-round
+     * special no round it can ever fire on. It would simply never happen, with
+     * nothing in the file to suggest why.
+     *
+     * <p>Rarest-wins also matches what an author means. A round that comes up
+     * every ten is being written as the bigger event than one that comes up
+     * every five, so when they collide the bigger one is the one to keep.
+     */
     public SpecialRound specialFor(int round) {
+        SpecialRound best = null;
         for (SpecialRound sr : specials) {
-            if (sr.appliesTo(round)) {
-                return sr;
+            if (sr.appliesTo(round) && (best == null || sr.every() > best.every())) {
+                best = sr;
             }
         }
-        return null;
+        return best;
     }
 
     /** The gap between rounds, shrinking as a run goes on. */
