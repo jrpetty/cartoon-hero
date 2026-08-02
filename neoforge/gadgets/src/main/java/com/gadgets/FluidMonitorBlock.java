@@ -32,14 +32,15 @@ public class FluidMonitorBlock extends Block implements EntityBlock {
     public static final DirectionProperty FACING = BlockStateProperties.FACING;
     public static final BooleanProperty LOW = BooleanProperty.create("low");
 
-    /** Sign-thin panel, flush against the face it reads. Indexed by Direction 3D data value. */
+    /** The 3px the model occupies (2px body + 1px bezel), against the face it
+     *  reads. Indexed by Direction 3D data value. */
     private static final VoxelShape[] PANEL = {
-            Block.box(0, 0, 0, 16, 2, 16),   // facing down
-            Block.box(0, 14, 0, 16, 16, 16), // facing up
-            Block.box(0, 0, 0, 16, 16, 2),   // facing north
-            Block.box(0, 0, 14, 16, 16, 16), // facing south
-            Block.box(0, 0, 0, 2, 16, 16),   // facing west
-            Block.box(14, 0, 0, 16, 16, 16), // facing east
+            Block.box(0, 0, 0, 16, 3, 16),   // facing down
+            Block.box(0, 13, 0, 16, 16, 16), // facing up
+            Block.box(0, 0, 0, 16, 16, 3),   // facing north
+            Block.box(0, 0, 13, 16, 16, 16), // facing south
+            Block.box(0, 0, 0, 3, 16, 16),   // facing west
+            Block.box(13, 0, 0, 16, 16, 16), // facing east
     };
 
     public FluidMonitorBlock(Properties properties) {

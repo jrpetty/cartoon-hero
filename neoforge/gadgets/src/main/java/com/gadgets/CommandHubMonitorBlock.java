@@ -8,6 +8,7 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.context.BlockPlaceContext;
+import net.minecraft.world.level.BlockGetter;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.EntityBlock;
@@ -18,6 +19,8 @@ import net.minecraft.world.level.block.entity.BlockEntityType;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.StateDefinition;
 import net.minecraft.world.phys.BlockHitResult;
+import net.minecraft.world.phys.shapes.CollisionContext;
+import net.minecraft.world.phys.shapes.VoxelShape;
 import org.jetbrains.annotations.Nullable;
 
 /**
@@ -26,6 +29,19 @@ import org.jetbrains.annotations.Nullable;
  */
 public class CommandHubMonitorBlock extends HorizontalDirectionalBlock implements EntityBlock {
     public static final MapCodec<CommandHubMonitorBlock> CODEC = simpleCodec(CommandHubMonitorBlock::new);
+
+    /**
+     * The 4-pixel slab the model actually occupies, against the facing side.
+     * Without this the panel kept a full cube's outline and collision, so you
+     * bumped into an invisible block standing where the screen visibly isn't.
+     * Indexed by {@link Direction#get2DDataValue()}: south, west, north, east.
+     */
+    private static final VoxelShape[] PANEL = {
+            Block.box(0, 0, 12, 16, 16, 16), // facing south
+            Block.box(0, 0, 0, 4, 16, 16),   // facing west
+            Block.box(0, 0, 0, 16, 16, 4),   // facing north
+            Block.box(12, 0, 0, 16, 16, 16), // facing east
+    };
 
     public CommandHubMonitorBlock(Properties properties) {
         super(properties);
@@ -40,6 +56,11 @@ public class CommandHubMonitorBlock extends HorizontalDirectionalBlock implement
     @Override
     protected void createBlockStateDefinition(StateDefinition.Builder<Block, BlockState> builder) {
         builder.add(FACING);
+    }
+
+    @Override
+    protected VoxelShape getShape(BlockState state, BlockGetter level, BlockPos pos, CollisionContext context) {
+        return PANEL[state.getValue(FACING).get2DDataValue()];
     }
 
     @Nullable

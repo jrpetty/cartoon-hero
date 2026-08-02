@@ -68,7 +68,7 @@ public class CounterScreen extends GadgetScreen {
 
         // One remove control per filtered item, plus a reset to "everything".
         List<Item> filter = be.getFilter();
-        for (int i = 0; i < Math.min(filter.size(), FILTER_ROWS); i++) {
+        for (int i = 0; i < shownFilterRows(filter.size()); i++) {
             String id = BuiltInRegistries.ITEM.getKey(filter.get(i)).toString();
             addRenderableWidget(Button.builder(Component.literal("✕"), b -> {
                 sendText(be.getBlockPos(), "counter_unfilter", id);
@@ -139,13 +139,14 @@ public class CounterScreen extends GadgetScreen {
             gfx.drawString(font, "Right-click it with an item to count only that",
                     x, top + FILTER_Y + 12, GRAY, false);
         }
-        for (int i = 0; i < Math.min(filter.size(), FILTER_ROWS); i++) {
+        int shown = shownFilterRows(filter.size());
+        for (int i = 0; i < shown; i++) {
             gfx.drawString(font, "· " + trim(filter.get(i).getDescription().getString(), 26),
                     x, top + FILTER_Y + 12 + i * 10, GRAY, false);
         }
-        if (filter.size() > FILTER_ROWS) {
-            gfx.drawString(font, "· +" + (filter.size() - FILTER_ROWS) + " more",
-                    x, top + FILTER_Y + 12 + FILTER_ROWS * 10, DIM, false);
+        if (filter.size() > shown) {
+            gfx.drawString(font, "· +" + (filter.size() - shown) + " more",
+                    x, top + FILTER_Y + 12 + shown * 10, DIM, false);
         }
 
         List<Map.Entry<String, Long>> top5 = be.topItems(4);
@@ -159,6 +160,16 @@ public class CounterScreen extends GadgetScreen {
 
         gfx.drawString(font, "Pulse every:", x, top + PULSE_Y, DIM, false);
         gfx.drawString(font, "Screen shows:  (now " + be.faceLabel() + ")", x, top + MODE_Y, DIM, false);
+    }
+
+    /**
+     * How many filtered items get their own row. The section is a fixed four
+     * rows tall, so when the list overflows, the "+N more" line takes the last
+     * row instead of being drawn after it — where it ran into the Top items
+     * heading below.
+     */
+    private static int shownFilterRows(int size) {
+        return size <= FILTER_ROWS ? size : FILTER_ROWS - 1;
     }
 
     private static String trim(String s, int max) {
