@@ -55,6 +55,20 @@ public final class Ruleset {
      * marker set - still works, because none of it was ever really about rounds.
      */
     public final boolean free;
+
+    /**
+     * Whether death puts you back in, and how long it takes.
+     *
+     * <p>Off by default, because in a survival arena death being final is the
+     * whole tension and a mode that hands you your life back has no stakes. It is
+     * equally the wrong answer for anything competitive: capture the flag where
+     * the first death removes a player is not capture the flag, it is attrition
+     * with a flag in it. Both are correct; the map has to be able to say which.
+     */
+    public final boolean respawnEnabled;
+    public final int respawnSeconds;
+    /** What you are handed on every spawn, named from the pools block. */
+    public final String kitPool;
     public final int finalRound;
     public final int baseCount;
     public final int perRound;
@@ -163,6 +177,9 @@ public final class Ruleset {
         this.id = b.id;
         this.endless = b.endless;
         this.free = b.free;
+        this.respawnEnabled = b.respawnEnabled;
+        this.respawnSeconds = b.respawnSeconds;
+        this.kitPool = b.kitPool;
         this.finalRound = b.finalRound;
         this.baseCount = b.baseCount;
         this.perRound = b.perRound;
@@ -216,6 +233,9 @@ public final class Ruleset {
         String id = "default";
         boolean endless = false;
         boolean free = false;
+        boolean respawnEnabled = false;
+        int respawnSeconds = 5;
+        String kitPool = "";
         int finalRound = 20;
         int baseCount = 6;
         int perRound = 4;
@@ -268,7 +288,8 @@ public final class Ruleset {
 
         checkKeys(root, "", b.warnings,
                 "rounds", "economy", "mobs", "currencies", "director", "script", "powerups",
-                "downed", "special_rounds", "pools");
+                "downed", "special_rounds", "pools", "respawn", "kit");
+        checkKeys(obj(root, "respawn"), "respawn", b.warnings, "enabled", "seconds");
         checkKeys(obj(root, "downed"), "downed", b.warnings,
                 "enabled", "bleedout_seconds", "revive_seconds", "revive_range", "solo");
         checkKeys(obj(root, "powerups"), "powerups", b.warnings, "one_in");
@@ -336,6 +357,13 @@ public final class Ruleset {
         }
 
         // Pools: one named weighted list per machine that hands something out.
+        JsonObject respawn = obj(root, "respawn");
+        if (respawn != null) {
+            b.respawnEnabled = bool(respawn, "enabled", false);
+            b.respawnSeconds = Math.max(0, Math.min(60, intOf(respawn, "seconds", 5)));
+        }
+        b.kitPool = str(root, "kit", "");
+
         if (root.has("pools") && root.get("pools").isJsonObject()) {
             JsonObject poolsObj = root.getAsJsonObject("pools");
             for (String key : poolsObj.keySet()) {

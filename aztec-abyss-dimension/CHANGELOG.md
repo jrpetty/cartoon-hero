@@ -13,6 +13,24 @@ behaviour that was already there · **docs**
 
 ## Unreleased
 
+### Respawning and kits — and a defect in shipped content
+
+- **fix** `aztecabyss:capture` shipped two iterations ago with **permadeath**,
+  because death in the engine was unconditionally final. First death and that
+  player spectated the rest of the match. Capture the flag where the first death
+  removes a player is not capture the flag.
+- **feat** `"respawn": { "enabled": true, "seconds": 5 }` — off by default, since
+  a survival arena needs death to be final and anything competitive needs the
+  opposite. No death screen: healed, sent to your side's spawn, brief resistance
+  and slowness so spawn camping is not a strategy.
+- **change** Respawning takes precedence over downing — two different answers to
+  the same moment, and the map already chose one.
+- **feat** `"kit": "<pool>"` — handed out on every spawn, first and after. Gives
+  every entry rather than drawing one, because a loadout is a list of what you get
+  and rolling it would start teammates with different equipment.
+- **fix** First join used the map's single spawn even on a team map, so players
+  only reached their own side after dying once.
+
 ### The script layer becomes observable
 
 - **fix** A mistyped action hit `default -> {}` and did nothing, silently; a

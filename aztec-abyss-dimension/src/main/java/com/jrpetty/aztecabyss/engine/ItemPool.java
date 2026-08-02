@@ -112,6 +112,36 @@ public final class ItemPool {
         return stack;
     }
 
+    /**
+     * The entry at a given index, rolled for count and enchantment but not for
+     * which item.
+     *
+     * <p>Used by loadouts, where a pool is a list of what you get rather than a
+     * table to draw from. Rolling a kit would mean two players on the same team
+     * starting with different equipment, which nobody asked for and which makes a
+     * competitive mode unfair for reasons invisible to everyone.
+     */
+    public ItemStack rollAt(int index, net.minecraft.world.level.Level level) {
+        if (slots.isEmpty()) {
+            return ItemStack.EMPTY;
+        }
+        Slot chosen = slots.get(Math.floorMod(index, slots.size()));
+        RandomSource rng = level == null ? RandomSource.create() : level.getRandom();
+        int count = chosen.minCount() >= chosen.maxCount()
+                ? chosen.minCount()
+                : chosen.minCount() + rng.nextInt(chosen.maxCount() - chosen.minCount() + 1);
+        ItemStack stack = new ItemStack(chosen.item(), Math.max(1, Math.min(64, count)));
+        if (chosen.enchant() > 0 && level != null) {
+            try {
+                stack = net.minecraft.world.item.enchantment.EnchantmentHelper.enchantItem(
+                        rng, stack, chosen.enchant(), level.registryAccess(), java.util.Optional.empty());
+            } catch (RuntimeException ignored) {
+                // Plain rather than not at all.
+            }
+        }
+        return stack;
+    }
+
     // ------------------------------------------------------------------
     // Parsing
     // ------------------------------------------------------------------

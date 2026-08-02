@@ -286,6 +286,32 @@ Free mode gets two things of its own:
 `aztecabyss:heist` ships as a worked example: three idols, one way out, five
 minutes. It is about thirty lines and it is a complete game.
 
+### Respawning, and kits
+
+```json
+"respawn": { "enabled": true, "seconds": 5 },
+"kit": "loadout",
+"pools": { "loadout": [
+  { "id": "minecraft:iron_sword", "enchant": 1 },
+  { "id": "minecraft:arrow", "count": "32" }
+] }
+```
+
+**Off by default.** In a survival arena death being final is the whole tension.
+It is equally the wrong answer for anything competitive — capture the flag where
+the first death removes a player is not capture the flag, it is attrition with a
+flag in it. Both are correct; the map says which.
+
+There is no death screen. You are healed, sent to your side's spawn, and given a
+few seconds of resistance and slowness so a spawn camp is not a strategy.
+
+`kit` names a pool and is handed out on **every** spawn, first and after. A kit
+gives you every entry in the pool rather than drawing from it — a loadout is a
+list of what you get, and rolling it would start two players on the same team with
+different equipment for reasons invisible to both.
+
+This was the one thing about a map an author could not touch at all.
+
 ### Teams — sides
 
 The engine had exactly one relationship between players: everybody on the same

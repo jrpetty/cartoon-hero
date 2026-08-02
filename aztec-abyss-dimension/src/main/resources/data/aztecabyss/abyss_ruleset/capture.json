@@ -1,36 +1,198 @@
 {
-  "rounds": { "mode": "free" },
-  "economy": { "enabled": false },
+  "rounds": {
+    "mode": "free"
+  },
+  "economy": {
+    "enabled": false
+  },
   "script": [
-    { "on": "run_start",
-      "do": [ { "balance_teams": 1 },
-              { "teleport_to_spawn": 1 },
-              { "title": { "main": "§lCAPTURE", "sub": "Three captures wins" } },
-              { "set_bar": "§cRed §f0 §8— §f0 §9Blue" } ] },
-
-    { "on": "region_enter", "when": { "region": "blue_flag", "team": "red" },
-      "do": [ { "set_my_var": { "name": "carrying", "to": 1 } },
-              { "team_message": { "team": "blue", "text": "§c⚑ They have your flag." } },
-              { "actionbar": "§6You have the flag — get it home" } ] },
-
-    { "on": "region_enter", "when": { "region": "red_flag", "team": "blue" },
-      "do": [ { "set_my_var": { "name": "carrying", "to": 1 } },
-              { "team_message": { "team": "red", "text": "§9⚑ They have your flag." } },
-              { "actionbar": "§6You have the flag — get it home" } ] },
-
-    { "on": "region_enter", "when": { "region": "red_base", "team": "red", "my_var": { "name": "carrying", "at_least": 1 } },
-      "do": [ { "set_my_var": { "name": "carrying", "to": 0 } },
-              { "add_team_var": { "team": "red", "name": "score", "by": 1 } },
-              { "message": "§c⚑ Red scores." } ] },
-
-    { "on": "region_enter", "when": { "region": "blue_base", "team": "blue", "my_var": { "name": "carrying", "at_least": 1 } },
-      "do": [ { "set_my_var": { "name": "carrying", "to": 0 } },
-              { "add_team_var": { "team": "blue", "name": "score", "by": 1 } },
-              { "message": "§9⚑ Blue scores." } ] },
-
-    { "on": "tick", "when": { "team_var": { "team": "red", "name": "score", "at_least": 3 } },
-      "do": [ { "win": { "title": "§c§lRED TAKES IT" } } ] },
-    { "on": "tick", "when": { "team_var": { "team": "blue", "name": "score", "at_least": 3 } },
-      "do": [ { "win": { "title": "§9§lBLUE TAKES IT" } } ] }
-  ]
+    {
+      "on": "run_start",
+      "do": [
+        {
+          "balance_teams": 1
+        },
+        {
+          "teleport_to_spawn": 1
+        },
+        {
+          "title": {
+            "main": "\u00a7lCAPTURE",
+            "sub": "Three captures wins"
+          }
+        },
+        {
+          "set_bar": "\u00a7cRed \u00a7f0 \u00a78\u2014 \u00a7f0 \u00a79Blue"
+        }
+      ]
+    },
+    {
+      "on": "region_enter",
+      "when": {
+        "region": "blue_flag",
+        "team": "red"
+      },
+      "do": [
+        {
+          "set_my_var": {
+            "name": "carrying",
+            "to": 1
+          }
+        },
+        {
+          "team_message": {
+            "team": "blue",
+            "text": "\u00a7c\u2691 They have your flag."
+          }
+        },
+        {
+          "actionbar": "\u00a76You have the flag \u2014 get it home"
+        }
+      ]
+    },
+    {
+      "on": "region_enter",
+      "when": {
+        "region": "red_flag",
+        "team": "blue"
+      },
+      "do": [
+        {
+          "set_my_var": {
+            "name": "carrying",
+            "to": 1
+          }
+        },
+        {
+          "team_message": {
+            "team": "red",
+            "text": "\u00a79\u2691 They have your flag."
+          }
+        },
+        {
+          "actionbar": "\u00a76You have the flag \u2014 get it home"
+        }
+      ]
+    },
+    {
+      "on": "region_enter",
+      "when": {
+        "region": "red_base",
+        "team": "red",
+        "my_var": {
+          "name": "carrying",
+          "at_least": 1
+        }
+      },
+      "do": [
+        {
+          "set_my_var": {
+            "name": "carrying",
+            "to": 0
+          }
+        },
+        {
+          "add_team_var": {
+            "team": "red",
+            "name": "score",
+            "by": 1
+          }
+        },
+        {
+          "message": "\u00a7c\u2691 Red scores."
+        }
+      ]
+    },
+    {
+      "on": "region_enter",
+      "when": {
+        "region": "blue_base",
+        "team": "blue",
+        "my_var": {
+          "name": "carrying",
+          "at_least": 1
+        }
+      },
+      "do": [
+        {
+          "set_my_var": {
+            "name": "carrying",
+            "to": 0
+          }
+        },
+        {
+          "add_team_var": {
+            "team": "blue",
+            "name": "score",
+            "by": 1
+          }
+        },
+        {
+          "message": "\u00a79\u2691 Blue scores."
+        }
+      ]
+    },
+    {
+      "on": "tick",
+      "when": {
+        "team_var": {
+          "team": "red",
+          "name": "score",
+          "at_least": 3
+        }
+      },
+      "do": [
+        {
+          "win": {
+            "title": "\u00a7c\u00a7lRED TAKES IT"
+          }
+        }
+      ]
+    },
+    {
+      "on": "tick",
+      "when": {
+        "team_var": {
+          "team": "blue",
+          "name": "score",
+          "at_least": 3
+        }
+      },
+      "do": [
+        {
+          "win": {
+            "title": "\u00a79\u00a7lBLUE TAKES IT"
+          }
+        }
+      ]
+    }
+  ],
+  "respawn": {
+    "enabled": true,
+    "seconds": 5
+  },
+  "kit": "loadout",
+  "pools": {
+    "loadout": [
+      {
+        "id": "minecraft:iron_sword",
+        "enchant": 1
+      },
+      {
+        "id": "minecraft:bow",
+        "enchant": 1
+      },
+      {
+        "id": "minecraft:arrow",
+        "count": "32"
+      },
+      {
+        "id": "minecraft:iron_chestplate"
+      },
+      {
+        "id": "minecraft:cooked_beef",
+        "count": "8"
+      }
+    ]
+  }
 }

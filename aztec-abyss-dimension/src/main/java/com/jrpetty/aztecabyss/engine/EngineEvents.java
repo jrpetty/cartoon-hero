@@ -1162,6 +1162,14 @@ public final class EngineEvents {
         if (event.getAmount() < player.getHealth()) {
             return;
         }
+        // Respawning beats downing. A mode that hands lives back should not also
+        // put people on the floor waiting for a pick-up - that is two different
+        // answers to the same moment, and the map already chose one.
+        if (arena.respawns()) {
+            event.setCanceled(true);
+            arena.respawnNow(player);
+            return;
+        }
         if (arena.canGoDown(player)) {
             event.setCanceled(true);
             arena.goDown(player);

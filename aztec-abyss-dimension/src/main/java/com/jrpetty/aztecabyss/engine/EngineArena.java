@@ -130,6 +130,77 @@ public final class EngineArena {
     /** Team spawn points, by team id. */
     private final java.util.Map<String, Marker> teamSpawns = new java.util.HashMap<>();
 
+    /**
+     * Puts a player back in rather than out.
+     *
+     * <p>Called instead of marking them fallen when the ruleset allows respawns.
+     * Deliberately no death screen: they are healed, sent to their spawn and given
+     * a few seconds of standing still to think about it. A competitive mode that
+     * makes you click through a death screen every thirty seconds is a worse game
+     * than one that does not, and the screen carries no information a respawning
+     * player wants.
+     */
+    private void respawn(ServerPlayer player) {
+        BlockPos at = spawnFor(player);
+        player.setHealth(player.getMaxHealth());
+        player.getFoodData().setFoodLevel(20);
+        player.clearFire();
+        player.teleportTo(level, at.getX() + 0.5, at.getY() + 1, at.getZ() + 0.5,
+                java.util.Set.of(), player.getYRot(), 0.0F);
+        int ticks = Math.max(1, rules.respawnSeconds) * 20;
+        // Briefly untouchable and slow, so a spawn camp is not a strategy and the
+        // player has a beat to work out where they are.
+        player.addEffect(new net.minecraft.world.effect.MobEffectInstance(
+                net.minecraft.world.effect.MobEffects.DAMAGE_RESISTANCE, ticks, 4, false, false));
+        player.addEffect(new net.minecraft.world.effect.MobEffectInstance(
+                net.minecraft.world.effect.MobEffects.MOVEMENT_SLOWDOWN, ticks, 2, false, false));
+        giveKit(player);
+        player.displayClientMessage(Component.literal(
+                "§7Back in. §8" + rules.respawnSeconds + "s to get your bearings."), true);
+        level.playSound(null, at, SoundEvents.BEACON_ACTIVATE, SoundSource.PLAYERS, 0.7F, 1.5F);
+    }
+
+    /**
+     * Whether this run hands players their lives back.
+     *
+     * <p>Read by the damage interception, which has to decide between downing
+     * somebody, respawning them and letting them die - three different games.
+     */
+    public boolean respawns() {
+        return rules.respawnEnabled;
+    }
+
+    public void respawnNow(ServerPlayer player) {
+        respawn(player);
+    }
+
+    /**
+     * What a player is handed on every spawn.
+     *
+     * <p>Named from the pools block, so the same weighted-list syntax that fills
+     * the Box fills a loadout. A map that starts you with a bow and eight arrows
+     * is a different game from one that starts you with a stone sword, and it was
+     * the one thing about a map an author could not touch at all.
+     */
+    public void giveKit(ServerPlayer player) {
+        if (rules.kitPool.isEmpty()) {
+            return;
+        }
+        ItemPool pool = rules.pools.get(rules.kitPool.toLowerCase(java.util.Locale.ROOT));
+        if (pool == null || pool.isEmpty()) {
+            return;
+        }
+        // Every entry once, not a random draw - a loadout is a list of what you
+        // get, and rolling it would make two players on the same team start with
+        // different equipment for no reason anybody asked for.
+        for (int i = 0; i < pool.size(); i++) {
+            ItemStack stack = pool.rollAt(i, level);
+            if (!player.getInventory().add(stack)) {
+                player.drop(stack, false);
+            }
+        }
+    }
+
     public Teams teams() {
         if (teams == null) {
             teams = new Teams(level);
@@ -392,12 +463,16 @@ public final class EngineArena {
     private void join(ServerPlayer player) {
         participants.add(player.getUUID());
         bar.addPlayer(player);
-        player.teleportTo(level, spawn.getX() + 0.5, spawn.getY() + 1, spawn.getZ() + 0.5,
+        // spawnFor rather than the map's single spawn, so a team map puts people
+        // on their own side from the first second rather than only after a death.
+        BlockPos at = spawnFor(player);
+        player.teleportTo(level, at.getX() + 0.5, at.getY() + 1, at.getZ() + 0.5,
                 java.util.Set.of(), player.getYRot(), 0.0F);
         if (rules.economyEnabled) {
             Currency c = Currency.byId(rules.defaultCurrency);
             c.set(player, c.start());
         }
+        giveKit(player);
     }
 
     public static void stop(boolean announce) {
@@ -505,10 +580,17 @@ public final class EngineArena {
         // Anyone who has died is out, and stays out - respawning does not put you
         // back in a run you already lost.
         for (ServerPlayer p : present) {
-            if (p.isDeadOrDying()) {
-                fallen.add(p.getUUID());
-                bar.removePlayer(p);
+            if (!p.isDeadOrDying()) {
+                continue;
             }
+            if (rules.respawnEnabled) {
+                // Back in rather than out. Anything competitive needs this, and a
+                // survival arena needs the opposite, so the ruleset decides.
+                respawn(p);
+                continue;
+            }
+            fallen.add(p.getUUID());
+            bar.removePlayer(p);
         }
         present.removeIf(p -> fallen.contains(p.getUUID())
                 || !p.level().dimension().equals(level.dimension()));
