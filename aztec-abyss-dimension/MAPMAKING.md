@@ -419,6 +419,35 @@ cannot hang your server.
 
 ---
 
+## Seeing what your script is doing
+
+A map with forty rules is unbuildable blind, and everything the script layer does
+is invisible when it works and identical to nothing at all when it does not.
+
+```
+/arena trace               every rule that fires or is skipped, live
+/arena vars                everything the run currently remembers
+/arena teams               who is on which side
+/arena rules <id>          unknown events, conditions and actions
+```
+
+`/arena rules` is the one to run first after writing a script. A mistyped action
+hits a default that does nothing, and a mistyped condition is ignored — both by
+design, so a map written for a later engine still runs on an earlier one. Both
+mean a rule that loads perfectly and never does anything. They are now reported:
+
+```
+⚠ script: rule 7: unknown action "add_vars" — does nothing
+⚠ script: rule 12: no event called "region_entered" — it will never fire
+```
+
+`/arena trace` is the one to run second. It prints, as it happens:
+
+```
+[script] fire region_enter (blue_flag) for Steve
+[script] skip tick — conditions not met
+```
+
 ## Playing
 
 ```

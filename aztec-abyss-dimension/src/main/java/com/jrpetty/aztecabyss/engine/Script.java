@@ -63,8 +63,44 @@ public final class Script {
     /** Rules per ruleset id, rebuilt whenever datapacks reload. */
     private static final Map<String, List<Rule>> BY_RULESET = new HashMap<>();
 
+    /**
+     * Problems found while reading a script, per ruleset.
+     *
+     * <p>The switch that runs actions ends in a default that does nothing, and the
+     * condition reader ignores keys it has no meaning for. Both are the right
+     * runtime behaviour - a map written for a later engine must still run on an
+     * earlier one - and both mean a typo produces a rule that loads perfectly and
+     * never does anything, with no symptom to chase.
+     *
+     * <p>So unknown names are collected here and reported by {@code /arena rules}.
+     * Not errors, because forward compatibility is worth more; never silent,
+     * because a rule that quietly does nothing is the worst thing a script can do.
+     */
+    private static final Map<String, List<String>> WARNINGS = new HashMap<>();
+
+    /** Every event the engine actually fires. */
+    private static final java.util.Set<String> EVENTS = java.util.Set.of(
+            "run_start", "round_start", "round_end", "mob_killed", "extracted",
+            "objective_complete", "objective_failed", "region_enter", "region_leave", "tick");
+
+    /** Every action the runner understands. */
+    private static final java.util.Set<String> ACTIONS = java.util.Set.of(
+            "message", "actionbar", "title", "sound", "effect", "give", "spawn", "award",
+            "open_area", "set_block", "end_run", "set_var", "add_var", "set_my_var",
+            "add_my_var", "win", "lose", "set_bar", "join_team", "balance_teams",
+            "team_message", "add_team_var", "set_team_var", "teleport_to_spawn");
+
+    /** Every condition the matcher understands. */
+    private static final java.util.Set<String> CONDITIONS = java.util.Set.of(
+            "round", "area_open", "region", "var", "my_var", "team", "team_var", "seconds");
+
+    public static List<String> warnings(String rulesetId) {
+        return WARNINGS.getOrDefault(rulesetId, List.of());
+    }
+
     public static void clear() {
         BY_RULESET.clear();
+        WARNINGS.clear();
     }
 
     /** Pulls the {@code script} array out of a ruleset file. */
@@ -73,14 +109,39 @@ public final class Script {
             return;
         }
         List<Rule> rules = new ArrayList<>();
+        List<String> warn = new ArrayList<>();
+        int index = 0;
         for (JsonElement el : root.getAsJsonArray("script")) {
+            index++;
             if (!el.isJsonObject()) {
+                warn.add("rule " + index + " is not an object");
                 continue;
             }
             JsonObject o = el.getAsJsonObject();
             String on = str(o, "on", "").toLowerCase(Locale.ROOT);
             if (on.isEmpty() || !o.has("do") || !o.get("do").isJsonArray()) {
+                warn.add("rule " + index + " has no \"on\" or no \"do\" — it will never run");
                 continue;
+            }
+            if (!EVENTS.contains(on)) {
+                warn.add("rule " + index + ": no event called \"" + on + "\" — it will never fire");
+            }
+            if (o.has("when") && o.get("when").isJsonObject()) {
+                for (String c : o.getAsJsonObject("when").keySet()) {
+                    if (!CONDITIONS.contains(c.toLowerCase(Locale.ROOT))) {
+                        warn.add("rule " + index + ": unknown condition \"" + c + "\" — ignored");
+                    }
+                }
+            }
+            for (JsonElement act : o.getAsJsonArray("do")) {
+                if (!act.isJsonObject()) {
+                    continue;
+                }
+                for (String a : act.getAsJsonObject().keySet()) {
+                    if (!ACTIONS.contains(a.toLowerCase(Locale.ROOT))) {
+                        warn.add("rule " + index + ": unknown action \"" + a + "\" — does nothing");
+                    }
+                }
             }
             rules.add(new Rule(on,
                     o.has("when") && o.get("when").isJsonObject() ? o.getAsJsonObject("when") : null,
@@ -88,6 +149,9 @@ public final class Script {
         }
         if (!rules.isEmpty()) {
             BY_RULESET.put(rulesetId, rules);
+        }
+        if (!warn.isEmpty()) {
+            WARNINGS.put(rulesetId, List.copyOf(warn));
         }
     }
 
@@ -117,6 +181,37 @@ public final class Script {
         fire(arena, level, rulesetId, event, who, null);
     }
 
+    /** Authors watching their own script run. */
+    private static final java.util.Set<java.util.UUID> TRACING = new java.util.HashSet<>();
+
+    public static boolean toggleTrace(ServerPlayer player) {
+        if (!TRACING.remove(player.getUUID())) {
+            TRACING.add(player.getUUID());
+            return true;
+        }
+        return false;
+    }
+
+    /**
+     * Tells anyone tracing what just happened.
+     *
+     * <p>A map with forty rules is unbuildable without this. Everything the script
+     * layer does is invisible when it works and identical to nothing at all when
+     * it does not, so the only debugging tool was moving things about and playing
+     * again. This says which rules fired and which were skipped, as it happens.
+     */
+    private static void trace(EngineArena arena, String text) {
+        if (TRACING.isEmpty()) {
+            return;
+        }
+        for (ServerPlayer p : arena.everyone()) {
+            if (TRACING.contains(p.getUUID())) {
+                p.displayClientMessage(net.minecraft.network.chat.Component.literal(
+                        "§8[script] §7" + text), false);
+            }
+        }
+    }
+
     public static void fire(EngineArena arena, ServerLevel level, String rulesetId,
                             String event, ServerPlayer who, String regionId) {
         List<Rule> rules = BY_RULESET.get(rulesetId);
@@ -124,9 +219,17 @@ public final class Script {
             return;
         }
         for (Rule rule : rules) {
-            if (!rule.event().equals(event) || !matches(rule.when(), arena, who, regionId)) {
+            if (!rule.event().equals(event)) {
                 continue;
             }
+            if (!matches(rule.when(), arena, who, regionId)) {
+                trace(arena, "§8skip §7" + event + (regionId == null ? "" : " (" + regionId + ")")
+                        + " §8— conditions not met");
+                continue;
+            }
+            trace(arena, "§afire §f" + event
+                    + (regionId == null ? "" : " §7(" + regionId + ")")
+                    + (who == null ? "" : " §8for " + who.getGameProfile().getName()));
             int budget = ACTION_BUDGET;
             for (JsonElement el : rule.actions()) {
                 if (budget-- <= 0) {

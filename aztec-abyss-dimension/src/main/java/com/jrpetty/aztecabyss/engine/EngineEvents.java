@@ -156,6 +156,22 @@ public final class EngineEvents {
                         .then(Commands.argument("name", com.mojang.brigadier.arguments.StringArgumentType.word())
                                 .executes(ctx -> unpublish(ctx.getSource(),
                                         com.mojang.brigadier.arguments.StringArgumentType.getString(ctx, "name")))))
+                .then(Commands.literal("vars")
+                        .executes(ctx -> dumpVars(ctx.getSource())))
+                .then(Commands.literal("teams")
+                        .executes(ctx -> dumpTeams(ctx.getSource())))
+                .then(Commands.literal("trace")
+                        .executes(ctx -> {
+                            ServerPlayer p = ctx.getSource().getPlayer();
+                            if (p == null) {
+                                return 0;
+                            }
+                            boolean on = Script.toggleTrace(p);
+                            ctx.getSource().sendSuccess(() -> Component.literal(on
+                                    ? "§a✔ Tracing on. §7Every rule that fires or is skipped will say so."
+                                    : "§7Tracing off."), false);
+                            return 1;
+                        }))
                 .then(Commands.literal("published")
                         .executes(ctx -> listPublished(ctx.getSource())))
                 .then(Commands.literal("reloadmaps")
@@ -470,6 +486,11 @@ public final class EngineEvents {
             source.sendSuccess(() -> Component.literal(
                     "§e⚠ unrecognised key §f" + unknown
                             + " §7— check the spelling; it is being ignored"), false);
+        }
+        // Script problems matter more than ruleset ones, because a mistyped
+        // action is a rule that loads perfectly and does nothing at all.
+        for (String problem : Script.warnings(r.id)) {
+            source.sendSuccess(() -> Component.literal("§e⚠ script: §f" + problem), false);
         }
         for (int round : new int[]{1, 10, 25, 50}) {
             int n = r.countFor(round);
@@ -886,6 +907,59 @@ public final class EngineEvents {
         }
         source.sendSuccess(() -> Component.literal(
                 "§6" + name + " §7is off the portal. §8The blocks are still where they were."), true);
+        return 1;
+    }
+
+    /**
+     * {@code /arena vars} - everything the run currently remembers.
+     *
+     * <p>Variables are the substrate of every non-arena game and were completely
+     * invisible. An author whose capture rule is not firing needs to know whether
+     * the score is 2 or 3 before anything else, and there was no way to ask.
+     */
+    private static int dumpVars(CommandSourceStack source) {
+        EngineArena arena = EngineArena.active();
+        if (arena == null) {
+            source.sendFailure(Component.literal("No run in progress."));
+            return 0;
+        }
+        var snap = arena.vars().snapshot();
+        if (snap.isEmpty()) {
+            source.sendSuccess(() -> Component.literal("§7No variables set yet."), false);
+            return 1;
+        }
+        source.sendSuccess(() -> Component.literal("§6— variables —"), false);
+        snap.forEach((k, v) -> source.sendSuccess(() -> Component.literal(
+                " §f" + k + " §8= §e" + v), false));
+        return 1;
+    }
+
+    /** {@code /arena teams} - who is on which side. */
+    private static int dumpTeams(CommandSourceStack source) {
+        EngineArena arena = EngineArena.active();
+        if (arena == null) {
+            source.sendFailure(Component.literal("No run in progress."));
+            return 0;
+        }
+        var teams = arena.teams();
+        if (teams.all().isEmpty()) {
+            source.sendSuccess(() -> Component.literal(
+                    "§7No teams. §8This map never declared any."), false);
+            return 1;
+        }
+        source.sendSuccess(() -> Component.literal("§6— sides —"), false);
+        for (Teams.Side side : teams.all()) {
+            StringBuilder names = new StringBuilder();
+            for (ServerPlayer p : teams.membersOf(side.id(), arena.everyone())) {
+                if (names.length() > 0) {
+                    names.append(", ");
+                }
+                names.append(p.getGameProfile().getName());
+            }
+            String line = " " + side.colour() + side.display() + " §8(" + teams.size(side.id()) + ") §7"
+                    + (names.length() == 0 ? "nobody" : names);
+            source.sendSuccess(() -> Component.literal(line), false);
+        }
         return 1;
     }
 

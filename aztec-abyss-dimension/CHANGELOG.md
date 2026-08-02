@@ -13,6 +13,21 @@ behaviour that was already there · **docs**
 
 ## Unreleased
 
+### The script layer becomes observable
+
+- **fix** A mistyped action hit `default -> {}` and did nothing, silently; a
+  mistyped condition was ignored. Both are the right *runtime* behaviour — a map
+  written for a later engine must still run on an earlier one — and both meant a
+  rule that loaded perfectly and never did anything, with no symptom to chase.
+  Unknown events, conditions and actions are now collected at load and reported by
+  `/arena rules`.
+- **feat** `/arena trace` — live per-rule tracing: what fired, what was skipped.
+- **feat** `/arena vars` — every variable the run currently holds. Variables are
+  the substrate of every non-arena game and were completely invisible.
+- **feat** `/arena teams` — who is on which side.
+- **change** This is the same failure mode this project keeps producing — accepts
+  input, does nothing, says nothing — applied to the primary authoring surface.
+
 ### Teams — the engine learns that players can be on different sides
 
 - **feat** `Teams` — named sides with colours, membership and even balancing.
