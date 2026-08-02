@@ -53,12 +53,24 @@ public final class BluffManager {
         final Random random;
         final int seats;
         final int wagered;
-        /** Seat the human sits in. Always 0 — but named, so nothing assumes it. */
-        final int mySeat = 0;
+        /**
+         * Who is in each seat, by index. A null entry is a computer player.
+         *
+         * <p>Solo is simply the case where only seat zero is filled, which is
+         * why nothing below asks whether the table is "multiplayer" — it asks
+         * whose seat it is and whether anybody is sitting in it.
+         */
+        final UUID[] occupants;
+        /** Last known display name per seat; null for a computer seat. */
+        final String[] names;
+        /** Settled once, however many people are sitting down. */
+        boolean settled;
 
-        Table(int seats, int wagered) {
+        Table(int seats, int wagered, UUID[] occupants) {
             this.seats = seats;
             this.wagered = wagered;
+            this.occupants = occupants;
+            this.names = new String[seats];
             this.random = new Random(ThreadLocalRandom.current().nextLong());
             this.game = new Bluff(seats, random);
             this.brains = new BluffAI[seats];
@@ -83,7 +95,35 @@ public final class BluffManager {
         }
     }
 
+    /** Every human at a table maps to the SAME Table instance. */
     private static final Map<UUID, Table> TABLES = new ConcurrentHashMap<>();
+    /** Pending challenges: invitee -> {challenger, expiry, seats}. */
+    private static final Map<UUID, Object[]> INVITES = new ConcurrentHashMap<>();
+    /** How long an unanswered challenge stands. */
+    private static final long INVITE_MS = 60_000L;
+
+    /** Which seat this player occupies at their table, or -1. */
+    private static int seatOf(Table table, UUID who) {
+        for (int i = 0; i < table.occupants.length; i++) {
+            if (who.equals(table.occupants[i])) {
+                return i;
+            }
+        }
+        return -1;
+    }
+
+    /** Push the table to everyone sitting at it. */
+    private static void sendAll(net.minecraft.server.MinecraftServer server, Table table) {
+        for (UUID id : table.occupants) {
+            if (id == null) {
+                continue;
+            }
+            ServerPlayer p = server.getPlayerList().getPlayer(id);
+            if (p != null) {
+                send(p);
+            }
+        }
+    }
     private static final Map<UUID, Integer> SEAT_CHOICE = new ConcurrentHashMap<>();
     private static final Map<UUID, Integer> STAKE_CHOICE = new ConcurrentHashMap<>();
 
@@ -142,7 +182,12 @@ public final class BluffManager {
     private static void leave(ServerPlayer player) {
         Table table = TABLES.get(player.getUUID());
         if (table != null && table.game.done()) {
-            TABLES.remove(player.getUUID());
+            // a shared table is only forgotten once, for everyone on it
+            for (UUID id : table.occupants) {
+                if (id != null) {
+                    TABLES.remove(id);
+                }
+            }
         } else if (table != null) {
             player.sendSystemMessage(Component.literal(
                             "Your hand is still on the table — sit back down to finish it.")
@@ -162,6 +207,24 @@ public final class BluffManager {
             player.sendSystemMessage(Component.literal("You folded. "
                             + table.wagered + " fragments lost.")
                     .withStyle(ChatFormatting.RED));
+            // Folding out of a hand with other people in it hands them the pot
+            // rather than quietly deleting a table they were still playing.
+            int seat = seatOf(table, player.getUUID());
+            if (seat >= 0) {
+                table.occupants[seat] = null;   // the seat plays itself from here
+                table.names[seat] = null;
+            }
+            for (UUID id : table.occupants) {
+                if (id != null && player.getServer() != null) {
+                    ServerPlayer p = player.getServer().getPlayerList().getPlayer(id);
+                    if (p != null) {
+                        p.sendSystemMessage(Component.literal(
+                                        player.getGameProfile().getName() + " folded.")
+                                .withStyle(ChatFormatting.GRAY));
+                        send(p);
+                    }
+                }
+            }
         }
         TABLES.remove(player.getUUID());
         send(player);
@@ -195,7 +258,10 @@ public final class BluffManager {
                     .withStyle(ChatFormatting.RED));
             return;
         }
-        Table table = new Table(seatsOf(player), stake);
+        int seats = seatsOf(player);
+        UUID[] occupants = new UUID[seats];
+        occupants[0] = player.getUUID();   // the rest are computer seats
+        Table table = new Table(seats, stake, occupants);
         TABLES.put(player.getUUID(), table);
         sound(player, SoundEvents.BOOK_PAGE_TURN, 1.3F);
         // whoever leads, the computer seats now move on the server clock, one
@@ -206,30 +272,34 @@ public final class BluffManager {
 
     private static void play(ServerPlayer player, List<Integer> picks) {
         Table table = TABLES.get(player.getUUID());
-        if (table == null || table.game.done() || table.game.turn() != table.mySeat
-                || !BlockReach.canReach(player)) {
+        if (table == null || table.game.done() || !BlockReach.canReach(player)) {
+            return;
+        }
+        int seat = seatOf(table, player.getUUID());
+        if (seat < 0 || table.game.turn() != seat) {
             return;
         }
         if (picks == null || picks.isEmpty() || picks.size() > Bluff.MAX_PLAY) {
             return;
         }
-        int before = table.game.handSize(table.mySeat);
-        if (!table.game.play(table.mySeat, picks)) {
+        int before = table.game.handSize(seat);
+        if (!table.game.play(seat, picks)) {
             return; // the engine refused it — a bad index, a repeat, or out of turn
         }
-        table.sawPlay(table.mySeat, before - table.game.handSize(table.mySeat));
+        table.sawPlay(seat, before - table.game.handSize(seat));
         sound(player, SoundEvents.BOOK_PAGE_TURN, 1.0F);
         armAi(table, FIRST_MOVE_TICKS);
-        send(player);
+        finishIfOver(player.getServer(), table);
+        sendAll(player.getServer(), table);
     }
 
     private static void challenge(ServerPlayer player) {
         Table table = TABLES.get(player.getUUID());
-        if (table == null || table.game.done() || table.game.turn() != table.mySeat
-                || !BlockReach.canReach(player)) {
+        if (table == null || table.game.done() || !BlockReach.canReach(player)) {
             return;
         }
-        if (!table.game.challenge(table.mySeat)) {
+        int seat = seatOf(table, player.getUUID());
+        if (seat < 0 || table.game.turn() != seat || !table.game.challenge(seat)) {
             return;
         }
         Bluff.Reveal reveal = table.game.lastReveal();
@@ -239,7 +309,7 @@ public final class BluffManager {
             StatsTracker.bump(player, "bluff_catches");
             // and a catch that sheds your own last card ends the game on the
             // spot — the rarest way there is to win a hand
-            if (table.game.done() && table.game.winner() == table.mySeat) {
+            if (table.game.done() && table.game.winner() == seat) {
                 StatsTracker.bump(player, "bluff_lastcard");
             }
             ServerSync.markAwards(player);
@@ -249,21 +319,21 @@ public final class BluffManager {
         table.roundTurnedOver();
         // a longer beat after a reveal, so what was turned over can be read
         armAi(table, REVEAL_PAUSE_TICKS);
-        finishIfOver(player, table);
-        send(player);
+        finishIfOver(player.getServer(), table);
+        sendAll(player.getServer(), table);
     }
 
     private static void pass(ServerPlayer player) {
         Table table = TABLES.get(player.getUUID());
-        if (table == null || table.game.done() || table.game.turn() != table.mySeat
-                || !BlockReach.canReach(player)) {
+        if (table == null || table.game.done() || !BlockReach.canReach(player)) {
             return;
         }
-        if (!table.game.passOnExit(table.mySeat)) {
+        int seat = seatOf(table, player.getUUID());
+        if (seat < 0 || table.game.turn() != seat || !table.game.passOnExit(seat)) {
             return;
         }
-        finishIfOver(player, table);
-        send(player);
+        finishIfOver(player.getServer(), table);
+        sendAll(player.getServer(), table);
     }
 
     /** Ticks before the first computer response to something the player did. */
@@ -294,22 +364,40 @@ public final class BluffManager {
         for (Map.Entry<UUID, Table> entry : TABLES.entrySet()) {
             Table table = entry.getValue();
             Bluff game = table.game;
-            if (game.done() || game.turn() == table.mySeat) {
+            if (game.done()) {
                 continue;
             }
-            ServerPlayer player = server.getPlayerList().getPlayer(entry.getKey());
-            if (player == null) {
-                continue;
+            // one entry per human, but the table is shared — only advance it from
+            // the seat whose turn it actually is
+            int turn = game.turn();
+            UUID sitting = table.occupants[turn];
+            if (sitting != null && server.getPlayerList().getPlayer(sitting) != null) {
+                continue; // a present human owes this move
+            }
+            if (!entry.getKey().equals(firstHuman(table))) {
+                continue; // drive each table once per tick, not once per player
             }
             if (--table.aiWait > 0) {
                 continue;
             }
-            aiMoveOnce(player, table);
+            // an empty seat, or one whose player has gone, plays itself — a
+            // table must never deadlock on somebody who logged off mid-hand
+            aiMoveOnce(server, table);
         }
     }
 
-    /** One computer seat takes one move, and the player is shown it. */
-    private static void aiMoveOnce(ServerPlayer player, Table table) {
+    /** The lowest-seated human, so a shared table is advanced exactly once. */
+    private static UUID firstHuman(Table table) {
+        for (UUID id : table.occupants) {
+            if (id != null) {
+                return id;
+            }
+        }
+        return null;
+    }
+
+    /** One unattended seat takes one move, and everyone at the table sees it. */
+    private static void aiMoveOnce(net.minecraft.server.MinecraftServer server, Table table) {
         Bluff game = table.game;
         int seat = game.turn();
         for (BluffAI brain : table.brains) {
@@ -321,7 +409,7 @@ public final class BluffManager {
             Bluff.Reveal reveal = game.lastReveal();
             boolean caught = reveal != null && reveal.wasLying();
             // quieter than the player's own sounds — it is across the table
-            sound(player, caught ? SoundEvents.PLAYER_LEVELUP : SoundEvents.ITEM_BREAK,
+            soundAll(server, table, caught ? SoundEvents.PLAYER_LEVELUP : SoundEvents.ITEM_BREAK,
                     caught ? 0.9F : 1.1F, 0.4F);
             armAi(table, REVEAL_PAUSE_TICKS);
         } else if (game.pendingOut() >= 0) {
@@ -336,41 +424,76 @@ public final class BluffManager {
                 return;
             }
             table.sawPlay(seat, count);
-            sound(player, SoundEvents.BOOK_PAGE_TURN, 0.85F + 0.1F * seat, 0.35F);
+            soundAll(server, table, SoundEvents.BOOK_PAGE_TURN, 0.85F + 0.1F * seat, 0.35F);
             armAi(table, MOVE_TICKS);
         }
-        finishIfOver(player, table);
-        send(player);
+        finishIfOver(server, table);
+        sendAll(server, table);
     }
 
-    /** Pay out once, the moment a table finishes. */
-    private static void finishIfOver(ServerPlayer player, Table table) {
-        if (!table.game.done()) {
+    private static void soundAll(net.minecraft.server.MinecraftServer server, Table table,
+                                 net.minecraft.sounds.SoundEvent event, float pitch, float vol) {
+        for (UUID id : table.occupants) {
+            if (id == null) {
+                continue;
+            }
+            ServerPlayer p = server.getPlayerList().getPlayer(id);
+            if (p != null) {
+                sound(p, event, pitch, vol);
+            }
+        }
+    }
+
+    /**
+     * Settle the table, once, the moment it finishes.
+     *
+     * <p>Everybody sitting down paid the same wager in, so the winner takes the
+     * lot. A seat played by the computer still contributes its share — the
+     * house covers it — which is what keeps a mixed table paying the same as a
+     * full one.
+     */
+    private static void finishIfOver(net.minecraft.server.MinecraftServer server, Table table) {
+        if (!table.game.done() || table.settled) {
             return;
         }
-        boolean won = table.game.winner() == table.mySeat;
-        StatsTracker.bump(player, won ? "bluff_wins" : "bluff_losses");
-        ServerSync.markAwards(player);
-        if (won) {
-            // the stake back, plus the same again for each opponent beaten
-            int payout = table.wagered * table.seats;
-            RecyclerManager.giveFragments(player, payout);
-            player.sendSystemMessage(Component.literal("You emptied your hand — "
-                            + payout + " fragments.").withStyle(ChatFormatting.GREEN));
-            sound(player, SoundEvents.PLAYER_LEVELUP, 1.0F);
-        } else {
-            String name = seatName(table, table.game.winner());
-            player.sendSystemMessage(Component.literal(name + " went out first. You lose "
-                    + table.wagered + " fragments.").withStyle(ChatFormatting.RED));
+        table.settled = true;
+        int winner = table.game.winner();
+        for (UUID id : table.occupants) {
+            if (id == null) {
+                continue;
+            }
+            ServerPlayer p = server == null ? null : server.getPlayerList().getPlayer(id);
+            if (p == null) {
+                continue;
+            }
+            boolean won = seatOf(table, id) == winner;
+            StatsTracker.bump(p, won ? "bluff_wins" : "bluff_losses");
+            ServerSync.markAwards(p);
+            if (won) {
+                int payout = table.wagered * table.seats;
+                RecyclerManager.giveFragments(p, payout);
+                p.sendSystemMessage(Component.literal("You emptied your hand — "
+                        + payout + " fragments.").withStyle(ChatFormatting.GREEN));
+                sound(p, SoundEvents.PLAYER_LEVELUP, 1.0F);
+            } else {
+                p.sendSystemMessage(Component.literal(seatName(table, winner)
+                        + " went out first. You lose " + table.wagered + " fragments.")
+                        .withStyle(ChatFormatting.RED));
+            }
         }
     }
 
+    /** Display name of a seat, from the table's own point of view. */
     private static String seatName(Table table, int seat) {
-        if (seat == table.mySeat) {
-            return "You";
+        if (seat < 0 || seat >= table.seats) {
+            return "Seat " + seat;
         }
-        int index = seat - 1;
-        return index >= 0 && index < AI_NAMES.length ? AI_NAMES[index] : "Seat " + seat;
+        String held = table.names[seat];
+        if (held != null) {
+            return held;
+        }
+        int index = seat % AI_NAMES.length;
+        return AI_NAMES[index];
     }
 
     private static void sound(ServerPlayer player, net.minecraft.sounds.SoundEvent event,
@@ -384,7 +507,21 @@ public final class BluffManager {
                 event, SoundSource.PLAYERS, volume, pitch);
     }
 
-    /** Push the table to its player. */
+    /** The numeric block for a player with no board in front of them. */
+    private static List<Integer> idleNums(ServerPlayer player) {
+        List<Integer> nums = new ArrayList<>();
+        for (int i = 0; i < BluffSyncPayload.NUM_HAND_SIZES; i++) {
+            nums.add(0);
+        }
+        nums.set(BluffSyncPayload.NUM_SEATS, seatsOf(player));
+        nums.set(BluffSyncPayload.NUM_STAKE, stakeIndexOf(player));
+        nums.set(BluffSyncPayload.NUM_WINNER, -1);
+        nums.set(BluffSyncPayload.NUM_LAST_SEAT, -1);
+        nums.set(BluffSyncPayload.NUM_PENDING_OUT, -1);
+        return nums;
+    }
+
+    /** Push the table to its player. Each client only ever gets its own hand. */
     public static void send(ServerPlayer player) {
         Table table = TABLES.get(player.getUUID());
         List<String> hand = new ArrayList<>();
@@ -394,28 +531,30 @@ public final class BluffManager {
         List<String> reveal = new ArrayList<>();
 
         if (table == null) {
-            int phase = PHASE_IDLE;
-            for (int i = 0; i < BluffSyncPayload.NUM_HAND_SIZES; i++) {
-                nums.add(0);
-            }
-            nums.set(BluffSyncPayload.NUM_SEATS, seatsOf(player));
-            nums.set(BluffSyncPayload.NUM_STAKE, stakeIndexOf(player));
-            nums.set(BluffSyncPayload.NUM_WINNER, -1);
-            nums.set(BluffSyncPayload.NUM_LAST_SEAT, -1);
-            nums.set(BluffSyncPayload.NUM_PENDING_OUT, -1);
             PacketDistributor.sendToPlayer(player,
-                    new BluffSyncPayload(phase, hand, nums, names, log, reveal));
+                    new BluffSyncPayload(PHASE_IDLE, List.of(), idleNums(player),
+                            List.of(), List.of(), List.of()));
             return;
         }
 
         Bluff game = table.game;
-        for (MobCard card : game.hand(table.mySeat)) {
+        int mySeat = seatOf(table, player.getUUID());
+        if (mySeat < 0) {
+            // Not seated here. Falling back to seat zero would have posted
+            // somebody else's hand to them, which is the one thing this whole
+            // game rests on not happening.
+            PacketDistributor.sendToPlayer(player,
+                    new BluffSyncPayload(PHASE_IDLE, List.of(),
+                            idleNums(player), List.of(), List.of(), List.of()));
+            return;
+        }
+        for (MobCard card : game.hand(mySeat)) {
             hand.add(card.id());
         }
         for (int i = 0; i < BluffSyncPayload.NUM_HAND_SIZES + table.seats; i++) {
             nums.add(0);
         }
-        nums.set(BluffSyncPayload.NUM_MY_SEAT, table.mySeat);
+        nums.set(BluffSyncPayload.NUM_MY_SEAT, mySeat);
         nums.set(BluffSyncPayload.NUM_SEATS, table.seats);
         nums.set(BluffSyncPayload.NUM_TURN, game.turn());
         nums.set(BluffSyncPayload.NUM_PILE, game.pileSize());
@@ -442,9 +581,10 @@ public final class BluffManager {
             nums.set(BluffSyncPayload.NUM_REVEAL_CHALLENGER, -1);
             nums.set(BluffSyncPayload.NUM_REVEAL_ACCUSED, -1);
         }
+        table.names[mySeat] = player.getGameProfile().getName();
         for (int s = 0; s < table.seats; s++) {
             nums.set(BluffSyncPayload.NUM_HAND_SIZES + s, game.handSize(s));
-            names.add(seatName(table, s));
+            names.add(s == mySeat ? "You" : seatName(table, s));
         }
         // the tail of the log; the whole thing would grow without bound
         List<String> full = game.log();
@@ -452,9 +592,9 @@ public final class BluffManager {
 
         int phase;
         if (game.done()) {
-            phase = game.winner() == table.mySeat ? PHASE_WON : PHASE_LOST;
+            phase = game.winner() == mySeat ? PHASE_WON : PHASE_LOST;
         } else {
-            phase = game.turn() == table.mySeat ? PHASE_YOUR_TURN : PHASE_THEIR_TURN;
+            phase = game.turn() == mySeat ? PHASE_YOUR_TURN : PHASE_THEIR_TURN;
         }
         PacketDistributor.sendToPlayer(player,
                 new BluffSyncPayload(phase, hand, nums, names, log, reveal));
