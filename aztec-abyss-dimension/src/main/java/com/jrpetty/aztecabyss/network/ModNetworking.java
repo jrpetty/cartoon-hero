@@ -77,6 +77,19 @@ public final class ModNetworking {
                                         + " §7— step through the portal when you're ready."), false);
                     }
                 }));
+        registrar.playToClient(
+                LeaderboardPayload.TYPE,
+                LeaderboardPayload.STREAM_CODEC,
+                (payload, context) -> context.enqueueWork(
+                        () -> ClientAbyssState.openLeaderboards(payload)));
+        registrar.playToServer(
+                RequestLeaderboardPayload.TYPE,
+                RequestLeaderboardPayload.STREAM_CODEC,
+                (payload, context) -> context.enqueueWork(() -> {
+                    if (context.player() instanceof ServerPlayer sp) {
+                        sendLeaderboards(sp);
+                    }
+                }));
         registrar.playToServer(
                 PingPayload.TYPE,
                 PingPayload.STREAM_CODEC,
@@ -132,6 +145,58 @@ public final class ModNetworking {
         }
         PacketDistributor.sendToPlayer(player, new OpenMapPickerPayload(
                 player.getPersistentData().getInt("aztecabyss_chosen_map"), bests, custom));
+    }
+
+    /**
+     * Packs every board on the server into one payload.
+     *
+     * <p>Flat strings, because the client has no way to look any of this up: a
+     * published map is a file in the world folder that no client has heard of.
+     * One list for every map and both boards, so opening the screen is one packet
+     * however many maps there are.
+     */
+    public static void sendLeaderboards(ServerPlayer player) {
+        if (player.getServer() == null) {
+            return;
+        }
+        var board = com.jrpetty.aztecabyss.data.Leaderboards.get(player.getServer());
+        java.util.List<String> rows = new java.util.ArrayList<>();
+        java.util.List<String> labels = new java.util.ArrayList<>();
+
+        java.util.LinkedHashMap<String, String> names = new java.util.LinkedHashMap<>();
+        for (com.jrpetty.aztecabyss.worldgen.ArenaMap m : com.jrpetty.aztecabyss.worldgen.ArenaMap.values()) {
+            names.put(m.name().toLowerCase(java.util.Locale.ROOT), m.title());
+        }
+        names.put("maze", "The Maze");
+        for (com.jrpetty.aztecabyss.engine.PublishedMaps.Entry e
+                : com.jrpetty.aztecabyss.engine.PublishedMaps.ordered(player.getServer())) {
+            names.put("custom:" + e.name().toLowerCase(java.util.Locale.ROOT), e.title());
+        }
+        // Anything with a record but no name left - a map since unpublished -
+        // still shows, under its key. Losing somebody's record because the map was
+        // taken off the portal would be worse than an ugly label.
+        for (String key : board.mapsWithRecords()) {
+            names.putIfAbsent(key, key);
+        }
+
+        for (var entry : names.entrySet()) {
+            String key = entry.getKey();
+            labels.add(key + "|" + entry.getValue());
+            boolean time = board.modeOf(key)
+                    == com.jrpetty.aztecabyss.data.Leaderboards.Mode.TIME;
+            for (boolean group : new boolean[]{false, true}) {
+                var top = board.top(key, group, 10);
+                for (int i = 0; i < top.size(); i++) {
+                    var r = top.get(i);
+                    String score = time
+                            ? (r.seconds() / 60) + "m " + (r.seconds() % 60) + "s"
+                            : "Round " + r.score();
+                    rows.add(key + (group ? "#group" : "#solo") + "|" + (i + 1) + "|"
+                            + r.name() + "|" + score + "|" + r.seconds() + "|" + r.party());
+                }
+            }
+        }
+        PacketDistributor.sendToPlayer(player, new LeaderboardPayload(rows, labels));
     }
 
     /** Pushes a player's squadmate list for the co-op teammate HUD. */

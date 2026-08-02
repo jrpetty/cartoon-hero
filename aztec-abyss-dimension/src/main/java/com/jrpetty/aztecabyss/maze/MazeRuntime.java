@@ -178,6 +178,9 @@ public final class MazeRuntime {
             boolean rollover = appliedDay >= 0;
             applyLayout(level, todaysLayout(level));
             appliedDay = day;
+            // Fresh caches with the fresh walls: yesterday's map of where things
+            // were should be worth nothing.
+            MazeChests.reshuffle(level, day);
             if (rollover) {
                 newDay(level, day);
             }
@@ -402,25 +405,46 @@ public final class MazeRuntime {
      * table is a material - nothing here shortcuts an arena.
      */
     private static void escapeBonus(ServerPlayer p, int seconds) {
+        // Beating the maze is the hardest single thing in the mod: a route you had
+        // to find, at night, with Grievers in it, having survived four stings or
+        // avoided them. The old payout was a handful of iron - less than an hour in
+        // a cave - which said the run had not been worth doing. It pays properly
+        // now, and it pays for speed, because the fast route is the one you had to
+        // learn the maze to find.
         int tier = seconds < 0 ? 1 : seconds <= 180 ? 3 : seconds <= 420 ? 2 : 1;
         java.util.List<net.minecraft.world.item.ItemStack> paid = new java.util.ArrayList<>();
         paid.add(new net.minecraft.world.item.ItemStack(
-                net.minecraft.world.item.Items.DIAMOND, tier * 2));
+                net.minecraft.world.item.Items.DIAMOND, 12 * tier));
         paid.add(new net.minecraft.world.item.ItemStack(
-                net.minecraft.world.item.Items.IRON_INGOT, tier * 8));
+                net.minecraft.world.item.Items.NETHERITE_SCRAP, tier));
         paid.add(new net.minecraft.world.item.ItemStack(
-                net.minecraft.world.item.Items.GOLD_INGOT, tier * 4));
+                net.minecraft.world.item.Items.GOLD_INGOT, 24 * tier));
         paid.add(new net.minecraft.world.item.ItemStack(
-                net.minecraft.world.item.Items.LAPIS_LAZULI, tier * 6));
+                net.minecraft.world.item.Items.IRON_INGOT, 32 * tier));
+        paid.add(new net.minecraft.world.item.ItemStack(
+                net.minecraft.world.item.Items.LAPIS_LAZULI, 24 * tier));
+        paid.add(new net.minecraft.world.item.ItemStack(
+                net.minecraft.world.item.Items.ENCHANTED_GOLDEN_APPLE, tier));
+        if (tier >= 2) {
+            paid.add(new net.minecraft.world.item.ItemStack(
+                    net.minecraft.world.item.Items.NETHERITE_INGOT, tier - 1));
+        }
+        if (tier >= 3) {
+            // Only the fast route gets this, and it should be visibly the prize.
+            paid.add(new net.minecraft.world.item.ItemStack(
+                    net.minecraft.world.item.Items.NETHERITE_BLOCK));
+            paid.add(new net.minecraft.world.item.ItemStack(
+                    net.minecraft.world.item.Items.ENCHANTED_BOOK));
+        }
         for (net.minecraft.world.item.ItemStack stack : paid) {
             if (!p.getInventory().add(stack)) {
                 p.drop(stack, false);
             }
         }
-        p.giveExperiencePoints(200 * tier);
-        String pace = tier == 3 ? "§6Blistering." : tier == 2 ? "§eGood pace." : "§7You made it.";
+        p.giveExperiencePoints(1500 * tier);
         p.displayClientMessage(Component.literal(
-                "§a§lOUT. §r" + pace + " §7The Glade pays what it owes you."), false);
+                "§6§lOUT. §r§7Tier §f" + tier + "§7 payout"
+                        + (tier == 3 ? " §8— you ran it clean." : "")), false);
     }
 
     private static void brief(ServerPlayer p) {

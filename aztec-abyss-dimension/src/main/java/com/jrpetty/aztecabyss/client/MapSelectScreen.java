@@ -88,11 +88,18 @@ public final class MapSelectScreen extends Screen {
 
     @Override
     protected void init() {
+        // Records live one press from the place everybody stands before every run,
+        // which is the only moment anyone actually wants to know what the record is.
+        addRenderableWidget(Button.builder(Component.literal("§eRecords"), b ->
+                        PacketDistributor.sendToServer(
+                                new com.jrpetty.aztecabyss.network.RequestLeaderboardPayload(0)))
+                .bounds(this.width / 2 + 84, this.height - 42, 76, 20)
+                .build());
         addRenderableWidget(Button.builder(Component.literal("Enter this Hunt"), b -> {
                     PacketDistributor.sendToServer(new MapSelectPayload(selected));
                     onClose();
                 })
-                .bounds(this.width / 2 - 80, this.height - 42, 160, 20)
+                .bounds(this.width / 2 - 160, this.height - 42, 160, 20)
                 .build());
         // The maze is deliberately set apart from the arena cards: no rounds, no
         // rewards, no scoring in common with them.

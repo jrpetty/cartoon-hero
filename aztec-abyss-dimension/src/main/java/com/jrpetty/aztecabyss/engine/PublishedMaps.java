@@ -337,6 +337,10 @@ public final class PublishedMaps {
             return;
         }
         String error = EngineArena.startIn(abyss, player, entry.bounds(), entry.ruleset());
+        if (error == null && EngineArena.active() != null) {
+            // Records file under the map, not under the ruleset it happens to use.
+            EngineArena.active().setMapKey("custom:" + entry.name());
+        }
         if (error != null) {
             player.displayClientMessage(net.minecraft.network.chat.Component.literal(
                     "§c" + error), false);

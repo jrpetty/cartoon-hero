@@ -148,6 +148,16 @@ public final class MazeRuns extends SavedData {
         store.add(new Record(player.getGameProfile().getName(), seconds, deaths,
                 (int) MazeRuntime.dayNumber(level) + 1, layout == null ? "?" : layout.name()));
 
+        // Party size is everyone who was in the maze when you got out. Solo and
+        // group are separate boards because they are not the same achievement:
+        // beating this alone is a different thing from beating it with four people
+        // drawing Grievers off you.
+        int party = level.players().size();
+        com.jrpetty.aztecabyss.data.Leaderboards.get(level.getServer()).submit(
+                "maze", com.jrpetty.aztecabyss.data.Leaderboards.Mode.TIME,
+                player.getUUID(), player.getGameProfile().getName(),
+                (int) MazeRuntime.dayNumber(level) + 1, seconds, party);
+
         String time = format(seconds);
         for (ServerPlayer p : level.getServer().getPlayerList().getPlayers()) {
             p.displayClientMessage(Component.literal(

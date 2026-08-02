@@ -76,6 +76,12 @@ public final class ClientAbyssState {
                 payload.currentChoice(), bests, payload.customMaps()));
     }
 
+    /** The records screen, opened over whatever asked for it. */
+    public static void openLeaderboards(com.jrpetty.aztecabyss.network.LeaderboardPayload payload) {
+        Minecraft mc = Minecraft.getInstance();
+        mc.setScreen(new com.jrpetty.aztecabyss.client.LeaderboardScreen(mc.screen, payload));
+    }
+
     public static void acceptCooldown(com.jrpetty.aztecabyss.network.AbyssCooldownPayload payload) {
         cooldownUntil = payload.cooldownUntil();
     }

@@ -1379,6 +1379,14 @@ public final class RoundManager {
         com.jrpetty.aztecabyss.data.AbyssStats.get(server).record(
                 player.getUUID(), player.getGameProfile().getName(),
                 round, survivalSeconds, rs.getTotalKills(), rs.getTotalRevives(), false, multiplayer, game.getMap().ordinal());
+        // Same result, filed on the board that every map shares - the three
+        // arenas, the maze and anything published all read from one place, so the
+        // Records screen does not have to know which kind of map it is looking at.
+        com.jrpetty.aztecabyss.data.Leaderboards.get(server).submit(
+                game.getMap().name().toLowerCase(java.util.Locale.ROOT),
+                com.jrpetty.aztecabyss.data.Leaderboards.Mode.ROUNDS,
+                player.getUUID(), player.getGameProfile().getName(),
+                round, survivalSeconds, Math.max(1, game.getParticipants().size()));
         com.jrpetty.aztecabyss.worldgen.MonumentBuilder.build(abyssLevel);
         ModNetworking.sendRecap(player, round, killsThisRun, revivesThisRun, survivalSeconds, prevBest,
                 false, multiplayer, true, rs.getHeadshotsThisRun(), rs.getTotalDeaths(), ritual);
@@ -1576,6 +1584,14 @@ public final class RoundManager {
         com.jrpetty.aztecabyss.data.AbyssStats.get(server).record(
                 player.getUUID(), player.getGameProfile().getName(),
                 round, survivalSeconds, rs.getTotalKills(), rs.getTotalRevives(), victory, multiplayer, game.getMap().ordinal());
+        // Dying still counts. The board is how far you got, not whether you walked
+        // away with it - a run that ended at round twenty-eight was a round
+        // twenty-eight run.
+        com.jrpetty.aztecabyss.data.Leaderboards.get(server).submit(
+                game.getMap().name().toLowerCase(java.util.Locale.ROOT),
+                com.jrpetty.aztecabyss.data.Leaderboards.Mode.ROUNDS,
+                player.getUUID(), player.getGameProfile().getName(),
+                round, survivalSeconds, Math.max(1, game.getParticipants().size()));
         com.jrpetty.aztecabyss.worldgen.MonumentBuilder.build(abyssLevel);
 
         // Death/victory recap screen data.

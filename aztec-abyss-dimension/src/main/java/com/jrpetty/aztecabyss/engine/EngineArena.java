@@ -198,6 +198,7 @@ public final class EngineArena {
         this.bar = new ServerBossEvent(Component.literal(mapName),
                 BossEvent.BossBarColor.RED, BossEvent.BossBarOverlay.PROGRESS);
         this.director = new Director(rules);
+        this.startedTick = level.getGameTime();
     }
 
     public static EngineArena active() {
@@ -336,6 +337,7 @@ public final class EngineArena {
                 p.displayClientMessage(Component.literal("§7The run is over."), false);
             }
         }
+        current.recordResult();
         for (Mob m : current.alive) {
             if (m.isAlive()) {
                 m.discard();
@@ -346,6 +348,41 @@ public final class EngineArena {
         current.bar.removeAllPlayers();
         current.running = false;
         current = null;
+    }
+
+    /**
+     * Files the run on the board before it is torn down.
+     *
+     * <p>Round reached is the score, and how long it took breaks a tie - two
+     * squads who both got to round twenty did not do the same thing if one of them
+     * did it in half the time. Every participant is credited, including anyone who
+     * went down and stayed down: they were in it.
+     */
+    private void recordResult() {
+        if (level.getServer() == null || round <= 0 || participants.isEmpty()) {
+            return;
+        }
+        String key = mapKey == null || mapKey.isBlank() ? "engine:" + rules.id : mapKey;
+        int party = participants.size();
+        int seconds = (int) ((level.getGameTime() - startedTick) / 20L);
+        var board = com.jrpetty.aztecabyss.data.Leaderboards.get(level.getServer());
+        for (UUID id : participants) {
+            ServerPlayer p = level.getServer().getPlayerList().getPlayer(id);
+            if (p == null) {
+                continue;
+            }
+            board.submit(key, com.jrpetty.aztecabyss.data.Leaderboards.Mode.ROUNDS,
+                    id, p.getGameProfile().getName(), round, seconds, party);
+        }
+    }
+
+    /** Which board this run files under. Set when a published map starts one. */
+    private String mapKey = "";
+    /** When the run began, for the tie-break on the board. */
+    private long startedTick = 0L;
+
+    public void setMapKey(String key) {
+        this.mapKey = key == null ? "" : key;
     }
 
     private List<ServerPlayer> players() {
