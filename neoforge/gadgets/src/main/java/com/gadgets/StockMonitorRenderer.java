@@ -2,28 +2,40 @@ package com.gadgets;
 
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.math.Axis;
-import net.minecraft.client.gui.Font;
-import net.minecraft.client.renderer.LightTexture;
 import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.blockentity.BlockEntityRenderer;
 import net.minecraft.client.renderer.blockentity.BlockEntityRendererProvider;
 import net.minecraft.core.Direction;
 import net.minecraft.world.level.block.state.BlockState;
-import org.joml.Matrix4f;
 
 /**
- * Draws the stock readout on the monitor's display face: the current count in
- * amber (red when below the alert level) with the tracked item's name beneath.
+ * The stock readout, laid out like the Fluid Monitor's: what is being tracked
+ * across the top, the count large in the middle, and the alert state under it,
+ * over a bar reading the stock against the level it is allowed to fall to.
+ *
+ * <p>That bar is why the alert level is worth having on the face at all. A bare
+ * number tells you how much is there; the bar tells you how close it is to
+ * running out, which is the question a stock monitor exists to answer.
  */
 public class StockMonitorRenderer implements BlockEntityRenderer<StockMonitorBlockEntity> {
     private static final int OK_COLOR = 0xFFC864;
-    private static final int LOW_COLOR = 0xFF5555;
+    private static final int LOW_COLOR = 0xFF6B6B;
     private static final int LABEL_COLOR = 0xC0B090;
+    private static final int NAME_COLOR = 0xE6AA3C;
+    private static final int TRACK_COLOR = 0xFF2E2A25;
 
-    private final Font font;
+    /** Width of the model's screen opening, in block pixels. */
+    private static final int GLASS_PX = 14;
+    /** The glass sits two pixels in from the mounting face; the bezel is a third. */
+    private static final float GLASS_Z = -0.5F + 2.0F / 16.0F;
+    /** Clear of the glass by enough not to z-fight, still inside the recess. */
+    private static final float TEXT_Z = GLASS_Z + 0.02F;
+    private static final float SCALE = 0.012F;
+
+    private final FaceText face;
 
     public StockMonitorRenderer(BlockEntityRendererProvider.Context ctx) {
-        this.font = ctx.getFont();
+        this.face = new FaceText(ctx.getFont(), GLASS_PX, SCALE);
     }
 
     @Override
@@ -42,18 +54,21 @@ public class StockMonitorRenderer implements BlockEntityRenderer<StockMonitorBlo
         } else {
             pose.mulPose(Axis.XP.rotationDegrees(back == Direction.UP ? -90.0F : 90.0F));
         }
-        pose.translate(0.0, 0.0, -0.368);
-        pose.scale(0.018F, -0.018F, 0.018F);
+        pose.translate(0.0, 0.0, TEXT_Z);
+        pose.scale(SCALE, -SCALE, SCALE);
 
-        String value = be.faceValue();
-        String label = be.faceLabel();
-        Matrix4f matrix = pose.last().pose();
-        int bright = LightTexture.FULL_BRIGHT;
-        int valueColor = be.isLow() ? LOW_COLOR : OK_COLOR;
-        font.drawInBatch(value, -font.width(value) / 2.0F, -9.0F, valueColor, false,
-                matrix, buffers, Font.DisplayMode.POLYGON_OFFSET, 0, bright);
-        font.drawInBatch(label, -font.width(label) / 2.0F, 2.0F, LABEL_COLOR, false,
-                matrix, buffers, Font.DisplayMode.POLYGON_OFFSET, 0, bright);
+        boolean low = be.isLow();
+        int colour = low ? LOW_COLOR : OK_COLOR;
+        face.line(pose, buffers, be.faceLabel(), -30.0F, NAME_COLOR);
+        face.line(pose, buffers, be.faceValue(), -18.0F, 2.0F, colour);
+        face.line(pose, buffers, low ? "LOW  < " + be.getThreshold() : "alert " + be.getThreshold(),
+                4.0F, low ? LOW_COLOR : LABEL_COLOR);
+
+        // Full bar means comfortably stocked; empty means at the alert line. An
+        // alert of zero has nothing to measure against, so the bar sits full.
+        int threshold = be.getThreshold();
+        int percent = threshold <= 0 ? 100 : (int) Math.min(100L, be.getCount() * 100L / threshold);
+        face.bar(pose, buffers, 18.0F, face.room() - 12.0F, percent, colour, TRACK_COLOR);
         pose.popPose();
     }
 }

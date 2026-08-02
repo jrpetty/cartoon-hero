@@ -2,20 +2,21 @@ package com.gadgets;
 
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.math.Axis;
-import net.minecraft.client.gui.Font;
-import net.minecraft.client.renderer.LightTexture;
 import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.blockentity.BlockEntityRenderer;
 import net.minecraft.client.renderer.blockentity.BlockEntityRendererProvider;
 import net.minecraft.core.Direction;
 import net.minecraft.world.level.block.HorizontalDirectionalBlock;
 import net.minecraft.world.level.block.state.BlockState;
-import org.joml.Matrix4f;
 
 /**
  * The monitor's face: the source gadget's name across the top, its headline
- * number large in the middle, and the same supporting figures the gadget shows
- * on its own display underneath.
+ * number large in the middle, and its supporting figures underneath.
+ *
+ * <p>Every gadget is laid out the way the Fluid Monitor is, so a wall of these
+ * reads as one instrument panel rather than three different ones. A counter
+ * follows whatever readout the counter itself is set to — including its
+ * all-at-once mode — so the remote screen and the block always agree.
  */
 public class CommandHubMonitorRenderer implements BlockEntityRenderer<CommandHubMonitorBlockEntity> {
     private static final int NAME = 0xE6AA3C;
@@ -25,20 +26,20 @@ public class CommandHubMonitorRenderer implements BlockEntityRenderer<CommandHub
     private static final int OK = 0x7CE87C;
     private static final int IDLE = 0x8E96A4;
 
-    /** Text scale for the name and footer rows. */
-    private static final float SMALL = 0.011F;
-    /** Text scale for the headline number — deliberately large to read at range. */
-    private static final float BIG = 0.026F;
-
     /** Depth of the model's glass, from the block centre along FACING. */
     private static final float GLASS_Z = 0.5F - 12.0F / 16.0F;
     /** Width of the model's screen opening, in block pixels. */
     private static final int GLASS_PX = 14;
+    private static final float SCALE = 0.011F;
+    /** The headline, relative to the base size — big enough to read at range. */
+    private static final float BIG = 2.35F;
+    /** The rows of the all-at-once counter readout. */
+    private static final float MEDIUM = 1.45F;
 
-    private final Font font;
+    private final FaceText face;
 
     public CommandHubMonitorRenderer(BlockEntityRendererProvider.Context ctx) {
-        this.font = ctx.getFont();
+        this.face = new FaceText(ctx.getFont(), GLASS_PX, SCALE);
     }
 
     @Override
@@ -53,82 +54,78 @@ public class CommandHubMonitorRenderer implements BlockEntityRenderer<CommandHub
         pose.pushPose();
         pose.translate(0.5, 0.5, 0.5);
         pose.mulPose(Axis.YP.rotationDegrees(-front.toYRot()));
-        // The glass sits twelve pixels back from the front of the block space,
+        // The glass is on the far side of the block from the direction it faces,
         // because the panel hangs off the wall behind it rather than off the
         // face nearest you. The readout goes a hair proud of that glass.
         pose.translate(0.0, 0.0, GLASS_Z + 0.005);
+        pose.scale(SCALE, -SCALE, SCALE);
 
         if (!be.isHubLinked()) {
-            line(pose, buffers, "NO HUB", 0.0F, SMALL, IDLE);
+            face.line(pose, buffers, "NO HUB", 0.0F, IDLE);
         } else if (!be.hasSource()) {
-            line(pose, buffers, "UNASSIGNED", -6.0F, SMALL, IDLE);
-            line(pose, buffers, "right-click", 6.0F, SMALL, IDLE);
+            face.line(pose, buffers, "UNASSIGNED", -6.0F, IDLE);
+            face.line(pose, buffers, "right-click", 6.0F, IDLE);
         } else if (!be.isOnline()) {
-            line(pose, buffers, trim(be.sourceLabel()), -14.0F, SMALL, NAME);
-            line(pose, buffers, "OFFLINE", 0.0F, SMALL, IDLE);
+            face.line(pose, buffers, be.sourceLabel(), -14.0F, NAME);
+            face.line(pose, buffers, "OFFLINE", 0.0F, IDLE);
         } else if (be.sourceType() == CommandHubBlockEntity.TYPE_COUNTER) {
-            // Mirrors the Item Counter's own face: rate headline, then /h and
-            // total — or, once it goes quiet, a STALLED flag in place of both.
-            boolean stalled = be.d() != 0;
-            line(pose, buffers, trim(be.sourceLabel()), -18.0F, SMALL, NAME);
-            line(pose, buffers, ItemCounterBlockEntity.compact(be.a()) + "/m", -4.0F, BIG, stalled ? LOW : VALUE);
-            line(pose, buffers, stalled ? "STALLED" : ItemCounterBlockEntity.compact(be.b()) + "/h  ·  "
-                    + ItemCounterBlockEntity.compact(be.c()) + " tot", 16.0F, SMALL, stalled ? LOW : SUB);
+            counter(pose, buffers, be);
         } else if (be.sourceType() == CommandHubBlockEntity.TYPE_MONITOR) {
-            // Mirrors the Stock Monitor: the count headline, then the alert state.
+            // The Stock Monitor: the count headline, then the alert state.
             boolean low = be.c() != 0;
-            line(pose, buffers, trim(be.sourceLabel()), -18.0F, SMALL, NAME);
-            line(pose, buffers, ItemCounterBlockEntity.compact(be.a()), -4.0F, BIG, low ? LOW : VALUE);
-            line(pose, buffers, low ? "LOW  <" + be.b() : be.d() + " types", 16.0F, SMALL, low ? LOW : OK);
+            headline(pose, buffers, be.sourceLabel(), ItemCounterBlockEntity.compact(be.a()),
+                    low ? "LOW  < " + be.b() : be.d() + (be.d() == 1 ? " type" : " types"),
+                    low ? LOW : VALUE, low ? LOW : OK);
         } else {
-            // Fluid and energy gauges: fill percentage over the raw amounts.
+            // Fluid gauge: fill percentage over the raw amounts.
             boolean low = be.c() != 0;
-            line(pose, buffers, trim(be.sourceLabel()), -18.0F, SMALL, NAME);
-            line(pose, buffers, be.d() + "%", -4.0F, BIG, low ? LOW : VALUE);
-            line(pose, buffers, ItemCounterBlockEntity.compact(be.a()) + " / "
-                    + ItemCounterBlockEntity.compact(be.b()), 16.0F, SMALL, low ? LOW : OK);
+            headline(pose, buffers, be.sourceLabel(), be.d() + "%",
+                    ItemCounterBlockEntity.compact(be.a()) + " / " + ItemCounterBlockEntity.compact(be.b()),
+                    low ? LOW : VALUE, low ? LOW : OK);
         }
         pose.popPose();
     }
 
     /**
-     * Draws one centred row. {@code y} is always expressed on the small-text
-     * grid, so rows keep their spacing whatever scale they are drawn at: a pose
-     * scaled by {@code scale} turns a font offset of {@code f} into {@code
-     * f * scale} of face, so the offset needed is {@code y * SMALL / scale}.
+     * An Item Counter, shown the way that counter's own face is showing it. A
+     * stalled counter overrides the choice: whatever you asked to watch, the
+     * thing worth knowing is that nothing is coming through any more.
      */
-    private void line(PoseStack pose, MultiBufferSource buffers, String text, float y, float scale, int colour) {
-        pose.pushPose();
-        pose.scale(scale, -scale, scale);
-        String shown = fit(text, scale);
-        Matrix4f matrix = pose.last().pose();
-        font.drawInBatch(shown, -font.width(shown) / 2.0F, y * (SMALL / scale), colour, false,
-                matrix, buffers, Font.DisplayMode.POLYGON_OFFSET, 0, LightTexture.FULL_BRIGHT);
-        pose.popPose();
+    private void counter(PoseStack pose, MultiBufferSource buffers, CommandHubMonitorBlockEntity be) {
+        if (be.d() != 0) {
+            headline(pose, buffers, be.sourceLabel(),
+                    ItemCounterBlockEntity.compact(be.a()) + "/m", "STALLED", LOW, LOW);
+            return;
+        }
+        if (be.sourceMode() == ItemCounterBlockEntity.MODE_ALL) {
+            // Every rate at once: three even rows under the name, rather than a
+            // headline with the rest crammed onto one line beneath it.
+            face.line(pose, buffers, be.sourceLabel(), -22.0F, NAME);
+            face.line(pose, buffers, ItemCounterBlockEntity.compact(be.a()) + "/m", -10.0F, MEDIUM, VALUE);
+            face.line(pose, buffers, ItemCounterBlockEntity.compact(be.b()) + "/h", 4.0F, MEDIUM, VALUE);
+            face.line(pose, buffers, ItemCounterBlockEntity.compact(be.c()) + " tot", 18.0F, MEDIUM, SUB);
+            return;
+        }
+        String value = switch (be.sourceMode()) {
+            case 1 -> ItemCounterBlockEntity.compact(be.b());
+            case 2 -> ItemCounterBlockEntity.compact(be.c());
+            case 3 -> be.pulseCount() + "/" + be.pulseSize();
+            default -> ItemCounterBlockEntity.compact(be.a());
+        };
+        String unit = ItemCounterBlockEntity.MODE_LABELS[
+                Math.floorMod(be.sourceMode(), ItemCounterBlockEntity.MODE_LABELS.length)];
+        headline(pose, buffers, be.sourceLabel(), value, unit, VALUE, SUB);
     }
 
     /**
-     * Shortens a row that would run past the glass.
-     *
-     * <p>Measured in pixels at the scale the row is actually drawn at, not in
-     * characters: a footer of narrow digits fits where the same count of wide
-     * letters does not, and the headline is drawn more than twice the size of
-     * everything else. A fixed character limit got both of those wrong and let
-     * text spill over the bezel and out into the air beside the panel.
+     * The house layout: name, one big number, one quiet line under it. The
+     * footer sits clear of the headline's full height, which it did not before
+     * — the bottoms of the big glyphs ran into it.
      */
-    private String fit(String text, float scale) {
-        float room = GLASS_PX / 16.0F / scale;
-        if (font.width(text) <= room) {
-            return text;
-        }
-        String out = text;
-        while (!out.isEmpty() && font.width(out + "…") > room) {
-            out = out.substring(0, out.length() - 1);
-        }
-        return out.isEmpty() ? "" : out + "…";
-    }
-
-    private static String trim(String s) {
-        return s.length() > 18 ? s.substring(0, 17) + "…" : s;
+    private void headline(PoseStack pose, MultiBufferSource buffers, String name,
+                          String value, String footer, int valueColour, int footerColour) {
+        face.line(pose, buffers, name, -20.0F, NAME);
+        face.line(pose, buffers, value, -4.0F, BIG, valueColour);
+        face.line(pose, buffers, footer, 20.0F, footerColour);
     }
 }

@@ -40,12 +40,12 @@ public class StockMonitorBlock extends Block implements EntityBlock {
 
     /** Sign-thin panel, flush against the face it reads. Indexed by Direction 3D data value. */
     private static final VoxelShape[] PANEL = {
-            Block.box(0, 0, 0, 16, 2, 16),   // facing down
-            Block.box(0, 14, 0, 16, 16, 16), // facing up
-            Block.box(0, 0, 0, 16, 16, 2),   // facing north
-            Block.box(0, 0, 14, 16, 16, 16), // facing south
-            Block.box(0, 0, 0, 2, 16, 16),   // facing west
-            Block.box(14, 0, 0, 16, 16, 16), // facing east
+            Block.box(0, 0, 0, 16, 3, 16),   // facing down
+            Block.box(0, 13, 0, 16, 16, 16), // facing up
+            Block.box(0, 0, 0, 16, 16, 3),   // facing north
+            Block.box(0, 0, 13, 16, 16, 16), // facing south
+            Block.box(0, 0, 0, 3, 16, 16),   // facing west
+            Block.box(13, 0, 0, 16, 16, 16), // facing east
     };
 
     public StockMonitorBlock(Properties properties) {

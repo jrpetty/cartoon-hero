@@ -65,6 +65,13 @@ public class CommandHubMonitorBlockEntity extends BlockEntity {
     private boolean online = false;
     private String label = "";
     private long a, b, c, d;
+    /**
+     * Counter only: which readout that counter is set to, so this screen can
+     * show the same thing its block does instead of always choosing for itself.
+     */
+    private int sourceMode = 0;
+    /** Counter only: progress toward its next redstone pulse, for pulse mode. */
+    private long pulseCount, pulseSize;
     private final List<Choice> choices = new ArrayList<>();
 
     /** Digest of the last screen pushed to clients; see {@link #fingerprint()}. */
@@ -110,6 +117,19 @@ public class CommandHubMonitorBlockEntity extends BlockEntity {
 
     public long d() {
         return d;
+    }
+
+    /** The counter's own display mode; see {@link ItemCounterBlockEntity#MODE_LABELS}. */
+    public int sourceMode() {
+        return sourceMode;
+    }
+
+    public long pulseCount() {
+        return pulseCount;
+    }
+
+    public long pulseSize() {
+        return pulseSize;
     }
 
     public List<Choice> choices() {
@@ -267,6 +287,9 @@ public class CommandHubMonitorBlockEntity extends BlockEntity {
             b = counter.getRateHour();
             c = counter.getTotal();
             d = counter.isStalled() ? 1 : 0;
+            sourceMode = counter.getDisplayMode();
+            pulseCount = counter.getCount();
+            pulseSize = counter.getThreshold();
         } else if (w.getBlockEntity(p) instanceof HubGauge gauge) {
             type = gauge.gaugeType();
             online = true;
@@ -304,6 +327,9 @@ public class CommandHubMonitorBlockEntity extends BlockEntity {
         h = h * 31 + b;
         h = h * 31 + c;
         h = h * 31 + d;
+        h = h * 31 + sourceMode;
+        h = h * 31 + pulseCount;
+        h = h * 31 + pulseSize;
         for (Choice ch : choices) {
             h = h * 31 + ch.dim().hashCode();
             h = h * 31 + ch.pos();
@@ -350,6 +376,9 @@ public class CommandHubMonitorBlockEntity extends BlockEntity {
         tag.putLong("B", b);
         tag.putLong("C", c);
         tag.putLong("D", d);
+        tag.putInt("SrcMode", sourceMode);
+        tag.putLong("PulseCount", pulseCount);
+        tag.putLong("PulseSize", pulseSize);
         ListTag list = new ListTag();
         for (Choice ch : choices) {
             list.add(ch.toNbt());
@@ -373,6 +402,9 @@ public class CommandHubMonitorBlockEntity extends BlockEntity {
         b = tag.getLong("B");
         c = tag.getLong("C");
         d = tag.getLong("D");
+        sourceMode = tag.getInt("SrcMode");
+        pulseCount = tag.getLong("PulseCount");
+        pulseSize = tag.getLong("PulseSize");
         choices.clear();
         ListTag list = tag.getList("Choices", Tag.TAG_COMPOUND);
         for (int i = 0; i < list.size(); i++) {

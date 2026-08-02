@@ -2,34 +2,43 @@ package com.gadgets;
 
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.math.Axis;
-import net.minecraft.client.gui.Font;
-import net.minecraft.client.renderer.LightTexture;
 import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.blockentity.BlockEntityRenderer;
 import net.minecraft.client.renderer.blockentity.BlockEntityRendererProvider;
 import net.minecraft.core.Direction;
 import net.minecraft.world.level.block.state.BlockState;
-import org.joml.Matrix4f;
 
 /**
- * Draws the live readout on the counter's display face (opposite the sensor),
- * full-bright like an LED panel: either one headline with its unit label, or —
- * in the "all" mode — every rate listed at once under the counter's name.
+ * The counter's display face, laid out like the Fluid Monitor's: the counter's
+ * name across the top, its headline figure large in the middle, and the unit
+ * underneath — with a fill bar in pulse mode, where there is a fraction worth
+ * drawing.
+ *
+ * <p>In the all-at-once mode the headline gives way to the three rates listed
+ * together, which is what the counter's own screen and any hub monitor pointed
+ * at it will be showing too.
  */
 public class ItemCounterRenderer implements BlockEntityRenderer<ItemCounterBlockEntity> {
     private static final int VALUE_COLOR = 0xFFC864;
     private static final int LABEL_COLOR = 0xC08840;
+    private static final int NAME_COLOR = 0xE6AA3C;
+    private static final int LOW_COLOR = 0xFF6B6B;
+    private static final int TRACK_COLOR = 0xFF2E2A25;
 
-    private static final float SCALE = 0.018F;
-    /** Usable width of the display face, in block pixels — a pixel of frame each side. */
-    private static final int FACE_PX = 14;
-    /** Text units that fit across the face at {@link #SCALE}. */
-    private static final float ROOM = FACE_PX / 16.0F / SCALE;
+    /** Width of the model's screen opening, in block pixels. */
+    private static final int GLASS_PX = 14;
+    /** The glass sits two pixels in from the mounting face; the bezel is a third. */
+    private static final float GLASS_Z = -0.5F + 2.0F / 16.0F;
+    /** Clear of the glass by enough not to z-fight, still inside the recess. */
+    private static final float TEXT_Z = GLASS_Z + 0.02F;
+    private static final float SCALE = 0.012F;
+    /** The pulse readout's own mode index in {@link ItemCounterBlockEntity#MODE_LABELS}. */
+    private static final int PULSE_MODE = 3;
 
-    private final Font font;
+    private final FaceText face;
 
     public ItemCounterRenderer(BlockEntityRendererProvider.Context ctx) {
-        this.font = ctx.getFont();
+        this.face = new FaceText(ctx.getFont(), GLASS_PX, SCALE);
     }
 
     @Override
@@ -49,46 +58,30 @@ public class ItemCounterRenderer implements BlockEntityRenderer<ItemCounterBlock
             // Screen on top or bottom: lay the text flat, readable from the south.
             pose.mulPose(Axis.XP.rotationDegrees(back == Direction.UP ? -90.0F : 90.0F));
         }
-        pose.translate(0.0, 0.0, -0.368);
+        pose.translate(0.0, 0.0, TEXT_Z);
         pose.scale(SCALE, -SCALE, SCALE);
 
-        Matrix4f matrix = pose.last().pose();
+        String name = be.getCustomName().isEmpty() ? "counter" : be.getCustomName();
+        boolean stalled = be.isStalled();
+        int colour = stalled ? LOW_COLOR : VALUE_COLOR;
+        face.line(pose, buffers, name, -30.0F, NAME_COLOR);
+
         if (be.showsEverything()) {
-            // Every statistic at once: the label heads the panel and the three
-            // rates stack under it, all on the small grid so they fit together.
-            String name = be.getCustomName().isEmpty() ? "counter" : be.getCustomName();
-            line(matrix, buffers, name, -18.0F, LABEL_COLOR);
             String[] rows = be.faceRows();
             for (int i = 0; i < rows.length; i++) {
-                line(matrix, buffers, rows[i], -6.0F + i * 9.0F, VALUE_COLOR);
+                face.line(pose, buffers, rows[i], -16.0F + i * 14.0F, 1.35F, colour);
             }
         } else {
-            line(matrix, buffers, be.faceValue(), -9.0F, VALUE_COLOR);
-            line(matrix, buffers, be.faceLabel(), 2.0F, LABEL_COLOR);
+            face.line(pose, buffers, be.faceValue(), -18.0F, 2.0F, colour);
+            face.line(pose, buffers, stalled ? "STALLED" : be.faceLabel(), 4.0F,
+                    stalled ? LOW_COLOR : LABEL_COLOR);
+            if (be.getDisplayMode() == PULSE_MODE && !stalled) {
+                // Pulse mode has a real fraction: how close the next pulse is.
+                int percent = be.getThreshold() <= 0 ? 0
+                        : (int) (be.getCount() * 100L / be.getThreshold());
+                face.bar(pose, buffers, 18.0F, face.room() - 12.0F, percent, VALUE_COLOR, TRACK_COLOR);
+            }
         }
         pose.popPose();
-    }
-
-    /** One centred row, shortened if it would run past the face. */
-    private void line(Matrix4f matrix, MultiBufferSource buffers, String text, float y, int colour) {
-        String shown = fit(text);
-        font.drawInBatch(shown, -font.width(shown) / 2.0F, y, colour, false,
-                matrix, buffers, Font.DisplayMode.POLYGON_OFFSET, 0, LightTexture.FULL_BRIGHT);
-    }
-
-    /**
-     * Shortens a row that would run past the display face. A counter given a
-     * long name used to draw it at full width straight off the block and out
-     * into the air on both sides.
-     */
-    private String fit(String text) {
-        if (font.width(text) <= ROOM) {
-            return text;
-        }
-        String out = text;
-        while (!out.isEmpty() && font.width(out + "…") > ROOM) {
-            out = out.substring(0, out.length() - 1);
-        }
-        return out.isEmpty() ? "" : out + "…";
     }
 }
