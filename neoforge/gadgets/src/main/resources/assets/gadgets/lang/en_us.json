@@ -16,7 +16,6 @@
   "block.gadgets.trash_can": "Trash Can",
   "block.gadgets.command_hub": "Command Hub",
   "item.gadgets.monitor_wand": "Monitor Wand",
-  "item.gadgets.wireless_remote": "Wireless Remote",
   "itemgroup.gadgets.gadgets": "Gadgets",
   "tip.gadgets.rope_arrow.1": "Fire it from a bow or crossbow",
   "tip.gadgets.rope_arrow.2": "Hangs climbable rope where it lands",
@@ -61,8 +60,6 @@
   "tip.gadgets.command_hub.3": "Right-click: open the board · Sneak: quick summary",
   "tip.gadgets.monitor_wand.1": "Click a Command Hub to select it",
   "tip.gadgets.monitor_wand.2": "Then click counters, monitors and gauges (sneak: unlink)",
-  "tip.gadgets.wireless_remote.1": "Right-click: pulse the channel",
-  "tip.gadgets.wireless_remote.2": "Sneak + right-click a block: bind it",
   "tip.gadgets.display_pedestal.4": "Place side by side up to 3×3",
   "tip.gadgets.display_pedestal.5": "Right-click a block onto it to re-skin",
   "item.gadgets.grappling_hook": "Grappling Hook",
@@ -82,9 +79,5 @@
   "block.gadgets.fluid_monitor": "Fluid Monitor",
   "tip.gadgets.fluid_monitor.1": "Shows how full the tank it faces is",
   "tip.gadgets.fluid_monitor.2": "Emits redstone below the alert level",
-  "tip.gadgets.fluid_monitor.3": "Right-click: alert level · Wand: link to a hub",
-  "block.gadgets.energy_monitor": "Energy Monitor",
-  "tip.gadgets.energy_monitor.1": "Shows the charge of the cell it faces",
-  "tip.gadgets.energy_monitor.2": "Emits redstone below the alert level",
-  "tip.gadgets.energy_monitor.3": "Right-click: alert level · Wand: link to a hub"
+  "tip.gadgets.fluid_monitor.3": "Right-click: alert level · Wand: link to a hub"
 }

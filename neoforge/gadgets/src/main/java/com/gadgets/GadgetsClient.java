@@ -26,7 +26,6 @@ public class GadgetsClient {
         event.registerBlockEntityRenderer(Gadgets.COMMAND_HUB_MONITOR_BE.get(), CommandHubMonitorRenderer::new);
         // One renderer serves both gauges; they differ only in what they read.
         event.registerBlockEntityRenderer(Gadgets.FLUID_MONITOR_BE.get(), GaugeRenderer::new);
-        event.registerBlockEntityRenderer(Gadgets.ENERGY_MONITOR_BE.get(), GaugeRenderer::new);
     }
 
     // NeoForge keeps MenuScreens.register private; screens are bound here instead.
@@ -43,9 +42,8 @@ public class GadgetsClient {
         ScreenOpener.MONITOR = be -> Minecraft.getInstance().setScreen(new MonitorScreen((StockMonitorBlockEntity) be));
         ScreenOpener.HUB_MONITOR = be ->
                 Minecraft.getInstance().setScreen(new HubMonitorScreen((CommandHubMonitorBlockEntity) be));
-        ScreenOpener.GAUGE = be -> {
-            String title = be instanceof FluidMonitorBlockEntity ? "Fluid Monitor" : "Energy Monitor";
-            Minecraft.getInstance().setScreen(new GaugeScreen((HubGauge) be, title));
-        };
+        // Titled from the gauge itself, so a second kind of gauge needs nothing here.
+        ScreenOpener.GAUGE = be -> Minecraft.getInstance().setScreen(
+                new GaugeScreen((HubGauge) be, be.getBlockState().getBlock().getName().getString()));
     }
 }

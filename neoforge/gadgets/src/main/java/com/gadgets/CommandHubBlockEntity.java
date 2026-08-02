@@ -43,6 +43,8 @@ public class CommandHubBlockEntity extends BlockEntity {
     public static final int TYPE_COUNTER = 0;
     public static final int TYPE_MONITOR = 1;
     public static final int TYPE_FLUID = 2;
+    /** Retired gauge kind. Kept so a board saved before it was removed still
+     *  reads its old nodes correctly; they drop off on the next refresh. */
     public static final int TYPE_ENERGY = 3;
 
     /** Short word for a node's kind, used on every board and screen. */
