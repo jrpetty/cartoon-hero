@@ -610,6 +610,12 @@ public final class EngineArena {
         tickObjective(present);
         tickPrompts(present);
         tickRegions(present);
+        // Once a second, in both modes. A deadline, a countdown and a "have they
+        // got them all yet" check are not free-mode ideas, and round mode having
+        // no recurring event of its own was an accident of build order.
+        if (elapsed % 20 == 0) {
+            Script.fire(this, level, rules.id, "tick", present.get(0));
+        }
 
         // Free mode stops here. No breather, no wave, no round ever begins - the
         // map is the script, and the script ends it. Everything above this line is
@@ -669,9 +675,14 @@ public final class EngineArena {
                 && level.getGameTime() - lastProgress > STALL_TICKS) {
             fetchStragglers(present);
         }
-        bar.setName(Component.literal("§c§lROUND " + round + " §r§7— §f"
-                + (alive.size() + leftToSpawn) + "§7 left"
-                + (objective == null ? "" : objective.hud())));
+        // A map that wrote its own bar keeps it. Round mode had no way to say
+        // anything of its own here, which made set_bar a free-mode privilege for
+        // no reason other than the order the two were built in.
+        bar.setName(Component.literal(barText.isEmpty()
+                ? "§c§lROUND " + round + " §r§7— §f"
+                        + (alive.size() + leftToSpawn) + "§7 left"
+                        + (objective == null ? "" : objective.hud())
+                : barText + " §8| §7R" + round));
         int total = Math.max(1, rules.countFor(round));
         bar.setProgress(Math.max(0.0F, Math.min(1.0F, (alive.size() + leftToSpawn) / (float) total)));
     }
@@ -1118,12 +1129,6 @@ public final class EngineArena {
         if (elapsed % 20 != 0) {
             return;
         }
-        // A free-mode map has no round to hang rules off, so this is the only
-        // recurring event it gets. Once a second, which is as fine-grained as a
-        // deadline or a "have they collected them all yet" check ever needs, and
-        // cheap enough that a map full of rules cannot make it hurt.
-        Script.fire(this, level, rules.id, "tick", present.isEmpty() ? null : present.get(0));
-
         String clock = MazeStyleTime.of(elapsed / 20);
         bar.setName(Component.literal(barText.isEmpty()
                 ? "§6" + clock
@@ -1138,6 +1143,40 @@ public final class EngineArena {
             int s = seconds % 60;
             return m + ":" + (s < 10 ? "0" + s : String.valueOf(s));
         }
+    }
+
+    /**
+     * Which region contains a given block, or null.
+     *
+     * <p>Used by block events so a rule can say "the lever in the vault" rather
+     * than "a lever, pulled by somebody standing in the vault" - which are
+     * different sentences and only one of them is what an author means.
+     */
+    public String regionAt(BlockPos at) {
+        for (Marker r : regions) {
+            String id = r.arg("id", r.arg("value", "")).toLowerCase(java.util.Locale.ROOT);
+            if (id.isEmpty()) {
+                continue;
+            }
+            double radius = Math.max(1, r.intArg("radius", 4));
+            int height = Math.max(1, r.intArg("height", 4));
+            double dx = at.getX() - r.pos().getX();
+            double dz = at.getZ() - r.pos().getZ();
+            if (dx * dx + dz * dz <= radius * radius
+                    && Math.abs(at.getY() - r.pos().getY()) <= height) {
+                return id;
+            }
+        }
+        return null;
+    }
+
+    /** Whether a position is inside the map at all, for the block-event guard. */
+    public boolean contains(BlockPos at) {
+        return bounds.isInside(at);
+    }
+
+    public String rulesetId() {
+        return rules.id;
     }
 
     public Vars vars() {

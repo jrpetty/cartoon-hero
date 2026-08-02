@@ -271,12 +271,10 @@ room, a heist and a puzzle all have no horde by definition.
 Everything else still works — shops, doors, traps, teleports, perks — because none
 of it was ever really about rounds.
 
-Free mode gets two things of its own:
-
-- **`tick`** — fires once a second. The only recurring event a map without rounds
-  has, and what a deadline or a "have they got them all yet" check hangs off.
-- **`set_bar`** — you write the bar. The run clock is appended automatically, so a
-  race has a time without you building one.
+`tick` (once a second) and `set_bar` work in **both** modes. They were briefly
+free-mode only, which made round mode a second-class citizen of its own engine for
+no reason but the order the two were built in. In round mode `set_bar` keeps your
+text and appends the round number.
 
 ```json
 { "on": "tick", "when": { "seconds": { "at_least": 300 } },
@@ -372,6 +370,30 @@ is enough for a hundred arenas and exactly one game.
 Integers only, no expressions — on purpose. That covers counting, flags, timers
 and scores, and it cannot be used to hang a server. A map you downloaded from a
 stranger stays safe to run.
+
+### Blocks — reacting to what somebody touched
+
+Rounds answer *when*. Regions answer *where somebody is standing*. Neither answers
+*what did they just pull* — so a map could ask you to reach a place but never to
+operate anything.
+
+```json
+{ "on": "use_block", "when": { "block": "minecraft:lever", "region": "lever_a" },
+  "do": [ { "set_var": { "name": "lever_a", "to": 1 } } ] }
+```
+
+**Events:** `use_block`, `break_block`
+**Condition:** `block` — the block id, `minecraft:` optional
+
+The `region` here is resolved from the **block's** position, not the player's,
+which is the difference between "the lever in the vault" and "a lever, pulled by
+someone who happens to be standing in the vault".
+
+Interactions are **not** swallowed — the lever still flips, the door still opens.
+A trigger that ate the interaction would mean every switch needing a rule just to
+behave like a switch.
+
+`aztecabyss:vault` ships as a worked example: three levers, then the door.
 
 ### Regions — reacting to *where*, not just *when*
 

@@ -13,6 +13,24 @@ behaviour that was already there · **docs**
 
 ## Unreleased
 
+### Blocks you can react to, and round-mode parity
+
+- **feat** `use_block` and `break_block` events with a `block` condition. Rounds
+  answered *when*, regions answered *where somebody stands*, and nothing answered
+  *what did they just pull* — so a map could ask you to reach a place but never to
+  operate anything. Levers, buttons, plates and mining are the foundation of every
+  puzzle and switch.
+- **change** The `region` on a block event resolves from the **block's** position,
+  not the player's — "the lever in the vault", not "a lever pulled by someone
+  standing in the vault".
+- **change** Interactions are not cancelled; the lever still flips. A trigger that
+  ate the interaction would mean every switch needing a rule to behave like one.
+- **fix** `tick` and `set_bar` were free-mode only, making round mode a
+  second-class citizen of its own engine for no reason but build order. Both work
+  in both modes now; round mode appends the round number to a custom bar.
+- **feat** `aztecabyss:vault` ships as a worked example — three levers, then the
+  door.
+
 ### Respawning and kits — and a defect in shipped content
 
 - **fix** `aztecabyss:capture` shipped two iterations ago with **permadeath**,

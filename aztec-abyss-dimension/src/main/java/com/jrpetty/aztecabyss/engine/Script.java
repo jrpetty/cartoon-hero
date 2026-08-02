@@ -81,7 +81,8 @@ public final class Script {
     /** Every event the engine actually fires. */
     private static final java.util.Set<String> EVENTS = java.util.Set.of(
             "run_start", "round_start", "round_end", "mob_killed", "extracted",
-            "objective_complete", "objective_failed", "region_enter", "region_leave", "tick");
+            "objective_complete", "objective_failed", "region_enter", "region_leave", "tick",
+            "use_block", "break_block");
 
     /** Every action the runner understands. */
     private static final java.util.Set<String> ACTIONS = java.util.Set.of(
@@ -92,7 +93,7 @@ public final class Script {
 
     /** Every condition the matcher understands. */
     private static final java.util.Set<String> CONDITIONS = java.util.Set.of(
-            "round", "area_open", "region", "var", "my_var", "team", "team_var", "seconds");
+            "round", "area_open", "region", "var", "my_var", "team", "team_var", "seconds", "block");
 
     public static List<String> warnings(String rulesetId) {
         return WARNINGS.getOrDefault(rulesetId, List.of());
@@ -170,6 +171,55 @@ public final class Script {
      * keeps its run; the alternative is a scripting mistake in someone else's
      * downloaded map taking down a server mid-round.
      */
+    /**
+     * A block a player touched, and where.
+     *
+     * <p>Rounds answer <em>when</em>, regions answer <em>where somebody is
+     * standing</em>, and neither answers <em>what did they just pull</em>. A lever,
+     * a button, a pressure plate and a block being mined are the foundation of
+     * every puzzle, switch and machine, and none of them could be reacted to at
+     * all - so a map could ask you to reach a place but never to operate anything.
+     *
+     * <p>The region is resolved from the <em>block's</em> position rather than the
+     * player's, which is the difference between "the lever in the vault" and "a
+     * lever, pulled by somebody who happens to be standing in the vault".
+     */
+    public static void fireBlock(EngineArena arena, ServerLevel level, String rulesetId,
+                                 String event, ServerPlayer who, BlockPos at, String blockId) {
+        List<Rule> rules = BY_RULESET.get(rulesetId);
+        if (rules == null || rules.isEmpty()) {
+            return;
+        }
+        String region = arena.regionAt(at);
+        for (Rule rule : rules) {
+            if (!rule.event().equals(event)) {
+                continue;
+            }
+            if (rule.when() != null && rule.when().has("block")) {
+                String want = str(rule.when(), "block", "").toLowerCase(Locale.ROOT);
+                if (!want.isEmpty() && !blockId.equalsIgnoreCase(want)
+                        && !blockId.equalsIgnoreCase("minecraft:" + want)) {
+                    continue;
+                }
+            }
+            if (!matches(rule.when(), arena, who, region)) {
+                trace(arena, "§8skip §7" + event + " §8(" + blockId + ") — conditions not met");
+                continue;
+            }
+            trace(arena, "§afire §f" + event + " §7(" + blockId + ")"
+                    + (region == null ? "" : " §8in " + region));
+            int budget = ACTION_BUDGET;
+            for (JsonElement el : rule.actions()) {
+                if (budget-- <= 0) {
+                    break;
+                }
+                if (el.isJsonObject()) {
+                    run(arena, level, el.getAsJsonObject(), who);
+                }
+            }
+        }
+    }
+
     /** A region event, which carries the region's id so rules can filter on it. */
     public static void fireRegion(EngineArena arena, ServerLevel level, String rulesetId,
                                   String event, ServerPlayer who, String regionId) {

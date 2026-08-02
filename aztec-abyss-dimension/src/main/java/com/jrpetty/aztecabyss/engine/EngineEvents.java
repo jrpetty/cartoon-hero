@@ -88,6 +88,40 @@ public final class EngineEvents {
         }
     }
 
+    /**
+     * Anything a player touches inside a running map is offered to the script.
+     *
+     * <p>Deliberately after the marker handling above and deliberately not
+     * cancelling: a lever should still flip, a door should still open, and the
+     * script gets to react to it having happened. A trigger that swallowed the
+     * interaction would mean every switch in every map needing a rule just to
+     * behave like a switch.
+     */
+    @SubscribeEvent
+    public static void onBlockTouched(PlayerInteractEvent.RightClickBlock event) {
+        blockEvent(event.getLevel(), event.getEntity(), event.getPos(), "use_block");
+    }
+
+    @SubscribeEvent
+    public static void onBlockBroken(net.neoforged.neoforge.event.level.BlockEvent.BreakEvent event) {
+        blockEvent(event.getLevel(), event.getPlayer(), event.getPos(), "break_block");
+    }
+
+    private static void blockEvent(net.minecraft.world.level.LevelAccessor levelAccess,
+                                   net.minecraft.world.entity.player.Player entity,
+                                   net.minecraft.core.BlockPos pos, String eventName) {
+        if (!(levelAccess instanceof ServerLevel level) || !(entity instanceof ServerPlayer player)) {
+            return;
+        }
+        EngineArena arena = EngineArena.active();
+        if (arena == null || !EngineArena.isRunning() || !arena.contains(pos)) {
+            return;
+        }
+        var block = level.getBlockState(pos).getBlock();
+        String id = net.minecraft.core.registries.BuiltInRegistries.BLOCK.getKey(block).toString();
+        Script.fireBlock(arena, level, arena.rulesetId(), eventName, player, pos, id);
+    }
+
     @SubscribeEvent
     public static void onRegisterCommands(RegisterCommandsEvent event) {
         LiteralArgumentBuilder<CommandSourceStack> wallet = Commands.literal("wallet")
