@@ -32,11 +32,23 @@ public final class MazeSting {
 
     /** Stings survived before the venom takes. */
     public static final int THRESHOLD = 4;
-    /** How long the Changing runs before it finishes you, in seconds. */
+    /**
+     * How long you have after the fourth sting before it starts killing you.
+     *
+     * <p>Ninety seconds is not how long you survive - it is how long you have to
+     * do something about it. The venom does no damage at all during this window;
+     * it takes your sight, your footing and your strength, and it counts down
+     * where you can see it. Long enough to run for the Glade or for a serum, and
+     * not long enough to do both.
+     */
     private static final int CHANGING_SECONDS = 90;
+    /** Damage a second once it turns lethal, and it does not stop. */
+    private static final float DEATH_TICK_DAMAGE = 2.0F;
 
     private static final Map<UUID, Integer> STINGS = new HashMap<>();
     private static final Set<UUID> INFECTED = new HashSet<>();
+    /** Seconds left before the Changing turns lethal. Absent once it has. */
+    private static final Map<UUID, Integer> COUNTDOWN = new HashMap<>();
 
     private MazeSting() {
     }
@@ -44,11 +56,13 @@ public final class MazeSting {
     public static void clear(UUID id) {
         STINGS.remove(id);
         INFECTED.remove(id);
+        COUNTDOWN.remove(id);
     }
 
     public static void clearAll() {
         STINGS.clear();
         INFECTED.clear();
+        COUNTDOWN.clear();
     }
 
     public static int stings(UUID id) {
@@ -83,21 +97,78 @@ public final class MazeSting {
         return true;
     }
 
-    /** The Changing begins. */
+    /**
+     * The Changing begins - the clock, not the dying.
+     *
+     * <p>Deliberately no Wither here. Killing you across the same ninety seconds
+     * you are being told to run somewhere makes the run pointless: you arrive at
+     * the Glade dead, having done the right thing. The venom cripples first and
+     * kills afterwards, so the ninety seconds are a real chance and the deadline
+     * is a real deadline.
+     */
     private static void infect(ServerLevel level, ServerPlayer player) {
         INFECTED.add(player.getUUID());
+        COUNTDOWN.put(player.getUUID(), CHANGING_SECONDS);
         int ticks = CHANGING_SECONDS * 20;
-        player.addEffect(new MobEffectInstance(MobEffects.WITHER, ticks, 0, false, true));
         player.addEffect(new MobEffectInstance(MobEffects.CONFUSION, ticks, 0, false, true));
         player.addEffect(new MobEffectInstance(MobEffects.MOVEMENT_SLOWDOWN, ticks, 0, false, true));
         player.addEffect(new MobEffectInstance(MobEffects.WEAKNESS, ticks, 0, false, true));
 
         player.displayClientMessage(Component.literal("§4§lTHE CHANGING"), false);
         player.displayClientMessage(Component.literal(
-                "§cThe fourth one took. §7Serum, or the Glade, and you have about "
-                        + CHANGING_SECONDS + " seconds."), false);
+                "§cThe fourth one took. §7Serum, or the Glade — you have "
+                        + CHANGING_SECONDS + " seconds before it starts killing you."), false);
         level.playSound(null, player.blockPosition(), SoundEvents.WARDEN_ROAR,
                 SoundSource.PLAYERS, 1.4F, 0.4F);
+    }
+
+    /**
+     * Runs the Changing. Called once a second from the maze runtime.
+     *
+     * <p>Two phases. While the countdown lasts nothing here hurts anyone - it
+     * announces, and it gets louder as the number gets smaller. When it reaches
+     * zero the venom turns and does not stop, which is what makes the ninety
+     * seconds mean something rather than being a status effect with a timer on it.
+     */
+    public static void tick(ServerLevel level) {
+        if (INFECTED.isEmpty()) {
+            return;
+        }
+        for (ServerPlayer player : level.players()) {
+            UUID id = player.getUUID();
+            if (!INFECTED.contains(id)) {
+                continue;
+            }
+            Integer left = COUNTDOWN.get(id);
+            if (left == null) {
+                // Past the deadline: it is killing them now.
+                player.hurt(level.damageSources().wither(), DEATH_TICK_DAMAGE);
+                player.displayClientMessage(Component.literal(
+                        "§4§lYou are turning."), true);
+                continue;
+            }
+            int now = left - 1;
+            if (now <= 0) {
+                COUNTDOWN.remove(id);
+                player.addEffect(new MobEffectInstance(
+                        MobEffects.WITHER, Integer.MAX_VALUE, 1, false, true));
+                player.addEffect(new MobEffectInstance(
+                        MobEffects.BLINDNESS, Integer.MAX_VALUE, 0, false, true));
+                player.displayClientMessage(Component.literal("§4§lIT HAS TAKEN"), false);
+                level.playSound(null, player.blockPosition(), SoundEvents.WARDEN_ROAR,
+                        SoundSource.PLAYERS, 1.6F, 0.35F);
+                continue;
+            }
+            COUNTDOWN.put(id, now);
+            player.displayClientMessage(Component.literal(
+                    "§4§lTHE CHANGING §8— §c" + now + "s"), true);
+            // The last ten seconds get a heartbeat, because a number on the action
+            // bar is easy to stop looking at and a sound is not.
+            if (now <= 10) {
+                level.playSound(null, player.blockPosition(), SoundEvents.WARDEN_ANGRY,
+                        SoundSource.PLAYERS, 0.7F, 0.5F);
+            }
+        }
     }
 
     /**
@@ -108,10 +179,12 @@ public final class MazeSting {
     public static boolean cure(ServerLevel level, ServerPlayer player) {
         boolean was = INFECTED.remove(player.getUUID()) || STINGS.containsKey(player.getUUID());
         STINGS.remove(player.getUUID());
+        COUNTDOWN.remove(player.getUUID());
         if (!was) {
             return false;
         }
         player.removeEffect(MobEffects.WITHER);
+        player.removeEffect(MobEffects.BLINDNESS);
         player.removeEffect(MobEffects.CONFUSION);
         player.removeEffect(MobEffects.WEAKNESS);
         player.removeEffect(MobEffects.MOVEMENT_SLOWDOWN);
@@ -125,7 +198,8 @@ public final class MazeSting {
     /** A short readout for the status bar. */
     public static String hudFragment(UUID id) {
         if (INFECTED.contains(id)) {
-            return " §8| §4§lCHANGING";
+            Integer left = COUNTDOWN.get(id);
+            return left == null ? " §8| §4§lTURNING" : " §8| §4CHANGING §c" + left + "s";
         }
         int n = stings(id);
         return n == 0 ? "" : " §8| §cStung " + n + "§8/§c" + THRESHOLD;

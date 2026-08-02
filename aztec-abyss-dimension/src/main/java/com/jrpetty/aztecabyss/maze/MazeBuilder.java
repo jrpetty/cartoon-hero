@@ -39,6 +39,18 @@ public final class MazeBuilder {
     private static final BlockState WALL_MOSS = Blocks.MOSSY_STONE_BRICKS.defaultBlockState();
     private static final BlockState GLADE_GROUND = Blocks.GRASS_BLOCK.defaultBlockState();
     private static final BlockState BEDROCK = Blocks.BEDROCK.defaultBlockState();
+    private static final BlockState BARRIER = Blocks.BARRIER.defaultBlockState();
+
+    /**
+     * Height of the invisible lid over the maze.
+     *
+     * <p>Four clear blocks above the wall tops. A Griever climbs a wall and walks
+     * along the top of it exactly as it always could; a runner cannot reach the
+     * top of an eighteen-block wall at all, and now cannot get above one by any
+     * other means either. The Glade is deliberately left open to the sky - it is
+     * the one place on the map you are meant to be able to look up from.
+     */
+    private static final int SKY_LID_Y = MazeData.WALL_TOP_Y + 4;
 
     /**
      * One colour per compass section, banded into the corridor walls.
@@ -84,8 +96,45 @@ public final class MazeBuilder {
      */
     private static final BlockPos BUILT_MARKER = new BlockPos(MazeData.SPAWN_X, 1, MazeData.SPAWN_Z);
 
+    /**
+     * A second marker recording which <em>version</em> of the geometry is down.
+     *
+     * <p>The built-marker alone answers "has this world ever had a maze", which is
+     * the wrong question the moment the shape of the map changes in code. A world
+     * built before the Glade ring was sealed, or before the sky lid existed, is
+     * built - and wrong, silently, with no way for a player to know that the map
+     * they are running is a version behind the rules they were told.
+     *
+     * <p>So the marker encodes a number. When the geometry changes here, the
+     * constant below goes up, and every existing world restamps itself the next
+     * time anyone walks in rather than waiting to be told to.
+     */
+    private static final BlockPos VERSION_MARKER = new BlockPos(MazeData.SPAWN_X, 2, MazeData.SPAWN_Z);
+
+    /**
+     * Bumped whenever the stamped shape of the map changes.
+     *
+     * <p>2: sealed the lap around the outside of the Glade, dressed the Glade wall,
+     * and put the barrier lid over the corridors.
+     */
+    private static final int GEOMETRY_VERSION = 2;
+
+    /** One distinctive block per version, so the marker is readable in-world. */
+    private static final BlockState[] VERSION_BLOCKS = {
+            Blocks.BEDROCK.defaultBlockState(),
+            Blocks.DEEPSLATE.defaultBlockState(),
+            Blocks.POLISHED_DEEPSLATE.defaultBlockState(),
+            Blocks.DEEPSLATE_BRICKS.defaultBlockState(),
+            Blocks.DEEPSLATE_TILES.defaultBlockState(),
+    };
+
+    private static BlockState versionBlock() {
+        return VERSION_BLOCKS[Math.floorMod(GEOMETRY_VERSION, VERSION_BLOCKS.length)];
+    }
+
     public static boolean isBuilt(ServerLevel level) {
-        return level.getBlockState(BUILT_MARKER).is(Blocks.BEDROCK);
+        return level.getBlockState(BUILT_MARKER).is(Blocks.BEDROCK)
+                && level.getBlockState(VERSION_MARKER).is(versionBlock().getBlock());
     }
 
     public static boolean isBuilding() {
@@ -166,6 +215,12 @@ public final class MazeBuilder {
                 level.setBlock(new BlockPos(x, MazeData.FLOOR_Y - 7, z), BEDROCK, 2);
                 level.setBlock(new BlockPos(x, MazeData.FLOOR_Y, z),
                         glade ? GLADE_GROUND : FLOOR, 2);
+                // The lid. Written here rather than in its own pass because this
+                // loop already visits every column in the map, so it costs one
+                // more block per column and inherits the staging for nothing.
+                if (!glade) {
+                    level.setBlock(new BlockPos(x, SKY_LID_Y, z), BARRIER, 2);
+                }
 
                 if (glade || isCorridor(lx, lz, openW, openE, openN, openS)) {
                     continue;
@@ -406,8 +461,11 @@ public final class MazeBuilder {
     private static void finish(ServerLevel level) {
         GladeBuilder.build(level);
         gladeWall(level);
-        // Stamp the marker last, so a build interrupted by a crash or a restart
+        // After the wall, because it writes the cells the wall stands between.
+        sealGladeRing(level);
+        // Stamp the markers last, so a build interrupted by a crash or a restart
         // is treated as unbuilt and simply runs again.
+        level.setBlock(VERSION_MARKER, versionBlock(), 2);
         level.setBlock(BUILT_MARKER, BEDROCK, 2);
         int max = MazeData.SPAN - 1;
         for (int i = 0; i < MazeData.SPAN; i++) {
@@ -461,12 +519,14 @@ public final class MazeBuilder {
         RandomSource rng = RandomSource.create(0x6AD3);
         for (int i = lo; i <= hi; i++) {
             for (int y = MazeData.WALL_BASE_Y; y <= MazeData.WALL_TOP_Y; y++) {
-                level.setBlock(new BlockPos(i, y, lo), wallStone(rng), 2);
-                level.setBlock(new BlockPos(i, y, hi), wallStone(rng), 2);
-                level.setBlock(new BlockPos(lo, y, i), wallStone(rng), 2);
-                level.setBlock(new BlockPos(hi, y, i), wallStone(rng), 2);
+                BlockState s = gladeStone(i, y, rng);
+                level.setBlock(new BlockPos(i, y, lo), s, 2);
+                level.setBlock(new BlockPos(i, y, hi), gladeStone(i, y, rng), 2);
+                level.setBlock(new BlockPos(lo, y, i), gladeStone(i, y, rng), 2);
+                level.setBlock(new BlockPos(hi, y, i), gladeStone(i, y, rng), 2);
             }
         }
+        gladeWallDressing(level, lo, hi);
         // Punch the four doors back through, full corridor width and head height.
         for (int[] cell : DOOR_CELLS) {
             int bx = cell[0] * MazeData.CELL;
@@ -490,6 +550,113 @@ public final class MazeBuilder {
                 }
             }
         }
+    }
+
+    /**
+     * The face of the Glade wall: courses, not rubble.
+     *
+     * <p>The maze's own walls are deliberately monotonous - that is what makes
+     * them a maze. This one is the opposite thing and has to look it, because it
+     * is the first structure anybody sees and the only one they will stand and
+     * look at. It is the boundary of the only safe ground on the map, so it should
+     * read as something that was built to keep a thing out.
+     *
+     * <p>Three devices, all cheap: a dark plinth at the bottom so it sits on the
+     * ground rather than starting from it, a banded course at eye height so the
+     * height is legible, and buttresses every eight blocks in a darker stone.
+     */
+    private static BlockState gladeStone(int along, int y, RandomSource rng) {
+        int fromBase = y - MazeData.WALL_BASE_Y;
+        int height = MazeData.WALL_TOP_Y - MazeData.WALL_BASE_Y;
+        if (fromBase <= 1) {
+            return Blocks.DEEPSLATE_BRICKS.defaultBlockState();
+        }
+        if (fromBase == height) {
+            // Crenellation: the top course alternates so the skyline is toothed
+            // rather than a flat line drawn across the sky.
+            return (along & 1) == 0
+                    ? Blocks.DEEPSLATE_BRICK_WALL.defaultBlockState()
+                    : Blocks.CHISELED_DEEPSLATE.defaultBlockState();
+        }
+        if (fromBase == height - 1) {
+            return Blocks.POLISHED_DEEPSLATE.defaultBlockState();
+        }
+        if (along % 8 == 0) {
+            return Blocks.DEEPSLATE_BRICKS.defaultBlockState(); // buttress
+        }
+        if (fromBase == 5) {
+            return Blocks.CHISELED_STONE_BRICKS.defaultBlockState(); // the band
+        }
+        return wallStone(rng);
+    }
+
+    /**
+     * Lanterns on the inside face, so the Glade has a lit boundary after dark.
+     *
+     * <p>A wall you cannot see at night is a wall you walk into. Lighting only the
+     * inward face keeps the corridors beyond it as black as they were.
+     */
+    private static void gladeWallDressing(ServerLevel level, int lo, int hi) {
+        BlockState lantern = Blocks.LANTERN.defaultBlockState();
+        for (int i = lo + 4; i < hi; i += 8) {
+            int y = MazeData.WALL_BASE_Y + 4;
+            trySet(level, new BlockPos(i, y, lo + 1), lantern);
+            trySet(level, new BlockPos(i, y, hi - 1), lantern);
+            trySet(level, new BlockPos(lo + 1, y, i), lantern);
+            trySet(level, new BlockPos(hi - 1, y, i), lantern);
+        }
+    }
+
+    /** Places only into air, so dressing can never eat the wall it decorates. */
+    private static void trySet(ServerLevel level, BlockPos at, BlockState state) {
+        if (level.getBlockState(at).isAir()) {
+            level.setBlock(at, state, 2);
+        }
+    }
+
+    /**
+     * Cuts the lap that ran the whole way round the outside of the Glade.
+     *
+     * <p>The Glade wall stopped you stepping out of the clearing sideways, but the
+     * ring of cells immediately outside it was still a continuous corridor. So all
+     * four doors opened onto the same lane: pick any door, turn, and walk round to
+     * whichever of the other three you actually wanted. Four doors that share one
+     * corridor are one door with four names, and the choice of which to take -
+     * which is the only decision the Glade offers - meant nothing at all.
+     *
+     * <p>Sealing every edge between two ring cells breaks the lap without touching
+     * anything else: each door can still only go outward, and outward is where the
+     * carved routes go.
+     */
+    public static void sealGladeRing(ServerLevel level) {
+        RandomSource rng = RandomSource.create(0x5EA1);
+        int lo = MazeData.GLADE_MIN_CELL - 1;
+        int hi = MazeData.GLADE_MAX_CELL + 1;
+        for (int cx = lo; cx <= hi; cx++) {
+            for (int cz = lo; cz <= hi; cz++) {
+                if (!onRing(cx, cz, lo, hi)) {
+                    continue;
+                }
+                // East and south only; the neighbour's own pass covers the others,
+                // and doing all four would write every edge twice.
+                if (onRing(cx + 1, cz, lo, hi)) {
+                    writeHalf(level, cx, cz, cx + 1, cz, false, rng);
+                    writeHalf(level, cx + 1, cz, cx, cz, false, rng);
+                }
+                if (onRing(cx, cz + 1, lo, hi)) {
+                    writeHalf(level, cx, cz, cx, cz + 1, false, rng);
+                    writeHalf(level, cx, cz + 1, cx, cz, false, rng);
+                }
+            }
+        }
+    }
+
+    /** A cell on the square ring of cells that hugs the Glade. */
+    private static boolean onRing(int cx, int cz, int lo, int hi) {
+        if (cx < lo || cx > hi || cz < lo || cz > hi) {
+            return false;
+        }
+        return cx == lo || cx == hi || cz == lo || cz == hi;
     }
 
     /** Opens the wall between two neighbouring cells, both halves. */

@@ -7,7 +7,6 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.GameType;
-import net.minecraft.world.level.block.Blocks;
 
 /**
  * Map Creator - the fourth thing on the menu, and the only one that is not a
@@ -34,9 +33,21 @@ import net.minecraft.world.level.block.Blocks;
  */
 public final class MapCreator {
 
-    /** Half-width of the stone pad you arrive on. */
-    private static final int PAD_HALF = 8;
-    private static final BlockPos PAD = new BlockPos(0, 64, 0);
+    /**
+     * Where you land.
+     *
+     * <p>The Workshop is a genuine flat world now - bedrock, stone, dirt, grass,
+     * from {@code y=0} up - rather than a void with a small platform floating in
+     * it. The platform was a workable answer to "you need something to stand on"
+     * and a bad answer to everything after that: you could only build on the pad,
+     * anything you walked off fell out of the world, and an author's first
+     * experience of the map editor was dying in it.
+     *
+     * <p>Ground level is {@code y=4}, so a build starts at 5 and has 378 blocks of
+     * headroom. Whole numbers near zero, which matters when the coordinates end up
+     * in a wand selection you have to reason about.
+     */
+    private static final BlockPos PAD = new BlockPos(0, 5, 0);
 
     /**
      * The markers worth having in hand on arrival.
@@ -74,14 +85,6 @@ public final class MapCreator {
         ServerLevel shop = player.getServer().getLevel(AztecAbyssConstants.WORKSHOP_LEVEL_KEY);
         if (shop == null) {
             return "The Workshop dimension is not loaded.";
-        }
-
-        // The Workshop is genuinely empty, so without this you arrive in a void and
-        // fall out of your own map before you have built any of it.
-        for (int x = -PAD_HALF; x <= PAD_HALF; x++) {
-            for (int z = -PAD_HALF; z <= PAD_HALF; z++) {
-                shop.setBlock(PAD.offset(x, -1, z), Blocks.SMOOTH_STONE.defaultBlockState(), 2);
-            }
         }
 
         player.teleportTo(shop, PAD.getX() + 0.5, PAD.getY(), PAD.getZ() + 0.5,

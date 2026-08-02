@@ -172,10 +172,15 @@ public final class MazeRuntime {
         long day = dayNumber(level);
         long t = timeOfDay(level);
 
-        // First run, or a fresh day: put today's walls in place.
+        // First run, or a fresh day: put today's walls in place and wipe every
+        // per-day tally with them.
         if (appliedDay != day) {
+            boolean rollover = appliedDay >= 0;
             applyLayout(level, todaysLayout(level));
             appliedDay = day;
+            if (rollover) {
+                newDay(level, day);
+            }
         }
         if (lastPhaseDay != day) {
             lastPhaseDay = day;
@@ -196,8 +201,41 @@ public final class MazeRuntime {
         }
 
         MazeRace.tick(level);
+        MazeSting.tick(level);
+        portalAmbience(level, todaysLayout(level));
         tickRunners(level, t);
         tickGrievers(level, t);
+    }
+
+    /**
+     * Everything that is measured in days gets put back to zero here.
+     *
+     * <p>The maze reshapes at midnight and the day number goes up, but the state
+     * hanging off it did not: a run clock started yesterday kept counting through
+     * the rollover into a maze that no longer had the corridor it was timing, and
+     * a sting tally survived a night's sleep in the Glade. Both make the day
+     * counter decorative - it advertises a fresh start the game does not give you.
+     *
+     * <p>So a new day is a new day. Clocks stop, tallies clear, and the venom in
+     * anyone who made it back is out of their system.
+     */
+    private static void newDay(ServerLevel level, long day) {
+        MazeRuns.clearAll();
+        MazeSting.clearAll();
+        NIGHT_OUT.clear();
+        for (ServerPlayer p : level.players()) {
+            p.removeEffect(net.minecraft.world.effect.MobEffects.WITHER);
+            p.removeEffect(net.minecraft.world.effect.MobEffects.BLINDNESS);
+            p.removeEffect(net.minecraft.world.effect.MobEffects.CONFUSION);
+            p.removeEffect(net.minecraft.world.effect.MobEffects.WEAKNESS);
+            p.removeEffect(net.minecraft.world.effect.MobEffects.MOVEMENT_SLOWDOWN);
+            p.displayClientMessage(Component.literal(
+                    "§6§lDAY " + (day + 1)), false);
+            p.displayClientMessage(Component.literal(
+                    "§7The walls moved in the night. §8Clocks and tallies are clear."), false);
+            level.playSound(null, p.blockPosition(), SoundEvents.BEACON_ACTIVATE,
+                    SoundSource.AMBIENT, 0.8F, 1.1F);
+        }
     }
 
     /** Night is everything from the doors sealing to dawn. */
@@ -254,6 +292,48 @@ public final class MazeRuntime {
             e.getValue().removeAllPlayers();
             return true;
         });
+    }
+
+    /**
+     * Makes the live exit look and sound like a way out rather than a gap.
+     *
+     * <p>The doorway is deliberately still air - a real portal block would either
+     * do vanilla's job and send people somewhere else entirely, or need a block,
+     * a model and a registration to do a job that particles already do. What was
+     * missing was any sign that the thing in front of you was the thing you had
+     * been looking for. A doorway that hums and throws light is unmistakable at
+     * the far end of a corridor, and it costs one particle call a second.
+     */
+    private static void portalAmbience(ServerLevel level, MazeData.Layout layout) {
+        if (layout == null || level.players().isEmpty()) {
+            return;
+        }
+        MazeData.Exit ex = MazeData.exit(layout.exit());
+        if (ex == null) {
+            return;
+        }
+        int[] p = MazeData.exitPortal(ex);
+        boolean alongX = "north".equals(ex.facing()) || "south".equals(ex.facing());
+        boolean anyoneNear = false;
+        for (ServerPlayer pl : level.players()) {
+            if (pl.blockPosition().distSqr(new BlockPos(p[0], p[1], p[2])) < 64.0 * 64.0) {
+                anyoneNear = true;
+                break;
+            }
+        }
+        if (!anyoneNear) {
+            return;
+        }
+        for (int w = 0; w < 2; w++) {
+            double x = p[0] + (alongX ? w : 0) + 0.5;
+            double z = p[2] + (alongX ? 0 : w) + 0.5;
+            level.sendParticles(net.minecraft.core.particles.ParticleTypes.PORTAL,
+                    x, MazeData.WALL_BASE_Y + 1.5, z, 24, 0.35, 1.4, 0.35, 0.35);
+            level.sendParticles(net.minecraft.core.particles.ParticleTypes.END_ROD,
+                    x, MazeData.WALL_BASE_Y + 2.0, z, 3, 0.25, 1.0, 0.25, 0.005);
+        }
+        level.playSound(null, new BlockPos(p[0], p[1], p[2]),
+                SoundEvents.PORTAL_AMBIENT, SoundSource.BLOCKS, 0.6F, 1.1F);
     }
 
     /** Within a couple of blocks of today's exit portal. */
@@ -389,14 +469,20 @@ public final class MazeRuntime {
     private static void tickGrievers(ServerLevel level, long t) {
         List<Mob> loaded = Griever.loaded(level);
         if (!isNight(t) || !AbyssConfig.GRIEVERS_ENABLED.get()) {
-            // Dawn: whatever is left goes back into the walls.
-            if (!loaded.isEmpty() && !isNight(t)) {
+            // Dawn: whatever is left walks back to the corners it came out of,
+            // and is cleared once it is there and out of everybody's way.
+            if (!loaded.isEmpty()) {
+                if (!isNight(t)) {
+                    Griever.recall(level, loaded);
+                }
                 for (Mob g : loaded) {
                     g.discard();
                 }
             }
             return;
         }
+        // Before anything else: the clearing is not theirs, ever.
+        Griever.keepOut(level, loaded);
         RandomSource rng = RandomSource.create();
         List<ServerPlayer> runners = new ArrayList<>();
         for (ServerPlayer p : level.players()) {
@@ -420,6 +506,7 @@ public final class MazeRuntime {
             Griever.spawnNear(level, runners.get(rng.nextInt(runners.size())), rng);
         }
         Griever.ambience(level, loaded, rng);
+        Griever.pressure(level, loaded);
     }
 
     /**

@@ -110,12 +110,12 @@ public final class AbyssConfig {
                 .defineInRange("grieverBaseCapPerPlayer", 2, 0, 20);
         GRIEVER_MAX_CAP = b.comment("Ceiling on Grievers per runner; the cap grows by one each week.")
                 .defineInRange("grieverMaxCapPerPlayer", 7, 0, 40);
-        GRIEVER_HEALTH = b.comment("Griever max health (a vanilla spider is 16).")
-                .defineInRange("grieverHealth", 60.0, 1.0, 1024.0);
+        GRIEVER_HEALTH = b.comment("Griever max health (a vanilla spider is 16). It is meant to be run from, not fought.")
+                .defineInRange("grieverHealth", 150.0, 1.0, 1024.0);
         GRIEVER_SPEED = b.comment("Griever movement speed (a vanilla spider is 0.3; below ~0.25 a runner outruns one).")
                 .defineInRange("grieverSpeed", 0.33, 0.05, 2.0);
         GRIEVER_DAMAGE = b.comment("Griever attack damage.")
-                .defineInRange("grieverAttackDamage", 7.0, 0.0, 100.0);
+                .defineInRange("grieverAttackDamage", 12.0, 0.0, 100.0);
         MAZE_DEATH_LOCKOUT_SECONDS = b.comment("Seconds you are locked out of the maze after dying in it. 0 lets you walk straight back in.")
                 .defineInRange("mazeDeathLockoutSeconds", 60, 0, 3600);
         MAZE_SHOW_BRIEFING = b.comment("Show newcomers the one-time maze rules message.")

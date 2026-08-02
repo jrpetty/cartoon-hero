@@ -103,10 +103,18 @@ public final class Griever {
         // It must be able to cross the map to reach you; a corridor maze is no
         // place for a mob that loses interest after sixteen blocks.
         set(mob, Attributes.FOLLOW_RANGE, 96.0);
+        // Half again as big as it was, and getting on for three times a spider.
+        // Size is the only part of "scarier" that survives having no custom model,
+        // and it is the part that does the most work: a thing that fills most of a
+        // four-wide corridor is read as an obstacle before it is read as an enemy.
         AttributeInstance scale = mob.getAttribute(Attributes.SCALE);
         if (scale != null) {
-            scale.setBaseValue(1.6);
+            scale.setBaseValue(2.4);
         }
+        // It does not stagger and it does not drown, and it steps up a full block
+        // without slowing - a chase that ends because the thing chasing you caught
+        // on a corner is not a chase.
+        set(mob, Attributes.STEP_HEIGHT, 1.5);
         mob.setHealth(mob.getMaxHealth());
 
         // Deliberately not glowing. It used to carry permanent Glowing so it read
@@ -142,6 +150,80 @@ public final class Griever {
     }
 
     /**
+     * The Glade is the one place they cannot follow you.
+     *
+     * <p>The clearing only works as safety if it is unconditional. A Griever that
+     * can be lured through a door on a lucky pathfind turns the whole map into the
+     * maze, and there is then nowhere to stand and think - which is the thing the
+     * Glade exists to give you.
+     *
+     * <p>Anything that gets in is thrown back out through the nearest wall rather
+     * than deleted, because a Griever vanishing at the doorway reads as a bug and a
+     * Griever recoiling off the boundary reads as a rule.
+     */
+    public static void keepOut(ServerLevel level, List<Mob> grievers) {
+        for (Mob g : grievers) {
+            BlockPos at = g.blockPosition();
+            if (!MazeData.inGlade(at.getX() / MazeData.CELL, at.getZ() / MazeData.CELL)) {
+                continue;
+            }
+            int lo = MazeData.gladeMinBlock() - 3;
+            int hi = MazeData.gladeMaxBlock() + 4;
+            // Out by whichever side it is nearest, so it leaves the way it came.
+            int dxLo = at.getX() - MazeData.gladeMinBlock();
+            int dxHi = MazeData.gladeMaxBlock() - at.getX();
+            int dzLo = at.getZ() - MazeData.gladeMinBlock();
+            int dzHi = MazeData.gladeMaxBlock() - at.getZ();
+            int best = Math.min(Math.min(dxLo, dxHi), Math.min(dzLo, dzHi));
+            double x = at.getX();
+            double z = at.getZ();
+            if (best == dxLo) {
+                x = lo;
+            } else if (best == dxHi) {
+                x = hi;
+            } else if (best == dzLo) {
+                z = lo;
+            } else {
+                z = hi;
+            }
+            g.teleportTo(x + 0.5, MazeData.FLOOR_Y + 1, z + 0.5);
+            g.setTarget(null);
+            level.playSound(null, g.blockPosition(), SoundEvents.WARDEN_ANGRY,
+                    SoundSource.HOSTILE, 1.2F, 0.4F);
+        }
+    }
+
+    /**
+     * Dawn: everything still out there goes home.
+     *
+     * <p>They used to be deleted where they stood, which is tidy and reads as
+     * nothing at all - the night simply stopped having monsters in it. Sending
+     * them back to the four corners instead makes dawn an event you can watch
+     * happen, and it means a runner caught out at first light sees the thing
+     * chasing them turn round and leave.
+     */
+    public static void recall(ServerLevel level, List<Mob> grievers) {
+        if (grievers.isEmpty()) {
+            return;
+        }
+        int lo = 4 * MazeData.CELL;
+        int hi = (MazeData.GRID - 5) * MazeData.CELL;
+        int[][] dens = {{lo, lo}, {hi, lo}, {lo, hi}, {hi, hi}};
+        int i = 0;
+        for (Mob g : grievers) {
+            int[] den = dens[i++ % dens.length];
+            g.setTarget(null);
+            g.teleportTo(den[0] + 0.5, MazeData.FLOOR_Y + 1, den[1] + 0.5);
+            level.sendParticles(net.minecraft.core.particles.ParticleTypes.LARGE_SMOKE,
+                    g.getX(), g.getY() + 1.0, g.getZ(), 20, 0.6, 0.8, 0.6, 0.02);
+        }
+        for (ServerPlayer p : level.players()) {
+            p.displayClientMessage(Component.literal(
+                    "§7The scraping fades. §8They have gone back into the walls."), false);
+        }
+    }
+
+    /**
      * Finds a corridor block to drop one into: 24-48 blocks from the runner,
      * never inside the Glade, and only somewhere with actual headroom.
      */
@@ -173,12 +255,39 @@ public final class Griever {
      */
     public static void ambience(ServerLevel level, List<Mob> grievers, RandomSource rng) {
         for (Mob g : grievers) {
+            // Always the smoke, sometimes the sound. Without a custom model this
+            // is what a Griever looks like: something the size of a horse boiling
+            // with soot, seen for half a second at the end of a corridor. It reads
+            // at distance, which is where the fear has to happen.
+            level.sendParticles(net.minecraft.core.particles.ParticleTypes.LARGE_SMOKE,
+                    g.getX(), g.getY() + 0.9, g.getZ(), 6, 0.5, 0.5, 0.5, 0.01);
+            level.sendParticles(net.minecraft.core.particles.ParticleTypes.SOUL,
+                    g.getX(), g.getY() + 0.4, g.getZ(), 2, 0.4, 0.2, 0.4, 0.01);
             if (rng.nextInt(6) != 0) {
                 continue;
             }
             level.playSound(null, g.blockPosition(),
                     rng.nextBoolean() ? SoundEvents.WARDEN_ANGRY : SoundEvents.WARDEN_EMERGE,
                     SoundSource.HOSTILE, 1.6F, 0.6F + rng.nextFloat() * 0.2F);
+        }
+    }
+
+    /**
+     * Darkness around a Griever, so being near one costs you the corridor.
+     *
+     * <p>The maze's problem is that a corridor you can see down is a corridor you
+     * can plan in. A Griever that blinds the ground it stands on turns a chase
+     * into a thing you navigate by memory and sound, which is the version of this
+     * that is frightening rather than merely fast.
+     */
+    public static void pressure(ServerLevel level, List<Mob> grievers) {
+        for (Mob g : grievers) {
+            for (ServerPlayer p : level.players()) {
+                if (p.distanceToSqr(g) > 18.0 * 18.0) {
+                    continue;
+                }
+                p.addEffect(new MobEffectInstance(MobEffects.DARKNESS, 60, 0, false, false));
+            }
         }
     }
 }

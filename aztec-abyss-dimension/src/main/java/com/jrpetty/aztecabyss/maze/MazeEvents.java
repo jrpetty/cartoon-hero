@@ -64,12 +64,19 @@ public final class MazeEvents {
     }
 
     /**
-     * Nothing gets built in the maze.
+     * Signs and torches, and nothing else.
      *
-     * <p>A maze you can bridge over, pillar up out of or wall yourself into is
-     * not a maze - every one of those turns the walls from a problem into
-     * scenery. The corridors are the whole puzzle, so they stay exactly as the
-     * builder left them.
+     * <p>A maze you can bridge over, pillar up out of or wall yourself into is not
+     * a maze - every one of those turns the walls from a problem into scenery. So
+     * building stays banned.
+     *
+     * <p>But banning <em>everything</em> banned the one thing a Runner should
+     * obviously be able to do. Charting the maze is the job; a Runner who cannot
+     * leave a mark has to hold the whole map in their head, and the section colours
+     * in the corridor walls exist precisely to be written down. A sign at a
+     * junction saying which way you already went, and a torch on the wall you have
+     * already followed, are the tools of the trade rather than a way out of it -
+     * neither is something you can stand on, and neither changes where a wall is.
      *
      * <p>Creative is exempt, because that is the only way to fix a map by hand.
      */
@@ -78,14 +85,79 @@ public final class MazeEvents {
         if (!(event.getLevel() instanceof ServerLevel level) || !isMaze(level)) {
             return;
         }
+        if (event.getEntity() instanceof ServerPlayer p && p.isCreative()) {
+            return;
+        }
+        if (isRunnersMark(event.getPlacedBlock().getBlock())) {
+            return;
+        }
         if (event.getEntity() instanceof ServerPlayer p) {
-            if (p.isCreative()) {
-                return;
-            }
             p.displayClientMessage(Component.literal(
-                    "§7The Glade does not let you build your way out."), true);
+                    "§7Signs and torches only. §8The walls are the puzzle."), true);
         }
         event.setCanceled(true);
+    }
+
+    /**
+     * What a Runner is allowed to leave behind: something to read, and something
+     * to see it by.
+     *
+     * <p>Matched by block tag rather than by listing every wood type, so a sign
+     * from a mod's tree works exactly like an oak one and nothing has to be added
+     * here when a new wood exists.
+     */
+    private static boolean isRunnersMark(net.minecraft.world.level.block.Block block) {
+        var state = block.defaultBlockState();
+        return state.is(net.minecraft.tags.BlockTags.ALL_SIGNS)
+                || block == net.minecraft.world.level.block.Blocks.TORCH
+                || block == net.minecraft.world.level.block.Blocks.WALL_TORCH
+                || block == net.minecraft.world.level.block.Blocks.SOUL_TORCH
+                || block == net.minecraft.world.level.block.Blocks.SOUL_WALL_TORCH;
+    }
+
+    /**
+     * The maze is not a quarry.
+     *
+     * <p>Three rules, in the order they matter. The floor never breaks, anywhere,
+     * including inside the Glade - a hole in the floor is a way under a wall, and
+     * one shovel would undo the entire map. Outside the Glade nothing breaks at
+     * all, which covers the corridor walls, the Glade's own wall, and the exit
+     * frames. Inside the Glade you may do as you like above the floor, because
+     * the clearing is the one place that is yours.
+     *
+     * <p>The Glade wall stands one block outside the clearing on every side, so it
+     * falls outside the protected interior automatically rather than needing a
+     * case of its own.
+     */
+    @SubscribeEvent
+    public static void onBreakBlock(net.neoforged.neoforge.event.level.BlockEvent.BreakEvent event) {
+        if (!(event.getLevel() instanceof ServerLevel level) || !isMaze(level)) {
+            return;
+        }
+        ServerPlayer p = event.getPlayer() instanceof ServerPlayer sp ? sp : null;
+        if (p != null && p.isCreative()) {
+            return;
+        }
+        net.minecraft.core.BlockPos at = event.getPos();
+        if (at.getY() <= MazeData.FLOOR_Y) {
+            if (p != null) {
+                p.displayClientMessage(Component.literal(
+                        "§7The ground does not give."), true);
+            }
+            event.setCanceled(true);
+            return;
+        }
+        int min = MazeData.gladeMinBlock();
+        int max = MazeData.gladeMaxBlock();
+        boolean insideGlade = at.getX() >= min && at.getX() <= max
+                && at.getZ() >= min && at.getZ() <= max;
+        if (!insideGlade) {
+            if (p != null) {
+                p.displayClientMessage(Component.literal(
+                        "§7The maze does not come apart. §8Only the Glade is yours."), true);
+            }
+            event.setCanceled(true);
+        }
     }
 
     @SubscribeEvent
