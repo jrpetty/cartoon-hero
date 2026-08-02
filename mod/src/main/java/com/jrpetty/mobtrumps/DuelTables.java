@@ -195,9 +195,22 @@ public final class DuelTables {
         return seat;
     }
 
+    /**
+     * Whether this player already has something running that a second game
+     * would tread on.
+     *
+     * <p>The three parlour games were missing from this. Opening one while
+     * another was live re-registered the player's reach record against the new
+     * menu, which silently made every action at the first table fail — and with
+     * a wager already taken, that left fragments committed to a board that
+     * would not respond. They also should not be able to have two bets going at
+     * once from one seat.
+     */
     private static boolean busy(ServerPlayer player) {
         return TableBattleManager.isInBattle(player)
-                || DuelManager.isInDuel(player) || DraftManager.isDrafting(player);
+                || DuelManager.isInDuel(player) || DraftManager.isDrafting(player)
+                || BluffManager.isPlaying(player) || BlackjackManager.isPlaying(player)
+                || GuessWhoManager.inGame(player);
     }
 
     private static void tableSound(ServerPlayer player, BlockPos pos, float pitch) {

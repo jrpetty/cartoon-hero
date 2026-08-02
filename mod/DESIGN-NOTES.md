@@ -659,3 +659,68 @@ they stay that way.
 | Card drops scale on **tier**, not category: 1 in 20 / 10 / 5 / 2, legendary always | 1.50.0 |
 | Pity guarantee at 3× the average wait, reset on every card | 1.50.0 |
 | CPU decks match your holo level and never deal mobs you're holding | 1.51.0 |
+
+## 9. Mob Bluff
+
+Cheat, played with mob cards. A question is turned up for the round and every
+card played is sworn to answer YES to it. On your turn you put one to three
+cards face down, or you challenge the play before yours. First hand emptied
+wins.
+
+**Why the claim is drawn and not chosen.** If players named their own claim
+they would describe cards they actually hold and never have to lie, which is
+the game. A claim fixed for the round is what runs the honest cards out.
+
+**Why only 48 of the 144 possible claims are dealt.** A claim matching three
+cards means everyone always lies, so challenging is free. One matching seventy
+means nobody ever has to. Only the 25–55% band is used. Guess Who's catalogue
+could not fill that band alone — its biggest category is 14 cards in 81 — so
+two questions of the same kind may be joined by "or", but only when they open
+with the same words, because the second half is printed with the first half's
+opener sliced off it.
+
+**The two outcomes are deliberately lopsided.** A caught liar eats the whole
+pile; a wrong challenger eats only the cards they called. When both cost the
+same, challenging was worth about −1.75 cards, so a seat that never challenged
+beat one that played properly 33% to a fair 25%. The asymmetry is what makes
+somebody willing to call.
+
+Measured over 20,000 games per configuration: every naive strategy loses.
+Always challenging 2%, always lying 13%, dumping everything 21%, never
+challenging 23.5%, playing properly 25% against a fair 25%.
+
+Multiplayer shares one Table between several humans. Solo is the case where
+only seat zero is filled — nothing asks whether a table is "multiplayer", it
+asks whose seat it is and whether anybody is in it. A seat whose player logs
+off plays itself, or one person closing the game would freeze the table for
+everybody else.
+
+## 10. The Guess Who wager
+
+Stake anything from 10 up; what comes back depends on how many questions it
+took. 4 or fewer +60%, 5 +32%, 6 +10%, 7 −14%, 8 −32%, 9 −50%, 10+ −70%.
+
+**The neutral point could not be eight.** 81 faces need log2(81) = 6.34
+questions to separate, so six or seven is near the floor rather than good
+play: simulated over the real catalogue a strong player finishes in six 58% of
+the time and seven the rest, and a careless one lands in that band nine games
+in ten. Centred on eight the ladder returns +23% to the player every game,
+which against an unbounded stake is a printing press. Centred where the game
+actually lives, near-perfect play returns 0.999x and careless play 0.982x.
+
+There is no break-even rung on purpose: six pays, seven costs, so every round
+settles instead of handing the commonest result its money back.
+
+## 11. What the offline checks cannot do
+
+`tools/check.sh` runs javac and discards every "cannot find symbol", because
+the Minecraft classes genuinely are absent. That filter also hides real
+mistakes, and javac never reaches method bodies in a file whose imports do not
+resolve — so for anything importing Minecraft it cannot see a wrong-arity
+call, a wrong argument type, or a missing import. v1.85.0 shipped a missing
+import and two `return` statements in void methods with the script reporting
+"clean"; CI caught it, eight errors later.
+
+`tools/checkimports.py` now closes the missing-import half for good. The rest
+is CI's job. A pass from check.sh does not mean the client code compiles, and
+must not be read as if it does.
