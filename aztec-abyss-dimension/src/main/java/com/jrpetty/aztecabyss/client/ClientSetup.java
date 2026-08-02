@@ -30,6 +30,25 @@ public final class ClientSetup {
             GLFW.GLFW_KEY_B,
             "key.categories.aztecabyss");
 
+    /**
+     * Bolts the Griever's skin onto the shared spider renderer.
+     *
+     * <p>Added as a layer rather than by replacing the renderer, so every other
+     * spider in every other dimension is untouched and no other mod's spider
+     * changes are trodden on. The layer itself checks the tag and does nothing at
+     * all for an ordinary spider.
+     */
+    @SubscribeEvent
+    public static void onAddLayers(net.neoforged.neoforge.client.event.EntityRenderersEvent.AddLayers event) {
+        net.minecraft.client.renderer.entity.LivingEntityRenderer<
+                net.minecraft.world.entity.monster.Spider,
+                net.minecraft.client.model.SpiderModel<net.minecraft.world.entity.monster.Spider>> renderer =
+                event.getRenderer(net.minecraft.world.entity.EntityType.SPIDER);
+        if (renderer != null) {
+            renderer.addLayer(new GrieverLayer(renderer));
+        }
+    }
+
     @SubscribeEvent
     public static void registerParticleProviders(RegisterParticleProvidersEvent event) {
         event.registerSpriteSet(ModParticles.BLACK_PORTAL_SWIRL.get(), BlackPortalSwirlParticle.Provider::new);

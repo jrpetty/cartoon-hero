@@ -13,6 +13,16 @@ behaviour that was already there · **docs**
 
 ## Unreleased
 
+### Griever gets a face
+
+- **feat** `GrieverLayer` — dark segmented plate over the whole model and eight
+  burning eyes drawn with `RenderType.eyes`, so it is full-bright in a dark
+  corridor. A Griever no longer reads as a large spider.
+- **change** Done as a render layer on the shared spider renderer rather than a
+  new entity: a spider already moves the way this should move, and the animation
+  is the half that sells it. Ordinary spiders are untouched — the layer checks the
+  tag and returns.
+
 ### `5a3b0ba` — Reaching the maze exit crashed the game
 
 - **fix** `tickRunners` walked the live player list and called `changeDimension`
