@@ -156,6 +156,9 @@ public final class EngineArena {
     /** The variant round in force, or null on an ordinary one. */
     private Ruleset.SpecialRound special;
 
+    /** What this map asks of you besides surviving, if anything. */
+    private Objective objective;
+
     /** Game time of the last thing that counted as progress. */
     private long lastProgress = 0L;
     /** How long a round may make no progress before the stragglers are fetched. */
@@ -218,6 +221,11 @@ public final class EngineArena {
         current.pens.addAll(scan.of("pen"));
         current.teleports.addAll(scan.of("teleport"));
         current.traps.addAll(scan.of("trap"));
+        Marker objectiveMarker = scan.first("objective");
+        if (objectiveMarker != null) {
+            Objective built = new Objective(objectiveMarker);
+            current.objective = built.valid() ? built : null;
+        }
         current.extract = scan.first("extract");
         EnginePowerUps.reset();
         current.consumeMarkers(scan);
@@ -373,6 +381,7 @@ public final class EngineArena {
 
         refreshBars(present);
         tickDowned(present);
+        tickObjective(present);
         tickTraps();
         tickTeleports(present);
         if (rules.powerupChance > 0 && (special == null || !special.noPowerups())) {
@@ -424,7 +433,8 @@ public final class EngineArena {
             fetchStragglers(present);
         }
         bar.setName(Component.literal("§c§lROUND " + round + " §r§7— §f"
-                + (alive.size() + leftToSpawn) + "§7 left"));
+                + (alive.size() + leftToSpawn) + "§7 left"
+                + (objective == null ? "" : objective.hud())));
         int total = Math.max(1, rules.countFor(round));
         bar.setProgress(Math.max(0.0F, Math.min(1.0F, (alive.size() + leftToSpawn) / (float) total)));
     }
@@ -796,6 +806,52 @@ public final class EngineArena {
                 // "grunt" and anything unrecognised: an ordinary one.
             }
         }
+    }
+
+    /** Drives the map's objective, and reacts when it resolves. */
+    private void tickObjective(List<ServerPlayer> present) {
+        if (objective == null) {
+            return;
+        }
+        if (!objective.tick(level, present)) {
+            return;
+        }
+        if (objective.complete()) {
+            for (ServerPlayer p : players()) {
+                p.displayClientMessage(Component.literal("§a§lOBJECTIVE COMPLETE"), false);
+            }
+            Script.fire(this, level, rules.id, "objective_complete", null);
+        } else if (objective.failed()) {
+            for (ServerPlayer p : players()) {
+                p.displayClientMessage(Component.literal("§4§lOBJECTIVE LOST"), false);
+            }
+            Script.fire(this, level, rules.id, "objective_failed", null);
+            if (objective.failEndsRun()) {
+                stop(false);
+            }
+        }
+    }
+
+    /** Right-clicking a collect objective hands in what you are carrying. */
+    public boolean handInTo(ServerPlayer player, Marker marker) {
+        if (objective == null || !objective.marker().pos().equals(marker.pos())) {
+            return false;
+        }
+        if (!objective.handIn(player)) {
+            player.displayClientMessage(Component.literal(
+                    "§7Nothing to hand in."), true);
+            return true;
+        }
+        for (ServerPlayer p : players()) {
+            p.displayClientMessage(Component.literal("§6Delivered." + objective.hud()), true);
+        }
+        if (objective.complete()) {
+            for (ServerPlayer p : players()) {
+                p.displayClientMessage(Component.literal("§a§lOBJECTIVE COMPLETE"), false);
+            }
+            Script.fire(this, level, rules.id, "objective_complete", null);
+        }
+        return true;
     }
 
     // ------------------------------------------------------------------

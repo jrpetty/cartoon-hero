@@ -90,6 +90,10 @@ public final class Machines {
             case "upgrade" -> upgrade(level, player, marker);
             case "loot" -> loot(level, player, marker);
             case "trap" -> trap(level, player, marker);
+            case "objective" -> {
+                EngineArena a = EngineArena.active();
+                yield a != null && a.handInTo(player, marker);
+            }
             default -> false;
         };
     }

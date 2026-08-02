@@ -68,6 +68,7 @@ and `[Perk] id=ironhide` mean the same thing. Facing comes from the sign.
 | `[Boss]` | *entity id* `every=` `health=` | boss on a cycle |
 | `[Trap]` | `cost=` `damage=` `radius=` `seconds=` `cooldown=` | pay to make a piece of the map lethal for a while |
 | `[Teleport]` | `id=` | two pads sharing an id link to each other |
+| `[Objective]` | `defend hp=` / `hold seconds=` / `collect count= item=` `radius=` `fail=end` | something to do besides survive |
 
 **Dealers are positional**, because they are a shop front you read at a glance:
 
@@ -149,6 +150,21 @@ clamped, so a typo makes a hard map rather than a dead server.
 and 50 — and warns about any key it did not recognise, which is how you catch
 `basecount` when you meant `base_count`.
 
+### Downed, and special rounds
+
+```json
+"downed": { "enabled": true, "bleedout_seconds": 30, "revive_seconds": 5 },
+"special_rounds": [
+  { "every": 5,  "role": "runner", "title": "§cTHEY ARE FAST" },
+  { "every": 10, "role": "brute",  "title": "§4HEAVY" },
+  { "every": 7,  "no_powerups": true, "title": "§8NO HELP" }
+]
+```
+
+Downed needs someone able to reach you — solo death stays final unless you set
+`"solo": true`. Special rounds filter the mob table you already wrote, so give
+your mobs `role`s for them to select on.
+
 ### Currencies
 
 ```json
@@ -181,7 +197,12 @@ Mobs can take a `role` as well as attributes, for behaviour numbers cannot
 express: `runner` closes distance, `brute` shrugs off hits but lumbers, `leaper`
 comes over what you were hiding behind, `armoured` is very hard to hurt.
 
-**Events:** `run_start`, `round_start`, `round_end`, `mob_killed`, `extracted`.
+Buying from a `[Dealer]` you already own **repairs and reloads** it instead of
+handing you a duplicate — which is what keeps the shop worth visiting after
+round ten.
+
+**Events:** `run_start`, `round_start`, `round_end`, `mob_killed`, `extracted`,
+`objective_complete`, `objective_failed`.
 **Conditions:** `round` with `equals` / `at_least` / `at_most` / `every`, and `area_open`.
 **Actions:** `message`, `actionbar`, `title`, `sound`, `effect`, `give`, `spawn`,
 `award`, `open_area`, `set_block`, `end_run`.

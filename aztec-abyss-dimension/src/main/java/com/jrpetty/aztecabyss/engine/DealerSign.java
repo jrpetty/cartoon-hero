@@ -9,6 +9,7 @@ import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
 import net.minecraft.world.level.block.entity.SignBlockEntity;
 
 /**
@@ -99,6 +100,58 @@ public final class DealerSign {
         return new Offer(new ItemStack(item, count), price, currency);
     }
 
+    /**
+     * Repairs and reloads what a player already has, rather than duplicating it.
+     *
+     * <p>Ammunition is handled by refilling whatever the weapon eats - arrows for a
+     * bow, rockets for a crossbow - so a map does not have to sell ammunition as a
+     * separate line to make ranged weapons work.
+     *
+     * @return true if the purchase was spent on an item already carried
+     */
+    private static boolean service(ServerPlayer player, Offer offer) {
+        Item wanted = offer.stack().getItem();
+        for (int i = 0; i < player.getInventory().getContainerSize(); i++) {
+            ItemStack held = player.getInventory().getItem(i);
+            if (!held.is(wanted)) {
+                continue;
+            }
+            boolean did = false;
+            if (held.isDamaged()) {
+                held.setDamageValue(0);
+                did = true;
+            }
+            ItemStack ammo = ammoFor(wanted);
+            if (!ammo.isEmpty()) {
+                if (!player.getInventory().add(ammo)) {
+                    player.drop(ammo, false);
+                }
+                did = true;
+            }
+            if (did) {
+                return true;
+            }
+            // Owned, undamaged and needs no ammunition: let the sale go through as
+            // an ordinary purchase rather than charging for nothing.
+            return false;
+        }
+        return false;
+    }
+
+    /** What a weapon needs feeding, if anything. */
+    private static ItemStack ammoFor(Item weapon) {
+        if (weapon == Items.BOW) {
+            return new ItemStack(Items.ARROW, 32);
+        }
+        if (weapon == Items.CROSSBOW) {
+            return new ItemStack(Items.ARROW, 24);
+        }
+        if (weapon == Items.TRIDENT || weapon == Items.SNOWBALL) {
+            return ItemStack.EMPTY;
+        }
+        return ItemStack.EMPTY;
+    }
+
     /** Resolves an item id, tolerating a bare name with no namespace. */
     private static Item itemFrom(String raw) {
         if (raw.isEmpty()) {
@@ -110,7 +163,7 @@ public final class DealerSign {
             return null;
         }
         Item item = BuiltInRegistries.ITEM.get(rl);
-        return item == net.minecraft.world.item.Items.AIR ? null : item;
+        return item == Items.AIR ? null : item;
     }
 
     /**
@@ -139,9 +192,21 @@ public final class DealerSign {
             return true;
         }
 
+        // Buying a weapon you already hold repairs and reloads it instead of
+        // handing you a second one. Without this a wall buy is a one-off purchase
+        // and the shop stops mattering the moment everyone owns everything - and
+        // an inventory slowly fills with worn duplicates of the same sword.
         ItemStack given = offer.stack().copy();
-        if (!player.getInventory().add(given)) {
+        boolean serviced = service(player, offer);
+        if (!serviced && !player.getInventory().add(given)) {
             player.drop(given, false);
+        }
+        if (serviced) {
+            player.displayClientMessage(Component.literal(
+                    "§a✔ Serviced §f" + label + " §7— " + offer.currency().format(offer.price())), true);
+            level.playSound(null, sign.getBlockPos(), SoundEvents.BEACON_ACTIVATE,
+                    SoundSource.BLOCKS, 0.6F, 1.1F);
+            return true;
         }
         player.displayClientMessage(Component.literal(
                 "§a✔ " + label + " §7— " + offer.currency().format(offer.price())
