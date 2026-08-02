@@ -13,6 +13,22 @@ behaviour that was already there · **docs**
 
 ## Unreleased
 
+### Variables and regions — the engine stops being only an arena
+
+- **feat** `Vars` — run-scoped and per-player integers. The script layer could do
+  a lot and could not count, so the only state a map had was the round number and
+  which doors were open. Almost everything that is not round-survival is counting.
+- **feat** `[Region] id= radius= height=` firing `region_enter` / `region_leave`,
+  edge-triggered. Rounds let a map react to *when*; regions let it react to
+  *where*, which is the substrate of checkpoints, capture points and finish lines.
+- **feat** Conditions `var`, `my_var` (with `equals`/`at_least`/`at_most`, and
+  `total` to sum a per-player name across the squad) and `region`.
+- **feat** Actions `set_var`, `add_var`, `set_my_var`, `add_my_var`, `win`, `lose`.
+- **change** `win`/`lose` end a run *with an outcome*. `end_run` said nothing about
+  whether that was a good thing, and a game has to be winnable on its own terms.
+- **change** Still integers only, no expressions — that covers counting, flags,
+  timers and scores and cannot hang a server. A downloaded map stays safe to run.
+
 ### Marker Blocks replace signs entirely — dealers included
 
 - **change** `/arena marker dealer` now gives a Marker Block. Every marker kind is

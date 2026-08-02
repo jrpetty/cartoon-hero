@@ -254,6 +254,57 @@ x1
 Limits are per run and per sign, not per player: one netherite sword means the
 squad gets one, which is a decision they have to make together.
 
+### Variables — what a run remembers
+
+The script layer could do a lot and could not **count**. Every rule was a reflex,
+so the only state a map had was the round number and which doors were open. That
+is enough for a hundred arenas and exactly one game.
+
+```json
+"script": [
+  { "on": "region_enter", "when": { "region": "vault" },
+    "do": [ { "add_var": { "name": "loot", "by": 1 } },
+            { "actionbar": "You have the idol" } ] },
+
+  { "on": "region_enter", "when": { "region": "exit", "var": { "name": "loot", "at_least": 3 } },
+    "do": [ { "win": { "title": "§6§lOUT WITH ALL THREE" } } ] }
+]
+```
+
+- `set_var` / `add_var` — the squad's, e.g. how many flags the team holds
+- `set_my_var` / `add_my_var` — one person's, e.g. how many keys *you* carry
+- `var` / `my_var` in a `when`, with `equals` / `at_least` / `at_most`
+- `"total": true` on a `var` sums a per-player name across everybody
+
+Integers only, no expressions — on purpose. That covers counting, flags, timers
+and scores, and it cannot be used to hang a server. A map you downloaded from a
+stranger stays safe to run.
+
+### Regions — reacting to *where*, not just *when*
+
+```
+[Region]
+id=vault radius=5 height=4
+```
+
+Fires `region_enter` and `region_leave`, filtered with `"region": "vault"`.
+**Edge-triggered**: entering fires once, leaving fires once, standing still fires
+nothing — otherwise "give them a diamond at the vault" means a diamond every tick.
+
+This is the other half of being a game rather than an arena. Checkpoints, capture
+points, finish lines, the room you are not supposed to be in yet — all of them are
+a region and a variable.
+
+### Winning on your own terms
+
+```json
+{ "win":  { "title": "§6§lYOU MADE IT" } }
+{ "lose": { "title": "§4§lTHE VAULT IS EMPTY" } }
+```
+
+`end_run` still exists and still says nothing about whether that was a good thing.
+A game needs to be winnable on its own terms.
+
 ### Currencies
 
 ```json

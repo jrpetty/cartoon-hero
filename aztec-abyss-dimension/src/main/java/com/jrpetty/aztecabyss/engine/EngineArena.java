@@ -106,6 +106,12 @@ public final class EngineArena {
     /** Optional out-of-sight spawn chambers, paired to the nearest way in. */
     private final List<Marker> pens = new ArrayList<>();
     private final List<Marker> teleports = new ArrayList<>();
+    /** Named volumes that fire an event when somebody walks in or out. */
+    private final List<Marker> regions = new ArrayList<>();
+    /** Who is currently inside which region, so enter and leave fire once each. */
+    private final java.util.Map<UUID, java.util.Set<String>> inRegion = new java.util.HashMap<>();
+    /** What this run remembers. */
+    private final Vars vars = new Vars();
     private final List<Marker> traps = new ArrayList<>();
     /** Armed traps: position to the game time they stop burning. */
     private final java.util.Map<BlockPos, Long> trapsActive = new java.util.HashMap<>();
@@ -244,6 +250,7 @@ public final class EngineArena {
         current.bossPoints.addAll(scan.of("boss"));
         current.pens.addAll(scan.of("pen"));
         current.teleports.addAll(scan.of("teleport"));
+        current.regions.addAll(scan.of("region"));
         current.traps.addAll(scan.of("trap"));
         Marker objectiveMarker = scan.first("objective");
         if (objectiveMarker != null) {
@@ -338,6 +345,8 @@ public final class EngineArena {
             }
         }
         current.recordResult();
+        current.vars.clear();
+        current.inRegion.clear();
         for (Mob m : current.alive) {
             if (m.isAlive()) {
                 m.discard();
@@ -383,6 +392,11 @@ public final class EngineArena {
 
     public void setMapKey(String key) {
         this.mapKey = key == null ? "" : key;
+    }
+
+    /** Everyone in the run, for anything outside this class that needs to address them. */
+    public List<ServerPlayer> everyone() {
+        return players();
     }
 
     private List<ServerPlayer> players() {
@@ -443,6 +457,7 @@ public final class EngineArena {
         tickDowned(present);
         tickObjective(present);
         tickPrompts(present);
+        tickRegions(present);
         tickTraps();
         tickTeleports(present);
         if (rules.powerupChance > 0 && (special == null || !special.noPowerups())) {
@@ -927,6 +942,63 @@ public final class EngineArena {
             case "loot" -> "§aSupplies §8(right-click)";
             default -> "";
         };
+    }
+
+    public Vars vars() {
+        return vars;
+    }
+
+    /**
+     * Fires {@code region_enter} and {@code region_leave} as people move.
+     *
+     * <p>This is the other half of what a map needs to be a game rather than an
+     * arena. Rounds let a map react to <em>when</em>; regions let it react to
+     * <em>where</em>, and almost everything that is not round-survival is built on
+     * where somebody is standing - a checkpoint, a capture point, a vault, a
+     * finish line, the room you are not supposed to be in yet.
+     *
+     * <p>Edge-triggered on purpose. A rule that ran every tick you stood in a
+     * region would make "give the player a diamond when they reach the vault" into
+     * a diamond every tick, and an author would have to invent their own latch to
+     * get the obvious behaviour. Entering fires once, leaving fires once, and
+     * standing still fires nothing.
+     */
+    private void tickRegions(List<ServerPlayer> present) {
+        if (regions.isEmpty() || level.getGameTime() % 5L != 0L) {
+            return;
+        }
+        for (ServerPlayer p : present) {
+            java.util.Set<String> was = inRegion.computeIfAbsent(
+                    p.getUUID(), id -> new java.util.HashSet<>());
+            java.util.Set<String> now = new java.util.HashSet<>();
+            for (Marker r : regions) {
+                String id = r.arg("id", r.arg("value", "")).toLowerCase(java.util.Locale.ROOT);
+                if (id.isEmpty()) {
+                    continue;
+                }
+                double radius = Math.max(1, r.intArg("radius", 4));
+                int height = Math.max(1, r.intArg("height", 4));
+                BlockPos at = p.blockPosition();
+                boolean inside = at.distToLowCornerSqr(
+                        r.pos().getX(), at.getY(), r.pos().getZ()) <= radius * radius
+                        && Math.abs(at.getY() - r.pos().getY()) <= height;
+                if (inside) {
+                    now.add(id);
+                }
+            }
+            for (String id : now) {
+                if (was.add(id)) {
+                    Script.fireRegion(this, level, rules.id, "region_enter", p, id);
+                }
+            }
+            was.removeIf(id -> {
+                if (now.contains(id)) {
+                    return false;
+                }
+                Script.fireRegion(this, level, rules.id, "region_leave", p, id);
+                return true;
+            });
+        }
     }
 
     /** Drives the map's objective, and reacts when it resolves. */

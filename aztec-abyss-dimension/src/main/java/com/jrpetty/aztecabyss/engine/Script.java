@@ -106,14 +106,25 @@ public final class Script {
      * keeps its run; the alternative is a scripting mistake in someone else's
      * downloaded map taking down a server mid-round.
      */
+    /** A region event, which carries the region's id so rules can filter on it. */
+    public static void fireRegion(EngineArena arena, ServerLevel level, String rulesetId,
+                                  String event, ServerPlayer who, String regionId) {
+        fire(arena, level, rulesetId, event, who, regionId);
+    }
+
     public static void fire(EngineArena arena, ServerLevel level, String rulesetId,
                             String event, ServerPlayer who) {
+        fire(arena, level, rulesetId, event, who, null);
+    }
+
+    public static void fire(EngineArena arena, ServerLevel level, String rulesetId,
+                            String event, ServerPlayer who, String regionId) {
         List<Rule> rules = BY_RULESET.get(rulesetId);
         if (rules == null || rules.isEmpty()) {
             return;
         }
         for (Rule rule : rules) {
-            if (!rule.event().equals(event) || !matches(rule.when(), arena)) {
+            if (!rule.event().equals(event) || !matches(rule.when(), arena, who, regionId)) {
                 continue;
             }
             int budget = ACTION_BUDGET;
@@ -133,9 +144,30 @@ public final class Script {
     }
 
     /** Conditions. Absent means always. */
-    private static boolean matches(JsonObject when, EngineArena arena) {
+    private static boolean matches(JsonObject when, EngineArena arena,
+                                   ServerPlayer who, String regionId) {
         if (when == null) {
             return true;
+        }
+        // Which region fired this. Lets one rule per region rather than one
+        // ruleset per region, which is what a map with nine checkpoints needs.
+        if (when.has("region")) {
+            String want = str(when, "region", "").toLowerCase(Locale.ROOT);
+            if (regionId == null || !regionId.equalsIgnoreCase(want)) {
+                return false;
+            }
+        }
+        // Variables, run-scoped and per-player. This is what makes a win
+        // condition expressible: "when flags is at_least 3, end the run".
+        if (when.has("var") && when.get("var").isJsonObject()) {
+            if (!varMatches(when.getAsJsonObject("var"), arena, who, false)) {
+                return false;
+            }
+        }
+        if (when.has("my_var") && when.get("my_var").isJsonObject()) {
+            if (who == null || !varMatches(when.getAsJsonObject("my_var"), arena, who, true)) {
+                return false;
+            }
         }
         if (when.has("round") && when.get("round").isJsonObject()) {
             JsonObject r = when.getAsJsonObject("round");
@@ -160,9 +192,89 @@ public final class Script {
         return true;
     }
 
+    /**
+     * One variable comparison.
+     *
+     * <p>{@code { "name": "flags", "at_least": 3 }}. Same four comparators the
+     * round condition uses, so an author who has written one has written both.
+     */
+    private static boolean varMatches(JsonObject v, EngineArena arena,
+                                      ServerPlayer who, boolean mine) {
+        String name = str(v, "name", "");
+        if (name.isEmpty()) {
+            return false;
+        }
+        int value = mine ? arena.vars().get(who, name)
+                : v.has("total") ? arena.vars().total(name)
+                : arena.vars().get(name);
+        if (v.has("equals") && value != intOf(v, "equals", Integer.MIN_VALUE)) {
+            return false;
+        }
+        if (v.has("at_least") && value < intOf(v, "at_least", 0)) {
+            return false;
+        }
+        if (v.has("at_most") && value > intOf(v, "at_most", Integer.MAX_VALUE)) {
+            return false;
+        }
+        return true;
+    }
+
     // ------------------------------------------------------------------
     // Actions
     // ------------------------------------------------------------------
+
+    /** {@code { "add_var": { "name": "flags", "by": 1 } }} */
+    private static void varAction(EngineArena arena, ServerPlayer who,
+                                  JsonElement body, boolean mine, boolean absolute) {
+        if (!body.isJsonObject()) {
+            return;
+        }
+        JsonObject o = body.getAsJsonObject();
+        String name = str(o, "name", "");
+        if (name.isEmpty()) {
+            return;
+        }
+        int amount = intOf(o, absolute ? "to" : "by", absolute ? 0 : 1);
+        if (mine) {
+            if (who == null) {
+                return;
+            }
+            if (absolute) {
+                arena.vars().set(who, name, amount);
+            } else {
+                arena.vars().add(who, name, amount);
+            }
+            return;
+        }
+        if (absolute) {
+            arena.vars().set(name, amount);
+        } else {
+            arena.vars().add(name, amount);
+        }
+    }
+
+    /**
+     * Ends the run with an outcome rather than just ending it.
+     *
+     * <p>{@code end_run} existed and said nothing about whether that was a good
+     * thing. A game needs to be winnable on its own terms - reach the vault,
+     * hold the point, get all four out - and "the run stopped" is not the same
+     * message as "you did it".
+     */
+    private static void finish(EngineArena arena, ServerLevel level, JsonElement body, boolean won) {
+        String text = body != null && body.isJsonObject()
+                ? str(body.getAsJsonObject(), "title", won ? "§6§lYOU MADE IT" : "§4§lFAILED")
+                : (won ? "§6§lYOU MADE IT" : "§4§lFAILED");
+        for (ServerPlayer p : arena.everyone()) {
+            p.connection.send(new net.minecraft.network.protocol.game.ClientboundSetTitleTextPacket(
+                    net.minecraft.network.chat.Component.literal(text)));
+            level.playSound(null, p.blockPosition(),
+                    won ? net.minecraft.sounds.SoundEvents.BEACON_ACTIVATE
+                            : net.minecraft.sounds.SoundEvents.WARDEN_DEATH,
+                    net.minecraft.sounds.SoundSource.PLAYERS, 1.0F, won ? 1.3F : 0.6F);
+        }
+        EngineArena.stop(false);
+    }
 
     private static void run(EngineArena arena, ServerLevel level, JsonObject action, ServerPlayer who) {
         for (String key : action.keySet()) {
@@ -181,6 +293,12 @@ public final class Script {
                 case "open_area" -> arena.openArea(asText(body));
                 case "set_block" -> setBlock(level, body);
                 case "end_run" -> EngineArena.stop(true);
+                case "set_var" -> varAction(arena, who, body, false, true);
+                case "add_var" -> varAction(arena, who, body, false, false);
+                case "set_my_var" -> varAction(arena, who, body, true, true);
+                case "add_my_var" -> varAction(arena, who, body, true, false);
+                case "win" -> finish(arena, level, body, true);
+                case "lose" -> finish(arena, level, body, false);
                 default -> {
                     // Unknown action names are ignored on purpose: a map written
                     // for a later engine should still run on an earlier one.

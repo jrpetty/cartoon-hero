@@ -113,7 +113,8 @@ public final class BuildTools {
     /** Every marker the engine understands, for the palette and for tab-completion. */
     public static final String[] KINDS = {
             "spawn", "extract", "horde", "pen", "boss", "loot", "powerup",
-            "dealer", "door", "box", "perk", "upgrade", "zone", "spawner", "trap", "teleport", "objective"
+            "dealer", "door", "box", "perk", "upgrade", "zone", "spawner", "trap", "teleport", "objective",
+            "region"
     };
 
     /**
@@ -210,6 +211,7 @@ public final class BuildTools {
             case "trap" -> "cost=1000 damage=12";
             case "teleport" -> "id=a";
             case "objective" -> "defend hp=600";
+            case "region" -> "id=vault radius=5";
             default -> "";
         };
     }

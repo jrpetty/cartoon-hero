@@ -47,7 +47,7 @@ public record Marker(String kind, BlockPos pos, Direction facing, Map<String, St
      * player touches, or has to go to, stays.
      */
     private static final java.util.Set<String> CONSUMED = java.util.Set.of(
-            "spawn", "horde", "pen", "boss", "powerup", "zone", "spawner");
+            "spawn", "horde", "pen", "boss", "powerup", "zone", "spawner", "region");
 
     /**
      * Whether this marker is scaffolding rather than furniture.
