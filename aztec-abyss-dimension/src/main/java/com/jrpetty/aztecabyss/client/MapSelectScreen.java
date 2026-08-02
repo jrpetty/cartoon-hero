@@ -174,7 +174,31 @@ public final class MapSelectScreen extends Screen {
      */
     @Override
     public void renderBackground(GuiGraphics g, int mouseX, int mouseY, float partialTick) {
-        g.fill(0, 0, this.width, this.height, 0xE0080608);
+        // Fully opaque, and deliberately not a call to super.
+        //
+        // Vanilla's screen background is a blur pass over the live world, and at
+        // 0xE0 this was letting 12% of that blurred, moving world through - which
+        // is exactly the smear the cards and their text were being read against.
+        // Sitting a type-heavy screen on top of a blurred render of whatever you
+        // happened to be standing in front of makes every card look out of focus,
+        // and no amount of contrast in the card fixes it.
+        //
+        // A solid ground costs nothing and means the picker reads the same whether
+        // you opened it in daylight or in a cave.
+        g.fillGradient(0, 0, this.width, this.height, 0xFF0B0A10, 0xFF060508);
+    }
+
+    /**
+     * No blur pass at all.
+     *
+     * <p>Belt to the brace above: vanilla runs the blur from its own background
+     * hook, so a screen that merely paints over the result is still paying for it
+     * and is one refactor away from showing it again. Overriding it away is the
+     * only version that cannot come back.
+     */
+    @Override
+    protected void renderBlurredBackground(float partialTick) {
+        // Intentionally empty.
     }
 
     @Override

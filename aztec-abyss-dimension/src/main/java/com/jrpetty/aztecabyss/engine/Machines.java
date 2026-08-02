@@ -68,14 +68,6 @@ public final class Machines {
             Map.entry("diamond_helmet", "netherite_helmet"),
             Map.entry("bow", "crossbow"));
 
-    /** What the Box can hand out when a map does not say. */
-    private static final Item[] BOX_POOL = {
-            Items.IRON_SWORD, Items.IRON_SWORD, Items.IRON_AXE,
-            Items.DIAMOND_SWORD, Items.DIAMOND_AXE,
-            Items.BOW, Items.BOW, Items.CROSSBOW, Items.SHIELD,
-            Items.TRIDENT, Items.NETHERITE_SWORD,
-            Items.IRON_CHESTPLATE, Items.DIAMOND_CHESTPLATE,
-    };
 
     /**
      * Handles a right-click on an interactive marker.
@@ -204,17 +196,46 @@ public final class Machines {
             return true;
         }
         RandomSource rng = level.getRandom();
-        ItemStack prize = new ItemStack(BOX_POOL[rng.nextInt(BOX_POOL.length)]);
+        ItemStack prize = poolFor(m, "box", ItemPool::defaultBox).roll(rng, level);
         if (!player.getInventory().add(prize)) {
             player.drop(prize, false);
         }
         level.sendParticles(net.minecraft.core.particles.ParticleTypes.END_ROD,
                 m.pos().getX() + 0.5, m.pos().getY() + 1.0, m.pos().getZ() + 0.5,
-                24, 0.4, 0.4, 0.4, 0.05);
-        level.playSound(null, m.pos(), SoundEvents.BEACON_ACTIVATE, SoundSource.BLOCKS, 1.0F, 1.3F);
+                20, 0.3, 0.5, 0.3, 0.02);
+        level.playSound(null, m.pos(), SoundEvents.BEACON_ACTIVATE, SoundSource.BLOCKS, 0.8F, 1.2F);
         player.displayClientMessage(Component.literal(
-                "§d✦ " + prize.getHoverName().getString()), false);
+                "§6The Box §7gives you §f" + prize.getHoverName().getString()), true);
         return true;
+    }
+
+    /**
+     * Which pool a machine draws from, in the order an author would expect.
+     *
+     * <p>Three places can say, and the most specific wins. {@code items=} written
+     * on the marker itself beats {@code pool=} naming one from the ruleset, which
+     * beats the built-in list. That ordering is the point: a one-off Box in one map
+     * should not need a datapack, and a map with eight Boxes that should all agree
+     * should not need the list written eight times.
+     */
+    private static ItemPool poolFor(Marker m, String defaultName,
+                                    java.util.function.Supplier<ItemPool> fallback) {
+        String inline = m.arg("items", "");
+        if (!inline.isBlank()) {
+            ItemPool pool = ItemPool.inline(inline);
+            if (!pool.isEmpty()) {
+                return pool;
+            }
+        }
+        EngineArena arena = EngineArena.active();
+        if (arena != null) {
+            String named = m.arg("pool", defaultName).toLowerCase(Locale.ROOT);
+            ItemPool pool = arena.rules().pools.get(named);
+            if (pool != null && !pool.isEmpty()) {
+                return pool;
+            }
+        }
+        return fallback.get();
     }
 
     // ------------------------------------------------------------------
@@ -314,11 +335,12 @@ public final class Machines {
             return true;
         }
         int tier = Math.max(1, Math.min(3, m.intArg("tier", 1)));
-        List<ItemStack> paid = List.of(
-                new ItemStack(Items.COOKED_BEEF, 4 * tier),
-                new ItemStack(Items.ARROW, 16 * tier),
-                new ItemStack(Items.IRON_INGOT, 2 * tier));
-        for (ItemStack s : paid) {
+        // A cache draws three times from its tier's pool rather than handing over
+        // one fixed list, so two caches at the same tier are not the same cache.
+        ItemPool pool = poolFor(m, "loot_" + tier, () -> ItemPool.defaultLoot(tier));
+        RandomSource rng = level.getRandom();
+        for (int i = 0; i < 3; i++) {
+            ItemStack s = pool.roll(rng, level);
             if (!player.getInventory().add(s)) {
                 player.drop(s, false);
             }

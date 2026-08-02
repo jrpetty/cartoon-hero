@@ -53,6 +53,29 @@ public final class EngineArena {
     private final ServerLevel level;
     private final String mapName;
     private final Ruleset rules;
+
+    /** The ruleset this run is playing under, for machines that need to consult it. */
+    public Ruleset rules() {
+        return rules;
+    }
+
+    /**
+     * How many times each limited dealer has been bought from this run.
+     *
+     * <p>Per run and per sign rather than per player: a limit of one on a
+     * netherite sword should mean the squad gets one, which is a decision they
+     * have to have together. Counted per position so two dealers selling the same
+     * thing are two stocks.
+     */
+    private final java.util.Map<BlockPos, Integer> dealerSales = new java.util.HashMap<>();
+
+    public boolean canBuyFrom(BlockPos dealer, int limit) {
+        return dealerSales.getOrDefault(dealer.immutable(), 0) < limit;
+    }
+
+    public void recordBuy(BlockPos dealer) {
+        dealerSales.merge(dealer.immutable(), 1, Integer::sum);
+    }
     private final BlockPos spawn;
     private final List<Marker> hordes;
     private final BoundingBox bounds;

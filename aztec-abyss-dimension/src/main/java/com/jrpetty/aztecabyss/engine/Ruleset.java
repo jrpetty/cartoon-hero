@@ -4,8 +4,10 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 
 /**
  * Every number a round-survival game has, in one object, loaded from JSON.
@@ -93,6 +95,16 @@ public final class Ruleset {
      */
     public final List<SpecialRound> specials;
 
+    /**
+     * Named item pools, for every machine that hands something out.
+     *
+     * <p>One block in the file feeds the Box, supply caches and the starting
+     * loadout, because they were three hard-coded arrays solving the same problem.
+     * A pool an author has not defined falls back to the built-in one, so a
+     * ruleset that says nothing about pools plays exactly as it did.
+     */
+    public final Map<String, ItemPool> pools;
+
     /** One recurring variant round. */
     public record SpecialRound(int every, String role, String mobId,
                                boolean noPowerups, String title, String subtitle) {
@@ -160,6 +172,7 @@ public final class Ruleset {
         this.reviveRange = b.reviveRange;
         this.downedSolo = b.downedSolo;
         this.specials = List.copyOf(b.specials);
+        this.pools = Map.copyOf(b.pools);
         this.directorEnabled = b.directorEnabled;
         this.directorTarget = b.directorTarget;
         this.directorMinPace = b.directorMinPace;
@@ -211,6 +224,7 @@ public final class Ruleset {
         double reviveRange = 3.0;
         boolean downedSolo = false;
         List<SpecialRound> specials = new ArrayList<>();
+        Map<String, ItemPool> pools = new LinkedHashMap<>();
         boolean directorEnabled = false;
         float directorTarget = 0.55f;
         float directorMinPace = 0.5f;
@@ -237,7 +251,7 @@ public final class Ruleset {
 
         checkKeys(root, "", b.warnings,
                 "rounds", "economy", "mobs", "currencies", "director", "script", "powerups",
-                "downed", "special_rounds");
+                "downed", "special_rounds", "pools");
         checkKeys(obj(root, "downed"), "downed", b.warnings,
                 "enabled", "bleedout_seconds", "revive_seconds", "revive_range", "solo");
         checkKeys(obj(root, "powerups"), "powerups", b.warnings, "one_in");
@@ -300,6 +314,25 @@ public final class Ruleset {
             b.reviveSeconds = clampInt(intOf(downed, "revive_seconds", b.reviveSeconds), 1, 60);
             b.reviveRange = clamp(dbl(downed, "revive_range", b.reviveRange), 1.0, 8.0);
             b.downedSolo = bool(downed, "solo", false);
+        }
+
+        // Pools: one named weighted list per machine that hands something out.
+        if (root.has("pools") && root.get("pools").isJsonObject()) {
+            JsonObject poolsObj = root.getAsJsonObject("pools");
+            for (String key : poolsObj.keySet()) {
+                if (!poolsObj.get(key).isJsonArray()) {
+                    b.warnings.add("pools." + key + " is not a list");
+                    continue;
+                }
+                ItemPool pool = ItemPool.fromJson(key.toLowerCase(Locale.ROOT),
+                        poolsObj.getAsJsonArray(key));
+                if (pool.isEmpty()) {
+                    // An empty pool is nearly always a misspelled item id, and it
+                    // would otherwise show up as a Box that hands out stone swords.
+                    b.warnings.add("pools." + key + " has no usable items in it");
+                }
+                b.pools.put(key.toLowerCase(Locale.ROOT), pool);
+            }
         }
 
         if (root.has("special_rounds") && root.get("special_rounds").isJsonArray()) {

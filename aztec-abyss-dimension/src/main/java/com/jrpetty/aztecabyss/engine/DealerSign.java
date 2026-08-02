@@ -45,15 +45,50 @@ public final class DealerSign {
     private DealerSign() {
     }
 
-    /** What a dealer sign is offering. */
-    public record Offer(ItemStack stack, int price, Currency currency) {
+    /**
+     * What a dealer sign is offering.
+     *
+     * <p>{@code fromRound} and {@code limit} are the two that change how a shop
+     * behaves rather than what it sells. A weapon that does not appear until round
+     * ten gives a map somewhere to get to; a weapon you may buy twice makes the
+     * decision of <em>when</em> matter as much as whether.
+     */
+    public record Offer(ItemStack stack, int price, Currency currency,
+                        int enchant, int fromRound, int limit) {
+
+        /** The plain form, for callers that only care what and how much. */
+        public Offer(ItemStack stack, int price, Currency currency) {
+            this(stack, price, currency, 0, 0, 0);
+        }
     }
 
-    /** Reads one line of a sign as plain text, with formatting stripped. */
+    private static int clampInt(String raw, int lo, int hi, int fallback) {
+        try {
+            return Math.max(lo, Math.min(hi, Integer.parseInt(raw.trim())));
+        } catch (NumberFormatException e) {
+            return fallback;
+        }
+    }
+
+    /**
+     * Reads one line of a sign as plain text, front face then back.
+     *
+     * <p>A sign has two faces and the shop was only ever using one of them, which
+     * is where the four-line ceiling came from - the format was never the limit,
+     * the front of the sign was. Lines 0-3 are the front, 4-7 the back, so a dealer
+     * has eight lines without anything a player sees changing: the shop front still
+     * reads item, price, quantity at a glance, and the extra room is round the back
+     * where the author put the details.
+     */
     private static String line(SignBlockEntity sign, int index) {
-        Component c = sign.getFrontText().getMessage(index, false);
+        Component c = index < 4
+                ? sign.getFrontText().getMessage(index, false)
+                : sign.getBackText().getMessage(index - 4, false);
         return c.getString().trim();
     }
+
+    /** How many lines a dealer can use, across both faces. */
+    public static final int LINES = 8;
 
     public static boolean isDealer(SignBlockEntity sign) {
         return line(sign, 0).toLowerCase(java.util.Locale.ROOT).equals(HEADER);
@@ -88,16 +123,39 @@ public final class DealerSign {
                 ? Currency.byId(priceParts[1].toLowerCase(java.util.Locale.ROOT))
                 : Currency.getDefault();
 
+        // Line 4 onward is free-form key=value, on either face, so a dealer can
+        // carry options that never fitted before: a stack size, an enchantment
+        // level, a round it unlocks at, a limit on how many may be sold.
         int count = 1;
-        String extra = line(sign, 3).toLowerCase(java.util.Locale.ROOT);
-        if (extra.startsWith("x")) {
-            try {
-                count = Math.max(1, Math.min(64, Integer.parseInt(extra.substring(1).trim())));
-            } catch (NumberFormatException ignored) {
-                count = 1;
+        int enchant = 0;
+        int fromRound = 0;
+        int limit = 0;
+        for (int i = 3; i < LINES; i++) {
+            String raw = line(sign, i).toLowerCase(java.util.Locale.ROOT);
+            if (raw.isEmpty()) {
+                continue;
+            }
+            for (String token : raw.split("\\s+")) {
+                if (token.startsWith("x") && token.length() > 1 && Character.isDigit(token.charAt(1))) {
+                    count = clampInt(token.substring(1), 1, 64, count);
+                    continue;
+                }
+                int eq = token.indexOf('=');
+                if (eq <= 0 || eq >= token.length() - 1) {
+                    continue;
+                }
+                String key = token.substring(0, eq);
+                String val = token.substring(eq + 1);
+                switch (key) {
+                    case "count", "amount" -> count = clampInt(val, 1, 64, count);
+                    case "enchant" -> enchant = clampInt(val, 0, 30, enchant);
+                    case "round", "from_round" -> fromRound = clampInt(val, 0, 1000, fromRound);
+                    case "limit" -> limit = clampInt(val, 0, 999, limit);
+                    default -> { }
+                }
             }
         }
-        return new Offer(new ItemStack(item, count), price, currency);
+        return new Offer(new ItemStack(item, count), price, currency, enchant, fromRound, limit);
     }
 
     /**
@@ -181,6 +239,26 @@ public final class DealerSign {
                 ? offer.stack().getCount() + "x " + offer.stack().getHoverName().getString()
                 : offer.stack().getHoverName().getString();
 
+        // A locked line is refused before it is charged for. Saying "not yet" is
+        // the whole point of from_round; taking the money and then saying it would
+        // be worse than not having the feature.
+        EngineArena arena = EngineArena.active();
+        if (offer.fromRound() > 0 && arena != null && arena.round() < offer.fromRound()) {
+            player.displayClientMessage(Component.literal(
+                    "§7" + label + " §8— §7sealed until round §f" + offer.fromRound()), true);
+            level.playSound(null, sign.getBlockPos(), SoundEvents.FIRE_EXTINGUISH,
+                    SoundSource.BLOCKS, 0.7F, 0.8F);
+            return true;
+        }
+        if (offer.limit() > 0 && arena != null
+                && !arena.canBuyFrom(sign.getBlockPos(), offer.limit())) {
+            player.displayClientMessage(Component.literal(
+                    "§7" + label + " §8— §7sold out. §8(" + offer.limit() + " a run)"), true);
+            level.playSound(null, sign.getBlockPos(), SoundEvents.FIRE_EXTINGUISH,
+                    SoundSource.BLOCKS, 0.7F, 0.8F);
+            return true;
+        }
+
         if (!offer.currency().charge(player, offer.price())) {
             player.displayClientMessage(Component.literal(
                     "§cNot enough. §7" + label + " costs "
@@ -197,6 +275,18 @@ public final class DealerSign {
         // and the shop stops mattering the moment everyone owns everything - and
         // an inventory slowly fills with worn duplicates of the same sword.
         ItemStack given = offer.stack().copy();
+        if (offer.enchant() > 0) {
+            try {
+                given = net.minecraft.world.item.enchantment.EnchantmentHelper.enchantItem(
+                        level.getRandom(), given, offer.enchant(),
+                        level.registryAccess(), java.util.Optional.empty());
+            } catch (RuntimeException ignored) {
+                // Sold plain rather than not sold.
+            }
+        }
+        if (offer.limit() > 0 && arena != null) {
+            arena.recordBuy(sign.getBlockPos());
+        }
         boolean serviced = service(player, offer);
         if (!serviced && !player.getInventory().add(given)) {
             player.drop(given, false);

@@ -198,6 +198,62 @@ fast, because every tenth round is also a fifth. Order in the file does not
 matter. A filter that matches nothing in your mob table is ignored rather than
 stalling the round.
 
+### Pools — what the machines hand out
+
+```json
+"pools": {
+  "box": [
+    { "id": "minecraft:trident", "weight": 1 },
+    { "id": "minecraft:crossbow", "weight": 4, "enchant": 2 },
+    { "id": "minecraft:arrow", "weight": 8, "count": "16-32" }
+  ],
+  "loot_1": [ "minecraft:bread", "minecraft:arrow" ]
+}
+```
+
+Weights are relative and need not add up to anything. `count` is a number or a
+`low-high` range. `enchant` is a vanilla enchanting level applied on the way out.
+A bare string is a weight-1 entry, so a simple pool is a list of names.
+
+The Box reads `box`, a `[Loot] tier=2` cache reads `loot_2`, and both fall back to
+the built-in list if you have not defined one. Point a machine somewhere else with
+`pool=`, or write it inline for a one-off:
+
+```
+[Box]
+price=950 pool=late_game
+[Box]
+price=600 items=arrow*8,cooked_beef*4,iron_sword
+```
+
+Most specific wins: `items=` beats `pool=` beats the default.
+
+**This is the single biggest lever on how a map feels.** A flooded dock where the
+Box only gives tridents, a siege map where it only gives arrows and bread, a
+low-tech map with no netherite in it at all — none of that was expressible before,
+and all of it changes a map more than the round curve does.
+
+### Dealers, in full
+
+A dealer has **eight** lines: the four on the front, then the four on the back.
+The front stays the shop front a player reads across a room; the back is where the
+detail goes.
+
+```
+front:                      back:
+[Dealer]                    enchant=3
+minecraft:crossbow          round=8
+1750 points                 limit=2
+x1
+```
+
+- `enchant=` a vanilla enchanting level, applied when sold
+- `round=` sealed until that round — somewhere for a map to get to
+- `limit=` how many the whole squad may buy this run
+
+Limits are per run and per sign, not per player: one netherite sword means the
+squad gets one, which is a decision they have to make together.
+
 ### Currencies
 
 ```json
