@@ -147,6 +147,26 @@ public final class ClientGuessWho {
         return phase == com.jrpetty.mobtrumps.GuessWhoManager.PHASE_YOUR_TURN;
     }
 
+    /** Naming a wager, before any board exists. */
+    public static boolean staking() {
+        return phase == com.jrpetty.mobtrumps.GuessWhoManager.PHASE_STAKE;
+    }
+
+    /**
+     * The wager in the box and the purse behind it, on the pre-round screen.
+     *
+     * <p>They ride in the two numeric slots of the opponent field, which is
+     * unused on a solo table. The leading separator keeps the name blank so
+     * {@link #versusPlayer()} still reads false.
+     */
+    public static int stake() {
+        return opponentLeft;
+    }
+
+    public static int purse() {
+        return opponentAsked;
+    }
+
     public static boolean over() {
         return phase == com.jrpetty.mobtrumps.GuessWhoManager.PHASE_WON
                 || phase == com.jrpetty.mobtrumps.GuessWhoManager.PHASE_LOST;

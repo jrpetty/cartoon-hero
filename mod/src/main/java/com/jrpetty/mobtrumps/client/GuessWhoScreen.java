@@ -3,6 +3,7 @@ package com.jrpetty.mobtrumps.client;
 import com.jrpetty.mobtrumps.GuessWhoActionPayload;
 import com.jrpetty.mobtrumps.GuessWhoManager;
 import com.jrpetty.mobtrumps.game.GuessQuestion;
+import com.jrpetty.mobtrumps.game.GuessWhoWager;
 import com.jrpetty.mobtrumps.game.MobCard;
 import com.jrpetty.mobtrumps.game.MobCards;
 import net.minecraft.client.gui.GuiGraphics;
@@ -57,6 +58,10 @@ public class GuessWhoScreen extends Screen {
 
     private final Map<String, LivingEntity> entityCache = new HashMap<>();
     private EditBox search;
+    /** The wager box on the pre-round screen. */
+    private EditBox wager;
+    private int[] startRect;
+    private final List<int[]> quickRects = new ArrayList<>();
 
     // solved per frame
     private int tileW;
@@ -104,6 +109,112 @@ public class GuessWhoScreen extends Screen {
         search.setMaxLength(32);
         search.setResponder(s -> scroll = 0);
         addRenderableWidget(search);
+
+        // The wager box. Digits only, and wide enough for the table's ceiling —
+        // a player who wants to put a hundred million on one board can type it.
+        int bw = Math.min(150, width - 60);
+        wager = new EditBox(font, (width - bw) / 2, height / 2 - 6, bw, 18,
+                Component.literal("wager"));
+        wager.setMaxLength(9);
+        wager.setFilter(t -> t.chars().allMatch(Character::isDigit));
+        wager.setValue(String.valueOf(Math.max(GuessWhoWager.MIN_STAKE, ClientGuessWho.stake())));
+        addRenderableWidget(wager);
+    }
+
+    /** What is typed in the box right now, clamped to what the table allows. */
+    private int typedStake() {
+        try {
+            return GuessWhoWager.clampStake(Integer.parseInt(wager.getValue().trim()));
+        } catch (NumberFormatException e) {
+            return GuessWhoWager.MIN_STAKE;
+        }
+    }
+
+    /**
+     * The pre-round screen: name a wager, then start.
+     *
+     * <p>The whole ladder is on show before a single fragment is committed. A
+     * player betting a hundred million on their own speed should be able to see
+     * exactly what six questions pays and what nine costs, without having to
+     * find out the expensive way.
+     */
+    private void drawStakeScreen(GuiGraphics g, int mouseX, int mouseY) {
+        quickRects.clear();
+        startRect = null;
+
+        var pose = g.pose();
+        pose.pushPose();
+        pose.translate(width / 2f, 26f, 0);
+        pose.scale(1.8f, 1.8f, 1f);
+        String title = "GUESS WHO";
+        g.drawString(font, title, -font.width(title) / 2, 0, GOLD, true);
+        pose.popPose();
+        g.drawCenteredString(font, "name your wager, then find the mob", width / 2, 48, DIM);
+
+        int purse = ClientGuessWho.purse();
+        int stake = typedStake();
+        boolean afford = purse >= stake;
+
+        g.drawCenteredString(font, "WAGER", width / 2, height / 2 - 20, GOLD_DIM);
+        wager.setX((width - wager.getWidth()) / 2);
+        wager.setY(height / 2 - 6);
+
+        // quick amounts, so a big bet is not a lot of typing
+        int[] quick = {GuessWhoWager.MIN_STAKE, 100, 1000, 10_000, Math.max(GuessWhoWager.MIN_STAKE, purse)};
+        String[] labels = {String.valueOf(GuessWhoWager.MIN_STAKE), "100", "1k", "10k", "All in"};
+        int total = 0;
+        for (String label : labels) {
+            total += font.width(label) + 14 + 4;
+        }
+        int qx = (width - total) / 2;
+        int qy = height / 2 + 16;
+        for (int i = 0; i < quick.length; i++) {
+            int bw = font.width(labels[i]) + 14;
+            boolean hot = inRect(mouseX, mouseY, new int[]{qx, qy, bw, 14});
+            g.fill(qx, qy, qx + bw, qy + 14, hot ? 0xFF3A3252 : 0xFF221D33);
+            g.renderOutline(qx, qy, bw, 14, hot ? GOLD : EDGE);
+            g.drawCenteredString(font, labels[i], qx + bw / 2, qy + 3, hot ? INK : DIM);
+            quickRects.add(new int[]{qx, qy, bw, 14, quick[i]});
+            qx += bw + 4;
+        }
+
+        g.drawCenteredString(font, "you hold " + purse + " fragments", width / 2, qy + 20,
+                afford ? DIM : NO);
+
+        // the ladder, so nothing about the payout is a surprise
+        int ly = qy + 36;
+        if (ly + 58 < height - 30) {
+            g.drawCenteredString(font, "FIND IT IN", width / 2, ly, GOLD_DIM);
+            ly += 12;
+            int cellW = Math.min(52, (width - 40) / 7);
+            int lx = width / 2 - cellW * 7 / 2;
+            for (int q = 4; q <= 10; q++) {
+                int pct = GuessWhoWager.percentFor(q);
+                boolean good = pct > 100;
+                String qs = q == 10 ? "10+" : String.valueOf(q);
+                String ps = (pct - 100 >= 0 ? "+" : "") + (pct - 100) + "%";
+                g.fill(lx + 1, ly, lx + cellW - 1, ly + 24, 0x40000000);
+                g.drawCenteredString(font, qs, lx + cellW / 2, ly + 2, INK);
+                g.drawCenteredString(font, ps, lx + cellW / 2, ly + 13, good ? YES : NO);
+                lx += cellW;
+            }
+            ly += 28;
+            int win = GuessWhoWager.payout(stake, 6);
+            g.drawCenteredString(font, "six questions on " + stake + " pays " + win
+                    + "  (+" + (win - stake) + ")", width / 2, ly, DIM);
+        }
+
+        String label = afford ? "START ROUND" : "NOT ENOUGH FRAGMENTS";
+        int bw = font.width(label) + 30;
+        int bx = (width - bw) / 2;
+        int by = height - 34;
+        boolean hot = afford && inRect(mouseX, mouseY, new int[]{bx, by, bw, 20});
+        g.fill(bx, by, bx + bw, by + 20, !afford ? 0xFF2A2233 : hot ? 0xFF3C8F5F : 0xFF2C6E49);
+        g.renderOutline(bx, by, bw, 20, !afford ? EDGE : hot ? GOLD : GOLD_DIM);
+        g.drawCenteredString(font, label, bx + bw / 2, by + 6, afford ? INK : FAINT);
+        if (afford) {
+            startRect = new int[]{bx, by, bw, 20};
+        }
     }
 
     /**
@@ -203,6 +314,16 @@ public class GuessWhoScreen extends Screen {
         drawBoard(g, mouseX, mouseY, since, playing);
         drawPanel(g, mouseX, mouseY, playing);
         drawFooter(g, mouseX, mouseY, playing);
+        if (ClientGuessWho.staking()) {
+            search.visible = false;
+            wager.visible = true;
+            wager.setEditable(true);
+            drawStakeScreen(g, mouseX, mouseY);
+            return;
+        }
+        search.visible = true;
+        wager.visible = false;
+        wager.setEditable(false);
         if (ClientGuessWho.picking()) {
             // nothing to ask yet — the panel is a preview of what is coming
             g.fill(panelX, 34, panelX + panelW, panelBottom, 0x99000000);
@@ -530,10 +651,27 @@ public class GuessWhoScreen extends Screen {
 
     @Override
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
+        if (ClientGuessWho.staking()) {
+            int mx = (int) mouseX;
+            int my = (int) mouseY;
+            for (int[] q : quickRects) {
+                if (inRect(mx, my, q)) {
+                    wager.setValue(String.valueOf(q[4]));
+                    click(1.0f);
+                    return true;
+                }
+            }
+            if (startRect != null && inRect(mx, my, startRect)) {
+                send(GuessWhoActionPayload.newGame(typedStake()));
+                click(1.2f);
+                return true;
+            }
+            return super.mouseClicked(mouseX, mouseY, button);
+        }
         if (button == 0) {
             if (hit(newGameRect, mouseX, mouseY)) {
                 pendingGuess = null;
-                send(GuessWhoActionPayload.newGame());
+                send(GuessWhoActionPayload.newGame(typedStake()));
                 click();
                 return true;
             }
@@ -642,10 +780,19 @@ public class GuessWhoScreen extends Screen {
     }
 
     private void click() {
+        click(1.0f);
+    }
+
+    private void click(float pitch) {
         if (minecraft != null) {
             minecraft.getSoundManager().play(
-                    SimpleSoundInstance.forUI(SoundEvents.UI_BUTTON_CLICK.value(), 1.0f));
+                    SimpleSoundInstance.forUI(SoundEvents.UI_BUTTON_CLICK.value(), pitch));
         }
+    }
+
+    private static boolean inRect(int mx, int my, int[] rect) {
+        return rect != null && mx >= rect[0] && mx < rect[0] + rect[2]
+                && my >= rect[1] && my < rect[1] + rect[3];
     }
 
     private static void send(GuessWhoActionPayload payload) {

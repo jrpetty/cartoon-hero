@@ -24,9 +24,16 @@ public record GuessWhoActionPayload(int action, int template, int value, String 
     public static final int LEAVE = 3;
     /** Choose the mob your opponent has to find. */
     public static final int PICK = 4;
+    /** Type a number into the wager box, before any board is dealt. */
+    public static final int SET_STAKE = 5;
 
-    public static GuessWhoActionPayload newGame() {
-        return new GuessWhoActionPayload(NEW_GAME, 0, 0, "");
+    /** Start a round for the given wager. */
+    public static GuessWhoActionPayload newGame(int stake) {
+        return new GuessWhoActionPayload(NEW_GAME, 0, stake, "");
+    }
+
+    public static GuessWhoActionPayload stake(int stake) {
+        return new GuessWhoActionPayload(SET_STAKE, 0, stake, "");
     }
 
     public static GuessWhoActionPayload ask(int template, int value) {

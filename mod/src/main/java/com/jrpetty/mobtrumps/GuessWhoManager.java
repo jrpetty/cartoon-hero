@@ -46,6 +46,8 @@ public final class GuessWhoManager {
     public static final int PHASE_THEIR_TURN = 3;
     public static final int PHASE_WON = 4;
     public static final int PHASE_LOST = 5;
+    /** No board yet — the player is naming their wager. */
+    public static final int PHASE_STAKE = 6;
 
     /** How long an unanswered challenge stands. */
     private static final long INVITE_MS = 60_000L;
@@ -72,6 +74,8 @@ public final class GuessWhoManager {
         UUID turn;
         UUID winner;
         boolean done;
+        /** Fragments staked on this board, or 0 for an unstaked practice game. */
+        int wager;
 
         Game(UUID a, UUID b) {
             this.a = a;
@@ -97,6 +101,8 @@ public final class GuessWhoManager {
     }
 
     private static final Map<UUID, Game> GAMES = new ConcurrentHashMap<>();
+    /** What each player last typed into the wager box, remembered between rounds. */
+    private static final Map<UUID, Integer> STAKE_CHOICE = new ConcurrentHashMap<>();
     /** target -> (challenger, expiry) for a pending invitation. */
     private static final Map<UUID, Object[]> INVITES = new ConcurrentHashMap<>();
 
@@ -106,13 +112,58 @@ public final class GuessWhoManager {
     // --- starting -----------------------------------------------------------
 
     /** Solo: the house hides one and you hunt it. */
+    /** Open the table. No board is dealt until a wager is named. */
     public static void openSolo(ServerPlayer player) {
+        PacketDistributor.sendToPlayer(player, new GuessWhoMenuPayload());
+        send(player);
+    }
+
+    /** What this player has in the wager box. */
+    public static int stakeOf(ServerPlayer player) {
+        int want = STAKE_CHOICE.getOrDefault(player.getUUID(), GuessWhoWager.MIN_STAKE);
+        return GuessWhoWager.clampStake(want);
+    }
+
+    /** Type a number into the box. Refused mid-game so a live wager cannot move. */
+    private static void setStake(ServerPlayer player, int stake) {
+        if (inGame(player)) {
+            return;
+        }
+        STAKE_CHOICE.put(player.getUUID(), GuessWhoWager.clampStake(stake));
+        send(player);
+    }
+
+    /**
+     * Take the wager and deal the board.
+     *
+     * <p>The stake is taken here and nowhere else, so what a player is playing
+     * for is fixed at the moment the faces go down — retyping the box mid-game
+     * cannot reach back and change what a finished round pays.
+     */
+    private static void startRound(ServerPlayer player, int stake) {
+        if (inGame(player) || !BlockReach.canReach(player)) {
+            return;
+        }
+        int want = GuessWhoWager.clampStake(stake);
+        STAKE_CHOICE.put(player.getUUID(), want);
+        int held = RecyclerManager.fragments(player);
+        if (held < want) {
+            player.sendSystemMessage(err("You have " + held + " fragments — that wager needs "
+                    + want + "."));
+            send(player);
+            return;
+        }
+        if (!RecyclerManager.takeFragments(player, want)) {
+            player.sendSystemMessage(err("Could not take that wager."));
+            send(player);
+            return;
+        }
         Game game = new Game(player.getUUID(), null);
+        game.wager = want;
         game.boardA.secret = MobCards.ALL.get(
                 ThreadLocalRandom.current().nextInt(MobCards.ALL.size()));
         game.turn = player.getUUID();
         GAMES.put(player.getUUID(), game);
-        PacketDistributor.sendToPlayer(player, new GuessWhoMenuPayload());
         send(player);
     }
 
@@ -187,7 +238,19 @@ public final class GuessWhoManager {
     public static void handle(ServerPlayer player, int action, int template, int value,
                               String mobId) {
         switch (action) {
-            case GuessWhoActionPayload.NEW_GAME -> openSolo(player);
+            case GuessWhoActionPayload.NEW_GAME -> {
+                // from the result screen this only clears the board; the wager
+                // screen is what deals the next one
+                if (inGame(player)) {
+                    return;
+                }
+                if (GAMES.containsKey(player.getUUID())) {
+                    clearIfDone(player);
+                } else {
+                    startRound(player, value);
+                }
+            }
+            case GuessWhoActionPayload.SET_STAKE -> setStake(player, value);
             case GuessWhoActionPayload.ASK -> ask(player, template, value);
             case GuessWhoActionPayload.GUESS -> guess(player, mobId);
             case GuessWhoActionPayload.PICK -> pick(player, mobId);
@@ -288,17 +351,34 @@ public final class GuessWhoManager {
             game.winner = player.getUUID();
             StatsTracker.bump(player, "guesswho_wins");
             ServerSync.markAwards(player);
-            RecyclerManager.giveFragments(player, reward(board.log.size()));
-            player.sendSystemMessage(Component.literal(
-                            "Guess Who: " + named.displayName() + ", in " + board.log.size()
-                                    + " question" + (board.log.size() == 1 ? "" : "s") + " — "
-                                    + reward(board.log.size()) + " fragments.")
-                    .withStyle(ChatFormatting.GREEN, ChatFormatting.BOLD));
+            int asked = board.log.size();
+            if (game.wager > 0) {
+                int paid = GuessWhoWager.payout(game.wager, asked);
+                int profit = paid - game.wager;
+                RecyclerManager.giveFragments(player, paid);
+                player.sendSystemMessage(Component.literal(
+                                "Guess Who: " + named.displayName() + ", in " + asked
+                                        + " question" + (asked == 1 ? "" : "s") + " — "
+                                        + GuessWhoWager.percentFor(asked) + "% back, "
+                                        + paid + " fragments ("
+                                        + (profit >= 0 ? "+" : "") + profit + ").")
+                        .withStyle(profit >= 0 ? ChatFormatting.GREEN : ChatFormatting.YELLOW,
+                                ChatFormatting.BOLD));
+            } else {
+                RecyclerManager.giveFragments(player, reward(asked));
+                player.sendSystemMessage(Component.literal(
+                                "Guess Who: " + named.displayName() + ", in " + asked
+                                        + " question" + (asked == 1 ? "" : "s") + " — "
+                                        + reward(asked) + " fragments.")
+                        .withStyle(ChatFormatting.GREEN, ChatFormatting.BOLD));
+            }
         } else {
             game.winner = game.solo() ? null : game.other(player.getUUID());
             player.sendSystemMessage(Component.literal(
                             "Guess Who: not " + named.displayName() + " — it was "
-                                    + board.secret.displayName() + ".")
+                                    + board.secret.displayName() + "."
+                                    + (game.wager > 0
+                                            ? " Your " + game.wager + " fragments are gone." : ""))
                     .withStyle(ChatFormatting.RED));
         }
         game.done = true;
@@ -325,6 +405,21 @@ public final class GuessWhoManager {
         if (!game.solo() && game.ready() && game.turn != null) {
             game.turn = game.other(game.turn);
         }
+    }
+
+    /**
+     * Clear a finished board so the table returns to the wager screen.
+     *
+     * <p>A completed game used to sit in the map for the rest of the session,
+     * which with a wager attached would mean the result screen was the last
+     * thing a player ever saw — no way back to the box to name a new bet.
+     */
+    private static void clearIfDone(ServerPlayer player) {
+        Game game = GAMES.get(player.getUUID());
+        if (game != null && game.done) {
+            GAMES.remove(player.getUUID());
+        }
+        send(player);
     }
 
     private static void quit(ServerPlayer player) {
@@ -377,6 +472,9 @@ public final class GuessWhoManager {
 
     private static void sendBoth(ServerPlayer player, Game game) {
         send(player);
+        if (game.wager < 0) {
+            return PHASE_STAKE;
+        }
         if (!game.solo()) {
             ServerPlayer them = playerOf(player, game.other(player.getUUID()));
             if (them != null) {
@@ -391,6 +489,9 @@ public final class GuessWhoManager {
                 return game.winner != null ? PHASE_WON : PHASE_LOST;
             }
             return who.equals(game.winner) ? PHASE_WON : PHASE_LOST;
+        }
+        if (game.wager < 0) {
+            return PHASE_STAKE;
         }
         if (!game.solo()) {
             UUID them = game.other(who);
@@ -408,6 +509,15 @@ public final class GuessWhoManager {
     private static void send(ServerPlayer player) {
         Game game = GAMES.get(player.getUUID());
         if (game == null) {
+            // No board dealt: the client is on the wager screen and still needs
+            // state, or it has nothing to draw. Bailing out here left it holding
+            // whatever the last finished game looked like.
+            PacketDistributor.sendToPlayer(player, new GuessWhoSyncPayload(
+                    PHASE_STAKE, 0, List.of(), List.of(), "",
+                    // leading empty field keeps opponentName blank, so the client
+                    // does not read a solo table as a match; the wager and the
+                    // purse ride in the two numeric slots the client reads back
+                    "|" + stakeOf(player) + "|" + RecyclerManager.fragments(player)));
             return;
         }
         UUID me = player.getUUID();
@@ -428,6 +538,9 @@ public final class GuessWhoManager {
         String secret = game.done && board.secret != null ? board.secret.id() : "";
 
         String opponent = "";
+        if (game.wager < 0) {
+            return PHASE_STAKE;
+        }
         if (!game.solo()) {
             UUID them = game.other(me);
             ServerPlayer other = playerOf(player, them);
