@@ -151,11 +151,7 @@ public class CollectionBookScreen extends Screen {
      * turn its cards over to look at it — a viewing mode, not an editing one:
      * while a spread is face-down nothing on it can be clicked.
      */
-    private boolean backsUp;
     /** When the turn started, so the cards flip in a wave rather than all at once. */
-    private long flipAt;
-    private static final long CARD_FLIP_MS = 300L;
-    private static final long CARD_FLIP_STAGGER = 45L;
 
     private int cardSpreads;
     private int spreadCount;
@@ -324,21 +320,21 @@ public class CollectionBookScreen extends Screen {
             chips.add(new Chip("f_" + f.name(), x, y, w, 12));
             x += w + 3;
         }
-        int statsW = font.width("Stats") + 8;
-        int statsX = panelX + panelW - 12 - statsW;
-        chips.add(new Chip("stats", statsX, y, statsW, 12));
-        int backsW = font.width(backsLabel()) + 8;
-        int backsX = statsX - backsW - 4;
-        chips.add(new Chip("backs", backsX, y, backsW, 12));
+        // The action chips hang off the RIGHT edge, right to left. They used to
+        // grow far enough left that Store ended up floating near the middle of
+        // the spread, over the spine, with a gap either side of it. Laying them
+        // out as one measured group and pushing the whole thing right keeps them
+        // together and keeps the centre of the book clear.
         String sortLabel = "Sort: " + sort.label;
-        int sortW = font.width(sortLabel) + 8;
-        int sortX = backsX - sortW - 4;
-        chips.add(new Chip("sort", sortX, y, sortW, 12));
-        int deckW = font.width("Deck") + 8;
-        int deckX = sortX - deckW - 4;
-        chips.add(new Chip("deck", deckX, y, deckW, 12));
-        int storeW = font.width("Store") + 8;
-        chips.add(new Chip("store", deckX - storeW - 4, y, storeW, 12));
+        String[] actions = {"Stats", sortLabel, "Deck", "Store"};
+        String[] keys = {"stats", "sort", "deck", "store"};
+        int right = panelX + panelW - 12;
+        for (int i = 0; i < actions.length; i++) {
+            int w = font.width(actions[i]) + 8;
+            right -= w;
+            chips.add(new Chip(keys[i], right, y, w, 12));
+            right -= 4;
+        }
     }
 
     private void rebuild() {
@@ -462,14 +458,6 @@ public class CollectionBookScreen extends Screen {
             hint = hoveredAward.title() + " — " + hoveredAward.description()
                     + "   ·   " + hoveredAward.rewardLabel();
             hintColor = 0xFFF3E2A7;
-        } else if (backsUp && section == Section.CARDS) {
-            // face-down, the footer does the naming — the back is the same on
-            // every card by design and a label printed on it would sit right
-            // across the wordmark it exists to show off
-            hint = hoveredCard != null
-                    ? hoveredCard.displayName()
-                    : "Face-down  ·  hover a card to name it  ·  F or click to turn back";
-            hintColor = hoveredCard != null ? 0xFFE3C071 : 0xFFAAAAAA;
         } else {
             hint = switch (section) {
                 case CARDS -> "Click a card to view it  ·  hover it to File or Take out";
@@ -561,46 +549,8 @@ public class CollectionBookScreen extends Screen {
             int cx = p[0], cy = p[1];
             g.fill(cx + 2, cy + 3, cx + cw + 4, cy + ch + 5, 0x44000000);
 
-            // the turn: each card squashes through its own edge, a beat after
-            // the one before it, so the page rolls over rather than blinking
-            float turn = flipAt == 0 ? 1f : Mth.clamp(
-                    (System.currentTimeMillis() - flipAt - s * CARD_FLIP_STAGGER)
-                            / (float) CARD_FLIP_MS, 0f, 1f);
-            // a card you do not own has no back to show — it stays a silhouette
-            boolean showBack = (turn >= 0.5f ? backsUp : !backsUp)
-                    && ClientCollection.has(card.id());
-            if (turn < 1f) {
-                var pose = g.pose();
-                pose.pushPose();
-                pose.translate(cx + cw / 2f, 0, 0);
-                pose.scale(Math.max(0.02f, Math.abs((float) Math.cos(turn * Math.PI))), 1f, 1f);
-                pose.translate(-(cx + cw / 2f), 0, 0);
-                try {
-                    if (showBack) {
-                        CardRenderer.renderBack(g, font, cx, cy, cardScale);
-                    } else {
-                        drawFrontSlot(g, card, cx, cy, cw, ch, false, overlayOpen, mouseX, mouseY);
-                    }
-                } finally {
-                    pose.popPose();
-                }
-                continue;
-            }
             boolean hovered = !overlayOpen
                     && mouseX >= cx && mouseX < cx + cw && mouseY >= cy && mouseY < cy + ch;
-            if (showBack) {
-                // the back is identical on every card by design — it is the
-                // deck's own livery, and seeing nine lined up is the point of
-                // turning the page over, so nothing is printed on top of it
-                CardRenderer.renderBack(g, font, cx, cy, cardScale);
-                // face-down, hovering only names the card — the footer says which
-                // it is, and nothing on the spread can be acted on
-                if (hovered) {
-                    g.renderOutline(cx - 2, cy - 2, cw + 4, ch + 4, 0xFFE3C071);
-                    hoveredCard = card;
-                }
-                continue;
-            }
             drawFrontSlot(g, card, cx, cy, cw, ch, hovered, overlayOpen, mouseX, mouseY);
         }
     }
@@ -1302,7 +1252,6 @@ public class CollectionBookScreen extends Screen {
         for (Chip chip : chips) {
             boolean active = switch (chip.key()) {
                 case "stats" -> statsOpen;
-                case "backs" -> backsUp;
                 case "sort", "deck", "store" -> false;
                 default -> chip.key().equals("f_" + filter.name());
             };
@@ -1312,7 +1261,6 @@ public class CollectionBookScreen extends Screen {
             g.renderOutline(chip.x(), chip.y(), chip.w(), chip.h(), CardRenderer.KRAFT_DARK);
             String label = switch (chip.key()) {
                 case "stats" -> "Stats";
-                case "backs" -> backsLabel();
                 case "sort" -> "Sort: " + sort.label;
                 case "deck" -> "Deck";
                 case "store" -> "Store";
@@ -1418,12 +1366,6 @@ public class CollectionBookScreen extends Screen {
     }
 
     private boolean clickCard(double mouseX, double mouseY) {
-        if (backsUp) {
-            // face-down, the spread is for looking at. Clicking a back turns the
-            // page back over rather than doing something to a card you can't see.
-            turnSpread();
-            return true;
-        }
         // the File / Take out pill sits on top of the card and wins the click
         if (cardAction != null && cardAction.hit(mouseX, mouseY)) {
             String key = cardAction.key();
@@ -1508,27 +1450,10 @@ public class CollectionBookScreen extends Screen {
         pickerMob = null;
     }
 
-    private String backsLabel() {
-        return backsUp ? "Fronts" : "Backs";
-    }
-
-    /** Turn the spread over. The chip relabels itself, so the row is re-laid out. */
-    private void turnSpread() {
-        backsUp = !backsUp;
-        flipAt = System.currentTimeMillis();
-        hoveredCard = null;
-        cardAction = null;
-        layoutChips();
-        if (minecraft != null) {
-            minecraft.getSoundManager().play(
-                    SimpleSoundInstance.forUI(SoundEvents.BOOK_PAGE_TURN, 1.2f));
-        }
-    }
 
     private void onChip(String key) {
         switch (key) {
             case "stats" -> statsOpen = true;
-            case "backs" -> { turnSpread(); return; }
             case "deck" -> { if (minecraft != null) minecraft.setScreen(new DeckBuilderScreen(this)); }
             case "store" -> PacketDistributor.sendToServer(StorageActionPayload.depositAll());
             case "sort" -> { sort = Sort.values()[(sort.ordinal() + 1) % Sort.values().length]; layoutChips(); rebuild(); }
@@ -1555,12 +1480,6 @@ public class CollectionBookScreen extends Screen {
         if (eggPicker != null && keyCode == 256) { eggPicker = null; return true; }
         if (statsOpen && keyCode == 256) { statsOpen = false; return true; }
         if (search.isFocused() && search.keyPressed(keyCode, scanCode, modifiers)) return true;
-        // not while typing: EditBox reports letters through charTyped, so a bare
-        // keyCode check here would eat the F out of a search for "fox"
-        if (keyCode == 70 && section() == Section.CARDS && !search.isFocused()) {
-            turnSpread();
-            return true;
-        }
         if (keyCode == 263 && spread > 0) { flip(-1); return true; }
         if (keyCode == 262 && spread < spreadCount - 1) { flip(1); return true; }
         return super.keyPressed(keyCode, scanCode, modifiers);
@@ -1574,8 +1493,6 @@ public class CollectionBookScreen extends Screen {
 
     private void flip(int direction) {
         spread += direction;
-        // a fresh page is settled, not caught mid-turn from the last one
-        flipAt = 0;
         layoutChips();
         clickSound();
     }

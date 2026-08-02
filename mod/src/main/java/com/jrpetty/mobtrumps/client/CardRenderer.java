@@ -117,7 +117,7 @@ public final class CardRenderer {
         pose.translate(x, y, 0);
         pose.scale(scale, scale, 1f);
 
-        drawFrame(g, Math.max(level, foil ? 1 : 0), edition);
+        drawFrame(g, Math.max(level, foil ? 1 : 0), edition, card.tier());
 
         // name, 1.5x, centred
         pose.pushPose();
@@ -230,7 +230,8 @@ public final class CardRenderer {
      * tiers add corner gems and a bright glint that laps the border.
      */
     private static void drawFrame(GuiGraphics g, int lvl,
-                                  com.jrpetty.mobtrumps.game.CardEdition edition) {
+                                  com.jrpetty.mobtrumps.game.CardEdition edition,
+                                  com.jrpetty.mobtrumps.game.Tier tier) {
         long t = ClientPrefs.foilSheen() ? System.currentTimeMillis() : 0L;
         lvl = Math.min(lvl, 3);
         // A Trophy takes the frame outright. It is the one print that cannot be
@@ -241,7 +242,15 @@ public final class CardRenderer {
             drawTrophyFrame(g, t);
             return;
         }
-        g.fill(-2, -2, CARD_W + 2, CARD_H + 2, EDGE_DARK);
+        // The tier owns the OUTER RING and the holo level owns the interior, so
+        // the two never fight for the same signal. A common and a legendary used
+        // to differ only by a small starred word at y=27, which at book scale is
+        // four pixels of text — indistinguishable. Two pixels of colour around
+        // the whole card reads at any size, right down to a fanned hand.
+        int band = tierBandColor(tier);
+        g.fill(-2, -2, CARD_W + 2, CARD_H + 2, band);
+        g.fill(-2, -2, CARD_W + 2, -1, lighten(band));
+        g.fill(-2, CARD_H + 1, CARD_W + 2, CARD_H + 2, 0xFF000000);
         switch (lvl) {
             case 0 -> g.fill(0, 0, CARD_W, CARD_H, BORDER_IVORY);
             case 1 -> g.fillGradient(0, 0, CARD_W, CARD_H, 0xFFF2F5FA, 0xFFC2CCDA);
@@ -260,6 +269,16 @@ public final class CardRenderer {
             default -> 0xFFFFFFFF;
         };
         g.renderOutline(4, 4, CARD_W - 8, CARD_H - 8, pin);
+
+        // the tier rule and its pips, in the clear strip above the name
+        int tc = tierBandColor(tier);
+        g.fill(7, 5, CARD_W - 7, 10, tc);
+        g.fill(7, 5, CARD_W - 7, 6, lighten(tc));
+        int pips = tier.ordinal() + 1;
+        for (int i = 0; i < pips; i++) {
+            int px = CARD_W - 12 - i * 7;
+            g.fill(px, 6, px + 4, 9, 0xFFFFFFFF);
+        }
         g.fill(6, 6, CARD_W - 6, CARD_H - 6, FACE);
 
         if (lvl >= 2) {
@@ -312,7 +331,9 @@ public final class CardRenderer {
         pose.translate(x, y, 0);
         pose.scale(scale, scale, 1f);
 
-        drawFrame(g, 0, com.jrpetty.mobtrumps.game.CardEdition.STANDARD);
+        // a card you have not got still shows its tier — knowing a missing slot
+        // is a legendary rather than a common is the point of the silhouette
+        drawFrame(g, 0, com.jrpetty.mobtrumps.game.CardEdition.STANDARD, card.tier());
 
         pose.pushPose();
         pose.translate(CARD_W / 2f, 11f, 0);
@@ -581,6 +602,21 @@ public final class CardRenderer {
 
     /** Chat colours glow on dark backgrounds but wash out on the cream card
      *  face, so the printed tier line uses darker ink versions of them. */
+    /**
+     * The tier's colour where it is used as a solid field rather than as ink on
+     * cream. {@link #tierPrintColor} is tuned for legibility as text on the
+     * card's face; these are a shade deeper so white pips sit on them cleanly.
+     */
+    public static int tierBandColor(com.jrpetty.mobtrumps.game.Tier tier) {
+        return switch (tier) {
+            case COMMON -> 0xFF5A5F66;
+            case UNCOMMON -> 0xFF2E7D32;
+            case RARE -> 0xFF15688C;
+            case EPIC -> 0xFF6E31A8;
+            case LEGENDARY -> 0xFF9A6B00;
+        };
+    }
+
     public static int tierPrintColor(MobCard card) {
         return switch (card.tier()) {
             case COMMON -> 0xFF6B6B6B;

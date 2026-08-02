@@ -66,6 +66,13 @@ public class BlackjackScreen extends Screen {
     private int announced;
 
     // solved each frame from the window
+    /**
+     * Largest a dealt card may be drawn. The old ceiling was 0.24, which is
+     * 41x57 pixels — small enough that the art was a smudge and the numbers
+     * were nothing at all, with the rest of the table sitting empty.
+     */
+    private static final float CARD_SCALE_MAX = 0.52f;
+
     private float cardScale;
     private int cardW;
     private int cardH;
@@ -105,14 +112,20 @@ public class BlackjackScreen extends Screen {
      */
     private int solveLayout(int cards, int half) {
         int stats = Stat.values().length;
-        for (int cols = 1; cols <= 3; cols++) {
-            for (int rh = 15; rh >= 12; rh--) {
-                for (boolean tight : new boolean[]{false, true}) {
-                    for (float scale = 0.24f; scale >= 0.10f; scale -= 0.01f) {
-                        int cw = Math.round(CardRenderer.CARD_W * scale);
-                        int ch = Math.round(CardRenderer.CARD_H * scale);
-                        int perRow = Math.max(1, (half + 4) / (cw + 4));
-                        int handRows = Math.max(1, (Math.max(1, cards) + perRow - 1) / perRow);
+        // SCALE IS THE OUTER LOOP, descending, so the biggest cards that can be
+        // made to fit win. It used to be the innermost loop under a one-column
+        // stat list, which meant the layout would rather shrink the cards than
+        // put the stat list in two columns — and the cap was 0.24, so a card
+        // could never exceed 41x57 however much empty table was going spare.
+        // On a 640x360 window that left half the screen bare above tiny cards.
+        for (float scale = CARD_SCALE_MAX; scale >= 0.10f; scale -= 0.01f) {
+            int cw = Math.round(CardRenderer.CARD_W * scale);
+            int ch = Math.round(CardRenderer.CARD_H * scale);
+            int perRow = Math.max(1, (half + 4) / (cw + 4));
+            int handRows = Math.max(1, (Math.max(1, cards) + perRow - 1) / perRow);
+            for (int cols = 1; cols <= 3; cols++) {
+                for (int rh = 15; rh >= 12; rh--) {
+                    for (boolean tight : new boolean[]{false, true}) {
                         int headH = tight ? 26 : 42;
                         int sRows = (stats + cols - 1) / cols;
                         int total = headH + 24 + 6 + handRows * (ch + CAPTION_H + 4)

@@ -40,14 +40,22 @@ public final class Recycler {
         };
     }
 
-    /** Fragments that guarantee a print of this tier. */
+    /**
+     * Fragments that guarantee a print of this tier.
+     *
+     * <p>Tripled from the original 30/45/70/110/180: a common cost about eight
+     * shredded duplicates, which made the press cheaper than hunting and the
+     * fragment economy too loose. Odds stay linear in the stake, so this one
+     * number is the whole price rise — expected cost per print triples at
+     * every stake with it.
+     */
     public static int maxStake(Tier tier) {
         return switch (tier) {
-            case COMMON -> 30;
-            case UNCOMMON -> 45;
-            case RARE -> 70;
-            case EPIC -> 110;
-            case LEGENDARY -> 180;
+            case COMMON -> 90;
+            case UNCOMMON -> 135;
+            case RARE -> 210;
+            case EPIC -> 330;
+            case LEGENDARY -> 540;
         };
     }
 

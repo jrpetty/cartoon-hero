@@ -72,11 +72,50 @@ public final class ScannerClient {
 
     // --- zoom while scoping ---
 
+    /** How far into the zoom we are, 0 = normal view, 1 = fully scoped. */
+    private static float zoom;
+    private static long lastFrameNanos;
+    /** Field of view at full scope. */
+    private static final float SCOPED_FOV = 0.4F;
+    /** Seconds to reach full zoom, and to come back out of it. */
+    private static final float ZOOM_IN_SECONDS = 0.28F;
+    private static final float ZOOM_OUT_SECONDS = 0.16F;
+
+    /** How far the readout has opened, 0..1 — the HUD rides the same curve. */
+    public static float scopeAmount() {
+        return zoom;
+    }
+
+    /**
+     * Ease the scope in and out instead of snapping to it.
+     *
+     * <p>This used to set the modifier to a constant the moment the item went
+     * up, so the world jumped to 0.4 in one frame and back again on release —
+     * which reads as a glitch rather than a lens. The zoom is now a value that
+     * travels, driven off wall time so it is the same speed whatever the frame
+     * rate, and eased so it settles rather than arriving.
+     *
+     * <p>The modifier is only claimed while actually zoomed. Setting it every
+     * frame regardless would flatten sprinting, item-use and effect FOV for
+     * anyone simply carrying a scanner.
+     */
     @SubscribeEvent
     public static void onFov(ComputeFovModifierEvent event) {
-        if (isUsingScanner(event.getPlayer())) {
-            event.setNewFovModifier(0.4F);
+        long now = System.nanoTime();
+        float dt = lastFrameNanos == 0L ? 0f : (now - lastFrameNanos) / 1_000_000_000f;
+        lastFrameNanos = now;
+        dt = Mth.clamp(dt, 0f, 0.25f); // a stall must not teleport the lens
+
+        boolean scoping = isUsingScanner(event.getPlayer());
+        float rate = dt / (scoping ? ZOOM_IN_SECONDS : ZOOM_OUT_SECONDS);
+        zoom = Mth.clamp(scoping ? zoom + rate : zoom - rate, 0f, 1f);
+        if (zoom <= 0.001f) {
+            zoom = 0f;
+            return; // hand the FOV back to the game entirely
         }
+        // smoothstep, so the lens slows as it arrives instead of stopping dead
+        float e = zoom * zoom * (3f - 2f * zoom);
+        event.setNewFovModifier(Mth.lerp(e, 1.0F, SCOPED_FOV));
     }
 
     // --- the card projected above the targeted mob ---
@@ -131,7 +170,10 @@ public final class ScannerClient {
 
     public static void renderHud(GuiGraphics g, DeltaTracker delta) {
         Minecraft mc = Minecraft.getInstance();
-        if (!isUsingScanner(mc.player)) {
+        // drawn while the lens is still travelling, in or out, so the readout
+        // arrives with the zoom rather than popping in on top of it
+        float open = scopeAmount();
+        if (open <= 0.001f) {
             return;
         }
         LivingEntity mob = target(mc);
@@ -139,6 +181,26 @@ public final class ScannerClient {
         Font font = mc.font;
         int sw = g.guiWidth();
         int sh = g.guiHeight();
+
+        // The reticle belongs to the LENS, not to the target, so it is drawn
+        // before anything can bail out — it has to be there while you are still
+        // hunting for something to point at, which is most of the time you are
+        // holding the thing up.
+        float ease = open * open * (3f - 2f * open);
+        int cx = sw / 2;
+        int cy = sh / 2;
+        int reach = Math.round(Mth.lerp(ease, 46f, 13f));
+        int arm = 6;
+        int tick = mob == null ? 0x70FFFFFF : 0xC0FFFFFF;
+        for (int[] d : new int[][]{{-1, 0}, {1, 0}, {0, -1}, {0, 1}}) {
+            int ax = cx + d[0] * reach;
+            int ay = cy + d[1] * reach;
+            g.fill(ax - (d[0] == 0 ? arm : 1), ay - (d[1] == 0 ? arm : 1),
+                    ax + (d[0] == 0 ? arm : 1), ay + (d[1] == 0 ? arm : 1), tick);
+        }
+        if (open < 0.995f) {
+            return; // still travelling: the reticle leads, the readout follows
+        }
 
         if (card == null) {
             String hint = "SCANNING — no card for this target";

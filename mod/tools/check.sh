@@ -6,7 +6,15 @@
 # tells you the mod compiles, this tells you the RULES still hold.
 #
 #   1. syntax over the whole source tree (filtered for the missing Minecraft
-#      classes, which are expected)
+#      classes, which are expected).
+#
+#      KNOWN LIMIT — this cannot check calls in the client package. javac stops
+#      at the unresolvable Minecraft imports and never performs method
+#      resolution for those files, so a call with the wrong ARITY or wrong
+#      argument types to your own method reports nothing at all. Verified by
+#      deliberately breaking a drawFrame call: this script said "clean".
+#      CI is the only real compiler for anything under client/. Do not read a
+#      pass here as "the client code compiles" — it does not mean that.
 #   2. enum switches: any without a default must list every constant. This is
 #      the class of bug that broke the v1.49.0 build -- javac cannot catch it
 #      offline because it gives up before flow analysis

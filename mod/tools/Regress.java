@@ -47,8 +47,11 @@ public class Regress {
         }
         check(flat, "expected cost flat at every stake; yield mint>=ruined>=1");
         check(ordered, "max stake rises with tier");
-        check(Recycler.percent(Tier.COMMON, 30) == 100 && Recycler.percent(Tier.COMMON, 15) == 50,
-                "common: 30 guarantees, 15 is a coin flip");
+        // the property, not a frozen number: the max always guarantees and half
+        // of it is always a coin flip, whatever the price is set to
+        int cap = Recycler.maxStake(Tier.COMMON);
+        check(Recycler.percent(Tier.COMMON, cap) == 100 && Recycler.percent(Tier.COMMON, cap / 2) == 50,
+                "common: " + cap + " guarantees, " + (cap / 2) + " is a coin flip");
 
         System.out.println("stats");
         check(Stat.RARITY.lowerWins, "rarity is lower-wins");
