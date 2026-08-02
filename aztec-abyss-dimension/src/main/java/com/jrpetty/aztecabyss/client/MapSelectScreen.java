@@ -56,6 +56,16 @@ public final class MapSelectScreen extends Screen {
         return CARD_HEAD + lines * LINE_H + CARD_FOOT;
     }
 
+    /**
+     * How much of the bottom of the screen the mode buttons own.
+     *
+     * <p>Three stacked buttons plus a margin. The card stack is centred in what is
+     * left rather than in the whole screen, because centring on the screen while
+     * the buttons grew downward is how the bottom card ends up underneath the
+     * Maze button on a short window.
+     */
+    private static final int BUTTON_BAND = 96;
+
     /** Top edge of card {@code index}, stacking the variable heights above it. */
     private int cardY(int index) {
         ArenaMap[] maps = ArenaMap.values();
@@ -63,7 +73,10 @@ public final class MapSelectScreen extends Screen {
         for (ArenaMap m : maps) {
             total += cardHeight(m) + GAP;
         }
-        int y = this.height / 2 - (total - GAP) / 2;
+        // Centred between the header and the button band, not on the screen.
+        int top = 52;
+        int bottom = this.height - BUTTON_BAND;
+        int y = top + (bottom - top - (total - GAP)) / 2;
         for (int i = 0; i < index; i++) {
             y += cardHeight(maps[i]) + GAP;
         }
@@ -86,6 +99,16 @@ public final class MapSelectScreen extends Screen {
                             onClose();
                         })
                 .bounds(this.width / 2 - 110, this.height - 68, 220, 20)
+                .build());
+        // Creator is set apart further still - it is the only thing on this screen
+        // that is not a fight. Listed rather than left to be discovered, because a
+        // mode you reach only by knowing a command to type is not really offered.
+        addRenderableWidget(Button.builder(
+                        Component.literal("§bMap Creator §8— build your own"), b -> {
+                            PacketDistributor.sendToServer(new MapSelectPayload(MapSelectPayload.CREATOR));
+                            onClose();
+                        })
+                .bounds(this.width / 2 - 110, this.height - 92, 220, 20)
                 .build());
     }
 
@@ -126,8 +149,9 @@ public final class MapSelectScreen extends Screen {
 
         g.drawCenteredString(this.font, Component.literal("CHOOSE YOUR HUNT").withStyle(s -> s.withBold(true)),
                 cx, 26, 0xFFFFD24A);
-        // Honest now that the Outpost runs endless rounds on its own economy.
-        g.drawCenteredString(this.font, Component.literal("Three battlefields. Three different games."),
+        // Honest about what is actually on the menu: three arenas, the maze, and
+        // the tools to add a fourth arena yourself.
+        g.drawCenteredString(this.font, Component.literal("Three battlefields, a maze — or build your own."),
                 cx, 40, 0xFF888888);
 
         ArenaMap[] maps = ArenaMap.values();

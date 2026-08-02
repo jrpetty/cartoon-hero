@@ -25,6 +25,14 @@ public record MapSelectPayload(int mapId) implements CustomPacketPayload {
      */
     public static final int MAZE = 900;
 
+    /**
+     * Sentinel meaning "I am not here to fight - put me in the Map Creator".
+     * Sits beside {@link #MAZE} in the reserved range for the same reason: these
+     * are modes, not entries in the arena list, and adding an arena must never
+     * renumber them.
+     */
+    public static final int CREATOR = 901;
+
     public static final Type<MapSelectPayload> TYPE =
             new Type<>(ResourceLocation.fromNamespaceAndPath(AztecAbyssConstants.MOD_ID, "map_select"));
 

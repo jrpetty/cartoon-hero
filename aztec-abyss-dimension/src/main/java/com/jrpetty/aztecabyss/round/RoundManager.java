@@ -742,6 +742,14 @@ public final class RoundManager {
         // the hunters instead of loitering until someone wanders close. Only wave
         // mobs pass through here, so nothing outside the arena is affected.
         setAttribute(mob, Attributes.FOLLOW_RANGE, AztecAbyssConstants.ARENA_RADIUS * 2.5);
+        // A wave mob never calls for help. On Hard, a damaged zombie summons
+        // another one beside itself - so a fight inside the pyramid bred more
+        // zombies inside the pyramid, arriving in the middle of a room the squad
+        // had already cleared rather than through a gate they were watching.
+        // Worse, a reinforcement is not one of ours: untagged, so it counted
+        // toward no round, survived the end-of-round sweep, and was still there
+        // the next round. Everything that comes at you comes through a gate.
+        setAttribute(mob, Attributes.SPAWN_REINFORCEMENTS_CHANCE, 0.0);
         AttributeInstance armor = mob.getAttribute(Attributes.ARMOR);
         if (armor != null) {
             armor.setBaseValue(Math.min(20.0, round * 0.6));

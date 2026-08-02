@@ -625,28 +625,17 @@ public final class EngineEvents {
     /** {@code /arena workshop} - into the empty lit void, in creative. */
     private static int workshop(CommandSourceStack source) {
         ServerPlayer player = source.getPlayer();
-        if (player == null || source.getServer() == null) {
+        if (player == null) {
             return 0;
         }
-        ServerLevel shop = source.getServer().getLevel(AztecAbyssConstants.WORKSHOP_LEVEL_KEY);
-        if (shop == null) {
-            source.sendFailure(Component.literal("The Workshop dimension is not loaded."));
+        // Shares one implementation with the Map Creator mode on the picker, so
+        // the command and the menu can never drift into arriving somewhere
+        // different or on a pad only one of them builds.
+        String error = MapCreator.enter(player, false);
+        if (error != null) {
+            source.sendFailure(Component.literal(error));
             return 0;
         }
-        // A platform to stand on, because the Workshop is genuinely empty and the
-        // alternative is arriving in a void and falling out of your own map.
-        net.minecraft.core.BlockPos pad = new net.minecraft.core.BlockPos(0, 64, 0);
-        for (int x = -8; x <= 8; x++) {
-            for (int z = -8; z <= 8; z++) {
-                shop.setBlock(pad.offset(x, -1, z),
-                        net.minecraft.world.level.block.Blocks.SMOOTH_STONE.defaultBlockState(), 2);
-            }
-        }
-        player.teleportTo(shop, pad.getX() + 0.5, pad.getY(), pad.getZ() + 0.5,
-                java.util.Set.of(), 0.0F, 0.0F);
-        player.setGameMode(net.minecraft.world.level.GameType.CREATIVE);
-        player.displayClientMessage(Component.literal(
-                "§6The Workshop. §7Build here, then §f/arena wand§7 to mark out the map."), false);
         return 1;
     }
 

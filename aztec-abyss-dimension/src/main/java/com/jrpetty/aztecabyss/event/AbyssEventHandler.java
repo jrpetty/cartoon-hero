@@ -47,6 +47,44 @@ public final class AbyssEventHandler {
         ArenaGenerator.ambientTick(level);
     }
 
+    /**
+     * Nothing gets into the Abyss during a run except through a gate.
+     *
+     * <p>The horde is supposed to arrive from the four gates and walk in, which is
+     * what makes holding a position mean anything. Anything that materialises
+     * inside the temple instead - next to you, in a room you cleared, behind the
+     * line you were watching - breaks that contract, and the player has no way to
+     * tell it apart from a gate spawn that pathed round behind them.
+     *
+     * <p>Natural spawning is already off: both biomes ship empty spawner lists. The
+     * leak was zombie reinforcements. Every wave mob is a zombie by default, and on
+     * Hard difficulty a damaged zombie summons help beside itself - so fighting
+     * inside the pyramid bred more zombies inside the pyramid. Those reinforcements
+     * carried none of our tags, so they never counted toward the round, never died
+     * to the end-of-round sweep, and survived into the next round.
+     *
+     * <p>{@link #onWaveMobSpawn} stops them being summoned. This is the belt to that
+     * brace, and it catches anything else that might try - a mod adding spawners, a
+     * structure override, a future mechanic nobody has written yet. Scoped to a live
+     * run so building and testing outside one is untouched.
+     */
+    @SubscribeEvent
+    public void onEntityJoin(net.neoforged.neoforge.event.entity.EntityJoinLevelEvent event) {
+        if (!inAbyss(event.getLevel()) || !RoundManager.isRunLocked()) {
+            return;
+        }
+        if (!(event.getEntity() instanceof net.minecraft.world.entity.monster.Monster monster)) {
+            return;
+        }
+        var data = monster.getPersistentData();
+        if (data.getBoolean("aztecabyss_wave_mob")
+                || data.getBoolean("aztecabyss_boss")
+                || data.getBoolean("aztecabyss_engine_mob")) {
+            return;
+        }
+        event.setCanceled(true);
+    }
+
     @SubscribeEvent
     public void onBlockBreak(BlockEvent.BreakEvent event) {
         if (!(event.getLevel() instanceof ServerLevel level) || !inAbyss(level)) {

@@ -54,6 +54,16 @@ public final class ModNetworking {
                             com.jrpetty.aztecabyss.maze.MazeEvents.sendToMaze(sp);
                             return;
                         }
+                        // Creator is a mode, not a hunt - nothing is recorded as a
+                        // choice, because there is no portal trip to record it for.
+                        if (payload.mapId() == MapSelectPayload.CREATOR) {
+                            String error = com.jrpetty.aztecabyss.engine.MapCreator.enter(sp, true);
+                            if (error != null) {
+                                sp.displayClientMessage(net.minecraft.network.chat.Component.literal(
+                                        "§c" + error), false);
+                            }
+                            return;
+                        }
                         int id = Math.max(0, Math.min(payload.mapId(),
                                 com.jrpetty.aztecabyss.worldgen.ArenaMap.values().length - 1));
                         sp.getPersistentData().putInt("aztecabyss_chosen_map", id);
