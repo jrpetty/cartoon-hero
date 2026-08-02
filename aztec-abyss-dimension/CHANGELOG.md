@@ -13,6 +13,23 @@ behaviour that was already there · **docs**
 
 ## Unreleased
 
+### Marker Blocks replace signs entirely — dealers included
+
+- **change** `/arena marker dealer` now gives a Marker Block. Every marker kind is
+  a block; nothing is a sign any more, so a finished map has nothing on its walls
+  explaining itself to the engine.
+- **feat** Interactive kinds (`dealer`, `box`, `perk`, `upgrade`, `loot`, `door`,
+  `trap`, `objective`) keep a clickable outline in survival while staying
+  invisible. The rest stay completely intangible — a `[Horde]` marker should be as
+  absent to a player as the air it looks like.
+- **feat** Look-at prompts. An invisible shop has to announce itself or it is a
+  secret, not a shop: face one within five blocks and the action bar shows what it
+  sells and what it costs, greyed out if you cannot afford it.
+- **change** `DealerSign` parses a plain list of lines, so a sign front, a sign
+  back and a Marker Block all feed one implementation.
+- **compat** Existing maps built on signs keep working — both surfaces still feed
+  the same parser.
+
 ### The portal screen was unreadable
 
 - **fix** Every string on the picker was drawn with `dropShadow = false`.

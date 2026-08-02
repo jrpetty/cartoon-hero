@@ -40,6 +40,24 @@ public final class EngineEvents {
         if (event.isCanceled()) {
             return; // something upstream already claimed this click
         }
+        // A Marker Block is the same machine with the sign taken off the wall.
+        if (level.getBlockEntity(event.getPos())
+                instanceof com.jrpetty.aztecabyss.block.MarkerBlockEntity be) {
+            if (player.isShiftKeyDown() || BuildTools.isWand(player.getMainHandItem())) {
+                return;
+            }
+            if (DealerSign.buyFrom(level, player, be)) {
+                event.setCanceled(true);
+                event.setCancellationResult(net.minecraft.world.InteractionResult.SUCCESS);
+                return;
+            }
+            Marker blockMarker = Marker.parse(be, level.getBlockState(event.getPos()));
+            if (blockMarker != null && Machines.use(level, player, blockMarker)) {
+                event.setCanceled(true);
+                event.setCancellationResult(net.minecraft.world.InteractionResult.SUCCESS);
+            }
+            return;
+        }
         if (!(level.getBlockEntity(event.getPos()) instanceof SignBlockEntity sign)) {
             return;
         }
@@ -745,18 +763,15 @@ public final class EngineEvents {
         // up to and read, so making it invisible would hide the shop rather than
         // tidy the map. Everything else is an instruction to the engine and has no
         // business being visible at all.
-        net.minecraft.world.item.ItemStack stack = clean.equals("dealer")
-                ? BuildTools.markerSign(clean, BuildTools.hintFor(clean))
-                : BuildTools.markerBlock(clean, BuildTools.hintFor(clean));
+        net.minecraft.world.item.ItemStack stack =
+                BuildTools.markerBlock(clean, BuildTools.hintFor(clean));
         if (!player.getInventory().add(stack)) {
             player.drop(stack, false);
         }
         source.sendSuccess(() -> Component.literal(
                 "§6[" + clean + "] §7marker — place it, that is the whole step."), false);
-        if (!clean.equals("dealer")) {
-            source.sendSuccess(() -> Component.literal(
-                    "§8Invisible in survival. §f/arena line <n> <text>§8 to write past a sign's limits."), false);
-        }
+        source.sendSuccess(() -> Component.literal(
+                "§8Invisible in survival. §f/arena line <n> <text>§8 to write past a sign's limits."), false);
         return 1;
     }
 

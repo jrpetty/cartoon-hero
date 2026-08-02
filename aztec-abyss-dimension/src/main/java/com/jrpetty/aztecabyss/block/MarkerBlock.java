@@ -138,17 +138,32 @@ public class MarkerBlock extends BaseEntityBlock {
     }
 
     /**
-     * Solid to an author, absent to a player.
+     * Kinds a player has to be able to click during a run.
      *
-     * <p>A marker has to be selectable or it cannot be edited once placed -
-     * {@code /arena look} and {@code /arena set} both work on whatever you are
-     * pointing at. It equally has to be unselectable in survival, or a map is full
-     * of invisible things that swallow a click meant for the wall behind them,
-     * which is worse than the signs it replaced.
+     * <p>This is the line between an instruction and a machine. A {@code [Horde]}
+     * marker is a note to the engine and should be as absent to a player as the
+     * air it looks like; a {@code [Dealer]} is a shop they have to be able to buy
+     * from. Both are invisible, and only one of them is there.
      *
-     * <p>So the outline exists only for someone in creative. Everyone else
-     * ray-traces straight through it as though it were air, which from where they
-     * are standing it is.
+     * <p>Without this split an invisible dealer was unusable - the outline existed
+     * only in creative, so in survival the click went through it into the wall
+     * behind. Giving <em>every</em> marker an outline instead would fill a map
+     * with invisible things swallowing clicks meant for the scenery, which is
+     * worse than the signs this replaced.
+     */
+    private static final java.util.Set<String> INTERACTIVE = java.util.Set.of(
+            "dealer", "box", "perk", "upgrade", "loot", "door", "trap", "objective");
+
+    public static boolean isInteractive(String kind) {
+        return INTERACTIVE.contains(kind.toLowerCase(java.util.Locale.ROOT));
+    }
+
+    /**
+     * Solid to an author; solid to a player only if there is something to buy.
+     *
+     * <p>A marker must be selectable in creative or it cannot be edited once
+     * placed - {@code /arena look} and {@code /arena set} both work on whatever you
+     * are pointing at.
      */
     @Override
     protected VoxelShape getShape(BlockState state, BlockGetter level, BlockPos pos,
@@ -156,6 +171,10 @@ public class MarkerBlock extends BaseEntityBlock {
         if (context instanceof net.minecraft.world.phys.shapes.EntityCollisionContext ec
                 && ec.getEntity() instanceof net.minecraft.world.entity.player.Player p
                 && p.isCreative()) {
+            return Shapes.block();
+        }
+        if (level.getBlockEntity(pos) instanceof MarkerBlockEntity be
+                && isInteractive(be.kind())) {
             return Shapes.block();
         }
         return Shapes.empty();

@@ -1,5 +1,6 @@
 package com.jrpetty.aztecabyss.engine;
 
+import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
@@ -105,11 +106,36 @@ public final class DealerSign {
         if (!isDealer(sign)) {
             return null;
         }
-        Item item = itemFrom(line(sign, 1));
+        java.util.List<String> lines = new java.util.ArrayList<>();
+        for (int i = 0; i < LINES; i++) {
+            lines.add(line(sign, i));
+        }
+        return parseLines(lines);
+    }
+
+    /** A Marker Block reading {@code [Dealer]} is the same shop, invisibly. */
+    public static Offer parse(com.jrpetty.aztecabyss.block.MarkerBlockEntity block) {
+        if (!block.kind().equalsIgnoreCase("dealer")) {
+            return null;
+        }
+        return parseLines(block.lines());
+    }
+
+    /**
+     * The one real parser. Everything else hands it a list of lines.
+     *
+     * <p>Line 0 is the header, 1 the item, 2 the price, and 3 onward free-form
+     * options - identical whether those lines came off the front of a sign, the
+     * back of one, or a Marker Block with eight of them.
+     */
+    private static Offer parseLines(java.util.List<String> src) {
+        java.util.function.IntFunction<String> line = i ->
+                i >= 0 && i < src.size() ? src.get(i).trim() : "";
+        Item item = itemFrom(line.apply(1));
         if (item == null) {
             return null;
         }
-        String[] priceParts = line(sign, 2).split("\\s+");
+        String[] priceParts = line.apply(2).split("\\s+");
         int price;
         try {
             price = Integer.parseInt(priceParts[0].replace(",", ""));
@@ -130,8 +156,8 @@ public final class DealerSign {
         int enchant = 0;
         int fromRound = 0;
         int limit = 0;
-        for (int i = 3; i < LINES; i++) {
-            String raw = line(sign, i).toLowerCase(java.util.Locale.ROOT);
+        for (int i = 3; i < Math.max(LINES, src.size()); i++) {
+            String raw = line.apply(i).toLowerCase(java.util.Locale.ROOT);
             if (raw.isEmpty()) {
                 continue;
             }
@@ -230,11 +256,38 @@ public final class DealerSign {
      * @return true if the click was a dealer interaction at all - whether or not
      *         it succeeded - so the caller knows to swallow the click.
      */
+    /** Buying from an invisible dealer. Same shop, no sign on the wall. */
+    public static boolean buyFrom(ServerLevel level, ServerPlayer player,
+                                  com.jrpetty.aztecabyss.block.MarkerBlockEntity block) {
+        Offer offer = parse(block);
+        return offer != null && complete(level, player, offer, block.getBlockPos());
+    }
+
     public static boolean buy(ServerLevel level, ServerPlayer player, SignBlockEntity sign) {
         Offer offer = parse(sign);
         if (offer == null) {
             return false;
         }
+        return complete(level, player, offer, sign.getBlockPos());
+    }
+
+    /**
+     * A one-line summary of what a dealer is selling, for the look-at prompt.
+     *
+     * <p>An invisible shop has to announce itself or it is not a shop, it is a
+     * secret. Vanilla wall-buys solve this with a floating label; the same idea,
+     * on the action bar, costs no rendering and no new packet.
+     */
+    public static String prompt(Offer offer, boolean affordable) {
+        String label = offer.stack().getCount() > 1
+                ? offer.stack().getCount() + "x " + offer.stack().getHoverName().getString()
+                : offer.stack().getHoverName().getString();
+        return (affordable ? "§e" : "§7") + label
+                + " §8— " + (affordable ? "§f" : "§c") + offer.currency().format(offer.price())
+                + (affordable ? " §8(right-click)" : "");
+    }
+
+    private static boolean complete(ServerLevel level, ServerPlayer player, Offer offer, BlockPos where) {
         String label = offer.stack().getCount() > 1
                 ? offer.stack().getCount() + "x " + offer.stack().getHoverName().getString()
                 : offer.stack().getHoverName().getString();
@@ -246,15 +299,15 @@ public final class DealerSign {
         if (offer.fromRound() > 0 && arena != null && arena.round() < offer.fromRound()) {
             player.displayClientMessage(Component.literal(
                     "§7" + label + " §8— §7sealed until round §f" + offer.fromRound()), true);
-            level.playSound(null, sign.getBlockPos(), SoundEvents.FIRE_EXTINGUISH,
+            level.playSound(null, where, SoundEvents.FIRE_EXTINGUISH,
                     SoundSource.BLOCKS, 0.7F, 0.8F);
             return true;
         }
         if (offer.limit() > 0 && arena != null
-                && !arena.canBuyFrom(sign.getBlockPos(), offer.limit())) {
+                && !arena.canBuyFrom(where, offer.limit())) {
             player.displayClientMessage(Component.literal(
                     "§7" + label + " §8— §7sold out. §8(" + offer.limit() + " a run)"), true);
-            level.playSound(null, sign.getBlockPos(), SoundEvents.FIRE_EXTINGUISH,
+            level.playSound(null, where, SoundEvents.FIRE_EXTINGUISH,
                     SoundSource.BLOCKS, 0.7F, 0.8F);
             return true;
         }
@@ -265,7 +318,7 @@ public final class DealerSign {
                             + offer.currency().format(offer.price())
                             + " §7— you have "
                             + offer.currency().format(offer.currency().balance(player))), true);
-            level.playSound(null, sign.getBlockPos(), SoundEvents.FIRE_EXTINGUISH,
+            level.playSound(null, where, SoundEvents.FIRE_EXTINGUISH,
                     SoundSource.BLOCKS, 0.7F, 1.0F);
             return true;
         }
@@ -285,7 +338,7 @@ public final class DealerSign {
             }
         }
         if (offer.limit() > 0 && arena != null) {
-            arena.recordBuy(sign.getBlockPos());
+            arena.recordBuy(where);
         }
         boolean serviced = service(player, offer);
         if (!serviced && !player.getInventory().add(given)) {
@@ -294,7 +347,7 @@ public final class DealerSign {
         if (serviced) {
             player.displayClientMessage(Component.literal(
                     "§a✔ Serviced §f" + label + " §7— " + offer.currency().format(offer.price())), true);
-            level.playSound(null, sign.getBlockPos(), SoundEvents.BEACON_ACTIVATE,
+            level.playSound(null, where, SoundEvents.BEACON_ACTIVATE,
                     SoundSource.BLOCKS, 0.6F, 1.1F);
             return true;
         }
@@ -302,7 +355,7 @@ public final class DealerSign {
                 "§a✔ " + label + " §7— " + offer.currency().format(offer.price())
                         + " §8(" + offer.currency().format(offer.currency().balance(player))
                         + " §8left)"), true);
-        level.playSound(null, sign.getBlockPos(), SoundEvents.BEACON_ACTIVATE,
+        level.playSound(null, where, SoundEvents.BEACON_ACTIVATE,
                 SoundSource.BLOCKS, 0.7F, 1.4F);
         return true;
     }

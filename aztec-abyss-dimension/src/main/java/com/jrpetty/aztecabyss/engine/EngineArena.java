@@ -442,6 +442,7 @@ public final class EngineArena {
         refreshBars(present);
         tickDowned(present);
         tickObjective(present);
+        tickPrompts(present);
         tickTraps();
         tickTeleports(present);
         if (rules.powerupChance > 0 && (special == null || !special.noPowerups())) {
@@ -866,6 +867,66 @@ public final class EngineArena {
                 // "grunt" and anything unrecognised: an ordinary one.
             }
         }
+    }
+
+    /**
+     * Tells a player what the invisible thing they are looking at is selling.
+     *
+     * <p>Marker Blocks made a finished map look finished, and took the shop front
+     * with them - a dealer you cannot see is a dealer nobody finds. Vanilla's
+     * wall-buys answer this with a floating label; this is the same idea on the
+     * action bar, which costs no renderer and no new packet.
+     *
+     * <p>Four times a second, only for players in the run, and only within five
+     * blocks - close enough that you are clearly looking <em>at</em> something
+     * rather than past it.
+     */
+    private void tickPrompts(List<ServerPlayer> present) {
+        if (level.getGameTime() % 5L != 0L) {
+            return;
+        }
+        for (ServerPlayer p : present) {
+            var hit = p.pick(5.0, 0.0F, false);
+            if (!(hit instanceof net.minecraft.world.phys.BlockHitResult bhr)) {
+                continue;
+            }
+            if (!(level.getBlockEntity(bhr.getBlockPos())
+                    instanceof com.jrpetty.aztecabyss.block.MarkerBlockEntity be)) {
+                continue;
+            }
+            String kind = be.kind().toLowerCase(java.util.Locale.ROOT);
+            if (kind.equals("dealer")) {
+                DealerSign.Offer offer = DealerSign.parse(be);
+                if (offer != null) {
+                    p.displayClientMessage(Component.literal(DealerSign.prompt(offer,
+                            offer.currency().balance(p) >= offer.price())), true);
+                }
+                continue;
+            }
+            String label = promptFor(kind, be);
+            if (!label.isEmpty()) {
+                p.displayClientMessage(Component.literal(label), true);
+            }
+        }
+    }
+
+    /** What the other buyable machines say when you look at them. */
+    private String promptFor(String kind, com.jrpetty.aztecabyss.block.MarkerBlockEntity be) {
+        Marker m = Marker.parse(be, level.getBlockState(be.getBlockPos()));
+        if (m == null) {
+            return "";
+        }
+        Currency c = Currency.byId(m.arg("currency", null));
+        return switch (kind) {
+            case "box" -> "§6The Box §8— §f" + c.format(m.intArg("price", 950)) + " §8(right-click)";
+            case "perk" -> "§dPerk §8— §f" + c.format(m.intArg("price", 2500)) + " §8(right-click)";
+            case "upgrade" -> "§bUpgrade §8— §f" + c.format(m.intArg("price", 5000)) + " §8(right-click)";
+            case "door" -> "§eOpen §f" + m.arg("area", m.arg("value", "the way on"))
+                    + " §8— §f" + c.format(m.intArg("cost", 1500)) + " §8(right-click)";
+            case "trap" -> "§cArm the trap §8— §f" + c.format(m.intArg("cost", 1000)) + " §8(right-click)";
+            case "loot" -> "§aSupplies §8(right-click)";
+            default -> "";
+        };
     }
 
     /** Drives the map's objective, and reacts when it resolves. */
