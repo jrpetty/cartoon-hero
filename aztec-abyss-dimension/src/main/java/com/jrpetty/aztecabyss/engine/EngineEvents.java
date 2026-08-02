@@ -278,6 +278,55 @@ public final class EngineEvents {
                     ctx.getSource().sendSuccess(() -> Component.literal("§a✔ You are in."), false);
                     return 1;
                 }));
+
+        // Its own root and deliberately not op-gated, for the same reason as
+        // /arenajoin: the whole point of a password is that it lets in somebody
+        // who is not an operator. A command only ops can run cannot do that.
+        event.getDispatcher().register(Commands.literal("creator")
+                .executes(ctx -> enterCreator(ctx.getSource()))
+                .then(Commands.literal("lock")
+                        .requires(s -> s.hasPermission(2))
+                        .then(Commands.argument("who", net.minecraft.commands.arguments.EntityArgument.player())
+                                .executes(ctx -> {
+                                    ServerPlayer who = net.minecraft.commands.arguments.EntityArgument
+                                            .getPlayer(ctx, "who");
+                                    MapCreator.lock(who);
+                                    ctx.getSource().sendSuccess(() -> Component.literal(
+                                            "§6" + who.getGameProfile().getName()
+                                                    + " §7will need the password again."), true);
+                                    return 1;
+                                })))
+                .then(Commands.argument("password",
+                                com.mojang.brigadier.arguments.StringArgumentType.greedyString())
+                        .executes(ctx -> {
+                            ServerPlayer p = ctx.getSource().getPlayer();
+                            if (p == null) {
+                                return 0;
+                            }
+                            String given = com.mojang.brigadier.arguments.StringArgumentType
+                                    .getString(ctx, "password");
+                            if (!MapCreator.unlock(p, given)) {
+                                ctx.getSource().sendFailure(Component.literal("That is not the word."));
+                                return 0;
+                            }
+                            ctx.getSource().sendSuccess(() -> Component.literal(
+                                    "§a✔ Map Creator is open to you. §7You will not need to type it again."), false);
+                            return enterCreator(ctx.getSource());
+                        })));
+    }
+
+    /** {@code /creator} - into the Workshop, if this player is allowed. */
+    private static int enterCreator(CommandSourceStack source) {
+        ServerPlayer player = source.getPlayer();
+        if (player == null) {
+            return 0;
+        }
+        String error = MapCreator.enter(player, true);
+        if (error != null) {
+            source.sendFailure(Component.literal(error));
+            return 0;
+        }
+        return 1;
     }
 
     /**

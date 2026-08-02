@@ -104,7 +104,7 @@ public final class MapSelectScreen extends Screen {
         // that is not a fight. Listed rather than left to be discovered, because a
         // mode you reach only by knowing a command to type is not really offered.
         addRenderableWidget(Button.builder(
-                        Component.literal("§bMap Creator §8— build your own"), b -> {
+                        Component.literal("§bMap Creator §8— build your own §7(password)"), b -> {
                             PacketDistributor.sendToServer(new MapSelectPayload(MapSelectPayload.CREATOR));
                             onClose();
                         })

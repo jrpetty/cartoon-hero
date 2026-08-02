@@ -30,6 +30,12 @@ import net.minecraft.world.level.GameType;
  * not a game mode, it is a way to take a server apart - so the button is visible
  * to everyone and refuses politely for anyone who should not have it, which is
  * better than hiding it and leaving them wondering.
+ *
+ * <p>The password is the way in for everyone else. Operators skip it, because
+ * they can already do all of this and more; anybody else types it once and is
+ * remembered from then on. That is what makes Creator shareable without making
+ * it open: the server owner hands the word to the people they want building, and
+ * to nobody else.
  */
 public final class MapCreator {
 
@@ -62,7 +68,46 @@ public final class MapCreator {
             "spawn", "horde", "pen", "dealer", "door", "extract"
     };
 
+    /** Set once a player has typed the password correctly. */
+    private static final String UNLOCKED_TAG = "aztecabyss_creator_unlocked";
+
     private MapCreator() {
+    }
+
+    /** Whether this player may enter Creator at all. */
+    public static boolean mayEnter(ServerPlayer player) {
+        return player.hasPermissions(2)
+                || player.getPersistentData().getBoolean(UNLOCKED_TAG);
+    }
+
+    /**
+     * Checks a password and remembers the answer.
+     *
+     * <p>Remembered on the player rather than asked for every time. A gate you
+     * retype on every visit stops being a gate and starts being a chore people
+     * work around - and the thing it is protecting is a build tool, not a bank.
+     *
+     * <p>Compared with {@code MessageDigest.isEqual} rather than {@code equals}
+     * so the comparison takes the same time whatever the guess. That is barely
+     * worth doing against a Minecraft chat prompt and it costs nothing, which is
+     * the right trade for any password comparison.
+     *
+     * @return true if the word was right
+     */
+    public static boolean unlock(ServerPlayer player, String attempt) {
+        String expected = com.jrpetty.aztecabyss.config.AbyssConfig.CREATOR_PASSWORD.get();
+        boolean ok = java.security.MessageDigest.isEqual(
+                attempt.getBytes(java.nio.charset.StandardCharsets.UTF_8),
+                expected.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        if (ok) {
+            player.getPersistentData().putBoolean(UNLOCKED_TAG, true);
+        }
+        return ok;
+    }
+
+    /** Forgets a player's unlock, for a server owner who has changed the word. */
+    public static void lock(ServerPlayer player) {
+        player.getPersistentData().putBoolean(UNLOCKED_TAG, false);
     }
 
     /**
@@ -78,9 +123,9 @@ public final class MapCreator {
         if (player.getServer() == null) {
             return "No server.";
         }
-        if (!player.hasPermissions(2)) {
-            return "Map Creator needs operator permission — it hands out creative mode "
-                    + "and a tool that rewrites the world.";
+        if (!mayEnter(player)) {
+            return "Map Creator is locked. Type §f/creator <password>§r to open it — "
+                    + "ask whoever runs this server for the word.";
         }
         ServerLevel shop = player.getServer().getLevel(AztecAbyssConstants.WORKSHOP_LEVEL_KEY);
         if (shop == null) {

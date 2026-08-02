@@ -116,6 +116,12 @@ public final class AbyssConfig {
                 .defineInRange("grieverSpeed", 0.33, 0.05, 2.0);
         GRIEVER_DAMAGE = b.comment("Griever attack damage.")
                 .defineInRange("grieverAttackDamage", 12.0, 0.0, 100.0);
+        CREATOR_PASSWORD = b.comment(
+                        "Password for Map Creator. Anyone who types it with /creator <password> is",
+                        "remembered and can enter from then on; operators never need it. Change it",
+                        "here and everyone who already knew the old one keeps their access until you",
+                        "run /creator lock <player>.")
+                .define("creatorPassword", "Techbuyer123");
         MAZE_DEATH_LOCKOUT_SECONDS = b.comment("Seconds you are locked out of the maze after dying in it. 0 lets you walk straight back in.")
                 .defineInRange("mazeDeathLockoutSeconds", 60, 0, 3600);
         MAZE_SHOW_BRIEFING = b.comment("Show newcomers the one-time maze rules message.")
@@ -139,6 +145,7 @@ public final class AbyssConfig {
     public static final ModConfigSpec.DoubleValue GRIEVER_HEALTH;
     public static final ModConfigSpec.DoubleValue GRIEVER_SPEED;
     public static final ModConfigSpec.DoubleValue GRIEVER_DAMAGE;
+    public static final ModConfigSpec.ConfigValue<String> CREATOR_PASSWORD;
     public static final ModConfigSpec.IntValue MAZE_DEATH_LOCKOUT_SECONDS;
     public static final ModConfigSpec.BooleanValue MAZE_SHOW_BRIEFING;
 

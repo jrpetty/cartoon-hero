@@ -19,12 +19,23 @@ The engine does not care where the blocks are, only what shape they make.
 But there is a dimension built for it:
 
 ```
-/arena workshop
+/creator <password>        the first time
+/creator                   every time after
 ```
 
-An empty void, permanently daylight, no weather, no mobs, no hunger. You arrive
-in creative. Nothing wanders in and ruins a build, and nothing is dark unless
-you made it dark.
+Map Creator is on the map picker too, under the Maze. It is password-gated
+because entering it means creative mode and a tool that rewrites regions of the
+world — on a server that is not something to hand to whoever clicks a button.
+Type the password once and you are remembered from then on. Operators never need
+it, and can run `/arena workshop` directly.
+
+The password lives in the mod config as `creatorPassword`. An operator can make
+a player type it again with `/creator lock <player>`.
+
+You arrive in a flat world — bedrock, stone, dirt, grass from `y=0`, so ground is
+`y=4` — permanently daylight, no weather, no mobs, no hunger, and you are in
+creative. Nothing wanders in and ruins a build, and nothing is dark unless you
+made it dark.
 
 To come back out, `/arena stop` if a run is going, then any normal means of
 travel — the workshop is a real dimension, not a menu.
@@ -599,6 +610,8 @@ Common ones:
 ## Command reference
 
 Everything under `/arena` needs op. `/arenajoin` and bare `/wallet` do not.
+
+**Getting in** — `/creator [password]` · `/creator lock <player>` *(op)*
 
 **Region** — `wand` · `scan [radius]` · `validate [radius]`
 
