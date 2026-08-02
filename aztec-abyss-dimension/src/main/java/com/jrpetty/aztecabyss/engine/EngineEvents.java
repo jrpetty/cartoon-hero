@@ -815,6 +815,41 @@ public final class EngineEvents {
         }
     }
 
+    /**
+     * Turns a killing blow on a participant into going down.
+     *
+     * <p>Intercepted before the damage lands rather than on death, because once a
+     * player is dead their inventory has dropped, their position has moved and
+     * putting them back is a reconstruction. Cancelling the blow means nothing has
+     * happened yet and there is nothing to undo.
+     *
+     * <p>A player already on the floor takes no further damage at all. Bleeding out
+     * is a clock, not a health bar, and a stray hit shortening it would make going
+     * near the horde to help pointless.
+     */
+    @SubscribeEvent
+    public static void onPlayerDown(
+            net.neoforged.neoforge.event.entity.living.LivingIncomingDamageEvent event) {
+        if (!(event.getEntity() instanceof ServerPlayer player)) {
+            return;
+        }
+        EngineArena arena = EngineArena.active();
+        if (arena == null || !EngineArena.isRunning()) {
+            return;
+        }
+        if (arena.isDowned(player.getUUID())) {
+            event.setCanceled(true);
+            return;
+        }
+        if (event.getAmount() < player.getHealth()) {
+            return;
+        }
+        if (arena.canGoDown(player)) {
+            event.setCanceled(true);
+            arena.goDown(player);
+        }
+    }
+
     /** Pays out for kills made during an engine run. */
     @SubscribeEvent
     public static void onMobKilled(net.neoforged.neoforge.event.entity.living.LivingDeathEvent event) {

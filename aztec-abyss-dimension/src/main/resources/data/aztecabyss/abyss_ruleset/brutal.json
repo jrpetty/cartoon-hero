@@ -29,6 +29,33 @@
   "powerups": {
     "one_in": 45
   },
+  "downed": {
+    "enabled": true,
+    "bleedout_seconds": 30,
+    "revive_seconds": 5,
+    "revive_range": 3.0,
+    "solo": false
+  },
+  "special_rounds": [
+    {
+      "every": 5,
+      "role": "runner",
+      "title": "§cTHEY ARE FAST",
+      "subtitle": "Nothing slow this round"
+    },
+    {
+      "every": 10,
+      "role": "brute",
+      "title": "§4HEAVY",
+      "subtitle": "Nothing here dies quickly"
+    },
+    {
+      "every": 7,
+      "no_powerups": true,
+      "title": "§8NO HELP",
+      "subtitle": "Nothing is coming for you"
+    }
+  ],
   "economy": {
     "enabled": true,
     "currency": "points",
@@ -46,7 +73,8 @@
         "max_health": 24,
         "movement_speed": 0.26,
         "attack_damage": 4
-      }
+      },
+      "role": "runner"
     },
     {
       "id": "minecraft:husk",
@@ -60,7 +88,8 @@
       "equipment": {
         "head": "minecraft:iron_helmet",
         "mainhand": "minecraft:iron_shovel"
-      }
+      },
+      "role": "brute"
     },
     {
       "id": "minecraft:drowned",
@@ -70,7 +99,8 @@
         "max_health": 60,
         "movement_speed": 0.25,
         "attack_damage": 8
-      }
+      },
+      "role": "brute"
     },
     {
       "id": "minecraft:zombified_piglin",
@@ -83,7 +113,8 @@
       },
       "equipment": {
         "mainhand": "minecraft:golden_axe"
-      }
+      },
+      "role": "brute"
     }
   ],
   "script": [

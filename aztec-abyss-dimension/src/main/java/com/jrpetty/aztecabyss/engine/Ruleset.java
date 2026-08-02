@@ -63,12 +63,52 @@ public final class Ruleset {
     /** One kill in this many leaves a drop. Zero switches power-ups off. */
     public final int powerupChance;
 
+    /**
+     * Going down instead of dying, and being picked back up.
+     *
+     * <p>Off by default because it changes what a run <em>is</em>, and a ruleset
+     * that never mentions it should play the way it always did.
+     */
+    public final boolean downedEnabled;
+    public final int bleedoutSeconds;
+    public final int reviveSeconds;
+    public final double reviveRange;
+    /** Whether a lone player can go down. Off means solo death stays final. */
+    public final boolean downedSolo;
+
     public final boolean directorEnabled;
     public final float directorTarget;
     public final float directorMinPace;
     public final float directorMaxPace;
 
     public final List<MobEntry> mobs;
+
+    /**
+     * Rounds that break the pattern.
+     *
+     * <p>Scaling alone makes round thirty into round twenty with bigger numbers.
+     * A round that is <em>all runners</em>, or all brutes, or has no drops in it,
+     * is remembered - and it costs nothing but a filter over the table the author
+     * already wrote.
+     */
+    public final List<SpecialRound> specials;
+
+    /** One recurring variant round. */
+    public record SpecialRound(int every, String role, String mobId,
+                               boolean noPowerups, String title, String subtitle) {
+
+        public boolean appliesTo(int round) {
+            return every > 0 && round > 0 && round % every == 0;
+        }
+
+        /** Whether a mob entry is allowed to turn up during this round. */
+        public boolean allows(MobEntry entry) {
+            if (!role.isEmpty() && !role.equalsIgnoreCase(entry.role())) {
+                return false;
+            }
+            return mobId.isEmpty() || mobId.equalsIgnoreCase(entry.entityId());
+        }
+    }
 
     /**
      * Keys the parser did not recognise.
@@ -114,6 +154,12 @@ public final class Ruleset {
         this.pointsHeadshot = b.pointsHeadshot;
         this.stripInventory = b.stripInventory;
         this.powerupChance = b.powerupChance;
+        this.downedEnabled = b.downedEnabled;
+        this.bleedoutSeconds = b.bleedoutSeconds;
+        this.reviveSeconds = b.reviveSeconds;
+        this.reviveRange = b.reviveRange;
+        this.downedSolo = b.downedSolo;
+        this.specials = List.copyOf(b.specials);
         this.directorEnabled = b.directorEnabled;
         this.directorTarget = b.directorTarget;
         this.directorMinPace = b.directorMinPace;
@@ -159,6 +205,12 @@ public final class Ruleset {
         int pointsHeadshot = 25;
         boolean stripInventory = false;
         int powerupChance = 0;
+        boolean downedEnabled = false;
+        int bleedoutSeconds = 30;
+        int reviveSeconds = 5;
+        double reviveRange = 3.0;
+        boolean downedSolo = false;
+        List<SpecialRound> specials = new ArrayList<>();
         boolean directorEnabled = false;
         float directorTarget = 0.55f;
         float directorMinPace = 0.5f;
@@ -184,7 +236,10 @@ public final class Ruleset {
         b.id = id;
 
         checkKeys(root, "", b.warnings,
-                "rounds", "economy", "mobs", "currencies", "director", "script", "powerups");
+                "rounds", "economy", "mobs", "currencies", "director", "script", "powerups",
+                "downed", "special_rounds");
+        checkKeys(obj(root, "downed"), "downed", b.warnings,
+                "enabled", "bleedout_seconds", "revive_seconds", "revive_range", "solo");
         checkKeys(obj(root, "powerups"), "powerups", b.warnings, "one_in");
 
         JsonObject rounds = obj(root, "rounds");
@@ -236,6 +291,34 @@ public final class Ruleset {
             b.pointsKill = clampInt(intOf(economy, "kill", b.pointsKill), 0, 100000);
             b.pointsHeadshot = clampInt(intOf(economy, "headshot", b.pointsHeadshot), 0, 100000);
             b.stripInventory = bool(economy, "strip_inventory_on_entry", b.stripInventory);
+        }
+
+        JsonObject downed = obj(root, "downed");
+        if (downed != null) {
+            b.downedEnabled = bool(downed, "enabled", false);
+            b.bleedoutSeconds = clampInt(intOf(downed, "bleedout_seconds", b.bleedoutSeconds), 3, 300);
+            b.reviveSeconds = clampInt(intOf(downed, "revive_seconds", b.reviveSeconds), 1, 60);
+            b.reviveRange = clamp(dbl(downed, "revive_range", b.reviveRange), 1.0, 8.0);
+            b.downedSolo = bool(downed, "solo", false);
+        }
+
+        if (root.has("special_rounds") && root.get("special_rounds").isJsonArray()) {
+            for (var el : root.getAsJsonArray("special_rounds")) {
+                if (!el.isJsonObject()) {
+                    continue;
+                }
+                JsonObject sr = el.getAsJsonObject();
+                int every = clampInt(intOf(sr, "every", 0), 0, 1000);
+                if (every <= 0) {
+                    continue;
+                }
+                b.specials.add(new SpecialRound(every,
+                        str(sr, "role", ""),
+                        str(sr, "mob", ""),
+                        bool(sr, "no_powerups", false),
+                        str(sr, "title", ""),
+                        str(sr, "subtitle", "")));
+            }
         }
 
         JsonObject powerups = obj(root, "powerups");
@@ -306,6 +389,16 @@ public final class Ruleset {
 
     public double damageMultiplier(int round) {
         return Math.min(1.0 + round * damagePerRound, damageCap);
+    }
+
+    /** The special round in force at this round, or null. */
+    public SpecialRound specialFor(int round) {
+        for (SpecialRound sr : specials) {
+            if (sr.appliesTo(round)) {
+                return sr;
+            }
+        }
+        return null;
     }
 
     /** The gap between rounds, shrinking as a run goes on. */

@@ -140,6 +140,22 @@ public final class EngineArena {
      */
     private final java.util.LinkedHashMap<BlockPos, BlockState> restore = new java.util.LinkedHashMap<>();
 
+    /**
+     * Players on the floor: uuid to ticks of bleed-out left.
+     *
+     * <p>The difference between four people playing together and four people
+     * playing solo beside each other. A death nobody can do anything about is
+     * just an exit; a teammate face-down across the room with a clock on them is
+     * a decision, and it is the only moment in the genre where the right move is
+     * to walk towards the horde.
+     */
+    private final java.util.Map<UUID, Integer> downed = new java.util.HashMap<>();
+    /** How far through a revive each downed player is. */
+    private final java.util.Map<UUID, Integer> reviving = new java.util.HashMap<>();
+
+    /** The variant round in force, or null on an ordinary one. */
+    private Ruleset.SpecialRound special;
+
     /** Game time of the last thing that counted as progress. */
     private long lastProgress = 0L;
     /** How long a round may make no progress before the stragglers are fetched. */
@@ -356,9 +372,10 @@ public final class EngineArena {
         }
 
         refreshBars(present);
+        tickDowned(present);
         tickTraps();
         tickTeleports(present);
-        if (rules.powerupChance > 0) {
+        if (rules.powerupChance > 0 && (special == null || !special.noPowerups())) {
             EnginePowerUps.tick(level, present, bounds);
         }
         alive.removeIf(m -> !m.isAlive());
@@ -499,6 +516,7 @@ public final class EngineArena {
         leftToSpawn = rules.countFor(n);
         breather = 0;
         lootTaken.clear();
+        special = rules.specialFor(n);
         lastProgress = level.getGameTime();
         director.onRoundStart();
         runSpawners();
@@ -513,6 +531,15 @@ public final class EngineArena {
             p.displayClientMessage(Component.literal("§c§lROUND " + n), true);
             level.playSound(null, p.blockPosition(), SoundEvents.WARDEN_ROAR,
                     SoundSource.HOSTILE, 0.5F, 1.4F);
+            if (special != null && !special.title().isEmpty()) {
+                p.connection.send(new net.minecraft.network.protocol.game.ClientboundSetTitleTextPacket(
+                        Component.literal(special.title())));
+                if (!special.subtitle().isEmpty()) {
+                    p.connection.send(
+                            new net.minecraft.network.protocol.game.ClientboundSetSubtitleTextPacket(
+                                    Component.literal(special.subtitle())));
+                }
+            }
         }
     }
 
@@ -771,6 +798,152 @@ public final class EngineArena {
         }
     }
 
+    // ------------------------------------------------------------------
+    // Down and revive
+    // ------------------------------------------------------------------
+
+    public boolean isDowned(UUID id) {
+        return downed.containsKey(id);
+    }
+
+    /**
+     * Whether this player should go down rather than die.
+     *
+     * <p>Requires somebody able to come for them. A lone player going down is not
+     * a rescue with a clock on it, it is a death with a wait attached - so unless
+     * a ruleset asks for it, solo death stays immediate and final.
+     */
+    public boolean canGoDown(ServerPlayer player) {
+        if (!rules.downedEnabled || downed.containsKey(player.getUUID())
+                || fallen.contains(player.getUUID())) {
+            return false;
+        }
+        if (rules.downedSolo) {
+            return true;
+        }
+        for (ServerPlayer other : livingPlayers()) {
+            if (other != player) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** Puts a player on the floor with a clock running. */
+    public void goDown(ServerPlayer player) {
+        downed.put(player.getUUID(), rules.bleedoutSeconds * 20);
+        reviving.put(player.getUUID(), 0);
+        player.setHealth(1.0F);
+        // Immobilised and unmistakable: a downed teammate has to be findable
+        // across a dark room or nobody can choose to go for them.
+        player.addEffect(new net.minecraft.world.effect.MobEffectInstance(
+                net.minecraft.world.effect.MobEffects.MOVEMENT_SLOWDOWN,
+                rules.bleedoutSeconds * 20, 5, false, false));
+        player.addEffect(new net.minecraft.world.effect.MobEffectInstance(
+                net.minecraft.world.effect.MobEffects.WEAKNESS,
+                rules.bleedoutSeconds * 20, 9, false, false));
+        player.setGlowingTag(true);
+        for (ServerPlayer p : players()) {
+            p.displayClientMessage(Component.literal(
+                    "§c" + player.getGameProfile().getName() + " is down."), false);
+        }
+        level.playSound(null, player.blockPosition(), SoundEvents.WARDEN_ANGRY,
+                SoundSource.PLAYERS, 1.0F, 0.6F);
+    }
+
+    /** Bleed-out, and teammates picking people up. */
+    private void tickDowned(List<ServerPlayer> present) {
+        if (downed.isEmpty()) {
+            return;
+        }
+        java.util.List<UUID> lost = new ArrayList<>();
+        for (java.util.Map.Entry<UUID, Integer> e : downed.entrySet()) {
+            ServerPlayer victim = level.getServer().getPlayerList().getPlayer(e.getKey());
+            if (victim == null) {
+                lost.add(e.getKey());
+                continue;
+            }
+            ServerPlayer helper = reviverFor(victim, present);
+            if (helper != null) {
+                int progress = reviving.merge(victim.getUUID(), 1, Integer::sum);
+                int need = rules.reviveSeconds * 20;
+                if (progress >= need) {
+                    lift(victim, helper);
+                    lost.add(e.getKey());
+                    continue;
+                }
+                if (progress % 10 == 0) {
+                    String pct = (progress * 100 / need) + "%";
+                    helper.displayClientMessage(Component.literal(
+                            "§eReviving " + victim.getGameProfile().getName() + " — §f" + pct), true);
+                    victim.displayClientMessage(Component.literal(
+                            "§aBeing picked up — §f" + pct), true);
+                }
+                continue;
+            }
+            // Nobody is helping, so the clock runs. Progress is kept rather than
+            // reset, because a rescuer driven off for a second and coming back
+            // should not have to start again.
+            int left = e.getValue() - 1;
+            e.setValue(left);
+            if (left <= 0) {
+                lost.add(e.getKey());
+                bleedOut(victim);
+            } else if (left % 20 == 0) {
+                victim.displayClientMessage(Component.literal(
+                        "§cBleeding out — §f" + (left / 20) + "s"), true);
+            }
+        }
+        for (UUID id : lost) {
+            downed.remove(id);
+            reviving.remove(id);
+        }
+    }
+
+    /** A living teammate close enough and still enough to be helping. */
+    private ServerPlayer reviverFor(ServerPlayer victim, List<ServerPlayer> present) {
+        double range = rules.reviveRange;
+        for (ServerPlayer p : present) {
+            if (p == victim || downed.containsKey(p.getUUID()) || fallen.contains(p.getUUID())) {
+                continue;
+            }
+            if (p.distanceToSqr(victim) <= range * range) {
+                return p;
+            }
+        }
+        return null;
+    }
+
+    private void lift(ServerPlayer victim, ServerPlayer helper) {
+        victim.setGlowingTag(false);
+        victim.removeEffect(net.minecraft.world.effect.MobEffects.MOVEMENT_SLOWDOWN);
+        victim.removeEffect(net.minecraft.world.effect.MobEffects.WEAKNESS);
+        victim.setHealth(Math.max(1.0F, victim.getMaxHealth() * 0.5F));
+        for (ServerPlayer p : players()) {
+            p.displayClientMessage(Component.literal(
+                    "§a" + helper.getGameProfile().getName() + " picked "
+                            + victim.getGameProfile().getName() + " up."), false);
+        }
+        level.playSound(null, victim.blockPosition(), SoundEvents.BEACON_ACTIVATE,
+                SoundSource.PLAYERS, 1.0F, 1.4F);
+    }
+
+    private void bleedOut(ServerPlayer victim) {
+        victim.setGlowingTag(false);
+        fallen.add(victim.getUUID());
+        bar.removePlayer(victim);
+        barred.remove(victim.getUUID());
+        victim.displayClientMessage(Component.literal(
+                "§4§lYou bled out."), false);
+        for (ServerPlayer p : players()) {
+            if (p != victim) {
+                p.displayClientMessage(Component.literal(
+                        "§4" + victim.getGameProfile().getName() + " did not make it."), false);
+            }
+        }
+        victim.hurt(level.damageSources().genericKill(), Float.MAX_VALUE);
+    }
+
     /** Kills everything currently in the wave. Used by the Purge drop. */
     public void purge() {
         for (Mob m : alive) {
@@ -1012,16 +1185,24 @@ public final class EngineArena {
         }
         int total = 0;
         for (Ruleset.MobEntry m : rules.mobs) {
-            if (m.fromRound() <= round) {
+            if (eligible(m)) {
                 total += m.weight();
             }
         }
+        // A special round that filters the table down to nothing would otherwise
+        // stall the round forever, so an impossible filter is simply ignored.
         if (total <= 0) {
+            special = null;
+            for (Ruleset.MobEntry m : rules.mobs) {
+                if (m.fromRound() <= round) {
+                    return m;
+                }
+            }
             return rules.mobs.get(0);
         }
         int roll = rng.nextInt(total);
         for (Ruleset.MobEntry m : rules.mobs) {
-            if (m.fromRound() > round) {
+            if (!eligible(m)) {
                 continue;
             }
             roll -= m.weight();
@@ -1030,6 +1211,11 @@ public final class EngineArena {
             }
         }
         return rules.mobs.get(0);
+    }
+
+    /** Unlocked at this round, and allowed by any special round in force. */
+    private boolean eligible(Ruleset.MobEntry m) {
+        return m.fromRound() <= round && (special == null || special.allows(m));
     }
 
     private void equip(Mob mob, Ruleset.MobEntry entry) {
@@ -1089,6 +1275,7 @@ public final class EngineArena {
         List<ServerPlayer> out = new ArrayList<>();
         for (ServerPlayer p : players()) {
             if (!fallen.contains(p.getUUID())
+                    && !downed.containsKey(p.getUUID())
                     && p.level().dimension().equals(level.dimension())
                     && !p.isDeadOrDying()) {
                 out.add(p);
