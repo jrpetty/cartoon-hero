@@ -51,6 +51,8 @@ public final class Objective {
     private float health;
     private boolean complete;
     private boolean failed;
+    /** Counts ticks between bites, so damage is a rate per second rather than per tick. */
+    private int gnaw;
 
     public Objective(Marker marker) {
         this.marker = marker;
@@ -115,8 +117,20 @@ public final class Objective {
         };
     }
 
-    /** The horde chews on it whenever something is stood next to it. */
+    /**
+     * The horde chews on it whenever something is stood next to it.
+     *
+     * <p>Once a second, not once a tick. Per-tick damage reads fine in isolation
+     * and is catastrophic in practice: ten mobs at a quarter each is fifty health
+     * a second, so the 600 the author asked for lasts twelve seconds and every
+     * defend objective in every map is unwinnable. The rate an author is thinking
+     * in when they write {@code hp=600} is per second, so that is the rate.
+     */
     private boolean tickDefend(ServerLevel level) {
+        if (++gnaw < 20) {
+            return false;
+        }
+        gnaw = 0;
         double radius = Math.max(2, marker.intArg("radius", 4));
         var box = new net.minecraft.world.phys.AABB(marker.pos()).inflate(radius);
         int biting = 0;

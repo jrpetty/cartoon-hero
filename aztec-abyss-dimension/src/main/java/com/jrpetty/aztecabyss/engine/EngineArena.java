@@ -913,6 +913,12 @@ public final class EngineArena {
             return;
         }
         java.util.List<UUID> lost = new ArrayList<>();
+        // Killing has to happen after the map is cleared, not during. The damage
+        // interception that keeps a downed player alive reads this same map, so a
+        // killing blow struck while the victim is still in it gets cancelled by
+        // the system that put them there - and they stand back up at one health,
+        // marked dead, unable to be revived and unable to die.
+        java.util.List<ServerPlayer> finish = new ArrayList<>();
         for (java.util.Map.Entry<UUID, Integer> e : downed.entrySet()) {
             ServerPlayer victim = level.getServer().getPlayerList().getPlayer(e.getKey());
             if (victim == null) {
@@ -945,6 +951,7 @@ public final class EngineArena {
             if (left <= 0) {
                 lost.add(e.getKey());
                 bleedOut(victim);
+                finish.add(victim);
             } else if (left % 20 == 0) {
                 victim.displayClientMessage(Component.literal(
                         "§cBleeding out — §f" + (left / 20) + "s"), true);
@@ -953,6 +960,9 @@ public final class EngineArena {
         for (UUID id : lost) {
             downed.remove(id);
             reviving.remove(id);
+        }
+        for (ServerPlayer victim : finish) {
+            victim.hurt(level.damageSources().genericKill(), Float.MAX_VALUE);
         }
     }
 
@@ -984,6 +994,11 @@ public final class EngineArena {
                 SoundSource.PLAYERS, 1.0F, 1.4F);
     }
 
+    /**
+     * Announces a bleed-out and marks the victim down.
+     *
+     * <p>Deliberately does not deal the killing blow - see {@link #tickDowned}.
+     */
     private void bleedOut(ServerPlayer victim) {
         victim.setGlowingTag(false);
         fallen.add(victim.getUUID());
@@ -997,7 +1012,6 @@ public final class EngineArena {
                         "§4" + victim.getGameProfile().getName() + " did not make it."), false);
             }
         }
-        victim.hurt(level.damageSources().genericKill(), Float.MAX_VALUE);
     }
 
     /** Kills everything currently in the wave. Used by the Purge drop. */
