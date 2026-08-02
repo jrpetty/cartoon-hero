@@ -119,14 +119,49 @@ public final class BluffManager {
             case BluffActionPayload.PASS -> pass(player);
             case BluffActionPayload.SET_SEATS -> setSeats(player, value);
             case BluffActionPayload.SET_STAKE -> setStake(player, value);
-            case BluffActionPayload.LEAVE -> {
-                TABLES.remove(player.getUUID());
-                send(player);
-            }
+            case BluffActionPayload.LEAVE -> leave(player);
+            case BluffActionPayload.FORFEIT -> forfeit(player);
             default -> {
                 // an action this build does not know; ignore rather than trust it
             }
         }
+    }
+
+    /**
+     * Close the screen without ending the game.
+     *
+     * <p>The stake is taken when the cards are dealt, so removing the table
+     * here — which is what this used to do — meant pressing Escape burned the
+     * wager and left nothing behind, silently. An unfinished hand is kept
+     * instead and picked up where it was left the next time the player sits
+     * down. Only a finished one is cleared away.
+     */
+    private static void leave(ServerPlayer player) {
+        Table table = TABLES.get(player.getUUID());
+        if (table != null && table.game.done()) {
+            TABLES.remove(player.getUUID());
+        } else if (table != null) {
+            player.sendSystemMessage(Component.literal(
+                            "Your hand is still on the table — sit back down to finish it.")
+                    .withStyle(ChatFormatting.GRAY));
+        }
+        send(player);
+    }
+
+    /** Walk away and eat the wager, so nobody is ever stuck in a hand. */
+    private static void forfeit(ServerPlayer player) {
+        Table table = TABLES.get(player.getUUID());
+        if (table == null) {
+            return;
+        }
+        if (!table.game.done()) {
+            StatsTracker.bump(player, "bluff_losses");
+            player.sendSystemMessage(Component.literal("You folded. "
+                            + table.wagered + " fragments lost.")
+                    .withStyle(ChatFormatting.RED));
+        }
+        TABLES.remove(player.getUUID());
+        send(player);
     }
 
     /** Changing the table only takes effect on the next deal. */
@@ -147,8 +182,8 @@ public final class BluffManager {
     }
 
     private static void newGame(ServerPlayer player) {
-        if (isPlaying(player)) {
-            return; // finish the hand you are in
+        if (isPlaying(player) || !BlockReach.canReach(player)) {
+            return; // finish the hand you are in — or you have walked off
         }
         int stake = stakeOf(player);
         if (!RecyclerManager.takeFragments(player, stake)) {
@@ -162,12 +197,14 @@ public final class BluffManager {
         sound(player, SoundEvents.BOOK_PAGE_TURN, 1.3F);
         // whoever leads, let the computer seats act until it is the player's move
         runComputerSeats(player, table);
+        finishIfOver(player, table);
         send(player);
     }
 
     private static void play(ServerPlayer player, List<Integer> picks) {
         Table table = TABLES.get(player.getUUID());
-        if (table == null || table.game.done() || table.game.turn() != table.mySeat) {
+        if (table == null || table.game.done() || table.game.turn() != table.mySeat
+                || !BlockReach.canReach(player)) {
             return;
         }
         if (picks == null || picks.isEmpty() || picks.size() > Bluff.MAX_PLAY) {
@@ -186,7 +223,8 @@ public final class BluffManager {
 
     private static void challenge(ServerPlayer player) {
         Table table = TABLES.get(player.getUUID());
-        if (table == null || table.game.done() || table.game.turn() != table.mySeat) {
+        if (table == null || table.game.done() || table.game.turn() != table.mySeat
+                || !BlockReach.canReach(player)) {
             return;
         }
         if (!table.game.challenge(table.mySeat)) {
@@ -204,7 +242,8 @@ public final class BluffManager {
 
     private static void pass(ServerPlayer player) {
         Table table = TABLES.get(player.getUUID());
-        if (table == null || table.game.done() || table.game.turn() != table.mySeat) {
+        if (table == null || table.game.done() || table.game.turn() != table.mySeat
+                || !BlockReach.canReach(player)) {
             return;
         }
         if (!table.game.passOnExit(table.mySeat)) {
@@ -357,8 +396,13 @@ public final class BluffManager {
                 new BluffSyncPayload(phase, hand, nums, names, log, reveal));
     }
 
-    /** Drop a leaving player's table so it is not held for a session that is over. */
-    public static void forget(ServerPlayer player) {
-        TABLES.remove(player.getUUID());
+    /**
+     * Whether the player has an unfinished hand waiting. The table menu uses
+     * this to say "resume" rather than "deal", so a kept game is visible rather
+     * than a surprise.
+     */
+    public static boolean hasUnfinished(ServerPlayer player) {
+        Table table = TABLES.get(player.getUUID());
+        return table != null && !table.game.done();
     }
 }

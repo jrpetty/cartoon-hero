@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -294,6 +295,88 @@ class BluffTest {
             all.addAll(g.hand(s));
         }
         assertEquals(all.size(), all.stream().distinct().count());
+    }
+
+    /**
+     * Drive whole games the way the server does — real AI on every seat, both
+     * moves offered at every turn — and assert what a player would notice being
+     * broken. This covers the paths the hand-written tests above cannot reach on
+     * their own: the pending-exit branch, a challenge landing on a seat's last
+     * card, and the state a finished table is left in.
+     */
+    @Test
+    void wholeGamesDrivenByTheRealPolicyHoldTheirInvariants() {
+        for (int seats = Bluff.MIN_SEATS; seats <= Bluff.MAX_SEATS; seats++) {
+            int dealt = seats * Bluff.handSizeFor(seats);
+            for (long seed = 0; seed < 120; seed++) {
+                Random r = new Random(seed);
+                Bluff g = new Bluff(seats, new Random(seed));
+                BluffAI[] ai = new BluffAI[seats];
+                for (int s = 0; s < seats; s++) {
+                    ai[s] = new BluffAI(g);
+                }
+                int guard = 0;
+                while (!g.done() && guard++ < Bluff.MAX_MOVES * 3) {
+                    int s = g.turn();
+                    assertTrue(g.handSize(s) > 0 || g.pendingOut() == s,
+                            "a seat with no cards was asked to move");
+                    int held = 0;
+                    for (int q = 0; q < seats; q++) {
+                        held += g.handSize(q);
+                    }
+                    assertEquals(dealt, held + g.pileSize() + g.burntCount(),
+                            "cards went missing at seat " + s);
+
+                    if (g.pendingOut() >= 0) {
+                        assertFalse(g.play(s, List.of(0)), "played over a pending exit");
+                        int accused = g.lastSeat();
+                        if (g.canChallenge() && r.nextBoolean()) {
+                            assertTrue(g.challenge(s));
+                            Bluff.Reveal rev = g.lastReveal();
+                            assertNotNull(rev);
+                            if (!rev.wasLying() && g.done()) {
+                                assertEquals(accused, g.winner(),
+                                        "an honest last card must win");
+                            }
+                            for (BluffAI b : ai) {
+                                b.newRound(g);
+                            }
+                        } else {
+                            assertTrue(g.passOnExit(s));
+                        }
+                        continue;
+                    }
+                    if (g.canChallenge() && ai[s].shouldChallenge(g, s)) {
+                        assertTrue(g.challenge(s));
+                        Bluff.Reveal rev = g.lastReveal();
+                        assertNotNull(rev);
+                        assertTrue(rev.cards().size() >= 1
+                                && rev.cards().size() <= Bluff.MAX_PLAY);
+                        assertTrue(rev.loser() >= 0 && rev.loser() < seats);
+                        for (BluffAI b : ai) {
+                            b.newRound(g);
+                        }
+                        continue;
+                    }
+                    List<Integer> picks = ai[s].choosePlay(g, s, r);
+                    assertTrue(!picks.isEmpty() && picks.size() <= Bluff.MAX_PLAY);
+                    assertEquals(picks.size(), Set.copyOf(picks).size(), "repeated index");
+                    int before = g.handSize(s);
+                    assertTrue(g.play(s, picks), "the policy offered an illegal play");
+                    assertEquals(before - picks.size(), g.handSize(s));
+                    for (BluffAI b : ai) {
+                        b.sawPlay(g, s, picks.size());
+                    }
+                }
+                assertTrue(g.done(), seats + " seats, seed " + seed + " never finished");
+                assertTrue(g.winner() >= 0 && g.winner() < seats);
+                assertTrue(g.moves() <= Bluff.MAX_MOVES);
+                // and a finished table refuses everything
+                assertFalse(g.play(g.winner(), List.of(0)));
+                assertFalse(g.challenge(0));
+                assertFalse(g.passOnExit(0));
+            }
+        }
     }
 
     // ---- helpers ---------------------------------------------------------

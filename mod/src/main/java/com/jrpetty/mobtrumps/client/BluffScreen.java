@@ -128,6 +128,15 @@ public class BluffScreen extends Screen {
     private static final int LIFT = 15;
     /** ...and a hovered one. */
     private static final int HOVER_LIFT = 6;
+    /**
+     * How long the cursor must rest on a card before it opens over the table.
+     *
+     * <p>Without this, sweeping the mouse along the hand strobed a full-screen
+     * dim and a full-size card through every card it crossed. A quarter of a
+     * second is long enough that only a deliberate pause opens one, and short
+     * enough that stopping on a card still feels immediate.
+     */
+    private static final long DWELL_MS = 240L;
 
     private final Map<String, LivingEntity> entityCache = new HashMap<>();
     /** Indices into the hand that are lifted, ready to be sworn to. */
@@ -142,11 +151,17 @@ public class BluffScreen extends Screen {
     private int hovered = -1;
     /** The card to open over the table this frame, or null. */
     private MobCard inspecting;
+    /** Which card the cursor has been resting on, and since when. */
+    private int dwellOn = -1;
+    private long dwellSince;
 
     private int[] playRect;
     private int[] challengeRect;
     private int[] passRect;
     private int[] newRect;
+    private int[] foldRect;
+    /** Fold is armed but not yet confirmed — one misclick must not cost a wager. */
+    private boolean confirmFold;
     private final List<int[]> stakeRects = new ArrayList<>();
     private final List<int[]> seatRects = new ArrayList<>();
 
@@ -246,6 +261,7 @@ public class BluffScreen extends Screen {
         challengeRect = null;
         passRect = null;
         newRect = null;
+        foldRect = null;
         hovered = -1;
         inspecting = null;
 
@@ -616,10 +632,22 @@ public class BluffScreen extends Screen {
         }
 
         if (hovered >= 0) {
+            if (hovered != dwellOn) {
+                dwellOn = hovered;
+                dwellSince = System.currentTimeMillis();
+            }
             // drawn after everything else, so it is over the table and not in it
-            inspecting = hand.get(hovered);
+            if (System.currentTimeMillis() - dwellSince >= DWELL_MS) {
+                inspecting = hand.get(hovered);
+            } else {
+                MobCard card = hand.get(hovered);
+                boolean matches = ClientBluff.claim().matches(card);
+                g.drawCenteredString(font, fit(card.displayName(), width - 16), width / 2,
+                        handY + cardH + 3, matches ? GOOD : BAD);
+            }
         } else {
-            g.drawCenteredString(font, "hover a card for its numbers", width / 2,
+            dwellOn = -1;
+            g.drawCenteredString(font, "rest on a card to open it", width / 2,
                     handY + cardH + 3, FAINT);
         }
     }
@@ -716,36 +744,57 @@ public class BluffScreen extends Screen {
             labels.add("Let them go");
             on.add(true);
         } else {
-            labels.add(picked.isEmpty() ? "Pick cards to swear to" : "SWEAR TO " + picked.size());
+            labels.add(picked.isEmpty() ? "Pick cards" : "SWEAR TO " + picked.size());
             on.add(!picked.isEmpty());
         }
         if (ClientBluff.canChallenge()) {
             labels.add("CHALLENGE");
             on.add(true);
         }
+        // Escape only closes the screen now — the hand stays on the table and is
+        // resumed next time you sit down, because the wager was taken when the
+        // cards were dealt. Giving it up has to be deliberate, so it is a button
+        // that says what it costs and asks twice.
+        labels.add(confirmFold ? "Lose " + ClientBluff.stake() + "?" : "Fold");
+        on.add(true);
 
+        // Three buttons at full padding overrun a 320-wide window, so the
+        // padding gives way before anything is allowed off the edge.
+        int pad = 30;
+        int gapX = 8;
         int total = 0;
-        for (String label : labels) {
-            total += font.width(label) + 30 + 8;
+        while (true) {
+            total = 0;
+            for (String label : labels) {
+                total += font.width(label) + pad + gapX;
+            }
+            total -= gapX;
+            if (total <= width - 8 || pad <= 8) {
+                break;
+            }
+            pad -= 2;
         }
-        int x = (width - total) / 2;
+        int x = Math.max(4, (width - total) / 2);
         List<int[]> rects = new ArrayList<>();
         for (int i = 0; i < labels.size(); i++) {
             String label = labels.get(i);
-            int bw = font.width(label) + 30;
+            int bw = font.width(label) + pad;
             int[] rect = {x, y, bw, 20};
             boolean enabled = on.get(i);
             boolean hot = enabled && inRect(mouseX, mouseY, rect);
+            boolean folding = label.startsWith("Fold") || label.startsWith("Lose ");
             boolean danger = label.equals("CHALLENGE");
             if (danger) {
                 // the risky move gets a heartbeat, not just a colour
                 TableArt.pool(g, x + bw / 2, y + 10, bw, BAD,
                         Math.round(0x1E * (0.4f + 0.6f * breath(560))));
             }
-            TableArt.button(g, x, y, bw, 20, danger ? 0xFF8A322B : 0xFF2C6E49, hot, enabled);
+            TableArt.button(g, x, y, bw, 20,
+                    folding ? (confirmFold ? 0xFF8A322B : 0xFF3A2A26)
+                            : danger ? 0xFF8A322B : 0xFF2C6E49, hot, enabled);
             g.drawCenteredString(font, label, x + bw / 2, y + 6, enabled ? INK : FAINT);
             rects.add(rect);
-            x += bw + 8;
+            x += bw + gapX;
         }
         int at = 0;
         if (pending) {
@@ -753,15 +802,17 @@ public class BluffScreen extends Screen {
         } else {
             playRect = rects.get(at++);
         }
-        if (ClientBluff.canChallenge() && at < rects.size()) {
-            challengeRect = rects.get(at);
+        if (ClientBluff.canChallenge()) {
+            challengeRect = rects.get(at++);
         }
+        foldRect = rects.get(at);
 
         if (pending) {
             String warn = ClientBluff.seatName(ClientBluff.pendingOut())
                     + " is one move from winning — call it, or let it stand";
             g.drawCenteredString(font, fit(warn, width - 20), width / 2, y - 13, BAD);
         }
+
     }
 
     /** The last few things that happened, down the left. */
@@ -853,6 +904,20 @@ public class BluffScreen extends Screen {
             click(1.2f);
             return true;
         }
+        if (foldRect != null && inRect(mx, my, foldRect)) {
+            if (confirmFold) {
+                picked.clear();
+                confirmFold = false;
+                send(BluffActionPayload.forfeit());
+                click(0.6f);
+            } else {
+                confirmFold = true;
+                click(0.8f);
+            }
+            return true;
+        }
+        // any other click stands the fold back down
+        confirmFold = false;
         if (challengeRect != null && inRect(mx, my, challengeRect)) {
             picked.clear();
             send(BluffActionPayload.challenge());

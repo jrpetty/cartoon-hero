@@ -27,6 +27,8 @@ public record BluffActionPayload(int action, List<Integer> picks, int stake)
     public static final int LEAVE = 4;
     public static final int SET_SEATS = 5;
     public static final int SET_STAKE = 6;
+    /** Give the hand up and eat the wager. */
+    public static final int FORFEIT = 7;
 
     public static BluffActionPayload newGame() {
         return new BluffActionPayload(NEW_GAME, List.of(), 0);
@@ -50,6 +52,10 @@ public record BluffActionPayload(int action, List<Integer> picks, int stake)
 
     public static BluffActionPayload seats(int n) {
         return new BluffActionPayload(SET_SEATS, List.of(), n);
+    }
+
+    public static BluffActionPayload forfeit() {
+        return new BluffActionPayload(FORFEIT, List.of(), 0);
     }
 
     public static BluffActionPayload stake(int index) {
