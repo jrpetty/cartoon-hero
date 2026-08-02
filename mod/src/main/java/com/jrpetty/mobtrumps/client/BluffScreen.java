@@ -86,18 +86,33 @@ public class BluffScreen extends Screen {
     private int dockW;
     private float dockScale;
 
-    /** Width the table proper gets — everything except the card dock. */
+    /**
+     * Width the table lays itself out in.
+     *
+     * <p>The whole window, deliberately. Reserving the dock's column made the
+     * table re-centre and the hand shrink the moment the layout was solved,
+     * which moved everything that was already fine. The card is drawn into the
+     * empty space on the right instead — an overlay on a layout that has not
+     * changed, rather than a column the layout has to make room for.
+     */
     private int tableW() {
-        return width - dockW;
+        return width;
     }
 
+    /**
+     * Where the inspected card goes: the empty space to the right of the claim
+     * board, between the rail and the top of the hand.
+     *
+     * <p>Sized to that gap rather than to the window, so it drops into room the
+     * table was not using instead of taking room the table wanted.
+     */
     private void solveDock() {
-        // as large as the height allows, capped so the table keeps the majority
-        float byHeight = (height - RAIL * 2 - 30) / (float) CardRenderer.CARD_H;
+        int gap = handTop() - RAIL - 26;
+        float byHeight = gap / (float) CardRenderer.CARD_H;
         float byWidth = width * 0.30f / CardRenderer.CARD_W;
-        dockScale = Mth.clamp(Math.min(byHeight, byWidth), 0.22f, 0.86f);
-        dockW = Math.round(CardRenderer.CARD_W * dockScale) + 16;
-        dockX = width - dockW;
+        dockScale = Mth.clamp(Math.min(byHeight, byWidth), 0.20f, 0.80f);
+        dockW = Math.round(CardRenderer.CARD_W * dockScale) + 12;
+        dockX = width - dockW - RAIL - 2;
     }
 
     // The middle of the table — claim board, who swore what, the heap, and the
@@ -301,9 +316,9 @@ public class BluffScreen extends Screen {
         }
 
         List<MobCard> hand = ClientBluff.hand();
-        solveDock();
         solveHand(hand.size());
         solveMiddle();
+        solveDock();
 
         // the light hangs over the pile, which is where the game happens
         TableArt.felt(g, width, height, tableW() / 2, 112);
@@ -702,14 +717,11 @@ public class BluffScreen extends Screen {
         int cw = Math.round(CardRenderer.CARD_W * dockScale);
         int ch = Math.round(CardRenderer.CARD_H * dockScale);
         int x = dockX + (dockW - cw) / 2;
-        int y = Math.max(RAIL + 14, (height - ch) / 2 - 6);
+        int y = RAIL + 12;
 
-        // the dock's own backing, so the card sits on something rather than
-        // floating over felt
-        g.fill(dockX, RAIL, width - RAIL, height - RAIL, 0x50000000);
-        g.fill(dockX, RAIL, dockX + 1, height - RAIL, BRASS_DARK);
-
-        TableArt.pool(g, dockX + dockW / 2, height / 2, Math.max(cw, ch), accent, 0x1C);
+        // no dimming strip and no divider — the table underneath is untouched,
+        // the card simply occupies space nothing else was using
+        TableArt.pool(g, x + cw / 2, y + ch / 2, Math.max(cw, ch), accent, 0x1A);
         g.fill(x + 3, y + 4, x + cw + 4, y + ch + 5, 0x88000000);
         LivingEntity mob = CardRenderer.portraitEntity(minecraft, card, entityCache);
         CardRenderer.renderCard(g, font, card, x, y, dockScale, -1, -1, mob, false, true);
@@ -729,7 +741,7 @@ public class BluffScreen extends Screen {
         String foot = answers ? "ANSWERS YES" : "ANSWERS NO";
         int fw = Math.min(dockW - 8, font.width(foot) + 16);
         int fx = dockX + (dockW - fw) / 2;
-        int fy = Math.min(height - RAIL - 13, y + ch + 3);
+        int fy = y + ch + 3;
         TableArt.bevel(g, fx, fy, fw, 11, TableArt.alpha(accent, 0x44), 0x22FFFFFF, 0x55000000);
         g.drawCenteredString(font, foot, fx + fw / 2, fy + 2, accent);
     }

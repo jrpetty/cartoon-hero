@@ -196,8 +196,12 @@ public class BlackjackScreen extends Screen {
             announced = 0;
         }
 
-        int longest = Math.max(mine.size(), shown);
-        int cardsTop = solveLayout(longest, half);
+        // Solved for a FULL hand, not the current one. Sizing to the cards on
+        // the table meant the whole screen re-laid itself out the moment a
+        // fourth card arrived — stat list into two columns, header shrinking,
+        // everything moving under the cursor mid-hand. A layout that can hold
+        // the most cards the rules allow never has to change.
+        int cardsTop = solveLayout(com.jrpetty.mobtrumps.game.Blackjack.MAX_DRAWS, half);
         int perRow = Math.max(1, (half + 4) / (cardW + 4));
         int rows = Math.max(rowsFor(mine.size(), perRow), rowsFor(shown, perRow));
 
@@ -383,12 +387,19 @@ public class BlackjackScreen extends Screen {
             if (card != null) {
                 var pose = g.pose();
                 pose.pushPose();
-                // turn on the vertical axis, and drop the last inch into place
+                // The card is drawn AT cx,cy and the flip squashes around that
+                // point. It used to be drawn at 0,0 and moved entirely by the
+                // pose — but renderCard places the live mob in screen space from
+                // the x,y it is handed, so every mob in this game was being
+                // rendered in the corner of the window instead of on its card.
                 pose.translate(cx + cardW / 2f, cy + cardH / 2f - (1f - ease) * 6f, 0);
                 pose.scale(Math.max(0.02f, ease), 1f, 1f);
-                pose.translate(-cardW / 2f, -cardH / 2f, 0);
-                LivingEntity mob = CardRenderer.portraitEntity(minecraft, card, entityCache);
-                CardRenderer.renderCard(g, font, card, 0, 0, cardScale, -1, -1, mob, false, false);
+                pose.translate(-(cx + cardW / 2f), -(cy + cardH / 2f), 0);
+                // and the mob only joins once the card has settled: an entity
+                // render inside a squashed pose is not a thing to gamble on
+                LivingEntity mob = ease >= 1f
+                        ? CardRenderer.portraitEntity(minecraft, card, entityCache) : null;
+                CardRenderer.renderCard(g, font, card, cx, cy, cardScale, -1, -1, mob, false, false);
                 pose.popPose();
                 if (mouseX >= cx && mouseX < cx + cardW && mouseY >= cy && mouseY < cy + cardH) {
                     hoverCard = card;
