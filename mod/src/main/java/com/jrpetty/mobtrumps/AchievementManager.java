@@ -61,12 +61,29 @@ public final class AchievementManager {
             case "guesswho_wins" -> StatsTracker.count(player, "guesswho_wins");
             case "bluff_wins" -> StatsTracker.count(player, "bluff_wins");
             case "bluff_catches" -> StatsTracker.count(player, "bluff_catches");
+            case "bluff_lastcard" -> StatsTracker.count(player, "bluff_lastcard");
+            case "guesswho_swift" -> StatsTracker.count(player, "guesswho_swift");
+            case "guesswho_sharp" -> StatsTracker.count(player, "guesswho_sharp");
+            case "guesswho_highroller" -> StatsTracker.count(player, "guesswho_highroller");
+            case "twentyone_exact" -> StatsTracker.count(player, "twentyone_exact");
+            case "parlour_all" -> parlourSpread(player);
             case "picks" -> totalPicks(player);
             case "legendaries" -> tierCount(player, Tier.LEGENDARY);
             case "categories" -> categoriesComplete(player);
             case "holo3" -> maxedCards(player);
             default -> 0;
         };
+    }
+
+    /** How many of the three parlour games the player has actually won. */
+    private static int parlourSpread(ServerPlayer player) {
+        int n = 0;
+        for (String key : new String[]{"twentyone_wins", "guesswho_wins", "bluff_wins"}) {
+            if (StatsTracker.count(player, key) > 0) {
+                n++;
+            }
+        }
+        return n;
     }
 
     private static int totalPicks(ServerPlayer player) {

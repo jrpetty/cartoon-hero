@@ -139,6 +139,43 @@ public final class Achievements {
         add("bluff_catch_15", Group.PARLOUR, "Called It",
                 "Catch 15 liars in Mob Bluff", "bluff_catches", 15, gold(6), xp(4));
 
+        // easy — just turn up and win one of each
+        add("parlour_taster", Group.PARLOUR, "Pull Up a Stool",
+                "Win at Twenty-One, Guess Who and Mob Bluff", "parlour_all", 3,
+                gold(4), xp(2));
+        add("guesswho_50", Group.PARLOUR, "Face in the Crowd",
+                "Win Guess Who 50 times", "guesswho_wins", 50, diamond(5), xp(8));
+        add("bluff_catch_50", Group.PARLOUR, "Nothing Gets Past",
+                "Catch 50 liars in Mob Bluff", "bluff_catches", 50, diamond(4), xp(8));
+
+        // hard — these need the game played well, not just played
+        add("guesswho_swift_1", Group.PARLOUR, "Five and Out",
+                "Find the mob in five questions or fewer", "guesswho_swift", 1,
+                gold(8), xp(4));
+        add("guesswho_swift_10", Group.PARLOUR, "Short Work",
+                "Do it in five or fewer, ten times", "guesswho_swift", 10,
+                diamond(5), xp(10));
+        add("twentyone_exact_1", Group.PARLOUR, "On the Nose",
+                "Land on exactly 21", "twentyone_exact", 1, gold(8), xp(4));
+        add("bluff_lastcard_1", Group.PARLOUR, "Last Card Standing",
+                "Win Mob Bluff by catching a liar on your final card",
+                "bluff_lastcard", 1, diamond(4), xp(8));
+
+        // brutal — the rarest things the parlour can produce
+        add("guesswho_sharp", Group.PARLOUR, "Four Questions",
+                "Find the mob in four questions or fewer. Eighty-one faces need "
+                        + "six to separate — this one needs the board to fall your way too",
+                "guesswho_sharp", 1, diamond(10), scrap(2), xp(16));
+        add("guesswho_highroller", Group.PARLOUR, "House Money",
+                "Win a Guess Who round with 10,000 fragments or more on the table",
+                "guesswho_highroller", 1, new Reward("netherite_ingot", 1), xp(20));
+        add("twentyone_exact_10", Group.PARLOUR, "Dead Reckoning",
+                "Land on exactly 21 ten times", "twentyone_exact", 10,
+                new Reward("netherite_ingot", 1), diamond(6), xp(20));
+        add("bluff_100", Group.PARLOUR, "The Whole Table",
+                "Win Mob Bluff 100 times", "bluff_wins", 100,
+                new Reward("netherite_ingot", 1), new Reward("diamond_block", 1), xp(24));
+
         // --- Hunter: out in the world -------------------------------------
         add("kills_25", Group.HUNTER, "Field Work",
                 "Hunt 25 mobs", "kills", 25, iron(4));

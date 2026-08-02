@@ -808,11 +808,34 @@ public class CollectionBookScreen extends Screen {
         int y = drawPageHeading(g, x0, x1, b[1], group.accent(),
                 group.label().toUpperCase(Locale.ROOT), group.blurb(), done);
 
+        // A group used to be one full-width column, with a row height that
+        // could not go below sixteen — so a long group simply ran off the foot
+        // of the page and the awards past the fold were invisible AND
+        // unclickable. The Parlour has twenty-one. Long groups now break across
+        // the two leaves of the spread, which is what the second leaf is for.
         int available = b[3] - y;
-        int rowH = Math.max(16, Math.min(30, available / Math.max(1, list.size())));
-        for (Achievement a : list) {
-            drawAwardRow(g, a, x0, x1, y, rowH, mouseX, mouseY);
-            y += rowH;
+        int n = list.size();
+        int perColumn = n;
+        boolean twoUp = n * 16 > available;
+        if (twoUp) {
+            perColumn = (n + 1) / 2;
+        }
+        int rowH = Math.max(twoUp ? 12 : 16,
+                Math.min(30, available / Math.max(1, perColumn)));
+        int spine = lg(panelX + panelW / 2);
+        for (int i = 0; i < n; i++) {
+            int cx0 = x0;
+            int cx1 = x1;
+            if (twoUp) {
+                boolean right = i >= perColumn;
+                cx0 = right ? spine + 8 : x0;
+                cx1 = right ? x1 : spine - 8;
+            }
+            int ry = y + (i % perColumn) * rowH;
+            if (ry + rowH > b[3]) {
+                continue; // never draw a row the page cannot hold
+            }
+            drawAwardRow(g, list.get(i), cx0, cx1, ry, rowH, mouseX, mouseY);
         }
     }
 

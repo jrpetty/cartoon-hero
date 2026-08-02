@@ -1,6 +1,7 @@
 package com.jrpetty.mobtrumps;
 
 import com.jrpetty.mobtrumps.game.GuessQuestion;
+import com.jrpetty.mobtrumps.game.GuessWhoWager;
 import com.jrpetty.mobtrumps.game.MobCard;
 import com.jrpetty.mobtrumps.game.MobCards;
 import net.minecraft.ChatFormatting;
@@ -352,6 +353,17 @@ public final class GuessWhoManager {
             StatsTracker.bump(player, "guesswho_wins");
             ServerSync.markAwards(player);
             int asked = board.log.size();
+            // the rungs that actually take skill, counted separately so an
+            // award can ask for them
+            if (asked <= 5) {
+                StatsTracker.bump(player, "guesswho_swift");
+            }
+            if (asked <= 4) {
+                StatsTracker.bump(player, "guesswho_sharp");
+            }
+            if (game.wager >= 10_000 && GuessWhoWager.isProfit(asked)) {
+                StatsTracker.bump(player, "guesswho_highroller");
+            }
             if (game.wager > 0) {
                 int paid = GuessWhoWager.payout(game.wager, asked);
                 int profit = paid - game.wager;
@@ -472,9 +484,6 @@ public final class GuessWhoManager {
 
     private static void sendBoth(ServerPlayer player, Game game) {
         send(player);
-        if (game.wager < 0) {
-            return PHASE_STAKE;
-        }
         if (!game.solo()) {
             ServerPlayer them = playerOf(player, game.other(player.getUUID()));
             if (them != null) {
@@ -489,9 +498,6 @@ public final class GuessWhoManager {
                 return game.winner != null ? PHASE_WON : PHASE_LOST;
             }
             return who.equals(game.winner) ? PHASE_WON : PHASE_LOST;
-        }
-        if (game.wager < 0) {
-            return PHASE_STAKE;
         }
         if (!game.solo()) {
             UUID them = game.other(who);
@@ -538,9 +544,6 @@ public final class GuessWhoManager {
         String secret = game.done && board.secret != null ? board.secret.id() : "";
 
         String opponent = "";
-        if (game.wager < 0) {
-            return PHASE_STAKE;
-        }
         if (!game.solo()) {
             UUID them = game.other(me);
             ServerPlayer other = playerOf(player, them);

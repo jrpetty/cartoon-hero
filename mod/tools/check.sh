@@ -46,6 +46,9 @@ else
   echo "   clean"
 fi
 
+echo "== 1b. imports =="
+if ! python3 tools/checkimports.py "$SRC"; then fail=1; fi
+
 echo "== 2. enum switch exhaustiveness =="
 python3 tools/checkswitch.py "$SRC/com/jrpetty/mobtrumps" || fail=1
 

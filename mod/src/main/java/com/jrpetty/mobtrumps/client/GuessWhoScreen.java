@@ -56,6 +56,9 @@ public class GuessWhoScreen extends Screen {
     /** Stagger across the board, so the answer sweeps rather than snaps. */
     private static final long SWEEP_MS = 320L;
 
+    /** This frame's partial tick, so hand-drawn widgets can be rendered. */
+    private float partial;
+
     private final Map<String, LivingEntity> entityCache = new HashMap<>();
     private EditBox search;
     /** The wager box on the pre-round screen. */
@@ -158,6 +161,7 @@ public class GuessWhoScreen extends Screen {
         g.drawCenteredString(font, "WAGER", width / 2, height / 2 - 20, GOLD_DIM);
         wager.setX((width - wager.getWidth()) / 2);
         wager.setY(height / 2 - 6);
+        wager.render(g, mouseX, mouseY, partial);
 
         // quick amounts, so a big bet is not a lot of typing
         int[] quick = {GuessWhoWager.MIN_STAKE, 100, 1000, 10_000, Math.max(GuessWhoWager.MIN_STAKE, purse)};
@@ -300,10 +304,27 @@ public class GuessWhoScreen extends Screen {
 
     @Override
     public void render(GuiGraphics g, int mouseX, int mouseY, float partialTick) {
+        // super.render draws the registered widgets, and the gradient below
+        // paints straight over them — so every text box on this screen has to
+        // be drawn again by hand, after the background, or it is invisible.
+        // The search box had been in exactly that state.
+        partial = partialTick;
         super.render(g, mouseX, mouseY, partialTick);
         g.fillGradient(0, 0, width, height, BACK_1, BACK_0);
         g.fill(0, 0, width, 2, GOLD_DIM);
         g.fill(0, height - 2, width, height, GOLD_DIM);
+
+        if (ClientGuessWho.staking()) {
+            // no board exists yet, so nothing below this should be laid out
+            search.visible = false;
+            wager.visible = true;
+            wager.setEditable(true);
+            drawStakeScreen(g, mouseX, mouseY);
+            return;
+        }
+        search.visible = true;
+        wager.visible = false;
+        wager.setEditable(false);
 
         solveDock();
         solveBoard();
@@ -314,16 +335,6 @@ public class GuessWhoScreen extends Screen {
         drawBoard(g, mouseX, mouseY, since, playing);
         drawPanel(g, mouseX, mouseY, playing);
         drawFooter(g, mouseX, mouseY, playing);
-        if (ClientGuessWho.staking()) {
-            search.visible = false;
-            wager.visible = true;
-            wager.setEditable(true);
-            drawStakeScreen(g, mouseX, mouseY);
-            return;
-        }
-        search.visible = true;
-        wager.visible = false;
-        wager.setEditable(false);
         if (ClientGuessWho.picking()) {
             // nothing to ask yet — the panel is a preview of what is coming
             g.fill(panelX, 34, panelX + panelW, panelBottom, 0x99000000);
@@ -440,6 +451,7 @@ public class GuessWhoScreen extends Screen {
         g.fill(panelX, 34, panelX + panelW, panelBottom, PANEL);
         g.renderOutline(panelX, 34, panelW, panelBottom - 34, EDGE);
         g.fill(panelX, 34, panelX + panelW, 36, GOLD_DIM);
+        search.render(g, mouseX, mouseY, partial);
 
         List<GuessQuestion.Template> hits = GuessQuestion.search(search.getValue());
         int listTop = 60;

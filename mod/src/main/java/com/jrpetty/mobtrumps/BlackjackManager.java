@@ -157,6 +157,9 @@ public final class BlackjackManager {
             case PLAYER_WIN -> {
                 RecyclerManager.giveFragments(player, stake * 2);
                 StatsTracker.bump(player, "twentyone_wins");
+                if (game.playerTotal() == Blackjack.TARGET) {
+                    StatsTracker.bump(player, "twentyone_exact");
+                }
                 ServerSync.markAwards(player);
                 player.sendSystemMessage(Component.literal(
                                 "Twenty-One: " + game.playerTotal() + " beats "

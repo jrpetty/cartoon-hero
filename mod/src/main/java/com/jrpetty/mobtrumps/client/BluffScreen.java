@@ -73,6 +73,33 @@ public class BluffScreen extends Screen {
     /** First row below the opponents' fanned hands. */
     private static final int MID_TOP = 64;
 
+    /**
+     * The inspected card lives in a reserved column down the right-hand side.
+     *
+     * <p>It used to open as a full-screen overlay over the middle of the table,
+     * which dimmed everything, hid the pile, and printed a second copy of the
+     * claim across the one already hanging there. A column the rest of the
+     * layout is measured against instead means the card can be big and nothing
+     * has to move or be covered to make room for it.
+     */
+    private int dockX;
+    private int dockW;
+    private float dockScale;
+
+    /** Width the table proper gets — everything except the card dock. */
+    private int tableW() {
+        return width - dockW;
+    }
+
+    private void solveDock() {
+        // as large as the height allows, capped so the table keeps the majority
+        float byHeight = (height - RAIL * 2 - 30) / (float) CardRenderer.CARD_H;
+        float byWidth = width * 0.30f / CardRenderer.CARD_W;
+        dockScale = Mth.clamp(Math.min(byHeight, byWidth), 0.22f, 0.86f);
+        dockW = Math.round(CardRenderer.CARD_W * dockScale) + 16;
+        dockX = width - dockW;
+    }
+
     // The middle of the table — claim board, who swore what, the heap, and the
     // band a reveal is turned over in — is SOLVED, not laid out from fixed
     // constants. Fixed ones fit at 640x360 and ran the pile's caption straight
@@ -195,7 +222,7 @@ public class BluffScreen extends Screen {
      * itself to be told apart and clicked.
      */
     private void solveHand(int count) {
-        int avail = width - 24;
+        int avail = tableW() - 24;
         int n = Math.max(1, count);
         // widest the cards can be and still fan inside the space at the tightest
         // overlap we allow, and short enough to leave the claim and pile alone
@@ -218,7 +245,7 @@ public class BluffScreen extends Screen {
             }
         }
         int span = count == 0 ? 0 : (count - 1) * gap + cardW;
-        handX = (width - span) / 2;
+        handX = (tableW() - span) / 2;
         handY = height - cardH - 40;
     }
 
@@ -266,6 +293,7 @@ public class BluffScreen extends Screen {
         inspecting = null;
 
         if (ClientBluff.idle()) {
+            dockW = 0;
             TableArt.felt(g, width, height, width / 2, height / 2);
             TableArt.rail(g, width, height);
             drawLobby(g, mouseX, mouseY);
@@ -273,11 +301,12 @@ public class BluffScreen extends Screen {
         }
 
         List<MobCard> hand = ClientBluff.hand();
+        solveDock();
         solveHand(hand.size());
         solveMiddle();
 
         // the light hangs over the pile, which is where the game happens
-        TableArt.felt(g, width, height, width / 2, 112);
+        TableArt.felt(g, width, height, tableW() / 2, 112);
         TableArt.rail(g, width, height);
 
         drawOpponents(g);
@@ -389,7 +418,7 @@ public class BluffScreen extends Screen {
         if (others.isEmpty()) {
             return;
         }
-        int slot = (width - RAIL * 2) / others.size();
+        int slot = (tableW() - RAIL * 2) / others.size();
         for (int i = 0; i < others.size(); i++) {
             int seat = others.get(i);
             int cx = RAIL + slot * i + slot / 2;
@@ -454,10 +483,10 @@ public class BluffScreen extends Screen {
         if (captioned) {
             widest = Math.max(widest, font.width(caption));
         }
-        int w = Math.min(width - 30, widest + 30);
+        int w = Math.min(tableW() - 30, widest + 30);
         int x = (width - w) / 2;
 
-        TableArt.pool(g, width / 2, y + h / 2, w, BRASS, 0x1A);
+        TableArt.pool(g, tableW() / 2, y + h / 2, w, BRASS, 0x1A);
         // the two hangers up to the rail, so it reads as suspended
         for (int hx : new int[]{x + 14, x + w - 15}) {
             g.fill(hx, RAIL, hx + 1, y, BRASS_DARK);
@@ -466,10 +495,10 @@ public class BluffScreen extends Screen {
         TableArt.plate(g, x, y, w, h, BRASS_DIM);
         g.fill(x + 4, y + 3, x + w - 4, y + 4, BRASS_DARK);
         if (captioned) {
-            g.drawCenteredString(font, fit(caption, w - 10), width / 2, y + 6, FAINT);
-            g.drawCenteredString(font, fit(text, w - 10), width / 2, y + h - 12, BRASS_HI);
+            g.drawCenteredString(font, fit(caption, w - 10), tableW() / 2, y + 6, FAINT);
+            g.drawCenteredString(font, fit(text, w - 10), tableW() / 2, y + h - 12, BRASS_HI);
         } else {
-            g.drawCenteredString(font, fit(text, w - 10), width / 2, y + (h - 8) / 2, BRASS_HI);
+            g.drawCenteredString(font, fit(text, w - 10), tableW() / 2, y + (h - 8) / 2, BRASS_HI);
         }
     }
 
@@ -480,24 +509,24 @@ public class BluffScreen extends Screen {
         if (count > 0 && cy > 0) {
             // a shadow on the felt under the heap
             int spread = Math.min(34, 14 + count);
-            g.fill(width / 2 - spread, cy + 8, width / 2 + spread, cy + 15, 0x44000000);
+            g.fill(tableW() / 2 - spread, cy + 8, tableW() / 2 + spread, cy + 15, 0x44000000);
             int show = Math.min(count, 12);
             for (int i = 0; i < show; i++) {
                 // deterministic scatter — the same pile must not twitch per frame
                 int a = (i * 73) % 31 - 15;
                 int b = (i * 149) % 17 - 8;
                 float deg = ((i * 97) % 37) - 18;
-                TableArt.back(g, width / 2 + a, cy - i + b / 3, 27, 21, deg, BRASS_DARK);
+                TableArt.back(g, tableW() / 2 + a, cy - i + b / 3, 27, 21, deg, BRASS_DARK);
             }
         }
         String label = count == 0 ? "nothing on the table yet"
                 : count + (count == 1 ? " card face down" : " cards face down");
         int lw = font.width(label) + 14;
-        int lx = width / 2 - lw / 2;
+        int lx = tableW() / 2 - lw / 2;
         TableArt.bevel(g, lx, pileCapY, lw, 12, count >= 5 ? 0xFF3A2C10 : 0xFF1A2A22,
                 0x33FFFFFF, 0x55000000);
         g.renderOutline(lx, pileCapY, lw, 12, count >= 5 ? BRASS_DIM : BRASS_DARK);
-        g.drawCenteredString(font, label, width / 2, pileCapY + 2,
+        g.drawCenteredString(font, label, tableW() / 2, pileCapY + 2,
                 count >= 5 ? BRASS_HI : DIM);
 
         int last = ClientBluff.lastCount();
@@ -506,7 +535,7 @@ public class BluffScreen extends Screen {
             // inside the board's own frame
             if (sworeY >= 0) {
                 String who = ClientBluff.seatName(ClientBluff.lastSeat()) + " swore to " + last;
-                g.drawCenteredString(font, fit(who, width - 20), width / 2, sworeY, DIM);
+                g.drawCenteredString(font, fit(who, tableW() - 20), tableW() / 2, sworeY, DIM);
             }
         }
     }
@@ -530,7 +559,7 @@ public class BluffScreen extends Screen {
         int usable = band - VERDICT_H;
         float scale = band < MIN_REVEAL_BAND ? 0f
                 : Math.min(0.30f, Math.min(usable / (float) CardRenderer.CARD_H,
-                        (width - 40f) / (shown.size() * (CardRenderer.CARD_W + 14f))));
+                        (tableW() - 40f) / (shown.size() * (CardRenderer.CARD_W + 14f))));
         if (scale < 0.10f) {
             // No room to turn the cards over on screen — but the outcome is the
             // one thing a player must never be left guessing at. The ribbon
@@ -546,7 +575,7 @@ public class BluffScreen extends Screen {
         int x = (width - span) / 2;
         int y = revealTop + Math.max(0, (usable - ch) / 2);
 
-        TableArt.pool(g, width / 2, y + ch / 2, span, accent, 0x1C);
+        TableArt.pool(g, tableW() / 2, y + ch / 2, span, accent, 0x1C);
         for (int i = 0; i < shown.size(); i++) {
             MobCard card = shown.get(i);
             int cx = x + i * (cw + 5);
@@ -574,11 +603,11 @@ public class BluffScreen extends Screen {
                         + ClientBluff.seatName(ClientBluff.revealAccused())
                 : "HONEST — " + ClientBluff.revealTaken() + " to "
                         + ClientBluff.seatName(ClientBluff.revealChallenger());
-        verdict = fit(verdict, width - 30);
+        verdict = fit(verdict, tableW() - 30);
         int vw = font.width(verdict) + 14;
-        int vx = width / 2 - vw / 2;
+        int vx = tableW() / 2 - vw / 2;
         TableArt.bevel(g, vx, vy, vw, 11, TableArt.alpha(accent, 0x33), 0x22FFFFFF, 0x55000000);
-        g.drawCenteredString(font, verdict, width / 2, vy + 2, accent);
+        g.drawCenteredString(font, verdict, tableW() / 2, vy + 2, accent);
     }
 
     /** Your hand, fanned. Picked cards lift clear of the row. */
@@ -587,8 +616,8 @@ public class BluffScreen extends Screen {
             return;
         }
         // a rail under the hand, to sit the cards on rather than float them
-        g.fill(RAIL, handY + cardH + 1, width - RAIL, handY + cardH + 2, BRASS_DARK);
-        TableArt.pool(g, width / 2, handY + cardH, width / 2, BRASS, 0x12);
+        g.fill(RAIL, handY + cardH + 1, tableW() - RAIL, handY + cardH + 2, BRASS_DARK);
+        TableArt.pool(g, tableW() / 2, handY + cardH, tableW() / 2, BRASS, 0x12);
 
         // topmost card wins the hover, which is the one you can actually see
         for (int i = 0; i < hand.size(); i++) {
@@ -642,12 +671,12 @@ public class BluffScreen extends Screen {
             } else {
                 MobCard card = hand.get(hovered);
                 boolean matches = ClientBluff.claim().matches(card);
-                g.drawCenteredString(font, fit(card.displayName(), width - 16), width / 2,
+                g.drawCenteredString(font, fit(card.displayName(), tableW() - 16), tableW() / 2,
                         handY + cardH + 3, matches ? GOOD : BAD);
             }
         } else {
             dwellOn = -1;
-            g.drawCenteredString(font, "rest on a card to open it", width / 2,
+            g.drawCenteredString(font, "rest on a card to open it", tableW() / 2,
                     handY + cardH + 3, FAINT);
         }
     }
@@ -668,48 +697,41 @@ public class BluffScreen extends Screen {
      * only number the decision in front of the player depends on.
      */
     private void drawInspect(GuiGraphics g, MobCard card) {
-        float scale = Math.min(0.85f, Math.min((width - 24) / (float) CardRenderer.CARD_W,
-                (height - 46) / (float) CardRenderer.CARD_H));
-        int cw = Math.round(CardRenderer.CARD_W * scale);
-        int ch = Math.round(CardRenderer.CARD_H * scale);
         boolean answers = ClientBluff.claim().matches(card);
         int accent = answers ? GOOD : BAD;
+        int cw = Math.round(CardRenderer.CARD_W * dockScale);
+        int ch = Math.round(CardRenderer.CARD_H * dockScale);
+        int x = dockX + (dockW - cw) / 2;
+        int y = Math.max(RAIL + 14, (height - ch) / 2 - 6);
 
-        int block = 12 + ch + 13;
-        int top = Math.max(RAIL + 3, (height - block) / 2);
-        int x = (width - cw) / 2;
-        int y = top + 12;
+        // the dock's own backing, so the card sits on something rather than
+        // floating over felt
+        g.fill(dockX, RAIL, width - RAIL, height - RAIL, 0x50000000);
+        g.fill(dockX, RAIL, dockX + 1, height - RAIL, BRASS_DARK);
 
-        // the table goes quiet behind it, so the card is the only thing to read
-        g.fill(0, 0, width, height, 0xB4000000);
-        TableArt.pool(g, width / 2, height / 2, Math.max(cw, ch), accent, 0x1E);
-
-        // the claim stays on screen — it is what the card is being judged against
-        String claim = fit(ClientBluff.claim().text(), width - 20);
-        g.drawCenteredString(font, claim, width / 2, top, BRASS_HI);
-
+        TableArt.pool(g, dockX + dockW / 2, height / 2, Math.max(cw, ch), accent, 0x1C);
         g.fill(x + 3, y + 4, x + cw + 4, y + ch + 5, 0x88000000);
         LivingEntity mob = CardRenderer.portraitEntity(minecraft, card, entityCache);
-        CardRenderer.renderCard(g, font, card, x, y, scale, -1, -1, mob, false, true);
+        CardRenderer.renderCard(g, font, card, x, y, dockScale, -1, -1, mob, false, true);
         g.renderOutline(x - 1, y - 1, cw + 2, ch + 2, accent);
 
-        // bracket the stat the claim is about, in the card's own row geometry
+        // bracket the stat the claim turns on, in the card's own row geometry
         Stat subject = claimStat();
         if (subject != null) {
             int row = subject.ordinal();
-            int ry = y + Math.round((CardRenderer.STAT_TOP + row * CardRenderer.ROW_H) * scale);
-            int rh = Math.max(3, Math.round(CardRenderer.ROW_H * scale));
+            int ry = y + Math.round((CardRenderer.STAT_TOP + row * CardRenderer.ROW_H) * dockScale);
+            int rh = Math.max(3, Math.round(CardRenderer.ROW_H * dockScale));
             g.renderOutline(x + 2, ry, cw - 4, rh, BRASS);
             g.fill(x - 4, ry, x - 1, ry + rh, BRASS);
             g.fill(x + cw + 1, ry, x + cw + 4, ry + rh, BRASS);
         }
 
         String foot = answers ? "ANSWERS YES" : "ANSWERS NO";
-        int fw = font.width(foot) + 16;
-        int fx = width / 2 - fw / 2;
-        int fy = y + ch + 2;
+        int fw = Math.min(dockW - 8, font.width(foot) + 16);
+        int fx = dockX + (dockW - fw) / 2;
+        int fy = Math.min(height - RAIL - 13, y + ch + 3);
         TableArt.bevel(g, fx, fy, fw, 11, TableArt.alpha(accent, 0x44), 0x22FFFFFF, 0x55000000);
-        g.drawCenteredString(font, foot, width / 2, fy + 2, accent);
+        g.drawCenteredString(font, foot, fx + fw / 2, fy + 2, accent);
     }
 
     /** The stat the round's claim turns on, or null when it is not a threshold. */
@@ -733,7 +755,7 @@ public class BluffScreen extends Screen {
             int dots = (int) ((System.currentTimeMillis() / 400) % 4);
             String who = ClientBluff.seatName(ClientBluff.turn()) + " is thinking"
                     + ".".repeat(ClientPrefs.reducedMotion() ? 3 : dots);
-            g.drawCenteredString(font, who, width / 2, y + 5, DIM);
+            g.drawCenteredString(font, who, tableW() / 2, y + 5, DIM);
             return;
         }
 
@@ -810,7 +832,7 @@ public class BluffScreen extends Screen {
         if (pending) {
             String warn = ClientBluff.seatName(ClientBluff.pendingOut())
                     + " is one move from winning — call it, or let it stand";
-            g.drawCenteredString(font, fit(warn, width - 20), width / 2, y - 13, BAD);
+            g.drawCenteredString(font, fit(warn, tableW() - 20), tableW() / 2, y - 13, BAD);
         }
 
     }
@@ -830,7 +852,7 @@ public class BluffScreen extends Screen {
         if (max <= 0) {
             return;
         }
-        int wide = Math.min(146, width / 3);
+        int wide = Math.min(146, tableW() / 3);
         int y = bottom - max * 10;
         g.fill(RAIL + 2, y - 4, RAIL + 6 + wide, bottom, 0x40000000);
         g.fill(RAIL + 2, y - 4, RAIL + 3, bottom, BRASS_DARK);

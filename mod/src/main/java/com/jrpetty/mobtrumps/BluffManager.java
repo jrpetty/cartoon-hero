@@ -237,6 +237,11 @@ public final class BluffManager {
         if (good) {
             // catches are worth counting: they are the skill in the game
             StatsTracker.bump(player, "bluff_catches");
+            // and a catch that sheds your own last card ends the game on the
+            // spot — the rarest way there is to win a hand
+            if (table.game.done() && table.game.winner() == table.mySeat) {
+                StatsTracker.bump(player, "bluff_lastcard");
+            }
             ServerSync.markAwards(player);
         }
         sound(player, good ? SoundEvents.PLAYER_LEVELUP : SoundEvents.ITEM_BREAK,
