@@ -41,7 +41,18 @@ public class GaugeRenderer<T extends BlockEntity & HubGauge> implements BlockEnt
      * recess.
      */
     private static final float GLASS_Z = -0.5F + 2.0F / 16.0F;
-    private static final float TEXT_Z = GLASS_Z + 0.007F;
+    /**
+     * How far the readout floats in front of the glass. It has to clear the
+     * glass by enough that the two do not z-fight and strobe at range, while
+     * staying inside the one-pixel recess the bezel gives it.
+     */
+    private static final float TEXT_Z = GLASS_Z + 0.02F;
+    /**
+     * Depth between the bar's track and its fill, in text units. They cover the
+     * same pixels, so without a sliver of separation the two quads fight for
+     * the same depth and the bar flickers.
+     */
+    private static final float LAYER = 0.5F;
 
     private static final float SCALE = 0.01F;
     /** Text units that fit across the glass at {@link #SCALE}. */
@@ -118,12 +129,13 @@ public class GaugeRenderer<T extends BlockEntity & HubGauge> implements BlockEnt
     private void bar(PoseStack pose, MultiBufferSource buffers, float y, int percent, int colour, int light) {
         pose.pushPose();
         pose.scale(0.25F, 1.0F, 1.0F);
-        Matrix4f matrix = pose.last().pose();
         int width = (int) BAR_W;
-        rect(matrix, buffers, -BAR_W / 2.0F, y, width, TRACK_COLOR, light);
+        rect(pose.last().pose(), buffers, -BAR_W / 2.0F, y, width, TRACK_COLOR, light);
         int filled = Math.round(width * Mth.clamp(percent, 0, 100) / 100.0F);
         if (filled > 0) {
-            rect(matrix, buffers, -BAR_W / 2.0F, y, filled, 0xFF000000 | colour, light);
+            // Lifted off the track so the two never contest the same depth.
+            pose.translate(0.0F, 0.0F, LAYER);
+            rect(pose.last().pose(), buffers, -BAR_W / 2.0F, y, filled, 0xFF000000 | colour, light);
         }
         pose.popPose();
     }

@@ -32,6 +32,8 @@ public class CommandHubMonitorRenderer implements BlockEntityRenderer<CommandHub
 
     /** Depth of the model's glass, from the block centre along FACING. */
     private static final float GLASS_Z = 0.5F - 12.0F / 16.0F;
+    /** Width of the model's screen opening, in block pixels. */
+    private static final int GLASS_PX = 14;
 
     private final Font font;
 
@@ -98,10 +100,32 @@ public class CommandHubMonitorRenderer implements BlockEntityRenderer<CommandHub
     private void line(PoseStack pose, MultiBufferSource buffers, String text, float y, float scale, int colour) {
         pose.pushPose();
         pose.scale(scale, -scale, scale);
+        String shown = fit(text, scale);
         Matrix4f matrix = pose.last().pose();
-        font.drawInBatch(text, -font.width(text) / 2.0F, y * (SMALL / scale), colour, false,
+        font.drawInBatch(shown, -font.width(shown) / 2.0F, y * (SMALL / scale), colour, false,
                 matrix, buffers, Font.DisplayMode.POLYGON_OFFSET, 0, LightTexture.FULL_BRIGHT);
         pose.popPose();
+    }
+
+    /**
+     * Shortens a row that would run past the glass.
+     *
+     * <p>Measured in pixels at the scale the row is actually drawn at, not in
+     * characters: a footer of narrow digits fits where the same count of wide
+     * letters does not, and the headline is drawn more than twice the size of
+     * everything else. A fixed character limit got both of those wrong and let
+     * text spill over the bezel and out into the air beside the panel.
+     */
+    private String fit(String text, float scale) {
+        float room = GLASS_PX / 16.0F / scale;
+        if (font.width(text) <= room) {
+            return text;
+        }
+        String out = text;
+        while (!out.isEmpty() && font.width(out + "…") > room) {
+            out = out.substring(0, out.length() - 1);
+        }
+        return out.isEmpty() ? "" : out + "…";
     }
 
     private static String trim(String s) {

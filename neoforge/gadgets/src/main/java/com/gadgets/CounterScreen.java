@@ -88,11 +88,18 @@ public class CounterScreen extends GadgetScreen {
                             send(be.getBlockPos(), "counter_threshold", value))
                     .bounds(left + 12 + i * 36, top + PULSE_Y + 12, 33, 14).build());
         }
-        for (int i = 0; i < ItemCounterBlockEntity.MODE_LABELS.length; i++) {
+        // Five modes across the panel's 216 usable pixels — the old 55-pixel
+        // pitch fitted four and pushed the fifth off the right-hand edge.
+        int modes = ItemCounterBlockEntity.MODE_LABELS.length;
+        int pitch = 216 / modes;
+        for (int i = 0; i < modes; i++) {
             final int idx = i;
-            addRenderableWidget(Button.builder(Component.literal(ItemCounterBlockEntity.MODE_LABELS[i]), b ->
-                            send(be.getBlockPos(), "counter_mode", idx))
-                    .bounds(left + 12 + i * 55, top + MODE_Y + 12, 52, 14).build());
+            addRenderableWidget(Button.builder(Component.literal(ItemCounterBlockEntity.MODE_LABELS[i]), b -> {
+                        send(be.getBlockPos(), "counter_mode", idx);
+                        rebuildWidgets();
+                    })
+                    .bounds(left + 12 + i * pitch, top + MODE_Y + 12, pitch - 3, 14).build())
+                    .active = be.getDisplayMode() != i;
         }
         addRenderableWidget(Button.builder(Component.literal("Reset statistics"), b ->
                         send(be.getBlockPos(), "counter_reset", 0))
@@ -159,7 +166,10 @@ public class CounterScreen extends GadgetScreen {
         }
 
         gfx.drawString(font, "Pulse every:", x, top + PULSE_Y, DIM, false);
-        gfx.drawString(font, "Screen shows:  (now " + be.faceLabel() + ")", x, top + MODE_Y, DIM, false);
+        gfx.drawString(font, be.showsEverything()
+                        ? "Screen shows:  every rate at once"
+                        : "Screen shows:  " + ItemCounterBlockEntity.MODE_LABELS[be.getDisplayMode()],
+                x, top + MODE_Y, DIM, false);
     }
 
     /**

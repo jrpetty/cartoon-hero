@@ -57,7 +57,9 @@ public class ItemCounterBlockEntity extends BlockEntity {
     private static final long STALL_TICKS = 3600L; // 3 minutes
 
     /** Face readout modes, cycled with sneak + empty hand. */
-    public static final String[] MODE_LABELS = {"/min", "/hour", "total", "pulse"};
+    public static final String[] MODE_LABELS = {"/min", "/hour", "total", "pulse", "all"};
+    /** Show every rate at once rather than picking one. */
+    public static final int MODE_ALL = 4;
 
     /** Which way through the watched container items are counted. */
     public static final int COUNT_IN = 0;
@@ -310,6 +312,20 @@ public class ItemCounterBlockEntity extends BlockEntity {
     /** The unit label shown under the face value. */
     public String faceLabel() {
         return customName.isEmpty() ? MODE_LABELS[displayMode] : customName;
+    }
+
+    /** True when the face lists every statistic instead of one headline. */
+    public boolean showsEverything() {
+        return displayMode == MODE_ALL;
+    }
+
+    /** The rows drawn in {@link #MODE_ALL}: per minute, per hour, and lifetime. */
+    public String[] faceRows() {
+        return new String[]{
+                compact(rateMin) + "/m",
+                compact(rateHour) + "/h",
+                compact(total) + " tot",
+        };
     }
 
     public static void tick(Level level, BlockPos pos, BlockState state, ItemCounterBlockEntity be) {

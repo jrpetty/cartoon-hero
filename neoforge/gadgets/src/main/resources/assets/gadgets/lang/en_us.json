@@ -42,7 +42,7 @@
   "tip.gadgets.drain.2": "Right-click with a block to disguise it",
   "tip.gadgets.drain.3": "Empty hand: remove the disguise",
   "tip.gadgets.item_counter.1": "Counts items moving through the container it faces",
-  "tip.gadgets.item_counter.2": "Screen shows a live rate — /min, /hour, total, pulse",
+  "tip.gadgets.item_counter.2": "Screen shows /min, /hour, total, pulse — or all at once",
   "tip.gadgets.item_counter.3": "Right-click: stats & settings screen",
   "tip.gadgets.item_counter.4": "Redstone dust: set pulse size (1/4/8/16/32/64)",
   "tip.gadgets.item_magnet.1": "Pulls nearby dropped items into the container below",

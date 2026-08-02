@@ -12,12 +12,19 @@ import net.minecraft.world.level.block.state.BlockState;
 import org.joml.Matrix4f;
 
 /**
- * Draws the live readout on the counter's display face (opposite the sensor):
- * a big value line and a small unit label, full-bright like an LED panel.
+ * Draws the live readout on the counter's display face (opposite the sensor),
+ * full-bright like an LED panel: either one headline with its unit label, or —
+ * in the "all" mode — every rate listed at once under the counter's name.
  */
 public class ItemCounterRenderer implements BlockEntityRenderer<ItemCounterBlockEntity> {
     private static final int VALUE_COLOR = 0xFFC864;
     private static final int LABEL_COLOR = 0xC08840;
+
+    private static final float SCALE = 0.018F;
+    /** Usable width of the display face, in block pixels — a pixel of frame each side. */
+    private static final int FACE_PX = 14;
+    /** Text units that fit across the face at {@link #SCALE}. */
+    private static final float ROOM = FACE_PX / 16.0F / SCALE;
 
     private final Font font;
 
@@ -43,16 +50,45 @@ public class ItemCounterRenderer implements BlockEntityRenderer<ItemCounterBlock
             pose.mulPose(Axis.XP.rotationDegrees(back == Direction.UP ? -90.0F : 90.0F));
         }
         pose.translate(0.0, 0.0, -0.368);
-        pose.scale(0.018F, -0.018F, 0.018F);
+        pose.scale(SCALE, -SCALE, SCALE);
 
-        String value = be.faceValue();
-        String label = be.faceLabel();
         Matrix4f matrix = pose.last().pose();
-        int fullBright = LightTexture.FULL_BRIGHT;
-        font.drawInBatch(value, -font.width(value) / 2.0F, -9.0F, VALUE_COLOR, false,
-                matrix, buffers, Font.DisplayMode.POLYGON_OFFSET, 0, fullBright);
-        font.drawInBatch(label, -font.width(label) / 2.0F, 2.0F, LABEL_COLOR, false,
-                matrix, buffers, Font.DisplayMode.POLYGON_OFFSET, 0, fullBright);
+        if (be.showsEverything()) {
+            // Every statistic at once: the label heads the panel and the three
+            // rates stack under it, all on the small grid so they fit together.
+            String name = be.getCustomName().isEmpty() ? "counter" : be.getCustomName();
+            line(matrix, buffers, name, -18.0F, LABEL_COLOR);
+            String[] rows = be.faceRows();
+            for (int i = 0; i < rows.length; i++) {
+                line(matrix, buffers, rows[i], -6.0F + i * 9.0F, VALUE_COLOR);
+            }
+        } else {
+            line(matrix, buffers, be.faceValue(), -9.0F, VALUE_COLOR);
+            line(matrix, buffers, be.faceLabel(), 2.0F, LABEL_COLOR);
+        }
         pose.popPose();
+    }
+
+    /** One centred row, shortened if it would run past the face. */
+    private void line(Matrix4f matrix, MultiBufferSource buffers, String text, float y, int colour) {
+        String shown = fit(text);
+        font.drawInBatch(shown, -font.width(shown) / 2.0F, y, colour, false,
+                matrix, buffers, Font.DisplayMode.POLYGON_OFFSET, 0, LightTexture.FULL_BRIGHT);
+    }
+
+    /**
+     * Shortens a row that would run past the display face. A counter given a
+     * long name used to draw it at full width straight off the block and out
+     * into the air on both sides.
+     */
+    private String fit(String text) {
+        if (font.width(text) <= ROOM) {
+            return text;
+        }
+        String out = text;
+        while (!out.isEmpty() && font.width(out + "…") > ROOM) {
+            out = out.substring(0, out.length() - 1);
+        }
+        return out.isEmpty() ? "" : out + "…";
     }
 }
