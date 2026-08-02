@@ -554,15 +554,26 @@ public final class EngineEvents {
         if (source.getServer() == null) {
             return 0;
         }
-        var all = MapManifest.listAll(source.getServer());
-        if (all.isEmpty()) {
+        var local = MapManifest.listAll(source.getServer());
+        var packs = ArenaLoader.all();
+        if (local.isEmpty() && packs.isEmpty()) {
             source.sendSuccess(() -> Component.literal(
                     "§7No maps yet. Build one, then §f/arena create <name>§7."), false);
             return 1;
         }
-        source.sendSuccess(() -> Component.literal("§6— " + all.size() + " maps —"), false);
-        for (MapManifest m : all) {
-            source.sendSuccess(() -> Component.literal(m.line()), false);
+        if (!local.isEmpty()) {
+            source.sendSuccess(() -> Component.literal("§6— made here —"), false);
+            for (MapManifest m : local) {
+                source.sendSuccess(() -> Component.literal(m.line()), false);
+            }
+        }
+        // Datapack maps are listed apart from local ones on purpose: one set you
+        // can edit and re-save, the other arrived from somebody else and will be
+        // replaced wholesale next time they update it.
+        if (!packs.isEmpty()) {
+            source.sendSuccess(() -> Component.literal("§6— from datapacks —"), false);
+            packs.forEach((key, m) -> source.sendSuccess(
+                    () -> Component.literal(m.line() + " §8[" + key + "]"), false));
         }
         return 1;
     }
@@ -573,14 +584,18 @@ public final class EngineEvents {
         }
         MapManifest m = MapManifest.load(source.getServer(), name);
         if (m == null) {
+            m = ArenaLoader.manifestFor(name);
+        }
+        if (m == null) {
             source.sendFailure(Component.literal("No map called '" + name + "'."));
             return 0;
         }
-        source.sendSuccess(() -> Component.literal("§6" + m.title() + " §8v" + m.version()), false);
-        source.sendSuccess(() -> Component.literal("§7by §f" + m.author()), false);
-        source.sendSuccess(() -> Component.literal("§7" + m.blurb()), false);
+        final MapManifest found = m;
+        source.sendSuccess(() -> Component.literal("§6" + found.title() + " §8v" + found.version()), false);
+        source.sendSuccess(() -> Component.literal("§7by §f" + found.author()), false);
+        source.sendSuccess(() -> Component.literal("§7" + found.blurb()), false);
         source.sendSuccess(() -> Component.literal(
-                "§7Difficulty §f" + m.difficulty() + "§7, ruleset §f" + m.ruleset()), false);
+                "§7Difficulty §f" + found.difficulty() + "§7, ruleset §f" + found.ruleset()), false);
         return 1;
     }
 

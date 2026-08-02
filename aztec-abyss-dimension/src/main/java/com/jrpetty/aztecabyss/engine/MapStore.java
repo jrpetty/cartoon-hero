@@ -172,7 +172,18 @@ public final class MapStore {
         StructureTemplateManager mgr = level.getStructureManager();
         Optional<StructureTemplate> found = mgr.get(idFor(name));
         if (found.isEmpty()) {
-            // Fall back to a fully-qualified id, so datapack maps load by name too.
+            // A datapack map is named by its manifest, not by its structure, so ask
+            // the manifest which structure it means before giving up.
+            String viaManifest = ArenaLoader.structureFor(name);
+            if (viaManifest != null) {
+                ResourceLocation rl = ResourceLocation.tryParse(viaManifest);
+                if (rl != null) {
+                    found = mgr.get(rl);
+                }
+            }
+        }
+        if (found.isEmpty()) {
+            // Last resort: treat what was typed as a structure id outright.
             ResourceLocation direct = ResourceLocation.tryParse(name);
             if (direct == null) {
                 return -1;

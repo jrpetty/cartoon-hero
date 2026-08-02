@@ -39,7 +39,35 @@ When you like it:
 ```
 
 The file lands in `<world>/generated/abyss_local/structures/myarena.nbt`. That
-file *is* the map — signs, shops and all. Copy it into a datapack to share it.
+file *is* the map — signs, shops and all.
+
+### Sharing it
+
+Copy the `.nbt` into a datapack and add a manifest beside it so it arrives with
+its name and its rules rather than as anonymous geometry:
+
+```
+MyMapPack/
+├── pack.mcmeta
+└── data/mypack/
+    ├── abyss_arena/blood_harbour.json     ← the manifest
+    ├── abyss_ruleset/harbour.json         ← optional, its own rules
+    └── structure/blood_harbour.nbt        ← the build
+```
+
+```json
+{
+  "title": "Blood Harbour",
+  "author": "you",
+  "blurb": "A flooded dock. The tide decides where you can stand.",
+  "difficulty": "HARD",
+  "ruleset": "mypack:harbour",
+  "structure": "mypack:blood_harbour"
+}
+```
+
+Drop it in `saves/<world>/datapacks/`, `/reload`, and it appears in
+`/arena maps`. `/arena load blood_harbour` places it by name.
 
 ---
 
