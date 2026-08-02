@@ -57,6 +57,10 @@ public final class AchievementManager {
             case "cpu_wins_hard" -> StatsTracker.count(player, "battle_wins_hard");
             case "cpu_wins" -> StatsTracker.count(player, "battle_wins");
             case "games" -> StatsTracker.count(player, "games_played");
+            case "twentyone_wins" -> StatsTracker.count(player, "twentyone_wins");
+            case "guesswho_wins" -> StatsTracker.count(player, "guesswho_wins");
+            case "bluff_wins" -> StatsTracker.count(player, "bluff_wins");
+            case "bluff_catches" -> StatsTracker.count(player, "bluff_catches");
             case "picks" -> totalPicks(player);
             case "legendaries" -> tierCount(player, Tier.LEGENDARY);
             case "categories" -> categoriesComplete(player);

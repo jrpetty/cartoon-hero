@@ -60,7 +60,10 @@ public class CollectionBookScreen extends Screen {
      * both leaves rather than being squeezed into one narrow column, which is
      * what used to chop every title and blurb in half.
      */
-    private static final int AWARD_SPREADS = 4; // one per Achievement.Group
+    // one page per group, DERIVED — this was a hardcoded 4, which would have
+    // silently hidden any group added after it (and one just was)
+    private static final int AWARD_SPREADS =
+            com.jrpetty.mobtrumps.game.Achievement.Group.values().length;
     private static final int BACK_SPREADS = AWARD_SPREADS + 2;
     /** Back pages are drawn through this scale so the text is properly legible. */
     private static final float UI = 1.25f;

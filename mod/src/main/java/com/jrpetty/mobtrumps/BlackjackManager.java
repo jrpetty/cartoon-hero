@@ -157,6 +157,7 @@ public final class BlackjackManager {
             case PLAYER_WIN -> {
                 RecyclerManager.giveFragments(player, stake * 2);
                 StatsTracker.bump(player, "twentyone_wins");
+                ServerSync.markAwards(player);
                 player.sendSystemMessage(Component.literal(
                                 "Twenty-One: " + game.playerTotal() + " beats "
                                         + describeDealer(game) + " — you win " + stake + ".")

@@ -117,6 +117,28 @@ public final class Achievements {
                 "Beat other players 100 times", "duel_wins", 100,
                 new Reward("netherite_ingot", 2), new Reward("enchanted_golden_apple", 1));
 
+        // --- the parlour: the other games the deck plays -------------------
+        add("twentyone_1", Group.PARLOUR, "Twenty-One",
+                "Beat the dealer at Twenty-One", "twentyone_wins", 1, iron(6), xp(1));
+        add("twentyone_10", Group.PARLOUR, "Counting the Deck",
+                "Beat the dealer 10 times", "twentyone_wins", 10, gold(5), xp(3));
+        add("twentyone_30", Group.PARLOUR, "House's Nightmare",
+                "Beat the dealer 30 times", "twentyone_wins", 30, diamond(3), xp(6));
+        add("guesswho_1", Group.PARLOUR, "Got Your Number",
+                "Find the hidden mob in Guess Who", "guesswho_wins", 1, iron(6), xp(1));
+        add("guesswho_10", Group.PARLOUR, "Twenty Questions",
+                "Win Guess Who 10 times", "guesswho_wins", 10, gold(5), xp(3));
+        add("guesswho_25", Group.PARLOUR, "Mind Reader",
+                "Win Guess Who 25 times", "guesswho_wins", 25, diamond(3), xp(6));
+        add("bluff_1", Group.PARLOUR, "Straight Face",
+                "Win a game of Mob Bluff", "bluff_wins", 1, iron(6), xp(1));
+        add("bluff_10", Group.PARLOUR, "Card Sharp",
+                "Win Mob Bluff 10 times", "bluff_wins", 10, gold(5), xp(3));
+        add("bluff_30", Group.PARLOUR, "Poker Face",
+                "Win Mob Bluff 30 times", "bluff_wins", 30, diamond(4), xp(8));
+        add("bluff_catch_15", Group.PARLOUR, "Called It",
+                "Catch 15 liars in Mob Bluff", "bluff_catches", 15, gold(6), xp(4));
+
         // --- Hunter: out in the world -------------------------------------
         add("kills_25", Group.HUNTER, "Field Work",
                 "Hunt 25 mobs", "kills", 25, iron(4));

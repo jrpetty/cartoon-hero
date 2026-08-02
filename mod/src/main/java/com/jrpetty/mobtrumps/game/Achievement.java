@@ -36,6 +36,7 @@ public record Achievement(String id, Group group, String title, String descripti
         COLLECTOR("Collector", "Filling the binder", 0xFF3FA7D6),
         ARENA("The Arena", "Games against the CPU", 0xFF7FB069),
         DUELIST("Duelist", "Beating real players", 0xFFF2C14E),
+        PARLOUR("The Parlour", "Twenty-One, Guess Who and Bluff", 0xFF9B6BD9),
         HUNTER("Hunter", "Out in the world", 0xFFD65A31);
 
         private final String label;

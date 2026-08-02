@@ -287,6 +287,7 @@ public final class GuessWhoManager {
         if (right) {
             game.winner = player.getUUID();
             StatsTracker.bump(player, "guesswho_wins");
+            ServerSync.markAwards(player);
             RecyclerManager.giveFragments(player, reward(board.log.size()));
             player.sendSystemMessage(Component.literal(
                             "Guess Who: " + named.displayName() + ", in " + board.log.size()

@@ -67,6 +67,9 @@ public final class BluffManager {
             }
         }
 
+        /** Ticks until the next computer move. */
+        int aiWait;
+
         void sawPlay(int seat, int cards) {
             for (BluffAI brain : brains) {
                 brain.sawPlay(game, seat, cards);
@@ -195,9 +198,9 @@ public final class BluffManager {
         Table table = new Table(seatsOf(player), stake);
         TABLES.put(player.getUUID(), table);
         sound(player, SoundEvents.BOOK_PAGE_TURN, 1.3F);
-        // whoever leads, let the computer seats act until it is the player's move
-        runComputerSeats(player, table);
-        finishIfOver(player, table);
+        // whoever leads, the computer seats now move on the server clock, one
+        // beat at a time, so the player watches the round open
+        armAi(table, FIRST_MOVE_TICKS);
         send(player);
     }
 
@@ -216,8 +219,7 @@ public final class BluffManager {
         }
         table.sawPlay(table.mySeat, before - table.game.handSize(table.mySeat));
         sound(player, SoundEvents.BOOK_PAGE_TURN, 1.0F);
-        runComputerSeats(player, table);
-        finishIfOver(player, table);
+        armAi(table, FIRST_MOVE_TICKS);
         send(player);
     }
 
@@ -232,10 +234,16 @@ public final class BluffManager {
         }
         Bluff.Reveal reveal = table.game.lastReveal();
         boolean good = reveal != null && reveal.wasLying();
+        if (good) {
+            // catches are worth counting: they are the skill in the game
+            StatsTracker.bump(player, "bluff_catches");
+            ServerSync.markAwards(player);
+        }
         sound(player, good ? SoundEvents.PLAYER_LEVELUP : SoundEvents.ITEM_BREAK,
                 good ? 1.2F : 0.8F);
         table.roundTurnedOver();
-        runComputerSeats(player, table);
+        // a longer beat after a reveal, so what was turned over can be read
+        armAi(table, REVEAL_PAUSE_TICKS);
         finishIfOver(player, table);
         send(player);
     }
@@ -253,36 +261,81 @@ public final class BluffManager {
         send(player);
     }
 
+    /** Ticks before the first computer response to something the player did. */
+    private static final int FIRST_MOVE_TICKS = 14;
+    /** Ticks between one computer move and the next. */
+    private static final int MOVE_TICKS = 16;
+    /** Extra beat after a challenge, so the revealed cards can be read. */
+    private static final int REVEAL_PAUSE_TICKS = 34;
+
+    private static void armAi(Table table, int base) {
+        table.aiWait = base + table.random.nextInt(9);
+    }
+
     /**
-     * Let every computer seat move until it is the player's turn again, or the
-     * game ends. Bounded by the engine's own move cap so a policy bug cannot
-     * spin the server thread.
+     * Advance every table whose turn belongs to a computer seat — one move per
+     * beat, so a round unfolds in front of the player instead of resolving
+     * inside their own button press. Before this, all three opponents moved in
+     * the same instant and the "is thinking" line was dead text: the player
+     * only ever saw the aftermath of a round, never the round.
+     *
+     * <p>A table whose player is offline simply waits; nothing is paid out or
+     * lost while they cannot see it.
      */
-    private static void runComputerSeats(ServerPlayer player, Table table) {
-        int guard = 0;
-        while (!table.game.done() && table.game.turn() != table.mySeat
-                && guard++ <= Bluff.MAX_MOVES) {
-            int seat = table.game.turn();
-            for (BluffAI brain : table.brains) {
-                brain.sync(table.game);
-            }
-            boolean challenging = table.brains[seat].shouldChallenge(table.game, seat);
-            if (challenging) {
-                table.game.challenge(seat);
-                table.roundTurnedOver();
+    public static void tick(net.minecraft.server.MinecraftServer server) {
+        if (TABLES.isEmpty()) {
+            return;
+        }
+        for (Map.Entry<UUID, Table> entry : TABLES.entrySet()) {
+            Table table = entry.getValue();
+            Bluff game = table.game;
+            if (game.done() || game.turn() == table.mySeat) {
                 continue;
             }
-            if (table.game.pendingOut() >= 0) {
-                table.game.passOnExit(seat);
+            ServerPlayer player = server.getPlayerList().getPlayer(entry.getKey());
+            if (player == null) {
                 continue;
             }
-            List<Integer> picks = table.brains[seat].choosePlay(table.game, seat, table.random);
+            if (--table.aiWait > 0) {
+                continue;
+            }
+            aiMoveOnce(player, table);
+        }
+    }
+
+    /** One computer seat takes one move, and the player is shown it. */
+    private static void aiMoveOnce(ServerPlayer player, Table table) {
+        Bluff game = table.game;
+        int seat = game.turn();
+        for (BluffAI brain : table.brains) {
+            brain.sync(game);
+        }
+        if (table.brains[seat].shouldChallenge(game, seat)) {
+            game.challenge(seat);
+            table.roundTurnedOver();
+            Bluff.Reveal reveal = game.lastReveal();
+            boolean caught = reveal != null && reveal.wasLying();
+            // quieter than the player's own sounds — it is across the table
+            sound(player, caught ? SoundEvents.PLAYER_LEVELUP : SoundEvents.ITEM_BREAK,
+                    caught ? 0.9F : 1.1F, 0.4F);
+            armAi(table, REVEAL_PAUSE_TICKS);
+        } else if (game.pendingOut() >= 0) {
+            game.passOnExit(seat);
+            armAi(table, MOVE_TICKS);
+        } else {
+            List<Integer> picks = table.brains[seat].choosePlay(game, seat, table.random);
             int count = picks.size();
-            if (!table.game.play(seat, picks)) {
-                break; // should not happen; stop rather than spin
+            if (!game.play(seat, picks)) {
+                // should be impossible; freeze this table rather than spin it
+                table.aiWait = Integer.MAX_VALUE;
+                return;
             }
             table.sawPlay(seat, count);
+            sound(player, SoundEvents.BOOK_PAGE_TURN, 0.85F + 0.1F * seat, 0.35F);
+            armAi(table, MOVE_TICKS);
         }
+        finishIfOver(player, table);
+        send(player);
     }
 
     /** Pay out once, the moment a table finishes. */
@@ -292,6 +345,7 @@ public final class BluffManager {
         }
         boolean won = table.game.winner() == table.mySeat;
         StatsTracker.bump(player, won ? "bluff_wins" : "bluff_losses");
+        ServerSync.markAwards(player);
         if (won) {
             // the stake back, plus the same again for each opponent beaten
             int payout = table.wagered * table.seats;
@@ -316,8 +370,13 @@ public final class BluffManager {
 
     private static void sound(ServerPlayer player, net.minecraft.sounds.SoundEvent event,
                               float pitch) {
+        sound(player, event, pitch, 0.7F);
+    }
+
+    private static void sound(ServerPlayer player, net.minecraft.sounds.SoundEvent event,
+                              float pitch, float volume) {
         player.serverLevel().playSound(null, player.getX(), player.getY(), player.getZ(),
-                event, SoundSource.PLAYERS, 0.7F, pitch);
+                event, SoundSource.PLAYERS, volume, pitch);
     }
 
     /** Push the table to its player. */

@@ -44,6 +44,7 @@ public class MobTrumps {
         NeoForge.EVENT_BUS.addListener(MobDrops::onLivingDrops);
         NeoForge.EVENT_BUS.addListener((net.neoforged.neoforge.event.tick.ServerTickEvent.Post event) -> {
             DuelManager.tickTimers(event.getServer());
+            BluffManager.tick(event.getServer());
             ConditionTracker.tick(event.getServer());
             ServerSync.tick(event.getServer());
             // check for a ranked season rollover about twice a minute
