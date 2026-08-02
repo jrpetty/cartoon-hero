@@ -9,8 +9,6 @@ import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.util.RandomSource;
-import net.minecraft.world.effect.MobEffectInstance;
-import net.minecraft.world.effect.MobEffects;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.MobSpawnType;
@@ -272,22 +270,4 @@ public final class Griever {
         }
     }
 
-    /**
-     * Darkness around a Griever, so being near one costs you the corridor.
-     *
-     * <p>The maze's problem is that a corridor you can see down is a corridor you
-     * can plan in. A Griever that blinds the ground it stands on turns a chase
-     * into a thing you navigate by memory and sound, which is the version of this
-     * that is frightening rather than merely fast.
-     */
-    public static void pressure(ServerLevel level, List<Mob> grievers) {
-        for (Mob g : grievers) {
-            for (ServerPlayer p : level.players()) {
-                if (p.distanceToSqr(g) > 18.0 * 18.0) {
-                    continue;
-                }
-                p.addEffect(new MobEffectInstance(MobEffects.DARKNESS, 60, 0, false, false));
-            }
-        }
-    }
 }

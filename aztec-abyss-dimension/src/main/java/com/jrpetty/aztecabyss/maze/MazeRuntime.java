@@ -253,7 +253,18 @@ public final class MazeRuntime {
      */
     private static void tickRunners(ServerLevel level, long t) {
         MazeData.Layout layout = todaysLayout(level);
-        for (ServerPlayer p : level.players()) {
+        // Escapees are collected and sent home after the loop, never inside it.
+        // Going through the portal calls changeDimension, which removes the player
+        // from the very list being walked here - so reaching the exit threw a
+        // ConcurrentModificationException out of the server tick and took the game
+        // down with it. Finding the way out crashed the game, which is the worst
+        // possible moment for it to happen.
+        //
+        // The copy is belt to that brace: anything else that ever removes a player
+        // mid-loop is now survivable rather than fatal.
+        java.util.List<ServerPlayer> escaped = new ArrayList<>();
+        java.util.List<Integer> escapedSeconds = new ArrayList<>();
+        for (ServerPlayer p : new ArrayList<>(level.players())) {
             brief(p);
             BlockPos at = p.blockPosition();
             int cellX = at.getX() / MazeData.CELL;
@@ -281,9 +292,15 @@ public final class MazeRuntime {
                 if (seconds >= 0 && MazeRace.onEscape(level, p, seconds)) {
                     MazeAdvancements.grant(p, MazeAdvancements.RACE_WIN);
                 }
-                sendHome(level, p, seconds);
+                escaped.add(p);
+                escapedSeconds.add(seconds);
+                // No bar for somebody who is on their way out of the dimension.
+                continue;
             }
             updateBar(level, p, layout, t);
+        }
+        for (int i = 0; i < escaped.size(); i++) {
+            sendHome(level, escaped.get(i), escapedSeconds.get(i));
         }
         // Drop bars for anyone who has left the dimension. The bar has to be
         // emptied, not just forgotten: dropping the reference alone leaves the
@@ -530,7 +547,6 @@ public final class MazeRuntime {
             Griever.spawnNear(level, runners.get(rng.nextInt(runners.size())), rng);
         }
         Griever.ambience(level, loaded, rng);
-        Griever.pressure(level, loaded);
     }
 
     /**
