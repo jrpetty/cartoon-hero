@@ -130,6 +130,34 @@ public final class EngineEvents {
                         .then(Commands.argument("name", com.mojang.brigadier.arguments.StringArgumentType.word())
                                 .executes(ctx -> create(ctx.getSource(),
                                         com.mojang.brigadier.arguments.StringArgumentType.getString(ctx, "name")))))
+                .then(Commands.literal("publish")
+                        .then(Commands.argument("name", com.mojang.brigadier.arguments.StringArgumentType.word())
+                                .executes(ctx -> publish(ctx.getSource(),
+                                        com.mojang.brigadier.arguments.StringArgumentType.getString(ctx, "name")))))
+                .then(Commands.literal("unpublish")
+                        .then(Commands.argument("name", com.mojang.brigadier.arguments.StringArgumentType.word())
+                                .executes(ctx -> unpublish(ctx.getSource(),
+                                        com.mojang.brigadier.arguments.StringArgumentType.getString(ctx, "name")))))
+                .then(Commands.literal("published")
+                        .executes(ctx -> listPublished(ctx.getSource())))
+                .then(Commands.literal("reloadmaps")
+                        .executes(ctx -> {
+                            PublishedMaps.load(ctx.getSource().getServer());
+                            int n = PublishedMaps.all(ctx.getSource().getServer()).size();
+                            ctx.getSource().sendSuccess(() -> Component.literal(
+                                    "§a✔ Read the maps folder again — §f" + n + "§a on the portal."), true);
+                            return 1;
+                        }))
+                .then(Commands.literal("folder")
+                        .executes(ctx -> {
+                            PublishedMaps.ensureFolder(ctx.getSource().getServer());
+                            ctx.getSource().sendSuccess(() -> Component.literal(
+                                    "§6Maps and settings live in §f"
+                                            + PublishedMaps.root(ctx.getSource().getServer())), false);
+                            ctx.getSource().sendSuccess(() -> Component.literal(
+                                    "§7There is a README in there saying what each file does."), false);
+                            return 1;
+                        }))
                 .then(Commands.literal("test")
                         .executes(ctx -> test(ctx.getSource(), "built-in"))
                         .then(Commands.argument("ruleset", com.mojang.brigadier.arguments.StringArgumentType.string())
@@ -765,6 +793,104 @@ public final class EngineEvents {
         }
         return level.getBlockEntity(bhr.getBlockPos())
                 instanceof com.jrpetty.aztecabyss.block.MarkerBlockEntity be ? be : null;
+    }
+
+    /**
+     * {@code /arena publish <name>} - puts a saved map on the portal.
+     *
+     * <p>Stamps it once into a permanent slot in the Abyss, in the same
+     * far-apart-on-X layout the three hand-built arenas already use, and writes a
+     * readable manifest into the maps folder. From then on it is a place, and the
+     * portal can send people to it.
+     */
+    private static int publish(CommandSourceStack source, String name) {
+        net.minecraft.server.MinecraftServer server = source.getServer();
+        if (server == null) {
+            return 0;
+        }
+        ServerLevel abyss = server.getLevel(com.jrpetty.aztecabyss.AztecAbyssConstants.ABYSS_LEVEL_KEY);
+        if (abyss == null) {
+            source.sendFailure(Component.literal("The Abyss dimension is not loaded."));
+            return 0;
+        }
+        PublishedMaps.Entry existing = PublishedMaps.byName(server, name);
+        int slot = existing != null ? existing.slot() : PublishedMaps.freeSlot(server);
+        net.minecraft.core.BlockPos origin = new net.minecraft.core.BlockPos(
+                20000 + slot * 2048, PublishedMaps.SLOT_Y, 0);
+
+        int placed = MapStore.load(abyss, name, origin);
+        if (placed < 0) {
+            source.sendFailure(Component.literal(
+                    "No map called " + name + ". Run /arena maps to see what there is."));
+            return 0;
+        }
+        var bounds = MapStore.boundsOf(abyss, name, origin);
+        int sx = bounds == null ? 64 : bounds.maxX() - bounds.minX();
+        int sy = bounds == null ? 32 : bounds.maxY() - bounds.minY();
+        int sz = bounds == null ? 64 : bounds.maxZ() - bounds.minZ();
+
+        MapManifest meta = MapManifest.load(server, name);
+        PublishedMaps.Entry entry = new PublishedMaps.Entry(
+                name,
+                meta != null ? meta.title() : name,
+                meta != null ? meta.author() : "unknown",
+                meta != null ? meta.blurb() : "",
+                meta != null ? meta.difficulty() : "MEDIUM",
+                meta != null && !meta.ruleset().equals("built-in") ? meta.ruleset() : "aztecabyss:classic",
+                slot, sx, sy, sz);
+        if (!PublishedMaps.save(server, entry)) {
+            source.sendFailure(Component.literal("Could not write to the maps folder."));
+            return 0;
+        }
+        PublishedMaps.copyStructure(server, name);
+
+        source.sendSuccess(() -> Component.literal(
+                "§a✔ Published §f" + entry.title() + "§a — slot " + slot
+                        + ", " + sx + " × " + sy + " × " + sz + "."), true);
+        source.sendSuccess(() -> Component.literal(
+                "§7It is on the portal now. §8Stamped at x=" + origin.getX()), false);
+        // Validate after publishing rather than before: the map is already saved
+        // and refusing to list it would not un-break anything, but silence would.
+        var problems = MapScan.validate(MapScan.scan(abyss, bounds != null ? bounds
+                : new net.minecraft.world.level.levelgen.structure.BoundingBox(
+                        origin.getX(), origin.getY(), origin.getZ(),
+                        origin.getX() + sx, origin.getY() + sy, origin.getZ() + sz)));
+        for (String p : problems) {
+            source.sendSuccess(() -> Component.literal(" " + p), false);
+        }
+        return 1;
+    }
+
+    private static int unpublish(CommandSourceStack source, String name) {
+        if (source.getServer() == null) {
+            return 0;
+        }
+        if (!PublishedMaps.remove(source.getServer(), name)) {
+            source.sendFailure(Component.literal("Nothing published under that name."));
+            return 0;
+        }
+        source.sendSuccess(() -> Component.literal(
+                "§6" + name + " §7is off the portal. §8The blocks are still where they were."), true);
+        return 1;
+    }
+
+    private static int listPublished(CommandSourceStack source) {
+        if (source.getServer() == null) {
+            return 0;
+        }
+        var all = PublishedMaps.ordered(source.getServer());
+        if (all.isEmpty()) {
+            source.sendSuccess(() -> Component.literal(
+                    "§7Nothing published. §8/arena publish <name> puts a map on the portal."), false);
+            return 1;
+        }
+        source.sendSuccess(() -> Component.literal("§6— on the portal —"), false);
+        for (PublishedMaps.Entry e : all) {
+            source.sendSuccess(() -> Component.literal(
+                    " §6" + e.title() + " §8(" + e.name() + ") §7by §f" + e.author()
+                            + " §8· " + e.difficulty() + " · " + e.ruleset()), false);
+        }
+        return 1;
     }
 
     /**

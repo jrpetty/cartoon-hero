@@ -33,6 +33,15 @@ public record MapSelectPayload(int mapId) implements CustomPacketPayload {
      */
     public static final int CREATOR = 901;
 
+    /**
+     * Published maps are picked as {@code CUSTOM_BASE + index into the server's
+     * published list}, which is the same list the picker was handed when it
+     * opened - so the two sides cannot disagree about which map is which without
+     * the list having changed underneath, and a stale pick lands on a real map or
+     * on nothing rather than on the wrong arena.
+     */
+    public static final int CUSTOM_BASE = 1000;
+
     public static final Type<MapSelectPayload> TYPE =
             new Type<>(ResourceLocation.fromNamespaceAndPath(AztecAbyssConstants.MOD_ID, "map_select"));
 

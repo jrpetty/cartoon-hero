@@ -36,11 +36,14 @@ public final class MapSelectScreen extends Screen {
 
     private final int[] bestRounds;
     private int selected;
+    /** Published maps, packed as {@code name|title|difficulty|blurb} by the server. */
+    private final java.util.List<String> customMaps;
 
-    public MapSelectScreen(int currentChoice, int[] bestRounds) {
+    public MapSelectScreen(int currentChoice, int[] bestRounds, java.util.List<String> customMaps) {
         super(Component.literal("Choose Your Hunt"));
         this.selected = currentChoice;
         this.bestRounds = bestRounds;
+        this.customMaps = customMaps == null ? java.util.List.of() : customMaps;
     }
 
     /**
@@ -64,7 +67,7 @@ public final class MapSelectScreen extends Screen {
      * the buttons grew downward is how the bottom card ends up underneath the
      * Maze button on a short window.
      */
-    private static final int BUTTON_BAND = 96;
+    private static final int BUTTON_BAND = 124;
 
     /** Top edge of card {@code index}, stacking the variable heights above it. */
     private int cardY(int index) {
@@ -100,6 +103,27 @@ public final class MapSelectScreen extends Screen {
                         })
                 .bounds(this.width / 2 - 110, this.height - 68, 220, 20)
                 .build());
+        // Published maps get a row of their own above the built-in modes. A button
+        // per map rather than a card, because there may be twenty of them and the
+        // three hand-built arenas are the thing this screen is mainly for.
+        int cy = this.height - 116;
+        int shown = Math.min(customMaps.size(), 4);
+        for (int i = 0; i < shown; i++) {
+            String packed = customMaps.get(i);
+            String name = com.jrpetty.aztecabyss.network.OpenMapPickerPayload.field(packed, 0);
+            String title = com.jrpetty.aztecabyss.network.OpenMapPickerPayload.field(packed, 1);
+            String diff = com.jrpetty.aztecabyss.network.OpenMapPickerPayload.field(packed, 2);
+            int w = 220 / Math.max(1, shown);
+            addRenderableWidget(Button.builder(
+                            Component.literal("§d" + title + " §8" + diff), b -> {
+                                PacketDistributor.sendToServer(new MapSelectPayload(
+                                        MapSelectPayload.CUSTOM_BASE + indexOfName(name)));
+                                onClose();
+                            })
+                    .bounds(this.width / 2 - 110 + i * w, cy, w - 2, 20)
+                    .build());
+        }
+
         // Creator is set apart further still - it is the only thing on this screen
         // that is not a fight. Listed rather than left to be discovered, because a
         // mode you reach only by knowing a command to type is not really offered.
@@ -110,6 +134,17 @@ public final class MapSelectScreen extends Screen {
                         })
                 .bounds(this.width / 2 - 110, this.height - 92, 220, 20)
                 .build());
+    }
+
+    /** Where a published map sits in the server's list, which is what it is picked by. */
+    private int indexOfName(String name) {
+        for (int i = 0; i < customMaps.size(); i++) {
+            if (com.jrpetty.aztecabyss.network.OpenMapPickerPayload
+                    .field(customMaps.get(i), 0).equals(name)) {
+                return i;
+            }
+        }
+        return 0;
     }
 
     /** The whole card is the click target, so selection feels like picking a tile. */

@@ -54,6 +54,11 @@ public final class ModNetworking {
                             com.jrpetty.aztecabyss.maze.MazeEvents.sendToMaze(sp);
                             return;
                         }
+                        if (payload.mapId() >= MapSelectPayload.CUSTOM_BASE) {
+                            com.jrpetty.aztecabyss.engine.PublishedMaps.playFromPicker(
+                                    sp, payload.mapId() - MapSelectPayload.CUSTOM_BASE);
+                            return;
+                        }
                         // Creator is a mode, not a hunt - nothing is recorded as a
                         // choice, because there is no portal trip to record it for.
                         if (payload.mapId() == MapSelectPayload.CREATOR) {
@@ -118,8 +123,15 @@ public final class ModNetworking {
                 bests.add(stats.bestRoundOnMap(player.getUUID(), i));
             }
         }
+        java.util.List<String> custom = new java.util.ArrayList<>();
+        if (player.getServer() != null) {
+            for (com.jrpetty.aztecabyss.engine.PublishedMaps.Entry e
+                    : com.jrpetty.aztecabyss.engine.PublishedMaps.ordered(player.getServer())) {
+                custom.add(e.name() + "|" + e.title() + "|" + e.difficulty() + "|" + e.blurb());
+            }
+        }
         PacketDistributor.sendToPlayer(player, new OpenMapPickerPayload(
-                player.getPersistentData().getInt("aztecabyss_chosen_map"), bests));
+                player.getPersistentData().getInt("aztecabyss_chosen_map"), bests, custom));
     }
 
     /** Pushes a player's squadmate list for the co-op teammate HUD. */

@@ -72,7 +72,8 @@ public final class ClientAbyssState {
         for (int i = 0; i < n; i++) {
             bests[i] = payload.bestOn(i);
         }
-        Minecraft.getInstance().setScreen(new MapSelectScreen(payload.currentChoice(), bests));
+        Minecraft.getInstance().setScreen(new MapSelectScreen(
+                payload.currentChoice(), bests, payload.customMaps()));
     }
 
     public static void acceptCooldown(com.jrpetty.aztecabyss.network.AbyssCooldownPayload payload) {

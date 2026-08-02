@@ -35,6 +35,13 @@ public final class AbyssEventHandler {
     public void onLevelLoad(LevelEvent.Load event) {
         if (event.getLevel() instanceof ServerLevel level && inAbyss(level)) {
             ArenaGenerator.generateIfNeeded(level);
+            // Re-read the maps folder per world, not once per process. The list is
+            // static, so a singleplayer client hopping between two worlds would
+            // otherwise show the first world's published maps on the second one's
+            // portal - and send anyone who picked one to an empty slot.
+            if (level.getServer() != null) {
+                com.jrpetty.aztecabyss.engine.PublishedMaps.load(level.getServer());
+            }
         }
     }
 
