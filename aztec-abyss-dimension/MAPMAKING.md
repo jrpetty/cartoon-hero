@@ -371,6 +371,29 @@ Integers only, no expressions — on purpose. That covers counting, flags, timer
 and scores, and it cannot be used to hang a server. A map you downloaded from a
 stranger stays safe to run.
 
+### Later — delays and repeating timers
+
+The script layer could say *"when this happens, do that"* and had no way to say
+*"in thirty seconds, do that"*. Every countdown, delayed gate, staged reveal and
+timed penalty had to be faked by polling `tick` against a variable you incremented
+yourself — a counter in every map that merely wanted a pause.
+
+```json
+{ "delay": { "seconds": 30, "do": [ { "open_area": "vault" } ] } }
+
+{ "every": { "seconds": 10, "times": 5,
+             "do": [ { "spawn": { "id": "minecraft:husk", "at": "boss" } } ] } }
+```
+
+`delay` fires once. `every` repeats — leave `times` off and it runs until the run
+ends, which is what a heartbeat wants and is safe because ending a run clears the
+queue with it.
+
+Both work in **both** modes. A countdown is not a free-mode idea.
+
+`/arena status` shows how many are queued, so a map that has scheduled something
+into the far future is visible rather than mysterious.
+
 ### Blocks — reacting to what somebody touched
 
 Rounds answer *when*. Regions answer *where somebody is standing*. Neither answers

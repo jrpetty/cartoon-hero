@@ -13,6 +13,21 @@ behaviour that was already there · **docs**
 
 ## Unreleased
 
+### `delay` and `every` — the script layer learns about later
+
+- **feat** `{ "delay": { "seconds": 30, "do": [...] } }` and
+  `{ "every": { "seconds": 10, "times": 5, "do": [...] } }`. The script layer could
+  say "when this happens, do that" and had no way to say "in thirty seconds, do
+  that" — so every countdown, delayed gate, staged reveal and timed penalty was
+  faked by polling `tick` against a hand-incremented variable. That is the shape of
+  a missing feature, not a technique.
+- **change** Both work in both modes. A countdown is not a free-mode idea.
+- **change** `Script.runActions` is now the single path for running an action list,
+  so delayed and immediate work cannot drift apart.
+- **change** The queue is capped at 256 and cleared when a run ends — a delayed
+  action firing into a finished run would act on an arena nobody is in.
+- **feat** `/arena status` reports how many actions are queued.
+
 ### Fix the build (second attempt)
 
 - **fix** The per-gate edit used unanchored whole-file string replacement, so the

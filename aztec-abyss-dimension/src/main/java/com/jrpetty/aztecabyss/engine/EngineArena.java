@@ -487,6 +487,9 @@ public final class EngineArena {
         current.recordResult();
         current.vars.clear();
         current.inRegion.clear();
+        // Anything queued dies with the run. A delayed action firing into a run
+        // that has ended would act on an arena nobody is in.
+        current.scheduled.clear();
         if (current.teams != null) {
             current.teams.clear();
         }
@@ -610,6 +613,9 @@ public final class EngineArena {
         tickObjective(present);
         tickPrompts(present);
         tickRegions(present);
+        // Before the mode split, so delayed work fires in a free-mode map and a
+        // round-mode one alike. A countdown is not a free-mode idea.
+        tickScheduled();
         // Once a second, in both modes. A deadline, a countdown and a "have they
         // got them all yet" check are not free-mode ideas, and round mode having
         // no recurring event of its own was an accident of build order.
@@ -891,6 +897,9 @@ public final class EngineArena {
                 + "§7 (areas open: §f" + String.join(", ", openAreas).trim() + "§7)");
         out.add("§7Extract " + (extract == null ? "§cnone on this map" : "§aset"));
         out.add(director.describe());
+        if (scheduledCount() > 0) {
+            out.add("§7Queued §f" + scheduledCount() + "§7 delayed action(s)");
+        }
         long stalled = level.getGameTime() - lastProgress;
         if (leftToSpawn <= 0 && !alive.isEmpty() && stalled > 60) {
             out.add("§e⚠ No progress for " + (stalled / 20) + "s — "
@@ -1173,6 +1182,79 @@ public final class EngineArena {
     /** Whether a position is inside the map at all, for the block-event guard. */
     public boolean contains(BlockPos at) {
         return bounds.isInside(at);
+    }
+
+    /**
+     * Work a rule asked for later.
+     *
+     * <p>The script layer could say "when this happens, do that" and had no way to
+     * say "in thirty seconds, do that". Every countdown, delayed gate, staged
+     * reveal and timed penalty had to be faked by polling {@code tick} against a
+     * variable the map incremented itself - which is the shape of a missing
+     * feature rather than a technique, and it put a counter in every map that
+     * merely wanted a pause.
+     */
+    private record Scheduled(long fireAt, com.google.gson.JsonArray actions,
+                             java.util.UUID who, int repeatTicks, int remaining) {
+    }
+
+    private final List<Scheduled> scheduled = new ArrayList<>();
+
+    /**
+     * Queues actions to run later.
+     *
+     * @param repeatTicks 0 for one-shot, otherwise the gap between repeats
+     * @param times       how many times a repeater fires; 0 means until the run ends
+     */
+    public void schedule(com.google.gson.JsonArray actions, ServerPlayer who,
+                         int delayTicks, int repeatTicks, int times) {
+        // A cap, because a map from a stranger should not be able to queue a
+        // million pieces of work.
+        if (scheduled.size() >= 256) {
+            return;
+        }
+        scheduled.add(new Scheduled(level.getGameTime() + Math.max(1, delayTicks), actions,
+                who == null ? null : who.getUUID(),
+                Math.max(0, repeatTicks), times <= 0 ? Integer.MAX_VALUE : times));
+    }
+
+    /**
+     * Fires anything due.
+     *
+     * <p>Collected and run after the sweep rather than during it, for the same
+     * reason as every other list in this class: an action may schedule more work,
+     * and mutating the list being walked is how three separate bugs in this
+     * project started.
+     */
+    private void tickScheduled() {
+        if (scheduled.isEmpty()) {
+            return;
+        }
+        long now = level.getGameTime();
+        List<Scheduled> due = new ArrayList<>();
+        for (Scheduled s : scheduled) {
+            if (s.fireAt() <= now) {
+                due.add(s);
+            }
+        }
+        if (due.isEmpty()) {
+            return;
+        }
+        scheduled.removeAll(due);
+        for (Scheduled s : due) {
+            ServerPlayer who = s.who() == null ? null
+                    : level.getServer().getPlayerList().getPlayer(s.who());
+            Script.runActions(this, level, s.actions(), who);
+            if (s.repeatTicks() > 0 && s.remaining() > 1) {
+                scheduled.add(new Scheduled(now + s.repeatTicks(), s.actions(), s.who(),
+                        s.repeatTicks(), s.remaining() - 1));
+            }
+        }
+    }
+
+    /** How many pieces of delayed work are queued, for {@code /arena status}. */
+    public int scheduledCount() {
+        return scheduled.size();
     }
 
     public Vars vars() {

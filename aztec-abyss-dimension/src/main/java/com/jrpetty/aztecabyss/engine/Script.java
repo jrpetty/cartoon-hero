@@ -89,7 +89,8 @@ public final class Script {
             "message", "actionbar", "title", "sound", "effect", "give", "spawn", "award",
             "open_area", "set_block", "end_run", "set_var", "add_var", "set_my_var",
             "add_my_var", "win", "lose", "set_bar", "join_team", "balance_teams",
-            "team_message", "add_team_var", "set_team_var", "teleport_to_spawn");
+            "team_message", "add_team_var", "set_team_var", "teleport_to_spawn",
+            "delay", "every");
 
     /** Every condition the matcher understands. */
     private static final java.util.Set<String> CONDITIONS = java.util.Set.of(
@@ -416,6 +417,31 @@ public final class Script {
     // Actions
     // ------------------------------------------------------------------
 
+    /**
+     * {@code delay} and {@code every} — the same queue, one repeating.
+     *
+     * <pre>
+     * { "delay": { "seconds": 30, "do": [ ... ] } }
+     * { "every": { "seconds": 10, "times": 5, "do": [ ... ] } }
+     * </pre>
+     *
+     * <p>{@code times} left off means "until the run ends", which is what a
+     * heartbeat wants and is safe because a run ending clears the queue with it.
+     */
+    private static void later(EngineArena arena, JsonElement body, ServerPlayer who, boolean repeating) {
+        if (!body.isJsonObject()) {
+            return;
+        }
+        JsonObject o = body.getAsJsonObject();
+        if (!o.has("do") || !o.get("do").isJsonArray()) {
+            return;
+        }
+        int seconds = Math.max(1, Math.min(3600, intOf(o, "seconds", 1)));
+        int ticks = seconds * 20;
+        arena.schedule(o.getAsJsonArray("do"), who, ticks,
+                repeating ? ticks : 0, repeating ? intOf(o, "times", 0) : 0);
+    }
+
     /** {@code { "team_message": { "team": "red", "text": "The flag is out" } }} */
     private static void teamMessage(EngineArena arena, JsonElement body) {
         if (!body.isJsonObject()) {
@@ -522,6 +548,31 @@ public final class Script {
         EngineArena.stop(false);
     }
 
+    /**
+     * Runs a list of actions.
+     *
+     * <p>Public because delayed work comes back through here rather than through a
+     * second copy of the runner. One implementation means a scheduled action and
+     * an immediate one cannot drift into behaving differently, which they would.
+     */
+    public static void runActions(EngineArena arena, ServerLevel level,
+                                  JsonArray actions, ServerPlayer who) {
+        int budget = ACTION_BUDGET;
+        for (JsonElement el : actions) {
+            if (budget-- <= 0) {
+                break;
+            }
+            if (el.isJsonObject()) {
+                run(arena, level, el.getAsJsonObject(), who);
+            }
+        }
+    }
+
+    /** A line for anyone tracing, from outside this class. */
+    public static void note(EngineArena arena, String text) {
+        trace(arena, text);
+    }
+
     private static void run(EngineArena arena, ServerLevel level, JsonObject action, ServerPlayer who) {
         for (String key : action.keySet()) {
             JsonElement body = action.get(key);
@@ -544,6 +595,8 @@ public final class Script {
                 case "set_my_var" -> varAction(arena, who, body, true, true);
                 case "add_my_var" -> varAction(arena, who, body, true, false);
                 case "set_bar" -> arena.setBarText(asText(body));
+                case "delay" -> later(arena, body, who, false);
+                case "every" -> later(arena, body, who, true);
                 case "join_team" -> {
                     if (who != null) {
                         arena.teams().join(who, asText(body));
