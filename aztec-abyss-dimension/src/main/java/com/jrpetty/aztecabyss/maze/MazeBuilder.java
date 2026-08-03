@@ -127,7 +127,7 @@ public final class MazeBuilder {
      * Griever holes were dug.
      * <p>6: the Chart Floor was laid, and the homestead moved east to make room.
      */
-    private static final int GEOMETRY_VERSION = 6;
+    private static final int GEOMETRY_VERSION = 7;
 
     /** One distinctive block per version, so the marker is readable in-world. */
     private static final BlockState[] VERSION_BLOCKS = {

@@ -13,6 +13,43 @@ behaviour that was already there · **docs**
 
 ## Unreleased
 
+### The Glade stops looking like boxes on grass
+
+A pass over every structure in the clearing. Two of the defects were comments
+describing something the code did not do, which is the worst kind: the file
+reads correctly and the world does not match it.
+
+- **fix** **The huts had flat roofs.** The comment said "roof, pitched along the
+  short axis" and the code laid one flat layer of slabs across the whole
+  footprint. Three identical flat-topped boxes was the homestead from every angle
+  in the Glade. They are now proper gables — stairs up both slopes to a slab
+  ridge, filled gable ends, and a one-block overhang all round, which is most of
+  why a pitched roof reads as a roof rather than as a triangle.
+- **fix** **The field's fence was one side of four, and there was no gate.** The
+  comment claimed "a fence and a gate so it reads as tended"; there was a single
+  row along the north edge and the other three sides ran out into the grass. A
+  fence on one side does not read as tended, it reads as an unfinished fence.
+  Now fenced all the way round, with a real gate on the side facing the Box, a
+  lantern on each post, and a composter, cauldron and hay bale at the entrance so
+  it looks like somewhere people come to work.
+- **fix** **Trees were growing through the huts.** The woods are scattered after
+  the homestead goes up and the two passes knew nothing about each other, so
+  trunks came up through floors and canopies through ridges. Anything scattered
+  now checks the column is clear first.
+- **feat** **The huts have insides.** They were bare apart from a single crafting
+  table. Now a straw pallet with a blanket, a barrel, a rug down the middle, a
+  composter and a pot by the door. Deliberately no bed: beds do not work in this
+  dimension, and a bed you cannot sleep in is a promise the Glade breaks every
+  night.
+- **feat** **The Deadheads are graves rather than stubs.** Fourteen lone cobble
+  wall blocks in a podzol patch read as scenery. Each is now turned earth around
+  a headstone, and about a third are still tended — a candle, or a poppy someone
+  left.
+- **change** Geometry version 6 → 7, so existing worlds rebuild the Glade rather
+  than keeping the old one.
+
+---
+
 ### One pot for the Glade, and a day's work that pays into it
 
 The requisition economy stops being six private allowances and becomes one

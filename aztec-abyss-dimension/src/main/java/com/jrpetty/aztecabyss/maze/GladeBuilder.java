@@ -156,6 +156,24 @@ public final class GladeBuilder {
         }
     }
 
+    /** Is there nothing standing here? Used before anything is scattered. */
+    private static boolean clearColumn(ServerLevel level, int x, int z, int height) {
+        for (int dy = 1; dy <= height; dy++) {
+            BlockState at = level.getBlockState(new BlockPos(x, Y + dy, z));
+            // Named rather than asked, because the ground pass is the only thing
+            // that puts anything here and it puts exactly these three. Anything
+            // else standing in this column is a building.
+            if (at.isAir()
+                    || at.is(Blocks.SHORT_GRASS)
+                    || at.is(Blocks.TALL_GRASS)
+                    || at.is(Blocks.POPPY)) {
+                continue;
+            }
+            return false;
+        }
+        return true;
+    }
+
     /** One shack: log corners, plank walls, a stair roof and a lantern. */
     private static void hut(ServerLevel level, int ox, int oz, int w, int d) {
         for (int x = ox; x < ox + w; x++) {
@@ -174,11 +192,9 @@ public final class GladeBuilder {
                         level.setBlock(new BlockPos(x, Y + dy, z), Blocks.AIR.defaultBlockState(), 2);
                     }
                 }
-                // Roof, pitched along the short axis.
-                level.setBlock(new BlockPos(x, Y + 4, z),
-                        Blocks.OAK_SLAB.defaultBlockState(), 2);
             }
         }
+        roof(level, ox, oz, w, d);
         // Doorway on the south wall, a window on the north.
         for (int dy = 1; dy <= 2; dy++) {
             level.setBlock(new BlockPos(ox + w / 2, Y + dy, oz + d - 1), Blocks.AIR.defaultBlockState(), 2);
@@ -186,7 +202,81 @@ public final class GladeBuilder {
         level.setBlock(new BlockPos(ox + w / 2, Y + 2, oz), Blocks.OAK_FENCE.defaultBlockState(), 2);
         level.setBlock(new BlockPos(ox + 1, Y + 3, oz + 1), Blocks.LANTERN.defaultBlockState()
                 .setValue(BlockStateProperties.HANGING, true), 2);
+        furnish(level, ox, oz, w, d);
+    }
+
+    /**
+     * A gable, rather than the flat slab lid this used to have.
+     *
+     * <p>The old code laid one layer of slabs across the whole footprint under a
+     * comment that said "pitched along the short axis". It was not pitched at
+     * all, and three identical boxes with flat tops is what the homestead looked
+     * like from every angle in the Glade.
+     *
+     * <p>Stairs up both slopes to a slab ridge, with a one-block overhang all
+     * round so the eaves cast a line down the walls. The overhang is most of why
+     * a pitched roof reads as a roof rather than as a triangle.
+     */
+    private static void roof(ServerLevel level, int ox, int oz, int w, int d) {
+        // Each step inward from the eaves is one course higher. The ridge is
+        // wherever the two slopes meet, which for an even depth is two blocks
+        // wide and for an odd depth is one.
+        int peak = d / 2 + 1;
+        for (int x = ox - 1; x <= ox + w; x++) {
+            for (int step = 0; step <= peak; step++) {
+                int y = Y + 4 + step;
+                int zNorth = oz - 1 + step;
+                int zSouth = oz + d - step;
+                if (zNorth >= zSouth) {
+                    for (int z = zSouth; z <= zNorth; z++) {
+                        level.setBlock(new BlockPos(x, y, z), Blocks.OAK_SLAB.defaultBlockState(), 2);
+                    }
+                    break;
+                }
+                level.setBlock(new BlockPos(x, y, zNorth), Blocks.OAK_STAIRS.defaultBlockState()
+                        .setValue(BlockStateProperties.HORIZONTAL_FACING, Direction.NORTH), 2);
+                level.setBlock(new BlockPos(x, y, zSouth), Blocks.OAK_STAIRS.defaultBlockState()
+                        .setValue(BlockStateProperties.HORIZONTAL_FACING, Direction.SOUTH), 2);
+                // Gable ends filled in, so the roof has a wall under it rather
+                // than a view straight through the rafters and out the far side.
+                if (x == ox || x == ox + w - 1) {
+                    for (int z = zNorth + 1; z < zSouth; z++) {
+                        level.setBlock(new BlockPos(x, y, z), Blocks.OAK_PLANKS.defaultBlockState(), 2);
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * Something inside, because an empty shack is a shed.
+     *
+     * <p>Three huts stood open and completely bare apart from one crafting
+     * table. The Glade is supposed to read as a place people have lived in for
+     * a year - a pallet somebody sleeps on, somewhere to put things, a pot by
+     * the door. None of it is functional and all of it is the difference
+     * between a settlement and a set of boxes.
+     */
+    private static void furnish(ServerLevel level, int ox, int oz, int w, int d) {
+        // A pallet in the corner. Hay and wool rather than a bed: beds do not
+        // work in this dimension and a bed you cannot sleep in is a promise the
+        // Glade breaks every night.
+        level.setBlock(new BlockPos(ox + 1, Y + 1, oz + 1), Blocks.HAY_BLOCK.defaultBlockState(), 2);
+        level.setBlock(new BlockPos(ox + 1, Y + 1, oz + 2), Blocks.HAY_BLOCK.defaultBlockState(), 2);
+        level.setBlock(new BlockPos(ox + 1, Y + 2, oz + 1), Blocks.WHITE_CARPET.defaultBlockState(), 2);
+        level.setBlock(new BlockPos(ox + 1, Y + 2, oz + 2), Blocks.WHITE_CARPET.defaultBlockState(), 2);
+
+        // A bench and a place to work.
         level.setBlock(new BlockPos(ox + w - 2, Y + 1, oz + 1), Blocks.CRAFTING_TABLE.defaultBlockState(), 2);
+        level.setBlock(new BlockPos(ox + w - 2, Y + 1, oz + 2), Blocks.BARREL.defaultBlockState(), 2);
+
+        // A rug down the middle, and a pot by the door.
+        int mid = oz + d / 2;
+        for (int x = ox + 2; x <= ox + w - 3; x++) {
+            level.setBlock(new BlockPos(x, Y + 1, mid), Blocks.BROWN_CARPET.defaultBlockState(), 2);
+        }
+        level.setBlock(new BlockPos(ox + w - 2, Y + 1, oz + d - 2), Blocks.FLOWER_POT.defaultBlockState(), 2);
+        level.setBlock(new BlockPos(ox + 1, Y + 1, oz + d - 2), Blocks.COMPOSTER.defaultBlockState(), 2);
     }
 
     public static final int FIELD_W = 20;
@@ -227,10 +317,33 @@ public final class GladeBuilder {
                 level.setBlock(new BlockPos(x, Y + 1, z), crop, 2);
             }
         }
-        // A fence and a gate so it reads as tended, not wild.
-        for (int x = ox - 1; x <= ox + 20; x++) {
+        // A fence all the way round, with a gate you actually walk through.
+        //
+        // This used to be one row along the north edge under a comment claiming
+        // "a fence and a gate" - there was no gate, and three sides of the field
+        // simply ran out into the grass. A fence on one side does not read as
+        // tended; it reads as an unfinished fence.
+        for (int x = ox - 1; x <= ox + FIELD_W; x++) {
             level.setBlock(new BlockPos(x, Y + 1, oz - 1), Blocks.OAK_FENCE.defaultBlockState(), 2);
+            level.setBlock(new BlockPos(x, Y + 1, oz + FIELD_D), Blocks.OAK_FENCE.defaultBlockState(), 2);
         }
+        for (int z = oz - 1; z <= oz + FIELD_D; z++) {
+            level.setBlock(new BlockPos(ox - 1, Y + 1, z), Blocks.OAK_FENCE.defaultBlockState(), 2);
+            level.setBlock(new BlockPos(ox + FIELD_W, Y + 1, z), Blocks.OAK_FENCE.defaultBlockState(), 2);
+        }
+        // The gate, on the side facing the Box, with a lantern either post.
+        int gate = ox + FIELD_W / 2;
+        level.setBlock(new BlockPos(gate, Y + 1, oz - 1), Blocks.OAK_FENCE_GATE.defaultBlockState()
+                .setValue(BlockStateProperties.HORIZONTAL_FACING, Direction.NORTH), 2);
+        level.setBlock(new BlockPos(gate - 1, Y + 2, oz - 1), Blocks.LANTERN.defaultBlockState(), 2);
+        level.setBlock(new BlockPos(gate + 1, Y + 2, oz - 1), Blocks.LANTERN.defaultBlockState(), 2);
+        // A composter and a water barrel at the gate: the field should look like
+        // somewhere people come to work rather than a rectangle of farmland.
+        level.setBlock(new BlockPos(ox, Y + 1, oz - 2), Blocks.COMPOSTER.defaultBlockState(), 2);
+        level.setBlock(new BlockPos(ox + 1, Y + 1, oz - 2), Blocks.CAULDRON.defaultBlockState(), 2);
+        level.setBlock(new BlockPos(ox + FIELD_W - 1, Y + 1, oz - 2), Blocks.HAY_BLOCK.defaultBlockState(), 2);
+        sign(level, new BlockPos(gate + 2, Y + 1, oz - 1), Direction.NORTH,
+                "§2THE FIELD", "§7Everything", "§7we eat.", "");
     }
 
     /**
@@ -294,10 +407,29 @@ public final class GladeBuilder {
         for (int i = 0; i < 14; i++) {
             int x = ox + rng.nextInt(18);
             int z = oz + rng.nextInt(16);
-            level.setBlock(new BlockPos(x, Y, z), Blocks.PODZOL.defaultBlockState(), 2);
+            if (!clearColumn(level, x, z, 3)) {
+                continue;
+            }
+            // A grave rather than a lone wall block: turned earth around it, a
+            // headstone, and about a third of them still tended with a light or
+            // something growing. Fourteen identical cobble stubs in a podzol
+            // patch read as scenery; this reads as somewhere people go.
+            for (int dx = -1; dx <= 1; dx++) {
+                for (int dz = -1; dz <= 1; dz++) {
+                    if (level.getBlockState(new BlockPos(x + dx, Y, z + dz)).is(Blocks.GRASS_BLOCK)) {
+                        level.setBlock(new BlockPos(x + dx, Y, z + dz),
+                                Blocks.PODZOL.defaultBlockState(), 2);
+                    }
+                }
+            }
+            level.setBlock(new BlockPos(x, Y, z), Blocks.COARSE_DIRT.defaultBlockState(), 2);
             level.setBlock(new BlockPos(x, Y + 1, z), Blocks.COBBLESTONE_WALL.defaultBlockState(), 2);
-            if (rng.nextInt(3) == 0) {
+            int tended = rng.nextInt(3);
+            if (tended == 0) {
                 level.setBlock(new BlockPos(x, Y + 2, z), Blocks.TORCH.defaultBlockState(), 2);
+            } else if (tended == 1 && clearColumn(level, x, z + 1, 2)) {
+                level.setBlock(new BlockPos(x, Y + 1, z + 1),
+                        Blocks.POPPY.defaultBlockState(), 2);
             }
         }
         for (int i = 0; i < 10; i++) {
@@ -333,6 +465,13 @@ public final class GladeBuilder {
      * apples, and therefore the only route to a golden apple.
      */
     private static void tree(ServerLevel level, int x, int z, boolean dark, RandomSource rng) {
+        // Nothing plants itself through a roof. The woods are scattered after
+        // the homestead is up and the two passes know nothing about each other,
+        // so trees were growing out of the huts - trunk through the floor,
+        // canopy through the ridge.
+        if (!clearColumn(level, x, z, 8)) {
+            return;
+        }
         int h = 4 + rng.nextInt(3);
         BlockState log = dark ? Blocks.DARK_OAK_LOG.defaultBlockState() : Blocks.OAK_LOG.defaultBlockState();
         BlockState leaf = (dark ? Blocks.DARK_OAK_LEAVES : Blocks.OAK_LEAVES).defaultBlockState()
