@@ -1175,10 +1175,6 @@ public final class EngineArena {
         return bounds.isInside(at);
     }
 
-    public String rulesetId() {
-        return rules.id;
-    }
-
     public Vars vars() {
         return vars;
     }

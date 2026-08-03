@@ -13,6 +13,13 @@ behaviour that was already there · **docs**
 
 ## Unreleased
 
+### Fix the build
+
+- **fix** `rulesetId()` was declared twice in `EngineArena` — the block-events
+  iteration added an accessor that already existed 300 lines above it. One line,
+  and it broke two builds: the per-gate commit stacked on top of an already-broken
+  block-events commit before either had verified.
+
 ### Per-gate tuning, and a full marker reference
 
 - **feat** `[Horde]` gains `weight=`, `burst=`, `mobs=`, `health=`, `damage=`,
