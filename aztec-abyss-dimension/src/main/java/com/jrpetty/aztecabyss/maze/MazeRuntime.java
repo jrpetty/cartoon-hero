@@ -180,7 +180,13 @@ public final class MazeRuntime {
      */
     private static boolean sessionWatch(ServerLevel level, MazeClock clock) {
         if (!level.players().isEmpty()) {
-            clock.markPlayed();
+            if (clock.markPlayed()) {
+                // Day one's delivery. TheBox.deliver only ever ran from newDay,
+                // and newDay only runs on a rollover - so day zero, the one day
+                // the crate is meant to contain two cures, never got one at all.
+                TheBox.deliver(level, clock.day());
+                MazeNight.lift(level);
+            }
             return false;
         }
         if (!clock.played()) {
@@ -909,7 +915,7 @@ public final class MazeRuntime {
                         : "§4SEALED §7" + (left / 60) + "m" + (left % 60) + "s")
                 + " §8| §c☠" + String.format("%.1f", Griever.dayScale(level)) + "x"
                 + (run >= 0 ? " §8| §b" + MazeRuns.format(run) : "")
-                + MazeSting.hudFragment(p.getUUID());
+                + MazeSting.hudFragment(level, p);
         bar.setName(Component.literal(title));
         bar.setColor(isNight(t) ? BossEvent.BossBarColor.RED
                 : doorsOpen ? BossEvent.BossBarColor.GREEN : BossEvent.BossBarColor.YELLOW);

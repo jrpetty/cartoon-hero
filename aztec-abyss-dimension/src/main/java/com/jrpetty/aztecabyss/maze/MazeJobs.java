@@ -126,6 +126,19 @@ public final class MazeJobs extends SavedData {
      * reconnect, which is the kind of thing a group finds within a day.
      */
     private final Map<UUID, Integer> kitted = new HashMap<>();
+    /**
+     * When each player was last outfitted, in epoch millis.
+     *
+     * <p>A game ends the moment the maze empties, which means a lone player can
+     * walk out, end the game, walk back in and be handed a second kit. Session
+     * alone cannot close that - the session is <em>supposed</em> to advance. So
+     * the kit is gated on both: a new game and enough real time that the round
+     * trip costs more than the kit is worth.
+     */
+    private final Map<UUID, Long> kittedAt = new HashMap<>();
+
+    /** How long before the same player may be outfitted again, whatever the session. */
+    private static final long KIT_COOLDOWN_MILLIS = 10L * 60L * 1000L;
 
     private static String key(UUID who, String job) {
         return who + "|" + job;
@@ -239,14 +252,29 @@ public final class MazeJobs extends SavedData {
         return larder;
     }
 
-    /** Has this player already been outfitted in this game? */
+    /** Has this player already been outfitted, either this game or too recently? */
     public boolean kitted(UUID who, int session) {
         Integer had = kitted.get(who);
-        return had != null && had == session;
+        if (had != null && had == session) {
+            return true;
+        }
+        Long when = kittedAt.get(who);
+        return when != null && System.currentTimeMillis() - when < KIT_COOLDOWN_MILLIS;
+    }
+
+    /** Seconds until this player could be outfitted again, or 0. */
+    public int kitCooldown(UUID who) {
+        Long when = kittedAt.get(who);
+        if (when == null) {
+            return 0;
+        }
+        long left = KIT_COOLDOWN_MILLIS - (System.currentTimeMillis() - when);
+        return left <= 0 ? 0 : (int) ((left + 999L) / 1000L);
     }
 
     public void markKitted(UUID who, int session) {
         kitted.put(who, session);
+        kittedAt.put(who, System.currentTimeMillis());
         setDirty();
     }
 
@@ -296,6 +324,9 @@ public final class MazeJobs extends SavedData {
         CompoundTag k = new CompoundTag();
         kitted.forEach((id, session) -> k.putInt(id.toString(), session));
         tag.put("Kitted", k);
+        CompoundTag when = new CompoundTag();
+        kittedAt.forEach((id, at) -> when.putLong(id.toString(), at));
+        tag.put("KittedAt", when);
         return tag;
     }
 
@@ -320,6 +351,14 @@ public final class MazeJobs extends SavedData {
                 out.kitted.put(UUID.fromString(key), k.getInt(key));
             } catch (IllegalArgumentException ignored) {
                 // Not a uuid, not worth losing the rest of the file over.
+            }
+        }
+        CompoundTag when = tag.getCompound("KittedAt");
+        for (String key : when.getAllKeys()) {
+            try {
+                out.kittedAt.put(UUID.fromString(key), when.getLong(key));
+            } catch (IllegalArgumentException ignored) {
+                // Same.
             }
         }
         return out;

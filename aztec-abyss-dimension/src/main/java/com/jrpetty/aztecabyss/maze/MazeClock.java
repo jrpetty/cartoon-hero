@@ -162,11 +162,21 @@ public final class MazeClock extends SavedData {
         return true;
     }
 
-    public void markPlayed() {
-        if (!played) {
-            played = true;
-            setDirty();
+    /**
+     * Notes that somebody is actually here.
+     *
+     * @return true only on the transition - the moment a game begins. The first
+     *         day never had a beginning anybody could hook: the day rollover is
+     *         what fired the morning delivery, and day zero has no rollover
+     *         before it, so the opening crate was silently never delivered.
+     */
+    public boolean markPlayed() {
+        if (played) {
+            return false;
         }
+        played = true;
+        setDirty();
+        return true;
     }
 
     public boolean played() {

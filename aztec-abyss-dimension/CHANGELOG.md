@@ -13,6 +13,31 @@ behaviour that was already there · **docs**
 
 ## Unreleased
 
+### Maze: five defects, three of them ones I introduced today
+
+- **fix** **The first day's crate was never delivered.** `TheBox.deliver` only ever
+  ran from `newDay`, and `newDay` only runs on a day *rollover* — so day zero, the
+  one day whose crate is meant to contain **two cures**, got nothing at all. The
+  first Changing of every game was unanswerable, which is precisely the lesson the
+  two cures existed to prevent teaching. `markPlayed` now reports the transition,
+  so the moment a game begins has something to hang on.
+- **fix** **Kit farming.** A game ends when the maze empties, so a lone player could
+  walk out, end the game, walk back in and be handed a second kit — four more
+  golden apples per round trip. Session alone cannot close it, because the session
+  is *supposed* to advance. Kits are now gated on a new game **and** ten real
+  minutes, so the round trip costs more than the kit is worth.
+- **fix** **Beds worked in the maze.** `bed_works` was still `true` after the maze
+  took its own clock, so a bed could only either do nothing (confusing) or shove
+  the overworld's time while the maze's sky ignored it (desync). Neither is a
+  feature.
+- **fix** **The sting counter lost its denominator.** Making the threshold
+  per-player for Antivenom quietly cost the bar its `/4`, leaving a runner reading
+  "Stung 3" with no idea whether that was survivable — the exact number the entire
+  mechanic is built on. `hudFragment` now takes the player so it can print it.
+- **fix** **A level 4 Builder's mark charted into the union, not the layout.** It
+  never appeared on the chart anybody was actually looking at, which made the top
+  Builder perk invisible on the Chart Floor it was designed for.
+
 ### The engine can remember between runs
 
 `Vars` opens by describing itself as **"what a run remembers"**, and that turned

@@ -242,13 +242,21 @@ public final class MazeSting {
         return true;
     }
 
-    /** A short readout for the status bar. */
-    public static String hudFragment(UUID id) {
+    /**
+     * A short readout for the status bar.
+     *
+     * <p>Takes the player rather than the id so it can print the denominator
+     * again. Making the threshold per-player for Antivenom quietly cost the bar
+     * its "/4", which left a runner reading "Stung 3" with no idea whether that
+     * was survivable - the exact number the whole mechanic is built on.
+     */
+    public static String hudFragment(ServerLevel level, ServerPlayer player) {
+        UUID id = player.getUUID();
         if (INFECTED.contains(id)) {
             Integer left = COUNTDOWN.get(id);
             return left == null ? " §8| §4§lTURNING" : " §8| §4CHANGING §c" + left + "s";
         }
         int n = stings(id);
-        return n == 0 ? "" : " §8| §cStung " + n;
+        return n == 0 ? "" : " §8| §cStung " + n + "§8/§c" + thresholdFor(level, player);
     }
 }

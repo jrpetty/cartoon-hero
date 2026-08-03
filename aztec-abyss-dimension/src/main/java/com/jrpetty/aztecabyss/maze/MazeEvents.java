@@ -180,7 +180,11 @@ public final class MazeEvents {
         if (charts.mark(cellX, cellZ)) {
             jobs.award(player, MazeJobs.BUILDER, 3);
             if (jobs.level(player.getUUID()) >= MazeJobs.MAX_LEVEL) {
-                charts.chart(player.getUUID(), cellX, cellZ);
+                // With the layout, or a level 4 Builder's mark charts the cell
+                // for the union and never appears on the chart anybody is
+                // actually looking at.
+                MazeData.Layout today = MazeRuntime.todaysLayout(level);
+                charts.chart(player.getUUID(), cellX, cellZ, today == null ? null : today.name());
             }
         }
     }
