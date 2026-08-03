@@ -13,6 +13,28 @@ behaviour that was already there · **docs**
 
 ## Unreleased
 
+### The golden apple comes off the sheet
+
+- **change** **You can no longer requisition a golden apple.** It was the one line
+  that sold the answer rather than the stock — eight points and the best heal in
+  the game turned up in a crate, which is exactly what the no-weapons-no-tools
+  rule exists to prevent. Gold is still on the sheet at 3 a bar and apples come off
+  the leaves in the wood, so a golden apple is now **eight bars and an afternoon in
+  the trees**: 24 points and some actual work, against 8 points and a click.
+- **fix** **The Glade's wood was quietly decaying to bare trunks.** The forty
+  hand-built trees placed their leaves with `setBlock` and no neighbour update,
+  which leaves every leaf at distance seven — precisely vanilla's decaying
+  condition — so the whole wood random-ticked itself away over the first day. It
+  was survivable while the wood was scenery and timber. It is not survivable now
+  the wood is the only source of apples and therefore the only route to a golden
+  apple. Hand-built leaves are placed persistent; trees grown from catalogue
+  saplings were always fine and are untouched.
+- Golden apples in the starting kit, the day-zero crate and deep maze chests are
+  **unchanged** — the rule is that the Box does not sell you one, not that they
+  stop existing.
+
+---
+
 ### The slate is a screen, and a bounty you can actually spend
 
 - **feat** **`/maze order` opens the requisition screen.** Ordering supplies meant

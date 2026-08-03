@@ -114,9 +114,16 @@ public final class MazeOrders extends SavedData {
             new Entry("Soil", "bonemeal", "Bone meal", Items.BONE_MEAL, 16, 2),
 
             // --- food
+            //
+            // No golden apple. It was the one line on the sheet that sold the
+            // answer rather than the stock: eight points and the best heal in
+            // the game arrived in a crate, which is exactly what the rest of the
+            // catalogue is built to avoid. Gold is on the sheet at three a bar
+            // and apples come off the leaves in the wood, so a golden apple is
+            // now eight bars and an afternoon in the trees - twenty-four points
+            // and some actual work, instead of eight and a click.
             new Entry("Food", "bread", "Bread", Items.BREAD, 8, 2),
             new Entry("Food", "steak", "Cooked beef", Items.COOKED_BEEF, 8, 3),
-            new Entry("Food", "apple", "Golden apple", Items.GOLDEN_APPLE, 1, 8),
 
             // --- light and sundries
             new Entry("Camp", "torches", "Torches", Items.TORCH, 32, 1),

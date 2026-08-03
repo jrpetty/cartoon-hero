@@ -320,11 +320,23 @@ public final class GladeBuilder {
         }
     }
 
-    /** A simple hand-built tree - cheap, deterministic, and good enough at this scale. */
+    /**
+     * A simple hand-built tree - cheap, deterministic, and good enough at this
+     * scale.
+     *
+     * <p>The leaves are placed <em>persistent</em>. A hand-built tree is not a
+     * grown one: {@code setBlock} with no neighbour update leaves every leaf at
+     * distance seven, which is precisely vanilla's decaying condition, so the
+     * whole wood would quietly random-tick itself away to forty bare trunks over
+     * the first day. That was survivable while the wood was only scenery and
+     * timber. It is not survivable now the wood is the <em>only</em> source of
+     * apples, and therefore the only route to a golden apple.
+     */
     private static void tree(ServerLevel level, int x, int z, boolean dark, RandomSource rng) {
         int h = 4 + rng.nextInt(3);
         BlockState log = dark ? Blocks.DARK_OAK_LOG.defaultBlockState() : Blocks.OAK_LOG.defaultBlockState();
-        BlockState leaf = dark ? Blocks.DARK_OAK_LEAVES.defaultBlockState() : Blocks.OAK_LEAVES.defaultBlockState();
+        BlockState leaf = (dark ? Blocks.DARK_OAK_LEAVES : Blocks.OAK_LEAVES).defaultBlockState()
+                .setValue(BlockStateProperties.PERSISTENT, true);
         for (int dy = 0; dy < h; dy++) {
             level.setBlock(new BlockPos(x, Y + 1 + dy, z), log, 2);
         }
