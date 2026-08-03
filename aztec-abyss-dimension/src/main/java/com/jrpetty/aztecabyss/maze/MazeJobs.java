@@ -126,6 +126,25 @@ public final class MazeJobs extends SavedData {
      * reconnect, which is the kind of thing a group finds within a day.
      */
     private final Map<UUID, Integer> kitted = new HashMap<>();
+
+    /**
+     * What a Runner is carrying and has not brought home yet.
+     *
+     * <p>Work done out in the corridors used to bank the instant it happened, so
+     * dying with a full day behind you cost nothing but your inventory. The
+     * reward was for <em>going</em>, and a reward for going is a reward for
+     * taking risks you have no reason not to take.
+     *
+     * <p>Now it is a reward for coming back. Everything earned beyond the Glade
+     * wall is carried; step back inside and it banks, die out there and it goes
+     * with you. That is the source material's actual mechanic - a Runner's day
+     * is worth nothing until they are through the door - and it makes the last
+     * minute before dusk a decision rather than a formality.
+     *
+     * <p>Deliberately not saved. A carry is one trip, and a trip does not
+     * survive a restart any more than the runner does.
+     */
+    private static final Map<UUID, Map<String, Integer>> CARRIED = new HashMap<>();
     /**
      * When each player was last outfitted, in epoch millis.
      *
@@ -208,6 +227,14 @@ public final class MazeJobs extends SavedData {
         if (amount <= 0 || !is(player.getUUID(), job)) {
             return;
         }
+        // Earned past the wall? Then it is carried, not banked. Work done inside
+        // the Glade is already home and settles at once - a Track-hoe pulling
+        // carrots by the firepit has not risked anything to do it.
+        if (beyondTheWall(player)) {
+            CARRIED.computeIfAbsent(player.getUUID(), u -> new HashMap<>())
+                    .merge(job, amount, Integer::sum);
+            return;
+        }
         String k = key(player.getUUID(), job);
         int before = xp.getOrDefault(k, 0);
         int after = before + amount;
@@ -219,6 +246,78 @@ public final class MazeJobs extends SavedData {
             player.displayClientMessage(Component.literal(
                     display(job) + " §f§lLEVEL " + nowLevel + "§r §7— " + perkLine(job, nowLevel)), false);
         }
+    }
+
+    private static boolean beyondTheWall(ServerPlayer player) {
+        if (!player.level().dimension().equals(
+                com.jrpetty.aztecabyss.AztecAbyssConstants.MAZE_LEVEL_KEY)) {
+            return false;
+        }
+        return !MazeData.inGlade(player.blockPosition().getX() / MazeData.CELL,
+                player.blockPosition().getZ() / MazeData.CELL);
+    }
+
+    /** How much this player stands to lose if they do not make it back. */
+    public static int carrying(UUID who) {
+        Map<String, Integer> mine = CARRIED.get(who);
+        if (mine == null) {
+            return 0;
+        }
+        int total = 0;
+        for (int n : mine.values()) {
+            total += n;
+        }
+        return total;
+    }
+
+    /**
+     * Home. Everything carried settles.
+     *
+     * <p>Announced, because a mechanic whose entire point is the moment you cross
+     * a line has to say something when you cross it.
+     */
+    public void bank(ServerPlayer player) {
+        Map<String, Integer> mine = CARRIED.remove(player.getUUID());
+        if (mine == null || mine.isEmpty()) {
+            return;
+        }
+        int total = 0;
+        for (Map.Entry<String, Integer> line : mine.entrySet()) {
+            String k = key(player.getUUID(), line.getKey());
+            int before = xp.getOrDefault(k, 0);
+            int after = before + line.getValue();
+            xp.put(k, after);
+            total += line.getValue();
+            int nowLevel = levelFor(after);
+            if (nowLevel > levelFor(before)) {
+                player.displayClientMessage(Component.literal(
+                        display(line.getKey()) + " §f§lLEVEL " + nowLevel + "§r §7— "
+                                + perkLine(line.getKey(), nowLevel)), false);
+            }
+        }
+        setDirty();
+        player.displayClientMessage(Component.literal(
+                "§a✔ Back inside. §f" + total + "§7 banked."), true);
+    }
+
+    /**
+     * Dead. Everything carried is gone.
+     *
+     * <p>The reward is for surviving. Nothing at all for dying out there, which
+     * is the only version of this that makes a Runner think twice about one more
+     * corridor before the doors shut.
+     */
+    public void forfeit(ServerPlayer player) {
+        int lost = carrying(player.getUUID());
+        CARRIED.remove(player.getUUID());
+        if (lost > 0) {
+            player.displayClientMessage(Component.literal(
+                    "§4✖ You were carrying §f" + lost + "§4. §7It stays out there."), false);
+        }
+    }
+
+    public static void clearCarried() {
+        CARRIED.clear();
     }
 
     /** What the level you just reached actually gives you. */

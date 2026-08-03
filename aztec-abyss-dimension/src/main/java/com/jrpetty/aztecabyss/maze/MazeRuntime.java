@@ -116,6 +116,7 @@ public final class MazeRuntime {
         hordeDay = -1;
         escapeUntil = 0L;
         escapees.clear();
+        MazeJobs.clearCarried();
         lastSeen.clear();
         walked.clear();
         secondWind.clear();
@@ -528,6 +529,11 @@ public final class MazeRuntime {
                 }
             }
 
+            if (inGlade) {
+                // Through the door. Everything the trip earned settles here and
+                // nowhere else.
+                MazeJobs.get(level).bank(p);
+            }
             if (!inGlade && !MazeRuns.isRunning(p.getUUID())) {
                 MazeRuns.begin(level, p);
                 MazeAdvancements.grant(p, MazeAdvancements.ROOT);
@@ -552,6 +558,9 @@ public final class MazeRuntime {
                     MazeAdvancements.grant(p, MazeAdvancements.RACE_WIN);
                 }
                 openTheWayOut(level, p);
+                // Out is home. Getting through the portal banks the trip exactly
+                // as walking back into the Glade would.
+                MazeJobs.get(level).bank(p);
                 escapees.add(p.getGameProfile().getName());
                 escaped.add(p);
                 escapedSeconds.add(seconds);
@@ -1121,6 +1130,8 @@ public final class MazeRuntime {
                         ? "§aDOORS OPEN §7" + (left / 60) + "m" + (left % 60) + "s"
                         : "§4SEALED §7" + (left / 60) + "m" + (left % 60) + "s")
                 + " §8| §c☠" + String.format("%.1f", Griever.dayScale(level)) + "x"
+                + (MazeJobs.carrying(p.getUUID()) > 0
+                        ? " §8| §e▲" + MazeJobs.carrying(p.getUUID()) : "")
                 + (run >= 0 ? " §8| §b" + MazeRuns.format(run) : "")
                 + MazeSting.hudFragment(level, p);
         bar.setName(Component.literal(title));

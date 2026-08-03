@@ -1088,6 +1088,10 @@ public final class MazeEvents {
         if (!(player.level() instanceof ServerLevel level) || !isMaze(level)) {
             return;
         }
+        // The reward is for surviving. Whatever this trip earned dies here.
+        if (player.level() instanceof ServerLevel sl) {
+            MazeJobs.get(sl).forfeit(player);
+        }
         MazeRuns.onDeath(player);
         MazeRace.dropOut(level, player.getUUID());
         MazeSting.clear(player.getUUID());

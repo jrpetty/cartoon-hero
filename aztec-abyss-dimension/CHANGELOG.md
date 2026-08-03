@@ -13,6 +13,24 @@ behaviour that was already there · **docs**
 
 ## Unreleased
 
+### The reward is for surviving
+
+- **change** **Work done beyond the Glade wall is now carried, not banked.** Step
+  back inside — or out through the portal — and it settles. Die out there and it
+  goes with you.
+- **fix** Experience used to bank the instant it was earned, so dying with a full
+  day behind you cost nothing but your inventory. The reward was for **going**, and
+  a reward for going is a reward for taking risks you have no reason not to take.
+  Every calculation about whether to push one more corridor before dusk came out
+  the same way: yes, always, because losing cost nothing.
+- **change** Work done **inside** the Glade still settles at once. A Track-hoe
+  pulling carrots by the firepit has not risked anything to do it.
+- **feat** The status bar shows `▲` and what you are carrying, so the number you
+  stand to lose is in front of you while you decide whether to keep going. A stake
+  nobody can see is not a stake.
+- **change** A carry is deliberately **not saved** — one trip, and a trip does not
+  survive a restart any more than the runner does.
+
 ### An ending, a deadline, noise, and weather
 
 - **change** **File no order and nothing comes up.** The crate still arrives and is
