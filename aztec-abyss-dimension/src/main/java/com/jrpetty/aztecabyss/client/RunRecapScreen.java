@@ -50,14 +50,14 @@ public final class RunRecapScreen extends Screen {
      * scoreboard text read as smeared.
      */
     @Override
+    public void renderBackground(GuiGraphics g, int mouseX, int mouseY, float partialTick) {
+        g.fill(0, 0, this.width, this.height, 0xE0080608);
+    }
+
     /** No blur under type. The one screen that was still getting it. */
     @Override
     protected void renderBlurredBackground(float partialTick) {
         // Intentionally empty.
-    }
-
-    public void renderBackground(GuiGraphics g, int mouseX, int mouseY, float partialTick) {
-        g.fill(0, 0, this.width, this.height, 0xE0080608);
     }
 
     @Override
