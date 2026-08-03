@@ -149,6 +149,35 @@ public final class AbyssConfig {
                         "hundred health and hit like a truck, so this is meant to be a large",
                         "number that a squad earns perhaps once in a game.")
                 .defineInRange("mazeGrieverBounty", 20, 0, 500);
+        MAZE_POOL_PER_PLAYER = b.comment(
+                        "Requisition credits the Glade gets per person in the maze, totalled into",
+                        "one shared pool rather than split into private allowances. Snapshotted at",
+                        "dawn so that somebody logging off at dusk cannot shrink a pool that has",
+                        "already been spent against.")
+                .defineInRange("mazePoolPerPlayer", 50, 0, 500);
+        MAZE_DAY_WORK_CREDITS = b.comment(
+                        "The most one person can add to the pool in a day by working their trade.",
+                        "The same for every trade on purpose: the moment one pays better than",
+                        "another, the trade board stops being a choice and becomes a right answer.")
+                .defineInRange("mazeDayWorkCredits", 30, 0, 200);
+        MAZE_QUOTA_FARM = b.comment(
+                        "Food a Track-hoe must produce for a full day's credits. Harvested crops",
+                        "and cooked or baked food both count; wheat does not, so wheat-into-bread",
+                        "is paid once rather than twice. Half the quota pays half the credits.")
+                .defineInRange("mazeQuotaFarm", 100, 1, 2000);
+        MAZE_QUOTA_CHART = b.comment(
+                        "Cells a Runner must chart that the Glade had never seen, for a full day's",
+                        "credits. Re-walking a known corridor pays nothing.")
+                .defineInRange("mazeQuotaChart", 60, 1, 2000);
+        MAZE_QUOTA_CARE = b.comment(
+                        "A Med-jack's day: one per bandage made, three per person treated or",
+                        "revived, because a person is worth more than a dressing.")
+                .defineInRange("mazeQuotaCare", 12, 1, 500);
+        MAZE_QUOTA_FORGE = b.comment(
+                        "Things a Builder must forge for a full day's credits. Counted in forged",
+                        "items rather than blocks placed - a wall you can put up and take down",
+                        "forty times is not a day's work.")
+                .defineInRange("mazeQuotaForge", 5, 1, 200);
         MAZE_APPLE_CACHES = b.comment(
                         "How many golden apples are hidden in the corridors, re-laid every night",
                         "when the maze reshapes. Deliberately few: the golden apple came off the",
@@ -194,6 +223,12 @@ public final class AbyssConfig {
     public static final ModConfigSpec.IntValue MAZE_ESCAPE_SECONDS;
     public static final ModConfigSpec.IntValue MAZE_GRIEVER_BOUNTY;
     public static final ModConfigSpec.IntValue MAZE_APPLE_CACHES;
+    public static final ModConfigSpec.IntValue MAZE_POOL_PER_PLAYER;
+    public static final ModConfigSpec.IntValue MAZE_DAY_WORK_CREDITS;
+    public static final ModConfigSpec.IntValue MAZE_QUOTA_FARM;
+    public static final ModConfigSpec.IntValue MAZE_QUOTA_CHART;
+    public static final ModConfigSpec.IntValue MAZE_QUOTA_CARE;
+    public static final ModConfigSpec.IntValue MAZE_QUOTA_FORGE;
 
     public static long cooldownMillis() {
         return REENTRY_COOLDOWN_HOURS.get() * 60L * 60L * 1000L;

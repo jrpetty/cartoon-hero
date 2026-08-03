@@ -1,5 +1,6 @@
 package com.jrpetty.aztecabyss.maze;
 
+import com.jrpetty.aztecabyss.config.AbyssConfig;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.server.MinecraftServer;
@@ -57,19 +58,6 @@ public final class MazeOrders extends SavedData {
 
     public static final String NAME = "aztecabyss_maze_orders";
 
-    /**
-     * What everybody gets, every day, before anything they have earned.
-     *
-     * <p>Eighty rather than a hundred. A hundred covered a day's building, a
-     * day's food and a couple of iron with room to spare, which made the evening
-     * decision a formality for anybody who had charted anything at all. Eighty
-     * covers the same day with nothing left over, so the first real choice -
-     * walls or food or metal - arrives on the base allowance rather than only
-     * biting the people who never left the clearing.
-     */
-    public static final int BASE_POINTS = 80;
-    /** However well it goes, a day's slate is bounded. */
-    public static final int MAX_POINTS = 400;
     /** The first morning the Box stops giving and starts filling orders. */
     public static final int REQUISITION_FROM_DAY = 2;
 
@@ -222,38 +210,55 @@ public final class MazeOrders extends SavedData {
      * the maze - nobody is punished for the trade they took, and everybody has a
      * reason to want the Runners out there.
      */
-    public static int budget(ServerLevel level, UUID who) {
-        // Bounties sit outside the cap on purpose. A ceiling that swallows the
-        // reward for killing a Griever would mean a well-charted Glade is paid
-        // nothing for the hardest thing in the game.
-        return ground(level, who) + get(level).bonus(who);
+    public static int pool(ServerLevel level) {
+        MazeOrders orders = get(level);
+        return orders.heads * AbyssConfig.MAZE_POOL_PER_PLAYER.get()
+                + orders.totalBounty()
+                + MazeDayWork.totalCredits(level);
+    }
+
+    /** The flat part: so many a head, for however many heads dawn found. */
+    public static int fromHeads(ServerLevel level) {
+        return get(level).heads * AbyssConfig.MAZE_POOL_PER_PLAYER.get();
     }
 
     /**
-     * The part of a budget that comes from ground covered, before bounties.
+     * How many people the pool was sized for.
      *
-     * <p>Split out because settling up needs to know which half of a day's
-     * spending came out of which pocket.
+     * <p>Snapshotted rather than counted live, because a pool that tracks the
+     * current headcount shrinks when somebody logs off at dusk - underneath
+     * orders that were already filed against it. The Glade was fed for six this
+     * morning; it is still fed for six at midnight.
      */
-    public static int ground(ServerLevel level, UUID who) {
-        if (level.getServer() == null) {
-            return BASE_POINTS;
-        }
-        MazeCharts charts = MazeCharts.get(level.getServer());
-        return Math.min(MAX_POINTS,
-                BASE_POINTS + charts.myPercent(who) * 2 + charts.gladePercent());
+    public int heads() {
+        return heads;
     }
 
-    /** What this player has earned today beyond their charting allowance. */
+    /** Called at dawn, once, when the day's size is decided. */
+    public void setHeads(int count) {
+        heads = Math.max(0, count);
+        setDirty();
+    }
+
+    /** Everything killed for, across everybody. */
+    public int totalBounty() {
+        int total = 0;
+        for (int n : bounty.values()) {
+            total += n;
+        }
+        return total;
+    }
+
+    /** What one person has put into the pot by killing Grievers. */
     public int bonus(UUID who) {
-        return bonus.getOrDefault(who, 0);
+        return bounty.getOrDefault(who, 0);
     }
 
     public void addBonus(UUID who, int points) {
         if (points <= 0) {
             return;
         }
-        bonus.merge(who, points, Integer::sum);
+        bounty.merge(who, points, Integer::sum);
         setDirty();
     }
 
@@ -276,7 +281,19 @@ public final class MazeOrders extends SavedData {
      * <p>Saved, so a restart in the middle of a day does not wipe what a squad
      * bled for, and cleared with the slates each dawn.
      */
-    private final Map<UUID, Integer> bonus = new LinkedHashMap<>();
+    private final Map<UUID, Integer> bounty = new LinkedHashMap<>();
+    /**
+     * How many people were in the maze when the day's pool was struck.
+     *
+     * <p>Saved, because a restart mid-day must not silently resize the Glade's
+     * budget underneath orders already committed against it.
+     */
+    private int heads = 0;
+
+    /** Everybody with anything on the slate today. */
+    public java.util.Set<UUID> everyone() {
+        return java.util.Set.copyOf(slates.keySet());
+    }
 
     public Map<String, Integer> slate(UUID who) {
         return slates.getOrDefault(who, Map.of());
@@ -293,8 +310,18 @@ public final class MazeOrders extends SavedData {
         return total;
     }
 
-    public int remaining(ServerLevel level, UUID who) {
-        return budget(level, who) - committed(who);
+    /** Everything the whole Glade has committed, across every slate. */
+    public int committedTotal() {
+        int total = 0;
+        for (UUID who : slates.keySet()) {
+            total += committed(who);
+        }
+        return total;
+    }
+
+    /** What is left in the pot for anybody to spend. */
+    public static int remaining(ServerLevel level) {
+        return pool(level) - get(level).committedTotal();
     }
 
     /**
@@ -307,9 +334,9 @@ public final class MazeOrders extends SavedData {
             return "Between one and sixty-four.";
         }
         int cost = e.cost() * qty;
-        int left = remaining(level, who);
+        int left = remaining(level);
         if (cost > left) {
-            return "That is " + cost + " and you have " + left + ".";
+            return "That is " + cost + " and the Glade has " + left + ".";
         }
         slates.computeIfAbsent(who, k -> new LinkedHashMap<>()).merge(e.id(), qty, Integer::sum);
         setDirty();
@@ -366,36 +393,44 @@ public final class MazeOrders extends SavedData {
     /**
      * Closes the day out once the Box has filled the slates.
      *
-     * <h2>Why a bounty is not simply wiped</h2>
+     * <h2>What expires and what does not</h2>
      *
-     * <p>The broadcast says a Griever is worth twenty points on tomorrow's
-     * slate, and for a kill at noon it was: you had all afternoon to spend it.
-     * For a kill at half past midnight it was a lie. The points landed, dawn
-     * came a minute later, the slate had already been filed and the whole lot
-     * was wiped unspent - so the hardest thing in the game paid nothing
-     * precisely when it was hardest, which is exactly backwards.
+     * <p>The head allowance and the day's work both expire. That is what makes
+     * the evening a decision: a Glade that underspends has lost the difference,
+     * so somebody has to actually sit down and choose.
      *
-     * <p>So the charting allowance still expires - that is what forces the
-     * evening decision - but a bounty you did not get the chance to spend rolls
-     * to the next day. Working out how much that is only needs one subtraction:
-     * anything you committed beyond your ground allowance must have come out of
-     * the bounty, and the rest of it is still yours.
+     * <p>A Griever bounty does not. The broadcast promises twenty credits on
+     * tomorrow's slate, and for a kill at noon that was true - you had all
+     * afternoon to spend it. For a kill at half past midnight it was a lie: the
+     * credits landed, dawn came a minute later, the slate was already filed and
+     * the lot was wiped unspent. The hardest thing in the game paid nothing
+     * precisely when it was hardest.
+     *
+     * <p>So the pot is spent cheapest-first: whatever the Glade committed comes
+     * out of the perishable half before it touches a bounty, and only the excess
+     * eats into what somebody bled for. What is left of that rolls.
      */
     public void settle(ServerLevel level) {
+        int perishable = fromHeads(level) + MazeDayWork.totalCredits(level);
+        int spentFromBounty = Math.max(0, committedTotal() - perishable);
+
+        // Taken in the order the kills happened, so the oldest bounty is the
+        // one that gets spent. Built into a new map first: editing the map being
+        // read from is the way this file would break.
         Map<UUID, Integer> carried = new LinkedHashMap<>();
-        for (Map.Entry<UUID, Integer> paid : bonus.entrySet()) {
-            UUID who = paid.getKey();
-            int fromBounty = Math.max(0, committed(who) - ground(level, who));
-            int left = Math.max(0, paid.getValue() - fromBounty);
+        int owing = spentFromBounty;
+        for (Map.Entry<UUID, Integer> paid : bounty.entrySet()) {
+            int had = paid.getValue();
+            int taken = Math.min(had, owing);
+            owing -= taken;
+            int left = had - taken;
             if (left > 0) {
-                carried.put(who, left);
+                carried.put(paid.getKey(), left);
             }
         }
-        // Built first, then swapped in. Editing the map being read from is the
-        // way this file would break.
         slates.clear();
-        bonus.clear();
-        bonus.putAll(carried);
+        bounty.clear();
+        bounty.putAll(carried);
         setDirty();
     }
 
@@ -413,7 +448,7 @@ public final class MazeOrders extends SavedData {
         });
         tag.put("Slates", all);
         CompoundTag paid = new CompoundTag();
-        bonus.forEach((id, n) -> paid.putInt(id.toString(), n));
+        bounty.forEach((id, n) -> paid.putInt(id.toString(), n));
         tag.put("Bonus", paid);
         return tag;
     }
@@ -437,7 +472,7 @@ public final class MazeOrders extends SavedData {
         CompoundTag paid = tag.getCompound("Bonus");
         for (String id : paid.getAllKeys()) {
             try {
-                out.bonus.put(UUID.fromString(id), paid.getInt(id));
+                out.bounty.put(UUID.fromString(id), paid.getInt(id));
             } catch (IllegalArgumentException ignored) {
                 // Same.
             }

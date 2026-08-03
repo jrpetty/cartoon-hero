@@ -322,6 +322,7 @@ public final class MazeEvents {
         if (!jobs.is(p.getUUID(), MazeJobs.TRACKHOE)) {
             return;
         }
+        countFood(level, p, at, state);
         doubleHarvest(level, p, at, state);
         if (state.getBlock() instanceof net.minecraft.world.level.block.CropBlock crop
                 && crop.isMaxAge(state)) {
@@ -349,6 +350,31 @@ public final class MazeEvents {
                 || block instanceof net.minecraft.world.level.block.NetherWartBlock
                 || block instanceof net.minecraft.world.level.block.SweetBerryBushBlock
                 || block instanceof net.minecraft.world.level.block.CocoaBlock;
+    }
+
+    /**
+     * A day's farming, counted where it actually happens.
+     *
+     * <p>Read off the block's real loot table rather than guessed, for the same
+     * reason the double harvest is: a crop this code has never heard of still
+     * counts correctly, and a hand-written table would drift the first time a
+     * crop changed. The Track-hoe's own doubling is counted too - that yield is
+     * real food in the larder, and paying for it is the point of the perk.
+     */
+    private static void countFood(ServerLevel level, ServerPlayer p, net.minecraft.core.BlockPos at,
+                                  net.minecraft.world.level.block.state.BlockState state) {
+        int food = 0;
+        for (net.minecraft.world.item.ItemStack stack
+                : net.minecraft.world.level.block.Block.getDrops(state, level, at,
+                        level.getBlockEntity(at), p, p.getMainHandItem())) {
+            if (!stack.isEmpty() && MazeDayWork.isFood(stack.getItem())) {
+                // Doubled, because the Track-hoe's harvest bonus lands too.
+                food += stack.getCount() * 2;
+            }
+        }
+        if (food > 0) {
+            MazeDayWork.get(level).add(level, p, MazeJobs.TRACKHOE, food);
+        }
     }
 
     /**
@@ -494,6 +520,7 @@ public final class MazeEvents {
                                         .executes(ctx -> orderAdd(ctx.getSource(),
                                                 com.mojang.brigadier.arguments.StringArgumentType.getString(ctx, "item"),
                                                 com.mojang.brigadier.arguments.IntegerArgumentType.getInteger(ctx, "qty"))))))
+                .then(Commands.literal("work").executes(ctx -> workSheet(ctx.getSource())))
                 .then(Commands.literal("treat").executes(ctx -> treat(ctx.getSource())))
                 .then(Commands.literal("rations").executes(ctx -> rations(ctx.getSource())))
                 .then(Commands.literal("rebuild").requires(src -> src.hasPermission(2))
@@ -735,7 +762,10 @@ public final class MazeEvents {
             return;
         }
         if (delta > 0) {
-            orders.add(level, player.getUUID(), e, Math.min(delta, 64));
+            int qty = Math.min(delta, 64);
+            if (orders.add(level, player.getUUID(), e, qty) == null) {
+                announceOrder(level, player, e, qty);
+            }
         } else if (delta < 0) {
             orders.take(player.getUUID(), e.id(), -delta);
         }
@@ -750,15 +780,15 @@ public final class MazeEvents {
         }
         ServerLevel level = src.getLevel();
         MazeOrders orders = MazeOrders.get(level);
-        int budget = MazeOrders.budget(level, player.getUUID());
-        int left = orders.remaining(level, player.getUUID());
-        MazeCharts charts = MazeCharts.get(src.getServer());
+        int pool = MazeOrders.pool(level);
+        int left = MazeOrders.remaining(level);
 
         src.sendSuccess(() -> Component.literal(
-                "§6— THE SLATE — §f" + left + "§7 of §f" + budget + "§7 points left"), false);
+                "§6— THE GLADE'S SLATE — §f" + left + "§7 of §f" + pool + "§7 credits left"), false);
         src.sendSuccess(() -> Component.literal(
-                "§8" + MazeOrders.BASE_POINTS + " base §8+ " + (charts.myPercent(player.getUUID()) * 2)
-                        + " yours §8+ " + charts.gladePercent() + " the Glade's"), false);
+                "§8" + MazeOrders.fromHeads(level) + " for " + orders.heads() + " heads §8+ "
+                        + MazeDayWork.totalCredits(level) + " day's work §8+ "
+                        + orders.totalBounty() + " bounties"), false);
 
         var slate = orders.slate(player.getUUID());
         if (!slate.isEmpty()) {
@@ -810,10 +840,84 @@ public final class MazeEvents {
             src.sendFailure(Component.literal(why));
             return 0;
         }
-        int left = orders.remaining(level, player.getUUID());
+        announceOrder(level, player, e, qty);
+        int left = MazeOrders.remaining(level);
         src.sendSuccess(() -> Component.literal(
                 "§a+ §f" + qty + "× " + e.display() + " §8(" + (e.cost() * qty) + ") §7— "
-                        + left + " left"), false);
+                        + left + " left in the pot"), false);
+        return 1;
+    }
+
+    /**
+     * Telling the Glade what somebody just spent their shared money on.
+     *
+     * <p>The pot belongs to everybody, so anybody can commit it - and the only
+     * thing standing between that and one person emptying it on diamonds before
+     * the others wake up is that everyone can see it happen. Visibility is the
+     * arbitration, which is how it would work down there anyway. A cap would be
+     * safer and would also stop the group deliberately pooling everything into
+     * one serum, which is the main reason to have a shared pot at all.
+     */
+    private static void announceOrder(ServerLevel level, ServerPlayer who,
+                                      MazeOrders.Entry e, int qty) {
+        int cost = e.cost() * qty;
+        int left = MazeOrders.remaining(level);
+        for (ServerPlayer p : level.players()) {
+            if (p == who) {
+                continue;
+            }
+            p.displayClientMessage(Component.literal(
+                    "§7▸ §f" + who.getGameProfile().getName() + "§7 put §f" + cost
+                            + "§7 on " + qty + "× " + e.display()
+                            + " §8(" + left + " left)"), false);
+        }
+    }
+
+    /**
+     * How your day is going, in the only terms the pool cares about.
+     *
+     * <p>A quota you cannot see is a quota nobody works toward. This is the
+     * screen for "am I nearly there", and it is deliberately blunt about the
+     * fact that the credits are the Glade's rather than yours.
+     */
+    private static int workSheet(CommandSourceStack src) {
+        ServerPlayer player = src.getPlayer();
+        if (player == null || !isMaze(src.getLevel())) {
+            src.sendFailure(Component.literal("Only in the maze."));
+            return 0;
+        }
+        ServerLevel level = src.getLevel();
+        String job = MazeJobs.get(level).jobOf(player.getUUID());
+        if (job == null) {
+            src.sendFailure(Component.literal("Take a trade first. §8/maze job"));
+            return 0;
+        }
+        MazeDayWork work = MazeDayWork.get(level);
+        int done = work.unitsOf(player.getUUID());
+        int quota = MazeDayWork.quotaFor(job);
+        int credits = work.creditsOf(level, player.getUUID());
+        int max = MazeDayWork.maxCredits();
+
+        src.sendSuccess(() -> Component.literal(
+                "§6— YOUR DAY — §7" + MazeJobs.display(job)), false);
+        src.sendSuccess(() -> Component.literal(
+                "§f" + done + "§7/§f" + quota + " §8" + MazeDayWork.unitName(job)), false);
+        // A bar, because a fraction is a number and a bar is a feeling.
+        int filled = quota <= 0 ? 0 : Math.min(20, done * 20 / quota);
+        StringBuilder bar = new StringBuilder("§a");
+        for (int i = 0; i < 20; i++) {
+            if (i == filled) {
+                bar.append("§8");
+            }
+            bar.append('|');
+        }
+        src.sendSuccess(() -> Component.literal(bar.toString()), false);
+        src.sendSuccess(() -> Component.literal(
+                "§7Worth §a+" + credits + "§7 of a possible §f" + max
+                        + "§7 to the Glade's pot."), false);
+        src.sendSuccess(() -> Component.literal(
+                "§8The pot stands at " + MazeOrders.remaining(level) + " of "
+                        + MazeOrders.pool(level) + ". §8/maze order"), false);
         return 1;
     }
 
@@ -959,6 +1063,10 @@ public final class MazeEvents {
             MazeJobs.spendCure(player.getUUID(), day);
             MazeSting.cure(level, subject);
             jobs.award(player, MazeJobs.MEDJACK, 20);
+            // A person is worth more than a dressing. Three units either way -
+            // buying somebody a minute is the same work as curing them, and
+            // often the braver of the two.
+            MazeDayWork.get(level).add(level, player, MazeJobs.MEDJACK, 3);
             src.sendSuccess(() -> Component.literal(
                     "§a✚ You pulled " + subject.getGameProfile().getName() + " back."), false);
             return 1;
@@ -969,6 +1077,7 @@ public final class MazeEvents {
             return 0;
         }
         jobs.award(player, MazeJobs.MEDJACK, 8);
+        MazeDayWork.get(level).add(level, player, MazeJobs.MEDJACK, 3);
         src.sendSuccess(() -> Component.literal(
                 "§a✚ You bought " + subject.getGameProfile().getName()
                         + " §f" + seconds + "s§a."), false);
@@ -1145,6 +1254,9 @@ public final class MazeEvents {
         }
         if (medjack) {
             jobs.award(player, MazeJobs.MEDJACK, 2);
+            // One unit per dressing, so a Med-jack who spends the morning at the
+            // bench is paid for the morning rather than for the batch.
+            MazeDayWork.get(level).add(level, player, MazeJobs.MEDJACK, made);
         }
         src.sendSuccess(() -> Component.literal(
                 "§f✚ " + made + " bandages." + (medjack ? " §8Half again, because you know how." : "")), false);

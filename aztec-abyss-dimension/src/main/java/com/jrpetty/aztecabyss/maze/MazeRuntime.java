@@ -223,6 +223,8 @@ public final class MazeRuntime {
         hordeDay = -1;
         escapeUntil = 0L;
         escapees.clear();
+        MazeDayWork.get(level).clearAll();
+        MazeOrders.get(level).setHeads(0);
         clock.newGame(level.getServer());
     }
 
@@ -289,10 +291,19 @@ public final class MazeRuntime {
                 // Dusk is the order deadline. Nothing comes up for anybody who
                 // has not filed one, so the game has to say so while there is
                 // still time to do something about it.
-                if (clock.day() + 1 >= MazeOrders.REQUISITION_FROM_DAY
-                        && MazeOrders.get(level).slate(p.getUUID()).isEmpty()) {
-                    p.displayClientMessage(Component.literal(
-                            "§e✦ You have filed no order. §7Nothing will come up at dawn. §8/maze order"), false);
+                if (clock.day() + 1 >= MazeOrders.REQUISITION_FROM_DAY) {
+                    MazeOrders orders = MazeOrders.get(level);
+                    if (orders.committedTotal() <= 0) {
+                        // The pot is shared, so this is everybody's problem and
+                        // is said to everybody rather than only to whoever has
+                        // not personally clicked anything.
+                        p.displayClientMessage(Component.literal(
+                                "§e✦ The Glade has filed nothing. §7Nothing comes up at dawn. §8/maze order"), false);
+                    } else if (orders.slate(p.getUUID()).isEmpty()) {
+                        p.displayClientMessage(Component.literal(
+                                "§7Others have ordered; you have not. §8"
+                                        + MazeOrders.remaining(level) + " left in the pot. /maze order"), false);
+                    }
                 }
                 level.playSound(null, p.blockPosition(), SoundEvents.ANVIL_LAND, SoundSource.BLOCKS, 1.0F, 0.5F);
             }
@@ -518,7 +529,14 @@ public final class MazeRuntime {
                 runnersLegs(level, p, jobs);
                 bearings(level, p, jobs);
                 groundCovered(level, p, jobs, at);
-                if (charts.chart(p.getUUID(), cellX, cellZ, layoutName) && charts.gladePercent() % 10 == 0
+                boolean freshGround = charts.chart(p.getUUID(), cellX, cellZ, layoutName);
+                if (freshGround) {
+                    // A Runner's day, counted in ground the Glade had never
+                    // seen. Re-walking a known corridor pays nothing, which is
+                    // the whole job.
+                    MazeDayWork.get(level).add(level, p, MazeJobs.RUNNER, 1);
+                }
+                if (freshGround && charts.gladePercent() % 10 == 0
                         && charts.gladePercent() > 0) {
                     for (ServerPlayer other : level.players()) {
                         other.displayClientMessage(Component.literal(

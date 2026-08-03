@@ -13,6 +13,69 @@ behaviour that was already there · **docs**
 
 ## Unreleased
 
+### One pot for the Glade, and a day's work that pays into it
+
+The requisition economy stops being six private allowances and becomes one
+shared budget that the whole Glade earns together. Two halves: what you are
+given for being here, and what you did today.
+
+- **change** **The pool is `50 × the people in the maze`, totalled, not split.**
+  Six players is 300 credits in one pot, not six wallets of 50. This is the first
+  thing in the supply system that makes another player's decision your problem,
+  and it unlocks the thing private budgets structurally cannot: **concentration**.
+  Six people with 50 each can never buy a Griever Serum. Six people with 300
+  between them can decide, as a group, to spend a quarter of the day on one.
+- **feat** **A day's work pays into the pot, up to 30 credits a head.** Each trade
+  has a quota and every quota is worth the same 30 — equal ceilings on purpose,
+  because the moment one trade pays better than another the trade board stops
+  being a choice and becomes a question with a right answer. You are paid the
+  fraction you managed, so there is no cliff at the end of the day:
+  `credits = 30 × min(1, units ÷ quota)`. Half a quota is half the money.
+
+  | Trade | Counted in | Quota | Config |
+  |---|---|---|---|
+  | Track-hoe | food produced | 100 | `mazeQuotaFarm` |
+  | Runner | cells charted the Glade had never seen | 60 | `mazeQuotaChart` |
+  | Med-jack | bandages (1) and patients treated or revived (3) | 12 | `mazeQuotaCare` |
+  | Builder | things forged | 5 | `mazeQuotaForge` |
+
+  Food is read off the block's **real loot table** rather than a hand-written
+  list, so a crop this code has never heard of counts correctly, and the
+  Track-hoe's own double-harvest counts too — that yield is real food in the
+  larder. Wheat is deliberately **not** food, so wheat-into-bread is paid once
+  rather than twice. The Builder is counted in forged items rather than blocks
+  placed, because a wall you can put up and take down forty times is not a day's
+  work and any metric you can farm standing still is one somebody will.
+- **feat** **`/maze work`** — your quota, a progress bar, what you have earned the
+  Glade and what the pot currently stands at. A quota you cannot see is a quota
+  nobody works toward.
+- **change** **The requisition screen is now the Glade's, not yours.** The bar
+  shows the whole pot with its three sources picked out — heads, work in green,
+  bounty in gold — so *"we are short because nobody farmed"* is a glance rather
+  than an argument. Each line shows what the Glade has on order with your own
+  share underneath, and a slim second bar tracks your personal quota.
+- **change** **Anyone can commit the pot, and every commitment is announced.**
+  `NAME put 25 on 1× Griever Serum (140 left)` goes to everyone in the maze.
+  Visibility is the arbitration, which is how it would work down there anyway. A
+  per-head cap would be safer and would also stop the group deliberately pooling
+  everything into one serum, which is the main reason to have a shared pot.
+- **change** Charting no longer feeds a personal allowance — `yours × 2 + Glade's`
+  had no meaning once the pot was shared. The Runner's quota replaces it, and it
+  is a better incentive: it pays for **new** ground every day rather than paying
+  forever for a corridor walked on day one.
+- **fix** **The headcount is snapshotted at dawn** and held all day. A pool that
+  tracked the live count would shrink when somebody logged off at dusk —
+  underneath orders already filed against it. The Glade was fed for six this
+  morning; it is still fed for six at midnight.
+- **fix** Heads are struck **every** morning, not only from day 2. Otherwise the
+  pool sits at zero through day one while the dusk warning is telling people to
+  file an order against it.
+- **change** Settling spends the pot **cheapest-first**: the head allowance and
+  the day's work expire, and only what the Glade committed beyond those eats into
+  a Griever bounty. Whatever is left of a bounty still rolls.
+
+---
+
 ### The maze was three to six times too small, and nobody could have known
 
 All seven presets were solved offline against the real dataset, replicating

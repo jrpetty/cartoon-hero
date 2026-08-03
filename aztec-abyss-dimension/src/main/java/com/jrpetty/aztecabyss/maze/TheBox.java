@@ -81,6 +81,11 @@ public final class TheBox {
         RandomSource rng = RandomSource.create(0xB0E5 + day * 7919L);
         MazeJobs jobs = MazeJobs.get(level);
 
+        // Struck every morning, including the two before requisitions start.
+        // Otherwise the pool is zero all through day one - while people are
+        // being told at dusk to file an order against it.
+        MazeOrders.get(level).setHeads(level.players().size());
+
         // From the second morning the Box stops giving and starts filling
         // orders. Two days of handouts is enough to learn the place; after that
         // the supply line is a decision somebody has to make every evening.
@@ -163,18 +168,26 @@ public final class TheBox {
             level.playSound(null, p.blockPosition(), SoundEvents.BEACON_ACTIVATE,
                     SoundSource.BLOCKS, 1.0F, 0.7F);
         }
-        // Slates are per day. The charting allowance not spent is gone, which is
-        // what makes the evening decision a decision; an unspent bounty rolls.
+        // Yesterday closes: the head allowance and the day's work expire, an
+        // unspent bounty rolls. Order matters - settle reads yesterday's work,
+        // so the work is only cleared afterwards.
         orders.settle(level);
-        // Only now is the new budget a real number. Quoting it before settling
-        // told people they had points that were about to be taken off them.
+        MazeDayWork.get(level).clearAll();
+        // Today's pool is struck now, for the people who are actually here, and
+        // held at that size all day. A pool that tracked the live headcount
+        // would shrink when somebody logged off at dusk, underneath orders
+        // already filed against it.
+        orders.setHeads(level.players().size());
+
+        int pool = MazeOrders.pool(level);
+        int rolled = orders.totalBounty();
         for (ServerPlayer p : level.players()) {
-            int today = MazeOrders.budget(level, p.getUUID());
-            int rolled = orders.bonus(p.getUUID());
             p.displayClientMessage(Component.literal(
-                    "§7Today you have §f" + today + "§7 points"
-                            + (rolled > 0 ? " §8(§6" + rolled + "§8 carried from bounties)" : "")
-                            + "§7. §8/maze order"), false);
+                    "§6▣ THE GLADE HAS §f" + pool + "§6 CREDITS §8— "
+                            + orders.heads() + " of you"
+                            + (rolled > 0 ? ", §6" + rolled + "§8 carried from bounties" : "")), false);
+            p.displayClientMessage(Component.literal(
+                    "§7Earn more by working your trade today. §8/maze work  /maze order"), false);
         }
         level.playSound(null, new BlockPos(MazeData.SPAWN_X, MazeData.FLOOR_Y + 2, MazeData.SPAWN_Z),
                 SoundEvents.ANVIL_LAND, SoundSource.BLOCKS, 1.4F, 0.6F);

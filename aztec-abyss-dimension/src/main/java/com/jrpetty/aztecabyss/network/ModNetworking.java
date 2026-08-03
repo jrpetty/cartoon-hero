@@ -178,25 +178,48 @@ public final class ModNetworking {
      * showing a balance the server does not agree with.
      */
     public static void sendOrders(ServerPlayer player) {
-        if (player.getServer() == null) {
-            return;
-        }
-        if (!(player.level() instanceof net.minecraft.server.level.ServerLevel level)) {
+        if (player.getServer() == null
+                || !(player.level() instanceof net.minecraft.server.level.ServerLevel level)) {
             return;
         }
         var orders = com.jrpetty.aztecabyss.maze.MazeOrders.get(level);
-        var slate = orders.slate(player.getUUID());
+        var work = com.jrpetty.aztecabyss.maze.MazeDayWork.get(level);
+        var mine = orders.slate(player.getUUID());
+
+        // What the whole Glade has on order, line by line. With one shared pot
+        // this is the number that decides anything - your own is a footnote.
+        java.util.Map<String, Integer> glade = new java.util.HashMap<>();
+        for (java.util.UUID who : orders.everyone()) {
+            orders.slate(who).forEach((id, n) -> glade.merge(id, n, Integer::sum));
+        }
+
         java.util.List<String> rows = new java.util.ArrayList<>();
         for (com.jrpetty.aztecabyss.maze.MazeOrders.Entry e
                 : com.jrpetty.aztecabyss.maze.MazeOrders.catalogue()) {
             rows.add(e.group() + "|" + e.id() + "|" + e.display() + "|"
-                    + e.count() + "|" + e.cost() + "|" + slate.getOrDefault(e.id(), 0));
+                    + e.count() + "|" + e.cost() + "|"
+                    + mine.getOrDefault(e.id(), 0) + "|"
+                    + glade.getOrDefault(e.id(), 0));
         }
+
+        String job = com.jrpetty.aztecabyss.maze.MazeJobs.get(level).jobOf(player.getUUID());
+        String summary = orders.heads()
+                + "|" + com.jrpetty.aztecabyss.maze.MazeOrders.fromHeads(level)
+                + "|" + com.jrpetty.aztecabyss.maze.MazeDayWork.totalCredits(level)
+                + "|" + orders.totalBounty()
+                + "|" + work.unitsOf(player.getUUID())
+                + "|" + com.jrpetty.aztecabyss.maze.MazeDayWork.quotaFor(job)
+                + "|" + work.creditsOf(level, player.getUUID())
+                + "|" + com.jrpetty.aztecabyss.maze.MazeDayWork.maxCredits()
+                + "|" + (job == null ? "No trade"
+                        : com.jrpetty.aztecabyss.maze.MazeJobs.display(job))
+                + "|" + com.jrpetty.aztecabyss.maze.MazeDayWork.unitName(job);
+
         PacketDistributor.sendToPlayer(player, new RequisitionPayload(
                 com.jrpetty.aztecabyss.maze.MazeClock.get(player.getServer()).day(),
-                com.jrpetty.aztecabyss.maze.MazeOrders.budget(level, player.getUUID()),
-                orders.bonus(player.getUUID()),
-                orders.committed(player.getUUID()),
+                com.jrpetty.aztecabyss.maze.MazeOrders.pool(level),
+                orders.committedTotal(),
+                summary,
                 rows));
     }
 

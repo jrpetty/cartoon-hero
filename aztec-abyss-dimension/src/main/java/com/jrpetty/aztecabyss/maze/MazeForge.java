@@ -122,6 +122,10 @@ public final class MazeForge {
         player.displayClientMessage(Component.literal(
                 "§6⚒ Your hands made it better. §7+" + Math.round(durability * 100)
                         + "% durability, +" + edge + "% damage"), true);
+        // A day's smithing. Counted in things forged rather than blocks placed:
+        // a wall you can put up and take down forty times is not a day's work,
+        // and any metric you can farm standing still is one somebody will.
+        MazeDayWork.get(level).add(level, player, MazeJobs.BUILDER, 1);
     }
 
     /**

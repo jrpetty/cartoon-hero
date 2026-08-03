@@ -48,13 +48,22 @@ import java.util.Map;
 public class RequisitionScreen extends Screen {
 
     /** One catalogue line, unpacked. */
-    private record Row(String group, String id, String display, int count, int cost, int ordered) {
+    private record Row(String group, String id, String display, int count, int cost,
+                       int yours, int glade) {
     }
 
     private final int day;
-    private final int budget;
-    private final int bonusPart;
+    private final int pool;
     private final int spent;
+    private final int heads;
+    private final int fromWork;
+    private final int fromBounty;
+    private final int yourUnits;
+    private final int yourQuota;
+    private final int yourCredits;
+    private final int maxCredits;
+    private final String jobDisplay;
+    private final String unitName;
     private final List<Row> rows = new ArrayList<>();
     private final List<String> groups = new ArrayList<>();
     private final Map<String, List<Row>> byGroup = new LinkedHashMap<>();
@@ -93,9 +102,17 @@ public class RequisitionScreen extends Screen {
     public RequisitionScreen(RequisitionPayload payload, int openTab) {
         super(Component.literal("Requisition"));
         this.day = payload.day();
-        this.budget = payload.budget();
-        this.bonusPart = payload.bonus();
+        this.pool = payload.pool();
         this.spent = payload.spent();
+        this.heads = payload.heads();
+        this.fromWork = payload.fromWork();
+        this.fromBounty = payload.fromBounty();
+        this.yourUnits = payload.yourUnits();
+        this.yourQuota = payload.yourQuota();
+        this.yourCredits = payload.yourCredits();
+        this.maxCredits = payload.maxCredits();
+        this.jobDisplay = payload.jobDisplay();
+        this.unitName = payload.unitName();
         for (String packed : payload.rows()) {
             Row r = new Row(
                     RequisitionPayload.field(packed, 0),
@@ -103,7 +120,8 @@ public class RequisitionScreen extends Screen {
                     RequisitionPayload.field(packed, 2),
                     RequisitionPayload.number(packed, 3),
                     RequisitionPayload.number(packed, 4),
-                    RequisitionPayload.number(packed, 5));
+                    RequisitionPayload.number(packed, 5),
+                    RequisitionPayload.number(packed, 6));
             rows.add(r);
             byGroup.computeIfAbsent(r.group(), k -> new ArrayList<>()).add(r);
         }
@@ -128,7 +146,7 @@ public class RequisitionScreen extends Screen {
     }
 
     private int panelTop() {
-        return Math.max(70, this.height / 2 - 72);
+        return Math.max(78, this.height / 2 - 68);
     }
 
     /** How far down the content runs, rail or lines, whichever is longer. */
@@ -164,13 +182,13 @@ public class RequisitionScreen extends Screen {
             Button minus = Button.builder(Component.literal("-"),
                             btn -> send(r.id(), -1))
                     .bounds(px + PANEL_W - 36, ry, 14, ROW_H - 2).build();
-            minus.active = r.ordered() > 0;
+            minus.active = r.yours() > 0;
             addRenderableWidget(minus);
 
             Button plus = Button.builder(Component.literal("+"),
                             btn -> send(r.id(), 1))
                     .bounds(px + PANEL_W - 18, ry, 14, ROW_H - 2).build();
-            plus.active = budget - spent >= r.cost();
+            plus.active = pool - spent >= r.cost();
             addRenderableWidget(plus);
         }
 
@@ -221,34 +239,40 @@ public class RequisitionScreen extends Screen {
         int x = left();
         int top = panelTop();
         int px = x + RAIL_W + 6;
-        int left = budget - spent;
+        int left = pool - spent;
 
         // --- header -------------------------------------------------------
         g.drawCenteredString(this.font, Component.literal("§8THE BOX — DAY " + day),
-                cx, 12, TEXT_FAINT);
+                cx, 10, TEXT_FAINT);
         g.pose().pushPose();
-        g.pose().translate(cx, 22, 0);
+        g.pose().translate(cx, 19, 0);
         g.pose().scale(1.6f, 1.6f, 1.0f);
         g.drawCenteredString(this.font, Component.literal("REQUISITION"), 0, 0, ACCENT);
         g.pose().popPose();
 
-        // --- the budget bar -----------------------------------------------
-        // The whole screen exists so that "can I afford this" is a look rather
-        // than a sum, and this bar is the answer to it.
+        // --- the pool bar -------------------------------------------------
+        // One pot for the whole Glade, so this bar is everybody's. The three
+        // slices say where it came from, because "we are short because nobody
+        // farmed" is the conversation this screen is meant to start.
         int barW = RAIL_W + 6 + PANEL_W;
-        int barY = 48;
-        int denom = Math.max(1, budget);
-        int filled = (int) (barW * (Math.min(spent, budget) / (float) denom));
-        int bonusW = (int) (barW * (Math.min(bonusPart, budget) / (float) denom));
+        int barY = 42;
+        int denom = Math.max(1, pool);
+        int filled = (int) (barW * (Math.min(spent, pool) / (float) denom));
+        int workW = (int) (barW * (Math.min(fromWork, pool) / (float) denom));
+        int bountyW = (int) (barW * (Math.min(fromBounty, pool) / (float) denom));
         g.fill(x, barY, x + barW, barY + 7, 0xFF1A1926);
-        // The bounty slice sits at the far end, unfilled, so you can see the part
-        // of today's budget you had to kill something for.
-        if (bonusW > 0) {
-            g.fill(x + barW - bonusW, barY, x + barW, barY + 7, 0xFF3A2E14);
+        // Earned slices sit at the far end, unfilled, so the part of today's pot
+        // that somebody had to work or bleed for is visible even when it is
+        // already spent.
+        if (workW + bountyW > 0) {
+            g.fill(x + barW - workW - bountyW, barY, x + barW - bountyW, barY + 7, 0xFF17301D);
+        }
+        if (bountyW > 0) {
+            g.fill(x + barW - bountyW, barY, x + barW, barY + 7, 0xFF3A2E14);
         }
         g.fill(x, barY, x + filled, barY + 7, left <= 0 ? GOLD : ACCENT);
 
-        g.drawString(this.font, Component.literal("§7" + spent + "§8 committed"),
+        g.drawString(this.font, Component.literal("§7" + spent + "§8 committed of " + pool),
                 x, barY + 11, TEXT_DIM, false);
         String rightLabel = left + " left";
         int pulse = left > 0 && spent == 0
@@ -256,11 +280,30 @@ public class RequisitionScreen extends Screen {
                 : left > 0 ? TEXT : TEXT_FAINT;
         g.drawString(this.font, Component.literal(rightLabel),
                 x + barW - this.font.width(rightLabel), barY + 11, pulse, false);
-        if (bonusPart > 0) {
-            String b = "◆ " + bonusPart + " bounty";
-            g.drawString(this.font, Component.literal(b),
-                    x + barW - this.font.width(b) - this.font.width(rightLabel) - 10,
-                    barY + 11, GOLD, false);
+
+        // Where the pot came from, in one line.
+        String source = "§8" + heads + " head" + (heads == 1 ? "" : "s")
+                + (fromWork > 0 ? "  §a+" + fromWork + " worked" : "")
+                + (fromBounty > 0 ? "  §6+" + fromBounty + " bounty" : "");
+        g.drawString(this.font, Component.literal(source),
+                x + barW - this.font.width(source) - this.font.width(rightLabel) - 10,
+                barY + 11, TEXT_FAINT, false);
+
+        // --- your own day -------------------------------------------------
+        // The pot is shared; this line is the only thing on screen that is
+        // yours, and it is the one that says whether you have pulled your weight.
+        if (yourQuota > 0) {
+            int qBarW = 90;
+            int qx = x + barW - qBarW;
+            int qy = barY + 22;
+            int qFill = (int) (qBarW * Math.min(1.0f, yourUnits / (float) yourQuota));
+            g.fill(qx, qy, qx + qBarW, qy + 4, 0xFF1A1926);
+            g.fill(qx, qy, qx + qFill, qy + 4,
+                    yourUnits >= yourQuota ? 0xFF63D488 : 0xFF3E9E4E);
+            String mine = strip(jobDisplay) + " — " + yourUnits + "/" + yourQuota
+                    + " " + unitName + "  §a+" + yourCredits + "§8/" + maxCredits;
+            g.drawString(this.font, Component.literal("§8" + mine),
+                    x, qy - 1, TEXT_FAINT, false);
         }
 
         // --- the panel ----------------------------------------------------
@@ -280,7 +323,7 @@ public class RequisitionScreen extends Screen {
                 hovered = i;
             }
             g.fill(px, ry, px + PANEL_W, ry + ROW_H - 2, hot ? ROW_HOT : ROW_FILL);
-            if (r.ordered() > 0) {
+            if (r.glade() > 0) {
                 // A gold spine on anything on the slate, so a filled order is
                 // legible from the rail without reading a single number.
                 g.fill(px, ry, px + 2, ry + ROW_H - 2, GOLD);
@@ -289,15 +332,15 @@ public class RequisitionScreen extends Screen {
             String name = r.display();
             String bundle = r.count() > 0 ? " §8x" + r.count() : "";
             g.drawString(this.font, Component.literal("§r" + name + bundle),
-                    px + 8, ry + 4, r.ordered() > 0 ? TEXT : TEXT_DIM, false);
+                    px + 8, ry + 4, r.glade() > 0 ? TEXT : TEXT_DIM, false);
 
             String price = r.cost() + "p";
             g.drawString(this.font, Component.literal(price),
                     px + PANEL_W - 60 - this.font.width(price), ry + 4,
                     r.cost() <= left ? TEXT_DIM : RED, false);
 
-            if (r.ordered() > 0) {
-                String n = "x" + r.ordered();
+            if (r.glade() > 0) {
+                String n = "x" + r.glade();
                 g.drawString(this.font, Component.literal(n),
                         px + PANEL_W - 52, ry + 4, GOLD, false);
             }
@@ -315,12 +358,23 @@ public class RequisitionScreen extends Screen {
             colour = RED;
         } else if (hovered >= 0 && hovered < list.size()) {
             Row r = list.get(hovered);
+            if (r.yours() > 0 && r.yours() != r.glade()) {
+                foot = "§8" + r.display() + " — §f" + r.glade() + "§8 on the Glade's slate, §f"
+                        + r.yours() + "§8 of them yours";
+                g.drawCenteredString(this.font, Component.literal(foot), cx, footTextY, TEXT_FAINT);
+                return;
+            }
             foot = "§8" + (r.count() > 0 ? r.count() + " × " : "") + r.display()
                     + " for " + r.cost() + ", and you have " + left;
         } else {
             foot = "§8No weapons, tools or armour — order the stock and make them.";
         }
         g.drawCenteredString(this.font, Component.literal(foot), cx, footTextY, colour);
+    }
+
+    /** Colour codes out. The trade names arrive with the server's colours on. */
+    private static String strip(String s) {
+        return s == null ? "" : s.replaceAll("§.", "");
     }
 
     /** Lerps a colour toward black, for the pulse. Kept off the alpha channel. */
