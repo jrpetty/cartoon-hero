@@ -80,6 +80,14 @@ public final class MazeRuntime {
     private static boolean doorsOpen = false;
     private static boolean warnedDusk = false;
 
+    /**
+     * When the way out closes, as a game-time tick. Zero means nobody has found
+     * it yet.
+     */
+    private static long escapeUntil = 0L;
+    /** Who got through, in the order they did, for the summary. */
+    private static final List<String> escapees = new ArrayList<>();
+
     /** How long the midnight reshape goes on making noise, in ticks. */
     private static final int RESHAPE_DRAMA_TICKS = 160;
     private static int reshapeDrama = 0;
@@ -106,6 +114,8 @@ public final class MazeRuntime {
         warnedDusk = false;
         reshapeDrama = 0;
         hordeDay = -1;
+        escapeUntil = 0L;
+        escapees.clear();
         lastSeen.clear();
         walked.clear();
         secondWind.clear();
@@ -210,6 +220,8 @@ public final class MazeRuntime {
         // know whether it differs from the old one.
         appliedLayoutName = null;
         hordeDay = -1;
+        escapeUntil = 0L;
+        escapees.clear();
         clock.newGame(level.getServer());
     }
 
@@ -273,6 +285,14 @@ public final class MazeRuntime {
             for (ServerPlayer p : level.players()) {
                 p.displayClientMessage(Component.literal(
                         "§c⚠ The doors begin to close. Get back to the Glade.").withStyle(ChatFormatting.BOLD), false);
+                // Dusk is the order deadline. Nothing comes up for anybody who
+                // has not filed one, so the game has to say so while there is
+                // still time to do something about it.
+                if (clock.day() + 1 >= MazeOrders.REQUISITION_FROM_DAY
+                        && MazeOrders.get(level).slate(p.getUUID()).isEmpty()) {
+                    p.displayClientMessage(Component.literal(
+                            "§e✦ You have filed no order. §7Nothing will come up at dawn. §8/maze order"), false);
+                }
                 level.playSound(null, p.blockPosition(), SoundEvents.ANVIL_LAND, SoundSource.BLOCKS, 1.0F, 0.5F);
             }
         }
@@ -283,6 +303,8 @@ public final class MazeRuntime {
         long t = clock.phase();
         MazeRace.tick(level);
         MazeSting.tick(level);
+        tickEscape(level);
+        MazeNight.tickWeather(level);
         ChartFloor.refresh(level);
         portalAmbience(level, want);
         tickRunners(level, t);
@@ -386,6 +408,16 @@ public final class MazeRuntime {
     }
 
     private static void newDay(ServerLevel level, long day) {
+        // The deadline. A Glade that has not found the way out by the end of the
+        // last day does not get a ninth - the maze was always going to be the
+        // thing that beat you, and an open-ended run lets a competent group live
+        // in it forever, which is a settlement simulator rather than this.
+        int limit = AbyssConfig.MAZE_DAY_LIMIT.get();
+        if (limit > 0 && day >= limit) {
+            theEnd(level, "§4§lTHE MAZE TOOK YOU ALL",
+                    "§7" + limit + " days was all there was.");
+            return;
+        }
         MazeRuns.clearAll();
         MazeSting.clearAll();
         NIGHT_OUT.clear();
@@ -407,6 +439,18 @@ public final class MazeRuntime {
             p.displayClientMessage(Component.literal(
                     "§8Tonight is §c" + String.format("%.1f", Griever.dayScale(level))
                             + "x §8what the first night was."), false);
+            int limit = AbyssConfig.MAZE_DAY_LIMIT.get();
+            if (limit > 0) {
+                int left = (int) (limit - day);
+                // The last three days say so loudly. A deadline nobody is
+                // counting down to is a deadline that arrives as a surprise,
+                // and a surprise deadline is just an unfair one.
+                p.displayClientMessage(Component.literal(left <= 1
+                        ? "§4§lLAST DAY. §7Get out today or not at all."
+                        : left <= 3
+                                ? "§c⚠ §f" + left + "§c days left."
+                                : "§8" + left + " days left."), false);
+            }
             level.playSound(null, p.blockPosition(), SoundEvents.BEACON_ACTIVATE,
                     SoundSource.AMBIENT, 0.8F, 1.1F);
         }
@@ -507,6 +551,8 @@ public final class MazeRuntime {
                 if (seconds >= 0 && MazeRace.onEscape(level, p, seconds)) {
                     MazeAdvancements.grant(p, MazeAdvancements.RACE_WIN);
                 }
+                openTheWayOut(level, p);
+                escapees.add(p.getGameProfile().getName());
                 escaped.add(p);
                 escapedSeconds.add(seconds);
                 // No bar for somebody who is on their way out of the dimension.
@@ -778,6 +824,112 @@ public final class MazeRuntime {
         return best;
     }
 
+    /**
+     * The ending the mode never had.
+     *
+     * <p>Before this a game simply stopped: one person walked through a doorway
+     * and vanished, and the other three were left standing in a field with no
+     * acknowledgement that anything had concluded. A week of work ended in
+     * silence.
+     *
+     * <p>So it ends out loud, and it ends with an account. What the Glade
+     * actually built is the only thing worth reading at the end of a run: how far
+     * they got, how much of the maze they had, who walked out and who did not.
+     * The numbers were all being kept already and nobody was ever shown them.
+     */
+    private static void theEnd(ServerLevel level, String headline, String because) {
+        MazeClock clock = MazeClock.get(level);
+        MazeCharts charts = MazeCharts.get(level.getServer());
+        MazeJobs jobs = MazeJobs.get(level);
+
+        // Collected first, killed after. Hurting a player inside a loop over
+        // level.players() is the bug this codebase has produced three times.
+        List<ServerPlayer> caught = new ArrayList<>(level.players());
+        for (ServerPlayer p : caught) {
+            p.connection.send(new net.minecraft.network.protocol.game.ClientboundSetTitleTextPacket(
+                    Component.literal(headline)));
+            p.connection.send(new net.minecraft.network.protocol.game.ClientboundSetSubtitleTextPacket(
+                    Component.literal(because)));
+            p.displayClientMessage(Component.literal("§8§m                                        "), false);
+            p.displayClientMessage(Component.literal(
+                    "§6§lTHE GLADE §8— §f" + (clock.day() + 1) + "§7 days"), false);
+            p.displayClientMessage(Component.literal(
+                    "§7Charted §f" + charts.gladePercent() + "%§7 of the maze §8("
+                            + charts.markCount() + " cells marked)"), false);
+            p.displayClientMessage(Component.literal(
+                    "§7Larder §f" + jobs.larder()), false);
+            p.displayClientMessage(Component.literal(escapees.isEmpty()
+                    ? "§4Nobody got out."
+                    : "§aOut: §f" + String.join("§7, §f", escapees)), false);
+            p.displayClientMessage(Component.literal("§8§m                                        "), false);
+            level.playSound(null, p.blockPosition(), SoundEvents.WARDEN_DEATH,
+                    SoundSource.AMBIENT, 2.0F, 0.4F);
+        }
+        for (ServerPlayer p : caught) {
+            p.hurt(level.damageSources().fellOutOfWorld(), Float.MAX_VALUE);
+        }
+        escapeUntil = 0L;
+        escapees.clear();
+    }
+
+    /**
+     * The five minutes after somebody finds the way out.
+     *
+     * <p>Finding the exit used to end the game for one person and change nothing
+     * for anybody else, which makes a co-op mode into four parallel solo ones at
+     * the exact moment it should be most together. Now the first person through
+     * starts a clock: everyone else has until it runs out, and the maze keeps
+     * whoever does not make it.
+     *
+     * <p>That is the only rule in here that makes another player's success into
+     * your problem, and it is the reason the last five minutes of a game will be
+     * the part anybody remembers.
+     */
+    private static void tickEscape(ServerLevel level) {
+        if (escapeUntil <= 0L) {
+            return;
+        }
+        long left = escapeUntil - level.getGameTime();
+        if (left <= 0) {
+            theEnd(level, "§4§lTHE WAY OUT CLOSED",
+                    escapees.isEmpty() ? "§7Nobody made it." : "§7You were not fast enough.");
+            return;
+        }
+        if (level.getGameTime() % 20L != 0L) {
+            return;
+        }
+        int seconds = (int) (left / 20L);
+        for (ServerPlayer p : level.players()) {
+            p.displayClientMessage(Component.literal(
+                    "§6§lTHE WAY OUT §8— §f" + (seconds / 60) + ":"
+                            + (seconds % 60 < 10 ? "0" : "") + (seconds % 60)), true);
+            // The last thirty seconds get a sound, because a number on the action
+            // bar is easy to stop looking at when something is chasing you.
+            if (seconds <= 30) {
+                level.playSound(null, p.blockPosition(), SoundEvents.ANVIL_LAND,
+                        SoundSource.AMBIENT, 0.8F, seconds <= 10 ? 1.8F : 1.2F);
+            }
+        }
+    }
+
+    /** Somebody has found it. Starts the clock, once. */
+    private static void openTheWayOut(ServerLevel level, ServerPlayer first) {
+        if (escapeUntil > 0L) {
+            return;
+        }
+        int seconds = AbyssConfig.MAZE_ESCAPE_SECONDS.get();
+        escapeUntil = level.getGameTime() + seconds * 20L;
+        for (ServerPlayer p : level.players()) {
+            p.connection.send(new net.minecraft.network.protocol.game.ClientboundSetTitleTextPacket(
+                    Component.literal("§6§lTHE WAY OUT IS OPEN")));
+            p.connection.send(new net.minecraft.network.protocol.game.ClientboundSetSubtitleTextPacket(
+                    Component.literal("§f" + first.getGameProfile().getName()
+                            + "§7 found it — " + (seconds / 60) + " minutes")));
+            level.playSound(null, p.blockPosition(), SoundEvents.BEACON_ACTIVATE,
+                    SoundSource.AMBIENT, 2.0F, 1.4F);
+        }
+    }
+
     private static void clearLastStand(ServerLevel level) {
         net.minecraft.world.phys.AABB box = new net.minecraft.world.phys.AABB(
                 -PortalAnnex.REACH, MazeData.FLOOR_Y - 16, -PortalAnnex.REACH,
@@ -1021,6 +1173,9 @@ public final class MazeRuntime {
         if (loaded.size() < cap && rng.nextInt(Griever.spawnChanceFor(level)) == 0) {
             Griever.spawnNear(level, runners.get(rng.nextInt(runners.size())), rng);
         }
+        // What they can hear. Deliberately after targeting and before ambience,
+        // so a Griever that heard you is already coming when it makes its noise.
+        Griever.hear(level, loaded, runners);
         Griever.ambience(level, loaded, rng);
     }
 

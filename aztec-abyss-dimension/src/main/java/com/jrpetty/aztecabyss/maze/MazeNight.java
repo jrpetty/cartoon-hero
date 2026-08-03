@@ -60,6 +60,39 @@ public final class MazeNight {
 
     private static final String TAG = "aztecabyss_nightlife";
 
+    /**
+     * What the weather is doing tonight.
+     *
+     * <p>Nights differed only by how many things were in them, which makes every
+     * night the same night at a different volume. Weather changes what your
+     * <em>senses</em> are worth, which is a far bigger difference than a count:
+     * fog takes the corridor's sightlines and rain takes the one warning the maze
+     * ever gives you.
+     */
+    public enum Weather {
+        CLEAR("", ""),
+        FOG("§8§lFOG", "§7You cannot see the end of a corridor"),
+        RAIN("§9§lRAIN", "§7You will not hear them coming");
+
+        public final String title;
+        public final String line;
+
+        Weather(String title, String line) {
+            this.title = title;
+            this.line = line;
+        }
+    }
+
+    private static Weather weather = Weather.CLEAR;
+
+    public static Weather weather() {
+        return weather;
+    }
+
+    public static void clearWeather() {
+        weather = Weather.CLEAR;
+    }
+
     private MazeNight() {
     }
 
@@ -84,6 +117,11 @@ public final class MazeNight {
     public static void fall(ServerLevel level, int day) {
         RandomSource rng = RandomSource.create(0x9147 + day * 31L);
         boolean swarm = rng.nextInt(SWARM_ODDS) == 0;
+        // Roughly one night in five has weather in it. Rare on purpose: a maze
+        // that is foggy most nights is a dark maze, not a maze that is
+        // occasionally foggy, and the whole value is in the exception.
+        int roll = rng.nextInt(10);
+        weather = roll == 0 ? Weather.FOG : roll == 1 ? Weather.RAIN : Weather.CLEAR;
         int count = swarm ? SWARM : NORMAL_MIN + rng.nextInt(NORMAL_MAX - NORMAL_MIN + 1);
         double scale = 1.0 + (Griever.dayScale(level) - 1.0) * 0.5;
 
@@ -163,8 +201,46 @@ public final class MazeNight {
         return level.getBlockState(at).isAir() && level.getBlockState(at.above()).isAir() ? at : null;
     }
 
+    /**
+     * Fog and rain, applied once a second to anyone out in it.
+     *
+     * <p>Fog is vanilla's Darkness, which pulses the edge of vision rather than
+     * blacking it out - a runner can still see their feet and the wall beside
+     * them, which makes it navigable and horrible rather than simply unplayable.
+     */
+    public static void tickWeather(ServerLevel level) {
+        if (weather == Weather.CLEAR) {
+            return;
+        }
+        for (ServerPlayer p : level.players()) {
+            int cellX = p.blockPosition().getX() / MazeData.CELL;
+            int cellZ = p.blockPosition().getZ() / MazeData.CELL;
+            if (MazeData.inGlade(cellX, cellZ)) {
+                continue; // the clearing has weather over it, not in it
+            }
+            if (weather == Weather.FOG) {
+                p.addEffect(new net.minecraft.world.effect.MobEffectInstance(
+                        net.minecraft.world.effect.MobEffects.DARKNESS, 60, 0, false, false));
+            }
+            // Rain is handled where the sound is made rather than here. There is
+            // no vanilla effect that deafens a player, and inventing one would
+            // mean a client mod - but the thing rain is supposed to take away is
+            // the Grievers' approach noise, and that is made server-side in
+            // Griever.ambience. Silencing it at the source is the same mechanic
+            // with none of the machinery.
+        }
+    }
+
     private static void announce(ServerLevel level, boolean swarm, int made) {
         for (ServerPlayer p : level.players()) {
+            if (weather != Weather.CLEAR) {
+                p.connection.send(new ClientboundSetTitleTextPacket(
+                        Component.literal(weather.title)));
+                p.connection.send(new ClientboundSetSubtitleTextPacket(
+                        Component.literal(weather.line)));
+                level.playSound(null, p.blockPosition(), SoundEvents.FIRE_EXTINGUISH,
+                        SoundSource.WEATHER, 2.0F, 0.6F);
+            }
             if (swarm) {
                 p.connection.send(new ClientboundSetTitleTextPacket(
                         Component.literal("§4§lA BAD NIGHT")));
@@ -196,6 +272,7 @@ public final class MazeNight {
                     m.getX(), m.getY() + 0.8, m.getZ(), 8, 0.3, 0.5, 0.3, 0.01);
             m.discard();
         }
+        weather = Weather.CLEAR;
         for (ServerPlayer p : level.players()) {
             p.displayClientMessage(Component.literal(
                     "§8The corridors empty out with the light."), true);

@@ -134,6 +134,14 @@ public final class AbyssConfig {
                         "Real seconds of night in one maze day - the window the doors are sealed",
                         "and the Grievers are out.")
                 .defineInRange("mazeNightSeconds", 600, 60, 7200);
+        MAZE_DAY_LIMIT = b.comment(
+                        "How many days a Glade has to get out. When the last one ends, the maze",
+                        "takes whoever is left. 0 removes the deadline entirely.")
+                .defineInRange("mazeDayLimit", 8, 0, 60);
+        MAZE_ESCAPE_SECONDS = b.comment(
+                        "Once somebody reaches the way out, how long the rest have to follow",
+                        "them through before it closes. Anyone still inside when it does dies.")
+                .defineInRange("mazeEscapeSeconds", 300, 30, 3600);
         MAZE_LAST_STAND = b.comment(
                         "How many stand between the maze doorway and the portal. They are raised",
                         "once a day, the first time anybody walks into the lane, and they scale",
@@ -169,6 +177,8 @@ public final class AbyssConfig {
     public static final ModConfigSpec.IntValue MAZE_NIGHT_SECONDS;
     public static final ModConfigSpec.IntValue MAZE_DAY_SCALING;
     public static final ModConfigSpec.IntValue MAZE_LAST_STAND;
+    public static final ModConfigSpec.IntValue MAZE_DAY_LIMIT;
+    public static final ModConfigSpec.IntValue MAZE_ESCAPE_SECONDS;
 
     public static long cooldownMillis() {
         return REENTRY_COOLDOWN_HOURS.get() * 60L * 60L * 1000L;

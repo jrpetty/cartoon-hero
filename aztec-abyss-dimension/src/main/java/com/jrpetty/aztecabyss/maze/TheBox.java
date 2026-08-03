@@ -149,15 +149,17 @@ public final class TheBox {
                 spent += e.cost() * line.getValue();
             }
             boolean ordered = !goods.isEmpty();
-            if (!ordered) {
-                goods.add(new ItemStack(Items.BREAD, 6));
-            }
+            // Nothing ordered, nothing delivered. The crate still arrives and is
+            // still yours; it is simply empty, which says what happened far more
+            // plainly than no crate at all would. A consolation ration would make
+            // the deadline advisory, and an advisory deadline is not one.
             stock(level, orderSlot(slot++), p.getGameProfile().getName(),
-                    Blocks.LIGHT_GRAY_CONCRETE.defaultBlockState(), goods);
+                    ordered ? Blocks.LIGHT_GRAY_CONCRETE.defaultBlockState()
+                            : Blocks.RED_CONCRETE.defaultBlockState(), goods);
             final int paid = spent;
             p.displayClientMessage(Component.literal(ordered
                     ? "§6▲ The Box came up. §7Your order is in the cage — §f" + paid + "§7 points spent."
-                    : "§6▲ The Box came up. §8You ordered nothing. §7Bread, then."), false);
+                    : "§c▲ The Box came up empty for you. §7You filed no order last night."), false);
             p.displayClientMessage(Component.literal(
                     "§7Today you have §f" + MazeOrders.budget(level, p.getUUID())
                             + "§7 points. §8/maze order"), false);

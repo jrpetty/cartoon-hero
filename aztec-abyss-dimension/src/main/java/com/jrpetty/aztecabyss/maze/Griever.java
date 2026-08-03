@@ -306,6 +306,68 @@ public final class Griever {
     }
 
     /**
+     * What they can hear.
+     *
+     * <p>Movement was free. A runner sprinting flat out through a junction was in
+     * exactly as much danger as one edging round a corner, which means a corridor
+     * asked nothing of you moment to moment - the only decision in the maze was
+     * which way to turn, and the walking between turns was dead input.
+     *
+     * <p>Now speed is loud. Sprinting carries a long way, walking carries a
+     * little, and crouching carries nothing at all, so every corridor is a
+     * standing trade between the clock and the thing in the dark. It pairs
+     * pointedly with Stride: the Runner's own skill makes them faster and
+     * therefore easier to hear, which is the right kind of cost for a perk.
+     *
+     * <p>Nothing here changes how a Griever sounds. They already announce
+     * themselves well; this only changes what makes them turn round.
+     */
+    public static void hear(ServerLevel level, List<Mob> grievers, List<ServerPlayer> runners) {
+        for (Mob g : grievers) {
+            // Something already has its attention. Noise finds the unoccupied.
+            if (g.getTarget() != null && g.getTarget().isAlive()) {
+                continue;
+            }
+            for (ServerPlayer p : runners) {
+                double radius = noiseRadius(p);
+                if (radius <= 0.0) {
+                    continue;
+                }
+                if (g.distanceToSqr(p) > radius * radius) {
+                    continue;
+                }
+                g.setTarget(p);
+                // Told, because a rule nobody can perceive is not a rule. This is
+                // the only feedback that teaches the mechanic, so it is worth the
+                // one line of action bar.
+                p.displayClientMessage(Component.literal(
+                        "§8Something heard you."), true);
+                level.playSound(null, g.blockPosition(), SoundEvents.WARDEN_ANGRY,
+                        SoundSource.HOSTILE, 1.0F, 0.7F);
+                break;
+            }
+        }
+    }
+
+    /**
+     * How far a person carries.
+     *
+     * <p>Crouching is silent rather than merely quiet, because a maze with no
+     * way to be safe is a maze with no tactics in it - there has to be a speed
+     * at which you cannot be found, or the mechanic is a tax rather than a
+     * choice.
+     */
+    private static double noiseRadius(ServerPlayer p) {
+        if (p.isCrouching()) {
+            return 0.0;
+        }
+        if (p.isSprinting()) {
+            return 30.0;
+        }
+        return 9.0;
+    }
+
+    /**
      * A sparse, directional cue so a Griever announces itself before it arrives.
      * Ridden off the runtime's existing once-a-second pass, so it costs nothing.
      */
@@ -319,7 +381,11 @@ public final class Griever {
                     g.getX(), g.getY() + 0.9, g.getZ(), 6, 0.5, 0.5, 0.5, 0.01);
             level.sendParticles(net.minecraft.core.particles.ParticleTypes.SOUL,
                     g.getX(), g.getY() + 0.4, g.getZ(), 2, 0.4, 0.2, 0.4, 0.01);
-            if (rng.nextInt(6) != 0) {
+            // Rain takes the one warning this place gives you. Silencing the
+            // approach here rather than deafening the player is the same
+            // mechanic without a client mod - and it is honest, because on a wet
+            // night the thing really is quieter, not your ears.
+            if (MazeNight.weather() == MazeNight.Weather.RAIN || rng.nextInt(6) != 0) {
                 continue;
             }
             level.playSound(null, g.blockPosition(),

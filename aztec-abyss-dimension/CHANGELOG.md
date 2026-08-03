@@ -13,6 +13,42 @@ behaviour that was already there · **docs**
 
 ## Unreleased
 
+### An ending, a deadline, noise, and weather
+
+- **change** **File no order and nothing comes up.** The crate still arrives and is
+  still yours; it is simply empty and sits on a red pad. A consolation ration would
+  make the deadline advisory, and an advisory deadline is not one. The dusk warning
+  now also tells anyone with an empty slate, so the rule is harsh but never unfair.
+- **feat** **Eight days.** A Glade that has not found the way out by the end of the
+  last day does not get a ninth. The final three days count down loudly — a
+  deadline nobody is counting down to arrives as a surprise, and a surprise
+  deadline is just an unfair one. Configurable; 0 removes it.
+- **feat** **The way out is a five-minute clock.** The first person through starts
+  it; everyone else has until it runs out, and the maze keeps whoever does not make
+  it. Finding the exit used to end the game for one person and change nothing for
+  anybody else — which turns a co-op mode into four parallel solo ones at the exact
+  moment it should be most together. This is the only rule in the mode that makes
+  somebody else's success into your problem.
+- **feat** **An ending with an account.** Days survived, percent charted, cells
+  marked, the larder, and who walked out against who did not. A week of work used
+  to end in silence: one person vanished through a doorway and the rest were left
+  standing in a field. Every number was already being kept and nobody was ever
+  shown them.
+- **feat** **Noise.** Sprinting carries 30 blocks, walking 9, crouching nothing at
+  all. Movement was free, so a corridor asked nothing of you moment to moment and
+  the walking between turns was dead input. It pairs pointedly with **Stride**: the
+  Runner's own skill makes them faster and therefore easier to hear, which is the
+  right kind of cost for a perk. The Grievers' own sounds are untouched — this only
+  changes what makes them turn round.
+- **feat** **Weather.** Roughly one night in five. **Fog** is vanilla Darkness, which
+  pulses the edge of vision rather than blacking it out — navigable and horrible
+  rather than unplayable. **Rain** silences the Grievers' approach.
+- **change** Rain is implemented at the **sound source**, not on the player. There
+  is no vanilla effect that deafens somebody and inventing one would mean a client
+  mod — but the thing rain is meant to take is the approach noise, and that is made
+  server-side. Silencing it there is the same mechanic with none of the machinery,
+  and it is more honest: on a wet night the thing really is quieter, not your ears.
+
 ### The requisition slate — the Box stops giving and starts filling orders
 
 The Box delivered a fixed crate every dawn, which made it **weather rather than a
