@@ -1306,6 +1306,19 @@ public final class MazeRuntime {
         }
         int salt = 1;
         for (int[] door : MazeBuilder.DOOR_CELLS) {
+            // Seventy per cent of the way, always. This is the beaten path the
+            // Runners have worn out of the Glade over the weeks they have been
+            // here - not a road to the exit, which moves every night.
+            //
+            // Without it the shortest route to the portal is 1,700 to 2,700
+            // blocks: fifty-one to eighty-one per cent of a ten-minute day at a
+            // perfect sprint, one way, on a route you would have to already
+            // know. That is not a hard maze, it is an unwinnable one, and it is
+            // what removing this left behind. With it the run is 400 to 1,050
+            // blocks and a round trip fits inside two thirds of a day.
+            MazeBuilder.carveRoute(level, door[0], door[1], ex.cellX(), ex.cellZ(),
+                    layout.name().hashCode() + salt * 7919, 0.70);
+            // And if the last stretch still does not join up, cut the rest.
             if (!MazeData.exitReachable(layout, door[0], door[1])) {
                 // Say so. A preset that cannot be solved from one of its own
                 // doors is an authoring mistake, and silently papering over it

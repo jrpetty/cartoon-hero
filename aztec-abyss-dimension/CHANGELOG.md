@@ -13,6 +13,36 @@ behaviour that was already there · **docs**
 
 ## Unreleased
 
+### The maze was unwinnable, and I did that
+
+- **fix** **You could not reach the portal.** Removing the guaranteed carve left
+  the shortest route from a Glade door to the exit at **1,700 to 2,700 blocks** —
+  between **51% and 81% of a ten-minute day** at a perfect sprint, one way, on a
+  route you would have to already know, with no dead ends, no Grievers and no
+  pause. It was technically solvable and practically impossible, and there was no
+  way to scout it either, because the round trip is over 100% of the day.
+- **The carve is back, but bounded to 70% of the way.** That is the whole design:
+  carve nothing and it is unwinnable; carve all of it and you get a 300-block
+  corridor with a puzzle at the end. Seventy per cent lands at **400–1,050
+  blocks** — a one to three minute run out, a round trip inside two thirds of a
+  day, and the last stretch still genuinely maze. The Runners have beaten a path
+  out of the Glade over the weeks they have been here; they have not beaten one
+  all the way to a door that moves every night.
+- Verified against the world as built — camp walls, frozen toggles, breaches and
+  all: **all seven presets reachable and returnable**, 12–32% of the day one way,
+  24–63% round trip.
+- The full carve is kept as a fallback for a door that still cannot get there,
+  and still says so to any operator present.
+- **fix** **The outer rim is no longer bedrock.** It announced the edge of the map
+  from a corridor away — the one block in the whole maze that looks like nothing
+  else, telling a Runner they had wasted a trip before they were close enough to
+  find out. It is the maze's own stone now, mossy and cracked like every other
+  wall. Nothing outside the Glade comes apart anyway, so the only thing bedrock
+  was adding was the giveaway.
+- **change** Geometry version 9 → 10, so existing worlds restamp the rim.
+
+---
+
 ### Charts you can lose, and a board that says who is who
 
 - **feat** **A Runner's survey is carried now, not banked instantly.** Charting

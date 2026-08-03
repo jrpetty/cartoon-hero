@@ -131,8 +131,9 @@ public final class MazeBuilder {
      * scattered plants itself through a building any more.
      * <p>8: the Dead Glade was carved into the south-west.
      * <p>9: the bell tower went up in the Glade.
+     * <p>10: the outer rim stopped being bedrock.
      */
-    private static final int GEOMETRY_VERSION = 9;
+    private static final int GEOMETRY_VERSION = 10;
 
     /** One distinctive block per version, so the marker is readable in-world. */
     private static final BlockState[] VERSION_BLOCKS = {
@@ -149,6 +150,7 @@ public final class MazeBuilder {
             Blocks.SMOOTH_BASALT.defaultBlockState(),
             Blocks.TUFF.defaultBlockState(),
             Blocks.CALCITE.defaultBlockState(),
+            Blocks.DRIPSTONE_BLOCK.defaultBlockState(),
     };
 
     private static BlockState versionBlock() {
@@ -513,13 +515,21 @@ public final class MazeBuilder {
         // is treated as unbuilt and simply runs again.
         level.setBlock(VERSION_MARKER, versionBlock(), 2);
         level.setBlock(BUILT_MARKER, BEDROCK, 2);
+        // The rim, in the maze's own stone rather than bedrock.
+        //
+        // Bedrock announced the edge of the map from a corridor away: the one
+        // block in here that looks like nothing else, telling a runner they had
+        // wasted a trip before they were close enough to find out. The outer
+        // wall is unbreakable either way - nothing outside the Glade comes
+        // apart - so the only thing bedrock added was the giveaway.
+        RandomSource rim = RandomSource.create(0x5EA1ED);
         int max = MazeData.SPAN - 1;
         for (int i = 0; i < MazeData.SPAN; i++) {
             for (int y = MazeData.WALL_BASE_Y; y <= MazeData.WALL_TOP_Y; y++) {
-                level.setBlock(new BlockPos(i, y, 0), BEDROCK, 2);
-                level.setBlock(new BlockPos(i, y, max), BEDROCK, 2);
-                level.setBlock(new BlockPos(0, y, i), BEDROCK, 2);
-                level.setBlock(new BlockPos(max, y, i), BEDROCK, 2);
+                level.setBlock(new BlockPos(i, y, 0), wallStone(rim), 2);
+                level.setBlock(new BlockPos(i, y, max), wallStone(rim), 2);
+                level.setBlock(new BlockPos(0, y, i), wallStone(rim), 2);
+                level.setBlock(new BlockPos(max, y, i), wallStone(rim), 2);
             }
         }
     }
@@ -729,13 +739,34 @@ public final class MazeBuilder {
      */
     public static void carveRoute(ServerLevel level, int fromX, int fromZ,
                                   int toX, int toZ, int salt) {
+        carveRoute(level, fromX, fromZ, toX, toZ, salt, 1.0);
+    }
+
+    /**
+     * Carves only part of the way, and leaves the rest to the maze.
+     *
+     * <p>The fraction is the whole design. Carving nothing leaves a route of
+     * 1,700 to 2,700 blocks - fifty-one to eighty-one per cent of a ten-minute
+     * day at a perfect sprint, one way, on a route you would have to already
+     * know. That is not a hard maze, it is an unwinnable one. Carving all of it
+     * leaves 300 to 500 blocks, which is a corridor with a puzzle at the end.
+     *
+     * <p>Seventy per cent lands between them: 400 to 1,050 blocks, a two to
+     * three minute run out and a round trip inside two thirds of the day, with
+     * the last stretch still genuinely maze. The Runners have beaten a path out
+     * of the Glade over the weeks they have been here; they have not beaten one
+     * all the way to a door that moves every night.
+     */
+    public static void carveRoute(ServerLevel level, int fromX, int fromZ,
+                                  int toX, int toZ, int salt, double fraction) {
         RandomSource rng = RandomSource.create();
         int cx = fromX;
         int cz = fromZ;
         int guard = 0;
+        int budget = (int) ((Math.abs(toX - fromX) + Math.abs(toZ - fromZ)) * fraction);
         // The cell grid is 96 a side; a Manhattan walk cannot need more steps
         // than the perimeter, and the guard stops a pathological loop dead.
-        while ((cx != toX || cz != toZ) && guard++ < MazeData.GRID * 4) {
+        while ((cx != toX || cz != toZ) && guard++ < Math.min(budget, MazeData.GRID * 4)) {
             int dx = Integer.signum(toX - cx);
             int dz = Integer.signum(toZ - cz);
             boolean stepX;
