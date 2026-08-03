@@ -107,9 +107,24 @@ public final class Griever {
      * it has to be heard coming, close enough that it will actually find them.
      */
     public static void spawnNear(ServerLevel level, ServerPlayer target, RandomSource rng) {
-        BlockPos spot = findCorridor(level, target.blockPosition(), rng);
+        // Out of a hole, if there is one within reach. They used to materialise
+        // in whatever corridor the dice picked, which meant the map had no
+        // geography of danger at all - every corridor was equally likely to
+        // produce one, so no corridor was frightening for a reason.
+        BlockPos den = GrieverHoles.nearestBeyond(target.blockPosition(), 20);
+        BlockPos spot = den != null && den.distSqr(target.blockPosition()) < 96 * 96
+                ? GrieverHoles.mouthSpawn(level, den) : null;
+        boolean fromHole = spot != null;
+        if (!fromHole) {
+            spot = findCorridor(level, target.blockPosition(), rng);
+        }
         if (spot == null) {
             return;
+        }
+        if (fromHole) {
+            level.sendParticles(net.minecraft.core.particles.ParticleTypes.LARGE_SMOKE,
+                    spot.getX() + 0.5, spot.getY() + 0.5, spot.getZ() + 0.5, 40, 0.8, 0.6, 0.8, 0.05);
+            level.playSound(null, spot, SoundEvents.WARDEN_EMERGE, SoundSource.HOSTILE, 2.0F, 0.5F);
         }
         Spider mob = EntityType.SPIDER.create(level);
         if (mob == null) {
@@ -246,20 +261,21 @@ public final class Griever {
         if (grievers.isEmpty()) {
             return;
         }
-        int lo = 4 * MazeData.CELL;
-        int hi = (MazeData.GRID - 5) * MazeData.CELL;
-        int[][] dens = {{lo, lo}, {hi, lo}, {lo, hi}, {hi, hi}};
-        int i = 0;
         for (Mob g : grievers) {
-            int[] den = dens[i++ % dens.length];
+            // Down the nearest hole rather than to a map corner. Where they went
+            // used to be somewhere nobody would ever stand, which made dawn a
+            // thing that happened offscreen; the holes are places players walk
+            // past, so dawn is now something you can be standing next to.
+            BlockPos den = GrieverHoles.nearest(g.blockPosition());
             g.setTarget(null);
-            g.teleportTo(den[0] + 0.5, MazeData.FLOOR_Y + 1, den[1] + 0.5);
+            g.teleportTo(den.getX() + 0.5, den.getY() - 6, den.getZ() + 0.5);
             level.sendParticles(net.minecraft.core.particles.ParticleTypes.LARGE_SMOKE,
-                    g.getX(), g.getY() + 1.0, g.getZ(), 20, 0.6, 0.8, 0.6, 0.02);
+                    den.getX() + 0.5, den.getY() + 0.5, den.getZ() + 0.5, 30, 0.7, 0.9, 0.7, 0.03);
+            level.playSound(null, den, SoundEvents.WARDEN_DEATH, SoundSource.HOSTILE, 1.6F, 0.5F);
         }
         for (ServerPlayer p : level.players()) {
             p.displayClientMessage(Component.literal(
-                    "§7The scraping fades. §8They have gone back into the walls."), false);
+                    "§7The scraping fades. §8They have gone back down the holes."), false);
         }
     }
 

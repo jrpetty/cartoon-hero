@@ -73,6 +73,10 @@ public final class MazeRuntime {
      * pieces of bookkeeping that can each go stale on their own.
      */
     private static String appliedLayoutName = null;
+    /** The day the annex horde was last raised, so it happens once a day. */
+    private static int hordeDay = -1;
+    /** Marks the annex horde, so last night's can be swept when the exit moves. */
+    private static final String LAST_STAND_TAG = "aztecabyss_laststand";
     private static boolean doorsOpen = false;
     private static boolean warnedDusk = false;
 
@@ -95,6 +99,7 @@ public final class MazeRuntime {
         doorsOpen = false;
         warnedDusk = false;
         reshapeDrama = 0;
+        hordeDay = -1;
         for (ServerBossEvent bar : BARS.values()) {
             bar.removeAllPlayers();
         }
@@ -180,6 +185,7 @@ public final class MazeRuntime {
         for (Mob g : Griever.loaded(level)) {
             g.discard();
         }
+        clearLastStand(level);
         MazeRuns.clearAll();
         MazeSting.clearAll();
         NIGHT_OUT.clear();
@@ -187,6 +193,7 @@ public final class MazeRuntime {
         // Null so the next tick stamps the new opening layout without needing to
         // know whether it differs from the old one.
         appliedLayoutName = null;
+        hordeDay = -1;
         clock.newGame(level.getServer());
     }
 
@@ -447,6 +454,7 @@ public final class MazeRuntime {
             } else if (!isNight(t) && NIGHT_OUT.remove(p.getUUID())) {
                 MazeAdvancements.grant(p, MazeAdvancements.SURVIVE_NIGHT);
             }
+            tickLastStand(level, layout, p);
             if (layout != null && MazeRuns.isRunning(p.getUUID()) && atExit(at, layout)) {
                 int seconds = MazeRuns.complete(level, p, layout);
                 MazeAdvancements.grant(p, MazeAdvancements.FIRST_ESCAPE);
@@ -562,17 +570,103 @@ public final class MazeRuntime {
         }
         level.playSound(null, new BlockPos(p[0], p[1], p[2]),
                 SoundEvents.PORTAL_AMBIENT, SoundSource.BLOCKS, 0.6F, 1.1F);
+
+        // And the real thing, at the far end of the annex. The doorway now means
+        // "through here" rather than "you win", so it needs something visible at
+        // the other end of the lane for it to be pointing at.
+        BlockPos portal = PortalAnnex.portalPos(ex);
+        level.sendParticles(net.minecraft.core.particles.ParticleTypes.PORTAL,
+                portal.getX() + 0.5, portal.getY() + 1.5, portal.getZ() + 0.5,
+                60, 0.5, 1.8, 0.5, 0.4);
+        level.sendParticles(net.minecraft.core.particles.ParticleTypes.END_ROD,
+                portal.getX() + 0.5, portal.getY() + 2.0, portal.getZ() + 0.5,
+                8, 0.3, 1.4, 0.3, 0.01);
+        level.playSound(null, portal, SoundEvents.PORTAL_AMBIENT, SoundSource.BLOCKS, 1.2F, 0.9F);
     }
 
     /** Within a couple of blocks of today's exit portal. */
+    /**
+     * Standing on the way out.
+     *
+     * <p>Measured at the portal in the annex chamber rather than at the doorway
+     * in the maze wall. Finding the exit and taking it used to be the same
+     * instant, so the whole search had no climax - the hardest thing you ever
+     * did was the walking. Now the doorway is where the last fight starts.
+     */
     private static boolean atExit(BlockPos at, MazeData.Layout layout) {
         MazeData.Exit ex = MazeData.exit(layout.exit());
         if (ex == null) {
             return false;
         }
-        int[] p = MazeData.exitPortal(ex);
-        return Math.abs(at.getX() - p[0]) <= 2 && Math.abs(at.getZ() - p[2]) <= 2
-                && Math.abs(at.getY() - p[1]) <= 3;
+        BlockPos p = PortalAnnex.portalPos(ex);
+        return Math.abs(at.getX() - p.getX()) <= 2 && Math.abs(at.getZ() - p.getZ()) <= 2
+                && Math.abs(at.getY() - p.getY()) <= 3;
+    }
+
+    /**
+     * The last forty blocks.
+     *
+     * <p>Sixty of them, standing between the doorway and the portal, spawned the
+     * first time anybody sets foot in the lane on a given day. Once per day, not
+     * once per entry, so backing out and walking in again is a retreat rather
+     * than a reset - and so a squad that gets halfway and loses two people has to
+     * decide whether to finish it tonight.
+     */
+    private static void clearLastStand(ServerLevel level) {
+        net.minecraft.world.phys.AABB box = new net.minecraft.world.phys.AABB(
+                -PortalAnnex.REACH, MazeData.FLOOR_Y - 16, -PortalAnnex.REACH,
+                MazeData.SPAN + PortalAnnex.REACH, MazeData.WALL_TOP_Y + 4,
+                MazeData.SPAN + PortalAnnex.REACH);
+        for (Mob m : level.getEntitiesOfClass(Mob.class, box,
+                m -> m.getPersistentData().getBoolean(LAST_STAND_TAG))) {
+            m.discard();
+        }
+    }
+
+    private static void tickLastStand(ServerLevel level, MazeData.Layout layout, ServerPlayer p) {
+        if (layout == null || hordeDay == MazeClock.get(level).day()) {
+            return;
+        }
+        MazeData.Exit ex = MazeData.exit(layout.exit());
+        if (ex == null || !PortalAnnex.inLane(ex, p.blockPosition())) {
+            return;
+        }
+        hordeDay = MazeClock.get(level).day();
+        int count = AbyssConfig.MAZE_LAST_STAND.get();
+        double scale = Griever.dayScale(level);
+        RandomSource rng = RandomSource.create();
+        for (int i = 0; i < count; i++) {
+            BlockPos spot = PortalAnnex.laneSpot(ex, i, count);
+            net.minecraft.world.entity.monster.Zombie z =
+                    net.minecraft.world.entity.EntityType.ZOMBIE.create(level);
+            if (z == null) {
+                continue;
+            }
+            z.moveTo(spot.getX() + 0.5, spot.getY(), spot.getZ() + 0.5, rng.nextFloat() * 360.0F, 0.0F);
+            z.finalizeSpawn(level, level.getCurrentDifficultyAt(spot),
+                    net.minecraft.world.entity.MobSpawnType.EVENT, null);
+            z.setPersistenceRequired();
+            var hp = z.getAttribute(net.minecraft.world.entity.ai.attributes.Attributes.MAX_HEALTH);
+            if (hp != null) {
+                hp.setBaseValue(hp.getBaseValue() * scale);
+            }
+            var dmg = z.getAttribute(net.minecraft.world.entity.ai.attributes.Attributes.ATTACK_DAMAGE);
+            if (dmg != null) {
+                dmg.setBaseValue(dmg.getBaseValue() * scale);
+            }
+            z.setHealth(z.getMaxHealth());
+            z.getPersistentData().putBoolean(LAST_STAND_TAG, true);
+            z.setTarget(p);
+            level.addFreshEntity(z);
+        }
+        for (ServerPlayer who : level.players()) {
+            who.connection.send(new net.minecraft.network.protocol.game.ClientboundSetTitleTextPacket(
+                    Component.literal("§4§lTHE LAST STAND")));
+            who.connection.send(new net.minecraft.network.protocol.game.ClientboundSetSubtitleTextPacket(
+                    Component.literal("§7Forty blocks. §f" + count + "§7 of them. One way through.")));
+            level.playSound(null, who.blockPosition(), SoundEvents.WARDEN_ROAR,
+                    SoundSource.HOSTILE, 3.0F, 0.4F);
+        }
     }
 
     /**
@@ -781,6 +875,11 @@ public final class MazeRuntime {
         for (MazeData.TogglePoint tp : MazeData.togglePoints().values()) {
             MazeBuilder.setToggle(level, tp, layout.open().contains(tp.id()), rng);
         }
+        // The exit moves every night, and the sixty standing in front of
+        // yesterday's would otherwise stay in yesterday's lane for the life of
+        // the world - sixty more every day, in an annex nobody will ever visit
+        // again. They belong to a day, so they go when the day does.
+        clearLastStand(level);
         openExit(level, layout);
         // Every day, from all four doors, a route is cut to that day's exit.
         // Not decoration: the toggles are drawn from a dataset and nothing in

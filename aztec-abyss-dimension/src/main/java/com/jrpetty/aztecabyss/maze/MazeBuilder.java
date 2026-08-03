@@ -50,7 +50,11 @@ public final class MazeBuilder {
      * other means either. The Glade is deliberately left open to the sky - it is
      * the one place on the map you are meant to be able to look up from.
      */
-    private static final int SKY_LID_Y = MazeData.WALL_TOP_Y + 4;
+    // One block above the wall tops, not four. The dimension is 80 blocks tall
+    // from y=0, so the highest writable block is 79 - and the old value of 82 was
+    // simply outside the world. Every setBlock for the lid silently did nothing,
+    // which is why the maze had no roof at all despite the code saying it did.
+    private static final int SKY_LID_Y = MazeData.WALL_TOP_Y + 1;
 
     /**
      * One colour per compass section, banded into the corridor walls.
@@ -117,8 +121,12 @@ public final class MazeBuilder {
      * <p>2: sealed the lap around the outside of the Glade, dressed the Glade wall,
      * and put the barrier lid over the corridors.
      * <p>3: added the Map Room to the Glade.
+     * <p>4: added the Job Board to the Glade.
+     * <p>5: the sky lid moved inside the world's height limit so it actually
+     * exists, the seven portal annexes were built outside the square, and the
+     * Griever holes were dug.
      */
-    private static final int GEOMETRY_VERSION = 4;
+    private static final int GEOMETRY_VERSION = 5;
 
     /** One distinctive block per version, so the marker is readable in-world. */
     private static final BlockState[] VERSION_BLOCKS = {
@@ -127,6 +135,8 @@ public final class MazeBuilder {
             Blocks.POLISHED_DEEPSLATE.defaultBlockState(),
             Blocks.DEEPSLATE_BRICKS.defaultBlockState(),
             Blocks.DEEPSLATE_TILES.defaultBlockState(),
+            Blocks.COBBLED_DEEPSLATE.defaultBlockState(),
+            Blocks.CHISELED_DEEPSLATE.defaultBlockState(),
     };
 
     private static BlockState versionBlock() {
@@ -168,7 +178,12 @@ public final class MazeBuilder {
         if (cursor < 0) {
             return 100;
         }
-        return (int) (cursor * 100L / (MazeData.GRID * MazeData.GRID));
+        return (int) (cursor * 100L / total());
+    }
+
+    /** Cells, then the annexes hanging off the outside, then the Griever holes. */
+    private static int total() {
+        return MazeData.GRID * MazeData.GRID + PortalAnnex.SLICES + GrieverHoles.SLICES;
     }
 
     /**
@@ -179,13 +194,28 @@ public final class MazeBuilder {
         if (cursor < 0) {
             return;
         }
-        int end = Math.min(cursor + CELLS_PER_TICK, MazeData.GRID * MazeData.GRID);
-        RandomSource rng = RandomSource.create();
-        for (int i = cursor; i < end; i++) {
-            stampCell(level, i % MazeData.GRID, i / MazeData.GRID, rng);
+        int cells = MazeData.GRID * MazeData.GRID;
+        if (cursor < cells) {
+            int end = Math.min(cursor + CELLS_PER_TICK, cells);
+            RandomSource rng = RandomSource.create();
+            for (int i = cursor; i < end; i++) {
+                stampCell(level, i % MazeData.GRID, i / MazeData.GRID, rng);
+            }
+            cursor = end;
+            return;
         }
-        cursor = end;
-        if (cursor >= MazeData.GRID * MazeData.GRID) {
+        // The annexes and the holes are stamped a row at a time off the same
+        // cursor. Doing them in finish() would be seven hundred columns and
+        // eight shafts on a single tick, which is a visible hitch on the exact
+        // tick a player is waiting to be let in.
+        int i = cursor - cells;
+        if (i < PortalAnnex.SLICES) {
+            PortalAnnex.stampSlice(level, i);
+        } else {
+            GrieverHoles.stampSlice(level, i - PortalAnnex.SLICES);
+        }
+        cursor++;
+        if (cursor >= total()) {
             cursor = -1;
             finish(level);
         }

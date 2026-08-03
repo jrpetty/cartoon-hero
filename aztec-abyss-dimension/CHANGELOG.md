@@ -13,6 +13,46 @@ behaviour that was already there · **docs**
 
 ## Unreleased
 
+### The maze stops being square, and the exit stops being a gap in a wall
+
+- **feat** `PortalAnnex` — every exit now **protrudes out of the square**. A walled
+  lane 10 blocks wide and 40 long runs out of the maze into ground that is not
+  maze, ending in a chamber with the way out in it. The maze is a perfect 96×96
+  and should be; the exit is the one place that breaks, so from inside a corridor
+  the doorway visibly leads somewhere that is not more corridor.
+- **feat** **The Last Stand.** Sixty of them, standing in the lane between you and
+  the portal, raised once a day the first time anybody walks in. Finding the way
+  out used to be the whole game *and* the end of it — you stepped through and won,
+  so the hardest thing you ever did was the walking and arrival asked nothing of
+  you. Now everything the Glade spent the week building is for this, in a corridor
+  narrow enough that four people can hold a line and one probably cannot.
+  Configurable (`mazeLastStandCount`) and scaled by the day like everything else.
+- **change** `atExit` moved to the chamber portal. The doorway in the maze wall is
+  now where the last fight *starts*.
+- **fix** **The sky lid was never placed.** `SKY_LID_Y` was `WALL_TOP_Y + 4` = 82,
+  and the dimension is 80 blocks tall from y=0 — so the highest writable block is
+  79 and every `setBlock` for the barrier roof silently did nothing. The maze has
+  had no roof at all this whole time, despite the code saying it did. It is now at
+  `WALL_TOP_Y + 1`, inside the world.
+
+### Griever holes — they come from somewhere and they go somewhere
+
+- **feat** `GrieverHoles` — sixteen shafts sunk through the corridor floor into lit
+  chambers, at fixed points a Runner can chart. Grievers **come up out of the
+  nearest one** at dusk and **go back down** at dawn.
+- **fix** They used to appear in whatever corridor the dice picked, which meant the
+  map had no geography of danger — every corridor was equally likely to produce
+  one, so no corridor was frightening for a *reason*. And at dawn they were
+  teleported to a map corner and deleted, which is the least interesting way for a
+  monster to stop existing.
+- **feat** Every shaft has a ladder the whole way up. An unbreakable floor and
+  unbreakable walls around a pit is not a Griever hole, it is a place a player is
+  deleted for being curious.
+- **change** Geometry version 5: the lid moved inside the world, the seven annexes
+  were built, and the holes were dug. The annexes and holes are stamped a row at a
+  time off the builder's existing staging — 5,600 columns and 16 shafts is not
+  something to do on one tick.
+
 ### The maze gets its own clock, and a game gets a beginning and an end
 
 - **fix** **The maze was not running on a clock at all.** Every schedule in it read

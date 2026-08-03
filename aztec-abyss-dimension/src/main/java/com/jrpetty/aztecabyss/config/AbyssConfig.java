@@ -134,6 +134,11 @@ public final class AbyssConfig {
                         "Real seconds of night in one maze day - the window the doors are sealed",
                         "and the Grievers are out.")
                 .defineInRange("mazeNightSeconds", 600, 60, 7200);
+        MAZE_LAST_STAND = b.comment(
+                        "How many stand between the maze doorway and the portal. They are raised",
+                        "once a day, the first time anybody walks into the lane, and they scale",
+                        "with the day like everything else.")
+                .defineInRange("mazeLastStandCount", 60, 0, 300);
         MAZE_DAY_SCALING = b.comment(
                         "How much harder each day in a run is than the last, as a percent. At 12",
                         "the Grievers on day 10 hit and take roughly twice what they did on day 1.")
@@ -163,6 +168,7 @@ public final class AbyssConfig {
     public static final ModConfigSpec.IntValue MAZE_DAY_SECONDS;
     public static final ModConfigSpec.IntValue MAZE_NIGHT_SECONDS;
     public static final ModConfigSpec.IntValue MAZE_DAY_SCALING;
+    public static final ModConfigSpec.IntValue MAZE_LAST_STAND;
 
     public static long cooldownMillis() {
         return REENTRY_COOLDOWN_HOURS.get() * 60L * 60L * 1000L;
