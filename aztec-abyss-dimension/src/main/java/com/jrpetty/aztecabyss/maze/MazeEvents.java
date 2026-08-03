@@ -254,6 +254,7 @@ public final class MazeEvents {
         }
         if (p != null) {
             trackHoe(level, p, at, event.getState());
+            salvage(level, p, at, event.getState());
         }
     }
 
@@ -367,6 +368,42 @@ public final class MazeEvents {
                 net.minecraft.world.level.block.Block.popResource(level, at, stack.copy());
             }
         }
+        // Bountiful: sometimes a third, on top of the double.
+        int bountiful = MazeSkills.rankOf(level, p.getUUID(), "bountiful");
+        if (bountiful > 0 && level.getRandom().nextInt(Math.max(2, 5 - bountiful)) == 0) {
+            for (net.minecraft.world.item.ItemStack stack : extra) {
+                if (!stack.isEmpty()) {
+                    net.minecraft.world.level.block.Block.popResource(level, at, stack.copy());
+                }
+            }
+        }
+    }
+
+    /**
+     * Salvage: a Builder gets some of it back.
+     *
+     * <p>Only in the Glade, and only for a Builder. The Glade is the one place
+     * anything comes apart, and a settlement that loses a block every time it
+     * changes its mind about where a hut goes is a settlement nobody rearranges.
+     */
+    private static void salvage(ServerLevel level, ServerPlayer p,
+                                net.minecraft.core.BlockPos at,
+                                net.minecraft.world.level.block.state.BlockState state) {
+        MazeJobs jobs = MazeJobs.get(level);
+        if (!jobs.is(p.getUUID(), MazeJobs.BUILDER)) {
+            return;
+        }
+        int rank = MazeSkills.rankOf(level, p.getUUID(), "salvage");
+        if (rank <= 0 || level.getRandom().nextInt(Math.max(2, 7 - rank * 2)) != 0) {
+            return;
+        }
+        for (net.minecraft.world.item.ItemStack stack
+                : net.minecraft.world.level.block.Block.getDrops(state, level, at,
+                        level.getBlockEntity(at), p, p.getMainHandItem())) {
+            if (!stack.isEmpty()) {
+                net.minecraft.world.level.block.Block.popResource(level, at, stack.copy());
+            }
+        }
     }
 
     @SubscribeEvent
@@ -408,6 +445,13 @@ public final class MazeEvents {
                         .then(Commands.literal(MazeJobs.TRACKHOE)
                                 .executes(ctx -> takeJob(ctx.getSource(), MazeJobs.TRACKHOE))))
                 .then(Commands.literal("jobs").executes(ctx -> roster(ctx.getSource())))
+                .then(Commands.literal("skills").executes(ctx -> skills(ctx.getSource())))
+                .then(Commands.literal("learn")
+                        .then(Commands.argument("skill", com.mojang.brigadier.arguments.StringArgumentType.word())
+                                .executes(ctx -> learn(ctx.getSource(),
+                                        com.mojang.brigadier.arguments.StringArgumentType.getString(ctx, "skill")))))
+                .then(Commands.literal("forget").executes(ctx -> forget(ctx.getSource())))
+                .then(Commands.literal("bandage").executes(ctx -> bandage(ctx.getSource())))
                 .then(Commands.literal("treat").executes(ctx -> treat(ctx.getSource())))
                 .then(Commands.literal("rations").executes(ctx -> rations(ctx.getSource())))
                 .then(Commands.literal("rebuild").requires(src -> src.hasPermission(2))
@@ -671,6 +715,8 @@ public final class MazeEvents {
             src.sendFailure(Component.literal("You are not a Med-jack. §8/maze job medjack"));
             return 0;
         }
+        int steady = MazeSkills.rankOf(level, player.getUUID(), "steady");
+        double reach = 5.0 + steady * 2.0;
         ServerPlayer patient = null;
         double best = Double.MAX_VALUE;
         for (ServerPlayer other : level.players()) {
@@ -678,7 +724,7 @@ public final class MazeEvents {
                 continue;
             }
             double d = other.distanceToSqr(player);
-            if (d <= 25.0 && d < best) {
+            if (d <= reach * reach && d < best) {
                 best = d;
                 patient = other;
             }
@@ -698,7 +744,7 @@ public final class MazeEvents {
                     "§a✚ You pulled " + subject.getGameProfile().getName() + " back."), false);
             return 1;
         }
-        int seconds = rank >= 2 ? 45 : 30;
+        int seconds = (rank >= 2 ? 45 : 30) + steady * 10;
         if (!MazeSting.extend(level, subject, seconds)) {
             src.sendFailure(Component.literal("Too late. It has already taken."));
             return 0;
@@ -707,6 +753,125 @@ public final class MazeEvents {
         src.sendSuccess(() -> Component.literal(
                 "§a✚ You bought " + subject.getGameProfile().getName()
                         + " §f" + seconds + "s§a."), false);
+        return 1;
+    }
+
+    /**
+     * The skill sheet.
+     *
+     * <p>Shows only your own trade's skills. A list of twelve things you cannot
+     * take is a list nobody reads, and the point of the sheet is the decision
+     * between three of them.
+     */
+    private static int skills(CommandSourceStack src) {
+        ServerPlayer player = src.getPlayer();
+        if (player == null || src.getServer() == null) {
+            return 0;
+        }
+        MazeJobs jobs = MazeJobs.get(src.getServer());
+        MazeSkills skills = MazeSkills.get(src.getServer());
+        String job = jobs.jobOf(player.getUUID());
+        if (job == null) {
+            src.sendFailure(Component.literal("Take a job first. §8/maze job"));
+            return 0;
+        }
+        int spare = skills.available(jobs, player.getUUID(), job);
+        int need = MazeSkills.costPerPoint(job);
+        int have = jobs.xpOf(player.getUUID(), job);
+        src.sendSuccess(() -> Component.literal(
+                MazeJobs.display(job) + " §8— §f" + spare + "§7 point" + (spare == 1 ? "" : "s")
+                        + " spare §8(" + (have % need) + "/" + need + " toward the next)"), false);
+        for (MazeSkills.Skill s : MazeSkills.forJob(job)) {
+            int rank = skills.rank(player.getUUID(), s.id());
+            String bar = "§a" + "●".repeat(rank) + "§8" + "○".repeat(MazeSkills.MAX_RANK - rank);
+            src.sendSuccess(() -> Component.literal(
+                    "  " + bar + " §f" + s.display() + " §8/maze learn " + s.id()), false);
+            src.sendSuccess(() -> Component.literal("      §7" + s.ranks()[
+                    Math.min(rank, MazeSkills.MAX_RANK - 1)]), false);
+        }
+        src.sendSuccess(() -> Component.literal(
+                "§8/maze forget puts every point in this trade back, free."), false);
+        return 1;
+    }
+
+    private static int learn(CommandSourceStack src, String id) {
+        ServerPlayer player = src.getPlayer();
+        if (player == null || src.getServer() == null) {
+            return 0;
+        }
+        MazeSkills.Skill skill = MazeSkills.byId(id);
+        if (skill == null) {
+            src.sendFailure(Component.literal("No such skill. §8/maze skills"));
+            return 0;
+        }
+        MazeJobs jobs = MazeJobs.get(src.getServer());
+        MazeSkills skills = MazeSkills.get(src.getServer());
+        String why = skills.learn(jobs, player.getUUID(), skill);
+        if (why != null) {
+            src.sendFailure(Component.literal(why));
+            return 0;
+        }
+        int rank = skills.rank(player.getUUID(), skill.id());
+        src.sendSuccess(() -> Component.literal(
+                "§a✦ " + skill.display() + " §f" + rank + "§7 — " + skill.ranks()[rank - 1]), false);
+        return 1;
+    }
+
+    private static int forget(CommandSourceStack src) {
+        ServerPlayer player = src.getPlayer();
+        if (player == null || src.getServer() == null) {
+            return 0;
+        }
+        MazeJobs jobs = MazeJobs.get(src.getServer());
+        String job = jobs.jobOf(player.getUUID());
+        if (job == null) {
+            src.sendFailure(Component.literal("You have no trade to forget."));
+            return 0;
+        }
+        int back = MazeSkills.get(src.getServer()).forget(player.getUUID(), job);
+        src.sendSuccess(() -> Component.literal(
+                "§7Unlearned. §f" + back + "§7 point" + (back == 1 ? "" : "s") + " back."), false);
+        return 1;
+    }
+
+    /**
+     * Rolling bandages.
+     *
+     * <p>Made at a command rather than a bench because a bandage that needs a
+     * registered item needs a model and a texture this mod does not have, and the
+     * serum already established that a potion is the honest way to ship a
+     * consumable here. It also means the Med-jack's advantage can live in the
+     * making rather than in a second recipe nobody would find.
+     */
+    private static int bandage(CommandSourceStack src) {
+        ServerPlayer player = src.getPlayer();
+        if (player == null || src.getServer() == null || !isMaze(player.level())) {
+            src.sendFailure(Component.literal("Only in the maze."));
+            return 0;
+        }
+        ServerLevel level = src.getLevel();
+        if (MazeBandage.count(player, net.minecraft.world.item.Items.STRING) < MazeBandage.STRING_COST
+                || MazeBandage.count(player, net.minecraft.world.item.Items.PAPER) < MazeBandage.PAPER_COST) {
+            src.sendFailure(Component.literal(
+                    "Not enough to work with — §f" + MazeBandage.STRING_COST + " string §7and §f"
+                            + MazeBandage.PAPER_COST + " paper§7."));
+            return 0;
+        }
+        MazeJobs jobs = MazeJobs.get(src.getServer());
+        boolean medjack = jobs.is(player.getUUID(), MazeJobs.MEDJACK);
+        MazeBandage.take(player, net.minecraft.world.item.Items.STRING, MazeBandage.STRING_COST);
+        MazeBandage.take(player, net.minecraft.world.item.Items.PAPER, MazeBandage.PAPER_COST);
+
+        int made = medjack ? MazeBandage.MEDJACK_YIELD : MazeBandage.YIELD;
+        int dressing = MazeSkills.rankOf(level, player.getUUID(), "dressing");
+        for (int i = 0; i < made; i++) {
+            player.getInventory().placeItemBackInInventory(MazeBandage.create(dressing));
+        }
+        if (medjack) {
+            jobs.award(player, MazeJobs.MEDJACK, 2);
+        }
+        src.sendSuccess(() -> Component.literal(
+                "§f✚ " + made + " bandages." + (medjack ? " §8Half again, because you know how." : "")), false);
         return 1;
     }
 
@@ -723,14 +888,17 @@ public final class MazeEvents {
             return 0;
         }
         MazeJobs jobs = MazeJobs.get(src.getServer());
-        if (!jobs.draw(4)) {
+        int provisions = MazeSkills.rankOf(src.getLevel(), player.getUUID(), "provisions");
+        int cost = provisions >= 3 ? 3 : 4;
+        if (!jobs.draw(cost)) {
             src.sendFailure(Component.literal(
                     "The larder is near empty — §f" + jobs.larder()
                             + "§7. Somebody has to work the field."));
             return 0;
         }
         player.getInventory().placeItemBackInInventory(
-                new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.BREAD, 3));
+                new net.minecraft.world.item.ItemStack(
+                        net.minecraft.world.item.Items.BREAD, 3 + provisions));
         src.sendSuccess(() -> Component.literal(
                 "§7Rations drawn. §8The larder holds " + jobs.larder() + "."), false);
         return 1;

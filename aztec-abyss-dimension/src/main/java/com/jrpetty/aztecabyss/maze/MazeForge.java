@@ -49,6 +49,8 @@ public final class MazeForge {
 
     /** The stamp itself. */
     private static final String FORGED = "AztecForged";
+    /** How much extra damage this particular object was forged with, in percent. */
+    private static final String EDGE = "AztecEdge";
 
     private MazeForge() {
     }
@@ -61,6 +63,16 @@ public final class MazeForge {
     public static boolean isForged(ItemStack stack) {
         return stack.getOrDefault(DataComponents.CUSTOM_DATA, CustomData.EMPTY)
                 .copyTag().getBoolean(FORGED);
+    }
+
+    /** The edge that was put on it, as a fraction. Zero if it was not forged. */
+    private static float edgeOf(ItemStack stack) {
+        var tag = stack.getOrDefault(DataComponents.CUSTOM_DATA, CustomData.EMPTY).copyTag();
+        if (!tag.getBoolean(FORGED)) {
+            return 0.0F;
+        }
+        // Older forged gear predates the stamp and gets the base bonus.
+        return tag.contains(EDGE) ? tag.getInt(EDGE) / 100.0F : DAMAGE_BONUS;
     }
 
     /**
@@ -90,13 +102,26 @@ public final class MazeForge {
         if (base <= 0) {
             return;
         }
-        out.set(DataComponents.MAX_DAMAGE, (int) Math.round(base * (1.0 + DURABILITY_BONUS)));
-        CustomData.update(DataComponents.CUSTOM_DATA, out, tag -> tag.putBoolean(FORGED, true));
+        // Skill is read once, here, and written into the object. A sword does not
+        // get sharper because the person who made it studied afterwards, and it
+        // does not get blunter when they hand it to somebody untrained.
+        int forge = MazeSkills.rankOf(level, player.getUUID(), "forgemaster");
+        int sharp = MazeSkills.rankOf(level, player.getUUID(), "sharpening");
+        double durability = DURABILITY_BONUS + 0.15 * forge;
+        int edge = Math.round((DAMAGE_BONUS + 0.05F * sharp) * 100.0F);
+
+        out.set(DataComponents.MAX_DAMAGE, (int) Math.round(base * (1.0 + durability)));
+        CustomData.update(DataComponents.CUSTOM_DATA, out, tag -> {
+            tag.putBoolean(FORGED, true);
+            tag.putInt(EDGE, edge);
+        });
         out.set(DataComponents.LORE, new ItemLore(List.of(
                 Component.literal("§6Forged in the Glade"),
-                Component.literal("§8by " + player.getGameProfile().getName()))));
+                Component.literal("§8by " + player.getGameProfile().getName()),
+                Component.literal("§8+" + Math.round(durability * 100) + "% wear  §8+" + edge + "% bite"))));
         player.displayClientMessage(Component.literal(
-                "§6⚒ Your hands made it better. §7+40% durability"), true);
+                "§6⚒ Your hands made it better. §7+" + Math.round(durability * 100)
+                        + "% durability, +" + edge + "% damage"), true);
     }
 
     /**
@@ -121,9 +146,10 @@ public final class MazeForge {
                 || !isMaze(attacker.level())) {
             return;
         }
-        if (!isForged(attacker.getMainHandItem())) {
+        float edge = edgeOf(attacker.getMainHandItem());
+        if (edge <= 0.0F) {
             return;
         }
-        event.setAmount(event.getAmount() * (1.0F + DAMAGE_BONUS));
+        event.setAmount(event.getAmount() * (1.0F + edge));
     }
 }

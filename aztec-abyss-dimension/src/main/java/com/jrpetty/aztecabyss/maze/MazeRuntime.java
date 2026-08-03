@@ -90,6 +90,12 @@ public final class MazeRuntime {
     private static final java.util.Set<UUID> BRIEFED = new java.util.HashSet<>();
     /** Who is currently caught outside the Glade for the night. */
     private static final java.util.Set<UUID> NIGHT_OUT = new java.util.HashSet<>();
+    /** Where each runner was a second ago, for paying them by the metre. */
+    private static final Map<UUID, BlockPos> lastSeen = new HashMap<>();
+    /** Metres banked toward the next point. */
+    private static final Map<UUID, Double> walked = new HashMap<>();
+    /** The day each Runner last caught their second wind. */
+    private static final Map<UUID, Integer> secondWind = new HashMap<>();
 
     private MazeRuntime() {
     }
@@ -100,6 +106,9 @@ public final class MazeRuntime {
         warnedDusk = false;
         reshapeDrama = 0;
         hordeDay = -1;
+        lastSeen.clear();
+        walked.clear();
+        secondWind.clear();
         for (ServerBossEvent bar : BARS.values()) {
             bar.removeAllPlayers();
         }
@@ -376,7 +385,7 @@ public final class MazeRuntime {
         TheBox.deliver(level, (int) day);
         // The field comes on overnight. Seeded off the day number so a world that
         // is reloaded mid-run does not get a second harvest out of the same night.
-        GladeBuilder.growField(level, RandomSource.create(0xF1E1D ^ day));
+        GladeBuilder.growField(level, RandomSource.create(0xF1E1D ^ day), greenThumb(level));
         for (ServerPlayer p : level.players()) {
             p.removeEffect(net.minecraft.world.effect.MobEffects.WITHER);
             p.removeEffect(net.minecraft.world.effect.MobEffects.BLINDNESS);
@@ -438,7 +447,20 @@ public final class MazeRuntime {
                         && jobs.is(p.getUUID(), MazeJobs.RUNNER)) {
                     jobs.award(p, MazeJobs.RUNNER, jobs.level(p.getUUID()) >= 2 ? 3 : 2);
                 }
+                // Cartographer: a Runner with an eye for it takes in the cells
+                // around them rather than only the one under their feet. This is
+                // the skill the Chart Floor exists to display, so it is the one
+                // that most changes what the Glade collectively knows.
+                int eye = MazeSkills.rankOf(level, p.getUUID(), "cartographer");
+                for (int ox = -eye; ox <= eye; ox++) {
+                    for (int oz = -eye; oz <= eye; oz++) {
+                        if (ox != 0 || oz != 0) {
+                            charts.chart(p.getUUID(), cellX + ox, cellZ + oz);
+                        }
+                    }
+                }
                 runnersLegs(level, p, jobs);
+                groundCovered(level, p, jobs, at);
                 if (charts.chart(p.getUUID(), cellX, cellZ) && charts.gladePercent() % 10 == 0
                         && charts.gladePercent() > 0) {
                     for (ServerPlayer other : level.players()) {
@@ -506,8 +528,58 @@ public final class MazeRuntime {
         if (!jobs.is(p.getUUID(), MazeJobs.RUNNER)) {
             return;
         }
-        int amplifier = jobs.level(p.getUUID()) >= 3 ? 1 : 0;
+        int stride = MazeSkills.rankOf(level, p.getUUID(), "stride");
+        // Capped at Speed II however you get there. Speed III plus sprinting is
+        // faster than a Griever by a margin that makes the night stop mattering,
+        // and the maze has to keep being the thing that beats you.
+        int amplifier = Math.min(1, (jobs.level(p.getUUID()) >= 3 ? 1 : 0) + (stride >= 2 ? 1 : 0));
         p.addEffect(new MobEffectInstance(MobEffects.MOVEMENT_SPEED, 40, amplifier, false, false));
+
+        // Second Wind. Once a day, and only when it is genuinely going wrong.
+        if (stride >= 3 && p.getHealth() <= 6.0F
+                && secondWind.getOrDefault(p.getUUID(), -1) != MazeClock.get(level).day()) {
+            secondWind.put(p.getUUID(), MazeClock.get(level).day());
+            p.addEffect(new MobEffectInstance(MobEffects.MOVEMENT_SPEED, 200, 1, false, true));
+            p.addEffect(new MobEffectInstance(MobEffects.REGENERATION, 200, 0, false, true));
+            p.displayClientMessage(Component.literal(
+                    "§b✦ Second wind. §7Run."), false);
+        }
+
+        // Endurance: the maze stops eating you quite so fast.
+        int endurance = MazeSkills.rankOf(level, p.getUUID(), "endurance");
+        if (endurance > 0 && level.getGameTime() % 600L == 0L) {
+            var food = p.getFoodData();
+            food.setSaturation(Math.min(20.0F, food.getSaturationLevel() + endurance));
+        }
+    }
+
+    /**
+     * Paying a Runner for ground.
+     *
+     * <p>The job was only ever paid for cells it had never seen, which is
+     * backwards: a Runner's actual work is covering distance, and somebody
+     * sprinting a known route to check whether it still goes through was earning
+     * nothing at all. Charting pays for discovery; this pays for the legs.
+     */
+    private static void groundCovered(ServerLevel level, ServerPlayer p, MazeJobs jobs, BlockPos at) {
+        if (!jobs.is(p.getUUID(), MazeJobs.RUNNER)) {
+            return;
+        }
+        BlockPos last = lastSeen.put(p.getUUID(), at);
+        if (last == null) {
+            return;
+        }
+        double moved = Math.sqrt(last.distSqr(at));
+        // A teleport is not a run. Anything over one cell in a second is the
+        // portal, a recall or an operator, and none of those are work.
+        if (moved > MazeData.CELL * 2) {
+            return;
+        }
+        double total = walked.merge(p.getUUID(), moved, Double::sum);
+        if (total >= 100.0) {
+            walked.put(p.getUUID(), total - 100.0);
+            jobs.award(p, MazeJobs.RUNNER, 1);
+        }
     }
 
     /**
@@ -619,6 +691,26 @@ public final class MazeRuntime {
      * than a reset - and so a squad that gets halfway and loses two people has to
      * decide whether to finish it tonight.
      */
+    /**
+     * The best Green Thumb in the Glade.
+     *
+     * <p>The field is one field. It does not grow four times over because four
+     * Track-hoes are standing in it, so the bonus is the best of them rather than
+     * the sum - which also means a Glade with one good farmer is as well fed as a
+     * Glade with three mediocre ones, and the third one is free to do something
+     * else.
+     */
+    private static int greenThumb(ServerLevel level) {
+        int best = 0;
+        MazeJobs jobs = MazeJobs.get(level);
+        for (ServerPlayer p : level.players()) {
+            if (jobs.is(p.getUUID(), MazeJobs.TRACKHOE)) {
+                best = Math.max(best, MazeSkills.rankOf(level, p.getUUID(), "greenthumb"));
+            }
+        }
+        return best;
+    }
+
     private static void clearLastStand(ServerLevel level) {
         net.minecraft.world.phys.AABB box = new net.minecraft.world.phys.AABB(
                 -PortalAnnex.REACH, MazeData.FLOOR_Y - 16, -PortalAnnex.REACH,

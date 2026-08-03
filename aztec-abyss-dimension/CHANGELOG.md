@@ -13,6 +13,42 @@ behaviour that was already there · **docs**
 
 ## Unreleased
 
+### Skills — what you have become, as opposed to what you are
+
+- **feat** `MazeSkills` — twelve skills, three per trade, three ranks each.
+  `/maze skills` to read your sheet, `/maze learn <skill>` to spend, `/maze forget`
+  to put every point in a trade back **free**. Jobs answered "what do you do here"
+  and never answered "what have you become" — two Runners a fortnight in were
+  identical, which makes a fortnight worth nothing.
+- **feat** **Points come from doing the job.** Track-hoes earn by harvesting,
+  Med-jacks by treating, Builders by making and marking, Runners by charting **and
+  by distance covered** — the last one matters most, because a Runner's job is
+  ground and the game only paid them for ground that was *new*. Sprinting a known
+  route to check it still goes through earned nothing, which is backwards.
+- **change** Each trade converts experience at **its own rate** (Med-jack 30,
+  Builder 40, Track-hoe 50, Runner 55). A Med-jack treats six people in a game and
+  a Track-hoe pulls three hundred carrots; charging both the same is how one trade
+  becomes the obvious one to grind.
+- **change** Every buff is deliberately **sideways, not upward**. Nothing raises
+  your health, nothing lets you fight a Griever, nothing shortens the maze. Speed
+  is hard-capped at II however you stack it, because Speed III plus sprinting
+  outruns a Griever by enough that the night stops mattering.
+- **feat** Forged gear now **carries its maker's skill in the object**. A sword
+  does not get sharper because the smith studied afterwards, and does not get
+  blunter when handed to somebody untrained.
+- **feat** **Bandages.** `/maze bandage` turns 2 string and 1 paper into two — or
+  **three for a Med-jack**, half again for the same materials, and theirs mend
+  longer. The trade could hold off a Changing and, at the top, cure one; both are
+  rare and dramatic and useless on an ordinary Tuesday. This is the small version
+  of the same idea, and it turns the role from an emergency service into a supply
+  line.
+- **feat** Notable hooks: **Cartographer** charts up to three cells around you
+  (feeding the Glade's shared map), **Antivenom** raises your sting threshold,
+  **Second Wind** gives a Runner ten seconds once a day when it is genuinely going
+  wrong, **Salvage** gets a Builder some of the Glade back when they rearrange it,
+  **Green Thumb** takes the best farmer in the Glade rather than the sum — one
+  field does not grow four times over because four people stand in it.
+
 ### The Box does the job it is named for
 
 - **feat** `TheBox` — every dawn the lift comes up loaded. The Box was the

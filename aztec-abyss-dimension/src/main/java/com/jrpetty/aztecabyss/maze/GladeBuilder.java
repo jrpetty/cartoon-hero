@@ -218,7 +218,7 @@ public final class GladeBuilder {
      * <p>It also gives the day counter something to be. A day in the Glade is
      * now a day the field moved, whether or not anybody ran the maze.
      */
-    public static void growField(ServerLevel level, RandomSource rng) {
+    public static void growField(ServerLevel level, RandomSource rng, int greenThumb) {
         int ox = fieldX();
         int oz = fieldZ();
         for (int x = ox; x < ox + FIELD_W; x++) {
@@ -229,7 +229,7 @@ public final class GladeBuilder {
                     // Harvested ground reseeds itself. Somebody planted this field
                     // long before you arrived and it is not going to stop because
                     // the last Glader forgot to put a seed back.
-                    if (state.isAir() && rng.nextInt(4) == 0
+                    if (state.isAir() && rng.nextInt(Math.max(1, 4 - greenThumb)) == 0
                             && level.getBlockState(at.below()).is(Blocks.FARMLAND)) {
                         int roll = rng.nextInt(3);
                         level.setBlock(at, roll == 0 ? Blocks.WHEAT.defaultBlockState()
@@ -246,6 +246,15 @@ public final class GladeBuilder {
                 // its own. Twice, so a day is a visible step rather than a nudge.
                 crop.growCrops(level, at, state);
                 crop.growCrops(level, at, level.getBlockState(at));
+                // Green Thumb: the field comes on further under a good farmer.
+                for (int extra = 0; extra < greenThumb; extra++) {
+                    BlockState now = level.getBlockState(at);
+                    if (!(now.getBlock() instanceof net.minecraft.world.level.block.CropBlock c2)
+                            || c2.isMaxAge(now)) {
+                        break;
+                    }
+                    c2.growCrops(level, at, now);
+                }
             }
         }
     }

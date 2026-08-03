@@ -69,6 +69,11 @@ public final class MazeSting {
         return STINGS.getOrDefault(id, 0);
     }
 
+    /** How many this particular body can take. */
+    public static int thresholdFor(ServerLevel level, ServerPlayer player) {
+        return THRESHOLD + MazeSkills.rankOf(level, player.getUUID(), "antivenom");
+    }
+
     public static boolean isInfected(UUID id) {
         return INFECTED.contains(id);
     }
@@ -84,10 +89,14 @@ public final class MazeSting {
             return false; // already turning; further stings change nothing
         }
         int n = STINGS.merge(player.getUUID(), 1, Integer::sum);
-        if (n < THRESHOLD) {
-            int left = THRESHOLD - n;
+        // Antivenom moves the number. It is the one skill in the game that
+        // changes how much punishment a body takes, and it is deliberately on
+        // the job whose entire subject is punishment to bodies.
+        int threshold = thresholdFor(level, player);
+        if (n < threshold) {
+            int left = threshold - n;
             player.displayClientMessage(Component.literal(
-                    "§c✖ Stung. §7" + n + "§8/§7" + THRESHOLD
+                    "§c✖ Stung. §7" + n + "§8/§7" + threshold
                             + " §8— " + left + " more and it takes."), true);
             level.playSound(null, player.blockPosition(), SoundEvents.WARDEN_ANGRY,
                     SoundSource.PLAYERS, 0.8F, 1.0F);
@@ -240,6 +249,6 @@ public final class MazeSting {
             return left == null ? " §8| §4§lTURNING" : " §8| §4CHANGING §c" + left + "s";
         }
         int n = stings(id);
-        return n == 0 ? "" : " §8| §cStung " + n + "§8/§c" + THRESHOLD;
+        return n == 0 ? "" : " §8| §cStung " + n;
     }
 }
