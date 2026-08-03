@@ -4,6 +4,7 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.util.RandomSource;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.entity.SignBlockEntity;
@@ -573,7 +574,76 @@ public final class GladeBuilder {
             level.setBlock(new BlockPos(x, Y + 4, oz), Blocks.LANTERN.defaultBlockState(), 2);
             sign(level, new BlockPos(x, Y + 2, oz + 1), Direction.SOUTH,
                     posts[i][0], posts[i][1], posts[i][2], posts[i][3]);
+            // A second sign under each post for the roster. Written blank here
+            // and filled in by refreshRoster once there is anybody to list.
+            sign(level, new BlockPos(x, Y + 1, oz + 1), Direction.SOUTH,
+                    "§8nobody", "", "", "");
         }
+    }
+
+    /** Where a trade's roster sign hangs, in job-board order. */
+    private static BlockPos rosterSign(int i) {
+        return new BlockPos(MazeData.SPAWN_X - 8 + i * 3, Y + 1, MazeData.SPAWN_Z + 6);
+    }
+
+    /** What each roster sign currently says, so unchanged boards are left alone. */
+    private static final String[] ROSTER_DRAWN = new String[MazeJobs.ALL.size()];
+
+    /**
+     * Who has taken what, written on the board rather than kept in a command.
+     *
+     * <p>The trade board told you the four jobs existed and nothing whatsoever
+     * about which of them anybody was doing. Working out whether the Glade
+     * already had a Med-jack meant asking out loud and hoping somebody was
+     * listening - for a decision the whole supply system now hangs on, since a
+     * trade with nobody in it is a quota nobody fills and a crate that does not
+     * come up.
+     *
+     * <p>Redrawn only when it changes. A sign block entity rewritten every second
+     * is a packet to every client every second, for a board that changes about
+     * four times a game.
+     */
+    public static void refreshRoster(ServerLevel level) {
+        if (level.getServer() == null) {
+            return;
+        }
+        MazeJobs jobs = MazeJobs.get(level.getServer());
+        for (int i = 0; i < MazeJobs.ALL.size(); i++) {
+            String job = MazeJobs.ALL.get(i);
+            java.util.List<String> names = new java.util.ArrayList<>();
+            for (ServerPlayer p : level.players()) {
+                if (jobs.is(p.getUUID(), job)) {
+                    names.add(p.getGameProfile().getName() + " §8" + jobs.levelOf(p.getUUID(), job));
+                }
+            }
+            String[] lines = new String[]{"§8nobody", "", "", ""};
+            if (!names.isEmpty()) {
+                for (int n = 0; n < 4; n++) {
+                    // Four names fit. A fifth becomes "+N more" on the last line,
+                    // because a truncated list that does not say it is truncated
+                    // is worse than no list.
+                    if (n == 3 && names.size() > 4) {
+                        lines[n] = "§8+" + (names.size() - 3) + " more";
+                    } else if (n < names.size()) {
+                        lines[n] = "§f" + names.get(n);
+                    } else {
+                        lines[n] = "";
+                    }
+                }
+            }
+            // A separator no player name or level can contain.
+            String joined = String.join("\n", lines);
+            if (joined.equals(ROSTER_DRAWN[i])) {
+                continue;
+            }
+            ROSTER_DRAWN[i] = joined;
+            sign(level, rosterSign(i), Direction.SOUTH, lines[0], lines[1], lines[2], lines[3]);
+        }
+    }
+
+    /** Forces the board to be rewritten, whatever it currently says. */
+    public static void forgetRoster() {
+        java.util.Arrays.fill(ROSTER_DRAWN, null);
     }
 
     /** The bell that counts the last two minutes of the day. */

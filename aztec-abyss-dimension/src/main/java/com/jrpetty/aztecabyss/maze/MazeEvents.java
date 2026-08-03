@@ -1323,9 +1323,13 @@ public final class MazeEvents {
         if (!(player.level() instanceof ServerLevel level) || !isMaze(level)) {
             return;
         }
-        // The reward is for surviving. Whatever this trip earned dies here.
+        // The reward is for surviving. Whatever this trip earned dies here -
+        // except the survey, which does not die, it falls. Somebody can go and
+        // get it, and that is the difference between a death and a place on the
+        // map that now matters.
         if (player.level() instanceof ServerLevel sl) {
             MazeJobs.get(sl).forfeit(player);
+            MazeNotes.drop(sl, player);
         }
         MazeRuns.onDeath(player);
         MazeRace.dropOut(level, player.getUUID());

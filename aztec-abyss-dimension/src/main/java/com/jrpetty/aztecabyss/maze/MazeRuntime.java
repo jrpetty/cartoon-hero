@@ -227,6 +227,8 @@ public final class MazeRuntime {
         MazeOrders.get(level).setHeads(0);
         MazeBell.reset();
         clock.newGame(level.getServer());
+        MazeNotes.clearAll();
+        GladeBuilder.forgetRoster();
     }
 
     /**
@@ -322,6 +324,7 @@ public final class MazeRuntime {
         tickEscape(level);
         MazeNight.tickWeather(level);
         ChartFloor.refresh(level);
+        GladeBuilder.refreshRoster(level);
         portalAmbience(level, want);
         tickRunners(level, t);
         tickGrievers(level, t);
@@ -523,40 +526,31 @@ public final class MazeRuntime {
                 // around them rather than only the one under their feet. This is
                 // the skill the Chart Floor exists to display, so it is the one
                 // that most changes what the Glade collectively knows.
-                String layoutName = layout == null ? null : layout.name();
                 int eye = MazeSkills.rankOf(level, p.getUUID(), "cartographer");
                 for (int ox = -eye; ox <= eye; ox++) {
                     for (int oz = -eye; oz <= eye; oz++) {
                         if (ox != 0 || oz != 0) {
-                            charts.chart(p.getUUID(), cellX + ox, cellZ + oz, layoutName);
+                            MazeNotes.record(level, p, cellX + ox, cellZ + oz);
                         }
                     }
                 }
                 runnersLegs(level, p, jobs);
                 bearings(level, p, jobs);
                 groundCovered(level, p, jobs, at);
-                boolean freshGround = charts.chart(p.getUUID(), cellX, cellZ, layoutName);
-                if (freshGround) {
-                    // A Runner's day, one unit per cell of ground the Glade had
-                    // never seen. Re-walking a corridor you already know pays
-                    // nothing, which is both the whole job and the only thing
-                    // stopping a Runner farming this by pacing.
-                    MazeDayWork.get(level).add(level, p, MazeJobs.RUNNER, 1);
-                }
-                if (freshGround && charts.gladePercent() % 10 == 0
-                        && charts.gladePercent() > 0) {
-                    for (ServerPlayer other : level.players()) {
-                        other.displayClientMessage(Component.literal(
-                                "§6✎ The Glade has charted §f" + charts.gladePercent()
-                                        + "%§6 of the maze."), true);
-                    }
-                }
+                // Noted, not charted. It reaches the Glade's map when the runner
+                // does - and falls on the floor if they do not. The day's work
+                // and the "the Glade has charted N%" milestone are both paid at
+                // that same moment, for the same reason: a survey nobody brought
+                // home did not happen.
+                MazeNotes.record(level, p, cellX, cellZ);
             }
 
             if (inGlade) {
                 // Through the door. Everything the trip earned settles here and
-                // nowhere else.
+                // nowhere else - the job experience, and the survey.
                 MazeJobs.get(level).bank(p);
+                MazeNotes.bank(level, p);
+                MazeNotes.redeemCarried(level, p);
             }
             if (!inGlade && !MazeRuns.isRunning(p.getUUID())) {
                 MazeRuns.begin(level, p);

@@ -13,6 +13,44 @@ behaviour that was already there · **docs**
 
 ## Unreleased
 
+### Charts you can lose, and a board that says who is who
+
+- **feat** **A Runner's survey is carried now, not banked instantly.** Charting
+  used to land on the Glade's map the moment a boot touched a new cell, which
+  made the most dangerous job in the mode completely risk-free at the thing it
+  exists for: walk out, chart forty cells, die at the far end of the map, and the
+  Glade kept every one. Nothing a Runner carried could be lost, so nothing a
+  Runner did was a gamble. It now goes onto the chart when you walk back through
+  the door — exactly as job experience already did, and banked in the same place
+  for the same reason.
+- **feat** **Die out there and your notes fall where you fell.** A real item, in
+  a real place, that somebody can go and get. The whole value is that it has a
+  *location*: a spot on the map that is suddenly worth going to and gets more
+  dangerous the longer it is left. Everyone is told it is out there and how much
+  is on it.
+- **Whoever files them gets the credit** — the cells *and* the day's work. A
+  recovery run is real work and is paid as such; crediting the corpse instead
+  would mean the person who walked out to fetch them got nothing.
+- **change** The **Chart Floor only shows what came home.** A Runner three
+  hundred blocks out watching their own progress appear on a map they are nowhere
+  near was always the wrong picture — the Glade knows what it has been told.
+- **fix** The *"the Glade has charted N%"* milestone moved to the moment notes
+  are filed. It was announced as a Runner stepped on a cell, reading a percentage
+  that had not changed yet, and it repeated on every step at that mark; it now
+  fires once, when the number actually moves.
+- **feat** **The job board shows the roster.** Under each trade's post, who has
+  taken it and what level they are — up to four names, then "+N more", because a
+  truncated list that does not say it is truncated is worse than no list. The
+  board told you the four jobs existed and nothing about which anybody was doing,
+  so working out whether the Glade already had a Med-jack meant asking out loud
+  and hoping. That is a decision the whole supply system now hangs on: a trade
+  with nobody in it is a quota nobody fills and a crate that never comes up.
+- Redrawn only when it changes, because a sign block entity rewritten every
+  second is a packet to every client every second for a board that changes about
+  four times a game.
+
+---
+
 ### The bell
 
 - **feat** **A bell in the Glade that tolls the last two minutes before the doors
