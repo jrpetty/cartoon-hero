@@ -1217,12 +1217,38 @@ public final class MazeRuntime {
      * guaranteed solvable: the dataset only ever lists toggle sets that leave a
      * route to that day's exit.
      */
+    /** Whether a toggle point stands on ground the Dead Glade has cleared. */
+    private static boolean touchesDeadGlade(MazeData.TogglePoint tp) {
+        String[] ends = tp.edge().split(">");
+        for (String end : ends) {
+            String[] parts = end.split(",");
+            if (parts.length != 2) {
+                continue;
+            }
+            try {
+                if (DeadGlade.coversCell(Integer.parseInt(parts[0].trim()),
+                        Integer.parseInt(parts[1].trim()))) {
+                    return true;
+                }
+            } catch (NumberFormatException ignored) {
+                // A malformed edge key is the dataset's problem, not the
+                // reshape's; leave it to the toggle itself to fall over loudly.
+            }
+        }
+        return false;
+    }
+
     public static void applyLayout(ServerLevel level, MazeData.Layout layout) {
         if (layout == null) {
             return;
         }
         RandomSource rng = RandomSource.create();
         for (MazeData.TogglePoint tp : MazeData.togglePoints().values()) {
+            if (touchesDeadGlade(tp)) {
+                // The camp is a clearing. Its walls came down long before you
+                // got here and the reshape does not put them back.
+                continue;
+            }
             MazeBuilder.setToggle(level, tp, layout.open().contains(tp.id()), rng);
         }
         // The exit moves every night, and the sixty standing in front of

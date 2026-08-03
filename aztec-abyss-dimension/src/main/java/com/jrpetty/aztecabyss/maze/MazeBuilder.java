@@ -129,8 +129,9 @@ public final class MazeBuilder {
      * <p>7: the huts got pitched roofs and interiors, the field got a fence all
      * the way round with a gate, the Deadheads became graves, and nothing
      * scattered plants itself through a building any more.
+     * <p>8: the Dead Glade was carved into the south-west.
      */
-    private static final int GEOMETRY_VERSION = 7;
+    private static final int GEOMETRY_VERSION = 8;
 
     /** One distinctive block per version, so the marker is readable in-world. */
     private static final BlockState[] VERSION_BLOCKS = {
@@ -145,6 +146,7 @@ public final class MazeBuilder {
             // entries, version 7 wrapped back onto version 0's bedrock and the
             // marker stopped being able to tell those two apart.
             Blocks.SMOOTH_BASALT.defaultBlockState(),
+            Blocks.TUFF.defaultBlockState(),
     };
 
     private static BlockState versionBlock() {
@@ -499,6 +501,9 @@ public final class MazeBuilder {
     /** Seals the outer rim, then dresses the Glade. */
     private static void finish(ServerLevel level) {
         GladeBuilder.build(level);
+        // Somebody else's clearing, carved out of the corridors after they are
+        // stamped so it eats the walls rather than being drawn over them.
+        DeadGlade.build(level);
         gladeWall(level);
         // After the wall, because it writes the cells the wall stands between.
         sealGladeRing(level);

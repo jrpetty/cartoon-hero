@@ -449,11 +449,20 @@ public final class MazeEvents {
         if (!(event.getLevel() instanceof ServerLevel level) || !isMaze(level)) {
             return;
         }
-        if (!(event.getEntity() instanceof ServerPlayer p) || !event.getPos().equals(ChartFloor.dial())) {
+        if (!(event.getEntity() instanceof ServerPlayer p)) {
             return;
         }
-        ChartFloor.cycle(level, p);
-        event.setCanceled(true);
+        if (event.getPos().equals(ChartFloor.dial())) {
+            ChartFloor.cycle(level, p);
+            event.setCanceled(true);
+            return;
+        }
+        // The Dead Glade's charts. The one thing out there worth walking to
+        // that is not the way out.
+        if (event.getPos().equals(DeadGlade.lectern())) {
+            DeadGlade.readCharts(level, p);
+            event.setCanceled(true);
+        }
     }
 
     @SubscribeEvent

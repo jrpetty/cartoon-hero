@@ -14,6 +14,14 @@ import json
 from collections import deque
 
 GRID, GLADE_MIN, GLADE_MAX = 96, 40, 55
+# The Dead Glade is carved out of the corridors after they are stamped, so its
+# cells are open ground and its perimeter walls are gone. It can only ADD
+# connectivity, but the presets are re-checked with it in place regardless.
+DEAD_X, DEAD_Z, DEAD_SPAN = 16, 70, 10
+
+
+def in_dead_glade(x, z):
+    return DEAD_X <= x < DEAD_X + DEAD_SPAN and DEAD_Z <= z < DEAD_Z + DEAD_SPAN
 DOOR_CELLS = [(48, 39), (56, 48), (47, 56), (39, 47)]
 
 d = json.load(open('src/main/resources/data/aztecabyss/maze/maze_config_v2.json'))
@@ -96,6 +104,9 @@ def opened_for(lay):
 
 
 def is_open(ax, az, bx, bz, opened, carved):
+    # Either end standing in the ruined camp means the wall between them is gone.
+    if in_dead_glade(ax, az) or in_dead_glade(bx, bz):
+        return True
     if ((ax, az), (bx, bz)) in carved:
         return True
     a, b = f"{ax},{az}>{bx},{bz}", f"{bx},{bz}>{ax},{az}"
