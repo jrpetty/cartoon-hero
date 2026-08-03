@@ -85,6 +85,24 @@ public final class MazeChests {
         }
     }
 
+    private static net.minecraft.world.item.Item ironPiece(RandomSource rng) {
+        return switch (rng.nextInt(4)) {
+            case 0 -> Items.IRON_HELMET;
+            case 1 -> Items.IRON_CHESTPLATE;
+            case 2 -> Items.IRON_LEGGINGS;
+            default -> Items.IRON_BOOTS;
+        };
+    }
+
+    private static net.minecraft.world.item.Item diamondPiece(RandomSource rng) {
+        return switch (rng.nextInt(4)) {
+            case 0 -> Items.DIAMOND_HELMET;
+            case 1 -> Items.DIAMOND_CHESTPLATE;
+            case 2 -> Items.DIAMOND_LEGGINGS;
+            default -> Items.DIAMOND_BOOTS;
+        };
+    }
+
     /** How many of a cell's four sides are open, read from the world as built. */
     private static int exits(ServerLevel level, int cellX, int cellZ) {
         int open = 0;
@@ -137,8 +155,41 @@ public final class MazeChests {
         if (tier >= 2) {
             loot.add(new ItemStack(Items.IRON_INGOT, 2 + rng.nextInt(4 * tier)));
         }
+        // Materials the dimension cannot produce. A cache that only ever holds
+        // food is a cache you stop opening; these are the ones that change what
+        // the Glade is able to build tomorrow.
+        if (rng.nextInt(3) == 0) {
+            loot.add(new ItemStack(Items.STRING, 2 + rng.nextInt(4 * tier)));
+        }
+        if (rng.nextInt(3) == 0) {
+            loot.add(new ItemStack(Items.ARROW, 4 + rng.nextInt(6 * tier)));
+        }
+        if (rng.nextInt(4) == 0) {
+            loot.add(new ItemStack(Items.LEATHER, 1 + rng.nextInt(3)));
+        }
+        if (rng.nextInt(4) == 0) {
+            loot.add(new ItemStack(Items.COAL, 3 + rng.nextInt(5 * tier)));
+        }
+        if (tier >= 2 && rng.nextInt(3) == 0) {
+            loot.add(new ItemStack(Items.WHEAT_SEEDS, 2 + rng.nextInt(5)));
+        }
+        // Armour, because walking four hundred cells to find two steaks is not
+        // a reason to walk four hundred cells. Iron is the honest reward for a
+        // long trip; diamond is the story you tell about the one time.
+        if (tier >= 2 && rng.nextInt(3) == 0) {
+            loot.add(new ItemStack(ironPiece(rng)));
+        }
         if (tier >= 3) {
             loot.add(new ItemStack(Items.DIAMOND, 1 + rng.nextInt(3)));
+            if (rng.nextInt(3) == 0) {
+                loot.add(new ItemStack(ironPiece(rng)));
+            }
+            if (rng.nextInt(8) == 0) {
+                loot.add(new ItemStack(diamondPiece(rng)));
+            }
+            if (rng.nextInt(6) == 0) {
+                loot.add(new ItemStack(Items.IRON_SWORD));
+            }
             if (rng.nextInt(4) == 0) {
                 loot.add(new ItemStack(Items.ENCHANTED_GOLDEN_APPLE));
             }

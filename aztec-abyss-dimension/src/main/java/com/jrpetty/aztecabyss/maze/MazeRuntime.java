@@ -246,6 +246,11 @@ public final class MazeRuntime {
         boolean shouldBeOpen = !clock.isNight();
         if (shouldBeOpen != doorsOpen) {
             setDoors(level, shouldBeOpen);
+            if (!shouldBeOpen) {
+                // The doors have just sealed. Whatever else lives here comes out
+                // now, which is what makes the night a place rather than a wait.
+                MazeNight.fall(level, clock.day());
+            }
         }
         if (!warnedDusk && clock.inDuskWarning()) {
             warnedDusk = true;
@@ -367,6 +372,8 @@ public final class MazeRuntime {
         MazeRuns.clearAll();
         MazeSting.clearAll();
         NIGHT_OUT.clear();
+        MazeNight.lift(level);
+        TheBox.deliver(level, (int) day);
         // The field comes on overnight. Seeded off the day number so a world that
         // is reloaded mid-run does not get a second harvest out of the same night.
         GladeBuilder.growField(level, RandomSource.create(0xF1E1D ^ day));

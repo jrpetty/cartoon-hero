@@ -13,6 +13,52 @@ behaviour that was already there · **docs**
 
 ## Unreleased
 
+### The Box does the job it is named for
+
+- **feat** `TheBox` — every dawn the lift comes up loaded. The Box was the
+  centrepiece of the Glade, the thing every Glader arrived in, and a decorative
+  cage. Meanwhile the maze gave you nothing to build with — no seeds, no saplings,
+  no string, no iron, no way to replace a broken tool — so everyone's inventory
+  only ever went down and the Glade could never become anything.
+- **feat** The **staples crate** carries what the dimension structurally cannot:
+  seeds and saplings (there is no soil out there), string, leather and feathers
+  (those come off animals and there are none), iron, coal and cobblestone (the
+  floor does not break). Generous on what you cannot otherwise have, thin on what
+  you can.
+- **feat** **Two cures in the first crate.** Day one is the only day nobody has had
+  a chance to earn one, and a Glade whose first Changing is unanswerable teaches
+  the wrong lesson about the entire system.
+- **feat** **Role crates** — one per job somebody is actually doing. No Med-jack,
+  no medical crate. That sounds harsh and is the point: jobs are a decision the
+  group makes together, and a decision with no consequence is not one.
+- **change** Scaled per head at **half rate**, not one-for-one. Four people do not
+  eat four times the wheat, they clear the field four times as fast — so straight
+  scaling would make a big Glade richer per person than a small one.
+- **change** Crates **top up** rather than being replaced. A delivery system that
+  quietly eats what you stored in it is one nobody stores anything in.
+
+### Nightlife — the maze has something living in it
+
+- **feat** `MazeNight` — 20 to 35 zombies, skeletons, spiders and husks through the
+  corridors at dusk, cleared at dawn. The night had exactly one inhabitant and it
+  was unkillable in practice, so a night you survived was a night in which nothing
+  happened.
+- **feat** **One night in nine is a bad one: eighty.** The rare night matters more
+  than the common one — a dusk that is usually survivable and occasionally is not
+  makes every dusk a real question.
+- **feat** Skeletons and spiders are deliberately over-represented, because string,
+  bone, arrows and gunpowder do not otherwise exist here. A Glade that wants bows,
+  beds or bonemeal has to send somebody out after dark — a far better reason to be
+  in the maze at night than "you failed to get back".
+- **change** They scale with the day at **half** the Grievers' rate. These are the
+  loot, and loot that outgrows the players stops being loot.
+
+### The caches are worth the walk now
+
+- **feat** Iron armour at tier 2 and up, the occasional diamond piece and iron
+  sword in the far corners, plus string, arrows, leather, coal and seeds. Walking
+  four hundred cells to find two steaks is not a reason to walk four hundred cells.
+
 ### The maze stops being square, and the exit stops being a gap in a wall
 
 - **feat** `PortalAnnex` — every exit now **protrudes out of the square**. A walled
