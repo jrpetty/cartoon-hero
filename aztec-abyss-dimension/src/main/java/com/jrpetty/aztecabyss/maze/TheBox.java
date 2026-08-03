@@ -12,7 +12,6 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.block.Blocks;
-import net.minecraft.world.level.block.entity.BaseContainerBlockEntity;
 import net.minecraft.world.level.block.entity.BlockEntity;
 
 import java.util.ArrayList;
@@ -90,20 +89,26 @@ public final class TheBox {
             staples.add(MazeSerum.create());
             staples.add(MazeSerum.create());
         }
-        stock(level, slot(0), "§e§lSTAPLES", staples);
+        stock(level, slot(0), "STAPLES", Blocks.YELLOW_CONCRETE.defaultBlockState(), staples);
 
         int next = 1;
+        StringBuilder manifest = new StringBuilder();
         for (String job : MazeJobs.ALL) {
             int takers = takers(level, jobs, job);
             if (takers == 0) {
                 continue; // nobody does this job; nothing comes up for it
             }
-            stock(level, slot(next++), crateName(job), roleCrate(job, rng, takers, day));
+            stock(level, slot(next++), crateName(job), crateColour(job),
+                    roleCrate(job, rng, takers, day));
+            manifest.append(manifest.isEmpty() ? "" : "§8, ").append(crateName(job));
         }
+        String crates = manifest.toString();
 
         for (ServerPlayer p : level.players()) {
             p.displayClientMessage(Component.literal(
-                    "§6▲ The Box came up. §7Something arrived for everyone doing a job."), false);
+                    "§6▲ The Box came up. §e§lSTAPLES§7 on yellow"
+                            + (crates.isEmpty() ? "§8, and nothing else — nobody here has a trade."
+                                    : "§7, and " + crates)), false);
             level.playSound(null, p.blockPosition(), SoundEvents.BEACON_ACTIVATE,
                     SoundSource.BLOCKS, 1.0F, 0.7F);
         }
@@ -124,11 +129,21 @@ public final class TheBox {
 
     private static String crateName(String job) {
         return switch (job) {
-            case MazeJobs.RUNNER -> "§b§lRUNNERS";
-            case MazeJobs.BUILDER -> "§6§lBUILDERS";
-            case MazeJobs.MEDJACK -> "§a§lMED-JACKS";
-            case MazeJobs.TRACKHOE -> "§2§lTRACK-HOES";
+            case MazeJobs.RUNNER -> "§b§lRUNNERS§7 on blue";
+            case MazeJobs.BUILDER -> "§6§lBUILDERS§7 on orange";
+            case MazeJobs.MEDJACK -> "§a§lMED-JACKS§7 on white";
+            case MazeJobs.TRACKHOE -> "§2§lTRACK-HOES§7 on green";
             default -> "§7SUPPLIES";
+        };
+    }
+
+    private static net.minecraft.world.level.block.state.BlockState crateColour(String job) {
+        return switch (job) {
+            case MazeJobs.RUNNER -> Blocks.LIGHT_BLUE_CONCRETE.defaultBlockState();
+            case MazeJobs.BUILDER -> Blocks.ORANGE_CONCRETE.defaultBlockState();
+            case MazeJobs.MEDJACK -> Blocks.WHITE_CONCRETE.defaultBlockState();
+            case MazeJobs.TRACKHOE -> Blocks.GREEN_CONCRETE.defaultBlockState();
+            default -> Blocks.YELLOW_CONCRETE.defaultBlockState();
         };
     }
 
@@ -289,16 +304,20 @@ public final class TheBox {
      * it is a delivery system nobody stores anything in. If a crate is genuinely
      * full the surplus is simply not delivered - which is a signal, not a bug.
      */
-    private static void stock(ServerLevel level, BlockPos at, String name, List<ItemStack> goods) {
+    private static void stock(ServerLevel level, BlockPos at, String name,
+                              net.minecraft.world.level.block.state.BlockState pad,
+                              List<ItemStack> goods) {
         if (!level.getBlockState(at).is(Blocks.CHEST)) {
             level.setBlock(at, Blocks.CHEST.defaultBlockState(), 2);
         }
+        // A coloured slab under each crate rather than a name on it. Naming a
+        // container from code is not something 1.21.1 exposes, and a floor you
+        // can read at a glance is better than a tooltip anyway - you know whose
+        // crate you are standing over before you open it.
+        level.setBlock(at.below(), pad, 2);
         BlockEntity be = level.getBlockEntity(at);
         if (!(be instanceof Container chest)) {
             return;
-        }
-        if (be instanceof BaseContainerBlockEntity named) {
-            named.setCustomName(Component.literal(name));
         }
         for (ItemStack stack : goods) {
             if (stack.isEmpty()) {
