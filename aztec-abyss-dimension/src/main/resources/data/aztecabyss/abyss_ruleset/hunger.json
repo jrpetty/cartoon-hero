@@ -81,6 +81,20 @@
           "award": 5000
         }
       ]
+    },
+    {
+      "on": "player_died",
+      "when": {
+        "subject": "final"
+      },
+      "do": [
+        {
+          "message": "\u00a78A cannon sounds."
+        },
+        {
+          "sound": "minecraft:entity.generic.explode"
+        }
+      ]
     }
   ],
   "lobby": {

@@ -13,6 +13,34 @@ behaviour that was already there · **docs**
 
 ## Unreleased
 
+### The engine can see the people playing it
+
+**There was no event for a player dying.** That is a strange hole in a game
+engine, and it is why "drop your flag when you die", "count the deaths",
+"respawn with a penalty" and every elimination format other than the one built
+into `tickLastStanding` were all unwritable.
+
+- **feat** `player_died` event, fired from **both** death paths — the ordinary one
+  in `tick()` and the bleed-out in the co-op modes. Firing only from the first
+  would have made co-op the one place where dying never happened.
+- **feat** It carries a subject: `respawn` if they are coming back, `final` if they
+  are out. Those are different events to a map and were previously the same
+  silence.
+- **feat** `player_joined` event, carrying the headcount. Somebody arriving is a
+  thing a map may want to react to — a lobby greeting, a team assignment, a
+  headcount that opens the gate — and the engine knew it had happened and told
+  nobody.
+- **feat** `players` condition — `{ "players": { "at_least": 4 } }`. A gate that
+  opens at four, a rule that only applies when the squad is down to two, a
+  solo-only secret: none could be asked.
+- **feat** `subject` condition — the general form of `killed`. Every event now
+  carries what it was a fact *about*, and this reads it. `killed` stays as an
+  alias because `{"killed": "zombie"}` reads like English and
+  `{"subject": "zombie"}` does not; they are the same test.
+- **feat** `aztecabyss:capture` now **drops the flag when the carrier dies** — the
+  single most canonical rule in capture the flag, and it could not be written
+  until today. `aztecabyss:hunger` sounds a cannon on each elimination.
+
 ### Phases — the engine learns that a game has a before
 
 A run began the instant somebody walked in. There was no *before*: no lobby, no

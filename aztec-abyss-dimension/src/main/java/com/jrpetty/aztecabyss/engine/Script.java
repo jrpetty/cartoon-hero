@@ -83,7 +83,8 @@ public final class Script {
     private static final java.util.Set<String> EVENTS = java.util.Set.of(
             "run_start", "round_start", "round_end", "mob_killed", "extracted",
             "objective_complete", "objective_failed", "region_enter", "region_leave", "tick",
-            "use_block", "break_block", "run_won", "phase_start");
+            "use_block", "break_block", "run_won", "phase_start",
+            "player_died", "player_joined");
 
     /** Every action the runner understands. */
     private static final java.util.Set<String> ACTIONS = java.util.Set.of(
@@ -96,7 +97,7 @@ public final class Script {
     /** Every condition the matcher understands. */
     private static final java.util.Set<String> CONDITIONS = java.util.Set.of(
             "round", "area_open", "region", "var", "my_var", "team", "team_var", "seconds", "block",
-            "has_item", "killed", "chance", "phase");
+            "has_item", "killed", "chance", "phase", "subject", "players");
 
     public static List<String> warnings(String rulesetId) {
         return WARNINGS.getOrDefault(rulesetId, List.of());
@@ -329,14 +330,35 @@ public final class Script {
         // "zombie" works as well as "minecraft:zombie" - an author writing a
         // ruleset by hand should not have to remember which ids carry a
         // namespace and which do not.
-        if (when.has("killed")) {
-            String want = str(when, "killed", "").toLowerCase(Locale.ROOT);
+        // The general form of "killed". Every event now carries a subject - what
+        // it was a fact about - and this is how a rule reads it. "killed" is kept
+        // as the alias because {"killed": "zombie"} reads like English and
+        // {"subject": "zombie"} does not; they are the same test.
+        if (when.has("subject") || when.has("killed")) {
+            String want = str(when, when.has("killed") ? "killed" : "subject", "")
+                    .toLowerCase(Locale.ROOT);
             if (subject == null || want.isEmpty()) {
                 return false;
             }
             String got = subject.toLowerCase(Locale.ROOT);
             if (!got.equals(want) && !got.equals("minecraft:" + want)
                     && !got.endsWith(":" + want)) {
+                return false;
+            }
+        }
+        // How many people are in the run. A lobby that opens a gate at four, a
+        // rule that only applies when the squad is down to two, a solo-only
+        // secret - none of which could be asked.
+        if (when.has("players") && when.get("players").isJsonObject()) {
+            JsonObject n = when.getAsJsonObject("players");
+            int now = arena.everyone().size();
+            if (n.has("equals") && now != intOf(n, "equals", -1)) {
+                return false;
+            }
+            if (n.has("at_least") && now < intOf(n, "at_least", 0)) {
+                return false;
+            }
+            if (n.has("at_most") && now > intOf(n, "at_most", Integer.MAX_VALUE)) {
                 return false;
             }
         }

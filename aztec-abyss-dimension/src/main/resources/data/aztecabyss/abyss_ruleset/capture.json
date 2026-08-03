@@ -165,6 +165,29 @@
           }
         }
       ]
+    },
+    {
+      "on": "player_died",
+      "when": {
+        "has_item": {
+          "id": "minecraft:white_banner",
+          "count": 1
+        }
+      },
+      "do": [
+        {
+          "take": {
+            "id": "minecraft:white_banner",
+            "count": 1
+          }
+        },
+        {
+          "message": "\u00a7eThe flag is dropped. \u00a77It is back where it started."
+        },
+        {
+          "sound": "minecraft:block.beacon.deactivate"
+        }
+      ]
     }
   ],
   "respawn": {

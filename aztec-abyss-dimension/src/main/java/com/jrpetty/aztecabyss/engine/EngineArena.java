@@ -559,6 +559,11 @@ public final class EngineArena {
             c.set(player, c.start());
         }
         giveKit(player);
+        // Somebody arriving is a thing a map may want to react to - a lobby
+        // greeting, a team assignment, a headcount that opens the gate. The
+        // engine knew it had happened and told nobody.
+        Script.fire(this, level, rules.id, "player_joined", player, null,
+                String.valueOf(participants.size()));
     }
 
     public static void stop(boolean announce) {
@@ -674,6 +679,12 @@ public final class EngineArena {
             if (!p.isDeadOrDying()) {
                 continue;
             }
+            // The engine had no event for a player dying, which is a strange
+            // hole in a game engine: "drop your flag when you die", "count the
+            // deaths", "respawn with a penalty" and every elimination format
+            // that is not the one built in were all unwritable.
+            Script.fire(this, level, rules.id, "player_died", p, null,
+                    rules.respawnEnabled ? "respawn" : "final");
             if (rules.respawnEnabled) {
                 // Back in rather than out. Anything competitive needs this, and a
                 // survival arena needs the opposite, so the ruleset decides.
@@ -1746,6 +1757,10 @@ public final class EngineArena {
      */
     private void bleedOut(ServerPlayer victim) {
         victim.setGlowingTag(false);
+        // Bleeding out is dying. It reaches this method rather than the one in
+        // tick(), so without its own fire the co-op modes would be the only ones
+        // where player_died never happened.
+        Script.fire(this, level, rules.id, "player_died", victim, null, "final");
         fallen.add(victim.getUUID());
         bar.removePlayer(victim);
         barred.remove(victim.getUUID());
