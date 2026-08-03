@@ -339,7 +339,8 @@ public final class MazeEvents {
     private static boolean isFarmable(net.minecraft.world.level.block.state.BlockState state) {
         var block = state.getBlock();
         return block instanceof net.minecraft.world.level.block.CropBlock
-                || block instanceof net.minecraft.world.level.block.StemGrownBlock
+                || block == net.minecraft.world.level.block.Blocks.MELON
+                || block == net.minecraft.world.level.block.Blocks.PUMPKIN
                 || block instanceof net.minecraft.world.level.block.SugarCaneBlock
                 || block instanceof net.minecraft.world.level.block.NetherWartBlock
                 || block instanceof net.minecraft.world.level.block.SweetBerryBushBlock

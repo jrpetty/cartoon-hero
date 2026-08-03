@@ -149,11 +149,11 @@ public final class Griever {
         // Scaled to the day it was born on. Speed climbs at a quarter of the
         // rate and stops at a quarter over baseline: a Griever that outruns a
         // sprinting runner by a wide margin is not harder, it is unplayable.
-        double scale = dayScale(level);
-        set(mob, Attributes.MAX_HEALTH, AbyssConfig.GRIEVER_HEALTH.get() * scale);
+        double hard = dayScale(level);
+        set(mob, Attributes.MAX_HEALTH, AbyssConfig.GRIEVER_HEALTH.get() * hard);
         set(mob, Attributes.MOVEMENT_SPEED,
-                AbyssConfig.GRIEVER_SPEED.get() * Math.min(1.25, 1.0 + (scale - 1.0) * 0.25));
-        set(mob, Attributes.ATTACK_DAMAGE, AbyssConfig.GRIEVER_DAMAGE.get() * scale);
+                AbyssConfig.GRIEVER_SPEED.get() * Math.min(1.25, 1.0 + (hard - 1.0) * 0.25));
+        set(mob, Attributes.ATTACK_DAMAGE, AbyssConfig.GRIEVER_DAMAGE.get() * hard);
         set(mob, Attributes.KNOCKBACK_RESISTANCE, 0.7);
         // It must be able to cross the map to reach you; a corridor maze is no
         // place for a mob that loses interest after sixteen blocks.
