@@ -1,0 +1,24 @@
+{
+  "rounds": { "mode": "free" },
+  "spawns": "scattered",
+  "economy": { "enabled": false },
+  "respawn": { "enabled": false },
+  "border": { "from": 300, "to": 24, "seconds": 420, "wait_seconds": 90 },
+  "script": [
+    { "on": "run_start",
+      "do": [ { "title": { "main": "§6§lTHE REAPING", "sub": "Last one standing" } },
+              { "set_bar": "§6May the odds be ever in your favour" },
+              { "effect": { "id": "minecraft:slowness", "seconds": 10, "amp": 5 } },
+              { "delay": { "seconds": 10,
+                           "do": [ { "title": { "main": "§c§lGO" } },
+                                   { "sound": "minecraft:entity.warden.roar" },
+                                   { "set_bar": "§7The border closes in 90s" } ] } } ] },
+
+    { "on": "tick", "when": { "seconds": { "at_least": 90 } },
+      "do": [ { "set_bar": "§cThe border is closing" } ] },
+
+    { "on": "run_won",
+      "do": [ { "give": { "id": "minecraft:netherite_ingot", "count": 4 } },
+              { "award": 5000 } ] }
+  ]
+}

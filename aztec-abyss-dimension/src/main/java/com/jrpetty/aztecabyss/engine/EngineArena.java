@@ -129,6 +129,10 @@ public final class EngineArena {
     private Teams teams;
     /** Team spawn points, by team id. */
     private final java.util.Map<String, Marker> teamSpawns = new java.util.HashMap<>();
+    /** Every [Spawn] on the map, for scattered starts. */
+    private final List<Marker> allSpawns = new ArrayList<>();
+    /** Which pedestal each player was given, so a respawn returns them to it. */
+    private final java.util.Map<UUID, BlockPos> mySpawn = new java.util.HashMap<>();
 
     /**
      * Puts a player back in rather than out.
@@ -217,6 +221,27 @@ public final class EngineArena {
      * into the void.
      */
     public BlockPos spawnFor(ServerPlayer player) {
+        // A scattered map hands out one pedestal each and remembers who got which,
+        // so a respawn puts you back where you started rather than shuffling you
+        // into somebody else's corner mid-match.
+        if (rules.scatterSpawns && !allSpawns.isEmpty()) {
+            BlockPos mine = mySpawn.get(player.getUUID());
+            if (mine != null) {
+                return mine;
+            }
+            java.util.Set<BlockPos> taken = new java.util.HashSet<>(mySpawn.values());
+            for (Marker sp : allSpawns) {
+                if (!taken.contains(sp.pos())) {
+                    mySpawn.put(player.getUUID(), sp.pos());
+                    return sp.pos();
+                }
+            }
+            // More players than pedestals: wrap round rather than refuse. A map
+            // that is one short should be crowded, not unplayable.
+            Marker fallback = allSpawns.get(mySpawn.size() % allSpawns.size());
+            mySpawn.put(player.getUUID(), fallback.pos());
+            return fallback.pos();
+        }
         if (teams != null) {
             String side = teams.teamOf(player);
             if (side != null) {
@@ -373,6 +398,7 @@ public final class EngineArena {
         current.teleports.addAll(scan.of("teleport"));
         current.regions.addAll(scan.of("region"));
         // A [Spawn] carrying team= is that side's spawn rather than the map's.
+        current.allSpawns.addAll(scan.of("spawn"));
         for (Marker sp : scan.of("spawn")) {
             String team = sp.arg("team", "").toLowerCase(java.util.Locale.ROOT);
             if (!team.isEmpty()) {
@@ -616,6 +642,8 @@ public final class EngineArena {
         // Before the mode split, so delayed work fires in a free-mode map and a
         // round-mode one alike. A countdown is not a free-mode idea.
         tickScheduled();
+        tickBorder();
+        tickLastStanding(present);
         // Once a second, in both modes. A deadline, a countdown and a "have they
         // got them all yet" check are not free-mode ideas, and round mode having
         // no recurring event of its own was an accident of build order.
@@ -1255,6 +1283,66 @@ public final class EngineArena {
     /** How many pieces of delayed work are queued, for {@code /arena status}. */
     public int scheduledCount() {
         return scheduled.size();
+    }
+
+    /** Whether the border has already been told to close. */
+    private boolean borderStarted;
+
+    /**
+     * Closes the world border in, once.
+     *
+     * <p>What stops a last-one-standing mode being two people hiding in opposite
+     * corners until somebody restarts the server. Driven through vanilla's own
+     * border rather than a custom ring of blocks, so players get the red warning
+     * wall, the sound, and damage outside it for free - and so the shrink is
+     * smooth rather than a series of jumps.
+     *
+     * <p>Set once and left alone. Vanilla interpolates it over the duration by
+     * itself; re-issuing it every tick would restart the interpolation and the
+     * border would never actually arrive.
+     */
+    private void tickBorder() {
+        if (borderStarted || rules.borderTo <= 0) {
+            return;
+        }
+        if (elapsed < rules.borderWaitSeconds * 20) {
+            return;
+        }
+        borderStarted = true;
+        var border = level.getWorldBorder();
+        double from = rules.borderFrom > 0 ? rules.borderFrom : border.getSize();
+        border.setCenter(spawn.getX() + 0.5, spawn.getZ() + 0.5);
+        border.setSize(from);
+        border.lerpSizeBetween(from, rules.borderTo, rules.borderSeconds * 1000L);
+        for (ServerPlayer p : players()) {
+            p.displayClientMessage(Component.literal(
+                    "§c§lTHE BORDER IS CLOSING"), false);
+            level.playSound(null, p.blockPosition(), SoundEvents.WARDEN_ROAR,
+                    SoundSource.AMBIENT, 1.0F, 0.5F);
+        }
+    }
+
+    /**
+     * Ends a no-respawn run when one player is left.
+     *
+     * <p>Only for maps that both scatter their spawns and never hand lives back -
+     * which is exactly the shape of a battle royale and nothing else. A co-op
+     * arena has its own ending, and applying this to one would end a two-player
+     * run the moment somebody died.
+     */
+    private void tickLastStanding(List<ServerPlayer> present) {
+        if (!rules.scatterSpawns || rules.respawnEnabled
+                || participants.size() < 2 || present.size() != 1) {
+            return;
+        }
+        ServerPlayer winner = present.get(0);
+        for (ServerPlayer p : players()) {
+            p.connection.send(new net.minecraft.network.protocol.game.ClientboundSetTitleTextPacket(
+                    Component.literal("§6§l" + winner.getGameProfile().getName().toUpperCase(
+                            java.util.Locale.ROOT) + " WINS")));
+        }
+        Script.fire(this, level, rules.id, "run_won", winner);
+        stop(false);
     }
 
     public Vars vars() {

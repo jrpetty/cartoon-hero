@@ -13,6 +13,21 @@ behaviour that was already there · **docs**
 
 ## Unreleased
 
+### Hunger Games — scattered spawns and a closing border
+
+- **feat** `"spawns": "scattered"` — one `[Spawn]` each, remembered per player so a
+  respawn returns you to your own pedestal. Every mode until now wanted players
+  together; a battle royale wants the exact opposite, and that could not be asked.
+- **feat** `"border": { from, to, seconds, wait_seconds }` — closes vanilla's own
+  world border, so the red wall, the sound and the damage outside come free and the
+  shrink is smooth. Set once, not re-issued, or the interpolation would restart
+  every tick and the border would never arrive.
+- **feat** Scattered spawns **plus** respawn off ends the run when one player is
+  left and fires `run_won`. Deliberately only that combination — it is the shape of
+  a battle royale and nothing else.
+- **feat** `aztecabyss:hunger` ships as a worked example: a reaping countdown, a
+  border on a 90-second fuse, and a payout for the winner.
+
 ### `delay` and `every` — the script layer learns about later
 
 - **feat** `{ "delay": { "seconds": 30, "do": [...] } }` and

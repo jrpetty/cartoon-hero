@@ -69,6 +69,27 @@ public final class Ruleset {
     public final int respawnSeconds;
     /** What you are handed on every spawn, named from the pools block. */
     public final String kitPool;
+
+    /**
+     * One spawn each, rather than everybody on the same pad.
+     *
+     * <p>Every mode so far wanted players together - a squad holding a room, or two
+     * sides on two pads. A battle royale wants the opposite: n pedestals and one
+     * person on each, nobody starting next to anybody. That is a different question
+     * from teams and could not be asked.
+     */
+    public final boolean scatterSpawns;
+
+    /**
+     * A border that closes in.
+     *
+     * <p>The thing that stops a last-one-standing mode being two people hiding in
+     * opposite corners until the server restarts. Off unless {@code to} is set.
+     */
+    public final int borderFrom;
+    public final int borderTo;
+    public final int borderSeconds;
+    public final int borderWaitSeconds;
     public final int finalRound;
     public final int baseCount;
     public final int perRound;
@@ -180,6 +201,11 @@ public final class Ruleset {
         this.respawnEnabled = b.respawnEnabled;
         this.respawnSeconds = b.respawnSeconds;
         this.kitPool = b.kitPool;
+        this.scatterSpawns = b.scatterSpawns;
+        this.borderFrom = b.borderFrom;
+        this.borderTo = b.borderTo;
+        this.borderSeconds = b.borderSeconds;
+        this.borderWaitSeconds = b.borderWaitSeconds;
         this.finalRound = b.finalRound;
         this.baseCount = b.baseCount;
         this.perRound = b.perRound;
@@ -236,6 +262,11 @@ public final class Ruleset {
         boolean respawnEnabled = false;
         int respawnSeconds = 5;
         String kitPool = "";
+        boolean scatterSpawns = false;
+        int borderFrom = 0;
+        int borderTo = 0;
+        int borderSeconds = 300;
+        int borderWaitSeconds = 60;
         int finalRound = 20;
         int baseCount = 6;
         int perRound = 4;
@@ -288,7 +319,9 @@ public final class Ruleset {
 
         checkKeys(root, "", b.warnings,
                 "rounds", "economy", "mobs", "currencies", "director", "script", "powerups",
-                "downed", "special_rounds", "pools", "respawn", "kit");
+                "downed", "special_rounds", "pools", "respawn", "kit", "border", "spawns");
+        checkKeys(obj(root, "border"), "border", b.warnings,
+                "from", "to", "seconds", "wait_seconds");
         checkKeys(obj(root, "respawn"), "respawn", b.warnings, "enabled", "seconds");
         checkKeys(obj(root, "downed"), "downed", b.warnings,
                 "enabled", "bleedout_seconds", "revive_seconds", "revive_range", "solo");
@@ -363,6 +396,15 @@ public final class Ruleset {
             b.respawnSeconds = Math.max(0, Math.min(60, intOf(respawn, "seconds", 5)));
         }
         b.kitPool = str(root, "kit", "");
+        b.scatterSpawns = "scattered".equalsIgnoreCase(str(root, "spawns", ""));
+
+        JsonObject border = obj(root, "border");
+        if (border != null) {
+            b.borderTo = Math.max(0, Math.min(8192, intOf(border, "to", 0)));
+            b.borderFrom = Math.max(0, Math.min(8192, intOf(border, "from", 0)));
+            b.borderSeconds = Math.max(5, Math.min(7200, intOf(border, "seconds", 300)));
+            b.borderWaitSeconds = Math.max(0, Math.min(3600, intOf(border, "wait_seconds", 60)));
+        }
 
         if (root.has("pools") && root.get("pools").isJsonObject()) {
             JsonObject poolsObj = root.getAsJsonObject("pools");

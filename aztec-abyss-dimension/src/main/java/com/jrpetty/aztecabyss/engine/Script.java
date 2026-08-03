@@ -82,7 +82,7 @@ public final class Script {
     private static final java.util.Set<String> EVENTS = java.util.Set.of(
             "run_start", "round_start", "round_end", "mob_killed", "extracted",
             "objective_complete", "objective_failed", "region_enter", "region_leave", "tick",
-            "use_block", "break_block");
+            "use_block", "break_block", "run_won");
 
     /** Every action the runner understands. */
     private static final java.util.Set<String> ACTIONS = java.util.Set.of(

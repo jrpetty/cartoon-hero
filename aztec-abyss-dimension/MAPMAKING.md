@@ -371,6 +371,32 @@ Integers only, no expressions — on purpose. That covers counting, flags, timer
 and scores, and it cannot be used to hang a server. A map you downloaded from a
 stranger stays safe to run.
 
+### Last one standing — scattered spawns and a closing border
+
+Two things every other mode wanted the opposite of.
+
+```json
+"spawns": "scattered",
+"respawn": { "enabled": false },
+"border": { "from": 300, "to": 24, "seconds": 420, "wait_seconds": 90 }
+```
+
+**`spawns: scattered`** hands out one `[Spawn]` each — place twelve pedestals and
+twelve players start alone. Who got which is remembered, so a respawn returns you
+to your own. More players than pedestals wraps round rather than refusing: a map
+one short should be crowded, not unplayable.
+
+**`border`** closes vanilla's own world border in on the map, which buys the red
+warning wall, the sound and the damage outside it for free. `wait_seconds` is the
+grace before it starts moving.
+
+A map that scatters spawns **and** has respawn off ends automatically when one
+player is left, firing `run_won`. That combination is a battle royale and nothing
+else — a co-op arena has its own ending, and this would end a two-player run the
+moment somebody died.
+
+`aztecabyss:hunger` ships as a worked example.
+
 ### Later — delays and repeating timers
 
 The script layer could say *"when this happens, do that"* and had no way to say

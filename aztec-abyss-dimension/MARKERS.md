@@ -178,6 +178,7 @@ than a single point of failure.
 | Race | `[Spawn]` `[Region]` checkpoints + `mode: free` + the run clock |
 | Boss rush | `[Spawn]` `[Boss] every=1` `[Dealer]` |
 | Horde defence | `[Spawn]` `[Horde]` `[Objective] defend` `[Trap]` |
+| Hunger Games / battle royale | many `[Spawn]` + `spawns: scattered` + `border` + no respawn |
 
 Nothing in the right-hand column is a mode the engine knows about. They are all
 the same marker set, arranged differently.
