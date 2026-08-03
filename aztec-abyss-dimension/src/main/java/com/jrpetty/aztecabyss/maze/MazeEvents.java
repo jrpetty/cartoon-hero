@@ -407,6 +407,25 @@ public final class MazeEvents {
         }
     }
 
+    /**
+     * The dial on the Chart Floor.
+     *
+     * <p>A block you use rather than a command, because the floor is a place five
+     * people stand round and the person turning the page should be visibly the
+     * person turning the page.
+     */
+    @SubscribeEvent
+    public static void onUseBlock(net.neoforged.neoforge.event.entity.player.PlayerInteractEvent.RightClickBlock event) {
+        if (!(event.getLevel() instanceof ServerLevel level) || !isMaze(level)) {
+            return;
+        }
+        if (!(event.getEntity() instanceof ServerPlayer p) || !event.getPos().equals(ChartFloor.dial())) {
+            return;
+        }
+        ChartFloor.cycle(level, p);
+        event.setCanceled(true);
+    }
+
     @SubscribeEvent
     public static void onLevelTick(LevelTickEvent.Post event) {
         if (!(event.getLevel() instanceof ServerLevel level) || !isMaze(level)) {
@@ -435,6 +454,7 @@ public final class MazeEvents {
                 .then(Commands.literal("status").executes(ctx -> status(ctx.getSource())))
                 .then(Commands.literal("section").executes(ctx -> section(ctx.getSource())))
                 .then(Commands.literal("map").executes(ctx -> chart(ctx.getSource())))
+                .then(Commands.literal("chart").executes(ctx -> turnChart(ctx.getSource())))
                 .then(Commands.literal("job")
                         .executes(ctx -> jobInfo(ctx.getSource()))
                         .then(Commands.literal(MazeJobs.RUNNER)
@@ -620,6 +640,19 @@ public final class MazeEvents {
                         + "%  §7SW §f" + sec[2] + "%  §7SE §f" + sec[3] + "%"), false);
         src.sendSuccess(() -> Component.literal(
                 "§8█ yours   ▓ brought back by others   §e✚§8 marked   · unknown   ▒ the Glade"), false);
+        src.sendSuccess(() -> Component.literal(
+                "§8The Chart Floor in the Glade shows the same thing, walkable, live."), false);
+        return 1;
+    }
+
+    /** Turns the page on the Chart Floor from wherever you are standing. */
+    private static int turnChart(CommandSourceStack src) {
+        ServerPlayer player = src.getPlayer();
+        if (player == null || !isMaze(src.getLevel())) {
+            src.sendFailure(Component.literal("Only in the maze."));
+            return 0;
+        }
+        ChartFloor.cycle(src.getLevel(), player);
         return 1;
     }
 

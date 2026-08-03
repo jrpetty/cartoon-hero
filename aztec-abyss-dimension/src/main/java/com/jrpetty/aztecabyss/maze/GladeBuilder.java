@@ -42,6 +42,11 @@ public final class GladeBuilder {
         mapRoom(level);
         jobBoard(level);
         doorFrames(level);
+        // Last, and it clears its own airspace first: the woods scatter trees
+        // across this quarter of the clearing and a plaza laid under them would
+        // leave forty floating trunks.
+        clearFor(level, ChartFloor.originX() - 1, ChartFloor.originZ() - 1, ChartFloor.SIZE + 2);
+        ChartFloor.build(level);
     }
 
     private static int min() {
@@ -121,11 +126,34 @@ public final class GladeBuilder {
                 "§8— THE BOX —", "§7You came up", "§7in this.", "");
     }
 
-    /** Three shacks and a store, built out of whatever came up in the Box. */
+    /**
+     * Three shacks and a store, built out of whatever came up in the Box.
+     *
+     * <p>Moved to the east side to make room for the Chart Floor. The homestead
+     * can be anywhere; the map wants the biggest uninterrupted square in the
+     * clearing, and there is exactly one of those.
+     */
     private static void homestead(ServerLevel level) {
-        hut(level, min() + 10, min() + 12, 9, 7);
-        hut(level, min() + 10, min() + 24, 7, 6);
-        hut(level, min() + 22, min() + 12, 6, 6);
+        int ox = MazeData.SPAWN_X + 13;
+        hut(level, ox, min() + 5, 9, 7);
+        hut(level, ox, min() + 17, 7, 6);
+        hut(level, ox + 12, min() + 5, 6, 6);
+    }
+
+    /**
+     * Empties a square down to the ground so something can be laid on it.
+     *
+     * <p>The Glade is built in passes and the later passes have no idea what the
+     * earlier ones put down. Anything that wants a clear footprint has to say so.
+     */
+    private static void clearFor(ServerLevel level, int ox, int oz, int size) {
+        for (int x = ox; x < ox + size; x++) {
+            for (int z = oz; z < oz + size; z++) {
+                for (int dy = 1; dy <= 12; dy++) {
+                    level.setBlock(new BlockPos(x, Y + dy, z), Blocks.AIR.defaultBlockState(), 2);
+                }
+            }
+        }
     }
 
     /** One shack: log corners, plank walls, a stair roof and a lantern. */

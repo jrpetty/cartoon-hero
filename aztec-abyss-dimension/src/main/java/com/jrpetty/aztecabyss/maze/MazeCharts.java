@@ -7,8 +7,10 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.level.saveddata.SavedData;
 
+import java.util.ArrayList;
 import java.util.BitSet;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
@@ -57,6 +59,27 @@ public final class MazeCharts extends SavedData {
      * for other people, so there is no private version of it.
      */
     private final BitSet marks = new BitSet(CELLS);
+    /**
+     * The same knowledge, kept separately for each of the seven layouts.
+     *
+     * <p>The base graph never moves and only two hundred toggles shift at
+     * midnight, so most of what you learn is true on every preset - but not all
+     * of it, and the part that is not is exactly the part that matters. A route
+     * that works on one layout and dead-ends on another is the single most
+     * useful thing a Glade can write down, and a single shared chart cannot
+     * express it.
+     */
+    private final Map<String, BitSet> byLayout = new HashMap<>();
+    /**
+     * Layout names in the order the Glade first saw them.
+     *
+     * <p>This is what the charts are labelled by, and it is deliberately not the
+     * layout's real name. You get Chart I, II, III in the order you met them.
+     * Which of those is the first day of the cycle is something the Glade has to
+     * work out from the shape of the thing, which is a far better use of a map
+     * room than reading a label somebody else wrote.
+     */
+    private final List<String> discovered = new ArrayList<>();
 
     private static int index(int cellX, int cellZ) {
         return cellZ * MazeData.GRID + cellX;
@@ -68,11 +91,21 @@ public final class MazeCharts extends SavedData {
      * @return true if this was new to the Glade - worth announcing
      */
     public boolean chart(UUID who, int cellX, int cellZ) {
+        return chart(who, cellX, cellZ, null);
+    }
+
+    public boolean chart(UUID who, int cellX, int cellZ, String layout) {
         if (cellX < 0 || cellZ < 0 || cellX >= MazeData.GRID || cellZ >= MazeData.GRID) {
             return false;
         }
         int i = index(cellX, cellZ);
         mine.computeIfAbsent(who, k -> new BitSet(CELLS)).set(i);
+        if (layout != null) {
+            byLayout.computeIfAbsent(layout, k -> {
+                discovered.add(k);
+                return new BitSet(CELLS);
+            }).set(i);
+        }
         if (glade.get(i)) {
             setDirty();
             return false;
@@ -80,6 +113,31 @@ public final class MazeCharts extends SavedData {
         glade.set(i);
         setDirty();
         return true;
+    }
+
+    /** The charts the Glade has started, in the order it met them. */
+    public List<String> charts() {
+        return List.copyOf(discovered);
+    }
+
+    /** Roman-numeral label for a chart, so nothing gives away which day it is. */
+    public static String label(int index) {
+        String[] numerals = {"I", "II", "III", "IV", "V", "VI", "VII", "VIII"};
+        return index >= 0 && index < numerals.length ? numerals[index] : String.valueOf(index + 1);
+    }
+
+    /** Has this cell been walked, on this particular layout? */
+    public boolean chartedOn(String layout, int cellX, int cellZ) {
+        if (cellX < 0 || cellZ < 0 || cellX >= MazeData.GRID || cellZ >= MazeData.GRID) {
+            return false;
+        }
+        BitSet b = byLayout.get(layout);
+        return b != null && b.get(index(cellX, cellZ));
+    }
+
+    public int percentOn(String layout) {
+        BitSet b = byLayout.get(layout);
+        return b == null ? 0 : percentOf(b);
     }
 
     /** Flags a cell as marked. Returns true if it was not already. */
@@ -190,6 +248,14 @@ public final class MazeCharts extends SavedData {
     public CompoundTag save(CompoundTag tag, HolderLookup.Provider registries) {
         tag.putByteArray("Glade", glade.toByteArray());
         tag.putByteArray("Marks", marks.toByteArray());
+        CompoundTag layouts = new CompoundTag();
+        byLayout.forEach((name, bits) -> layouts.putByteArray(name, bits.toByteArray()));
+        tag.put("ByLayout", layouts);
+        net.minecraft.nbt.ListTag order = new net.minecraft.nbt.ListTag();
+        for (String name : discovered) {
+            order.add(net.minecraft.nbt.StringTag.valueOf(name));
+        }
+        tag.put("Order", order);
         CompoundTag people = new CompoundTag();
         mine.forEach((id, bits) -> people.putByteArray(id.toString(), bits.toByteArray()));
         tag.put("Mine", people);
@@ -200,6 +266,24 @@ public final class MazeCharts extends SavedData {
         MazeCharts c = new MazeCharts();
         c.glade.or(BitSet.valueOf(tag.getByteArray("Glade")));
         c.marks.or(BitSet.valueOf(tag.getByteArray("Marks")));
+        CompoundTag layouts = tag.getCompound("ByLayout");
+        for (String name : layouts.getAllKeys()) {
+            c.byLayout.put(name, BitSet.valueOf(layouts.getByteArray(name)));
+        }
+        net.minecraft.nbt.ListTag order = tag.getList("Order", net.minecraft.nbt.Tag.TAG_STRING);
+        for (int i = 0; i < order.size(); i++) {
+            String name = order.getString(i);
+            if (!c.discovered.contains(name)) {
+                c.discovered.add(name);
+            }
+        }
+        // A chart with cells but no place in the order predates the ordering and
+        // would otherwise be invisible on the floor.
+        for (String name : c.byLayout.keySet()) {
+            if (!c.discovered.contains(name)) {
+                c.discovered.add(name);
+            }
+        }
         CompoundTag people = tag.getCompound("Mine");
         for (String key : people.getAllKeys()) {
             try {

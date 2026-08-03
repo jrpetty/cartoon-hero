@@ -125,8 +125,9 @@ public final class MazeBuilder {
      * <p>5: the sky lid moved inside the world's height limit so it actually
      * exists, the seven portal annexes were built outside the square, and the
      * Griever holes were dug.
+     * <p>6: the Chart Floor was laid, and the homestead moved east to make room.
      */
-    private static final int GEOMETRY_VERSION = 5;
+    private static final int GEOMETRY_VERSION = 6;
 
     /** One distinctive block per version, so the marker is readable in-world. */
     private static final BlockState[] VERSION_BLOCKS = {

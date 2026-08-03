@@ -109,6 +109,7 @@ public final class MazeRuntime {
         lastSeen.clear();
         walked.clear();
         secondWind.clear();
+        ChartFloor.reset();
         for (ServerBossEvent bar : BARS.values()) {
             bar.removeAllPlayers();
         }
@@ -276,6 +277,7 @@ public final class MazeRuntime {
         long t = clock.phase();
         MazeRace.tick(level);
         MazeSting.tick(level);
+        ChartFloor.refresh(level);
         portalAmbience(level, want);
         tickRunners(level, t);
         tickGrievers(level, t);
@@ -451,17 +453,18 @@ public final class MazeRuntime {
                 // around them rather than only the one under their feet. This is
                 // the skill the Chart Floor exists to display, so it is the one
                 // that most changes what the Glade collectively knows.
+                String layoutName = layout == null ? null : layout.name();
                 int eye = MazeSkills.rankOf(level, p.getUUID(), "cartographer");
                 for (int ox = -eye; ox <= eye; ox++) {
                     for (int oz = -eye; oz <= eye; oz++) {
                         if (ox != 0 || oz != 0) {
-                            charts.chart(p.getUUID(), cellX + ox, cellZ + oz);
+                            charts.chart(p.getUUID(), cellX + ox, cellZ + oz, layoutName);
                         }
                     }
                 }
                 runnersLegs(level, p, jobs);
                 groundCovered(level, p, jobs, at);
-                if (charts.chart(p.getUUID(), cellX, cellZ) && charts.gladePercent() % 10 == 0
+                if (charts.chart(p.getUUID(), cellX, cellZ, layoutName) && charts.gladePercent() % 10 == 0
                         && charts.gladePercent() > 0) {
                     for (ServerPlayer other : level.players()) {
                         other.displayClientMessage(Component.literal(

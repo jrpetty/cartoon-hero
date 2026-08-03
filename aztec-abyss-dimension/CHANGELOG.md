@@ -13,6 +13,40 @@ behaviour that was already there · **docs**
 
 ## Unreleased
 
+### The Chart Floor — the maze from above, revealed only where you have been
+
+- **feat** `ChartFloor` — a 42×42 sunken mosaic in the Glade you walk on. It
+  **starts black**. The only thing visible on day one is the Glade's own square in
+  the middle, because that is the only ground anybody has stood on. Everything
+  else fills in **live** as Runners move: a corridor somebody ran appears as a
+  line, a dead end as a stub, and the shape of the maze assembles itself out of
+  other people's legs over a week.
+- **change** Charting existed and had nowhere to go — it lived in a SavedData and
+  could be printed into chat. That is a debug readout, not a map: you cannot stand
+  round a chat message with four people and argue about which way the south
+  passage bends.
+- **feat** **It cannot draw what nobody walked.** Nothing in the renderer reads the
+  world. A fog-of-war map that quietly knows the answer is a minimap, and a minimap
+  makes Runners pointless — the only way a lane appears is that somebody walked it
+  and came back.
+- **feat** **Live Runner positions** in light blue, but only on the chart standing
+  tonight. A dot on last Tuesday's chart would be a lie about where somebody is.
+- **feat** **One chart per layout**, and the dial on the south edge turns the page.
+  A route is only true on the layout it was found on, so a single shared chart
+  cannot express the thing most worth writing down.
+- **feat** Charts are labelled **Chart I, II, III in the order the Glade met them**
+  — never by which day they are. Working out that Chart IV is the one that comes
+  back every seventh night is something the Glade has to do for itself.
+- **change** Pixels are sampled as a **union** over the ~2.3 cells each covers, not
+  a midpoint. Sampling the middle cell would make single-width corridors flicker in
+  and out depending on which side of a boundary they fell, and a map that drops
+  lanes is worse than no map.
+- **change** Refreshes **diff against what is drawn** and touch only what moved —
+  1,764 blocks a second would not be acceptable, a handful is.
+- **change** Geometry version 6: the floor is laid and the homestead moved east.
+  The homestead can be anywhere; the map wants the biggest uninterrupted square in
+  the clearing and there is exactly one of those.
+
 ### Skills — what you have become, as opposed to what you are
 
 - **feat** `MazeSkills` — twelve skills, three per trade, three ranks each.
