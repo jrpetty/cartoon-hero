@@ -1,5 +1,6 @@
 package com.jrpetty.aztecabyss.maze;
 
+import com.jrpetty.aztecabyss.config.AbyssConfig;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.util.RandomSource;
@@ -82,6 +83,85 @@ public final class MazeChests {
             fill(level, at, rng, cellX, cellZ);
             PLACED.add(at);
             placed++;
+        }
+        appleCaches(level, rng);
+    }
+
+    /**
+     * The apple caches, and the light that gives them away.
+     *
+     * <p>The golden apple came off the requisition sheet, which is the right call
+     * - it was the one line that sold the answer rather than the stock - but a
+     * thing you can no longer buy has to be a thing you can find, or it has
+     * quietly stopped existing. So a handful of them are laid in the corridors
+     * every night, and finding one is meant to be an event.
+     *
+     * <h2>Why they are not just more chest loot</h2>
+     *
+     * <p>Twenty-eight chests already hold golden apples at depth, and nobody has
+     * ever gone looking for a chest - you open the ones you walk past. A cache
+     * you can <em>see</em> is a different thing entirely: a lantern burning at
+     * the end of a dead end is visible from the junction, and the whole point is
+     * the moment where somebody stops, looks down a side corridor they were
+     * going to ignore, and says there is something down there.
+     *
+     * <p>Deep only. Fourteen cells is far enough that the light is never
+     * something you spot from the Glade doorway, and the walk is the price.
+     */
+    private static final List<BlockPos> CACHES = new ArrayList<>();
+
+    private static void appleCaches(ServerLevel level, RandomSource rng) {
+        for (BlockPos old : CACHES) {
+            if (level.getBlockState(old).is(Blocks.BARREL)
+                    || level.getBlockState(old).is(Blocks.LANTERN)) {
+                level.setBlock(old, Blocks.AIR.defaultBlockState(), 2);
+            }
+        }
+        CACHES.clear();
+
+        int want = AbyssConfig.MAZE_APPLE_CACHES.get();
+        int centre = (MazeData.GLADE_MIN_CELL + MazeData.GLADE_MAX_CELL) / 2;
+        int placed = 0;
+        for (int attempt = 0; attempt < want * TRIES && placed < want; attempt++) {
+            int cellX = rng.nextInt(MazeData.GRID - 4) + 2;
+            int cellZ = rng.nextInt(MazeData.GRID - 4) + 2;
+            if (MazeData.inGlade(cellX, cellZ)) {
+                continue;
+            }
+            if (Math.max(Math.abs(cellX - centre), Math.abs(cellZ - centre)) < 14) {
+                continue;
+            }
+            // Dead ends only, with no exception. A cache on a through route is
+            // one you find by walking your usual way, which is not finding it.
+            if (exits(level, cellX, cellZ) > 1) {
+                continue;
+            }
+            int x = MazeData.corridorMin(cellX);
+            int z = MazeData.corridorMin(cellZ);
+            BlockPos at = new BlockPos(x, MazeData.FLOOR_Y + 1, z);
+            if (!level.getBlockState(at).isAir()) {
+                continue;
+            }
+            level.setBlock(at, Blocks.BARREL.defaultBlockState(), 2);
+            if (level.getBlockEntity(at) instanceof Container barrel) {
+                // One in eight is the enchanted one. Rare enough that the story
+                // is about that specific morning rather than about barrels.
+                barrel.setItem(0, new ItemStack(rng.nextInt(8) == 0
+                        ? Items.ENCHANTED_GOLDEN_APPLE : Items.GOLDEN_APPLE));
+            }
+            CACHES.add(at);
+            placed++;
+
+            // The tell. Beside it rather than on it, so the barrel is still a
+            // shape you have to walk up to and identify.
+            BlockPos lamp = at.east();
+            if (!level.getBlockState(lamp).isAir()) {
+                lamp = at.south();
+            }
+            if (level.getBlockState(lamp).isAir()) {
+                level.setBlock(lamp, Blocks.LANTERN.defaultBlockState(), 2);
+                CACHES.add(lamp);
+            }
         }
     }
 

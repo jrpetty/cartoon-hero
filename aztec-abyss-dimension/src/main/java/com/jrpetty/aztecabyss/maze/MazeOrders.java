@@ -57,8 +57,17 @@ public final class MazeOrders extends SavedData {
 
     public static final String NAME = "aztecabyss_maze_orders";
 
-    /** What everybody gets, every day, before anything they have earned. */
-    public static final int BASE_POINTS = 100;
+    /**
+     * What everybody gets, every day, before anything they have earned.
+     *
+     * <p>Eighty rather than a hundred. A hundred covered a day's building, a
+     * day's food and a couple of iron with room to spare, which made the evening
+     * decision a formality for anybody who had charted anything at all. Eighty
+     * covers the same day with nothing left over, so the first real choice -
+     * walls or food or metal - arrives on the base allowance rather than only
+     * biting the people who never left the clearing.
+     */
+    public static final int BASE_POINTS = 80;
     /** However well it goes, a day's slate is bounded. */
     public static final int MAX_POINTS = 400;
     /** The first morning the Box stops giving and starts filling orders. */

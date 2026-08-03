@@ -13,6 +13,32 @@ behaviour that was already there · **docs**
 
 ## Unreleased
 
+### Golden apples in the corridors, and a leaner day
+
+- **feat** **Apple caches.** A thing you can no longer buy has to be a thing you
+  can find, or it has quietly stopped existing — so six golden apples are laid in
+  the corridors every night when the maze reshapes, and one in eight is the
+  enchanted one.
+  - **A lantern beside each one.** Twenty-eight chests already hold golden apples
+    at depth and nobody has ever gone *looking* for a chest — you open the ones you
+    walk past. A cache you can see is a different thing: a light burning at the end
+    of a dead end is visible from the junction, and the whole point is the moment
+    somebody stops, looks down a side corridor they were going to ignore, and says
+    there is something down there.
+  - **Dead ends only, and deep only** — fourteen cells minimum from the Glade, so
+    the light is never something you spot from the doorway and the walk is the
+    price. Re-laid with the reshape like the chests, so yesterday's map is worth
+    nothing.
+  - `mazeAppleCaches` in the config, default 6.
+- **change** **Base requisition points 100 → 80.** A hundred covered a day's
+  building, a day's food and a couple of iron with room to spare, which made the
+  evening decision a formality for anybody who had charted anything at all. Eighty
+  covers the same day with nothing left over, so the first real choice — walls or
+  food or metal — arrives on the base allowance rather than only biting the people
+  who never leave the clearing.
+
+---
+
 ### Arrows come off the sheet, flint goes on
 
 - **change** **You can no longer requisition arrows.** Same rule as the golden

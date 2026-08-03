@@ -149,6 +149,12 @@ public final class AbyssConfig {
                         "hundred health and hit like a truck, so this is meant to be a large",
                         "number that a squad earns perhaps once in a game.")
                 .defineInRange("mazeGrieverBounty", 20, 0, 500);
+        MAZE_APPLE_CACHES = b.comment(
+                        "How many golden apples are hidden in the corridors, re-laid every night",
+                        "when the maze reshapes. Deliberately few: the golden apple came off the",
+                        "requisition sheet so that finding one is an event, and a corridor with",
+                        "one in every dead end is a corridor with nothing in it.")
+                .defineInRange("mazeAppleCaches", 6, 0, 60);
         MAZE_LAST_STAND = b.comment(
                         "How many stand between the maze doorway and the portal. They are raised",
                         "once a day, the first time anybody walks into the lane, and they scale",
@@ -187,6 +193,7 @@ public final class AbyssConfig {
     public static final ModConfigSpec.IntValue MAZE_DAY_LIMIT;
     public static final ModConfigSpec.IntValue MAZE_ESCAPE_SECONDS;
     public static final ModConfigSpec.IntValue MAZE_GRIEVER_BOUNTY;
+    public static final ModConfigSpec.IntValue MAZE_APPLE_CACHES;
 
     public static long cooldownMillis() {
         return REENTRY_COOLDOWN_HOURS.get() * 60L * 60L * 1000L;
