@@ -13,6 +13,27 @@ behaviour that was already there · **docs**
 
 ## Unreleased
 
+### The Map Room — charting finally means something
+
+- **feat** `MazeCharts` — every corridor cell you stand in is recorded, per player
+  and for the Glade as a whole, persisted across deaths and days. The best idea in
+  the source material is that Runners chart the maze and the Gladers assemble it;
+  the ingredients were all there (section colours, placeable signs and torches) and
+  nothing ever *collected* any of it.
+- **feat** The **Map Room** in the Glade, and `/maze map` — a drawn window centred
+  on the Glade: your cells solid, cells other Runners brought back dimmer, unknown
+  ground dark. Plus percentage charted and a per-section breakdown.
+- **change** This works because the base graph is stamped once and never moves —
+  only 200 toggles shift nightly. Charting is durable knowledge, which the game
+  previously refused to acknowledge.
+- **fix** The Glade had **zero interactions anywhere in the maze package**. A
+  homestead, huts, a field, deadheads, woods and a firepit, every one of them
+  scenery. The Map Room is the first building in the clearing with a job.
+- **feat** The nightly reshape is audible — grinding stone and a message. The
+  entire maze rearranged itself at midnight in total silence, which made the map
+  feel arbitrary rather than alive.
+- **change** Geometry version 3, so existing worlds restamp and get the Map Room.
+
 ### Hunger Games — scattered spawns and a closing border
 
 - **feat** `"spawns": "scattered"` — one `[Spawn]` each, remembered per player so a

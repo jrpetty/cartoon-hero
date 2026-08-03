@@ -186,6 +186,7 @@ public final class MazeEvents {
                 .then(Commands.literal("leave").executes(ctx -> leave(ctx.getSource())))
                 .then(Commands.literal("status").executes(ctx -> status(ctx.getSource())))
                 .then(Commands.literal("section").executes(ctx -> section(ctx.getSource())))
+                .then(Commands.literal("map").executes(ctx -> chart(ctx.getSource())))
                 .then(Commands.literal("rebuild").requires(src -> src.hasPermission(2))
                         .executes(ctx -> rebuild(ctx.getSource())))
                 .then(Commands.literal("leaderboard").executes(ctx -> leaderboard(ctx.getSource())))
@@ -320,6 +321,37 @@ public final class MazeEvents {
         MazeRuntime.reset();
         src.sendSuccess(() -> Component.literal(
                 "§5The maze is being torn down and raised again. §7Give it a moment."), true);
+        return 1;
+    }
+
+    /**
+     * {@code /maze map} - what the Glade knows.
+     *
+     * <p>Drawn in chat rather than on an item, because a real filled map would
+     * show terrain the maze does not have - every cell is the same stone - and
+     * would need a renderer to say the one thing that matters, which is whether
+     * anybody has been down there. Blocks in chat say it directly.
+     */
+    private static int chart(CommandSourceStack src) {
+        ServerPlayer player = src.getPlayer();
+        if (player == null || src.getServer() == null) {
+            return 0;
+        }
+        MazeCharts charts = MazeCharts.get(src.getServer());
+        int mine = charts.myPercent(player.getUUID());
+        int all = charts.gladePercent();
+
+        src.sendSuccess(() -> Component.literal(
+                "§6— THE MAP ROOM —  §7you §f" + mine + "%§7, the Glade §f" + all + "%"), false);
+        for (String row : charts.render(player, 21)) {
+            src.sendSuccess(() -> Component.literal(row), false);
+        }
+        int[] sec = charts.sectionPercent();
+        src.sendSuccess(() -> Component.literal(
+                "§7NW §f" + sec[0] + "%  §7NE §f" + sec[1]
+                        + "%  §7SW §f" + sec[2] + "%  §7SE §f" + sec[3] + "%"), false);
+        src.sendSuccess(() -> Component.literal(
+                "§8█ yours   ▓ brought back by others   · unknown   ▒ the Glade"), false);
         return 1;
     }
 

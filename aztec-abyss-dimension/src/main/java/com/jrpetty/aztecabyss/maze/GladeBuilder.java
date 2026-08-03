@@ -39,6 +39,7 @@ public final class GladeBuilder {
         deadheads(level, rng);
         woods(level, rng);
         firepit(level);
+        mapRoom(level);
         doorFrames(level);
     }
 
@@ -243,6 +244,53 @@ public final class GladeBuilder {
     }
 
     /** The fire everyone sits round when the doors shut. */
+    /**
+     * The Map Room.
+     *
+     * <p>Everything else in the Glade is scenery - a homestead, huts, a field, a
+     * firepit, none of which a player can do anything with. This is the one
+     * building with a job: it is where what the Runners brought back is kept, and
+     * the only place the maze can be looked at rather than walked.
+     *
+     * <p>Deliberately the most solid thing in the clearing. Deepslate and a lit
+     * interior, because it is the one structure the Gladers would actually have
+     * built to last rather than thrown together.
+     */
+    private static void mapRoom(ServerLevel level) {
+        int ox = MazeData.SPAWN_X + 10;
+        int oz = MazeData.SPAWN_Z - 12;
+        int y = MazeData.FLOOR_Y + 1;
+        BlockState wall = Blocks.DEEPSLATE_BRICKS.defaultBlockState();
+
+        for (int dx = 0; dx < 7; dx++) {
+            for (int dz = 0; dz < 7; dz++) {
+                boolean edge = dx == 0 || dz == 0 || dx == 6 || dz == 6;
+                for (int dy = 0; dy < 4; dy++) {
+                    BlockPos at = new BlockPos(ox + dx, y + dy, oz + dz);
+                    if (dy == 3) {
+                        level.setBlock(at, Blocks.DEEPSLATE_TILES.defaultBlockState(), 2);
+                    } else if (edge) {
+                        level.setBlock(at, wall, 2);
+                    } else {
+                        level.setBlock(at, Blocks.AIR.defaultBlockState(), 2);
+                    }
+                }
+                level.setBlock(new BlockPos(ox + dx, y - 1, oz + dz),
+                        Blocks.POLISHED_DEEPSLATE.defaultBlockState(), 2);
+            }
+        }
+        // A doorway facing the middle of the Glade, so it is walked into rather
+        // than found.
+        for (int dy = 0; dy < 2; dy++) {
+            level.setBlock(new BlockPos(ox, y + dy, oz + 3), Blocks.AIR.defaultBlockState(), 2);
+        }
+        // The table itself, and light to read it by.
+        level.setBlock(new BlockPos(ox + 3, y, oz + 3), Blocks.LECTERN.defaultBlockState(), 2);
+        level.setBlock(new BlockPos(ox + 3, y + 2, oz + 3), Blocks.SEA_LANTERN.defaultBlockState(), 2);
+        sign(level, new BlockPos(ox + 1, y + 1, oz + 3), Direction.WEST,
+                "§0THE MAP ROOM", "§0/maze map", "", "");
+    }
+
     private static void firepit(ServerLevel level) {
         int x = MazeData.SPAWN_X + 10;
         int z = MazeData.SPAWN_Z + 6;

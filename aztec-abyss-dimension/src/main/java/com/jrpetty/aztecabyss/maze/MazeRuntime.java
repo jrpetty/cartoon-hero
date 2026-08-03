@@ -182,6 +182,9 @@ public final class MazeRuntime {
             // were should be worth nothing.
             MazeChests.reshuffle(level, day);
             if (rollover) {
+                reshapeHeard(level);
+            }
+            if (rollover) {
                 newDay(level, day);
             }
         }
@@ -222,6 +225,24 @@ public final class MazeRuntime {
      * <p>So a new day is a new day. Clocks stop, tallies clear, and the venom in
      * anyone who made it back is out of their system.
      */
+    /**
+     * The walls moving, made audible.
+     *
+     * <p>The entire maze rearranged itself at midnight and nothing said so. It is
+     * the single most characteristic thing this place does and it happened in
+     * total silence, which made the map feel arbitrary rather than alive - you
+     * woke up and the route was different, with no moment to attribute it to.
+     */
+    private static void reshapeHeard(ServerLevel level) {
+        for (ServerPlayer p : level.players()) {
+            BlockPos at = p.blockPosition();
+            level.playSound(null, at, SoundEvents.STONE_BREAK, SoundSource.AMBIENT, 3.0F, 0.35F);
+            level.playSound(null, at, SoundEvents.ANVIL_LAND, SoundSource.AMBIENT, 1.6F, 0.4F);
+            p.displayClientMessage(Component.literal(
+                    "§8The walls are moving."), true);
+        }
+    }
+
     private static void newDay(ServerLevel level, long day) {
         MazeRuns.clearAll();
         MazeSting.clearAll();
@@ -270,6 +291,21 @@ public final class MazeRuntime {
             int cellX = at.getX() / MazeData.CELL;
             int cellZ = at.getZ() / MazeData.CELL;
             boolean inGlade = MazeData.inGlade(cellX, cellZ);
+
+            // Charting: every corridor cell you stand in is knowledge the Glade
+            // keeps. The base graph never moves, so this is durable rather than
+            // a note about tonight.
+            if (!inGlade && level.getServer() != null) {
+                MazeCharts charts = MazeCharts.get(level.getServer());
+                if (charts.chart(p.getUUID(), cellX, cellZ) && charts.gladePercent() % 10 == 0
+                        && charts.gladePercent() > 0) {
+                    for (ServerPlayer other : level.players()) {
+                        other.displayClientMessage(Component.literal(
+                                "§6✎ The Glade has charted §f" + charts.gladePercent()
+                                        + "%§6 of the maze."), true);
+                    }
+                }
+            }
 
             if (!inGlade && !MazeRuns.isRunning(p.getUUID())) {
                 MazeRuns.begin(level, p);
