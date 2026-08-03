@@ -1060,6 +1060,11 @@ public final class EngineArena {
     }
 
     /** The ruleset this run is being played under, for script lookups. */
+    /** The world this run is happening in. Conditions need it to read saved state. */
+    public ServerLevel level() {
+        return level;
+    }
+
     public String rulesetId() {
         return rules.id;
     }

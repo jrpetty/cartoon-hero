@@ -167,6 +167,35 @@ than a single point of failure.
 
 ---
 
+## Remembering between runs
+
+`Vars` describes itself as "what a **run** remembers", and that was the whole
+limitation: every number died when the run ended, so nothing that happened in a
+map could ever matter to the next one. Saved variables are the other half.
+
+| Clause | Kind | Does |
+|---|---|---|
+| `set_saved_var` / `add_saved_var` | action | a number the world keeps |
+| `set_my_saved_var` / `add_my_saved_var` | action | a number that follows a player |
+| `saved_var` / `my_saved_var` | condition | reads them back, same comparators as everything else |
+| `{saved_var:x}` `{my_saved_var:x}` | placeholder | prints them |
+
+**Namespaced by ruleset** unless you pass `"global": true`. Two maps that both
+count `score` do not fight — which matters far more here than for run variables,
+since a run's names vanish in twenty minutes and these do not. A campaign that
+spans several maps asks for `global` and has thereby said out loud that it means
+to share.
+
+**Bounded on purpose**: 512 names for the world, 128 per player. Run variables are
+capped so a map cannot hang a server; these are capped because they are written to
+disk, and a downloaded map should not be able to grow your save file forever.
+
+**What this unlocks:** campaigns, unlocks, progression, persistent world state,
+player profiles — anything at all that is true about a player rather than about
+their current attempt.
+
+---
+
 ## Saying what you know
 
 Every text the script layer produced was a literal. An author could count keys,

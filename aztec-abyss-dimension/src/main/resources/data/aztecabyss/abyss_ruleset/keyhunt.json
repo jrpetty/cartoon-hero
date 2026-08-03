@@ -4,6 +4,43 @@
   "respawn": true,
   "script": [
     {
+      "on": "player_joined",
+      "when": {
+        "my_saved_var": {
+          "name": "escapes",
+          "at_least": 1
+        }
+      },
+      "do": [
+        {
+          "give": {
+            "id": "minecraft:golden_apple",
+            "count": 1
+          }
+        },
+        {
+          "actionbar": "\u00a76You have been here before. \u00a77{my_saved_var:escapes} escapes."
+        }
+      ]
+    },
+    {
+      "on": "run_start",
+      "when": {
+        "saved_var": {
+          "name": "cracked",
+          "at_least": 1
+        }
+      },
+      "do": [
+        {
+          "message": "\u00a78Somebody has cracked this before. \u00a77The north door is already open."
+        },
+        {
+          "open_area": "north"
+        }
+      ]
+    },
+    {
       "on": "phase_start",
       "when": {
         "phase": "countdown"
@@ -166,6 +203,21 @@
           "win": {
             "message": "\u00a76The Glade cracked it."
           }
+        },
+        {
+          "add_saved_var": {
+            "name": "cracked",
+            "value": 1
+          }
+        },
+        {
+          "add_my_saved_var": {
+            "name": "escapes",
+            "value": 1
+          }
+        },
+        {
+          "message": "\u00a77The vault has been cracked \u00a7f{saved_var:cracked}\u00a77 times. You: \u00a7f{my_saved_var:escapes}\u00a77."
         }
       ]
     }

@@ -92,12 +92,14 @@ public final class Script {
             "open_area", "set_block", "end_run", "set_var", "add_var", "set_my_var",
             "add_my_var", "win", "lose", "set_bar", "join_team", "balance_teams",
             "team_message", "add_team_var", "set_team_var", "teleport_to_spawn",
-            "delay", "every", "take", "set_phase", "teleport", "heal", "clear_effects");
+            "delay", "every", "take", "set_phase", "teleport", "heal", "clear_effects",
+            "set_saved_var", "add_saved_var", "set_my_saved_var", "add_my_saved_var");
 
     /** Every condition the matcher understands. */
     private static final java.util.Set<String> CONDITIONS = java.util.Set.of(
             "round", "area_open", "region", "var", "my_var", "team", "team_var", "seconds", "block",
-            "has_item", "killed", "chance", "phase", "subject", "players");
+            "has_item", "killed", "chance", "phase", "subject", "players",
+            "saved_var", "my_saved_var");
 
     public static List<String> warnings(String rulesetId) {
         return WARNINGS.getOrDefault(rulesetId, List.of());
@@ -385,6 +387,19 @@ public final class Script {
                 return false;
             }
         }
+        // What the world still knows from previous runs. Same four comparators
+        // as every other number in here, so an author who has written one
+        // condition has written all of them.
+        if (when.has("saved_var") && when.get("saved_var").isJsonObject()) {
+            if (!savedMatches(when.getAsJsonObject("saved_var"), arena, null)) {
+                return false;
+            }
+        }
+        if (when.has("my_saved_var") && when.get("my_saved_var").isJsonObject()) {
+            if (who == null || !savedMatches(when.getAsJsonObject("my_saved_var"), arena, who)) {
+                return false;
+            }
+        }
         if (when.has("has_item")) {
             if (who == null || !hasItem(who, when.get("has_item"))) {
                 return false;
@@ -471,6 +486,26 @@ public final class Script {
             return arena.isAreaOpen(str(when, "area_open", ""));
         }
         return true;
+    }
+
+    /** One comparison against something the world remembered. */
+    private static boolean savedMatches(JsonObject v, EngineArena arena, ServerPlayer who) {
+        if (arena.level().getServer() == null) {
+            return false;
+        }
+        SavedVars saved = SavedVars.get(arena.level().getServer());
+        boolean global = v.has("global") && v.get("global").getAsBoolean();
+        String name = str(v, "name", "");
+        int value = who == null
+                ? saved.get(arena.rulesetId(), name, global)
+                : saved.get(who.getUUID(), arena.rulesetId(), name, global);
+        if (v.has("equals") && value != intOf(v, "equals", 0)) {
+            return false;
+        }
+        if (v.has("at_least") && value < intOf(v, "at_least", 0)) {
+            return false;
+        }
+        return !v.has("at_most") || value <= intOf(v, "at_most", Integer.MAX_VALUE);
     }
 
     /**
@@ -700,6 +735,10 @@ public final class Script {
                             : Math.min(p.getMaxHealth(), p.getHealth() + amount));
                 });
                 case "clear_effects" -> forEach(arena, who, p -> p.removeAllEffects());
+                case "set_saved_var" -> savedVar(arena, level, who, body, false, true);
+                case "add_saved_var" -> savedVar(arena, level, who, body, false, false);
+                case "set_my_saved_var" -> savedVar(arena, level, who, body, true, true);
+                case "add_my_saved_var" -> savedVar(arena, level, who, body, true, false);
                 case "delay" -> later(arena, body, who, false);
                 case "every" -> later(arena, body, who, true);
                 case "join_team" -> {
@@ -888,6 +927,46 @@ public final class Script {
      * author has. Raw coordinates are accepted too, for the map that wants a spot
      * it never needed to name.
      */
+    /**
+     * Writes something the world will still know tomorrow.
+     *
+     * <p>Per-player saved variables are written for <em>everyone the action
+     * applies to</em>, the same as every other per-player action - a rule that
+     * says "you have escaped once more" on a squad win should say it about the
+     * squad, not about whoever happened to trip the trigger.
+     */
+    private static void savedVar(EngineArena arena, ServerLevel level, ServerPlayer who,
+                                 JsonElement body, boolean perPlayer, boolean absolute) {
+        if (!body.isJsonObject() || level.getServer() == null) {
+            return;
+        }
+        JsonObject o = body.getAsJsonObject();
+        String name = str(o, "name", "");
+        if (name.isEmpty()) {
+            trace(arena, "§csaved var §7— no name given");
+            return;
+        }
+        int value = intOf(o, "value", absolute ? 0 : 1);
+        boolean global = o.has("global") && o.get("global").getAsBoolean();
+        SavedVars saved = SavedVars.get(level.getServer());
+        String rules = arena.rulesetId();
+        if (!perPlayer) {
+            if (absolute) {
+                saved.set(rules, name, value, global);
+            } else {
+                saved.add(rules, name, value, global);
+            }
+            return;
+        }
+        forEach(arena, who, p -> {
+            if (absolute) {
+                saved.set(p.getUUID(), rules, name, value, global);
+            } else {
+                saved.add(p.getUUID(), rules, name, value, global);
+            }
+        });
+    }
+
     private static void teleport(EngineArena arena, ServerLevel level, ServerPlayer who, JsonElement body) {
         JsonObject o = body.isJsonObject() ? body.getAsJsonObject() : null;
         String region = o != null ? str(o, "region", "") : asText(body);
@@ -1048,6 +1127,13 @@ public final class Script {
                 return viewer == null ? "0" : String.valueOf(arena.vars().get(viewer, a));
             case "total_var":
                 return String.valueOf(arena.vars().total(a));
+            case "saved_var":
+                return arena.level().getServer() == null ? "0" : String.valueOf(
+                        SavedVars.get(arena.level().getServer()).get(arena.rulesetId(), a, false));
+            case "my_saved_var":
+                return viewer == null || arena.level().getServer() == null ? "0" : String.valueOf(
+                        SavedVars.get(arena.level().getServer())
+                                .get(viewer.getUUID(), arena.rulesetId(), a, false));
             case "team_var": {
                 // {team_var:red:score}, or {team_var:score} for the viewer's side.
                 int split = a.indexOf(':');

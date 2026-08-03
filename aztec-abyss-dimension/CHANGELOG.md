@@ -13,6 +13,36 @@ behaviour that was already there · **docs**
 
 ## Unreleased
 
+### The engine can remember between runs
+
+`Vars` opens by describing itself as **"what a run remembers"**, and that turned
+out to be the whole limitation. Every number the engine could hold died the moment
+the run ended, so nothing that happened in a map could ever matter to the next one.
+That rules out an entire *category* of game rather than a genre: a campaign, any
+progression, a persistent world, a player profile. None of them are hard. There
+was nowhere to put the number.
+
+- **feat** `SavedVars` — `set_saved_var`, `add_saved_var`, `set_my_saved_var`,
+  `add_my_saved_var`; `saved_var` and `my_saved_var` conditions; `{saved_var:x}`
+  and `{my_saved_var:x}` placeholders. World scope and player scope, same as run
+  variables, same comparators as everything else.
+- **change** **Namespaced by ruleset** unless the author passes `"global": true`.
+  Two maps that both count `score` do not fight — which matters far more here than
+  for run variables, because a run's names vanish in twenty minutes and these do
+  not. A campaign spanning several maps asks for `global`, and has thereby said out
+  loud that it intends to share.
+- **change** **Bounded**: 512 world names, 128 per player. Run variables are capped
+  so a map cannot hang a server; these are capped for a different reason — they are
+  written to disk, and a downloaded map should not be able to grow your save file
+  forever any more than it should be able to run a program.
+- **feat** `aztecabyss:keyhunt` now has real progression: the world counts how many
+  times the vault has been cracked and **opens the north door for good** once
+  anybody has done it, returning players are greeted by name-count and handed a
+  golden apple, and the win line reads *"cracked {saved_var:cracked} times. You:
+  {my_saved_var:escapes}"*.
+- **feat** `EngineArena.level()` — conditions needed the world to read saved state
+  and the matcher only had the arena.
+
 ### The engine can move people
 
 `teleport_to_spawn` was the only way the script could move anybody, which meant
