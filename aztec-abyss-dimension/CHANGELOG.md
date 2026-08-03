@@ -13,6 +13,40 @@ behaviour that was already there · **docs**
 
 ## Unreleased
 
+### Phases — the engine learns that a game has a before
+
+A run began the instant somebody walked in. There was no *before*: no lobby, no
+start line, no countdown, no warmup, no overtime, no intermission. Every game in
+this engine started mid-sentence, which ruled out every format that has a
+beginning — a reaping, a ready-up, a race start, a draft, a shop phase between
+rounds, sudden death.
+
+- **feat** `"lobby": { "min_players": 2, "countdown_seconds": 20, "wait_seconds": 120 }`
+  — the arena waits, shows who it is waiting for, counts down audibly for the last
+  five seconds, and then starts. **On a timeout**, because a lobby that waits
+  forever for a fourth player never starts on a quiet evening: the wait is a
+  preference, not a requirement, and the engine should always eventually play.
+- **feat** `phase` condition, `set_phase` action, `phase_start` event. Phases are a
+  **free-form string**, not an enum — the engine ships `lobby`, `countdown` and
+  `active` because every game needs those three, and an author can invent
+  `overtime`, `intermission` or `sudden_death` without asking. A rule gated on
+  your own phase is written exactly like one gated on the engine's.
+- **change** Creating the arena and beginning play were the same act and should
+  never have been: one is a server concern, the other a game concern, and a lobby
+  is precisely the gap between them. `beginPlay` now does what `start` used to do
+  inline — and carefully, since `beginRound(1)` already fires `run_start` and
+  firing it twice would re-run every opening rule.
+- **change** During a non-active phase the shops, doors, regions, scheduled work
+  and script all stay live; only the game stops. A lobby you cannot gear up or
+  ready up in is a loading screen.
+- **change** The run clock only advances in `active`, so `seconds` still means
+  "since the game started" rather than "since the server made an arena".
+- **feat** `aztecabyss:hunger` now opens with a real reaping — two players
+  minimum, a 20-second countdown, and a 2-minute timeout. It is the format that
+  most obviously needed a start line and had been starting without one.
+- **change** Every existing ruleset is untouched: no `lobby` block means no lobby,
+  and a game that used to start instantly still does.
+
 ### The engine can read the player
 
 The audit finding: the script layer could read the run, the round, the clock, the

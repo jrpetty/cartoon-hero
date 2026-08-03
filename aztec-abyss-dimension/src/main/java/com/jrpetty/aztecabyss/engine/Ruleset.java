@@ -90,6 +90,17 @@ public final class Ruleset {
     public final int borderTo;
     public final int borderSeconds;
     public final int borderWaitSeconds;
+    /**
+     * The before.
+     *
+     * <p>{@code "lobby": { "min_players": 2, "countdown_seconds": 20,
+     * "wait_seconds": 180 }}. Zero or one player and no countdown means no lobby
+     * at all, which is what every existing ruleset gets - a game that used to
+     * start instantly still does.
+     */
+    public final int lobbyMinPlayers;
+    public final int lobbyCountdownSeconds;
+    public final int lobbyWaitSeconds;
     public final int finalRound;
     public final int baseCount;
     public final int perRound;
@@ -206,6 +217,9 @@ public final class Ruleset {
         this.borderTo = b.borderTo;
         this.borderSeconds = b.borderSeconds;
         this.borderWaitSeconds = b.borderWaitSeconds;
+        this.lobbyMinPlayers = b.lobbyMinPlayers;
+        this.lobbyCountdownSeconds = b.lobbyCountdownSeconds;
+        this.lobbyWaitSeconds = b.lobbyWaitSeconds;
         this.finalRound = b.finalRound;
         this.baseCount = b.baseCount;
         this.perRound = b.perRound;
@@ -267,6 +281,9 @@ public final class Ruleset {
         int borderTo = 0;
         int borderSeconds = 300;
         int borderWaitSeconds = 60;
+        int lobbyMinPlayers = 1;
+        int lobbyCountdownSeconds = 0;
+        int lobbyWaitSeconds = 0;
         int finalRound = 20;
         int baseCount = 6;
         int perRound = 4;
@@ -404,6 +421,12 @@ public final class Ruleset {
             b.borderFrom = Math.max(0, Math.min(8192, intOf(border, "from", 0)));
             b.borderSeconds = Math.max(5, Math.min(7200, intOf(border, "seconds", 300)));
             b.borderWaitSeconds = Math.max(0, Math.min(3600, intOf(border, "wait_seconds", 60)));
+        }
+        if (root.has("lobby") && root.get("lobby").isJsonObject()) {
+            JsonObject lobby = root.getAsJsonObject("lobby");
+            b.lobbyMinPlayers = Math.max(1, Math.min(64, intOf(lobby, "min_players", 1)));
+            b.lobbyCountdownSeconds = Math.max(0, Math.min(600, intOf(lobby, "countdown_seconds", 10)));
+            b.lobbyWaitSeconds = Math.max(0, Math.min(3600, intOf(lobby, "wait_seconds", 0)));
         }
 
         if (root.has("pools") && root.get("pools").isJsonObject()) {

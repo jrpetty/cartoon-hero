@@ -83,7 +83,7 @@ public final class Script {
     private static final java.util.Set<String> EVENTS = java.util.Set.of(
             "run_start", "round_start", "round_end", "mob_killed", "extracted",
             "objective_complete", "objective_failed", "region_enter", "region_leave", "tick",
-            "use_block", "break_block", "run_won");
+            "use_block", "break_block", "run_won", "phase_start");
 
     /** Every action the runner understands. */
     private static final java.util.Set<String> ACTIONS = java.util.Set.of(
@@ -91,12 +91,12 @@ public final class Script {
             "open_area", "set_block", "end_run", "set_var", "add_var", "set_my_var",
             "add_my_var", "win", "lose", "set_bar", "join_team", "balance_teams",
             "team_message", "add_team_var", "set_team_var", "teleport_to_spawn",
-            "delay", "every", "take");
+            "delay", "every", "take", "set_phase");
 
     /** Every condition the matcher understands. */
     private static final java.util.Set<String> CONDITIONS = java.util.Set.of(
             "round", "area_open", "region", "var", "my_var", "team", "team_var", "seconds", "block",
-            "has_item", "killed", "chance");
+            "has_item", "killed", "chance", "phase");
 
     public static List<String> warnings(String rulesetId) {
         return WARNINGS.getOrDefault(rulesetId, List.of());
@@ -354,6 +354,15 @@ public final class Script {
         // quests, deliveries, tolls and trades - the engine could read the run,
         // the round, the clock, the regions, the teams and its own variables,
         // and could not read the player.
+        // Which part of the game this is. The condition every phased format
+        // needs and the reason phases are a name rather than an enum: a rule
+        // that only applies during your own "overtime" is written the same way
+        // as one that only applies during the engine's own countdown.
+        if (when.has("phase")) {
+            if (!arena.phase().equalsIgnoreCase(str(when, "phase", ""))) {
+                return false;
+            }
+        }
         if (when.has("has_item")) {
             if (who == null || !hasItem(who, when.get("has_item"))) {
                 return false;
@@ -652,6 +661,7 @@ public final class Script {
                 case "add_my_var" -> varAction(arena, who, body, true, false);
                 case "set_bar" -> arena.setBarText(asText(body));
                 case "take" -> take(arena, who, body);
+                case "set_phase" -> arena.setPhase(asText(body));
                 case "delay" -> later(arena, body, who, false);
                 case "every" -> later(arena, body, who, true);
                 case "join_team" -> {

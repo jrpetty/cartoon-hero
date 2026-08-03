@@ -109,6 +109,54 @@ public final class EngineArena {
     private boolean running = true;
 
     /**
+     * What part of the game this is.
+     *
+     * <p>A run used to begin the instant somebody walked in. There was no
+     * before - no lobby, no start line, no countdown, no warmup, no overtime and
+     * no intermission - so every game in this engine started mid-sentence. That
+     * ruled out every format with a beginning: a reaping, a ready-up, a race
+     * start, a draft, a shop phase between rounds, sudden death.
+     *
+     * <p>Deliberately a free-form string rather than an enum. The engine ships
+     * {@code lobby}, {@code countdown} and {@code active} because those are the
+     * three every game needs, and an author can invent {@code overtime} or
+     * {@code intermission} without asking anybody - a phase is only ever a name
+     * that rules can be gated on and the script can set.
+     */
+    private String phase = PHASE_ACTIVE;
+    /** Ticks spent in the current phase, so a phase can have a clock of its own. */
+    private int phaseTicks = 0;
+
+    public static final String PHASE_LOBBY = "lobby";
+    public static final String PHASE_COUNTDOWN = "countdown";
+    public static final String PHASE_ACTIVE = "active";
+
+    public String phase() {
+        return phase;
+    }
+
+    public int phaseSeconds() {
+        return phaseTicks / 20;
+    }
+
+    /**
+     * Moves the game to a named phase.
+     *
+     * <p>Fires {@code phase_start} carrying the new name, so a ruleset can hang
+     * anything it likes off the transition rather than needing the engine to know
+     * what an overtime is.
+     */
+    public void setPhase(String next) {
+        if (next == null || next.isEmpty() || next.equals(phase)) {
+            return;
+        }
+        phase = next;
+        phaseTicks = 0;
+        Script.fire(this, level, rules.id, "phase_start", players().isEmpty()
+                ? null : players().get(0), null, next);
+    }
+
+    /**
      * Which areas have been paid open.
      *
      * <p>"start" is open from the first round and everything else has to be bought
@@ -429,7 +477,14 @@ public final class EngineArena {
                 current.join(other);
             }
         }
-        if (rules.free) {
+        // With a lobby, creating the arena and beginning play stop being the
+        // same act. Nothing starts until the countdown runs out - which is the
+        // entire point of having a before.
+        if (rules.lobbyMinPlayers > 1 || rules.lobbyCountdownSeconds > 0) {
+            current.phase = PHASE_LOBBY;
+            current.phaseTicks = 0;
+            current.bar.setName(Component.literal("§eWaiting for players"));
+        } else if (rules.free) {
             // No round ever begins. run_start is the only thing that fires, and
             // from there the map is on its own.
             current.bar.setName(Component.literal("§6" + rules.id));
@@ -608,6 +663,8 @@ public final class EngineArena {
     private void tick() {
         List<ServerPlayer> present = players();
         if (present.isEmpty()) {
+            // A lobby that empties is a lobby, not a loss. Everywhere else an
+            // empty arena means everybody died; here it means nobody turned up.
             stop(false);
             return;
         }
@@ -637,7 +694,21 @@ public final class EngineArena {
             stop(false);
             return;
         }
+        // Anything that is not the game itself runs here and then stops. The
+        // shops, the doors, the regions and the script all stay live, because a
+        // lobby you cannot gear up in or ready up in is a loading screen.
+        if (!PHASE_ACTIVE.equals(phase)) {
+            phaseTicks++;
+            tickScheduled();
+            tickRegions(present);
+            if (phaseTicks % 20 == 0) {
+                Script.fire(this, level, rules.id, "tick", present.get(0));
+            }
+            tickWarmup(present);
+            return;
+        }
         elapsed++;
+        phaseTicks++;
 
         refreshBars(present);
         tickDowned(present);
@@ -740,6 +811,81 @@ public final class EngineArena {
      * and the interesting version of the question is asked in the quiet: you have
      * what you have, and the next round is bigger.
      */
+    /**
+     * The lobby and the countdown, which are the two phases the engine owns.
+     *
+     * <p>The lobby waits for people and the countdown warns them. Both are on a
+     * timeout, because a lobby that waits forever for a fourth player is a lobby
+     * that never starts on a quiet evening - the wait is a preference, not a
+     * requirement, and the engine should always eventually play the game.
+     */
+    private void tickWarmup(List<ServerPlayer> present) {
+        if (PHASE_LOBBY.equals(phase)) {
+            int need = Math.max(1, rules.lobbyMinPlayers);
+            int waited = phaseTicks / 20;
+            boolean enough = present.size() >= need;
+            boolean waitedLongEnough = rules.lobbyWaitSeconds > 0 && waited >= rules.lobbyWaitSeconds;
+            bar.setName(Component.literal(enough
+                    ? "§aReady §8— §7starting"
+                    : "§eWaiting for players §8— §f" + present.size() + "§7/§f" + need
+                            + (rules.lobbyWaitSeconds > 0
+                                    ? " §8| starts anyway in " + Math.max(0, rules.lobbyWaitSeconds - waited) + "s"
+                                    : "")));
+            bar.setProgress(Math.min(1.0F, present.size() / (float) need));
+            if (enough || waitedLongEnough) {
+                setPhase(PHASE_COUNTDOWN);
+            }
+            return;
+        }
+        if (!PHASE_COUNTDOWN.equals(phase)) {
+            return; // an author's own phase; it is theirs to leave
+        }
+        int total = Math.max(1, rules.lobbyCountdownSeconds);
+        int left = total - phaseTicks / 20;
+        bar.setName(Component.literal("§6Starting in §f" + Math.max(0, left) + "s"));
+        bar.setProgress(Math.max(0.0F, Math.min(1.0F, left / (float) total)));
+        // A tick per second for the last five, because a countdown you cannot
+        // hear is a countdown people miss while looking at a chest.
+        if (phaseTicks % 20 == 0 && left <= 5 && left > 0) {
+            for (ServerPlayer p : present) {
+                p.displayClientMessage(Component.literal("§6§l" + left), true);
+                level.playSound(null, p.blockPosition(),
+                        net.minecraft.sounds.SoundEvents.NOTE_BLOCK_PLING.value(),
+                        net.minecraft.sounds.SoundSource.PLAYERS, 1.0F, left == 1 ? 1.6F : 1.0F);
+            }
+        }
+        if (left <= 0) {
+            beginPlay(present);
+        }
+    }
+
+    /**
+     * The moment the game actually starts.
+     *
+     * <p>Separated from {@code start} because those were the same thing and
+     * should never have been: creating the arena is a server concern and
+     * beginning play is a game concern, and a lobby is exactly the gap between
+     * them.
+     */
+    private void beginPlay(List<ServerPlayer> present) {
+        setPhase(PHASE_ACTIVE);
+        for (ServerPlayer p : present) {
+            p.displayClientMessage(Component.literal("§a§lGO"), true);
+            level.playSound(null, p.blockPosition(),
+                    net.minecraft.sounds.SoundEvents.BEACON_ACTIVATE,
+                    net.minecraft.sounds.SoundSource.PLAYERS, 1.0F, 1.4F);
+        }
+        // Exactly what start() used to do inline, now that there is a moment to
+        // hang it on. beginRound(1) fires run_start itself, so round mode must
+        // not fire it twice.
+        if (rules.free) {
+            bar.setName(Component.literal("§6" + rules.id));
+            Script.fire(this, level, rules.id, "run_start", present.isEmpty() ? null : present.get(0));
+        } else {
+            beginRound(1);
+        }
+    }
+
     private void tickExtraction(List<ServerPlayer> present) {
         if (extract == null) {
             return;
