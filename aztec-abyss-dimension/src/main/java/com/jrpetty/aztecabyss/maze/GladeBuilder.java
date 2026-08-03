@@ -41,6 +41,7 @@ public final class GladeBuilder {
         firepit(level);
         mapRoom(level);
         jobBoard(level);
+        bellTower(level);
         doorFrames(level);
         // Last, and it clears its own airspace first: the woods scatter trees
         // across this quarter of the clearing and a plaza laid under them would
@@ -573,6 +574,11 @@ public final class GladeBuilder {
             sign(level, new BlockPos(x, Y + 2, oz + 1), Direction.SOUTH,
                     posts[i][0], posts[i][1], posts[i][2], posts[i][3]);
         }
+    }
+
+    /** The bell that counts the last two minutes of the day. */
+    private static void bellTower(ServerLevel level) {
+        MazeBell.build(level);
     }
 
     private static void firepit(ServerLevel level) {

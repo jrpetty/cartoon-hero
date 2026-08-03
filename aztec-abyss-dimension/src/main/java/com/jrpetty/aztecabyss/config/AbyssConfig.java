@@ -182,6 +182,13 @@ public final class AbyssConfig {
                         "items rather than blocks placed - a wall you can put up and take down",
                         "forty times is not a day's work.")
                 .defineInRange("mazeQuotaForge", 5, 1, 200);
+        MAZE_BELL_SECONDS = b.comment(
+                        "How long before the doors seal the Glade's bell starts tolling, in",
+                        "seconds. It speeds up as it runs down - every ten seconds at first,",
+                        "every five inside a minute, every second inside twenty - and it is",
+                        "played at each listener so it reaches the far corners of the map,",
+                        "quieter and deeper the further out they are. Zero silences it.")
+                .defineInRange("mazeBellSeconds", 120, 0, 600);
         MAZE_APPLE_CACHES = b.comment(
                         "How many golden apples are hidden in the corridors, re-laid every night",
                         "when the maze reshapes. Deliberately few: the golden apple came off the",
@@ -227,6 +234,7 @@ public final class AbyssConfig {
     public static final ModConfigSpec.IntValue MAZE_ESCAPE_SECONDS;
     public static final ModConfigSpec.IntValue MAZE_GRIEVER_BOUNTY;
     public static final ModConfigSpec.IntValue MAZE_APPLE_CACHES;
+    public static final ModConfigSpec.IntValue MAZE_BELL_SECONDS;
     public static final ModConfigSpec.IntValue MAZE_POOL_PER_PLAYER;
     public static final ModConfigSpec.IntValue MAZE_DAY_WORK_CREDITS;
     public static final ModConfigSpec.IntValue MAZE_QUOTA_FARM;

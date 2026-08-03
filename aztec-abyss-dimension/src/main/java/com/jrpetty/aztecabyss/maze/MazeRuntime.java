@@ -225,6 +225,7 @@ public final class MazeRuntime {
         escapees.clear();
         MazeDayWork.get(level).clearAll();
         MazeOrders.get(level).setHeads(0);
+        MazeBell.reset();
         clock.newGame(level.getServer());
     }
 
@@ -313,6 +314,9 @@ public final class MazeRuntime {
             return;
         }
         long t = clock.phase();
+        // Before anything else in the second: the doors closing is the deadline
+        // that actually kills people, so it gets said first.
+        MazeBell.tick(level, clock);
         MazeRace.tick(level);
         MazeSting.tick(level);
         tickEscape(level);
@@ -433,6 +437,8 @@ public final class MazeRuntime {
         MazeRuns.clearAll();
         MazeSting.clearAll();
         NIGHT_OUT.clear();
+        // A fresh day, so the bell forgets which second it last rang on.
+        MazeBell.reset();
         MazeNight.lift(level);
         TheBox.deliver(level, (int) day);
         // The field comes on overnight. Seeded off the day number so a world that

@@ -13,6 +13,38 @@ behaviour that was already there · **docs**
 
 ## Unreleased
 
+### The bell
+
+- **feat** **A bell in the Glade that tolls the last two minutes before the doors
+  seal.** The deadline that actually kills people was the one thing this mode
+  said quietest: a single line of chat sixty seconds out, which arrives, scrolls
+  and is gone. If you were deep in the maze with something chasing you, the next
+  thing you knew about it was the sound of the doors sealing. A warning you can
+  miss is not a warning.
+- **The cadence is the information.** Every ten seconds at first, every five
+  inside a minute, every second inside twenty — so you never have to count,
+  because the gaps tell you how bad it is. A metronome that never changes is
+  something you stop hearing after the second toll. The last twenty seconds ring
+  a shade louder and higher: the same bell, rung by somebody who has started to
+  panic.
+- **It reaches the far corners.** Played at each listener rather than at the
+  tower, so a 576-block map cannot swallow it — but scaled by distance and
+  pitched *down* the further out you are. In the clearing it is a bell rung
+  nearby; forty cells out it is something deep and far off you have to stop and
+  listen for. Both of them know exactly what it is.
+- Anyone outside the Glade also gets the count itself on the action bar. People
+  standing in the clearing do not, because it is not about them.
+- **feat** A **stone bell tower** with lanterns either side, lit and tall, so
+  *"head for the bell"* works as a direction at night.
+- **fix** Caught before shipping: the first position tried sat inside the Chart
+  Floor's 44-block clear square, which is laid *afterwards* — the tower would
+  have been erased and paved over, existing in the code and nowhere else. Moved
+  south of it and checked against every other structure in the clearing.
+- `mazeBellSeconds` in the config, default 120, zero to silence it. Geometry
+  version 8 → 9.
+
+---
+
 ### The Dead Glade gets a wall, and the way in moves
 
 - **fix** **The camp had no perimeter at all.** `clear()` removed the boundary

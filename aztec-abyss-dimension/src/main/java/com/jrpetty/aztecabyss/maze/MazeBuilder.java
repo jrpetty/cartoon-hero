@@ -130,8 +130,9 @@ public final class MazeBuilder {
      * the way round with a gate, the Deadheads became graves, and nothing
      * scattered plants itself through a building any more.
      * <p>8: the Dead Glade was carved into the south-west.
+     * <p>9: the bell tower went up in the Glade.
      */
-    private static final int GEOMETRY_VERSION = 8;
+    private static final int GEOMETRY_VERSION = 9;
 
     /** One distinctive block per version, so the marker is readable in-world. */
     private static final BlockState[] VERSION_BLOCKS = {
@@ -147,6 +148,7 @@ public final class MazeBuilder {
             // marker stopped being able to tell those two apart.
             Blocks.SMOOTH_BASALT.defaultBlockState(),
             Blocks.TUFF.defaultBlockState(),
+            Blocks.CALCITE.defaultBlockState(),
     };
 
     private static BlockState versionBlock() {
