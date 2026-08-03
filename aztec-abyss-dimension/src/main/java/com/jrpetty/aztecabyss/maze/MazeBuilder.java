@@ -135,8 +135,9 @@ public final class MazeBuilder {
      * <p>11: the trade desk and the order desk went up, and the portal moved to
      * the back of its chamber.
      * <p>12: the Chart Floor gained its lens.
+     * <p>13: both clearings got three blocks of soil instead of one.
      */
-    private static final int GEOMETRY_VERSION = 12;
+    private static final int GEOMETRY_VERSION = 13;
 
     /** One distinctive block per version, so the marker is readable in-world. */
     private static final BlockState[] VERSION_BLOCKS = {
@@ -156,6 +157,7 @@ public final class MazeBuilder {
             Blocks.DRIPSTONE_BLOCK.defaultBlockState(),
             Blocks.TUFF_BRICKS.defaultBlockState(),
             Blocks.POLISHED_TUFF.defaultBlockState(),
+            Blocks.CHISELED_TUFF.defaultBlockState(),
     };
 
     private static BlockState versionBlock() {

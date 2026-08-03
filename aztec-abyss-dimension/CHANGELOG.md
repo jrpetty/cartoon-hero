@@ -13,6 +13,23 @@ behaviour that was already there · **docs**
 
 ## Unreleased
 
+### Three blocks of soil, where there was one
+
+- **fix** **Both clearings were a single block of turf laid over a six-block drop
+  to bedrock.** Nothing under the grass at all — the flat generator lays no
+  layers, and the builder wrote one block at floor level and bedrock seven down.
+  It has been that way since the maze was first stamped.
+- Grass on top and two of dirt beneath it now, in the Glade and in the Dead
+  Glade, the way ground works.
+- That also fixes something quieter: **the field's water channel had nothing to
+  sit on.** A single water block over void is not a channel.
+- The Box's floor and the Chart Floor still lay their own deepslate over the
+  soil — they run after the ground pass, which is the order that was already
+  right.
+- **change** Geometry version 12 → 13.
+
+---
+
 ### The chart is a map now, not a heat map
 
 - **feat** **The Chart Floor zooms, and at close range it draws the actual maze.**

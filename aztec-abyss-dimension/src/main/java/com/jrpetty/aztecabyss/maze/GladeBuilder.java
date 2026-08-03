@@ -78,6 +78,13 @@ public final class GladeBuilder {
                         : h < 6 ? Blocks.COARSE_DIRT.defaultBlockState()
                         : Blocks.GRASS_BLOCK.defaultBlockState();
                 level.setBlock(new BlockPos(x, Y, z), top, 2);
+                // Three deep. The clearing was a single block of turf laid over
+                // a six-block drop to bedrock - nothing under the grass at all,
+                // which is why the field's water channel had nothing to sit on
+                // and why every cut edge in here showed void rather than soil.
+                // Grass on top, two of dirt beneath it, the way ground works.
+                level.setBlock(new BlockPos(x, Y - 1, z), Blocks.DIRT.defaultBlockState(), 2);
+                level.setBlock(new BlockPos(x, Y - 2, z), Blocks.DIRT.defaultBlockState(), 2);
 
                 if (!path && h >= 88) {
                     level.setBlock(new BlockPos(x, Y + 1, z),

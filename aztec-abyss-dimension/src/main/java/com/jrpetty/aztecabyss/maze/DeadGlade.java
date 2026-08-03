@@ -190,6 +190,9 @@ public final class DeadGlade {
                     top = Blocks.GRASS_BLOCK.defaultBlockState();
                 }
                 level.setBlock(new BlockPos(x, Y, z), top, 2);
+                // Their ground is soil too, and the same three deep.
+                level.setBlock(new BlockPos(x, Y - 1, z), Blocks.DIRT.defaultBlockState(), 2);
+                level.setBlock(new BlockPos(x, Y - 2, z), Blocks.DIRT.defaultBlockState(), 2);
                 if (h >= 92 && top.is(Blocks.GRASS_BLOCK)) {
                     level.setBlock(new BlockPos(x, Y + 1, z),
                             Blocks.DEAD_BUSH.defaultBlockState(), 2);
