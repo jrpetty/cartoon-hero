@@ -189,6 +189,59 @@ public final class MazeData {
         return false;
     }
 
+    /**
+     * Can you get from this cell to today's exit, walking only what is open?
+     *
+     * <p>Nothing ever asked this question. The maze promised a way out and then
+     * carved one by brute force rather than checking whether it already had one,
+     * which meant two things were true at once and neither was noticed: the
+     * carve never actually reached an exit, and it was cutting a motorway
+     * through the middle of the maze on the way to not reaching one.
+     *
+     * <p>So ask first. All seven datasets connect on their own, which makes the
+     * carve a fallback that never fires - and a fallback that never fires is the
+     * only kind worth having.
+     *
+     * <p>The Glade is excluded on purpose: a route that crosses the clearing is
+     * not a route through the maze.
+     */
+    public static boolean exitReachable(Layout layout, int fromX, int fromZ) {
+        if (layout == null) {
+            return false;
+        }
+        Exit ex = exit(layout.exit());
+        if (ex == null) {
+            return false;
+        }
+        boolean[] seen = new boolean[GRID * GRID];
+        java.util.ArrayDeque<int[]> queue = new java.util.ArrayDeque<>();
+        seen[fromZ * GRID + fromX] = true;
+        queue.add(new int[]{fromX, fromZ});
+        int[][] steps = {{0, -1}, {0, 1}, {-1, 0}, {1, 0}};
+        while (!queue.isEmpty()) {
+            int[] at = queue.poll();
+            if (at[0] == ex.cellX() && at[1] == ex.cellZ()) {
+                return true;
+            }
+            for (int[] step : steps) {
+                int nx = at[0] + step[0];
+                int nz = at[1] + step[1];
+                if (nx < 0 || nz < 0 || nx >= GRID || nz >= GRID) {
+                    continue;
+                }
+                if (seen[nz * GRID + nx] || inGlade(nx, nz)) {
+                    continue;
+                }
+                if (!isOpen(at[0], at[1], nx, nz, layout)) {
+                    continue;
+                }
+                seen[nz * GRID + nx] = true;
+                queue.add(new int[]{nx, nz});
+            }
+        }
+        return false;
+    }
+
     public static List<Layout> layouts() {
         return layouts;
     }

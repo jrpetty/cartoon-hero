@@ -13,6 +13,45 @@ behaviour that was already there · **docs**
 
 ## Unreleased
 
+### The maze was three to six times too small, and nobody could have known
+
+All seven presets were solved offline against the real dataset, replicating
+`MazeData.isOpen` and `MazeBuilder.carveRoute` exactly — including `Deco.hash`'s
+32-bit overflow and `String.hashCode`. The verifier is committed at
+`tools/verify_maze_presets.py`; run it whenever the dataset changes.
+
+- **fix** **`carveRoute` had never once reached an exit — 0 of 28 door/preset
+  combinations.** Every exit sits on the rim, at cell 0 or cell 95, and the walk
+  refused to step onto `GRID - 1` or below `1`, so it stopped short of its
+  destination every single time. The method's own documentation called itself
+  *"the promise that there is always a way out"*. It had never kept it. Nothing
+  noticed because the dataset connects on its own.
+- **fix** **And on its way to not arriving, it was cutting a motorway.** Four
+  near-direct corridors from the four Glade doors, every day, most of the way
+  across the map. That turned the authored 1,662–2,706 block journey into a
+  252–552 block one. **The maze was between three and six times smaller than it
+  was drawn to be**, and the reason it felt crossable inside a single day was a
+  bug, not a design.
+- **change** **The guarantee now checks before it cuts.** `MazeData.exitReachable`
+  walks the graph from a door to the day's exit — excluding the Glade, because a
+  route across the clearing is not a route through the maze — and the carve only
+  fires for a door that genuinely cannot get there. All 28 combinations pass
+  unaided, so in practice nothing is cut and the maze is full size. If a future
+  preset ever does strand a door, the fallback fires **and says so** to any
+  operator present, rather than papering over an authoring mistake in silence.
+- **fix** The fallback's bounds were corrected to the whole grid, rim included,
+  so that if it ever does fire it can reach the cells it is aimed at. That takes
+  it from 0 of 28 arriving to 27 of 28.
+
+**Verified, and worth stating plainly:** all seven presets are solvable from all
+four doors; all seven exits are distinct and spread across all four sides of the
+map; and any two presets share between **0% and 5.4%** of their winning route, so
+yesterday's path is never today's. Wall layouts differ by only 2–4%, which is the
+honest number — the presets are told apart by *where the route goes*, not by
+looking different.
+
+---
+
 ### Golden apples in the corridors, and a leaner day
 
 - **feat** **Apple caches.** A thing you can no longer buy has to be a thing you

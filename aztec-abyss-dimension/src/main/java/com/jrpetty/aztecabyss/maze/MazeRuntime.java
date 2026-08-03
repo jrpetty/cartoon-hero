@@ -1226,11 +1226,29 @@ public final class MazeRuntime {
      * maze with no solution at all, and there would be no symptom other than
      * somebody wandering until the clock ran out.
      *
-     * <p>So each of the four doors gets its own carved route to the live exit,
-     * each with a different hash salt. That does two things at once: it makes the
-     * promise that a way through exists from wherever you started, and it stops
-     * the four doors being the same corridor - they wander apart before they
-     * converge on the way out.
+     * <h2>Ask before cutting</h2>
+     *
+     * <p>This used to carve unconditionally, four routes from four doors, every
+     * single day. Two things were wrong with that and they hid each other.
+     *
+     * <p>The first: the carve never once arrived. Every exit sits on the rim -
+     * at cell 0 or cell 95 - and the walk refused to step onto {@code GRID - 1}
+     * or below {@code 1}, so it stopped a cell short of its destination on all
+     * twenty-eight door-and-preset combinations. The promise in this method's
+     * name had never been kept, and nothing noticed because the dataset happened
+     * to connect anyway.
+     *
+     * <p>The second, and the expensive one: on its way to not arriving it cut a
+     * near-direct corridor most of the way across the maze. Four of them. That
+     * turned a 1,600 to 2,700 block journey into a 250 to 550 block one - the
+     * maze was between three and six times smaller than it was drawn to be, and
+     * the reason it felt crossable in a single day was a bug.
+     *
+     * <p>So: check first, carve only if the check fails. All seven presets
+     * connect on their own, so in practice this now cuts nothing at all and the
+     * maze is the size it was authored to be. A fallback that never fires is the
+     * only kind worth having - but it is still here, and it will still fire, if
+     * somebody ever writes a preset that strands a door.
      */
     private static void guaranteeRoutes(ServerLevel level, MazeData.Layout layout) {
         MazeData.Exit ex = MazeData.exit(layout.exit());
@@ -1239,8 +1257,21 @@ public final class MazeRuntime {
         }
         int salt = 1;
         for (int[] door : MazeBuilder.DOOR_CELLS) {
-            MazeBuilder.carveRoute(level, door[0], door[1], ex.cellX(), ex.cellZ(),
-                    layout.name().hashCode() + salt * 7919);
+            if (!MazeData.exitReachable(layout, door[0], door[1])) {
+                // Say so. A preset that cannot be solved from one of its own
+                // doors is an authoring mistake, and silently papering over it
+                // is how it would survive to the next seven presets.
+                for (ServerPlayer p : level.players()) {
+                    if (p.hasPermissions(2)) {
+                        p.displayClientMessage(Component.literal(
+                                "§e⚠ " + layout.name() + ": door " + salt
+                                        + " could not reach " + layout.exit()
+                                        + " — a route was cut for it."), false);
+                    }
+                }
+                MazeBuilder.carveRoute(level, door[0], door[1], ex.cellX(), ex.cellZ(),
+                        layout.name().hashCode() + salt * 7919);
+            }
             salt++;
         }
     }

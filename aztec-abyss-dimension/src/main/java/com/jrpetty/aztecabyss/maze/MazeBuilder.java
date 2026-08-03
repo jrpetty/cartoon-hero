@@ -735,7 +735,12 @@ public final class MazeBuilder {
             }
             int nx = stepX ? cx + dx : cx;
             int nz = stepX ? cz : cz + dz;
-            if (nx < 1 || nz < 1 || nx >= MazeData.GRID - 1 || nz >= MazeData.GRID - 1) {
+            // The whole grid, rim included. This used to stop one cell short of
+            // the edge, and every exit in the dataset sits on the edge - cell 0
+            // or cell 95 - so the walk could never once reach its destination.
+            // A route that refuses to enter the only cells it is ever aimed at
+            // is not a route.
+            if (nx < 0 || nz < 0 || nx >= MazeData.GRID || nz >= MazeData.GRID) {
                 break;
             }
             if (MazeData.inGlade(nx, nz)) {
