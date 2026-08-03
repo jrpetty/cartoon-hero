@@ -253,7 +253,7 @@ public final class MazeEvents {
             return;
         }
         if (p != null) {
-            trackHoe(level, p, event.getState());
+            trackHoe(level, p, at, event.getState());
         }
     }
 
@@ -305,21 +305,68 @@ public final class MazeEvents {
      * <p>It was drawn with farmland, a water channel, a fence and three crops
      * and then left as a backdrop: harvesting it did nothing, and the wheat it
      * gave you was worth less than the time it took. Now a Track-hoe's harvest
-     * goes into the Glade's larder, which is a number other people spend.
+     * goes into the Glade's larder, which is a number other people spend - and
+     * comes out of the ground at twice the rate it does for anybody else.
      */
-    private static void trackHoe(ServerLevel level, ServerPlayer p,
+    private static void trackHoe(ServerLevel level, ServerPlayer p, net.minecraft.core.BlockPos at,
                                  net.minecraft.world.level.block.state.BlockState state) {
-        if (!(state.getBlock() instanceof net.minecraft.world.level.block.CropBlock crop)
-                || !crop.isMaxAge(state)) {
+        if (!isFarmable(state)) {
             return;
         }
         MazeJobs jobs = MazeJobs.get(level);
         if (!jobs.is(p.getUUID(), MazeJobs.TRACKHOE)) {
             return;
         }
-        int rank = jobs.level(p.getUUID());
-        jobs.store(rank);
-        jobs.award(p, MazeJobs.TRACKHOE, 1);
+        doubleHarvest(level, p, at, state);
+        if (state.getBlock() instanceof net.minecraft.world.level.block.CropBlock crop
+                && crop.isMaxAge(state)) {
+            int rank = jobs.level(p.getUUID());
+            jobs.store(rank);
+            jobs.award(p, MazeJobs.TRACKHOE, 1);
+        }
+    }
+
+    /**
+     * Everything a Track-hoe's hands are better at.
+     *
+     * <p>Matched on the block classes rather than a list of ids, so it covers
+     * wheat, carrots, potatoes, beetroot, nether wart, berries, cocoa, cane and
+     * both gourds without naming any of them - and covers a modded crop that
+     * extends the same class for free. "All the farmable blocks" is a category,
+     * so it is written as one.
+     */
+    private static boolean isFarmable(net.minecraft.world.level.block.state.BlockState state) {
+        var block = state.getBlock();
+        return block instanceof net.minecraft.world.level.block.CropBlock
+                || block instanceof net.minecraft.world.level.block.StemGrownBlock
+                || block instanceof net.minecraft.world.level.block.SugarCaneBlock
+                || block instanceof net.minecraft.world.level.block.NetherWartBlock
+                || block instanceof net.minecraft.world.level.block.SweetBerryBushBlock
+                || block instanceof net.minecraft.world.level.block.CocoaBlock;
+    }
+
+    /**
+     * A second harvest, drawn from the block's own loot table.
+     *
+     * <p>Rolling the real loot table rather than guessing the product means a
+     * Track-hoe's bonus wheat comes with a bonus seed at the same odds the game
+     * would have given, and a crop this code has never heard of still doubles
+     * correctly. Anything else would be a hand-written table that drifts out of
+     * date the first time a crop changes.
+     *
+     * <p>An unripe crop drops seeds, so this deliberately doubles that too - a
+     * Track-hoe who mis-times a harvest is still better at it than you are.
+     */
+    private static void doubleHarvest(ServerLevel level, ServerPlayer p, net.minecraft.core.BlockPos at,
+                                      net.minecraft.world.level.block.state.BlockState state) {
+        java.util.List<net.minecraft.world.item.ItemStack> extra =
+                net.minecraft.world.level.block.Block.getDrops(state, level, at,
+                        level.getBlockEntity(at), p, p.getMainHandItem());
+        for (net.minecraft.world.item.ItemStack stack : extra) {
+            if (!stack.isEmpty()) {
+                net.minecraft.world.level.block.Block.popResource(level, at, stack.copy());
+            }
+        }
     }
 
     @SubscribeEvent
@@ -328,7 +375,7 @@ public final class MazeEvents {
             return;
         }
         // While the map is going down, run the stamper every tick so it finishes
-        // in seconds; after that the clock only needs looking at once a second.
+        // in seconds.
         if (MazeBuilder.isBuilding()) {
             MazeBuilder.tick(level);
             if (!MazeBuilder.isBuilding()) {
@@ -336,9 +383,10 @@ public final class MazeEvents {
             }
             return;
         }
-        if (level.getGameTime() % 20L == 0L) {
-            MazeRuntime.tick(level);
-        }
+        // Every tick, not every twentieth. The maze owns its clock now, and a
+        // clock only read once a second is wrong by up to a second - which is
+        // the difference between getting through the door and not.
+        MazeRuntime.tick(level);
     }
 
     @SubscribeEvent

@@ -13,6 +13,81 @@ behaviour that was already there · **docs**
 
 ## Unreleased
 
+### The maze gets its own clock, and a game gets a beginning and an end
+
+- **fix** **The maze was not running on a clock at all.** Every schedule in it read
+  `level.getDayTime()`, which for any dimension that is not the overworld *is the
+  overworld's time*. Someone sleeping in a bed on the surface skipped the maze's
+  night. `/time set day` threw the doors open. The day counter counted the
+  overworld's days, so a maze first entered on a mature world opened on "day 400".
+- **feat** `MazeClock` — the maze keeps its own time, persisted with the world.
+  `mazeDaySeconds` and `mazeNightSeconds`, **600 each by default**, so a night is
+  exactly ten minutes and every other timing in the place is derived from those two
+  numbers rather than being a magic tick constant.
+- **feat** The sky follows. `setDayTime` is a no-op off the overworld, so each
+  player in the maze is sent a time packet every tick with the phase mapped onto a
+  vanilla day and the daylight-cycle flag off. Daylight always spans sunrise to
+  sunset whatever the real length is — the sky moves at a different speed rather
+  than skipping any of it. Step out and the real sky is back within a second.
+- **feat** **A game has an end.** It runs from the first person walking in to the
+  last one leaving, however they leave; when the maze empties, that is the end of
+  it. The next game re-rolls which of the seven layouts is day one. They still run
+  in order after that — a game that opens on Saturday's maze goes Sunday, Monday,
+  Tuesday; the next might open on Wednesday's.
+- **change** The reshape now happens **at midnight**, not at dawn. It was named for
+  midnight, described as midnight, and actually fired at the day rollover.
+  `todaysLayout` tells the truth about this: after midnight the standing walls are
+  already tomorrow's, so anyone caught out overnight is walking tomorrow's maze
+  before tomorrow arrives.
+- **change** Which layout is standing is now tracked **by name**, so a restart, a
+  midnight reshape and a brand new game are one code path instead of three pieces
+  of bookkeeping that could each go stale alone.
+- **change** The runtime ticks every tick rather than every twentieth. A clock read
+  once a second is wrong by up to a second, which is the difference between getting
+  through the door and not. The expensive work is still gated to once a second.
+
+### The reshape, given a voice
+
+- **feat** Eight seconds either side of midnight: a Warden roar to open it, then
+  grinding stone laid over hammer-falls, dust, and a low note when it stops. Loud
+  in the corridors and distant from the Glade — the difference between those two
+  places is the entire point of the Glade.
+- **feat** Anyone standing **in** the maze when it moves gets six seconds of not
+  being able to trust their footing, and a subtitle that says so. The single most
+  characteristic thing this place does used to be one stone-break sound and an
+  action-bar line you would miss if you were in your inventory.
+
+### Day 12 no longer plays like day 3
+
+- **fix** The only thing that moved with the calendar was the Griever cap, and it
+  moved once a **week** — so a fortnight-long run got two extra spiders and was
+  otherwise identical. The maze had a day counter and no difficulty curve, which
+  made the number decorative.
+- **feat** `Griever.dayScale()` — health, damage and reach all ride on the day, one
+  config number (`mazeDayScalingPercent`, default 12). Day 10 is roughly double day
+  1; day 20 hits the 3× ceiling. Speed climbs at a quarter of that rate and stops
+  at +25%, because a Griever that badly outruns a sprinting runner is not harder,
+  it is unplayable.
+- **change** The cap climbs every **other day** instead of every week, and they
+  arrive faster on later nights — the cap is where a night ends up, the arrival
+  rate is what it feels like getting there.
+- **feat** The status bar now shows the countdown to the next phase and the night's
+  danger multiplier. Knowing the doors seal in four minutes is a decision; knowing
+  it is "day" is not.
+
+### Builder and Track-hoe get the jobs their names promise
+
+- **feat** **Builder** — anything they craft comes out with **+40% durability** and
+  hits for **+20%**. Stamped on the *object*, not the player: a sword a Builder made
+  is still a better sword after they hand it over, and after they are dead.
+  Durability is written into the item so the number is visible in the tooltip.
+- **feat** **Track-hoe** — **double drops from every farmable block**. Rolled from
+  the block's own loot table rather than a hand-written list, so bonus wheat comes
+  with a bonus seed at the game's own odds and a crop this code has never heard of
+  still doubles correctly. Matched on block *class*, so wheat, carrots, potatoes,
+  beetroot, nether wart, berries, cocoa, cane and both gourds are all covered
+  without naming any of them.
+
 ### Jobs — the Glade stops being a waiting room
 
 The Glade is half the clock. Sixty minutes of daylight and thirty of night, and

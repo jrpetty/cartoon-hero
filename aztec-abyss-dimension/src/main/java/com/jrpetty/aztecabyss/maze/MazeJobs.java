@@ -33,14 +33,16 @@ import java.util.UUID;
  *   <li><b>Runner</b> - the maze is your ground. You move faster in it and you
  *       are the only job paid for charting it. Hooks the charting the Map Room
  *       already keeps.</li>
- *   <li><b>Builder</b> - you may mark the corridors with more than a torch.
- *       Hooks the placement rule, which banned everything and so banned the one
- *       thing a mapmaker needs.</li>
+ *   <li><b>Builder</b> - everything you craft comes out tougher and sharper, and
+ *       you may mark the corridors with more than a torch. Hooks the crafting
+ *       bench and the placement rule, which banned everything and so banned the
+ *       one thing a mapmaker needs.</li>
  *   <li><b>Med-jack</b> - you can buy a stung Runner time, and eventually pull
  *       them back. Hooks the Changing, which until now nobody but the victim
  *       could do anything about.</li>
- *   <li><b>Track-hoe</b> - you work the field, and the field feeds the Glade.
- *       Hooks the farmland that was drawn in and then left as decoration.</li>
+ *   <li><b>Track-hoe</b> - every farmable block gives you twice what it gives
+ *       anybody else, and the field feeds the Glade. Hooks the farmland that was
+ *       drawn in and then left as decoration.</li>
  * </ul>
  *
  * <h2>Why levels</h2>
@@ -87,9 +89,9 @@ public final class MazeJobs extends SavedData {
     public static String blurb(String job) {
         return switch (job) {
             case RUNNER -> "§7Faster in the corridors, and the only job paid for charting them.";
-            case BUILDER -> "§7May leave wool, carpet, banners and lanterns in the maze.";
+            case BUILDER -> "§7Anything you craft lasts 40% longer and hits 20% harder.";
             case MEDJACK -> "§7Buys a stung Runner time. At level 3, pulls them back.";
-            case TRACKHOE -> "§7Works the field. What you harvest feeds the Glade.";
+            case TRACKHOE -> "§7Double drops from every farmable block. The field feeds the Glade.";
             default -> "§7No job yet. §8/maze job <name>";
         };
     }
@@ -207,7 +209,7 @@ public final class MazeJobs extends SavedData {
             case BUILDER -> level >= 4 ? "A marked cell now counts as charted for the whole Glade."
                     : level >= 3 ? "Lanterns and banners as well."
                     : level >= 2 ? "Wool as well as carpet."
-                    : "Carpet in the corridors, and your marks show on the Glade's map.";
+                    : "Forged gear: +40% durability, +20% damage. Carpet in the corridors.";
             case MEDJACK -> level >= 4 ? "Curing no longer costs your day."
                     : level >= 3 ? "/maze treat now cures outright, once a day."
                     : level >= 2 ? "/maze treat buys 45 seconds."
@@ -215,7 +217,7 @@ public final class MazeJobs extends SavedData {
             case TRACKHOE -> level >= 4 ? "Every crop feeds four."
                     : level >= 3 ? "Every crop feeds three."
                     : level >= 2 ? "Every crop feeds two."
-                    : "Every crop you harvest feeds one.";
+                    : "Double drops from anything farmable; each crop feeds one.";
             default -> "";
         };
     }

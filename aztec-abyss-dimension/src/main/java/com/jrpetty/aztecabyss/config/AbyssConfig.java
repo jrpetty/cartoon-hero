@@ -126,6 +126,18 @@ public final class AbyssConfig {
                 .defineInRange("mazeDeathLockoutSeconds", 60, 0, 3600);
         MAZE_SHOW_BRIEFING = b.comment("Show newcomers the one-time maze rules message.")
                 .define("mazeShowBriefing", true);
+        MAZE_DAY_SECONDS = b.comment(
+                        "Real seconds of daylight in one maze day - the window the doors are open.",
+                        "The maze runs on its own clock, not the overworld's, so this is exact.")
+                .defineInRange("mazeDaySeconds", 600, 60, 7200);
+        MAZE_NIGHT_SECONDS = b.comment(
+                        "Real seconds of night in one maze day - the window the doors are sealed",
+                        "and the Grievers are out.")
+                .defineInRange("mazeNightSeconds", 600, 60, 7200);
+        MAZE_DAY_SCALING = b.comment(
+                        "How much harder each day in a run is than the last, as a percent. At 12",
+                        "the Grievers on day 10 hit and take roughly twice what they did on day 1.")
+                .defineInRange("mazeDayScalingPercent", 12, 0, 100);
         b.pop();
 
         b.push("easteregg");
@@ -148,6 +160,9 @@ public final class AbyssConfig {
     public static final ModConfigSpec.ConfigValue<String> CREATOR_PASSWORD;
     public static final ModConfigSpec.IntValue MAZE_DEATH_LOCKOUT_SECONDS;
     public static final ModConfigSpec.BooleanValue MAZE_SHOW_BRIEFING;
+    public static final ModConfigSpec.IntValue MAZE_DAY_SECONDS;
+    public static final ModConfigSpec.IntValue MAZE_NIGHT_SECONDS;
+    public static final ModConfigSpec.IntValue MAZE_DAY_SCALING;
 
     public static long cooldownMillis() {
         return REENTRY_COOLDOWN_HOURS.get() * 60L * 60L * 1000L;

@@ -18,7 +18,6 @@ import net.minecraft.server.level.ServerBossEvent;
 import net.minecraft.world.entity.Mob;
 
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -27,29 +26,34 @@ import java.util.UUID;
 /**
  * The live maze: the daily clock, the doors, and the nightly reshape.
  *
- * <p>A day is ninety real minutes - sixty of daylight, thirty of night - and the
- * clock is read straight off the world's day time, so the maze's schedule and
- * Minecraft's are the same schedule:
+ * <p>A day is a day of daylight and a night of dark, both set in real seconds by
+ * the config and ten minutes each out of the box:
  *
  * <ul>
- *   <li>{@code 1000} the Glade doors grind open</li>
- *   <li>{@code 11500} the dusk warning sounds</li>
- *   <li>{@code 12500} the doors seal - anyone still inside is inside for the night</li>
- *   <li>{@code 18000} the maze reshapes</li>
- *   <li>{@code 24000} dawn, and the next layout takes over</li>
+ *   <li><b>dawn</b> the Glade doors grind open</li>
+ *   <li><b>one minute to dusk</b> the warning sounds</li>
+ *   <li><b>dusk</b> the doors seal - anyone still inside is inside for the night</li>
+ *   <li><b>midnight</b> the maze reshapes, and is heard doing it</li>
+ *   <li><b>dawn</b> the next layout is already standing</li>
  * </ul>
  *
- * <p>The seven layouts are shuffled once per world from its seed and then repeat
- * weekly, so a given server's week is stable and learnable - which is the entire
- * point of a maze you are meant to chart.
+ * <p>The seven layouts run in a fixed order. Which of them a game opens on is
+ * drawn fresh every time the maze empties out, so one game starts on Saturday's
+ * maze and goes Sunday, Monday, Tuesday, and the next might open on Wednesday's.
+ * The order is the constant and the entry point is the variable - which is the
+ * right way round for a maze you are meant to learn, because what you learned is
+ * still true, you just came in at a different place in it.
+ *
+ * <p>The clock itself lives in {@link MazeClock}: the maze keeps its own time
+ * rather than borrowing the overworld's, so a night is however long the config
+ * says a night is and nobody can sleep through one from somewhere else.
  */
 public final class MazeRuntime {
 
-    public static final long DOORS_OPEN = 1000L;
-    public static final long DUSK_WARNING = 11500L;
-    public static final long DOORS_SEAL = 12500L;
-    public static final long RESHAPE = 18000L;
-    public static final long DAY_TICKS = 24000L;
+    // The schedule is no longer a set of magic tick numbers read off the
+    // overworld's clock. Dawn is phase zero, dusk is the end of the day phase,
+    // midnight is halfway through the night, and all three are derived from two
+    // numbers in the config. See MazeClock.
 
     /** The four Glade doors, as ring cells read from the dataset's meta. */
     private static final int[][] DOOR_CELLS = {
@@ -60,15 +64,21 @@ public final class MazeRuntime {
     };
     private static final String[] DOOR_NAMES = {"NORTH", "EAST", "SOUTH", "WEST"};
 
-    /** Layout order for this world, shuffled once from the seed. */
-    private static int[] weekOrder = null;
-    /** The day whose layout is currently standing in the world, or -1. */
-    private static long appliedDay = -1;
-    /** Bumped on a wipe, so the next run gets a different way out. */
-    private static int layoutShift = 0;
+    /**
+     * The name of the layout whose walls are actually standing in the world.
+     *
+     * <p>Keyed on the name rather than the day number on purpose: a restart, a
+     * midnight reshape and a brand new game then all reduce to the same question
+     * - is what is standing what should be standing - instead of three separate
+     * pieces of bookkeeping that can each go stale on their own.
+     */
+    private static String appliedLayoutName = null;
     private static boolean doorsOpen = false;
-    private static long lastPhaseDay = -1;
     private static boolean warnedDusk = false;
+
+    /** How long the midnight reshape goes on making noise, in ticks. */
+    private static final int RESHAPE_DRAMA_TICKS = 160;
+    private static int reshapeDrama = 0;
 
     /** One status bar per runner: day, layout, doors, and their own clock. */
     private static final Map<UUID, ServerBossEvent> BARS = new HashMap<>();
@@ -81,11 +91,10 @@ public final class MazeRuntime {
     }
 
     public static void reset() {
-        weekOrder = null;
-        appliedDay = -1;
+        appliedLayoutName = null;
         doorsOpen = false;
-        lastPhaseDay = -1;
         warnedDusk = false;
+        reshapeDrama = 0;
         for (ServerBossEvent bar : BARS.values()) {
             bar.removeAllPlayers();
         }
@@ -94,27 +103,33 @@ public final class MazeRuntime {
         MazeSting.clearAll();
     }
 
-    /** Which day of the run this is, counting from world start. */
+    /** Which day of this game it is, from zero. */
     public static long dayNumber(ServerLevel level) {
-        return level.getDayTime() / DAY_TICKS;
+        return MazeClock.get(level).day();
     }
 
+    /** Ticks into the current maze day. */
     public static long timeOfDay(ServerLevel level) {
-        return level.getDayTime() % DAY_TICKS;
+        return MazeClock.get(level).phase();
     }
 
     public static boolean doorsOpen() {
         return doorsOpen;
     }
 
-    /** The layout standing today. */
+    /**
+     * The layout that should be standing right now.
+     *
+     * <p>Note the midnight step. After midnight the walls are already tomorrow's,
+     * because that is when they move - so "today's layout" is a different answer
+     * either side of it, and anyone caught out in the maze overnight is walking
+     * tomorrow's corridors before tomorrow arrives. That is the whole horror of
+     * the reshape and it only works if this method tells the truth about it.
+     */
     public static MazeData.Layout todaysLayout(ServerLevel level) {
-        ensureOrder(level);
-        int n = MazeData.layouts().size();
-        if (n == 0) {
-            return null;
-        }
-        return MazeData.layout(weekOrder[(int) Math.floorMod(dayNumber(level) + layoutShift, n)]);
+        MazeClock c = MazeClock.get(level);
+        int mid = MazeClock.dayTicks() + MazeClock.nightTicks() / 2;
+        return c.layoutFor(c.phase() >= mid ? c.day() + 1 : c.day());
     }
 
     /**
@@ -130,40 +145,58 @@ public final class MazeRuntime {
      * does not.
      */
     public static void rerollAfterWipe(ServerLevel level) {
-        layoutShift++;
-        appliedDay = -1;
-        MazeData.Layout next = todaysLayout(level);
-        if (next != null) {
-            applyLayout(level, next);
-            appliedDay = dayNumber(level);
+        MazeClock clock = MazeClock.get(level);
+        if (clock.played() && level.players().isEmpty()) {
+            endGame(level, clock);
         }
     }
 
     /**
-     * Shuffles the week once, deterministically from the world seed. Same world,
-     * same week, every time - so a route learned on day three is still worth
-     * something next Wednesday.
+     * Watches for the end of a game.
+     *
+     * <p>A game runs from the first person walking in to the last one leaving,
+     * however they leave. When the maze empties, that is the end of it - there is
+     * no other definition available, and no other one is wanted: everybody got
+     * out or everybody died are the only two ways this ends, and from in here
+     * they look identical.
+     *
+     * @return true if a game just ended, in which case the caller should let the
+     *         next tick start the new one from a clean slate
      */
-    private static void ensureOrder(ServerLevel level) {
-        if (weekOrder != null) {
-            return;
+    private static boolean sessionWatch(ServerLevel level, MazeClock clock) {
+        if (!level.players().isEmpty()) {
+            clock.markPlayed();
+            return false;
         }
-        int n = Math.max(1, MazeData.layouts().size());
-        List<Integer> order = new ArrayList<>();
-        for (int i = 0; i < n; i++) {
-            order.add(i);
+        if (!clock.played()) {
+            return false;
         }
-        Collections.shuffle(order, new java.util.Random(level.getSeed()));
-        weekOrder = new int[n];
-        for (int i = 0; i < n; i++) {
-            weekOrder[i] = order.get(i);
+        endGame(level, clock);
+        return true;
+    }
+
+    /** Packs the game away and draws the next one's opening layout. */
+    private static void endGame(ServerLevel level, MazeClock clock) {
+        for (Mob g : Griever.loaded(level)) {
+            g.discard();
         }
+        MazeRuns.clearAll();
+        MazeSting.clearAll();
+        NIGHT_OUT.clear();
+        warnedDusk = false;
+        // Null so the next tick stamps the new opening layout without needing to
+        // know whether it differs from the old one.
+        appliedLayoutName = null;
+        clock.newGame(level.getServer());
     }
 
     /**
-     * Drives the whole live loop. Called once a second rather than every tick -
-     * nothing here is finer-grained than a clock event, and the reshape is the
-     * only expensive thing it ever does.
+     * Drives the whole live loop. Called every tick now rather than once a
+     * second, because the maze owns its clock and a clock that only looks at
+     * itself once a second is a clock that is wrong for up to a second - which
+     * is the difference between the doors sealing on you and not. The expensive
+     * work below is still gated to once a second; only the clock, the sky and
+     * the phase boundaries run at full rate.
      */
     public static void tick(ServerLevel level) {
         if (MazeBuilder.isBuilding()) {
@@ -171,35 +204,43 @@ public final class MazeRuntime {
             return;
         }
         MazeData.load();
-        long day = dayNumber(level);
-        long t = timeOfDay(level);
+        MazeClock clock = MazeClock.get(level);
 
-        // First run, or a fresh day: put today's walls in place and wipe every
-        // per-day tally with them.
-        if (appliedDay != day) {
-            boolean rollover = appliedDay >= 0;
-            applyLayout(level, todaysLayout(level));
-            appliedDay = day;
+        boolean dawn = clock.advance(1);
+        boolean midnight = clock.crossedMidnight(1);
+        clock.pushSky(level);
+
+        if (sessionWatch(level, clock)) {
+            return;
+        }
+
+        // Is what is standing what should be standing? One question covers the
+        // midnight reshape, a server restart and the first day of a new game.
+        MazeData.Layout want = todaysLayout(level);
+        String wantName = want == null ? null : want.name();
+        if (!java.util.Objects.equals(appliedLayoutName, wantName)) {
+            boolean first = appliedLayoutName == null;
+            applyLayout(level, want);
+            appliedLayoutName = wantName;
             // Fresh caches with the fresh walls: yesterday's map of where things
             // were should be worth nothing.
-            MazeChests.reshuffle(level, day);
-            if (rollover) {
+            MazeChests.reshuffle(level, clock.day());
+            if (!first && midnight) {
                 reshapeHeard(level);
             }
-            if (rollover) {
-                newDay(level, day);
-            }
         }
-        if (lastPhaseDay != day) {
-            lastPhaseDay = day;
+        if (dawn) {
             warnedDusk = false;
+            newDay(level, clock.day());
         }
 
-        boolean shouldBeOpen = t >= DOORS_OPEN && t < DOORS_SEAL;
+        tickReshapeDrama(level);
+
+        boolean shouldBeOpen = !clock.isNight();
         if (shouldBeOpen != doorsOpen) {
             setDoors(level, shouldBeOpen);
         }
-        if (!warnedDusk && t >= DUSK_WARNING && t < DOORS_SEAL) {
+        if (!warnedDusk && clock.inDuskWarning()) {
             warnedDusk = true;
             for (ServerPlayer p : level.players()) {
                 p.displayClientMessage(Component.literal(
@@ -208,9 +249,13 @@ public final class MazeRuntime {
             }
         }
 
+        if (level.getGameTime() % 20L != 0L) {
+            return;
+        }
+        long t = clock.phase();
         MazeRace.tick(level);
         MazeSting.tick(level);
-        portalAmbience(level, todaysLayout(level));
+        portalAmbience(level, want);
         tickRunners(level, t);
         tickGrievers(level, t);
     }
@@ -236,12 +281,78 @@ public final class MazeRuntime {
      * woke up and the route was different, with no moment to attribute it to.
      */
     private static void reshapeHeard(ServerLevel level) {
+        reshapeDrama = RESHAPE_DRAMA_TICKS;
+        for (ServerPlayer p : level.players()) {
+            boolean inside = !MazeData.inGlade(
+                    p.blockPosition().getX() / MazeData.CELL,
+                    p.blockPosition().getZ() / MazeData.CELL);
+            p.connection.send(new net.minecraft.network.protocol.game.ClientboundSetTitleTextPacket(
+                    Component.literal("§4§lTHE WALLS ARE MOVING")));
+            p.connection.send(new net.minecraft.network.protocol.game.ClientboundSetSubtitleTextPacket(
+                    Component.literal(inside
+                            ? "§7You are standing in it"
+                            : "§8Somewhere out there, everything just changed")));
+            level.playSound(null, p.blockPosition(), SoundEvents.WARDEN_ROAR,
+                    SoundSource.AMBIENT, inside ? 4.0F : 2.0F, 0.3F);
+            if (inside) {
+                // Being inside the maze while it rearranges around you should not
+                // be a sound you hear about afterwards. Six seconds of not being
+                // able to trust your own footing is the difference between the
+                // reshape happening to the map and happening to you.
+                p.addEffect(new MobEffectInstance(MobEffects.CONFUSION, 160, 0, false, false));
+            }
+        }
+    }
+
+    /**
+     * The eight seconds either side of midnight.
+     *
+     * <p>The entire maze rearranged itself in silence. It is the single most
+     * characteristic thing this place does - the thing the whole map is named
+     * for - and it happened with one stone-break sound and an action-bar line
+     * you would miss if you were looking at your inventory. A change that large
+     * with no announcement does not read as frightening, it reads as a bug.
+     *
+     * <p>So it is a sequence rather than a sound: a roar to open it, grinding
+     * stone laid over hammer-falls for six seconds while the ground you are
+     * standing on stops being trustworthy, and a single low note when it stops.
+     * Loud in the corridors and distant from the Glade, because the difference
+     * between those two places is the point of the Glade.
+     */
+    private static void tickReshapeDrama(ServerLevel level) {
+        if (reshapeDrama <= 0) {
+            return;
+        }
+        int elapsed = RESHAPE_DRAMA_TICKS - reshapeDrama;
+        reshapeDrama--;
+        RandomSource rng = RandomSource.create();
         for (ServerPlayer p : level.players()) {
             BlockPos at = p.blockPosition();
-            level.playSound(null, at, SoundEvents.STONE_BREAK, SoundSource.AMBIENT, 3.0F, 0.35F);
-            level.playSound(null, at, SoundEvents.ANVIL_LAND, SoundSource.AMBIENT, 1.6F, 0.4F);
-            p.displayClientMessage(Component.literal(
-                    "§8The walls are moving."), true);
+            boolean inside = !MazeData.inGlade(at.getX() / MazeData.CELL, at.getZ() / MazeData.CELL);
+            float loud = inside ? 4.0F : 1.4F;
+            if (elapsed % 7 == 0) {
+                level.playSound(null, at, SoundEvents.STONE_BREAK, SoundSource.AMBIENT,
+                        loud, 0.28F + rng.nextFloat() * 0.16F);
+            }
+            if (elapsed % 17 == 0) {
+                level.playSound(null, at, SoundEvents.ANVIL_LAND, SoundSource.AMBIENT,
+                        loud * 0.6F, 0.3F + rng.nextFloat() * 0.1F);
+            }
+            if (elapsed % 41 == 0) {
+                level.playSound(null, at, SoundEvents.WARDEN_ANGRY, SoundSource.AMBIENT,
+                        loud * 0.7F, 0.3F);
+            }
+            if (inside && elapsed % 3 == 0) {
+                level.sendParticles(net.minecraft.core.particles.ParticleTypes.LARGE_SMOKE,
+                        at.getX() + rng.nextDouble() * 8 - 4, at.getY() + 3.0,
+                        at.getZ() + rng.nextDouble() * 8 - 4, 8, 1.5, 1.0, 1.5, 0.0);
+            }
+            if (reshapeDrama == 0) {
+                level.playSound(null, at, SoundEvents.BEACON_ACTIVATE, SoundSource.AMBIENT,
+                        loud * 0.8F, 0.35F);
+                p.displayClientMessage(Component.literal(
+                        "§8It has settled. §7Nothing is where you left it."), false);
+            }
         }
     }
 
@@ -262,6 +373,9 @@ public final class MazeRuntime {
                     "§6§lDAY " + (day + 1)), false);
             p.displayClientMessage(Component.literal(
                     "§7The walls moved in the night. §8Clocks and tallies are clear."), false);
+            p.displayClientMessage(Component.literal(
+                    "§8Tonight is §c" + String.format("%.1f", Griever.dayScale(level))
+                            + "x §8what the first night was."), false);
             level.playSound(null, p.blockPosition(), SoundEvents.BEACON_ACTIVATE,
                     SoundSource.AMBIENT, 0.8F, 1.1F);
         }
@@ -269,7 +383,7 @@ public final class MazeRuntime {
 
     /** Night is everything from the doors sealing to dawn. */
     public static boolean isNight(long timeOfDay) {
-        return timeOfDay >= DOORS_SEAL;
+        return timeOfDay >= MazeClock.dayTicks();
     }
 
     /**
@@ -585,15 +699,22 @@ public final class MazeRuntime {
             BARS.put(p.getUUID(), bar);
         }
         int run = MazeRuns.elapsedSeconds(level, p.getUUID());
-        String title = "§fDay §e" + (dayNumber(level) + 1)
+        MazeClock clock = MazeClock.get(level);
+        int left = clock.secondsLeftInPhase();
+        // The countdown is the whole reason for the bar. Knowing the doors seal
+        // in four minutes is a decision; knowing it is "day" is not.
+        String title = "§fDay §e" + (clock.day() + 1)
                 + " §8| §f" + (layout == null ? "?" : layout.name())
-                + " §8| " + (doorsOpen ? "§aDOORS OPEN" : "§4DOORS SEALED")
+                + " §8| " + (doorsOpen
+                        ? "§aDOORS OPEN §7" + (left / 60) + "m" + (left % 60) + "s"
+                        : "§4SEALED §7" + (left / 60) + "m" + (left % 60) + "s")
+                + " §8| §c☠" + String.format("%.1f", Griever.dayScale(level)) + "x"
                 + (run >= 0 ? " §8| §b" + MazeRuns.format(run) : "")
                 + MazeSting.hudFragment(p.getUUID());
         bar.setName(Component.literal(title));
         bar.setColor(isNight(t) ? BossEvent.BossBarColor.RED
                 : doorsOpen ? BossEvent.BossBarColor.GREEN : BossEvent.BossBarColor.YELLOW);
-        bar.setProgress(Math.max(0.0F, Math.min(1.0F, (float) t / (float) DAY_TICKS)));
+        bar.setProgress(MazeClock.get(level).progress());
     }
 
     /**
@@ -637,7 +758,7 @@ public final class MazeRuntime {
             }
         }
         int cap = Griever.capFor(level, runners.size());
-        if (loaded.size() < cap && rng.nextInt(3) == 0) {
+        if (loaded.size() < cap && rng.nextInt(Griever.spawnChanceFor(level)) == 0) {
             Griever.spawnNear(level, runners.get(rng.nextInt(runners.size())), rng);
         }
         Griever.ambience(level, loaded, rng);
@@ -661,11 +782,10 @@ public final class MazeRuntime {
             MazeBuilder.setToggle(level, tp, layout.open().contains(tp.id()), rng);
         }
         openExit(level, layout);
+        // Every day, from all four doors, a route is cut to that day's exit.
+        // Not decoration: the toggles are drawn from a dataset and nothing in
+        // that file promises the way out is reachable, so this is the guarantee.
         guaranteeRoutes(level, layout);
-        for (ServerPlayer p : level.players()) {
-            p.displayClientMessage(Component.literal(
-                    "§5The walls grind. §7The maze has changed."), false);
-        }
     }
 
     /**
@@ -766,12 +886,14 @@ public final class MazeRuntime {
     /** A one-line status readable from a command or a HUD. */
     public static String status(ServerLevel level) {
         MazeData.Layout l = todaysLayout(level);
-        long t = timeOfDay(level);
-        return "Day " + (dayNumber(level) + 1)
+        MazeClock c = MazeClock.get(level);
+        return "Day " + (c.day() + 1)
                 + " | layout " + (l == null ? "?" : l.name())
                 + " | exit " + (l == null ? "?" : l.exit())
                 + " | " + (doorsOpen ? "doors OPEN" : "doors SEALED")
-                + " | t=" + t
+                + " | " + c.secondsLeftInPhase() + "s left"
+                + " | danger " + String.format("%.1f", Griever.dayScale(level)) + "x"
+                + " | game #" + (c.session() + 1)
                 + (MazeBuilder.isBuilding() ? " | building " + MazeBuilder.progressPercent() + "%" : "");
     }
 

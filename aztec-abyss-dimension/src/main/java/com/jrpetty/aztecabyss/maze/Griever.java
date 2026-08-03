@@ -47,15 +47,52 @@ public final class Griever {
     }
 
     /**
-     * How many Grievers the maze is allowed right now. Two per runner in week
-     * one, climbing by one a week to the ceiling - so a server that keeps a world
-     * alive gets steadily less forgiving.
+     * How hard tonight is, as a multiplier on everything.
+     *
+     * <p>Day twelve used to play exactly like day three. The only thing that
+     * moved with the calendar was the Griever cap, and it moved once a <em>week</em>
+     * - so a run that lasted a fortnight got two extra spiders and was otherwise
+     * the same run. The maze had a day counter and no difficulty curve, which
+     * made the number decorative.
+     *
+     * <p>Now the day is the difficulty. Health, damage, reach and how fast they
+     * come all ride on it, and the curve is one config number so a server can
+     * make a week survivable or make it a fortnight of hell.
+     *
+     * <p>Capped, because the point is escalation rather than a wall. At the
+     * default twelve percent, day ten is roughly double day one and day twenty
+     * hits the ceiling - which is about as long as a game should ever get.
+     */
+    public static double dayScale(ServerLevel level) {
+        int day = (int) Math.max(0, MazeRuntime.dayNumber(level));
+        double per = AbyssConfig.MAZE_DAY_SCALING.get() / 100.0;
+        return Math.min(3.0, 1.0 + day * per);
+    }
+
+    /**
+     * How many Grievers the maze is allowed right now.
+     *
+     * <p>Climbing every other day rather than every week. A week was long enough
+     * that most games ended before the cap ever moved.
      */
     public static int capFor(ServerLevel level, int runners) {
-        int week = (int) (MazeRuntime.dayNumber(level) / 7L);
-        int per = Math.min(AbyssConfig.GRIEVER_BASE_CAP.get() + week,
+        int day = (int) Math.max(0, MazeRuntime.dayNumber(level));
+        int per = Math.min(AbyssConfig.GRIEVER_BASE_CAP.get() + day / 2,
                 AbyssConfig.GRIEVER_MAX_CAP.get());
         return Math.max(0, per) * Math.max(1, runners);
+    }
+
+    /**
+     * How often one is allowed to arrive, as a one-in-N chance per second.
+     *
+     * <p>A flat one-in-three meant the night filled up at the same rate on every
+     * day of every game. Later nights fill faster, which is felt long before the
+     * cap is reached - the cap is where a night <em>ends up</em>, this is what it
+     * feels like getting there.
+     */
+    public static int spawnChanceFor(ServerLevel level) {
+        int day = (int) Math.max(0, MazeRuntime.dayNumber(level));
+        return Math.max(1, 4 - day / 4);
     }
 
     /** Every Griever currently loaded in the maze. */
@@ -94,9 +131,14 @@ public final class Griever {
         mob.setCustomName(Component.literal("§4§lGRIEVER"));
         mob.setCustomNameVisible(false);
 
-        set(mob, Attributes.MAX_HEALTH, AbyssConfig.GRIEVER_HEALTH.get());
-        set(mob, Attributes.MOVEMENT_SPEED, AbyssConfig.GRIEVER_SPEED.get());
-        set(mob, Attributes.ATTACK_DAMAGE, AbyssConfig.GRIEVER_DAMAGE.get());
+        // Scaled to the day it was born on. Speed climbs at a quarter of the
+        // rate and stops at a quarter over baseline: a Griever that outruns a
+        // sprinting runner by a wide margin is not harder, it is unplayable.
+        double scale = dayScale(level);
+        set(mob, Attributes.MAX_HEALTH, AbyssConfig.GRIEVER_HEALTH.get() * scale);
+        set(mob, Attributes.MOVEMENT_SPEED,
+                AbyssConfig.GRIEVER_SPEED.get() * Math.min(1.25, 1.0 + (scale - 1.0) * 0.25));
+        set(mob, Attributes.ATTACK_DAMAGE, AbyssConfig.GRIEVER_DAMAGE.get() * scale);
         set(mob, Attributes.KNOCKBACK_RESISTANCE, 0.7);
         // It must be able to cross the map to reach you; a corridor maze is no
         // place for a mob that loses interest after sixteen blocks.
