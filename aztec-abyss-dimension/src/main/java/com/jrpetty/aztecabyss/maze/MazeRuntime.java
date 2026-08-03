@@ -9,6 +9,8 @@ import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.util.RandomSource;
+import net.minecraft.world.effect.MobEffectInstance;
+import net.minecraft.world.effect.MobEffects;
 import net.minecraft.world.level.block.Blocks;
 
 import net.minecraft.world.BossEvent;
@@ -247,6 +249,9 @@ public final class MazeRuntime {
         MazeRuns.clearAll();
         MazeSting.clearAll();
         NIGHT_OUT.clear();
+        // The field comes on overnight. Seeded off the day number so a world that
+        // is reloaded mid-run does not get a second harvest out of the same night.
+        GladeBuilder.growField(level, RandomSource.create(0xF1E1D ^ day));
         for (ServerPlayer p : level.players()) {
             p.removeEffect(net.minecraft.world.effect.MobEffects.WITHER);
             p.removeEffect(net.minecraft.world.effect.MobEffects.BLINDNESS);
@@ -297,6 +302,15 @@ public final class MazeRuntime {
             // a note about tonight.
             if (!inGlade && level.getServer() != null) {
                 MazeCharts charts = MazeCharts.get(level.getServer());
+                MazeJobs jobs = MazeJobs.get(level);
+                // A Runner is the only job paid for walking the corridors, and
+                // only for ground they had not already walked - otherwise the
+                // fastest way to level is to pace one junction all afternoon.
+                if (!charts.chartedBy(p.getUUID(), cellX, cellZ)
+                        && jobs.is(p.getUUID(), MazeJobs.RUNNER)) {
+                    jobs.award(p, MazeJobs.RUNNER, jobs.level(p.getUUID()) >= 2 ? 3 : 2);
+                }
+                runnersLegs(level, p, jobs);
                 if (charts.chart(p.getUUID(), cellX, cellZ) && charts.gladePercent() % 10 == 0
                         && charts.gladePercent() > 0) {
                     for (ServerPlayer other : level.players()) {
@@ -311,6 +325,7 @@ public final class MazeRuntime {
                 MazeRuns.begin(level, p);
                 MazeAdvancements.grant(p, MazeAdvancements.ROOT);
                 MazeAdvancements.grant(p, MazeAdvancements.FIRST_RUN);
+                veteranHint(level, p, layout);
             }
             // Still out there when the doors shut, and still out there at dawn.
             if (!inGlade && isNight(t)) {
@@ -348,6 +363,49 @@ public final class MazeRuntime {
             e.getValue().removeAllPlayers();
             return true;
         });
+    }
+
+    /**
+     * A Runner's legs.
+     *
+     * <p>Only outside the Glade, because the perk is about the corridors rather
+     * than about being a Runner - a Runner pottering round the firepit is just a
+     * Glader. Reapplied every second at two seconds' duration so it lapses on
+     * its own the moment they step back inside, with no bookkeeping to get wrong.
+     */
+    private static void runnersLegs(ServerLevel level, ServerPlayer p, MazeJobs jobs) {
+        if (!jobs.is(p.getUUID(), MazeJobs.RUNNER)) {
+            return;
+        }
+        int amplifier = jobs.level(p.getUUID()) >= 3 ? 1 : 0;
+        p.addEffect(new MobEffectInstance(MobEffects.MOVEMENT_SPEED, 40, amplifier, false, false));
+    }
+
+    /**
+     * What a Runner at the top of the trade can tell at the gate.
+     *
+     * <p>Not the route and not the cell - the compass section, which is the same
+     * unit the corridor walls are banded in and the same unit the Map Room
+     * reports. It removes a quarter of the day's guesswork for somebody who has
+     * earned it, and it is still four hundred cells of maze to walk.
+     */
+    private static void veteranHint(ServerLevel level, ServerPlayer p, MazeData.Layout layout) {
+        if (layout == null) {
+            return;
+        }
+        MazeJobs jobs = MazeJobs.get(level);
+        if (!jobs.is(p.getUUID(), MazeJobs.RUNNER) || jobs.level(p.getUUID()) < MazeJobs.MAX_LEVEL) {
+            return;
+        }
+        MazeData.Exit ex = MazeData.exit(layout.exit());
+        if (ex == null) {
+            return;
+        }
+        String where = section(new BlockPos(
+                ex.cellX() * MazeData.CELL, MazeData.FLOOR_Y + 1, ex.cellZ() * MazeData.CELL));
+        p.displayClientMessage(Component.literal(
+                "§b✦ You have run this place long enough. §7Today's way out is in the §f"
+                        + where + "§7."), false);
     }
 
     /**

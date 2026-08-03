@@ -13,6 +13,55 @@ behaviour that was already there · **docs**
 
 ## Unreleased
 
+### Jobs — the Glade stops being a waiting room
+
+The Glade is half the clock. Sixty minutes of daylight and thirty of night, and
+until now every minute of it that was not *inside the maze* was dead time — you
+stood in a clearing full of buildings you could not use until the doors opened.
+Four jobs, each one wired into something the map already had and was refusing to
+use.
+
+- **feat** `MazeJobs` — `/maze job` to take one, `/maze jobs` for the roster. Four
+  levels each, earned by doing the work. Experience is kept **per job**, so
+  changing your mind is free; a Glade where switching burns a week is a Glade
+  where nobody ever tries the other three.
+- **feat** The **Job Board** by the Box — four posts, one per trade, where
+  everyone lands. A job you have to go looking for is a job nobody takes.
+- **feat** **Runner** — Speed I outside the Glade (II at level 3), and the only
+  job paid for charting. At level 4 the day's exit *section* is named to you as
+  you leave the Glade: a quarter of the guesswork, not the route.
+- **feat** **Builder** — may leave carpet in the corridors (wool at 2, lanterns
+  and banners at 3), and a marked cell shows as `✚` on the Glade's map for
+  everyone. At level 4 a mark also **charts** the cell for the whole Glade — the
+  one perk that pays other people rather than the person who earned it.
+- **feat** **Med-jack** — `/maze treat` on a Changing runner within five blocks
+  buys them 30 seconds (45 at level 2); at level 3 it cures outright, once a day;
+  at level 4 the cure stops costing the day. The Changing was a private
+  catastrophe nobody else could touch.
+- **feat** **Track-hoe** — harvesting a mature crop in the Glade fills the
+  **larder**, the one number in the maze one player raises and another spends.
+  `/maze rations` draws bread from it. The field was farmland, a water channel, a
+  fence and three crops, drawn in and left as a backdrop.
+- **fix** **You could break inside the Glade but never place.** A rule that only
+  ever destroys is not a rule; you could pull your own hut apart and never put it
+  back. Placement is now allowed inside the Glade — up to a **12-block ceiling**,
+  because the Glade is open to the sky and an uncapped height is a pillar to the
+  wall tops and a walk over the entire maze. The old blanket ban closed that
+  exploit by accident.
+- **fix** **Marks were permanent.** Signs and torches could be placed in the
+  corridors and never removed, so one torch on the wrong wall stayed there for the
+  life of the world and a chart could only ever be added to. Marks now break back
+  down outside the Glade — and only marks; the walls still do not come apart.
+- **feat** **The field grows at dawn**, explicitly, rather than relying on vanilla
+  random ticks. This is a bespoke dimension with a barrier lid over most of it, so
+  vanilla growth would have made the Track-hoe's job quietly work on some worlds
+  and not others — the worst kind of bug, because it looks like bad luck. Harvested
+  ground reseeds itself, and the field is sown at mixed ages so it can be worked on
+  day one.
+- **change** A day in the Glade is now a day the field moved, whether or not
+  anybody ran the maze. The day counter had nothing to accumulate in before this.
+- **change** Geometry version 4, so existing worlds restamp and get the Job Board.
+
 ### The Map Room — charting finally means something
 
 - **feat** `MazeCharts` — every corridor cell you stand in is recorded, per player

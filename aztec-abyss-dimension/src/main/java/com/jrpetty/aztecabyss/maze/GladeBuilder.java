@@ -40,6 +40,7 @@ public final class GladeBuilder {
         woods(level, rng);
         firepit(level);
         mapRoom(level);
+        jobBoard(level);
         doorFrames(level);
     }
 
@@ -160,12 +161,23 @@ public final class GladeBuilder {
         level.setBlock(new BlockPos(ox + w - 2, Y + 1, oz + 1), Blocks.CRAFTING_TABLE.defaultBlockState(), 2);
     }
 
+    public static final int FIELD_W = 20;
+    public static final int FIELD_D = 16;
+
+    public static int fieldX() {
+        return MazeData.gladeMaxBlock() - 26;
+    }
+
+    public static int fieldZ() {
+        return MazeData.gladeMaxBlock() - 22;
+    }
+
     /** The field they feed themselves from, with a water channel down the middle. */
     private static void field(ServerLevel level, RandomSource rng) {
-        int ox = max() - 26;
-        int oz = max() - 22;
-        for (int x = ox; x < ox + 20; x++) {
-            for (int z = oz; z < oz + 16; z++) {
+        int ox = fieldX();
+        int oz = fieldZ();
+        for (int x = ox; x < ox + FIELD_W; x++) {
+            for (int z = oz; z < oz + FIELD_D; z++) {
                 boolean channel = z == oz + 8;
                 if (channel) {
                     level.setBlock(new BlockPos(x, Y, z), Blocks.WATER.defaultBlockState(), 2);
@@ -178,12 +190,63 @@ public final class GladeBuilder {
                         : roll < 6 ? Blocks.CARROTS.defaultBlockState()
                         : roll < 8 ? Blocks.POTATOES.defaultBlockState()
                         : Blocks.AIR.defaultBlockState();
+                // Sown at mixed ages, some of it ready. A field that starts at
+                // age zero everywhere is a field nobody can work on day one, and
+                // "the Gladers have been here a while" is the whole premise.
+                if (crop.getBlock() instanceof net.minecraft.world.level.block.CropBlock cb) {
+                    crop = cb.getStateForAge(rng.nextInt(cb.getMaxAge() + 1));
+                }
                 level.setBlock(new BlockPos(x, Y + 1, z), crop, 2);
             }
         }
         // A fence and a gate so it reads as tended, not wild.
         for (int x = ox - 1; x <= ox + 20; x++) {
             level.setBlock(new BlockPos(x, Y + 1, oz - 1), Blocks.OAK_FENCE.defaultBlockState(), 2);
+        }
+    }
+
+    /**
+     * The field comes on overnight.
+     *
+     * <p>Not decoration and not a convenience. Vanilla crop growth needs light
+     * and a random tick, and this is a bespoke dimension with a barrier lid over
+     * most of it - relying on the vanilla rules here would mean the Track-hoe's
+     * job quietly did not exist on some worlds and did on others, which is the
+     * worst kind of bug because it looks like bad luck. Growing the field
+     * explicitly at dawn makes the job work the same way everywhere.
+     *
+     * <p>It also gives the day counter something to be. A day in the Glade is
+     * now a day the field moved, whether or not anybody ran the maze.
+     */
+    public static void growField(ServerLevel level, RandomSource rng) {
+        int ox = fieldX();
+        int oz = fieldZ();
+        for (int x = ox; x < ox + FIELD_W; x++) {
+            for (int z = oz; z < oz + FIELD_D; z++) {
+                BlockPos at = new BlockPos(x, Y + 1, z);
+                BlockState state = level.getBlockState(at);
+                if (!(state.getBlock() instanceof net.minecraft.world.level.block.CropBlock crop)) {
+                    // Harvested ground reseeds itself. Somebody planted this field
+                    // long before you arrived and it is not going to stop because
+                    // the last Glader forgot to put a seed back.
+                    if (state.isAir() && rng.nextInt(4) == 0
+                            && level.getBlockState(at.below()).is(Blocks.FARMLAND)) {
+                        int roll = rng.nextInt(3);
+                        level.setBlock(at, roll == 0 ? Blocks.WHEAT.defaultBlockState()
+                                : roll == 1 ? Blocks.CARROTS.defaultBlockState()
+                                : Blocks.POTATOES.defaultBlockState(), 2);
+                    }
+                    continue;
+                }
+                if (crop.isMaxAge(state)) {
+                    continue;
+                }
+                // growCrops rather than setting the age property directly: beetroot
+                // and wheat do not share an age range, and the block already knows
+                // its own. Twice, so a day is a visible step rather than a nudge.
+                crop.growCrops(level, at, state);
+                crop.growCrops(level, at, level.getBlockState(at));
+            }
         }
     }
 
@@ -289,6 +352,39 @@ public final class GladeBuilder {
         level.setBlock(new BlockPos(ox + 3, y + 2, oz + 3), Blocks.SEA_LANTERN.defaultBlockState(), 2);
         sign(level, new BlockPos(ox + 1, y + 1, oz + 3), Direction.WEST,
                 "§0THE MAP ROOM", "§0/maze map", "", "");
+    }
+
+    /**
+     * The Job Board: four posts by the Box, one for each trade.
+     *
+     * <p>Put deliberately where everyone lands rather than tucked away with the
+     * Map Room. A job you have to go looking for is a job nobody takes, and the
+     * first thing a new Glader should learn is that there is something for them
+     * to be.
+     */
+    private static void jobBoard(ServerLevel level) {
+        int ox = MazeData.SPAWN_X - 8;
+        int oz = MazeData.SPAWN_Z + 5;
+        String[][] posts = {
+                {"§1RUNNER", "§0/maze job", "§0runner", "§8the corridors"},
+                {"§6BUILDER", "§0/maze job", "§0builder", "§8the marks"},
+                {"§2MED-JACK", "§0/maze job", "§0medjack", "§8the stung"},
+                {"§0TRACK-HOE", "§0/maze job", "§0trackhoe", "§8the field"},
+        };
+        // Logs rather than fences for the posts: a wall sign wants a solid face
+        // behind it, and a fence is not one - the whole board would pop off the
+        // first time a neighbour updated.
+        for (int i = 0; i < posts.length; i++) {
+            int x = ox + i * 3;
+            level.setBlock(new BlockPos(x, Y, oz), Blocks.COBBLESTONE.defaultBlockState(), 2);
+            for (int dy = 1; dy <= 3; dy++) {
+                level.setBlock(new BlockPos(x, Y + dy, oz), Blocks.OAK_LOG.defaultBlockState(), 2);
+            }
+            // A lantern standing on top of each post, so the board reads at night.
+            level.setBlock(new BlockPos(x, Y + 4, oz), Blocks.LANTERN.defaultBlockState(), 2);
+            sign(level, new BlockPos(x, Y + 2, oz + 1), Direction.SOUTH,
+                    posts[i][0], posts[i][1], posts[i][2], posts[i][3]);
+        }
     }
 
     private static void firepit(ServerLevel level) {

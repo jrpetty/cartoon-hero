@@ -172,6 +172,44 @@ public final class MazeSting {
     }
 
     /**
+     * Buys someone more time.
+     *
+     * <p>The Changing was a private catastrophe: the victim watched a number go
+     * down and everybody else watched them. This is the seam a Med-jack works
+     * through - it does not cure anything, it moves the deadline, which is the
+     * difference between "you are dead" and "you are dead unless somebody gets
+     * to you". It deliberately cannot save a runner who has already turned,
+     * because a deadline you can extend after it has passed is not a deadline.
+     *
+     * @return true if there was a countdown left to extend
+     */
+    public static boolean extend(ServerLevel level, ServerPlayer player, int seconds) {
+        UUID id = player.getUUID();
+        Integer left = COUNTDOWN.get(id);
+        if (!INFECTED.contains(id) || left == null) {
+            return false;
+        }
+        int now = left + seconds;
+        COUNTDOWN.put(id, now);
+        int ticks = now * 20;
+        // The crippling effects were pinned to the original window, so without
+        // this a treated runner walks away cured of everything but the dying.
+        player.addEffect(new MobEffectInstance(MobEffects.CONFUSION, ticks, 0, false, true));
+        player.addEffect(new MobEffectInstance(MobEffects.MOVEMENT_SLOWDOWN, ticks, 0, false, true));
+        player.addEffect(new MobEffectInstance(MobEffects.WEAKNESS, ticks, 0, false, true));
+        player.displayClientMessage(Component.literal(
+                "§a✚ Treated. §7The Changing is held off — §f" + now + "s§7 left."), false);
+        level.playSound(null, player.blockPosition(), SoundEvents.BEACON_ACTIVATE,
+                SoundSource.PLAYERS, 0.8F, 1.6F);
+        return true;
+    }
+
+    /** True if the venom has taken and the deadline has not yet passed. */
+    public static boolean isChanging(UUID id) {
+        return INFECTED.contains(id) && COUNTDOWN.containsKey(id);
+    }
+
+    /**
      * Grief Serum: stops the Changing and wipes the tally.
      *
      * @return true if there was something to cure

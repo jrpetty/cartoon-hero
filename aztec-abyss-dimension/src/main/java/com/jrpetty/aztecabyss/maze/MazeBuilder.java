@@ -118,7 +118,7 @@ public final class MazeBuilder {
      * and put the barrier lid over the corridors.
      * <p>3: added the Map Room to the Glade.
      */
-    private static final int GEOMETRY_VERSION = 3;
+    private static final int GEOMETRY_VERSION = 4;
 
     /** One distinctive block per version, so the marker is readable in-world. */
     private static final BlockState[] VERSION_BLOCKS = {

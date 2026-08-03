@@ -46,6 +46,17 @@ public final class MazeCharts extends SavedData {
     private final BitSet glade = new BitSet(CELLS);
     /** Per player, what they personally have walked. */
     private final Map<UUID, BitSet> mine = new HashMap<>();
+    /**
+     * Cells a Builder has left a mark in.
+     *
+     * <p>Charting records where somebody <em>went</em>; this records where
+     * somebody decided it was worth saying something. They are different facts
+     * and the second is the more useful one, because a corridor you walked and
+     * a corridor you walked and then flagged are not the same corridor. It is
+     * Glade-wide with no per-player copy on purpose - a mark is a message left
+     * for other people, so there is no private version of it.
+     */
+    private final BitSet marks = new BitSet(CELLS);
 
     private static int index(int cellX, int cellZ) {
         return cellZ * MazeData.GRID + cellX;
@@ -69,6 +80,38 @@ public final class MazeCharts extends SavedData {
         glade.set(i);
         setDirty();
         return true;
+    }
+
+    /** Flags a cell as marked. Returns true if it was not already. */
+    public boolean mark(int cellX, int cellZ) {
+        if (cellX < 0 || cellZ < 0 || cellX >= MazeData.GRID || cellZ >= MazeData.GRID) {
+            return false;
+        }
+        int i = index(cellX, cellZ);
+        if (marks.get(i)) {
+            return false;
+        }
+        marks.set(i);
+        setDirty();
+        return true;
+    }
+
+    /** Drops the flag when the last mark in a cell comes down. */
+    public void unmark(int cellX, int cellZ) {
+        if (cellX < 0 || cellZ < 0 || cellX >= MazeData.GRID || cellZ >= MazeData.GRID) {
+            return;
+        }
+        marks.clear(index(cellX, cellZ));
+        setDirty();
+    }
+
+    public boolean marked(int cellX, int cellZ) {
+        return cellX >= 0 && cellZ >= 0 && cellX < MazeData.GRID && cellZ < MazeData.GRID
+                && marks.get(index(cellX, cellZ));
+    }
+
+    public int markCount() {
+        return marks.cardinality();
     }
 
     public boolean charted(int cellX, int cellZ) {
@@ -146,6 +189,7 @@ public final class MazeCharts extends SavedData {
     @Override
     public CompoundTag save(CompoundTag tag, HolderLookup.Provider registries) {
         tag.putByteArray("Glade", glade.toByteArray());
+        tag.putByteArray("Marks", marks.toByteArray());
         CompoundTag people = new CompoundTag();
         mine.forEach((id, bits) -> people.putByteArray(id.toString(), bits.toByteArray()));
         tag.put("Mine", people);
@@ -155,6 +199,7 @@ public final class MazeCharts extends SavedData {
     public static MazeCharts load(CompoundTag tag, HolderLookup.Provider registries) {
         MazeCharts c = new MazeCharts();
         c.glade.or(BitSet.valueOf(tag.getByteArray("Glade")));
+        c.marks.or(BitSet.valueOf(tag.getByteArray("Marks")));
         CompoundTag people = tag.getCompound("Mine");
         for (String key : people.getAllKeys()) {
             try {
@@ -199,6 +244,10 @@ public final class MazeCharts extends SavedData {
                     row.append("§a▒");
                 } else if (cx < 0 || cz < 0 || cx >= MazeData.GRID || cz >= MazeData.GRID) {
                     row.append("§8·");
+                } else if (marked(cx, cz)) {
+                    // A Builder's mark outranks everything except where you are
+                    // standing, because somebody chose to put it there.
+                    row.append("§e✚");
                 } else if (chartedBy(viewer.getUUID(), cx, cz)) {
                     row.append("§f█");
                 } else if (charted(cx, cz)) {

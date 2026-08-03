@@ -33,6 +33,9 @@ public final class MazeEvents {
     private MazeEvents() {
     }
 
+    /** How high anything may be built inside the Glade. */
+    private static final int BUILD_CEILING = MazeData.FLOOR_Y + 12;
+
     /** Players who asked to go in while the maze was still being raised. */
     private static final java.util.Set<java.util.UUID> WAITING = new java.util.HashSet<>();
 
@@ -88,14 +91,98 @@ public final class MazeEvents {
         if (event.getEntity() instanceof ServerPlayer p && p.isCreative()) {
             return;
         }
-        if (isRunnersMark(event.getPlacedBlock().getBlock())) {
+        // The Glade is yours. Breaking inside it was already allowed and placing
+        // was not, which meant you could pull your own hut apart and never put
+        // it back - a rule that only ever destroys is not a rule, it is a hole.
+        //
+        // With a ceiling, though. The Glade is the one place left open to the
+        // sky, so an uncapped build height is a pillar up to the wall tops and a
+        // walk over the whole maze - the exploit that banning placement outright
+        // used to close by accident. Twelve blocks is a tower, a lookout or a
+        // second storey; it is six short of the top of the wall.
+        if (insideGlade(event.getPos())) {
+            if (event.getPos().getY() <= BUILD_CEILING) {
+                return;
+            }
+            if (event.getEntity() instanceof ServerPlayer p) {
+                p.displayClientMessage(Component.literal(
+                        "§7Not that high. §8The wall is not a road."), true);
+            }
+            event.setCanceled(true);
             return;
         }
-        if (event.getEntity() instanceof ServerPlayer p) {
-            p.displayClientMessage(Component.literal(
+        ServerPlayer player = event.getEntity() instanceof ServerPlayer sp ? sp : null;
+        var block = event.getPlacedBlock().getBlock();
+        if (isRunnersMark(block)) {
+            return;
+        }
+        if (player != null && isBuildersMark(level, player, block)) {
+            markCell(level, player, event.getPos());
+            return;
+        }
+        if (player != null) {
+            player.displayClientMessage(Component.literal(
                     "§7Signs and torches only. §8The walls are the puzzle."), true);
         }
         event.setCanceled(true);
+    }
+
+    private static boolean insideGlade(net.minecraft.core.BlockPos at) {
+        int min = MazeData.gladeMinBlock();
+        int max = MazeData.gladeMaxBlock();
+        return at.getX() >= min && at.getX() <= max && at.getZ() >= min && at.getZ() <= max;
+    }
+
+    /**
+     * What a Builder may leave that a Runner may not.
+     *
+     * <p>Everything here is chosen on one test: can you stand on it, and does it
+     * change where a wall is. Carpet is a sixteenth of a block and needs support
+     * underneath, wool replaces nothing, and lanterns and banners hang. None of
+     * them shortens a corridor, so the maze stays the maze while the person
+     * whose job is marking it can actually mark it in more than one colour.
+     */
+    private static boolean isBuildersMark(ServerLevel level, ServerPlayer player,
+                                          net.minecraft.world.level.block.Block block) {
+        MazeJobs jobs = MazeJobs.get(level);
+        if (!jobs.is(player.getUUID(), MazeJobs.BUILDER)) {
+            return false;
+        }
+        int rank = jobs.level(player.getUUID());
+        var state = block.defaultBlockState();
+        if (state.is(net.minecraft.tags.BlockTags.WOOL_CARPETS)) {
+            return true;
+        }
+        if (rank >= 2 && state.is(net.minecraft.tags.BlockTags.WOOL)) {
+            return true;
+        }
+        return rank >= 3 && (state.is(net.minecraft.tags.BlockTags.BANNERS)
+                || block == net.minecraft.world.level.block.Blocks.LANTERN
+                || block == net.minecraft.world.level.block.Blocks.SOUL_LANTERN);
+    }
+
+    /**
+     * Records that somebody said something about this cell, and pays them for it.
+     *
+     * <p>A level 4 Builder's mark also charts the cell for the whole Glade. That
+     * is the one perk in the game that hands other people something rather than
+     * the person who earned it, which is the right shape for the job: a Builder
+     * at the top of their trade is useful to the Glade, not to themselves.
+     */
+    private static void markCell(ServerLevel level, ServerPlayer player, net.minecraft.core.BlockPos at) {
+        if (level.getServer() == null) {
+            return;
+        }
+        MazeCharts charts = MazeCharts.get(level.getServer());
+        int cellX = at.getX() / MazeData.CELL;
+        int cellZ = at.getZ() / MazeData.CELL;
+        MazeJobs jobs = MazeJobs.get(level);
+        if (charts.mark(cellX, cellZ)) {
+            jobs.award(player, MazeJobs.BUILDER, 3);
+            if (jobs.level(player.getUUID()) >= MazeJobs.MAX_LEVEL) {
+                charts.chart(player.getUUID(), cellX, cellZ);
+            }
+        }
     }
 
     /**
@@ -147,17 +234,92 @@ public final class MazeEvents {
             event.setCanceled(true);
             return;
         }
-        int min = MazeData.gladeMinBlock();
-        int max = MazeData.gladeMaxBlock();
-        boolean insideGlade = at.getX() >= min && at.getX() <= max
-                && at.getZ() >= min && at.getZ() <= max;
-        if (!insideGlade) {
+        if (!insideGlade(at)) {
+            // A mark is not the maze. Signs, torches and a Builder's colours were
+            // placeable and then permanent, so one torch on the wrong wall stayed
+            // there for the life of the world and a chart could only ever be added
+            // to. Taking your own marks back down is half of mapping.
+            if (isMark(event.getState())) {
+                if (p != null && level.getServer() != null) {
+                    clearMarkIfLast(level, at);
+                }
+                return;
+            }
             if (p != null) {
                 p.displayClientMessage(Component.literal(
                         "§7The maze does not come apart. §8Only the Glade is yours."), true);
             }
             event.setCanceled(true);
+            return;
         }
+        if (p != null) {
+            trackHoe(level, p, event.getState());
+        }
+    }
+
+    /** Anything a player was ever allowed to leave in a corridor. */
+    private static boolean isMark(net.minecraft.world.level.block.state.BlockState state) {
+        return state.is(net.minecraft.tags.BlockTags.ALL_SIGNS)
+                || state.is(net.minecraft.tags.BlockTags.WOOL_CARPETS)
+                || state.is(net.minecraft.tags.BlockTags.WOOL)
+                || state.is(net.minecraft.tags.BlockTags.BANNERS)
+                || isRunnersMark(state.getBlock())
+                || state.getBlock() == net.minecraft.world.level.block.Blocks.LANTERN
+                || state.getBlock() == net.minecraft.world.level.block.Blocks.SOUL_LANTERN;
+    }
+
+    /**
+     * Drops the map flag when the last mark in a cell comes down.
+     *
+     * <p>Scans the cell rather than counting, because a count would have to be
+     * kept in step with every way a block can vanish and this cannot drift. Six
+     * by six by the wall height is a small enough box to walk once on a break.
+     */
+    private static void clearMarkIfLast(ServerLevel level, net.minecraft.core.BlockPos broken) {
+        int cellX = broken.getX() / MazeData.CELL;
+        int cellZ = broken.getZ() / MazeData.CELL;
+        MazeCharts charts = MazeCharts.get(level.getServer());
+        if (!charts.marked(cellX, cellZ)) {
+            return;
+        }
+        net.minecraft.core.BlockPos.MutableBlockPos scan = new net.minecraft.core.BlockPos.MutableBlockPos();
+        for (int x = 0; x < MazeData.CELL; x++) {
+            for (int z = 0; z < MazeData.CELL; z++) {
+                for (int y = MazeData.FLOOR_Y + 1; y <= MazeData.WALL_TOP_Y; y++) {
+                    scan.set(cellX * MazeData.CELL + x, y, cellZ * MazeData.CELL + z);
+                    if (scan.equals(broken)) {
+                        continue; // this one is on its way out
+                    }
+                    if (isMark(level.getBlockState(scan))) {
+                        return;
+                    }
+                }
+            }
+        }
+        charts.unmark(cellX, cellZ);
+    }
+
+    /**
+     * The field, finally worth walking into.
+     *
+     * <p>It was drawn with farmland, a water channel, a fence and three crops
+     * and then left as a backdrop: harvesting it did nothing, and the wheat it
+     * gave you was worth less than the time it took. Now a Track-hoe's harvest
+     * goes into the Glade's larder, which is a number other people spend.
+     */
+    private static void trackHoe(ServerLevel level, ServerPlayer p,
+                                 net.minecraft.world.level.block.state.BlockState state) {
+        if (!(state.getBlock() instanceof net.minecraft.world.level.block.CropBlock crop)
+                || !crop.isMaxAge(state)) {
+            return;
+        }
+        MazeJobs jobs = MazeJobs.get(level);
+        if (!jobs.is(p.getUUID(), MazeJobs.TRACKHOE)) {
+            return;
+        }
+        int rank = jobs.level(p.getUUID());
+        jobs.store(rank);
+        jobs.award(p, MazeJobs.TRACKHOE, 1);
     }
 
     @SubscribeEvent
@@ -187,6 +349,19 @@ public final class MazeEvents {
                 .then(Commands.literal("status").executes(ctx -> status(ctx.getSource())))
                 .then(Commands.literal("section").executes(ctx -> section(ctx.getSource())))
                 .then(Commands.literal("map").executes(ctx -> chart(ctx.getSource())))
+                .then(Commands.literal("job")
+                        .executes(ctx -> jobInfo(ctx.getSource()))
+                        .then(Commands.literal(MazeJobs.RUNNER)
+                                .executes(ctx -> takeJob(ctx.getSource(), MazeJobs.RUNNER)))
+                        .then(Commands.literal(MazeJobs.BUILDER)
+                                .executes(ctx -> takeJob(ctx.getSource(), MazeJobs.BUILDER)))
+                        .then(Commands.literal(MazeJobs.MEDJACK)
+                                .executes(ctx -> takeJob(ctx.getSource(), MazeJobs.MEDJACK)))
+                        .then(Commands.literal(MazeJobs.TRACKHOE)
+                                .executes(ctx -> takeJob(ctx.getSource(), MazeJobs.TRACKHOE))))
+                .then(Commands.literal("jobs").executes(ctx -> roster(ctx.getSource())))
+                .then(Commands.literal("treat").executes(ctx -> treat(ctx.getSource())))
+                .then(Commands.literal("rations").executes(ctx -> rations(ctx.getSource())))
                 .then(Commands.literal("rebuild").requires(src -> src.hasPermission(2))
                         .executes(ctx -> rebuild(ctx.getSource())))
                 .then(Commands.literal("leaderboard").executes(ctx -> leaderboard(ctx.getSource())))
@@ -351,7 +526,165 @@ public final class MazeEvents {
                 "§7NW §f" + sec[0] + "%  §7NE §f" + sec[1]
                         + "%  §7SW §f" + sec[2] + "%  §7SE §f" + sec[3] + "%"), false);
         src.sendSuccess(() -> Component.literal(
-                "§8█ yours   ▓ brought back by others   · unknown   ▒ the Glade"), false);
+                "§8█ yours   ▓ brought back by others   §e✚§8 marked   · unknown   ▒ the Glade"), false);
+        return 1;
+    }
+
+    // ------------------------------------------------------------------
+    // Jobs
+    // ------------------------------------------------------------------
+
+    /** What you are, what it gives you, and what the next level gives you. */
+    private static int jobInfo(CommandSourceStack src) {
+        ServerPlayer player = src.getPlayer();
+        if (player == null || src.getServer() == null) {
+            return 0;
+        }
+        MazeJobs jobs = MazeJobs.get(src.getServer());
+        String job = jobs.jobOf(player.getUUID());
+        if (job == null) {
+            src.sendSuccess(() -> Component.literal("§6— THE JOB BOARD —"), false);
+            for (String j : MazeJobs.ALL) {
+                src.sendSuccess(() -> Component.literal(
+                        "  " + MazeJobs.display(j) + " §8/maze job " + j), false);
+                src.sendSuccess(() -> Component.literal("    " + MazeJobs.blurb(j)), false);
+            }
+            src.sendSuccess(() -> Component.literal(
+                    "§8Changing your mind is free — every job keeps its own experience."), false);
+            return 1;
+        }
+        int rank = jobs.levelOf(player.getUUID(), job);
+        int next = jobs.toNext(player.getUUID(), job);
+        src.sendSuccess(() -> Component.literal(
+                MazeJobs.display(job) + " §8lv" + rank + " §7— " + MazeJobs.perkLine(job, rank)), false);
+        src.sendSuccess(() -> Component.literal(next < 0
+                ? "§8Top of the trade."
+                : "§7" + next + " more and you make level " + (rank + 1) + "§7: §f"
+                        + MazeJobs.perkLine(job, rank + 1)), false);
+        src.sendSuccess(() -> Component.literal(
+                "§7The larder holds §f" + jobs.larder() + "§7. §8/maze rations"), false);
+        return 1;
+    }
+
+    private static int takeJob(CommandSourceStack src, String job) {
+        ServerPlayer player = src.getPlayer();
+        if (player == null || src.getServer() == null) {
+            return 0;
+        }
+        MazeJobs jobs = MazeJobs.get(src.getServer());
+        if (!jobs.setJob(player.getUUID(), job)) {
+            src.sendSuccess(() -> Component.literal("§7You already are one."), false);
+            return 0;
+        }
+        int rank = jobs.levelOf(player.getUUID(), job);
+        src.sendSuccess(() -> Component.literal(
+                "§7You are a " + MazeJobs.display(job) + " §8lv" + rank), false);
+        src.sendSuccess(() -> Component.literal("  " + MazeJobs.perkLine(job, rank)), false);
+        for (ServerPlayer other : src.getServer().getPlayerList().getPlayers()) {
+            if (other != player) {
+                other.displayClientMessage(Component.literal(
+                        "§7" + player.getGameProfile().getName() + " is a "
+                                + MazeJobs.display(job) + "§7 now."), false);
+            }
+        }
+        return 1;
+    }
+
+    private static int roster(CommandSourceStack src) {
+        if (src.getServer() == null) {
+            return 0;
+        }
+        MazeJobs jobs = MazeJobs.get(src.getServer());
+        src.sendSuccess(() -> Component.literal("§6— THE GLADE —"), false);
+        for (String row : jobs.roster(src.getServer())) {
+            src.sendSuccess(() -> Component.literal("  " + row), false);
+        }
+        src.sendSuccess(() -> Component.literal(
+                "§7Larder §f" + jobs.larder()), false);
+        return 1;
+    }
+
+    /**
+     * A Med-jack working on somebody.
+     *
+     * <p>Range is deliberately short. Treating from across the Glade would make
+     * the job a command rather than a thing you do, and the point of it is that
+     * somebody has to physically get to a runner who is dying on the grass.
+     */
+    private static int treat(CommandSourceStack src) {
+        ServerPlayer player = src.getPlayer();
+        ServerLevel level = src.getLevel();
+        if (player == null || src.getServer() == null || !isMaze(level)) {
+            src.sendFailure(Component.literal("Only inside the maze."));
+            return 0;
+        }
+        MazeJobs jobs = MazeJobs.get(src.getServer());
+        if (!jobs.is(player.getUUID(), MazeJobs.MEDJACK)) {
+            src.sendFailure(Component.literal("You are not a Med-jack. §8/maze job medjack"));
+            return 0;
+        }
+        ServerPlayer patient = null;
+        double best = Double.MAX_VALUE;
+        for (ServerPlayer other : level.players()) {
+            if (!MazeSting.isChanging(other.getUUID())) {
+                continue;
+            }
+            double d = other.distanceToSqr(player);
+            if (d <= 25.0 && d < best) {
+                best = d;
+                patient = other;
+            }
+        }
+        if (patient == null) {
+            src.sendFailure(Component.literal("Nobody within reach is Changing."));
+            return 0;
+        }
+        int rank = jobs.level(player.getUUID());
+        long day = MazeRuntime.dayNumber(level);
+        final ServerPlayer subject = patient;
+        if (rank >= 3 && MazeJobs.cureReady(player.getUUID(), day, rank)) {
+            MazeJobs.spendCure(player.getUUID(), day);
+            MazeSting.cure(level, subject);
+            jobs.award(player, MazeJobs.MEDJACK, 20);
+            src.sendSuccess(() -> Component.literal(
+                    "§a✚ You pulled " + subject.getGameProfile().getName() + " back."), false);
+            return 1;
+        }
+        int seconds = rank >= 2 ? 45 : 30;
+        if (!MazeSting.extend(level, subject, seconds)) {
+            src.sendFailure(Component.literal("Too late. It has already taken."));
+            return 0;
+        }
+        jobs.award(player, MazeJobs.MEDJACK, 8);
+        src.sendSuccess(() -> Component.literal(
+                "§a✚ You bought " + subject.getGameProfile().getName()
+                        + " §f" + seconds + "s§a."), false);
+        return 1;
+    }
+
+    /**
+     * Drawing on the Glade's stores.
+     *
+     * <p>Bread rather than the raw crop, because the Track-hoe's work should be
+     * worth more coming out of the larder than it was going in - otherwise the
+     * shared store is a worse inventory and nobody uses it.
+     */
+    private static int rations(CommandSourceStack src) {
+        ServerPlayer player = src.getPlayer();
+        if (player == null || src.getServer() == null) {
+            return 0;
+        }
+        MazeJobs jobs = MazeJobs.get(src.getServer());
+        if (!jobs.draw(4)) {
+            src.sendFailure(Component.literal(
+                    "The larder is near empty — §f" + jobs.larder()
+                            + "§7. Somebody has to work the field."));
+            return 0;
+        }
+        player.getInventory().placeItemBackInInventory(
+                new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.BREAD, 3));
+        src.sendSuccess(() -> Component.literal(
+                "§7Rations drawn. §8The larder holds " + jobs.larder() + "."), false);
         return 1;
     }
 
