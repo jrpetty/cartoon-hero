@@ -462,6 +462,11 @@ public final class MazeEvents {
         if (event.getPos().equals(DeadGlade.lectern())) {
             DeadGlade.readCharts(level, p);
             event.setCanceled(true);
+            return;
+        }
+        // The trade desk and the order desk, so neither screen needs a command.
+        if (MazeStations.onUse(level, p, event.getPos())) {
+            event.setCanceled(true);
         }
     }
 

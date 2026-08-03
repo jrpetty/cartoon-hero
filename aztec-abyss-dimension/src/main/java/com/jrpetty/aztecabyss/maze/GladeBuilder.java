@@ -43,6 +43,7 @@ public final class GladeBuilder {
         mapRoom(level);
         jobBoard(level);
         bellTower(level);
+        MazeStations.build(level);
         doorFrames(level);
         // Last, and it clears its own airspace first: the woods scatter trees
         // across this quarter of the clearing and a plaza laid under them would

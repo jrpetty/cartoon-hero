@@ -132,8 +132,10 @@ public final class MazeBuilder {
      * <p>8: the Dead Glade was carved into the south-west.
      * <p>9: the bell tower went up in the Glade.
      * <p>10: the outer rim stopped being bedrock.
+     * <p>11: the trade desk and the order desk went up, and the portal moved to
+     * the back of its chamber.
      */
-    private static final int GEOMETRY_VERSION = 10;
+    private static final int GEOMETRY_VERSION = 11;
 
     /** One distinctive block per version, so the marker is readable in-world. */
     private static final BlockState[] VERSION_BLOCKS = {
@@ -151,6 +153,7 @@ public final class MazeBuilder {
             Blocks.TUFF.defaultBlockState(),
             Blocks.CALCITE.defaultBlockState(),
             Blocks.DRIPSTONE_BLOCK.defaultBlockState(),
+            Blocks.TUFF_BRICKS.defaultBlockState(),
     };
 
     private static BlockState versionBlock() {

@@ -1022,7 +1022,51 @@ public final class MazeRuntime {
      * doorway is the one thing in the maze that says <em>this is the way out</em>
      * without a marker on your screen telling you so.
      */
-    private static void portalFrame(ServerLevel level, MazeData.Exit ex, int[] p) {
+    private static void portalFrame(ServerLevel level, MazeData.Exit ex, BlockPos centre) {
+        boolean alongX = "north".equals(ex.facing()) || "south".equals(ex.facing());
+        int baseY = centre.getY() - 1;
+        for (int side = -2; side <= 2; side++) {
+            for (int dy = 0; dy <= 6; dy++) {
+                boolean jamb = side == -2 || side == 2;
+                boolean head = dy == 0 || dy == 6;
+                if (!jamb && !head) {
+                    continue;
+                }
+                BlockPos at = new BlockPos(
+                        centre.getX() + (alongX ? side : 0),
+                        baseY + dy,
+                        centre.getZ() + (alongX ? 0 : side));
+                level.setBlock(at, jamb && head
+                        ? Blocks.CHISELED_DEEPSLATE.defaultBlockState()
+                        : jamb ? Blocks.CRYING_OBSIDIAN.defaultBlockState()
+                        : Blocks.POLISHED_DEEPSLATE.defaultBlockState(), 2);
+            }
+        }
+        // Lit from both jambs, and standing on a dais, so it reads as the thing
+        // the whole room was built around rather than as a gap in a wall.
+        for (int side : new int[]{-2, 2}) {
+            level.setBlock(new BlockPos(
+                    centre.getX() + (alongX ? side : 0),
+                    baseY + 3,
+                    centre.getZ() + (alongX ? 0 : side)), Blocks.SEA_LANTERN.defaultBlockState(), 2);
+        }
+        for (int a = -1; a <= 1; a++) {
+            level.setBlock(new BlockPos(
+                    centre.getX() + (alongX ? a : 0),
+                    baseY,
+                    centre.getZ() + (alongX ? 0 : a)),
+                    Blocks.CHISELED_DEEPSLATE.defaultBlockState(), 2);
+        }
+    }
+
+    /**
+     * The doorway out of the maze: an arch, not a prize.
+     *
+     * <p>Plain trim and a light. Whatever stands here has to read as "the maze
+     * ends and something else begins", and emphatically not as the way out -
+     * the way out is at the far end of the room beyond it.
+     */
+    private static void doorwayArch(ServerLevel level, MazeData.Exit ex, int[] p) {
         boolean alongX = "north".equals(ex.facing()) || "south".equals(ex.facing());
         for (int side = -1; side <= 2; side++) {
             for (int dy = -1; dy <= 5; dy++) {
@@ -1031,22 +1075,12 @@ public final class MazeRuntime {
                 if (!jamb && !head) {
                     continue;
                 }
-                BlockPos at = new BlockPos(
+                level.setBlock(new BlockPos(
                         p[0] + (alongX ? side : 0),
                         MazeData.WALL_BASE_Y + dy,
-                        p[2] + (alongX ? 0 : side));
-                level.setBlock(at, jamb && head
-                        ? Blocks.CHISELED_DEEPSLATE.defaultBlockState()
-                        : jamb ? Blocks.CRYING_OBSIDIAN.defaultBlockState()
-                        : Blocks.POLISHED_DEEPSLATE.defaultBlockState(), 2);
+                        p[2] + (alongX ? 0 : side)),
+                        Blocks.POLISHED_DEEPSLATE.defaultBlockState(), 2);
             }
-        }
-        // A pair of lights on the jambs, so it reads as lit rather than as a hole.
-        for (int side : new int[]{-1, 2}) {
-            level.setBlock(new BlockPos(
-                    p[0] + (alongX ? side : 0),
-                    MazeData.WALL_BASE_Y + 2,
-                    p[2] + (alongX ? 0 : side)), Blocks.SEA_LANTERN.defaultBlockState(), 2);
         }
     }
 
@@ -1368,7 +1402,17 @@ public final class MazeRuntime {
                 level.setBlock(new BlockPos(p[0], MazeData.WALL_BASE_Y + 4, p[2]),
                         Blocks.LANTERN.defaultBlockState()
                                 .setValue(net.minecraft.world.level.block.state.properties.BlockStateProperties.HANGING, true), 2);
-                portalFrame(level, ex, p);
+                // A doorway here, and the portal fifty-four blocks further on at
+                // the back of the chamber.
+                //
+                // The dressed frame used to stand right here, in the maze wall.
+                // It looked exactly like the way out, so people walked up to it,
+                // stopped, and never went down the lane at all - which is also
+                // why nobody ever saw the sixty standing in it. Two symptoms,
+                // one cause: the prize was drawn at the entrance to the room it
+                // is supposed to be at the back of.
+                doorwayArch(level, ex, p);
+                portalFrame(level, ex, PortalAnnex.portalPos(ex));
             }
         }
     }
