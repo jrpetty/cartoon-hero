@@ -81,6 +81,14 @@ public final class TheBox {
         RandomSource rng = RandomSource.create(0xB0E5 + day * 7919L);
         MazeJobs jobs = MazeJobs.get(level);
 
+        // From the second morning the Box stops giving and starts filling
+        // orders. Two days of handouts is enough to learn the place; after that
+        // the supply line is a decision somebody has to make every evening.
+        if (day >= MazeOrders.REQUISITION_FROM_DAY) {
+            fillOrders(level, day);
+            return;
+        }
+
         List<ItemStack> staples = staples(rng, heads, day);
         if (day == 0) {
             // Two cures in the first crate. Day one is the only day nobody has
@@ -114,6 +122,75 @@ public final class TheBox {
         }
         level.playSound(null, new BlockPos(MazeData.SPAWN_X, MazeData.FLOOR_Y + 2, MazeData.SPAWN_Z),
                 SoundEvents.ANVIL_LAND, SoundSource.BLOCKS, 1.4F, 0.6F);
+    }
+
+    /**
+     * Filling the slates.
+     *
+     * <p>One crate per person, on their own coloured pad, holding exactly what
+     * they asked for. A player who ordered nothing gets a ration of bread rather
+     * than an empty box - forgetting to order should be a bad day, not a fatal
+     * one, and an empty crate teaches nothing except that the system is broken.
+     */
+    private static void fillOrders(ServerLevel level, int day) {
+        MazeOrders orders = MazeOrders.get(level);
+        MazeSkills skills = MazeSkills.get(level);
+        int slot = 0;
+        for (ServerPlayer p : level.players()) {
+            List<ItemStack> goods = new ArrayList<>();
+            int spent = 0;
+            for (var line : orders.slate(p.getUUID()).entrySet()) {
+                MazeOrders.Entry e = MazeOrders.entry(line.getKey());
+                if (e == null) {
+                    continue;
+                }
+                goods.addAll(MazeOrders.build(e, line.getValue(),
+                        skills.rank(p.getUUID(), "dressing")));
+                spent += e.cost() * line.getValue();
+            }
+            boolean ordered = !goods.isEmpty();
+            if (!ordered) {
+                goods.add(new ItemStack(Items.BREAD, 6));
+            }
+            stock(level, orderSlot(slot++), p.getGameProfile().getName(),
+                    Blocks.LIGHT_GRAY_CONCRETE.defaultBlockState(), goods);
+            final int paid = spent;
+            p.displayClientMessage(Component.literal(ordered
+                    ? "§6▲ The Box came up. §7Your order is in the cage — §f" + paid + "§7 points spent."
+                    : "§6▲ The Box came up. §8You ordered nothing. §7Bread, then."), false);
+            p.displayClientMessage(Component.literal(
+                    "§7Today you have §f" + MazeOrders.budget(level, p.getUUID())
+                            + "§7 points. §8/maze order"), false);
+            level.playSound(null, p.blockPosition(), SoundEvents.BEACON_ACTIVATE,
+                    SoundSource.BLOCKS, 1.0F, 0.7F);
+        }
+        // Slates are per day. Anything not spent is gone, which is what makes
+        // the evening decision a decision.
+        orders.clearAll();
+        level.playSound(null, new BlockPos(MazeData.SPAWN_X, MazeData.FLOOR_Y + 2, MazeData.SPAWN_Z),
+                SoundEvents.ANVIL_LAND, SoundSource.BLOCKS, 1.4F, 0.6F);
+    }
+
+    /**
+     * Where one person's crate lands.
+     *
+     * <p>Ringed around the outside of the cage rather than inside it, because
+     * eight crates will not fit in a five by five box and a queue to reach your
+     * own supplies is a bad first minute of the day.
+     */
+    private static BlockPos orderSlot(int index) {
+        int cx = MazeData.SPAWN_X;
+        int cz = MazeData.SPAWN_Z;
+        int ring = 5;
+        int side = index / 4;
+        int along = index % 4;
+        int offset = -3 + along * 2;
+        return switch (side) {
+            case 0 -> new BlockPos(cx + offset, MazeData.FLOOR_Y + 1, cz - ring);
+            case 1 -> new BlockPos(cx + ring, MazeData.FLOOR_Y + 1, cz + offset);
+            case 2 -> new BlockPos(cx + offset, MazeData.FLOOR_Y + 1, cz + ring);
+            default -> new BlockPos(cx - ring, MazeData.FLOOR_Y + 1, cz + offset);
+        };
     }
 
     /** How many people are currently doing a given job. */

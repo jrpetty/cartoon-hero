@@ -477,6 +477,20 @@ public final class MazeEvents {
                                         com.mojang.brigadier.arguments.StringArgumentType.getString(ctx, "skill")))))
                 .then(Commands.literal("forget").executes(ctx -> forget(ctx.getSource())))
                 .then(Commands.literal("bandage").executes(ctx -> bandage(ctx.getSource())))
+                .then(Commands.literal("order")
+                        .executes(ctx -> orderSheet(ctx.getSource()))
+                        .then(Commands.literal("clear").executes(ctx -> orderClear(ctx.getSource())))
+                        .then(Commands.literal("cancel")
+                                .then(Commands.argument("item", com.mojang.brigadier.arguments.StringArgumentType.word())
+                                        .executes(ctx -> orderCancel(ctx.getSource(),
+                                                com.mojang.brigadier.arguments.StringArgumentType.getString(ctx, "item")))))
+                        .then(Commands.argument("item", com.mojang.brigadier.arguments.StringArgumentType.word())
+                                .executes(ctx -> orderAdd(ctx.getSource(),
+                                        com.mojang.brigadier.arguments.StringArgumentType.getString(ctx, "item"), 1))
+                                .then(Commands.argument("qty", com.mojang.brigadier.arguments.IntegerArgumentType.integer(1, 64))
+                                        .executes(ctx -> orderAdd(ctx.getSource(),
+                                                com.mojang.brigadier.arguments.StringArgumentType.getString(ctx, "item"),
+                                                com.mojang.brigadier.arguments.IntegerArgumentType.getInteger(ctx, "qty"))))))
                 .then(Commands.literal("treat").executes(ctx -> treat(ctx.getSource())))
                 .then(Commands.literal("rations").executes(ctx -> rations(ctx.getSource())))
                 .then(Commands.literal("rebuild").requires(src -> src.hasPermission(2))
@@ -657,6 +671,116 @@ public final class MazeEvents {
             return 0;
         }
         ChartFloor.cycle(src.getLevel(), player);
+        return 1;
+    }
+
+    // ------------------------------------------------------------------
+    // The requisition slate
+    // ------------------------------------------------------------------
+
+    /**
+     * The catalogue and what you have already committed.
+     *
+     * <p>Prices and budget on the same screen on purpose. A shop that makes you
+     * remember what you can afford while you read what things cost is a shop
+     * nobody uses properly.
+     */
+    private static int orderSheet(CommandSourceStack src) {
+        ServerPlayer player = src.getPlayer();
+        if (player == null || !isMaze(src.getLevel())) {
+            src.sendFailure(Component.literal("Only in the maze."));
+            return 0;
+        }
+        ServerLevel level = src.getLevel();
+        MazeOrders orders = MazeOrders.get(level);
+        int budget = MazeOrders.budget(level, player.getUUID());
+        int left = orders.remaining(level, player.getUUID());
+        MazeCharts charts = MazeCharts.get(src.getServer());
+
+        src.sendSuccess(() -> Component.literal(
+                "§6— THE SLATE — §f" + left + "§7 of §f" + budget + "§7 points left"), false);
+        src.sendSuccess(() -> Component.literal(
+                "§8" + MazeOrders.BASE_POINTS + " base §8+ " + (charts.myPercent(player.getUUID()) * 2)
+                        + " yours §8+ " + charts.gladePercent() + " the Glade's"), false);
+
+        var slate = orders.slate(player.getUUID());
+        if (!slate.isEmpty()) {
+            src.sendSuccess(() -> Component.literal("§7On order:"), false);
+            for (var line : slate.entrySet()) {
+                MazeOrders.Entry e = MazeOrders.entry(line.getKey());
+                if (e != null) {
+                    src.sendSuccess(() -> Component.literal("  §f" + line.getValue() + "× §7"
+                            + e.display() + " §8(" + (e.cost() * line.getValue()) + ")"), false);
+                }
+            }
+        }
+        src.sendSuccess(() -> Component.literal(
+                "§7Catalogue §8— /maze order <id> [qty]"), false);
+        StringBuilder row = new StringBuilder();
+        int n = 0;
+        for (MazeOrders.Entry e : MazeOrders.catalogue()) {
+            row.append("§f").append(e.id()).append(" §8").append(e.cost()).append("§7  ");
+            if (++n % 5 == 0) {
+                String text = row.toString();
+                src.sendSuccess(() -> Component.literal("  " + text), false);
+                row.setLength(0);
+            }
+        }
+        if (row.length() > 0) {
+            String text = row.toString();
+            src.sendSuccess(() -> Component.literal("  " + text), false);
+        }
+        src.sendSuccess(() -> Component.literal(
+                "§8No weapons, tools or armour — order the materials and make them."), false);
+        return 1;
+    }
+
+    private static int orderAdd(CommandSourceStack src, String id, int qty) {
+        ServerPlayer player = src.getPlayer();
+        if (player == null || !isMaze(src.getLevel())) {
+            src.sendFailure(Component.literal("Only in the maze."));
+            return 0;
+        }
+        MazeOrders.Entry e = MazeOrders.entry(id);
+        if (e == null) {
+            src.sendFailure(Component.literal("Nothing called that. §8/maze order"));
+            return 0;
+        }
+        ServerLevel level = src.getLevel();
+        MazeOrders orders = MazeOrders.get(level);
+        String why = orders.add(level, player.getUUID(), e, qty);
+        if (why != null) {
+            src.sendFailure(Component.literal(why));
+            return 0;
+        }
+        int left = orders.remaining(level, player.getUUID());
+        src.sendSuccess(() -> Component.literal(
+                "§a+ §f" + qty + "× " + e.display() + " §8(" + (e.cost() * qty) + ") §7— "
+                        + left + " left"), false);
+        return 1;
+    }
+
+    private static int orderCancel(CommandSourceStack src, String id) {
+        ServerPlayer player = src.getPlayer();
+        if (player == null || src.getServer() == null) {
+            return 0;
+        }
+        int removed = MazeOrders.get(src.getLevel()).cancel(player.getUUID(), id);
+        if (removed == 0) {
+            src.sendFailure(Component.literal("That is not on your slate."));
+            return 0;
+        }
+        src.sendSuccess(() -> Component.literal("§7Taken off — §f" + removed + "§7 refunded."), false);
+        return 1;
+    }
+
+    private static int orderClear(CommandSourceStack src) {
+        ServerPlayer player = src.getPlayer();
+        if (player == null || src.getServer() == null) {
+            return 0;
+        }
+        MazeOrders.get(src.getLevel()).clear(player.getUUID());
+        src.sendSuccess(() -> Component.literal("§7Slate wiped."), false);
         return 1;
     }
 

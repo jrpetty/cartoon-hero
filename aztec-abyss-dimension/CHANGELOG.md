@@ -13,6 +13,41 @@ behaviour that was already there · **docs**
 
 ## Unreleased
 
+### The requisition slate — the Box stops giving and starts filling orders
+
+The Box delivered a fixed crate every dawn, which made it **weather rather than a
+system**. Nobody ever decided anything about it: the same seeds and the same iron
+arrived whether the Glade was starving, out of arrows, or sitting on a fortnight
+of surplus. A supply line nobody chooses is scenery with items in it.
+
+- **feat** `MazeOrders` — a catalogue with a price on everything and **100 points
+  a day**. `/maze order` reads the slate, `/maze order <id> [qty]` commits,
+  `/maze order cancel <id>` and `/maze order clear` refund.
+- **change** **From the second morning the automatic crates stop.** Two days of
+  handouts is enough to learn the place; after that the supply line is a decision
+  somebody makes every evening.
+- **feat** **Points come from ground covered** — your own charting counts double,
+  the Glade's counts single, capped at 400. A Runner who has walked half the maze
+  is genuinely richer; a Track-hoe who never leaves the clearing still gets more
+  each week because the settlement is doing well. Nobody is punished for the trade
+  they took, and everybody now has a reason to want the maze charted.
+- **change** **No weapons, tools or armour on the catalogue, ever.** You order iron
+  and wood and you *make* them. That keeps the bench relevant, gives the Builder's
+  forge bonus somewhere to matter — their versions are simply better — and stops
+  the Box being a shop that sells the answer to every problem.
+- **change** **Points do not roll over.** Banking would turn a daily decision into
+  an occasional one and let a cautious Glade skip four days to buy something
+  enormous on the fifth, which is a worse game than choosing what you need
+  tomorrow morning.
+- **change** Priced as **bundles**, not per unit — 32 cobblestone for 2, 8 string
+  for 3, 1 diamond for 7. "One cobblestone for a point" is not a decision anybody
+  wants to make thirty-two times; the bundle is the unit of thought.
+- **feat** One crate per person, ringed around the outside of the cage rather than
+  inside it — eight crates do not fit in a five-by-five box and a queue to reach
+  your own supplies is a bad first minute of the day.
+- **change** Order nothing and you get **bread**, not an empty crate. Forgetting
+  should be a bad day, not a fatal one.
+
 ### Bearings — a third Runner skill that gives nothing away
 
 - **feat** **Bearings** replaces the deleted Endurance, and is deliberately the
