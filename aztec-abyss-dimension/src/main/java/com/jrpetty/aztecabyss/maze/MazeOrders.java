@@ -88,6 +88,10 @@ public final class MazeOrders extends SavedData {
             new Entry("Stone", "stone", "Stone", Items.STONE, 16, 2),
             new Entry("Stone", "glass", "Glass", Items.GLASS, 16, 2),
             new Entry("Stone", "clay", "Bricks", Items.BRICK, 8, 2),
+            // Flint, because gravel does not exist in here and the floor never
+            // breaks. Without this line the fletching table is missing a leg and
+            // a bow is an ornament.
+            new Entry("Stone", "flint", "Flint", Items.FLINT, 8, 3),
 
             // --- timber
             new Entry("Timber", "logs", "Oak logs", Items.OAK_LOG, 8, 3),
@@ -100,7 +104,6 @@ public final class MazeOrders extends SavedData {
             new Entry("Cloth", "string", "String", Items.STRING, 8, 3),
             new Entry("Cloth", "leather", "Leather", Items.LEATHER, 4, 3),
             new Entry("Cloth", "feather", "Feathers", Items.FEATHER, 8, 2),
-            new Entry("Cloth", "arrows", "Arrows", Items.ARROW, 16, 3),
             new Entry("Cloth", "wool", "White wool", Items.WHITE_WOOL, 8, 2),
 
             // --- soil

@@ -13,6 +13,21 @@ behaviour that was already there · **docs**
 
 ## Unreleased
 
+### Arrows come off the sheet, flint goes on
+
+- **change** **You can no longer requisition arrows.** Same rule as the golden
+  apple: the Box sells stock, not the finished thing. All three components are now
+  on the sheet — **flint** (new, 8 for 3), feathers (8 for 2) and sticks (16 for 1)
+  — so sixteen arrows costs **2.75 points crafted** against the 3 they used to cost
+  in a bundle. Slightly cheaper for doing the work, and it now takes three lines
+  and a crafting table instead of one click.
+- **feat** **Flint is on the catalogue.** It had to be: there is no gravel in the
+  maze and the floor never breaks, so flint had no source at all. Without it the
+  fletching table was missing a leg and a bow was an ornament — string and sticks
+  were both already buyable, so you could make the bow and never feed it.
+
+---
+
 ### The golden apple comes off the sheet
 
 - **change** **You can no longer requisition a golden apple.** It was the one line
