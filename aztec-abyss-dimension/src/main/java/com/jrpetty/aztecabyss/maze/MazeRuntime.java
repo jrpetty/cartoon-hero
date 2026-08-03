@@ -557,12 +557,6 @@ public final class MazeRuntime {
                     "§b✦ Second wind. §7Run."), false);
         }
 
-        // Endurance: the maze stops eating you quite so fast.
-        int endurance = MazeSkills.rankOf(level, p.getUUID(), "endurance");
-        if (endurance > 0 && level.getGameTime() % 600L == 0L) {
-            var food = p.getFoodData();
-            food.setSaturation(Math.min(20.0F, food.getSaturationLevel() + endurance));
-        }
     }
 
     /**

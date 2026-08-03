@@ -61,10 +61,6 @@ public final class MazeSkills extends SavedData {
                     "You chart the cells either side of you, not just the one you stand in.",
                     "You chart everything within two cells.",
                     "You chart everything within three cells."}),
-            new Skill("endurance", MazeJobs.RUNNER, "Endurance", new String[]{
-                    "The maze takes less out of you - some saturation back every half minute.",
-                    "Noticeably less.",
-                    "You can run all day."}),
 
             new Skill("forgemaster", MazeJobs.BUILDER, "Forgemaster", new String[]{
                     "+15% durability on what you forge, over the usual 40%.",

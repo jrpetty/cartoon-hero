@@ -13,6 +13,18 @@ behaviour that was already there · **docs**
 
 ## Unreleased
 
+### Endurance removed
+
+- **change** The Runner's **Endurance** skill is gone — topping saturation back up
+  on a timer was a slow drip of free food that fought the Box, the field and the
+  larder all at once, which is three systems undermined by one line. Runner keeps
+  **Stride** and **Cartographer**.
+- **change** No rebalance needed alongside it: maxing Runner now costs 6 points at
+  55 xp each (330) against Builder's 9 at 40 (360), so the trades still land in the
+  same place. Anybody who had spent points in it gets them back automatically —
+  `MazeSkills` reads ranks by id, and an id that no longer exists simply has no
+  rank, while `/maze forget` refunds a whole trade free anyway.
+
 ### Maze: five defects, three of them ones I introduced today
 
 - **fix** **The first day's crate was never delivered.** `TheBox.deliver` only ever
