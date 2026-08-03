@@ -431,6 +431,9 @@ public final class MazeRuntime {
         java.util.List<Integer> escapedSeconds = new ArrayList<>();
         for (ServerPlayer p : new ArrayList<>(level.players())) {
             brief(p);
+            // Nobody moves until they have said what they are, and nobody is
+            // sent out into that with an empty inventory.
+            MazeInduction.tick(level, p);
             BlockPos at = p.blockPosition();
             int cellX = at.getX() / MazeData.CELL;
             int cellZ = at.getZ() / MazeData.CELL;

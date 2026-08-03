@@ -117,6 +117,15 @@ public final class MazeJobs extends SavedData {
      * can raise and another can lower.
      */
     private int larder = 0;
+    /**
+     * Which game each player was last kitted in.
+     *
+     * <p>Saved rather than kept in memory, because the alternative is that a
+     * server restart hands everybody a second kit - and a second kit is four
+     * more golden apples and thirty-two more cobblestone for the price of a
+     * reconnect, which is the kind of thing a group finds within a day.
+     */
+    private final Map<UUID, Integer> kitted = new HashMap<>();
 
     private static String key(UUID who, String job) {
         return who + "|" + job;
@@ -230,6 +239,17 @@ public final class MazeJobs extends SavedData {
         return larder;
     }
 
+    /** Has this player already been outfitted in this game? */
+    public boolean kitted(UUID who, int session) {
+        Integer had = kitted.get(who);
+        return had != null && had == session;
+    }
+
+    public void markKitted(UUID who, int session) {
+        kitted.put(who, session);
+        setDirty();
+    }
+
     public void store(int amount) {
         larder = Math.min(999, larder + Math.max(0, amount));
         setDirty();
@@ -273,6 +293,9 @@ public final class MazeJobs extends SavedData {
         xp.forEach(x::putInt);
         tag.put("Xp", x);
         tag.putInt("Larder", larder);
+        CompoundTag k = new CompoundTag();
+        kitted.forEach((id, session) -> k.putInt(id.toString(), session));
+        tag.put("Kitted", k);
         return tag;
     }
 
@@ -291,6 +314,14 @@ public final class MazeJobs extends SavedData {
             out.xp.put(k, x.getInt(k));
         }
         out.larder = tag.getInt("Larder");
+        CompoundTag k = tag.getCompound("Kitted");
+        for (String key : k.getAllKeys()) {
+            try {
+                out.kitted.put(UUID.fromString(key), k.getInt(key));
+            } catch (IllegalArgumentException ignored) {
+                // Not a uuid, not worth losing the rest of the file over.
+            }
+        }
         return out;
     }
 

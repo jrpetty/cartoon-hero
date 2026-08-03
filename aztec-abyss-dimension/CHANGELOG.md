@@ -13,6 +13,43 @@ behaviour that was already there · **docs**
 
 ## Unreleased
 
+### Induction — nobody moves until they say what they are
+
+- **feat** `MazeInduction` — arriving in the Glade now holds you where you stand
+  until you take a trade. Arrival was the weakest moment in the whole loop: you
+  appeared in the middle of a field with an empty inventory and no instructions,
+  and the game's position was that you might like to read a sign at some point.
+  Jobs were the spine of everything and were **optional**.
+- **change** This is not a tutorial gate for its own sake. It is the one moment the
+  whole group is standing in the same place with the same question in front of
+  them, which is exactly when a party should be deciding who the Med-jack is.
+- **feat** **Starter kits**, on the generous side of sensible. Materials are
+  genuinely hard to come by here — no soil, no animals, an unbreakable floor — so
+  arriving empty is not a challenge, it is an hour of nothing. Every kit carries
+  bread, torches and something to swing, because those are survival rather than
+  trade and a Track-hoe who cannot defend themselves at night is a casualty.
+  - **Runner** — iron sword, leather helmet and boots, 32 torches, 8 signs, cooked
+    beef, a golden apple. Light armour on purpose: a Runner in iron has stopped
+    being able to outrun the thing chasing them.
+  - **Builder** — iron axe, crafting table, 32 planks, 32 cobblestone, 16 sticks,
+    8 iron, 12 coal, wool and carpet. Enough to build something on day one rather
+    than spend it collecting sticks.
+  - **Med-jack** — four bandages ready to use plus 24 string and 12 paper for a
+    dozen more, two golden apples, stone sword. The point is being useful in the
+    first five minutes, not after a week of accumulating string.
+  - **Track-hoe** — iron hoe, water bucket, 24 wheat seeds, 12 each of carrots,
+    potatoes and beetroot, 16 bone meal, saplings. Everything the Glade eats grows
+    from this.
+- **change** **One kit per game.** Changing trade later is free and gives you
+  nothing, because a kit per switch is a vending machine. The Box's role crates
+  cover anybody who changes their mind, one dawn later — a real cost measured in a
+  day rather than a wasted week.
+- **change** Kit state is **saved**, not held in memory. Otherwise a restart hands
+  everybody a second kit for the price of a reconnect, which a group finds inside
+  a day.
+- **change** Creative and spectator are exempt — an operator fixing the map is not
+  a Greenie.
+
 ### The Chart Floor — the maze from above, revealed only where you have been
 
 - **feat** `ChartFloor` — a 42×42 sunken mosaic in the Glade you walk on. It
