@@ -13,6 +13,23 @@ behaviour that was already there · **docs**
 
 ## Unreleased
 
+### Bearings — a third Runner skill that gives nothing away
+
+- **feat** **Bearings** replaces the deleted Endurance, and is deliberately the
+  least powerful thing on the sheet. Rank 1 names the section you are standing in;
+  rank 2 adds the compass point and distance back to the Glade; rank 3 warns you
+  within about twenty blocks of a Griever hole.
+- **change** It gives away **nothing the maze is keeping from you**. It says where
+  you *are*, which is the one fact a person who runs this place for a living would
+  simply have — and it never says where the exit is, because that is the entire job
+  and no skill should shortcut it. Section colours are already banded into the
+  corridor walls, so rank 1 only saves you looking up.
+- **change** Rank 3 pairs with the Griever holes, which are fixed and chartable —
+  a veteran would learn where they are eventually, so this is that knowledge
+  arriving a fortnight early rather than knowledge nobody could have had.
+- **change** Silent while the Changing is running. A compass reading written over
+  a death countdown is the wrong information at the worst possible moment.
+
 ### Endurance removed
 
 - **change** The Runner's **Endurance** skill is gone — topping saturation back up

@@ -472,6 +472,7 @@ public final class MazeRuntime {
                     }
                 }
                 runnersLegs(level, p, jobs);
+                bearings(level, p, jobs);
                 groundCovered(level, p, jobs, at);
                 if (charts.chart(p.getUUID(), cellX, cellZ, layoutName) && charts.gladePercent() % 10 == 0
                         && charts.gladePercent() > 0) {
@@ -557,6 +558,66 @@ public final class MazeRuntime {
                     "§b✦ Second wind. §7Run."), false);
         }
 
+    }
+
+    /**
+     * A Runner's sense of where they are.
+     *
+     * <p>Deliberately the least powerful thing on the sheet, and chosen to be:
+     * the last skill here handed out saturation on a timer, which quietly
+     * undercut the Box, the field and the larder all at once. This gives away
+     * nothing the maze is keeping from you. It tells you where you are standing,
+     * which is the one fact a person who runs this place for a living would
+     * simply <em>have</em> - and it never tells you where the exit is, because
+     * that is the entire job and no skill should shortcut it.
+     *
+     * <p>The section names are already banded into the corridor walls in colour,
+     * so rank one only saves you looking up. Rank three pairs with the Griever
+     * holes: they are fixed and chartable, so a veteran would eventually know
+     * where they are anyway, and this is that knowledge arriving a fortnight
+     * early rather than knowledge nobody could have had.
+     */
+    private static void bearings(ServerLevel level, ServerPlayer p, MazeJobs jobs) {
+        if (!jobs.is(p.getUUID(), MazeJobs.RUNNER)) {
+            return;
+        }
+        int rank = MazeSkills.rankOf(level, p.getUUID(), "bearings");
+        if (rank <= 0 || level.getGameTime() % 40L != 0L) {
+            return;
+        }
+        // The Changing owns the action bar while it is running. A compass reading
+        // written over a death countdown is the wrong information at the worst
+        // possible moment.
+        if (MazeSting.isInfected(p.getUUID())) {
+            return;
+        }
+        BlockPos at = p.blockPosition();
+        StringBuilder line = new StringBuilder("§7").append(section(at));
+        if (rank >= 2) {
+            int dx = MazeData.SPAWN_X - at.getX();
+            int dz = MazeData.SPAWN_Z - at.getZ();
+            int away = (int) Math.sqrt((double) dx * dx + (double) dz * dz);
+            line.append(" §8| §fGlade ").append(compass(dx, dz)).append(" §7").append(away).append("m");
+        }
+        if (rank >= 3) {
+            BlockPos hole = GrieverHoles.nearest(at);
+            int d = (int) Math.sqrt(hole.distSqr(at));
+            if (d <= 24) {
+                line.append(" §8| §c\u2620 hole ").append(d).append("m");
+            }
+        }
+        p.displayClientMessage(Component.literal(line.toString()), true);
+    }
+
+    /** Eight points, which is as precise as a person without an instrument gets. */
+    private static String compass(int dx, int dz) {
+        if (Math.abs(dx) > Math.abs(dz) * 2) {
+            return dx > 0 ? "E" : "W";
+        }
+        if (Math.abs(dz) > Math.abs(dx) * 2) {
+            return dz > 0 ? "S" : "N";
+        }
+        return (dz > 0 ? "S" : "N") + (dx > 0 ? "E" : "W");
     }
 
     /**

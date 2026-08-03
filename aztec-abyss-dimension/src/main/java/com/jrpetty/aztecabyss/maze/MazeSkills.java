@@ -61,6 +61,10 @@ public final class MazeSkills extends SavedData {
                     "You chart the cells either side of you, not just the one you stand in.",
                     "You chart everything within two cells.",
                     "You chart everything within three cells."}),
+            new Skill("bearings", MazeJobs.RUNNER, "Bearings", new String[]{
+                    "You always know which section of the maze you are standing in.",
+                    "And which way the Glade is, and how far.",
+                    "And a warning when you come within twenty-odd blocks of a Griever hole."}),
 
             new Skill("forgemaster", MazeJobs.BUILDER, "Forgemaster", new String[]{
                     "+15% durability on what you forge, over the usual 40%.",
