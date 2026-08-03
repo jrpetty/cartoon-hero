@@ -457,6 +457,11 @@ public final class MazeEvents {
             event.setCanceled(true);
             return;
         }
+        if (event.getPos().equals(ChartFloor.zoomDial())) {
+            ChartFloor.zoomCycle(level, p);
+            event.setCanceled(true);
+            return;
+        }
         // The Dead Glade's charts. The one thing out there worth walking to
         // that is not the way out.
         if (event.getPos().equals(DeadGlade.lectern())) {

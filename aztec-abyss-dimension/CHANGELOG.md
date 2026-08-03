@@ -13,6 +13,37 @@ behaviour that was already there · **docs**
 
 ## Unreleased
 
+### The chart is a map now, not a heat map
+
+- **feat** **The Chart Floor zooms, and at close range it draws the actual maze.**
+  It was one fixed view: ninety-six cells of maze squeezed into forty-two blocks,
+  so a single tile covered two and a bit cells and **a wall was physically
+  unrepresentable**. It could tell you *that* a region had been walked and never
+  once *what was in it* — which is the only thing a maze map is for.
+  - **A second stone, the Lens**, beside the existing chart dial. Three settings:
+    the whole maze for orientation, a quarter for planning, and **close at three
+    tiles to the cell** — the resolution at which corridors and walls become
+    separate things.
+  - At close range each cell is drawn as its middle plus its four edges, and each
+    edge is read from the live graph: **open where there is a way through, wall
+    where there is not.** Corners are always wall, because that is where four
+    cells meet.
+  - Walls are only drawn for the chart that is actually standing tonight. A wall
+    on last Tuesday's map is a guess, and the floor does not guess.
+  - The close view **centres on wherever the last person to walk out there got
+    to** — a close map of the Glade is a close map of the one place nobody needs
+    one.
+- **feat** **Nine colours where there were four.** Unknown, wall, corridor, Glade,
+  Dead Glade, marked, runner, and two landmarks the map never showed at all: the
+  **live exit** in gold and the **Griever holes** in red, both only once somebody
+  has actually charted that cell. The four Glade doors are picked out in lime so
+  you can see which one you are looking at.
+- Landmarks beat coverage when a coarse tile contains both — the reason to look
+  at this thing is to find the four or five places that matter.
+- A runner at close range now fills their whole cell rather than one lost pixel.
+
+---
+
 ### The maze was unwinnable, and I did that
 
 - **fix** **You could not reach the portal.** Removing the guaranteed carve left

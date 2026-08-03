@@ -543,6 +543,8 @@ public final class MazeRuntime {
                 // that same moment, for the same reason: a survey nobody brought
                 // home did not happen.
                 MazeNotes.record(level, p, cellX, cellZ);
+                // The close chart follows whoever is actually out here.
+                ChartFloor.focusOn(cellX, cellZ);
             }
 
             if (inGlade) {

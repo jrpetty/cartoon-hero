@@ -70,12 +70,57 @@ public final class ChartFloor {
     /** What is currently drawn, so a refresh only writes what changed. */
     private static byte[] drawn = null;
 
+    /**
+     * How much of the maze the forty-two blocks are showing.
+     *
+     * <p>The chart used to be one fixed view: ninety-six cells of maze squeezed
+     * into forty-two blocks, so a single tile covered two and a bit cells and a
+     * wall was physically unrepresentable. It could tell you <em>that</em> a
+     * region had been walked and never once <em>what was in it</em> - which is
+     * the only thing a maze map is for.
+     *
+     * <p>So it zooms. The whole map for orientation, a quarter for planning, and
+     * a close view at three tiles to the cell - which is the resolution at which
+     * corridors and walls become separate things and the floor stops being a
+     * heat map and starts being a map.
+     */
+    private static final int[] ZOOM_CELLS = {96, 48, 14};
+    private static final String[] ZOOM_NAME = {"the whole maze", "a quarter", "close"};
+    private static int zoom = 0;
+
+    /** Cell the close view is centred on, per the last person to walk out there. */
+    private static int focusX = MazeData.GRID / 2;
+    private static int focusZ = MazeData.GRID / 2;
+
     private ChartFloor() {
     }
 
     public static void reset() {
         drawn = null;
         showing = 0;
+        zoom = 0;
+        focusX = MazeData.GRID / 2;
+        focusZ = MazeData.GRID / 2;
+    }
+
+    /** The second stone: how far in the chart is drawn. */
+    public static BlockPos zoomDial() {
+        return new BlockPos(originX() + SIZE / 2 - 3, Y + 1, originZ() + SIZE + 1);
+    }
+
+    /**
+     * Remembers where somebody actually was, so the close view has a subject.
+     *
+     * <p>Called from the runtime as people walk. A close map centred on the
+     * middle of the grid would be centred on the Glade, which is the one part
+     * of this world nobody needs a map of.
+     */
+    public static void focusOn(int cellX, int cellZ) {
+        if (MazeData.inGlade(cellX, cellZ)) {
+            return;
+        }
+        focusX = cellX;
+        focusZ = cellZ;
     }
 
     /** The block you punch to change chart. */
@@ -130,6 +175,14 @@ public final class ChartFloor {
         level.setBlock(dial.above(), Blocks.LANTERN.defaultBlockState(), 2);
         sign(level, dial.south(), Direction.SOUTH,
                 "§0THE CHART", "§0Use the stone", "§0to turn the page.", "");
+
+        // The second stone: how far in it is drawn.
+        BlockPos zd = zoomDial();
+        level.setBlock(zd.below(), Blocks.POLISHED_DEEPSLATE.defaultBlockState(), 2);
+        level.setBlock(zd, Blocks.CHISELED_DEEPSLATE.defaultBlockState(), 2);
+        level.setBlock(zd.above(), Blocks.SEA_LANTERN.defaultBlockState(), 2);
+        sign(level, zd.south(), Direction.SOUTH,
+                "§0THE LENS", "§0Whole map,", "§0quarter, close.", "");
         drawn = null;
     }
 
@@ -143,15 +196,53 @@ public final class ChartFloor {
     private static final byte WALKED = 2;
     private static final byte MARKED = 3;
     private static final byte RUNNER = 4;
+    /** Standing stone, drawn only where a tile is small enough to mean one. */
+    private static final byte WALL = 5;
+    /** Open corridor, as against merely "a region somebody has been through". */
+    private static final byte CORRIDOR = 6;
+    private static final byte EXIT = 7;
+    private static final byte HOLE = 8;
+    private static final byte DEAD_GLADE = 9;
+    private static final byte DOOR = 10;
 
+    /**
+     * Nine colours where there were four.
+     *
+     * <p>Concrete throughout, because it is the only block family with enough
+     * flat, unmistakable colours to build a legend out of - and a legend is what
+     * this is. Every one of these has to be identifiable from head height while
+     * somebody else is arguing with you about it.
+     */
     private static BlockState paint(byte code) {
         return switch (code) {
             case GLADE -> Blocks.GREEN_CONCRETE.defaultBlockState();
             case WALKED -> Blocks.LIGHT_GRAY_CONCRETE.defaultBlockState();
             case MARKED -> Blocks.YELLOW_CONCRETE.defaultBlockState();
             case RUNNER -> Blocks.LIGHT_BLUE_CONCRETE.defaultBlockState();
+            case WALL -> Blocks.GRAY_CONCRETE.defaultBlockState();
+            case CORRIDOR -> Blocks.WHITE_CONCRETE.defaultBlockState();
+            case EXIT -> Blocks.GOLD_BLOCK.defaultBlockState();
+            case HOLE -> Blocks.RED_CONCRETE.defaultBlockState();
+            case DEAD_GLADE -> Blocks.BROWN_CONCRETE.defaultBlockState();
+            case DOOR -> Blocks.LIME_CONCRETE.defaultBlockState();
             default -> Blocks.BLACK_CONCRETE.defaultBlockState();
         };
+    }
+
+    /** Cells across, at the current zoom. */
+    private static int span() {
+        return ZOOM_CELLS[Math.floorMod(zoom, ZOOM_CELLS.length)];
+    }
+
+    /** North-west cell of the window the floor is showing. */
+    private static int windowX() {
+        int sp = span();
+        return Math.max(0, Math.min(MazeData.GRID - sp, focusX - sp / 2));
+    }
+
+    private static int windowZ() {
+        int sp = span();
+        return Math.max(0, Math.min(MazeData.GRID - sp, focusZ - sp / 2));
     }
 
     /**
@@ -170,27 +261,46 @@ public final class ChartFloor {
         List<String> known = charts.charts();
         String layout = known.isEmpty() ? null : known.get(Math.floorMod(showing, known.size()));
 
+        MazeData.Layout live = MazeRuntime.todaysLayout(level);
+        // Walls are only drawn for the chart that is actually standing tonight.
+        MazeData.Layout graph = live != null && layout != null && live.name().equals(layout)
+                ? live : null;
+
         byte[] want = new byte[SIZE * SIZE];
         for (int px = 0; px < SIZE; px++) {
             for (int pz = 0; pz < SIZE; pz++) {
-                want[pz * SIZE + px] = sample(charts, layout, px, pz);
+                want[pz * SIZE + px] = sample(level, charts, layout, graph, px, pz);
             }
         }
         // Live positions, drawn last so a Runner is never hidden under a colour.
         // Only for the chart standing today - a blue dot on last Tuesday's chart
         // would be a lie about where somebody is.
-        MazeData.Layout today = MazeRuntime.todaysLayout(level);
-        if (today != null && layout != null && today.name().equals(layout)) {
+        if (graph != null) {
+            int sp = span();
+            int wx = windowX();
+            int wz = windowZ();
+            int scale = SIZE / sp;
             for (ServerPlayer p : level.players()) {
                 int cellX = p.blockPosition().getX() / MazeData.CELL;
                 int cellZ = p.blockPosition().getZ() / MazeData.CELL;
                 if (MazeData.inGlade(cellX, cellZ)) {
                     continue;
                 }
-                int px = cellX * SIZE / MazeData.GRID;
-                int pz = cellZ * SIZE / MazeData.GRID;
-                if (px >= 0 && pz >= 0 && px < SIZE && pz < SIZE) {
-                    want[pz * SIZE + px] = RUNNER;
+                if (cellX < wx || cellZ < wz || cellX >= wx + sp || cellZ >= wz + sp) {
+                    continue; // outside the window the floor is showing
+                }
+                if (scale >= 3) {
+                    // A whole cell of blue at close range, so a runner is a
+                    // person standing in a corridor rather than one lost pixel.
+                    int bx = (cellX - wx) * scale;
+                    int bz = (cellZ - wz) * scale;
+                    for (int dx = 1; dx < scale - 1; dx++) {
+                        for (int dz = 1; dz < scale - 1; dz++) {
+                            mark(want, bx + dx, bz + dz);
+                        }
+                    }
+                } else {
+                    mark(want, (cellX - wx) * SIZE / sp, (cellZ - wz) * SIZE / sp);
                 }
             }
         }
@@ -216,6 +326,12 @@ public final class ChartFloor {
         }
     }
 
+    private static void mark(byte[] want, int px, int pz) {
+        if (px >= 0 && pz >= 0 && px < SIZE && pz < SIZE) {
+            want[pz * SIZE + px] = RUNNER;
+        }
+    }
+
     /**
      * What one pixel of the mosaic should be.
      *
@@ -226,39 +342,186 @@ public final class ChartFloor {
      * existence depending on which side of the boundary they fell, and a map that
      * drops lanes is worse than no map.
      */
-    private static byte sample(MazeCharts charts, String layout, int px, int pz) {
-        int x0 = px * MazeData.GRID / SIZE;
-        int x1 = Math.max(x0 + 1, (px + 1) * MazeData.GRID / SIZE);
-        int z0 = pz * MazeData.GRID / SIZE;
-        int z1 = Math.max(z0 + 1, (pz + 1) * MazeData.GRID / SIZE);
+    private static byte sample(ServerLevel level, MazeCharts charts, String layout,
+                               MazeData.Layout live, int px, int pz) {
+        int sp = span();
+        int wx = windowX();
+        int wz = windowZ();
+
+        // Three tiles to the cell or better: draw the maze itself - the walls,
+        // the openings between them, the shape of the junction. Below that a
+        // tile covers more than one cell and there is no honest way to draw a
+        // wall, so it stays a coverage map.
+        int scale = SIZE / sp;
+        if (scale >= 3) {
+            int cx = wx + px / scale;
+            int cz = wz + pz / scale;
+            int sx = px % scale;
+            int sz = pz % scale;
+            return fine(level, charts, layout, live, cx, cz, sx, sz, scale);
+        }
+
+        int x0 = wx + px * sp / SIZE;
+        int x1 = Math.max(x0 + 1, wx + (px + 1) * sp / SIZE);
+        int z0 = wz + pz * sp / SIZE;
+        int z1 = Math.max(z0 + 1, wz + (pz + 1) * sp / SIZE);
 
         boolean glade = false;
+        boolean dead = false;
         boolean walked = false;
         boolean marked = false;
-        for (int cx = x0; cx < x1; cx++) {
-            for (int cz = z0; cz < z1; cz++) {
+        boolean exit = false;
+        boolean hole = false;
+        boolean door = false;
+        for (int cx = x0; cx < x1 && cx < MazeData.GRID; cx++) {
+            for (int cz = z0; cz < z1 && cz < MazeData.GRID; cz++) {
                 if (MazeData.inGlade(cx, cz)) {
                     glade = true;
                     continue;
                 }
+                boolean known = layout == null ? charts.charted(cx, cz)
+                        : charts.chartedOn(layout, cx, cz);
+                if (DeadGlade.coversCell(cx, cz)) {
+                    // Only once somebody has actually been there. A ruin you have
+                    // not found should not be sitting on the map waiting.
+                    dead |= known;
+                }
                 if (charts.marked(cx, cz)) {
                     marked = true;
                 }
-                // On the selected chart if there is one, otherwise on everything
-                // the Glade has ever brought back.
-                if (layout == null ? charts.charted(cx, cz) : charts.chartedOn(layout, cx, cz)) {
+                if (known) {
                     walked = true;
+                    if (isDoorCell(cx, cz)) {
+                        door = true;
+                    }
+                    if (live != null && isExitCell(live, cx, cz)) {
+                        exit = true;
+                    }
+                    if (isHoleCell(cx, cz)) {
+                        hole = true;
+                    }
                 }
             }
+        }
+        // Landmarks beat coverage: the whole reason to look at this thing is to
+        // find the four or five places that matter.
+        if (exit) {
+            return EXIT;
+        }
+        if (hole) {
+            return HOLE;
+        }
+        if (door) {
+            return DOOR;
+        }
+        if (dead) {
+            return DEAD_GLADE;
+        }
+        if (glade) {
+            return GLADE;
         }
         if (marked && walked) {
             return MARKED;
         }
-        if (walked) {
-            return WALKED;
+        return walked ? WALKED : UNKNOWN;
+    }
+
+    /**
+     * One cell, drawn at three tiles a side or better.
+     *
+     * <p>The middle is the corridor and the four edges are the walls between
+     * this cell and its neighbours, read from the live graph. This is the whole
+     * point of the zoom: at this size "there is a way through to the north" is
+     * something the floor can say, and at any coarser resolution it simply
+     * cannot.
+     *
+     * <p>Corners are always wall. They are where four cells meet and there is
+     * never an opening there.
+     */
+    private static byte fine(ServerLevel level, MazeCharts charts, String layout,
+                             MazeData.Layout live, int cx, int cz, int sx, int sz, int scale) {
+        if (cx >= MazeData.GRID || cz >= MazeData.GRID) {
+            return UNKNOWN;
         }
-        // The Glade is the one thing you know before you have been anywhere.
-        return glade ? GLADE : UNKNOWN;
+        if (MazeData.inGlade(cx, cz)) {
+            return GLADE;
+        }
+        boolean known = layout == null ? charts.charted(cx, cz)
+                : charts.chartedOn(layout, cx, cz);
+        if (!known) {
+            return UNKNOWN;
+        }
+
+        int mid = scale / 2;
+        boolean edgeN = sz == 0;
+        boolean edgeS = sz == scale - 1;
+        boolean edgeW = sx == 0;
+        boolean edgeE = sx == scale - 1;
+        boolean midX = sx == mid;
+        boolean midZ = sz == mid;
+
+        // The middle of the tile: the cell itself and whatever is standing in it.
+        if (!edgeN && !edgeS && !edgeW && !edgeE) {
+            if (DeadGlade.coversCell(cx, cz)) {
+                return DEAD_GLADE;
+            }
+            if (live != null && isExitCell(live, cx, cz)) {
+                return EXIT;
+            }
+            if (isHoleCell(cx, cz)) {
+                return HOLE;
+            }
+            if (isDoorCell(cx, cz)) {
+                return DOOR;
+            }
+            if (charts.marked(cx, cz)) {
+                return MARKED;
+            }
+            return CORRIDOR;
+        }
+        // The edges: wall unless the graph says there is a way through, and only
+        // for the chart that is actually standing - a wall on last Tuesday's map
+        // is a guess.
+        if (live == null) {
+            return WALL;
+        }
+        if (midX && edgeN) {
+            return MazeData.isOpen(cx, cz, cx, cz - 1, live) ? CORRIDOR : WALL;
+        }
+        if (midX && edgeS) {
+            return MazeData.isOpen(cx, cz, cx, cz + 1, live) ? CORRIDOR : WALL;
+        }
+        if (midZ && edgeW) {
+            return MazeData.isOpen(cx, cz, cx - 1, cz, live) ? CORRIDOR : WALL;
+        }
+        if (midZ && edgeE) {
+            return MazeData.isOpen(cx, cz, cx + 1, cz, live) ? CORRIDOR : WALL;
+        }
+        return WALL;
+    }
+
+    private static boolean isDoorCell(int cx, int cz) {
+        for (int[] d : MazeBuilder.DOOR_CELLS) {
+            if (d[0] == cx && d[1] == cz) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static boolean isExitCell(MazeData.Layout live, int cx, int cz) {
+        MazeData.Exit ex = MazeData.exit(live.exit());
+        return ex != null && ex.cellX() == cx && ex.cellZ() == cz;
+    }
+
+    private static boolean isHoleCell(int cx, int cz) {
+        for (int i = 0; i < GrieverHoles.COUNT; i++) {
+            BlockPos h = GrieverHoles.hole(i);
+            if (h.getX() / MazeData.CELL == cx && h.getZ() / MazeData.CELL == cz) {
+                return true;
+            }
+        }
+        return false;
     }
 
     // ------------------------------------------------------------------
@@ -284,6 +547,28 @@ public final class ChartFloor {
                         + charts.percentOn(layout) + "%§7 of it walked"
                         + (isToday(level, layout) ? " §a(this is tonight's)" : "")), false);
         level.playSound(null, dial(), SoundEvents.WOOD_PLACE, SoundSource.BLOCKS, 0.8F, 1.2F);
+    }
+
+    /**
+     * Turning the lens.
+     *
+     * <p>Whole map, quarter, close - and at close the floor centres on wherever
+     * the last person to walk out there got to, because a close map of the Glade
+     * is a close map of the one place nobody needs one.
+     */
+    public static void zoomCycle(ServerLevel level, ServerPlayer who) {
+        zoom = Math.floorMod(zoom + 1, ZOOM_CELLS.length);
+        drawn = null;
+        int sp = span();
+        int scale = SIZE / sp;
+        who.displayClientMessage(Component.literal(
+                "§bTHE LENS §8— §f" + ZOOM_NAME[zoom] + "§7, " + sp + " cells across"
+                        + (scale >= 3 ? " §a(walls drawn)" : "")), false);
+        if (scale >= 3) {
+            who.displayClientMessage(Component.literal(
+                    "§8centred on " + focusX + ", " + focusZ + " — where somebody last was"), false);
+        }
+        level.playSound(null, zoomDial(), SoundEvents.WOOD_PLACE, SoundSource.BLOCKS, 0.8F, 0.8F);
         refresh(level);
     }
 

@@ -134,8 +134,9 @@ public final class MazeBuilder {
      * <p>10: the outer rim stopped being bedrock.
      * <p>11: the trade desk and the order desk went up, and the portal moved to
      * the back of its chamber.
+     * <p>12: the Chart Floor gained its lens.
      */
-    private static final int GEOMETRY_VERSION = 11;
+    private static final int GEOMETRY_VERSION = 12;
 
     /** One distinctive block per version, so the marker is readable in-world. */
     private static final BlockState[] VERSION_BLOCKS = {
@@ -154,6 +155,7 @@ public final class MazeBuilder {
             Blocks.CALCITE.defaultBlockState(),
             Blocks.DRIPSTONE_BLOCK.defaultBlockState(),
             Blocks.TUFF_BRICKS.defaultBlockState(),
+            Blocks.POLISHED_TUFF.defaultBlockState(),
     };
 
     private static BlockState versionBlock() {
