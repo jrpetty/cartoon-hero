@@ -50,6 +50,20 @@ reads correctly and the world does not match it.
 
 ---
 
+### The Runner's quota is in blocks, not cells
+
+- **change** **A cell was an invisible unit.** The maze grid is 6×6 blocks a
+  cell, of which 4×4 is walkable corridor, in walls 18 blocks high — but a player
+  never sees a grid, they see corridor. "60 cells" was a real target wearing a
+  unit nobody could read. The Runner is now measured in **blocks of new ground**,
+  at six per cell charted, with the quota at **400** — a little under seventy
+  cells, so the difficulty is where it was and only the unit changed.
+- It stays **new** ground rather than distance walked, deliberately. Distance is
+  the one Runner metric that could be farmed on the spot: pacing a corridor you
+  already know would pay exactly as well as finding one you don't.
+
+---
+
 ### One pot for the Glade, and a day's work that pays into it
 
 The requisition economy stops being six private allowances and becomes one
@@ -72,7 +86,7 @@ given for being here, and what you did today.
   | Trade | Counted in | Quota | Config |
   |---|---|---|---|
   | Track-hoe | food produced | 100 | `mazeQuotaFarm` |
-  | Runner | cells charted the Glade had never seen | 60 | `mazeQuotaChart` |
+  | Runner | blocks of new ground charted | 400 | `mazeQuotaChart` |
   | Med-jack | bandages (1) and patients treated or revived (3) | 12 | `mazeQuotaCare` |
   | Builder | things forged | 5 | `mazeQuotaForge` |
 

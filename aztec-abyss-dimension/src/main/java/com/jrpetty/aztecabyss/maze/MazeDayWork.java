@@ -43,8 +43,12 @@ import java.util.UUID;
  *   <li><b>Track-hoe</b> - food produced. Harvested crops and cooked or baked
  *       food both count, and wheat does not, so wheat-into-bread is paid once
  *       rather than twice.
- *   <li><b>Runner</b> - cells charted that the Glade had never seen. Walking a
- *       corridor you already know pays nothing, which is the whole job.
+ *   <li><b>Runner</b> - blocks of corridor the Glade had never seen. Measured
+ *       in blocks rather than cells because a cell is an invisible unit: a player
+ *       sees corridor, not a grid. Each newly charted cell is six blocks of it.
+ *       Crucially it is <em>new</em> ground rather than distance walked - pacing
+ *       a corridor you already know is the one Runner metric somebody could farm
+ *       standing in one place.
  *   <li><b>Med-jack</b> - bandages made, and people treated or revived at three
  *       apiece because a person is worth more than a dressing.
  *   <li><b>Builder</b> - things forged. Not blocks placed: a wall you can put up
@@ -105,7 +109,7 @@ public final class MazeDayWork extends SavedData {
         }
         return switch (job) {
             case MazeJobs.TRACKHOE -> "food produced";
-            case MazeJobs.RUNNER -> "new cells charted";
+            case MazeJobs.RUNNER -> "blocks of new ground";
             case MazeJobs.MEDJACK -> "bandages and patients";
             case MazeJobs.BUILDER -> "things forged";
             default -> "work";

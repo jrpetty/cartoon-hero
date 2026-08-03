@@ -531,10 +531,14 @@ public final class MazeRuntime {
                 groundCovered(level, p, jobs, at);
                 boolean freshGround = charts.chart(p.getUUID(), cellX, cellZ, layoutName);
                 if (freshGround) {
-                    // A Runner's day, counted in ground the Glade had never
-                    // seen. Re-walking a known corridor pays nothing, which is
-                    // the whole job.
-                    MazeDayWork.get(level).add(level, p, MazeJobs.RUNNER, 1);
+                    // A Runner's day, counted in blocks of ground the Glade had
+                    // never seen - one cell is six blocks of corridor. Blocks
+                    // rather than cells because a cell is an invisible unit; a
+                    // player sees corridor, not a grid. Re-walking a corridor
+                    // you already know still pays nothing, which is both the
+                    // whole job and the only thing stopping a Runner farming
+                    // this by pacing.
+                    MazeDayWork.get(level).add(level, p, MazeJobs.RUNNER, MazeData.CELL);
                 }
                 if (freshGround && charts.gladePercent() % 10 == 0
                         && charts.gladePercent() > 0) {
