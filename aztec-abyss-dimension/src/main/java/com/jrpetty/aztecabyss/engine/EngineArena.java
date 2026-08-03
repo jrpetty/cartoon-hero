@@ -1458,6 +1458,14 @@ public final class EngineArena {
     private List<Marker> liveHordes() {
         List<Marker> live = new ArrayList<>();
         for (Marker h : hordes) {
+            // A gate may hold itself shut until a given round, which is how a map
+            // gets somewhere to go rather than everything being open at once.
+            if (round < h.intArg("from_round", 0)) {
+                continue;
+            }
+            if (h.intArg("until_round", Integer.MAX_VALUE) < round) {
+                continue;
+            }
             if (isAreaOpen(h.arg("area", ""))) {
                 live.add(h);
             }
@@ -1537,6 +1545,8 @@ public final class EngineArena {
             return;
         }
         mob.moveTo(at.getX() + 0.5, at.getY(), at.getZ() + 0.5, rng.nextFloat() * 360.0F, 0.0F);
+        mob.getPersistentData().putString("aztecabyss_gate",
+                gate.arg("id", gate.arg("area", "")));
         if (health > 0) {
             setAttr(mob, Attributes.MAX_HEALTH, Math.min(1024, health));
         }
@@ -1547,6 +1557,10 @@ public final class EngineArena {
         mob.getPersistentData().putBoolean("aztecabyss_engine_mob", true);
         mob.setPersistenceRequired();
         level.addFreshEntity(mob);
+        // The rest of the burst, if this gate asked for one.
+        for (int extra = 1; extra < burst && leftToSpawn > 1; extra++) {
+            spawnCompanion(gate, pick, at, healthMul, damageMul);
+        }
         ServerPlayer target = nearestPlayer(at);
         if (target != null) {
             mob.setTarget(target);
@@ -1627,10 +1641,35 @@ public final class EngineArena {
         return !level.getBlockState(pos.below()).getCollisionShape(level, pos.below()).isEmpty();
     }
 
+    /**
+     * Picks a gate, respecting per-gate weight.
+     *
+     * <p>Every gate was equally likely, which made a map's four ways in
+     * interchangeable no matter how different the rooms behind them were. A
+     * weight lets an author say "most of it comes through the front" without
+     * needing four rulesets or any code.
+     */
+    private Marker pickGate(List<Marker> live) {
+        int total = 0;
+        for (Marker m : live) {
+            total += Math.max(1, m.intArg("weight", 1));
+        }
+        int roll = rng.nextInt(Math.max(1, total));
+        for (Marker m : live) {
+            roll -= Math.max(1, m.intArg("weight", 1));
+            if (roll < 0) {
+                return m;
+            }
+        }
+        return live.get(0);
+    }
+
     private void spawnOne() {
         List<Marker> live = liveHordes();
-        Marker gate = live.get(rng.nextInt(live.size()));
-        Ruleset.MobEntry pick = pickMob();
+        Marker gate = pickGate(live);
+        // A gate may name its own mobs, which is what turns four identical ways
+        // in into a map where the cellar sends something different from the roof.
+        Ruleset.MobEntry pick = pickMobFor(gate);
         if (pick == null) {
             leftToSpawn = 0;
             return;
@@ -1645,6 +1684,10 @@ public final class EngineArena {
             leftToSpawn--;
             return;
         }
+        // burst= sends several at once out of this gate. A pack arriving together
+        // is a different problem from the same number trickling in, and trickle
+        // was the only thing the engine could do.
+        int burst = Math.max(1, Math.min(8, gate.intArg("burst", 1)));
         BlockPos at = spawnPointFor(gate);
         if (at == null) {
             // Nowhere to put it. Better to skip one than to bury it in stone,
@@ -1653,9 +1696,17 @@ public final class EngineArena {
             return;
         }
         mob.moveTo(at.getX() + 0.5, at.getY(), at.getZ() + 0.5, rng.nextFloat() * 360.0F, 0.0F);
+        mob.getPersistentData().putString("aztecabyss_gate",
+                gate.arg("id", gate.arg("area", "")));
 
-        double healthMul = rules.healthMultiplier(round);
-        double damageMul = rules.damageMultiplier(round);
+        // Per-gate multipliers, on top of the round curve rather than instead of
+        // it. A gate saying health=200 means "twice as tough as whatever this
+        // round is", which stays meaningful at round 5 and at round 40 - an
+        // absolute number would stop meaning anything by round 10.
+        double gateHealth = Math.max(1, gate.intArg("health", 100)) / 100.0;
+        double gateDamage = Math.max(1, gate.intArg("damage", 100)) / 100.0;
+        double healthMul = rules.healthMultiplier(round) * gateHealth;
+        double damageMul = rules.damageMultiplier(round) * gateDamage;
         setAttr(mob, Attributes.MAX_HEALTH, pick.maxHealth() * healthMul);
         setAttr(mob, Attributes.MOVEMENT_SPEED, pick.speed());
         setAttr(mob, Attributes.ATTACK_DAMAGE, pick.attackDamage() * damageMul);
@@ -1666,6 +1717,10 @@ public final class EngineArena {
         mob.setPersistenceRequired();
 
         level.addFreshEntity(mob);
+        // The rest of the burst, if this gate asked for one.
+        for (int extra = 1; extra < burst && leftToSpawn > 1; extra++) {
+            spawnCompanion(gate, pick, at, healthMul, damageMul);
+        }
         ServerPlayer target = nearestPlayer(at);
         if (target != null) {
             mob.setTarget(target);
@@ -1709,6 +1764,68 @@ public final class EngineArena {
             }
         }
         return rules.mobs.get(0);
+    }
+
+    /**
+     * A gate's own mob table, if it named one.
+     *
+     * <p>{@code mobs=husk,drowned} on a horde marker restricts what comes out of
+     * it to those entities, drawn from the ruleset's table so their scaling,
+     * roles and equipment still apply. A gate naming something the table does not
+     * contain falls back to the table rather than sending nothing, because a
+     * silent gate is indistinguishable from a broken one.
+     */
+    private Ruleset.MobEntry pickMobFor(Marker gate) {
+        String only = gate.arg("mobs", "");
+        if (only.isBlank()) {
+            return pickMob();
+        }
+        java.util.List<Ruleset.MobEntry> allowed = new ArrayList<>();
+        for (String raw : only.split(",")) {
+            String want = raw.trim().toLowerCase(java.util.Locale.ROOT);
+            if (want.isEmpty()) {
+                continue;
+            }
+            for (Ruleset.MobEntry m : rules.mobs) {
+                String id = m.entityId().toLowerCase(java.util.Locale.ROOT);
+                if ((id.equals(want) || id.equals("minecraft:" + want)) && eligible(m)) {
+                    allowed.add(m);
+                }
+            }
+        }
+        if (allowed.isEmpty()) {
+            return pickMob();
+        }
+        return allowed.get(rng.nextInt(allowed.size()));
+    }
+
+    /** One more of the same, beside the first. Used only by {@code burst=}. */
+    private void spawnCompanion(Marker gate, Ruleset.MobEntry pick, BlockPos near,
+                                double healthMul, double damageMul) {
+        var maybeType = EntityType.byString(pick.entityId());
+        if (maybeType.isEmpty() || !(maybeType.get().create(level) instanceof Mob mob)) {
+            return;
+        }
+        BlockPos at = spawnPointFor(gate);
+        if (at == null) {
+            at = near;
+        }
+        mob.moveTo(at.getX() + 0.5, at.getY(), at.getZ() + 0.5, rng.nextFloat() * 360.0F, 0.0F);
+        setAttr(mob, Attributes.MAX_HEALTH, pick.maxHealth() * healthMul);
+        setAttr(mob, Attributes.MOVEMENT_SPEED, pick.speed());
+        setAttr(mob, Attributes.ATTACK_DAMAGE, pick.attackDamage() * damageMul);
+        mob.setHealth(mob.getMaxHealth());
+        applyRole(mob, pick.role());
+        equip(mob, pick);
+        mob.getPersistentData().putBoolean("aztecabyss_engine_mob", true);
+        mob.setPersistenceRequired();
+        level.addFreshEntity(mob);
+        alive.add(mob);
+        leftToSpawn--;
+        ServerPlayer t = nearestPlayer(at);
+        if (t != null) {
+            mob.setTarget(t);
+        }
     }
 
     /** Unlocked at this round, and allowed by any special round in force. */

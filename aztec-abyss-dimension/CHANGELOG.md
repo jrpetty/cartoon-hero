@@ -13,6 +13,24 @@ behaviour that was already there · **docs**
 
 ## Unreleased
 
+### Per-gate tuning, and a full marker reference
+
+- **feat** `[Horde]` gains `weight=`, `burst=`, `mobs=`, `health=`, `damage=`,
+  `from_round=`, `until_round=`. Every gate was equally likely and identically
+  scaled, which made a map's four ways in interchangeable however different the
+  rooms behind them were.
+- **change** `health=` / `damage=` are **percentages on top of** the round curve,
+  not absolutes. `200` means "twice as tough as whatever this round is", which
+  still means something at round 40; an absolute stops meaning anything by 10.
+- **feat** `burst=` sends several out of one gate at once — a pack arriving
+  together is a different problem from the same number trickling in, and trickle
+  was the only thing the engine could do.
+- **feat** `mobs=` restricts a gate to named entities, drawn from the ruleset table
+  so scaling, roles and equipment still apply. A gate naming something absent
+  falls back to the table rather than sending nothing.
+- **docs** `MARKERS.md` — every marker, every option, and what people actually
+  build with each, plus a table of which markers each kind of game needs.
+
 ### Blocks you can react to, and round-mode parity
 
 - **feat** `use_block` and `break_block` events with a `block` condition. Rounds
