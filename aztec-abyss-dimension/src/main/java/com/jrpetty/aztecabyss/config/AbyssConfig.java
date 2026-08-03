@@ -106,8 +106,10 @@ public final class AbyssConfig {
         b.push("maze");
         GRIEVERS_ENABLED = b.comment("Grievers hunt the maze after dark.")
                 .define("grieversEnabled", true);
-        GRIEVER_BASE_CAP = b.comment("Grievers per runner in week one.")
-                .defineInRange("grieverBaseCapPerPlayer", 2, 0, 20);
+        GRIEVER_BASE_CAP = b.comment(
+                        "Grievers allowed per person out in the maze, on day one. Climbs by one",
+                        "every other day toward the ceiling below.")
+                .defineInRange("grieverBaseCapPerPlayer", 4, 0, 20);
         GRIEVER_MAX_CAP = b.comment("Ceiling on Grievers per runner; the cap grows by one each week.")
                 .defineInRange("grieverMaxCapPerPlayer", 7, 0, 40);
         GRIEVER_HEALTH = b.comment("Griever max health (a vanilla spider is 16). It is meant to be run from, not fought.")
@@ -142,6 +144,11 @@ public final class AbyssConfig {
                         "Once somebody reaches the way out, how long the rest have to follow",
                         "them through before it closes. Anyone still inside when it does dies.")
                 .defineInRange("mazeEscapeSeconds", 300, 30, 3600);
+        MAZE_GRIEVER_BOUNTY = b.comment(
+                        "Requisition points paid for killing a Griever. They have well over a",
+                        "hundred health and hit like a truck, so this is meant to be a large",
+                        "number that a squad earns perhaps once in a game.")
+                .defineInRange("mazeGrieverBounty", 20, 0, 500);
         MAZE_LAST_STAND = b.comment(
                         "How many stand between the maze doorway and the portal. They are raised",
                         "once a day, the first time anybody walks into the lane, and they scale",
@@ -179,6 +186,7 @@ public final class AbyssConfig {
     public static final ModConfigSpec.IntValue MAZE_LAST_STAND;
     public static final ModConfigSpec.IntValue MAZE_DAY_LIMIT;
     public static final ModConfigSpec.IntValue MAZE_ESCAPE_SECONDS;
+    public static final ModConfigSpec.IntValue MAZE_GRIEVER_BOUNTY;
 
     public static long cooldownMillis() {
         return REENTRY_COOLDOWN_HOURS.get() * 60L * 60L * 1000L;

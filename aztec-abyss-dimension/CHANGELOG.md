@@ -13,6 +13,22 @@ behaviour that was already there · **docs**
 
 ## Unreleased
 
+### A bounty on Grievers, and four of them per head
+
+- **feat** **Killing a Griever pays 20 requisition points**, announced to the whole
+  Glade. It is the hardest thing anybody does in here — well over a hundred health,
+  knockback resistant, and it takes a squad — and until now it paid a serum roll
+  and an advancement. Now it pays in the currency that decides what tomorrow looks
+  like.
+- **change** The bounty sits **outside** the charting cap. A ceiling that swallowed
+  it would mean a well-mapped Glade is paid nothing for the hardest thing in the
+  game.
+- **change** Bounties are **saved**, so a restart mid-day does not wipe what a
+  squad bled for, and they clear with the slates each dawn.
+- **change** **Four Grievers per person**, up from two — climbing by one every
+  other day to the ceiling of seven, as before. With the noise mechanic landing in
+  the same batch, two per head was a night you could walk through.
+
 ### The trade sheet is a screen
 
 Skills lived in chat. Twelve lines of grey text scrolling away above a hotbar is

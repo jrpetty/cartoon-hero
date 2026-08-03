@@ -1204,6 +1204,23 @@ public final class MazeEvents {
             if (dropped) {
                 MazeAdvancements.grant(killer, MazeAdvancements.SERUM);
             }
+            // Killing one is the hardest thing anybody does in here and it paid a
+            // serum and an advancement. Now it pays in the currency that decides
+            // what tomorrow looks like - and it pays outside the charting cap, so
+            // a well-mapped Glade is still rewarded for doing it.
+            int bounty = com.jrpetty.aztecabyss.config.AbyssConfig.MAZE_GRIEVER_BOUNTY.get();
+            if (bounty > 0) {
+                MazeOrders.get(level).addBonus(killer.getUUID(), bounty);
+                for (ServerPlayer p : level.players()) {
+                    p.displayClientMessage(Component.literal(
+                            "§6§l✦ " + killer.getGameProfile().getName()
+                                    + " KILLED A GRIEVER §r§7— §f+" + bounty
+                                    + "§7 points on tomorrow's slate"), false);
+                    level.playSound(null, p.blockPosition(),
+                            net.minecraft.sounds.SoundEvents.BEACON_ACTIVATE,
+                            net.minecraft.sounds.SoundSource.PLAYERS, 1.2F, 0.8F);
+                }
+            }
         }
     }
 

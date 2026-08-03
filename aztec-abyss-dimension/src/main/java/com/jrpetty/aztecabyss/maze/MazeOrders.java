@@ -189,7 +189,25 @@ public final class MazeOrders extends SavedData {
             return BASE_POINTS;
         }
         MazeCharts charts = MazeCharts.get(level.getServer());
-        return Math.min(MAX_POINTS, BASE_POINTS + charts.myPercent(who) * 2 + charts.gladePercent());
+        int fromGround = Math.min(MAX_POINTS,
+                BASE_POINTS + charts.myPercent(who) * 2 + charts.gladePercent());
+        // Bounties sit outside the cap on purpose. A ceiling that swallows the
+        // reward for killing a Griever would mean a well-charted Glade is paid
+        // nothing for the hardest thing in the game.
+        return fromGround + get(level).bonus(who);
+    }
+
+    /** What this player has earned today beyond their charting allowance. */
+    public int bonus(UUID who) {
+        return bonus.getOrDefault(who, 0);
+    }
+
+    public void addBonus(UUID who, int points) {
+        if (points <= 0) {
+            return;
+        }
+        bonus.merge(who, points, Integer::sum);
+        setDirty();
     }
 
     // ------------------------------------------------------------------
@@ -198,6 +216,20 @@ public final class MazeOrders extends SavedData {
 
     /** Per player, catalogue id to quantity ordered for the next delivery. */
     private final Map<UUID, Map<String, Integer>> slates = new LinkedHashMap<>();
+    /**
+     * Points earned today by doing something worth paying for, on top of the
+     * charting allowance.
+     *
+     * <p>Charting was the only thing that moved the budget, which quietly said
+     * the only work worth rewarding was walking. Killing a Griever is the single
+     * hardest thing anybody does in here - well over a hundred health, knockback
+     * resistant, and it takes a squad - and it paid a serum and a scoreboard
+     * line. Now it pays in the currency that decides what tomorrow looks like.
+     *
+     * <p>Saved, so a restart in the middle of a day does not wipe what a squad
+     * bled for, and cleared with the slates each dawn.
+     */
+    private final Map<UUID, Integer> bonus = new LinkedHashMap<>();
 
     public Map<String, Integer> slate(UUID who) {
         return slates.getOrDefault(who, Map.of());
@@ -256,6 +288,7 @@ public final class MazeOrders extends SavedData {
     /** Wipes every slate. Called once the Box has filled them. */
     public void clearAll() {
         slates.clear();
+        bonus.clear();
         setDirty();
     }
 
@@ -272,6 +305,9 @@ public final class MazeOrders extends SavedData {
             all.put(id.toString(), one);
         });
         tag.put("Slates", all);
+        CompoundTag paid = new CompoundTag();
+        bonus.forEach((id, n) -> paid.putInt(id.toString(), n));
+        tag.put("Bonus", paid);
         return tag;
     }
 
@@ -289,6 +325,14 @@ public final class MazeOrders extends SavedData {
                 out.slates.put(who, mine);
             } catch (IllegalArgumentException ignored) {
                 // Not a uuid. Not worth losing everybody else's order over.
+            }
+        }
+        CompoundTag paid = tag.getCompound("Bonus");
+        for (String id : paid.getAllKeys()) {
+            try {
+                out.bonus.put(UUID.fromString(id), paid.getInt(id));
+            } catch (IllegalArgumentException ignored) {
+                // Same.
             }
         }
         return out;
