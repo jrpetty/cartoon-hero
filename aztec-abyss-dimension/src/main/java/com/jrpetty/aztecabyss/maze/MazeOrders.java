@@ -71,66 +71,85 @@ public final class MazeOrders extends SavedData {
      * point" is not a decision anybody wants to make thirty-two times. The
      * bundle is the unit of thought.
      */
-    public record Entry(String id, String display, Item item, int count, int cost) {
+    public record Entry(String group, String id, String display, Item item, int count, int cost) {
     }
 
     private static final List<Entry> CATALOGUE = List.of(
-            // --- metal and stone: the floor does not break, so none of this exists here
-            new Entry("diamond", "Diamond", Items.DIAMOND, 1, 7),
-            new Entry("iron", "Iron ingot", Items.IRON_INGOT, 1, 4),
-            new Entry("gold", "Gold ingot", Items.GOLD_INGOT, 1, 3),
-            new Entry("copper", "Copper ingot", Items.COPPER_INGOT, 2, 2),
-            new Entry("redstone", "Redstone", Items.REDSTONE, 8, 2),
-            new Entry("coal", "Coal", Items.COAL, 8, 2),
-            new Entry("cobble", "Cobblestone", Items.COBBLESTONE, 32, 2),
-            new Entry("stone", "Stone", Items.STONE, 16, 2),
-            new Entry("glass", "Glass", Items.GLASS, 16, 2),
-            new Entry("clay", "Bricks", Items.BRICK, 8, 2),
+            // --- metal: the floor does not break, so none of this is mineable here
+            new Entry("Metal", "diamond", "Diamond", Items.DIAMOND, 1, 7),
+            new Entry("Metal", "iron", "Iron ingot", Items.IRON_INGOT, 1, 4),
+            new Entry("Metal", "gold", "Gold ingot", Items.GOLD_INGOT, 1, 3),
+            new Entry("Metal", "copper", "Copper ingot", Items.COPPER_INGOT, 2, 2),
+            new Entry("Metal", "redstone", "Redstone", Items.REDSTONE, 8, 2),
+            new Entry("Metal", "coal", "Coal", Items.COAL, 8, 2),
+
+            // --- stone
+            new Entry("Stone", "cobble", "Cobblestone", Items.COBBLESTONE, 32, 2),
+            new Entry("Stone", "stone", "Stone", Items.STONE, 16, 2),
+            new Entry("Stone", "glass", "Glass", Items.GLASS, 16, 2),
+            new Entry("Stone", "clay", "Bricks", Items.BRICK, 8, 2),
 
             // --- timber
-            new Entry("logs", "Oak logs", Items.OAK_LOG, 8, 3),
-            new Entry("planks", "Oak planks", Items.OAK_PLANKS, 32, 2),
-            new Entry("sticks", "Sticks", Items.STICK, 16, 1),
-            new Entry("sapling", "Oak saplings", Items.OAK_SAPLING, 4, 2),
-            new Entry("darkoak", "Dark oak saplings", Items.DARK_OAK_SAPLING, 2, 2),
+            new Entry("Timber", "logs", "Oak logs", Items.OAK_LOG, 8, 3),
+            new Entry("Timber", "planks", "Oak planks", Items.OAK_PLANKS, 32, 2),
+            new Entry("Timber", "sticks", "Sticks", Items.STICK, 16, 1),
+            new Entry("Timber", "sapling", "Oak saplings", Items.OAK_SAPLING, 4, 2),
+            new Entry("Timber", "darkoak", "Dark oak saplings", Items.DARK_OAK_SAPLING, 2, 2),
 
             // --- things that come off animals, of which there are none
-            new Entry("string", "String", Items.STRING, 8, 3),
-            new Entry("leather", "Leather", Items.LEATHER, 4, 3),
-            new Entry("feather", "Feathers", Items.FEATHER, 8, 2),
-            new Entry("arrows", "Arrows", Items.ARROW, 16, 3),
-            new Entry("wool", "White wool", Items.WHITE_WOOL, 8, 2),
+            new Entry("Cloth", "string", "String", Items.STRING, 8, 3),
+            new Entry("Cloth", "leather", "Leather", Items.LEATHER, 4, 3),
+            new Entry("Cloth", "feather", "Feathers", Items.FEATHER, 8, 2),
+            new Entry("Cloth", "arrows", "Arrows", Items.ARROW, 16, 3),
+            new Entry("Cloth", "wool", "White wool", Items.WHITE_WOOL, 8, 2),
 
             // --- soil
-            new Entry("seeds", "Wheat seeds", Items.WHEAT_SEEDS, 16, 1),
-            new Entry("carrots", "Carrots", Items.CARROT, 8, 1),
-            new Entry("potatoes", "Potatoes", Items.POTATO, 8, 1),
-            new Entry("beetroot", "Beetroot seeds", Items.BEETROOT_SEEDS, 8, 1),
-            new Entry("melon", "Melon seeds", Items.MELON_SEEDS, 4, 1),
-            new Entry("pumpkin", "Pumpkin seeds", Items.PUMPKIN_SEEDS, 4, 1),
-            new Entry("cane", "Sugar cane", Items.SUGAR_CANE, 8, 2),
-            new Entry("bonemeal", "Bone meal", Items.BONE_MEAL, 16, 2),
+            new Entry("Soil", "seeds", "Wheat seeds", Items.WHEAT_SEEDS, 16, 1),
+            new Entry("Soil", "carrots", "Carrots", Items.CARROT, 8, 1),
+            new Entry("Soil", "potatoes", "Potatoes", Items.POTATO, 8, 1),
+            new Entry("Soil", "beetroot", "Beetroot seeds", Items.BEETROOT_SEEDS, 8, 1),
+            new Entry("Soil", "melon", "Melon seeds", Items.MELON_SEEDS, 4, 1),
+            new Entry("Soil", "pumpkin", "Pumpkin seeds", Items.PUMPKIN_SEEDS, 4, 1),
+            new Entry("Soil", "cane", "Sugar cane", Items.SUGAR_CANE, 8, 2),
+            new Entry("Soil", "bonemeal", "Bone meal", Items.BONE_MEAL, 16, 2),
 
             // --- food
-            new Entry("bread", "Bread", Items.BREAD, 8, 2),
-            new Entry("steak", "Cooked beef", Items.COOKED_BEEF, 8, 3),
-            new Entry("apple", "Golden apple", Items.GOLDEN_APPLE, 1, 8),
+            new Entry("Food", "bread", "Bread", Items.BREAD, 8, 2),
+            new Entry("Food", "steak", "Cooked beef", Items.COOKED_BEEF, 8, 3),
+            new Entry("Food", "apple", "Golden apple", Items.GOLDEN_APPLE, 1, 8),
 
             // --- light and sundries
-            new Entry("torches", "Torches", Items.TORCH, 32, 1),
-            new Entry("lanterns", "Lanterns", Items.LANTERN, 4, 2),
-            new Entry("signs", "Oak signs", Items.OAK_SIGN, 8, 1),
-            new Entry("paper", "Paper", Items.PAPER, 16, 2),
-            new Entry("bottles", "Glass bottles", Items.GLASS_BOTTLE, 8, 2),
-            new Entry("carpet", "White carpet", Items.WHITE_CARPET, 16, 1),
+            new Entry("Camp", "torches", "Torches", Items.TORCH, 32, 1),
+            new Entry("Camp", "lanterns", "Lanterns", Items.LANTERN, 4, 2),
+            new Entry("Camp", "signs", "Oak signs", Items.OAK_SIGN, 8, 1),
+            new Entry("Camp", "paper", "Paper", Items.PAPER, 16, 2),
+            new Entry("Camp", "bottles", "Glass bottles", Items.GLASS_BOTTLE, 8, 2),
+            new Entry("Camp", "carpet", "White carpet", Items.WHITE_CARPET, 16, 1),
 
             // --- the two that change how a night ends, priced accordingly
-            new Entry("bandages", "Bandages", Items.PAPER, 0, 6),
-            new Entry("serum", "Griever Serum", Items.POTION, 0, 25)
+            new Entry("Medical", "bandages", "Bandages", Items.PAPER, 0, 6),
+            new Entry("Medical", "serum", "Griever Serum", Items.POTION, 0, 25)
     );
 
     public static List<Entry> catalogue() {
         return CATALOGUE;
+    }
+
+    /**
+     * The catalogue's group names, in catalogue order.
+     *
+     * <p>Derived from the entries rather than listed separately, so a new line
+     * cannot end up in a group the tab rail has never heard of - the commonest
+     * way a menu like this rots.
+     */
+    public static List<String> groups() {
+        List<String> out = new ArrayList<>();
+        for (Entry e : CATALOGUE) {
+            if (!out.contains(e.group())) {
+                out.add(e.group());
+            }
+        }
+        return out;
     }
 
     public static Entry entry(String id) {
@@ -185,16 +204,25 @@ public final class MazeOrders extends SavedData {
      * reason to want the Runners out there.
      */
     public static int budget(ServerLevel level, UUID who) {
+        // Bounties sit outside the cap on purpose. A ceiling that swallows the
+        // reward for killing a Griever would mean a well-charted Glade is paid
+        // nothing for the hardest thing in the game.
+        return ground(level, who) + get(level).bonus(who);
+    }
+
+    /**
+     * The part of a budget that comes from ground covered, before bounties.
+     *
+     * <p>Split out because settling up needs to know which half of a day's
+     * spending came out of which pocket.
+     */
+    public static int ground(ServerLevel level, UUID who) {
         if (level.getServer() == null) {
             return BASE_POINTS;
         }
         MazeCharts charts = MazeCharts.get(level.getServer());
-        int fromGround = Math.min(MAX_POINTS,
+        return Math.min(MAX_POINTS,
                 BASE_POINTS + charts.myPercent(who) * 2 + charts.gladePercent());
-        // Bounties sit outside the cap on purpose. A ceiling that swallows the
-        // reward for killing a Griever would mean a well-charted Glade is paid
-        // nothing for the hardest thing in the game.
-        return fromGround + get(level).bonus(who);
     }
 
     /** What this player has earned today beyond their charting allowance. */
@@ -269,6 +297,37 @@ public final class MazeOrders extends SavedData {
         return null;
     }
 
+    /**
+     * Takes some of a line back off, refunding it. Returns how many went.
+     *
+     * <p>Separate from {@link #cancel} because the screen's minus button removes
+     * one bundle and the command removes the whole line, and folding those into
+     * one call would mean a mis-click on a slate of twelve iron costs you all
+     * twelve.
+     */
+    public int take(UUID who, String id, int qty) {
+        Map<String, Integer> mine = slates.get(who);
+        if (mine == null) {
+            return 0;
+        }
+        String key = id.toLowerCase(Locale.ROOT);
+        Integer had = mine.get(key);
+        if (had == null) {
+            return 0;
+        }
+        int taken = Math.min(had, Math.max(1, qty));
+        if (taken >= had) {
+            mine.remove(key);
+        } else {
+            mine.put(key, had - taken);
+        }
+        if (mine.isEmpty()) {
+            slates.remove(who);
+        }
+        setDirty();
+        return taken;
+    }
+
     /** Takes a line back off, refunding it. Returns how many were removed. */
     public int cancel(UUID who, String id) {
         Map<String, Integer> mine = slates.get(who);
@@ -285,10 +344,39 @@ public final class MazeOrders extends SavedData {
         setDirty();
     }
 
-    /** Wipes every slate. Called once the Box has filled them. */
-    public void clearAll() {
+    /**
+     * Closes the day out once the Box has filled the slates.
+     *
+     * <h2>Why a bounty is not simply wiped</h2>
+     *
+     * <p>The broadcast says a Griever is worth twenty points on tomorrow's
+     * slate, and for a kill at noon it was: you had all afternoon to spend it.
+     * For a kill at half past midnight it was a lie. The points landed, dawn
+     * came a minute later, the slate had already been filed and the whole lot
+     * was wiped unspent - so the hardest thing in the game paid nothing
+     * precisely when it was hardest, which is exactly backwards.
+     *
+     * <p>So the charting allowance still expires - that is what forces the
+     * evening decision - but a bounty you did not get the chance to spend rolls
+     * to the next day. Working out how much that is only needs one subtraction:
+     * anything you committed beyond your ground allowance must have come out of
+     * the bounty, and the rest of it is still yours.
+     */
+    public void settle(ServerLevel level) {
+        Map<UUID, Integer> carried = new LinkedHashMap<>();
+        for (Map.Entry<UUID, Integer> paid : bonus.entrySet()) {
+            UUID who = paid.getKey();
+            int fromBounty = Math.max(0, committed(who) - ground(level, who));
+            int left = Math.max(0, paid.getValue() - fromBounty);
+            if (left > 0) {
+                carried.put(who, left);
+            }
+        }
+        // Built first, then swapped in. Editing the map being read from is the
+        // way this file would break.
         slates.clear();
         bonus.clear();
+        bonus.putAll(carried);
         setDirty();
     }
 

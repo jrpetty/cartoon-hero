@@ -103,6 +103,20 @@ public final class ModNetworking {
                         com.jrpetty.aztecabyss.maze.MazeEvents.onSkillClick(sp, payload.skillId());
                     }
                 }));
+        registrar.playToClient(
+                RequisitionPayload.TYPE,
+                RequisitionPayload.STREAM_CODEC,
+                (payload, context) -> context.enqueueWork(
+                        () -> ClientAbyssState.openRequisition(payload)));
+        registrar.playToServer(
+                RequisitionOrderPayload.TYPE,
+                RequisitionOrderPayload.STREAM_CODEC,
+                (payload, context) -> context.enqueueWork(() -> {
+                    if (context.player() instanceof ServerPlayer sp) {
+                        com.jrpetty.aztecabyss.maze.MazeEvents.onOrderClick(
+                                sp, payload.id(), payload.delta());
+                    }
+                }));
         registrar.playToServer(
                 PingPayload.TYPE,
                 PingPayload.STREAM_CODEC,
@@ -152,6 +166,37 @@ public final class ModNetworking {
                 skills.available(jobs, player.getUUID(), job),
                 jobs.xpOf(player.getUUID(), job),
                 com.jrpetty.aztecabyss.maze.MazeSkills.costPerPoint(job),
+                rows));
+    }
+
+    /**
+     * Sends a player the whole catalogue and their whole slate.
+     *
+     * <p>One packet for the lot, so opening the screen never waits and every
+     * click is a single message each way. The screen is rebuilt from this rather
+     * than patched, which is why adding a line can never leave the client
+     * showing a balance the server does not agree with.
+     */
+    public static void sendOrders(ServerPlayer player) {
+        if (player.getServer() == null) {
+            return;
+        }
+        if (!(player.level() instanceof net.minecraft.server.level.ServerLevel level)) {
+            return;
+        }
+        var orders = com.jrpetty.aztecabyss.maze.MazeOrders.get(level);
+        var slate = orders.slate(player.getUUID());
+        java.util.List<String> rows = new java.util.ArrayList<>();
+        for (com.jrpetty.aztecabyss.maze.MazeOrders.Entry e
+                : com.jrpetty.aztecabyss.maze.MazeOrders.catalogue()) {
+            rows.add(e.group() + "|" + e.id() + "|" + e.display() + "|"
+                    + e.count() + "|" + e.cost() + "|" + slate.getOrDefault(e.id(), 0));
+        }
+        PacketDistributor.sendToPlayer(player, new RequisitionPayload(
+                com.jrpetty.aztecabyss.maze.MazeClock.get(player.getServer()).day(),
+                com.jrpetty.aztecabyss.maze.MazeOrders.budget(level, player.getUUID()),
+                orders.bonus(player.getUUID()),
+                orders.committed(player.getUUID()),
                 rows));
     }
 

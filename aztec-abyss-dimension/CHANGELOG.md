@@ -13,6 +13,49 @@ behaviour that was already there · **docs**
 
 ## Unreleased
 
+### The slate is a screen, and a bounty you can actually spend
+
+- **feat** **`/maze order` opens the requisition screen.** Ordering supplies meant
+  reading a thirty-eight line catalogue as it scrolled past in chat and then typing
+  `/maze order beetroot 3` from memory. Nobody makes a good decision that way: you
+  cannot weigh a golden apple against four iron when only one of them is on screen,
+  you cannot see what you have left without asking, and the price list is gone by
+  the time you have thought about it. The evening choice is the spine of the whole
+  supply system and it was being made blind.
+  - A rail of eight groups down the left — Metal, Stone, Timber, Cloth, Soil, Food,
+    Camp, Medical — and that group's lines on the right. Eight short lists you can
+    flick between, because thirty-eight rows do not fit on a Minecraft screen at any
+    sane scale and paging through one is worse than the chat sheet was. Left and
+    right arrow keys move between groups.
+  - The budget bar across the top is what the screen is for: committed against
+    total in one bar, the bounty portion picked out in gold at the far end, moving
+    the instant you add a line. "Can I afford the serum" is now a look, not a sum.
+  - A gold spine on every line that is on the slate, so a filled order is legible
+    without reading a number, and a red footer that says **Nothing filed. The Box
+    comes up empty tomorrow.** whenever the slate is bare.
+  - The `+` is dead when you cannot afford the line and the `−` is dead when you
+    have not ordered one, so the two mistakes the system can punish you for are
+    unclickable rather than explained afterwards.
+- **feat** Catalogue entries carry a **group**, derived into the tab rail rather
+  than listed separately, so a new line cannot end up in a group the rail has never
+  heard of — the commonest way a menu like this rots.
+- **fix** **A Griever killed late at night paid nothing.** The broadcast promised
+  twenty points on tomorrow's slate, and for a kill at noon it delivered: you had
+  all afternoon to spend them. For a kill at half past midnight it was a lie — the
+  points landed, dawn came a minute later, the slate had already been filed, and
+  `clearAll` wiped the lot unspent. The hardest thing in the game paid nothing
+  precisely when it was hardest. Bounties you did not get the chance to spend now
+  roll to the next day; the charting allowance still expires, because that is what
+  forces the evening decision. Dawn says how much carried.
+- **fix** The Box quoted **tomorrow's budget before settling up**, so the number it
+  told you at dawn included bounty points it was about to take off you. It is now
+  quoted after the day closes out, when it is a real number.
+- **change** `/maze order text` keeps the printed catalogue, for the same reason
+  the trade sheet kept its own: it is the only version you can read back after the
+  screen is closed.
+
+---
+
 ### A bounty on Grievers, and four of them per head
 
 - **feat** **Killing a Griever pays 20 requisition points**, announced to the whole

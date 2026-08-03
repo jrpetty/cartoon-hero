@@ -480,7 +480,8 @@ public final class MazeEvents {
                 .then(Commands.literal("forget").executes(ctx -> forget(ctx.getSource())))
                 .then(Commands.literal("bandage").executes(ctx -> bandage(ctx.getSource())))
                 .then(Commands.literal("order")
-                        .executes(ctx -> orderSheet(ctx.getSource()))
+                        .executes(ctx -> orderScreen(ctx.getSource()))
+                        .then(Commands.literal("text").executes(ctx -> orderSheet(ctx.getSource())))
                         .then(Commands.literal("clear").executes(ctx -> orderClear(ctx.getSource())))
                         .then(Commands.literal("cancel")
                                 .then(Commands.argument("item", com.mojang.brigadier.arguments.StringArgumentType.word())
@@ -687,6 +688,60 @@ public final class MazeEvents {
      * remember what you can afford while you read what things cost is a shop
      * nobody uses properly.
      */
+    /**
+     * Opens the slate.
+     *
+     * <p>The chat sheet is still there under {@code /maze order text}, for the
+     * same reason the trade sheet kept its own: a printed list is the only
+     * version you can read back after the screen is closed, and it is the only
+     * version that works if somebody is looking over your shoulder.
+     */
+    private static int orderScreen(CommandSourceStack src) {
+        ServerPlayer player = src.getPlayer();
+        if (player == null || !isMaze(src.getLevel())) {
+            src.sendFailure(Component.literal("Only in the maze."));
+            return 0;
+        }
+        com.jrpetty.aztecabyss.network.ModNetworking.sendOrders(player);
+        return 1;
+    }
+
+    /**
+     * One click on the requisition screen, re-checked from scratch.
+     *
+     * <p>Everything the command path checks is checked again here - that they
+     * are in the maze, that the id is real, that the budget covers it - because
+     * a packet is not a button press. The screen is then re-sent whatever
+     * happened, so a refused click leaves the client showing the truth rather
+     * than its own guess.
+     */
+    public static void onOrderClick(ServerPlayer player, String id, int delta) {
+        if (!(player.level() instanceof ServerLevel level) || !isMaze(level)) {
+            return;
+        }
+        MazeOrders orders = MazeOrders.get(level);
+        if (com.jrpetty.aztecabyss.network.RequisitionOrderPayload.CLEAR.equals(id)) {
+            orders.clear(player.getUUID());
+            com.jrpetty.aztecabyss.network.ModNetworking.sendOrders(player);
+            return;
+        }
+        MazeOrders.Entry e = MazeOrders.entry(id);
+        if (e == null) {
+            // Not a catalogue line. Say so rather than silently redrawing, which
+            // is how a renamed entry would sit broken for a month.
+            player.displayClientMessage(Component.literal(
+                    "§cThe Box has no line called '" + id + "'."), false);
+            com.jrpetty.aztecabyss.network.ModNetworking.sendOrders(player);
+            return;
+        }
+        if (delta > 0) {
+            orders.add(level, player.getUUID(), e, Math.min(delta, 64));
+        } else if (delta < 0) {
+            orders.take(player.getUUID(), e.id(), -delta);
+        }
+        com.jrpetty.aztecabyss.network.ModNetworking.sendOrders(player);
+    }
+
     private static int orderSheet(CommandSourceStack src) {
         ServerPlayer player = src.getPlayer();
         if (player == null || !isMaze(src.getLevel())) {

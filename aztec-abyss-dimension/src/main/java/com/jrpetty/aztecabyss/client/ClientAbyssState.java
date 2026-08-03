@@ -82,6 +82,21 @@ public final class ClientAbyssState {
                 new com.jrpetty.aztecabyss.client.SkillTreeScreen(payload));
     }
 
+    /**
+     * The requisition slate.
+     *
+     * <p>Re-sent after every click, so this replaces the screen rather than
+     * patching it. The tab you were on is carried across by hand, because being
+     * bounced back to Metal every time you add a torch would make ordering ten
+     * things unbearable.
+     */
+    public static void openRequisition(com.jrpetty.aztecabyss.network.RequisitionPayload payload) {
+        Minecraft mc = Minecraft.getInstance();
+        int tab = mc.screen instanceof com.jrpetty.aztecabyss.client.RequisitionScreen open
+                ? open.currentTab() : 0;
+        mc.setScreen(new com.jrpetty.aztecabyss.client.RequisitionScreen(payload, tab));
+    }
+
     /** The records screen, opened over whatever asked for it. */
     public static void openLeaderboards(com.jrpetty.aztecabyss.network.LeaderboardPayload payload) {
         Minecraft mc = Minecraft.getInstance();

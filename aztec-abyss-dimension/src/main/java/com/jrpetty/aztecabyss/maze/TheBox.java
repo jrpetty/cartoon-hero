@@ -160,15 +160,22 @@ public final class TheBox {
             p.displayClientMessage(Component.literal(ordered
                     ? "§6▲ The Box came up. §7Your order is in the cage — §f" + paid + "§7 points spent."
                     : "§c▲ The Box came up empty for you. §7You filed no order last night."), false);
-            p.displayClientMessage(Component.literal(
-                    "§7Today you have §f" + MazeOrders.budget(level, p.getUUID())
-                            + "§7 points. §8/maze order"), false);
             level.playSound(null, p.blockPosition(), SoundEvents.BEACON_ACTIVATE,
                     SoundSource.BLOCKS, 1.0F, 0.7F);
         }
-        // Slates are per day. Anything not spent is gone, which is what makes
-        // the evening decision a decision.
-        orders.clearAll();
+        // Slates are per day. The charting allowance not spent is gone, which is
+        // what makes the evening decision a decision; an unspent bounty rolls.
+        orders.settle(level);
+        // Only now is the new budget a real number. Quoting it before settling
+        // told people they had points that were about to be taken off them.
+        for (ServerPlayer p : level.players()) {
+            int today = MazeOrders.budget(level, p.getUUID());
+            int rolled = orders.bonus(p.getUUID());
+            p.displayClientMessage(Component.literal(
+                    "§7Today you have §f" + today + "§7 points"
+                            + (rolled > 0 ? " §8(§6" + rolled + "§8 carried from bounties)" : "")
+                            + "§7. §8/maze order"), false);
+        }
         level.playSound(null, new BlockPos(MazeData.SPAWN_X, MazeData.FLOOR_Y + 2, MazeData.SPAWN_Z),
                 SoundEvents.ANVIL_LAND, SoundSource.BLOCKS, 1.4F, 0.6F);
     }
