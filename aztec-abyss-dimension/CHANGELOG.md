@@ -13,6 +13,37 @@ behaviour that was already there · **docs**
 
 ## Unreleased
 
+### The Dead Glade gets a wall, and the way in moves
+
+- **fix** **The camp had no perimeter at all.** `clear()` removed the boundary
+  walls along with everything else, so it was a sixty-block hole open on all four
+  faces. The maze did not route *around* it, it just stopped — and the presets had
+  nothing to say about how you approached it. A landmark with no edge is not a
+  landmark.
+- **feat** **It is walled now, in the maze's own stone** — mossier and more
+  cracked than the corridors you walked to get there, because it is older and
+  sorrier. The only ways in are **three breaches** where the wall has fallen,
+  corridor-wide and head-high with a ragged top edge and the rubble left in place.
+- **feat** **The breaches move with the reshape.** The camp is fixed for the life
+  of the world; which sections of its wall are down is chosen from the layout's
+  own name, so a preset always opens the same ones and *"on day four you go in
+  from the east"* is a real thing a veteran can learn. **No two of the seven
+  presets share a set.**
+- **fix** **Breaches are chosen from the ones that actually go somewhere.** They
+  are picked from the candidates opening onto corridor reachable from a Glade
+  door, not by hash alone — and that is not theoretical. Verified against the real
+  dataset: picking by hash alone put **every breach on unreachable corridor for
+  day_7**, which would have sealed the camp for a whole day with nothing to say
+  why. Day_7 has only 4 usable candidates of 40, against 13–18 for the others.
+- **verified** `tools/verify_maze_presets.py` gained a fifth part that ports the
+  shipped selection algorithm and checks it: **all seven presets enterable, 0 of
+  21 preset pairs sharing a breach set.**
+- If a future preset ever does seal the camp off entirely, the reshape says so to
+  any operator present rather than leaving a landmark that silently cannot be
+  entered.
+
+---
+
 ### The Dead Glade
 
 - **feat** **There is a second clearing out there, and somebody else built it.**

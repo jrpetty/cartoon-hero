@@ -1251,6 +1251,10 @@ public final class MazeRuntime {
             }
             MazeBuilder.setToggle(level, tp, layout.open().contains(tp.id()), rng);
         }
+        // The camp does not move; the way into it does. Seals its wall and cuts
+        // tonight's breaches, chosen from the ones that actually open onto
+        // corridor a runner can reach.
+        DeadGlade.applyBreaches(level, layout);
         // The exit moves every night, and the sixty standing in front of
         // yesterday's would otherwise stay in yesterday's lane for the life of
         // the world - sixty more every day, in an annex nobody will ever visit

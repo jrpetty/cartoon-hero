@@ -47,6 +47,21 @@ import net.minecraft.world.level.block.state.properties.BlockStateProperties;
  * days walking. Once per game, and it is worth the trip.
  *
  * <p>And their supplies, which they did not get to use.
+ *
+ * <h2>It stays put; the way in does not</h2>
+ *
+ * <p>The camp is fixed - the same cells, the same buildings, for the life of the
+ * world - and the maze reshapes around it every night like it reshapes around
+ * everything else. What changes is where its wall has fallen in: three breaches,
+ * chosen from its own name so a preset always opens the same ones, and no two of
+ * the seven presets share a set. Learning "on day four you go in from the east"
+ * is a real thing a veteran can know.
+ *
+ * <p>The breaches are picked from the ones that open onto corridor a runner can
+ * actually reach, not by hash alone. That distinction is not theoretical: on one
+ * of the seven presets, hash-alone put every single breach on unreachable
+ * corridor, and the camp would simply have been sealed for a day with nothing to
+ * say why.
  */
 public final class DeadGlade {
 
@@ -131,6 +146,10 @@ public final class DeadGlade {
         graves(level, rng);
         mapRoom(level);
         rubble(level, rng);
+        // Walled last, so nothing scattered writes over the perimeter. The
+        // breaches themselves are cut by the reshape, which runs straight after
+        // the build and every night after that.
+        wallRing(level, rng);
     }
 
     /** Empties the cells the camp stands in, walls and all. */
@@ -398,6 +417,206 @@ public final class DeadGlade {
                     : roll < 9 ? Blocks.MOSSY_STONE_BRICK_WALL.defaultBlockState()
                     : Blocks.STONE_BRICK_SLAB.defaultBlockState();
             level.setBlock(at, piece, 2);
+        }
+    }
+
+    // ------------------------------------------------------------------
+    // The wall, and the ways in
+    // ------------------------------------------------------------------
+
+    /** Breaches cut per night. Enough to vary the approach, few enough to hunt. */
+    private static final int BREACHES = 3;
+    /** Ten possible breaches a side, four sides. */
+    private static final int PER_SIDE = SPAN_CELLS;
+    public static final int CANDIDATES = PER_SIDE * 4;
+
+    /**
+     * The camp's perimeter, which it did not have and badly needed.
+     *
+     * <p>The first version simply cleared ten cells of maze, walls and all. That
+     * made the camp a sixty-block hole open on all four faces - so the maze did
+     * not route around it, it just stopped, and the presets had nothing to say
+     * about how you got in. A landmark with no edge is not a landmark.
+     *
+     * <p>Now it is walled like your own Glade is walled, in the maze's own
+     * stone, and the only ways in are the places the wall has fallen. Which
+     * places those are changes every night with the reshape.
+     */
+    private static void wallRing(ServerLevel level, RandomSource rng) {
+        for (int x = minBlock(); x <= maxBlock(); x++) {
+            column(level, rng, x, minBlockZ());
+            column(level, rng, x, maxBlockZ());
+        }
+        for (int z = minBlockZ(); z <= maxBlockZ(); z++) {
+            column(level, rng, minBlock(), z);
+            column(level, rng, maxBlock(), z);
+        }
+    }
+
+    private static void column(ServerLevel level, RandomSource rng, int x, int z) {
+        for (int y = Y + 1; y <= MazeData.WALL_TOP_Y; y++) {
+            int r = rng.nextInt(10);
+            // Older and sorrier than the live maze: mossy and cracked far more
+            // often than the corridors you walked to get here.
+            level.setBlock(new BlockPos(x, y, z), r < 4
+                    ? Blocks.MOSSY_STONE_BRICKS.defaultBlockState()
+                    : r < 7 ? Blocks.CRACKED_STONE_BRICKS.defaultBlockState()
+                    : Blocks.STONE_BRICKS.defaultBlockState(), 2);
+        }
+    }
+
+    /** Which side candidate {@code i} is on: 0 west, 1 east, 2 north, 3 south. */
+    private static int side(int i) {
+        return i / PER_SIDE;
+    }
+
+    private static int along(int i) {
+        return i % PER_SIDE;
+    }
+
+    /** The maze cell a breach opens onto, outside the wall. */
+    public static int[] candidateOutside(int i) {
+        int k = along(i);
+        return switch (side(i)) {
+            case 0 -> new int[]{CELL_X - 1, CELL_Z + k};
+            case 1 -> new int[]{CELL_X + SPAN_CELLS, CELL_Z + k};
+            case 2 -> new int[]{CELL_X + k, CELL_Z - 1};
+            default -> new int[]{CELL_X + k, CELL_Z + SPAN_CELLS};
+        };
+    }
+
+    /**
+     * Every cell you can reach from a Glade door with the camp sealed.
+     *
+     * <p>The whole point of asking: a breach onto a pocket of maze nobody can
+     * get to is a camp nobody can enter. The old code picked breaches by hash
+     * alone, and on one of the seven presets every single one of them opened
+     * onto unreachable corridor - the camp would simply have been sealed for a
+     * day, with nothing to say why.
+     */
+    private static boolean[] reachableFromDoors(MazeData.Layout layout) {
+        boolean[] seen = new boolean[MazeData.GRID * MazeData.GRID];
+        java.util.ArrayDeque<int[]> queue = new java.util.ArrayDeque<>();
+        for (int[] door : MazeBuilder.DOOR_CELLS) {
+            seen[door[1] * MazeData.GRID + door[0]] = true;
+            queue.add(new int[]{door[0], door[1]});
+        }
+        int[][] steps = {{0, -1}, {0, 1}, {-1, 0}, {1, 0}};
+        while (!queue.isEmpty()) {
+            int[] at = queue.poll();
+            for (int[] step : steps) {
+                int nx = at[0] + step[0];
+                int nz = at[1] + step[1];
+                if (nx < 0 || nz < 0 || nx >= MazeData.GRID || nz >= MazeData.GRID) {
+                    continue;
+                }
+                if (seen[nz * MazeData.GRID + nx] || MazeData.inGlade(nx, nz)
+                        || coversCell(nx, nz)) {
+                    continue;
+                }
+                if (!MazeData.isOpen(at[0], at[1], nx, nz, layout)) {
+                    continue;
+                }
+                seen[nz * MazeData.GRID + nx] = true;
+                queue.add(new int[]{nx, nz});
+            }
+        }
+        return seen;
+    }
+
+    /**
+     * Tonight's ways in, chosen from the breaches that actually go somewhere.
+     *
+     * <p>Deterministic from the layout's own name, so the same preset always
+     * opens the same wall and a veteran can genuinely learn "on day four you go
+     * in from the east". Across the seven presets no two share a set, so the
+     * approach really does move.
+     */
+    public static java.util.List<Integer> breachesFor(MazeData.Layout layout) {
+        java.util.List<Integer> usable = new java.util.ArrayList<>();
+        boolean[] reach = reachableFromDoors(layout);
+        for (int i = 0; i < CANDIDATES; i++) {
+            int[] out = candidateOutside(i);
+            if (out[0] < 0 || out[1] < 0 || out[0] >= MazeData.GRID || out[1] >= MazeData.GRID) {
+                continue;
+            }
+            if (reach[out[1] * MazeData.GRID + out[0]]) {
+                usable.add(i);
+            }
+        }
+        java.util.List<Integer> picked = new java.util.ArrayList<>();
+        if (usable.isEmpty()) {
+            return picked;
+        }
+        int h = layout.name().hashCode() & 0x7FFFFFFF;
+        for (int n = 0; n < BREACHES; n++) {
+            int pick = usable.get((h + n * 7) % usable.size());
+            if (!picked.contains(pick)) {
+                picked.add(pick);
+            }
+        }
+        return picked;
+    }
+
+    /**
+     * Seals the wall and cuts tonight's holes in it.
+     *
+     * <p>Run with the nightly reshape, so the camp stays put while the maze
+     * rearranges itself around it and the way in is somewhere else in the
+     * morning.
+     */
+    public static void applyBreaches(ServerLevel level, MazeData.Layout layout) {
+        if (layout == null) {
+            return;
+        }
+        RandomSource rng = RandomSource.create(0xDEAD_BEEFL + layout.name().hashCode());
+        wallRing(level, rng);
+        java.util.List<Integer> open = breachesFor(layout);
+        if (open.isEmpty()) {
+            // Cannot happen with the seven shipped presets - all of them leave
+            // at least four usable - but a future preset could seal the camp
+            // off entirely, and a landmark nobody can enter should say so
+            // rather than just being missing.
+            for (ServerPlayer p : level.players()) {
+                if (p.hasPermissions(2)) {
+                    p.displayClientMessage(Component.literal(
+                            "§e⚠ " + layout.name() + ": no reachable way into the Dead Glade."), false);
+                }
+            }
+            return;
+        }
+        for (int i : open) {
+            cutBreach(level, rng, i);
+        }
+    }
+
+    /** One collapsed section, corridor-wide and head-high, with the rubble left. */
+    private static void cutBreach(ServerLevel level, RandomSource rng, int i) {
+        int k = along(i);
+        int s = side(i);
+        int lo = MazeData.corridorMin(s < 2 ? CELL_Z + k : CELL_X + k);
+        int hi = MazeData.corridorMax(s < 2 ? CELL_Z + k : CELL_X + k);
+        int fixed = switch (s) {
+            case 0 -> minBlock();
+            case 1 -> maxBlock();
+            case 2 -> minBlockZ();
+            default -> maxBlockZ();
+        };
+        for (int a = lo; a <= hi; a++) {
+            for (int y = Y + 1; y <= Y + 4; y++) {
+                BlockPos at = s < 2 ? new BlockPos(fixed, y, a) : new BlockPos(a, y, fixed);
+                level.setBlock(at, Blocks.AIR.defaultBlockState(), 2);
+            }
+            // A ragged top edge, so it reads as fallen rather than as a doorway
+            // somebody cut.
+            if (rng.nextInt(2) == 0) {
+                BlockPos lip = s < 2 ? new BlockPos(fixed, Y + 5, a) : new BlockPos(a, Y + 5, fixed);
+                level.setBlock(lip, Blocks.AIR.defaultBlockState(), 2);
+            }
+            BlockPos floor = s < 2 ? new BlockPos(fixed, Y + 1, a) : new BlockPos(a, Y + 1, fixed);
+            if (rng.nextInt(3) == 0) {
+                level.setBlock(floor, Blocks.MOSSY_STONE_BRICK_SLAB.defaultBlockState(), 2);
+            }
         }
     }
 

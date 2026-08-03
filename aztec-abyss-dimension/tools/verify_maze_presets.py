@@ -22,6 +22,23 @@ DEAD_X, DEAD_Z, DEAD_SPAN = 16, 70, 10
 
 def in_dead_glade(x, z):
     return DEAD_X <= x < DEAD_X + DEAD_SPAN and DEAD_Z <= z < DEAD_Z + DEAD_SPAN
+
+
+DEAD_BREACHES = 3
+DEAD_PER_SIDE = DEAD_SPAN
+DEAD_CANDIDATES = DEAD_PER_SIDE * 4
+
+
+def dead_candidate_outside(i):
+    """Mirrors DeadGlade.candidateOutside exactly."""
+    k, s = i % DEAD_PER_SIDE, i // DEAD_PER_SIDE
+    if s == 0:
+        return (DEAD_X - 1, DEAD_Z + k)
+    if s == 1:
+        return (DEAD_X + DEAD_SPAN, DEAD_Z + k)
+    if s == 2:
+        return (DEAD_X + k, DEAD_Z - 1)
+    return (DEAD_X + k, DEAD_Z + DEAD_SPAN)
 DOOR_CELLS = [(48, 39), (56, 48), (47, 56), (39, 47)]
 
 d = json.load(open('src/main/resources/data/aztecabyss/maze/maze_config_v2.json'))
@@ -227,3 +244,60 @@ print(f"every door reaches its exit unaided : {all(dataset_ok)}  <- if True, the
 print(f"every carved route arrives     : {all_arrived}")
 print(f"combined solves all seven      : {all_solved}")
 print("=" * 76)
+
+
+# ---------------------------------------------------------------------------
+# The Dead Glade is walled, and the way in moves with the preset. The thing that
+# has to hold: every preset must leave at least one breach opening onto corridor
+# a runner can actually reach from a Glade door.
+# ---------------------------------------------------------------------------
+print()
+print("=" * 76)
+print("PART 5 — is the Dead Glade enterable on every preset?")
+print("=" * 76)
+
+
+def doors_reach(opened):
+    """Reachable cells with the camp sealed, as DeadGlade.reachableFromDoors does."""
+    seen = set(DOOR_CELLS)
+    q = deque(DOOR_CELLS)
+    while q:
+        x, z = q.popleft()
+        for dx, dz in ((0, -1), (0, 1), (-1, 0), (1, 0)):
+            n = (x + dx, z + dz)
+            if not (0 <= n[0] < GRID and 0 <= n[1] < GRID) or n in seen:
+                continue
+            if in_glade(*n) or in_dead_glade(*n):
+                continue
+            a = f"{x},{z}>{n[0]},{n[1]}"
+            b = f"{n[0]},{n[1]}>{x},{z}"
+            if not (a in base or b in base or a in opened or b in opened):
+                continue
+            seen.add(n)
+            q.append(n)
+    return seen
+
+
+print(f"{'preset':8} {'usable':>7} {'chosen breaches':>34}")
+sets, enterable = {}, True
+for lay in layouts:
+    reach = doors_reach(opened_for(lay))
+    usable = [i for i in range(DEAD_CANDIDATES) if dead_candidate_outside(i) in reach]
+    h = str_hash(lay['name']) & 0x7FFFFFFF
+    picked = []
+    for n in range(DEAD_BREACHES):
+        if not usable:
+            break
+        p = usable[(h + n * 7) % len(usable)]
+        if p not in picked:
+            picked.append(p)
+    sets[lay['name']] = frozenset(picked)
+    enterable &= len(picked) > 0
+    faces = "".join("WENS"[i // DEAD_PER_SIDE] for i in picked)
+    print(f"{lay['name']:8} {len(usable):>7} {str(sorted(picked)) + '  ' + faces:>34}")
+
+pairs = [(a, b) for i, a in enumerate(sets) for b in list(sets)[i + 1:]]
+same = sum(1 for a, b in pairs if sets[a] == sets[b])
+print()
+print(f"every preset can be entered      : {enterable}")
+print(f"presets sharing a breach set     : {same} of {len(pairs)}")
