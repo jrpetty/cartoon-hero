@@ -470,7 +470,9 @@ public final class MazeEvents {
                         .then(Commands.literal(MazeJobs.TRACKHOE)
                                 .executes(ctx -> takeJob(ctx.getSource(), MazeJobs.TRACKHOE))))
                 .then(Commands.literal("jobs").executes(ctx -> roster(ctx.getSource())))
-                .then(Commands.literal("skills").executes(ctx -> skills(ctx.getSource())))
+                .then(Commands.literal("skills")
+                        .executes(ctx -> skills(ctx.getSource()))
+                        .then(Commands.literal("text").executes(ctx -> skillsText(ctx.getSource()))))
                 .then(Commands.literal("learn")
                         .then(Commands.argument("skill", com.mojang.brigadier.arguments.StringArgumentType.word())
                                 .executes(ctx -> learn(ctx.getSource(),
@@ -926,6 +928,63 @@ public final class MazeEvents {
      * between three of them.
      */
     private static int skills(CommandSourceStack src) {
+        ServerPlayer player = src.getPlayer();
+        if (player == null || src.getServer() == null) {
+            return 0;
+        }
+        // The sheet is a screen now. Twelve lines of chat is not a place anybody
+        // compares three options and picks one.
+        com.jrpetty.aztecabyss.network.ModNetworking.sendSkills(player);
+        return 1;
+    }
+
+    /**
+     * A click on the trade sheet.
+     *
+     * <p>The screen names a skill and nothing else; every check the command made
+     * is made again here, because a screen is a nicer way to ask a question and
+     * not a reason to trust the answer. The sheet is re-sent afterwards whatever
+     * happens, so the client is always looking at what the server actually
+     * thinks - including when the answer was no.
+     */
+    public static void onSkillClick(ServerPlayer player, String skillId) {
+        if (player.getServer() == null) {
+            return;
+        }
+        MazeJobs jobs = MazeJobs.get(player.getServer());
+        MazeSkills skills = MazeSkills.get(player.getServer());
+        String job = jobs.jobOf(player.getUUID());
+        if (job == null) {
+            return;
+        }
+        if (skillId == null || skillId.isEmpty()) {
+            int back = skills.forget(player.getUUID(), job);
+            player.displayClientMessage(Component.literal(
+                    "§7Unlearned. §f" + back + "§7 point" + (back == 1 ? "" : "s") + " back."), false);
+            com.jrpetty.aztecabyss.network.ModNetworking.sendSkills(player);
+            return;
+        }
+        MazeSkills.Skill skill = MazeSkills.byId(skillId);
+        if (skill == null) {
+            com.jrpetty.aztecabyss.network.ModNetworking.sendSkills(player);
+            return;
+        }
+        String why = skills.learn(jobs, player.getUUID(), skill);
+        if (why != null) {
+            player.displayClientMessage(Component.literal("§c" + why), true);
+        } else {
+            int rank = skills.rank(player.getUUID(), skill.id());
+            player.displayClientMessage(Component.literal(
+                    "§a✦ " + skill.display() + " §f" + rank + "§7 — " + skill.ranks()[rank - 1]), false);
+            player.level().playSound(null, player.blockPosition(),
+                    net.minecraft.sounds.SoundEvents.BEACON_ACTIVATE,
+                    net.minecraft.sounds.SoundSource.PLAYERS, 0.7F, 1.6F);
+        }
+        com.jrpetty.aztecabyss.network.ModNetworking.sendSkills(player);
+    }
+
+    /** The old chat sheet, kept behind {@code /maze skills text} for servers with no client mod. */
+    private static int skillsText(CommandSourceStack src) {
         ServerPlayer player = src.getPlayer();
         if (player == null || src.getServer() == null) {
             return 0;

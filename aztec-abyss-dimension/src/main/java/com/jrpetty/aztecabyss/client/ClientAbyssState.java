@@ -76,6 +76,12 @@ public final class ClientAbyssState {
                 payload.currentChoice(), bests, payload.customMaps()));
     }
 
+    /** The trade sheet, opened fresh each time the server sends one. */
+    public static void openSkills(com.jrpetty.aztecabyss.network.SkillTreePayload payload) {
+        Minecraft.getInstance().setScreen(
+                new com.jrpetty.aztecabyss.client.SkillTreeScreen(payload));
+    }
+
     /** The records screen, opened over whatever asked for it. */
     public static void openLeaderboards(com.jrpetty.aztecabyss.network.LeaderboardPayload payload) {
         Minecraft mc = Minecraft.getInstance();

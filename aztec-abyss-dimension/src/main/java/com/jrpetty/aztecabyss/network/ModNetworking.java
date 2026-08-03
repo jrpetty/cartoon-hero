@@ -90,6 +90,19 @@ public final class ModNetworking {
                         sendLeaderboards(sp);
                     }
                 }));
+        registrar.playToClient(
+                SkillTreePayload.TYPE,
+                SkillTreePayload.STREAM_CODEC,
+                (payload, context) -> context.enqueueWork(
+                        () -> ClientAbyssState.openSkills(payload)));
+        registrar.playToServer(
+                SkillLearnPayload.TYPE,
+                SkillLearnPayload.STREAM_CODEC,
+                (payload, context) -> context.enqueueWork(() -> {
+                    if (context.player() instanceof ServerPlayer sp) {
+                        com.jrpetty.aztecabyss.maze.MazeEvents.onSkillClick(sp, payload.skillId());
+                    }
+                }));
         registrar.playToServer(
                 PingPayload.TYPE,
                 PingPayload.STREAM_CODEC,
@@ -99,6 +112,47 @@ public final class ModNetworking {
                                 sp, new net.minecraft.core.BlockPos(payload.x(), payload.y(), payload.z()));
                     }
                 }));
+    }
+
+    /**
+     * Sends a player their whole trade sheet.
+     *
+     * <p>One packet for the lot, so opening the screen never waits on a second
+     * round trip and re-sending after a point is spent is a single message. The
+     * screen is rebuilt from this rather than patched, which is why spending a
+     * point can never leave the client showing a rank the server does not agree
+     * exists.
+     */
+    public static void sendSkills(ServerPlayer player) {
+        if (player.getServer() == null) {
+            return;
+        }
+        var jobs = com.jrpetty.aztecabyss.maze.MazeJobs.get(player.getServer());
+        var skills = com.jrpetty.aztecabyss.maze.MazeSkills.get(player.getServer());
+        String job = jobs.jobOf(player.getUUID());
+        if (job == null) {
+            player.displayClientMessage(net.minecraft.network.chat.Component.literal(
+                    "§7Take a trade first. §8/maze job"), false);
+            return;
+        }
+        java.util.List<String> rows = new java.util.ArrayList<>();
+        for (var s : com.jrpetty.aztecabyss.maze.MazeSkills.forJob(job)) {
+            StringBuilder packed = new StringBuilder();
+            packed.append(s.id()).append('|').append(s.display()).append('|')
+                    .append(skills.rank(player.getUUID(), s.id())).append('|')
+                    .append(com.jrpetty.aztecabyss.maze.MazeSkills.MAX_RANK);
+            for (String rank : s.ranks()) {
+                packed.append('|').append(rank);
+            }
+            rows.add(packed.toString());
+        }
+        PacketDistributor.sendToPlayer(player, new SkillTreePayload(
+                job,
+                com.jrpetty.aztecabyss.maze.MazeJobs.display(job),
+                skills.available(jobs, player.getUUID(), job),
+                jobs.xpOf(player.getUUID(), job),
+                com.jrpetty.aztecabyss.maze.MazeSkills.costPerPoint(job),
+                rows));
     }
 
     public static void sendState(ServerPlayer player, boolean inRun, int round) {

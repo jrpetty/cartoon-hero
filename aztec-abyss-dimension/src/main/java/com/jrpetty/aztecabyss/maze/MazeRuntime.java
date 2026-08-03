@@ -440,7 +440,6 @@ public final class MazeRuntime {
             p.displayClientMessage(Component.literal(
                     "§8Tonight is §c" + String.format("%.1f", Griever.dayScale(level))
                             + "x §8what the first night was."), false);
-            int limit = AbyssConfig.MAZE_DAY_LIMIT.get();
             if (limit > 0) {
                 int left = (int) (limit - day);
                 // The last three days say so loudly. A deadline nobody is

@@ -13,6 +13,35 @@ behaviour that was already there · **docs**
 
 ## Unreleased
 
+### The trade sheet is a screen
+
+Skills lived in chat. Twelve lines of grey text scrolling away above a hotbar is
+not a place anybody makes a decision — you cannot compare two options that are
+not on screen together, you cannot see what a rank costs against what you have,
+and the whole thing is gone the moment somebody else says anything. A
+progression system nobody can look at properly is one nobody engages with.
+
+- **feat** `SkillTreeScreen` — three columns side by side, one per skill, full
+  height. That is the entire point: a trade has exactly three choices and the
+  decision is a *comparison*, so they have to be visible at the same time.
+- **feat** Each column is a **ladder**. Ranks you own are ticked, the one you are
+  about to buy is lit, the ones above are dim but legible — so you can see where a
+  column *goes* before committing a point. Knowing Stride ends at Second Wind is
+  what makes its first rank worth buying.
+- **feat** A points meter across the top showing progress to your next point, and
+  a spare-points counter that **breathes** when you have any. It is the only thing
+  on screen that moves, and only when it matters — a number you have to remember
+  to look at is a number that sits unspent for a week.
+- **feat** Per-trade accent colour, read off the display name the server already
+  sends. Re-deciding it client-side would be two sources of truth for one fact.
+- **feat** Unlearn is a two-click confirm rather than a command you have to know.
+- **change** **The client decides nothing.** Clicks send a skill's name; the server
+  re-checks the trade, the ceiling and the balance exactly as the command did, then
+  re-sends the whole sheet. No optimistic update — a client that guesses its own
+  progression will eventually show somebody a rank they did not buy.
+- **change** `/maze skills text` keeps the old chat sheet for anyone on a server
+  without the client mod.
+
 ### The reward is for surviving
 
 - **change** **Work done beyond the Glade wall is now carried, not banked.** Step
