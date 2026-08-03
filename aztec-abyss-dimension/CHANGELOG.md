@@ -13,6 +13,49 @@ behaviour that was already there · **docs**
 
 ## Unreleased
 
+### The Dead Glade
+
+- **feat** **There is a second clearing out there, and somebody else built it.**
+  The maze had exactly two destinations — the way out, and back home — which made
+  exploration a pure cost: the only reason to turn down an unknown corridor was
+  that it might be the exit, and if it wasn't, the trip was wasted. A map with one
+  prize in it is a puzzle, not a place.
+  - **Not the middle of the map**, because the middle of the map is your Glade —
+    cells 40–55 of 96, dead centre. It sits deep in the **south-west** instead,
+    around cell (16, 70): about twenty cells past your own wall and at least
+    twenty from any exit, so reaching it is a decision about how to spend a day
+    rather than something you pass on the way to anything.
+  - **Ten cells across against your sixteen.** Smaller on purpose — it has to read
+    as the same kind of place without competing with home, and a ruin the size of
+    the Glade would be a second settlement rather than a warning.
+  - **It is your Glade, finished.** The same deepslate Box cage with the bars torn
+    open and broken off at uneven heights. The same three huts, walls standing to
+    different heights with holes knocked through and a few rafters still up. The
+    same fenced field, gone to dead bush, the fence *mostly* still standing —
+    mostly is what makes it sad. Twenty-two graves where you have fourteen. Podzol
+    and gravel where your Glade has grass, cobwebs indoors, and ninety pieces of
+    fallen stone scattered through it.
+  - **Their map room still stands**, in deepslate, cracked but not collapsed —
+    the one thing any group in here would build to last.
+- **feat** **Their charts are the reward.** Right-click the lectern in their map
+  room and everything they had surveyed — 29 cells square around their camp — is
+  marked onto your Glade's chart, free, in one go. Deliberately **information
+  rather than loot**: a chest of iron would make this a supply run, and the one
+  thing this place should change is what the Glade *knows*. Once per game, and it
+  pays the reader a Runner's day's work.
+- **fix** **The nightly reshape would have grown walls back through the camp.**
+  Two of the two hundred toggle points sit inside the footprint, so the reshape
+  now skips any toggle standing on ground the camp has cleared — the walls came
+  down long before you got here and they do not come back.
+- **verified** All seven presets re-solved with the camp in place: **28 of 28**
+  door-to-exit routes still go through, and no Griever hole falls inside the
+  footprint. Checked rather than assumed, even though carving a clearing can only
+  add connectivity. `tools/verify_maze_presets.py` now models the camp.
+- **change** Geometry version 7 → 8, with its own marker block, so existing
+  worlds carve it in.
+
+---
+
 ### The Glade stops looking like boxes on grass
 
 A pass over every structure in the clearing. Two of the defects were comments
