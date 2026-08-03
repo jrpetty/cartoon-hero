@@ -60,8 +60,10 @@ public final class ChartFloor {
         return MazeData.gladeMinBlock() + 1;
     }
 
-    /** The floor sits one below standing height, so it reads as a sunken table. */
+    /** The mosaic is laid at ground level, so it is walked on rather than viewed. */
     private static final int Y = MazeData.FLOOR_Y;
+    /** How often the whole thing is repainted regardless of the diff. */
+    private static final long FULL_REPAINT_TICKS = 1200L;
 
     /** Which chart the floor is currently showing, as an index into discovery order. */
     private static int showing = 0;
@@ -86,11 +88,14 @@ public final class ChartFloor {
     // ------------------------------------------------------------------
 
     /**
-     * Lays the plaza: a rim, a sunken bed, and the dial on its south edge.
+     * Lays the plaza: a kerbed bed flush with the Glade, and the dial on its
+     * south edge.
      *
-     * <p>Sunk by one so that standing on the rim you are looking down at it. A
-     * map at eye level is a wall; a map at your feet is a table, and a table is
-     * the thing five people can crowd round.
+     * <p>Flush rather than raised, so you walk out onto the map and stand on the
+     * part of the maze you are talking about. A map on a wall is a thing one
+     * person reads; a map you are standing in the middle of is a thing five
+     * people argue over, and the argument is the point. The slab kerb is only
+     * there so the edge of the map is unambiguous.
      */
     public static void build(ServerLevel level) {
         int ox = originX();
@@ -190,7 +195,13 @@ public final class ChartFloor {
             }
         }
 
-        if (drawn == null || drawn.length != want.length) {
+        // A full repaint once a minute. The diff is what makes this cheap, but it
+        // also means anything that changes a pixel behind the renderer's back -
+        // somebody standing a torch on the map, a creeper, an operator - stays
+        // wrong forever, because the renderer believes it already painted that
+        // block. Self-healing beats being right about the cache.
+        if (drawn == null || drawn.length != want.length
+                || level.getGameTime() % FULL_REPAINT_TICKS == 0L) {
             drawn = new byte[want.length];
             java.util.Arrays.fill(drawn, (byte) -1);
         }
