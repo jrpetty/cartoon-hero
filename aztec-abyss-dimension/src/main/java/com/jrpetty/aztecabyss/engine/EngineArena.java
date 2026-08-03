@@ -85,6 +85,11 @@ public final class EngineArena {
     private final ServerBossEvent bar;
     private final RandomSource rng = RandomSource.create();
 
+    /** The run's own randomness, so the script layer rolls the same dice the arena does. */
+    public RandomSource rng() {
+        return rng;
+    }
+
     /** Elapsed run time in ticks, for free mode's clock and the board's tie-break. */
     private int elapsed = 0;
     /** What free mode shows on the bar. Set by script; the clock is appended. */
@@ -2094,7 +2099,9 @@ public final class EngineArena {
         // A kill is progress, which resets the stall clock. Without this a long
         // hard round with a slow weapon would be mistaken for a stuck one.
         a.lastProgress = a.level.getGameTime();
-        Script.fire(a, a.level, a.rules.id, "mob_killed", killer);
+        Script.fire(a, a.level, a.rules.id, "mob_killed", killer, null,
+                net.minecraft.core.registries.BuiltInRegistries.ENTITY_TYPE
+                        .getKey(mob.getType()).toString());
     }
 
     public int round() {

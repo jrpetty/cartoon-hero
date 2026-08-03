@@ -1,0 +1,124 @@
+{
+  "mode": "free",
+  "display": "The Key Hunt",
+  "respawn": true,
+  "script": [
+    {
+      "on": "run_start",
+      "do": [
+        {
+          "title": {
+            "main": "\u00a76THE KEY HUNT",
+            "sub": "\u00a77Three keys. One vault. Nothing hands them to you."
+          }
+        },
+        {
+          "set_var": {
+            "name": "keys",
+            "value": 0
+          }
+        }
+      ]
+    },
+    {
+      "on": "mob_killed",
+      "when": {
+        "killed": "husk"
+      },
+      "do": [
+        {
+          "give": {
+            "id": "minecraft:tripwire_hook",
+            "count": 1
+          }
+        },
+        {
+          "actionbar": "\u00a7eA key. \u00a77Take it to the vault door."
+        }
+      ]
+    },
+    {
+      "on": "mob_killed",
+      "when": {
+        "killed": "zombie",
+        "chance": 8
+      },
+      "do": [
+        {
+          "give": {
+            "id": "minecraft:tripwire_hook",
+            "count": 1
+          }
+        },
+        {
+          "actionbar": "\u00a7eSomething fell out of it."
+        }
+      ]
+    },
+    {
+      "on": "use_block",
+      "when": {
+        "region": "vault_door",
+        "has_item": {
+          "id": "minecraft:tripwire_hook",
+          "count": 1
+        }
+      },
+      "do": [
+        {
+          "take": {
+            "id": "minecraft:tripwire_hook",
+            "count": 1
+          }
+        },
+        {
+          "add_var": {
+            "name": "keys",
+            "value": 1
+          }
+        },
+        {
+          "sound": "minecraft:block.beacon.activate"
+        },
+        {
+          "message": "\u00a7aA lock turns."
+        }
+      ]
+    },
+    {
+      "on": "use_block",
+      "when": {
+        "region": "vault_door"
+      },
+      "do": [
+        {
+          "actionbar": "\u00a77Locked. \u00a78It wants a key."
+        }
+      ]
+    },
+    {
+      "on": "tick",
+      "when": {
+        "var": {
+          "name": "keys",
+          "at_least": 3
+        }
+      },
+      "do": [
+        {
+          "open_area": "vault"
+        },
+        {
+          "title": {
+            "main": "\u00a76THE VAULT IS OPEN"
+          }
+        },
+        {
+          "win": {
+            "message": "\u00a76The Glade cracked it."
+          }
+        }
+      ]
+    }
+  ]
+}

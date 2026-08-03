@@ -16,6 +16,7 @@ import net.minecraft.world.effect.MobEffectInstance;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.Mob;
+import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.block.state.BlockState;
 
@@ -90,11 +91,12 @@ public final class Script {
             "open_area", "set_block", "end_run", "set_var", "add_var", "set_my_var",
             "add_my_var", "win", "lose", "set_bar", "join_team", "balance_teams",
             "team_message", "add_team_var", "set_team_var", "teleport_to_spawn",
-            "delay", "every");
+            "delay", "every", "take");
 
     /** Every condition the matcher understands. */
     private static final java.util.Set<String> CONDITIONS = java.util.Set.of(
-            "round", "area_open", "region", "var", "my_var", "team", "team_var", "seconds", "block");
+            "round", "area_open", "region", "var", "my_var", "team", "team_var", "seconds", "block",
+            "has_item", "killed", "chance");
 
     public static List<String> warnings(String rulesetId) {
         return WARNINGS.getOrDefault(rulesetId, List.of());
@@ -265,6 +267,21 @@ public final class Script {
 
     public static void fire(EngineArena arena, ServerLevel level, String rulesetId,
                             String event, ServerPlayer who, String regionId) {
+        fire(arena, level, rulesetId, event, who, regionId, null);
+    }
+
+    /**
+     * Fires an event, carrying what it was <em>about</em>.
+     *
+     * <p>Every event until now told a rule that something happened and refused to
+     * say what. {@code mob_killed} fired identically for a zombie and for the
+     * boss, so "when the boss dies, open the vault" - the single most obvious
+     * sentence in a boss map - could not be written at all. The subject is
+     * whatever the event is a fact about: the entity id for a kill, and room for
+     * the same treatment on any future event that has a noun in it.
+     */
+    public static void fire(EngineArena arena, ServerLevel level, String rulesetId,
+                            String event, ServerPlayer who, String regionId, String subject) {
         List<Rule> rules = BY_RULESET.get(rulesetId);
         if (rules == null || rules.isEmpty()) {
             return;
@@ -273,7 +290,7 @@ public final class Script {
             if (!rule.event().equals(event)) {
                 continue;
             }
-            if (!matches(rule.when(), arena, who, regionId)) {
+            if (!matches(rule.when(), arena, who, regionId, subject)) {
                 trace(arena, "§8skip §7" + event + (regionId == null ? "" : " (" + regionId + ")")
                         + " §8— conditions not met");
                 continue;
@@ -300,8 +317,47 @@ public final class Script {
     /** Conditions. Absent means always. */
     private static boolean matches(JsonObject when, EngineArena arena,
                                    ServerPlayer who, String regionId) {
+        return matches(when, arena, who, regionId, null);
+    }
+
+    private static boolean matches(JsonObject when, EngineArena arena,
+                                   ServerPlayer who, String regionId, String subject) {
         if (when == null) {
             return true;
+        }
+        // What died, for the events that killed something. Matched loosely so
+        // "zombie" works as well as "minecraft:zombie" - an author writing a
+        // ruleset by hand should not have to remember which ids carry a
+        // namespace and which do not.
+        if (when.has("killed")) {
+            String want = str(when, "killed", "").toLowerCase(Locale.ROOT);
+            if (subject == null || want.isEmpty()) {
+                return false;
+            }
+            String got = subject.toLowerCase(Locale.ROOT);
+            if (!got.equals(want) && !got.equals("minecraft:" + want)
+                    && !got.endsWith(":" + want)) {
+                return false;
+            }
+        }
+        // A percentage roll. The script layer was entirely deterministic, which
+        // meant an author could describe a game but never a game that surprises
+        // you twice - no random events, no rare drops, no "one time in ten this
+        // door is already open".
+        if (when.has("chance")) {
+            int percent = intOf(when, "chance", 100);
+            if (percent < 100 && arena.rng().nextInt(100) >= percent) {
+                return false;
+            }
+        }
+        // What somebody is carrying. This is the one that unlocks keys, fetch
+        // quests, deliveries, tolls and trades - the engine could read the run,
+        // the round, the clock, the regions, the teams and its own variables,
+        // and could not read the player.
+        if (when.has("has_item")) {
+            if (who == null || !hasItem(who, when.get("has_item"))) {
+                return false;
+            }
         }
         // Which region fired this. Lets one rule per region rather than one
         // ruleset per region, which is what a map with nine checkpoints needs.
@@ -595,6 +651,7 @@ public final class Script {
                 case "set_my_var" -> varAction(arena, who, body, true, true);
                 case "add_my_var" -> varAction(arena, who, body, true, false);
                 case "set_bar" -> arena.setBarText(asText(body));
+                case "take" -> take(arena, who, body);
                 case "delay" -> later(arena, body, who, false);
                 case "every" -> later(arena, body, who, true);
                 case "join_team" -> {
@@ -689,6 +746,84 @@ public final class Script {
         int ticks = Math.max(1, Math.min(20 * 60 * 60, intOf(o, "seconds", 10) * 20));
         int amp = Math.max(0, Math.min(9, intOf(o, "amp", 0)));
         forEach(arena, who, p -> p.addEffect(new MobEffectInstance(holder.get(), ticks, amp, false, true)));
+    }
+
+    /**
+     * How much of something a player is carrying.
+     *
+     * <p>Searched across the whole inventory by default rather than the held
+     * slot, because "do you have the key" is almost never "are you holding the
+     * key right now" - a player who put it in their bag to fight something has
+     * not stopped having it. {@code slot} narrows it for the cases that do care.
+     */
+    private static int countItem(ServerPlayer p, ResourceLocation rl, String slot) {
+        Item item = BuiltInRegistries.ITEM.get(rl);
+        int found = 0;
+        switch (slot) {
+            case "mainhand" -> found = p.getMainHandItem().is(item) ? p.getMainHandItem().getCount() : 0;
+            case "offhand" -> found = p.getOffhandItem().is(item) ? p.getOffhandItem().getCount() : 0;
+            case "armor" -> {
+                for (ItemStack stack : p.getInventory().armor) {
+                    if (stack.is(item)) {
+                        found += stack.getCount();
+                    }
+                }
+            }
+            default -> {
+                for (int i = 0; i < p.getInventory().getContainerSize(); i++) {
+                    ItemStack stack = p.getInventory().getItem(i);
+                    if (stack.is(item)) {
+                        found += stack.getCount();
+                    }
+                }
+            }
+        }
+        return found;
+    }
+
+    /** Reads a {@code has_item} clause, in either its short or long form. */
+    private static boolean hasItem(ServerPlayer who, JsonElement body) {
+        JsonObject o = body.isJsonObject() ? body.getAsJsonObject() : null;
+        String id = o != null ? str(o, "id", "") : asText(body);
+        ResourceLocation rl = ResourceLocation.tryParse(id.toLowerCase(Locale.ROOT));
+        if (rl == null || !BuiltInRegistries.ITEM.containsKey(rl)) {
+            return false;
+        }
+        int want = o != null ? Math.max(1, intOf(o, "count", 1)) : 1;
+        String slot = o != null ? str(o, "slot", "any").toLowerCase(Locale.ROOT) : "any";
+        return countItem(who, rl, slot) >= want;
+    }
+
+    /**
+     * Takes something away.
+     *
+     * <p>The counterpart {@code give} never had. Without it an item could be
+     * required but never <em>spent</em>, so every key was a key that opened every
+     * door forever and every delivery could be made twice. A toll you pay once is
+     * a different mechanic from a toll you pass a check for, and only one of them
+     * was expressible.
+     */
+    private static void take(EngineArena arena, ServerPlayer who, JsonElement body) {
+        JsonObject o = body.isJsonObject() ? body.getAsJsonObject() : null;
+        String id = o != null ? str(o, "id", "") : asText(body);
+        ResourceLocation rl = ResourceLocation.tryParse(id.toLowerCase(Locale.ROOT));
+        if (rl == null || !BuiltInRegistries.ITEM.containsKey(rl)) {
+            return;
+        }
+        Item item = BuiltInRegistries.ITEM.get(rl);
+        int count = o != null ? Math.max(1, intOf(o, "count", 1)) : 1;
+        forEach(arena, who, p -> {
+            int left = count;
+            for (int i = 0; i < p.getInventory().getContainerSize() && left > 0; i++) {
+                ItemStack stack = p.getInventory().getItem(i);
+                if (!stack.is(item)) {
+                    continue;
+                }
+                int taken = Math.min(left, stack.getCount());
+                stack.shrink(taken);
+                left -= taken;
+            }
+        });
     }
 
     private static void give(EngineArena arena, ServerPlayer who, JsonElement body) {

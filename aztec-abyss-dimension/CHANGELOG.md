@@ -13,6 +13,42 @@ behaviour that was already there · **docs**
 
 ## Unreleased
 
+### The engine can read the player
+
+The audit finding: the script layer could read the run, the round, the clock, the
+regions, the teams and its own variables — and could not read **the player**.
+Nothing anywhere could ask what somebody was carrying, and `give` had no
+counterpart. That is why no map in this engine has ever had a key, a fetch quest,
+a delivery, a toll or a trade: they were not hard to write, they were
+*unwritable*.
+
+- **feat** `has_item` condition — `{ "has_item": { "id": "minecraft:tripwire_hook",
+  "count": 1, "slot": "any" } }`. Searches the whole inventory by default rather
+  than the held slot, because "do you have the key" is almost never "are you
+  holding the key right now" — somebody who bagged it to fight something has not
+  stopped having it. `slot` narrows to `mainhand`, `offhand` or `armor` for the
+  cases that do care.
+- **feat** `take` action — the counterpart `give` never had. Without it an item
+  could be required but never **spent**, so every key opened every door forever
+  and every delivery could be made twice. A toll you pay once is a different
+  mechanic from a check you pass, and only one of them was expressible.
+- **feat** `killed` condition — **`mob_killed` never said what died.** It fired
+  identically for a zombie and for the boss, so "when the boss dies, open the
+  vault" — the most obvious sentence in a boss map — could not be written at all.
+  Events now carry a *subject*, and the condition matches loosely (`zombie` works
+  as well as `minecraft:zombie`) because an author writing JSON by hand should not
+  have to remember which ids carry a namespace.
+- **feat** `chance` condition — a percentage roll on any rule. The script layer was
+  entirely deterministic, so an author could describe a game but never one that
+  surprises you twice: no random events, no rare drops, no "one time in ten this
+  door is already open".
+- **feat** `aztecabyss:keyhunt` ships as a worked example — a named mob drops keys,
+  ordinary kills drop them one time in twelve, and the vault door asks for one and
+  **spends** it. Every line of it was impossible yesterday.
+- **change** `EngineArena.rng()` is exposed so the script layer rolls the same dice
+  the arena does, rather than starting a second source of randomness that a seed
+  could never reproduce.
+
 ### Induction — nobody moves until they say what they are
 
 - **feat** `MazeInduction` — arriving in the Glade now holds you where you stand

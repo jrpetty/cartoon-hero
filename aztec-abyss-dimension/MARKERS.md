@@ -167,6 +167,28 @@ than a single point of failure.
 
 ---
 
+## Reading the player
+
+The script layer could always read the run. It could not read the person playing
+it, which is why no map here has ever had a key.
+
+| Clause | Kind | Does |
+|---|---|---|
+| `has_item` | condition | `{ "id": "...", "count": 1, "slot": "any" }` — searches the whole inventory unless you narrow it to `mainhand`, `offhand` or `armor` |
+| `take` | action | removes N of an item. The counterpart `give` never had |
+| `killed` | condition | which entity died. `zombie` and `minecraft:zombie` both work |
+| `chance` | condition | a percentage roll on any rule |
+
+**Why `take` matters more than it looks.** Without it an item can be *required*
+but never *spent*, so every key opens every door forever. A toll you pay once and
+a check you pass are different mechanics, and only the second one existed.
+
+**What these four unlock together:** keys and doors, fetch quests, deliveries,
+tolls, trades, escort payoffs, boss-specific triggers, rare drops and random
+events. `aztecabyss:keyhunt` is a shipped map built entirely out of them.
+
+---
+
 ## Which markers a given game needs
 
 | Game | Needs |
