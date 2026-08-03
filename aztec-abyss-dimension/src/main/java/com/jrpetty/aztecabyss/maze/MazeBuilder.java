@@ -126,6 +126,9 @@ public final class MazeBuilder {
      * exists, the seven portal annexes were built outside the square, and the
      * Griever holes were dug.
      * <p>6: the Chart Floor was laid, and the homestead moved east to make room.
+     * <p>7: the huts got pitched roofs and interiors, the field got a fence all
+     * the way round with a gate, the Deadheads became graves, and nothing
+     * scattered plants itself through a building any more.
      */
     private static final int GEOMETRY_VERSION = 7;
 
@@ -138,6 +141,10 @@ public final class MazeBuilder {
             Blocks.DEEPSLATE_TILES.defaultBlockState(),
             Blocks.COBBLED_DEEPSLATE.defaultBlockState(),
             Blocks.CHISELED_DEEPSLATE.defaultBlockState(),
+            // One per version, and the list has to grow with it: with seven
+            // entries, version 7 wrapped back onto version 0's bedrock and the
+            // marker stopped being able to tell those two apart.
+            Blocks.SMOOTH_BASALT.defaultBlockState(),
     };
 
     private static BlockState versionBlock() {
