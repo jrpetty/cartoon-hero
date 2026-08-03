@@ -166,12 +166,13 @@ public final class AbyssConfig {
                         "is paid once rather than twice. Half the quota pays half the credits.")
                 .defineInRange("mazeQuotaFarm", 100, 1, 2000);
         MAZE_QUOTA_CHART = b.comment(
-                        "Blocks of corridor a Runner must chart that the Glade had never seen,",
-                        "for a full day's credits. A cell is six blocks across and four wide, so",
-                        "400 is a little under seventy cells. Re-walking a corridor you already",
-                        "know pays nothing - it is new ground, not distance, which is what stops",
-                        "a Runner farming this by pacing.")
-                .defineInRange("mazeQuotaChart", 400, 1, 20000);
+                        "Cells a Runner must chart that the Glade had never seen, for a full",
+                        "day's credits. A cell is six blocks square with a four-wide corridor",
+                        "through it, so eighty cells is a shade under five hundred blocks of new",
+                        "ground. Re-walking a corridor you already know pays nothing - it is new",
+                        "ground rather than distance, which is what stops a Runner farming this",
+                        "by pacing.")
+                .defineInRange("mazeQuotaChart", 80, 1, 5000);
         MAZE_QUOTA_CARE = b.comment(
                         "A Med-jack's day: one per bandage made, three per person treated or",
                         "revived, because a person is worth more than a dressing.")
