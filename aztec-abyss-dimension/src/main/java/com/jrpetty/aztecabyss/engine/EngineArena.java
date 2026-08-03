@@ -1541,8 +1541,6 @@ public final class EngineArena {
             return;
         }
         mob.moveTo(at.getX() + 0.5, at.getY(), at.getZ() + 0.5, rng.nextFloat() * 360.0F, 0.0F);
-        mob.getPersistentData().putString("aztecabyss_gate",
-                gate.arg("id", gate.arg("area", "")));
         if (health > 0) {
             setAttr(mob, Attributes.MAX_HEALTH, Math.min(1024, health));
         }
@@ -1553,10 +1551,6 @@ public final class EngineArena {
         mob.getPersistentData().putBoolean("aztecabyss_engine_mob", true);
         mob.setPersistenceRequired();
         level.addFreshEntity(mob);
-        // The rest of the burst, if this gate asked for one.
-        for (int extra = 1; extra < burst && leftToSpawn > 1; extra++) {
-            spawnCompanion(gate, pick, at, healthMul, damageMul);
-        }
         ServerPlayer target = nearestPlayer(at);
         if (target != null) {
             mob.setTarget(target);

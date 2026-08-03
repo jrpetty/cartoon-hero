@@ -13,6 +13,16 @@ behaviour that was already there · **docs**
 
 ## Unreleased
 
+### Fix the build (second attempt)
+
+- **fix** The per-gate edit used unanchored whole-file string replacement, so the
+  gate tag and the burst loop were injected into **every** matching site — landing
+  in `spawnAt()`, the boss spawner, which has no `gate`, `pick` or `burst` in
+  scope. Seven errors, all in a method the change was never meant to touch.
+- **process** Two build failures in a row from scripted edits I did not read back.
+  Verifying the edit landed where intended costs one command; not verifying cost
+  three builds and an hour.
+
 ### Fix the build
 
 - **fix** `rulesetId()` was declared twice in `EngineArena` — the block-events
