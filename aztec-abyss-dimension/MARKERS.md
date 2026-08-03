@@ -167,6 +167,35 @@ than a single point of failure.
 
 ---
 
+## Saying what you know
+
+Every text the script layer produced was a literal. An author could count keys,
+captures, lives and flags — the entire point of variables — and had no way to
+**show a number to anybody**. State was tracked perfectly and communicated not
+at all.
+
+Any `message`, `actionbar`, `title`, `set_bar` or `team_message` may now contain:
+
+| Placeholder | Is |
+|---|---|
+| `{var:name}` | a run variable |
+| `{my_var:name}` | that player's own copy |
+| `{total_var:name}` | everybody's copies added up |
+| `{team_var:red:score}` | a team's variable — drop the team for the viewer's own |
+| `{round}` `{seconds}` `{time}` | the round, and the run clock raw or as `m:ss` |
+| `{phase}` `{players}` | which part of the game, and how many are in |
+| `{player}` `{team}` | the viewer's name and side |
+
+Rendered **per recipient**, so `{my_var}` and `{player}` mean the right thing to
+each person — a message resolved once would show the whole squad the first
+player's numbers. `set_bar` has no viewer, so per-player placeholders come out
+blank there rather than lying.
+
+Anything unrecognised is left exactly as written: a map that puts `{foo}` in a
+message meant to.
+
+---
+
 ## Reading the player
 
 The script layer could always read the run. It could not read the person playing

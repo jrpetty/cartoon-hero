@@ -21,6 +21,14 @@
       ]
     },
     {
+      "on": "tick",
+      "do": [
+        {
+          "set_bar": "\u00a76Keys \u00a7f{var:keys}\u00a77/3 \u00a78| \u00a77{time} \u00a78| \u00a77{players} in"
+        }
+      ]
+    },
+    {
       "on": "mob_killed",
       "when": {
         "killed": "husk"
@@ -82,6 +90,9 @@
         },
         {
           "message": "\u00a7aA lock turns."
+        },
+        {
+          "set_bar": "\u00a76Keys \u00a7f{var:keys}\u00a77/3 \u00a78| \u00a77{time}"
         }
       ]
     },

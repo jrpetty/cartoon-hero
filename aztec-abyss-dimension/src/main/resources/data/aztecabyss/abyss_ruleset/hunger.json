@@ -95,6 +95,14 @@
           "sound": "minecraft:entity.generic.explode"
         }
       ]
+    },
+    {
+      "on": "tick",
+      "do": [
+        {
+          "set_bar": "\u00a74\u00a7lTHE ARENA \u00a78| \u00a7f{players} \u00a77left \u00a78| \u00a77{time}"
+        }
+      ]
     }
   ],
   "lobby": {

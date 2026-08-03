@@ -188,6 +188,14 @@
           "sound": "minecraft:block.beacon.deactivate"
         }
       ]
+    },
+    {
+      "on": "tick",
+      "do": [
+        {
+          "set_bar": "\u00a7cRed \u00a7f{team_var:red:score} \u00a78\u2014 \u00a79Blue \u00a7f{team_var:blue:score} \u00a78| \u00a77{time}"
+        }
+      ]
     }
   ],
   "respawn": {

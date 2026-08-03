@@ -13,6 +13,34 @@ behaviour that was already there · **docs**
 
 ## Unreleased
 
+### The engine can say what it knows
+
+Every text the script layer produced was a **literal**. An author could count
+keys, captures, lives and flags — the entire point of having variables — and had
+no way whatsoever to show a number to anybody. The state was tracked perfectly
+and communicated not at all, which is the difference between an engine that
+knows the score and a game that tells you it. This turned out to be a bigger hole
+than the sidebar I had queued, and it is the prerequisite for one.
+
+- **feat** Placeholders in `message`, `actionbar`, `title`, `set_bar` and
+  `team_message`: `{var:x}`, `{my_var:x}`, `{total_var:x}`, `{team_var:red:score}`,
+  `{round}`, `{seconds}`, `{time}`, `{phase}`, `{players}`, `{player}`, `{team}`.
+- **change** Rendered **per recipient**, not once. `{my_var}` and `{player}` mean
+  different things to different people, and a message resolved once would show the
+  whole squad the first player's numbers.
+- **change** `set_bar` has no viewer — one bar for everybody — so per-player
+  placeholders resolve blank there rather than silently showing somebody else's.
+- **change** Anything unrecognised is left **exactly as written**. A map that puts
+  `{foo}` in a message meant to, and an engine that eats it is an engine that
+  corrupts text it does not understand.
+- **change** Deliberately no arithmetic, nesting or conditionals — the same reason
+  `Vars` holds integers and nothing else. A map downloaded off the internet should
+  not be able to run a program on your server, and every expression language is one
+  bad idea away from being able to.
+- **feat** `keyhunt`, `capture` and `hunger` now all carry live bars —
+  `§6Keys §f{var:keys}§7/3`, `§cRed §f{team_var:red:score} §8— §9Blue …`,
+  `§f{players} §7left`. Not one of those lines was expressible yesterday.
+
 ### The engine can see the people playing it
 
 **There was no event for a player dying.** That is a strange hole in a game

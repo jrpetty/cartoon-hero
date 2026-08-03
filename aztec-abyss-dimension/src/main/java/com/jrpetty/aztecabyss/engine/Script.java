@@ -541,7 +541,8 @@ public final class Script {
             return;
         }
         for (ServerPlayer p : arena.teams().membersOf(team, arena.everyone())) {
-            p.displayClientMessage(net.minecraft.network.chat.Component.literal(text), false);
+            p.displayClientMessage(net.minecraft.network.chat.Component.literal(
+                    render(arena, p, text)), false);
         }
     }
 
@@ -665,9 +666,11 @@ public final class Script {
             JsonElement body = action.get(key);
             switch (key.toLowerCase(Locale.ROOT)) {
                 case "message" -> forEach(arena, who, p ->
-                        p.displayClientMessage(Component.literal(asText(body)), false));
+                        p.displayClientMessage(Component.literal(
+                                render(arena, p, asText(body))), false));
                 case "actionbar" -> forEach(arena, who, p ->
-                        p.displayClientMessage(Component.literal(asText(body)), true));
+                        p.displayClientMessage(Component.literal(
+                                render(arena, p, asText(body))), true));
                 case "title" -> title(arena, who, body);
                 case "sound" -> sound(level, arena, who, body);
                 case "effect" -> effect(arena, who, body);
@@ -681,7 +684,9 @@ public final class Script {
                 case "add_var" -> varAction(arena, who, body, false, false);
                 case "set_my_var" -> varAction(arena, who, body, true, true);
                 case "add_my_var" -> varAction(arena, who, body, true, false);
-                case "set_bar" -> arena.setBarText(asText(body));
+                // No viewer: the bar is one bar for everybody, so per-player
+                // placeholders resolve to blank rather than to the first player's.
+                case "set_bar" -> arena.setBarText(render(arena, null, asText(body)));
                 case "take" -> take(arena, who, body);
                 case "set_phase" -> arena.setPhase(asText(body));
                 case "delay" -> later(arena, body, who, false);
@@ -728,10 +733,10 @@ public final class Script {
         String sub = body.isJsonObject() ? str(body.getAsJsonObject(), "sub", "") : "";
         forEach(arena, who, p -> {
             p.connection.send(new net.minecraft.network.protocol.game.ClientboundSetTitleTextPacket(
-                    Component.literal(main)));
+                    Component.literal(render(arena, p, main))));
             if (!sub.isEmpty()) {
                 p.connection.send(new net.minecraft.network.protocol.game.ClientboundSetSubtitleTextPacket(
-                        Component.literal(sub)));
+                        Component.literal(render(arena, p, sub))));
             }
         });
     }
@@ -941,6 +946,91 @@ public final class Script {
     }
 
     // ------------------------------------------------------------------
+
+    /**
+     * The placeholders a message may contain.
+     *
+     * <p>Deliberately narrow: lower-case names and one optional argument. There
+     * is no arithmetic, no nesting and no conditionals, for the same reason
+     * {@link Vars} holds integers and nothing else - a map downloaded off the
+     * internet should not be able to run a program on your server, and every
+     * expression language is one bad idea away from being able to.
+     */
+    private static final java.util.regex.Pattern PLACEHOLDER =
+            java.util.regex.Pattern.compile("\\{([a-z_]+)(?::([^}]*))?}");
+
+    /**
+     * Fills the placeholders in a line of text.
+     *
+     * <p>Every text the script layer could produce was a literal. An author could
+     * count keys, captures, lives and flags - the whole point of variables - and
+     * had no way whatsoever to <em>show</em> a number to anybody. The state was
+     * tracked perfectly and communicated not at all, which is the difference
+     * between an engine that knows the score and a game that tells you it.
+     *
+     * <p>Rendered per recipient rather than once, because {@code {my_var}} and
+     * {@code {player}} mean different things to different people and a message
+     * that resolved them once would show the whole squad the first player's
+     * numbers.
+     */
+    static String render(EngineArena arena, ServerPlayer viewer, String raw) {
+        if (raw == null || raw.isEmpty() || raw.indexOf('{') < 0) {
+            return raw == null ? "" : raw;
+        }
+        java.util.regex.Matcher m = PLACEHOLDER.matcher(raw);
+        StringBuilder out = new StringBuilder();
+        while (m.find()) {
+            String value = placeholder(arena, viewer, m.group(1), m.group(2));
+            m.appendReplacement(out, java.util.regex.Matcher.quoteReplacement(value));
+        }
+        m.appendTail(out);
+        return out.toString();
+    }
+
+    /** One placeholder. Anything unrecognised is left exactly as it was written. */
+    private static String placeholder(EngineArena arena, ServerPlayer viewer, String name, String arg) {
+        String a = arg == null ? "" : arg;
+        switch (name) {
+            case "var":
+                return String.valueOf(arena.vars().get(a));
+            case "my_var":
+                return viewer == null ? "0" : String.valueOf(arena.vars().get(viewer, a));
+            case "total_var":
+                return String.valueOf(arena.vars().total(a));
+            case "team_var": {
+                // {team_var:red:score}, or {team_var:score} for the viewer's side.
+                int split = a.indexOf(':');
+                String team = split < 0 ? (viewer == null ? "" : arena.teams().teamOf(viewer)) : a.substring(0, split);
+                String key = split < 0 ? a : a.substring(split + 1);
+                if (team == null || team.isEmpty()) {
+                    return "0";
+                }
+                return String.valueOf(arena.vars().get(
+                        "team:" + team.toLowerCase(Locale.ROOT) + ":" + key));
+            }
+            case "round":
+                return String.valueOf(arena.round());
+            case "seconds":
+                return String.valueOf(arena.elapsedSeconds());
+            case "time": {
+                int t = arena.elapsedSeconds();
+                return (t / 60) + ":" + (t % 60 < 10 ? "0" : "") + (t % 60);
+            }
+            case "phase":
+                return arena.phase();
+            case "players":
+                return String.valueOf(arena.everyone().size());
+            case "player":
+                return viewer == null ? "" : viewer.getGameProfile().getName();
+            case "team": {
+                String t = viewer == null ? null : arena.teams().teamOf(viewer);
+                return t == null ? "" : t;
+            }
+            default:
+                // Not ours. A map that writes {"foo"} in a message meant to.
+                return arg == null ? "{" + name + "}" : "{" + name + ":" + arg + "}";
+        }
+    }
 
     private static String asText(JsonElement el) {
         try {
