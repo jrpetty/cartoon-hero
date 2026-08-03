@@ -92,7 +92,7 @@ public final class Script {
             "open_area", "set_block", "end_run", "set_var", "add_var", "set_my_var",
             "add_my_var", "win", "lose", "set_bar", "join_team", "balance_teams",
             "team_message", "add_team_var", "set_team_var", "teleport_to_spawn",
-            "delay", "every", "take", "set_phase");
+            "delay", "every", "take", "set_phase", "teleport", "heal", "clear_effects");
 
     /** Every condition the matcher understands. */
     private static final java.util.Set<String> CONDITIONS = java.util.Set.of(
@@ -689,6 +689,17 @@ public final class Script {
                 case "set_bar" -> arena.setBarText(render(arena, null, asText(body)));
                 case "take" -> take(arena, who, body);
                 case "set_phase" -> arena.setPhase(asText(body));
+                case "teleport" -> teleport(arena, level, who, body);
+                case "heal" -> forEach(arena, who, p -> {
+                    JsonObject h = body.isJsonObject() ? body.getAsJsonObject() : null;
+                    float amount = h != null ? intOf(h, "hearts", 0) * 2.0F : 0.0F;
+                    // No amount means all of it, because "heal" with no argument
+                    // obviously means heal, and making an author write the number
+                    // for the common case is a tax on the common case.
+                    p.setHealth(amount <= 0.0F ? p.getMaxHealth()
+                            : Math.min(p.getMaxHealth(), p.getHealth() + amount));
+                });
+                case "clear_effects" -> forEach(arena, who, p -> p.removeAllEffects());
                 case "delay" -> later(arena, body, who, false);
                 case "every" -> later(arena, body, who, true);
                 case "join_team" -> {
@@ -861,6 +872,46 @@ public final class Script {
                 left -= taken;
             }
         });
+    }
+
+    /**
+     * Moves people to a named place.
+     *
+     * <p>{@code teleport_to_spawn} was the only way the script could move
+     * anybody, which meant the one destination a map could ever name was the one
+     * the engine had already named. No checkpoints, no jail, no second stage, no
+     * start line - and the last of those is a hole I put there myself an hour
+     * ago, because a lobby that cannot move people to the start when the
+     * countdown ends is half a lobby.
+     *
+     * <p>Regions are the destination because they are the only named places an
+     * author has. Raw coordinates are accepted too, for the map that wants a spot
+     * it never needed to name.
+     */
+    private static void teleport(EngineArena arena, ServerLevel level, ServerPlayer who, JsonElement body) {
+        JsonObject o = body.isJsonObject() ? body.getAsJsonObject() : null;
+        String region = o != null ? str(o, "region", "") : asText(body);
+        net.minecraft.core.BlockPos to = null;
+        if (!region.isEmpty()) {
+            to = arena.regionPos(region);
+            if (to == null) {
+                // A destination that does not exist is the exact shape of bug
+                // this engine keeps producing: it would silently do nothing
+                // forever. Say so, to anybody tracing.
+                trace(arena, "§cteleport §7— no region called §f" + region);
+                return;
+            }
+        } else if (o != null && o.has("x") && o.has("y") && o.has("z")) {
+            to = new net.minecraft.core.BlockPos(
+                    intOf(o, "x", 0), intOf(o, "y", 0), intOf(o, "z", 0));
+        }
+        if (to == null) {
+            return;
+        }
+        final net.minecraft.core.BlockPos at = to;
+        forEach(arena, who, p -> p.teleportTo(level,
+                at.getX() + 0.5, at.getY() + 1, at.getZ() + 0.5,
+                java.util.Set.of(), p.getYRot(), 0.0F));
     }
 
     private static void give(EngineArena arena, ServerPlayer who, JsonElement body) {

@@ -4,6 +4,36 @@
   "respawn": true,
   "script": [
     {
+      "on": "phase_start",
+      "when": {
+        "phase": "countdown"
+      },
+      "do": [
+        {
+          "message": "\u00a77The doors are about to open. \u00a7f{players}\u00a77 of you."
+        }
+      ]
+    },
+    {
+      "on": "phase_start",
+      "when": {
+        "phase": "active"
+      },
+      "do": [
+        {
+          "teleport": {
+            "region": "start_line"
+          }
+        },
+        {
+          "title": {
+            "main": "\u00a76GO",
+            "sub": "\u00a77{players} in the hunt"
+          }
+        }
+      ]
+    },
+    {
       "on": "run_start",
       "do": [
         {
@@ -120,6 +150,14 @@
           "open_area": "vault"
         },
         {
+          "teleport": {
+            "region": "vault"
+          }
+        },
+        {
+          "heal": {}
+        },
+        {
           "title": {
             "main": "\u00a76THE VAULT IS OPEN"
           }
@@ -131,5 +169,10 @@
         }
       ]
     }
-  ]
+  ],
+  "lobby": {
+    "min_players": 1,
+    "countdown_seconds": 15,
+    "wait_seconds": 60
+  }
 }

@@ -1351,6 +1351,28 @@ public final class EngineArena {
      * than "a lever, pulled by somebody standing in the vault" - which are
      * different sentences and only one of them is what an author means.
      */
+    /**
+     * Where a named region is.
+     *
+     * <p>The engine could answer "which region is this position in" and not
+     * "where is the region called start_line", which is the wrong half. Regions
+     * are the only named places an author has - they are how a map says
+     * <em>the vault</em>, <em>the start line</em>, <em>jail</em> - and until now
+     * nothing could send anybody to one.
+     */
+    public BlockPos regionPos(String id) {
+        if (id == null || id.isEmpty()) {
+            return null;
+        }
+        String want = id.toLowerCase(java.util.Locale.ROOT);
+        for (Marker r : regions) {
+            if (r.arg("id", r.arg("value", "")).toLowerCase(java.util.Locale.ROOT).equals(want)) {
+                return r.pos();
+            }
+        }
+        return null;
+    }
+
     public String regionAt(BlockPos at) {
         for (Marker r : regions) {
             String id = r.arg("id", r.arg("value", "")).toLowerCase(java.util.Locale.ROOT);

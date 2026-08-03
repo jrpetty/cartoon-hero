@@ -13,6 +13,35 @@ behaviour that was already there · **docs**
 
 ## Unreleased
 
+### The engine can move people
+
+`teleport_to_spawn` was the only way the script could move anybody, which meant
+**the one destination a map could name was the one the engine had already named**.
+No checkpoints, no jail, no second stage, no start line — and the last of those
+is a hole I put there myself one iteration ago, because a lobby that cannot move
+people to the start when the countdown ends is half a lobby.
+
+- **feat** `teleport` action — `{ "teleport": { "region": "start_line" } }`, or raw
+  coordinates for a spot a map never needed to name. Regions are the destination
+  because they are the **only named places an author has**: they are how a map
+  says *the vault*, *the start line*, *jail*.
+- **fix** `EngineArena` could answer "which region is this position in" and not
+  "where is the region called `start_line`" — the wrong half of the question.
+  `regionPos()` adds the other half.
+- **change** A teleport to a region that does not exist **says so** to anyone
+  tracing, rather than silently doing nothing forever. That failure mode — accept
+  bad input, do nothing, say nothing — is the single most common bug shape in this
+  engine's history, and it is worth two lines to not add another one.
+- **feat** `heal` and `clear_effects` actions. `heal` with no argument heals fully,
+  because making an author write the number for the common case is a tax on the
+  common case.
+- **feat** `aztecabyss:keyhunt` is now the worked example of the **entire chain
+  built this session**: it waits for players, counts down, teleports everyone to
+  the start line on `phase_start`, tells them `{players}` are in the hunt, tracks
+  keys on a live bar, asks for a key at the vault door and spends it, and
+  teleports and heals the winners inside when the third lock turns. Not one step
+  of that was expressible this morning.
+
 ### The engine can say what it knows
 
 Every text the script layer produced was a **literal**. An author could count
