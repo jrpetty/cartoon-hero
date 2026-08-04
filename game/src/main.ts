@@ -282,9 +282,9 @@ class App {
   cycleStance() {
     const units = this.playerSelection().filter((e) => e.kind === Kind.Unit);
     if (!units.length) return;
-    const next = (((units[0].stance as number) + 1) % 4) as Stance;
+    const next = (((units[0].stance as number) + 1) % 5) as Stance;
     this.dispatch({ t: "stance", team: this.me, ids: units.map((e) => e.id), stance: next });
-    this.hud.addAlert(`Stance: ${["⚔ Aggressive", "🛡 Defensive", "⚑ Stand Ground", "✋ Passive"][next]}`);
+    this.hud.addAlert(`Stance: ${["⚔ Aggressive", "🛡 Defensive", "⚑ Stand Ground", "✋ Passive", "🏹 Skirmish"][next]}`);
     audio.play("command");
   }
 

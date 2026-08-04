@@ -80,7 +80,21 @@ from the first pass:
   (was 100), 95 HP (was 110), 12 attack (was 13), 1 armour (was 2). Pikeman
   also went up 10 food; it had the largest army HP on the board.
 
-**Nothing in the sim kites.** Units close and trade, so massed archers lose a
+**Skirmish stance (added).** Ranged units on Skirmish give ground while
+reloading and plant to fire the moment the shot is ready — move, stand, shoot.
+It is opt-in (Y cycles to it) rather than the default, so it is a lever the
+player pulls rather than a blanket archer buff, and the skirmish AI sets it on
+its own ranged units so neither side gets free micro. Two things keep it from
+being overpowered, both measured: it cannot fire while moving, and a skirmisher
+at 76-80 only *holds* the gap against infantry (78-80) while losing it outright
+to cavalry (112-135). Archer beats Militia and Two-Handed Swordsman on
+Skirmish; Knight and Horseman still beat the Archer. The counter triangle
+enforces itself through speed rather than through bonus damage.
+
+Hand Cannoneer was the floor of the matrix at 20% — 45 HP and a 2.8s reload
+meant it fired twice and died. Now 58 HP and 2.5s, which puts it at 50%.
+
+**The default combat model still does not kite.** Units close and trade, so massed archers lose a
 head-on fight with massed infantry however the bonus is tuned — and pushing the
 bonus far enough to change that also lets one archer beat one swordsman, which
 breaks the anti-kite invariant in world.test.ts. That tension is real and was

@@ -439,7 +439,7 @@ export class HUD {
         tooltip: ["Garrison (G)", "Tuck units into the nearest building for cover + extra arrows."],
       });
       // Combat stance — highlight the selection's prevailing posture (cycle with Y).
-      const counts = [0, 0, 0, 0];
+      const counts = [0, 0, 0, 0, 0];
       for (const u of combatUnits) counts[u.stance]++;
       const cur = counts.indexOf(Math.max(...counts));
       const stances: [string, Stance, string][] = [
@@ -447,6 +447,7 @@ export class HUD {
         ["Def", Stance.Defensive, "Defensive — engage nearby threats, then return to post."],
         ["Stand", Stance.StandGround, "Stand Ground — fire on anything in range, never move to chase."],
         ["No Atk", Stance.Passive, "Passive — hold fire; only fight when you order it."],
+        ["Skirm", Stance.Skirmish, "Skirmish — ranged units give ground while reloading, then plant and shoot. Beats slow infantry; cavalry still runs them down."],
       ];
       for (const [lbl, st, tip] of stances) {
         place(lbl, () => ctrl.setStance(st), { accent: cur === st, size: 10, tooltip: [`${lbl} stance (Y to cycle)`, tip] });

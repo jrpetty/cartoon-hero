@@ -117,6 +117,17 @@ export interface WorldEvent {
   data?: string;
 }
 
+/** A skirmisher starts giving ground once a melee unit is this close, and
+ *  backs off in steps of this size. Deliberately short: it should look like
+ *  stepping back to reload, not fleeing the field. */
+// Sized off a reload, not off arm's length: infantry covers ~110 units while a
+// bow reloads, so giving ground any later than that means being caught mid-draw
+// and shoved along by the chaser instead of backing off cleanly.
+const KITE_GAP = 105;
+const KITE_STEP = 70;
+/** Anything with range at or under this has to close to do damage. */
+const MELEE_RANGE = 12;
+
 export const FOG_UNSEEN = 0;
 export const FOG_EXPLORED = 1;
 export const FOG_VISIBLE = 2;
@@ -1275,6 +1286,37 @@ export class World {
   }
 
   /** Move toward order.tx/ty using flow field (groups) or A* path (singles). */
+  /**
+   * Move one tick in a direction, with the same separation and wall handling a
+   * normal move gets, but no goal, path or flow field. Used for giving ground:
+   * the unit is repositioning within a fight, not travelling anywhere.
+   */
+  private driveAway(e: Entity, dirX: number, dirY: number) {
+    const moveSpeed = this.effectiveSpeed(e);
+    const neighbors = this.spatial.query(e.x, e.y, 40) as Entity[];
+    const [sx, sy] = applySeparation(e, neighbors, dirX * moveSpeed, dirY * moveSpeed);
+    const sl = Math.hypot(sx, sy) || 1;
+    const spd = Math.min(moveSpeed, sl);
+    e.vx = (sx / sl) * spd;
+    e.vy = (sy / sl) * spd;
+    const nx = e.x + e.vx * SIM_DT;
+    const ny = e.y + e.vy * SIM_DT;
+    if (!this.grid.isBlockedWorld(nx, ny)) { e.x = nx; e.y = ny; }
+    else if (!this.grid.isBlockedWorld(nx, e.y)) e.x = nx;
+    else if (!this.grid.isBlockedWorld(e.x, ny)) e.y = ny;
+  }
+
+  /**
+   * Is this something a skirmisher should back away from? Only units that have
+   * to reach us to hurt us — there is nothing to gain by retreating from
+   * another archer, and buildings do not chase.
+   */
+  private closesToMelee(target: Entity): boolean {
+    if (target.kind !== Kind.Unit) return false;
+    const td = UNITS[target.type];
+    return !!td && td.attack > 0 && td.range <= MELEE_RANGE;
+  }
+
   private stepMove(e: Entity, def: UnitDef, ignoreArrival: boolean): boolean {
     const flow: FlowField | undefined = (e.order as any).flow;
     const dx = e.order.tx - e.x;
@@ -1383,6 +1425,34 @@ export class World {
     e.order.ty = target.y;
     const contact = e.radius + target.radius + (def.ranged ? e.range : 6);
     const d = dist(e.x, e.y, target.x, target.y);
+
+    // Skirmish: give ground rather than let a melee unit close, then plant and
+    // shoot again — move, stand, shoot. Two things stop this being a free win.
+    // It cannot fire while moving, so every step backwards is damage not dealt;
+    // and a skirmisher moves at 76-80, which only *holds* the gap against
+    // infantry (78-80) and loses it outright to cavalry (112-135). Kiting beats
+    // slow melee at a cost and does nothing at all to horsemen, which is the
+    // counter triangle enforcing itself through speed rather than through
+    // bonus damage.
+    if (e.stance === Stance.Skirmish && def.ranged && e.range > 0 && this.closesToMelee(target)) {
+      const tooClose = e.radius + target.radius + KITE_GAP;
+      // Only give ground while reloading. The moment the shot is ready it
+      // plants and fires — move, stand, shoot. Backing away *instead* of
+      // shooting just means never shooting again at equal speed, which made
+      // skirmishers strictly worse rather than better.
+      const reloading = e.attackCooldown > 0 || d > contact;
+      if (d < tooClose && reloading) {
+        // Steer straight away, rather than routing the retreat through
+        // stepMove: that follows the flow field the attack order arrived with,
+        // which points at the very unit we are backing away from, and its A*
+        // fallback crawls on a hop this short.
+        const away = Math.atan2(e.y - target.y, e.x - target.x);
+        this.driveAway(e, Math.cos(away), Math.sin(away));
+        e.facing = Math.atan2(target.y - e.y, target.x - e.x); // keep it covered
+        return; // no shot this tick — the price of giving ground
+      }
+    }
+
     if (d <= contact) {
       e.vx = e.vy = 0;
       e.facing = Math.atan2(target.y - e.y, target.x - e.x);

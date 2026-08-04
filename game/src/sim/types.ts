@@ -85,6 +85,7 @@ export const enum Stance {
   Defensive = 1, // engage nearby threats but return to post afterwards (default)
   StandGround = 2, // fire on what's in range, never move to chase
   Passive = 3, // hold fire — only attack when explicitly ordered
+  Skirmish = 4, // ranged: give ground rather than be closed on, then shoot again
 }
 
 export interface Order {

@@ -24,7 +24,7 @@ const CONTROLS: [string, string][] = [
   ["Shift", "Queue order · add to selection"],
   ["A", "Attack-move"],
   ["S / H", "Stop · Hold position"],
-  ["Y", "Cycle stance (Aggr/Def/Hold/Pass)"],
+  ["Y", "Cycle stance (5, incl. Skirmish)"],
   ["Q", "Use ability"],
   ["B / G", "Build menu · Garrison"],
   ["C", "Commander power"],

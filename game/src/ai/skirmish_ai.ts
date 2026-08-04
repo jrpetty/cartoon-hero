@@ -3,7 +3,7 @@
 // composition, expansion, harassment and attack pacing (see difficulty.ts).
 
 import { World } from "../sim/world";
-import { ArmorClass, BuildState, Entity, Kind, OrderKind, ResourceKind, Team } from "../sim/types";
+import { ArmorClass, BuildState, Entity, Kind, OrderKind, ResourceKind, Stance, Team } from "../sim/types";
 import { UNITS } from "../content/units";
 import { ABILITIES } from "../content/abilities";
 import { BUILDINGS } from "../content/buildings";
@@ -500,6 +500,18 @@ export class SkirmishAI {
 
     // 6. Military/tech buildings + age advances per the build order.
     this.buildOrder(p, base, villagers.length);
+
+    // 6b. Put ranged units on Skirmish so they give ground while reloading
+    //     instead of standing to be cut down. Doing this only for the player
+    //     would hand one side free micro — the same trap the Blacksmith-only
+    //     research below used to be.
+    if (this.world.tickCount % 40 === 0) {
+      const skirmishers = this.world
+        .entitiesOf(this.team, Kind.Unit)
+        .filter((e) => e.alive && e.stance !== Stance.Skirmish && (UNITS[e.type]?.range ?? 0) > 40)
+        .map((e) => e.id);
+      if (skirmishers.length) this.world.setStance(skirmishers, Stance.Skirmish);
+    }
 
     // 7. Research, wherever it lives. This used to look only at the Blacksmith,
     //    which meant the AI never took a single economy tech — the Mill, Lumber
