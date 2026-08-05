@@ -22,14 +22,17 @@ import net.minecraft.world.item.Items;
  */
 public class TransferScreen extends GadgetScreen {
     private static final int NAME_Y = 18;
+    /** The flow strip's box; its caption sits {@value #FLOW_CAPTION} below the top. */
     private static final int FLOW_Y = 40;
-    private static final int CHANNEL_Y = 78;
-    private static final int CARGO_Y = 94;
-    private static final int LEVEL_Y = 120;
-    private static final int PIPS_Y = 134;
-    private static final int COST_Y = 152;
-    private static final int COST_ROW = 168;
-    private static final int BUTTON_Y = 192;
+    private static final int FLOW_H = 30;
+    private static final int FLOW_CAPTION = 34;
+    private static final int CHANNEL_Y = 88;
+    private static final int CARGO_Y = 102;
+    private static final int LEVEL_Y = 126;
+    private static final int PIPS_Y = 140;
+    private static final int COST_Y = 156;
+    private static final int COST_ROW = 170;
+    private static final int BUTTON_Y = 194;
 
     private static final int SLOT_BG = 0xFF20262E;
     private static final int PORTAL = 0xFF9660DC;
@@ -110,8 +113,8 @@ public class TransferScreen extends GadgetScreen {
      */
     private void flowStrip(GuiGraphics gfx, int x) {
         int y = top + FLOW_Y;
-        gfx.fill(x, y, left + panelW - 12, y + 30, SLOT_BG);
-        gfx.renderOutline(x, y, panelW - 24, 30, FRAME);
+        gfx.fill(x, y, left + panelW - 12, y + FLOW_H, SLOT_BG);
+        gfx.renderOutline(x, y, panelW - 24, FLOW_H, FRAME);
 
         String a = sender ? "CHEST ABOVE" : "PORTAL";
         String b = sender ? "PORTAL" : "CHEST BELOW";
@@ -124,7 +127,7 @@ public class TransferScreen extends GadgetScreen {
         gfx.drawString(font, sender
                         ? "Takes one item at a time from the inventory ABOVE"
                         : "Drops what arrives into the inventory BELOW",
-                x, y + 34, GRAY, false);
+                x, y + FLOW_CAPTION, GRAY, false);
     }
 
     /** What the block is carrying, drawn as the item itself. */
