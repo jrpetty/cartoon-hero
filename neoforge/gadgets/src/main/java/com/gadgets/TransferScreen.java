@@ -26,13 +26,14 @@ public class TransferScreen extends GadgetScreen {
     private static final int FLOW_Y = 40;
     private static final int FLOW_H = 30;
     private static final int FLOW_CAPTION = 34;
-    private static final int CHANNEL_Y = 88;
-    private static final int CARGO_Y = 102;
-    private static final int LEVEL_Y = 126;
-    private static final int PIPS_Y = 140;
-    private static final int COST_Y = 156;
-    private static final int COST_ROW = 170;
-    private static final int BUTTON_Y = 194;
+    private static final int CODE_Y = 88;
+    private static final int LINK_Y = 108;
+    private static final int CARGO_Y = 122;
+    private static final int LEVEL_Y = 146;
+    private static final int PIPS_Y = 160;
+    private static final int COST_Y = 176;
+    private static final int COST_ROW = 190;
+    private static final int BUTTON_Y = 214;
 
     private static final int SLOT_BG = 0xFF20262E;
     private static final int PORTAL = 0xFF9660DC;
@@ -40,6 +41,7 @@ public class TransferScreen extends GadgetScreen {
     private final TransferNode node;
     private final boolean sender;
     private EditBox nameField;
+    private EditBox codeField;
     private Button upgrade;
     private String shownName = "";
 
@@ -62,6 +64,26 @@ public class TransferScreen extends GadgetScreen {
                         sendText(node.getBlockPos(), "set_name", nameField.getValue()))
                 .bounds(left + 172, top + NAME_Y, 56, 14).build());
 
+        if (sender) {
+            // Eight digits, typed off the face of the receiver you want.
+            codeField = new EditBox(font, left + 52, top + CODE_Y, 116, 14, Component.literal("Code"));
+            codeField.setMaxLength(TransferNode.CODE_LENGTH);
+            codeField.setFilter(t -> t.chars().allMatch(Character::isDigit));
+            codeField.setHint(Component.literal("00000000"));
+            codeField.setValue(node.getChannel());
+            addRenderableWidget(codeField);
+            addRenderableWidget(Button.builder(Component.literal("Link"), b ->
+                            sendText(node.getBlockPos(), "transfer_code", codeField.getValue()))
+                    .bounds(left + 172, top + CODE_Y, 56, 14).build());
+        } else {
+            addRenderableWidget(Button.builder(Component.literal("Release"), b -> {
+                        send(node.getBlockPos(), "transfer_release", 0);
+                        rebuildWidgets();
+                    })
+                    .bounds(left + 172, top + CODE_Y + 2, 56, 14).build())
+                    .active = node.linkState() == TransferNode.LINK_PAIRED;
+        }
+
         boolean maxed = node.getTier() >= TransferNode.MAX_TIER;
         upgrade = addRenderableWidget(Button.builder(
                         Component.literal(maxed
@@ -76,6 +98,10 @@ public class TransferScreen extends GadgetScreen {
 
     @Override
     public void render(GuiGraphics gfx, int mouseX, int mouseY, float delta) {
+        if (codeField != null && !codeField.isFocused()
+                && !codeField.getValue().equals(node.getChannel())) {
+            codeField.setValue(node.getChannel());
+        }
         String current = node.getCustomName();
         if (!current.equals(shownName) && !nameField.isFocused()) {
             shownName = current;
@@ -94,12 +120,7 @@ public class TransferScreen extends GadgetScreen {
 
         flowStrip(gfx, x);
 
-        String channel = node.getChannel();
-        gfx.drawString(font, channel.isEmpty()
-                        ? "No channel — pair it with a Redstone Linker"
-                        : "Channel  " + channel,
-                x, top + CHANNEL_Y, channel.isEmpty() ? RED : GREEN, false);
-
+        code(gfx, x);
         cargo(gfx, x);
         level(gfx, x);
         cost(gfx, x, mouseX, mouseY);
@@ -128,6 +149,31 @@ public class TransferScreen extends GadgetScreen {
                         ? "Takes one item at a time from the inventory ABOVE"
                         : "Drops what arrives into the inventory BELOW",
                 x, y + FLOW_CAPTION, GRAY, false);
+    }
+
+    /**
+     * The pairing. A receiver mints a code and shows it large, because the
+     * whole point is that you read it off one block and type it into another;
+     * a sender gets the field you type it into.
+     */
+    private void code(GuiGraphics gfx, int x) {
+        gfx.drawString(font, "Code", x, top + CODE_Y + 4, DIM, false);
+        if (!sender) {
+            gfx.pose().pushPose();
+            gfx.pose().scale(2.0F, 2.0F, 1.0F);
+            gfx.drawString(font, TransferNode.pretty(node.getChannel()),
+                    (x + 40) / 2, (top + CODE_Y) / 2, AMBER, false);
+            gfx.pose().popPose();
+        }
+
+        int state = node.linkState();
+        int colour = switch (state) {
+            case TransferNode.LINK_PAIRED -> GREEN;
+            case TransferNode.LINK_TAKEN -> RED;
+            case TransferNode.LINK_SEARCHING -> DIM;
+            default -> GRAY;
+        };
+        gfx.drawString(font, node.linkLine(), x, top + LINK_Y, colour, false);
     }
 
     /** What the block is carrying, drawn as the item itself. */

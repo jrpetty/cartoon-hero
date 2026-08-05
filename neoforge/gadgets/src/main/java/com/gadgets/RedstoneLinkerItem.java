@@ -30,6 +30,17 @@ public class RedstoneLinkerItem extends Item {
         Level level = ctx.getLevel();
         BlockEntity be = level.getBlockEntity(ctx.getClickedPos());
         Player player = ctx.getPlayer();
+        // Item transfer moved to codes: a receiver mints one and a sender is
+        // typed into. The linker would appear to work here and quietly do
+        // nothing, since a receiver's address is no longer something to paste.
+        if (be instanceof TransferNode node) {
+            if (!level.isClientSide() && player != null) {
+                player.displayClientMessage(Component.literal(
+                                "These pair by code — read the receiver's, then type it into the sender.")
+                        .withStyle(ChatFormatting.AQUA), true);
+            }
+            return InteractionResult.sidedSuccess(level.isClientSide());
+        }
         if (!(be instanceof ChannelBlockEntity channel)) {
             return InteractionResult.PASS;
         }

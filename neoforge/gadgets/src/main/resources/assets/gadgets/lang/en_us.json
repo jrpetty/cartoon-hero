@@ -35,9 +35,9 @@
   "tip.gadgets.display_pedestal.2": "Item on top: spin · on side: size",
   "tip.gadgets.display_pedestal.3": "Empty hand: take it back",
   "tip.gadgets.item_sender.1": "Takes from the inventory ABOVE it",
-  "tip.gadgets.item_sender.2": "Teleports it to an Item Receiver on its channel",
+  "tip.gadgets.item_sender.2": "Type a receiver's code into it to pair",
   "tip.gadgets.item_receiver.1": "Delivers into the inventory BELOW it",
-  "tip.gadgets.item_receiver.2": "Pair with an Item Sender via the Linker",
+  "tip.gadgets.item_receiver.2": "Shows an 8-digit code — one sender may claim it",
   "tip.gadgets.drain.1": "A walkable grate — fluids fall through",
   "tip.gadgets.drain.2": "Right-click with a block to disguise it",
   "tip.gadgets.drain.3": "Empty hand: remove the disguise",
@@ -81,6 +81,6 @@
   "tip.gadgets.fluid_monitor.2": "Emits redstone below the alert level",
   "tip.gadgets.fluid_monitor.3": "Right-click: alert level · Wand: link to a hub",
   "item.gadgets.ender_core": "Ender Core",
-  "tip.gadgets.item_sender.3": "Right-click: level and upgrades · Linker: pair it",
-  "tip.gadgets.item_receiver.3": "Right-click: level and upgrades"
+  "tip.gadgets.item_sender.3": "Right-click: code, level and upgrades",
+  "tip.gadgets.item_receiver.3": "Right-click: code, level and upgrades"
 }

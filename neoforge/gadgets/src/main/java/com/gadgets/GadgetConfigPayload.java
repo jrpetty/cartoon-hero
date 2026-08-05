@@ -156,6 +156,25 @@ public record GadgetConfigPayload(BlockPos pos, String key, int value, String te
                     }
                 }
             }
+            case "transfer_code" -> {
+                // Only a sender is typed into; a receiver's code is minted.
+                if (be instanceof ItemSenderBlockEntity from) {
+                    String code = p.text();
+                    if (TransferNode.isCode(code)) {
+                        from.setChannel(code);
+                        say(player, "Linked to " + TransferNode.pretty(code)
+                                + " — it pairs when the receiver answers.", ChatFormatting.GREEN);
+                    } else {
+                        say(player, "A code is " + TransferNode.CODE_LENGTH + " digits.", ChatFormatting.RED);
+                    }
+                }
+            }
+            case "transfer_release" -> {
+                if (be instanceof ItemReceiverBlockEntity to) {
+                    to.release();
+                    say(player, "Released — another sender may claim this code now.", ChatFormatting.YELLOW);
+                }
+            }
             case "transfer_upgrade" -> {
                 if (be instanceof TransferNode node) {
                     upgradeTransfer(player, node);

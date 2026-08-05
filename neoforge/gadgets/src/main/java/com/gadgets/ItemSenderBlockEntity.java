@@ -38,6 +38,8 @@ public class ItemSenderBlockEntity extends BlockEntity implements TransferNode {
     private ItemStack nextItem = ItemStack.EMPTY;
     /** Game time the next item may move; the link idles until it comes round. */
     private long nextMove = 0L;
+    /** How the pairing is faring, for the screen. Recomputed every cycle. */
+    private int linkState = LINK_FREE;
 
     public ItemSenderBlockEntity(BlockPos pos, BlockState state) {
         super(Gadgets.ITEM_SENDER_BE.get(), pos, state);
@@ -51,16 +53,17 @@ public class ItemSenderBlockEntity extends BlockEntity implements TransferNode {
         // Peeked every cycle, not just when an item actually moves — the screen
         // is most useful in the long wait between one item and the next.
         be.setNextItem(source == null ? ItemStack.EMPTY : ItemTransfer.peek(source));
-        if (level.getGameTime() < be.nextMove) {
-            return; // still paying for the last item
-        }
-        if (source == null || ItemTransfer.isEmpty(source)) {
-            return;
-        }
         MinecraftServer server = level.getServer();
         if (server == null) {
             return;
         }
+        // The pairing is re-read every cycle even when nothing can move, so the
+        // screen tells the truth about a typed code straight away rather than
+        // only once an item happens to be waiting.
+        boolean due = level.getGameTime() >= be.nextMove
+                && source != null && !ItemTransfer.isEmpty(source);
+        String me = sourceKey(level, pos);
+        int state = LINK_SEARCHING;
         for (String key : ItemNetwork.receivers(be.channel, level.getGameTime())) {
             int bar = key.indexOf('|');
             if (bar < 0) {
@@ -81,26 +84,60 @@ public class ItemSenderBlockEntity extends BlockEntity implements TransferNode {
             if (!(target.getBlockState(rpos).getBlock() instanceof ItemReceiverBlock)) {
                 continue;
             }
+            if (!(target.getBlockEntity(rpos) instanceof ItemReceiverBlockEntity far)) {
+                continue;
+            }
+            // One sender to a receiver: the first to reach it holds it, and
+            // anyone else who typed the same code is turned away here.
+            if (!far.claim(me)) {
+                state = LINK_TAKEN;
+                continue;
+            }
+            state = LINK_PAIRED;
             Container dest = HopperBlockEntity.getContainerAt(target, rpos.below());
-            if (dest == null) {
+            if (dest == null || !due) {
                 continue;
             }
             // Copied before the move, which empties the stack it came from.
             ItemStack sent = ItemTransfer.peek(source).copyWithCount(1);
             if (ItemTransfer.move(source, dest, 1) > 0) {
-                ItemReceiverBlockEntity far = target.getBlockEntity(rpos) instanceof ItemReceiverBlockEntity r
-                        ? r : null;
-                if (far != null) {
-                    far.setLastItem(sent);
-                }
+                far.setLastItem(sent);
                 // The link is only as quick as its slower end.
-                int paired = far == null ? be.tier : Math.min(be.tier, far.getTier());
-                be.nextMove = level.getGameTime() + TransferNode.ticksPerItem(paired);
+                be.nextMove = level.getGameTime()
+                        + TransferNode.ticksPerItem(Math.min(be.tier, far.getTier()));
                 spark(level, pos, true);
                 spark(target, rpos, false);
                 break;
             }
         }
+        be.setLinkState(be.channel.isEmpty() ? LINK_FREE : state);
+    }
+
+    static String sourceKey(Level level, BlockPos pos) {
+        return level.dimension().location() + "|" + pos.asLong();
+    }
+
+    private void setLinkState(int state) {
+        if (linkState != state) {
+            linkState = state;
+            setChanged();
+            sync();
+        }
+    }
+
+    @Override
+    public int linkState() {
+        return linkState;
+    }
+
+    @Override
+    public String linkLine() {
+        return switch (linkState) {
+            case LINK_PAIRED -> "Paired with a receiver";
+            case LINK_TAKEN -> "That receiver already has a sender";
+            case LINK_SEARCHING -> "No receiver answering that code";
+            default -> "No code — read one off a receiver";
+        };
     }
 
     /**
@@ -198,6 +235,7 @@ public class ItemSenderBlockEntity extends BlockEntity implements TransferNode {
         tag.putString("Channel", channel);
         tag.putInt("Tier", tier);
         tag.putString("CustomName", customName);
+        tag.putInt("LinkState", linkState);
         if (!nextItem.isEmpty()) {
             tag.put("NextItem", nextItem.save(registries));
         }
@@ -210,6 +248,7 @@ public class ItemSenderBlockEntity extends BlockEntity implements TransferNode {
         // A link saved before levels existed reads as zero; it starts at one.
         tier = Mth.clamp(tag.getInt("Tier"), MIN_TIER, MAX_TIER);
         customName = tag.getString("CustomName");
+        linkState = tag.getInt("LinkState");
         nextItem = tag.contains("NextItem")
                 ? ItemStack.parse(registries, tag.getCompound("NextItem")).orElse(ItemStack.EMPTY)
                 : ItemStack.EMPTY;

@@ -24,6 +24,36 @@ public interface TransferNode extends ChannelBlockEntity {
     /** Ticks in a minute — the unit the levels are quoted in. */
     int MINUTE = 1200;
 
+    /** Digits in a receiver's code. */
+    int CODE_LENGTH = 8;
+
+    /** {@link #linkState()}: nothing typed in, or nothing claiming this receiver. */
+    int LINK_FREE = 0;
+    /** A code is set but no receiver is answering it. */
+    int LINK_SEARCHING = 1;
+    /** Paired, and this end is the one holding the line. */
+    int LINK_PAIRED = 2;
+    /** A receiver answered, but another sender already holds it. */
+    int LINK_TAKEN = 3;
+
+    /** True when the string is exactly {@link #CODE_LENGTH} digits. */
+    static boolean isCode(String text) {
+        if (text == null || text.length() != CODE_LENGTH) {
+            return false;
+        }
+        for (int i = 0; i < text.length(); i++) {
+            if (text.charAt(i) < '0' || text.charAt(i) > '9') {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /** "1234 5678" — grouped, because eight digits are read off a screen by eye. */
+    static String pretty(String code) {
+        return isCode(code) ? code.substring(0, 4) + " " + code.substring(4) : code;
+    }
+
     /** What one upgrade costs, taken from the player's inventory. */
     int UPGRADE_IRON_BLOCKS = 7;
     int UPGRADE_ENDER_PEARLS = 16;
@@ -58,6 +88,12 @@ public interface TransferNode extends ChannelBlockEntity {
      * what is queued at the far end.
      */
     ItemStack flowing();
+
+    /** One of the {@code LINK_*} constants, for how this end is faring. */
+    int linkState();
+
+    /** A sentence for the screen explaining that state. */
+    String linkLine();
 
     BlockPos getBlockPos();
 }
