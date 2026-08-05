@@ -153,7 +153,7 @@ export const ABILITIES: Record<string, AbilityDef> = {
   twohand: {
     id: "wide_arc", name: "Wide Arc",
     desc: "A two-handed sweep that carves through every enemy pressed around him.",
-    kind: "cleave", cooldown: 20, duration: 1.3, radius: 92, amount: 14, statusDuration: 3,
+    kind: "cleave", cooldown: 20, duration: 1.3, radius: 92, amount: 10, statusDuration: 3,
     color: "#e8d08a",
   },
   // Shieldbearer: the reason to field one — he makes the whole line harder to kill.
@@ -188,21 +188,21 @@ export const ABILITIES: Record<string, AbilityDef> = {
   longbow: {
     id: "arrow_storm", name: "Arrow Storm",
     desc: "The sky goes dark: a wide, punishing fall of arrows across the enemy formation.",
-    kind: "volley", cooldown: 22, duration: 1.1, radius: 128, amount: 18,
+    kind: "volley", cooldown: 22, duration: 1.1, radius: 120, amount: 12,
     color: "#c8e88a",
   },
   // Hand Cannoneer: one devastating close blast.
   handcannon: {
     id: "scattershot", name: "Scattershot",
     desc: "Cram the barrel with scrap and fire: a brutal cone of shot that shreds packed infantry.",
-    kind: "volley", cooldown: 20, duration: 1.0, radius: 76, amount: 26,
+    kind: "volley", cooldown: 20, duration: 1.0, radius: 76, amount: 17,
     color: "#ffa24a",
   },
   // Javelin: hurl every javelin at once at whatever is riding you down.
   javelin: {
     id: "volley_of_spears", name: "Volley of Spears",
     desc: "Loose the whole bundle at once — heavy damage, and cavalry take the worst of it.",
-    kind: "volley", cooldown: 18, duration: 0.9, radius: 88, amount: 15,
+    kind: "volley", cooldown: 18, duration: 0.9, radius: 88, amount: 11,
     color: "#9ad0a0",
   },
   // Horseman: ride down the shooters, which is the whole point of him.
@@ -232,21 +232,21 @@ export const ABILITIES: Record<string, AbilityDef> = {
   cataphract: {
     id: "iron_wedge", name: "Iron Wedge",
     desc: "Lower the lances and drive through: +8 armour and +45% damage for 6s.",
-    kind: "buff", cooldown: 25, duration: 6, armorBonus: 8, attackMult: 1.45,
+    kind: "buff", cooldown: 25, duration: 6, armorBonus: 5, attackMult: 1.3,
     color: "#c8b48a",
   },
   // Battlemage: the reason to guard him at all.
   battlemage: {
     id: "firestorm", name: "Firestorm",
     desc: "Calls fire down across a wide stretch of the field. Devastating on a packed formation.",
-    kind: "volley", cooldown: 24, duration: 1.4, radius: 140, amount: 30,
+    kind: "volley", cooldown: 24, duration: 1.4, radius: 140, amount: 22,
     color: "#ff8a2c",
   },
   // Bombard: one enormous shot.
   bombard: {
     id: "point_blank", name: "Point Blank",
     desc: "Depress the barrel and touch it off: an enormous blast that levels whatever is in front of it.",
-    kind: "volley", cooldown: 26, duration: 1.5, radius: 118, amount: 42,
+    kind: "volley", cooldown: 26, duration: 1.5, radius: 118, amount: 32,
     color: "#ffb84a",
   },
   // Trebuchet: wind the counterweight to its limit.

@@ -235,9 +235,11 @@ export function resolveBattle(
   openingOrders(w, idsB, 1, cx, cy);
 
   const maxTicks = SIM_HZ * maxSeconds;
+  const mana = new Map<EntityId, number>();
   let t = 0;
   for (; t < maxTicks; t++) {
     w.tick();
+    chargeAbilities(w, mana);
     w.drainEvents();
     if (t % 10 === 0) {
       if (alivePower(w, Team.Player).count === 0 || alivePower(w, Team.Enemy).count === 0) break;
@@ -271,6 +273,33 @@ const BOARD_LAYOUT: PosFn = (i, n, cx, cy, side) => {
     y: cy - ((rows - 1) / 2) * ROW_GAP + row * ROW_GAP,
   };
 };
+
+/**
+ * Units with a signature ability build "mana" as the fight goes and cast it
+ * when full — faster for higher-star units. After a cast the long sim cooldown
+ * is cleared so the charge meter (not the cooldown) paces repeat casts.
+ *
+ * Shared by both resolution paths on purpose. This used to live only on
+ * LiveBattle, which meant the headless resolver never cast a single ability:
+ * the very same matchup came out differently depending on whether you watched
+ * it, and every balance measurement taken through resolveBattle silently
+ * excluded abilities altogether.
+ */
+export function chargeAbilities(world: World, mana: Map<EntityId, number>): void {
+  for (const e of world.entities) {
+    if (!e.alive || e.kind !== Kind.Unit || !ABILITIES[e.type] || e.type === "villager") continue;
+    if (e.abilityActive > 0) continue; // mid-cast: let the buff run before recharging
+    const star = (e.variantRarity ?? 0) + 1;
+    const chargeTime = Math.max(2.4, 5 - (star - 1) * 1.2); // 1★ 5s · 2★ 3.8s · 3★ 2.6s
+    let m = (mana.get(e.id) ?? 0) + SIM_DT / chargeTime;
+    if (m >= 1) {
+      world.useAbility([e.id]);
+      e.abilityCooldown = 0; // let mana, not the 20s+ cooldown, gate the next cast
+      m = 0;
+    }
+    mana.set(e.id, m);
+  }
+}
 
 /**
  * A watchable version of {@link resolveBattle}: same deterministic setup, but
@@ -338,26 +367,7 @@ export class LiveBattle {
     }
   }
 
-  /**
-   * Units with a signature ability build "mana" as the fight goes and cast it
-   * when full — faster for higher-star units. After a cast the long sim cooldown
-   * is cleared so the charge meter (not the cooldown) paces repeat casts.
-   */
-  private tickAbilities() {
-    for (const e of this.world.entities) {
-      if (!e.alive || e.kind !== Kind.Unit || !ABILITIES[e.type] || e.type === "villager") continue;
-      if (e.abilityActive > 0) continue; // mid-cast: let the buff run before recharging
-      const star = (e.variantRarity ?? 0) + 1;
-      const chargeTime = Math.max(2.4, 5 - (star - 1) * 1.2); // 1★ 5s · 2★ 3.8s · 3★ 2.6s
-      let m = (this.mana.get(e.id) ?? 0) + SIM_DT / chargeTime;
-      if (m >= 1) {
-        this.world.useAbility([e.id]);
-        e.abilityCooldown = 0; // let mana, not the 20s+ cooldown, gate the next cast
-        m = 0;
-      }
-      this.mana.set(e.id, m);
-    }
-  }
+  private tickAbilities() { chargeAbilities(this.world, this.mana); }
 
   /** Current ability charge (0..1) for a unit, for the charge-bar render. */
   chargeOf(id: EntityId): number { return this.mana.get(id) ?? 0; }

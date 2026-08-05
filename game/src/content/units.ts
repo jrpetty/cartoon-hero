@@ -133,7 +133,7 @@ export const UNITS: Record<string, UnitDef> = {
     desc: "Cheap anti-archer ranged unit. Counters bowmen; poor against everything melee.",
     armorClass: ArmorClass.Archer,
     hp: 42,
-    attack: 4,
+    attack: 6,
     range: 130,
     attackInterval: 1.5,
     armor: 1,
