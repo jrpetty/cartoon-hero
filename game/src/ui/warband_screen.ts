@@ -21,6 +21,10 @@ import { Item, applyItems, itemDef, isComponent, buildsInto } from "../sim/items
 import { ABILITIES } from "../content/abilities";
 import { Augment, TIER_COLOR as AUG_COLOR } from "../sim/augments";
 import { WarbandCommander, commanderIdentity } from "../sim/warband_commanders";
+import { WARBAND_DIFFICULTIES } from "../sim/warband_difficulty";
+
+/** Rank of each lobby on the ladder, for the pip row under the title. */
+const WARBAND_RANK: Record<string, number> = Object.fromEntries(WARBAND_DIFFICULTIES.map((d, i) => [d.id, i]));
 import { CarouselPick, isDraftRound } from "../sim/carousel";
 import { isCreepRound } from "../sim/creeps";
 import { tierForRound } from "../sim/augments";
@@ -94,6 +98,28 @@ export class WarbandScreen {
   private portraits = new Map<string, Entity>();
   /** Trailing health fraction per entity, for the damage-ghost on health bars. */
   private hpGhost = new Map<number, number>();
+  /** The ground-seed field's contents while it is being typed into, else null. */
+  private seedEdit: string | null = null;
+
+  /**
+   * Keys, forwarded from the app while this screen is up. Only the ground-seed
+   * field wants them; everything else here is pointer-driven. Returns true when
+   * the key was consumed, so the app knows not to treat it as a hotkey.
+   */
+  handleKey(key: string): boolean {
+    if (this.seedEdit === null) return false;
+    if (key === "Escape") { this.seedEdit = null; return true; }
+    if (key === "Enter") { this.seedApply = this.seedEdit; this.seedEdit = null; return true; }
+    if (key === "Backspace") { this.seedEdit = this.seedEdit.slice(0, -1); return true; }
+    if (key.length === 1 && /[0-9a-zA-Z]/.test(key) && this.seedEdit.length < 6) {
+      this.seedEdit += key.toUpperCase();
+      return true;
+    }
+    return true; // while typing, swallow everything else too
+  }
+
+  /** A seed submitted with Enter, waiting to be handed to the run next frame. */
+  private seedApply: string | null = null;
   private introT = 0;   // VS clash banner countdown at the start of a fight
   private resultT = -1; // victory/defeat flourish clock
   private scoutId = -1;   // opponent whose warband is being scouted, or -1
@@ -121,10 +147,28 @@ export class WarbandScreen {
 
     let action: "exit" | null = null;
 
+    // A ground seed typed in and submitted last frame.
+    if (this.seedApply !== null) {
+      const code = this.seedApply;
+      this.seedApply = null;
+      if (run.applyTerrainCode(code)) { audio.play("complete"); this.battleSig = ""; }
+      else audio.play("tick");
+    }
+    if (run.phase !== "shop") this.seedEdit = null; // never leave a field armed
+
     // ---- header ----
     this.drawHeaderPlate(W, time);
     this.bannerEmblem(ctx, 26, 30, 13, time);
-    ui.text("Warband Tactics", 46, 38, { size: 23, bold: true, color: PAL.uiAccent, font: "Georgia, serif" });
+    ui.text("Warband Tactics", 46, 33, { size: 21, bold: true, color: PAL.uiAccent, font: "Georgia, serif" });
+    // Which lobby you chose, under the title — it changes how every round reads.
+    {
+      const d = run.difficulty;
+      for (let k = 0; k < 4; k++) {
+        ctx.fillStyle = k <= WARBAND_RANK[d.id] ? d.color : "rgba(255,255,255,0.14)";
+        ctx.beginPath(); ctx.arc(50 + k * 7, 46, 2.3, 0, Math.PI * 2); ctx.fill();
+      }
+      ui.text(d.name, 82, 49, { size: 10, bold: true, color: withAlpha(d.color, 0.9) });
+    }
     // Stat pods: a fixed grid, each pod owning its own sub-line, so nothing has
     // to be squeezed into a neighbour's box.
     const POD_Y = 7, POD_H = 48;
@@ -197,10 +241,15 @@ export class WarbandScreen {
     px0 += 90;
     this.drawRoundTrack(px0 + 10, POD_Y, Math.max(0, W - 136 - (px0 + 10)), POD_H, run);
     // While a modal pick is up nothing behind it may be clicked.
-    const picking = run.phase === "augment" || run.phase === "commander" || run.phase === "draft";
+    const picking = run.phase === "augment" || run.phase === "commander" || run.phase === "draft" || run.phase === "difficulty";
     if (!picking && ui.button("Quit Run", W - 120, 12, 100, 32, { danger: true, size: 13 })) action = "exit";
 
-    // ---- standings sidebar ----
+    // ---- left rail ----
+    // Everything in the rail is clipped to the space between the header and the
+    // shop counter. Late in a run the relic grid grows past the bottom of the
+    // screen, and it used to draw straight through the counter.
+    ctx.save();
+    ctx.beginPath(); ctx.rect(0, HEADER_H, RAIL_W - 4, H - SHOP_H - HEADER_H - 4); ctx.clip();
     const sx = 12;
     let sy = 80;
     ui.text("Standings", sx, sy, { size: 14, bold: true, color: PAL.uiAccent });
@@ -344,14 +393,35 @@ export class WarbandScreen {
         sx + 34, sy + 27, { size: 9, color: "#8a8278" });
       if (hovC) this.condTip = { c: cond, x: sx + 208, y: sy };
       sy += bh2 + 5;
-      // The ground's seed, so a board you liked can be noted and replayed.
-      if (run.terrain.length) {
-        ctx.fillStyle = "rgba(0,0,0,0.32)"; this.roundRect(ctx, sx, sy, 200, 20, 4); ctx.fill();
-        ui.text("ground seed", sx + 8, sy + 14, { size: 9.5, color: "#8a8278" });
-        ui.text(run.terrainCode(), sx + 192, sy + 14, {
-          align: "right", size: 11, bold: true, color: "#cabfa4", font: "ui-monospace, Menlo, monospace",
+      // The ground's seed. Readable so a board you liked can be noted down, and
+      // editable so it can actually be played again — a code you can only ever
+      // read is a code you can only ever describe.
+      if (run.terrain.length || this.seedEdit !== null) {
+        const editing = this.seedEdit !== null;
+        const canEdit = run.phase === "shop";
+        const hovS = canEdit && ui.mx >= sx && ui.mx <= sx + 200 && ui.my >= sy && ui.my <= sy + 22;
+        ctx.fillStyle = editing ? "rgba(60,50,20,0.6)" : hovS ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.32)";
+        this.roundRect(ctx, sx, sy, 200, 22, 4); ctx.fill();
+        ctx.strokeStyle = editing ? "#ffd24a" : hovS ? "rgba(255,210,74,0.5)" : "rgba(255,255,255,0.06)";
+        ctx.lineWidth = 1; this.roundRect(ctx, sx + 0.5, sy + 0.5, 199, 21, 4); ctx.stroke();
+        ui.text(editing ? "type a seed" : "ground seed", sx + 8, sy + 15, {
+          size: 9.5, color: editing ? "#ffd24a" : hovS ? "#cabfa4" : "#8a8278",
         });
-        sy += 24;
+        const shown = editing ? this.seedEdit + (Math.floor(time * 2) % 2 ? "_" : "") : run.terrainCode();
+        ui.text(shown, sx + 192, sy + 15, {
+          align: "right", size: 11, bold: true,
+          color: editing ? "#ffe9b0" : "#cabfa4", font: "ui-monospace, Menlo, monospace",
+        });
+        if (hovS && ui.clicked && !ui.pointerConsumed) {
+          ui.pointerConsumed = true;
+          this.seedEdit = editing ? null : "";
+          audio.play("ui");
+        }
+        sy += 26;
+        if (editing) {
+          ui.text("enter to apply · esc to cancel", sx + 8, sy + 8, { size: 9, color: "#8a8278" });
+          sy += 14;
+        }
       }
     }
 
@@ -390,6 +460,8 @@ export class WarbandScreen {
       if (run.itemStash.length) sy += Math.ceil(run.itemStash.length / per) * (tile + gap);
     }
 
+    ctx.restore(); // end of the rail clip
+
     // ---- board geometry ----
     const bx = RAIL_W;
     const board = boardRect(W, H);
@@ -403,7 +475,7 @@ export class WarbandScreen {
 
     // Keep a battle world around for the current matchup: during shop it's a
     // static preview (both warbands standing on the board); FIGHT begins it.
-    if (run.phase === "shop" || run.phase === "augment" || run.phase === "draft") {
+    if (run.phase === "shop" || run.phase === "augment" || run.phase === "draft" || run.phase === "difficulty") {
       const sig = this.sig(run);
       if (sig !== this.battleSig || !this.battle) {
         this.battle = new LiveBattle(run.boardUnits(), run.pendingOpp, run.pendingSeed, 30, run.sideOpts(), run.fieldOpts());
@@ -469,7 +541,20 @@ export class WarbandScreen {
         ctx.fillStyle = i < deployed ? "#7df2a9" : "rgba(255,255,255,0.16)";
         ctx.beginPath(); ctx.arc(px2, stripY - 4, 2.8, 0, Math.PI * 2); ctx.fill();
       }
-      if (run.isCreepRound()) {
+      if (run.bossRound) {
+        // The crown. Nothing about this round is routine, so it doesn't get the
+        // routine banner.
+        const camp = run.pendingCamp!;
+        const pulse = 0.5 + 0.5 * Math.sin(time * 3);
+        ctx.save(); ctx.shadowColor = "#ff6a52"; ctx.shadowBlur = 8 + pulse * 12;
+        ui.text(camp.name.toUpperCase(), boardX + boardW - 8, stripY, {
+          size: 14, bold: true, align: "right", color: "#ff9a86", font: "Georgia, serif",
+        });
+        ctx.restore();
+        ui.text("FINAL CHALLENGE", boardX + boardW - 24 - camp.name.length * 8.6, stripY, {
+          size: 10.5, bold: true, align: "right", color: withAlpha("#e0564a", 0.6 + pulse * 0.4),
+        });
+      } else if (run.isCreepRound()) {
         // A PvE camp round reads differently: loot on the line, not your life.
         const camp = run.pendingCamp!;
         this.roundGlyph(ctx, boardX + boardW - 8, stripY - 5, 6, "camp", "#c8a86a");
@@ -499,8 +584,13 @@ export class WarbandScreen {
     const rackY = boardBottom + BOARD_RIM + 4;
     const rackH = benchH - 8;
     const railSpan = W - RAIL_W - 24; // the whole field right of the rail
-    const cardW = Math.max(58, Math.min(104, Math.floor((railSpan - (BENCH_SLOTS - 1) * 7) / BENCH_SLOTS)));
-    const rackW = BENCH_SLOTS * cardW + (BENCH_SLOTS - 1) * 7;
+    // Bench = your reserve (non-deployed) pieces. Never fewer slots than there
+    // are reserves: a piece you own but cannot see is a piece you cannot sell,
+    // and the board can overflow the bench in edge cases.
+    const reserve = run.pieces.map((_, i) => i).filter((i) => !run.pieces[i].deployed);
+    const slots = Math.max(BENCH_SLOTS, reserve.length);
+    const cardW = Math.max(52, Math.min(104, Math.floor((railSpan - (slots - 1) * 7) / slots)));
+    const rackW = slots * cardW + (slots - 1) * 7;
     const rackX = Math.round(RAIL_W + 12 + (railSpan - rackW) / 2);
     // The shelf the slots sit in.
     const rg = ctx.createLinearGradient(0, rackY, 0, rackY + rackH);
@@ -518,11 +608,10 @@ export class WarbandScreen {
       });
     } else if (this.selectedItem >= run.itemStash.length) this.selectedItem = -1;
 
-    // Bench = your reserve (non-deployed) pieces. Drag one onto the board to
-    // field it, into the Sell box to sell it, or click with a relic to equip.
-    const reserve = run.pieces.map((_, i) => i).filter((i) => !run.pieces[i].deployed);
+    // Drag one onto the board to field it, into the Sell box to sell it, or
+    // click with a relic armed to equip.
     const cardH = rackH - 12;
-    for (let k = 0; k < BENCH_SLOTS; k++) {
+    for (let k = 0; k < slots; k++) {
       const cx = rackX + k * (cardW + 7);
       const cy = rackY + 6;
       const i = reserve[k];
@@ -695,7 +784,8 @@ export class WarbandScreen {
     if (this.scoutId >= 0 && run.phase !== "over") this.drawScoutPanel(W, H, run, time);
     if (picking) {
       this.unitTip = null; this.itemTip = null; this.augTip = null; this.cmdTip = null; this.condTip = null;
-      if (run.phase === "commander") this.drawCommanderPicker(W, H, run, time);
+      if (run.phase === "difficulty") this.drawDifficultyPicker(W, H, run, time);
+      else if (run.phase === "commander") this.drawCommanderPicker(W, H, run, time);
       else if (run.phase === "draft") this.drawDraftPicker(W, H, run, time);
       else this.drawAugmentPicker(W, H, run, time);
     }
@@ -936,6 +1026,116 @@ export class WarbandScreen {
       }
     });
     // Swallow any other click while the modal is up.
+    if (ui.clicked) ui.pointerConsumed = true;
+  }
+
+  /**
+   * The first choice of a run: how hard the other seven warbands play. They run
+   * the same economy you do, so this is a dial on how well they run it — shown
+   * as four bars per lobby rather than a vague word, because "Warlord" on its
+   * own tells you nothing about what changed.
+   */
+  private drawDifficultyPicker(W: number, H: number, run: WarbandRun, time: number) {
+    const ctx = ui.ctx;
+    const offer = run.difficultyOffer();
+    if (!offer.length) return;
+
+    ctx.fillStyle = "rgba(5,4,2,0.88)"; ctx.fillRect(0, 0, W, H);
+    const glow = ctx.createRadialGradient(W / 2, H / 2, 40, W / 2, H / 2, Math.max(W, H) * 0.55);
+    glow.addColorStop(0, withAlpha("#caa56a", 0.13)); glow.addColorStop(1, "rgba(0,0,0,0)");
+    ctx.fillStyle = glow; ctx.fillRect(0, 0, W, H);
+
+    const gap = 18;
+    const cardW = Math.min(246, (W - 120 - gap * 3) / 4);
+    const lines = Math.max(...offer.map((d) => this.wrap(d.blurb, 30).length));
+    const cardH = Math.min(H * 0.66, 176 + lines * 17 + 66);
+    const totalW = cardW * offer.length + gap * (offer.length - 1);
+    const x0 = (W - totalW) / 2;
+    const cy = H / 2 - cardH / 2 + 26;
+
+    ctx.globalAlpha = Math.min(1, this.augT * 3);
+    ui.text("HOW HARD IS THE LOBBY?", W / 2, cy - 62, { align: "center", size: 30, bold: true, color: "#f2e8d0", font: "Georgia, serif" });
+    ui.text("Seven rival warbands run the same economy you do. This is how well they run it.",
+      W / 2, cy - 38, { align: "center", size: 13, bold: true, color: "#caa56a" });
+    ctx.globalAlpha = 1;
+
+    offer.forEach((d, i) => {
+      const t = Math.max(0, Math.min(1, (this.augT - i * 0.09) * 3.2));
+      const ease = 1 - Math.pow(1 - t, 3);
+      if (t <= 0) return;
+      const col = d.color;
+      const x = x0 + i * (cardW + gap);
+      const hov = ui.mx >= x && ui.mx <= x + cardW && ui.my >= cy && ui.my <= cy + cardH && t >= 1;
+      const y = cy + (hov ? -8 : 0) + (1 - ease) * 44;
+
+      ctx.save();
+      ctx.globalAlpha = ease;
+      ctx.save();
+      ctx.shadowColor = hov ? withAlpha(col, 0.75) : "rgba(0,0,0,0.65)";
+      ctx.shadowBlur = hov ? 28 : 15; ctx.shadowOffsetY = 6;
+      const g = ctx.createLinearGradient(0, y, 0, y + cardH);
+      g.addColorStop(0, withAlpha(col, hov ? 0.36 : 0.2));
+      g.addColorStop(0.4, "rgba(24,18,11,0.98)");
+      g.addColorStop(1, "rgba(12,9,5,0.99)");
+      ctx.fillStyle = g; this.roundRect(ctx, x, y, cardW, cardH, 12); ctx.fill();
+      ctx.restore();
+      ctx.strokeStyle = withAlpha(col, hov ? 1 : 0.65); ctx.lineWidth = hov ? 2.4 : 1.5;
+      this.roundRect(ctx, x + 1.25, y + 1.25, cardW - 2.5, cardH - 2.5, 11); ctx.stroke();
+
+      // A rank of chevrons: one filled per step up the ladder.
+      const marks = i + 1;
+      ctx.save();
+      ctx.translate(x + cardW / 2, y + 40);
+      ctx.strokeStyle = col; ctx.lineWidth = 2.4; ctx.lineCap = "round"; ctx.lineJoin = "round";
+      for (let k = 0; k < 4; k++) {
+        ctx.globalAlpha = k < marks ? 1 : 0.16;
+        const cyk = -14 + k * 9;
+        ctx.beginPath();
+        ctx.moveTo(-13, cyk + 5); ctx.lineTo(0, cyk - 3); ctx.lineTo(13, cyk + 5);
+        ctx.stroke();
+      }
+      ctx.restore();
+
+      ui.text(d.name, x + cardW / 2, y + 84, { align: "center", size: 21, bold: true, color: "#f7efdc", font: "Georgia, serif" });
+      ui.text(d.title, x + cardW / 2, y + 102, { align: "center", size: 11, bold: true, color: col });
+      ctx.strokeStyle = withAlpha(col, 0.3); ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(x + 30, y + 114); ctx.lineTo(x + cardW - 30, y + 114); ctx.stroke();
+
+      // The three dials this actually turns, as bars against Veteran's baseline.
+      const dial = (label: string, value: number, dy: number) => {
+        const bw = cardW - 96;
+        ui.text(label, x + 16, dy, { size: 9, color: "#8a8278" });
+        const bxD = x + 74, byD = dy - 7;
+        ctx.fillStyle = "rgba(0,0,0,0.5)"; this.roundRect(ctx, bxD, byD, bw, 6, 3); ctx.fill();
+        // 0.6..1.4 maps across the bar, with the midpoint being "as you play".
+        const f = Math.max(0.04, Math.min(1, (value - 0.6) / 0.8));
+        ctx.fillStyle = col; this.roundRect(ctx, bxD, byD, bw * f, 6, 3); ctx.fill();
+        ctx.fillStyle = "rgba(255,255,255,0.35)"; ctx.fillRect(bxD + bw * 0.5, byD - 2, 1, 10);
+      };
+      dial("their gold", d.foeIncome, y + 134);
+      dial("their tech", d.foeLevelPace, y + 150);
+      dial("defeat hurts", d.damageTaken, y + 166);
+
+      let ly = y + 190;
+      for (const ln of this.wrap(d.blurb, 30)) {
+        ui.text(ln, x + cardW / 2, ly, { align: "center", size: 11, color: "#cabfa4" });
+        ly += 15;
+      }
+
+      const bw2 = cardW - 40, bh2 = 34, byy = y + cardH - bh2 - 16;
+      const bhov = ui.mx >= x + 20 && ui.mx <= x + 20 + bw2 && ui.my >= byy && ui.my <= byy + bh2 && t >= 1;
+      ctx.fillStyle = bhov ? withAlpha(col, 0.85) : withAlpha(col, 0.22);
+      this.roundRect(ctx, x + 20, byy, bw2, bh2, 7); ctx.fill();
+      ctx.strokeStyle = withAlpha(col, 0.95); ctx.lineWidth = 1.4;
+      this.roundRect(ctx, x + 20.7, byy + 0.7, bw2 - 1.4, bh2 - 1.4, 7); ctx.stroke();
+      ui.text("ENTER", x + cardW / 2, byy + 22, { align: "center", size: 14, bold: true, color: bhov ? "#1a1207" : col });
+      ctx.restore();
+
+      if ((hov || bhov) && ui.clicked && !ui.pointerConsumed) {
+        ui.pointerConsumed = true;
+        if (run.pickDifficulty(d.id)) { audio.play("ui"); this.battleSig = ""; }
+      }
+    });
     if (ui.clicked) ui.pointerConsumed = true;
   }
 
@@ -1795,12 +1995,16 @@ export class WarbandScreen {
   private drawRunSummary(W: number, H: number, run: WarbandRun, time: number): boolean {
     const ctx = ui.ctx;
     const won = run.outcome === "win";
-    const col = won ? "#ffd24a" : "#c87a72";
+    // Three endings, not two: you can outlast the lobby and still be put down
+    // by the crown, and that is a different sentence from either of the others.
+    const crowned = won && run.bossCleared;
+    const uncrowned = won && run.bossRound && !run.bossCleared;
+    const col = crowned ? "#ffd24a" : won ? "#c8a86a" : "#c87a72";
     ctx.fillStyle = "rgba(5,4,2,0.9)"; ctx.fillRect(0, 0, W, H);
     const bloom = ctx.createRadialGradient(W / 2, H * 0.3, 30, W / 2, H * 0.3, Math.max(W, H) * 0.6);
     bloom.addColorStop(0, withAlpha(col, 0.14)); bloom.addColorStop(1, "rgba(0,0,0,0)");
     ctx.fillStyle = bloom; ctx.fillRect(0, 0, W, H);
-    if (won) {
+    if (crowned) {
       ctx.save();
       ctx.translate(W / 2, H * 0.3); ctx.rotate(time * 0.1); ctx.globalAlpha = 0.05;
       for (let i = 0; i < 18; i++) {
@@ -1835,12 +2039,16 @@ export class WarbandScreen {
     ctx.fillStyle = mh; ctx.fillRect(cx0, cy0, cw, 96);
     ctx.restore();
     ctx.save(); ctx.shadowColor = col; ctx.shadowBlur = 22;
-    ui.text(won ? "WARBAND TRIUMPHANT" : "WARBAND BROKEN", cx0 + 32, cy0 + 50, {
-      size: 34, bold: true, color: won ? "#ffe9b0" : "#e0b0a6", font: "Georgia, serif",
-    });
+    ui.text(crowned ? "THE IRON CROWN IS YOURS" : uncrowned ? "UNCROWNED" : won ? "WARBAND TRIUMPHANT" : "WARBAND BROKEN",
+      cx0 + 32, cy0 + 50, {
+        size: crowned ? 32 : 34, bold: true,
+        color: crowned ? "#ffe9b0" : won ? "#f0dfc0" : "#e0b0a6", font: "Georgia, serif",
+      });
     ctx.restore();
-    ui.text(won ? "Last warband standing — the arena is yours."
-      : `Beaten in stage ${run.stageLabel()} after ${run.history.length} fight${run.history.length === 1 ? "" : "s"}.`,
+    ui.text(crowned ? "You outlasted the lobby and took the crown from its champions."
+      : uncrowned ? "You outlasted all seven — then the arena's champions put you down."
+        : won ? "Last warband standing — the arena is yours."
+          : `Beaten in stage ${run.stageLabel()} after ${run.history.length} fight${run.history.length === 1 ? "" : "s"}.`,
       cx0 + 32, cy0 + 74, { size: 13, color: "#bcb299" });
     // Placement medal.
     const px3 = cx0 + cw - 74, py3 = cy0 + 48;
@@ -1947,7 +2155,7 @@ export class WarbandScreen {
       ["camps", `${t2.campsCleared} cleared`, "#c8a86a"],
       ["relics", String(t2.relicsWon), "#9b5cf0"],
       ["gold spent", String(t2.goldSpent), "#ffd24a"],
-      ["rerolls", String(t2.rerolls), "#7fb0e8"],
+      ["lobby", run.difficulty.name, run.difficulty.color],
     ];
     const chipW = (colW - 12) / 3;
     chips.forEach(([label, val, c3], i) => {
@@ -2349,7 +2557,7 @@ export class WarbandScreen {
     // "Setup" is how the board *reads* (your side only, no health bars); it also
     // covers the augment pause so the board doesn't flash back to the last fight.
     // Placement itself stays shop-only.
-    const setup = run.phase === "shop" || run.phase === "augment" || run.phase === "draft";
+    const setup = run.phase === "shop" || run.phase === "augment" || run.phase === "draft" || run.phase === "difficulty";
     const interactive = run.phase === "shop";
     // Monster camps are never hidden — you get to plan against what you can see.
     const reveal = run.isCreepRound();

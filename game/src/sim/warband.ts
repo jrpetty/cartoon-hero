@@ -10,13 +10,14 @@ import { resolveBattle, UnitStack, ArenaUnit, BattleResult, SideOpts } from "./a
 import { activeTraits, ActiveTrait, Buff, Trait, TraitTier, TRAITS } from "./traits";
 import { COMPONENT_IDS, MAX_ITEMS, fuseComponents } from "./items";
 import { Augment, offerAugments, tierForRound, combinedBuff, combinedTraitBonus } from "./augments";
-import { CreepCamp, isCreepRound, campForRound, campBoard } from "./creeps";
+import { CreepCamp, isCreepRound, campForRound, campBoard, bossCamp } from "./creeps";
 import { WarbandCommander, warbandCommander, offerCommanders } from "./warband_commanders";
 import { CarouselPick, isDraftRound, rollCarousel, pickValue } from "./carousel";
 import { UNIT_TIER, TIER_UNITS } from "./unit_tiers";
 import { styleOf } from "../content/battle_styles";
 import { Condition, rollCondition, CLEAR } from "./conditions";
-import { TerrainFeature, rollTerrain, isBlocked, terrainCode } from "./terrain";
+import { TerrainFeature, rollTerrain, isBlocked, terrainCode, parseTerrainCode } from "./terrain";
+import { WarbandDifficulty, difficultyById, VETERAN, WARBAND_DIFFICULTIES } from "./warband_difficulty";
 
 export { UNIT_TIER } from "./unit_tiers"; // re-exported: the screen and tests import it from here
 
@@ -209,7 +210,7 @@ export class WarbandRun {
   itemStash: string[] = []; // unequipped relics
   shop: (string | null)[] = [];
   opponents: Opponent[] = [];
-  phase: "commander" | "augment" | "draft" | "shop" | "battle" | "result" | "over" = "shop";
+  phase: "difficulty" | "commander" | "augment" | "draft" | "shop" | "battle" | "result" | "over" = "shop";
   outcome: "win" | "loss" | null = null;
   lastResult: { won: boolean; foe: string; youLeft: number; foeLeft: number; dmg: number; relics: number; gold: number; creep: boolean } | null = null;
   // ---- augments (TFT-style run-defining picks) ----
@@ -250,6 +251,14 @@ export class WarbandRun {
   lastMerge: { type: string; star: number } | null = null;
   /** Set whenever two components fuse into a relic, for the screen's flourish. */
   lastFusion: { item: string; type: string } | null = null;
+  /** How hard the lobby plays. Veteran unless the run opened on the choice. */
+  difficulty: WarbandDifficulty = VETERAN;
+  /** The final challenge: set when the lobby empties, cleared when it is fought. */
+  private bossPending = false;
+  /** True while the boss round is the one on the table. */
+  bossRound = false;
+  /** Whether the crown was actually taken, once the run is over. */
+  bossCleared = false;
   // The round's matchup, fixed when the shop opens so the on-board preview shows
   // the real upcoming enemy and the live fight uses the same deterministic seed.
   pendingSeed = 0;
@@ -281,11 +290,25 @@ export class WarbandRun {
     });
     if (commander !== undefined && commander !== null) this.applyCommander(warbandCommander(commander) ?? null);
     this.startRound();
-    // With no commander named, the run opens on the choice.
+    // With no commander named, the run opens on its two choices: how hard the
+    // lobby plays, then who leads. A named (or explicitly null) commander means
+    // a scripted or tested run, which takes the defaults and starts shopping.
     if (commander === undefined) {
       this.commanderOffer = offerCommanders(this.rng);
-      this.phase = "commander";
+      this.phase = "difficulty";
     }
+  }
+
+  /** The lobby difficulties on offer at the start of a run. */
+  difficultyOffer(): WarbandDifficulty[] { return WARBAND_DIFFICULTIES; }
+
+  /** Set how hard the lobby plays, and move on to the commander choice. */
+  pickDifficulty(id: string): boolean {
+    if (this.phase !== "difficulty") return false;
+    this.difficulty = difficultyById(id);
+    this.gold += this.difficulty.startGold;
+    this.phase = this.commanderOffer.length ? "commander" : "shop";
+    return true;
   }
 
   /** Take a commander for the run, applying its one-off effects. */
@@ -341,6 +364,30 @@ export class WarbandRun {
 
   /** A short code for this round's ground, so a board can be found again. */
   terrainCode(): string { return terrainCode(this.terrainSeed); }
+
+  /**
+   * Re-roll this round's ground from a code you typed in. Showing the seed but
+   * giving you no way to enter one meant a board you liked was a board you
+   * could only ever describe.
+   *
+   * Anything standing on a cell the new ground blocks is lifted back off the
+   * board, and the opponent's placement is re-derived, so the fight you set up
+   * is the fight you'll get.
+   */
+  applyTerrainCode(code: string): boolean {
+    if (this.phase !== "shop") return false;
+    const seed = parseTerrainCode(code);
+    if (seed == null) return false;
+    this.terrainSeed = seed;
+    this.terrain = rollTerrain(seed, this.round);
+    for (const p of this.pieces) {
+      if (p.col == null || p.row == null) continue;
+      if (isBlocked(this.terrain, p.col, p.row)) { p.col = undefined; p.row = undefined; }
+    }
+    if (this.pendingFoe) this.pendingOpp = this.foeBoard(this.foeBrains[this.pendingFoe.id]);
+    this.reconcile();
+    return true;
+  }
 
   /** Free rerolls left this round (for the shop button's label). */
   freeRerollsLeft(): number { return this.freeRerolls; }
@@ -670,6 +717,18 @@ export class WarbandRun {
     this.condition = rollCondition(this.rng, this.round);
     this.terrainSeed = this.rng.int(1, 1e9);
     this.terrain = rollTerrain(this.terrainSeed, this.round);
+    if (this.bossPending) {
+      // The lobby is empty: the arena's own champions ride out. This is the
+      // run's last round either way, so nothing else about it is rolled.
+      this.bossPending = false;
+      this.bossRound = true;
+      this.pendingCamp = bossCamp(this.round, this.difficulty.damageTaken);
+      this.pendingFoe = null;
+      this.pendingOpp = campBoard(this.pendingCamp);
+      this.reconcile();
+      this.phase = "shop";
+      return;
+    }
     if (isCreepRound(this.round)) {
       // A PvE monster camp: no player life at stake, relics on the table.
       this.pendingCamp = campForRound(this.round);
@@ -846,12 +905,14 @@ export class WarbandRun {
    * relics it earns onto its carry. That lets it scale roughly as fast as you.
    */
   private stepFoe(b: FoeBrain) {
-    b.gold += 5 + Math.min(5, Math.floor(b.gold / 10)); // base + interest (same formula)
-    if (this.round % 3 === 2) this.equipFoeRelic(b); // a relic every few rounds, like you
+    const d = this.difficulty;
+    // Base + interest, the same formula you run on, scaled by how hard the lobby plays.
+    b.gold += Math.round((5 + Math.min(5, Math.floor(b.gold / 10))) * d.foeIncome);
+    if (this.round % d.foeRelicEvery === 2) this.equipFoeRelic(b); // a relic every few rounds, like you
     // Personality shapes the three levers every warband pulls: how hard it banks
     // for interest, how fast it techs, and how much it rolls for star-ups.
     const play = b.play;
-    const levelPace = play === "aggressor" ? 0.95 : play === "roller" ? 0.68 : 0.8;
+    const levelPace = (play === "aggressor" ? 0.95 : play === "roller" ? 0.68 : 0.8) * d.foeLevelPace;
     const targetLevel = Math.min(MAX_LEVEL, 1 + Math.floor(this.round * levelPace));
     // Banking is right early and wrong late. Past the mid-game a warband that
     // is still sitting on 50 gold is a warband fielding a board it could have
@@ -859,7 +920,7 @@ export class WarbandRun {
     const late = this.round > 11;
     const reserveCap = late ? 8 : play === "economist" ? 50 : play === "roller" ? 20 : 30;
     const reserve = Math.min(reserveCap, Math.max(0, (this.round - 2) * 8));
-    let rerolls = (play === "roller" ? 5 : 2) + Math.floor(this.round / 2) + (late ? 6 : 0);
+    let rerolls = Math.max(0, (play === "roller" ? 5 : 2) + d.foeRerolls) + Math.floor(this.round / 2) + (late ? 6 : 0);
     let guard = 0;
     while (guard++ < 160) {
       // Tech toward the curve when it can afford to and stay above reserve.
@@ -1003,16 +1064,26 @@ export class WarbandRun {
       if (wonCamp) { this.tally.campsCleared++; this.tally.relicsWon += relics; this.tally.goldEarned += camp.gold; }
       else { this.tally.campsLost++; this.tally.lifeLost += camp.bite; }
       this.recordRound();
+      // The final challenge ends the run either way — there is no second run at
+      // the crown, so it can't loop, and outlasting the lobby is still a win
+      // even if the champions put you down.
+      if (this.bossRound) {
+        this.bossCleared = wonCamp;
+        if (this.life <= 0) { this.life = 0; this.outcome = "loss"; } else this.outcome = "win";
+        this.phase = "over";
+        return;
+      }
       if (this.life <= 0) { this.life = 0; this.outcome = "loss"; this.phase = "over"; return; }
-      if (this.livingFoes().length === 0) { this.outcome = "win"; this.phase = "over"; return; }
+      if (this.livingFoes().length === 0) { this.bossPending = true; this.phase = "result"; return; }
       this.phase = "result";
       return;
     }
     const foe = this.pendingFoe;
-    if (!foe) { this.outcome = "win"; this.phase = "over"; return; }
+    // No opponent and no camp means the lobby emptied off-screen; go to the crown.
+    if (!foe) { this.bossPending = true; this.phase = "result"; return; }
     const won = res.winner === "A";
     // Stage toll + star-weighted survivors; a commander can blunt what you take.
-    const raw = roundDamage(this.round, res.powerB);
+    const raw = Math.round(roundDamage(this.round, res.powerB) * this.difficulty.damageTaken);
     const dmg = won ? 0 : Math.max(1, raw - (this.commander?.lossShield ?? 0));
     if (won) {
       foe.life -= roundDamage(this.round, res.powerA);
@@ -1031,7 +1102,7 @@ export class WarbandRun {
     this.recordRound();
 
     if (this.life <= 0) { this.life = 0; this.outcome = "loss"; this.phase = "over"; return; }
-    if (this.livingFoes().length === 0) { this.outcome = "win"; this.phase = "over"; return; }
+    if (this.livingFoes().length === 0) { this.bossPending = true; this.phase = "result"; return; }
     this.phase = "result";
   }
 

@@ -195,3 +195,65 @@ describe("Warband screen renders", () => {
     }
   });
 });
+
+describe("Warband screen difficulty & seed", () => {
+  const ctxOf = () => createCanvas(W, H).getContext("2d") as unknown as CanvasRenderingContext2D;
+
+  it("opens on the difficulty picker and a card click enters that lobby", () => {
+    const ctx = ctxOf();
+    const s = new WarbandScreen();
+    const run = new WarbandRun(17); // the real flow: difficulty, then commander
+    let t = 0;
+    const frame = (mx: number, my: number, clicked = false) => {
+      t += 1 / 30; setMouseDown(false);
+      ui.begin(ctx, { mx, my, clicked, rightClicked: false, alt: false });
+      s.draw(W, H, t, run);
+    };
+    expect(run.phase).toBe("difficulty");
+    for (let i = 0; i < 40; i++) frame(0, 0); // let all four cards deal in
+    // Card geometry mirrors drawDifficultyPicker's layout maths.
+    const gap = 18, cardW = Math.min(246, (W - 120 - gap * 3) / 4);
+    const x0 = (W - (cardW * 4 + gap * 3)) / 2;
+    const cardCx = x0 + 3 * (cardW + gap) + cardW / 2; // the fourth card
+    frame(cardCx, H / 2, true);
+    expect(run.difficulty.id).toBe("conqueror");
+    expect(run.phase).toBe("commander");
+  });
+
+  it("types a ground seed into the rail field and replays that board", () => {
+    const ctx = ctxOf();
+    const s = new WarbandScreen();
+    const run = new WarbandRun(19, null);
+    // Reach a round that actually has terrain (round 1 is deliberately clear).
+    while (run.round < 6) {
+      if (run.phase === "augment") run.pickAugment(0);
+      if (run.phase === "draft") run.takeCarousel(0);
+      if (run.phase === "shop") run.fight();
+      if (run.phase === "result") run.next(); else break;
+    }
+    expect(run.terrain.length).toBeGreaterThan(0);
+    const wanted = run.terrainCode();
+    let t = 0;
+    const frame = (mx = -99, my = -99, clicked = false) => {
+      t += 1 / 30; setMouseDown(false);
+      ui.begin(ctx, { mx, my, clicked, rightClicked: false, alt: false });
+      s.draw(W, H, t, run);
+    };
+    frame(); // lay the rail out so the field's rect is known
+    // Keys are ignored until the field is armed.
+    expect(s.handleKey("Backspace")).toBe(false);
+    // Find the field by clicking down the rail — it is the only thing there
+    // that arms on click, so a miss simply does nothing. Backspace is the probe
+    // because it is consumed when armed without typing anything.
+    let armed = false;
+    for (let y = 380; y < 720 && !armed; y += 4) {
+      frame(60, y, true);
+      armed = s.handleKey("Backspace");
+    }
+    expect(armed).toBe(true);
+    for (const k of wanted) s.handleKey(k);
+    s.handleKey("Enter");
+    frame();
+    expect(run.terrainCode()).toBe(wanted);
+  });
+});

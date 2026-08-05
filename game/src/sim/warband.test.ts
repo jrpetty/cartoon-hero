@@ -10,6 +10,7 @@ import { isComponent } from "./items";
 import { CONDITIONS, CLEAR, conditionById, hasEffect, conditionLines } from "./conditions";
 import { TRAITS } from "./traits";
 import { resolveBattle, mergeSideOpts } from "./autobattle";
+import { difficultyById } from "./warband_difficulty";
 
 /** Drive a run to the start of a given round, taking the first augment offered. */
 function advanceTo(run: WarbandRun, round: number) {
@@ -350,7 +351,9 @@ describe("Warband monster camps", () => {
 
 describe("Warband commanders", () => {
   it("opens the run on a commander choice, then plays on", () => {
-    const run = new WarbandRun(51); // no id → the pick is offered
+    const run = new WarbandRun(51); // no id → both opening picks are offered
+    expect(run.phase).toBe("difficulty");
+    expect(run.pickDifficulty("veteran")).toBe(true);
     expect(run.phase).toBe("commander");
     expect(run.commanderOffer.length).toBe(3);
     expect(new Set(run.commanderOffer.map((c) => c.id)).size).toBe(3);
@@ -466,7 +469,8 @@ describe("Warband commanders", () => {
     const run = new WarbandRun(59);
     let guard = 0;
     while (run.phase !== "over" && guard++ < 200) {
-      if (run.phase === "commander") run.pickCommander(0);
+      if (run.phase === "difficulty") run.pickDifficulty("veteran");
+      else if (run.phase === "commander") run.pickCommander(0);
       else if (run.phase === "augment") run.pickAugment(0);
       else if (run.phase === "draft") run.takeCarousel(0);
       else if (run.phase === "shop") { if (run.gold >= 8) run.buyXp(); for (let s = 0; s < run.shop.length; s++) run.buy(s); run.fight(); }
@@ -1105,5 +1109,186 @@ describe("Warband run history", () => {
     expect(run.history).toEqual([]);
     expect(run.tally.wins).toBe(0);
     expect(run.tally.goldSpent).toBe(0);
+  });
+});
+
+describe("Warband lobby difficulty", () => {
+  /** How strong the whole lobby's boards are, star-weighted. */
+  const lobbyPower = (run: WarbandRun) => {
+    let n = 0;
+    for (let id = 0; id < 7; id++) {
+      const s = run.scout(id);
+      if (!s) continue;
+      n += s.level;
+      for (const u of s.board) n += Math.pow(2, (u.star ?? 1) - 1);
+    }
+    return n;
+  };
+  const runTo = (diff: string, round: number, seed: number) => {
+    const run = new WarbandRun(seed, null);
+    (run as unknown as { difficulty: unknown }).difficulty = difficultyById(diff);
+    while (run.round < round) {
+      if (run.phase === "augment") run.pickAugment(0);
+      if (run.phase === "draft") run.takeCarousel(0);
+      if (run.phase === "shop") run.fight();
+      if (run.phase === "result") run.next(); else break;
+    }
+    return run;
+  };
+
+  it("offers four lobbies and defaults to Veteran", () => {
+    const run = new WarbandRun(91, null);
+    expect(run.difficulty.id).toBe("veteran");
+    expect(run.difficultyOffer().map((d) => d.id)).toEqual(["squire", "veteran", "warlord", "conqueror"]);
+  });
+
+  it("opens a full run on the difficulty choice, then the commander choice", () => {
+    const run = new WarbandRun(92); // no commander argument at all → the real flow
+    expect(run.phase).toBe("difficulty");
+    expect(run.pickDifficulty("squire")).toBe(true);
+    expect(run.difficulty.id).toBe("squire");
+    expect(run.phase).toBe("commander");
+    expect(run.pickDifficulty("conqueror")).toBe(false); // the choice is made once
+    expect(run.gold).toBeGreaterThanOrEqual(2 + 3);      // Squire's opening purse
+  });
+
+  it("scales how hard the rest of the lobby plays", () => {
+    // Averaged over seeds: a Conqueror lobby must out-build a Squire one.
+    let squire = 0, conqueror = 0;
+    for (const seed of [11, 23, 37, 51, 67]) {
+      squire += lobbyPower(runTo("squire", 14, seed));
+      conqueror += lobbyPower(runTo("conqueror", 14, seed));
+    }
+    expect(conqueror).toBeGreaterThan(squire);
+  });
+
+  it("scales what a defeat costs you", () => {
+    // Same seed and the same (empty) board, so every fight is lost the same
+    // way and only the toll for losing it differs. Camp bites are deliberately
+    // not scaled, so this has to run past the opening camp to show anything.
+    const lifeLostBy = (diff: string) => {
+      const run = new WarbandRun(93, null);
+      (run as unknown as { difficulty: unknown }).difficulty = difficultyById(diff);
+      let guard = 0;
+      while (run.phase !== "over" && run.round < 14 && guard++ < 40) {
+        if (run.phase === "augment") run.pickAugment(0);
+        if (run.phase === "draft") run.takeCarousel(0);
+        if (run.phase === "shop") run.fight();
+        if (run.phase === "result") run.next(); else break;
+      }
+      return run.tally.lifeLost;
+    };
+    expect(lifeLostBy("conqueror")).toBeGreaterThan(lifeLostBy("squire"));
+  });
+});
+
+describe("Warband final challenge", () => {
+  const playOut = (seed: number) => {
+    const run = new WarbandRun(seed, null);
+    let guard = 0;
+    while (run.phase !== "over" && guard++ < 90) {
+      if (run.phase === "augment") run.pickAugment(0);
+      if (run.phase === "draft") run.takeCarousel(0);
+      if (run.phase === "shop") {
+        for (let k = 0; k < 5; k++) run.buy(k);
+        if (run.gold >= 8) run.buyXp();
+        run.fight();
+      }
+      if (run.phase === "result") run.next();
+    }
+    return run;
+  };
+
+  it("sends the crown out when the lobby empties, and ends the run either way", () => {
+    // Seeds chosen because they outlast the lobby rather than dying to it.
+    let sawBoss = false;
+    for (const seed of [37, 74, 111, 148, 185, 222, 259, 296, 333, 370, 407, 444]) {
+      const run = playOut(seed);
+      expect(run.phase).toBe("over"); // never loops on the boss
+      if (!run.bossRound) continue;
+      sawBoss = true;
+      expect(run.pendingCamp?.id).toBe("crown");
+      // Outlasting seven rivals is a win; the crown is the extra thing on top.
+      if (run.life > 0) expect(run.outcome).toBe("win");
+      expect(typeof run.bossCleared).toBe("boolean");
+      // The fight it ended on is the one recorded last.
+      expect(run.history[run.history.length - 1].foe).toBe("The Iron Crown");
+    }
+    expect(sawBoss).toBe(true);
+  });
+
+  it("is a real fight — not a formality and not a wall", () => {
+    // A deliberately naive player (buys the shop blind, never rerolls for stars)
+    // should be near an even coin-flip against it. A player who actually drafts
+    // is far stronger than this, so this is the floor, not the average.
+    let reached = 0, cleared = 0;
+    for (let s = 1; s <= 44; s++) {
+      const run = playOut(s * 37);
+      if (!run.bossRound) continue;
+      reached++;
+      if (run.bossCleared) cleared++;
+    }
+    expect(reached).toBeGreaterThan(4);
+    expect(cleared).toBeGreaterThan(0);
+    expect(cleared).toBeLessThan(reached); // it beats a careless board sometimes
+  }, 120000);
+});
+
+describe("Warband ground seed", () => {
+  it("replays a board from its code", () => {
+    const run = new WarbandRun(101, null);
+    // Get past the opening camp: round 1 is deliberately clear ground.
+    while (run.round < 6) {
+      if (run.phase === "augment") run.pickAugment(0);
+      if (run.phase === "draft") run.takeCarousel(0);
+      if (run.phase === "shop") run.fight();
+      if (run.phase === "result") run.next(); else break;
+    }
+    expect(run.phase).toBe("shop");
+    expect(run.terrain.length).toBeGreaterThan(0);
+    const wanted = run.terrainCode();
+    const shape = JSON.stringify(run.terrain);
+    // Roll it away, then type the code back in.
+    run.applyTerrainCode("ZZZZZZ");
+    expect(run.terrainCode()).not.toBe(wanted);
+    expect(run.applyTerrainCode(wanted)).toBe(true);
+    expect(run.terrainCode()).toBe(wanted);
+    expect(JSON.stringify(run.terrain)).toBe(shape);
+  });
+
+  it("refuses a code that isn't one, and only during setup", () => {
+    const run = new WarbandRun(102, null);
+    expect(run.applyTerrainCode("")).toBe(false);
+    expect(run.applyTerrainCode("hello!")).toBe(false);
+    expect(run.applyTerrainCode("TOOLONGCODE")).toBe(false);
+    run.phase = "battle";
+    expect(run.applyTerrainCode("ABC123")).toBe(false);
+  });
+
+  it("lifts a unit off a cell the new ground blocks", () => {
+    const run = new WarbandRun(103, null);
+    run.gold = 300; run.level = 6;
+    while (run.round < 6) {
+      if (run.phase === "augment") run.pickAugment(0);
+      if (run.phase === "draft") run.takeCarousel(0);
+      if (run.phase === "shop") run.fight();
+      if (run.phase === "result") run.next(); else break;
+    }
+    run.gold = 300;
+    for (const t of ["militia", "archer", "knight"]) { run.shop = [t, t, t, t, t]; run.buy(0); }
+    const fielded = run.deployedCount(); // the carousel round may have added one
+    // Try every code until one blocks a cell somebody is standing on.
+    let moved = false;
+    for (let i = 0; i < 60 && !moved; i++) {
+      const before = run.deployment().map((d) => `${d.col},${d.row}`);
+      run.applyTerrainCode((1000 + i * 7919).toString(36).toUpperCase().slice(-6));
+      const after = run.deployment().map((d) => `${d.col},${d.row}`);
+      // Nobody may ever end up standing on a boulder, whatever the code.
+      for (const d of run.deployment()) {
+        expect(run.terrain.some((f) => f.kind === "boulder" && f.col === d.col && f.row === d.row)).toBe(false);
+      }
+      if (before.join("|") !== after.join("|")) moved = true;
+    }
+    expect(run.deployedCount()).toBe(fielded); // and nobody is lost doing it
   });
 });

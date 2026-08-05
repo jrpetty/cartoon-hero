@@ -213,6 +213,9 @@ class App {
   }
 
   handleKey(key: string) {
+    // Warband Tactics has one typed field (the ground seed); give it first
+    // refusal on every key while that screen is up.
+    if (this.state === "warband") { this.warbandScreen.handleKey(key); return; }
     if (this.state !== "match" || !this.world) return;
     // Chat capture takes precedence over every game hotkey while typing.
     if (this.chatOpen) { this.handleChatKey(key); return; }

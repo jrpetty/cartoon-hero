@@ -48,6 +48,35 @@ const CAMPS: CreepCamp[] = [
   },
 ];
 
+/**
+ * The final challenge. Outlasting the lobby used to end the run mid-sentence:
+ * the last rival fell to off-screen attrition and a banner appeared. Now the
+ * arena's own champions ride out, and the crown has to be taken from them.
+ *
+ * It scales with the round you reached, because a run that wins in stage 4 has
+ * a very different board from one that grinds to stage 8, and a fixed board
+ * would be a wall to the first and a formality to the second.
+ */
+export function bossCamp(round: number, damageScale = 1): CreepCamp {
+  const step = Math.max(0, Math.floor((round - 12) / 4)); // 0 up to about stage 4
+  return {
+    id: "crown",
+    name: "The Iron Crown",
+    blurb: "The arena's own champions. Beat them and the crown is yours.",
+    relics: 0, gold: 0,
+    bite: Math.round(45 * damageScale),
+    units: [
+      { type: "hero", star: 2, count: 1 },
+      { type: "twohand", star: 2, count: 1 },
+      { type: "cataphract", star: 2, count: 1 + Math.min(1, step) },
+      { type: "handcannon", star: 1, count: 1 },
+      { type: "shieldbearer", star: 2, count: 1 },
+      { type: "longbow", star: 2, count: 1 + Math.min(1, step) },
+      { type: "battlemage", star: 1, count: 1 },
+    ],
+  };
+}
+
 /** Camp rounds: the opener, then one every fifth round. */
 export function isCreepRound(round: number): boolean {
   return round === 1 || round % 5 === 1;
