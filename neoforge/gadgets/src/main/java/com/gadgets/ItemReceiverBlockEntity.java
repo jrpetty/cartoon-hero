@@ -54,7 +54,12 @@ public class ItemReceiverBlockEntity extends BlockEntity implements TransferNode
         if (!TickPhase.due(level, pos, INTERVAL)) {
             return;
         }
-        if (be.channel.isEmpty()) {
+        // Also re-minted when what is stored is not a code at all: a world saved
+        // before these paired by code carries a Redstone Linker channel here,
+        // and that can neither be read off this block by eye nor typed into a
+        // sender. Better a fresh code the player can actually use than a link
+        // that looks intact and can never be remade.
+        if (!TransferNode.isCode(be.channel)) {
             be.mintCode(level);
         }
         ItemNetwork.publish(be.channel, sourceKey(level, pos), level.getGameTime());

@@ -1,5 +1,8 @@
 package com.gadgets;
 
+import java.util.List;
+
+import net.minecraft.ChatFormatting;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.EditBox;
@@ -45,6 +48,8 @@ public class TransferScreen extends GadgetScreen {
     private Button upgrade;
     private Button release;
     private String shownName = "";
+    /** Ticks left on the "Copied" flash after clicking a receiver's code. */
+    private int copied = 0;
 
     public TransferScreen(TransferNode node, boolean sender) {
         super(Component.literal(sender ? "Item Sender" : "Item Receiver"), 240, BUTTON_Y + 28);
@@ -98,8 +103,11 @@ public class TransferScreen extends GadgetScreen {
 
     @Override
     public void render(GuiGraphics gfx, int mouseX, int mouseY, float delta) {
+        // Follow the block, including when it goes to no code at all: a field
+        // still showing eight digits after the link was dropped is the screen
+        // telling you that you are paired when you are not.
         if (codeField != null && !codeField.isFocused()
-                && TransferNode.isCode(node.getChannel())
+                && (node.getChannel().isEmpty() || TransferNode.isCode(node.getChannel()))
                 && !codeField.getValue().equals(node.getChannel())) {
             codeField.setValue(node.getChannel());
         }
@@ -124,10 +132,52 @@ public class TransferScreen extends GadgetScreen {
 
         flowStrip(gfx, x);
 
-        code(gfx, x);
+        code(gfx, x, mouseX, mouseY);
         cargo(gfx, x);
         level(gfx, x);
         cost(gfx, x, mouseX, mouseY);
+
+        // Last, so it sits over everything it explains.
+        if (overCode(mouseX, mouseY)) {
+            gfx.renderComponentTooltip(font, List.<Component>of(
+                    Component.literal("Pairing code").withStyle(ChatFormatting.GOLD),
+                    Component.literal("Type it into a sender to pair with this receiver")
+                            .withStyle(ChatFormatting.GRAY),
+                    Component.literal(copied > 0 ? "Copied" : "Click to copy")
+                            .withStyle(copied > 0 ? ChatFormatting.GREEN : ChatFormatting.DARK_GRAY)
+            ), mouseX, mouseY);
+        }
+    }
+
+    /** The box the receiver's code is drawn in — twice normal size, so twice as wide. */
+    private boolean overCode(double mouseX, double mouseY) {
+        if (sender || !TransferNode.isCode(node.getChannel())) {
+            return false;
+        }
+        int x0 = left + 12 + 40;
+        int w = font.width(TransferNode.pretty(node.getChannel())) * 2;
+        return mouseX >= x0 - 2 && mouseX < x0 + w + 2
+                && mouseY >= top + CODE_Y - 1 && mouseY < top + CODE_Y + 17;
+    }
+
+    @Override
+    public boolean mouseClicked(double mouseX, double mouseY, int button) {
+        if (button == 0 && overCode(mouseX, mouseY) && minecraft != null) {
+            // Eight digits carried by eye from one block to another is exactly
+            // where a transcription slip lands, and a wrong code looks the same
+            // as an unbuilt one.
+            minecraft.keyboardHandler.setClipboard(node.getChannel());
+            copied = 40;
+            return true;
+        }
+        return super.mouseClicked(mouseX, mouseY, button);
+    }
+
+    @Override
+    public void tick() {
+        if (copied > 0) {
+            copied--;
+        }
     }
 
     /**
@@ -160,13 +210,14 @@ public class TransferScreen extends GadgetScreen {
      * whole point is that you read it off one block and type it into another;
      * a sender gets the field you type it into.
      */
-    private void code(GuiGraphics gfx, int x) {
+    private void code(GuiGraphics gfx, int x, int mouseX, int mouseY) {
         gfx.drawString(font, "Code", x, top + CODE_Y + 4, DIM, false);
         if (!sender) {
             gfx.pose().pushPose();
             gfx.pose().translate((float) (x + 40), (float) (top + CODE_Y), 0.0F);
             gfx.pose().scale(2.0F, 2.0F, 1.0F);
-            gfx.drawString(font, TransferNode.pretty(node.getChannel()), 0, 0, AMBER, false);
+            gfx.drawString(font, TransferNode.pretty(node.getChannel()), 0, 0,
+                    copied > 0 ? GREEN : overCode(mouseX, mouseY) ? 0xFFFFE0A0 : AMBER, false);
             gfx.pose().popPose();
         }
 

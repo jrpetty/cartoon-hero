@@ -55,6 +55,24 @@ public class ItemReceiverBlock extends Block implements EntityBlock {
         return new ItemReceiverBlockEntity(pos, state);
     }
 
+    /**
+     * Stop answering on this code the moment the block is broken.
+     *
+     * <p>Published entries expire on their own after a second and a half, which
+     * is right for a receiver that merely went quiet — but a broken one is not
+     * quiet, it is gone, and its sender should say so at once rather than keep
+     * reporting a pairing for the time it takes the entry to rot.
+     */
+    @Override
+    protected void onRemove(BlockState state, Level level, BlockPos pos, BlockState newState, boolean moved) {
+        if (!state.is(newState.getBlock())) {
+            if (!level.isClientSide() && level.getBlockEntity(pos) instanceof ItemReceiverBlockEntity be) {
+                ItemNetwork.remove(be.getChannel(), ItemReceiverBlockEntity.sourceKey(level, pos));
+            }
+            super.onRemove(state, level, pos, newState, moved);
+        }
+    }
+
     @SuppressWarnings("unchecked")
     @Nullable
     @Override

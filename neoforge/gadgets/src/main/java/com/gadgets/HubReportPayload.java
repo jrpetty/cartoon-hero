@@ -36,8 +36,29 @@ public final class HubReportPayload {
             return TYPE;
         }
 
+        /**
+         * The shortest gap between two answers to the same player.
+         *
+         * <p>A reply carries a whole board, and a packet a client can ask for at
+         * will should not be one it can ask for as fast as it likes. Deliberately
+         * short: a tablet asks once a second, and a player who clicks Link in the
+         * tenth of a second after an automatic ask should see their answer, not a
+         * screen that appears to have ignored them. Two ticks bounds the traffic
+         * without ever being the reason something feels broken — and the worst it
+         * can cost is the "Asking…" the screen is already showing.
+         */
+        private static final long MIN_GAP = 2L;
+        private static final String ASKED_KEY = "GadgetsHubAsk";
+
         /** Answer from the registry. Never touches the world, so it can never load a chunk. */
         public static void apply(ServerPlayer player, Request p) {
+            long now = player.serverLevel().getGameTime();
+            long last = player.getPersistentData().getLong(ASKED_KEY);
+            if (last != 0L && now >= last && now - last < MIN_GAP) {
+                return; // the screen re-asks a moment later; nothing is lost
+            }
+            player.getPersistentData().putLong(ASKED_KEY, now);
+
             HubRegistry.Report report = HubRegistry.get(p.code());
             if (report == null) {
                 Gadgets.sendReply(player, new Reply(false, "", "", 0L, new CompoundTag()));

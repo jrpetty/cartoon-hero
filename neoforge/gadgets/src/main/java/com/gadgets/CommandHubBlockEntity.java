@@ -326,9 +326,10 @@ public class CommandHubBlockEntity extends BlockEntity {
         // tell "all clear" from "I have not heard from home since you left".
         long now = level.getGameTime();
         long key = pos.asLong();
-        if (changed || !HubRegistry.heard(be.code, key, now)) {
-            if (!HubRegistry.publish(be.code, be.hubName(), level.dimension().location().toString(),
-                    key, be.getUpdateTag(level.registryAccess()), now)) {
+        String dim = level.dimension().location().toString();
+        if (changed || !HubRegistry.heard(be.code, dim, key, now)) {
+            if (!HubRegistry.publish(be.code, be.hubName(), dim, key,
+                    be.getUpdateTag(level.registryAccess()), now)) {
                 be.mintCode(level); // someone else already answers on those digits
             }
         }

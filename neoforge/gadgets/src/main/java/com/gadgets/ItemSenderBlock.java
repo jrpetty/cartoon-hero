@@ -57,6 +57,27 @@ public class ItemSenderBlock extends Block implements EntityBlock {
         return new ItemSenderBlockEntity(pos, state);
     }
 
+    /**
+     * Let go of the receiver this sender was holding.
+     *
+     * <p>A receiver takes one sender, and the claim outlives the block that made
+     * it: the receiver only drops a claim once it can prove the sender is gone,
+     * and proof needs a loaded chunk. Break a sender and walk away and there is
+     * nobody left to prove anything — the receiver would stay claimed by a block
+     * that no longer exists, refusing every sender that ever typed its code.
+     * Releasing here, while both ends are still loaded, is the moment it can be
+     * done for certain.
+     */
+    @Override
+    protected void onRemove(BlockState state, Level level, BlockPos pos, BlockState newState, boolean moved) {
+        if (!state.is(newState.getBlock())) {
+            if (!level.isClientSide() && level.getBlockEntity(pos) instanceof ItemSenderBlockEntity be) {
+                be.releaseClaim();
+            }
+            super.onRemove(state, level, pos, newState, moved);
+        }
+    }
+
     @SuppressWarnings("unchecked")
     @Nullable
     @Override

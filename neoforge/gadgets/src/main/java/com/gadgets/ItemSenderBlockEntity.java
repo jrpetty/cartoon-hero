@@ -53,7 +53,16 @@ public class ItemSenderBlockEntity extends BlockEntity implements TransferNode {
     }
 
     public static void tick(Level level, BlockPos pos, BlockState state, ItemSenderBlockEntity be) {
-        if (!TickPhase.due(level, pos, INTERVAL) || be.channel.isEmpty()) {
+        if (!TickPhase.due(level, pos, INTERVAL)) {
+            return;
+        }
+        // The other half of the receiver's migration: a Redstone Linker channel
+        // left here by an older world can never match a minted code, so it is
+        // cleared rather than left looking like a link that simply never pairs.
+        if (!be.channel.isEmpty() && !TransferNode.isCode(be.channel)) {
+            be.setChannel("");
+        }
+        if (be.channel.isEmpty()) {
             return;
         }
         Container source = HopperBlockEntity.getContainerAt(level, pos.above());

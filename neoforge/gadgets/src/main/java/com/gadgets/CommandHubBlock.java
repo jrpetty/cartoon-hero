@@ -97,7 +97,7 @@ public class CommandHubBlock extends HorizontalDirectionalBlock implements Entit
     protected void onRemove(BlockState state, Level level, BlockPos pos, BlockState newState, boolean moved) {
         if (!state.is(newState.getBlock())) {
             if (!level.isClientSide() && level.getBlockEntity(pos) instanceof CommandHubBlockEntity be) {
-                HubRegistry.forget(be.getCode(), pos.asLong());
+                HubRegistry.forget(be.getCode(), level.dimension().location().toString(), pos.asLong());
             }
             super.onRemove(state, level, pos, newState, moved);
         }

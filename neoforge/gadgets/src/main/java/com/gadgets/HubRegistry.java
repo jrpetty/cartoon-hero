@@ -64,11 +64,23 @@ public final class HubRegistry {
             return false;
         }
         Report was = HUBS.get(code);
-        if (was != null && was.pos() != pos) {
+        if (was != null && !isSame(was, dim, pos)) {
             return false;
         }
         HUBS.put(code, new Report(name, dim, pos, board, now));
         return true;
+    }
+
+    /**
+     * Whether a stored report belongs to the hub asking about it.
+     *
+     * <p>Dimension as well as position: coordinates repeat across dimensions,
+     * and a nether outpost built at the overworld coordinates it links to is not
+     * an accident, it is how everybody builds. Comparing positions alone would
+     * make those two hubs the same hub.
+     */
+    private static boolean isSame(Report report, String dim, long pos) {
+        return report.pos() == pos && report.dim().equals(dim);
     }
 
     /**
@@ -78,9 +90,9 @@ public final class HubRegistry {
      * @return false when this hub has nothing on record here yet, so the caller
      *         knows to publish in full instead
      */
-    public static synchronized boolean heard(String code, long pos, long now) {
+    public static synchronized boolean heard(String code, String dim, long pos, long now) {
         Report was = HUBS.get(code);
-        if (was == null || was.pos() != pos) {
+        if (was == null || !isSame(was, dim, pos)) {
             return false;
         }
         HUBS.put(code, new Report(was.name(), was.dim(), was.pos(), was.board(), now));
@@ -96,9 +108,9 @@ public final class HubRegistry {
      * Stop answering on this code, but only for the hub that owns it — a
      * rebuilt hub that happened to roll the same digits keeps its own entry.
      */
-    public static synchronized void forget(String code, long pos) {
+    public static synchronized void forget(String code, String dim, long pos) {
         Report was = code == null ? null : HUBS.get(code);
-        if (was != null && was.pos() == pos) {
+        if (was != null && isSame(was, dim, pos)) {
             HUBS.remove(code);
         }
     }
