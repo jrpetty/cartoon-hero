@@ -127,6 +127,8 @@ public record GadgetConfigPayload(BlockPos pos, String key, int value, String te
                     monitor.setCustomName(name);
                 } else if (be instanceof HubGauge gauge) {
                     gauge.setCustomName(name);
+                } else if (be instanceof TransferNode node) {
+                    node.setCustomName(name);
                 }
             }
             case "hub_clear" -> {

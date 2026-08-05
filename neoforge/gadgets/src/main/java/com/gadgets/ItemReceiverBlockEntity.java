@@ -5,6 +5,7 @@ import net.minecraft.core.HolderLookup;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.protocol.game.ClientboundBlockEntityDataPacket;
 import net.minecraft.util.Mth;
+import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.entity.BlockEntity;
@@ -24,6 +25,10 @@ public class ItemReceiverBlockEntity extends BlockEntity implements TransferNode
 
     private String channel = "";
     private int tier = MIN_TIER;
+    private String customName = "";
+    /** The last item delivered here. Nothing tells a receiver what is queued at
+     *  the far end, so this reports what came through rather than what is next. */
+    private ItemStack lastItem = ItemStack.EMPTY;
 
     public ItemReceiverBlockEntity(BlockPos pos, BlockState state) {
         super(Gadgets.ITEM_RECEIVER_BE.get(), pos, state);
@@ -38,6 +43,38 @@ public class ItemReceiverBlockEntity extends BlockEntity implements TransferNode
 
     static String sourceKey(Level level, BlockPos pos) {
         return level.dimension().location() + "|" + pos.asLong();
+    }
+
+    /** Called by the sender at the moment of delivery. */
+    void setLastItem(ItemStack stack) {
+        if (ItemStack.isSameItemSameComponents(lastItem, stack)) {
+            return;
+        }
+        lastItem = stack.isEmpty() ? ItemStack.EMPTY : stack.copyWithCount(1);
+        setChanged();
+        sync();
+    }
+
+    @Override
+    public ItemStack flowing() {
+        return lastItem;
+    }
+
+    @Override
+    public String getCustomName() {
+        return customName;
+    }
+
+    @Override
+    public void setCustomName(String name) {
+        customName = name == null ? "" : name;
+        setChanged();
+        sync();
+    }
+
+    @Override
+    public String displayName() {
+        return customName.isEmpty() ? "Item Receiver" : customName;
     }
 
     @Override
@@ -95,6 +132,10 @@ public class ItemReceiverBlockEntity extends BlockEntity implements TransferNode
         super.saveAdditional(tag, registries);
         tag.putString("Channel", channel);
         tag.putInt("Tier", tier);
+        tag.putString("CustomName", customName);
+        if (!lastItem.isEmpty()) {
+            tag.put("LastItem", lastItem.save(registries));
+        }
     }
 
     @Override
@@ -103,5 +144,9 @@ public class ItemReceiverBlockEntity extends BlockEntity implements TransferNode
         channel = tag.getString("Channel");
         // A link saved before levels existed reads as zero; it starts at one.
         tier = Mth.clamp(tag.getInt("Tier"), MIN_TIER, MAX_TIER);
+        customName = tag.getString("CustomName");
+        lastItem = tag.contains("LastItem")
+                ? ItemStack.parse(registries, tag.getCompound("LastItem")).orElse(ItemStack.EMPTY)
+                : ItemStack.EMPTY;
     }
 }

@@ -19,6 +19,25 @@ public final class ItemTransfer {
         return true;
     }
 
+    /**
+     * The stack {@link #move} would draw from next, or empty. Returned as a
+     * live reference for cheapness — copy it if you mean to keep it, because
+     * the next move will shrink it.
+     */
+    public static ItemStack peek(Container inv) {
+        for (int i = 0; i < inv.getContainerSize(); i++) {
+            ItemStack stack = inv.getItem(i);
+            if (stack.isEmpty()) {
+                continue;
+            }
+            if (inv instanceof WorldlyContainer sided && !sided.canTakeItemThroughFace(i, stack, Direction.DOWN)) {
+                continue; // the same slots move() is allowed to touch
+            }
+            return stack;
+        }
+        return ItemStack.EMPTY;
+    }
+
     /** Move up to {@code max} items from {@code from} into {@code to}; returns the number moved. */
     public static int move(Container from, Container to, int max) {
         int moved = 0;

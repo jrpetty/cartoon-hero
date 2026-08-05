@@ -12,6 +12,7 @@ import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.util.Mth;
 import net.minecraft.world.Container;
+import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.entity.BlockEntity;
@@ -32,6 +33,9 @@ public class ItemSenderBlockEntity extends BlockEntity implements TransferNode {
 
     private String channel = "";
     private int tier = MIN_TIER;
+    private String customName = "";
+    /** The stack the next transfer will draw from, for the screen's preview. */
+    private ItemStack nextItem = ItemStack.EMPTY;
     /** Game time the next item may move; the link idles until it comes round. */
     private long nextMove = 0L;
 
@@ -43,10 +47,13 @@ public class ItemSenderBlockEntity extends BlockEntity implements TransferNode {
         if (!TickPhase.due(level, pos, INTERVAL) || be.channel.isEmpty()) {
             return;
         }
+        Container source = HopperBlockEntity.getContainerAt(level, pos.above());
+        // Peeked every cycle, not just when an item actually moves — the screen
+        // is most useful in the long wait between one item and the next.
+        be.setNextItem(source == null ? ItemStack.EMPTY : ItemTransfer.peek(source));
         if (level.getGameTime() < be.nextMove) {
             return; // still paying for the last item
         }
-        Container source = HopperBlockEntity.getContainerAt(level, pos.above());
         if (source == null || ItemTransfer.isEmpty(source)) {
             return;
         }
@@ -78,10 +85,16 @@ public class ItemSenderBlockEntity extends BlockEntity implements TransferNode {
             if (dest == null) {
                 continue;
             }
+            // Copied before the move, which empties the stack it came from.
+            ItemStack sent = ItemTransfer.peek(source).copyWithCount(1);
             if (ItemTransfer.move(source, dest, 1) > 0) {
+                ItemReceiverBlockEntity far = target.getBlockEntity(rpos) instanceof ItemReceiverBlockEntity r
+                        ? r : null;
+                if (far != null) {
+                    far.setLastItem(sent);
+                }
                 // The link is only as quick as its slower end.
-                int paired = target.getBlockEntity(rpos) instanceof ItemReceiverBlockEntity r
-                        ? Math.min(be.tier, r.getTier()) : be.tier;
+                int paired = far == null ? be.tier : Math.min(be.tier, far.getTier());
                 be.nextMove = level.getGameTime() + TransferNode.ticksPerItem(paired);
                 spark(level, pos, true);
                 spark(target, rpos, false);
@@ -103,6 +116,38 @@ public class ItemSenderBlockEntity extends BlockEntity implements TransferNode {
         double y = pos.getY() + (intake ? 1.05 : -0.05);
         server.sendParticles(intake ? ParticleTypes.REVERSE_PORTAL : ParticleTypes.PORTAL,
                 pos.getX() + 0.5, y, pos.getZ() + 0.5, 6, 0.22, 0.05, 0.22, 0.02);
+    }
+
+    /** Only syncs when the answer changes — this is consulted every few ticks. */
+    private void setNextItem(ItemStack stack) {
+        if (ItemStack.isSameItemSameComponents(nextItem, stack)) {
+            return;
+        }
+        nextItem = stack.isEmpty() ? ItemStack.EMPTY : stack.copyWithCount(1);
+        setChanged();
+        sync();
+    }
+
+    @Override
+    public ItemStack flowing() {
+        return nextItem;
+    }
+
+    @Override
+    public String getCustomName() {
+        return customName;
+    }
+
+    @Override
+    public void setCustomName(String name) {
+        customName = name == null ? "" : name;
+        setChanged();
+        sync();
+    }
+
+    @Override
+    public String displayName() {
+        return customName.isEmpty() ? "Item Sender" : customName;
     }
 
     @Override
@@ -152,6 +197,10 @@ public class ItemSenderBlockEntity extends BlockEntity implements TransferNode {
         super.saveAdditional(tag, registries);
         tag.putString("Channel", channel);
         tag.putInt("Tier", tier);
+        tag.putString("CustomName", customName);
+        if (!nextItem.isEmpty()) {
+            tag.put("NextItem", nextItem.save(registries));
+        }
     }
 
     @Override
@@ -160,5 +209,9 @@ public class ItemSenderBlockEntity extends BlockEntity implements TransferNode {
         channel = tag.getString("Channel");
         // A link saved before levels existed reads as zero; it starts at one.
         tier = Mth.clamp(tag.getInt("Tier"), MIN_TIER, MAX_TIER);
+        customName = tag.getString("CustomName");
+        nextItem = tag.contains("NextItem")
+                ? ItemStack.parse(registries, tag.getCompound("NextItem")).orElse(ItemStack.EMPTY)
+                : ItemStack.EMPTY;
     }
 }
