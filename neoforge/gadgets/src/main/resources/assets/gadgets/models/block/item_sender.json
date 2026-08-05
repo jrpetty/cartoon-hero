@@ -1,9 +1,287 @@
 {
-  "parent": "minecraft:block/cube_bottom_top",
   "textures": {
-    "particle": "gadgets:block/item_sender",
-    "side": "gadgets:block/item_sender",
-    "top": "gadgets:block/item_sender_top",
-    "bottom": "gadgets:block/item_sender_bottom"
-  }
+    "particle": "gadgets:block/transfer_metal",
+    "metal": "gadgets:block/transfer_metal",
+    "trim": "gadgets:block/transfer_trim",
+    "portal": "gadgets:block/transfer_portal",
+    "plate": "gadgets:block/transfer_plate"
+  },
+  "elements": [
+    {
+      "name": "foot",
+      "from": [
+        3,
+        0,
+        3
+      ],
+      "to": [
+        13,
+        2,
+        13
+      ],
+      "faces": {
+        "north": {
+          "uv": [
+            3,
+            14,
+            13,
+            16
+          ],
+          "texture": "#trim"
+        },
+        "south": {
+          "uv": [
+            3,
+            14,
+            13,
+            16
+          ],
+          "texture": "#trim"
+        },
+        "east": {
+          "uv": [
+            3,
+            14,
+            13,
+            16
+          ],
+          "texture": "#trim"
+        },
+        "west": {
+          "uv": [
+            3,
+            14,
+            13,
+            16
+          ],
+          "texture": "#trim"
+        },
+        "up": {
+          "uv": [
+            3,
+            3,
+            13,
+            13
+          ],
+          "texture": "#trim"
+        },
+        "down": {
+          "uv": [
+            3,
+            3,
+            13,
+            13
+          ],
+          "texture": "#plate"
+        }
+      }
+    },
+    {
+      "name": "body",
+      "from": [
+        4,
+        2,
+        4
+      ],
+      "to": [
+        12,
+        10,
+        12
+      ],
+      "faces": {
+        "north": {
+          "uv": [
+            4,
+            6,
+            12,
+            14
+          ],
+          "texture": "#metal"
+        },
+        "south": {
+          "uv": [
+            4,
+            6,
+            12,
+            14
+          ],
+          "texture": "#metal"
+        },
+        "east": {
+          "uv": [
+            4,
+            6,
+            12,
+            14
+          ],
+          "texture": "#metal"
+        },
+        "west": {
+          "uv": [
+            4,
+            6,
+            12,
+            14
+          ],
+          "texture": "#metal"
+        },
+        "up": {
+          "uv": [
+            4,
+            4,
+            12,
+            12
+          ],
+          "texture": "#metal"
+        },
+        "down": {
+          "uv": [
+            4,
+            4,
+            12,
+            12
+          ],
+          "texture": "#metal"
+        }
+      }
+    },
+    {
+      "name": "collar",
+      "from": [
+        2,
+        10,
+        2
+      ],
+      "to": [
+        14,
+        12,
+        14
+      ],
+      "faces": {
+        "north": {
+          "uv": [
+            2,
+            4,
+            14,
+            6
+          ],
+          "texture": "#trim"
+        },
+        "south": {
+          "uv": [
+            2,
+            4,
+            14,
+            6
+          ],
+          "texture": "#trim"
+        },
+        "east": {
+          "uv": [
+            2,
+            4,
+            14,
+            6
+          ],
+          "texture": "#trim"
+        },
+        "west": {
+          "uv": [
+            2,
+            4,
+            14,
+            6
+          ],
+          "texture": "#trim"
+        },
+        "up": {
+          "uv": [
+            2,
+            2,
+            14,
+            14
+          ],
+          "texture": "#trim"
+        },
+        "down": {
+          "uv": [
+            2,
+            2,
+            14,
+            14
+          ],
+          "texture": "#trim"
+        }
+      }
+    },
+    {
+      "name": "mouth",
+      "from": [
+        1,
+        12,
+        1
+      ],
+      "to": [
+        15,
+        16,
+        15
+      ],
+      "faces": {
+        "north": {
+          "uv": [
+            1,
+            0,
+            15,
+            4
+          ],
+          "texture": "#metal"
+        },
+        "south": {
+          "uv": [
+            1,
+            0,
+            15,
+            4
+          ],
+          "texture": "#metal"
+        },
+        "east": {
+          "uv": [
+            1,
+            0,
+            15,
+            4
+          ],
+          "texture": "#metal"
+        },
+        "west": {
+          "uv": [
+            1,
+            0,
+            15,
+            4
+          ],
+          "texture": "#metal"
+        },
+        "up": {
+          "uv": [
+            1,
+            1,
+            15,
+            15
+          ],
+          "texture": "#portal"
+        },
+        "down": {
+          "uv": [
+            1,
+            1,
+            15,
+            15
+          ],
+          "texture": "#metal"
+        }
+      }
+    }
+  ]
 }

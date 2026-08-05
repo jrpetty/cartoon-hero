@@ -1,9 +1,287 @@
 {
-  "parent": "minecraft:block/cube_bottom_top",
   "textures": {
-    "particle": "gadgets:block/item_receiver",
-    "side": "gadgets:block/item_receiver",
-    "top": "gadgets:block/item_receiver_top",
-    "bottom": "gadgets:block/item_receiver_bottom"
-  }
+    "particle": "gadgets:block/transfer_metal",
+    "metal": "gadgets:block/transfer_metal",
+    "trim": "gadgets:block/transfer_trim",
+    "portal": "gadgets:block/transfer_portal",
+    "plate": "gadgets:block/transfer_plate"
+  },
+  "elements": [
+    {
+      "name": "mouth",
+      "from": [
+        1,
+        0,
+        1
+      ],
+      "to": [
+        15,
+        4,
+        15
+      ],
+      "faces": {
+        "north": {
+          "uv": [
+            1,
+            12,
+            15,
+            16
+          ],
+          "texture": "#metal"
+        },
+        "south": {
+          "uv": [
+            1,
+            12,
+            15,
+            16
+          ],
+          "texture": "#metal"
+        },
+        "east": {
+          "uv": [
+            1,
+            12,
+            15,
+            16
+          ],
+          "texture": "#metal"
+        },
+        "west": {
+          "uv": [
+            1,
+            12,
+            15,
+            16
+          ],
+          "texture": "#metal"
+        },
+        "up": {
+          "uv": [
+            1,
+            1,
+            15,
+            15
+          ],
+          "texture": "#metal"
+        },
+        "down": {
+          "uv": [
+            1,
+            1,
+            15,
+            15
+          ],
+          "texture": "#portal"
+        }
+      }
+    },
+    {
+      "name": "collar",
+      "from": [
+        2,
+        4,
+        2
+      ],
+      "to": [
+        14,
+        6,
+        14
+      ],
+      "faces": {
+        "north": {
+          "uv": [
+            2,
+            10,
+            14,
+            12
+          ],
+          "texture": "#trim"
+        },
+        "south": {
+          "uv": [
+            2,
+            10,
+            14,
+            12
+          ],
+          "texture": "#trim"
+        },
+        "east": {
+          "uv": [
+            2,
+            10,
+            14,
+            12
+          ],
+          "texture": "#trim"
+        },
+        "west": {
+          "uv": [
+            2,
+            10,
+            14,
+            12
+          ],
+          "texture": "#trim"
+        },
+        "up": {
+          "uv": [
+            2,
+            2,
+            14,
+            14
+          ],
+          "texture": "#trim"
+        },
+        "down": {
+          "uv": [
+            2,
+            2,
+            14,
+            14
+          ],
+          "texture": "#trim"
+        }
+      }
+    },
+    {
+      "name": "body",
+      "from": [
+        4,
+        6,
+        4
+      ],
+      "to": [
+        12,
+        14,
+        12
+      ],
+      "faces": {
+        "north": {
+          "uv": [
+            4,
+            2,
+            12,
+            10
+          ],
+          "texture": "#metal"
+        },
+        "south": {
+          "uv": [
+            4,
+            2,
+            12,
+            10
+          ],
+          "texture": "#metal"
+        },
+        "east": {
+          "uv": [
+            4,
+            2,
+            12,
+            10
+          ],
+          "texture": "#metal"
+        },
+        "west": {
+          "uv": [
+            4,
+            2,
+            12,
+            10
+          ],
+          "texture": "#metal"
+        },
+        "up": {
+          "uv": [
+            4,
+            4,
+            12,
+            12
+          ],
+          "texture": "#metal"
+        },
+        "down": {
+          "uv": [
+            4,
+            4,
+            12,
+            12
+          ],
+          "texture": "#metal"
+        }
+      }
+    },
+    {
+      "name": "cap",
+      "from": [
+        3,
+        14,
+        3
+      ],
+      "to": [
+        13,
+        16,
+        13
+      ],
+      "faces": {
+        "north": {
+          "uv": [
+            3,
+            0,
+            13,
+            2
+          ],
+          "texture": "#trim"
+        },
+        "south": {
+          "uv": [
+            3,
+            0,
+            13,
+            2
+          ],
+          "texture": "#trim"
+        },
+        "east": {
+          "uv": [
+            3,
+            0,
+            13,
+            2
+          ],
+          "texture": "#trim"
+        },
+        "west": {
+          "uv": [
+            3,
+            0,
+            13,
+            2
+          ],
+          "texture": "#trim"
+        },
+        "up": {
+          "uv": [
+            3,
+            3,
+            13,
+            13
+          ],
+          "texture": "#plate"
+        },
+        "down": {
+          "uv": [
+            3,
+            3,
+            13,
+            13
+          ],
+          "texture": "#trim"
+        }
+      }
+    }
+  ]
 }
