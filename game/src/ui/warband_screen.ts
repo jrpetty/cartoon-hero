@@ -23,6 +23,7 @@ import { Augment, TIER_COLOR as AUG_COLOR } from "../sim/augments";
 import { WarbandCommander, commanderIdentity } from "../sim/warband_commanders";
 import { CarouselPick } from "../sim/carousel";
 import { Condition, hasEffect, conditionLines } from "../sim/conditions";
+import { TerrainFeature, TERRAIN, terrainAt } from "../sim/terrain";
 import { TRAITS } from "../sim/traits";
 import { styleDef, BattleStyleDef } from "../content/battle_styles";
 
@@ -125,6 +126,18 @@ export class WarbandScreen {
     // TFT-style stage-round ("2-3") with the raw round number under it.
     stat("STAGE", run.stageLabel(), 280);
     ui.text(`round ${run.round}`, 280, 53, { size: 8.5, color: "#6f6a5c" });
+    // Where the next point of interest lands, so the maths isn't homework.
+    {
+      const g = run.gold, nextAt = (Math.floor(g / 10) + 1) * 10;
+      const capped = Math.floor(g / 10) >= 5;
+      const pipY = 51;
+      for (let i = 0; i < 5; i++) {
+        const lit = Math.floor(g / 10) > i;
+        ctx.fillStyle = lit ? "#ffd24a" : "rgba(255,210,74,0.22)";
+        ctx.beginPath(); ctx.arc(354 + i * 8, pipY, 2.4, 0, Math.PI * 2); ctx.fill();
+      }
+      ui.text(capped ? "max" : `+1g at ${nextAt}`, 398, pipY + 3.5, { size: 8.5, color: "#8a8278" });
+    }
     stat("GOLD", String(run.gold), 360, "#ffd24a", () => {
       ctx.save(); ctx.shadowColor = "#ffd24a"; ctx.shadowBlur = 6;
       const cg = ctx.createRadialGradient(364, 35, 1, 366, 37, 7);
@@ -358,6 +371,12 @@ export class WarbandScreen {
       this.weatherGlyph(ctx, cx2 + 12, cy2 + 10, 6, cond, time);
       ui.text(label, cx2 + 22, cy2 + 14, { size: 11, bold: true, color: cond.color });
       if (hovC) this.condTip = { c: cond, x: cx2, y: cy2 + 26 };
+      // The ground's seed, so a board you liked can be noted and replayed.
+      if (run.terrain.length) {
+        ui.text(`⛰ ${run.terrainCode()}`, cx2 + cw2 + 10, cy2 + 14, {
+          size: 10.5, bold: true, color: "#8a8278", font: "ui-monospace, Menlo, monospace",
+        });
+      }
     }
     if (run.isCreepRound()) {
       // A PvE camp round reads differently: loot on the line, not your life.
@@ -454,6 +473,13 @@ export class WarbandScreen {
         disabled: run.gold < rc, size: 13, accent: freeR > 0,
         tooltip: ["New shop", freeR > 0 ? "Your commander covers this one." : `Costs ${rc} gold.`],
       })) { if (run.reroll()) audio.play("ui"); }
+      // Hold this shop through the round — the "one copy off a 3★" button.
+      if (ui.button(run.shopLocked ? "🔒 Held" : "🔓 Lock", rxx + 138, shopY + 14, 92, 32, {
+        accent: run.shopLocked, size: 12,
+        tooltip: [run.shopLocked ? "This shop is held" : "Hold this shop",
+          "Keeps these five through the coming round instead of rolling them away.",
+          "Rerolling releases the hold."],
+      })) { if (run.toggleShopLock()) audio.play("ui"); }
       // Level-up shows the shop odds it would unlock — the real reason to tech.
       const odds = run.shopOdds();
       if (ui.button(`Level Up  (4g)`, rxx, shopY + 52, 130, 32, {
@@ -463,11 +489,13 @@ export class WarbandScreen {
       // What this fight is actually worth risking, before you commit to it.
       const worst = run.worstCaseDamage();
       const sg = run.streakGold();
-      ui.text(`Defeat costs up to ${worst} life`, rxx + 138, shopY + 26, {
-        size: 11, bold: true, color: worst >= run.life ? "#e0564a" : "#e0a878",
+      // Right-aligned to the screen edge: the lock button now owns the space
+      // this used to start in, and left-aligned text ran off the canvas.
+      ui.text(`Defeat costs up to ${worst} life`, W - 14, shopY + 62, {
+        align: "right", size: 11, bold: true, color: worst >= run.life ? "#e0564a" : "#e0a878",
       });
-      ui.text(sg > 0 ? `Streak pays +${sg}g next round` : "No streak bonus yet", rxx + 138, shopY + 44, {
-        size: 11, color: sg > 0 ? "#7df2a9" : "#6f6a5c",
+      ui.text(sg > 0 ? `Streak pays +${sg}g next round` : "No streak bonus yet", W - 14, shopY + 80, {
+        align: "right", size: 11, color: sg > 0 ? "#7df2a9" : "#6f6a5c",
       });
       if (ui.button("⚔ FIGHT", rxx, shopY + 92, 130, 36, { accent: true, size: 16, tooltip: ["Send your warband into the arena."] })) {
         if (run.beginFight()) {
@@ -1054,6 +1082,62 @@ export class WarbandScreen {
     ctx.restore();
   }
 
+  /**
+   * The round's ground: boulders that take a cell off the board, rises that
+   * extend reach, mires that bog you down. Drawn under the units, and mirrored
+   * across the centre line by the generator so both halves are the same
+   * problem.
+   */
+  private drawTerrain(bx: number, by: number, cellW: number, cellH: number, features: TerrainFeature[], time: number) {
+    if (!features.length) return;
+    const ctx = ui.ctx;
+    for (const f of features) {
+      const def = TERRAIN[f.kind];
+      const cx = bx + (f.col + 0.5) * cellW;
+      const cy = by + (f.row + 0.5) * cellH;
+      const rx = cellW * 0.42, ry = cellH * 0.36;
+      ctx.save();
+      if (f.kind === "boulder") {
+        // A solid lump with a lit top and a shadow — reads as "not a cell".
+        ctx.fillStyle = "rgba(0,0,0,0.4)";
+        ctx.beginPath(); ctx.ellipse(cx, cy + ry * 0.5, rx * 0.9, ry * 0.5, 0, 0, Math.PI * 2); ctx.fill();
+        const g = ctx.createLinearGradient(cx, cy - ry, cx, cy + ry);
+        g.addColorStop(0, "#a8a294"); g.addColorStop(1, "#4a463e");
+        ctx.fillStyle = g;
+        ctx.beginPath();
+        ctx.moveTo(cx - rx * 0.85, cy + ry * 0.45);
+        ctx.lineTo(cx - rx * 0.6, cy - ry * 0.5);
+        ctx.lineTo(cx - rx * 0.05, cy - ry * 0.8);
+        ctx.lineTo(cx + rx * 0.6, cy - ry * 0.35);
+        ctx.lineTo(cx + rx * 0.85, cy + ry * 0.45);
+        ctx.closePath(); ctx.fill();
+        ctx.strokeStyle = "rgba(0,0,0,0.45)"; ctx.lineWidth = 1.2; ctx.stroke();
+      } else if (f.kind === "rise") {
+        // A shallow terrace: a lit plateau with a contour line around it.
+        ctx.fillStyle = withAlpha(def.color, 0.2);
+        ctx.beginPath(); ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.strokeStyle = withAlpha(def.color, 0.7); ctx.lineWidth = 1.4;
+        ctx.beginPath(); ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2); ctx.stroke();
+        ctx.strokeStyle = withAlpha(def.color, 0.45); ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.ellipse(cx, cy + ry * 0.16, rx * 0.6, ry * 0.55, 0, 0, Math.PI * 2); ctx.stroke();
+      } else {
+        // Mire: a dark pool with a slow shimmer so it reads as wet.
+        ctx.fillStyle = withAlpha(def.color, 0.4);
+        ctx.beginPath(); ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.strokeStyle = withAlpha("#000", 0.35); ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2); ctx.stroke();
+        const shimmer = 0.4 + 0.25 * Math.sin(time * 1.4 + f.col * 1.7 + f.row);
+        ctx.strokeStyle = withAlpha("#cfe0c0", shimmer * 0.45); ctx.lineWidth = 1;
+        for (const k of [-0.3, 0.15]) {
+          ctx.beginPath();
+          ctx.ellipse(cx, cy + ry * k, rx * 0.55, ry * 0.22, 0, 0, Math.PI * 2);
+          ctx.stroke();
+        }
+      }
+      ctx.restore();
+    }
+  }
+
   /** A tiny weather mark for the condition chip: sun, rain, snow or cloud. */
   private weatherGlyph(ctx: CanvasRenderingContext2D, cx: number, cy: number, r: number, c: Condition, time: number) {
     ctx.save();
@@ -1596,6 +1680,7 @@ export class WarbandScreen {
     const cellH = h / GRID_ROWS;
 
     this.drawArena(x, y, w, h, cellW, cellH, time, run.condition);
+    this.drawTerrain(x, y, cellW, cellH, run.terrain, time);
 
     if (!this.battle) return;
     const b = this.battle;

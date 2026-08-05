@@ -14,6 +14,7 @@ import { activeTraits, applyBuff, traitsOf, ActiveTrait, Buff } from "./traits";
 import { applyItems } from "./items";
 import { ABILITIES } from "../content/abilities";
 import { styleOf } from "../content/battle_styles";
+import { TerrainFeature, terrainAt } from "./terrain";
 
 export interface UnitStack {
   type: string;
@@ -76,6 +77,8 @@ export interface SideOpts {
   traitBonus?: Record<string, number>;
   /** Buffs applied to units belonging to a trait — how conditions bite. */
   traitBuffs?: Record<string, Buff>;
+  /** The round's board terrain, applied by the cell a unit stands on. */
+  terrain?: TerrainFeature[];
 }
 
 /** Merge a side's own modifiers with the battlefield ones that hit everybody. */
@@ -98,6 +101,7 @@ export function mergeSideOpts(own?: SideOpts, field?: SideOpts): SideOpts | unde
     buff: Object.keys(buff).length ? buff : undefined,
     traitBonus: own.traitBonus ?? field.traitBonus,
     traitBuffs: Object.keys(traitBuffs).length ? traitBuffs : undefined,
+    terrain: own.terrain ?? field.terrain,
   };
 }
 
@@ -138,6 +142,12 @@ function spawnArmy(w: World, units: ArenaUnit[], team: Team, side: number, posFn
         const b = opts.traitBuffs[t.id];
         if (b) applyBuff(u, b);
       }
+    }
+    // Ground effects, from whichever cell this unit was placed on.
+    if (opts?.terrain && au.col != null && au.row != null) {
+      const ground = terrainAt(opts.terrain, au.col, au.row);
+      if (ground?.rangePct) u.range = Math.round(u.range * (1 + ground.rangePct / 100));
+      if (ground?.speedPct) u.speed = Math.round(u.speed * (1 + ground.speedPct / 100));
     }
     u.stance = Stance.Aggressive; // hunt — no economy, just fight
     u.variantRarity = star - 1; // a visual tier glow if rendered

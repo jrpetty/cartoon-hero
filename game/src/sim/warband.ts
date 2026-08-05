@@ -16,6 +16,7 @@ import { CarouselPick, isDraftRound, rollCarousel, pickValue } from "./carousel"
 import { UNIT_TIER, TIER_UNITS } from "./unit_tiers";
 import { styleOf } from "../content/battle_styles";
 import { Condition, rollCondition, CLEAR } from "./conditions";
+import { TerrainFeature, rollTerrain, isBlocked, terrainCode } from "./terrain";
 
 export { UNIT_TIER } from "./unit_tiers"; // re-exported: the screen and tests import it from here
 
@@ -149,7 +150,7 @@ export const BENCH_SLOTS = 9;
  * A board that puts a trebuchet on the front line is the single most obvious
  * tell of a dumb opponent, and this is what removes it.
  */
-export function placeByStyle(pieces: Piece[], side: 1 | -1): ArenaUnit[] {
+export function placeByStyle(pieces: Piece[], side: 1 | -1, terrain: TerrainFeature[] = []): ArenaUnit[] {
   // Depth 0 = closest to the centre line, 4 = furthest back.
   const depthFor: Record<string, number> = {
     vanguard: 0, line: 1, flanker: 1, artillery: 3, infiltrator: 4,
@@ -180,7 +181,7 @@ export function placeByStyle(pieces: Piece[], side: 1 | -1): ArenaUnit[] {
       const col = side === 1 ? 5 + d : 4 - d;
       for (const row of rows) {
         const key = `${col},${row}`;
-        if (used.has(key)) continue;
+        if (used.has(key) || isBlocked(terrain, col, row)) continue;
         used.add(key);
         out.push({ type: p.type, star: p.star, items: p.items, col, row });
         placed = true;
@@ -218,6 +219,12 @@ export class WarbandRun {
   pendingCamp: CreepCamp | null = null;
   /** The weather and ground this round is fought on — it hits both warbands. */
   condition: Condition = CLEAR;
+  /** This round's board terrain, mirrored across the centre line. */
+  terrain: TerrainFeature[] = [];
+  /** The seed that produced it, so a board can be noted down and found again. */
+  terrainSeed = 0;
+  /** Shop held through the round — the classic "one copy off a 3★" hold. */
+  shopLocked = false;
   // ---- the shared draft, on carousel rounds ----
   /** What's still on the ring when your turn comes (rivals pick before you). */
   carousel: CarouselPick[] = [];
@@ -309,6 +316,16 @@ export class WarbandRun {
     for (const a of this.augments) if (a.rerollCost != null) c = Math.min(c, a.rerollCost);
     return c;
   }
+  /** Hold this shop through the coming round instead of rerolling it away. */
+  toggleShopLock(): boolean {
+    if (this.phase !== "shop") return false;
+    this.shopLocked = !this.shopLocked;
+    return true;
+  }
+
+  /** A short code for this round's ground, so a board can be found again. */
+  terrainCode(): string { return terrainCode(this.terrainSeed); }
+
   /** Free rerolls left this round (for the shop button's label). */
   freeRerollsLeft(): number { return this.freeRerolls; }
   /** The interest cap — 5 gold unless an augment or commander raises it. */
@@ -375,6 +392,7 @@ export class WarbandRun {
     const cost = this.rerollCost();
     if (this.phase !== "shop" || this.gold < cost) return false;
     if (this.freeRerolls > 0) this.freeRerolls--; else this.gold -= cost;
+    this.shopLocked = false; // you asked for a new shop; the hold is spent
     this.rollShop();
     return true;
   }
@@ -503,6 +521,12 @@ export class WarbandRun {
       const bench = this.pieces.map((_, i) => i).filter((i) => !this.pieces[i].deployed).sort((a, b) => this.stronger(a, b));
       for (const i of bench) { if (count >= cap) break; this.pieces[i].deployed = true; count++; }
     }
+    // A new round's terrain can land on top of last round's placement.
+    for (const p of this.pieces) {
+      if (p.deployed && p.col != null && p.row != null && isBlocked(this.terrain, p.col, p.row)) {
+        p.col = p.row = undefined;
+      }
+    }
     // Assign a cell to every deployed piece that lacks one (front rank first).
     const used = new Set<string>();
     for (const p of this.pieces) if (p.deployed && p.col != null && p.row != null) used.add(`${p.col},${p.row}`);
@@ -510,7 +534,9 @@ export class WarbandRun {
     for (const i of this.deployedIndices()) {
       const p = this.pieces[i];
       if (p.col == null || p.row == null) {
-        while (ai < PLAYER_CELLS.length && used.has(`${PLAYER_CELLS[ai].c},${PLAYER_CELLS[ai].r}`)) ai++;
+        while (ai < PLAYER_CELLS.length &&
+          (used.has(`${PLAYER_CELLS[ai].c},${PLAYER_CELLS[ai].r}`) ||
+            isBlocked(this.terrain, PLAYER_CELLS[ai].c, PLAYER_CELLS[ai].r))) ai++;
         const cell = PLAYER_CELLS[Math.min(ai, PLAYER_CELLS.length - 1)];
         p.col = cell.c; p.row = cell.r; used.add(`${cell.c},${cell.r}`); ai++;
       }
@@ -547,6 +573,7 @@ export class WarbandRun {
   place(index: number, col: number, row: number): boolean {
     if (this.phase !== "shop") return false;
     if (col < 0 || col > 4 || row < 0 || row > 9) return false;
+    if (isBlocked(this.terrain, col, row)) return false; // solid rock
     const p = this.pieces[index];
     if (!p) return false;
     const occ = this.pieces.find((q, qi) => qi !== index && q.deployed && q.col === col && q.row === row);
@@ -597,13 +624,17 @@ export class WarbandRun {
     }
     // A relic every few rounds — equip it to build a carry.
     if (this.round % this.relicEvery() === 2 % this.relicEvery()) this.grantRelic();
-    this.rollShop();
+    // A locked shop survives the round, then releases — you hold it for one
+    // roll, not forever.
+    if (this.shopLocked) this.shopLocked = false; else this.rollShop();
     // Every living opponent runs its economy for the round (same rules as you).
     for (const o of this.opponents) if (o.alive) this.stepFoe(this.foeBrains[o.id]);
     // Lock in this round's matchup + battle seed now, so the board preview and
     // the live fight face the same warband (or camp).
     this.pendingSeed = this.rng.int(1, 1e9);
     this.condition = rollCondition(this.rng, this.round);
+    this.terrainSeed = this.rng.int(1, 1e9);
+    this.terrain = rollTerrain(this.terrainSeed, this.round);
     if (isCreepRound(this.round)) {
       // A PvE monster camp: no player life at stake, relics on the table.
       this.pendingCamp = campForRound(this.round);
@@ -738,7 +769,7 @@ export class WarbandRun {
 
   /** This round's battlefield modifiers — applied identically to both sides. */
   fieldOpts(): SideOpts {
-    return { buff: this.condition.all, traitBuffs: this.condition.traits };
+    return { buff: this.condition.all, traitBuffs: this.condition.traits, terrain: this.terrain };
   }
 
   /** Every run-wide buff (augments + commander) merged into one. */
@@ -890,7 +921,7 @@ export class WarbandRun {
     const fielded = [...b.pieces]
       .sort((p, q) => q.star - p.star || (UNIT_TIER[q.type] ?? 0) - (UNIT_TIER[p.type] ?? 0))
       .slice(0, cap);
-    return placeByStyle(fielded, 1);
+    return placeByStyle(fielded, 1, this.terrain);
   }
 
   private livingFoes(): Opponent[] { return this.opponents.filter((o) => o.alive); }

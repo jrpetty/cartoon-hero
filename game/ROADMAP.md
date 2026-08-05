@@ -43,6 +43,17 @@ at the top of each section.
   units currently sharing draws (twohand/militia, pikeman/spearman, scout/raider,
   javelin/skirmisher, handcannon/crossbow).
 
+## Board terrain
+Every round rolls its own ground from its own seed: **boulders** take a cell off
+the board entirely, **rises** give whoever holds them +20% range, **mires** slow
+what stands in them by 30%. Round 1 is deliberately clear.
+
+Two rules keep it fair rather than random punishment. Features are **mirrored
+across the centre line**, so a boulder in your third rank has a twin in theirs —
+both warbands face identical ground. And the front rank (cols 4/5) is always
+clear, so a wall always has somewhere to stand. The seed is shown on screen as a
+six-character code, so a board can be noted down and found again.
+
 ## Abilities
 Every shop unit now has a signature ability — it was 9 of 24, so most of the
 Warband roster was a stat block while a lucky few actually did something. The
