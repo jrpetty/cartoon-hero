@@ -1054,3 +1054,56 @@ describe("Warband levelling", () => {
     expect(run.xpProgress().max).toBe(true);
   });
 });
+
+describe("Warband run history", () => {
+  /** Play a run out headlessly so the summary has something real to describe. */
+  const playOut = (run: WarbandRun, rounds = 40) => {
+    for (let i = 0; i < rounds && run.phase !== "over"; i++) {
+      if (run.phase === "augment") run.pickAugment(0);
+      if (run.phase === "draft") run.takeCarousel(0);
+      if (run.phase === "shop") {
+        for (let k = 0; k < 5; k++) run.buy(k);
+        if (!run.beginFight()) break;
+        run.finishFight(resolveBattle(run.boardUnits(), run.pendingOpp, run.pendingSeed, 30, run.sideOpts(), run.fieldOpts()));
+      }
+      if (run.phase === "result") run.next();
+    }
+  };
+
+  it("records one entry per fight, in order, with the life you were left on", () => {
+    const run = new WarbandRun(81, null);
+    playOut(run);
+    expect(run.phase).toBe("over");
+    expect(run.history.length).toBeGreaterThan(2);
+    for (let i = 1; i < run.history.length; i++) {
+      expect(run.history[i].round).toBeGreaterThan(run.history[i - 1].round);
+    }
+    const last = run.history[run.history.length - 1];
+    expect(last.life).toBe(run.life);
+    // Every entry names who it was against and how it went.
+    for (const h of run.history) {
+      expect(h.foe.length).toBeGreaterThan(0);
+      expect(typeof h.won).toBe("boolean");
+    }
+  });
+
+  it("tallies the run's record and spending", () => {
+    const run = new WarbandRun(82, null);
+    playOut(run);
+    const t = run.tally;
+    // PvP fights are counted; camp rounds are tallied separately, so the two
+    // together should account for every entry in the history.
+    expect(t.wins + t.losses + t.campsCleared + t.campsLost).toBe(run.history.length);
+    expect(t.goldSpent).toBeGreaterThan(0);
+    expect(t.unitsBought).toBeGreaterThan(0);
+    expect(t.bestStreak).toBeGreaterThanOrEqual(0);
+    expect(t.worstStreak).toBeLessThanOrEqual(0);
+  });
+
+  it("starts empty", () => {
+    const run = new WarbandRun(83, null);
+    expect(run.history).toEqual([]);
+    expect(run.tally.wins).toBe(0);
+    expect(run.tally.goldSpent).toBe(0);
+  });
+});

@@ -671,17 +671,7 @@ export class WarbandScreen {
     }
 
     // ---- run over ----
-    if (run.phase === "over") {
-      ctx.fillStyle = "rgba(6,4,2,0.78)";
-      ctx.fillRect(0, 0, W, H);
-      const won = run.outcome === "win";
-      ui.text(won ? "WARBAND TRIUMPHANT" : "WARBAND BROKEN", W / 2, H / 2 - 60, {
-        align: "center", size: 44, bold: true, color: won ? "#ffe9b0" : "#c87a72", font: "Georgia, serif",
-      });
-      ui.text(won ? "Last warband standing — the arena is yours." : `You placed #${run.placement()} of 8.`,
-        W / 2, H / 2 - 12, { align: "center", size: 17, color: "#d8cdb4" });
-      if (ui.button("Back to Menu", W / 2 - 110, H / 2 + 30, 220, 48, { accent: true, size: 18 })) action = "exit";
-    }
+    if (run.phase === "over" && this.drawRunSummary(W, H, run, time)) action = "exit";
 
     // ---- held unit rides the cursor ----
     if (run.phase === "shop" && this.heldPiece >= 0 && this.heldPiece < run.pieces.length) {
@@ -698,8 +688,10 @@ export class WarbandScreen {
     // ---- overlays, back to front ----
     if (run.phase === "battle" && this.introT > 0) this.drawIntro(boardX, boardY, boardW, boardH, run);
     if (run.phase === "result" && run.lastResult) this.drawResultFlourish(boardX, boardY, boardW, boardH, run, time);
-    this.drawStarUp(boardX, boardY, boardW, boardH);
-    this.drawFusion(boardX, boardY, boardW, boardH);
+    if (run.phase !== "over") {
+      this.drawStarUp(boardX, boardY, boardW, boardH);
+      this.drawFusion(boardX, boardY, boardW, boardH);
+    }
     if (this.scoutId >= 0 && run.phase !== "over") this.drawScoutPanel(W, H, run, time);
     if (picking) {
       this.unitTip = null; this.itemTip = null; this.augTip = null; this.cmdTip = null; this.condTip = null;
@@ -1792,6 +1784,184 @@ export class WarbandScreen {
     ctx.arcTo(x, y + h, x, y, r);
     ctx.arcTo(x, y, x + w, y, r);
     ctx.closePath();
+  }
+
+  /**
+   * The post-run summary. A run is a story — the board you ended up with, the
+   * fights that went your way, the round the bleeding started — and none of
+   * that used to survive past a one-line "you placed #5". Returns true when
+   * the player asks to leave.
+   */
+  private drawRunSummary(W: number, H: number, run: WarbandRun, time: number): boolean {
+    const ctx = ui.ctx;
+    const won = run.outcome === "win";
+    const col = won ? "#ffd24a" : "#c87a72";
+    ctx.fillStyle = "rgba(5,4,2,0.9)"; ctx.fillRect(0, 0, W, H);
+    const bloom = ctx.createRadialGradient(W / 2, H * 0.3, 30, W / 2, H * 0.3, Math.max(W, H) * 0.6);
+    bloom.addColorStop(0, withAlpha(col, 0.14)); bloom.addColorStop(1, "rgba(0,0,0,0)");
+    ctx.fillStyle = bloom; ctx.fillRect(0, 0, W, H);
+    if (won) {
+      ctx.save();
+      ctx.translate(W / 2, H * 0.3); ctx.rotate(time * 0.1); ctx.globalAlpha = 0.05;
+      for (let i = 0; i < 18; i++) {
+        ctx.rotate((Math.PI * 2) / 18);
+        ctx.fillStyle = "#ffe9b0";
+        ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(Math.max(W, H), -22); ctx.lineTo(Math.max(W, H), 22); ctx.closePath(); ctx.fill();
+      }
+      ctx.restore();
+    }
+
+    // Height follows the content: a fixed 660 left a lake of empty card under
+    // the columns on a board that ended small.
+    const cmdH = (run.commander ? 44 : 26) + run.augments.length * 26;
+    const chartH = 12 + 116 + 10 + 2 * 38; // chart + two rows of tally chips
+    const cw = Math.min(1080, W - 80);
+    const chh = Math.min(H - 70, 118 + 10 + 108 + 22 + Math.max(cmdH, chartH) + 88);
+    const cx0 = Math.round((W - cw) / 2), cy0 = Math.round((H - chh) / 2);
+    ctx.save();
+    ctx.shadowColor = "rgba(0,0,0,0.8)"; ctx.shadowBlur = 34; ctx.shadowOffsetY = 12;
+    const g = ctx.createLinearGradient(0, cy0, 0, cy0 + chh);
+    g.addColorStop(0, "rgba(30,24,15,0.99)"); g.addColorStop(1, "rgba(11,8,5,0.99)");
+    ctx.fillStyle = g; this.roundRect(ctx, cx0, cy0, cw, chh, 14); ctx.fill();
+    ctx.restore();
+    ctx.strokeStyle = withAlpha(col, 0.75); ctx.lineWidth = 2;
+    this.roundRect(ctx, cx0 + 1, cy0 + 1, cw - 2, chh - 2, 13); ctx.stroke();
+
+    // ---- masthead ----
+    ctx.save();
+    ctx.beginPath(); this.roundRect(ctx, cx0 + 1, cy0 + 1, cw - 2, 96, 13); ctx.clip();
+    const mh = ctx.createLinearGradient(cx0, cy0, cx0 + cw, cy0 + 96);
+    mh.addColorStop(0, withAlpha(col, 0.3)); mh.addColorStop(1, "rgba(20,15,9,0.2)");
+    ctx.fillStyle = mh; ctx.fillRect(cx0, cy0, cw, 96);
+    ctx.restore();
+    ctx.save(); ctx.shadowColor = col; ctx.shadowBlur = 22;
+    ui.text(won ? "WARBAND TRIUMPHANT" : "WARBAND BROKEN", cx0 + 32, cy0 + 50, {
+      size: 34, bold: true, color: won ? "#ffe9b0" : "#e0b0a6", font: "Georgia, serif",
+    });
+    ctx.restore();
+    ui.text(won ? "Last warband standing — the arena is yours."
+      : `Beaten in stage ${run.stageLabel()} after ${run.history.length} fight${run.history.length === 1 ? "" : "s"}.`,
+      cx0 + 32, cy0 + 74, { size: 13, color: "#bcb299" });
+    // Placement medal.
+    const px3 = cx0 + cw - 74, py3 = cy0 + 48;
+    ctx.save();
+    ctx.shadowColor = col; ctx.shadowBlur = 18;
+    const mg = ctx.createRadialGradient(px3 - 6, py3 - 8, 2, px3, py3, 34);
+    mg.addColorStop(0, withAlpha(col, 0.85)); mg.addColorStop(1, "rgba(20,14,7,0.9)");
+    ctx.fillStyle = mg; ctx.beginPath(); ctx.arc(px3, py3, 33, 0, Math.PI * 2); ctx.fill();
+    ctx.restore();
+    ctx.strokeStyle = withAlpha(col, 0.95); ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(px3, py3, 33, 0, Math.PI * 2); ctx.stroke();
+    ui.text(`#${run.placement()}`, px3, py3 + 4, { align: "center", size: 24, bold: true, color: "#1a1207", font: "Georgia, serif" });
+    ui.text("of 8", px3, py3 + 20, { align: "center", size: 9, bold: true, color: "rgba(26,18,7,0.8)" });
+
+    let y = cy0 + 118;
+    const pad = 32;
+
+    // ---- the board you died with ----
+    ui.text("THE WARBAND YOU ENDED WITH", cx0 + pad, y, { size: 10, bold: true, color: "#8f8770" });
+    y += 10;
+    const deployed = run.deployment().map((d) => run.pieces[d.index]);
+    const slot = Math.min(104, Math.floor((cw - pad * 2) / Math.max(6, deployed.length)));
+    const rowH = 108;
+    if (!deployed.length) {
+      ui.text("— nothing was left standing —", cx0 + pad, y + 32, { size: 12, color: "#6f6a5c" });
+    }
+    deployed.forEach((p, i) => {
+      const bx2 = cx0 + pad + i * slot;
+      if (bx2 + slot - 6 > cx0 + cw - pad) return;
+      this.pieceCard(bx2, y, slot - 6, rowH, p, true, time);
+    });
+    y += rowH + 22;
+
+    // ---- what led it ----
+    const colW = (cw - pad * 2 - 24) / 2;
+    const leftX = cx0 + pad, rightX = cx0 + pad + colW + 24;
+    let ly = y;
+    ui.text("COMMAND", leftX, ly, { size: 10, bold: true, color: "#8f8770" });
+    ly += 8;
+    if (run.commander) {
+      const id = commanderIdentity(run.commander);
+      const c2 = id?.color ?? "#caa56a";
+      ctx.fillStyle = withAlpha(c2, 0.16); this.roundRect(ctx, leftX, ly, colW, 38, 6); ctx.fill();
+      ctx.strokeStyle = withAlpha(c2, 0.6); ctx.lineWidth = 1;
+      this.roundRect(ctx, leftX + 0.5, ly + 0.5, colW - 1, 37, 6); ctx.stroke();
+      this.crest(ctx, leftX + 22, ly + 19, 13, run.commander, time);
+      ui.text(id?.name ?? run.commander.id, leftX + 44, ly + 17, { size: 13, bold: true, color: "#f2e8d0", font: "Georgia, serif" });
+      ui.text(id?.title ?? "", leftX + 44, ly + 31, { size: 10, color: c2 });
+      ly += 44;
+    } else { ui.text("— led by no one —", leftX, ly + 16, { size: 11, color: "#6f6a5c" }); ly += 26; }
+    run.augments.forEach((a, i) => {
+      const ay = ly + i * 26;
+      const ac = AUG_COLOR[a.tier];
+      ctx.fillStyle = withAlpha(ac, 0.14); this.roundRect(ctx, leftX, ay, colW, 22, 5); ctx.fill();
+      this.augSigil(ctx, leftX + 14, ay + 11, 7, a, time);
+      ui.text(a.name, leftX + 28, ay + 15, { size: 11, bold: true, color: ac });
+      ui.text(a.tier, leftX + colW - 10, ay + 15, { align: "right", size: 9, color: "#8a8278" });
+    });
+
+    // ---- the run's life, round by round ----
+    ui.text("HOW IT WENT", rightX, y, { size: 10, bold: true, color: "#8f8770" });
+    const chY = y + 12, chH = 116;
+    ctx.fillStyle = "rgba(0,0,0,0.35)"; this.roundRect(ctx, rightX, chY, colW, chH, 6); ctx.fill();
+    const hist = run.history;
+    if (hist.length) {
+      const step = colW / Math.max(1, hist.length);
+      const lifeY = (life: number) => chY + chH - 10 - (chH - 20) * Math.max(0, Math.min(1, life / 100));
+      // Grid lines at 25 / 50 / 75 life, so the shape has a scale.
+      ctx.strokeStyle = "rgba(255,255,255,0.06)"; ctx.lineWidth = 1;
+      for (const l of [25, 50, 75]) {
+        ctx.beginPath(); ctx.moveTo(rightX + 4, lifeY(l)); ctx.lineTo(rightX + colW - 4, lifeY(l)); ctx.stroke();
+      }
+      // The life line, filled underneath.
+      ctx.beginPath();
+      ctx.moveTo(rightX + 4, lifeY(100));
+      hist.forEach((h, i) => ctx.lineTo(rightX + 4 + (i + 1) * step - step / 2, lifeY(h.life)));
+      ctx.lineTo(rightX + 4 + hist.length * step - step / 2, chY + chH - 4);
+      ctx.lineTo(rightX + 4, chY + chH - 4);
+      ctx.closePath();
+      const lg = ctx.createLinearGradient(0, chY, 0, chY + chH);
+      lg.addColorStop(0, "rgba(125,242,169,0.28)"); lg.addColorStop(1, "rgba(125,242,169,0)");
+      ctx.fillStyle = lg; ctx.fill();
+      ctx.beginPath();
+      ctx.moveTo(rightX + 4, lifeY(100));
+      hist.forEach((h, i) => ctx.lineTo(rightX + 4 + (i + 1) * step - step / 2, lifeY(h.life)));
+      ctx.strokeStyle = "#7df2a9"; ctx.lineWidth = 1.8; ctx.stroke();
+      // A pip per round: green for a win, red for a loss, gold for a camp cleared.
+      hist.forEach((h, i) => {
+        const hx = rightX + 4 + (i + 1) * step - step / 2;
+        ctx.fillStyle = h.creep ? (h.won ? "#ffd24a" : "#8a6a3a") : h.won ? "#7df2a9" : "#e0564a";
+        ctx.beginPath(); ctx.arc(hx, lifeY(h.life), 2.8, 0, Math.PI * 2); ctx.fill();
+      });
+      ui.text("100", rightX + colW - 6, chY + 12, { align: "right", size: 8.5, color: "#6f6a5c" });
+      ui.text(`${hist[0].stage}`, rightX + 6, chY + chH - 4, { size: 8.5, color: "#6f6a5c" });
+      ui.text(`${hist[hist.length - 1].stage}`, rightX + colW - 6, chY + chH - 4, { align: "right", size: 8.5, color: "#6f6a5c" });
+    } else {
+      ui.text("— no fights were fought —", rightX + 12, chY + chH / 2, { size: 11, color: "#6f6a5c" });
+    }
+    // The tally, in two rows of chips under the chart.
+    const t2 = run.tally;
+    const chips: [string, string, string][] = [
+      ["record", `${t2.wins}W · ${t2.losses}L`, t2.wins >= t2.losses ? "#7df2a9" : "#e0786a"],
+      ["best streak", t2.bestStreak > 0 ? `+${t2.bestStreak}` : "—", "#ffd24a"],
+      ["camps", `${t2.campsCleared} cleared`, "#c8a86a"],
+      ["relics", String(t2.relicsWon), "#9b5cf0"],
+      ["gold spent", String(t2.goldSpent), "#ffd24a"],
+      ["rerolls", String(t2.rerolls), "#7fb0e8"],
+    ];
+    const chipW = (colW - 12) / 3;
+    chips.forEach(([label, val, c3], i) => {
+      const bx2 = rightX + (i % 3) * (chipW + 6);
+      const by2 = chY + chH + 10 + Math.floor(i / 3) * 38;
+      ctx.fillStyle = "rgba(0,0,0,0.35)"; this.roundRect(ctx, bx2, by2, chipW, 34, 5); ctx.fill();
+      ui.text(label, bx2 + 8, by2 + 13, { size: 8.5, color: "#8a8278" });
+      ui.text(val, bx2 + 8, by2 + 28, { size: 13, bold: true, color: c3 });
+    });
+
+    const bw2 = 220, bh2 = 46;
+    if (ui.button("Back to Menu", cx0 + cw / 2 - bw2 / 2, cy0 + chh - bh2 - 20, bw2, bh2, { accent: true, size: 17 })) return true;
+    if (ui.clicked) ui.pointerConsumed = true;
+    return false;
   }
 
   /** The header banner: dark leather, a gilded rule, and a slow sheen. */

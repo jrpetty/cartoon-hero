@@ -234,6 +234,18 @@ export class WarbandRun {
   carousel: CarouselPick[] = [];
   /** How many rivals took their pick ahead of you — you're that far down. */
   draftAhead = 0;
+  /**
+   * One entry per fought round, and the tallies behind it. A run that ends is
+   * a story — which fights you won, when the bleeding started, what you spent
+   * it all on — and none of that survived past the "you placed #5" line.
+   */
+  history: { round: number; stage: string; foe: string; won: boolean; creep: boolean; dmg: number; youLeft: number; foeLeft: number; life: number }[] = [];
+  tally = {
+    wins: 0, losses: 0, campsCleared: 0, campsLost: 0,
+    bestStreak: 0, worstStreak: 0,
+    goldSpent: 0, goldEarned: 0, rerolls: 0, levelUps: 0,
+    relicsWon: 0, lifeLost: 0, unitsBought: 0, unitsSold: 0,
+  };
   /** Set whenever pieces merge into a star-up, for the screen's celebration. */
   lastMerge: { type: string; star: number } | null = null;
   /** Set whenever two components fuse into a relic, for the screen's flourish. */
@@ -395,7 +407,8 @@ export class WarbandRun {
   reroll(): boolean {
     const cost = this.rerollCost();
     if (this.phase !== "shop" || this.gold < cost) return false;
-    if (this.freeRerolls > 0) this.freeRerolls--; else this.gold -= cost;
+    if (this.freeRerolls > 0) this.freeRerolls--; else { this.gold -= cost; this.tally.goldSpent += cost; }
+    this.tally.rerolls++;
     this.shopLocked = false; // you asked for a new shop; the hold is spent
     this.rollShop();
     return true;
@@ -404,6 +417,8 @@ export class WarbandRun {
   buyXp(): boolean {
     if (this.phase !== "shop" || this.gold < XP_BUY || this.level >= MAX_LEVEL) return false;
     this.gold -= XP_BUY;
+    this.tally.goldSpent += XP_BUY;
+    this.tally.levelUps++;
     this.xp += XP_BUY;
     while (this.level < MAX_LEVEL && this.xp >= XP_TO_LEVEL[this.level + 1]) this.level++;
     this.reconcile(); // bigger board → pull up reserves
@@ -449,6 +464,8 @@ export class WarbandRun {
     if (this.gold < c) return false;
     if (!this.canBuy(slot).ok) return false;
     this.gold -= c;
+    this.tally.goldSpent += c;
+    this.tally.unitsBought++;
     this.shop[slot] = null;
     this.takeFromPool(type); // claim the copy from the shared pool
     this.pieces.push({ type, star: 1, items: [] });
@@ -462,9 +479,12 @@ export class WarbandRun {
     if (this.phase !== "shop" || index < 0 || index >= this.pieces.length) return false;
     const p = this.pieces[index];
     // Normally a flat star price; the Quartermaster refunds every copy sunk in.
-    this.gold += this.commander?.fullRefund
+    const refund = this.commander?.fullRefund
       ? this.cost(p.type) * Math.pow(3, p.star - 1)
       : this.cost(p.type) * p.star;
+    this.gold += refund;
+    this.tally.goldEarned += refund;
+    this.tally.unitsSold++;
     this.refundToPool(p.type, p.star); // its copies return to the shared pool
     this.pieces.splice(index, 1);
     this.reconcile(); // selling a board unit pulls up a reserve
@@ -627,7 +647,9 @@ export class WarbandRun {
     // plus whatever the run's augments add.
     const interest = Math.min(this.interestCap(), Math.floor(this.gold / 10));
     const streak = streakBonus(this.streak);
-    this.gold += 5 + interest + streak + this.augSum((a) => a.gold) + (this.commander?.gold ?? 0);
+    const income = 5 + interest + streak + this.augSum((a) => a.gold) + (this.commander?.gold ?? 0);
+    this.gold += income;
+    this.tally.goldEarned += income;
     this.freeRerolls = this.commander?.freeRerolls ?? 0; // the perk refreshes every round
     // Augment-granted free XP (a levelling engine).
     const freeXp = this.augSum((a) => a.xp);
@@ -978,6 +1000,9 @@ export class WarbandRun {
         won: wonCamp, foe: camp.name, youLeft: res.survivorsA, foeLeft: res.survivorsB,
         dmg: wonCamp ? 0 : camp.bite, relics, gold: wonCamp ? camp.gold : 0, creep: true,
       };
+      if (wonCamp) { this.tally.campsCleared++; this.tally.relicsWon += relics; this.tally.goldEarned += camp.gold; }
+      else { this.tally.campsLost++; this.tally.lifeLost += camp.bite; }
+      this.recordRound();
       if (this.life <= 0) { this.life = 0; this.outcome = "loss"; this.phase = "over"; return; }
       if (this.livingFoes().length === 0) { this.outcome = "win"; this.phase = "over"; return; }
       this.phase = "result";
@@ -1000,10 +1025,24 @@ export class WarbandRun {
     // The other living foes skirmish among themselves so the lobby thins out too.
     this.thinTheHerd();
     this.lastResult = { won, foe: foe.name, youLeft: res.survivorsA, foeLeft: res.survivorsB, dmg, relics: 0, gold: 0, creep: false };
+    if (won) this.tally.wins++; else { this.tally.losses++; this.tally.lifeLost += dmg; }
+    this.tally.bestStreak = Math.max(this.tally.bestStreak, this.streak);
+    this.tally.worstStreak = Math.min(this.tally.worstStreak, this.streak);
+    this.recordRound();
 
     if (this.life <= 0) { this.life = 0; this.outcome = "loss"; this.phase = "over"; return; }
     if (this.livingFoes().length === 0) { this.outcome = "win"; this.phase = "over"; return; }
     this.phase = "result";
+  }
+
+  /** Append the round that just resolved to the run's history. */
+  private recordRound() {
+    const r = this.lastResult;
+    if (!r) return;
+    this.history.push({
+      round: this.round, stage: this.stageLabel(), foe: r.foe, won: r.won, creep: r.creep,
+      dmg: r.dmg, youLeft: r.youLeft, foeLeft: r.foeLeft, life: Math.max(0, this.life),
+    });
   }
 
   /** Off-screen attrition: random living foes lose a little life each round. */

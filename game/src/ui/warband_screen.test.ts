@@ -173,4 +173,25 @@ describe("Warband screen renders", () => {
     begin();
     expect(() => s.draw(1280, 760, 1, run)).not.toThrow();
   });
+
+  it("draws the post-run summary of a run that was actually played out", () => {
+    const ctx = createCanvas(1280, 760).getContext("2d") as unknown as CanvasRenderingContext2D;
+    const s = new WarbandScreen();
+    const run = new WarbandRun(31, null);
+    // Play the whole run headlessly, so the summary has a real history, a real
+    // final board and a real tally behind it rather than a forced phase flag.
+    for (let i = 0; i < 40 && run.phase !== "over"; i++) {
+      if (run.phase === "augment") run.pickAugment(0);
+      if (run.phase === "draft") run.takeCarousel(0);
+      if (run.phase === "shop") { for (let k = 0; k < 5; k++) run.buy(k); run.fight(); }
+      if (run.phase === "result") run.next();
+    }
+    expect(run.phase).toBe("over");
+    expect(run.history.length).toBeGreaterThan(0);
+    // Both sizes: the card is height-derived, so a short screen must still fit.
+    for (const [w, h] of [[1280, 760], [1600, 900], [1100, 680]] as const) {
+      ui.begin(ctx, { mx: 0, my: 0, clicked: false, rightClicked: false, alt: false });
+      expect(() => s.draw(w, h, 1, run)).not.toThrow();
+    }
+  });
 });
