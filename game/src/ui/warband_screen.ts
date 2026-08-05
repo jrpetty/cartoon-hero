@@ -2262,6 +2262,19 @@ export class WarbandScreen {
       ctx.restore();
     }
 
+    // Motes drifting in the brazier light — the arena should feel like air, not
+    // a flat plate. Positions are a fixed cycle, so they never stutter.
+    ctx.save();
+    ctx.beginPath(); ctx.rect(x, y, w, h); ctx.clip();
+    for (let i = 0; i < 34; i++) {
+      const mx2 = x + ((i * 173.7 + time * (9 + (i % 5) * 4)) % (w + 40)) - 20;
+      const my2 = y + ((i * 97.3 + Math.sin(time * 0.35 + i) * 26 + h) % h);
+      const a = 0.05 + 0.09 * (0.5 + 0.5 * Math.sin(time * 1.3 + i * 2.1));
+      ctx.fillStyle = `rgba(255,232,186,${a})`;
+      ctx.beginPath(); ctx.arc(mx2, my2, 0.9 + (i % 3) * 0.6, 0, Math.PI * 2); ctx.fill();
+    }
+    ctx.restore();
+
     // Vignette.
     const vg = ctx.createRadialGradient(x + w / 2, y + h / 2, Math.min(w, h) * 0.22, x + w / 2, y + h / 2, Math.max(w, h) * 0.62);
     vg.addColorStop(0, "rgba(0,0,0,0)"); vg.addColorStop(1, "rgba(0,0,0,0.46)");
@@ -2548,6 +2561,16 @@ export class WarbandScreen {
         ctx.shadowColor = starGlow[Math.min(2, star - 1)]; ctx.shadowBlur = 8; ctx.lineWidth = 2;
         ctx.beginPath(); ctx.ellipse(sx, footY, cellW * 0.26, cellH * 0.13, 0, 0, Math.PI * 2); ctx.stroke();
         ctx.restore();
+      }
+      // A soft dark pool behind the figure. Without it the sprites sink into
+      // the stone; a per-shape canvas shadow would look slightly better but
+      // costs a blur pass for every one of a sprite's ~30 draw calls, and
+      // there can be twenty sprites on screen at sixty frames a second.
+      if (!lifted) {
+        const back = ctx.createRadialGradient(sx, footY - cellH * 0.22, 2, sx, footY - cellH * 0.22, cellH * 0.42);
+        back.addColorStop(0, "rgba(0,0,0,0.42)"); back.addColorStop(1, "rgba(0,0,0,0)");
+        ctx.fillStyle = back;
+        ctx.beginPath(); ctx.arc(sx, footY - cellH * 0.22, cellH * 0.42, 0, Math.PI * 2); ctx.fill();
       }
       ctx.save();
       ctx.globalAlpha = lifted ? 0.3 : 1; // lifted unit rides the cursor
