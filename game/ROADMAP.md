@@ -29,8 +29,17 @@ at the top of each section.
   raider), knight, catapult, ram, trebuchet, monk, champion (hero),
   **scout** (Dark, cheap vision), **two-handed swordsman** (Castle heavy inf),
   **pikeman** (Castle anti-cav).
-- Backlog: **Battlemage** (Castle arcane caster — fireball / slow, "not too
-  sci-fi"), **Trade Cart** (Market economy unit). Possible unique art passes for
+- **Battlemage** is in (Castle, trained at the Castle: AoE fire, slow to cast,
+  frail — worth guarding). Added alongside it: **Shieldbearer** (Feudal wall,
+  4/5 armour, hits softly), **Berserker** (Castle, twin axes, no armour at all),
+  **Longbowman** (Castle, 215 range, slow draw), **Cataphract** (Castle barded
+  cavalry) and **Bombard** (Castle gunpowder siege). Roster 18 → 24, which is
+  mostly aimed at Warband Tactics, where three units a tier made the shop feel
+  bare.
+- Two new synergies came with them: **Mystics** (Monk + Battlemage — the Monk
+  previously belonged to no trait at all) and **Gunpowder** (Hand Cannoneer +
+  Bombard).
+- Backlog: **Trade Cart** (Market economy unit). Possible unique art passes for
   units currently sharing draws (twohand/militia, pikeman/spearman, scout/raider,
   javelin/skirmisher, handcannon/crossbow).
 

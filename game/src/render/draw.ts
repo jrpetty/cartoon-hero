@@ -979,6 +979,12 @@ export function drawUnit(ctx: Ctx, e: Entity, time: number, lod = 0) {
   switch (e.type) {
     case "villager": drawVillager(ctx, e, tc, moving); break;
     case "militia": drawMilitia(ctx, e, tc, lunge); break;
+    case "shieldbearer": drawShieldbearer(ctx, e, tc, lunge); break;
+    case "berserker": drawBerserker(ctx, e, tc, lunge, time); break;
+    case "longbow": drawLongbow(ctx, e, tc, atkFrac); break;
+    case "cataphract": drawCataphract(ctx, e, tc, moving, time, lunge); break;
+    case "battlemage": drawBattlemage(ctx, e, tc, atkFrac, time); break;
+    case "bombard": drawBombard(ctx, e, tc, atkFrac); break;
     case "twohand": drawTwohand(ctx, e, tc, lunge); break;
     case "spearman": drawSpearman(ctx, e, tc, lunge); break;
     case "pikeman": drawPikeman(ctx, e, tc, lunge); break;
@@ -1340,6 +1346,216 @@ function drawSpearman(ctx: Ctx, e: Entity, tc: any, lunge: number) {
   ctx.lineTo(tipX + fy * 2.4, tipY - fx * 2.4);
   ctx.closePath();
   ctx.fill();
+  softOutline(ctx, 1);
+}
+
+/** A wall of a man: full helm, heavy pauldrons and a tower shield up front. */
+function drawShieldbearer(ctx: Ctx, e: Entity, tc: any, lunge: number) {
+  const r = e.radius;
+  body(ctx, e, tc.main, tc.dark, { pauldrons: true, chestPlate: true });
+  head(ctx, r, { helm: "full", tone: PAL.steel });
+  const [fx, fy] = weaponAngleParts(e.facing);
+  // Short stabbing sword, kept close.
+  ctx.strokeStyle = PAL.steel;
+  ctx.lineCap = "round";
+  ctx.lineWidth = r * 0.16;
+  ctx.beginPath();
+  ctx.moveTo(-fy * r * 0.5, fx * r * 0.5);
+  ctx.lineTo(-fy * r * 0.5 + fx * r * (1.1 + lunge * 0.5), fx * r * 0.5 + fy * r * (1.1 + lunge * 0.5));
+  ctx.stroke();
+  // The shield itself — big, slightly forward, team-coloured with a boss.
+  const sx = fx * r * 0.85 + fy * r * 0.45;
+  const sy = fy * r * 0.85 - fx * r * 0.45;
+  ctx.fillStyle = grad(ctx, sx, sy - r * 0.7, sx, sy + r * 0.7, shade(tc.light, 0.1), tc.dark);
+  ctx.beginPath();
+  ctx.ellipse(sx, sy, r * 0.5, r * 0.82, e.facing, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = PAL.steelDark;
+  ctx.lineWidth = r * 0.1;
+  ctx.stroke();
+  ctx.fillStyle = PAL.steel;
+  ctx.beginPath();
+  ctx.arc(sx, sy, r * 0.17, 0, Math.PI * 2);
+  ctx.fill();
+  softOutline(ctx, 1);
+}
+
+/** Bare-headed, wild-haired, an axe in each hand. No armour anywhere. */
+function drawBerserker(ctx: Ctx, e: Entity, tc: any, lunge: number, time: number) {
+  const r = e.radius;
+  body(ctx, e, tc.main, tc.dark, { sash: tc.light });
+  head(ctx, r, { helm: "bare", hair: "#b8763a" });
+  const [fx, fy] = weaponAngleParts(e.facing);
+  const swing = lunge * 0.9 + Math.sin(time * 3 + e.id) * 0.06;
+  for (const side of [-1, 1]) {
+    const hx = -fy * r * 0.6 * side;
+    const hy = fx * r * 0.6 * side;
+    const tx = hx + fx * r * (1.25 + swing);
+    const ty = hy + fy * r * (1.25 + swing);
+    ctx.strokeStyle = PAL.woodDark;
+    ctx.lineCap = "round";
+    ctx.lineWidth = r * 0.11;
+    ctx.beginPath();
+    ctx.moveTo(hx, hy);
+    ctx.lineTo(tx, ty);
+    ctx.stroke();
+    // Axe head, angled off the haft.
+    ctx.fillStyle = grad(ctx, tx, ty - r * 0.3, tx, ty + r * 0.3, PAL.steel, PAL.steelDark);
+    ctx.beginPath();
+    ctx.moveTo(tx, ty);
+    ctx.lineTo(tx + fx * r * 0.34 - fy * r * 0.36 * side, ty + fy * r * 0.34 + fx * r * 0.36 * side);
+    ctx.lineTo(tx - fx * r * 0.12 - fy * r * 0.42 * side, ty - fy * r * 0.12 + fx * r * 0.42 * side);
+    ctx.closePath();
+    ctx.fill();
+  }
+  softOutline(ctx, 1);
+}
+
+/** A very tall bow, drawn past the ear — the silhouette is the whole point. */
+function drawLongbow(ctx: Ctx, e: Entity, tc: any, atkFrac: number) {
+  const r = e.radius;
+  body(ctx, e, tc.main, tc.dark, { sash: tc.light });
+  head(ctx, r, { helm: "cap", tone: "#4a5c3a" });
+  const [fx, fy] = weaponAngleParts(e.facing);
+  const draw = Math.max(0, 1 - atkFrac); // full draw just before loosing
+  const bx = fx * r * 0.55 - fy * r * 0.2;
+  const by = fy * r * 0.55 + fx * r * 0.2;
+  ctx.strokeStyle = PAL.woodLight;
+  ctx.lineWidth = r * 0.11;
+  ctx.lineCap = "round";
+  ctx.beginPath();
+  ctx.ellipse(bx, by, r * 0.34, r * 1.5, e.facing, Math.PI * 0.42, Math.PI * 1.58);
+  ctx.stroke();
+  // String, pulled back as the shot builds.
+  ctx.strokeStyle = "rgba(240,236,220,0.85)";
+  ctx.lineWidth = Math.max(0.6, r * 0.045);
+  const nockX = bx - fx * r * 0.75 * draw;
+  const nockY = by - fy * r * 0.75 * draw;
+  ctx.beginPath();
+  ctx.moveTo(bx - fy * r * 1.42, by + fx * r * 1.42);
+  ctx.lineTo(nockX, nockY);
+  ctx.lineTo(bx + fy * r * 1.42, by - fx * r * 1.42);
+  ctx.stroke();
+  if (draw > 0.25) { // the arrow on the string
+    ctx.strokeStyle = PAL.woodDark;
+    ctx.lineWidth = r * 0.07;
+    ctx.beginPath();
+    ctx.moveTo(nockX, nockY);
+    ctx.lineTo(nockX + fx * r * 1.5, nockY + fy * r * 1.5);
+    ctx.stroke();
+  }
+  softOutline(ctx, 1);
+}
+
+/** Knight silhouette, but the horse is armoured too — heavier and squarer. */
+function drawCataphract(ctx: Ctx, e: Entity, tc: any, moving: boolean, time: number, lunge: number) {
+  const r = e.radius;
+  const gallop = moving ? Math.sin(e.animPhase * 10) * 1.1 : 0;
+  // Barded horse: a blockier body than the Knight's, in steel over team colour.
+  ctx.fillStyle = grad(ctx, 0, r * 0.1, 0, r * 0.95, PAL.steel, PAL.steelDark);
+  ctx.beginPath();
+  ctx.ellipse(0, r * 0.5 + gallop * 0.1, r * 1.05, r * 0.62, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = shade(tc.dark, -0.05); // caparison skirt
+  ctx.beginPath();
+  ctx.ellipse(0, r * 0.78, r * 0.98, r * 0.34, 0, 0, Math.PI * 2);
+  ctx.fill();
+  const [fx, fy] = weaponAngleParts(e.facing);
+  // Armoured head of the horse, thrust forward.
+  ctx.fillStyle = PAL.steel;
+  ctx.beginPath();
+  ctx.ellipse(fx * r * 0.95, fy * r * 0.95 + r * 0.3, r * 0.34, r * 0.26, e.facing, 0, Math.PI * 2);
+  ctx.fill();
+  // Rider.
+  body(ctx, e, tc.main, tc.dark, { pauldrons: true, chestPlate: true });
+  head(ctx, r, { helm: "full", tone: PAL.steel, plume: tc.light });
+  // Couched lance.
+  const reach = 2.4 + lunge * 0.7;
+  ctx.strokeStyle = grad(ctx, 0, 0, fx * r * reach, fy * r * reach, PAL.woodLight, PAL.woodDark);
+  ctx.lineWidth = r * 0.12;
+  ctx.lineCap = "round";
+  ctx.beginPath();
+  ctx.moveTo(-fx * r * 0.7, -fy * r * 0.7);
+  ctx.lineTo(fx * r * reach, fy * r * reach);
+  ctx.stroke();
+  ctx.fillStyle = PAL.steel;
+  ctx.beginPath();
+  ctx.moveTo(fx * r * (reach + 0.3), fy * r * (reach + 0.3));
+  ctx.lineTo(fx * r * reach - fy * r * 0.22, fy * r * reach + fx * r * 0.22);
+  ctx.lineTo(fx * r * reach + fy * r * 0.22, fy * r * reach - fx * r * 0.22);
+  ctx.closePath();
+  ctx.fill();
+  softOutline(ctx, 1);
+}
+
+/** Robed, hooded, with a staff whose head kindles as the cast builds. */
+function drawBattlemage(ctx: Ctx, e: Entity, tc: any, atkFrac: number, time: number) {
+  const r = e.radius;
+  body(ctx, e, shade(tc.dark, -0.12), shade(tc.dark, -0.24), { legCol: shade(tc.dark, -0.3) });
+  head(ctx, r, { helm: "hood", tone: shade(tc.dark, -0.18) });
+  const [fx, fy] = weaponAngleParts(e.facing);
+  const charge = Math.max(0, 1 - atkFrac); // brightest just before the cast
+  // Staff.
+  const topX = -fy * r * 0.62 + fx * r * 0.2;
+  const topY = fx * r * 0.62 + fy * r * 0.2;
+  ctx.strokeStyle = grad(ctx, topX, topY - r * 1.4, topX, topY + r * 0.6, PAL.woodLight, PAL.woodDark);
+  ctx.lineWidth = r * 0.1;
+  ctx.lineCap = "round";
+  ctx.beginPath();
+  ctx.moveTo(topX, topY + r * 0.6);
+  ctx.lineTo(topX, topY - r * 1.25);
+  ctx.stroke();
+  // The ember at its head, breathing and flaring on the cast.
+  const glow = 0.35 + charge * 0.65 + Math.sin(time * 4 + e.id) * 0.08;
+  const gy = topY - r * 1.35;
+  ctx.save();
+  ctx.shadowColor = "#ff9a3a";
+  ctx.shadowBlur = r * (1.4 + charge * 2.6);
+  ctx.fillStyle = grad(ctx, topX, gy - r * 0.3, topX, gy + r * 0.3, "#ffe7a8", "#e8631a");
+  ctx.beginPath();
+  ctx.arc(topX, gy, r * (0.2 + glow * 0.18), 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+  softOutline(ctx, 1);
+}
+
+/** A short fat barrel on a two-wheeled carriage, muzzle flaring as it fires. */
+function drawBombard(ctx: Ctx, e: Entity, tc: any, atkFrac: number) {
+  const r = e.radius;
+  const [fx, fy] = weaponAngleParts(e.facing);
+  const recoil = atkFrac > 0.85 ? (atkFrac - 0.85) / 0.15 : 0;
+  // Carriage bed + wheels.
+  ctx.fillStyle = grad(ctx, 0, -r * 0.3, 0, r * 0.5, PAL.woodLight, PAL.woodDark);
+  ctx.beginPath();
+  ctx.ellipse(0, r * 0.28, r * 0.9, r * 0.42, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = PAL.woodDark;
+  for (const side of [-1, 1]) {
+    ctx.beginPath();
+    ctx.ellipse(-fy * r * 0.62 * side, fx * r * 0.62 * side + r * 0.34, r * 0.34, r * 0.34, 0, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  // The barrel, kicked back on the shot.
+  const bx = -fx * r * 0.5 * recoil;
+  const by = -fy * r * 0.5 * recoil - r * 0.15;
+  ctx.fillStyle = grad(ctx, bx, by - r * 0.35, bx, by + r * 0.35, "#5a5a62", "#2c2c33");
+  ctx.beginPath();
+  ctx.ellipse(bx + fx * r * 0.42, by + fy * r * 0.42, r * 0.86, r * 0.36, e.facing, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = "#6e6e78"; // reinforcing band
+  ctx.beginPath();
+  ctx.ellipse(bx + fx * r * 0.1, by + fy * r * 0.1, r * 0.28, r * 0.4, e.facing, 0, Math.PI * 2);
+  ctx.fill();
+  if (recoil > 0.1) { // muzzle flash
+    ctx.save();
+    ctx.shadowColor = "#ffb03a";
+    ctx.shadowBlur = r * 3;
+    ctx.fillStyle = "#ffd88a";
+    ctx.beginPath();
+    ctx.arc(bx + fx * r * 1.45, by + fy * r * 1.45, r * 0.42 * recoil, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
   softOutline(ctx, 1);
 }
 

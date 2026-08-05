@@ -804,20 +804,30 @@ describe("Warband opponent intelligence", () => {
   });
 
   it("actually fields role-sorted boards in a real run", () => {
-    const run = new WarbandRun(91, null);
-    advanceTo(run, 12);
+    // Sample the whole lobby across several rounds and seeds rather than one
+    // snapshot: whether any given board happens to hold both a wall and a
+    // siege piece is down to what that opponent drafted, and pinning it to a
+    // single round makes the test hostage to the roster.
     let checked = 0;
-    for (const o of run.opponents.filter((x) => x.alive)) {
-      const board = run.scout(o.id)!.board;
-      const front = board.filter((u) => styleOf(u.type) === "vanguard").map((u) => u.col!);
-      const back = board.filter((u) => styleOf(u.type) === "artillery").map((u) => u.col!);
-      if (front.length && back.length) {
-        expect(Math.min(...back)).toBeGreaterThan(Math.max(...front));
-        checked++;
+    for (const seed of [91, 92, 93]) {
+      const run = new WarbandRun(seed, null);
+      for (const round of [8, 12, 16]) {
+        advanceTo(run, round);
+        if (run.phase === "over") break;
+        for (const o of run.opponents.filter((x) => x.alive)) {
+          const board = run.scout(o.id)!.board;
+          const front = board.filter((u) => styleOf(u.type) === "vanguard").map((u) => u.col!);
+          const back = board.filter((u) => styleOf(u.type) === "artillery").map((u) => u.col!);
+          if (!front.length || !back.length) continue;
+          // Siege never stands in front of the wall.
+          expect(Math.min(...back), `seed ${seed} round ${round} ${o.name}`)
+            .toBeGreaterThan(Math.max(...front));
+          checked++;
+        }
       }
     }
-    expect(checked).toBeGreaterThan(0); // the situation actually arose
-  });
+    expect(checked).toBeGreaterThan(0); // the situation arose somewhere
+  }, 60000);
 
   it("drafts toward merges and synergies rather than at random", () => {
     const run = new WarbandRun(92, null);

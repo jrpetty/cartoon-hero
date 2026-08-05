@@ -19,7 +19,7 @@ export interface Trait { id: string; name: string; color: string; types: string[
 export const TRAITS: Trait[] = [
   {
     id: "footmen", name: "Footmen", color: "#c9a24a",
-    types: ["militia", "spearman", "twohand", "pikeman"],
+    types: ["militia", "spearman", "twohand", "pikeman", "shieldbearer", "berserker"],
     tiers: [
       { at: 2, label: "+3 armour", buff: { armor: 3 } },
       { at: 4, label: "+8 armour, +12% HP", buff: { armor: 8, hpPct: 12 } },
@@ -27,7 +27,7 @@ export const TRAITS: Trait[] = [
   },
   {
     id: "marksmen", name: "Marksmen", color: "#6fd0ff",
-    types: ["archer", "skirmisher", "crossbow", "handcannon", "javelin"],
+    types: ["archer", "skirmisher", "crossbow", "handcannon", "javelin", "longbow"],
     tiers: [
       { at: 2, label: "+18% attack", buff: { atkPct: 18 } },
       { at: 4, label: "+45% attack", buff: { atkPct: 45 } },
@@ -35,7 +35,7 @@ export const TRAITS: Trait[] = [
   },
   {
     id: "riders", name: "Riders", color: "#e0822f",
-    types: ["knight", "horseman", "raider", "scout"],
+    types: ["knight", "horseman", "raider", "scout", "cataphract"],
     tiers: [
       { at: 2, label: "+12% HP", buff: { hpPct: 12 } },
       { at: 3, label: "+30% HP, +15% speed", buff: { hpPct: 30, speedPct: 15 } },
@@ -43,7 +43,7 @@ export const TRAITS: Trait[] = [
   },
   {
     id: "engines", name: "War Engines", color: "#d8403a",
-    types: ["catapult", "ram", "trebuchet"],
+    types: ["catapult", "ram", "trebuchet", "bombard"],
     tiers: [
       { at: 2, label: "+35% attack", buff: { atkPct: 35 } },
     ],
@@ -57,9 +57,23 @@ export const TRAITS: Trait[] = [
   },
   {
     id: "elite", name: "Elite", color: "#cf5fd8",
-    types: ["hero", "twohand", "knight", "handcannon"],
+    types: ["hero", "twohand", "knight", "handcannon", "cataphract", "berserker"],
     tiers: [
       { at: 2, label: "+15% attack & HP", buff: { atkPct: 15, hpPct: 15 } },
+    ],
+  },
+  {
+    id: "mystics", name: "Mystics", color: "#9a7ae0",
+    types: ["monk", "battlemage"],
+    tiers: [
+      { at: 2, label: "+20% HP, +4 armour", buff: { hpPct: 20, armor: 4 } },
+    ],
+  },
+  {
+    id: "gunpowder", name: "Gunpowder", color: "#e07a3a",
+    types: ["handcannon", "bombard"],
+    tiers: [
+      { at: 2, label: "+30% attack", buff: { atkPct: 30 } },
     ],
   },
 ];

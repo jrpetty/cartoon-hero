@@ -51,6 +51,7 @@ export const BATTLE_STYLES: Record<BattleStyle, BattleStyleDef> = {
 export const UNIT_STYLE: Record<string, BattleStyle> = {
   // The wall.
   militia: "vanguard",
+  shieldbearer: "vanguard",
   spearman: "vanguard",
   pikeman: "vanguard",
   twohand: "vanguard",
@@ -60,15 +61,20 @@ export const UNIT_STYLE: Record<string, BattleStyle> = {
   javelin: "line",
   monk: "line",
   hero: "line",
+  berserker: "line",
   // Around the side.
   horseman: "flanker",
   knight: "flanker",
   skirmisher: "flanker",
+  cataphract: "flanker",
   // Stand and shoot.
   crossbow: "artillery",
   handcannon: "artillery",
   catapult: "artillery",
   trebuchet: "artillery",
+  longbow: "artillery",
+  battlemage: "artillery",
+  bombard: "artillery",
   // Behind their line.
   scout: "infiltrator",
   raider: "infiltrator",

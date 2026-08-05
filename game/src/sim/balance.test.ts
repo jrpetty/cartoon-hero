@@ -5,8 +5,9 @@ import { UNITS } from "../content/units";
 // Equal-budget armies, so this measures the unit rather than what it costs.
 // The board layout is fixed and the fights are seeded, so the whole matrix is
 // deterministic — a balance change shows up as a moved number, not as noise.
-const ROSTER = ["militia", "spearman", "pikeman", "twohand", "archer", "crossbow",
-  "skirmisher", "javelin", "horseman", "knight", "handcannon", "catapult"];
+const ROSTER = ["militia", "spearman", "pikeman", "twohand", "shieldbearer", "berserker",
+  "archer", "crossbow", "longbow", "skirmisher", "javelin",
+  "horseman", "knight", "cataphract", "handcannon", "battlemage", "catapult", "bombard"];
 const BUDGET = 600;
 const SEEDS = [1, 2, 3];
 const ROWS = [4, 5, 3, 6, 2, 7, 1, 8, 0, 9];
