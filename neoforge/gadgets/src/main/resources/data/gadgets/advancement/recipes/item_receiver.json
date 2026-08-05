@@ -1,13 +1,13 @@
 {
   "parent": "minecraft:recipes/root",
   "criteria": {
-    "has_ender_pearl": {
+    "has_ender_core": {
       "trigger": "minecraft:inventory_changed",
       "conditions": {
         "items": [
           {
             "items": [
-              "minecraft:ender_pearl"
+              "gadgets:ender_core"
             ]
           }
         ]
@@ -22,7 +22,7 @@
   },
   "requirements": [
     [
-      "has_ender_pearl",
+      "has_ender_core",
       "has_the_recipe"
     ]
   ],

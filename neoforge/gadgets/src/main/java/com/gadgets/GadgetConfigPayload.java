@@ -1,13 +1,20 @@
 package com.gadgets;
 
+import net.minecraft.ChatFormatting;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.codec.ByteBufCodecs;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
+import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.sounds.SoundEvents;
+import net.minecraft.sounds.SoundSource;
+import net.minecraft.world.item.Item;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.entity.BlockEntity;
 
@@ -147,12 +154,90 @@ public record GadgetConfigPayload(BlockPos pos, String key, int value, String te
                     }
                 }
             }
+            case "transfer_upgrade" -> {
+                if (be instanceof TransferNode node) {
+                    upgradeTransfer(player, node);
+                }
+            }
             case "hubmon_pick" -> {
                 if (be instanceof CommandHubMonitorBlockEntity monitor) {
                     pickMonitorSource(player, monitor, p.text());
                 }
             }
             default -> {
+            }
+        }
+    }
+
+    /**
+     * Spends the upgrade cost out of the player's inventory and moves the link
+     * up a level.
+     *
+     * <p>Everything is counted before anything is taken, so a player who is one
+     * pearl short keeps their iron. The cost is charged per end: a fast line
+     * needs both its sender and its receiver paid for.
+     */
+    private static void upgradeTransfer(ServerPlayer player, TransferNode node) {
+        if (node.getTier() >= TransferNode.MAX_TIER) {
+            say(player, "That end is already at level " + TransferNode.MAX_TIER + ".", ChatFormatting.GRAY);
+            return;
+        }
+        if (player.getAbilities().instabuild) {
+            node.setTier(node.getTier() + 1);
+            announce(player, node);
+            return;
+        }
+        if (!has(player, Items.IRON_BLOCK, TransferNode.UPGRADE_IRON_BLOCKS)
+                || !has(player, Items.ENDER_PEARL, TransferNode.UPGRADE_ENDER_PEARLS)
+                || !has(player, Items.HOPPER, TransferNode.UPGRADE_HOPPERS)) {
+            say(player, "Not enough: an upgrade takes " + TransferNode.UPGRADE_IRON_BLOCKS
+                    + " blocks of iron, " + TransferNode.UPGRADE_ENDER_PEARLS + " ender pearls and a hopper.",
+                    ChatFormatting.RED);
+            return;
+        }
+        take(player, Items.IRON_BLOCK, TransferNode.UPGRADE_IRON_BLOCKS);
+        take(player, Items.ENDER_PEARL, TransferNode.UPGRADE_ENDER_PEARLS);
+        take(player, Items.HOPPER, TransferNode.UPGRADE_HOPPERS);
+        node.setTier(node.getTier() + 1);
+        announce(player, node);
+    }
+
+    private static void announce(ServerPlayer player, TransferNode node) {
+        say(player, "Level " + node.getTier() + " — " + TransferNode.ratePerMinute(node.getTier())
+                + " items a minute (a link runs at its slower end).", ChatFormatting.GREEN);
+        player.level().playSound(null, node.getBlockPos(), SoundEvents.ANVIL_USE,
+                SoundSource.BLOCKS, 0.6F, 1.4F);
+    }
+
+    private static void say(ServerPlayer player, String message, ChatFormatting colour) {
+        player.displayClientMessage(Component.literal(message).withStyle(colour), true);
+    }
+
+    /** How many of an item the player is carrying, across every stack. */
+    private static boolean has(ServerPlayer player, Item item, int needed) {
+        int found = 0;
+        var inv = player.getInventory();
+        for (int i = 0; i < inv.getContainerSize(); i++) {
+            ItemStack stack = inv.getItem(i);
+            if (stack.is(item)) {
+                found += stack.getCount();
+                if (found >= needed) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    private static void take(ServerPlayer player, Item item, int count) {
+        int left = count;
+        var inv = player.getInventory();
+        for (int i = 0; i < inv.getContainerSize() && left > 0; i++) {
+            ItemStack stack = inv.getItem(i);
+            if (stack.is(item)) {
+                int taken = Math.min(left, stack.getCount());
+                stack.shrink(taken);
+                left -= taken;
             }
         }
     }

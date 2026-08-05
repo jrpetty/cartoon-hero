@@ -2,11 +2,24 @@
   "type": "minecraft:crafting_shaped",
   "category": "redstone",
   "group": "gadgets",
-  "pattern": [ "IEI", "IHI", "III" ],
+  "pattern": [
+    "CBC",
+    "BHB",
+    "BBB"
+  ],
   "key": {
-    "I": { "item": "minecraft:iron_ingot" },
-    "E": { "item": "minecraft:ender_pearl" },
-    "H": { "item": "minecraft:hopper" }
+    "B": {
+      "item": "minecraft:iron_block"
+    },
+    "C": {
+      "item": "gadgets:ender_core"
+    },
+    "H": {
+      "item": "minecraft:hopper"
+    }
   },
-  "result": { "id": "gadgets:item_sender", "count": 1 }
+  "result": {
+    "id": "gadgets:item_sender",
+    "count": 1
+  }
 }

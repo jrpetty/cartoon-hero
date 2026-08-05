@@ -43,6 +43,8 @@ public class GadgetsClient {
         ScreenOpener.HUB_MONITOR = be ->
                 Minecraft.getInstance().setScreen(new HubMonitorScreen((CommandHubMonitorBlockEntity) be));
         // Titled from the gauge itself, so a second kind of gauge needs nothing here.
+        ScreenOpener.TRANSFER = be -> Minecraft.getInstance().setScreen(
+                new TransferScreen((TransferNode) be, be instanceof ItemSenderBlockEntity));
         ScreenOpener.GAUGE = be -> Minecraft.getInstance().setScreen(
                 new GaugeScreen((HubGauge) be, be.getBlockState().getBlock().getName().getString()));
     }

@@ -1,13 +1,13 @@
 {
   "parent": "minecraft:recipes/root",
   "criteria": {
-    "has_ender_core": {
+    "has_ender_pearl": {
       "trigger": "minecraft:inventory_changed",
       "conditions": {
         "items": [
           {
             "items": [
-              "gadgets:ender_core"
+              "minecraft:ender_pearl"
             ]
           }
         ]
@@ -16,19 +16,19 @@
     "has_the_recipe": {
       "trigger": "minecraft:recipe_unlocked",
       "conditions": {
-        "recipe": "gadgets:item_sender"
+        "recipe": "gadgets:ender_core"
       }
     }
   },
   "requirements": [
     [
-      "has_ender_core",
+      "has_ender_pearl",
       "has_the_recipe"
     ]
   ],
   "rewards": {
     "recipes": [
-      "gadgets:item_sender"
+      "gadgets:ender_core"
     ]
   },
   "sends_telemetry_event": false

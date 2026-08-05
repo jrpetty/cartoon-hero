@@ -34,9 +34,9 @@
   "tip.gadgets.display_pedestal.1": "Sets an item floating above the base",
   "tip.gadgets.display_pedestal.2": "Item on top: spin · on side: size",
   "tip.gadgets.display_pedestal.3": "Empty hand: take it back",
-  "tip.gadgets.item_sender.1": "Teleports items from the inventory above",
-  "tip.gadgets.item_sender.2": "Pair with an Item Receiver via the Linker",
-  "tip.gadgets.item_receiver.1": "Delivers items into the inventory below",
+  "tip.gadgets.item_sender.1": "Takes from the inventory ABOVE it",
+  "tip.gadgets.item_sender.2": "Teleports it to an Item Receiver on its channel",
+  "tip.gadgets.item_receiver.1": "Delivers into the inventory BELOW it",
   "tip.gadgets.item_receiver.2": "Pair with an Item Sender via the Linker",
   "tip.gadgets.drain.1": "A walkable grate — fluids fall through",
   "tip.gadgets.drain.2": "Right-click with a block to disguise it",
@@ -79,5 +79,8 @@
   "block.gadgets.fluid_monitor": "Fluid Monitor",
   "tip.gadgets.fluid_monitor.1": "Shows how full the tank it faces is",
   "tip.gadgets.fluid_monitor.2": "Emits redstone below the alert level",
-  "tip.gadgets.fluid_monitor.3": "Right-click: alert level · Wand: link to a hub"
+  "tip.gadgets.fluid_monitor.3": "Right-click: alert level · Wand: link to a hub",
+  "item.gadgets.ender_core": "Ender Core",
+  "tip.gadgets.item_sender.3": "Right-click: level and upgrades · Linker: pair it",
+  "tip.gadgets.item_receiver.3": "Right-click: level and upgrades"
 }

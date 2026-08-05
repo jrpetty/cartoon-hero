@@ -120,9 +120,9 @@ public class Gadgets {
     public static final DeferredItem<?> DISPLAY_PEDESTAL_ITEM = ITEMS.register("display_pedestal", () -> new TooltipBlockItem(DISPLAY_PEDESTAL.get(), new Item.Properties(),
             "tip.gadgets.display_pedestal.1", "tip.gadgets.display_pedestal.2", "tip.gadgets.display_pedestal.3", "tip.gadgets.display_pedestal.4", "tip.gadgets.display_pedestal.5"));
     public static final DeferredItem<?> ITEM_SENDER_ITEM = ITEMS.register("item_sender", () -> new TooltipBlockItem(ITEM_SENDER.get(), new Item.Properties(),
-            "tip.gadgets.item_sender.1", "tip.gadgets.item_sender.2"));
+            "tip.gadgets.item_sender.1", "tip.gadgets.item_sender.2", "tip.gadgets.item_sender.3"));
     public static final DeferredItem<?> ITEM_RECEIVER_ITEM = ITEMS.register("item_receiver", () -> new TooltipBlockItem(ITEM_RECEIVER.get(), new Item.Properties(),
-            "tip.gadgets.item_receiver.1", "tip.gadgets.item_receiver.2"));
+            "tip.gadgets.item_receiver.1", "tip.gadgets.item_receiver.2", "tip.gadgets.item_receiver.3"));
     public static final DeferredItem<?> DRAIN_ITEM = ITEMS.register("drain", () -> new TooltipBlockItem(DRAIN.get(), new Item.Properties(),
             "tip.gadgets.drain.1", "tip.gadgets.drain.2", "tip.gadgets.drain.3"));
     public static final DeferredItem<?> ITEM_COUNTER_ITEM = ITEMS.register("item_counter", () -> new TooltipBlockItem(ITEM_COUNTER.get(), new Item.Properties(),
@@ -141,6 +141,10 @@ public class Gadgets {
     public static final DeferredItem<?> FLUID_MONITOR_ITEM = ITEMS.register("fluid_monitor",
             () -> new TooltipBlockItem(FLUID_MONITOR.get(), new Item.Properties(),
                     "tip.gadgets.fluid_monitor.1", "tip.gadgets.fluid_monitor.2", "tip.gadgets.fluid_monitor.3"));
+
+    /** Crafting component: eight ender pearls held stable around an iron block. */
+    public static final DeferredItem<Item> ENDER_CORE =
+            ITEMS.register("ender_core", () -> new Item(new Item.Properties()));
 
     public static final DeferredItem<Item> GRAPPLING_HOOK =
             ITEMS.register("grappling_hook", () -> new GrapplingHookItem(new Item.Properties().stacksTo(1)));
@@ -219,6 +223,7 @@ public class Gadgets {
                         output.accept(DISPLAY_PEDESTAL_ITEM.get());
                         output.accept(ITEM_SENDER_ITEM.get());
                         output.accept(ITEM_RECEIVER_ITEM.get());
+                        output.accept(ENDER_CORE.get());
                         output.accept(DRAIN_ITEM.get());
                         output.accept(ITEM_COUNTER_ITEM.get());
                         output.accept(ITEM_MAGNET_ITEM.get());

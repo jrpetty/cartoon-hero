@@ -1,1 +1,9 @@
-{ "parent": "minecraft:block/cube_all", "textures": { "all": "gadgets:block/item_receiver" } }
+{
+  "parent": "minecraft:block/cube_bottom_top",
+  "textures": {
+    "particle": "gadgets:block/item_receiver",
+    "side": "gadgets:block/item_receiver",
+    "top": "gadgets:block/item_receiver_top",
+    "bottom": "gadgets:block/item_receiver_bottom"
+  }
+}
