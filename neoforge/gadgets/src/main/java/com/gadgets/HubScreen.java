@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 
+import net.minecraft.ChatFormatting;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.EditBox;
@@ -51,6 +52,9 @@ public class HubScreen extends GadgetScreen {
     private boolean showLog = false;
     private int logPage = 0;
 
+    /** Ticks left on the "Copied" flash after clicking the hub's code. */
+    private int copied = 0;
+
     private EditBox filterBox;
     private Button sortButton;
     private Button viewButton;
@@ -58,9 +62,30 @@ public class HubScreen extends GadgetScreen {
     private Button nextButton;
     private Button clearButton;
 
+    /**
+     * Where this board came from when it is a Base Tablet's copy — the hub's
+     * name and how old the reading is. Empty when you are stood at the hub.
+     */
+    private final String provenance;
+
     public HubScreen(CommandHubBlockEntity be) {
-        super(Component.literal("Command Hub"), 320, 276);
+        this(be, "");
+    }
+
+    /**
+     * A board read remotely. Everything is shown and nothing can be changed:
+     * unlinking a gadget from a thousand blocks away is the one thing a tablet
+     * has no business doing, and a button that silently failed would be worse
+     * than one that is not there.
+     */
+    public HubScreen(CommandHubBlockEntity be, String provenance) {
+        super(Component.literal(provenance.isEmpty() ? "Command Hub" : "Command Hub  ·  remote"), 320, 276);
         this.be = be;
+        this.provenance = provenance;
+    }
+
+    private boolean readOnly() {
+        return !provenance.isEmpty();
     }
 
     /** Board indices to show, after filtering and sorting. */
@@ -140,6 +165,9 @@ public class HubScreen extends GadgetScreen {
 
         // Doubles as the log's clear button, since the two views never share a
         // moment: whichever is showing is the one this acts on.
+        if (readOnly()) {
+            return; // no clear-all, and no ✕ hit boxes either — see mouseClicked
+        }
         clearButton = addRenderableWidget(Button.builder(Component.literal("Disconnect all"), b -> {
             if (showLog) {
                 send(be.getBlockPos(), "hub_log_clear", 0);
@@ -163,12 +191,19 @@ public class HubScreen extends GadgetScreen {
 
     @Override
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
+        if (button == 0 && overCode(mouseX, mouseY) && minecraft != null) {
+            // Eight digits read off a screen and typed into a tablet is exactly
+            // the sort of thing that gets one digit wrong.
+            minecraft.keyboardHandler.setClipboard(be.getCode());
+            copied = 40;
+            return true;
+        }
         // The log draws no ✕ controls, so it must not hit-test for them either.
         if (button == 0 && !showLog) {
             List<Integer> rows = visibleRows();
             int start = page() * ROWS_PER_PAGE;
             for (int i = start; i < Math.min(rows.size(), start + ROWS_PER_PAGE); i++) {
-                if (overClose(i - start, mouseX, mouseY)) {
+                if (!readOnly() && overClose(i - start, mouseX, mouseY)) {
                     CommandHubBlockEntity.Node n = be.getNodes().get(rows.get(i));
                     // Addressed by dimension and position, not row, so the click
                     // lands on the gadget the player actually pointed at.
@@ -180,8 +215,60 @@ public class HubScreen extends GadgetScreen {
         return super.mouseClicked(mouseX, mouseY, button);
     }
 
+    /** "Code 1234 5678" — what a Base Tablet has to be told to find this hub. */
+    private String codeText() {
+        return "Code " + LinkCode.pretty(be.getCode());
+    }
+
+    private boolean overCode(double mouseX, double mouseY) {
+        if (readOnly() || !LinkCode.isCode(be.getCode())) {
+            return false;
+        }
+        int w = font.width(codeText());
+        int x = left + panelW - 8 - w;
+        return mouseX >= x - 3 && mouseX < x + w + 3 && mouseY >= top + 1 && mouseY < top + 14;
+    }
+
+    /**
+     * The hub's code, in the title bar and click-to-copy.
+     *
+     * <p>Drawn after everything else so its tooltip lands on top, and drawn on
+     * every view — a code you can only find by paging to the right screen is a
+     * code you write down wrong.
+     */
+    private void renderCode(GuiGraphics gfx, int mouseX, int mouseY) {
+        if (readOnly() || !LinkCode.isCode(be.getCode())) {
+            return;
+        }
+        String text = codeText();
+        boolean hot = overCode(mouseX, mouseY);
+        gfx.drawString(font, text, left + panelW - 8 - font.width(text), top + 3,
+                copied > 0 ? GREEN : hot ? AMBER : GRAY, false);
+        if (hot) {
+            gfx.renderComponentTooltip(font, List.<Component>of(
+                    Component.literal("Base Tablet code").withStyle(ChatFormatting.GOLD),
+                    Component.literal("Type it into a tablet to read this board anywhere")
+                            .withStyle(ChatFormatting.GRAY),
+                    Component.literal(copied > 0 ? "Copied" : "Click to copy")
+                            .withStyle(copied > 0 ? ChatFormatting.GREEN : ChatFormatting.DARK_GRAY)
+            ), mouseX, mouseY);
+        }
+    }
+
+    @Override
+    public void tick() {
+        if (copied > 0) {
+            copied--;
+        }
+    }
+
     @Override
     public void render(GuiGraphics gfx, int mouseX, int mouseY, float delta) {
+        renderPanel(gfx, mouseX, mouseY, delta);
+        renderCode(gfx, mouseX, mouseY);
+    }
+
+    private void renderPanel(GuiGraphics gfx, int mouseX, int mouseY, float delta) {
         List<CommandHubBlockEntity.Node> nodes = be.getNodes();
         List<Integer> rows = visibleRows();
         int maxPage = maxPage();
@@ -196,9 +283,11 @@ public class HubScreen extends GadgetScreen {
         viewButton.setMessage(Component.literal(showLog ? "Board" : "Log"));
         prevButton.active = page > 0;
         nextButton.active = page < maxPage;
-        clearButton.setMessage(Component.literal(showLog ? "Clear log"
-                : armed ? "Confirm — clear all" : "Disconnect all"));
-        clearButton.active = showLog ? !be.getEvents().isEmpty() : !nodes.isEmpty();
+        if (clearButton != null) { // absent on a tablet's read-only copy
+            clearButton.setMessage(Component.literal(showLog ? "Clear log"
+                    : armed ? "Confirm — clear all" : "Disconnect all"));
+            clearButton.active = showLog ? !be.getEvents().isEmpty() : !nodes.isEmpty();
+        }
 
         super.render(gfx, mouseX, mouseY, delta);
         int x = left + 12;
@@ -207,6 +296,11 @@ public class HubScreen extends GadgetScreen {
         int alarms = be.alarmCount();
         gfx.fill(left + 8, top + 18, left + panelW - 8, top + 32, TABLE_BG);
         gfx.drawString(font, nodes.size() + "/" + CommandHubBlockEntity.MAX_NODES + " linked", x, top + 21, AMBER, false);
+        if (readOnly()) {
+            // Say plainly whose board this is and how old, since a remote copy
+            // that looked identical to the live one would be a trap.
+            gfx.drawString(font, provenance, left + panelW - 12 - font.width(provenance), top + 5, GRAY, false);
+        }
         gfx.drawString(font, ItemCounterBlockEntity.fmt(be.totalRateMin()) + " items/min",
                 left + 108, top + 21, AMBER, false);
         gfx.drawString(font, alarms == 0 ? "all clear" : alarms + " alert" + (alarms == 1 ? "" : "s"),
@@ -273,6 +367,9 @@ public class HubScreen extends GadgetScreen {
             }
 
             // Drawn where mouseClicked hit-tests, from the same row list.
+            if (readOnly()) {
+                continue; // nothing to unlink with, so nothing to draw
+            }
             boolean hot = overClose(slot, mouseX, mouseY);
             gfx.fill(left + panelW - 26, y - 3, left + panelW - 26 + CLOSE_W, y - 3 + CLOSE_W,
                     hot ? 0xFF3A2020 : 0xFF20242C);

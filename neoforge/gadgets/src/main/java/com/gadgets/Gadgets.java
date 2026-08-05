@@ -25,6 +25,7 @@ import net.neoforged.neoforge.event.BuildCreativeModeTabContentsEvent;
 import net.neoforged.neoforge.event.entity.player.PlayerInteractEvent;
 import net.neoforged.neoforge.event.server.ServerStoppedEvent;
 import net.neoforged.neoforge.network.event.RegisterPayloadHandlersEvent;
+import net.neoforged.neoforge.network.PacketDistributor;
 import net.neoforged.neoforge.network.registration.PayloadRegistrar;
 import net.neoforged.neoforge.registries.DeferredBlock;
 import net.neoforged.neoforge.registries.DeferredItem;
@@ -137,10 +138,14 @@ public class Gadgets {
             "tip.gadgets.trash_can.1", "tip.gadgets.trash_can.2", "tip.gadgets.trash_can.3"));
     public static final DeferredItem<?> COMMAND_HUB_ITEM = ITEMS.register("command_hub", () -> new TooltipBlockItem(COMMAND_HUB.get(), new Item.Properties(),
             "tip.gadgets.command_hub.1", "tip.gadgets.command_hub.2", "tip.gadgets.command_hub.3",
-            "tip.gadgets.command_hub.4"));
+            "tip.gadgets.command_hub.4", "tip.gadgets.command_hub.5"));
     public static final DeferredItem<?> FLUID_MONITOR_ITEM = ITEMS.register("fluid_monitor",
             () -> new TooltipBlockItem(FLUID_MONITOR.get(), new Item.Properties(),
                     "tip.gadgets.fluid_monitor.1", "tip.gadgets.fluid_monitor.2", "tip.gadgets.fluid_monitor.3"));
+
+    /** A Command Hub's board in your pocket, linked to one hub by its code. */
+    public static final DeferredItem<Item> BASE_TABLET =
+            ITEMS.register("base_tablet", () -> new BaseTabletItem(new Item.Properties().stacksTo(1)));
 
     /** Crafting component: eight ender pearls held stable around an iron block. */
     public static final DeferredItem<Item> ENDER_CORE =
@@ -224,6 +229,7 @@ public class Gadgets {
                         output.accept(ITEM_SENDER_ITEM.get());
                         output.accept(ITEM_RECEIVER_ITEM.get());
                         output.accept(ENDER_CORE.get());
+                        output.accept(BASE_TABLET.get());
                         output.accept(DRAIN_ITEM.get());
                         output.accept(ITEM_COUNTER_ITEM.get());
                         output.accept(ITEM_MAGNET_ITEM.get());
@@ -254,6 +260,7 @@ public class Gadgets {
         NeoForge.EVENT_BUS.addListener((ServerStoppedEvent event) -> {
             WirelessNetwork.clear();
             ItemNetwork.clear();
+            HubRegistry.clear();
         });
 
         // The wand has to run before the block's own interaction: hubs, counters,
@@ -283,5 +290,24 @@ public class Gadgets {
                         GadgetConfigPayload.apply(sp, payload);
                     }
                 }));
+        registrar.playToServer(HubReportPayload.Request.TYPE, HubReportPayload.Request.CODEC, (payload, context) ->
+                context.enqueueWork(() -> {
+                    if (context.player() instanceof ServerPlayer sp) {
+                        HubReportPayload.Request.apply(sp, payload);
+                    }
+                }));
+        registrar.playToServer(HubReportPayload.Link.TYPE, HubReportPayload.Link.CODEC, (payload, context) ->
+                context.enqueueWork(() -> {
+                    if (context.player() instanceof ServerPlayer sp) {
+                        HubReportPayload.Link.apply(sp, payload);
+                    }
+                }));
+        registrar.playToClient(HubReportPayload.Reply.TYPE, HubReportPayload.Reply.CODEC, (payload, context) ->
+                context.enqueueWork(() -> ClientHubReport.accept(payload)));
+    }
+
+    /** Send a tablet's answer back to the player who asked for it. */
+    static void sendReply(ServerPlayer player, HubReportPayload.Reply reply) {
+        PacketDistributor.sendToPlayer(player, reply);
     }
 }

@@ -24,8 +24,8 @@ public interface TransferNode extends ChannelBlockEntity {
     /** Ticks in a minute — the unit the levels are quoted in. */
     int MINUTE = 1200;
 
-    /** Digits in a receiver's code. */
-    int CODE_LENGTH = 8;
+    /** Digits in a receiver's code. See {@link LinkCode}. */
+    int CODE_LENGTH = LinkCode.LENGTH;
 
     /** {@link #linkState()}: nothing typed in, or nothing claiming this receiver. */
     int LINK_FREE = 0;
@@ -36,22 +36,12 @@ public interface TransferNode extends ChannelBlockEntity {
     /** A receiver answered, but another sender already holds it. */
     int LINK_TAKEN = 3;
 
-    /** True when the string is exactly {@link #CODE_LENGTH} digits. */
     static boolean isCode(String text) {
-        if (text == null || text.length() != CODE_LENGTH) {
-            return false;
-        }
-        for (int i = 0; i < text.length(); i++) {
-            if (text.charAt(i) < '0' || text.charAt(i) > '9') {
-                return false;
-            }
-        }
-        return true;
+        return LinkCode.isCode(text);
     }
 
-    /** "1234 5678" — grouped, because eight digits are read off a screen by eye. */
     static String pretty(String code) {
-        return isCode(code) ? code.substring(0, 4) + " " + code.substring(4) : code;
+        return LinkCode.pretty(code);
     }
 
     /** What one upgrade costs, taken from the player's inventory. */

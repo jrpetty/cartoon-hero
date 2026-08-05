@@ -19,6 +19,9 @@ public final class ScreenOpener {
     public static Consumer<BlockEntity> GAUGE = be -> {};
     public static Consumer<BlockEntity> TRANSFER = be -> {};
 
+    /** The Base Tablet has no block behind it, so its opener takes nothing. */
+    public static Runnable TABLET = () -> {};
+
     private ScreenOpener() {
     }
 }

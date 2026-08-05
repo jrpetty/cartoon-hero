@@ -75,11 +75,7 @@ public class ItemReceiverBlockEntity extends BlockEntity implements TransferNode
      */
     private void mintCode(Level level) {
         for (int attempt = 0; attempt < CODE_ATTEMPTS; attempt++) {
-            StringBuilder sb = new StringBuilder(CODE_LENGTH);
-            for (int i = 0; i < CODE_LENGTH; i++) {
-                sb.append((char) ('0' + level.getRandom().nextInt(10)));
-            }
-            String candidate = sb.toString();
+            String candidate = LinkCode.mint(level.getRandom());
             if (ItemNetwork.receivers(candidate, level.getGameTime()).isEmpty()) {
                 channel = candidate;
                 setChanged();

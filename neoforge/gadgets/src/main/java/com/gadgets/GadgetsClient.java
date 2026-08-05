@@ -1,6 +1,7 @@
 package com.gadgets;
 
 import net.minecraft.client.Minecraft;
+import net.neoforged.neoforge.network.PacketDistributor;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
@@ -43,6 +44,21 @@ public class GadgetsClient {
         ScreenOpener.HUB_MONITOR = be ->
                 Minecraft.getInstance().setScreen(new HubMonitorScreen((CommandHubMonitorBlockEntity) be));
         // Titled from the gauge itself, so a second kind of gauge needs nothing here.
+        ScreenOpener.TABLET = () -> {
+            // Ask as the screen opens, so it is showing something by the time
+            // the player has finished looking at it.
+            String code = BaseTabletItem.codeOf(Minecraft.getInstance().player.getMainHandItem());
+            if (code.isEmpty()) {
+                code = BaseTabletItem.codeOf(Minecraft.getInstance().player.getOffhandItem());
+            }
+            if (LinkCode.isCode(code)) {
+                ClientHubReport.asked(code);
+                PacketDistributor.sendToServer(new HubReportPayload.Request(code));
+            } else {
+                ClientHubReport.forget();
+            }
+            Minecraft.getInstance().setScreen(new TabletScreen());
+        };
         ScreenOpener.TRANSFER = be -> Minecraft.getInstance().setScreen(
                 new TransferScreen((TransferNode) be, be instanceof ItemSenderBlockEntity));
         ScreenOpener.GAUGE = be -> Minecraft.getInstance().setScreen(

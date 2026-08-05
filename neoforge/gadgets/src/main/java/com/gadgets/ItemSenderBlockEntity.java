@@ -73,7 +73,7 @@ public class ItemSenderBlockEntity extends BlockEntity implements TransferNode {
             return; // nothing to move, and the pairing was checked recently
         }
         String me = sourceKey(level, pos);
-        int state = LINK_SEARCHING;
+        int link = LINK_SEARCHING;
         for (String key : ItemNetwork.receivers(be.channel, level.getGameTime())) {
             ItemReceiverBlockEntity far = resolve(server, key);
             if (far == null) {
@@ -84,10 +84,10 @@ public class ItemSenderBlockEntity extends BlockEntity implements TransferNode {
             // One sender to a receiver: the first to reach it holds it, and
             // anyone else who typed the same code is turned away here.
             if (!far.claim(me)) {
-                state = LINK_TAKEN;
+                link = LINK_TAKEN;
                 continue;
             }
-            state = LINK_PAIRED;
+            link = LINK_PAIRED;
             Container dest = HopperBlockEntity.getContainerAt(target, rpos.below());
             if (dest == null || !due) {
                 continue;
@@ -104,7 +104,7 @@ public class ItemSenderBlockEntity extends BlockEntity implements TransferNode {
                 break;
             }
         }
-        be.setLinkState(be.channel.isEmpty() ? LINK_FREE : state);
+        be.setLinkState(be.channel.isEmpty() ? LINK_FREE : link);
     }
 
     static String sourceKey(Level level, BlockPos pos) {

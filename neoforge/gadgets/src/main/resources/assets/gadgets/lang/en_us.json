@@ -82,5 +82,7 @@
   "tip.gadgets.fluid_monitor.3": "Right-click: alert level · Wand: link to a hub",
   "item.gadgets.ender_core": "Ender Core",
   "tip.gadgets.item_sender.3": "Right-click: code, level and upgrades",
-  "tip.gadgets.item_receiver.3": "Right-click: code, level and upgrades"
+  "tip.gadgets.item_receiver.3": "Right-click: code, level and upgrades",
+  "item.gadgets.base_tablet": "Base Tablet",
+  "tip.gadgets.command_hub.5": "Its code links a Base Tablet — click the code to copy it"
 }

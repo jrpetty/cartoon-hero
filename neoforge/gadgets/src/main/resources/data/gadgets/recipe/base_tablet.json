@@ -1,0 +1,12 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "redstone",
+  "group": "gadgets",
+  "pattern": [ "IGI", "IEI", "III" ],
+  "key": {
+    "I": { "item": "minecraft:iron_ingot" },
+    "G": { "item": "minecraft:glass_pane" },
+    "E": { "item": "gadgets:ender_core" }
+  },
+  "result": { "id": "gadgets:base_tablet", "count": 1 }
+}

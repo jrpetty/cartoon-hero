@@ -150,6 +150,8 @@ public class CommandHubBlockEntity extends BlockEntity {
         }
     }
 
+    /** This hub's own eight-digit code, minted once and typed into a tablet. */
+    private String code = "";
     private final List<Node> nodes = new ArrayList<>();
     /** Newest first, so the interesting end is the one you read. */
     private final List<Event> events = new ArrayList<>();
@@ -266,6 +268,9 @@ public class CommandHubBlockEntity extends BlockEntity {
         if (server == null) {
             return;
         }
+        if (be.code.isEmpty()) {
+            be.mintCode(level);
+        }
         if (!be.nodes.isEmpty()) {
             // One pass: read each gadget, and drop it if that read proves it's
             // gone. Pruning and refreshing separately meant looking every linked
@@ -307,11 +312,48 @@ public class CommandHubBlockEntity extends BlockEntity {
         // is part of that: a log entry with no matching board change still needs
         // to reach the screen.
         long fingerprint = be.fingerprint();
-        if (fingerprint != be.lastSync) {
+        boolean changed = fingerprint != be.lastSync;
+        if (changed) {
             be.lastSync = fingerprint;
             be.setChanged();
             be.sync();
         }
+
+        // A tablet reads the copy left here rather than the block itself, since
+        // the block is in an unloaded chunk whenever the tablet is interesting.
+        // Marking the hub heard is the cheap path and the common one: a base
+        // running normally has nothing new to say, but a tablet still needs to
+        // tell "all clear" from "I have not heard from home since you left".
+        long now = level.getGameTime();
+        long key = pos.asLong();
+        if (changed || !HubRegistry.heard(be.code, key, now)) {
+            if (!HubRegistry.publish(be.code, be.hubName(), level.dimension().location().toString(),
+                    key, be.getUpdateTag(level.registryAccess()), now)) {
+                be.mintCode(level); // someone else already answers on those digits
+            }
+        }
+    }
+
+    /** Eight digits, minted once, re-rolled off any hub already answering. */
+    private void mintCode(Level level) {
+        for (int attempt = 0; attempt < 5; attempt++) {
+            String candidate = LinkCode.mint(level.getRandom());
+            if (!HubRegistry.taken(candidate)) {
+                code = candidate;
+                setChanged();
+                sync();
+                return;
+            }
+        }
+    }
+
+    public String getCode() {
+        return code;
+    }
+
+    /** What a tablet calls this hub: its position, since a hub has no name field. */
+    private String hubName() {
+        return "Hub " + worldPosition.getX() + ", " + worldPosition.getY() + ", " + worldPosition.getZ();
     }
 
     /**
@@ -422,6 +464,7 @@ public class CommandHubBlockEntity extends BlockEntity {
     @Override
     protected void saveAdditional(CompoundTag tag, HolderLookup.Provider registries) {
         super.saveAdditional(tag, registries);
+        tag.putString("Code", code);
         tag.put("Nodes", buildList());
         ListTag log = new ListTag();
         for (Event e : events) {
@@ -433,6 +476,7 @@ public class CommandHubBlockEntity extends BlockEntity {
     @Override
     protected void loadAdditional(CompoundTag tag, HolderLookup.Provider registries) {
         super.loadAdditional(tag, registries);
+        code = tag.getString("Code");
         nodes.clear();
         ListTag list = tag.getList("Nodes", Tag.TAG_COMPOUND);
         for (int i = 0; i < Math.min(list.size(), MAX_NODES); i++) {
