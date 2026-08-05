@@ -43,6 +43,14 @@ at the top of each section.
   units currently sharing draws (twohand/militia, pikeman/spearman, scout/raider,
   javelin/skirmisher, handcannon/crossbow).
 
+## Abilities
+Every shop unit now has a signature ability — it was 9 of 24, so most of the
+Warband roster was a stat block while a lucky few actually did something. The
+15 new ones reuse the existing kinds where they fit and added one new kind,
+**guard**: a timed armour aura for nearby allies. `rally` only lifted attack,
+so there was no way for a support unit to make a line harder to kill; the
+Shieldbearer's Shield Wall is built on it.
+
 ## Upgrades
 - Done: Long Swords, Pikes, Cavalier (Stable, Knight +25 HP), Heavy Cavalry
   Archer (Archery Range, Horseman +3 attack); Horse Collar / Bow Saw / Gold

@@ -183,6 +183,7 @@ export interface Entity {
   abilityActive: number; // seconds of buff remaining (0 = inactive)
   slowTimer: number; // seconds of enemy-applied slow remaining (Caltrops)
   rallyTimer: number; // seconds of ally-applied attack boost remaining (War Cry)
+  guardTimer: number; // seconds of ally-applied armour remaining (Shield Wall)
   heroLevel: number; // hero units only: 0..5, raises stats
   heroKills: number; // hero units only: kills credited toward the next level
   veterancy: number; // combat units: 0..3 rank earned from kills

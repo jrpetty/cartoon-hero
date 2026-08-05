@@ -10,10 +10,11 @@ import { ArmorClass } from "../sim/types";
 //   "slow"  – on cast, saps the speed of nearby enemies (slowTimer)
 //   "heal"  – on cast, instantly restores HP to nearby allies
 //   "volley"– on cast, rains an instant area-of-effect strike on the foe
+//   "guard" – on cast, shields nearby allies with timed armour (guardTimer)
 //
 // Only the unit types listed here have an ability.
 
-export type AbilityKind = "buff" | "rally" | "slow" | "heal" | "volley" | "cleave";
+export type AbilityKind = "buff" | "rally" | "slow" | "heal" | "volley" | "cleave" | "guard";
 
 export interface AbilityDef {
   id: string;
@@ -148,6 +149,113 @@ export const ABILITIES: Record<string, AbilityDef> = {
     atkIntervalMult: 0.45,
     color: "#e0683a",
   },
+  // Two-Handed Swordsman: a wide arc that catches everything in front of him.
+  twohand: {
+    id: "wide_arc", name: "Wide Arc",
+    desc: "A two-handed sweep that carves through every enemy pressed around him.",
+    kind: "cleave", cooldown: 20, duration: 1.3, radius: 92, amount: 14, statusDuration: 3,
+    color: "#e8d08a",
+  },
+  // Shieldbearer: the reason to field one — he makes the whole line harder to kill.
+  shieldbearer: {
+    id: "shield_wall", name: "Shield Wall",
+    desc: "Shields up along the line: every nearby ally gains armour for 8s. He is why the line holds.",
+    kind: "guard", cooldown: 24, duration: 1.5, radius: 160, statusDuration: 8,
+    color: "#9fc4e8",
+  },
+  // Berserker: burns hotter the moment he is let loose.
+  berserker: {
+    id: "blood_frenzy", name: "Blood Frenzy",
+    desc: "Works himself into a fury: strikes 60% faster and 30% harder for 6s. No guard at all.",
+    kind: "buff", cooldown: 21, duration: 6, attackMult: 1.3, atkIntervalMult: 0.62,
+    color: "#e04a3a",
+  },
+  // Pikeman: a hedge of points that stops a charge dead rather than trading with it.
+  pikeman: {
+    id: "pike_hedge", name: "Pike Hedge",
+    desc: "Level the pikes — everything nearby is bogged down for 5s, and cavalry is gutted on the points.",
+    kind: "slow", cooldown: 20, duration: 1.2, radius: 130, statusDuration: 5,
+    color: "#9ad02f",
+  },
+  // Crossbowman: plant the pavise and shoot from behind it.
+  crossbow: {
+    id: "pavise", name: "Pavise",
+    desc: "Plant the shield and wind the windlass: +6 armour and 40% faster bolts for 7s, rooted in place.",
+    kind: "buff", cooldown: 23, duration: 7, armorBonus: 6, atkIntervalMult: 0.6, speedMult: 0.5,
+    color: "#a8b4c4",
+  },
+  // Longbowman: the massed sky-darkening volley, at its own long range.
+  longbow: {
+    id: "arrow_storm", name: "Arrow Storm",
+    desc: "The sky goes dark: a wide, punishing fall of arrows across the enemy formation.",
+    kind: "volley", cooldown: 22, duration: 1.1, radius: 128, amount: 18,
+    color: "#c8e88a",
+  },
+  // Hand Cannoneer: one devastating close blast.
+  handcannon: {
+    id: "scattershot", name: "Scattershot",
+    desc: "Cram the barrel with scrap and fire: a brutal cone of shot that shreds packed infantry.",
+    kind: "volley", cooldown: 20, duration: 1.0, radius: 76, amount: 26,
+    color: "#ffa24a",
+  },
+  // Javelin: hurl every javelin at once at whatever is riding you down.
+  javelin: {
+    id: "volley_of_spears", name: "Volley of Spears",
+    desc: "Loose the whole bundle at once — heavy damage, and cavalry take the worst of it.",
+    kind: "volley", cooldown: 18, duration: 0.9, radius: 88, amount: 15,
+    color: "#9ad0a0",
+  },
+  // Horseman: ride down the shooters, which is the whole point of him.
+  horseman: {
+    id: "run_down", name: "Run Them Down",
+    desc: "Spur into the shooters: +55% speed and savage bonus damage to archers for 5s.",
+    kind: "buff", cooldown: 21, duration: 5, speedMult: 1.55,
+    bonusVs: { [ArmorClass.Archer]: 14 },
+    color: "#ffb06a",
+  },
+  // Raider: a torch through the economy.
+  raider: {
+    id: "put_to_torch", name: "Put to the Torch",
+    desc: "Burn as you pass: +50% speed and heavy bonus damage to villagers and buildings for 6s.",
+    kind: "buff", cooldown: 22, duration: 6, speedMult: 1.5,
+    bonusVs: { [ArmorClass.Villager]: 16, [ArmorClass.Building]: 12 },
+    color: "#e07a3a",
+  },
+  // Scout: seeing trouble early and living through it.
+  scout: {
+    id: "outrider", name: "Outrider",
+    desc: "Break into a gallop: +80% speed and +4 armour for 5s. For getting out, not getting stuck in.",
+    kind: "buff", cooldown: 18, duration: 5, speedMult: 1.8, armorBonus: 4,
+    color: "#a8e0c8",
+  },
+  // Cataphract: armoured wedge that shrugs off the line it breaks.
+  cataphract: {
+    id: "iron_wedge", name: "Iron Wedge",
+    desc: "Lower the lances and drive through: +8 armour and +45% damage for 6s.",
+    kind: "buff", cooldown: 25, duration: 6, armorBonus: 8, attackMult: 1.45,
+    color: "#c8b48a",
+  },
+  // Battlemage: the reason to guard him at all.
+  battlemage: {
+    id: "firestorm", name: "Firestorm",
+    desc: "Calls fire down across a wide stretch of the field. Devastating on a packed formation.",
+    kind: "volley", cooldown: 24, duration: 1.4, radius: 140, amount: 30,
+    color: "#ff8a2c",
+  },
+  // Bombard: one enormous shot.
+  bombard: {
+    id: "point_blank", name: "Point Blank",
+    desc: "Depress the barrel and touch it off: an enormous blast that levels whatever is in front of it.",
+    kind: "volley", cooldown: 26, duration: 1.5, radius: 118, amount: 42,
+    color: "#ffb84a",
+  },
+  // Trebuchet: wind the counterweight to its limit.
+  trebuchet: {
+    id: "counterweight", name: "Full Counterweight",
+    desc: "Wind it to the stops: far heavier stones, thrown faster, for 9s.",
+    kind: "buff", cooldown: 30, duration: 9, attackMult: 1.8, atkIntervalMult: 0.65,
+    color: "#d8a06a",
+  },
   // Monk: a pulse of holy light that mends the wounded around him.
   monk: {
     id: "sanctuary",
@@ -165,3 +273,4 @@ export const ABILITIES: Record<string, AbilityDef> = {
 // Status strengths shared by the area abilities.
 export const SLOW_MULT = 0.45; // Caltrops: fraction of normal speed while slowed
 export const RALLY_ATK_MULT = 1.4; // War Cry: attack multiplier while rallied
+export const GUARD_ARMOR = 5; // Shield Wall: flat armour while guarded

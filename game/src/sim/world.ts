@@ -21,7 +21,7 @@ import { UNITS, UnitDef } from "../content/units";
 import { BUILDINGS, BuildingDef } from "../content/buildings";
 import { AGES, MAX_AGE, UPGRADES } from "../content/tech";
 import { dayPhase, visionMult } from "../content/daynight";
-import { ABILITIES, SLOW_MULT, RALLY_ATK_MULT } from "../content/abilities";
+import { ABILITIES, SLOW_MULT, RALLY_ATK_MULT, GUARD_ARMOR } from "../content/abilities";
 import {
   AGE_ARMOR_BONUS,
   AGE_ATTACK_BONUS,
@@ -172,7 +172,7 @@ export function makeEntity(): Entity {
     garrison: [], gateOpen: false, gateForce: 0, farmWorker: -1,
     projTargetId: -1, projDamage: 0, projSpeed: 0, projSourceTeam: Team.Neutral,
     projArmorClassBonusFrom: "", projElapsed: 0, projDuration: 0, projFromX: 0, projFromY: 0,
-    abilityCooldown: 0, abilityActive: 0, slowTimer: 0, rallyTimer: 0, heroLevel: 0, heroKills: 0,
+    abilityCooldown: 0, abilityActive: 0, slowTimer: 0, rallyTimer: 0, guardTimer: 0, heroLevel: 0, heroKills: 0,
     veterancy: 0, vetKills: 0, projSourceId: -1,
     animPhase: 0, hitFlash: 0, lastDamageTime: -999, lastAttackerId: -1, selected: false,
     variantRarity: 0, tier: 0,
@@ -744,6 +744,18 @@ export class World {
           }
           break;
         }
+        case "guard": {
+          // Raise shields over everyone nearby: a defensive rally. "rally" only
+          // lifts attack, so before this there was no way for a support unit to
+          // make a line harder to kill.
+          const r = (ab.radius ?? 140) * pm;
+          for (const n of this.spatial.query(e.x, e.y, r) as Entity[]) {
+            if (n.alive && n.kind === Kind.Unit && this.areAllied(e.team, n.team) && dist(e.x, e.y, n.x, n.y) <= r) {
+              n.guardTimer = Math.max(n.guardTimer, (ab.statusDuration ?? 6) * pm);
+            }
+          }
+          break;
+        }
         case "slow": {
           // Hobble nearby enemies.
           const r = (ab.radius ?? 120) * pm;
@@ -1168,6 +1180,7 @@ export class World {
       e.abilityActive = Math.max(0, e.abilityActive - SIM_DT);
       e.slowTimer = Math.max(0, e.slowTimer - SIM_DT);
       e.rallyTimer = Math.max(0, e.rallyTimer - SIM_DT);
+      e.guardTimer = Math.max(0, e.guardTimer - SIM_DT);
       e.hitFlash = Math.max(0, e.hitFlash - SIM_DT * 3);
       switch (e.kind) {
         case Kind.Unit: this.tickUnit(e); break;
@@ -2085,6 +2098,8 @@ export class World {
         if (up && up.kind === "armor" && def && (up.appliesTo.includes(def.armorClass) || (up.appliesToUnits?.includes(target.type) ?? false))) armor += up.amount;
       }
     }
+    // A guard aura from an ally's ability (Shield Wall).
+    if (target.guardTimer > 0) armor += GUARD_ARMOR;
     // Shield Wall / Brace add armour while active.
     if (target.abilityActive > 0) {
       const ab = ABILITIES[target.type];
