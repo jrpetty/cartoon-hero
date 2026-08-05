@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "description": "Banner & Blade — a stylized-fantasy real-time strategy game with skirmish AI and a CS-style unit collection meta.",
+  "description": "Banner & Blade \u2014 a stylized-fantasy real-time strategy game with skirmish AI and a CS-style unit collection meta.",
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
@@ -12,7 +12,8 @@
     "test": "vitest run",
     "build:single": "node scripts/inline.mjs && node scripts/boot-check.mjs",
     "serve": "node server/server.mjs",
-    "assets:meshy": "tsx scripts/meshy.ts"
+    "assets:meshy": "tsx scripts/meshy.ts",
+    "perf": "tsx scripts/perf.ts"
   },
   "devDependencies": {
     "@napi-rs/canvas": "^1.0.0",

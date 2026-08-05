@@ -177,6 +177,58 @@ Warlord and Conqueror tie on the "average" row. That is real: both are already
 past the point where a middling board survives, so the difference between them
 only shows up in the "good" column.
 
+## Performance — measured
+
+`npm run perf [players] [minutes]` plays a headless AI-vs-AI match and reports
+tick percentiles. Percentiles, not averages: a sim whose *average* tick is
+comfortable still stutters if one tick in a hundred blows the frame budget, and
+that is exactly what a busy eight-player match felt like.
+
+Eight players, twelve minutes, ~1000 entities, 50ms budget at 20Hz:
+
+| tick time | before | after |
+|---|---|---|
+| median | 0.37ms | 0.23ms |
+| p95 | 8.59ms | 0.67ms |
+| p99 | 25.07ms | 2.36ms |
+| p99.9 | 32.13ms | 4.86ms |
+| worst | 39.24ms | 12.11ms |
+
+Two findings, both in A*:
+
+1. **It allocated the whole grid per call.** Three arrays the size of the nav
+   grid, two of them filled — ~190KB and 21,000 writes for every path request,
+   whether the answer was five cells long or five hundred. Now the buffers are
+   module-level and stamped with a generation counter, so starting a search is
+   O(1). This alone was 2.4× on total sim time and cut garbage collection 5×.
+2. **Two in five path requests were to targets with no route at all**, and each
+   one expanded its full 6000-node budget before giving up. That was 36 of the
+   36.4 million node expansions in a whole match. The nav grid now keeps
+   connected-component labels (flood-filled lazily, invalidated by `setBlocked`)
+   and A* returns null in constant time when the two ends are in different
+   pockets.
+
+Four-way flood fill is exactly right for this despite A* moving diagonally: a
+diagonal step is only legal when at least one of its two orthogonal neighbours
+is open, and that neighbour gives a 4-connected route to the same cell. So the
+labels never refuse a route the search would have found. The shortcut also
+deliberately does *not* fire when either end stands on a blocked cell — a unit
+shoved onto a footprint can still walk out through its neighbours, and that case
+keeps taking the full search.
+
+Both changes are output-identical: 12,000 random queries across three map
+presets return byte-identical paths to the old implementation. Getting there
+took one real correction — the first rewrite differed on 41% of queries because
+`ng + (a + b)` had become `(ng + a) + b`, and floating-point addition is not
+associative, so ties broke differently and units took different (equally short)
+routes.
+
+What is *not* the bottleneck, measured: the per-frame vector drawing is 0.5–2.8ms
+at 1000 entities. A headless render profile puts almost the whole frame in three
+full-screen `drawImage` blits (terrain, fog, vignette), but that is software
+rasterisation in node — a browser composites those on the GPU — so that number
+says nothing about real-world frame time and was not acted on.
+
 ## Bigger / later
 - **Naval** — water is currently only an impassable wall, and the Islands
   preset (55% water) is a maze rather than a naval map. Dock, transport,

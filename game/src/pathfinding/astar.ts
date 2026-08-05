@@ -4,53 +4,98 @@ import { NavGrid } from "./grid";
 // waypoints (flattened [x0,y0,x1,y1,...]) or null if unreachable. Includes a
 // simple line-of-sight smoothing pass so paths don't hug every cell corner.
 
-const DIRS = [
-  [1, 0, 1],
-  [-1, 0, 1],
-  [0, 1, 1],
-  [0, -1, 1],
-  [1, 1, 1.4142],
-  [1, -1, 1.4142],
-  [-1, 1, 1.4142],
-  [-1, -1, 1.4142],
-];
+// Neighbour offsets, flattened. The order matters: it decides the order equal-
+// cost nodes enter the heap, which decides which of several equally short paths
+// a unit takes. Keep it as it is unless you mean to change every path.
+const DX = [1, -1, 0, 0, 1, 1, -1, -1];
+const DY = [0, 0, 1, -1, 1, -1, 1, -1];
+const DC = [1, 1, 1, 1, 1.4142, 1.4142, 1.4142, 1.4142];
 
-class MinHeap {
-  private items: { f: number; i: number }[] = [];
-  get size() {
-    return this.items.length;
+/**
+ * Scratch state, reused across every search.
+ *
+ * A* used to allocate three arrays the size of the whole nav grid on each call
+ * and fill two of them — about 190KB of allocation and 21,000 writes per path
+ * request, whether the path turned out to be five cells long or five hundred.
+ * On an eight-player match that was the single largest cost in the game, and
+ * most of the garbage collector's work as well.
+ *
+ * Instead the buffers live here and are stamped with a generation counter: an
+ * entry counts as "set this search" only when its stamp matches, so starting a
+ * search is O(1) instead of O(cells). The buffers only ever grow, so alternating
+ * between maps of different sizes doesn't churn them.
+ */
+let gScore = new Float32Array(0);
+let gStamp = new Uint32Array(0);
+let cameFrom = new Int32Array(0);
+let closedStamp = new Uint32Array(0);
+let heapF = new Float64Array(0);
+let heapI = new Int32Array(0);
+let heapLen = 0;
+let generation = 0;
+
+function ensureCapacity(n: number) {
+  if (gScore.length >= n) return;
+  gScore = new Float32Array(n);
+  gStamp = new Uint32Array(n);
+  cameFrom = new Int32Array(n);
+  closedStamp = new Uint32Array(n);
+  generation = 0; // fresh (zeroed) stamps, so restart the counter
+}
+
+/**
+ * The open list is *not* bounded by the number of cells: a cell is pushed again
+ * every time a cheaper route to it is found, and the stale copies are discarded
+ * on pop. Sizing the heap to the grid and trusting it looked right and silently
+ * dropped pushes — typed arrays ignore out-of-range writes — which quietly
+ * produced worse paths. So it grows on demand instead.
+ */
+function growHeap() {
+  const cap = Math.max(1024, heapF.length * 2);
+  const nf = new Float64Array(cap); nf.set(heapF); heapF = nf;
+  const ni = new Int32Array(cap); ni.set(heapI); heapI = ni;
+}
+
+/**
+ * Binary min-heap over two parallel typed arrays. The comparisons and the order
+ * of swaps are exactly those of the object-array heap this replaces, so the pop
+ * order — and therefore every path the game produces — is unchanged.
+ */
+function heapPush(i: number, f: number) {
+  if (heapLen >= heapF.length) growHeap();
+  let c = heapLen++;
+  heapF[c] = f;
+  heapI[c] = i;
+  while (c > 0) {
+    const p = (c - 1) >> 1;
+    if (heapF[p] <= heapF[c]) break;
+    const tf = heapF[p], ti = heapI[p];
+    heapF[p] = heapF[c]; heapI[p] = heapI[c];
+    heapF[c] = tf; heapI[c] = ti;
+    c = p;
   }
-  push(i: number, f: number) {
-    const a = this.items;
-    a.push({ f, i });
-    let c = a.length - 1;
-    while (c > 0) {
-      const p = (c - 1) >> 1;
-      if (a[p].f <= a[c].f) break;
-      [a[p], a[c]] = [a[c], a[p]];
-      c = p;
+}
+
+function heapPop(): number {
+  const top = heapI[0];
+  const lastF = heapF[--heapLen], lastI = heapI[heapLen];
+  if (heapLen > 0) {
+    heapF[0] = lastF; heapI[0] = lastI;
+    let p = 0;
+    for (;;) {
+      const l = 2 * p + 1;
+      const r = 2 * p + 2;
+      let s = p;
+      if (l < heapLen && heapF[l] < heapF[s]) s = l;
+      if (r < heapLen && heapF[r] < heapF[s]) s = r;
+      if (s === p) break;
+      const tf = heapF[p], ti = heapI[p];
+      heapF[p] = heapF[s]; heapI[p] = heapI[s];
+      heapF[s] = tf; heapI[s] = ti;
+      p = s;
     }
   }
-  pop(): number {
-    const a = this.items;
-    const top = a[0].i;
-    const last = a.pop()!;
-    if (a.length) {
-      a[0] = last;
-      let p = 0;
-      for (;;) {
-        const l = 2 * p + 1;
-        const r = 2 * p + 2;
-        let s = p;
-        if (l < a.length && a[l].f < a[s].f) s = l;
-        if (r < a.length && a[r].f < a[s].f) s = r;
-        if (s === p) break;
-        [a[p], a[s]] = [a[s], a[p]];
-        p = s;
-      }
-    }
-    return top;
-  }
+  return top;
 }
 
 export function findPath(
@@ -81,48 +126,67 @@ export function findPath(
     tcy = grid.worldToCellY(owy);
   }
   if (scx === tcx && scy === tcy) return [tx, ty];
+  // Nothing to search for if the two ends are in different pockets of the map.
+  // The search would have expanded its whole node budget and returned null; on
+  // an eight-player match that was two in five requests and almost all of the
+  // pathfinder's cost.
+  if (grid.provablyUnreachable(scx, scy, tcx, tcy)) return null;
 
-  const n = grid.cols * grid.rows;
-  const g = new Float32Array(n).fill(Infinity);
-  const came = new Int32Array(n).fill(-1);
-  const closed = new Uint8Array(n);
-  const open = new MinHeap();
+  const cols = grid.cols, rows = grid.rows;
+  const blocked = grid.blocked;
+  const n = cols * rows;
+  ensureCapacity(n);
+  // Stamps live in a Uint32Array, so the counter has to stay inside it. Four
+  // billion searches away, but a wrapped stamp would silently stop matching.
+  if (generation >= 0xfffffffe) { gStamp.fill(0); closedStamp.fill(0); generation = 0; }
+  const gen = ++generation;
+  heapLen = 0;
 
-  const h = (cx: number, cy: number) => {
-    const dx = Math.abs(cx - tcx);
-    const dy = Math.abs(cy - tcy);
-    return (dx + dy) + (1.4142 - 2) * Math.min(dx, dy);
-  };
-
-  const start = grid.idx(scx, scy);
-  g[start] = 0;
-  open.push(start, h(scx, scy));
-  const goal = grid.idx(tcx, tcy);
+  const start = scy * cols + scx;
+  gScore[start] = 0;
+  gStamp[start] = gen;
+  cameFrom[start] = -1; // the chain terminator; nothing else needs clearing
+  {
+    const dx = Math.abs(scx - tcx), dy = Math.abs(scy - tcy);
+    heapPush(start, (dx + dy) + (1.4142 - 2) * Math.min(dx, dy));
+  }
+  const goal = tcy * cols + tcx;
   let expanded = 0;
 
-  while (open.size > 0) {
-    const cur = open.pop();
-    if (cur === goal) return reconstruct(grid, came, cur, tx, ty);
-    if (closed[cur]) continue;
-    closed[cur] = 1;
+  while (heapLen > 0) {
+    const cur = heapPop();
+    if (cur === goal) return reconstruct(grid, cameFrom, cur, tx, ty);
+    if (closedStamp[cur] === gen) continue;
+    closedStamp[cur] = gen;
     if (++expanded > maxNodes) break;
-    const ccx = cur % grid.cols;
-    const ccy = (cur / grid.cols) | 0;
-    for (const [dx, dy, cost] of DIRS) {
-      const nx = ccx + dx;
-      const ny = ccy + dy;
-      if (grid.isBlocked(nx, ny)) continue;
+    const ccx = cur % cols;
+    const ccy = (cur / cols) | 0;
+    const gCur = gScore[cur];
+    for (let k = 0; k < 8; k++) {
+      const nx = ccx + DX[k];
+      const ny = ccy + DY[k];
+      if (nx < 0 || ny < 0 || nx >= cols || ny >= rows) continue;
+      const ni = ny * cols + nx;
+      if (blocked[ni] === 1) continue;
       // Prevent diagonal corner cutting through two blocked orthogonals.
-      if (dx !== 0 && dy !== 0) {
-        if (grid.isBlocked(ccx + dx, ccy) && grid.isBlocked(ccx, ccy + dy)) continue;
+      if (k >= 4) {
+        const sideX = nx < 0 || nx >= cols || ccy < 0 || ccy >= rows || blocked[ccy * cols + nx] === 1;
+        const sideY = ccx < 0 || ccx >= cols || ny < 0 || ny >= rows || blocked[ny * cols + ccx] === 1;
+        if (sideX && sideY) continue;
       }
-      const ni = grid.idx(nx, ny);
-      if (closed[ni]) continue;
-      const ng = g[cur] + cost;
-      if (ng < g[ni]) {
-        g[ni] = ng;
-        came[ni] = cur;
-        open.push(ni, ng + h(nx, ny));
+      if (closedStamp[ni] === gen) continue;
+      const ng = gCur + DC[k];
+      if (gStamp[ni] !== gen || ng < gScore[ni]) {
+        gScore[ni] = ng;
+        gStamp[ni] = gen;
+        cameFrom[ni] = cur;
+        const dx = Math.abs(nx - tcx), dy = Math.abs(ny - tcy);
+        // Group the heuristic exactly as the old `h()` did. Floating-point
+        // addition is not associative, so `ng + (a + b)` and `(ng + a) + b`
+        // disagree in the last bit — which is enough to break ties differently
+        // and send units down a different (equally short) path.
+        const hn = (dx + dy) + (1.4142 - 2) * Math.min(dx, dy);
+        heapPush(ni, ng + hn);
       }
     }
   }
