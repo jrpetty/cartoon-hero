@@ -77,7 +77,7 @@ export class WarbandScreen {
   private fx = new WarbandFx();
   private prevPhase = "shop";
   private itemTip: { id: string; x: number; y: number } | null = null;
-  private unitTip: { p: Piece; x: number; y: number } | null = null;
+  private unitTip: { p: Piece; x: number; y: number; compare?: Piece | null } | null = null;
   private liveTip: { e: Entity; x: number; y: number } | null = null; // hovered unit mid-fight
   private augTip: { a: Augment; x: number; y: number } | null = null; // hovered owned augment
   private cmdTip: { c: WarbandCommander; x: number; y: number } | null = null; // hovered commander plate
@@ -452,12 +452,15 @@ export class WarbandScreen {
       const shopW = 5 * sw + 4 * 8;
       const shopX = Math.round(Math.max(bx, boardX + (boardW - shopW) / 2 - 70));
       ui.text("Shop", shopX, shopY + 6, { size: 13, bold: true, color: PAL.uiAccent });
+      // What a bought unit would push off a full board, so a hovered card can
+      // be measured against the thing it actually competes with.
+      const benchmark = run.weakestDeployed();
       run.shop.forEach((type, i) => {
         const cx = shopX + i * (sw + 8);
         const cy = shopY + 12;
         if (type) {
           const can = run.canBuy(i);
-          this.shopCard(cx, cy, sw, sh, type, can.ok, run.poolCount(type), can.reason, time, () => { if (run.buy(i)) audio.play("coin"); });
+          this.shopCard(cx, cy, sw, sh, type, can.ok, run.poolCount(type), can.reason, time, benchmark, () => { if (run.buy(i)) audio.play("coin"); });
         }
         else {
           // A bought-out slot still holds its place in the row.
@@ -1952,7 +1955,8 @@ export class WarbandScreen {
 
   private shopCard(
     x: number, y: number, w: number, h: number, type: string, affordable: boolean,
-    poolLeft: number, blocked: "gold" | "bench" | undefined, time: number, onClick: () => void,
+    poolLeft: number, blocked: "gold" | "bench" | undefined, time: number,
+    compare: Piece | null, onClick: () => void,
   ) {
     const ctx = ui.ctx;
     const tier = UNIT_TIER[type] ?? 1;
@@ -2014,7 +2018,7 @@ export class WarbandScreen {
     }
     // Gold coin with the cost.
     this.coin(ctx, x + w - 16, y + oy + h - 12, tier, affordable);
-    if (hover) this.unitTip = { p: { type, star: 1, items: [] }, x: x + w + 6, y: y - 150 };
+    if (hover) this.unitTip = { p: { type, star: 1, items: [] }, x: x + w + 6, y: y - 150, compare };
     if (hover && affordable && ui.clicked && !ui.pointerConsumed) { ui.pointerConsumed = true; onClick(); }
   }
 
@@ -2261,6 +2265,21 @@ export class WarbandScreen {
     } else ui.text("Equip onto a unit · up to 3 each", px + 14, ly + 4, { size: 10, color: "#8a8278" });
   }
 
+  /**
+   * A piece's effective numbers: base scaled by star, then its relics. The same
+   * maths for the unit you're hovering and the one you'd be measuring it
+   * against, so a comparison is honest.
+   */
+  private unitStats(p: Piece) {
+    const def = UNITS[p.type];
+    const sm = STAR_MULT[p.star] ?? 1;
+    const st = { maxHp: Math.round(def.hp * sm), hp: 0, attack: Math.round(def.attack * sm), armor: def.armor, speed: def.speed };
+    st.hp = st.maxHp;
+    applyItems(st, p.items);
+    const rate = def.attackInterval > 0 ? 1 / def.attackInterval : 0;
+    return { ...st, rate, dps: Math.round(st.attack * rate), range: def.range };
+  }
+
   /** Hover inspector for a unit: its tier, star, live combat stats, counter
    *  bonuses, signature ability and equipped relics. */
   private drawUnitTip(W: number, H: number) {
@@ -2272,15 +2291,16 @@ export class WarbandScreen {
     const tier = UNIT_TIER[p.type] ?? 1;
     const relics = p.items.map((id) => itemDef(id)).filter(Boolean) as Item[];
     const ab = ABILITIES[p.type];
-    // Effective stats = base × star, then relics (synergies add more in a fight).
-    const sm = STAR_MULT[p.star] ?? 1;
-    const st = { maxHp: Math.round(def.hp * sm), hp: 0, attack: Math.round(def.attack * sm), armor: def.armor, speed: def.speed };
-    st.hp = st.maxHp;
-    applyItems(st, p.items);
+    const st = this.unitStats(p);
+    // What this would be measured against — the unit it would push off a full
+    // board. Never compare a piece to itself.
+    const other = this.unitTip.compare && this.unitTip.compare !== p ? this.unitTip.compare : null;
+    const ost = other ? this.unitStats(other) : null;
     const bonuses = Object.entries(def.bonus).map(([cls, amt]) => `+${amt} vs ${cls}`);
 
-    const pw = 244;
+    const pw = ost ? 296 : 244; // deltas need room beside each value
     let ph = 50 + 56; // header + stat block (incl. RATE + DPS)
+    if (ost) ph += 18; // the "vs …" line
     ph += 52; // battle-style block
     if (bonuses.length) ph += 18;
     if (ab) ph += 34;
@@ -2306,19 +2326,39 @@ export class WarbandScreen {
     // Stat block. RATE = attacks/sec; DPS ≈ attack × rate (before enemy armour).
     const rate = def.attackInterval > 0 ? 1 / def.attackInterval : 0;
     const dps = Math.round(st.attack * rate);
-    const statCell = (label: string, val: string, sx: number, sy: number, col: string) => {
+    const colX = ost ? [px + 14, px + 108, px + 202] : [px + 16, px + 92, px + 162];
+    const statCell = (label: string, val: string, sx: number, sy: number, col: string, delta?: number | null, unit = "") => {
       ui.text(label, sx, sy, { size: 9.5, color: "#8a8278" });
       ui.text(val, sx + 32, sy, { size: 12.5, bold: true, color: col });
+      // Green when this unit is ahead, red when behind — read at a glance
+      // rather than by subtracting two stat blocks in your head.
+      if (delta != null && Math.abs(delta) > 0.001) {
+        const txt = (delta > 0 ? "+" : "") + (Number.isInteger(delta) ? delta : delta.toFixed(2)) + unit;
+        ui.text(txt, sx + 88, sy, { align: "right", size: 9.5, bold: true, color: delta > 0 ? "#7df2a9" : "#e0786a" });
+      }
     };
-    statCell("HP", String(st.maxHp), px + 16, y + 16, "#7df2a9");
-    statCell("ATK", String(st.attack), px + 92, y + 16, "#ffce6a");
-    statCell("RATE", rate.toFixed(2) + "/s", px + 162, y + 16, "#e7ddc4");
-    statCell("ARM", String(st.armor), px + 16, y + 33, "#cfe0ff");
-    statCell("RNG", def.range > 0 ? String(def.range) : "melee", px + 92, y + 33, "#e7ddc4");
-    statCell("SPD", String(st.speed), px + 162, y + 33, "#e7ddc4");
+    statCell("HP", String(st.maxHp), colX[0], y + 16, "#7df2a9", ost && st.maxHp - ost.maxHp);
+    statCell("ATK", String(st.attack), colX[1], y + 16, "#ffce6a", ost && st.attack - ost.attack);
+    statCell("RATE", ost ? rate.toFixed(2) : rate.toFixed(2) + "/s", colX[2], y + 16, "#e7ddc4",
+      ost && +(st.rate - ost.rate).toFixed(2));
+    statCell("ARM", String(st.armor), colX[0], y + 33, "#cfe0ff", ost && st.armor - ost.armor);
+    statCell("RNG", def.range > 0 ? String(def.range) : "melee", colX[1], y + 33, "#e7ddc4", ost && st.range - ost.range);
+    statCell("SPD", String(st.speed), colX[2], y + 33, "#e7ddc4", ost && st.speed - ost.speed);
     ui.text(`DPS ≈ ${dps}`, px + 16, y + 50, { size: 10.5, bold: true, color: "#ffb47a" });
-    ui.text(`(${st.attack} dmg every ${def.attackInterval.toFixed(1)}s)`, px + 78, y + 50, { size: 9.5, color: "#8a8278" });
+    if (ost) {
+      const d = dps - ost.dps;
+      ui.text(`${d > 0 ? "+" : ""}${d} vs ${shortName(other!.type)}${other!.star > 1 ? " " + stars(other!.star) : ""}`,
+        px + 74, y + 50, { size: 9.5, bold: true, color: d > 0 ? "#7df2a9" : d < 0 ? "#e0786a" : "#8a8278" });
+    } else {
+      ui.text(`(${st.attack} dmg every ${def.attackInterval.toFixed(1)}s)`, px + 78, y + 50, { size: 9.5, color: "#8a8278" });
+    }
     y += 56;
+    if (ost) {
+      div();
+      ui.text(`compared with your weakest fielded unit — ${UNITS[other!.type]?.name ?? other!.type}`,
+        px + 14, y + 13, { size: 9.5, color: "#9a917b" });
+      y += 18;
+    }
     // How it enters a fight — as important as its stats for where you place it.
     div();
     this.styleGlyph(ctx, px + 20, y + 15, 6.5, sd);

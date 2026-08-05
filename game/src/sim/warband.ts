@@ -561,6 +561,15 @@ export class WarbandRun {
     });
   }
 
+  /**
+   * The piece a newly-fielded unit would push off a full board — the weakest
+   * thing you have deployed. What a shop unit is really competing with.
+   */
+  weakestDeployed(): Piece | null {
+    const idx = this.deployedIndices().pop(); // strongest-first, so last is weakest
+    return idx == null ? null : this.pieces[idx];
+  }
+
   /** How many pieces are on the board right now (≤ deployCount()). */
   deployedCount(): number { return this.pieces.filter((p) => p.deployed).length; }
 

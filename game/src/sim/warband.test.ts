@@ -966,3 +966,36 @@ describe("Warband difficulty", () => {
     expect(run.standings()[0].alive).toBe(true);
   }, 60000);
 });
+
+describe("Warband shop comparison", () => {
+  it("names the unit a new buy would push off a full board", () => {
+    const run = new WarbandRun(61, null);
+    run.gold = 300; run.level = 3;
+    // A strong knight and two weak bodies, so the ordering is unambiguous.
+    for (const t of ["knight", "militia", "scout"]) { run.shop = [t, t, t, t, t]; run.buy(0); }
+    expect(run.deployedCount()).toBe(3);
+    const weakest = run.weakestDeployed();
+    expect(weakest).not.toBeNull();
+    // It is the one `place` would actually bump: the last of the strength order.
+    const order = run.deployment(); // strongest first
+    expect(weakest!.type).toBe(run.pieces[order[order.length - 1].index].type);
+    expect(weakest!.type).not.toBe("knight"); // never the best thing you own
+  });
+
+  it("returns nothing to compare against when the board is empty", () => {
+    const run = new WarbandRun(62, null);
+    expect(run.weakestDeployed()).toBeNull();
+  });
+
+  it("tracks the board as it changes", () => {
+    const run = new WarbandRun(63, null);
+    run.gold = 300; run.level = 2;
+    run.shop = ["militia", "militia", "militia", "militia", "militia"];
+    run.buy(0);
+    expect(run.weakestDeployed()!.type).toBe("militia");
+    // A star-up outranks a plain body, so the weakest becomes the other one.
+    run.shop = ["hero", "hero", "hero", "hero", "hero"];
+    run.buy(0);
+    expect(run.weakestDeployed()!.type).toBe("militia");
+  });
+});
