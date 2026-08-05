@@ -21,8 +21,8 @@ export const TRAITS: Trait[] = [
     id: "footmen", name: "Footmen", color: "#c9a24a",
     types: ["militia", "spearman", "twohand", "pikeman", "shieldbearer", "berserker"],
     tiers: [
-      { at: 2, label: "+3 armour", buff: { armor: 3 } },
-      { at: 4, label: "+8 armour, +12% HP", buff: { armor: 8, hpPct: 12 } },
+      { at: 2, label: "+2 armour", buff: { armor: 2 } },
+      { at: 4, label: "+5 armour, +12% HP", buff: { armor: 5, hpPct: 12 } },
     ],
   },
   {
@@ -66,7 +66,7 @@ export const TRAITS: Trait[] = [
     id: "mystics", name: "Mystics", color: "#9a7ae0",
     types: ["monk", "battlemage"],
     tiers: [
-      { at: 2, label: "+20% HP, +4 armour", buff: { hpPct: 20, armor: 4 } },
+      { at: 2, label: "+20% HP, +3 armour", buff: { hpPct: 20, armor: 3 } },
     ],
   },
   {

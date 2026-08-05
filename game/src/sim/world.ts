@@ -117,6 +117,10 @@ export interface WorldEvent {
   data?: string;
 }
 
+/** However much armour is stacked, a hit still lands for this share of its
+ *  raw damage. Never reached in a normal match; it only bites the extremes. */
+const ARMOR_MIN_FRACTION = 0.2;
+
 /** A skirmisher starts giving ground once a melee unit is this close, and
  *  backs off in steps of this size. Deliberately short: it should look like
  *  stepping back to reload, not fleeing the field. */
@@ -2102,7 +2106,13 @@ export class World {
     if (attacker && attacker.boon.raiderMult > 1 && (target.kind === Kind.Building || target.type === "villager")) {
       raw *= attacker.boon.raiderMult;
     }
-    const dmg = Math.max(1, raw - this.effectiveArmor(target, ranged));
+    // Armour subtracts flat, which is fine at the handful of points a unit
+    // carries in a normal match — but Warband relics, synergies and augments
+    // stack it far past any attack value in the game, and a flat subtraction
+    // with only a 1-damage floor turns that into effective immunity (20 attack
+    // against 44 armour was 1 damage). A blow always lands for at least a fifth
+    // of its weight, so armour caps out at heavy mitigation instead of walling.
+    const dmg = Math.max(1, raw * ARMOR_MIN_FRACTION, raw - this.effectiveArmor(target, ranged));
     target.hp -= dmg;
     target.hitFlash = 1;
     target.lastDamageTime = this.time;

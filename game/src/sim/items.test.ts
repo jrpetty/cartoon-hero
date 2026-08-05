@@ -4,14 +4,17 @@ import {
   fusionOf, fuseComponents, buildsInto,
 } from "./items";
 import { resolveBattle } from "./autobattle";
+import { World } from "./world";
+import { Team } from "./types";
+import { generateMap } from "../maps/generator";
 import { WarbandRun } from "./warband";
 
 describe("Warband relics", () => {
   it("applyItems stacks flat and percent buffs", () => {
     const u = { maxHp: 100, hp: 100, attack: 10, armor: 1, speed: 80 };
-    applyItems(u, ["whetstone", "greatmail"]); // +30% attack, +12 armour
+    applyItems(u, ["whetstone", "greatmail"]); // +30% attack, +7 armour
     expect(u.attack).toBe(13);
-    expect(u.armor).toBe(13);
+    expect(u.armor).toBe(8);
   });
 
   it("a fully-itemized carry sweeps an identical un-itemized unit", () => {
@@ -108,9 +111,9 @@ describe("Warband components", () => {
 
   it("components buff a unit on their own, before they are fused", () => {
     const u = { maxHp: 100, hp: 100, attack: 10, armor: 1, speed: 80 };
-    applyItems(u, ["blade", "plate"]); // +6 attack, +8 armour
+    applyItems(u, ["blade", "plate"]); // +6 attack, +5 armour
     expect(u.attack).toBe(16);
-    expect(u.armor).toBe(9);
+    expect(u.armor).toBe(6);
     // …and the relic they fuse into is stronger than the parts.
     const fused = { maxHp: 100, hp: 100, attack: 10, armor: 1, speed: 80 };
     applyItems(fused, [fusionOf("blade", "plate")!]);
@@ -155,4 +158,48 @@ describe("Warband components", () => {
     expect(forged.length).toBeGreaterThan(0);
     for (const id of forged) expect(ITEMS[id]).toBeTruthy();
   });
+});
+
+describe("Armour scaling", () => {
+  it("blunts a hit but can never wall it off", () => {
+    const w = new World(7);
+    w.init(generateMap("open_plains", 7), [{}, {}], [1, 1]);
+    const target = w.spawnUnit(Team.Enemy, "militia", 1200, 1200);
+    // Far more armour than any attack value in the game.
+    target.armor = 60;
+    target.pierceArmor = 60;
+    const before = target.hp;
+    w.dealDamage(Team.Player, target, 30, "twohand");
+    const dealt = before - target.hp;
+    // Flat subtraction alone would leave the 1-damage floor here, which is what
+    // made a stacked-armour carry effectively immortal in Warband.
+    expect(dealt).toBeGreaterThan(1);
+    expect(dealt).toBeCloseTo(30 * 0.2, 5);
+    // Ordinary armour still works by subtraction, untouched.
+    const normal = w.spawnUnit(Team.Enemy, "militia", 1300, 1200);
+    normal.armor = 4; normal.pierceArmor = 4;
+    const h0 = normal.hp;
+    w.dealDamage(Team.Player, normal, 30, "twohand");
+    expect(h0 - normal.hp).toBe(26);
+  });
+
+  it("keeps armour worth taking without letting it win on its own", () => {
+    const ROWS = [4, 5, 3, 6, 2, 7, 1, 8, 0, 9];
+    const side = (items: string[], s: 1 | -1) =>
+      Array.from({ length: 5 }, (_, i) => ({
+        type: "twohand", star: 2, items,
+        col: s === -1 ? 4 - Math.floor(i / ROWS.length) : 5 + Math.floor(i / ROWS.length),
+        row: ROWS[i % ROWS.length],
+      }));
+    const armour = ["greatmail", "towershield", "dancersmail"];
+    const damage = ["whetstone", "bloodaxe", "warbanner"];
+    const seeds = [1, 2, 3, 4, 5];
+    let vsBare = 0, vsDamage = 0;
+    for (const s of seeds) {
+      if (resolveBattle(side(armour, -1), side([], 1), s).winner === "A") vsBare++;
+      if (resolveBattle(side(armour, -1), side(damage, 1), s).winner === "A") vsDamage++;
+    }
+    expect(vsBare).toBe(seeds.length);          // still clearly worth equipping
+    expect(vsDamage).toBeLessThan(seeds.length); // but no longer an auto-win
+  }, 60000);
 });

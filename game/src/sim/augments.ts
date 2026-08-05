@@ -55,7 +55,7 @@ export const AUGMENTS: Augment[] = [
   { id: "quartermaster", name: "Quartermaster", tier: "silver", rerollCost: 1, desc: "Rerolls cost 1 gold instead of 2." },
   { id: "apprentice", name: "Apprentice Drill", tier: "silver", xp: 2, desc: "+2 free XP every round." },
   { id: "scavengers", name: "Scavengers", tier: "silver", relics: 1, gold: 1, desc: "Gain a relic now, then +1 gold every round." },
-  { id: "shieldwall", name: "Shield Wall", tier: "silver", buff: { armor: 6 }, desc: "Your warband gains +6 armour." },
+  { id: "shieldwall", name: "Shield Wall", tier: "silver", buff: { armor: 4 }, desc: "Your warband gains +4 armour." },
   { id: "forcedmarch", name: "Forced March", tier: "silver", buff: { speedPct: 18 }, desc: "Your warband moves 18% faster." },
 
   // ---- gold: real power spikes -------------------------------------------
@@ -63,7 +63,7 @@ export const AUGMENTS: Augment[] = [
   { id: "warforged", name: "Warforged Banner", tier: "gold", boardSlots: 1, desc: "+1 board slot — field one more unit." },
   { id: "relichoard", name: "Relic Hoard", tier: "gold", relicEvery: 2, desc: "Earn a relic every 2 rounds instead of 3." },
   { id: "blademaster", name: "Blademaster's Oath", tier: "gold", buff: { atkPct: 26 }, desc: "Your warband deals +26% attack." },
-  { id: "bulwark", name: "Bulwark", tier: "gold", buff: { hpPct: 18, armor: 8 }, desc: "+18% HP and +8 armour to your warband." },
+  { id: "bulwark", name: "Bulwark", tier: "gold", buff: { hpPct: 18, armor: 5 }, desc: "+18% HP and +5 armour to your warband." },
   { id: "warcollege", name: "War College", tier: "gold", xp: 4, desc: "+4 free XP every round — level up fast." },
   { id: "veterans", name: "Veterans' Pay", tier: "gold", gold: 4, desc: "+4 gold every round." },
 
