@@ -43,6 +43,7 @@ public class TransferScreen extends GadgetScreen {
     private EditBox nameField;
     private EditBox codeField;
     private Button upgrade;
+    private Button release;
     private String shownName = "";
 
     public TransferScreen(TransferNode node, boolean sender) {
@@ -76,12 +77,11 @@ public class TransferScreen extends GadgetScreen {
                             sendText(node.getBlockPos(), "transfer_code", codeField.getValue()))
                     .bounds(left + 172, top + CODE_Y, 56, 14).build());
         } else {
-            addRenderableWidget(Button.builder(Component.literal("Release"), b -> {
+            release = addRenderableWidget(Button.builder(Component.literal("Release"), b -> {
                         send(node.getBlockPos(), "transfer_release", 0);
                         rebuildWidgets();
                     })
-                    .bounds(left + 172, top + CODE_Y + 2, 56, 14).build())
-                    .active = node.linkState() == TransferNode.LINK_PAIRED;
+                    .bounds(left + 172, top + CODE_Y + 2, 56, 14).build());
         }
 
         boolean maxed = node.getTier() >= TransferNode.MAX_TIER;
@@ -99,6 +99,7 @@ public class TransferScreen extends GadgetScreen {
     @Override
     public void render(GuiGraphics gfx, int mouseX, int mouseY, float delta) {
         if (codeField != null && !codeField.isFocused()
+                && TransferNode.isCode(node.getChannel())
                 && !codeField.getValue().equals(node.getChannel())) {
             codeField.setValue(node.getChannel());
         }
@@ -112,6 +113,9 @@ public class TransferScreen extends GadgetScreen {
         // screen is open should grey the button out, not fail on the press.
         if (upgrade != null) {
             upgrade.active = node.getTier() < TransferNode.MAX_TIER && affordable();
+        }
+        if (release != null) {
+            release.active = node.linkState() == TransferNode.LINK_PAIRED;
         }
 
         super.render(gfx, mouseX, mouseY, delta);
@@ -160,9 +164,9 @@ public class TransferScreen extends GadgetScreen {
         gfx.drawString(font, "Code", x, top + CODE_Y + 4, DIM, false);
         if (!sender) {
             gfx.pose().pushPose();
+            gfx.pose().translate((float) (x + 40), (float) (top + CODE_Y), 0.0F);
             gfx.pose().scale(2.0F, 2.0F, 1.0F);
-            gfx.drawString(font, TransferNode.pretty(node.getChannel()),
-                    (x + 40) / 2, (top + CODE_Y) / 2, AMBER, false);
+            gfx.drawString(font, TransferNode.pretty(node.getChannel()), 0, 0, AMBER, false);
             gfx.pose().popPose();
         }
 

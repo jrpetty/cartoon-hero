@@ -160,12 +160,20 @@ public record GadgetConfigPayload(BlockPos pos, String key, int value, String te
                 // Only a sender is typed into; a receiver's code is minted.
                 if (be instanceof ItemSenderBlockEntity from) {
                     String code = p.text();
-                    if (TransferNode.isCode(code)) {
-                        from.setChannel(code);
-                        say(player, "Linked to " + TransferNode.pretty(code)
-                                + " — it pairs when the receiver answers.", ChatFormatting.GREEN);
-                    } else {
+                    if (!code.isEmpty() && !TransferNode.isCode(code)) {
                         say(player, "A code is " + TransferNode.CODE_LENGTH + " digits.", ChatFormatting.RED);
+                    } else if (code.equals(from.getChannel())) {
+                        say(player, "Already on that code.", ChatFormatting.GRAY);
+                    } else {
+                        // Free the receiver this sender was holding before moving
+                        // on, so the code it vacates can be claimed immediately.
+                        from.releaseClaim();
+                        from.setChannel(code);
+                        say(player, code.isEmpty()
+                                        ? "Unlinked — this sender is on no code."
+                                        : "Linked to " + TransferNode.pretty(code)
+                                                + " — it pairs when the receiver answers.",
+                                code.isEmpty() ? ChatFormatting.YELLOW : ChatFormatting.GREEN);
                     }
                 }
             }
