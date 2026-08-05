@@ -7,7 +7,7 @@
 import { RNG } from "../engine/rng";
 import { UNITS } from "../content/units";
 import { resolveBattle, UnitStack, ArenaUnit, BattleResult, SideOpts } from "./autobattle";
-import { activeTraits, ActiveTrait, Buff } from "./traits";
+import { activeTraits, ActiveTrait, Buff, Trait, TraitTier, TRAITS } from "./traits";
 import { COMPONENT_IDS, MAX_ITEMS, fuseComponents } from "./items";
 import { Augment, offerAugments, tierForRound, combinedBuff, combinedTraitBonus } from "./augments";
 import { CreepCamp, isCreepRound, campForRound, campBoard } from "./creeps";
@@ -37,7 +37,11 @@ const TIER_ODDS: number[][] = [
   [16, 24, 35, 20, 5],
   [10, 16, 30, 30, 14],
 ];
-const XP_TO_LEVEL = [0, 0, 2, 6, 12, 22, 38, 60, 90]; // cumulative xp needed for level i (1..9)
+// Cumulative xp needed for level i, indexed by level (1..9). The level-9 entry
+// matters twice over: without it the climb stops at 8 (the loop compares
+// against XP_TO_LEVEL[level+1], which was undefined) and the header's xp
+// readout printed "NaN".
+const XP_TO_LEVEL = [0, 0, 2, 6, 12, 22, 38, 60, 90, 130];
 const SHOP_SIZE = 5;
 const REROLL_COST = 2;
 const XP_BUY = 4; // gold → +4 xp
@@ -1073,6 +1077,31 @@ export class WarbandRun {
   /** Active synergies on your currently-deployed warband (for the screen). */
   activeTraits(): ActiveTrait[] {
     return activeTraits([...new Set(this.boardUnits().map((u) => u.type))], this.traitBonusMap());
+  }
+
+  /**
+   * Every synergy your board touches at all, active or not, with how many
+   * distinct types it has and what the next threshold is. "Vanguard 2/3" is
+   * the single most useful thing a board can tell you while you shop, and it
+   * was invisible while only *active* traits were listed.
+   */
+  traitProgress(): { trait: Trait; count: number; tier: TraitTier | null; next: number | null }[] {
+    const set = new Set(this.boardUnits().map((u) => u.type));
+    const bonus = this.traitBonusMap();
+    const out: { trait: Trait; count: number; tier: TraitTier | null; next: number | null }[] = [];
+    for (const trait of TRAITS) {
+      const count = trait.types.reduce((n, t) => n + (set.has(t) ? 1 : 0), 0) + (bonus?.[trait.id] ?? 0);
+      if (count <= 0) continue;
+      let tier: TraitTier | null = null;
+      for (const t of trait.tiers) if (count >= t.at) tier = t;
+      const next = trait.tiers.find((t) => t.at > count)?.at ?? null;
+      out.push({ trait, count, tier, next });
+    }
+    // Active first, then whoever is closest to switching on.
+    return out.sort((a, b) =>
+      Number(!!b.tier) - Number(!!a.tier) ||
+      (a.next ?? 0) - (a.count) - ((b.next ?? 0) - b.count) ||
+      b.count - a.count);
   }
 
   /**

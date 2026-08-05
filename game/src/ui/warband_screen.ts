@@ -21,7 +21,9 @@ import { Item, applyItems, itemDef, isComponent, buildsInto } from "../sim/items
 import { ABILITIES } from "../content/abilities";
 import { Augment, TIER_COLOR as AUG_COLOR } from "../sim/augments";
 import { WarbandCommander, commanderIdentity } from "../sim/warband_commanders";
-import { CarouselPick } from "../sim/carousel";
+import { CarouselPick, isDraftRound } from "../sim/carousel";
+import { isCreepRound } from "../sim/creeps";
+import { tierForRound } from "../sim/augments";
 import { Condition, hasEffect, conditionLines } from "../sim/conditions";
 import { TerrainFeature, TERRAIN, terrainAt } from "../sim/terrain";
 import { TRAITS } from "../sim/traits";
@@ -37,23 +39,29 @@ const easeOut = (t: number) => 1 - Math.pow(1 - Math.max(0, Math.min(1, t)), 3);
 
 /** Left rail (standings, commander, synergies, relics) and bottom bar heights. */
 export const RAIL_W = 232;
-export const BENCH_H = 66;
-export const SHOP_H = 132;
+export const BENCH_H = 86;
+export const SHOP_H = 146;
+/** The banner across the top, and the strip of labels above the arena. */
+export const HEADER_H = 62;
+/** The stone kerb the board is set into — nothing else may sit inside it. */
+export const BOARD_RIM = 12;
 
 /**
  * The arena rect for a given canvas. The board is a 10×10 grid, so its cells
  * are kept close to square and the board is centred in whatever width is left
  * — otherwise on a wide monitor the arena smears into a near-empty field of
- * very flat rectangles with the units lost in the middle of it.
+ * very flat rectangles with the units lost in the middle of it. The rect is the
+ * *playable* area; the kerb and its braziers overhang it by BOARD_RIM, which is
+ * why every margin here allows for it.
  */
 export function boardRect(W: number, H: number): { x: number; y: number; w: number; h: number } {
-  const y = 92;
-  const availX = RAIL_W;
-  const availW = W - availX - 16;
-  const availH = (H - SHOP_H) - BENCH_H - 16 - y;
+  const y = HEADER_H + 34 + BOARD_RIM;
+  const availX = RAIL_W + BOARD_RIM;
+  const availW = W - availX - 16 - BOARD_RIM;
+  const availH = (H - SHOP_H) - BENCH_H - 10 - BOARD_RIM - y;
   const cellH = availH / GRID_ROWS;
   // A little horizontal stretch reads fine; a lot looks broken.
-  const cellW = Math.min(availW / GRID_COLS, cellH * 1.25);
+  const cellW = Math.min(availW / GRID_COLS, cellH * 1.18);
   const w = cellW * GRID_COLS;
   return { x: Math.round(availX + (availW - w) / 2), y, w, h: cellH * GRID_ROWS };
 }
@@ -84,6 +92,8 @@ export class WarbandScreen {
   private condTip: { c: Condition; x: number; y: number } | null = null; // hovered battlefield chip
   /** One reusable entity per unit type, so cards can draw the real sprite. */
   private portraits = new Map<string, Entity>();
+  /** Trailing health fraction per entity, for the damage-ghost on health bars. */
+  private hpGhost = new Map<number, number>();
   private introT = 0;   // VS clash banner countdown at the start of a fight
   private resultT = -1; // victory/defeat flourish clock
   private scoutId = -1;   // opponent whose warband is being scouted, or -1
@@ -112,56 +122,80 @@ export class WarbandScreen {
     let action: "exit" | null = null;
 
     // ---- header ----
-    const hg = ctx.createLinearGradient(0, 0, 0, 56);
-    hg.addColorStop(0, "rgba(26,19,10,0.96)"); hg.addColorStop(1, "rgba(8,6,3,0.94)");
-    ctx.fillStyle = hg; ctx.fillRect(0, 0, W, 56);
-    ctx.fillStyle = withAlpha(PAL.uiAccent, 0.5); ctx.fillRect(0, 55, W, 1.5);
-    ui.text("⚔ Warband Tactics", 20, 35, { size: 22, bold: true, color: PAL.uiAccent, font: "Georgia, serif" });
-    const stat = (label: string, val: string, x: number, col = "#e7ddc4", icon?: () => void) => {
-      ctx.fillStyle = "rgba(0,0,0,0.3)"; this.roundRect(ctx, x - 10, 8, 74, 40, 6); ctx.fill();
-      ui.text(label, x, 22, { size: 10, color: "#9a917b" });
-      ui.text(val, icon ? x + 16 : x, 43, { size: 18, bold: true, color: col });
-      if (icon) icon();
+    this.drawHeaderPlate(W, time);
+    this.bannerEmblem(ctx, 26, 30, 13, time);
+    ui.text("Warband Tactics", 46, 38, { size: 23, bold: true, color: PAL.uiAccent, font: "Georgia, serif" });
+    // Stat pods: a fixed grid, each pod owning its own sub-line, so nothing has
+    // to be squeezed into a neighbour's box.
+    const POD_Y = 7, POD_H = 48;
+    const pod = (x: number, w2: number, label: string, draw: (px: number, pw: number) => void) => {
+      const pg = ctx.createLinearGradient(0, POD_Y, 0, POD_Y + POD_H);
+      pg.addColorStop(0, "rgba(0,0,0,0.42)"); pg.addColorStop(1, "rgba(0,0,0,0.22)");
+      ctx.fillStyle = pg; this.roundRect(ctx, x, POD_Y, w2, POD_H, 7); ctx.fill();
+      ctx.strokeStyle = "rgba(255,246,224,0.08)"; ctx.lineWidth = 1;
+      this.roundRect(ctx, x + 0.5, POD_Y + 0.5, w2 - 1, POD_H - 1, 7); ctx.stroke();
+      ui.text(label, x + 9, POD_Y + 14, { size: 9, color: "#8f8770" });
+      draw(x, w2);
     };
-    // TFT-style stage-round ("2-3") with the raw round number under it.
-    stat("STAGE", run.stageLabel(), 280);
-    ui.text(`round ${run.round}`, 280, 53, { size: 8.5, color: "#6f6a5c" });
-    // Where the next point of interest lands, so the maths isn't homework.
-    {
-      const g = run.gold, nextAt = (Math.floor(g / 10) + 1) * 10;
-      const capped = Math.floor(g / 10) >= 5;
-      const pipY = 51;
-      for (let i = 0; i < 5; i++) {
-        const lit = Math.floor(g / 10) > i;
-        ctx.fillStyle = lit ? "#ffd24a" : "rgba(255,210,74,0.22)";
-        ctx.beginPath(); ctx.arc(354 + i * 8, pipY, 2.4, 0, Math.PI * 2); ctx.fill();
-      }
-      ui.text(capped ? "max" : `+1g at ${nextAt}`, 398, pipY + 3.5, { size: 8.5, color: "#8a8278" });
-    }
-    stat("GOLD", String(run.gold), 360, "#ffd24a", () => {
-      ctx.save(); ctx.shadowColor = "#ffd24a"; ctx.shadowBlur = 6;
-      const cg = ctx.createRadialGradient(364, 35, 1, 366, 37, 7);
-      cg.addColorStop(0, "#ffe89a"); cg.addColorStop(1, "#e0a52a");
-      ctx.fillStyle = cg; ctx.beginPath(); ctx.arc(366, 37, 6.5, 0, Math.PI * 2); ctx.fill(); ctx.restore();
-      ctx.strokeStyle = "#a8771e"; ctx.lineWidth = 1; ctx.beginPath(); ctx.arc(366, 37, 6.5, 0, Math.PI * 2); ctx.stroke();
+    let px0 = 250;
+    // TFT-style stage-round ("2-3") with the raw round number beside it.
+    pod(px0, 88, "STAGE", (x) => {
+      ui.text(run.stageLabel(), x + 9, POD_Y + 36, { size: 20, bold: true, color: "#e7ddc4" });
+      ui.text(`rd ${run.round}`, x + 79, POD_Y + 36, { align: "right", size: 9.5, color: "#6f6a5c" });
     });
-    stat("LEVEL", String(run.level), 452);
-    // XP progress toward the next level, right under the number.
-    {
+    px0 += 94;
+    pod(px0, 108, "GOLD", (x, w2) => {
+      ctx.save(); ctx.shadowColor = "#ffd24a"; ctx.shadowBlur = 6;
+      const cg = ctx.createRadialGradient(x + 15, POD_Y + 26, 1, x + 17, POD_Y + 28, 8);
+      cg.addColorStop(0, "#ffe89a"); cg.addColorStop(1, "#e0a52a");
+      ctx.fillStyle = cg; ctx.beginPath(); ctx.arc(x + 17, POD_Y + 28, 7, 0, Math.PI * 2); ctx.fill(); ctx.restore();
+      ctx.strokeStyle = "#a8771e"; ctx.lineWidth = 1; ctx.beginPath(); ctx.arc(x + 17, POD_Y + 28, 7, 0, Math.PI * 2); ctx.stroke();
+      ui.text(String(run.gold), x + 30, POD_Y + 35, { size: 20, bold: true, color: "#ffd24a" });
+      // Where the next point of interest lands, so the maths isn't homework.
+      const g = run.gold, tens = Math.floor(g / 10), capped = tens >= 5;
+      for (let i = 0; i < 5; i++) {
+        ctx.fillStyle = tens > i ? "#ffd24a" : "rgba(255,210,74,0.20)";
+        ctx.beginPath(); ctx.arc(x + 11 + i * 7.5, POD_Y + 43, 2.3, 0, Math.PI * 2); ctx.fill();
+      }
+      ui.text(capped ? "max int." : `+1g @${(tens + 1) * 10}`, x + w2 - 8, POD_Y + 46, { align: "right", size: 8.5, color: "#8a8278" });
+    });
+    px0 += 114;
+    pod(px0, 96, "LEVEL", (x, w2) => {
+      ui.text(String(run.level), x + 9, POD_Y + 36, { size: 20, bold: true, color: "#e7ddc4" });
       const xp = run.xpProgress();
-      const bx2 = 443, by2 = 46, bw2 = 68;
-      ctx.fillStyle = "rgba(0,0,0,0.55)"; ctx.fillRect(bx2, by2, bw2, 4);
+      const bx2 = x + 32, by2 = POD_Y + 29, bw2 = w2 - 42;
+      ctx.fillStyle = "rgba(0,0,0,0.6)"; this.roundRect(ctx, bx2, by2, bw2, 5, 2.5); ctx.fill();
       if (xp.max) {
-        ctx.fillStyle = "#ffd24a"; ctx.fillRect(bx2, by2, bw2, 4);
-        ui.text("MAX", bx2 + bw2, 22, { align: "right", size: 9, color: "#ffd24a" });
+        ctx.fillStyle = "#ffd24a"; this.roundRect(ctx, bx2, by2, bw2, 5, 2.5); ctx.fill();
+        ui.text("MAX", x + w2 - 8, POD_Y + 46, { align: "right", size: 8.5, color: "#ffd24a" });
       } else {
         const cur = Math.max(0, xp.xp); // a hand-set level can sit below its own gate
-        ctx.fillStyle = "#7fb0e8"; ctx.fillRect(bx2, by2, bw2 * Math.max(0, Math.min(1, cur / xp.need)), 4);
-        ui.text(`${cur}/${xp.need}`, bx2 + bw2, 22, { align: "right", size: 9, color: "#8a8278" });
+        ctx.fillStyle = "#7fb0e8";
+        this.roundRect(ctx, bx2, by2, Math.max(2, bw2 * Math.min(1, cur / xp.need)), 5, 2.5); ctx.fill();
+        ui.text(`${cur}/${xp.need} xp`, x + w2 - 8, POD_Y + 46, { align: "right", size: 8.5, color: "#8a8278" });
       }
-    }
-    stat("LIFE", String(run.life), 540, run.life <= 25 ? "#e0564a" : "#7df2a9");
-    stat("STREAK", (run.streak > 0 ? "+" : "") + run.streak, 628, run.streak > 0 ? "#7df2a9" : run.streak < 0 ? "#e0a878" : "#9a917b");
+    });
+    px0 += 102;
+    pod(px0, 84, "LIFE", (x, w2) => {
+      const col = run.life <= 25 ? "#e0564a" : run.life <= 50 ? "#e0a878" : "#7df2a9";
+      ui.text(String(run.life), x + 9, POD_Y + 36, { size: 20, bold: true, color: col });
+      ctx.fillStyle = "rgba(0,0,0,0.6)"; this.roundRect(ctx, x + 9, POD_Y + 41, w2 - 18, 4, 2); ctx.fill();
+      ctx.fillStyle = col; this.roundRect(ctx, x + 9, POD_Y + 41, (w2 - 18) * Math.max(0, Math.min(1, run.life / 100)), 4, 2); ctx.fill();
+    });
+    px0 += 90;
+    pod(px0, 84, "STREAK", (x, w2) => {
+      const s = run.streak;
+      const col = s > 0 ? "#7df2a9" : s < 0 ? "#e0a878" : "#9a917b";
+      ui.text((s > 0 ? "+" : "") + s, x + 9, POD_Y + 36, { size: 20, bold: true, color: col });
+      // Pips toward the next streak payout, so a run of wins visibly builds.
+      const n = Math.min(5, Math.abs(s));
+      for (let i = 0; i < 5; i++) {
+        ctx.fillStyle = i < n ? col : "rgba(255,255,255,0.12)";
+        ctx.beginPath(); ctx.arc(x + w2 - 12 - i * 8, POD_Y + 43, 2.3, 0, Math.PI * 2); ctx.fill();
+      }
+    });
+    px0 += 90;
+    this.drawRoundTrack(px0 + 10, POD_Y, Math.max(0, W - 136 - (px0 + 10)), POD_H, run);
     // While a modal pick is up nothing behind it may be clicked.
     const picking = run.phase === "augment" || run.phase === "commander" || run.phase === "draft";
     if (!picking && ui.button("Quit Run", W - 120, 12, 100, 32, { danger: true, size: 13 })) action = "exit";
@@ -181,10 +215,10 @@ export class WarbandScreen {
       if (open || hov) { ctx.strokeStyle = withAlpha("#7fb0e8", open ? 0.9 : 0.45); ctx.lineWidth = 1; ctx.strokeRect(sx + 0.5, sy + 0.5, 199, h - 1); }
       // The warband you face this round gets a marker so you can read the matchup.
       const next = !s.you && !run.isCreepRound() && s.name === run.pendingFoeName() && s.alive;
-      ui.text((s.alive ? "" : "☠ ") + s.name, sx + 8, sy + 17, {
+      ui.text((s.alive ? "" : "† ") + s.name, sx + 8, sy + 17, {
         size: 12, bold: s.you, color: s.alive ? (s.you ? "#ffe9b0" : "#e7ddc4") : "#6f6a5c",
       });
-      if (next) ui.text("⚔", sx + 96, sy + 17, { size: 12, color: "#e0786a" });
+      if (next) this.roundGlyph(ctx, sx + 100, sy + 12, 5.5, "pvp", "#e0786a");
       ui.bar(sx + 110, sy + 9, 82, 9, Math.max(0, s.life) / 100, s.alive ? "#7df2a9" : "#5a554d");
       // Light text with a dark halo, so it stays legible over both the filled
       // and the empty part of the bar.
@@ -239,21 +273,86 @@ export class WarbandScreen {
     }
 
     // ---- synergies ----
+    // Every trait the board touches, not only the ones already switched on:
+    // "two away from Vanguard" is the thing you actually shop against.
     sy += 12;
     ui.text("Synergies", sx, sy, { size: 14, bold: true, color: PAL.uiAccent });
     sy += 16;
-    const traits = run.activeTraits();
-    if (!traits.length) { ui.text("— none active —", sx, sy + 6, { size: 11, color: "#6f6a5c" }); sy += 16; }
+    const traits = run.traitProgress();
+    if (!traits.length) { ui.text("— nothing deployed —", sx, sy + 6, { size: 11, color: "#6f6a5c" }); sy += 16; }
     for (const at of traits) {
-      const th = 30;
-      ctx.fillStyle = withAlpha(at.trait.color, 0.14);
-      ctx.fillRect(sx, sy, 200, th);
-      ctx.fillStyle = at.trait.color;
-      ctx.fillRect(sx, sy, 3, th);
-      ui.text(`${at.trait.name}`, sx + 10, sy + 13, { size: 12, bold: true, color: at.trait.color });
-      ui.text(`×${at.count}`, sx + 192, sy + 13, { size: 12, align: "right", color: "#e7ddc4" });
-      ui.text(at.tier?.label ?? "", sx + 10, sy + 26, { size: 10, color: "#cabfa4" });
+      const on = !!at.tier;
+      const th = on ? 32 : 24;
+      const col = at.trait.color;
+      const g3 = ctx.createLinearGradient(sx, 0, sx + 200, 0);
+      g3.addColorStop(0, withAlpha(col, on ? 0.24 : 0.08)); g3.addColorStop(1, "rgba(12,9,5,0.35)");
+      ctx.fillStyle = g3; this.roundRect(ctx, sx, sy, 200, th, 4); ctx.fill();
+      // A hexagonal badge carrying the count — TFT's language, in our palette.
+      const bx3 = sx + 15, by3 = sy + th / 2, br = on ? 10 : 8;
+      ctx.beginPath();
+      for (let i = 0; i < 6; i++) {
+        const a = (i / 6) * Math.PI * 2 - Math.PI / 2;
+        const hx = bx3 + Math.cos(a) * br, hy = by3 + Math.sin(a) * br;
+        i ? ctx.lineTo(hx, hy) : ctx.moveTo(hx, hy);
+      }
+      ctx.closePath();
+      ctx.fillStyle = on ? withAlpha(col, 0.9) : "rgba(0,0,0,0.5)"; ctx.fill();
+      ctx.strokeStyle = withAlpha(col, on ? 1 : 0.5); ctx.lineWidth = 1.2; ctx.stroke();
+      ui.text(String(at.count), bx3, by3 + 4, {
+        align: "center", size: on ? 11 : 9.5, bold: true, color: on ? "#0e0b06" : withAlpha(col, 0.9),
+      });
+      ui.text(at.trait.name, sx + 31, sy + (on ? 14 : 15), {
+        size: on ? 12 : 11, bold: on, color: on ? col : withAlpha(col, 0.6),
+      });
+      if (on) ui.text(at.tier!.label, sx + 31, sy + 26, { size: 9.5, color: "#cabfa4" });
+      // Threshold pips: the ladder this trait still has to climb.
+      const marks = at.trait.tiers;
+      let mx = sx + 194;
+      for (let i = marks.length - 1; i >= 0; i--) {
+        const hit = at.count >= marks[i].at;
+        ctx.fillStyle = hit ? col : "rgba(255,255,255,0.16)";
+        ctx.beginPath(); ctx.arc(mx, sy + th / 2, 2.6, 0, Math.PI * 2); ctx.fill();
+        mx -= 8;
+      }
+      if (at.next != null) {
+        ui.text(`+${at.next - at.count}`, mx - 2, sy + th / 2 + 4, { align: "right", size: 9, color: "#8a8278" });
+      }
       sy += th + 3;
+    }
+
+    // ---- the ground you're fighting on ----
+    // Weather and terrain used to be chips squeezed above the board, where they
+    // collided with the arena's kerb. They belong with the other run state.
+    this.condTip = null;
+    {
+      sy += 14;
+      ui.text("Battlefield", sx, sy, { size: 14, bold: true, color: PAL.uiAccent });
+      sy += 8;
+      const cond = run.condition;
+      const live = hasEffect(cond);
+      const bh2 = 34;
+      const hovC = ui.mx >= sx && ui.mx <= sx + 200 && ui.my >= sy && ui.my <= sy + bh2;
+      const bg = ctx.createLinearGradient(sx, 0, sx + 200, 0);
+      bg.addColorStop(0, withAlpha(cond.color, hovC ? 0.34 : live ? 0.22 : 0.12));
+      bg.addColorStop(1, "rgba(12,9,5,0.6)");
+      ctx.fillStyle = bg; this.roundRect(ctx, sx, sy, 200, bh2, 6); ctx.fill();
+      ctx.strokeStyle = withAlpha(cond.color, hovC ? 0.95 : 0.5); ctx.lineWidth = 1;
+      this.roundRect(ctx, sx + 0.5, sy + 0.5, 199, bh2 - 1, 6); ctx.stroke();
+      this.weatherGlyph(ctx, sx + 17, sy + bh2 / 2, 8, cond, time);
+      ui.text(cond.name, sx + 34, sy + 15, { size: 12, bold: true, color: cond.color });
+      ui.text(live ? "hover for what it changes" : "no effect this round",
+        sx + 34, sy + 27, { size: 9, color: "#8a8278" });
+      if (hovC) this.condTip = { c: cond, x: sx + 208, y: sy };
+      sy += bh2 + 5;
+      // The ground's seed, so a board you liked can be noted and replayed.
+      if (run.terrain.length) {
+        ctx.fillStyle = "rgba(0,0,0,0.32)"; this.roundRect(ctx, sx, sy, 200, 20, 4); ctx.fill();
+        ui.text("ground seed", sx + 8, sy + 14, { size: 9.5, color: "#8a8278" });
+        ui.text(run.terrainCode(), sx + 192, sy + 14, {
+          align: "right", size: 11, bold: true, color: "#cabfa4", font: "ui-monospace, Menlo, monospace",
+        });
+        sy += 24;
+      }
     }
 
     // ---- relics ----
@@ -348,43 +447,40 @@ export class WarbandScreen {
         audio.play(run.lastResult.won ? "complete" : "collapse");
         this.resultT = 0;
         this.starUp = null; this.fusion = null;
-      } else if (run.phase === "shop") { this.fx.clear(); this.resultT = -1; }
+      } else if (run.phase === "shop") { this.fx.clear(); this.resultT = -1; this.hpGhost.clear(); }
       this.prevPhase = run.phase;
     }
     if (this.resultT >= 0) this.resultT += dt;
 
-    // ---- board title + enemy banner ----
-    ui.text(`Your Warband  ·  ${run.deployedCount()} / ${run.deployCount()} deployed`, boardX, 80, { size: 14, bold: true, color: PAL.uiAccent });
-    // ---- the round's battlefield condition ----
-    this.condTip = null;
+    // ---- board title + matchup banner ----
+    // One clean strip above the kerb: who you are on the left, who you face on
+    // the right. Everything else about the round now lives in the rail.
+    const stripY = boardY - BOARD_RIM - 8;
     {
-      const cond = run.condition;
-      const live = hasEffect(cond);
-      const label = cond.name;
-      const cw2 = 22 + label.length * 6.4;
-      const cx2 = boardX + 232, cy2 = 66;
-      const hovC = ui.mx >= cx2 && ui.mx <= cx2 + cw2 && ui.my >= cy2 && ui.my <= cy2 + 20;
-      ctx.fillStyle = withAlpha(cond.color, hovC ? 0.34 : live ? 0.2 : 0.12);
-      this.roundRect(ctx, cx2, cy2, cw2, 20, 5); ctx.fill();
-      ctx.strokeStyle = withAlpha(cond.color, hovC ? 0.95 : 0.5); ctx.lineWidth = 1;
-      this.roundRect(ctx, cx2 + 0.5, cy2 + 0.5, cw2 - 1, 19, 5); ctx.stroke();
-      this.weatherGlyph(ctx, cx2 + 12, cy2 + 10, 6, cond, time);
-      ui.text(label, cx2 + 22, cy2 + 14, { size: 11, bold: true, color: cond.color });
-      if (hovC) this.condTip = { c: cond, x: cx2, y: cy2 + 26 };
-      // The ground's seed, so a board you liked can be noted and replayed.
-      if (run.terrain.length) {
-        ui.text(`⛰ ${run.terrainCode()}`, cx2 + cw2 + 10, cy2 + 14, {
-          size: 10.5, bold: true, color: "#8a8278", font: "ui-monospace, Menlo, monospace",
-        });
+      const deployed = run.deployedCount(), cap = run.deployCount();
+      ui.text("YOUR WARBAND", boardX - 2, stripY, { size: 12, bold: true, color: PAL.uiAccent, font: "Georgia, serif" });
+      const dx0 = boardX + 112;
+      ui.text(`${deployed} / ${cap}`, dx0, stripY, {
+        size: 12, bold: true, color: deployed >= cap ? "#7df2a9" : deployed === 0 ? "#e0786a" : "#e7ddc4",
+      });
+      // Deployment pips — how many of your slots are actually on the field.
+      for (let i = 0; i < cap; i++) {
+        const px2 = dx0 + 40 + i * 9;
+        ctx.fillStyle = i < deployed ? "#7df2a9" : "rgba(255,255,255,0.16)";
+        ctx.beginPath(); ctx.arc(px2, stripY - 4, 2.8, 0, Math.PI * 2); ctx.fill();
       }
-    }
-    if (run.isCreepRound()) {
-      // A PvE camp round reads differently: loot on the line, not your life.
-      const camp = run.pendingCamp!;
-      ui.text(`🐺 ${camp.name}`, boardX + boardW, 80, { size: 13, bold: true, align: "right", color: "#c8a86a" });
-      ui.text(`win → ${camp.relics} relic${camp.relics > 1 ? "s" : ""} + ${camp.gold}g`, boardX + boardW, 66, { size: 10.5, align: "right", color: "#9a917b" });
-    } else {
-      ui.text(`vs ${run.pendingFoeName()}`, boardX + boardW, 80, { size: 13, bold: true, align: "right", color: "#e0786a" });
+      if (run.isCreepRound()) {
+        // A PvE camp round reads differently: loot on the line, not your life.
+        const camp = run.pendingCamp!;
+        this.roundGlyph(ctx, boardX + boardW - 8, stripY - 5, 6, "camp", "#c8a86a");
+        ui.text(camp.name.toUpperCase(), boardX + boardW - 20, stripY, { size: 12, bold: true, align: "right", color: "#c8a86a", font: "Georgia, serif" });
+        ui.text(`win → ${camp.relics} relic${camp.relics > 1 ? "s" : ""} + ${camp.gold}g`,
+          boardX + boardW - 32 - camp.name.length * 7.4, stripY, { size: 10.5, align: "right", color: "#9a917b" });
+      } else {
+        this.roundGlyph(ctx, boardX + boardW - 8, stripY - 5, 6, "pvp", "#e0786a");
+        ui.text(run.pendingFoeName().toUpperCase(), boardX + boardW - 20, stripY, { size: 12, bold: true, align: "right", color: "#e0786a", font: "Georgia, serif" });
+        ui.text("vs", boardX + boardW - 26 - run.pendingFoeName().length * 7.4, stripY, { size: 10.5, align: "right", color: "#8a8278" });
+      }
     }
 
     // The scout panel floats over the left of the board — swallow the pointer
@@ -397,38 +493,52 @@ export class WarbandScreen {
     this.drawBoard(boardX, boardY, boardW, boardH, time, dt, run);
 
     // ---- bench (your pieces) ----
-    const benchY = boardBottom + 8;
+    // A rack of nine slots, sized to the width the board actually occupies so
+    // the bench reads as the board's shelf rather than a loose row of cards.
     const benchUsed = run.benchCount();
-    ui.text("Bench", boardX, benchY - 2, { size: 12, bold: true, color: "#9a917b" });
-    ui.text(`${benchUsed} / ${run.benchSlots()}`, boardX + 44, benchY - 2, {
-      size: 11, bold: true, color: run.benchFull() ? "#e0786a" : "#6f6a5c",
+    const rackY = boardBottom + BOARD_RIM + 4;
+    const rackH = benchH - 8;
+    const railSpan = W - RAIL_W - 24; // the whole field right of the rail
+    const cardW = Math.max(58, Math.min(104, Math.floor((railSpan - (BENCH_SLOTS - 1) * 7) / BENCH_SLOTS)));
+    const rackW = BENCH_SLOTS * cardW + (BENCH_SLOTS - 1) * 7;
+    const rackX = Math.round(RAIL_W + 12 + (railSpan - rackW) / 2);
+    // The shelf the slots sit in.
+    const rg = ctx.createLinearGradient(0, rackY, 0, rackY + rackH);
+    rg.addColorStop(0, "rgba(26,20,12,0.7)"); rg.addColorStop(1, "rgba(10,7,4,0.55)");
+    ctx.fillStyle = rg; this.roundRect(ctx, rackX - 10, rackY - 2, rackW + 20, rackH + 4, 8); ctx.fill();
+    ctx.strokeStyle = "rgba(202,165,106,0.18)"; ctx.lineWidth = 1;
+    this.roundRect(ctx, rackX - 9.5, rackY - 1.5, rackW + 19, rackH + 3, 8); ctx.stroke();
+    ui.text("BENCH", rackX - 10, rackY - 8, { size: 10, bold: true, color: "#8f8770" });
+    ui.text(`${benchUsed} / ${run.benchSlots()}`, rackX + 46, rackY - 8, {
+      size: 10, bold: true, color: run.benchFull() ? "#e0786a" : "#6f6a5c",
     });
     if (this.selectedItem >= 0 && this.selectedItem < run.itemStash.length) {
-      ui.text("Relic ready — click a unit to equip it", boardX + 52, benchY - 2, { size: 12, bold: true, color: "#ffd24a" });
+      ui.text("◆ Relic armed — click a unit to equip it", rackX + rackW, rackY - 8, {
+        align: "right", size: 11, bold: true, color: "#ffd24a",
+      });
     } else if (this.selectedItem >= run.itemStash.length) this.selectedItem = -1;
 
     // Bench = your reserve (non-deployed) pieces. Drag one onto the board to
     // field it, into the Sell box to sell it, or click with a relic to equip.
     const reserve = run.pieces.map((_, i) => i).filter((i) => !run.pieces[i].deployed);
-    const cardW = 78;
-    const cardH = benchH - 14; // clear of the shop panel below
-    // A fixed rank of slots, so the bench reads as a real capacity you can fill.
+    const cardH = rackH - 12;
     for (let k = 0; k < BENCH_SLOTS; k++) {
-      const cx = boardX + k * (cardW + 6);
-      if (cx + cardW > W - 16) break;
+      const cx = rackX + k * (cardW + 7);
+      const cy = rackY + 6;
       const i = reserve[k];
       if (i == null) {
-        // An empty slot: a dashed frame, so "how much room is left" is visible.
-        ctx.fillStyle = "rgba(0,0,0,0.22)";
-        this.roundRect(ctx, cx, benchY + 14, cardW, cardH, 6); ctx.fill();
-        ctx.strokeStyle = "rgba(255,255,255,0.09)"; ctx.lineWidth = 1;
+        // An empty slot: a recessed well, so "how much room is left" is visible.
+        ctx.fillStyle = "rgba(0,0,0,0.34)";
+        this.roundRect(ctx, cx, cy, cardW, cardH, 6); ctx.fill();
+        ctx.strokeStyle = "rgba(255,255,255,0.07)"; ctx.lineWidth = 1;
         ctx.setLineDash([4, 4]);
-        this.roundRect(ctx, cx + 0.5, benchY + 14.5, cardW - 1, cardH - 1, 6); ctx.stroke();
+        this.roundRect(ctx, cx + 0.5, cy + 0.5, cardW - 1, cardH - 1, 6); ctx.stroke();
         ctx.setLineDash([]);
+        ui.text(String(k + 1), cx + cardW / 2, cy + cardH / 2 + 5, { align: "center", size: 13, bold: true, color: "rgba(255,255,255,0.07)" });
         continue;
       }
-      this.pieceCard(cx, benchY + 14, cardW, cardH, run.pieces[i], false, time, this.heldPiece === i);
-      const over = ui.mx >= cx && ui.mx <= cx + cardW && ui.my >= benchY + 14 && ui.my <= benchY + 14 + cardH;
+      this.pieceCard(cx, cy, cardW, cardH, run.pieces[i], false, time, this.heldPiece === i);
+      const over = ui.mx >= cx && ui.mx <= cx + cardW && ui.my >= cy && ui.my <= cy + cardH;
       if (run.phase === "shop" && over && !ui.pointerConsumed) {
         const equipping = this.selectedItem >= 0 && this.selectedItem < run.itemStash.length;
         if (equipping && ui.clicked) { ui.pointerConsumed = true; if (run.equipItem(this.selectedItem, i)) this.selectedItem = -1; }
@@ -437,70 +547,81 @@ export class WarbandScreen {
         }
       }
     }
-    if (run.pieces.length === 0) {
-      ui.text("Buy units from the shop below…", boardX + BENCH_SLOTS * (cardW + 6) + 10, benchY + 40, { size: 12, color: "#9a917b" });
-    }
 
     // ---- shop / actions (bottom) ----
     const shopY = shopTop;
-    ctx.fillStyle = "rgba(8,6,3,0.85)";
-    ctx.fillRect(0, shopY - 8, W, H - shopY + 8);
+    {
+      // A carved counter, not a flat black band: dark leather with a lit lip.
+      const bg = ctx.createLinearGradient(0, shopY - 10, 0, H);
+      bg.addColorStop(0, "rgba(24,18,10,0.97)"); bg.addColorStop(0.2, "rgba(12,9,5,0.96)"); bg.addColorStop(1, "rgba(6,4,2,0.98)");
+      ctx.fillStyle = bg; ctx.fillRect(0, shopY - 10, W, H - shopY + 10);
+      ctx.fillStyle = "rgba(202,165,106,0.22)"; ctx.fillRect(0, shopY - 10, W, 1.5);
+      const lip = ctx.createLinearGradient(0, shopY - 9, 0, shopY + 4);
+      lip.addColorStop(0, "rgba(202,165,106,0.10)"); lip.addColorStop(1, "rgba(202,165,106,0)");
+      ctx.fillStyle = lip; ctx.fillRect(0, shopY - 9, W, 13);
+    }
 
     if (run.phase === "shop") {
-      const sw = 120, sh = 108; // tall enough for the unit to actually be seen
-      // Centre the five cards under the board rather than pinning them to the rail.
-      const shopW = 5 * sw + 4 * 8;
-      const shopX = Math.round(Math.max(bx, boardX + (boardW - shopW) / 2 - 70));
-      ui.text("Shop", shopX, shopY + 6, { size: 13, bold: true, color: PAL.uiAccent });
+      // The counter is one block: five cards, then a column of actions. The
+      // whole block is centred under the board so it never drifts off to a side.
+      const ACT_W = 236;
+      const sh = SHOP_H - 26;
+      const span = W - RAIL_W - 24;
+      const sw = Math.max(90, Math.min(142, Math.floor((span - ACT_W - 48) / 5)));
+      const blockW = 5 * (sw + 8) + ACT_W;
+      const shopX = Math.round(RAIL_W + 12 + Math.max(0, (span - blockW) / 2));
+      const cy = shopY + 14;
+      ui.text("SHOP", shopX, shopY + 6, { size: 10, bold: true, color: "#8f8770" });
+      const odds = run.shopOdds();
+      ui.text(odds.map((o, i) => (o > 0 ? `T${i + 1} ${o}%` : "")).filter(Boolean).join("   "),
+        shopX + 44, shopY + 6, { size: 9.5, color: "#6f6a5c" });
       // What a bought unit would push off a full board, so a hovered card can
       // be measured against the thing it actually competes with.
       const benchmark = run.weakestDeployed();
       run.shop.forEach((type, i) => {
         const cx = shopX + i * (sw + 8);
-        const cy = shopY + 12;
         if (type) {
           const can = run.canBuy(i);
           this.shopCard(cx, cy, sw, sh, type, can.ok, run.poolCount(type), can.reason, time, benchmark, () => { if (run.buy(i)) audio.play("coin"); });
         }
         else {
           // A bought-out slot still holds its place in the row.
-          ctx.fillStyle = "rgba(0,0,0,0.25)"; this.roundRect(ctx, cx, cy, sw, sh, 8); ctx.fill();
+          ctx.fillStyle = "rgba(0,0,0,0.3)"; this.roundRect(ctx, cx, cy, sw, sh, 8); ctx.fill();
           ctx.strokeStyle = "rgba(255,255,255,0.05)"; ctx.lineWidth = 1;
           ctx.setLineDash([4, 4]); this.roundRect(ctx, cx + 0.5, cy + 0.5, sw - 1, sh - 1, 8); ctx.stroke(); ctx.setLineDash([]);
+          ui.text("bought", cx + sw / 2, cy + sh / 2 + 4, { align: "center", size: 10, color: "rgba(255,255,255,0.14)" });
         }
       });
-      const rxx = shopX + 5 * (sw + 8) + 8;
+      // Action column, right of the cards.
+      const rxx = shopX + 5 * (sw + 8) + 4;
       const rc = run.rerollCost();
       const freeR = run.freeRerollsLeft();
-      if (ui.button(freeR > 0 ? `Reroll  (FREE ×${freeR})` : `Reroll  (${rc}g)`, rxx, shopY + 14, 130, 32, {
-        disabled: run.gold < rc, size: 13, accent: freeR > 0,
+      if (ui.button(freeR > 0 ? `Reroll — FREE ×${freeR}` : `Reroll  ${rc}g`, rxx, cy, 138, 30, {
+        disabled: run.gold < rc, size: 12.5, accent: freeR > 0,
         tooltip: ["New shop", freeR > 0 ? "Your commander covers this one." : `Costs ${rc} gold.`],
       })) { if (run.reroll()) audio.play("ui"); }
       // Hold this shop through the round — the "one copy off a 3★" button.
-      if (ui.button(run.shopLocked ? "🔒 Held" : "🔓 Lock", rxx + 138, shopY + 14, 92, 32, {
+      if (ui.button(run.shopLocked ? "Held" : "Lock", rxx + 144, cy, 86, 30, {
         accent: run.shopLocked, size: 12,
         tooltip: [run.shopLocked ? "This shop is held" : "Hold this shop",
           "Keeps these five through the coming round instead of rolling them away.",
           "Rerolling releases the hold."],
       })) { if (run.toggleShopLock()) audio.play("ui"); }
       // Level-up shows the shop odds it would unlock — the real reason to tech.
-      const odds = run.shopOdds();
-      if (ui.button(`Level Up  (4g)`, rxx, shopY + 52, 130, 32, {
-        disabled: run.gold < 4 || run.level >= 9, size: 13,
+      if (ui.button(run.level >= 9 ? "Max Level" : `▲ Level Up  4g`, rxx, cy + 36, 138, 30, {
+        disabled: run.gold < 4 || run.level >= 9, size: 12.5,
         tooltip: ["+4 XP · bigger board", `Shop odds now: ${odds.map((o, i) => `T${i + 1} ${o}%`).filter((_, i) => odds[i] > 0).join("  ")}`],
       })) { if (run.buyXp()) audio.play("levelup"); }
       // What this fight is actually worth risking, before you commit to it.
       const worst = run.worstCaseDamage();
       const sg = run.streakGold();
-      // Right-aligned to the screen edge: the lock button now owns the space
-      // this used to start in, and left-aligned text ran off the canvas.
-      ui.text(`Defeat costs up to ${worst} life`, W - 14, shopY + 62, {
-        align: "right", size: 11, bold: true, color: worst >= run.life ? "#e0564a" : "#e0a878",
+      ui.text(`risk −${worst} life`, rxx + 144, cy + 48, {
+        align: "left", size: 10.5, bold: true, color: worst >= run.life ? "#e0564a" : "#e0a878",
       });
-      ui.text(sg > 0 ? `Streak pays +${sg}g next round` : "No streak bonus yet", W - 14, shopY + 80, {
-        align: "right", size: 11, color: sg > 0 ? "#7df2a9" : "#6f6a5c",
+      ui.text(sg > 0 ? `streak +${sg}g` : "no streak", rxx + 144, cy + 62, {
+        align: "left", size: 10.5, color: sg > 0 ? "#7df2a9" : "#6f6a5c",
       });
-      if (ui.button("⚔ FIGHT", rxx, shopY + 92, 130, 36, { accent: true, size: 16, tooltip: ["Send your warband into the arena."] })) {
+      if (ui.button("FIGHT", rxx, cy + 72, 138, sh - 72, { accent: true, size: 17, tooltip: ["Send your warband into the arena."] })) {
         if (run.beginFight()) {
           this.battle = new LiveBattle(run.boardUnits(), run.pendingOpp, run.pendingSeed, 30, run.sideOpts(), run.fieldOpts());
           this.battle.begin();
@@ -509,8 +630,23 @@ export class WarbandScreen {
         }
       }
     } else if (run.phase === "battle") {
-      ui.text("⚔ Battle in progress…", W / 2, shopY + 40, { align: "center", size: 22, bold: true, color: "#ffd24a", font: "Georgia, serif" });
-      ui.text(`vs ${run.pendingFoeName()}`, W / 2, shopY + 66, { align: "center", size: 14, color: "#d8cdb4" });
+      // A live readout of the fight, so the bar isn't dead air while it plays.
+      const alive = this.battle
+        ? this.battle.world.entities.filter((e) => e.alive && e.kind === Kind.Unit && e.type !== "villager")
+        : [];
+      const mine = alive.filter((e) => e.team === 0).length;
+      const theirs = alive.length - mine;
+      ui.text("Battle in progress…", W / 2, shopY + 34, { align: "center", size: 21, bold: true, color: "#ffd24a", font: "Georgia, serif" });
+      const barW = Math.min(520, W - RAIL_W - 80), bxL = W / 2 - barW / 2, byL = shopY + 52;
+      const total = Math.max(1, mine + theirs);
+      ctx.fillStyle = "rgba(0,0,0,0.55)"; this.roundRect(ctx, bxL, byL, barW, 12, 6); ctx.fill();
+      ctx.save(); this.roundRect(ctx, bxL, byL, barW, 12, 6); ctx.clip();
+      ctx.fillStyle = "#4a93e8"; ctx.fillRect(bxL, byL, barW * (mine / total), 12);
+      ctx.fillStyle = "#e0564a"; ctx.fillRect(bxL + barW * (mine / total), byL, barW * (theirs / total), 12);
+      ctx.restore();
+      ui.text(`${mine} standing`, bxL - 8, byL + 11, { align: "right", size: 12, bold: true, color: "#7fb0e8" });
+      ui.text(`${theirs} standing`, bxL + barW + 8, byL + 11, { size: 12, bold: true, color: "#e88a7f" });
+      ui.text(`vs ${run.pendingFoeName()}`, W / 2, shopY + 84, { align: "center", size: 13, color: "#8a8278" });
     } else if (run.phase === "result" && run.lastResult) {
       const r = run.lastResult;
       const title = r.creep
@@ -531,7 +667,7 @@ export class WarbandScreen {
           W / 2, shopY + 58, { align: "center", size: 14, color: "#d8cdb4" },
         );
       }
-      if (ui.button("Continue ▶", W / 2 - 80, shopY + 80, 160, 40, { accent: true, size: 16 })) run.next();
+      if (ui.button("Continue", W / 2 - 80, shopY + 80, 160, 40, { accent: true, size: 16 })) run.next();
     }
 
     // ---- run over ----
@@ -561,7 +697,7 @@ export class WarbandScreen {
 
     // ---- overlays, back to front ----
     if (run.phase === "battle" && this.introT > 0) this.drawIntro(boardX, boardY, boardW, boardH, run);
-    if (run.phase === "result" && run.lastResult) this.drawResultFlourish(W, H, run, time);
+    if (run.phase === "result" && run.lastResult) this.drawResultFlourish(boardX, boardY, boardW, boardH, run, time);
     this.drawStarUp(boardX, boardY, boardW, boardH);
     this.drawFusion(boardX, boardY, boardW, boardH);
     if (this.scoutId >= 0 && run.phase !== "over") this.drawScoutPanel(W, H, run, time);
@@ -711,7 +847,10 @@ export class WarbandScreen {
 
     const gap = 24;
     const cardW = Math.min(258, (W - 100 - gap * 2) / 3);
-    const cardH = Math.min(324, H * 0.5);
+    // Height follows the longest description, so a short augment doesn't leave
+    // a band of empty card between its text and its button.
+    const descLines = Math.max(...offer.map((a) => this.wrap(a.desc, 30).length));
+    const cardH = Math.min(H * 0.62, 190 + descLines * 18 + 66);
     const totalW = cardW * offer.length + gap * (offer.length - 1);
     const x0 = (W - totalW) / 2;
     const cy = H / 2 - cardH / 2 + 24;
@@ -765,6 +904,17 @@ export class WarbandScreen {
       ctx.restore();
       ctx.fillStyle = "rgba(0,0,0,0.35)";
       ctx.beginPath(); ctx.arc(x + cardW / 2, sy2, 34, 0, Math.PI * 2); ctx.fill();
+      // A ring of runes turning slowly behind the sigil — the card should feel
+      // like a charm being offered, not a bullet point.
+      ctx.save();
+      ctx.translate(x + cardW / 2, sy2); ctx.rotate(time * 0.18 + i);
+      ctx.strokeStyle = withAlpha(col, hov ? 0.8 : 0.45); ctx.lineWidth = 1.4; ctx.lineCap = "round";
+      for (let k = 0; k < 12; k++) {
+        ctx.rotate((Math.PI * 2) / 12);
+        const len = k % 3 === 0 ? 7 : 3.5;
+        ctx.beginPath(); ctx.moveTo(0, -44); ctx.lineTo(0, -44 - len); ctx.stroke();
+      }
+      ctx.restore();
       this.augSigil(ctx, x + cardW / 2, sy2, 21, a, time);
 
       // Name + description.
@@ -880,7 +1030,8 @@ export class WarbandScreen {
 
     const gap = 24;
     const cardW = Math.min(266, (W - 100 - gap * 2) / 3);
-    const cardH = Math.min(348, H * 0.56);
+    const perkLines = Math.max(...offer.map((c) => this.wrap(c.perk, 30).length));
+    const cardH = Math.min(H * 0.62, 200 + perkLines * 18 + 66);
     const totalW = cardW * offer.length + gap * (offer.length - 1);
     const x0 = (W - totalW) / 2;
     const cy = H / 2 - cardH / 2 + 22;
@@ -959,8 +1110,8 @@ export class WarbandScreen {
     ctx.fillStyle = glow; ctx.fillRect(0, 0, W, H);
 
     const gap = 14;
-    const cardW = Math.min(150, (W - 120 - gap * (ring.length - 1)) / ring.length);
-    const cardH = 236;
+    const cardW = Math.min(156, (W - 120 - gap * (ring.length - 1)) / ring.length);
+    const cardH = 320;
     const totalW = cardW * ring.length + gap * (ring.length - 1);
     const x0 = (W - totalW) / 2;
     const cy = H / 2 - cardH / 2 + 16;
@@ -1002,31 +1153,47 @@ export class WarbandScreen {
       ctx.strokeStyle = withAlpha(col, hov ? 1 : 0.7); ctx.lineWidth = hov ? 2.4 : 1.5;
       this.roundRect(ctx, x + 1.25, y + 1.25, cardW - 2.5, cardH - 2.5, 10); ctx.stroke();
 
-      // The component it carries, on a plinth at the top.
-      if (it) {
-        ctx.save();
-        ctx.shadowColor = withAlpha(it.color, 0.9); ctx.shadowBlur = hov ? 18 : 9;
-        ctx.fillStyle = "rgba(8,6,3,0.9)";
-        ctx.beginPath(); ctx.arc(x + cardW / 2, y + 44, 25, 0, Math.PI * 2); ctx.fill();
-        ctx.strokeStyle = withAlpha(it.color, 0.95); ctx.lineWidth = 1.5;
-        ctx.setLineDash([4, 3]); ctx.stroke(); ctx.setLineDash([]);
-        ctx.restore();
-        this.itemIcon(ctx, x + cardW / 2, y + 44, 14, it);
-        ui.text(it.name, x + cardW / 2, y + 84, { align: "center", size: 10.5, bold: true, color: it.color });
-        ui.text(it.desc, x + cardW / 2, y + 97, { align: "center", size: 9, color: "#8a8278" });
+      // The unit itself, riding the ring. A carousel where you can't see the
+      // champion is just a list of names — the figure is the whole point.
+      const stage = y + 96;
+      ctx.save();
+      ctx.beginPath(); ctx.rect(x + 4, y + 8, cardW - 8, 108); ctx.clip();
+      const halo2 = ctx.createRadialGradient(x + cardW / 2, stage - 22, 2, x + cardW / 2, stage - 22, 62);
+      halo2.addColorStop(0, withAlpha(col, hov ? 0.42 : 0.28)); halo2.addColorStop(1, "rgba(0,0,0,0)");
+      ctx.fillStyle = halo2; ctx.fillRect(x + 4, y + 8, cardW - 8, 108);
+      this.plinth(ctx, x + cardW / 2, stage, 28, col);
+      this.portrait(ctx, x + cardW / 2, stage - 22, Math.min(cardW * 0.62, 96), p.type, p.star ?? 1, time);
+      ctx.restore();
+      if ((p.star ?? 1) >= 2) {
+        ui.text(stars(p.star ?? 1), x + cardW / 2, y + 24, {
+          align: "center", size: 13, color: (p.star ?? 1) >= 3 ? "#ffd24a" : "#cfe0ff",
+        });
       }
 
-      ctx.strokeStyle = withAlpha(col, 0.3); ctx.lineWidth = 1;
-      ctx.beginPath(); ctx.moveTo(x + 18, y + 108); ctx.lineTo(x + cardW - 18, y + 108); ctx.stroke();
-
       const nm = shortName(p.type);
-      ui.text(nm, x + cardW / 2, y + 132, { align: "center", size: nm.length > 9 ? 12 : 14.5, bold: true, color: "#f7efdc", font: "Georgia, serif" });
-      ui.text(`Tier ${tier}`, x + cardW / 2, y + 150, { align: "center", size: 10, color: col });
+      ui.text(nm, x + cardW / 2, y + 130, { align: "center", size: nm.length > 9 ? 12 : 14.5, bold: true, color: "#f7efdc", font: "Georgia, serif" });
+      ui.text(`Tier ${tier}`, x + cardW / 2, y + 146, { align: "center", size: 10, color: col });
       // Its synergies, so you can draft toward a comp.
-      let ty = y + 170;
+      let ty = y + 164;
       for (const tr of traitsOf(p.type).slice(0, 2)) {
-        ui.text(`◆ ${tr.name}`, x + cardW / 2, ty, { align: "center", size: 9.5, color: tr.color });
+        ui.text(tr.name, x + cardW / 2, ty, { align: "center", size: 9.5, color: tr.color });
         ty += 13;
+      }
+
+      // The component it rides out carrying, on its own shelf below.
+      ctx.strokeStyle = withAlpha(col, 0.28); ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(x + 18, y + 196); ctx.lineTo(x + cardW - 18, y + 196); ctx.stroke();
+      if (it) {
+        ctx.save();
+        ctx.shadowColor = withAlpha(it.color, 0.9); ctx.shadowBlur = hov ? 16 : 8;
+        ctx.fillStyle = "rgba(8,6,3,0.9)";
+        ctx.beginPath(); ctx.arc(x + cardW / 2, y + 220, 18, 0, Math.PI * 2); ctx.fill();
+        ctx.strokeStyle = withAlpha(it.color, 0.95); ctx.lineWidth = 1.4;
+        ctx.setLineDash([4, 3]); ctx.stroke(); ctx.setLineDash([]);
+        ctx.restore();
+        this.itemIcon(ctx, x + cardW / 2, y + 220, 10.5, it);
+        ui.text(it.name, x + cardW / 2, y + 252, { align: "center", size: 10.5, bold: true, color: it.color });
+        ui.text(it.desc, x + cardW / 2, y + 265, { align: "center", size: 9, color: "#8a8278" });
       }
 
       const bw = cardW - 26, bh = 30, byy = y + cardH - bh - 14;
@@ -1274,55 +1441,109 @@ export class WarbandScreen {
       if (g) g.n++; else groups.set(k, { type: u.type, star: u.star ?? 1, n: 1 });
     }
     const rows = [...groups.values()].sort((a, b) => b.star - a.star || (UNIT_TIER[b.type] ?? 0) - (UNIT_TIER[a.type] ?? 0));
-    const pw = 300;
-    const ph = Math.min(H - 100, 78 + Math.max(1, rows.length) * 26 + (s.traits.length ? s.traits.length * 18 + 24 : 0));
-    const px = 224, py = 88;
+    const pw = 336;
+    const CELL_W = (pw - 40) / 5, CELL_H = 21;
+    const gridH = CELL_H * GRID_ROWS;
+    const traitH = s.traits.length ? 30 : 0;
+    const ph = Math.min(H - 120, 104 + gridH + traitH + Math.max(1, rows.length) * 22 + 18);
+    const px = RAIL_W - 8, py = HEADER_H + 26;
     this.scoutRect = { x: px, y: py, w: pw, h: ph };
 
     ctx.save();
-    ctx.shadowColor = "rgba(0,0,0,0.7)"; ctx.shadowBlur = 24; ctx.shadowOffsetY = 8;
+    ctx.shadowColor = "rgba(0,0,0,0.75)"; ctx.shadowBlur = 28; ctx.shadowOffsetY = 10;
     const g = ctx.createLinearGradient(0, py, 0, py + ph);
-    g.addColorStop(0, "rgba(26,22,14,0.99)"); g.addColorStop(1, "rgba(12,9,5,0.99)");
+    g.addColorStop(0, "rgba(28,24,16,0.99)"); g.addColorStop(1, "rgba(11,8,5,0.99)");
     ctx.fillStyle = g; this.roundRect(ctx, px, py, pw, ph, 11); ctx.fill();
     ctx.restore();
     ctx.strokeStyle = withAlpha("#7fb0e8", 0.85); ctx.lineWidth = 1.8;
     this.roundRect(ctx, px + 1, py + 1, pw - 2, ph - 2, 10); ctx.stroke();
+    // A tinted header band, so the panel has a masthead rather than floating text.
+    ctx.save();
+    ctx.beginPath(); this.roundRect(ctx, px + 1, py + 1, pw - 2, 58, 10); ctx.clip();
+    const hb = ctx.createLinearGradient(px, py, px + pw, py + 58);
+    hb.addColorStop(0, "rgba(60,86,124,0.55)"); hb.addColorStop(1, "rgba(24,30,44,0.35)");
+    ctx.fillStyle = hb; ctx.fillRect(px, py, pw, 58);
+    ctx.restore();
 
-    ui.text(`🔭 ${s.name}`, px + 16, py + 26, { size: 17, bold: true, color: "#cfe0ff", font: "Georgia, serif" });
-    ui.text(s.alive ? `Level ${s.level}` : "eliminated", px + pw - 16, py + 26, { align: "right", size: 12, bold: true, color: s.alive ? "#e7ddc4" : "#6f6a5c" });
+    ui.text("SCOUTING", px + 16, py + 18, { size: 9, bold: true, color: "#8fa8c8" });
+    ui.text(s.name, px + 16, py + 38, { size: 18, bold: true, color: "#e8f0ff", font: "Georgia, serif" });
+    ui.text(s.alive ? `LV ${s.level}` : "eliminated", px + pw - 16, py + 20, {
+      align: "right", size: 12, bold: true, color: s.alive ? "#e7ddc4" : "#6f6a5c",
+    });
+    ui.text(`${s.board.length} fielded`, px + pw - 16, py + 38, { align: "right", size: 10.5, color: "#9aa8bc" });
     // Life bar.
-    ctx.fillStyle = "rgba(0,0,0,0.6)"; ctx.fillRect(px + 16, py + 36, pw - 32, 9);
-    ctx.fillStyle = s.alive ? "#7df2a9" : "#5a554d"; ctx.fillRect(px + 16, py + 36, (pw - 32) * Math.max(0, s.life) / 100, 9);
-    ui.text(`${Math.max(0, s.life)} life`, px + pw - 16, py + 58, { align: "right", size: 10.5, color: "#9a917b" });
-    ui.text(`${s.board.length} deployed`, px + 16, py + 58, { size: 10.5, color: "#9a917b" });
+    ctx.fillStyle = "rgba(0,0,0,0.6)"; this.roundRect(ctx, px + 16, py + 48, pw - 32, 6, 3); ctx.fill();
+    ctx.fillStyle = s.alive ? "#7df2a9" : "#5a554d";
+    this.roundRect(ctx, px + 16, py + 48, (pw - 32) * Math.max(0, Math.min(1, s.life / 100)), 6, 3); ctx.fill();
 
-    // Their comp.
+    // ---- their formation ----
+    // The single most useful thing to know about a rival is where their line
+    // stands. A list of names can't tell you they've stacked the back rank.
+    let y = py + 74;
+    ui.text("FORMATION", px + 16, y, { size: 9, bold: true, color: "#8f8770" });
+    ui.text("their front rank is nearest you", px + pw - 16, y, { align: "right", size: 8.5, color: "#6f6a5c" });
+    y += 8;
+    const gx = px + 20;
+    const occupied = new Map<string, { type: string; star: number }>();
+    for (const u of s.board) if (u.col != null && u.row != null) occupied.set(`${u.col},${u.row}`, { type: u.type, star: u.star ?? 1 });
+    for (let c = 5; c < 10; c++) {
+      for (let r = 0; r < GRID_ROWS; r++) {
+        const cx2 = gx + (c - 5) * CELL_W, cy2 = y + r * CELL_H;
+        ctx.fillStyle = c === 5 ? "rgba(224,120,106,0.10)" : "rgba(255,255,255,0.032)";
+        this.roundRect(ctx, cx2 + 1, cy2 + 1, CELL_W - 2, CELL_H - 2, 3); ctx.fill();
+        const occ = occupied.get(`${c},${r}`);
+        if (!occ) continue;
+        const tier = UNIT_TIER[occ.type] ?? 1;
+        const tc = TIER_COLOR[tier];
+        ctx.fillStyle = withAlpha(tc, 0.72);
+        this.roundRect(ctx, cx2 + 1, cy2 + 1, CELL_W - 2, CELL_H - 2, 3); ctx.fill();
+        ctx.strokeStyle = withAlpha(tc, 1); ctx.lineWidth = 1;
+        this.roundRect(ctx, cx2 + 1.5, cy2 + 1.5, CELL_W - 3, CELL_H - 3, 3); ctx.stroke();
+        ui.text(this.clip(shortName(occ.type), 7), cx2 + CELL_W / 2, cy2 + CELL_H / 2 + 3.5, {
+          align: "center", size: 8.5, bold: true, color: "#120e08",
+        });
+        if (occ.star >= 2) {
+          ctx.fillStyle = occ.star >= 3 ? "#ffd24a" : "#e8f0ff";
+          for (let k = 0; k < occ.star; k++) {
+            ctx.beginPath(); ctx.arc(cx2 + CELL_W - 5 - k * 4, cy2 + 4.5, 1.5, 0, Math.PI * 2); ctx.fill();
+          }
+        }
+      }
+    }
+    y += gridH + 12;
+
+    // ---- their synergies, as the same hex badges the rail uses ----
+    if (s.traits.length) {
+      let tx = px + 16;
+      for (const at of s.traits) {
+        const label = `${at.trait.name} ${at.count}`;
+        const cw3 = 14 + label.length * 5.6;
+        if (tx + cw3 > px + pw - 14) break;
+        ctx.fillStyle = withAlpha(at.trait.color, 0.22);
+        this.roundRect(ctx, tx, y - 12, cw3, 18, 9); ctx.fill();
+        ctx.strokeStyle = withAlpha(at.trait.color, 0.8); ctx.lineWidth = 1;
+        this.roundRect(ctx, tx + 0.5, y - 11.5, cw3 - 1, 17, 9); ctx.stroke();
+        ui.text(label, tx + cw3 / 2, y + 1, { align: "center", size: 9.5, bold: true, color: at.trait.color });
+        tx += cw3 + 6;
+      }
+      y += 24;
+    }
+
+    // ---- their roster ----
     ctx.strokeStyle = "rgba(255,255,255,0.08)"; ctx.lineWidth = 1;
-    ctx.beginPath(); ctx.moveTo(px + 12, py + 68); ctx.lineTo(px + pw - 12, py + 68); ctx.stroke();
-    let y = py + 84;
+    ctx.beginPath(); ctx.moveTo(px + 14, y - 6); ctx.lineTo(px + pw - 14, y - 6); ctx.stroke();
+    y += 10;
     if (!rows.length) ui.text("— no warband fielded yet —", px + 16, y, { size: 11.5, color: "#6f6a5c" });
     for (const r of rows) {
-      if (y + 10 > py + ph) break;
+      if (y + 8 > py + ph - 6) break;
       const tier = UNIT_TIER[r.type] ?? 1;
-      ctx.fillStyle = withAlpha(TIER_COLOR[tier], 0.16);
-      this.roundRect(ctx, px + 14, y - 13, pw - 28, 22, 5); ctx.fill();
-      ctx.fillStyle = TIER_COLOR[tier]; ctx.fillRect(px + 14, y - 13, 3, 22);
-      ui.text(UNITS[r.type]?.name ?? r.type, px + 24, y + 3, { size: 12, bold: true, color: "#e7ddc4" });
-      ui.text(stars(r.star), px + pw - 54, y + 3, { align: "right", size: 11, color: r.star >= 3 ? "#ffd24a" : r.star === 2 ? "#cfe0ff" : "#9a917b" });
-      if (r.n > 1) ui.text(`×${r.n}`, px + pw - 24, y + 3, { align: "right", size: 11, bold: true, color: "#9a917b" });
-      y += 26;
-    }
-    // Their synergies.
-    if (s.traits.length && y + 24 < py + ph) {
-      ctx.strokeStyle = "rgba(255,255,255,0.08)"; ctx.lineWidth = 1;
-      ctx.beginPath(); ctx.moveTo(px + 12, y - 4); ctx.lineTo(px + pw - 12, y - 4); ctx.stroke();
-      y += 14;
-      for (const at of s.traits) {
-        if (y + 6 > py + ph) break;
-        ui.text(`◆ ${at.trait.name} ×${at.count}`, px + 18, y, { size: 11, bold: true, color: at.trait.color });
-        ui.text(at.tier?.label ?? "", px + pw - 18, y, { align: "right", size: 9.5, color: "#8a8278" });
-        y += 18;
-      }
+      ctx.fillStyle = withAlpha(TIER_COLOR[tier], 0.14);
+      this.roundRect(ctx, px + 14, y - 11, pw - 28, 19, 4); ctx.fill();
+      ctx.fillStyle = TIER_COLOR[tier]; this.roundRect(ctx, px + 15, y - 10, 2.5, 17, 1.2); ctx.fill();
+      ui.text(UNITS[r.type]?.name ?? r.type, px + 24, y + 3, { size: 11.5, bold: true, color: "#e7ddc4" });
+      ui.text(stars(r.star), px + pw - 52, y + 3, { align: "right", size: 10.5, color: r.star >= 3 ? "#ffd24a" : r.star === 2 ? "#cfe0ff" : "#9a917b" });
+      if (r.n > 1) ui.text(`×${r.n}`, px + pw - 24, y + 3, { align: "right", size: 10.5, bold: true, color: "#9a917b" });
+      y += 22;
     }
     // Close.
     const cbx = px + pw - 30, cby = py + 8;
@@ -1391,48 +1612,63 @@ export class WarbandScreen {
    * The result flourish: rays and a scale-popped banner. Winning a round should
    * feel like something, not read as a line of text in the shop bar.
    */
-  private drawResultFlourish(W: number, H: number, run: WarbandRun, time: number) {
+  private drawResultFlourish(bx: number, by: number, bw: number, bh: number, run: WarbandRun, time: number) {
     const r = run.lastResult;
     if (!r || this.resultT < 0) return;
     const ctx = ui.ctx;
     const t = this.resultT;
     const fade = t > 1.5 ? Math.max(0, 1 - (t - 1.5) / 0.6) : 1;
     if (fade <= 0) return;
-    const cx = W / 2, cy = H * 0.34;
+    const cx = bx + bw / 2, cy = by + bh * 0.36;
     const col = r.won ? "#7df2a9" : "#e0564a";
+    const rise = (1 - easeOut(Math.min(1, t / 0.45))) * 26; // the banner drops in
 
     ctx.save();
     ctx.globalAlpha = fade;
-    // Radiant rays behind a win; a dull pall behind a loss.
+    // Everything is confined to the arena: this is the board's news, and rays
+    // spilling over the standings and the shop just made the screen noisy.
+    ctx.beginPath(); ctx.rect(bx, by, bw, bh); ctx.clip();
+    ctx.fillStyle = r.won ? "rgba(10,26,16,0.42)" : "rgba(30,8,6,0.46)";
+    ctx.fillRect(bx, by, bw, bh);
     if (r.won) {
       ctx.save();
-      ctx.translate(cx, cy); ctx.rotate(time * 0.22); ctx.globalAlpha = fade * 0.1;
-      for (let i = 0; i < 14; i++) {
-        ctx.rotate((Math.PI * 2) / 14);
+      ctx.translate(cx, cy); ctx.rotate(time * 0.18); ctx.globalAlpha = fade * 0.11;
+      for (let i = 0; i < 16; i++) {
+        ctx.rotate((Math.PI * 2) / 16);
         ctx.fillStyle = "#ffe9b0";
-        ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(Math.max(W, H) * 0.5, -22); ctx.lineTo(Math.max(W, H) * 0.5, 22); ctx.closePath(); ctx.fill();
+        ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(Math.max(bw, bh), -20); ctx.lineTo(Math.max(bw, bh), 20); ctx.closePath(); ctx.fill();
       }
       ctx.restore();
     }
-    const glow = ctx.createRadialGradient(cx, cy, 10, cx, cy, 300);
-    glow.addColorStop(0, withAlpha(col, 0.2)); glow.addColorStop(1, "rgba(0,0,0,0)");
-    ctx.fillStyle = glow; ctx.fillRect(0, 0, W, H);
+    const glow = ctx.createRadialGradient(cx, cy, 10, cx, cy, Math.max(bw, bh) * 0.55);
+    glow.addColorStop(0, withAlpha(col, 0.22)); glow.addColorStop(1, "rgba(0,0,0,0)");
+    ctx.fillStyle = glow; ctx.fillRect(bx, by, bw, bh);
 
-    // Scale-pop banner.
-    const pop = 1 + 0.5 * Math.exp(-t * 5) * Math.cos(t * 13);
+    // Scale-pop banner on a ribbon, so the word has something to sit on.
+    const pop = 1 + 0.45 * Math.exp(-t * 5) * Math.cos(t * 13);
     ctx.save();
-    ctx.translate(cx, cy); ctx.scale(pop, pop); ctx.translate(-cx, -cy);
+    ctx.translate(cx, cy - rise); ctx.scale(pop, pop);
+    const rw = Math.min(bw * 0.86, 420), rh = 96;
+    const rg = ctx.createLinearGradient(0, -rh / 2, 0, rh / 2);
+    rg.addColorStop(0, "rgba(16,12,7,0.55)"); rg.addColorStop(0.5, "rgba(10,7,4,0.9)"); rg.addColorStop(1, "rgba(16,12,7,0.55)");
+    ctx.fillStyle = rg;
+    ctx.beginPath();
+    ctx.moveTo(-rw / 2, -rh / 2); ctx.lineTo(rw / 2, -rh / 2);
+    ctx.lineTo(rw / 2 - 18, 0); ctx.lineTo(rw / 2, rh / 2);
+    ctx.lineTo(-rw / 2, rh / 2); ctx.lineTo(-rw / 2 + 18, 0);
+    ctx.closePath(); ctx.fill();
+    ctx.strokeStyle = withAlpha(col, 0.65); ctx.lineWidth = 1.5; ctx.stroke();
     ctx.save();
     ctx.shadowColor = col; ctx.shadowBlur = 26;
-    ui.text(r.won ? "VICTORY" : "DEFEAT", cx, cy, {
-      align: "center", size: 58, bold: true, color: r.won ? "#f7efdc" : "#e8bfb6", font: "Georgia, serif",
+    ui.text(r.won ? "VICTORY" : "DEFEAT", 0, 4, {
+      align: "center", size: 52, bold: true, color: r.won ? "#f7efdc" : "#e8bfb6", font: "Georgia, serif",
     });
     ctx.restore();
     ui.text(
       r.creep && r.won ? `${r.foe} cleared — ${r.relics} relic${r.relics === 1 ? "" : "s"} + ${r.gold}g`
         : r.won ? `${r.foe} broken · ${r.youLeft} still standing`
           : `${r.foe} holds · −${r.dmg} life`,
-      cx, cy + 34, { align: "center", size: 16, bold: true, color: col, font: "Georgia, serif" },
+      0, 34, { align: "center", size: 15, bold: true, color: col, font: "Georgia, serif" },
     );
     ctx.restore();
     ctx.restore();
@@ -1558,61 +1794,307 @@ export class WarbandScreen {
     ctx.closePath();
   }
 
-  private brazier(ctx: CanvasRenderingContext2D, cx: number, cy: number, time: number) {
-    ctx.fillStyle = "#1c150e"; ctx.beginPath(); ctx.ellipse(cx, cy + 2, 8, 4, 0, 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = "#2a2118"; ctx.beginPath(); ctx.ellipse(cx, cy, 7, 3.5, 0, 0, Math.PI * 2); ctx.fill();
-    const f = 0.72 + 0.28 * Math.sin(time * 9 + cx * 0.3);
-    const f2 = 0.72 + 0.28 * Math.sin(time * 13 + cy * 0.3 + 1);
+  /** The header banner: dark leather, a gilded rule, and a slow sheen. */
+  private drawHeaderPlate(W: number, time: number) {
+    const ctx = ui.ctx;
+    const hg = ctx.createLinearGradient(0, 0, 0, HEADER_H);
+    hg.addColorStop(0, "rgba(38,28,15,0.97)"); hg.addColorStop(0.55, "rgba(20,15,8,0.96)"); hg.addColorStop(1, "rgba(8,6,3,0.96)");
+    ctx.fillStyle = hg; ctx.fillRect(0, 0, W, HEADER_H);
+    // A slow band of light crossing the banner, so the plate feels lacquered.
+    const sheenX = ((time * 90) % (W + 520)) - 260;
+    const sh = ctx.createLinearGradient(sheenX - 130, 0, sheenX + 130, HEADER_H);
+    sh.addColorStop(0, "rgba(255,235,180,0)"); sh.addColorStop(0.5, "rgba(255,235,180,0.045)"); sh.addColorStop(1, "rgba(255,235,180,0)");
+    ctx.fillStyle = sh; ctx.fillRect(0, 0, W, HEADER_H);
+    // The rule under it: a bright hairline over a soft accent bloom.
+    const bloom = ctx.createLinearGradient(0, HEADER_H - 10, 0, HEADER_H);
+    bloom.addColorStop(0, withAlpha(PAL.uiAccent, 0)); bloom.addColorStop(1, withAlpha(PAL.uiAccent, 0.16));
+    ctx.fillStyle = bloom; ctx.fillRect(0, HEADER_H - 10, W, 10);
+    ctx.fillStyle = withAlpha(PAL.uiAccent, 0.55); ctx.fillRect(0, HEADER_H - 2, W, 2);
+    // Diamond studs along the rule.
+    ctx.fillStyle = withAlpha(PAL.uiAccent, 0.35);
+    for (let sx = 14; sx < W; sx += 26) {
+      ctx.beginPath();
+      ctx.moveTo(sx, HEADER_H - 6); ctx.lineTo(sx + 3, HEADER_H - 3); ctx.lineTo(sx, HEADER_H); ctx.lineTo(sx - 3, HEADER_H - 3);
+      ctx.closePath(); ctx.fill();
+    }
+  }
+
+  /** The mode's mark: a shield with crossed blades, drawn not typed. */
+  private bannerEmblem(ctx: CanvasRenderingContext2D, cx: number, cy: number, r: number, time: number) {
     ctx.save();
-    ctx.shadowColor = "#ff9128"; ctx.shadowBlur = 18 * f; ctx.globalAlpha = 0.92;
-    ctx.fillStyle = "#ff7a18"; ctx.beginPath(); ctx.ellipse(cx, cy - 7 * f, 4.4, 9.5 * f, 0, 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = "#ffd862"; ctx.beginPath(); ctx.ellipse(cx, cy - 6 * f2, 2.3, 5.5 * f2, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.translate(cx, cy);
+    ctx.lineJoin = "round"; ctx.lineCap = "round";
+    // Shield.
+    const g = ctx.createLinearGradient(0, -r, 0, r);
+    g.addColorStop(0, "#3b2f1c"); g.addColorStop(1, "#170f07");
+    ctx.beginPath();
+    ctx.moveTo(-r * 0.82, -r * 0.86); ctx.lineTo(r * 0.82, -r * 0.86); ctx.lineTo(r * 0.82, r * 0.16);
+    ctx.quadraticCurveTo(r * 0.82, r * 0.92, 0, r * 1.05);
+    ctx.quadraticCurveTo(-r * 0.82, r * 0.92, -r * 0.82, r * 0.16);
+    ctx.closePath();
+    ctx.fillStyle = g; ctx.fill();
+    ctx.strokeStyle = withAlpha(PAL.uiAccent, 0.85); ctx.lineWidth = 1.4; ctx.stroke();
+    // Crossed blades, with a slow glint travelling one of them.
+    ctx.strokeStyle = "#d9cdb0"; ctx.lineWidth = 1.8;
+    ctx.beginPath();
+    ctx.moveTo(-r * 0.5, r * 0.5); ctx.lineTo(r * 0.5, -r * 0.55);
+    ctx.moveTo(r * 0.5, r * 0.5); ctx.lineTo(-r * 0.5, -r * 0.55);
+    ctx.stroke();
+    ctx.strokeStyle = withAlpha("#5a4a2e", 0.95); ctx.lineWidth = 1.6;
+    ctx.beginPath(); ctx.moveTo(-r * 0.52, r * 0.24); ctx.lineTo(-r * 0.18, r * 0.6); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(r * 0.52, r * 0.24); ctx.lineTo(r * 0.18, r * 0.6); ctx.stroke();
+    const glint = ((time * 0.5) % 3) / 3;
+    if (glint < 0.34) {
+      ctx.save();
+      ctx.globalAlpha = 1 - glint / 0.34;
+      ctx.fillStyle = "#fff6dc";
+      const t2 = glint / 0.34;
+      ctx.beginPath(); ctx.arc(-r * 0.5 + t2 * r, r * 0.5 - t2 * r * 1.05, 1.6, 0, Math.PI * 2); ctx.fill();
+      ctx.restore();
+    }
     ctx.restore();
   }
 
-  /** The painterly stone arena: platform, team-tinted board, glowing centre line,
-   *  vignette, ornate frame and flickering corner braziers. */
-  private drawArena(x: number, y: number, w: number, h: number, cellW: number, cellH: number, time: number, cond: Condition) {
+  /** What kind of round a number is, for the track and its glyphs. */
+  private roundKind(round: number): { key: "camp" | "draft" | "augment" | "pvp"; color: string; label: string } {
+    if (isCreepRound(round)) return { key: "camp", color: "#c8a86a", label: "Camp" };
+    if (tierForRound(round)) return { key: "augment", color: "#9b5cf0", label: "Augment" };
+    if (isDraftRound(round)) return { key: "draft", color: "#6ac8d8", label: "Carousel" };
+    return { key: "pvp", color: "#e0786a", label: "Duel" };
+  }
+
+  /**
+   * The stage track: the five rounds of the stage you're in, each marked with
+   * what it holds. Knowing a carousel or an augment is two rounds out is half
+   * of planning an economy, and it shouldn't take counting on your fingers.
+   */
+  private drawRoundTrack(x: number, y: number, w: number, h: number, run: WarbandRun) {
+    if (w < 190) return;
     const ctx = ui.ctx;
-    // Raised stone platform (drop shadow + base).
+    const stage = Math.floor((run.round - 1) / 5);
+    const first = stage * 5 + 1;
+    const gap = 6;
+    const pw = Math.min(112, (w - gap * 4) / 5);
+    ui.text(`STAGE ${stage + 1}`, x, y + 14, { size: 9, color: "#8f8770" });
+    for (let i = 0; i < 5; i++) {
+      const rd = first + i;
+      const k = this.roundKind(rd);
+      const px = x + i * (pw + gap);
+      const py = y + 19;
+      const ph = h - 19;
+      const now = rd === run.round;
+      const past = rd < run.round;
+      ctx.globalAlpha = past ? 0.4 : 1;
+      const g = ctx.createLinearGradient(0, py, 0, py + ph);
+      g.addColorStop(0, withAlpha(k.color, now ? 0.42 : 0.16)); g.addColorStop(1, "rgba(10,7,4,0.7)");
+      ctx.fillStyle = g; this.roundRect(ctx, px, py, pw, ph, 5); ctx.fill();
+      ctx.strokeStyle = withAlpha(k.color, now ? 1 : 0.4); ctx.lineWidth = now ? 1.8 : 1;
+      this.roundRect(ctx, px + 0.9, py + 0.9, pw - 1.8, ph - 1.8, 5); ctx.stroke();
+      this.roundGlyph(ctx, px + 12, py + ph / 2, 6.5, k.key, k.color);
+      if (pw > 84) {
+        ui.text(`${stage + 1}-${i + 1}`, px + 24, py + ph / 2 - 1, { size: 10.5, bold: true, color: now ? "#f7efdc" : "#bcb299" });
+        ui.text(k.label, px + 24, py + ph / 2 + 10, { size: 8.5, color: withAlpha(k.color, now ? 1 : 0.75) });
+      } else {
+        ui.text(`${stage + 1}-${i + 1}`, px + 24, py + ph / 2 + 4, { size: 10.5, bold: true, color: now ? "#f7efdc" : "#bcb299" });
+      }
+      ctx.globalAlpha = 1;
+    }
+  }
+
+  /** A tiny mark per round kind: claw, sigil, ring or crossed blades. */
+  private roundGlyph(ctx: CanvasRenderingContext2D, cx: number, cy: number, r: number, kind: string, color: string) {
     ctx.save();
-    ctx.shadowColor = "rgba(0,0,0,0.6)"; ctx.shadowBlur = 20; ctx.shadowOffsetY = 7;
-    ctx.fillStyle = "#0b0906"; this.roundRect(ctx, x - 6, y - 6, w + 12, h + 12, 12); ctx.fill();
+    ctx.translate(cx, cy);
+    ctx.strokeStyle = color; ctx.fillStyle = color; ctx.lineWidth = 1.4; ctx.lineCap = "round";
+    if (kind === "camp") {
+      // Three claw marks.
+      for (const dx of [-r * 0.55, 0, r * 0.55]) {
+        ctx.beginPath(); ctx.moveTo(dx - r * 0.15, -r * 0.8); ctx.quadraticCurveTo(dx + r * 0.2, 0, dx, r * 0.85); ctx.stroke();
+      }
+    } else if (kind === "augment") {
+      // A hex sigil with a bright core.
+      ctx.beginPath();
+      for (let i = 0; i < 6; i++) {
+        const a = (i / 6) * Math.PI * 2 - Math.PI / 2;
+        const px = Math.cos(a) * r, py = Math.sin(a) * r;
+        i ? ctx.lineTo(px, py) : ctx.moveTo(px, py);
+      }
+      ctx.closePath(); ctx.stroke();
+      ctx.beginPath(); ctx.arc(0, 0, r * 0.32, 0, Math.PI * 2); ctx.fill();
+    } else if (kind === "draft") {
+      // A ring of picks turning.
+      ctx.beginPath(); ctx.arc(0, 0, r * 0.85, 0, Math.PI * 2); ctx.stroke();
+      for (let i = 0; i < 4; i++) {
+        const a = (i / 4) * Math.PI * 2;
+        ctx.beginPath(); ctx.arc(Math.cos(a) * r * 0.85, Math.sin(a) * r * 0.85, r * 0.24, 0, Math.PI * 2); ctx.fill();
+      }
+    } else {
+      // Crossed blades.
+      ctx.beginPath();
+      ctx.moveTo(-r * 0.8, r * 0.8); ctx.lineTo(r * 0.8, -r * 0.8);
+      ctx.moveTo(r * 0.8, r * 0.8); ctx.lineTo(-r * 0.8, -r * 0.8);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  private brazier(ctx: CanvasRenderingContext2D, cx: number, cy: number, time: number, scale = 1) {
+    const f = 0.72 + 0.28 * Math.sin(time * 9 + cx * 0.3);
+    const f2 = 0.72 + 0.28 * Math.sin(time * 13 + cy * 0.3 + 1);
+    ctx.save();
+    ctx.translate(cx, cy); ctx.scale(scale, scale);
+    // The bowl: a squat iron cup on a footed base, not a flat smudge.
+    ctx.fillStyle = "rgba(0,0,0,0.45)"; ctx.beginPath(); ctx.ellipse(0, 7, 10, 3.6, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = "#2a2118"; ctx.beginPath(); ctx.moveTo(-3, 6); ctx.lineTo(3, 6); ctx.lineTo(2, 1); ctx.lineTo(-2, 1); ctx.closePath(); ctx.fill();
+    const bowl = ctx.createLinearGradient(0, -4, 0, 4);
+    bowl.addColorStop(0, "#4a4136"); bowl.addColorStop(1, "#191410");
+    ctx.fillStyle = bowl;
+    ctx.beginPath(); ctx.moveTo(-8, -3); ctx.lineTo(8, -3); ctx.lineTo(5, 3); ctx.lineTo(-5, 3); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = "#5a4f40"; ctx.beginPath(); ctx.ellipse(0, -3, 8, 2.4, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = "#120d08"; ctx.beginPath(); ctx.ellipse(0, -3, 6, 1.7, 0, 0, Math.PI * 2); ctx.fill();
+    // Flame + the pool of light it throws on the stone.
+    const pool = ctx.createRadialGradient(0, -2, 2, 0, -2, 54);
+    pool.addColorStop(0, "rgba(255,150,44,0.30)"); pool.addColorStop(1, "rgba(255,150,44,0)");
+    ctx.fillStyle = pool; ctx.beginPath(); ctx.arc(0, -2, 54, 0, Math.PI * 2); ctx.fill();
+    ctx.shadowColor = "#ff9128"; ctx.shadowBlur = 18 * f; ctx.globalAlpha = 0.94;
+    ctx.fillStyle = "#ff7a18"; ctx.beginPath(); ctx.ellipse(0, -11 * f, 4.6, 10 * f, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = "#ffd862"; ctx.beginPath(); ctx.ellipse(0, -9 * f2, 2.4, 5.6 * f2, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = "#fff3c8"; ctx.beginPath(); ctx.ellipse(0, -6 * f2, 1.2, 2.6 * f2, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.restore();
+  }
+
+  /** Cheap deterministic 0..1 hash, so stone grain is stable frame to frame. */
+  private static hash(a: number, b: number): number {
+    const n = Math.sin(a * 127.1 + b * 311.7) * 43758.5453;
+    return n - Math.floor(n);
+  }
+
+  /**
+   * One inlaid stone plate. Each cell is a real object — bevelled, top-lit,
+   * with its own grain — rather than a line on a flat field. This is what
+   * makes the arena read as a place rather than a spreadsheet.
+   */
+  private tile(ctx: CanvasRenderingContext2D, tx: number, ty: number, tw: number, th: number, col: number, row: number, mine: boolean, glow: number) {
+    const inset = Math.max(1.5, Math.min(tw, th) * 0.05);
+    const px = tx + inset, py = ty + inset, pw = tw - inset * 2, ph = th - inset * 2;
+    const rad = Math.min(pw, ph) * 0.16;
+    const grain = WarbandScreen.hash(col, row);
+    // Base stone, lighter at the top edge (a single high sun).
+    const base = ctx.createLinearGradient(0, py, 0, py + ph);
+    const lift = 0.06 + grain * 0.07 + glow * 0.1;
+    base.addColorStop(0, `rgba(${Math.round(96 + lift * 260)},${Math.round(104 + lift * 250)},${Math.round(88 + lift * 230)},0.30)`);
+    base.addColorStop(1, "rgba(18,26,21,0.42)");
+    ctx.fillStyle = base;
+    this.roundRect(ctx, px, py, pw, ph, rad); ctx.fill();
+    // Side tint — cool for your ground, warm for theirs — strongest at the line.
+    // Blue reads weaker than red at the same alpha, so it gets a little more.
+    ctx.fillStyle = mine
+      ? withAlpha("#5aa6f0", 0.08 + glow * 0.17)
+      : withAlpha("#e8604a", 0.05 + glow * 0.12);
+    this.roundRect(ctx, px, py, pw, ph, rad); ctx.fill();
+    // Bevel: bright top-left lip, dark bottom-right.
+    ctx.lineWidth = 1;
+    ctx.strokeStyle = "rgba(255,246,224,0.09)";
+    ctx.beginPath();
+    ctx.moveTo(px + rad, py + 0.5); ctx.lineTo(px + pw - rad, py + 0.5);
+    ctx.moveTo(px + 0.5, py + rad); ctx.lineTo(px + 0.5, py + ph - rad);
+    ctx.stroke();
+    ctx.strokeStyle = "rgba(0,0,0,0.40)";
+    ctx.beginPath();
+    ctx.moveTo(px + rad, py + ph - 0.5); ctx.lineTo(px + pw - rad, py + ph - 0.5);
+    ctx.moveTo(px + pw - 0.5, py + rad); ctx.lineTo(px + pw - 0.5, py + ph - rad);
+    ctx.stroke();
+    // A chipped corner or a crack on some stones, so the field isn't uniform.
+    if (grain > 0.82) {
+      ctx.strokeStyle = "rgba(0,0,0,0.22)"; ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(px + pw * 0.2, py + ph * (0.3 + grain * 0.2));
+      ctx.lineTo(px + pw * 0.55, py + ph * 0.62);
+      ctx.lineTo(px + pw * 0.78, py + ph * 0.44);
+      ctx.stroke();
+    }
+  }
+
+  /** The painterly stone arena: platform, inlaid tiles, carved centre channel,
+   *  vignette, ornate frame and flickering corner braziers. */
+  private drawArena(x: number, y: number, w: number, h: number, cellW: number, cellH: number, time: number, cond: Condition, setup: boolean) {
+    const ctx = ui.ctx;
+    const RIM = 12; // the stone kerb the board is set into
+    // Raised stone platform: a deep shadow, a dark kerb, then a lit rim.
+    ctx.save();
+    ctx.shadowColor = "rgba(0,0,0,0.72)"; ctx.shadowBlur = 28; ctx.shadowOffsetY = 10;
+    ctx.fillStyle = "#0a0805"; this.roundRect(ctx, x - RIM, y - RIM, w + RIM * 2, h + RIM * 2, 16); ctx.fill();
+    ctx.restore();
+    const kerb = ctx.createLinearGradient(0, y - RIM, 0, y + h + RIM);
+    kerb.addColorStop(0, "#4d4536"); kerb.addColorStop(0.5, "#2e2a20"); kerb.addColorStop(1, "#16130d");
+    ctx.fillStyle = kerb; this.roundRect(ctx, x - RIM, y - RIM, w + RIM * 2, h + RIM * 2, 16); ctx.fill();
+    // Kerb blocks, so the rim reads as cut stone rather than a painted band.
+    ctx.save();
+    ctx.beginPath(); this.roundRect(ctx, x - RIM, y - RIM, w + RIM * 2, h + RIM * 2, 16);
+    this.roundRect(ctx, x, y, w, h, 4); ctx.clip("evenodd");
+    ctx.strokeStyle = "rgba(0,0,0,0.42)"; ctx.lineWidth = 1;
+    ctx.beginPath();
+    for (let i = 0; i * 44 < w + RIM * 2; i++) {
+      const gx = x - RIM + i * 44;
+      ctx.moveTo(gx, y - RIM); ctx.lineTo(gx, y); ctx.moveTo(gx, y + h); ctx.lineTo(gx, y + h + RIM);
+    }
+    for (let i = 0; i * 44 < h + RIM * 2; i++) {
+      const gy = y - RIM + i * 44;
+      ctx.moveTo(x - RIM, gy); ctx.lineTo(x, gy); ctx.moveTo(x + w, gy); ctx.lineTo(x + w + RIM, gy);
+    }
+    ctx.stroke();
     ctx.restore();
 
-    // Painterly ground gradient.
+    // The ground the tiles are bedded in.
     const g = ctx.createLinearGradient(0, y, 0, y + h);
-    g.addColorStop(0, "#27372c"); g.addColorStop(0.5, "#1d2c23"); g.addColorStop(1, "#14201a");
+    g.addColorStop(0, "#212d25"); g.addColorStop(0.55, "#161f1a"); g.addColorStop(1, "#0e1512");
     ctx.fillStyle = g; ctx.fillRect(x, y, w, h);
 
-    // Checker + team tint, strongest at the centre line.
+    // Inlaid stone plates, one per cell.
     for (let c = 0; c < GRID_COLS; c++) {
       const mine = c < GRID_COLS / 2;
-      const tintA = Math.max(0.025, 0.11 - Math.abs(c - (GRID_COLS / 2 - 0.5)) * 0.012);
+      const glow = Math.max(0, 1 - Math.abs(c - (GRID_COLS / 2 - 0.5)) / 4.5); // hottest at the line
       for (let r = 0; r < GRID_ROWS; r++) {
-        const tx = x + c * cellW, ty = y + r * cellH;
-        if ((c + r) % 2 === 0) { ctx.fillStyle = "rgba(255,255,255,0.022)"; ctx.fillRect(tx, ty, cellW + 1, cellH + 1); }
-        ctx.fillStyle = withAlpha(mine ? "#3f86e0" : "#e0584a", tintA);
-        ctx.fillRect(tx, ty, cellW + 1, cellH + 1);
+        this.tile(ctx, x + c * cellW, y + r * cellH, cellW, cellH, c, r, mine, glow);
       }
     }
-    // Grid lines (dark + faint highlight for an engraved look).
-    ctx.strokeStyle = "rgba(0,0,0,0.28)"; ctx.lineWidth = 1; ctx.beginPath();
-    for (let c = 1; c < GRID_COLS; c++) { ctx.moveTo(x + c * cellW, y); ctx.lineTo(x + c * cellW, y + h); }
-    for (let r = 1; r < GRID_ROWS; r++) { ctx.moveTo(x, y + r * cellH); ctx.lineTo(x + w, y + r * cellH); }
-    ctx.stroke();
 
-    // Glowing animated centre divide.
-    const mid = x + w / 2, pulse = 0.5 + 0.5 * Math.sin(time * 2.2);
+    // The carved channel down the middle, with a slow glow crawling along it.
+    const mid = x + w / 2, pulse = 0.5 + 0.5 * Math.sin(time * 1.7);
+    const chW = Math.max(5, cellW * 0.1);
+    const ch = ctx.createLinearGradient(mid - chW, 0, mid + chW, 0);
+    ch.addColorStop(0, "rgba(0,0,0,0)"); ch.addColorStop(0.5, "rgba(0,0,0,0.62)"); ch.addColorStop(1, "rgba(0,0,0,0)");
+    ctx.fillStyle = ch; ctx.fillRect(mid - chW, y, chW * 2, h);
     ctx.save();
-    ctx.shadowColor = withAlpha(PAL.uiAccent, 0.85); ctx.shadowBlur = 10 + pulse * 10;
-    ctx.strokeStyle = withAlpha(PAL.uiAccent, 0.4 + pulse * 0.3); ctx.lineWidth = 2.5;
-    ctx.beginPath(); ctx.moveTo(mid, y + 3); ctx.lineTo(mid, y + h - 3); ctx.stroke();
+    ctx.shadowColor = withAlpha(PAL.uiAccent, 0.9); ctx.shadowBlur = 8 + pulse * 12;
+    ctx.strokeStyle = withAlpha(PAL.uiAccent, 0.34 + pulse * 0.26); ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(mid, y + 6); ctx.lineTo(mid, y + h - 6); ctx.stroke();
+    // Rune notches marching down the seam.
+    ctx.lineWidth = 1.4;
+    for (let r = 0; r < GRID_ROWS; r++) {
+      const ry = y + (r + 0.5) * cellH;
+      const a = 0.2 + 0.5 * (0.5 + 0.5 * Math.sin(time * 2.4 - r * 0.55));
+      ctx.strokeStyle = withAlpha(PAL.uiAccent, a);
+      ctx.beginPath(); ctx.moveTo(mid - chW * 0.7, ry); ctx.lineTo(mid + chW * 0.7, ry); ctx.stroke();
+    }
     ctx.restore();
+
+    // During setup, the ground you may actually stand on is marked out.
+    if (setup) {
+      const dz = mid - x;
+      ctx.save();
+      const band = ctx.createLinearGradient(x, 0, mid, 0);
+      band.addColorStop(0, withAlpha(PAL.uiAccent, 0.10)); band.addColorStop(1, withAlpha(PAL.uiAccent, 0.02));
+      ctx.fillStyle = band; ctx.fillRect(x, y, dz, h);
+      ctx.strokeStyle = withAlpha(PAL.uiAccent, 0.30); ctx.lineWidth = 1.5;
+      ctx.setLineDash([7, 6]); ctx.lineDashOffset = -time * 14;
+      ctx.strokeRect(x + 3, y + 3, dz - 6, h - 6);
+      ctx.restore();
+    }
 
     // Vignette.
     const vg = ctx.createRadialGradient(x + w / 2, y + h / 2, Math.min(w, h) * 0.22, x + w / 2, y + h / 2, Math.max(w, h) * 0.62);
-    vg.addColorStop(0, "rgba(0,0,0,0)"); vg.addColorStop(1, "rgba(0,0,0,0.42)");
+    vg.addColorStop(0, "rgba(0,0,0,0)"); vg.addColorStop(1, "rgba(0,0,0,0.46)");
     ctx.fillStyle = vg; ctx.fillRect(x, y, w, h);
 
     // ---- the round's weather, inside the arena ----
@@ -1660,11 +2142,20 @@ export class WarbandScreen {
       ctx.restore();
     }
 
-    // Ornate frame + corner braziers.
-    ctx.strokeStyle = "rgba(0,0,0,0.6)"; ctx.lineWidth = 4; ctx.strokeRect(x + 2, y + 2, w - 4, h - 4);
-    ctx.strokeStyle = withAlpha("#caa56a", 0.5); ctx.lineWidth = 1.5; ctx.strokeRect(x + 5.5, y + 5.5, w - 11, h - 11);
-    for (const [bx2, by2] of [[x + 16, y + 15], [x + w - 16, y + 15], [x + 16, y + h - 15], [x + w - 16, y + h - 15]] as const) {
-      this.brazier(ctx, bx2, by2, time);
+    // Ornate frame: a dark shadow line inside the kerb, then a gilded fillet.
+    ctx.strokeStyle = "rgba(0,0,0,0.55)"; ctx.lineWidth = 5; ctx.strokeRect(x + 2.5, y + 2.5, w - 5, h - 5);
+    ctx.strokeStyle = withAlpha("#caa56a", 0.45); ctx.lineWidth = 1.5; ctx.strokeRect(x + 6.5, y + 6.5, w - 13, h - 13);
+    // Corner bosses, sitting on the kerb — the braziers are mounted on them.
+    const RIM2 = 12;
+    for (const [ox, oy] of [[x - 1, y - 1], [x + w + 1, y - 1], [x - 1, y + h + 1], [x + w + 1, y + h + 1]] as const) {
+      ctx.save();
+      const bg = ctx.createRadialGradient(ox - 3, oy - 3, 1, ox, oy, RIM2 + 4);
+      bg.addColorStop(0, "#6a5f4a"); bg.addColorStop(1, "#231e15");
+      ctx.fillStyle = bg; ctx.beginPath(); ctx.arc(ox, oy, RIM2 + 2, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = withAlpha("#caa56a", 0.55); ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.arc(ox, oy, RIM2 + 2, 0, Math.PI * 2); ctx.stroke();
+      ctx.restore();
+      this.brazier(ctx, ox, oy + 1, time, 0.95);
     }
   }
 
@@ -1682,7 +2173,7 @@ export class WarbandScreen {
     const cellW = w / GRID_COLS;
     const cellH = h / GRID_ROWS;
 
-    this.drawArena(x, y, w, h, cellW, cellH, time, run.condition);
+    this.drawArena(x, y, w, h, cellW, cellH, time, run.condition, setup);
     this.drawTerrain(x, y, cellW, cellH, run.terrain, time);
 
     if (!this.battle) return;
@@ -1695,13 +2186,15 @@ export class WarbandScreen {
     const syk = h / (GRID_ROWS * GRID_CELL);
     const mapX = (wx: number) => x + (wx - worldLeft) * sxk;
     const mapY = (wy: number) => y + (wy - worldTop) * syk;
-    const us = (cellH * 0.62) / TILE; // unit fits comfortably inside a cell
+    // Fill the cell. A figure at 62% of a tile reads as an ant on a wide board;
+    // this fills the square while still leaving air between neighbours.
+    const us = Math.min(cellH * 1.3, cellW * 1.24) / TILE;
 
     // ---- enemy fog (setup) — camps stand in the open instead ----
     if (setup && !reveal) {
       ctx.fillStyle = "rgba(8,5,3,0.66)";
       ctx.fillRect(x + w / 2 + 1.5, y + 1.5, w / 2 - 3, h - 3);
-      ui.text("🔒 Enemy warband hidden", x + w * 0.74, y + 30, { align: "center", size: 15, bold: true, color: "#caa" });
+      ui.text("Enemy warband hidden", x + w * 0.74, y + 30, { align: "center", size: 15, bold: true, color: "#caa" });
       ui.text("scout a rival on the left to see theirs", x + w * 0.74, y + 50, { align: "center", size: 12, color: "#8a8278" });
     } else if (setup && reveal) {
       const camp = run.pendingCamp!;
@@ -1719,19 +2212,34 @@ export class WarbandScreen {
       const inPlayer = ui.mx >= x && ui.mx < x + w && ui.my >= y && ui.my < y + h && hovC >= 0 && hovC <= 4 && hovR >= 0 && hovR <= 9;
       const equipping = this.selectedItem >= 0 && this.selectedItem < run.itemStash.length;
 
-      // Sell box, bottom-right corner of the board.
+      // Sell box, bottom-right corner of the board — a brazier pit you throw a
+      // unit into. It only lights up when you're actually carrying something.
       const sbW = 156, sbH = 66;
       this.sellBox = { x: x + w - sbW - 14, y: y + h - sbH - 14, w: sbW, h: sbH };
-      const overSell = ui.mx >= this.sellBox.x && ui.mx <= this.sellBox.x + sbW && ui.my >= this.sellBox.y && ui.my <= this.sellBox.y + sbH;
+      const sb = this.sellBox;
+      const overSell = ui.mx >= sb.x && ui.mx <= sb.x + sbW && ui.my >= sb.y && ui.my <= sb.y + sbH;
       const heldObj = this.heldPiece >= 0 ? run.pieces[this.heldPiece] : null;
       const hot = overSell && this.heldPiece >= 0;
-      ctx.fillStyle = hot ? "rgba(210,70,58,0.55)" : "rgba(70,24,18,0.5)";
-      ctx.fillRect(this.sellBox.x, this.sellBox.y, sbW, sbH);
-      ctx.strokeStyle = hot ? "#ff7a68" : "#a8463c"; ctx.lineWidth = 2;
-      ctx.setLineDash([6, 4]); ctx.strokeRect(this.sellBox.x + 1, this.sellBox.y + 1, sbW - 2, sbH - 2); ctx.setLineDash([]);
-      ui.text("🗑 SELL", this.sellBox.x + sbW / 2, this.sellBox.y + 26, { align: "center", size: 15, bold: true, color: "#f0c0b6" });
-      ui.text(heldObj ? `drop to sell  +${run.cost(heldObj.type) * heldObj.star}g` : "drag a unit here",
-        this.sellBox.x + sbW / 2, this.sellBox.y + 46, { align: "center", size: 11, color: "#e0b0a6" });
+      const armed = this.heldPiece >= 0;
+      ctx.save();
+      if (hot) { ctx.shadowColor = "#ff6a52"; ctx.shadowBlur = 18; }
+      const sg2 = ctx.createLinearGradient(0, sb.y, 0, sb.y + sbH);
+      sg2.addColorStop(0, hot ? "rgba(214,74,58,0.68)" : armed ? "rgba(96,32,24,0.62)" : "rgba(48,18,14,0.42)");
+      sg2.addColorStop(1, "rgba(24,10,7,0.72)");
+      ctx.fillStyle = sg2; this.roundRect(ctx, sb.x, sb.y, sbW, sbH, 8); ctx.fill();
+      ctx.restore();
+      ctx.strokeStyle = hot ? "#ff8a76" : armed ? "#c05a4c" : "#7a3a32"; ctx.lineWidth = hot ? 2.4 : 1.6;
+      ctx.setLineDash([7, 5]); ctx.lineDashOffset = hot ? -time * 24 : 0;
+      this.roundRect(ctx, sb.x + 1.5, sb.y + 1.5, sbW - 3, sbH - 3, 8); ctx.stroke();
+      ctx.setLineDash([]); ctx.lineDashOffset = 0;
+      // A little coin-and-arrow mark: the unit goes in, gold comes out.
+      const gx = sb.x + 26, gy = sb.y + 26;
+      ctx.strokeStyle = hot ? "#ffd9cc" : "#c8968c"; ctx.lineWidth = 1.6; ctx.lineCap = "round";
+      ctx.beginPath(); ctx.moveTo(gx, gy - 9); ctx.lineTo(gx, gy + 5); ctx.moveTo(gx - 5, gy); ctx.lineTo(gx, gy + 6); ctx.lineTo(gx + 5, gy); ctx.stroke();
+      this.coin(ctx, gx, gy + 15, 0, hot);
+      ui.text("SELL", sb.x + sbW / 2 + 18, sb.y + 28, { align: "center", size: 16, bold: true, color: hot ? "#fff0ea" : "#f0c0b6", font: "Georgia, serif" });
+      ui.text(heldObj ? `drop for +${run.cost(heldObj.type) * heldObj.star}g` : "drag a unit here",
+        sb.x + sbW / 2 + 18, sb.y + 48, { align: "center", size: 11, bold: !!heldObj, color: heldObj ? "#ffd24a" : "#c09a92" });
 
       // Grab a board unit on press (when nothing held and not equipping a relic).
       if (this.pressEdge && this.heldPiece < 0 && inPlayer && !equipping && !ui.pointerConsumed) {
@@ -1787,9 +2295,17 @@ export class WarbandScreen {
         } else this.heldPiece = -1; // dropped on nothing → cancel
       }
 
-      ui.text(this.heldPiece >= 0 ? "Drop on a cell to place/field · drop on another unit to swap · drop on 🗑 to sell"
-        : "Drag a reserve onto the board to field it · click a unit then a cell to move · drag to 🗑 to sell",
-        x + w * 0.25, y + h - 12, { align: "center", size: 12, color: this.heldPiece >= 0 ? "#ffd24a" : "#9a917b" });
+      // The instruction line sits on its own plate inside the player's half, so
+      // it never fights the arena's kerb or the bench below it for space.
+      const hint = this.heldPiece >= 0
+        ? "Drop on a cell to place · drop on a unit to swap · drop on SELL to sell"
+        : "Drag a reserve onto the board · click a unit then a cell to move";
+      const hw = hint.length * 6.1 + 24, hx = x + w * 0.25 - hw / 2, hy = y + h - 30;
+      ctx.fillStyle = this.heldPiece >= 0 ? "rgba(60,44,10,0.82)" : "rgba(8,6,3,0.66)";
+      this.roundRect(ctx, hx, hy, hw, 20, 10); ctx.fill();
+      ctx.strokeStyle = this.heldPiece >= 0 ? withAlpha("#ffd24a", 0.6) : "rgba(255,255,255,0.07)";
+      ctx.lineWidth = 1; this.roundRect(ctx, hx + 0.5, hy + 0.5, hw - 1, 19, 10); ctx.stroke();
+      ui.text(hint, x + w * 0.25, hy + 14, { align: "center", size: 11, color: this.heldPiece >= 0 ? "#ffd24a" : "#9a917b" });
     }
 
     // ---- units + combat FX ----
@@ -1838,17 +2354,29 @@ export class WarbandScreen {
       // middle of the square (the sprite is feet-anchored and rises upward).
       const footY = sy + cellH * 0.24;
       const star = (e.variantRarity ?? 0) + 1;
-      // Soft drop shadow at the feet.
-      ctx.globalAlpha = lifted ? 0.12 : 0.34;
-      ctx.fillStyle = "#000";
-      ctx.beginPath(); ctx.ellipse(sx, footY, cellW * 0.2, cellH * 0.1, 0, 0, Math.PI * 2); ctx.fill();
-      ctx.globalAlpha = 1;
+      // A team-coloured disc under the feet: contact shadow, then a soft pool of
+      // side colour, so at a glance you can read whose half of the field a
+      // brawl is happening on without picking out uniforms.
+      const dr = cellW * 0.30, dry = cellH * 0.15;
+      ctx.save();
+      ctx.globalAlpha = lifted ? 0.2 : 1;
+      const pool = ctx.createRadialGradient(sx, footY, 1, sx, footY, dr);
+      const side = e.team === 0 ? "#4a93e8" : "#e8604a";
+      pool.addColorStop(0, withAlpha(side, 0.34)); pool.addColorStop(1, withAlpha(side, 0));
+      ctx.save(); ctx.translate(sx, footY); ctx.scale(1, dry / dr); ctx.translate(-sx, -footY);
+      ctx.fillStyle = pool; ctx.beginPath(); ctx.arc(sx, footY, dr, 0, Math.PI * 2); ctx.fill();
+      ctx.restore();
+      ctx.fillStyle = "rgba(0,0,0,0.42)";
+      ctx.beginPath(); ctx.ellipse(sx, footY, cellW * 0.19, cellH * 0.085, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = withAlpha(side, 0.55); ctx.lineWidth = 1.2;
+      ctx.beginPath(); ctx.ellipse(sx, footY, dr * 0.78, dry * 0.78, 0, 0, Math.PI * 2); ctx.stroke();
+      ctx.restore();
       // Star-tier ring at the feet for 2★/3★.
       if (star >= 2) {
         ctx.save();
         ctx.strokeStyle = withAlpha(starGlow[Math.min(2, star - 1)], 0.9);
         ctx.shadowColor = starGlow[Math.min(2, star - 1)]; ctx.shadowBlur = 8; ctx.lineWidth = 2;
-        ctx.beginPath(); ctx.ellipse(sx, footY, cellW * 0.22, cellH * 0.11, 0, 0, Math.PI * 2); ctx.stroke();
+        ctx.beginPath(); ctx.ellipse(sx, footY, cellW * 0.26, cellH * 0.13, 0, 0, Math.PI * 2); ctx.stroke();
         ctx.restore();
       }
       ctx.save();
@@ -1885,13 +2413,29 @@ export class WarbandScreen {
       }
       const frac = Math.max(0, Math.min(1, e.hp / e.maxHp));
       if (!setup) {
-        // Always-on health bar during the fight (team-coloured), so you can read
-        // every unit's health live.
-        const barW = cellW * 0.5, barH = 3.5, byy = sy - cellH * 0.26;
-        ctx.fillStyle = "rgba(0,0,0,0.78)"; ctx.fillRect(sx - barW / 2 - 1, byy - 1, barW + 2, barH + 2);
-        ctx.fillStyle = "rgba(0,0,0,0.45)"; ctx.fillRect(sx - barW / 2, byy, barW, barH);
-        ctx.fillStyle = e.team === 0 ? "#5ad06a" : "#e0564a";
-        ctx.fillRect(sx - barW / 2, byy, barW * frac, barH);
+        // Health bar with a trailing "ghost": the white tail shows the chunk
+        // just taken and drains away, so a big hit is legible as a big hit
+        // rather than a bar that silently jumps.
+        const barW = cellW * 0.56, barH = 5, byy = sy - cellH * 0.3;
+        const ghostPrev = this.hpGhost.get(e.id);
+        const ghost = ghostPrev == null ? frac : (frac > ghostPrev ? frac : Math.max(frac, ghostPrev - dt * 0.55));
+        this.hpGhost.set(e.id, ghost);
+        ctx.fillStyle = "rgba(0,0,0,0.8)";
+        this.roundRect(ctx, sx - barW / 2 - 1.2, byy - 1.2, barW + 2.4, barH + 2.4, 3); ctx.fill();
+        ctx.save();
+        this.roundRect(ctx, sx - barW / 2, byy, barW, barH, 2); ctx.clip();
+        ctx.fillStyle = "rgba(0,0,0,0.55)"; ctx.fillRect(sx - barW / 2, byy, barW, barH);
+        if (ghost > frac) {
+          ctx.fillStyle = "rgba(255,236,210,0.75)";
+          ctx.fillRect(sx - barW / 2 + barW * frac, byy, barW * (ghost - frac), barH);
+        }
+        // Low health reads as danger regardless of side.
+        const hpCol = frac < 0.25 ? "#ff7a52" : e.team === 0 ? "#5ad06a" : "#e0564a";
+        const hg2 = ctx.createLinearGradient(0, byy, 0, byy + barH);
+        hg2.addColorStop(0, hpCol); hg2.addColorStop(1, withAlpha(hpCol, 0.55));
+        ctx.fillStyle = hg2; ctx.fillRect(sx - barW / 2, byy, barW * frac, barH);
+        ctx.fillStyle = "rgba(255,255,255,0.28)"; ctx.fillRect(sx - barW / 2, byy, barW * frac, 1.4);
+        ctx.restore();
         // Track the unit nearest the cursor for a live hover readout.
         const d = Math.hypot(ui.mx - sx, ui.my - sy);
         if (d < hoverDist && d < cellH * 0.8) { hoverDist = d; this.liveTip = { e, x: sx + cellW * 0.4, y: sy - cellH * 0.6 }; }
@@ -1928,18 +2472,28 @@ export class WarbandScreen {
     ctx.fillStyle = g; this.roundRect(ctx, x, y, w, h, 6); ctx.fill();
     ctx.strokeStyle = withAlpha(TIER_COLOR[tier], hover ? 0.95 : 0.6);
     ctx.lineWidth = 1.5; this.roundRect(ctx, x + 0.75, y + 0.75, w - 1.5, h - 1.5, 6); ctx.stroke();
+    // A tier stripe down the left edge, so a rack of cards reads as tiers even
+    // before you look at any of the art.
+    ctx.fillStyle = withAlpha(TIER_COLOR[tier], hover ? 1 : 0.7);
+    this.roundRect(ctx, x + 1.5, y + 4, 2.5, h - 8, 1.5); ctx.fill();
     // The unit stands on the card; its name sits on a plate along the bottom.
+    const plate = 15;
+    const band = h - plate - 10;
+    const px2 = Math.min(w * 0.62, band * 1.2);
+    const origin = y + 6 + band * 0.5;
     ctx.save();
-    ctx.beginPath(); ctx.rect(x + 2, y + 2, w - 4, h - 18); ctx.clip();
-    this.plinth(ctx, x + w / 2, y + h - 24, 16, TIER_COLOR[tier]);
-    this.portrait(ctx, x + w / 2, y + h - 24, 33, p.type, p.star, time);
+    ctx.beginPath(); ctx.rect(x + 2, y + 2, w - 4, h - plate - 3); ctx.clip();
+    this.plinth(ctx, x + w / 2, origin + px2 * 0.26, Math.min(w * 0.24, 22), TIER_COLOR[tier]);
+    this.portrait(ctx, x + w / 2, origin, px2, p.type, p.star, time);
     ctx.restore();
     if (p.star >= 2) {
-      ui.text(stars(p.star), x + w / 2, y + 13, { align: "center", size: 11, color: p.star >= 3 ? "#ffd24a" : "#cfe0ff" });
+      ui.text(stars(p.star), x + w - 5, y + 13, { align: "right", size: 11, color: p.star >= 3 ? "#ffd24a" : "#cfe0ff" });
     }
-    ctx.fillStyle = "rgba(10,7,4,0.82)";
-    this.roundRect(ctx, x + 2, y + h - 17, w - 4, 15, 4); ctx.fill();
-    ui.text(shortName(p.type), x + w / 2, y + h - 6, { align: "center", size: 10.5, bold: true, color: "#e7ddc4" });
+    ctx.fillStyle = "rgba(10,7,4,0.86)";
+    this.roundRect(ctx, x + 2, y + h - plate - 2, w - 4, plate, 4); ctx.fill();
+    ui.text(this.clip(shortName(p.type), Math.max(5, Math.floor((w - 10) / 6.1))), x + w / 2, y + h - 6, {
+      align: "center", size: 10.5, bold: true, color: "#e7ddc4",
+    });
     // Equipped relics as mini icons along the bottom.
     let ix = x + 11;
     for (const id of p.items) {
@@ -1973,48 +2527,60 @@ export class WarbandScreen {
     ctx.restore();
     ctx.strokeStyle = withAlpha(col, affordable ? 0.95 : 0.4); ctx.lineWidth = 2;
     this.roundRect(ctx, x + 1, y + oy + 1, w - 2, h - 2, 7); ctx.stroke();
-    // Tier accent bar along the top.
+    // Tier accent bar along the top, glowing when the card is live and hovered.
+    if (hover && affordable) { ctx.save(); ctx.shadowColor = col; ctx.shadowBlur = 10; }
     ctx.fillStyle = withAlpha(col, affordable ? 1 : 0.5);
-    ctx.fillRect(x + 6, y + oy + 4, w - 12, 2.5);
-    // The unit itself, standing on a lit plinth — the card's centrepiece.
-    const feet = y + oy + 58;
+    this.roundRect(ctx, x + 6, y + oy + 4, w - 12, 3, 1.5); ctx.fill();
+    if (hover && affordable) ctx.restore();
+    // Layout rows, derived from the card height so a taller counter gives the
+    // figure more room rather than leaving a band of empty card under it.
+    const top = y + oy + 11;
+    const nameY = y + oy + h - 34;
+    const traitY = y + oy + h - 21;
+    const footY = y + oy + h - 7;
+    // `portrait` centres the sprite on its origin, so the figure is placed by
+    // its middle and the plinth is drawn where its feet actually land.
+    const band = nameY - 8 - top;
+    const px2 = Math.min(w * 0.60, band * 1.16);
+    const origin = top + band * 0.5;
+    const sole = origin + px2 * 0.26;
     ctx.save();
     ctx.globalAlpha = affordable ? 1 : 0.4;
     // A soft pool of tier light behind the figure.
-    const halo = ctx.createRadialGradient(x + w / 2, feet - 14, 2, x + w / 2, feet - 14, 34);
-    halo.addColorStop(0, withAlpha(col, 0.3)); halo.addColorStop(1, "rgba(0,0,0,0)");
-    ctx.fillStyle = halo; ctx.fillRect(x + 2, y + oy + 8, w - 4, 62);
-    this.plinth(ctx, x + w / 2, feet, 21, col);
+    const halo = ctx.createRadialGradient(x + w / 2, origin, 2, x + w / 2, origin, band * 0.85);
+    halo.addColorStop(0, withAlpha(col, 0.34)); halo.addColorStop(1, "rgba(0,0,0,0)");
+    ctx.fillStyle = halo; ctx.fillRect(x + 2, top - 4, w - 4, band + 12);
+    this.plinth(ctx, x + w / 2, sole, Math.min(w * 0.24, 28), col);
     ctx.save();
-    ctx.beginPath(); ctx.rect(x + 3, y + oy + 8, w - 6, 54); ctx.clip();
-    this.portrait(ctx, x + w / 2, feet, 46, type, 1, time);
+    ctx.beginPath(); ctx.rect(x + 3, top - 3, w - 6, band + 10); ctx.clip();
+    this.portrait(ctx, x + w / 2, origin, px2, type, 1, time);
     ctx.restore();
     ctx.globalAlpha = 1;
     ctx.restore();
-    const nm = shortName(type);
-    ui.text(nm, x + w / 2, y + oy + 78, {
-      align: "center", size: nm.length > 10 ? 11 : 13.5, bold: true,
+    const nm = this.clip(shortName(type), Math.max(6, Math.floor((w - 12) / 7.2)));
+    ui.text(nm, x + w / 2, nameY, {
+      align: "center", size: nm.length > 10 ? 11.5 : 14, bold: true,
       color: affordable ? "#f2e8d0" : "#6f6a5c", font: "Georgia, serif",
     });
     // Synergies, centred under the name.
     const tt = traitsOf(type).slice(0, 2);
-    const label = tt.map((t2) => t2.name).join(" · ");
+    const label = this.clip(tt.map((t2) => t2.name).join(" · "), Math.max(6, Math.floor((w - 8) / 5.3)));
     if (label) {
-      ui.text(label, x + w / 2, y + oy + 92, {
+      ui.text(label, x + w / 2, traitY, {
         align: "center", size: 9, color: affordable ? withAlpha(tt[0].color, 0.95) : withAlpha(tt[0].color, 0.45),
       });
     }
-    ui.text(`T${tier}`, x + 9, y + oy + h - 8, { size: 9.5, bold: true, color: withAlpha(col, affordable ? 1 : 0.5) });
+    ui.text(`T${tier}`, x + 9, footY, { size: 9.5, bold: true, color: withAlpha(col, affordable ? 1 : 0.5) });
     // How it opens a fight, as a corner mark — the name lives in the tooltip.
     const sd2 = styleDef(type);
     ctx.globalAlpha = affordable ? 1 : 0.45;
-    this.styleGlyph(ctx, x + w - 15, y + oy + 15, 6, sd2);
+    this.styleGlyph(ctx, x + w - 15, y + oy + 17, 6, sd2);
     ctx.globalAlpha = 1;
     // Copies left in the shared lobby pool — or why this one can't be bought.
     if (blocked === "bench") {
-      ui.text("bench full", x + w / 2, y + oy + h - 8, { align: "center", size: 9.5, bold: true, color: "#e0786a" });
+      ui.text("bench full", x + w / 2, footY, { align: "center", size: 9.5, bold: true, color: "#e0786a" });
     } else {
-      ui.text(`${poolLeft} left`, x + w / 2, y + oy + h - 8, { align: "center", size: 9.5, color: poolLeft <= 3 ? "#e0786a" : "#8a8278" });
+      ui.text(`${poolLeft} left`, x + w / 2, footY, { align: "center", size: 9.5, color: poolLeft <= 3 ? "#e0786a" : "#8a8278" });
     }
     // Gold coin with the cost.
     this.coin(ctx, x + w - 16, y + oy + h - 12, tier, affordable);
@@ -2031,7 +2597,8 @@ export class WarbandScreen {
     ctx.fillStyle = g; ctx.beginPath(); ctx.arc(cx, cy, 7.5, 0, Math.PI * 2); ctx.fill();
     ctx.restore();
     ctx.strokeStyle = bright ? "#a8771e" : "#544622"; ctx.lineWidth = 1; ctx.beginPath(); ctx.arc(cx, cy, 7.5, 0, Math.PI * 2); ctx.stroke();
-    ui.text(String(n), cx, cy + 4, { align: "center", size: 11, bold: true, color: bright ? "#5a3e08" : "#3a3018" });
+    // n = 0 means "a coin", not "zero gold" — used as an icon, so leave it blank.
+    if (n > 0) ui.text(String(n), cx, cy + 4, { align: "center", size: 11, bold: true, color: bright ? "#5a3e08" : "#3a3018" });
   }
 
   /** A distinct procedural glyph per relic, drawn centred at (cx,cy), half-size s. */
@@ -2303,7 +2870,8 @@ export class WarbandScreen {
     if (ost) ph += 18; // the "vs …" line
     ph += 52; // battle-style block
     if (bonuses.length) ph += 18;
-    if (ab) ph += 34;
+    const abLines = ab ? this.wrap(ab.desc, ost ? 56 : 46).slice(0, 3) : [];
+    if (ab) ph += 20 + abLines.length * 12;
     ph += 8 + (relics.length ? relics.length * 30 : 16);
     let px = this.unitTip.x, py = this.unitTip.y;
     if (px + pw > W - 4) px = Math.max(4, px - pw - 90);
@@ -2315,7 +2883,8 @@ export class WarbandScreen {
     ctx.strokeStyle = withAlpha(TIER_COLOR[tier], 0.95); ctx.lineWidth = 1.5; this.roundRect(ctx, px + 0.75, py + 0.75, pw - 1.5, ph - 1.5, 9); ctx.stroke();
     // Header.
     ui.text(UNITS[p.type]?.name ?? p.type, px + 14, py + 21, { size: 15, bold: true, color: "#f2e8d0", font: "Georgia, serif" });
-    ui.text(stars(p.star), px + 14, py + 37, { size: 13, color: p.star >= 3 ? "#ffd24a" : p.star === 2 ? "#cfe0ff" : "#9a917b" });
+    if (p.star >= 2) ui.text(stars(p.star), px + 14, py + 38, { size: 13, color: p.star >= 3 ? "#ffd24a" : "#cfe0ff" });
+    else ui.text(traitsOf(p.type).map((t2) => t2.name).join(" · "), px + 14, py + 38, { size: 10, color: "#8a8278" });
     ui.text(`Tier ${tier}`, px + pw - 14, py + 21, { align: "right", size: 11, color: TIER_COLOR[tier] });
     const sd = styleDef(p.type);
     this.styleGlyph(ctx, px + pw - 24, py + 38, 6.5, sd);
@@ -2368,14 +2937,14 @@ export class WarbandScreen {
     });
     y += 52;
     if (bonuses.length) {
-      div(); ui.text("⚔ " + bonuses.join("  "), px + 14, y + 13, { size: 11, bold: true, color: "#ffb47a" }); y += 18;
+      div(); ui.text("+ " + bonuses.join("  "), px + 14, y + 13, { size: 11, bold: true, color: "#ffb47a" }); y += 18;
     }
     if (ab) {
       div();
       ui.text(ab.name, px + 14, y + 13, { size: 12, bold: true, color: ab.color });
       ui.text("ability — charges in battle", px + pw - 14, y + 13, { align: "right", size: 9, color: "#8a8278" });
-      ui.text(this.clip(ab.desc, 42), px + 14, y + 27, { size: 9.5, color: "#cabfa4" });
-      y += 34;
+      abLines.forEach((ln, i) => ui.text(ln, px + 14, y + 26 + i * 12, { size: 9.5, color: "#cabfa4" }));
+      y += 20 + abLines.length * 12;
     }
     div(); y += 8;
     ui.text(`Relics ${relics.length}/3`, px + 14, y - 0, { size: 10, color: "#9a917b" });

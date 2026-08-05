@@ -999,3 +999,58 @@ describe("Warband shop comparison", () => {
     expect(run.weakestDeployed()!.type).toBe("militia");
   });
 });
+
+describe("Warband synergy progress", () => {
+  it("reports traits the board touches but hasn't switched on yet", () => {
+    const run = new WarbandRun(71, null);
+    run.gold = 300; run.level = 2;
+    // One footman only: Footmen needs more than one distinct type to activate.
+    run.shop = ["militia", "militia", "militia", "militia", "militia"];
+    run.buy(0);
+    const prog = run.traitProgress();
+    const footmen = prog.find((p) => p.trait.id === "footmen");
+    expect(footmen).toBeDefined();
+    expect(footmen!.count).toBe(1);
+    expect(footmen!.tier).toBeNull();        // not active yet…
+    expect(footmen!.next).toBeGreaterThan(1); // …but the next rung is named
+    // activeTraits() would have hidden it entirely, which is the whole point.
+    expect(run.activeTraits().some((a) => a.trait.id === "footmen")).toBe(false);
+  });
+
+  it("marks a trait active once its first threshold is met, and points at the next", () => {
+    const run = new WarbandRun(72, null);
+    run.gold = 300; run.level = 4;
+    for (const t of ["militia", "spearman"]) { run.shop = [t, t, t, t, t]; run.buy(0); }
+    const footmen = run.traitProgress().find((p) => p.trait.id === "footmen")!;
+    expect(footmen.count).toBe(2);
+    expect(footmen.tier).not.toBeNull();
+    // Either it has a higher rung to climb, or it is already maxed.
+    expect(footmen.next === null || footmen.next > footmen.count).toBe(true);
+  });
+
+  it("leaves out traits the board doesn't touch at all", () => {
+    const run = new WarbandRun(73, null);
+    expect(run.traitProgress()).toEqual([]);
+  });
+});
+
+describe("Warband levelling", () => {
+  it("can actually reach the maximum level", () => {
+    const run = new WarbandRun(74, null);
+    run.gold = 10000;
+    for (let i = 0; i < 80 && run.level < 9; i++) run.buyXp();
+    expect(run.level).toBe(9);
+  });
+
+  it("never reports a NaN xp bar on the way up", () => {
+    const run = new WarbandRun(75, null);
+    run.gold = 10000;
+    for (let i = 0; i < 80; i++) {
+      const xp = run.xpProgress();
+      expect(Number.isFinite(xp.xp)).toBe(true);
+      expect(Number.isFinite(xp.need)).toBe(true);
+      if (!run.buyXp()) break;
+    }
+    expect(run.xpProgress().max).toBe(true);
+  });
+});
