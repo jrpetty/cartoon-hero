@@ -8,6 +8,7 @@ import net.minecraft.ChatFormatting;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.EditBox;
+import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
 
@@ -68,8 +69,11 @@ public class HubScreen extends GadgetScreen {
      */
     private final String provenance;
 
+    /** Where Escape goes back to. Set only when a tablet opened this board. */
+    private final Screen parent;
+
     public HubScreen(CommandHubBlockEntity be) {
-        this(be, "");
+        this(be, "", null);
     }
 
     /**
@@ -78,10 +82,21 @@ public class HubScreen extends GadgetScreen {
      * has no business doing, and a button that silently failed would be worse
      * than one that is not there.
      */
-    public HubScreen(CommandHubBlockEntity be, String provenance) {
+    public HubScreen(CommandHubBlockEntity be, String provenance, Screen parent) {
         super(Component.literal(provenance.isEmpty() ? "Command Hub" : "Command Hub  ·  remote"), 320, 276);
         this.be = be;
         this.provenance = provenance;
+        this.parent = parent;
+    }
+
+    /** Back to the tablet rather than out to the world — this is a page of it. */
+    @Override
+    public void onClose() {
+        if (parent != null && minecraft != null) {
+            minecraft.setScreen(parent);
+            return;
+        }
+        super.onClose();
     }
 
     private boolean readOnly() {

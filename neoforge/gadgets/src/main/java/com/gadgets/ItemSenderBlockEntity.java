@@ -253,6 +253,14 @@ public class ItemSenderBlockEntity extends BlockEntity implements TransferNode {
     @Override
     public void setChannel(String channel) {
         this.channel = channel == null ? "" : channel;
+        if (this.channel.isEmpty()) {
+            // tick() bails before it reaches either of these while there is no
+            // code, so clearing one has to reset them here — otherwise the
+            // screen goes on claiming to be paired with a receiver it just let
+            // go of, and previewing an item it will never send.
+            linkState = LINK_FREE;
+            nextItem = ItemStack.EMPTY;
+        }
         setChanged();
         sync();
     }

@@ -85,6 +85,24 @@ public class CommandHubBlock extends HorizontalDirectionalBlock implements Entit
         return new CommandHubBlockEntity(pos, state);
     }
 
+    /**
+     * Stop answering tablets once the hub is genuinely gone.
+     *
+     * <p>Deliberately here and not in the block entity's own removal: that runs
+     * on chunk unload too, and a hub going quiet because you walked away is the
+     * exact case a tablet exists to report on. Only breaking the block should
+     * turn "last heard from 4m ago" into "nothing answering that code".
+     */
+    @Override
+    protected void onRemove(BlockState state, Level level, BlockPos pos, BlockState newState, boolean moved) {
+        if (!state.is(newState.getBlock())) {
+            if (!level.isClientSide() && level.getBlockEntity(pos) instanceof CommandHubBlockEntity be) {
+                HubRegistry.forget(be.getCode(), pos.asLong());
+            }
+            super.onRemove(state, level, pos, newState, moved);
+        }
+    }
+
     @SuppressWarnings("unchecked")
     @Nullable
     @Override

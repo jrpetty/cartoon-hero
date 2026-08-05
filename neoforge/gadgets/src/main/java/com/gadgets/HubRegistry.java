@@ -92,6 +92,17 @@ public final class HubRegistry {
         return code == null || code.isEmpty() ? null : HUBS.get(code);
     }
 
+    /**
+     * Stop answering on this code, but only for the hub that owns it — a
+     * rebuilt hub that happened to roll the same digits keeps its own entry.
+     */
+    public static synchronized void forget(String code, long pos) {
+        Report was = code == null ? null : HUBS.get(code);
+        if (was != null && was.pos() == pos) {
+            HUBS.remove(code);
+        }
+    }
+
     /** Drop everything — called when a server stops, so nothing leaks into the next world. */
     public static synchronized void clear() {
         HUBS.clear();
