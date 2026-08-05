@@ -12,9 +12,9 @@ import { WarbandRun } from "./warband";
 describe("Warband relics", () => {
   it("applyItems stacks flat and percent buffs", () => {
     const u = { maxHp: 100, hp: 100, attack: 10, armor: 1, speed: 80 };
-    applyItems(u, ["whetstone", "greatmail"]); // +30% attack, +7 armour
+    applyItems(u, ["whetstone", "greatmail"]); // +30% attack, +6 armour
     expect(u.attack).toBe(13);
-    expect(u.armor).toBe(8);
+    expect(u.armor).toBe(7);
   });
 
   it("a fully-itemized carry sweeps an identical un-itemized unit", () => {
@@ -111,9 +111,9 @@ describe("Warband components", () => {
 
   it("components buff a unit on their own, before they are fused", () => {
     const u = { maxHp: 100, hp: 100, attack: 10, armor: 1, speed: 80 };
-    applyItems(u, ["blade", "plate"]); // +6 attack, +5 armour
+    applyItems(u, ["blade", "plate"]); // +6 attack, +4 armour
     expect(u.attack).toBe(16);
-    expect(u.armor).toBe(6);
+    expect(u.armor).toBe(5);
     // …and the relic they fuse into is stronger than the parts.
     const fused = { maxHp: 100, hp: 100, attack: 10, armor: 1, speed: 80 };
     applyItems(fused, [fusionOf("blade", "plate")!]);

@@ -1162,6 +1162,43 @@ describe("Warband lobby difficulty", () => {
     expect(conqueror).toBeGreaterThan(squire);
   });
 
+  it("makes Squire forgiving without making it a formality", () => {
+    // Squire's job is room to be wrong, not a free run. Softening the rivals as
+    // well as the damage made a careful player win 15 times out of 18, which is
+    // no way to learn a board — so the forgiveness now lives almost entirely in
+    // what a defeat costs, and the lobby plays nearly the honest game.
+    const play = (seed: number, skill: "average" | "good", diff: string) => {
+      const run = new WarbandRun(seed, null);
+      (run as unknown as { difficulty: unknown }).difficulty = difficultyById(diff);
+      let guard = 0;
+      while (run.phase !== "over" && guard++ < 400) {
+        if (run.phase === "augment") { run.pickAugment(0); continue; }
+        if (run.phase === "draft") { run.takeCarousel(0); continue; }
+        if (run.phase === "shop") {
+          if (skill === "average") { if (run.gold >= 12) run.buyXp(); run.buy(0); run.buy(1); }
+          else {
+            while (run.gold >= 20 && run.level < 9) run.buyXp();
+            for (let s = 0; s < 5; s++) run.buy(s);
+            if (run.gold > 30) { run.reroll(); for (let s = 0; s < 5; s++) run.buy(s); }
+          }
+          run.fight();
+        } else if (run.phase === "result") run.next();
+      }
+      return run.placement();
+    };
+    const seeds = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+    const mean = (xs: number[]) => xs.reduce((a, b) => a + b, 0) / xs.length;
+
+    // Forgiving: a middling player measurably survives longer on Squire.
+    const avgSquire = mean(seeds.map((s) => play(s, "average", "squire")));
+    const avgVeteran = mean(seeds.map((s) => play(s, "average", "veteran")));
+    expect(avgSquire, `squire ${avgSquire} vs veteran ${avgVeteran}`).toBeLessThan(avgVeteran);
+
+    // But not a formality: a careful player still loses runs on it.
+    const goodWins = seeds.map((s) => play(s, "good", "squire")).filter((p) => p === 1).length;
+    expect(goodWins, `good player took ${goodWins}/${seeds.length} Squire runs`).toBeLessThan(8);
+  }, 180000);
+
   it("scales what a defeat costs you", () => {
     // Same seed and the same (empty) board, so every fight is lost the same
     // way and only the toll for losing it differs. Camp bites are deliberately

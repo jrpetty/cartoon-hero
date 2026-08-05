@@ -78,6 +78,27 @@ describe("Unit balance", () => {
     expect(sorted[0][1] - sorted[sorted.length - 1][1], report).toBeLessThan(0.65);
   }, 120000);
 
+  it("does not let armour alone decide a fight", () => {
+    // "Too easy to get a unit with high armour and just win" was the complaint
+    // that started the armour work. The fix was two-sided: a proportional
+    // damage floor (armour can never reduce a hit below a fifth of its raw
+    // value) and repeated cuts to the base values. This is the guard that says
+    // it stayed fixed — across the roster, base armour must not predict who
+    // wins. It currently sits near zero and slightly negative: the two heaviest
+    // units left, Shieldbearer and Battering Ram, are both bottom-half.
+    const rate = matrix();
+    const rows = ROSTER.map((t) => ({ rate: rate.get(t)!, arm: UNITS[t].armor }));
+    const mean = (xs: number[]) => xs.reduce((a, b) => a + b, 0) / xs.length;
+    const ma = mean(rows.map((r) => r.arm)), mr = mean(rows.map((r) => r.rate));
+    const cov = mean(rows.map((r) => (r.arm - ma) * (r.rate - mr)));
+    const sa = Math.sqrt(mean(rows.map((r) => (r.arm - ma) ** 2)));
+    const sr = Math.sqrt(mean(rows.map((r) => (r.rate - mr) ** 2)));
+    const r = cov / (sa * sr);
+    expect(Math.abs(r), `armour/win-rate correlation ${r.toFixed(3)}`).toBeLessThan(0.35);
+    // And no single unit is allowed to carry a lot of it.
+    expect(Math.max(...ROSTER.map((t) => UNITS[t].armor))).toBeLessThanOrEqual(3);
+  }, 120000);
+
   it("keeps the counter triangle pointing the right way", () => {
     // Spears stop cavalry, cavalry runs down archers, skirmishers out-trade
     // archers. Each leg is checked against the unit it is meant to answer.

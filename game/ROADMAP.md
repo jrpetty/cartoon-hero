@@ -135,6 +135,48 @@ Spread went from 0.9–100% to 20–77%. The specialists (Spearman 29%, Skirmish
 ones. The bounds encode "nothing unbeatable, nothing dead weight" rather than
 parity, because the metric has a known melee bias.
 
+**Second armour pass (measured).** Base armour came down again — Cataphract 4→2,
+Shieldbearer and Battering Ram 4→3, King 3→2, Knight / Champion / Bombard /
+Trebuchet 2→1 — and every armour relic lost a point (Greatmail 7→6, Ironplate
+5→4, Ironhide 4→3, Tower Shield 5→4, Duelist's Edge 4→3, Dancer's Mail 5→4).
+Matrix afterwards: max 72%, min 28%, spread 43, and the correlation between base
+armour and win rate is **−0.145** — armour no longer predicts who wins at all.
+balance.test.ts now asserts that correlation stays under 0.35 and that no unit
+carries more than 3 base armour.
+
+**Correction to the earlier suspicion.** An "armour build beats an attack build
+100%" reading looked damning until the builds were made single-stat. Pure armour
+(Greatmail + Ironplate) loses to pure attack *and* to pure HP, from either side
+of the board, and did so **before** the relic cut as well as after — the earlier
+result was the +160 HP and +22% HP riding along on Ironhide and Tower Shield,
+not the armour. So the relic cut is a safe ceiling reduction, not a fix for a
+measured dominance. Note also that a one-directional matchup here is unreliable:
+the mirror control (identical boards, both sides) swings 8–92% across units, so
+anything measured this way has to be read in both orderings.
+
+## Warband lobby difficulty — measured
+
+The four lobbies scale *how well the rivals play the same economy*, not their
+stats. Placement by player archetype over 30 seeds (1 is best of 8):
+
+| lobby | idle | average | good |
+|---|---|---|---|
+| Squire | 8.00 (0 wins) | 4.13 (3/30) | 2.10 (13/30) |
+| Veteran | 8.00 (0) | 5.13 (0/30) | 2.30 (14/30) |
+| Warlord | 8.00 (0) | 6.17 (0/30) | 3.07 (8/30) |
+| Conqueror | 8.00 (0) | 6.17 (0/30) | 3.63 (5/30) |
+
+Squire's first cut softened the rivals *and* the damage, and a careful player
+took it 15 times out of 18 — a formality is no way to learn a board. The
+forgiveness now lives almost entirely in what a defeat costs (×0.66); the lobby
+plays at 0.94 income and 0.92 tech, near the honest game. Squire is still
+clearly the kind one for a middling player (4.13 vs Veteran's 5.13, and 3 wins
+against 0) without being free at the top.
+
+Warlord and Conqueror tie on the "average" row. That is real: both are already
+past the point where a middling board survives, so the difference between them
+only shows up in the "good" column.
+
 ## Bigger / later
 - **Naval** — water is currently only an impassable wall, and the Islands
   preset (55% water) is a maze rather than a naval map. Dock, transport,

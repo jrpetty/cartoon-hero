@@ -33,9 +33,13 @@ export interface WarbandDifficulty {
 
 export const WARBAND_DIFFICULTIES: WarbandDifficulty[] = [
   {
-    id: "squire", name: "Squire", title: "learn the board", color: "#7ad08a",
-    blurb: "Rivals bank lazily and tech late. Defeats cost you a third less life, and you open three gold up.",
-    foeIncome: 0.82, foeLevelPace: 0.82, foeRerolls: -1, foeRelicEvery: 4, damageTaken: 0.68, startGold: 3,
+    // Forgiveness here is deliberately about surviving your own mistakes, not
+    // about the lobby being feeble. Softening the rivals as well turned Squire
+    // into a formality — a careful player took it 15 times out of 18 — which is
+    // no way to learn a board.
+    id: "squire", name: "Squire", title: "room to be wrong", color: "#7ad08a",
+    blurb: "The same rivals, a little slower off the mark. Defeats cost you a third less life, so a bad round isn't a lost run.",
+    foeIncome: 0.94, foeLevelPace: 0.92, foeRerolls: 0, foeRelicEvery: 3, damageTaken: 0.66, startGold: 2,
   },
   {
     id: "veteran", name: "Veteran", title: "the honest fight", color: "#e7ddc4",
@@ -45,12 +49,12 @@ export const WARBAND_DIFFICULTIES: WarbandDifficulty[] = [
   {
     id: "warlord", name: "Warlord", title: "they draft properly", color: "#e0a23a",
     blurb: "Rivals bank harder, tech on curve and roll for their carries. Defeats bite deeper.",
-    foeIncome: 1.12, foeLevelPace: 1.1, foeRerolls: 2, foeRelicEvery: 3, damageTaken: 1.15, startGold: 0,
+    foeIncome: 1.16, foeLevelPace: 1.1, foeRerolls: 3, foeRelicEvery: 3, damageTaken: 1.15, startGold: 0,
   },
   {
     id: "conqueror", name: "Conqueror", title: "no room to be wrong", color: "#d8584a",
     blurb: "Rivals run a full economy and dig relentlessly for star-ups. Every defeat costs a third more.",
-    foeIncome: 1.26, foeLevelPace: 1.2, foeRerolls: 4, foeRelicEvery: 2, damageTaken: 1.32, startGold: 0,
+    foeIncome: 1.30, foeLevelPace: 1.2, foeRerolls: 5, foeRelicEvery: 2, damageTaken: 1.32, startGold: 0,
   },
 ];
 
