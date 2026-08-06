@@ -60,3 +60,30 @@ export const PROJECTILE_SPEED = 360; // world units / sec for arrows etc.
 
 export const REPAIR_RATE = 30; // hp/sec while a villager repairs
 export const BUILD_PLACEMENT_PAD = 2; // tiles clearance helper
+
+/**
+ * What a Trade Cart earns per trip: `TRADE_GOLD_PER_TILE * tiles ^ TRADE_GOLD_EXPONENT`.
+ *
+ * The exponent is the whole point, and the first version got it wrong. Paying
+ * *linearly* by distance sounds right and does nothing: a trip pays twice as
+ * much and takes twice as long, so gold per second is identical at every
+ * distance and a cart shuttling between two Markets in one courtyard earns
+ * exactly what a cart crossing the map earns — measured at 312 gold for a short
+ * route against 231 for a long one, i.e. worse.
+ *
+ * Above 1 the income rises with distance instead: at these values an 8-tile hop
+ * makes about 0.7 gold/sec and a 50-tile line about 1.2, so a long route is
+ * worth roughly twice a short one *and* spends most of its life outside your
+ * walls where it can be cut. That is the decision trade is supposed to be.
+ */
+export const TRADE_GOLD_PER_TILE = 0.16;
+export const TRADE_GOLD_EXPONENT = 1.3;
+
+/**
+ * How much of a Market price's displacement survives each second.
+ *
+ * 0.994 halves it in about two minutes — long enough that dumping a thousand
+ * wood in one go is meaningfully worse than spreading it out, short enough that
+ * a mistake early doesn't shadow the rest of the game.
+ */
+export const MARKET_RECOVERY = 0.994;

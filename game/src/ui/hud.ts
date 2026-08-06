@@ -541,10 +541,29 @@ export class HUD {
         });
       }
       if (building.type === "market") {
-        place("Sell 🪵", () => ctrl.trade("sell_wood"), { tooltip: ["Sell 100 wood → 75 gold"] });
-        place("Sell 🍖", () => ctrl.trade("sell_food"), { tooltip: ["Sell 100 food → 75 gold"] });
-        place("Buy 🪵", () => ctrl.trade("buy_wood"), { tooltip: ["Buy 75 wood ← 100 gold"] });
-        place("Buy 🍖", () => ctrl.trade("buy_food"), { tooltip: ["Buy 75 food ← 100 gold"] });
+        // Live quotes, because the whole point of a moving price is being able
+        // to see it move. A rate below par means the market is glutted.
+        const wq = world.marketQuote(team, "wood");
+        const fq = world.marketQuote(team, "food");
+        const trend = (v: number) => (v > 1.02 ? " ▲" : v < 0.98 ? " ▼" : "");
+        const wp = world.marketPrice(team, "wood");
+        const fp = world.marketPrice(team, "food");
+        place(`Sell 🪵${trend(wp)}`, () => ctrl.trade("sell_wood"), {
+          size: 10,
+          tooltip: [`Sell 100 wood → ${wq.sell} gold`, "Every sale pushes the price down; it drifts back over a few minutes."],
+        });
+        place(`Sell 🍖${trend(fp)}`, () => ctrl.trade("sell_food"), {
+          size: 10,
+          tooltip: [`Sell 100 food → ${fq.sell} gold`, "Every sale pushes the price down; it drifts back over a few minutes."],
+        });
+        place(`Buy 🪵${trend(wp)}`, () => ctrl.trade("buy_wood"), {
+          size: 10,
+          tooltip: [`Buy 100 wood ← ${wq.buy} gold`, "Every purchase pushes the price up."],
+        });
+        place(`Buy 🍖${trend(fp)}`, () => ctrl.trade("buy_food"), {
+          size: 10,
+          tooltip: [`Buy 100 food ← ${fq.buy} gold`, "Every purchase pushes the price up."],
+        });
       }
       if (building.type === "gate") {
         place(building.gateOpen ? "Close Gate" : "Open Gate", () => ctrl.toggleGate(building), {

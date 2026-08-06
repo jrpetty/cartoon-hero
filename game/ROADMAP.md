@@ -578,6 +578,71 @@ The cost is load time: twelve minutes of a two-player match is ~14,000 ticks, a
 few seconds of headless simulation. Worth it for a format that cannot rot. It
 also puts replays within reach — a replay is this minus the "keep playing".
 
+## Siege, walls, and a market — measured
+
+**Walls were never a decision.** Measured, 900 gold of army against one
+1800hp stone wall segment:
+
+| | before | after |
+|---|---|---|
+| Trebuchet ×2 | 23.9s | 28.5s |
+| Battering Ram ×4 | 24.0s | 35.0s |
+| **Militia ×11** | **23.1s** | **93.8s** |
+| Knight ×6 | 34.1s | 151.2s |
+
+Eleven Militia broke a stone wall *faster than four Battering Rams at the same
+cost*. Siege was not merely weak against walls, it was worse per gold than the
+cheapest infantry in the game — so walling bought nothing and a Siege Workshop
+had no job.
+
+The fix is armour on wall-class buildings rather than more damage on siege. The
+damage floor is 20% of raw, so armour can slow a sword by at most five times and
+barely touches a ram's 56: stone wall 20, gate 12 (a gate is a door, and should
+stay the obvious place to hit a line), palisade 6 (timber slows an axe, it
+doesn't laugh at one). Siege is now 3–5× better than an army, while infantry can
+still chew through in ~90s — walls are a decision, not a hard counter to every
+army without a workshop. The AI already ramped siege on `seenWalls >= 4`, so
+both sides understand this one.
+
+**The Market moves.** Flat rates made it a converter you pressed when short,
+with no reason to think about when. Every sale now pushes a commodity's price
+down and every purchase pushes it up, drifting back toward par over a couple of
+minutes, inside a ±40% band — a smoothing tool for a lopsided economy, not
+something you can break by holding a key.
+
+**Trade Carts** run gold between two Markets, yours or an ally's, paying by the
+distance of the route. Two bugs found by their own tests, both real:
+
+1. **Buying got cheaper the more you bought.** The buy price was derived as
+   `10000 / sell`, so a dearer commodity cost *less*. Both sides now scale the
+   same way with value, and the constant spread between them is what guarantees
+   a round trip can never make money at any point on the curve.
+2. **A long route paid less per second than a short one.** Pay ∝ distance and
+   trip time ∝ distance, so distance cancels out exactly — measured at 312 gold
+   for a short route against 231 for a long one. The pay is superlinear now
+   (`d^1.3`), so an 8-tile hop makes ~0.7 gold/sec and a 50-tile line ~1.2, and
+   a long route is worth roughly twice a short one *and* spends its life outside
+   your walls. That is the decision trade was supposed to be.
+
+## Hosting multiplayer
+
+Correcting something written in this file's own suggestion list: **the relay
+server already existed** — `server/server.mjs`, zero dependencies, tested
+end-to-end in `src/net/server.test.ts`. The claim that the net stack had no
+server was wrong.
+
+What was actually missing was everything a *host* needs. The server now reads
+`PORT`/`HOST` from the environment (a server that only reads argv binds 8787
+while the platform routes to whatever it assigned — healthy and unreachable),
+answers `/healthz` with JSON, and closes cleanly on `SIGTERM` instead of being
+SIGKILLed at the end of every deploy's grace period. Added: a Dockerfile, a
+`fly.toml`, a `render.yaml`, and a hosting section in `server/README.md`.
+
+One rule decides the whole topic and is now stated plainly: **a page served over
+`https://` may only open `wss://`**. That is why "just run the server" isn't
+enough for anything but a LAN or a VPN, and why the recommended hosts are the
+ones that terminate TLS for you.
+
 ## Bigger / later
 - **Naval** — water is currently only an impassable wall, and the Islands
   preset (55% water) is a maze rather than a naval map. Dock, transport,

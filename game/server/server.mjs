@@ -180,9 +180,16 @@ function handleConn(socket) {
 
 export function startServer(port = 8787, host = "0.0.0.0") {
   const server = http.createServer((req, res) => {
-    // A plain GET is handy for a quick "is it up?" check from a browser.
-    res.writeHead(200, { "content-type": "text/plain" });
     let n = 0; for (const r of rooms.values()) n += r.clients.length;
+    // Managed hosts poll a health endpoint and restart anything that doesn't
+    // answer it. JSON so a monitor can read it; the plain root stays a
+    // human-readable "is it up?" check from a browser.
+    if (req.url === "/healthz") {
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(JSON.stringify({ ok: true, rooms: rooms.size, players: n, uptime: process.uptime() }));
+      return;
+    }
+    res.writeHead(200, { "content-type": "text/plain" });
     res.end(`Banner & Blade relay up. Rooms: ${rooms.size}, players: ${n}\n`);
   });
   server.on("upgrade", (req, socket) => {
@@ -206,6 +213,28 @@ export function startServer(port = 8787, host = "0.0.0.0") {
 }
 
 // Run directly: `node server/server.mjs [port]`
+//
+// PORT from the environment takes precedence over the argument, because that is
+// how every managed host tells a process where to listen — a server that only
+// reads argv binds 8787, the platform routes to whatever it assigned, and the
+// deploy looks healthy while being unreachable.
 if (import.meta.url === `file://${process.argv[1]}`) {
-  startServer(Number(process.argv[2]) || 8787);
+  const port = Number(process.env.PORT) || Number(process.argv[2]) || 8787;
+  const host = process.env.HOST || "0.0.0.0";
+  startServer(port, host).then(({ server, close }) => {
+    // Containers are stopped with SIGTERM. Without this the platform waits out
+    // its grace period and SIGKILLs, which turns every deploy into a hang.
+    let closing = false;
+    const bye = (sig) => {
+      if (closing) return;
+      closing = true;
+      console.log(`\n${sig} — closing relay.`);
+      close().then(() => process.exit(0));
+      // Sockets mid-match would otherwise hold the process open indefinitely.
+      setTimeout(() => process.exit(0), 5000).unref();
+    };
+    process.on("SIGTERM", () => bye("SIGTERM"));
+    process.on("SIGINT", () => bye("SIGINT"));
+    void server;
+  });
 }

@@ -15,7 +15,8 @@ import { ui } from "./ui";
 import { drawMenuBackground } from "./screens";
 
 import type { Profile } from "../meta/profile";
-import { listHistory, summariseHistory } from "../meta/history";
+import { MatchRecord, listHistory, summariseHistory } from "../meta/history";
+import { REPORT_TABS, ReportTab, drawReportTab } from "./match_report";
 import { ACHIEVEMENTS, challengesForWeek, weekIndex } from "../meta/achievements";
 
 type Tab = "units" | "buildings" | "tech" | "records";
@@ -189,8 +190,44 @@ export class CodexScreen {
   // of thing as the rest of it — a reference you go and look at, not a mode you
   // enter.
 
+  /** The history row currently opened back up as its full report, if any. */
+  private openReport: MatchRecord | null = null;
+  private reportTab: ReportTab = "overview";
+
   private drawRecords(W: number, H: number, top: number, profile: Profile) {
     const ctx = ui.ctx;
+    // A report opened from the list takes over the tab. The summary row can
+    // never say what actually went wrong in a game; the report can, and it was
+    // being thrown away at Continue.
+    if (this.openReport?.report) {
+      const r = this.openReport;
+      const colW = Math.min(1180, W - 60);
+      const x0 = Math.round(W / 2 - colW / 2);
+      ui.panel(x0, top, colW, H - top - 84, { light: true });
+      const when = new Date(r.at);
+      ui.text(`${r.won ? "Victory" : "Defeat"} — ${r.mapName}`, x0 + 20, top + 28,
+        { size: 17, bold: true, color: r.won ? "#7df2a9" : "#e0786a" });
+      ui.text(
+        `${when.toLocaleDateString()} · ${r.mode} · ${r.players} players · ${r.difficulty} · ${mmssOf(r.durationSec)}`,
+        x0 + 20, top + 48, { size: 11.5, color: "#9a917b" },
+      );
+      let tx = x0 + 20;
+      for (const t of REPORT_TABS) {
+        if (ui.button(t.label, tx, top + 62, 106, 26, { accent: this.reportTab === t.id, size: 12 })) {
+          this.reportTab = t.id;
+        }
+        tx += 112;
+      }
+      if (ui.button("‹ Back to records", x0 + colW - 170, top + 62, 150, 26, { size: 12 })) {
+        this.openReport = null;
+      }
+      ctx.fillStyle = "#7fb0e8"; ctx.fillRect(x0 + colW - 320, top + 30, 10, 10);
+      ui.text("You", x0 + colW - 306, top + 36, { size: 11, color: "#cabfa4" });
+      ctx.fillStyle = "#e0786a"; ctx.fillRect(x0 + colW - 250, top + 30, 10, 10);
+      ui.text("Opponent", x0 + colW - 236, top + 36, { size: 11, color: "#cabfa4" });
+      drawReportTab(this.reportTab, x0 + 26, top + 108, colW - 52, H - top - 210, r.report!);
+      return;
+    }
     const rows = listHistory();
     const sum = summariseHistory(rows);
     const colW = Math.min(1180, W - 60);
@@ -229,8 +266,18 @@ export class CodexScreen {
         ui.text(r.mapName.slice(0, 22), x0 + 66, ry + 17, { size: 11.5, color: "#e7ddc4" });
         ui.text(`${r.difficulty} · ${r.players}p`, x0 + 220, ry + 17, { size: 10.5, color: "#8f8770" });
         ui.text(mmssOf(r.durationSec), x0 + 320, ry + 17, { size: 10.5, color: "#8f8770" });
-        ui.text(`${r.unitsKilled}/${r.unitsLost}`, x0 + leftW - 24, ry + 17,
+        ui.text(`${r.unitsKilled}/${r.unitsLost}`, x0 + leftW - 92, ry + 17,
           { size: 10.5, align: "right", color: "#cabfa4" });
+        // Only the newest few kept their full report — the rest are summaries,
+        // so say so rather than offering a button that does nothing.
+        if (r.report) {
+          if (ui.button("Report", x0 + leftW - 84, ry + 2, 62, 22, { size: 10.5 })) {
+            this.openReport = r;
+            this.reportTab = "overview";
+          }
+        } else {
+          ui.text("—", x0 + leftW - 53, ry + 17, { size: 11, align: "center", color: "#5a5548" });
+        }
         ry += rowH;
       }
     }

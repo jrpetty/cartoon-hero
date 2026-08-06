@@ -78,6 +78,56 @@ Notes:
   Caddy in front, or use a tunnel that provides `wss://`).
 - Always set a room password when exposing the server publicly.
 
+## Deploying it somewhere permanent
+
+Everything the code can do is done: the server reads `PORT` and `HOST` from the
+environment, answers `/healthz` with JSON, and shuts down cleanly on `SIGTERM`
+so a deploy doesn't hang waiting to be killed. What is left is choosing a host,
+which is a decision about money and location rather than about code.
+
+There is one rule that decides everything else:
+
+> **A page served over `https://` may only open `wss://`.** Browsers block a
+> plain `ws://` connection from a secure page, and there is no flag or code
+> change that gets around it.
+
+So if the game is opened from `https://` — anything hosted, including GitHub
+Pages — the relay needs TLS. You do not want to be managing certificates for
+this, so pick a host that terminates TLS for you.
+
+| | good for | TLS | cost |
+|---|---|---|---|
+| **Fly.io** (`fly.toml` here) | the default | yes, free | free tier; sleeps to zero when empty |
+| **Render** (`render.yaml` here) | click-to-deploy from the repo | yes, free | free tier; cold starts |
+| **Any VPS + Caddy** | you already have a box | yes, two lines of Caddyfile | ~$4/mo |
+| **A tunnel** (Cloudflare, ngrok) | trying it out this evening | yes, given by the tunnel | free |
+| **Your own machine, `ws://`** | a LAN or a VPN | not needed | free |
+
+```bash
+# Fly — one command after `fly launch --no-deploy`
+cd server && fly deploy
+
+# Docker, anywhere
+docker build -t bb-relay server && docker run -p 8787:8787 bb-relay
+
+# Nothing at all
+npm run serve
+```
+
+Then in the game: **Multiplayer → Join a Server**, and enter `wss://<host>` (or
+`ws://<host>:8787` on a LAN or VPN). Set a room password if it is reachable from
+the public internet.
+
+If you are putting it behind your own reverse proxy, the only thing that needs
+care is that WebSocket upgrades pass through untouched. Caddy does it by
+default:
+
+```
+relay.example.com {
+    reverse_proxy localhost:8787
+}
+```
+
 ## Capacity & topology
 
 One connection per client (star topology), so 8v8 is 16 sockets, not a 240-link

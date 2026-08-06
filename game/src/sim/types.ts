@@ -77,6 +77,8 @@ export const enum OrderKind {
   Build = 6,
   Repair = 7,
   Hold = 8,
+  /** A Trade Cart running a route between two Markets. */
+  Trade = 9,
 }
 
 /** Combat posture — how a unit reacts to enemies on its own. */
@@ -183,6 +185,8 @@ export interface Entity {
   abilityActive: number; // seconds of buff remaining (0 = inactive)
   slowTimer: number; // seconds of enemy-applied slow remaining (Caltrops)
   rallyTimer: number; // seconds of ally-applied attack boost remaining (War Cry)
+  /** For a Trade Cart: the Market at the other end of its route. */
+  tradeHomeId: EntityId;
   guardTimer: number; // seconds of ally-applied armour remaining (Shield Wall)
   heroLevel: number; // hero units only: 0..5, raises stats
   heroKills: number; // hero units only: kills credited toward the next level

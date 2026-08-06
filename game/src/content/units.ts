@@ -391,6 +391,29 @@ export const UNITS: Record<string, UnitDef> = {
     bonus: { [ArmorClass.Building]: 50 },
   }),
 
+  trade_cart: U({
+    id: "trade_cart",
+    name: "Trade Cart",
+    desc: "Runs gold between two of your Markets, or an ally's. Pays by distance — a long, well-guarded route is a second economy. Unarmed.",
+    armorClass: ArmorClass.Siege, // a cart, not a soldier: siege armour class, no attack
+    hp: 140,
+    attack: 0,
+    range: 0,
+    attackInterval: 1,
+    armor: 0,
+    pierceArmor: 2,
+    speed: 74,
+    visionRange: 140,
+    radius: 10,
+    cost: { food: 0, wood: 100, gold: 50 },
+    buildTime: 22,
+    pop: 1,
+    trainedAt: "market",
+    age: 1,
+    ranged: false,
+    bonus: {},
+  }),
+
   hero: U({
     id: "hero",
     name: "Champion",

@@ -110,11 +110,27 @@ describe("Town Centre, Market and elite lines", () => {
     expect(w.marketTrade(Team.Player, "sell_wood")).toBe(false);
     w.spawnBuilding(Team.Player, "market", 1200, 1200, true);
     p.resources.wood = 1000; p.resources.gold = 0;
-    expect(w.marketTrade(Team.Player, "sell_wood")).toBe(true);
-    expect(p.resources.gold).toBe(75);
+
+    // Quoted at par, rather than by selling twice and adding up. Prices move
+    // with what you have been selling now, so a second sale is deliberately
+    // worth less than the first — totalling two sales would measure the Caravan
+    // bonus and the price slide together and call the sum the bonus.
+    expect(w.marketQuote(Team.Player, "wood").sell).toBe(75);
     p.upgrades.add("caravan");
+    expect(w.marketQuote(Team.Player, "wood").sell).toBe(85);
+
+    // And it reaches an actual trade, not just the quote.
     expect(w.marketTrade(Team.Player, "sell_wood")).toBe(true);
-    expect(p.resources.gold).toBe(75 + 85); // the better rate
+    expect(p.resources.gold).toBe(85);
+  });
+
+  it("Caravan is not shared with a team that did not research it", () => {
+    const w = makeWorld();
+    w.spawnBuilding(Team.Player, "market", 1200, 1200, true);
+    w.spawnBuilding(Team.Enemy, "market", 1600, 1600, true);
+    w.player(Team.Player).upgrades.add("caravan");
+    expect(w.marketQuote(Team.Player, "wood").sell).toBe(85);
+    expect(w.marketQuote(Team.Enemy, "wood").sell).toBe(75);
   });
 
   it("Cavalier and Heavy Cavalry Archer upgrade only their own line", () => {

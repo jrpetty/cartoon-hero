@@ -28,7 +28,8 @@ export type Command =
   | { t: "trade"; team: Team; action: "sell_wood" | "sell_food" | "buy_wood" | "buy_food" }
   | { t: "banner"; team: Team; x: number; y: number }
   | { t: "delete"; team: Team; ids: EntityId[] }
-  | { t: "autoreseed"; team: Team; on: boolean };
+  | { t: "autoreseed"; team: Team; on: boolean }
+  | { t: "trade_route"; team: Team; ids: EntityId[] };
 
 /** Keep only ids the issuing team actually owns — a client can never command
  *  another player's units, and it keeps application order-independent. */
@@ -83,6 +84,10 @@ export function applyCommand(world: World, c: Command): void {
     case "delete": world.deleteUnits(owned(world, c.team, c.ids)); break;
     // A standing preference rather than an order, but it still changes what the
     // sim does, so it goes through the command layer like everything else.
+    // Put carts on the longest route they can reach. The choice of route is the
+    // sim's, not the player's — the pay is the distance, so there is exactly one
+    // right answer and asking the player to click it is busywork.
+    case "trade_route": world.assignTradeRoute(owned(world, c.team, c.ids)); break;
     case "autoreseed": {
       const p = world.player(c.team);
       if (p) p.autoReseed = c.on;

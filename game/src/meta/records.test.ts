@@ -1,7 +1,7 @@
 import { describe, expect, it, beforeEach } from "vitest";
 import {
-  HISTORY_LIMIT, clearHistory, listHistory, recordMatch, summarise, summariseHistory,
-  type MatchRecord,
+  FULL_REPORT_KEEP, HISTORY_LIMIT, clearHistory, listHistory, recordMatch, summarise,
+  summariseHistory, type MatchRecord,
 } from "./history";
 import {
   ACHIEVEMENTS, ACHIEVEMENTS_BY_ID, CHALLENGES_PER_WEEK, CHALLENGE_POOL,
@@ -228,5 +228,81 @@ describe("Weekly challenges", () => {
     expect(weekIndex(0)).toBe(0);
     expect(weekIndex(7 * 24 * 60 * 60 * 1000)).toBe(1);
     expect(weekIndex(7 * 24 * 60 * 60 * 1000 - 1)).toBe(0);
+  });
+});
+
+describe("Keeping the report itself", () => {
+  it("stores the whole report alongside the summary", () => {
+    clearHistory();
+    const report = emptyMatchReport();
+    report.mapName = "Riverlands";
+    report.you.trainedByType = { villager: 20, knight: 9 };
+    recordMatch(summarise(report, {
+      won: true, mode: "conquest", difficulty: "duke", players: 2, at: 5,
+    }));
+    const back = listHistory()[0];
+    expect(back.report, "the report was dropped on the way in").toBeDefined();
+    expect(back.report!.mapName).toBe("Riverlands");
+    expect(back.report!.you.trainedByType.knight).toBe(9);
+  });
+
+  it("thins older games back to their summary as they age", () => {
+    // Twenty full reports with four per-type maps a side is a few hundred
+    // kilobytes of localStorage for something nobody scrolls back to. The
+    // summary is what a trend needs; the report is what re-reading one game
+    // needs, and only the newest few are still that game.
+    clearHistory();
+    for (let i = 0; i < FULL_REPORT_KEEP + 4; i++) {
+      const report = emptyMatchReport();
+      report.mapName = `M${i}`;
+      recordMatch(summarise(report, {
+        won: true, mode: "conquest", difficulty: "knight", players: 2, at: 100 + i,
+      }));
+    }
+    const rows = listHistory();
+    const withReport = rows.filter((r) => r.report);
+    expect(withReport).toHaveLength(FULL_REPORT_KEEP);
+    // …and it is the newest few that kept theirs.
+    expect(withReport.map((r) => r.mapName))
+      .toEqual(rows.slice(0, FULL_REPORT_KEEP).map((r) => r.mapName));
+  });
+
+  it("keeps the summary when the report is gone, so a row never becomes blank", () => {
+    clearHistory();
+    for (let i = 0; i < FULL_REPORT_KEEP + 2; i++) {
+      const report = emptyMatchReport();
+      report.you.unitsKilled = 10 + i;
+      recordMatch(summarise(report, {
+        won: i % 2 === 0, mode: "koth", difficulty: "lord", players: 4, at: 200 + i,
+      }));
+    }
+    const rowsForOldest = listHistory();
+    const oldest = rowsForOldest[rowsForOldest.length - 1];
+    expect(oldest.report).toBeUndefined();
+    expect(oldest.unitsKilled).toBe(10);
+    expect(oldest.difficulty).toBe("lord");
+  });
+
+  it("falls back to summaries rather than losing the game when storage is full", () => {
+    // A report is what blew the budget, so dropping reports and keeping the
+    // record beats dropping the record.
+    clearHistory();
+    const real = localStorage.setItem.bind(localStorage);
+    let calls = 0;
+    localStorage.setItem = (k: string, v: string) => {
+      calls++;
+      if (calls === 1) throw new Error("QuotaExceededError");
+      real(k, v);
+    };
+    const report = emptyMatchReport();
+    report.mapName = "Crowded";
+    recordMatch(summarise(report, {
+      won: true, mode: "conquest", difficulty: "knight", players: 2, at: 9,
+    }));
+    localStorage.setItem = real;
+    const rows = listHistory();
+    expect(rows, "the whole record was lost rather than just the report").toHaveLength(1);
+    expect(rows[0].mapName).toBe("Crowded");
+    expect(rows[0].report).toBeUndefined();
   });
 });

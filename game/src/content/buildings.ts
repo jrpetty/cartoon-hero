@@ -25,6 +25,12 @@ export interface BuildingDef {
   /** Garrison capacity (0 = none). Garrisoned units add arrows. */
   garrisonCap?: number;
   /**
+   * Melee / pierce armour. Buildings default to 1; walls are the exception and
+   * say so, which is what makes siege the tool for them rather than a habit.
+   */
+  armor?: number;
+  pierceArmor?: number;
+  /**
    * Goes on water instead of on land. A bridge is the only building that wants
    * ground nothing else can use, so it inverts the usual buildability test
    * rather than relaxing it — you cannot lay a bridge across a meadow.
@@ -170,12 +176,13 @@ export const BUILDINGS: Record<string, BuildingDef> = {
   market: B({
     id: "market",
     name: "Market",
-    desc: "Trade resources for gold. Smooths out shortages in long games. (Feudal Age)",
+    desc: "Trade resources for gold, and home for Trade Carts. Prices move with what everyone is selling. (Feudal Age)",
     hp: 900,
     cost: { food: 0, wood: 175, gold: 0 },
     buildTime: 35,
     tiles: 3,
     age: 1,
+    trains: ["trade_cart"],
   }),
   stable: B({
     id: "stable",
@@ -234,6 +241,8 @@ export const BUILDINGS: Record<string, BuildingDef> = {
     buildTime: 6,
     tiles: 1,
     sight: 80,
+    // Timber, not stone: it slows an axe down but doesn't laugh at one.
+    armor: 6,
   }),
   stone_wall: B({
     id: "stone_wall",
@@ -245,6 +254,11 @@ export const BUILDINGS: Record<string, BuildingDef> = {
     tiles: 1,
     age: 1,
     sight: 90,
+    // The whole reason siege exists. Measured before this: eleven Militia broke
+    // a stone wall *faster* than four Battering Rams at the same cost, so walls
+    // were never a decision and siege never had a job. Armour bites a sword and
+    // barely notices a ram, which is what makes bringing one a choice.
+    armor: 20,
   }),
   gate: B({
     id: "gate",
@@ -256,6 +270,9 @@ export const BUILDINGS: Record<string, BuildingDef> = {
     tiles: 1,
     age: 1,
     sight: 140,
+    // A gate is the wall's weak point by design — it is a door. Tough, but not
+    // stone-wall tough, so battering one down stays the obvious plan.
+    armor: 12,
   }),
   castle: B({
     id: "castle",

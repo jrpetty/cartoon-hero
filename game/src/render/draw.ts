@@ -535,6 +535,42 @@ function drawMiningCamp(ctx: Ctx, e: Entity, half: number) {
  * something troops walk *over*, and anything with height to it would read as an
  * obstacle in the middle of the water, which is the opposite of what it is.
  */
+/**
+ * A laden cart. Deliberately unmilitary — no blade, no shield, a canopy and a
+ * wheel — because the one thing a player must read instantly is that this is
+ * money walking across the map with nothing defending it.
+ */
+function drawTradeCart(ctx: Ctx, e: Entity, tc: { main: string; dark: string }) {
+  const r = e.radius;
+  // Bed.
+  ctx.fillStyle = PAL.woodDark;
+  ctx.beginPath();
+  ctx.roundRect(-r * 0.9, -r * 0.35, r * 1.8, r * 0.8, 2);
+  ctx.fill();
+  // Canopy, in the owner's colour so allied lines are legible in a melee.
+  ctx.fillStyle = tc.main;
+  ctx.beginPath();
+  ctx.moveTo(-r * 0.75, -r * 0.3);
+  ctx.quadraticCurveTo(0, -r * 1.25, r * 0.75, -r * 0.3);
+  ctx.closePath();
+  ctx.fill();
+  ctx.strokeStyle = tc.dark;
+  ctx.lineWidth = 1.2;
+  ctx.stroke();
+  // Wheels.
+  ctx.fillStyle = "#4a3823";
+  for (const wx of [-r * 0.5, r * 0.5]) {
+    ctx.beginPath();
+    ctx.arc(wx, r * 0.42, r * 0.3, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  // A hint of cargo.
+  ctx.fillStyle = PAL.goldVein;
+  ctx.beginPath();
+  ctx.arc(0, -r * 0.15, r * 0.18, 0, Math.PI * 2);
+  ctx.fill();
+}
+
 function drawBridge(ctx: Ctx, e: Entity, half: number) {
   const x = e.x - half, y = e.y - half, s = half * 2;
   // The deck.
@@ -1041,6 +1077,7 @@ export function drawUnit(ctx: Ctx, e: Entity, time: number, lod = 0) {
     case "catapult": drawCatapult(ctx, e, tc, atkFrac); break;
     case "trebuchet": drawTrebuchet(ctx, e, tc, atkFrac); break;
     case "ram": drawRam(ctx, e, tc, atkFrac); break;
+    case "trade_cart": drawTradeCart(ctx, e, tc); break;
     case "hero": drawHero(ctx, e, tc, lunge, time); break;
     case "king": drawKing(ctx, e, tc, lunge, time); break;
     case "monk": drawMonk(ctx, e, tc, time); break;

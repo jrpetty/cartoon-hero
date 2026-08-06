@@ -248,3 +248,45 @@ describe("Relay server end-to-end", () => {
     }
   });
 });
+
+describe("Ready to be hosted", () => {
+  it("answers /healthz with JSON a platform monitor can read", async () => {
+    // Managed hosts poll a health endpoint and restart anything that doesn't
+    // answer. Without one the platform's own defaults decide, and they usually
+    // decide wrong for a long-lived socket server.
+    const s = await startServer(0, "127.0.0.1");
+    try {
+      const res = await fetch(`http://127.0.0.1:${s.port}/healthz`);
+      expect(res.status).toBe(200);
+      const body = await res.json() as { ok: boolean; rooms: number; players: number };
+      expect(body.ok).toBe(true);
+      expect(typeof body.rooms).toBe("number");
+      expect(typeof body.players).toBe("number");
+    } finally {
+      await s.close();
+    }
+  });
+
+  it("still serves a human-readable status at the root", async () => {
+    const s = await startServer(0, "127.0.0.1");
+    try {
+      const res = await fetch(`http://127.0.0.1:${s.port}/`);
+      expect(await res.text()).toContain("relay up");
+    } finally {
+      await s.close();
+    }
+  });
+
+  it("binds the port it was given rather than a hard-coded one", async () => {
+    // The PORT-from-environment path exists because a server that only reads
+    // argv binds 8787, the platform routes to whatever it assigned, and the
+    // deploy looks healthy while being unreachable.
+    const s = await startServer(0, "127.0.0.1");
+    try {
+      expect(s.port).toBeGreaterThan(0);
+      expect(s.port).not.toBe(8787);
+    } finally {
+      await s.close();
+    }
+  });
+});

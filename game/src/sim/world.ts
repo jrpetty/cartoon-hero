@@ -29,6 +29,9 @@ import {
   GATHER_TICK,
   FARM_TICK_MULT,
   FARM_FOOD,
+  TRADE_GOLD_PER_TILE,
+  TRADE_GOLD_EXPONENT,
+  MARKET_RECOVERY,
   POP_CAP_HARD,
   PROJECTILE_SPEED,
   SIM_HZ,
@@ -72,6 +75,11 @@ export interface PlayerState {
    * point of the toggle is for the rare player who wants the wood back instead.
    */
   autoReseed: boolean;
+  /**
+   * How far each commodity's Market price has been pushed from par, −1..1.
+   * Negative means the world has been dumping it and it sells cheap.
+   */
+  marketPressure: { wood: number; food: number };
   defeated: boolean;
   /** Hero (Champion) lifecycle: none = never trained, alive, or respawning. */
   heroState: "none" | "alive" | "respawning";
@@ -238,7 +246,7 @@ export function makeEntity(): Entity {
     garrison: [], gateOpen: false, gateForce: 0, farmWorker: -1,
     projTargetId: -1, projDamage: 0, projSpeed: 0, projSourceTeam: Team.Neutral,
     projArmorClassBonusFrom: "", projElapsed: 0, projDuration: 0, projFromX: 0, projFromY: 0,
-    abilityCooldown: 0, abilityActive: 0, slowTimer: 0, rallyTimer: 0, guardTimer: 0, heroLevel: 0, heroKills: 0,
+    abilityCooldown: 0, abilityActive: 0, slowTimer: 0, rallyTimer: 0, tradeHomeId: -1, guardTimer: 0, heroLevel: 0, heroKills: 0,
     veterancy: 0, vetKills: 0, projSourceId: -1,
     animPhase: 0, hitFlash: 0, lastDamageTime: -999, lastAttackerId: -1, selected: false,
     variantRarity: 0, tier: 0,
@@ -365,6 +373,7 @@ export class World {
         loadout: loadouts[t] ?? {},
         econMult: econMults[t] ?? 1,
         autoReseed: true,
+        marketPressure: { wood: 0, food: 0 },
         defeated: false,
         heroState: "none",
         heroRespawnTimer: 0,
@@ -589,8 +598,8 @@ export class World {
     const maxHp = Math.round(def.hp * hpMult);
     e.maxHp = maxHp;
     e.armorClass = ArmorClass.Building;
-    e.armor = 1;
-    e.pierceArmor = 1;
+    e.armor = def.armor ?? 1;
+    e.pierceArmor = def.pierceArmor ?? def.armor ?? 1;
     e.visionRange = def.sight;
     e.attack = def.attack;
     // Vigilant Watch: defensive buildings fire faster and farther.
@@ -1335,26 +1344,69 @@ export class World {
   }
 
   /** Market trading at fixed, slightly lossy rates. */
+  /**
+   * Buy or sell 100 of a commodity at the Market.
+   *
+   * The rate *moves*. Every sale pushes a commodity's price down and every
+   * purchase pushes it up, drifting back toward par over the following minutes.
+   * Flat rates made the Market a converter you pressed whenever you were short,
+   * with no reason to think about when — which is not an economy, it is a
+   * button. Now dumping a thousand wood pays visibly worse than dumping two
+   * hundred, and a shortage everyone is buying into costs more to fix.
+   *
+   * The band is deliberately narrow (±40%). This is a smoothing tool for a
+   * lopsided economy, and a market you can break by spamming one key would just
+   * be a different exploit.
+   */
   marketTrade(team: Team, action: "sell_wood" | "sell_food" | "buy_wood" | "buy_food"): boolean {
     const p = this.players[team];
     if (!p || !this.hasBuilding(team, "market")) return false;
     const r = p.resources;
-    const yield_ = 75 + this.teamUpgradeSum(team, "trade"); // Caravan
-    switch (action) {
-      case "sell_wood":
-        if (r.wood < 100) return false;
-        r.wood -= 100; r.gold += yield_; return true;
-      case "sell_food":
-        if (r.food < 100) return false;
-        r.food -= 100; r.gold += yield_; return true;
-      case "buy_wood":
-        if (r.gold < 100) return false;
-        r.gold -= 100; r.wood += yield_; return true;
-      case "buy_food":
-        if (r.gold < 100) return false;
-        r.gold -= 100; r.food += yield_; return true;
+    const kind = action.endsWith("wood") ? "wood" : "food";
+    const selling = action.startsWith("sell");
+    const quote = this.marketQuote(team, kind);
+    if (selling) {
+      if (r[kind] < 100) return false;
+      r[kind] -= 100;
+      r.gold += quote.sell;
+    } else {
+      const cost = this.marketQuote(team, kind).buy;
+      if (r.gold < cost) return false;
+      r.gold -= cost;
+      r[kind] += 100;
     }
+    // Each trade shifts the price against whoever just made it.
+    const at = p.marketPressure[kind] ?? 0;
+    p.marketPressure[kind] = Math.max(-1, Math.min(1, at + (selling ? -0.06 : 0.06)));
+    return true;
   }
+
+  /** The multiplier on a commodity's Market rate right now, 0.6–1.4. */
+  marketPrice(team: Team, kind: "wood" | "food"): number {
+    const p = this.players[team];
+    if (!p) return 1;
+    return 1 + (p.marketPressure[kind] ?? 0) * 0.4;
+  }
+
+  /**
+   * What 100 of a commodity fetches, and what 100 costs, right now.
+   *
+   * Both move the *same* way with the price: when wood is dear you are paid more
+   * for selling it and charged more for buying it. Deriving the buy price as
+   * `10000 / sell` instead — which is what this did first — quietly inverted it,
+   * so buying repeatedly made the next purchase *cheaper*. The spread between
+   * the two is what the house takes, and it is a constant ratio, which is also
+   * what guarantees a round trip can never make money at any point on the curve.
+   */
+  marketQuote(team: Team, kind: "wood" | "food"): { sell: number; buy: number } {
+    const base = 75 + this.teamUpgradeSum(team, "trade");
+    const price = this.marketPrice(team, kind);
+    return {
+      sell: Math.round(base * price),
+      buy: Math.max(1, Math.round((10000 / base) * price)),
+    };
+  }
+
 
   canAfford(bag: ResourceBag, cost: { food: number; wood: number; gold: number }): boolean {
     return bag.food >= cost.food && bag.wood >= cost.wood && bag.gold >= cost.gold;
@@ -1393,6 +1445,19 @@ export class World {
   tick() {
     this.tickCount++;
     this.time += SIM_DT;
+
+    // Market prices creep back toward par. Once a second is plenty — the drift
+    // is measured in minutes and doing it every tick would be 20x the work for
+    // a number nobody can see move.
+    if (this.tickCount % SIM_HZ === 0) {
+      for (const p of this.players) {
+        if (!p) continue;
+        for (const k of ["wood", "food"] as const) {
+          const v = p.marketPressure[k];
+          if (v !== 0) p.marketPressure[k] = Math.abs(v) < 0.005 ? 0 : v * MARKET_RECOVERY;
+        }
+      }
+    }
 
     // Snapshot positions so the renderer can interpolate between ticks (smooth
     // 60fps motion over the 20Hz sim). Done before anything moves this tick.
@@ -1520,6 +1585,9 @@ export class World {
       case OrderKind.Build:
       case OrderKind.Repair:
         this.stepBuildRepair(e, def);
+        break;
+      case OrderKind.Trade:
+        this.stepTrade(e, def);
         break;
     }
   }
@@ -1944,6 +2012,91 @@ export class World {
     }
   }
 
+  /**
+   * A Trade Cart shuttling between two Markets.
+   *
+   * Pays on arrival, by the distance between the two Markets — so trade is a
+   * *route*, not a building. A short hop between two Markets in one base earns
+   * almost nothing; a long line to an ally across the map earns properly and
+   * spends most of its life outside your walls where it can be cut. That is the
+   * whole shape of the decision, and it is also why the cart is unarmed.
+   *
+   * The cart holds the two ends in `order.target` (where it is going) and
+   * `order.tx/ty` (the position it is heading for), flipping between them. If
+   * either Market falls the route is gone and the cart goes idle rather than
+   * walking to a ruin.
+   */
+  private stepTrade(e: Entity, def: UnitDef) {
+    const dest = this.byId.get(e.order.target);
+    const home = this.byId.get(e.tradeHomeId);
+    if (!dest || !dest.alive || !home || !home.alive) {
+      this.finishOrder(e);
+      return;
+    }
+    // Keep the walk target on the Market itself; a Market that is razed and
+    // rebuilt elsewhere is a different building and the route ends with it.
+    e.order.tx = dest.x;
+    e.order.ty = dest.y;
+    if (dist(e.x, e.y, dest.x, dest.y) > dest.radius + e.radius + 14) {
+      this.stepMove(e, def, true);
+      // stepMove finishes the order when it arrives; put the trade order back.
+      if (e.order.kind !== OrderKind.Trade) {
+        e.order = { kind: OrderKind.Trade, tx: dest.x, ty: dest.y, target: dest.id };
+      }
+      return;
+    }
+    // Arrived. Pay out and turn around.
+    const p = this.players[e.team];
+    if (p) {
+      const legs = dist(home.x, home.y, dest.x, dest.y);
+      const bonus = 1 + this.teamUpgradeSum(e.team, "trade") / 100; // Caravan
+      const tiles = legs / TILE;
+      const gold = Math.max(1, Math.round(TRADE_GOLD_PER_TILE * Math.pow(tiles, TRADE_GOLD_EXPONENT) * bonus));
+      p.resources.gold += gold;
+      p.stats.gathered += gold;
+      p.stats.gatheredBy.gold += gold;
+      this.emit("deposit", e.x, e.y, e.team, "gold");
+    }
+    // Swap ends: the place it just left becomes the destination.
+    const nextTarget = e.tradeHomeId;
+    e.tradeHomeId = dest.id;
+    const back = this.byId.get(nextTarget);
+    e.order = { kind: OrderKind.Trade, tx: back?.x ?? e.x, ty: back?.y ?? e.y, target: nextTarget };
+    e.path = null;
+  }
+
+  /**
+   * Put a cart on the best route it can reach: the furthest Market of ours or an
+   * ally's that isn't the one it is standing at. Furthest, because the pay is
+   * the distance — a cart that picks the nearest Market is a cart that earns
+   * nothing.
+   */
+  assignTradeRoute(ids: EntityId[]): boolean {
+    let any = false;
+    for (const id of ids) {
+      const cart = this.byId.get(id);
+      if (!cart || !cart.alive || cart.type !== "trade_cart") continue;
+      const markets = this.entities.filter(
+        (m) => m.alive && m.kind === Kind.Building && m.type === "market"
+          && m.buildState === BuildState.Done && this.areAllied(cart.team, m.team),
+      );
+      if (markets.length < 2) continue;
+      // Home is the nearest Market; the route runs to the furthest from it.
+      markets.sort((a, b) => dist(a.x, a.y, cart.x, cart.y) - dist(b.x, b.y, cart.x, cart.y));
+      const home = markets[0];
+      let far = markets[1];
+      for (const m of markets) {
+        if (m.id === home.id) continue;
+        if (dist(m.x, m.y, home.x, home.y) > dist(far.x, far.y, home.x, home.y)) far = m;
+      }
+      cart.tradeHomeId = home.id;
+      cart.order = { kind: OrderKind.Trade, tx: far.x, ty: far.y, target: far.id };
+      cart.path = null;
+      any = true;
+    }
+    return any;
+  }
+
   private stepBuildRepair(e: Entity, def: UnitDef) {
     const b = this.byId.get(e.order.target);
     if (!b || !b.alive || b.kind !== Kind.Building) {
@@ -2201,7 +2354,11 @@ export class World {
         this.applyHeroLevel(u, p.heroLevel);
       }
       this.emit("spawn", sx, sy, b.team, type);
-      if (b.rallyX >= 0) this.applyRally(u, b, type);
+      // A Trade Cart puts itself on the longest route it can reach. The pay is
+      // the distance, so there is exactly one right answer and making the player
+      // click it every time would be busywork, not a decision.
+      if (type === "trade_cart") this.assignTradeRoute([u.id]);
+      else if (b.rallyX >= 0) this.applyRally(u, b, type);
     } else if (item.startsWith("t:")) {
       const upId = item.slice(2);
       p.upgrades.add(upId);

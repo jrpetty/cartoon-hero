@@ -44,7 +44,20 @@ export interface MatchRecord {
   tcSeconds: number;
   /** The unit you trained most of, which is the shortest honest read of a style. */
   favouriteUnit: string;
+  /**
+   * The whole end-of-match report, kept for the most recent few games only.
+   *
+   * The summary above is what a *trend* needs; this is what re-reading one game
+   * needs, and the two are different sizes. A full report carries four per-type
+   * maps per side, so twenty of them is a few hundred kilobytes of localStorage
+   * for something nobody scrolls back to. Three is enough to answer "what went
+   * wrong in that one" while it is still the question you are asking.
+   */
+  report?: MatchReport;
 }
+
+/** How many of the stored games keep their full report. */
+export const FULL_REPORT_KEEP = 3;
 
 /** Boil a full report down to what a trend actually needs. */
 export function summarise(
@@ -61,6 +74,7 @@ export function summarise(
     if (n > most) { most = n; favouriteUnit = type; }
   }
   return {
+    report,
     at: meta.at,
     won: meta.won,
     mapName: report.mapName,
@@ -117,10 +131,21 @@ export function recordMatch(rec: MatchRecord): void {
   const s = store();
   if (!s) return;
   const all = [rec, ...listHistory()].slice(0, HISTORY_LIMIT);
+  // Only the newest few carry their full report; older rows are thinned to the
+  // summary as they age out of the window rather than all at once.
+  for (let i = FULL_REPORT_KEEP; i < all.length; i++) {
+    if (all[i].report) all[i] = { ...all[i], report: undefined };
+  }
   try {
     s.setItem(STORAGE_KEY, JSON.stringify(all));
   } catch {
-    // Storage full or blocked. Losing a history entry is not worth an error.
+    // Storage is full. A history entry is a nicety, but losing the *report* is
+    // what blew the budget, so retry without them before giving up entirely.
+    try {
+      s.setItem(STORAGE_KEY, JSON.stringify(all.map((r) => ({ ...r, report: undefined }))));
+    } catch {
+      /* nothing left to try */
+    }
   }
 }
 
