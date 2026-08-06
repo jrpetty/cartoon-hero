@@ -25,9 +25,12 @@ import {
   BIOMES, BiomeId, Terrain, TERRAIN_DEFS, biomeById, terrainDef,
 } from "../maps/terrain_kinds";
 import {
-  CustomMap, MAP_SIZES, MAX_SEATS, MapIssue, NOMAD_RULES, NomadRule, deleteCustomMap, deserialiseMap,
-  hasErrors, listCustomMaps, newCustomMap, saveCustomMap, serialiseMap, validateMap,
+  CustomMap, MAP_SIZES, MAX_SEATS, MapIssue, NOMAD_RULES, NomadRule, customFromGenerated,
+  deleteCustomMap, deserialiseMap, hasErrors, listCustomMaps, newCustomMap, saveCustomMap,
+  serialiseMap, validateMap,
 } from "../maps/custom";
+import { PRESETS } from "../maps/generator";
+import { drawMapThumbnail } from "./map_thumb";
 
 // ---------------------------------------------------------------- symmetry --
 
@@ -82,7 +85,7 @@ export function symmetryCells(sym: SymmetryId, cx: number, cy: number, cols: num
 
 // ------------------------------------------------------------------- tools --
 
-type Tool = "terrain" | "resource" | "spawn" | "erase";
+type Tool = "terrain" | "path" | "scatter" | "region" | "resource" | "spawn" | "erase";
 type ResourceKind = "tree" | "gold_mine" | "berries";
 
 const PALETTE: Terrain[] = [
@@ -123,6 +126,23 @@ export class EditorScreen {
   private paint: Terrain = Terrain.Grass;
   private resource: ResourceKind = "tree";
   private brush = 3;
+  /**
+   * Where a drag started, in cells. Shared by the path and region tools: both
+   * are "press here, release there" gestures rather than continuous painting,
+   * so both need the anchor and neither wants the other's.
+   */
+  private dragFrom: { cx: number; cy: number } | null = null;
+  /** How thickly the scatter brush sprinkles, as a chance per candidate cell. */
+  private scatterDensity = 0.25;
+  /** A lifted rectangle of map, waiting to be stamped down somewhere. */
+  private clip: {
+    w: number; h: number; terrain: Uint8Array;
+    resources: { type: ResourceKind; dx: number; dy: number; amount: number }[];
+  } | null = null;
+  private clipFlipX = false;
+  private clipFlipY = false;
+  /** Deterministic sprinkle: an author's scatter should not reshuffle per frame. */
+  private scatterSeed = 1;
   private sym: SymmetryId = "rot180";
   private camX = 0;
   private camY = 0;
@@ -136,10 +156,14 @@ export class EditorScreen {
   private statusT = 0;
   private lastPan: { x: number; y: number } | null = null;
   /** Which text field is being typed into, if any. */
-  private editing: "name" | "import" | null = null;
+  private editing: "name" | "desc" | "import" | null = null;
   private importBuf = "";
   private newSize = 128;
   private newBiome: BiomeId = "temperate";
+  /** The "roll one and edit it" controls in the library. */
+  private rollPreset = "highlands";
+  private rollSeed = 1 + Math.floor(Math.random() * 99999);
+  private rollPlayers = 2;
   private confirmDelete = "";
   /** Set when a map is opened: the first draw frames the whole thing. */
   private needsFit = true;
@@ -151,11 +175,13 @@ export class EditorScreen {
       if (key === "Enter") { this.editing = null; return true; }
       if (key === "Backspace") {
         if (this.editing === "name" && this.map) this.map.name = this.map.name.slice(0, -1);
+        else if (this.editing === "desc" && this.map) this.map.desc = this.map.desc.slice(0, -1);
         else this.importBuf = this.importBuf.slice(0, -1);
         return true;
       }
       if (key.length === 1) {
         if (this.editing === "name" && this.map) this.map.name = (this.map.name + key).slice(0, 40);
+        else if (this.editing === "desc" && this.map) this.map.desc = (this.map.desc + key).slice(0, 160);
         else this.importBuf += key;
       }
       return true;
@@ -232,6 +258,133 @@ export class EditorScreen {
       }
     }
     this.dirty = true;
+  }
+
+  /**
+   * Stroke a straight run of ground from one cell to another.
+   *
+   * Rivers, ridges and roads are lines, and a round brush dragged by hand makes
+   * a wobbly sausage rather than a river. Walking the line and stamping the
+   * brush at every step gives an even-width run with no gaps, however steep the
+   * diagonal — the same reason the wall tool in the match uses a line walk
+   * rather than sampling along the distance.
+   */
+  private strokePath(x0: number, y0: number, x1: number, y1: number) {
+    const steps = Math.max(Math.abs(x1 - x0), Math.abs(y1 - y0));
+    if (steps === 0) { this.paintAt(x0, y0); return; }
+    for (let i = 0; i <= steps; i++) {
+      const t = i / steps;
+      this.paintAt(Math.round(x0 + (x1 - x0) * t), Math.round(y0 + (y1 - y0) * t));
+    }
+  }
+
+  /**
+   * A cheap deterministic hash of a cell, for the scatter brush.
+   *
+   * It has to be a function of the *cell*, not a running random: an author
+   * dragging back over ground they already covered should not keep thickening
+   * it, and the same drag twice should look the same both times.
+   */
+  private scatterRoll(cx: number, cy: number): number {
+    let h = (cx * 374761393 + cy * 668265263 + this.scatterSeed * 2246822519) | 0;
+    h = Math.imul(h ^ (h >>> 13), 1274126177);
+    return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
+  }
+
+  /**
+   * Sprinkle resource nodes across the brush at the chosen density, rather than
+   * one node per click. A woodline is fifty trees; placing those by hand is the
+   * single most tedious thing in the editor.
+   */
+  private scatterAt(cx: number, cy: number) {
+    const m = this.map!;
+    const r = this.brush - 1;
+    const occupied = new Set(
+      m.resources.map((res) => `${Math.floor(res.x / TILE)},${Math.floor(res.y / TILE)}`),
+    );
+    for (const [ax, ay] of symmetryCells(this.sym, cx, cy, m.cols, m.rows)) {
+      for (let dy = -r; dy <= r; dy++) {
+        for (let dx = -r; dx <= r; dx++) {
+          if (dx * dx + dy * dy > r * r + r * 0.6) continue;
+          const nx = ax + dx, ny = ay + dy;
+          if (nx < 0 || ny < 0 || nx >= m.cols || ny >= m.rows) continue;
+          if (this.scatterRoll(nx, ny) > this.scatterDensity) continue;
+          const key = `${nx},${ny}`;
+          if (occupied.has(key)) continue;
+          occupied.add(key);
+          m.resources.push({
+            type: this.resource,
+            x: nx * TILE + TILE / 2,
+            y: ny * TILE + TILE / 2,
+            amount: RES_AMOUNT[this.resource],
+          });
+        }
+      }
+    }
+    this.dirty = true;
+  }
+
+  /** Lift a rectangle of ground and everything standing on it. */
+  private copyRegion(x0: number, y0: number, x1: number, y1: number) {
+    const m = this.map!;
+    const ax = Math.max(0, Math.min(x0, x1)), ay = Math.max(0, Math.min(y0, y1));
+    const bx = Math.min(m.cols - 1, Math.max(x0, x1)), by = Math.min(m.rows - 1, Math.max(y0, y1));
+    const w = bx - ax + 1, h = by - ay + 1;
+    if (w < 1 || h < 1) return;
+    const terrain = new Uint8Array(w * h);
+    for (let cy = 0; cy < h; cy++) {
+      for (let cx = 0; cx < w; cx++) terrain[cy * w + cx] = m.terrain[(ay + cy) * m.cols + (ax + cx)];
+    }
+    const resources = m.resources
+      .map((r) => ({
+        type: r.type as ResourceKind,
+        dx: Math.floor(r.x / TILE) - ax,
+        dy: Math.floor(r.y / TILE) - ay,
+        amount: r.amount,
+      }))
+      .filter((r) => r.dx >= 0 && r.dy >= 0 && r.dx < w && r.dy < h);
+    this.clip = { w, h, terrain, resources };
+    this.say(`Copied ${w}×${h} — click to stamp it`);
+  }
+
+  /**
+   * Stamp the lifted region with its top-left at the cursor.
+   *
+   * Deliberately *not* mirrored through the symmetry setting. Symmetry exists so
+   * a stroke lands in every quadrant at once; a stamp is a considered placement
+   * of something already built, and having it also fire into three other corners
+   * is almost never what an author means. Flip X/Y are offered instead, which is
+   * what you actually want when facing a base at the opposite seat.
+   */
+  private pasteRegion(cx: number, cy: number) {
+    const m = this.map!;
+    const c = this.clip;
+    if (!c) return;
+    for (let dy = 0; dy < c.h; dy++) {
+      for (let dx = 0; dx < c.w; dx++) {
+        const sx = this.clipFlipX ? c.w - 1 - dx : dx;
+        const sy = this.clipFlipY ? c.h - 1 - dy : dy;
+        const nx = cx + dx, ny = cy + dy;
+        if (nx < 0 || ny < 0 || nx >= m.cols || ny >= m.rows) continue;
+        m.terrain[ny * m.cols + nx] = c.terrain[sy * c.w + sx];
+      }
+    }
+    // Anything already standing inside the stamped area goes, or the paste
+    // would layer new trees on top of old ones.
+    const ax = cx, ay = cy;
+    m.resources = m.resources.filter((r) => {
+      const rx = Math.floor(r.x / TILE) - ax, ry = Math.floor(r.y / TILE) - ay;
+      return rx < 0 || ry < 0 || rx >= c.w || ry >= c.h;
+    });
+    for (const r of c.resources) {
+      const dx = this.clipFlipX ? c.w - 1 - r.dx : r.dx;
+      const dy = this.clipFlipY ? c.h - 1 - r.dy : r.dy;
+      const nx = cx + dx, ny = cy + dy;
+      if (nx < 0 || ny < 0 || nx >= m.cols || ny >= m.rows) continue;
+      m.resources.push({ type: r.type, x: nx * TILE + TILE / 2, y: ny * TILE + TILE / 2, amount: r.amount });
+    }
+    this.dirty = true;
+    this.say("Stamped");
   }
 
   private placeResource(cx: number, cy: number) {
@@ -340,6 +493,33 @@ export class EditorScreen {
     }
     y += panelH + 16;
 
+    // ---- roll from the generator ----
+    ui.panel(x0, y, colW, 78, { light: true });
+    ui.text("Start from a generated map", x0 + 20, y + 24, { size: 14, bold: true, color: PAL.uiAccent });
+    ui.text("Rolls a real map with its spawn points already placed, then hands it to you to edit.",
+      x0 + 20, y + 40, { size: 11, color: "#9a917b" });
+    {
+      const pw = Math.min(96, Math.floor((colW - 300) / PRESETS.length) - 4);
+      PRESETS.forEach((pp, i) => {
+        if (ui.button(pp.name.split(" ")[0], x0 + 20 + i * (pw + 4), y + 48, pw, 22, {
+          accent: this.rollPreset === pp.id, size: 10.5, tooltip: [pp.name, pp.desc],
+        })) this.rollPreset = pp.id;
+      });
+      const rx = x0 + colW - 260;
+      ui.text(`seed ${this.rollSeed}`, rx, y + 30, { size: 11, color: "#cabfa4", font: "ui-monospace, monospace" });
+      if (ui.button("New seed", rx, y + 40, 84, 24, { size: 11 })) {
+        this.rollSeed = 1 + Math.floor(Math.random() * 99999);
+      }
+      ui.text(`${this.rollPlayers} seats`, rx + 96, y + 30, { size: 11, color: "#cabfa4" });
+      if (ui.button("−", rx + 96, y + 40, 26, 24, { size: 13, disabled: this.rollPlayers <= 2 })) this.rollPlayers--;
+      if (ui.button("+", rx + 126, y + 40, 26, 24, { size: 13, disabled: this.rollPlayers >= MAX_SEATS })) this.rollPlayers++;
+      if (ui.button("Roll & edit", rx + 160, y + 40, 96, 24, { accent: true, size: 12 })) {
+        this.open(customFromGenerated(this.rollPreset, this.rollSeed, this.rollPlayers));
+        this.say("Rolled — edit it however you like");
+      }
+    }
+    y += 94;
+
     // ---- import ----
     ui.panel(x0, y, colW, 78, { light: true });
     ui.text("Paste a map code", x0 + 20, y + 26, { size: 14, bold: true, color: PAL.uiAccent });
@@ -417,16 +597,7 @@ export class EditorScreen {
 
   /** A tiny picture of a map, for the library rows. */
   private thumbnail(ctx: CanvasRenderingContext2D, x: number, y: number, size: number, m: CustomMap) {
-    const step = Math.max(1, Math.floor(m.cols / size));
-    const px = size / Math.ceil(m.cols / step);
-    for (let cy = 0, ry = 0; cy < m.rows; cy += step, ry++) {
-      for (let cx = 0, rx = 0; cx < m.cols; cx += step, rx++) {
-        ctx.fillStyle = SWATCH[m.terrain[cy * m.cols + cx]] ?? "#6f9c4a";
-        ctx.fillRect(x + rx * px, y + ry * px, Math.ceil(px), Math.ceil(px));
-      }
-    }
-    ctx.strokeStyle = "rgba(255,255,255,0.14)"; ctx.lineWidth = 1;
-    ctx.strokeRect(x + 0.5, y + 0.5, size - 1, size - 1);
+    drawMapThumbnail(ctx, x, y, size, m, { spawns: true });
   }
 
   // ---- editor ----
@@ -443,7 +614,7 @@ export class EditorScreen {
 
     this.drawCanvas(canvasX, canvasY, canvasW, canvasH, m, mouseDown, time);
     this.drawToolRail(0, canvasY, RAIL, H - canvasY - 52, m);
-    const action = this.drawProperties(W - PROPS, canvasY, PROPS, H - canvasY - 52, m);
+    const action = this.drawProperties(W - PROPS, canvasY, PROPS, H - canvasY - 52, m, time);
     if (action) return action;
 
     // ---- top bar ----
@@ -568,9 +739,14 @@ export class EditorScreen {
         this.beginStroke();
         if (hx >= 0 && hy >= 0 && hx < m.cols && hy < m.rows) {
           if (this.tool === "terrain") this.paintAt(hx, hy);
+          else if (this.tool === "scatter") this.scatterAt(hx, hy);
           else if (this.tool === "resource") this.placeResource(hx, hy);
           else if (this.tool === "spawn") this.placeSpawn(hx, hy);
-          else this.eraseAt(hx, hy);
+          else if (this.tool === "path" || this.tool === "region") {
+            // Both are press-here-release-there gestures. Remember where the
+            // press landed; the work happens on release, below.
+            if (!this.dragFrom) this.dragFrom = { cx: hx, cy: hy };
+          } else this.eraseAt(hx, hy);
         }
       }
       if (ui.wheel) {
@@ -582,7 +758,52 @@ export class EditorScreen {
       }
       ui.text(`${hx}, ${hy}`, x + w - 10, y + h - 10, { align: "right", size: 11, color: "#8a8278", font: "ui-monospace, monospace" });
     }
-    if (!mouseDown) { this.strokeOpen = false; this.lastPan = null; }
+    // Preview for the two gesture tools, drawn while the button is still down so
+    // an author can see the run or the rectangle before committing to it.
+    if (this.dragFrom && mouseDown) {
+      const a = this.dragFrom;
+      ctx.setLineDash([4, 3]);
+      ctx.strokeStyle = "#ffd24a";
+      ctx.lineWidth = 1.5;
+      if (this.tool === "path") {
+        ctx.beginPath();
+        ctx.moveTo(toScreenX(a.cx) + z / 2, toScreenY(a.cy) + z / 2);
+        ctx.lineTo(toScreenX(hx) + z / 2, toScreenY(hy) + z / 2);
+        ctx.stroke();
+      } else {
+        const sx = toScreenX(Math.min(a.cx, hx)), sy = toScreenY(Math.min(a.cy, hy));
+        ctx.strokeRect(sx, sy, (Math.abs(hx - a.cx) + 1) * z, (Math.abs(hy - a.cy) + 1) * z);
+      }
+      ctx.setLineDash([]);
+    }
+    // A copied region follows the cursor, so a stamp lands where you expect.
+    if (over && this.tool === "region" && this.clip && !this.dragFrom) {
+      ctx.strokeStyle = withAlpha("#7fd0ff", 0.9);
+      ctx.lineWidth = 1.5;
+      ctx.strokeRect(toScreenX(hx), toScreenY(hy), this.clip.w * z, this.clip.h * z);
+    }
+
+    if (!mouseDown) {
+      // Release: this is where the gesture tools actually do their work, so the
+      // author sees the whole shape before it is committed.
+      if (this.dragFrom) {
+        const a = this.dragFrom;
+        this.dragFrom = null;
+        const inside = hx >= 0 && hy >= 0 && hx < m.cols && hy < m.rows;
+        if (this.tool === "path" && inside) {
+          this.strokePath(a.cx, a.cy, hx, hy);
+        } else if (this.tool === "region") {
+          // A drag lifts a region; a click (start and end on one cell) stamps
+          // the one already held. One tool, because copy and paste are two
+          // halves of the same act and splitting them across two buttons means
+          // more trips to the rail than to the map.
+          if (a.cx === hx && a.cy === hy && this.clip) this.pasteRegion(hx, hy);
+          else this.copyRegion(a.cx, a.cy, hx, hy);
+        }
+      }
+      this.strokeOpen = false;
+      this.lastPan = null;
+    }
     // Clamp so the map can never be lost off-screen entirely.
     this.camX = Math.max(-w / z / 2, Math.min(m.cols + w / z / 2, this.camX));
     this.camY = Math.max(-h / z / 2, Math.min(m.rows + h / z / 2, this.camY));
@@ -604,7 +825,10 @@ export class EditorScreen {
 
     const tools: [Tool, string, string][] = [
       ["terrain", "Ground", "Paint terrain with the selected brush."],
-      ["resource", "Resources", "Place trees, gold and berries."],
+      ["path", "Path", "Drag a straight run — rivers, ridges and roads are lines, and a round brush makes a wobble."],
+      ["scatter", "Scatter", "Drag to sprinkle resources at a density, instead of placing each node by hand."],
+      ["region", "Region", "Drag to copy a rectangle, then click to stamp it. Build one base properly and repeat it at every seat."],
+      ["resource", "Resources", "Place trees, gold and berries one at a time."],
       ["spawn", "Spawns", "Seat a player. Numbered in the order you place them."],
       ["erase", "Erase", "Remove resources and spawn points under the brush."],
     ];
@@ -618,9 +842,9 @@ export class EditorScreen {
         tooltip: disabled ? ["Spawns disabled", "This map is set to always nomad."] : [label, desc],
       })) this.tool = id;
     }
-    ry += 74;
+    ry += Math.ceil(tools.length / 2) * 32 + 10;
 
-    if (this.tool === "terrain") {
+    if (this.tool === "terrain" || this.tool === "path") {
       ui.text("GROUND", x + 12, ry, { size: 10, bold: true, color: "#8f8770" });
       ry += 10;
       PALETTE.forEach((t, i) => {
@@ -641,6 +865,53 @@ export class EditorScreen {
         }
       });
       ry += Math.ceil(PALETTE.length / 2) * 30 + 10;
+      if (this.tool === "path") {
+        ui.text("Drag from one point to another.", x + 12, ry, { size: 10.5, color: "#9a917b" });
+        ui.text("Brush size sets how wide the run is.", x + 12, ry + 14, { size: 10.5, color: "#9a917b" });
+        ry += 34;
+      }
+    } else if (this.tool === "scatter") {
+      ui.text("SCATTER", x + 12, ry, { size: 10, bold: true, color: "#8f8770" });
+      ry += 12;
+      for (const k of ["tree", "gold_mine", "berries"] as ResourceKind[]) {
+        if (ui.button(RES_LABEL[k], x + 10, ry, 190, 28, { accent: this.resource === k, size: 12 })) this.resource = k;
+        ctx.fillStyle = RES_COLOUR[k];
+        ctx.beginPath(); ctx.arc(x + 24, ry + 14, 5, 0, Math.PI * 2); ctx.fill();
+        ry += 32;
+      }
+      ry += 6;
+      ui.text(`DENSITY  ${Math.round(this.scatterDensity * 100)}%`, x + 12, ry, { size: 10, bold: true, color: "#8f8770" });
+      const dv = ui.slider(x + 12, ry + 20, w - 34, (this.scatterDensity - 0.05) / 0.75, ui.clicked || ui.leftHeld);
+      this.scatterDensity = Math.max(0.05, Math.min(0.8, 0.05 + dv * 0.75));
+      ry += 40;
+      // Re-rolling matters: the sprinkle is a function of the cell, so without
+      // this an author who dislikes a clump can only move somewhere else.
+      if (ui.button("Re-roll pattern", x + 10, ry, 190, 26, { size: 12,
+        tooltip: ["Shuffle the sprinkle", "The pattern is fixed per cell so dragging back over ground doesn't thicken it. This picks a different one."] })) {
+        this.scatterSeed = (this.scatterSeed * 1664525 + 1013904223) >>> 0;
+        this.say("New scatter pattern");
+      }
+      ry += 36;
+    } else if (this.tool === "region") {
+      ui.text("REGION", x + 12, ry, { size: 10, bold: true, color: "#8f8770" });
+      ry += 14;
+      if (this.clip) {
+        ui.text(`Holding ${this.clip.w} × ${this.clip.h} cells`, x + 12, ry, { size: 11, color: "#e7ddc4" });
+        ry += 16;
+        ui.text("Click the map to stamp it.", x + 12, ry, { size: 10.5, color: "#9a917b" });
+        ry += 20;
+        if (ui.button(this.clipFlipX ? "Flip ↔ on" : "Flip ↔ off", x + 10, ry, 92, 26,
+          { size: 11, accent: this.clipFlipX })) this.clipFlipX = !this.clipFlipX;
+        if (ui.button(this.clipFlipY ? "Flip ↕ on" : "Flip ↕ off", x + 108, ry, 92, 26,
+          { size: 11, accent: this.clipFlipY })) this.clipFlipY = !this.clipFlipY;
+        ry += 32;
+        if (ui.button("Drop it", x + 10, ry, 190, 26, { size: 12 })) { this.clip = null; this.say("Region dropped"); }
+        ry += 36;
+      } else {
+        ui.text("Drag a rectangle to copy the", x + 12, ry, { size: 10.5, color: "#9a917b" });
+        ui.text("ground and everything on it.", x + 12, ry + 14, { size: 10.5, color: "#9a917b" });
+        ry += 40;
+      }
     } else if (this.tool === "resource") {
       ui.text("RESOURCE", x + 12, ry, { size: 10, bold: true, color: "#8f8770" });
       ry += 12;
@@ -671,7 +942,8 @@ export class EditorScreen {
     }
 
     // Brush size applies to ground and erase.
-    if (this.tool === "terrain" || this.tool === "erase" || this.tool === "resource") {
+    if (this.tool === "terrain" || this.tool === "path" || this.tool === "scatter"
+      || this.tool === "erase" || this.tool === "resource") {
       ui.text(`BRUSH  ${this.brush}`, x + 12, ry, { size: 10, bold: true, color: "#8f8770" });
       const nv = ui.slider(x + 12, ry + 20, w - 34, (this.brush - 1) / 23, ui.clicked || ui.leftHeld);
       this.brush = Math.max(1, Math.round(1 + nv * 23));
@@ -691,7 +963,7 @@ export class EditorScreen {
 
   // ---- properties + validation ----
 
-  private drawProperties(x: number, y: number, w: number, h: number, m: CustomMap): EditorAction {
+  private drawProperties(x: number, y: number, w: number, h: number, m: CustomMap, time: number): EditorAction {
     const ctx = ui.ctx;
     ctx.fillStyle = "rgba(20,16,9,0.96)"; ctx.fillRect(x, y, w, h);
     ctx.fillStyle = withAlpha(PAL.uiAccent, 0.25); ctx.fillRect(x, y, 1, h);
@@ -705,6 +977,36 @@ export class EditorScreen {
       const sz = MAP_SIZES.find((z) => z.cols === m.cols);
       ui.text(`${sz ? sz.label + " · " : ""}${m.cols} × ${m.rows} cells`, lx, ry, { size: 11.5, color: "#cabfa4" });
       ry += 20;
+    }
+
+    // What the map is *for*. A line here is the difference between a map people
+    // scroll past in the lobby and one they pick.
+    ui.text("DESCRIPTION", lx, ry, { size: 10, bold: true, color: "#8f8770" });
+    ry += 8;
+    {
+      const dh = 46;
+      const dhov = ui.hit(lx, ry, w - 28, dh);
+      ctx.fillStyle = this.editing === "desc" ? "rgba(60,50,20,0.7)"
+        : dhov ? "rgba(255,255,255,0.07)" : "rgba(0,0,0,0.28)";
+      ctx.beginPath(); ctx.roundRect(lx, ry, w - 28, dh, 4); ctx.fill();
+      ctx.strokeStyle = this.editing === "desc" ? "#ffd24a" : "rgba(255,255,255,0.1)";
+      ctx.lineWidth = 1; ctx.stroke();
+      const shown = m.desc || (this.editing === "desc" ? "" : "click to describe this map");
+      // Wrapped by hand at a character count rather than measured: the rail is a
+      // fixed width and the font is fixed, so this is exact enough and costs
+      // nothing per frame.
+      const lines: string[] = [];
+      for (const word of shown.split(" ")) {
+        if (!lines.length || (lines[lines.length - 1] + " " + word).length > 34) lines.push(word);
+        else lines[lines.length - 1] += " " + word;
+      }
+      lines.slice(0, 3).forEach((ln, i) => {
+        ui.text(ln + (this.editing === "desc" && i === Math.min(lines.length, 3) - 1
+          && Math.floor(time * 2) % 2 ? "_" : ""), lx + 7, ry + 15 + i * 13,
+          { size: 10.5, color: m.desc ? "#e7ddc4" : "#6f6a5c" });
+      });
+      if (dhov && ui.clicked) { this.editing = this.editing === "desc" ? null : "desc"; ui.pointerConsumed = true; }
+      ry += dh + 14;
     }
 
     // Biome — changing it repaints only the untouched base ground, so the work

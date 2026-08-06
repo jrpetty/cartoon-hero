@@ -19,7 +19,8 @@ import { RNG, randomSeed } from "../engine/rng";
 import { audio } from "../engine/audio";
 import { Particles } from "../engine/particles";
 import { MatchReport } from "../sim/metrics";
-import { listCustomMaps, mapSupports } from "../maps/custom";
+import { CustomMap, listCustomMaps, mapSupports } from "../maps/custom";
+import { drawMapThumbnail } from "./map_thumb";
 import { REPORT_TABS, ReportTab, drawReportTab, reportSubtitle } from "./match_report";
 
 export interface SkirmishConfig {
@@ -232,13 +233,17 @@ export class SetupScreen {
     // itself for a four-player free-for-all.
     const custom = listCustomMaps().filter((m) => mapSupports(m, this.config.mode, this.config.players));
     const cards = [
-      ...PRESETS.map((p) => ({ id: p.id, name: p.name, desc: p.desc, custom: false })),
-      { id: "random", name: "🎲 Random", desc: "A surprise battlefield — a different preset every match.", custom: false },
+      ...PRESETS.map((p) => ({ id: p.id, name: p.name, desc: p.desc, custom: false, map: null as CustomMap | null })),
+      { id: "random", name: "🎲 Random", desc: "A surprise battlefield — a different preset every match.", custom: false, map: null as CustomMap | null },
       ...custom.map((m) => ({
         id: m.id,
         name: m.name,
-        desc: `${m.cols}×${m.rows} · ${m.minPlayers}–${m.maxPlayers} players${m.nomad === "forced" ? " · always nomad" : ""}`,
+        // The author's own line first, if they wrote one — that is the whole
+        // point of the field. The dimensions are a fallback, not a headline.
+        desc: m.desc?.trim()
+          || `${m.cols}×${m.rows} · ${m.minPlayers}–${m.maxPlayers} players${m.nomad === "forced" ? " · always nomad" : ""}`,
         custom: true,
+        map: m,
       })),
     ];
     // A map that no longer qualifies must not stay selected behind the scenes.
@@ -262,11 +267,24 @@ export class SetupScreen {
         this.config.presetId = p.id;
         audio.play("ui");
       }
-      ui.text(p.name, cx + 12, cy + 20, { size: 15, bold: true, color: sel ? "#ffe9b0" : PAL.uiParchment });
+      // A custom map earns a preview: a name and a cell count cannot say where
+      // the seats are or how much of it is water, and that is most of what
+      // decides whether you want to play it.
+      const thumb = p.map ? cardH - 24 : 0;
+      if (p.map) {
+        drawMapThumbnail(ui.ctx, cx + 12, cy + 12, thumb, p.map, { spawns: true, resources: true });
+      }
+      const tx = cx + 12 + (thumb ? thumb + 10 : 0);
+      const tw = cardW - 24 - (thumb ? thumb + 10 : 0);
+      ui.text(p.name, tx, cy + 20, { size: 15, bold: true, color: sel ? "#ffe9b0" : PAL.uiParchment });
       if (p.custom) {
         ui.text("YOURS", cx + cardW - 12, cy + 20, { align: "right", size: 9, bold: true, color: "#7fb0e8" });
       }
-      wrapText(p.desc, cx + 12, cy + 42, cardW - 24, 13, "#bdb49a");
+      wrapText(p.desc, tx, cy + 42, tw, 13, "#bdb49a");
+      if (p.map) {
+        ui.text(`${p.map.cols}×${p.map.rows} · ${p.map.minPlayers}–${p.map.maxPlayers} players${p.map.nomad === "forced" ? " · nomad" : ""}`,
+          tx, cy + cardH - 12, { size: 10, color: "#8f8770" });
+      }
     }
     y += panelH + 12;
 

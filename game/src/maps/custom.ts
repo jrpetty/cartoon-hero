@@ -13,7 +13,7 @@ import { RNG } from "../engine/rng";
 import { TILE, START_RESOURCES } from "../content/balance";
 import { GameMode } from "../sim/types";
 import { NavGrid } from "../pathfinding/grid";
-import { MapData, ResourceSpawn } from "./generator";
+import { MapData, ResourceSpawn, generateMap } from "./generator";
 import { Terrain, BiomeId, biomeById, TERRAIN_BLOCKS, TERRAIN_BUILDABLE } from "./terrain_kinds";
 
 export const MAP_FORMAT_VERSION = 1;
@@ -30,6 +30,11 @@ export const NOMAD_RULES: { id: NomadRule; label: string; desc: string }[] = [
 export interface CustomMap {
   id: string;
   name: string;
+  /**
+   * A line or two about what the map is for, shown on its card in the lobby.
+   * The difference between a map people scroll past and one they pick.
+   */
+  desc: string;
   version: number;
   biome: BiomeId;
   cols: number;
@@ -85,6 +90,7 @@ export function newCustomMap(name: string, cols: number, biome: BiomeId = "tempe
   return {
     id: `custom_${Date.now().toString(36)}_${Math.floor(Math.random() * 1e6).toString(36)}`,
     name,
+    desc: "",
     version: MAP_FORMAT_VERSION,
     biome,
     cols,
@@ -149,7 +155,7 @@ const b64decode = (s: string): string => decodeURIComponent(escape(atob(s)));
 /** A map as one pasteable string. */
 export function serialiseMap(m: CustomMap): string {
   const payload = {
-    v: m.version, n: m.name, b: m.biome, c: m.cols, r: m.rows,
+    v: m.version, n: m.name, d: m.desc, b: m.biome, c: m.cols, r: m.rows,
     t: rleEncode(m.terrain),
     // Resources and spawns go to cell coordinates: they are always placed on a
     // cell, and integers survive a round trip where floats invite drift. It has
@@ -183,6 +189,7 @@ export function deserialiseMap(code: string): CustomMap | null {
     return {
       id: `custom_${Date.now().toString(36)}_${Math.floor(Math.random() * 1e6).toString(36)}`,
       name: String(p.n ?? "Imported map").slice(0, 40),
+      desc: String(p.d ?? "").slice(0, 160),
       version: Number(p.v) || MAP_FORMAT_VERSION,
       biome: (["temperate", "arid", "alpine", "wetland"].includes(p.b) ? p.b : "temperate") as BiomeId,
       cols, rows, terrain,
@@ -345,6 +352,41 @@ export function mapSupports(m: CustomMap, mode: GameMode, players: number): bool
 }
 
 // ------------------------------------------------------------- to MapData --
+
+/**
+ * The other direction: take a generated map and hand it back as something you
+ * can paint on.
+ *
+ * Starting from a blank field means a lot of painting before there is anything
+ * to react to, and the generator is already good at the boring parts — a
+ * coastline, a scatter of woods, gold that isn't all in one place. Rolling one
+ * and then editing it is how most maps actually get made, so it is worth being
+ * a first-class way in rather than something you fake by exporting a match.
+ *
+ * The generator's `starts` become authored spawn points, which is the whole
+ * reason this is useful: the seats are already fair, and the author is free to
+ * move them.
+ */
+export function customFromGenerated(
+  preset: string, seed: number, players: number, name?: string,
+): CustomMap {
+  const g = generateMap(preset, seed, players);
+  const base = newCustomMap(name ?? `${g.name} ${seed}`, g.cols, g.biome);
+  base.rows = g.rows;
+  base.terrain = new Uint8Array(g.terrain);
+  base.resources = g.resources.map((r) => ({ ...r }));
+  base.spawns = g.starts.map((s) => ({ x: s.x, y: s.y }));
+  base.startResources = { ...g.startResources };
+  // Seats: exactly the ones the generator laid out. The ceiling has to match
+  // what is actually on the map rather than the engine's maximum — a map that
+  // claims eight seats and shows two is an error, and arriving in the editor
+  // with an error already on the board is a poor greeting. Raising it is one
+  // click once the author has placed more.
+  base.minPlayers = Math.min(2, base.spawns.length || 1);
+  base.maxPlayers = Math.max(1, base.spawns.length);
+  base.desc = `Rolled from ${g.name}, seed ${seed}.`;
+  return base;
+}
 
 /**
  * Turn an authored map into the MapData one match consumes.

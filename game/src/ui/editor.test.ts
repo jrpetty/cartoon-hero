@@ -3,7 +3,9 @@ import { createCanvas } from "@napi-rs/canvas";
 import { ui } from "./ui";
 import { EditorScreen, symmetryCells } from "./editor_screen";
 import { Terrain } from "../maps/terrain_kinds";
-import { listCustomMaps } from "../maps/custom";
+import {
+  customFromGenerated, deserialiseMap, hasErrors, listCustomMaps, newCustomMap, serialiseMap, validateMap,
+} from "../maps/custom";
 
 
 beforeAll(() => {
@@ -196,9 +198,263 @@ describe("Editor", () => {
     const colW = Math.min(980, W - 80);
     const x0 = Math.round(W / 2 - colW / 2);
     frame({ mx: x0 + colW - 80, my: 122 + 82, clicked: true });
-    for (const tool of ["terrain", "resource", "spawn", "erase"]) {
+    for (const tool of ["terrain", "path", "scatter", "region", "resource", "spawn", "erase"]) {
       (s as unknown as { tool: string }).tool = tool;
       expect(() => frame({ mx: 100, my: 400 }), tool).not.toThrow();
     }
+  });
+});
+
+// ---------------------------------------------------------- the new tools --
+//
+// These drive the tool methods directly rather than through synthetic drags.
+// The click plumbing is already covered by the tests above; what is worth
+// pinning here is what each tool does to the map, which is the part an author
+// would notice going wrong.
+
+interface ToolInternals {
+  map: unknown;
+  tool: string;
+  paint: number;
+  brush: number;
+  sym: string;
+  resource: string;
+  scatterDensity: number;
+  scatterSeed: number;
+  clip: { w: number; h: number } | null;
+  clipFlipX: boolean;
+  clipFlipY: boolean;
+  strokePath(x0: number, y0: number, x1: number, y1: number): void;
+  scatterAt(cx: number, cy: number): void;
+  copyRegion(x0: number, y0: number, x1: number, y1: number): void;
+  pasteRegion(cx: number, cy: number): void;
+}
+
+function editing() {
+  const s = new EditorScreen();
+  const inner = s as unknown as ToolInternals;
+  inner.map = newCustomMap("T", 64, "temperate");
+  inner.sym = "none";
+  return { s, inner, map: inner.map as { cols: number; rows: number; terrain: Uint8Array; resources: unknown[] } };
+}
+
+describe("The path tool", () => {
+  it("lays a gap-free run between two points", () => {
+    // The reason it exists: a river dragged with a round brush wobbles and can
+    // leave holes on a steep diagonal, and a river with a hole in it is a ford
+    // nobody meant to author.
+    const { inner, map } = editing();
+    inner.paint = Terrain.Water;
+    inner.brush = 1;
+    inner.strokePath(4, 4, 40, 22);
+    let painted = 0;
+    for (let cy = 0; cy < map.rows; cy++) {
+      for (let cx = 0; cx < map.cols; cx++) if (map.terrain[cy * map.cols + cx] === Terrain.Water) painted++;
+    }
+    expect(painted).toBeGreaterThan(30);
+    // Walk the line and check every step landed.
+    for (let i = 0; i <= 36; i++) {
+      const t = i / 36;
+      const cx = Math.round(4 + 36 * t), cy = Math.round(4 + 18 * t);
+      expect(map.terrain[cy * map.cols + cx], `hole at ${cx},${cy}`).toBe(Terrain.Water);
+    }
+  });
+
+  it("handles a zero-length drag as a single dab", () => {
+    const { inner, map } = editing();
+    inner.paint = Terrain.Rock;
+    inner.brush = 1;
+    expect(() => inner.strokePath(10, 10, 10, 10)).not.toThrow();
+    expect(map.terrain[10 * map.cols + 10]).toBe(Terrain.Rock);
+  });
+
+  it("gets its width from the brush, so a road and a river differ", () => {
+    const wide = editing();
+    wide.inner.paint = Terrain.Dirt;
+    wide.inner.brush = 4;
+    wide.inner.strokePath(10, 30, 50, 30);
+    const thin = editing();
+    thin.inner.paint = Terrain.Dirt;
+    thin.inner.brush = 1;
+    thin.inner.strokePath(10, 30, 50, 30);
+    const count = (m: { terrain: Uint8Array }) =>
+      [...m.terrain].filter((t) => t === Terrain.Dirt).length;
+    expect(count(wide.map)).toBeGreaterThan(count(thin.map) * 2);
+  });
+});
+
+describe("The scatter brush", () => {
+  it("sprinkles many nodes from one dab instead of placing them one at a time", () => {
+    const { inner, map } = editing();
+    inner.resource = "tree";
+    inner.brush = 8;
+    inner.scatterDensity = 0.4;
+    inner.scatterAt(30, 30);
+    expect(map.resources.length).toBeGreaterThan(10);
+  });
+
+  it("thickens with density", () => {
+    const sparse = editing();
+    sparse.inner.resource = "tree"; sparse.inner.brush = 8; sparse.inner.scatterDensity = 0.1;
+    sparse.inner.scatterAt(30, 30);
+    const dense = editing();
+    dense.inner.resource = "tree"; dense.inner.brush = 8; dense.inner.scatterDensity = 0.7;
+    dense.inner.scatterAt(30, 30);
+    expect(dense.map.resources.length).toBeGreaterThan(sparse.map.resources.length);
+  });
+
+  it("does not keep thickening when you drag back over the same ground", () => {
+    // The pattern is a function of the cell, not a running random, so a second
+    // pass over ground you already covered is a no-op rather than a pile-up.
+    const { inner, map } = editing();
+    inner.resource = "tree"; inner.brush = 6; inner.scatterDensity = 0.4;
+    inner.scatterAt(30, 30);
+    const once = map.resources.length;
+    inner.scatterAt(30, 30);
+    inner.scatterAt(30, 30);
+    expect(map.resources.length).toBe(once);
+  });
+
+  it("never stacks two nodes on one cell", () => {
+    const { inner, map } = editing();
+    inner.resource = "tree"; inner.brush = 10; inner.scatterDensity = 0.8;
+    inner.scatterAt(30, 30);
+    inner.resource = "gold_mine";
+    inner.scatterAt(30, 30);
+    const cells = (map.resources as { x: number; y: number }[])
+      .map((r) => `${Math.floor(r.x / 32)},${Math.floor(r.y / 32)}`);
+    expect(new Set(cells).size).toBe(cells.length);
+  });
+
+  it("re-rolls to a different pattern on demand", () => {
+    const a = editing();
+    a.inner.resource = "tree"; a.inner.brush = 8; a.inner.scatterDensity = 0.4;
+    a.inner.scatterAt(30, 30);
+    const b = editing();
+    b.inner.resource = "tree"; b.inner.brush = 8; b.inner.scatterDensity = 0.4;
+    b.inner.scatterSeed = 999;
+    b.inner.scatterAt(30, 30);
+    const key = (m: { resources: unknown[] }) =>
+      (m.resources as { x: number; y: number }[]).map((r) => `${r.x},${r.y}`).sort().join("|");
+    expect(key(b.map)).not.toBe(key(a.map));
+  });
+});
+
+describe("Copying a region", () => {
+  it("lifts the ground and what stands on it, then stamps it elsewhere", () => {
+    const { inner, map } = editing();
+    // Author a small distinctive patch.
+    inner.paint = Terrain.Rock;
+    inner.brush = 1;
+    for (let cy = 5; cy <= 9; cy++) for (let cx = 5; cx <= 9; cx++) inner.strokePath(cx, cy, cx, cy);
+    inner.resource = "gold_mine";
+    inner.brush = 2; inner.scatterDensity = 0.8;
+    inner.scatterAt(7, 7);
+    const nodesBefore = map.resources.length;
+
+    inner.copyRegion(5, 5, 9, 9);
+    expect(inner.clip).not.toBeNull();
+    expect(inner.clip!.w).toBe(5);
+    expect(inner.clip!.h).toBe(5);
+
+    inner.pasteRegion(40, 40);
+    for (let cy = 40; cy <= 44; cy++) {
+      for (let cx = 40; cx <= 44; cx++) {
+        expect(map.terrain[cy * map.cols + cx], `${cx},${cy}`).toBe(Terrain.Rock);
+      }
+    }
+    expect(map.resources.length, "the stamp brought nothing with it")
+      .toBeGreaterThan(nodesBefore);
+  });
+
+  it("mirrors a stamp, which is what you want facing the opposite seat", () => {
+    const { inner, map } = editing();
+    inner.paint = Terrain.Rock;
+    inner.brush = 1;
+    // An L, so a flip is detectable.
+    inner.strokePath(5, 5, 9, 5);
+    inner.strokePath(5, 5, 5, 7);
+    inner.copyRegion(5, 5, 9, 7);
+    inner.clipFlipX = true;
+    inner.pasteRegion(40, 40);
+    // The upright of the L was on the left; flipped, it is on the right.
+    expect(map.terrain[42 * map.cols + 44]).toBe(Terrain.Rock);
+    expect(map.terrain[42 * map.cols + 40]).not.toBe(Terrain.Rock);
+  });
+
+  it("clears what was already there rather than layering on top", () => {
+    const { inner, map } = editing();
+    // Somewhere to stamp onto that already has nodes.
+    inner.resource = "tree"; inner.brush = 4; inner.scatterDensity = 0.8;
+    inner.scatterAt(42, 42);
+    const before = map.resources.length;
+    expect(before).toBeGreaterThan(0);
+    // An empty patch of plain ground.
+    inner.copyRegion(2, 2, 8, 8);
+    inner.pasteRegion(39, 39);
+    const inside = (map.resources as { x: number; y: number }[]).filter((r) => {
+      const cx = Math.floor(r.x / 32), cy = Math.floor(r.y / 32);
+      return cx >= 39 && cx <= 45 && cy >= 39 && cy <= 45;
+    });
+    expect(inside, "old nodes survived under the stamp").toHaveLength(0);
+  });
+
+  it("clips a stamp at the map edge instead of wrapping or throwing", () => {
+    const { inner, map } = editing();
+    inner.paint = Terrain.Rock;
+    inner.brush = 1;
+    for (let cx = 5; cx <= 9; cx++) inner.strokePath(cx, 5, cx, 5);
+    inner.copyRegion(5, 5, 9, 5);
+    expect(() => inner.pasteRegion(map.cols - 2, map.rows - 2)).not.toThrow();
+    // Nothing wrapped around to the far side.
+    expect(map.terrain[(map.rows - 2) * map.cols + 0]).not.toBe(Terrain.Rock);
+  });
+});
+
+describe("A map's description", () => {
+  it("survives a round trip through a share code", () => {
+    const m = newCustomMap("Described", 48, "temperate");
+    m.desc = "A narrow pass with one gold in the middle.";
+    const back = deserialiseMap(serialiseMap(m));
+    expect(back?.desc).toBe(m.desc);
+  });
+
+  it("defaults to empty rather than undefined, so the lobby can trust it", () => {
+    expect(newCustomMap("X", 40).desc).toBe("");
+    const older = deserialiseMap(serialiseMap({ ...newCustomMap("Y", 40), desc: undefined as unknown as string }));
+    expect(older?.desc).toBe("");
+  });
+});
+
+describe("Starting from a generated map", () => {
+  it("arrives painted, stocked and already seated", () => {
+    // The whole point: a blank field is a lot of painting before there is
+    // anything to react to.
+    const m = customFromGenerated("highlands", 42, 4);
+    expect(m.cols).toBeGreaterThan(0);
+    expect(m.spawns, "no seats came with it").toHaveLength(4);
+    expect(m.resources.length, "no resources came with it").toBeGreaterThan(10);
+    const distinct = new Set([...m.terrain]);
+    expect(distinct.size, "the ground is all one thing").toBeGreaterThan(2);
+  });
+
+  it("is a real editable map — same seed gives the same map", () => {
+    const a = customFromGenerated("highlands", 7, 2);
+    const b = customFromGenerated("highlands", 7, 2);
+    expect([...b.terrain]).toEqual([...a.terrain]);
+    expect(b.spawns).toEqual(a.spawns);
+  });
+
+  it("validates clean enough to play straight away", () => {
+    const m = customFromGenerated("highlands", 5, 2);
+    expect(hasErrors(validateMap(m)), validateMap(m).map((i) => i.text).join("; ")).toBe(false);
+  });
+
+  it("round-trips through a share code like any other map", () => {
+    const m = customFromGenerated("riverlands", 9, 2);
+    const back = deserialiseMap(serialiseMap(m));
+    expect(back).not.toBeNull();
+    expect([...back!.terrain]).toEqual([...m.terrain]);
+    expect(back!.spawns.length).toBe(m.spawns.length);
   });
 });
