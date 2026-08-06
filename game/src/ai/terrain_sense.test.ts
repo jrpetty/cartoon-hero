@@ -1,13 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { World } from "../sim/world";
-import { Team } from "../sim/types";
+import { Kind, Team } from "../sim/types";
 import { generateMap } from "../maps/generator";
 import { TILE } from "../content/balance";
 import { Terrain } from "../maps/terrain_kinds";
 import { SkirmishAI } from "./skirmish_ai";
 import { DIFFICULTIES } from "./difficulty";
 import {
-  bestGroundNear, bestTowerSite, flankPoint, groundScore, isHighGround, stagingPoint,
+  bestGroundNear, bestTowerSite, flankPoint, fordCrossing, groundScore, isHighGround, stagingPoint,
 } from "./terrain_sense";
 
 /** A world on flat open ground, with helpers to paint terrain into it. */
@@ -274,4 +274,160 @@ describe("The AI reads the ground", () => {
     }
     expect(kills, "the armies never met on any seed").toBeGreaterThan(0);
   }, 300000);
+});
+
+describe("Finding a ford on the way", () => {
+  /** A world with a band of shallows across the middle. */
+  const forded = (halfWidth = 3) => {
+    const { w } = field(31);
+    const midC = Math.floor(w.terrainCols / 2);
+    for (let cy = 0; cy < w.terrainRows; cy++) {
+      for (let dx = -halfWidth; dx <= halfWidth; dx++) {
+        w.terrain[cy * w.terrainCols + midC + dx] = Terrain.Shallow;
+        w.grid.setBlocked(midC + dx, cy, false);
+      }
+    }
+    return { w, fordX: midC * TILE + TILE / 2, midY: Math.floor(w.terrainRows / 2) * TILE };
+  };
+
+  it("finds the crossing on the line between two points", () => {
+    const { w, fordX, midY } = forded();
+    const cross = fordCrossing(w, { x: fordX - 600, y: midY }, { x: fordX + 600, y: midY });
+    expect(cross, "did not notice the ford at all").not.toBeNull();
+    expect(Math.abs(cross!.x - fordX), "the crossing is not where the water is")
+      .toBeLessThan(TILE * 3);
+  });
+
+  it("finds nothing when the route stays on dry land", () => {
+    const { w, fordX, midY } = forded();
+    // Both ends on the same bank, never reaching the water.
+    expect(fordCrossing(w, { x: fordX - 900, y: midY }, { x: fordX - 400, y: midY })).toBeNull();
+  });
+
+  it("reports the width, so a puddle can be told from a real ford", () => {
+    const narrow = forded(1);
+    const wide = forded(6);
+    const a = fordCrossing(narrow.w, { x: narrow.fordX - 600, y: narrow.midY }, { x: narrow.fordX + 600, y: narrow.midY });
+    const b = fordCrossing(wide.w, { x: wide.fordX - 600, y: wide.midY }, { x: wide.fordX + 600, y: wide.midY });
+    expect(b!.width).toBeGreaterThan(a!.width);
+  });
+
+  it("stops seeing a ford once it has been bridged", () => {
+    // Otherwise the AI would pay for a second crossing beside the first, and a
+    // third beside that, for as long as it could afford them. The band here is
+    // exactly two cells — one bridge footprint — so a decked crossing really is
+    // fully decked rather than leaving a lip of water the line still clips.
+    const { w } = field(31);
+    const midC = Math.floor(w.terrainCols / 2);
+    for (let cy = 0; cy < w.terrainRows; cy++) {
+      for (const cx of [midC, midC + 1]) {
+        w.terrain[cy * w.terrainCols + cx] = Terrain.Shallow;
+        w.grid.setBlocked(cx, cy, false);
+      }
+    }
+    const fordX = midC * TILE + TILE / 2;
+    const midY = Math.floor(w.terrainRows / 2) * TILE;
+    const from = { x: fordX - 600, y: midY }, to = { x: fordX + 600, y: midY };
+    expect(fordCrossing(w, from, to)).not.toBeNull();
+
+    w.player(Team.Player).resources.wood = 5000; // enough to deck the whole span
+    for (let dy = -8; dy <= 8; dy++) {
+      const b = w.placeBuilding(Team.Player, "bridge", fordX, midY + dy * 2 * TILE);
+      if (b) {
+        b.buildState = 0;
+        (w as unknown as { onBuildingCompleted(e: unknown, d: unknown, s: boolean): void })
+          .onBuildingCompleted(b, { onlyOnShallows: true, popProvided: 0, id: "bridge" }, true);
+      }
+    }
+    expect(fordCrossing(w, from, to), "kept seeing a ford that is now decked").toBeNull();
+  });
+
+  it("picks the widest crossing when the route wades more than once", () => {
+    const { w } = field(31);
+    const band = (cx: number, half: number) => {
+      for (let cy = 0; cy < w.terrainRows; cy++) {
+        for (let dx = -half; dx <= half; dx++) w.terrain[cy * w.terrainCols + cx + dx] = Terrain.Shallow;
+      }
+    };
+    band(30, 1);
+    band(60, 5);
+    const midY = Math.floor(w.terrainRows / 2) * TILE;
+    const cross = fordCrossing(w, { x: 10 * TILE, y: midY }, { x: 90 * TILE, y: midY });
+    // The wide one, not the first one met — that is the crossing costing time.
+    expect(Math.abs(cross!.x - 60 * TILE)).toBeLessThan(TILE * 4);
+  });
+});
+
+describe("The AI and the water", () => {
+  /** Two bases either side of a ford, so every attack has to cross it. */
+  const acrossAFord = (seed: number) => {
+    const map = generateMap("open_plains", seed, 2);
+    const world = new World(seed);
+    world.init(map, [{}, {}], [1, 1], [0, 1]);
+    const midC = Math.floor(world.terrainCols / 2);
+    for (let cy = 0; cy < world.terrainRows; cy++) {
+      for (let dx = -3; dx <= 3; dx++) {
+        world.terrain[cy * world.terrainCols + midC + dx] = Terrain.Shallow;
+        world.grid.setBlocked(midC + dx, cy, false);
+      }
+    }
+    return world;
+  };
+
+  it("lays a crossing over the ford its army keeps wading through", () => {
+    // The regression this whole pair of features exists for. Bridges shipped as
+    // something only the player understood; an AI that never builds one is a
+    // building the game owns and never uses.
+    const world = acrossAFord(4);
+    const ais = [
+      new SkirmishAI(world, Team.Player, DIFFICULTIES.knight),
+      new SkirmishAI(world, Team.Enemy, DIFFICULTIES.knight),
+    ];
+    for (let i = 0; i < 20 * 60 * 14; i++) {
+      world.tick();
+      for (const ai of ais) ai.update(1 / 20);
+      world.drainEvents();
+      if (world.winner !== null) break;
+    }
+    const spans = world.entities.filter((e) => e.kind === Kind.Building && e.type === "bridge");
+    expect(spans.length, "neither AI ever bridged the ford").toBeGreaterThan(0);
+  }, 180000);
+
+  it("does not bridge when the route never touches water", () => {
+    // A hundred wood set on fire. The check is tied to the route it actually
+    // takes, not to "is there water anywhere on this map".
+    const map = generateMap("open_plains", 4, 2);
+    const world = new World(4);
+    world.init(map, [{}, {}], [1, 1], [0, 1]);
+    world.terrain = new Uint8Array(world.terrain.length); // all grass
+    const ais = [
+      new SkirmishAI(world, Team.Player, DIFFICULTIES.knight),
+      new SkirmishAI(world, Team.Enemy, DIFFICULTIES.knight),
+    ];
+    for (let i = 0; i < 20 * 60 * 10; i++) {
+      world.tick();
+      for (const ai of ais) ai.update(1 / 20);
+      world.drainEvents();
+      if (world.winner !== null) break;
+    }
+    expect(world.entities.some((e) => e.type === "bridge"), "bridged dry land").toBe(false);
+  }, 180000);
+
+  it("can be switched off with the rest of its terrain sense", () => {
+    // Same flag as the hills: the feature has to be measurable against an AI
+    // that cannot see it.
+    const world = acrossAFord(4);
+    const ais = [
+      new SkirmishAI(world, Team.Player, DIFFICULTIES.knight),
+      new SkirmishAI(world, Team.Enemy, DIFFICULTIES.knight),
+    ];
+    for (const ai of ais) ai.readsGround = false;
+    for (let i = 0; i < 20 * 60 * 14; i++) {
+      world.tick();
+      for (const ai of ais) ai.update(1 / 20);
+      world.drainEvents();
+      if (world.winner !== null) break;
+    }
+    expect(world.entities.some((e) => e.type === "bridge")).toBe(false);
+  }, 180000);
 });

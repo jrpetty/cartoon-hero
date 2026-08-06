@@ -9,6 +9,13 @@ import { ABILITIES } from "./content/abilities";
 import { BUILDINGS } from "./content/buildings";
 import { COMMANDERS, COMMANDER_IDS } from "./content/commanders";
 import { SIM_DT, TILE } from "./content/balance";
+import { RNG } from "./engine/rng";
+import {
+  CommandLog, SAVE_FORMAT_VERSION, SaveGame, deleteSave, listSaves, replayTo, writeSave,
+} from "./sim/savegame";
+
+/** Seconds as m:ss — a match clock reads as a duration, not a number. */
+const mmss = (s: number) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
 import { dayPhase } from "./content/daynight";
 import { generateMap } from "./maps/generator";
 import { randomSeed } from "./engine/rng";
@@ -38,7 +45,7 @@ import {
 } from "./ui/screens";
 import { Profile } from "./meta/profile";
 import { computeRewards, MatchRewards } from "./meta/progression";
-import { Command, applyCommand } from "./sim/commands";
+import { Command, applyCommand, worldChecksum } from "./sim/commands";
 import { NetSession } from "./net/session";
 import { NetLobby, NetStart } from "./ui/net_lobby";
 import { Settings, loadSettings, saveSettings } from "./meta/settings";
@@ -53,7 +60,9 @@ import { Weather } from "./render/weather";
 import { drawChat, ChatLine } from "./ui/chat";
 import { KeybindResolver, chordOf, chordFor } from "./meta/keybinds";
 import { EditorScreen } from "./ui/editor_screen";
-import { CustomMap, findCustomMap, saveCustomMap, toMapData } from "./maps/custom";
+import {
+  CustomMap, deserialiseMap, findCustomMap, saveCustomMap, serialiseMap, toMapData,
+} from "./maps/custom";
 
 type AppState = "menu" | "setup" | "armory" | "match" | "postmatch" | "codex" | "settings" | "warband" | "editor";
 
@@ -156,6 +165,10 @@ class App {
   private fps = 60; // smoothed frames-per-second for the optional overlay
   private smokeTimer = 0;
   private accumulator = 0;
+  /** Every order this match has been given — half of what a save is. */
+  private cmdLog = new CommandLog();
+  /** Set while a resume is fast-forwarding, so the match loop stays paused. */
+  private loadingSave = false;
   private lastFrame = performance.now();
 
   constructor() {
@@ -473,10 +486,15 @@ class App {
     const econMults = [1];
     const commanders = [config.commander || this.profile.data.commander];
     const boonLoadouts: { id: string; rarity: number; age: number }[][] = [config.fairMode ? [] : this.profile.equippedBoonPlan()];
+    const setupRng = new RNG(config.seed ^ 0x5eed);
     for (let t = 1; t < numPlayers; t++) {
       loadouts.push(this.profile.matchLoadout(true));
       econMults.push(t === hordeTeam ? diff.econMult : diffFor(t).econMult);
-      commanders.push(COMMANDER_IDS[Math.floor(Math.random() * COMMANDER_IDS.length)]);
+      // Seeded, not Math.random(). A match has to be reproducible from its
+      // config alone — that is what makes a save a seed plus a command log
+      // rather than a dump of every entity — and an AI that drew a different
+      // commander on reload would fight a different battle.
+      commanders.push(COMMANDER_IDS[setupRng.int(0, COMMANDER_IDS.length - 1)]);
       boonLoadouts.push([]);
     }
     world.init(map, loadouts, econMults, alliances, commanders, config.nomad, boonLoadouts, mode);
@@ -505,12 +523,91 @@ class App {
     this.camera.centerOn(map.starts[this.me].x, map.starts[this.me].y);
     this.accumulator = 0;
     this.spectating = false;
+    this.cmdLog.clear();
     this.resetMatchTelemetry();
     this.endNet();
     this.me = Team.Player;
     this.state = "match";
     this.hud.addAlert(`${map.name} — vs ${diff.name}. Your villagers await orders!`);
     audio.play("complete");
+  }
+
+  /**
+   * Write the match out: its setup, every order given, and a hash of where the
+   * sim actually is. Custom maps travel as a share code rather than an id,
+   * since the map library can be edited or emptied between save and load.
+   */
+  saveMatch(label?: string): boolean {
+    const world = this.world;
+    if (!world || !this.config) return false;
+    if (this.net) {
+      // Resuming one side of a lockstep match would desync everyone else.
+      this.hud.addAlert("Multiplayer matches can't be saved.");
+      return false;
+    }
+    const custom = this.config.presetId.startsWith("custom_")
+      ? findCustomMap(this.config.presetId)
+      : null;
+    const save: SaveGame = {
+      version: SAVE_FORMAT_VERSION,
+      savedAt: Date.now(),
+      label: label ?? `${this.mapName || "Skirmish"} — ${mmss(world.time)}`,
+      setup: { ...this.config },
+      mapCode: custom ? serialiseMap(custom) : undefined,
+      tick: world.tickCount,
+      commands: this.cmdLog.entries,
+      checksum: worldChecksum(world),
+      summary: {
+        mapName: this.mapName || "Skirmish",
+        mode: this.config.mode ?? "conquest",
+        players: this.config.players ?? 2,
+        difficulty: this.config.difficulty ?? "knight",
+        elapsed: world.time,
+      },
+    };
+    const ok = writeSave(save);
+    this.hud.addAlert(ok ? `Saved — ${save.label}` : "Couldn't save (storage full?)");
+    audio.play(ok ? "complete" : "ui");
+    return ok;
+  }
+
+  /**
+   * Rebuild a saved match by replaying it.
+   *
+   * The setup is re-run through the normal startMatch path — same seed, same
+   * world, same AI — and then the order log is fast-forwarded through it. If
+   * the result doesn't hash to what was saved, say so *now*: a divergence is
+   * only recoverable while the player still knows the game isn't the one they
+   * left, and playing an hour on top of a wrong resume is the bad outcome.
+   */
+  loadMatch(save: SaveGame): boolean {
+    // A custom map may have been edited or deleted since; the save carries its
+    // own copy, so restore that first and point the config at it.
+    const setup = { ...(save.setup as SkirmishConfig) };
+    if (save.mapCode) {
+      const m = deserialiseMap(save.mapCode);
+      if (!m) {
+        this.hud.addAlert("That save's map couldn't be read.");
+        return false;
+      }
+      m.id = setup.presetId; // keep the id the save was taken against
+      saveCustomMap(m);
+    }
+    this.loadingSave = true;
+    this.startMatch(setup);
+    const world = this.world;
+    if (!world) { this.loadingSave = false; return false; }
+    const res = replayTo(world, this.ais, save.commands, save.tick, save.checksum);
+    this.cmdLog.load(save.commands);
+    this.loadingSave = false;
+    this.accumulator = 0;
+    this.camera.centerOn(world.map.starts[this.me].x, world.map.starts[this.me].y);
+    if (!res.faithful) {
+      this.hud.addAlert("This save was made by a different version — the match may differ.");
+    } else {
+      this.hud.addAlert(`Resumed at ${mmss(world.time)}.`);
+    }
+    return true;
   }
 
   /** Tear down any active net session/link (called when leaving a net match). */
@@ -720,7 +817,13 @@ class App {
    *  applied immediately in single-player. Keeps both paths in one place. */
   dispatch(cmd: Command) {
     if (this.net?.lock) this.net.lock.localCommand(cmd);
-    else if (this.world) applyCommand(this.world, cmd);
+    else if (this.world) {
+      // Log before applying, stamped with the tick it will land on. A save is
+      // the seed plus this log, so anything that reaches the world and isn't
+      // here is a divergence waiting to happen on reload.
+      this.cmdLog.record(this.world.tickCount, cmd);
+      applyCommand(this.world, cmd);
+    }
   }
 
   /**
@@ -1317,6 +1420,11 @@ class App {
         if (action === "skirmish") {
           this.state = "setup";
           audio.play("ui");
+        } else if (action === "resume" && this.menu.pickedSave) {
+          const save = this.menu.pickedSave;
+          this.menu.pickedSave = null;
+          audio.play("ui");
+          this.loadMatch(save);
         } else if (action === "multiplayer") {
           audio.play("ui");
           this.lobby.open((start) => this.startNetMatch(start));
@@ -1743,7 +1851,7 @@ class App {
       const ctx = this.renderer.ctx;
       ctx.fillStyle = "rgba(8, 6, 3, 0.6)";
       ctx.fillRect(0, 0, UW, UH);
-      ui.panel(UW / 2 - 150, UH / 2 - 130, 300, 270, { light: true });
+      ui.panel(UW / 2 - 150, UH / 2 - 130, 300, 322, { light: true });
       ui.text("Paused", UW / 2, UH / 2 - 100, { align: "center", size: 22, bold: true, color: PAL.uiAccent });
       if (ui.button("Resume", UW / 2 - 110, UH / 2 - 64, 220, 44, { accent: true, size: 16 })) {
         this.ingameMenu = false;
@@ -1751,7 +1859,16 @@ class App {
       if (ui.button("⚙  Settings", UW / 2 - 110, UH / 2 - 12, 220, 44, { size: 15 })) {
         this.openSettings("match"); // returns to the (still-paused) match
       }
-      if (ui.button("Concede & Quit", UW / 2 - 110, UH / 2 + 40, 220, 44, { danger: true, size: 15 })) {
+      if (ui.button("💾  Save Game", UW / 2 - 110, UH / 2 + 40, 220, 44, {
+        size: 15,
+        disabled: !!this.net,
+        tooltip: this.net
+          ? ["Not in multiplayer", "Resuming one side of a lockstep match would desync the others."]
+          : ["Save this match", "Stores the setup and every order you gave — reloading replays them."],
+      })) {
+        this.saveMatch();
+      }
+      if (ui.button("Concede & Quit", UW / 2 - 110, UH / 2 + 92, 220, 44, { danger: true, size: 15 })) {
         this.finishMatch(false);
       }
     }

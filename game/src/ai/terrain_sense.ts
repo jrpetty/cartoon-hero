@@ -238,6 +238,55 @@ export function bestTowerSite(
   return { x: bestX, y: bestY };
 }
 
+/**
+ * Where the line from A to B wades through shallows, if it does.
+ *
+ * Bridges arrived and only the player could see the point of them: the AI would
+ * march an army through a ford at half speed, every wave, past a crossing it
+ * could have paid a hundred wood for once. That is the same mistake as not
+ * knowing hills exist, and worse — a bridge is a *thing the AI can build*, so
+ * the gap shows up as a base that never uses a whole building.
+ *
+ * Walks the straight line rather than the actual path on purpose. The pathfinder
+ * already routes around walls; shallows are not walls, so the route it picks
+ * really does go through them, and the straight line is where. Returns the
+ * middle of the widest run crossed — the middle because a bridge wants both
+ * banks, the widest because that is the crossing costing the most time.
+ */
+export function fordCrossing(
+  world: World,
+  from: { x: number; y: number },
+  to: { x: number; y: number },
+): { x: number; y: number; width: number } | null {
+  const steps = Math.ceil(Math.hypot(to.x - from.x, to.y - from.y) / (TILE / 2));
+  if (steps <= 0) return null;
+  let best: { x: number; y: number; width: number } | null = null;
+  let runStart = -1;
+  const closeRun = (endStep: number) => {
+    if (runStart < 0) return;
+    const width = endStep - runStart;
+    if (!best || width > best.width) {
+      const mid = (runStart + endStep) / 2 / steps;
+      best = {
+        x: from.x + (to.x - from.x) * mid,
+        y: from.y + (to.y - from.y) * mid,
+        width,
+      };
+    }
+    runStart = -1;
+  };
+  for (let i = 0; i <= steps; i++) {
+    const t = i / steps;
+    const x = from.x + (to.x - from.x) * t;
+    const y = from.y + (to.y - from.y) * t;
+    const wading = world.terrainAt(x, y) === Terrain.Shallow && !world.bridgedAt(x, y);
+    if (wading) { if (runStart < 0) runStart = i; }
+    else closeRun(i);
+  }
+  closeRun(steps);
+  return best;
+}
+
 /** True when this cell is high ground — used by tests and callouts. */
 export const isHighGround = (world: World, wx: number, wy: number): boolean =>
   world.terrainAt(wx, wy) === Terrain.Hill;

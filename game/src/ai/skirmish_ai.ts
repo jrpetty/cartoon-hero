@@ -13,7 +13,7 @@ import { DifficultyDef } from "./difficulty";
 import { RNG } from "../engine/rng";
 import { dist } from "../engine/math";
 import { FOG_VISIBLE } from "../sim/world";
-import { bestGroundNear, bestTowerSite, flankPoint, isHighGround, stagingPoint } from "./terrain_sense";
+import { bestGroundNear, bestTowerSite, flankPoint, fordCrossing, isHighGround, stagingPoint } from "./terrain_sense";
 
 interface SeenComposition {
   infantry: number;
@@ -53,6 +53,7 @@ export class SkirmishAI {
   private seen: SeenComposition = { infantry: 0, archer: 0, cavalry: 0, siege: 0 };
   private lastWaveTime = 0;
   private lastHarassTime = 0;
+  private lastBridgeTime = -999;
   private lastScoutTime = -999;
   private scoutId = -1;
   private wallsPlanned = false;
@@ -946,6 +947,7 @@ export class SkirmishAI {
     const kingEmergency = this.world.mode === "regicide" && this.kingDefense();
     const defended = !kingEmergency && this.defendStep();
     if (!kingEmergency && !defended) {
+      this.bridgeStep();
       this.attackStep();
       this.harassStep();
     }
@@ -1486,6 +1488,57 @@ export class SkirmishAI {
   }
 
   /** Raid: send fast units to butcher the enemy's villagers / eco. */
+  /**
+   * Bridge the ford the army keeps wading through.
+   *
+   * Bridges shipped as something only the player understood: the AI would march
+   * every wave through shallows at half speed, past a crossing it could have
+   * bought once for a hundred wood. That is the same failure as not knowing
+   * hills exist and a more embarrassing one, because a bridge is a building the
+   * AI owns and simply never used.
+   *
+   * Deliberately tied to the route it actually takes — the line from its base
+   * toward the enemy — rather than "bridge every ford". A crossing nowhere near
+   * the fighting is a hundred wood set on fire.
+   */
+  private bridgeStep() {
+    if (!this.readsGround) return;
+    const p = this.world.player(this.team);
+    const def = BUILDINGS.bridge;
+    if (!def || !this.world.canAfford(p.resources, def.cost)) return;
+    // Rate-limited hard: this walks a line and scans buildings, and a ford does
+    // not appear halfway through a match.
+    if (this.gameTime - this.lastBridgeTime < 45) return;
+    const base = this.base();
+    if (!base) return;
+    // Don't start a second one while the first is still going up — an AI that
+    // queues four bridges at a ford has spent four hundred wood on one crossing.
+    const building = this.world.entities.some(
+      (e) => e.alive && e.team === this.team && e.type === "bridge" && e.buildState !== BuildState.Done,
+    );
+    if (building) return;
+
+    const target = this.world.map.starts[this.focusEnemy];
+    const ford = fordCrossing(this.world, base, target);
+    // A puddle is not worth a hundred wood; a real ford is several cells of
+    // half-speed ground with an army walking through it every wave.
+    if (!ford || ford.width < 4) return;
+
+    this.lastBridgeTime = this.gameTime;
+    // Nudge around the crossing point: the exact midpoint may be one cell short
+    // of a full water footprint, and a bridge needs every cell to be shallows.
+    for (let attempt = 0; attempt < 10; attempt++) {
+      const jx = attempt === 0 ? 0 : this.rng.range(-TILE * 2, TILE * 2);
+      const jy = attempt === 0 ? 0 : this.rng.range(-TILE * 2, TILE * 2);
+      const b = this.world.placeBuilding(this.team, "bridge", ford.x + jx, ford.y + jy);
+      if (b) {
+        this.assignBuilder(b, 2);
+        this.say("bridging the ford.", b.x, b.y, 20);
+        return;
+      }
+    }
+  }
+
   private harassStep() {
     if (!this.diff.harasses && this.style !== "rush") return;
     const cool = this.style === "rush" ? 55 : 85;
@@ -1498,6 +1551,24 @@ export class SkirmishAI {
     if (raiders.length < 3) return;
     this.lastHarassTime = this.gameTime;
     const ids = raiders.slice(0, 4).map((u) => u.id);
+    // A crossing the enemy paid for is the cheapest thing on the map to take
+    // away from them: it cost a hundred wood and a builder's time, it is barely
+    // defended by construction because it stands in water, and burning it puts
+    // their next wave back into the shallows at half speed. Raiders are exactly
+    // the wrong unit to besiege a Castle with and exactly the right one for this.
+    if (this.readsGround) {
+      const spans = this.world.entities.filter(
+        (e) => e.alive && e.kind === Kind.Building && e.type === "bridge" && this.isHostile(e.team) &&
+          this.world.fogAt(this.team, e.x, e.y) !== 0,
+      );
+      const home = this.base();
+      if (spans.length && home) {
+        spans.sort((a, b) => dist(a.x, a.y, home.x, home.y) - dist(b.x, b.y, home.x, home.y));
+        this.world.issueAttack(ids, spans[0].id);
+        this.say("burn their bridge.", spans[0].x, spans[0].y, 20);
+        return;
+      }
+    }
     // Prefer a visible enemy villager; otherwise sweep their base eco.
     const vills = this.world.entities.filter(
       (e) => e.alive && e.kind === Kind.Unit && this.isHostile(e.team) && e.type === "villager" &&

@@ -199,6 +199,21 @@ const BUILDING_WALKABLE = new Set<string>(["farm", "bridge"]);
 /** Wall-class buildings (Bulwark boon, cheaper/tougher fortifications). */
 const WALL_TYPES = new Set<string>(["palisade", "stone_wall", "gate"]);
 
+/**
+ * Entity ids come from the World that owns them, not from a module global.
+ *
+ * They used to come from a `let nextId` reset in the World constructor, which
+ * is fine while exactly one world exists and silently wrong the moment two do:
+ * building world B after world A resets the counter, and then *ticking* them in
+ * turn interleaves their allocations, so the same match built twice ends up with
+ * different ids. Ids are hashed into `worldChecksum`, so that reads as a
+ * non-deterministic simulation — which is exactly what save/resume and lockstep
+ * both stake everything on.
+ *
+ * `makeEntity` keeps its no-argument form for the handful of callers that build
+ * a detached entity; anything belonging to a world goes through `world.spawn*`,
+ * which stamps the owner's id.
+ */
 let nextId = 1;
 
 export function makeEntity(): Entity {
@@ -264,9 +279,18 @@ export class World {
   map!: MapData;
   private lastAlertTime: number[] = [];
 
+  /** This world's id allocator. Per-world so two can coexist without colliding. */
+  private nextEntityId = 1;
+
   constructor(seed: number) {
     this.rng = new RNG(seed);
-    nextId = 1;
+  }
+
+  /** A blank entity carrying an id from *this* world's sequence. */
+  private newEntity(): Entity {
+    const e = makeEntity();
+    e.id = this.nextEntityId++;
+    return e;
   }
 
   // ---------------------------------------------------------------- setup --
@@ -531,7 +555,7 @@ export class World {
 
   spawnUnit(team: Team, type: string, x: number, y: number): Entity {
     const def = UNITS[type];
-    const e = makeEntity();
+    const e = this.newEntity();
     e.kind = Kind.Unit;
     e.team = team;
     e.type = type;
@@ -549,7 +573,7 @@ export class World {
 
   spawnBuilding(team: Team, type: string, x: number, y: number, completed: boolean): Entity {
     const def = BUILDINGS[type];
-    const e = makeEntity();
+    const e = this.newEntity();
     e.kind = Kind.Building;
     e.team = team;
     e.type = type;
@@ -596,7 +620,7 @@ export class World {
   }
 
   spawnResource(type: string, x: number, y: number, amount: number): Entity {
-    const e = makeEntity();
+    const e = this.newEntity();
     e.kind = Kind.Resource;
     e.team = Team.Neutral;
     e.type = type;
@@ -2199,7 +2223,7 @@ export class World {
   }
 
   private fireProjectileRaw(from: Entity, target: Entity, dmg: number, sourceType: string, aoe = 0) {
-    const e = makeEntity();
+    const e = this.newEntity();
     e.kind = Kind.Projectile;
     e.team = from.team;
     e.type = sourceType === "catapult" ? "rock" : "arrow";

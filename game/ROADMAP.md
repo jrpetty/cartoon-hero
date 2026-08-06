@@ -528,6 +528,56 @@ The editor's script panel is folded away by default. It is the most powerful
 thing on that screen and also the one most people will never touch, and an editor
 that greets you with a code box has told you it is for programmers.
 
+## The AI and the water
+
+Bridges shipped as something only the player understood — measured: zero
+references to `bridge` in `skirmish_ai.ts`. Which is precisely the thing the
+terrain section above argues against, committed two changes after writing it.
+
+`fordCrossing` walks the straight line from a base toward its target and returns
+the middle of the widest undecked run of shallows on it, with the width. The
+straight line rather than the real path on purpose: the pathfinder already routes
+around walls, and shallows are not walls, so the route it picks really does go
+through them. The AI bridges a crossing wider than two tiles, once, only while it
+can afford it and only when nothing of its own is already going up — an AI that
+queues four bridges at one ford has spent four hundred wood on a crossing worth
+one. Raiders now prefer an enemy span to anything else visible: it cost them a
+hundred wood, it stands in water so nothing defends it, and burning it puts their
+next wave back into the shallows at half speed.
+
+Under `readsGround` with the rest of its terrain sense, so it stays measurable.
+
+## Save and resume
+
+A save is **the seed, the setup, and every order you gave** — not a snapshot.
+The sim is a deterministic fixed-tick machine and the AI is deterministic too, so
+replaying the setup and the order log reproduces a match tick for tick. The
+alternative, serialising the world, loads instantly and costs a per-field
+serialiser for every entity, player and grid, plus a new silent bug every time
+someone adds a field and forgets it. That class of bug corrupts saves
+retroactively. A command log has one failure mode instead, and the stored
+checksum catches it at load — loudly, before an hour has been played on top.
+
+Building it turned up two genuine determinism bugs:
+
+1. **AI commanders were drawn with `Math.random()`.** A match was therefore not
+   reproducible from its own config, which is the premise the whole format rests
+   on. Now seeded off the match seed.
+2. **Entity ids came from a module-global counter** reset in the `World`
+   constructor. Fine while exactly one world exists, and silently wrong the
+   moment two do: building world B resets the counter, then ticking A and B in
+   turn interleaves their allocations. Ids are hashed into `worldChecksum`, so
+   the same match built twice measured as *non-deterministic* — the thing
+   lockstep and save/resume both stake everything on. The allocator is per-world
+   now.
+
+Neither showed up in normal play, because normal play has one world and never
+compares two. Both would have shown up as an unreproducible save.
+
+The cost is load time: twelve minutes of a two-player match is ~14,000 ticks, a
+few seconds of headless simulation. Worth it for a format that cannot rot. It
+also puts replays within reach — a replay is this minus the "keep playing".
+
 ## Bigger / later
 - **Naval** — water is currently only an impassable wall, and the Islands
   preset (55% water) is a maze rather than a naval map. Dock, transport,

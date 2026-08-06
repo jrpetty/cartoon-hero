@@ -7,6 +7,7 @@ import { RARITIES, rarityByIndex } from "../meta/rarity";
 import { CATALOG, COLLECTIBLE_UNIT_IDS, variantKey, VARIANT_BY_KEY } from "../meta/catalog";
 import { MatchRewards, levelFromXp } from "../meta/progression";
 import type { EarnedAward } from "../meta/achievements";
+import { SaveGame, listSaves } from "../sim/savegame";
 import { UNITS } from "../content/units";
 import { PRESETS } from "../maps/generator";
 import { GameMode } from "../sim/types";
@@ -108,7 +109,10 @@ export function drawMenuBackground(W: number, H: number, time: number) {
 // ------------------------------------------------------------------- menu --
 
 export class MenuScreen {
-  draw(W: number, H: number, time: number, profile: Profile): "skirmish" | "multiplayer" | "warband" | "armory" | "codex" | "settings" | "editor" | null {
+  /** A save the player picked from the continue strip, consumed by the app. */
+  pickedSave: SaveGame | null = null;
+
+  draw(W: number, H: number, time: number, profile: Profile): "skirmish" | "multiplayer" | "warband" | "armory" | "codex" | "settings" | "editor" | "resume" | null {
     drawMenuBackground(W, H, time);
     const ctx = ui.ctx;
 
@@ -164,12 +168,47 @@ export class MenuScreen {
     ui.bar(W / 2 - 150, H * 0.36 + 36, 300, 9, info.into / info.need, PAL.uiAccent);
     ui.text(`${info.into}/${info.need} XP`, W / 2, H * 0.36 + 54, { align: "center", size: 11, color: "#bdb49a" });
 
-    let action: "skirmish" | "multiplayer" | "warband" | "armory" | "codex" | "settings" | "editor" | null = null;
+    let action: "skirmish" | "multiplayer" | "warband" | "armory" | "codex" | "settings" | "editor" | "resume" | null = null;
     const bw = 280;
     const bx = W / 2 - bw / 2;
     let by = H * 0.36 + 92;
     if (ui.button("⚔  Skirmish", bx, by, bw, 52, { accent: true, size: 19 })) action = "skirmish";
     by += 60;
+    // Saves sit directly under Skirmish and only when there are any: an empty
+    // "Load Game" that opens an empty list is a worse greeting than no button.
+    const saves = listSaves();
+    if (saves.length) {
+      const latest = saves[0];
+      const mm = Math.floor(latest.summary.elapsed / 60);
+      const ss = String(Math.floor(latest.summary.elapsed % 60)).padStart(2, "0");
+      if (ui.button(`↩  Resume — ${latest.summary.mapName} (${mm}:${ss})`, bx, by, bw, 40, {
+        size: 14,
+        tooltip: [
+          "Continue your last save",
+          `${latest.summary.mode} · ${latest.summary.players} players · ${latest.summary.difficulty}`,
+          "Loading replays the match from its opening order, so it takes a moment.",
+        ],
+      })) {
+        this.pickedSave = latest;
+        action = "resume";
+      }
+      by += 46;
+      // The rest, if there are any, as a compact strip rather than a screen.
+      if (saves.length > 1) {
+        const cw = (bw - (saves.length - 2) * 4) / (saves.length - 1);
+        saves.slice(1).forEach((sv, i) => {
+          const sm = Math.floor(sv.summary.elapsed / 60);
+          if (ui.button(`${sv.summary.mapName.slice(0, 8)} ${sm}m`, bx + i * (cw + 4), by, cw, 26, {
+            size: 10.5,
+            tooltip: [sv.label, `${sv.summary.mode} · ${sv.summary.players} players`],
+          })) {
+            this.pickedSave = sv;
+            action = "resume";
+          }
+        });
+        by += 34;
+      }
+    }
     if (ui.button("🔗  Multiplayer", bx, by, bw, 46, { size: 16, tooltip: ["Play online — up to 8 vs 8", "Join a hosted server, or quick 1v1 with no server."] })) action = "multiplayer";
     by += 56;
     if (ui.button("🎲  Warband Tactics", bx, by, bw, 46, { size: 16, tooltip: ["Auto-battler", "Draft a warband, merge star-ups, fight for the last spot standing."] })) action = "warband";
