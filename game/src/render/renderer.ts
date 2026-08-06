@@ -18,6 +18,7 @@ import {
 } from "./draw";
 import { PAL, teamColor, withAlpha } from "./palette";
 import { BUILDINGS } from "../content/buildings";
+import { snapBuilding } from "../engine/gridsnap";
 import { TILE } from "../content/balance";
 import { skyTint } from "../content/daynight";
 import { Terrain } from "../maps/generator";
@@ -527,8 +528,8 @@ export class Renderer {
         const tiles = def.tiles;
         const half = (tiles * TILE) / 2;
         const cell = (x: number, y: number, valid: boolean) => {
-          const sx = Math.round(x / TILE) * TILE + (tiles % 2 === 1 ? TILE / 2 : 0);
-          const sy = Math.round(y / TILE) * TILE + (tiles % 2 === 1 ? TILE / 2 : 0);
+          const sx = snapBuilding(x, tiles);
+          const sy = snapBuilding(y, tiles);
           ctx.fillStyle = valid ? withAlpha("#7df27d", 0.3) : withAlpha("#f25d4a", 0.35);
           ctx.fillRect(sx - half, sy - half, half * 2, half * 2);
           ctx.strokeStyle = valid ? "#7df27d" : "#f25d4a";

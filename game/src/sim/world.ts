@@ -57,6 +57,7 @@ import type { MapData } from "../maps/generator";
 import { COMMANDERS, CommanderPower } from "../content/commanders";
 import { BoonEffect, emptyBoonEffect, aggregateBoons } from "../content/boons";
 import { TERRAIN_SPEED, TERRAIN_SIGHT, TERRAIN_BUILDABLE, Terrain } from "../maps/terrain_kinds";
+import { snapBuilding } from "../engine/gridsnap";
 
 export interface PlayerState {
   team: Team;
@@ -588,8 +589,8 @@ export class World {
     e.type = type;
     // Snap to tile grid so footprints align.
     const tiles = def.tiles;
-    e.x = Math.round(x / TILE) * TILE + (tiles % 2 === 1 ? TILE / 2 : 0);
-    e.y = Math.round(y / TILE) * TILE + (tiles % 2 === 1 ? TILE / 2 : 0);
+    e.x = snapBuilding(x, tiles);
+    e.y = snapBuilding(y, tiles);
     e.prevX = e.x;
     e.prevY = e.y;
     e.radius = (tiles * TILE) / 2;
@@ -1077,8 +1078,8 @@ export class World {
     const cost = this.scaledCost(def.cost, WALL_TYPES.has(type) ? p.boon.wallCostMult : p.boon.buildCostMult);
     if (!this.canAfford(p.resources, cost)) return null;
     const tiles = def.tiles;
-    const sx = Math.round(wx / TILE) * TILE + (tiles % 2 === 1 ? TILE / 2 : 0);
-    const sy = Math.round(wy / TILE) * TILE + (tiles % 2 === 1 ? TILE / 2 : 0);
+    const sx = snapBuilding(wx, tiles);
+    const sy = snapBuilding(wy, tiles);
     if (!this.grid.footprintClear(sx, sy, tiles)) return null;
     if (!this.groundBuildable(sx, sy, tiles, type)) return null;
     const overlaps = (ent: Entity) =>
@@ -1116,8 +1117,8 @@ export class World {
     const def = BUILDINGS[type];
     if (!def) return false;
     const tiles = def.tiles;
-    const sx = Math.round(wx / TILE) * TILE + (tiles % 2 === 1 ? TILE / 2 : 0);
-    const sy = Math.round(wy / TILE) * TILE + (tiles % 2 === 1 ? TILE / 2 : 0);
+    const sx = snapBuilding(wx, tiles);
+    const sy = snapBuilding(wy, tiles);
     return this.grid.footprintClear(sx, sy, tiles) && this.groundBuildable(sx, sy, tiles, type);
   }
 

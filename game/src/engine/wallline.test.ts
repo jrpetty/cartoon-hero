@@ -32,9 +32,20 @@ describe("wallLinePoints", () => {
   });
 
   it("a single click yields one segment", () => {
-    const pts = wallLinePoints(5 * TILE, 5 * TILE, 5 * TILE + 3, 5 * TILE - 2, TILE);
+    // Started from mid-cell on purpose. The original version started exactly on
+    // a cell boundary and moved 2px *up*, which genuinely crosses into the cell
+    // above — the old rounding hid that by pulling both ends to the nearest
+    // boundary, which is the same thing that made a dragged run land a cell off
+    // the line the player dragged.
+    const pts = wallLinePoints(5.5 * TILE, 5.5 * TILE, 5.5 * TILE + 3, 5.5 * TILE - 2, TILE);
     expect(pts.length).toBe(1);
     expect(cell(pts[0])).toEqual([5, 5]);
+  });
+
+  it("counts a drag that crosses a cell boundary as two", () => {
+    // The honest reading of a two-pixel move that happens to straddle a line.
+    const pts = wallLinePoints(5 * TILE, 5 * TILE, 5 * TILE, 5 * TILE - 2, TILE);
+    expect(pts.map(cell)).toEqual([[5, 5], [5, 4]]);
   });
 
   it("caps absurdly long drags", () => {

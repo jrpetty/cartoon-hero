@@ -155,7 +155,10 @@ describe("AI research", () => {
     const w = new World(7);
     w.init(generateMap("open_plains", 7, 2), [{}, {}], [1, 1]);
     const ai = new SkirmishAI(w, Team.Enemy, DIFFICULTIES.warlord);
-    for (let i = 0; i < SIM_HZ * 60 * 14; i++) { w.tick(); ai.update(SIM_DT); w.drainEvents(); }
+    // Both seats get a brain: against an empty one the AI now wins in minutes
+    // and stops thinking, so the test measured a finished game.
+    const foe = new SkirmishAI(w, Team.Player, DIFFICULTIES.warlord);
+    for (let i = 0; i < SIM_HZ * 60 * 14; i++) { w.tick(); ai.update(SIM_DT); foe.update(SIM_DT); w.drainEvents(); if (w.winner !== null) break; }
     const got = [...w.player(Team.Enemy).upgrades];
     expect(got.length).toBeGreaterThan(0);
     // It used to only ever look at the Blacksmith, so every tech housed

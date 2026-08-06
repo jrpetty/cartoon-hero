@@ -229,6 +229,11 @@ describe("A scripted map is a real map", () => {
     // The end of the chain: script → CustomMap → MapData → a running match with
     // real AI on both sides. Without brains nobody gathers and the test would
     // be measuring nothing.
+    //
+    // Growth between two samples, not a total at one arbitrary moment. The two
+    // seats on this map start at noticeably different speeds — 160 against 430
+    // gathered at the two-minute mark — so a fixed threshold there measures the
+    // seat lottery rather than whether the map supports an economy at all.
     const m = ok(EXAMPLE_SCRIPT, 33);
     const data = toMapData(m, 33, 2);
     const w = new World(33);
@@ -237,13 +242,20 @@ describe("A scripted map is a real map", () => {
       new SkirmishAI(w, Team.Player, DIFFICULTIES.knight),
       new SkirmishAI(w, Team.Enemy, DIFFICULTIES.knight),
     ];
-    for (let i = 0; i < 20 * 120; i++) {
-      w.tick();
-      for (const ai of ais) ai.update(1 / 20);
-      w.drainEvents();
-    }
-    for (const t of [Team.Player, Team.Enemy]) {
-      expect(w.player(t).stats.gathered, `team ${t} gathered nothing`).toBeGreaterThan(200);
+    const run = (secs: number) => {
+      for (let i = 0; i < 20 * secs; i++) {
+        w.tick();
+        for (const ai of ais) ai.update(1 / 20);
+        w.drainEvents();
+      }
+      return [Team.Player, Team.Enemy].map((t) => w.player(t).stats.gathered);
+    };
+    const early = run(120);
+    const later = run(120);
+    for (const t of [0, 1]) {
+      expect(early[t], `team ${t} gathered nothing at all`).toBeGreaterThan(50);
+      expect(later[t], `team ${t}'s economy stalled: ${early[t]} → ${later[t]}`)
+        .toBeGreaterThan(early[t] * 2);
     }
   }, 60000);
 

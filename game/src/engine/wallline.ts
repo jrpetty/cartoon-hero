@@ -3,15 +3,20 @@
 // and reaches the exact endpoint — the old "sample every TILE along the diagonal
 // distance" approach under-sampled angled drags, leaving holes and stopping short.
 
+import { snapBuilding } from "./gridsnap";
+
 export interface WallCell { x: number; y: number; }
 
 export function wallLinePoints(
   wx0: number, wy0: number, wx1: number, wy1: number, tile: number, maxCells = 256,
 ): WallCell[] {
-  let x0 = Math.round(wx0 / tile);
-  let y0 = Math.round(wy0 / tile);
-  const x1 = Math.round(wx1 / tile);
-  const y1 = Math.round(wy1 / tile);
+  // floor, not round: the cell the cursor is *in*, not the nearest boundary. A
+  // wall run should start and end on the cells the player actually dragged
+  // between, and rounding pushed both ends half a cell along the drag.
+  let x0 = Math.floor(wx0 / tile);
+  let y0 = Math.floor(wy0 / tile);
+  const x1 = Math.floor(wx1 / tile);
+  const y1 = Math.floor(wy1 / tile);
   const dx = Math.abs(x1 - x0);
   const dy = Math.abs(y1 - y0);
   const sx = x0 < x1 ? 1 : -1;
@@ -47,10 +52,11 @@ export function blockPoints(
   tile: number, tiles: number, maxCells = 64,
 ): WallCell[] {
   const pitch = (tiles + 1) * tile; // footprint plus a one-tile walking gap
-  // Odd footprints sit on a tile centre, even ones on a tile corner — the same
-  // rule placeBuilding snaps to, so the preview matches what actually gets built.
-  const half = tiles % 2 === 1 ? tile / 2 : 0;
-  const snap = (v: number) => Math.round((v - half) / tile) * tile + half;
+  // The same snap the sim uses, so the preview and the placement cannot drift
+  // apart. This used to be its own expression and disagreed with placeBuilding
+  // for odd footprints — invisible only because the two buildings that drag out
+  // as a block both happen to be 2x2.
+  const snap = (v: number) => snapBuilding(v, tiles);
   const ax = snap(Math.min(wx0, wx1)), ay = snap(Math.min(wy0, wy1));
   const bx = snap(Math.max(wx0, wx1)), by = snap(Math.max(wy0, wy1));
   const cols = Math.max(1, Math.floor((bx - ax) / pitch) + 1);

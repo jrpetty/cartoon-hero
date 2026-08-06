@@ -705,6 +705,45 @@ undisturbed minutes to build an economy. It now wipes that idle opponent out by
 minute six, wins, and stops thinking, so the test was measuring a finished game.
 Both seats get a brain.
 
+## Building placement — one snap, and it lands where you point
+
+The snap from cursor position to building centre was the same expression copied
+into **five places across three modules**. Two of those copies were wrong, and
+nothing on screen revealed it: each was individually consistent with the ghost
+preview, so the building always went exactly where the ghost showed. The ghost
+was simply in the wrong place.
+
+**Odd footprints landed in the next cell.** `round(v / TILE) * TILE + TILE/2`
+rounds *up* past the halfway point of a cell, so a 1×1 Watch Tower placed with
+the cursor in the right-hand half of a cell went into the cell next door — and
+the ghost, using the same rule, jumped with it. The rule is now `floor` for odd
+footprints: a 1×1 or 3×3 building covers the cell the cursor is in, always,
+wherever in the cell you are. Even footprints still centre on a tile corner,
+because a 2×2 cannot be centred on one cell; which half of the cell you are in
+decides which way it extends, and it covers your cell either way.
+
+**Dragged walls landed a cell down-right of the drag.** `wallLinePoints` returns
+tile *centres*, and those went straight into the place command, where the old
+rule snapped them again — `round(cx + 0.5) === cx + 1`. `placeBuilding` even
+carried a comment warning callers to pass raw coordinates for exactly this
+reason, but the warning only protected callers inside the same file.
+
+The fix is one shared `snapBuilding(v, tiles)` in `engine/gridsnap.ts`, and the
+property that makes the warning unnecessary: **snapping twice is snapping once.**
+It no longer matters whether a coordinate has already been through it, which is
+what let the bug cross a module boundary in the first place.
+
+`src/engine/gridsnap.test.ts` pins all of it: every footprint size covers the
+cursor's cell from any position within it, every drag helper produces
+coordinates the sim will not move, `canPlace` and `placeBuilding` agree, the nav
+grid is stamped on exactly the cells the building occupies, and two adjacent
+wall segments actually touch.
+
+One existing test had to change its premise rather than its expectation. It
+dragged from *exactly* a cell boundary two pixels upward and asserted one
+segment; that genuinely crosses into the cell above, and the old rounding was
+hiding it — the same rounding that put whole wall runs a cell off the line.
+
 ## Bigger / later
 - **Naval** — water is currently only an impassable wall, and the Islands
   preset (55% water) is a maze rather than a naval map. Dock, transport,
