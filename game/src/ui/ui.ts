@@ -35,6 +35,7 @@ export class UI {
   /** Interface scale currently in force. 1 = canvas pixels. */
   scale = 1;
   private scaleStack: number[] = [];
+  private scrollStack: number[] = [];
 
   /**
    * Draw the next block of UI at `s`× size. Widgets lay out in a *smaller*
@@ -61,6 +62,52 @@ export class UI {
     this.ctx.restore();
   }
 
+  /**
+   * Draw the next block of UI scrolled up by `dy` and clipped to `clip`.
+   *
+   * The same bargain as `pushScale`: the context is translated and the pointer
+   * is moved to match, so every widget keeps testing `ui.my` against its own
+   * layout coordinates and never learns a scroll is in force.
+   *
+   * A screen that lays its panels out by accumulating `y` downward has no idea
+   * how tall it will end up, and on a short window the things at the bottom
+   * simply leave the viewport — which is how the Skirmish setup screen ended up
+   * with its "To Battle!" button below the fold and unclickable.
+   */
+  pushScroll(dy: number, clip?: { x: number; y: number; w: number; h: number }) {
+    this.ctx.save();
+    if (clip) {
+      this.ctx.beginPath();
+      this.ctx.rect(clip.x, clip.y, clip.w, clip.h);
+      this.ctx.clip();
+    }
+    this.ctx.translate(0, -dy);
+    this.scrollStack.push(dy);
+    this.my += dy;
+  }
+
+  popScroll() {
+    const dy = this.scrollStack.pop() ?? 0;
+    this.my -= dy;
+    this.ctx.restore();
+  }
+
+  /**
+   * A slim indicator that there is more above or below. Drawn outside the
+   * scrolled block, in screen coordinates.
+   */
+  scrollbar(x: number, y: number, h: number, offset: number, contentH: number) {
+    if (contentH <= h) return;
+    const { ctx } = this;
+    const frac = h / contentH;
+    const thumbH = Math.max(24, h * frac);
+    const t = y + (h - thumbH) * (offset / Math.max(1, contentH - h));
+    ctx.fillStyle = "rgba(255,255,255,0.06)";
+    ctx.beginPath(); ctx.roundRect(x, y, 5, h, 2.5); ctx.fill();
+    ctx.fillStyle = "rgba(255,233,176,0.45)";
+    ctx.beginPath(); ctx.roundRect(x, t, 5, thumbH, 2.5); ctx.fill();
+  }
+
   begin(ctx: CanvasRenderingContext2D, input: UIFrameInput) {
     this.ctx = ctx;
     this.mx = input.mx;
@@ -77,6 +124,7 @@ export class UI {
     this.hoveredTooltip = null;
     this.scale = 1;
     this.scaleStack.length = 0;
+    this.scrollStack.length = 0;
   }
 
   hit(x: number, y: number, w: number, h: number): boolean {

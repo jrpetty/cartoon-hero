@@ -256,6 +256,10 @@ export class SetupScreen {
     mode: "conquest",
   };
 
+  /** How far the setup panels are scrolled, and how tall they were last frame. */
+  private scroll = 0;
+  private contentH = 0;
+
   draw(W: number, H: number, time: number, profile: Profile): "start" | "spectate" | "back" | null {
     drawMenuBackground(W, H, time);
     ui.text("Skirmish Setup", W / 2, 64, {
@@ -264,6 +268,25 @@ export class SetupScreen {
 
     const colW = Math.min(880, W - 80);
     const x0 = W / 2 - colW / 2;
+
+    // The action bar is pinned to the bottom of the screen and everything above
+    // it scrolls. This screen lays its panels out by accumulating `y` downward,
+    // so its height depends on how many battlefield cards there are — seven
+    // presets plus Random already reach the bottom of a 1080p window, and a
+    // single custom map adds a row and pushes "To Battle!" off the screen
+    // entirely, with no way to reach it.
+    const FOOTER = 76;
+    const top = 100;
+    const viewH = Math.max(120, H - top - FOOTER);
+    // Content height is what the *last* frame measured. Immediate mode does not
+    // know it in advance, and a frame of lag on a clamp nobody can perceive is a
+    // better trade than laying the whole screen out twice.
+    const maxScroll = Math.max(0, this.contentH - viewH);
+    if (ui.wheel && ui.my > top && ui.my < top + viewH) {
+      this.scroll = Math.max(0, Math.min(maxScroll, this.scroll + ui.wheel * 0.6));
+    }
+    this.scroll = Math.min(this.scroll, maxScroll);
+    ui.pushScroll(this.scroll, { x: 0, y: top, w: W, h: viewH });
     let y = 110;
 
     // Map presets — laid out in a grid that wraps every 3 cards. A "Random"
@@ -452,10 +475,28 @@ export class SetupScreen {
     ui.text("No Town Center — settle where you land.", x0 + half + 56, y + 46, { size: 11, color: "#bdb49a" });
     y += 80;
 
+    this.contentH = y - top + 12;
+    ui.popScroll();
+    ui.scrollbar(x0 + colW + 10, top, viewH, this.scroll, this.contentH);
+
+    // ---- pinned action bar ----
+    // Outside the scrolled block on purpose: whatever is on the screen, the way
+    // out of it and the way into the match are always in the same place and
+    // always clickable.
+    const ctx = ui.ctx;
+    const fy = H - FOOTER;
+    ctx.fillStyle = "rgba(10, 8, 4, 0.86)";
+    ctx.fillRect(0, fy, W, FOOTER);
+    ctx.fillStyle = withAlpha(PAL.uiAccent, 0.25);
+    ctx.fillRect(0, fy, W, 1);
+    const by2 = fy + 16;
     let action: "start" | "spectate" | "back" | null = null;
-    if (ui.button("⟵ Back", x0, y, 130, 44, { size: 15 })) action = "back";
-    if (ui.button("👁 Watch", x0 + colW - 360, y, 130, 44, { size: 15, tooltip: ["Spectate an AI vs AI battle", "All sides are AI — sit back and watch."] })) action = "spectate";
-    if (ui.button("⚔  To Battle!", x0 + colW - 220, y, 220, 44, { accent: true, size: 18 })) action = "start";
+    if (ui.button("⟵ Back", x0, by2, 130, 44, { size: 15 })) action = "back";
+    if (ui.button("👁 Watch", x0 + colW - 360, by2, 130, 44, { size: 15, tooltip: ["Spectate an AI vs AI battle", "All sides are AI — sit back and watch."] })) action = "spectate";
+    if (ui.button("⚔  To Battle!", x0 + colW - 220, by2, 220, 44, { accent: true, size: 18 })) action = "start";
+    if (this.contentH > viewH) {
+      ui.text("scroll for more", x0 + 146, by2 + 26, { size: 11, color: "#8f8770" });
+    }
     return action;
   }
 
