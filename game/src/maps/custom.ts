@@ -49,13 +49,33 @@ export interface CustomMap {
   updated: number;
 }
 
-export const MAP_SIZES: { label: string; cols: number }[] = [
-  { label: "Tiny", cols: 72 },
-  { label: "Small", cols: 96 },
-  { label: "Medium", cols: 128 },
-  { label: "Large", cols: 160 },
-  { label: "Huge", cols: 200 },
+/**
+ * The size ladder, from a duel arena to something you could get lost in.
+ *
+ * `cols` is cells; a cell is TILE (32) world units, and a Town Centre is three
+ * cells across. So a Duel map is 40 cells — about thirteen Town Centres wide,
+ * which is close quarters — and Colossal is 320, eight times that in area and
+ * genuinely a long march from corner to corner.
+ *
+ * Nothing here implies a player count. A creator can put eight seats on a Duel
+ * map if they want a knife fight, or two on a Colossal one if they want a long
+ * game of scouting and expansion. The blurb says what a size is *for*; it does
+ * not decide anything.
+ */
+export const MAP_SIZES: { label: string; cols: number; desc: string }[] = [
+  { label: "Duel", cols: 40, desc: "A closed arena. Bases within sight of each other — first fight decides it." },
+  { label: "Skirmish", cols: 56, desc: "Very small. Room for a wall and a woodline, not much more." },
+  { label: "Tiny", cols: 72, desc: "Cramped. Expansions are contested from the first minute." },
+  { label: "Small", cols: 96, desc: "Tight but complete — the classic aggressive 1v1 size." },
+  { label: "Medium", cols: 128, desc: "The standard field. Comfortable for two to four." },
+  { label: "Large", cols: 160, desc: "Room to manoeuvre, and a real map to scout." },
+  { label: "Huge", cols: 200, desc: "Long games. Expansions matter more than the opening." },
+  { label: "Massive", cols: 256, desc: "A campaign map. Armies take a while to arrive anywhere." },
+  { label: "Colossal", cols: 320, desc: "Enormous. A corner-to-corner march is most of a minute at full speed." },
 ];
+
+/** The engine seats at most this many realms — colours, names and AI slots. */
+export const MAX_SEATS = 8;
 
 /** A blank map, painted with its biome's primary ground. */
 export function newCustomMap(name: string, cols: number, biome: BiomeId = "temperate"): CustomMap {
@@ -73,8 +93,10 @@ export function newCustomMap(name: string, cols: number, biome: BiomeId = "tempe
     resources: [],
     spawns: [],
     modes: [],
-    minPlayers: 2,
-    maxPlayers: 8,
+    // Wide open by default: the creator narrows it if they mean to, rather than
+    // discovering later that the editor quietly decided for them.
+    minPlayers: 1,
+    maxPlayers: MAX_SEATS,
     nomad: "off",
     startResources: { ...START_RESOURCES },
     updated: Date.now(),
@@ -172,8 +194,8 @@ export function deserialiseMap(code: string): CustomMap | null {
       spawns: (Array.isArray(p.sp) ? p.sp : []).map((s: unknown[]) => ({ x: cell(s[0]), y: cell(s[1]) })),
       modes: (Array.isArray(p.md) ? p.md : []).filter((m: string) =>
         ["conquest", "survival", "koth", "regicide"].includes(m)) as GameMode[],
-      minPlayers: Math.max(1, Math.min(8, Number(p.mn) || 2)),
-      maxPlayers: Math.max(1, Math.min(8, Number(p.mx) || 8)),
+      minPlayers: Math.max(1, Math.min(MAX_SEATS, Number(p.mn) || 2)),
+      maxPlayers: Math.max(1, Math.min(MAX_SEATS, Number(p.mx) || MAX_SEATS)),
       nomad: (["off", "optional", "forced"].includes(p.nm) ? p.nm : "off") as NomadRule,
       startResources: {
         food: Math.max(0, Number(p.sr?.food) || START_RESOURCES.food),
@@ -216,7 +238,7 @@ export function validateMap(m: CustomMap): MapIssue[] {
     warn("This map is always nomad, so its spawn points are ignored.");
   }
   if (m.spawns.length < needSpawns) {
-    err(`${m.spawns.length} spawn point${m.spawns.length === 1 ? "" : "s"} for up to ${m.maxPlayers} players — place ${needSpawns - m.spawns.length} more.`);
+    err(`${m.spawns.length} spawn point${m.spawns.length === 1 ? "" : "s"} for up to ${m.maxPlayers} players. Place ${needSpawns - m.spawns.length} more, or lower the maximum to ${m.spawns.length}.`);
   }
   const cellsOf = (s: { x: number; y: number }) => [Math.floor(s.x / TILE), Math.floor(s.y / TILE)] as [number, number];
   m.spawns.forEach((s, i) => {

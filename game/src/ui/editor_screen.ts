@@ -25,7 +25,7 @@ import {
   BIOMES, BiomeId, Terrain, TERRAIN_DEFS, biomeById, terrainDef,
 } from "../maps/terrain_kinds";
 import {
-  CustomMap, MAP_SIZES, MapIssue, NOMAD_RULES, NomadRule, deleteCustomMap, deserialiseMap,
+  CustomMap, MAP_SIZES, MAX_SEATS, MapIssue, NOMAD_RULES, NomadRule, deleteCustomMap, deserialiseMap,
   hasErrors, listCustomMaps, newCustomMap, saveCustomMap, serialiseMap, validateMap,
 } from "../maps/custom";
 
@@ -308,29 +308,37 @@ export class EditorScreen {
     let y = 122;
 
     // ---- new map ----
-    ui.panel(x0, y, colW, 128, { light: true });
+    const perRow = 5;
+    const sizeRows = Math.ceil(MAP_SIZES.length / perRow);
+    const panelH = 92 + sizeRows * 30 + 42;
+    ui.panel(x0, y, colW, panelH, { light: true });
     ui.text("New map", x0 + 20, y + 26, { size: 16, bold: true, color: PAL.uiAccent });
-    let bx = x0 + 20;
-    ui.text("Size", bx, y + 56, { size: 12, color: "#9a917b" });
-    bx += 44;
-    for (const s of MAP_SIZES) {
-      if (ui.button(`${s.label}`, bx, y + 44, 86, 26, { accent: this.newSize === s.cols, size: 11.5,
-        tooltip: [`${s.label}`, `${s.cols} × ${s.cols} cells`] })) this.newSize = s.cols;
-      bx += 92;
+    const chosen = MAP_SIZES.find((s) => s.cols === this.newSize);
+    if (chosen) {
+      ui.text(`${chosen.label} — ${chosen.cols} × ${chosen.cols} cells`, x0 + 110, y + 26,
+        { size: 12, bold: true, color: "#e7ddc4" });
+      ui.text(chosen.desc, x0 + 110, y + 42, { size: 11, color: "#9a917b" });
     }
-    bx = x0 + 20;
-    ui.text("Biome", bx, y + 92, { size: 12, color: "#9a917b" });
-    bx += 44;
-    for (const b of BIOMES) {
-      if (ui.button(b.name, bx, y + 80, 104, 26, { accent: this.newBiome === b.id, size: 11.5, tooltip: [b.name, b.desc] })) {
-        this.newBiome = b.id;
-      }
-      bx += 110;
-    }
-    if (ui.button("Create", x0 + colW - 140, y + 62, 120, 40, { accent: true, size: 15 })) {
+    ui.text("Size", x0 + 20, y + 68, { size: 12, color: "#9a917b" });
+    const sw = Math.floor((colW - 220) / perRow) - 6;
+    MAP_SIZES.forEach((s, i) => {
+      const bx2 = x0 + 66 + (i % perRow) * (sw + 6);
+      const by2 = y + 56 + Math.floor(i / perRow) * 30;
+      if (ui.button(s.label, bx2, by2, sw, 26, {
+        accent: this.newSize === s.cols, size: 11,
+        tooltip: [s.label, `${s.cols} × ${s.cols} cells`, s.desc],
+      })) this.newSize = s.cols;
+    });
+    const by3 = y + 56 + sizeRows * 30 + 6;
+    ui.text("Biome", x0 + 20, by3 + 13, { size: 12, color: "#9a917b" });
+    BIOMES.forEach((b, i) => {
+      if (ui.button(b.name, x0 + 66 + i * 110, by3, 104, 26,
+        { accent: this.newBiome === b.id, size: 11.5, tooltip: [b.name, b.desc] })) this.newBiome = b.id;
+    });
+    if (ui.button("Create", x0 + colW - 140, y + 56, 120, 44, { accent: true, size: 15 })) {
       this.open(newCustomMap("New Map", this.newSize, this.newBiome));
     }
-    y += 144;
+    y += panelH + 16;
 
     // ---- import ----
     ui.panel(x0, y, colW, 78, { light: true });
@@ -371,7 +379,8 @@ export class EditorScreen {
       this.thumbnail(ctx, x0 + 18, ry + 5, 38, m);
       ui.text(m.name, x0 + 66, ry + 20, { size: 14, bold: true, color: "#f2e8d0" });
       const modeText = m.modes.length ? m.modes.map((x) => MODES.find((y2) => y2.id === x)?.label ?? x).join(", ") : "any mode";
-      ui.text(`${m.cols}×${m.rows} · ${biomeById(m.biome).name} · ${modeText} · ${m.minPlayers}–${m.maxPlayers} players${m.nomad === "forced" ? " · nomad" : ""}`,
+      const sizeLabel = MAP_SIZES.find((z) => z.cols === m.cols)?.label ?? `${m.cols}×${m.rows}`;
+      ui.text(`${sizeLabel} (${m.cols}×${m.rows}) · ${biomeById(m.biome).name} · ${modeText} · ${m.minPlayers}–${m.maxPlayers} players${m.nomad === "forced" ? " · nomad" : ""}`,
         x0 + 66, ry + 38, { size: 11, color: "#9a917b" });
       if (ui.button("Edit", x0 + colW - 240, ry + 12, 68, 26, { size: 12 })) this.open(m);
       if (ui.button("Copy code", x0 + colW - 166, ry + 12, 84, 26, { size: 12,
@@ -692,8 +701,11 @@ export class EditorScreen {
 
     ui.text("MAP", lx, ry, { size: 10, bold: true, color: "#8f8770" });
     ry += 14;
-    ui.text(`${m.cols} × ${m.rows} cells`, lx, ry, { size: 11.5, color: "#cabfa4" });
-    ry += 20;
+    {
+      const sz = MAP_SIZES.find((z) => z.cols === m.cols);
+      ui.text(`${sz ? sz.label + " · " : ""}${m.cols} × ${m.rows} cells`, lx, ry, { size: 11.5, color: "#cabfa4" });
+      ry += 20;
+    }
 
     // Biome — changing it repaints only the untouched base ground, so the work
     // you have already done survives a change of mind about the setting.
@@ -728,24 +740,32 @@ export class EditorScreen {
 
     ui.text("PLAYERS", lx, ry, { size: 10, bold: true, color: "#8f8770" });
     ry += 12;
+    // Nothing here is derived from the map's size — a Duel map may seat eight
+    // if that is the fight you want, and a Colossal one may seat two.
     const stepper = (label: string, value: number, set: (v: number) => void) => {
       ui.text(label, lx, ry + 13, { size: 11.5, color: "#cabfa4" });
-      if (ui.button("−", lx + 96, ry, 26, 24, { size: 13 })) { set(Math.max(1, value - 1)); this.dirty = true; }
+      if (ui.button("−", lx + 96, ry, 26, 24, { size: 13, disabled: value <= 1 })) { set(value - 1); this.dirty = true; }
       ui.text(String(value), lx + 136, ry + 13, { align: "center", size: 13, bold: true, color: "#f2e8d0" });
-      if (ui.button("+", lx + 150, ry, 26, 24, { size: 13 })) { set(Math.min(8, value + 1)); this.dirty = true; }
+      if (ui.button("+", lx + 150, ry, 26, 24, { size: 13, disabled: value >= MAX_SEATS })) { set(value + 1); this.dirty = true; }
       ry += 30;
     };
     stepper("Minimum", m.minPlayers, (v) => { m.minPlayers = v; if (m.maxPlayers < v) m.maxPlayers = v; });
     stepper("Maximum", m.maxPlayers, (v) => { m.maxPlayers = v; if (m.minPlayers > v) m.minPlayers = v; });
-    if (ui.button("1v1 only", lx, ry, 84, 24, { size: 11,
-      accent: m.minPlayers === 2 && m.maxPlayers === 2 && m.modes.length === 1 && m.modes[0] === "conquest",
-      tooltip: ["1v1 only", "Two players, conquest — the competitive preset."] })) {
-      m.minPlayers = 2; m.maxPlayers = 2; m.modes = ["conquest"]; this.dirty = true;
+    if (ui.button("Match spawns", lx, ry, 110, 24, {
+      size: 11, disabled: !m.spawns.length || m.nomad === "forced",
+      tooltip: ["Match the seats to the map", `Set the maximum to the ${m.spawns.length} spawn point${m.spawns.length === 1 ? "" : "s"} you have placed.`],
+    })) {
+      m.maxPlayers = Math.max(1, m.spawns.length);
+      if (m.minPlayers > m.maxPlayers) m.minPlayers = m.maxPlayers;
+      this.dirty = true;
     }
-    if (ui.button("Any", lx + 92, ry, 84, 24, { size: 11 })) {
-      m.minPlayers = 2; m.maxPlayers = 8; m.modes = []; this.dirty = true;
+    if (ui.button("Any", lx + 118, ry, 58, 24, { size: 11,
+      tooltip: ["Open it up", `One to ${MAX_SEATS} players, any mode.`] })) {
+      m.minPlayers = 1; m.maxPlayers = MAX_SEATS; m.modes = []; this.dirty = true;
     }
-    ry += 36;
+    ry += 30;
+    ui.text(`The engine seats ${MAX_SEATS} realms at most.`, lx, ry, { size: 10, color: "#6f6a5c" });
+    ry += 22;
 
     ui.text("NOMAD", lx, ry, { size: 10, bold: true, color: "#8f8770" });
     ry += 10;

@@ -5,7 +5,7 @@ import { World, FOG_UNSEEN, FOG_VISIBLE } from "../sim/world";
 import { BuildState, Entity, Kind, Team } from "../sim/types";
 import { Camera } from "../engine/camera";
 import { Particles } from "../engine/particles";
-import { buildTerrainCache, TERRAIN_SCALE } from "./terrain";
+import { buildTerrainCache, terrainCacheScale } from "./terrain";
 import {
   drawBuilding,
   drawHealthBar,
@@ -67,6 +67,8 @@ export interface GhostPlacement {
 export class Renderer {
   ctx: CanvasRenderingContext2D;
   private terrainCache: HTMLCanvasElement | null = null;
+  /** The scale this map's cache was baked at — large maps are baked coarser. */
+  private terrainScale = 0.5;
   private fogCanvas: HTMLCanvasElement | null = null;
   private fogCtx: CanvasRenderingContext2D | null = null;
   private fogDirtyTimer = 0;
@@ -193,6 +195,7 @@ export class Renderer {
 
   prepare(map: MapData) {
     this.terrainCache = buildTerrainCache(map);
+    this.terrainScale = terrainCacheScale(map);
     this.fogCanvas = document.createElement("canvas");
     this.fogCanvas.width = map.cols;
     this.fogCanvas.height = map.rows;
@@ -284,8 +287,8 @@ export class Renderer {
       if (cx1 > cx0 && cy1 > cy0) {
         ctx.drawImage(
           this.terrainCache,
-          cx0 * TERRAIN_SCALE, cy0 * TERRAIN_SCALE,
-          (cx1 - cx0) * TERRAIN_SCALE, (cy1 - cy0) * TERRAIN_SCALE,
+          cx0 * this.terrainScale, cy0 * this.terrainScale,
+          (cx1 - cx0) * this.terrainScale, (cy1 - cy0) * this.terrainScale,
           cx0, cy0, cx1 - cx0, cy1 - cy0,
         );
       }

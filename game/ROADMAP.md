@@ -318,6 +318,21 @@ is nowhere else for a map to go. Terrain is RLE'd then base64'd: an empty
 nothing — an out-of-range terrain id would index off the end of the lookup
 tables the movement path reads every tick, so it is clamped.
 
+**Nine sizes, from a duel arena to something enormous.** Duel (40 cells) is
+about thirteen Town Centres across — bases within sight of each other — and
+Colossal (320) is eight times that in area. Nothing about a size implies a
+player count: a Duel map may seat eight if that is the fight you want, and a
+Colossal one may seat two. The blurb on each size says what it is *for*; it
+decides nothing. New maps open wide (1–8 players, any mode) so the creator
+narrows it deliberately rather than discovering the editor chose for them.
+
+That did need one engine fix. The terrain cache is a single canvas spanning
+the world, and at half scale a 320-cell map wants 5,120 pixels — past Safari's
+4,096 limit, where it hands back a *blank texture rather than an error*. The
+cache scale is adaptive now, capped so the biggest map bakes at 3,072px, and a
+test asserts every size stays under 4,096. Nothing is lost: at the zoom you
+view a map that size from, the extra resolution was sub-pixel.
+
 **Custom maps are not a second-class citizen.** Every match resolves its map
 through one seam, `App.resolveMap`, so skirmish, spectate and Test Map all take
 the same path. The setup screen lists your maps beside the presets, filtered by

@@ -2,7 +2,9 @@ import { describe, expect, it, beforeAll } from "vitest";
 import {
   CustomMap, deserialiseMap, newCustomMap, serialiseMap, toMapData, validateMap, hasErrors,
   mapSupports, listCustomMaps, saveCustomMap, deleteCustomMap, findCustomMap,
+  MAP_SIZES, MAX_SEATS,
 } from "./custom";
+import { terrainCacheScale } from "../render/terrain";
 import { Terrain, TERRAIN_BLOCKS } from "./terrain_kinds";
 import { TILE } from "../content/balance";
 
@@ -285,5 +287,72 @@ describe("Which matches a map allows", () => {
     expect(mapSupports(m, "conquest", 2)).toBe(true);
     expect(mapSupports(m, "conquest", 4)).toBe(false);
     expect(mapSupports(m, "koth", 2)).toBe(false);
+  });
+});
+
+describe("Map sizes", () => {
+  it("runs from a duel arena to something enormous, all the way up", () => {
+    const cols = MAP_SIZES.map((s) => s.cols);
+    expect(cols[0]).toBeLessThanOrEqual(40);          // very, very small
+    expect(cols[cols.length - 1]).toBeGreaterThanOrEqual(320); // and hugeee
+    // Strictly increasing, so the ladder reads as a ladder.
+    for (let i = 1; i < cols.length; i++) expect(cols[i]).toBeGreaterThan(cols[i - 1]);
+    // Every size has a name and a line saying what it is for.
+    for (const s of MAP_SIZES) {
+      expect(s.label.length).toBeGreaterThan(0);
+      expect(s.desc.length).toBeGreaterThan(10);
+    }
+  });
+
+  it("builds, validates, serialises and converts at every size", () => {
+    for (const size of MAP_SIZES) {
+      const m = newCustomMap(`${size.label} test`, size.cols);
+      expect(m.terrain.length, size.label).toBe(size.cols * size.cols);
+      // A round trip has to survive even the biggest terrain array.
+      const back = deserialiseMap(serialiseMap(m))!;
+      expect(back, size.label).not.toBeNull();
+      expect(back.cols, size.label).toBe(size.cols);
+      expect(back.terrain.length, size.label).toBe(size.cols * size.cols);
+      // And it converts to something the sim would accept.
+      m.nomad = "forced";
+      const md = toMapData(m, 5, 2, true);
+      expect(md.starts.length, size.label).toBe(2);
+      expect(md.worldW, size.label).toBe(size.cols * TILE);
+      expect(() => validateMap(m), size.label).not.toThrow();
+    }
+  });
+
+  it("stays inside a canvas the browser will actually allocate", () => {
+    // A terrain cache is one canvas spanning the world. Safari refuses a
+    // dimension over 4096 and hands back a blank texture rather than an error,
+    // so the biggest map must still bake under that.
+    for (const size of MAP_SIZES) {
+      const world = size.cols * TILE;
+      const px = Math.ceil(world * terrainCacheScale({ worldW: world, worldH: world }));
+      expect(px, `${size.label} cache is ${px}px`).toBeLessThanOrEqual(4096);
+    }
+  });
+
+  it("never ties a player count to a map's size", () => {
+    // A Duel map may seat eight; a Colossal one may seat two. The size is a
+    // description of the ground, not a rule about the lobby.
+    const tiny = newCustomMap("Duel", MAP_SIZES[0].cols);
+    const huge = newCustomMap("Colossal", MAP_SIZES[MAP_SIZES.length - 1].cols);
+    for (const m of [tiny, huge]) {
+      expect(m.minPlayers).toBe(1);
+      expect(m.maxPlayers).toBe(MAX_SEATS);
+      m.minPlayers = 8; m.maxPlayers = 8;
+      expect(deserialiseMap(serialiseMap(m))!.maxPlayers).toBe(8);
+      m.minPlayers = 1; m.maxPlayers = 1;
+      expect(deserialiseMap(serialiseMap(m))!.maxPlayers).toBe(1);
+    }
+  });
+
+  it("opens a new map wide open rather than deciding for the creator", () => {
+    const m = newCustomMap("Fresh", 96);
+    expect(m.modes).toEqual([]);       // any mode
+    expect(m.minPlayers).toBe(1);
+    expect(m.maxPlayers).toBe(MAX_SEATS);
+    expect(m.nomad).toBe("off");
   });
 });

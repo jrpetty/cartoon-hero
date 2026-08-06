@@ -14,6 +14,22 @@ import { RNG } from "../engine/rng";
 
 export const TERRAIN_SCALE = 0.5;
 
+/**
+ * The scale the cache for *this* map is baked at.
+ *
+ * Half-scale is right for a normal map, but the cache is one canvas spanning
+ * the whole world, and a 320-cell custom map is 10,240 world units across —
+ * 5,120 pixels at half scale, which is past Safari's 4,096-pixel canvas limit
+ * and would hand back a blank texture rather than an error. So large maps are
+ * baked coarser. Nothing is lost: at the zoom you view a map that size from,
+ * the extra resolution was sub-pixel anyway.
+ */
+const MAX_CACHE_PX = 3072;
+export function terrainCacheScale(map: { worldW: number; worldH: number }): number {
+  const longest = Math.max(map.worldW, map.worldH);
+  return Math.min(TERRAIN_SCALE, MAX_CACHE_PX / Math.max(1, longest));
+}
+
 /** Smooth 2D value noise on a coarse lattice, bilinear + smoothstep. */
 function makeNoise(rng: RNG, cols: number, rows: number, step: number) {
   const gw = Math.ceil(cols / step) + 2;
@@ -38,11 +54,12 @@ function makeNoise(rng: RNG, cols: number, rows: number, step: number) {
 
 export function buildTerrainCache(map: MapData): HTMLCanvasElement {
   const canvas = document.createElement("canvas");
-  canvas.width = Math.ceil(map.worldW * TERRAIN_SCALE);
-  canvas.height = Math.ceil(map.worldH * TERRAIN_SCALE);
+  const scale = terrainCacheScale(map);
+  canvas.width = Math.ceil(map.worldW * scale);
+  canvas.height = Math.ceil(map.worldH * scale);
   const ctx = canvas.getContext("2d")!;
   const rng = new RNG(map.seed ^ 0xbeef);
-  const t = TILE * TERRAIN_SCALE;
+  const t = TILE * scale;
   const at = (cx: number, cy: number): number =>
     cx >= 0 && cy >= 0 && cx < map.cols && cy < map.rows ? map.terrain[cy * map.cols + cx] : Terrain.Grass;
   const isWater = (cx: number, cy: number) => at(cx, cy) === Terrain.Water;
