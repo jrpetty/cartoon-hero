@@ -89,6 +89,58 @@ export function buildTerrainCache(map: MapData): HTMLCanvasElement {
   paintBiome(Terrain.GrassDark, (cx, cy) => shade(PAL.grassDark, groundShade(cx, cy) * 0.12));
   paintBiome(Terrain.Dirt, (cx, cy) => shade(PAL.dirt, groundShade(cx, cy) * 0.14));
   paintBiome(Terrain.Sand, (cx, cy) => shade(PAL.sand, groundShade(cx, cy) * 0.1));
+  paintBiome(Terrain.Snow, (cx, cy) => shade("#dfe7f0", groundShade(cx, cy) * 0.08));
+  paintBiome(Terrain.Marsh, (cx, cy) => shade("#4d5a3c", groundShade(cx, cy) * 0.16));
+  paintBiome(Terrain.Shallow, (cx, cy) => shade("#4a7f96", groundShade(cx, cy) * 0.1));
+  // Woodland floor: darker, mottled ground under the trees, so a wood reads as
+  // a place rather than a scatter of trunks on a lawn.
+  paintBiome(Terrain.Forest, (cx, cy) => shade("#2f4429", groundShade(cx, cy) * 0.2));
+  // High ground gets a lit crown and a shaded skirt, which is the cheapest way
+  // to say "this is raised" on a flat top-down map.
+  paintBiome(Terrain.Hill, (cx, cy) => shade("#6d8a4c", groundShade(cx, cy) * 0.12));
+  for (let cy = 0; cy < map.rows; cy++) {
+    for (let cx = 0; cx < map.cols; cx++) {
+      if (at(cx, cy) !== Terrain.Hill) continue;
+      const mx = cx * t + t / 2, my = cy * t + t / 2;
+      // A brighter cap where the hill is highest (away from its edge).
+      const edge = at(cx - 1, cy) !== Terrain.Hill || at(cx + 1, cy) !== Terrain.Hill
+        || at(cx, cy - 1) !== Terrain.Hill || at(cx, cy + 1) !== Terrain.Hill;
+      ctx.globalAlpha = edge ? 0.5 : 0.32;
+      ctx.fillStyle = edge ? "rgba(20,28,14,0.55)" : "#8fae66";
+      ctx.beginPath();
+      ctx.arc(mx, my, t * (edge ? 0.62 : 0.5), 0, Math.PI * 2);
+      ctx.fill();
+      ctx.globalAlpha = 1;
+    }
+  }
+  // Mountains: a shaded mass with a lit north face, drawn per cell so a ridge
+  // reads as one range instead of a row of identical lumps.
+  for (let cy = 0; cy < map.rows; cy++) {
+    for (let cx = 0; cx < map.cols; cx++) {
+      if (at(cx, cy) !== Terrain.Rock) continue;
+      const mx = cx * t + t / 2, my = cy * t + t / 2;
+      ctx.fillStyle = "rgba(10,10,12,0.5)";
+      ctx.beginPath(); ctx.ellipse(mx, my + t * 0.3, t * 0.72, t * 0.42, 0, 0, Math.PI * 2); ctx.fill();
+      const g = ctx.createLinearGradient(mx, my - t * 0.7, mx, my + t * 0.6);
+      g.addColorStop(0, shade("#9aa0a8", rng.range(-0.05, 0.08)));
+      g.addColorStop(1, "#3c4046");
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      ctx.moveTo(mx - t * 0.72, my + t * 0.5);
+      ctx.lineTo(mx - t * 0.4, my - t * 0.45 + rng.range(-t * 0.12, t * 0.12));
+      ctx.lineTo(mx + t * 0.05, my - t * 0.78 + rng.range(-t * 0.14, t * 0.14));
+      ctx.lineTo(mx + t * 0.45, my - t * 0.3 + rng.range(-t * 0.12, t * 0.12));
+      ctx.lineTo(mx + t * 0.72, my + t * 0.5);
+      ctx.closePath(); ctx.fill();
+      // Snowline / lit edge.
+      ctx.fillStyle = "rgba(232,238,246,0.5)";
+      ctx.beginPath();
+      ctx.moveTo(mx + t * 0.05, my - t * 0.78);
+      ctx.lineTo(mx - t * 0.16, my - t * 0.42);
+      ctx.lineTo(mx + t * 0.24, my - t * 0.4);
+      ctx.closePath(); ctx.fill();
+    }
+  }
 
   // --- 3. Shoreline: warm sand rim on land cells that touch water ---------
   for (let cy = 0; cy < map.rows; cy++) {
@@ -249,6 +301,12 @@ export function buildMinimapBase(map: MapData, size: number): HTMLCanvasElement 
         ter === Terrain.Water ? PAL.water :
         ter === Terrain.Dirt ? PAL.dirt :
         ter === Terrain.Sand ? PAL.sand :
+        ter === Terrain.Rock ? "#6a6f76" :
+        ter === Terrain.Hill ? "#7f9c5b" :
+        ter === Terrain.Forest ? "#2f4429" :
+        ter === Terrain.Marsh ? "#4d5a3c" :
+        ter === Terrain.Snow ? "#dfe7f0" :
+        ter === Terrain.Shallow ? "#4a7f96" :
         ter === Terrain.GrassDark ? PAL.grassDark : PAL.grass;
       ctx.fillStyle = shade(base, (noise(cx, cy) - 0.5) * 0.12);
       ctx.fillRect(cx * sx, cy * sy, sx + 1, sy + 1);

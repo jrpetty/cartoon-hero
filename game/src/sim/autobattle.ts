@@ -227,6 +227,18 @@ const alivePower = (w: World, team: Team): { count: number; power: number } => {
   return { count, power };
 };
 
+/**
+ * The auto-battler borrows a generated map purely as a substrate — it needs a
+ * world with dimensions, not a landscape. Now that ground has gameplay meaning
+ * (hills see further, woods slow you down), that scenery would leak into every
+ * Warband round as invisible modifiers nobody chose. Warband has its own
+ * terrain system, mirrored across the centre line so both sides face identical
+ * ground; the arena floor underneath it is flat.
+ */
+function flattenArena(w: World) {
+  w.terrain = new Uint8Array(w.terrain.length); // all Grass
+}
+
 export function resolveBattle(
   a: (UnitStack | ArenaUnit)[], b: (UnitStack | ArenaUnit)[], seed = 1, maxSeconds = 40,
   optsA?: SideOpts, field?: SideOpts,
@@ -234,6 +246,7 @@ export function resolveBattle(
   const map = generateMap("open_plains", seed, 2);
   const w = new World(seed);
   w.init(map, [{}, {}], [1, 1], [0, 1]); // two hostile sides
+  flattenArena(w);
   const cx = w.worldW / 2;
   const cy = w.worldH / 2;
 
@@ -336,6 +349,7 @@ export class LiveBattle {
     const map = generateMap("open_plains", seed, 2);
     this.world = new World(seed);
     this.world.init(map, [{}, {}], [1, 1], [0, 1]);
+    flattenArena(this.world);
     this.cx = this.world.worldW / 2;
     this.cy = this.world.worldH / 2;
     this.idsA = spawnArmy(this.world, normalize(a), Team.Player, -1, BOARD_LAYOUT, mergeSideOpts(optsA, field));

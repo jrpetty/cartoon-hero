@@ -4,14 +4,9 @@
 
 import { RNG } from "../engine/rng";
 import { TILE, START_RESOURCES } from "../content/balance";
+import { Terrain, BiomeId, biomeById, TERRAIN_BLOCKS } from "./terrain_kinds";
 
-export const enum Terrain {
-  Grass = 0,
-  GrassDark = 1,
-  Dirt = 2,
-  Water = 3,
-  Sand = 4,
-}
+export { Terrain } from "./terrain_kinds";
 
 export interface ResourceSpawn {
   type: "tree" | "gold_mine" | "berries";
@@ -32,6 +27,14 @@ export interface MapData {
   starts: { x: number; y: number }[];
   startResources: { food: number; wood: number; gold: number };
   seed: number;
+  /** Which palette and terrain mix this map is painted from. */
+  biome: BiomeId;
+  /** Set when the map came from the editor rather than the generator. */
+  custom?: boolean;
+  /** Game modes this map was authored for; empty means "any". */
+  modes?: string[];
+  /** True when starts are random (nomad) rather than authored. */
+  nomad?: boolean;
 }
 
 export interface MapPreset {
@@ -42,6 +45,13 @@ export interface MapPreset {
   forestry: number; // 0..1 density of extra forest
   water: number; // 0..1 amount of lakes/river
   chokes?: number; // 0..1 strength of forest barriers that carve lanes
+  /** 0..1 — how much of the map is mountain ridge (a hard barrier). */
+  mountains?: number;
+  /** 0..1 — how much high ground there is to fight over. */
+  hills?: number;
+  /** 0..1 — how much of the "forest" is walkable woodland rather than trees. */
+  woodland?: number;
+  biome?: BiomeId;
 }
 
 export const PRESETS: MapPreset[] = [
@@ -52,6 +62,11 @@ export const PRESETS: MapPreset[] = [
     size: 3200,
     forestry: 0.25,
     water: 0.08,
+    // Deliberately no hills or woodland. Warband Tactics borrows this preset as
+    // its arena substrate, and the geography passes draw from the same RNG
+    // stream as the resource scatter — so adding them here would silently move
+    // every tree in the auto-battler's arena and re-tune a season of measured
+    // balance work. "Wide open grassland" wants a bare field anyway.
   },
   {
     id: "black_forest",
@@ -60,6 +75,8 @@ export const PRESETS: MapPreset[] = [
     size: 3400,
     forestry: 0.85,
     water: 0.04,
+    woodland: 0.55,
+    hills: 0.15,
   },
   {
     id: "riverlands",
@@ -68,6 +85,8 @@ export const PRESETS: MapPreset[] = [
     size: 3400,
     forestry: 0.35,
     water: 0.55,
+    hills: 0.3,
+    woodland: 0.35,
   },
   {
     id: "highlands",
@@ -76,6 +95,9 @@ export const PRESETS: MapPreset[] = [
     size: 3300,
     forestry: 0.5,
     water: 0.22,
+    mountains: 0.45,
+    hills: 0.7,
+    woodland: 0.4,
   },
   {
     id: "islands",
@@ -84,6 +106,8 @@ export const PRESETS: MapPreset[] = [
     size: 3500,
     forestry: 0.3,
     water: 0.78,
+    hills: 0.25,
+    woodland: 0.3,
   },
   {
     id: "crossroads",
@@ -92,6 +116,7 @@ export const PRESETS: MapPreset[] = [
     size: 2800,
     forestry: 0.16,
     water: 0.0,
+    hills: 0.2,
   },
   {
     id: "gauntlet",
@@ -100,6 +125,8 @@ export const PRESETS: MapPreset[] = [
     size: 3400,
     forestry: 0.3,
     water: 0.05,
+    mountains: 0.6,
+    hills: 0.2,
     chokes: 0.85,
   },
 ];
@@ -283,6 +310,79 @@ export function generateMap(
     }
   }
 
+  // --- Mountains: ridges you have to go around -----------------------------
+  // Ridges are drawn as walks rather than blobs, because a blob is scenery and
+  // a ridge is geography: it has a direction, a length, and two sides. They are
+  // always mirrored, always kept off the starts, and always broken by at least
+  // one pass, so a ridge shapes the approach without sealing anything off.
+  const addRock = (cx: number, cy: number) => {
+    if (!inB(cx, cy) || nearStart(cx, cy)) return;
+    const i = idx(cx, cy);
+    if (terrain[i] === Terrain.Water) return; // a lake already owns this cell
+    terrain[i] = Terrain.Rock;
+    blockedSet.add(i);
+    resCells.add(i);
+    const [mx, my] = mirror(cx, cy);
+    if (!nearStart(mx, my) && terrain[idx(mx, my)] !== Terrain.Water) {
+      terrain[idx(mx, my)] = Terrain.Rock;
+      blockedSet.add(idx(mx, my));
+      resCells.add(idx(mx, my));
+    }
+  };
+  if (preset.mountains && preset.mountains > 0) {
+    const ridges = 1 + Math.round(preset.mountains * 3);
+    for (let r = 0; r < ridges; r++) {
+      // Start somewhere off-centre and walk, drifting, for a good distance.
+      let cx = rng.range(cols * 0.15, cols * 0.85);
+      let cy = rng.range(rows * 0.15, rows * 0.85);
+      let ang = rng.range(0, Math.PI * 2);
+      const len = Math.round(rng.range(cols * 0.22, cols * 0.45));
+      // One pass per ridge, at a random point along it, so there is always a way
+      // through for whoever is willing to fight for it.
+      const passAt = rng.int(Math.floor(len * 0.25), Math.floor(len * 0.75));
+      const passWidth = 3;
+      for (let stepI = 0; stepI < len; stepI++) {
+        ang += rng.range(-0.22, 0.22);
+        cx += Math.cos(ang);
+        cy += Math.sin(ang);
+        if (Math.abs(stepI - passAt) < passWidth) continue; // the gap
+        const half = 1 + (rng.bool(0.35) ? 1 : 0);
+        for (let dy = -half; dy <= half; dy++) {
+          for (let dx = -half; dx <= half; dx++) {
+            if (dx * dx + dy * dy > half * half + 0.5) continue;
+            addRock(Math.round(cx) + dx, Math.round(cy) + dy);
+          }
+        }
+      }
+    }
+  }
+
+  // --- Hills: high ground worth taking --------------------------------------
+  // Passable, slower to climb, and worth 20% more range and sight to whoever
+  // holds them — so they are the thing to fight over rather than around.
+  if (preset.hills && preset.hills > 0) {
+    const count = Math.round(preset.hills * 10);
+    for (let i = 0; i < count; i++) {
+      const hx = rng.int(4, cols - 5);
+      const hy = rng.int(4, rows - 5);
+      const r = rng.int(2, 5);
+      for (let dy = -r; dy <= r; dy++) {
+        for (let dx = -r; dx <= r; dx++) {
+          const d2 = dx * dx + dy * dy;
+          if (d2 > r * r) continue;
+          // A soft edge, so a hill reads as a slope rather than a stamped disc.
+          if (d2 > (r - 1) * (r - 1) && rng.bool(0.45)) continue;
+          for (const [tx, ty] of [[hx + dx, hy + dy], mirror(hx + dx, hy + dy)] as [number, number][]) {
+            if (!inB(tx, ty) || nearStart(tx, ty, 7)) continue;
+            const ti = idx(tx, ty);
+            if (blockedSet.has(ti)) continue; // never overwrite a barrier
+            terrain[ti] = Terrain.Hill;
+          }
+        }
+      }
+    }
+  }
+
   // --- Land bridges: guarantee every base connects to the centre -----------
   // On water-heavy maps lakes/rivers could otherwise wall a base off entirely
   // (we have no ships). Carving a passable lane from each start to the centre —
@@ -389,6 +489,37 @@ export function generateMap(
     cluster("tree", cx, cy, rng.int(6, 14), rng.int(2, 3));
   }
 
+  // --- Walkable woodland under and around the tree lines --------------------
+  // Tree *nodes* are harvestable obstacles; woodland is the ground they stand
+  // on. It is passable but slow and short-sighted, which is what makes a wood a
+  // place you can push through when you must and would rather go around — and
+  // what makes an ambush in one work. Painting it around the existing forest
+  // means the map's woods look like woods instead of a scatter of stumps.
+  if (preset.woodland && preset.woodland > 0) {
+    const treeCells = new Set<number>();
+    for (const r of resources) {
+      if (r.type !== "tree") continue;
+      treeCells.add(idx(Math.floor(r.x / TILE), Math.floor(r.y / TILE)));
+    }
+    const reach = 1 + Math.round(preset.woodland * 2);
+    for (const ti of treeCells) {
+      const tx = ti % cols, ty = (ti / cols) | 0;
+      for (let dy = -reach; dy <= reach; dy++) {
+        for (let dx = -reach; dx <= reach; dx++) {
+          if (dx * dx + dy * dy > reach * reach) continue;
+          const nx = tx + dx, ny = ty + dy;
+          if (!inB(nx, ny) || nearStart(nx, ny, 9)) continue;
+          const i = idx(nx, ny);
+          if (blockedSet.has(i)) continue;          // never soften a barrier
+          if (terrain[i] === Terrain.Hill) continue; // nor bury high ground
+          // Thin at the edges so a wood has a ragged border, not a stamped one.
+          if (dx * dx + dy * dy > (reach - 1) * (reach - 1) && rng.bool(0.5)) continue;
+          terrain[i] = Terrain.Forest;
+        }
+      }
+    }
+  }
+
   // --- Extra resources strewn across the whole map (richer maps) ------------
   const extraGold = 4 + Math.floor((cols * rows) / 2600);
   for (let i = 0; i < extraGold; i++) {
@@ -448,5 +579,7 @@ export function generateMap(
     starts,
     startResources: { ...START_RESOURCES },
     seed,
+    biome: preset.biome ?? "temperate",
+    nomad,
   };
 }

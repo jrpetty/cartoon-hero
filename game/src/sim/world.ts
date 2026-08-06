@@ -51,6 +51,7 @@ import { dist, dist2 } from "../engine/math";
 import type { MapData } from "../maps/generator";
 import { COMMANDERS, CommanderPower } from "../content/commanders";
 import { BoonEffect, emptyBoonEffect, aggregateBoons } from "../content/boons";
+import { TERRAIN_SPEED, TERRAIN_SIGHT, TERRAIN_BUILDABLE } from "../maps/terrain_kinds";
 
 export interface PlayerState {
   team: Team;
@@ -183,6 +184,10 @@ export class World {
   entities: Entity[] = [];
   byId = new Map<EntityId, Entity>();
   grid!: NavGrid;
+  /** The ground, one Terrain per cell — read on the movement path. */
+  terrain: Uint8Array = new Uint8Array(0);
+  terrainCols = 0;
+  terrainRows = 0;
   spatial = new SpatialGrid(96);
   players: PlayerState[] = [];
   rng: RNG;
@@ -236,6 +241,11 @@ export class World {
     this.worldW = map.worldW;
     this.worldH = map.worldH;
     this.grid = new NavGrid(map.worldW, map.worldH);
+    // The ground itself: read on the movement path, so it is kept as flat
+    // arrays sized to the nav grid rather than looked up through the map.
+    this.terrain = map.terrain;
+    this.terrainCols = map.cols;
+    this.terrainRows = map.rows;
     this.fogCols = this.grid.cols;
     this.fogRows = this.grid.rows;
 
@@ -967,6 +977,7 @@ export class World {
     const sx = Math.round(wx / TILE) * TILE + (tiles % 2 === 1 ? TILE / 2 : 0);
     const sy = Math.round(wy / TILE) * TILE + (tiles % 2 === 1 ? TILE / 2 : 0);
     if (!this.grid.footprintClear(sx, sy, tiles)) return null;
+    if (!this.groundBuildable(sx, sy, tiles)) return null;
     const overlaps = (ent: Entity) =>
       Math.abs(ent.x - sx) < (tiles * TILE) / 2 + ent.radius &&
       Math.abs(ent.y - sy) < (tiles * TILE) / 2 + ent.radius;
@@ -998,7 +1009,29 @@ export class World {
     const tiles = def.tiles;
     const sx = Math.round(wx / TILE) * TILE + (tiles % 2 === 1 ? TILE / 2 : 0);
     const sy = Math.round(wy / TILE) * TILE + (tiles % 2 === 1 ? TILE / 2 : 0);
-    return this.grid.footprintClear(sx, sy, tiles);
+    return this.grid.footprintClear(sx, sy, tiles) && this.groundBuildable(sx, sy, tiles);
+  }
+
+  /**
+   * Whether a footprint's ground will take a building. Mountains and lakes are
+   * already blocked, so this is really about the passable-but-unbuildable
+   * ground: you cannot raise a barracks in a marsh, in a wood, or in a ford.
+   * That is what stops a player from simply paving over the map's geography.
+   */
+  private groundBuildable(sx: number, sy: number, tiles: number): boolean {
+    // Worlds built without a map (the auto-battler's arena, unit tests) have no
+    // ground to consult, and everything on them is buildable.
+    if (!this.terrainCols) return true;
+    const c0x = Math.floor((sx - (tiles * TILE) / 2) / TILE);
+    const c0y = Math.floor((sy - (tiles * TILE) / 2) / TILE);
+    for (let y = 0; y < tiles; y++) {
+      for (let x = 0; x < tiles; x++) {
+        const cx = c0x + x, cy = c0y + y;
+        if (cx < 0 || cy < 0 || cx >= this.terrainCols || cy >= this.terrainRows) return false;
+        if (!TERRAIN_BUILDABLE[this.terrain[cy * this.terrainCols + cx]]) return false;
+      }
+    }
+    return true;
   }
 
   /** How many distinct qualifying building types `team` has, vs how many an age needs. */
@@ -1454,7 +1487,10 @@ export class World {
     }
     e.order.tx = target.x;
     e.order.ty = target.y;
-    const contact = e.radius + target.radius + (def.ranged ? e.range : 6);
+    // High ground shoots further, a wood shoots shorter. Melee reach is
+    // unaffected — a hill doesn't lengthen a sword.
+    const reach = def.ranged ? e.range * this.terrainSight(e) : 6;
+    const contact = e.radius + target.radius + reach;
     const d = dist(e.x, e.y, target.x, target.y);
 
     // Skirmish: give ground rather than let a melee unit close, then plant and
@@ -2048,6 +2084,23 @@ export class World {
 
   /** Attack value including tech/age bonuses and RPS bonus vs the target. */
   /** Movement speed including ability buffs (Charge / Brace) and Caltrops slow. */
+  /** The Terrain under a world point (Grass when off the map). */
+  terrainAt(wx: number, wy: number): number {
+    const cx = (wx / TILE) | 0;
+    const cy = (wy / TILE) | 0;
+    if (cx < 0 || cy < 0 || cx >= this.terrainCols || cy >= this.terrainRows) return 0;
+    return this.terrain[cy * this.terrainCols + cx];
+  }
+
+  /**
+   * How far this unit sees and shoots from where it is standing. High ground is
+   * worth 20% more; a wood costs you a quarter of it. This is what makes a hill
+   * worth taking and a forest a bad place to be caught by archers.
+   */
+  terrainSight(e: Entity): number {
+    return TERRAIN_SIGHT[this.terrainAt(e.x, e.y)] ?? 1;
+  }
+
   private effectiveSpeed(e: Entity): number {
     let s = e.speed;
     const p = this.players[e.team];
@@ -2062,6 +2115,13 @@ export class World {
       if (ab?.speedMult) s *= ab.speedMult;
     }
     if (e.slowTimer > 0) s *= SLOW_MULT;
+    // The ground underfoot. Siege engines are already slow and get stuck on
+    // everything, so they take half the penalty rather than all of it.
+    const ground = TERRAIN_SPEED[this.terrainAt(e.x, e.y)] ?? 1;
+    if (ground !== 1) {
+      const soften = e.armorClass === ArmorClass.Siege ? 0.5 : 1;
+      s *= 1 - (1 - ground) * soften;
+    }
     return s;
   }
 
@@ -2233,7 +2293,9 @@ export class World {
       const cy = this.grid.worldToCellY(e.y);
       // Watchfires burn through the dark — full sight regardless of the hour.
       const mult = e.type === "watchfire" ? 1 : e.kind === Kind.Building ? buildingMult : nightMult;
-      const r = Math.max(2, Math.ceil((e.visionRange * mult) / TILE));
+      // The ground you stand on decides how far you can see from it.
+      const ground = TERRAIN_SIGHT[this.terrainAt(e.x, e.y)] ?? 1;
+      const r = Math.max(2, Math.ceil((e.visionRange * mult * ground) / TILE));
       const r2 = r * r;
       for (let dy = -r; dy <= r; dy++) {
         for (let dx = -r; dx <= r; dx++) {

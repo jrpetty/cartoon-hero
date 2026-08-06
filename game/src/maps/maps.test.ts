@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { generateMap, PRESETS, Terrain } from "./generator";
+import { TERRAIN_BUILDABLE } from "./terrain_kinds";
+import { NavGrid } from "../pathfinding/grid";
 import { TILE } from "../content/balance";
 
 // Flood-fill over cells that aren't water/cliff (blockedCells). Resources (trees
@@ -122,5 +124,76 @@ describe("Map generation", () => {
     }
     expect(water).toBeGreaterThan(50); // it's a watery map
     expect(sand).toBeGreaterThan(0); // ...with carved land bridges
+  });
+});
+
+describe("Map geography", () => {
+  it("gives a map hard barriers, high ground and walkable woods", () => {
+    const map = generateMap("highlands", 4242, 4);
+    const counts = new Map<number, number>();
+    for (const t of map.terrain) counts.set(t, (counts.get(t) ?? 0) + 1);
+    const has = (t: Terrain) => (counts.get(t) ?? 0);
+    // Mountains and lakes are the hard barriers; hills and forest are the
+    // ground you can cross but would rather think about first.
+    expect(has(Terrain.Rock), "no mountains").toBeGreaterThan(20);
+    expect(has(Terrain.Hill), "no high ground").toBeGreaterThan(20);
+    expect(has(Terrain.Forest), "no walkable woodland").toBeGreaterThan(40);
+    // Blocked cells and the terrain map must agree about what is a wall.
+    const blocked = new Set(map.blockedCells.map(([cx, cy]) => cy * map.cols + cx));
+    for (let i = 0; i < map.terrain.length; i++) {
+      const t = map.terrain[i];
+      if (t === Terrain.Rock || t === Terrain.Water) {
+        expect(blocked.has(i), `terrain ${t} at ${i} is not blocked`).toBe(true);
+      }
+      if (blocked.has(i)) {
+        expect([Terrain.Rock, Terrain.Water]).toContain(t);
+      }
+    }
+  });
+
+  it("keeps every start on clear, buildable ground", () => {
+    for (const preset of ["highlands", "gauntlet", "riverlands"]) {
+      const map = generateMap(preset, 77, 4);
+      for (const s of map.starts) {
+        const cx = Math.floor(s.x / TILE), cy = Math.floor(s.y / TILE);
+        for (let dy = -3; dy <= 3; dy++) {
+          for (let dx = -3; dx <= 3; dx++) {
+            const t = map.terrain[(cy + dy) * map.cols + (cx + dx)];
+            expect(TERRAIN_BUILDABLE[t], `${preset}: unbuildable ground by a start`).toBe(1);
+          }
+        }
+      }
+    }
+  });
+
+  it("never walls a start off from the middle of the map", () => {
+    // Ridges and lakes are meant to shape an approach, not seal a player in.
+    for (const preset of ["highlands", "gauntlet", "islands", "riverlands"]) {
+      for (const seed of [1, 2, 3]) {
+        const map = generateMap(preset, seed, 4);
+        const grid = new NavGrid(map.worldW, map.worldH);
+        for (const [cx, cy] of map.blockedCells) grid.setBlocked(cx, cy, true);
+        const mid: [number, number] = [Math.floor(map.cols / 2), Math.floor(map.rows / 2)];
+        for (const s of map.starts) {
+          const sc: [number, number] = [Math.floor(s.x / TILE), Math.floor(s.y / TILE)];
+          expect(
+            grid.provablyUnreachable(sc[0], sc[1], mid[0], mid[1]),
+            `${preset} seed ${seed}: a start is cut off from the centre`,
+          ).toBe(false);
+        }
+      }
+    }
+  });
+
+  it("keeps the auto-battler's arena flat", () => {
+    // Warband Tactics borrows a generated map as a substrate and has its own
+    // mirrored terrain on top. If the substrate ever grew hills or woodland,
+    // every round would quietly inherit modifiers nobody chose — and because
+    // the geography passes share an RNG stream with the resource scatter, it
+    // would move every tree in the arena too.
+    const map = generateMap("open_plains", 1234, 2);
+    for (const t of map.terrain) {
+      expect([Terrain.Grass, Terrain.GrassDark, Terrain.Dirt, Terrain.Water, Terrain.Sand]).toContain(t);
+    }
   });
 });
