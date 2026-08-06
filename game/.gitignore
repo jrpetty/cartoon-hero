@@ -1,0 +1,8 @@
+node_modules
+dist
+*.local
+.DS_Store
+
+# generated preview artifacts
+shots/
+scripts/*.bundle.mjs

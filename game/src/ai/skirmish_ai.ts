@@ -1,0 +1,1709 @@
+// The skirmish AI brain. Acts only through the same public World command API
+// the human player uses. Behavior scales with difficulty: scouting, counter
+// composition, expansion, harassment and attack pacing (see difficulty.ts).
+
+import { World } from "../sim/world";
+import { ArmorClass, BuildState, Entity, Kind, OrderKind, ResourceKind, Stance, Team } from "../sim/types";
+import { UNITS } from "../content/units";
+import { ABILITIES } from "../content/abilities";
+import { BUILDINGS } from "../content/buildings";
+import { UPGRADES, AGES } from "../content/tech";
+import { TILE, POP_CAP_HARD } from "../content/balance";
+import { DifficultyDef } from "./difficulty";
+import { RNG } from "../engine/rng";
+import { dist } from "../engine/math";
+import { FOG_VISIBLE } from "../sim/world";
+import { bestGroundNear, bestTowerSite, flankPoint, fordCrossing, isHighGround, stagingPoint } from "./terrain_sense";
+
+interface SeenComposition {
+  infantry: number;
+  archer: number;
+  cavalry: number;
+  siege: number;
+}
+
+type AIStyle = "rush" | "boom" | "turtle" | "balanced";
+
+/** How long the AI will hold production back to bank an age-up before giving up. */
+const AGE_SAVE_MAX_SEC = 60;
+/** …and how long it then grows before it is allowed to try banking again. */
+const AGE_SAVE_COOLDOWN = 45;
+
+// Every AI brain in a match registers here (keyed by World, GC-safe). Teammates
+// read each other's scouted composition so intel is pooled across the alliance —
+// what one ally has seen, the whole team reasons about and counters.
+const AI_ROSTER = new WeakMap<World, SkirmishAI[]>();
+
+// High-value structures an assault should drive toward (the kill, not the wall).
+const PRODUCTION = new Set([
+  "town_center", "barracks", "archery_range", "stable", "siege_workshop", "blacksmith", "mill", "market",
+]);
+
+/** Kill-order value of an enemy unit in an army clash — delete what hurts us
+ *  most or is about to die first. Exported for testing. */
+export function armyTargetPriority(type: string): number {
+  const u = UNITS[type];
+  if (!u) return 40;
+  if (u.hero) return 115;
+  if (u.armorClass === ArmorClass.Siege) return 120; // splash/rams wreck a clumped army
+  if (type === "monk") return 95; // heals/converts
+  if (u.range >= 60) return 80; // archers/crossbow/handcannon/skirmisher/javelin
+  if (u.armorClass === ArmorClass.Cavalry) return 60;
+  return 45; // infantry
+}
+
+export class SkirmishAI {
+  private timer = 0;
+  private rng: RNG;
+  private seen: SeenComposition = { infantry: 0, archer: 0, cavalry: 0, siege: 0 };
+  private lastWaveTime = 0;
+  private lastHarassTime = 0;
+  private lastBridgeTime = -999;
+  private lastTradeTime = -999;
+  private lastScoutTime = -999;
+  private scoutId = -1;
+  private wallsPlanned = false;
+  private attacking = false;
+  private gameTime = 0;
+  private seenWalls = 0;
+  private lastRetreatTime = -999;
+  private lastAllyHelpTime = -999;
+  private lastPressTime = -999;
+  private lastCalloutTime = -999;
+  private lastFocusId = -1; // current focus-fire target (avoids re-issuing every tick)
+  private savingForAge = false;
+  private saveStartedAt = 0;
+  private saveGaveUpAt = -999;
+  /**
+   * Whether this AI reads the ground it is fighting on. Public and mutable for
+   * one reason: it is the only way to measure whether terrain awareness is
+   * worth anything, by running an aware AI against a blind one on the same map
+   * with the same seed. A feature that cannot be measured cannot be defended.
+   */
+  readsGround = true;
+  /**
+   * Whether a wave forms up on good ground before charging. Mutable for the same
+   * reason `readsGround` is: it is the only way to tell whether the extra
+   * marching leg pays for itself.
+   */
+  stagesOnGoodGround = true;
+  /** Building types we've finished at least once — drives prompt rebuilds. */
+  private everBuilt = new Set<string>();
+  /** Shared roster of all AI brains in this match (for ally intel pooling). */
+  private roster: SkirmishAI[];
+  /** Personality — biases army timing, eco focus and turtling. */
+  private style: AIStyle = "balanced";
+
+  constructor(
+    private world: World,
+    private team: Team,
+    private diff: DifficultyDef,
+  ) {
+    this.rng = world.rng.fork(100 + team);
+    // Squire stays vanilla; mid tiers get the full personality spread; the top
+    // tiers stay aggressive (no turtling) so they keep the pressure on.
+    const pools: Record<string, AIStyle[]> = {
+      squire: ["balanced"],
+      knight: ["rush", "boom", "turtle", "balanced", "balanced"],
+      lord: ["rush", "balanced", "balanced", "boom"],
+      warlord: ["rush", "rush", "balanced", "balanced", "boom"],
+      conqueror: ["rush", "rush", "balanced", "boom"],
+    };
+    const styles = pools[diff.id] ?? ["balanced"];
+    this.style = styles[this.rng.int(0, styles.length - 1)];
+    // First wave shouldn't come absurdly early on slow tiers.
+    this.lastWaveTime = -this.cadence * 0.4;
+
+    // Join the match roster so allies can pool intel.
+    let roster = AI_ROSTER.get(world);
+    if (!roster) { roster = []; AI_ROSTER.set(world, roster); }
+    roster.push(this);
+    this.roster = roster;
+  }
+
+  /** Living allied AI brains (excluding self) for intel pooling. */
+  private alliedAIs(): SkirmishAI[] {
+    return this.roster.filter(
+      (a) => a !== this && this.world.areAllied(this.team, a.team) && !this.world.player(a.team).defeated,
+    );
+  }
+
+  /** A small chance to fumble an optional action — see DifficultyDef. */
+  private flub(): boolean {
+    return this.rng.range(0, 1) < this.diff.executionError;
+  }
+
+  /** Compass direction of (ax,ay) relative to (ox,oy), e.g. "north". */
+  private compass(ox: number, oy: number, ax: number, ay: number): string {
+    const deg = (Math.atan2(ay - oy, ax - ox) * 180) / Math.PI; // y grows downward
+    const i = Math.round(((deg + 360) % 360) / 45) % 8;
+    return ["east", "south-east", "south", "south-west", "west", "north-west", "north", "north-east"][i];
+  }
+
+  /** Emit an AI voice line (team games only), rate-limited against spam. */
+  private say(text: string, x: number, y: number, minGap = 14): void {
+    if (!this.hasAlly()) return;
+    if (this.gameTime - this.lastCalloutTime < minGap) return;
+    this.lastCalloutTime = this.gameTime;
+    this.world.callout(this.team, x, y, text);
+  }
+
+  // Personality-scaled tunables ------------------------------------------------
+  private get armySize(): number {
+    const m = { rush: 0.62, boom: 1.35, turtle: 1.5, balanced: 1 }[this.style];
+    return Math.max(6, Math.round(this.diff.attackArmySize * m));
+  }
+  private get cadence(): number {
+    const m = { rush: 0.58, boom: 1.18, turtle: 1.3, balanced: 1 }[this.style];
+    return this.diff.attackEverySec * m;
+  }
+  private get villagerGoal(): number {
+    const m = { rush: 0.82, boom: 1.25, turtle: 1.05, balanced: 1 }[this.style];
+    const base = this.diff.villagerTarget * m;
+    // Once at the top age, real opponents (Knight+) keep growing the economy so a
+    // full-pop army is affordable (otherwise they plateau ~60). Gated to max age
+    // so early-age progression thresholds stay stable.
+    const p = this.world.player(this.team);
+    const grow = this.diff.maxAge >= 2 && p.age >= this.diff.maxAge ? 16 + this.gameTime / 60 : 0;
+    return Math.round(Math.min(base + grow, base * 2.2));
+  }
+  private get turtles(): boolean {
+    return this.style === "turtle";
+  }
+
+  /** Rough combat strength of own (mine=true) or hostile units near a point. */
+  private strengthNear(x: number, y: number, r: number, mine: boolean): number {
+    let s = 0;
+    const r2 = r * r;
+    for (const e of this.world.entities) {
+      if (!e.alive || e.kind !== Kind.Unit) continue;
+      if (mine ? e.team !== this.team : !this.isHostile(e.team)) continue;
+      if (e.type === "villager") continue;
+      const dx = e.x - x;
+      const dy = e.y - y;
+      if (dx * dx + dy * dy > r2) continue;
+      const def = UNITS[e.type];
+      s += (def?.attack ?? 4) + e.hp * 0.08;
+    }
+    return s;
+  }
+
+  update(dt: number) {
+    this.gameTime += dt;
+    this.timer -= dt;
+    if (this.timer > 0) return;
+    this.timer = this.diff.reactionSec;
+    if (this.world.winner !== null) return;
+    const p = this.world.player(this.team);
+    if (!p || p.defeated) return;
+
+    this.updateIntel();
+    this.economy();
+    this.military();
+  }
+
+  // ------------------------------------------------------------- helpers --
+
+  private myUnits(type?: string): Entity[] {
+    return this.world.entities.filter(
+      (e) => e.alive && e.team === this.team && e.kind === Kind.Unit && (!type || e.type === type),
+    );
+  }
+
+  private myBuildings(type?: string, doneOnly = true): Entity[] {
+    return this.world.entities.filter(
+      (e) =>
+        e.alive &&
+        e.team === this.team &&
+        e.kind === Kind.Building &&
+        (!type || e.type === type) &&
+        (!doneOnly || e.buildState === BuildState.Done),
+    );
+  }
+
+  /** A foe is any hostile team (respects 2v2 alliances). */
+  private isHostile(t: Team): boolean {
+    return this.world.areHostile(this.team, t);
+  }
+
+  /** The rival we're focusing: the nearest non-defeated enemy by base distance. */
+  private get enemyTeam(): Team {
+    const myBase = this.base();
+    let best: Team = ((this.team + 1) % this.world.numTeams) as Team;
+    let bestD = Infinity;
+    for (let t = 0; t < this.world.numTeams; t++) {
+      if (!this.isHostile(t as Team)) continue;
+      const p = this.world.player(t as Team);
+      if (!p || p.defeated) continue;
+      const s = this.world.map.starts[t];
+      const d = myBase && s ? dist(myBase.x, myBase.y, s.x, s.y) : 0;
+      if (d < bestD) {
+        bestD = d;
+        best = t as Team;
+      }
+    }
+    return best;
+  }
+
+  private base(): Entity | null {
+    const tcs = this.myBuildings("town_center");
+    return tcs[0] ?? this.myBuildings()[0] ?? null;
+  }
+
+  // --------------------------------------------------- team coordination --
+
+  /** True when this AI has at least one living allied teammate (a team game). */
+  private hasAlly(): boolean {
+    for (let t = 0; t < this.world.numTeams; t++) {
+      if (t === this.team) continue;
+      if (!this.world.areAllied(this.team, t as Team)) continue;
+      const p = this.world.player(t as Team);
+      if (p && !p.defeated) return true;
+    }
+    return false;
+  }
+
+  /** Rough total strength of a team (buildings + standing army). */
+  private teamStrength(t: Team): number {
+    let s = 0;
+    for (const e of this.world.entities) {
+      if (!e.alive || e.team !== t) continue;
+      if (e.kind === Kind.Building) s += 12;
+      else if (e.kind === Kind.Unit && e.type !== "villager") s += (UNITS[e.type]?.attack ?? 4) + e.hp * 0.05;
+    }
+    return s;
+  }
+
+  /**
+   * The foe the whole alliance should concentrate on. Every allied AI computes
+   * this the same way (weakest standing enemy, tie-break by team index), so they
+   * converge on one target instead of splitting their pushes — concentration of
+   * force is what actually wins team games. Falls back to the nearest enemy when
+   * we have no teammate (1v1 / FFA are unchanged).
+   */
+  private get focusEnemy(): Team {
+    if (!this.hasAlly()) return this.enemyTeam;
+    let best: Team = this.enemyTeam;
+    let bestScore = Infinity;
+    for (let t = 0; t < this.world.numTeams; t++) {
+      if (!this.isHostile(t as Team)) continue;
+      const p = this.world.player(t as Team);
+      if (!p || p.defeated) continue;
+      const score = this.teamStrength(t as Team);
+      if (score < bestScore - 0.001) {
+        bestScore = score;
+        best = t as Team;
+      }
+    }
+    return best;
+  }
+
+  /** True if a living ally is currently assaulting (army units mid-attack). */
+  private allyAssaulting(): boolean {
+    let assaulting = 0;
+    for (const e of this.world.entities) {
+      if (!e.alive || e.kind !== Kind.Unit || e.team === this.team) continue;
+      if (!this.world.areAllied(this.team, e.team)) continue;
+      if (e.type === "villager") continue;
+      if (e.order.kind === OrderKind.Attack || e.order.kind === OrderKind.AttackMove) assaulting++;
+    }
+    return assaulting >= 5;
+  }
+
+  /** Plant a Town Center. Picks the best nearby spot with access to wood, gold
+   *  AND food (the nomad-settling aim) rather than just the villagers' centroid. */
+  private foundTownCenter(p: ReturnType<World["player"]>) {
+    if (this.myBuildings("town_center", false).length > 0) return; // already founding
+    const vills = this.myUnits("villager");
+    if (vills.length === 0 || !this.world.canAfford(p.resources, BUILDINGS.town_center.cost)) return;
+    let cx = 0;
+    let cy = 0;
+    for (const v of vills) { cx += v.x; cy += v.y; }
+    cx /= vills.length;
+    cy /= vills.length;
+    const spot = this.bestSettleSpot(cx, cy);
+    const tc = this.placeNear("town_center", spot.x, spot.y, 0, 3) ?? this.placeNear("town_center", cx, cy, 0, 5);
+    if (tc) this.assignBuilder(tc, Math.min(3, vills.length));
+  }
+
+  /**
+   * Scout for the best base site near (cx,cy): score candidate spots by how close
+   * the nearest wood, gold and food are — rewarding a site that reaches all three
+   * (and minimising its worst resource), lightly penalising distance travelled.
+   */
+  private bestSettleSpot(cx: number, cy: number): { x: number; y: number } {
+    const trees: Entity[] = [];
+    const golds: Entity[] = [];
+    const foods: Entity[] = [];
+    for (const e of this.world.entities) {
+      if (!e.alive || e.kind !== Kind.Resource || e.amount <= 0) continue;
+      if (e.type === "tree") trees.push(e);
+      else if (e.type === "gold_mine") golds.push(e);
+      else if (e.type === "berries") foods.push(e);
+    }
+    const CAP = 60 * TILE; // treat "no resource of this kind nearby" as this far
+    const nearest = (arr: Entity[], x: number, y: number) => {
+      let m = CAP;
+      for (const e of arr) { const d = Math.hypot(e.x - x, e.y - y); if (d < m) m = d; }
+      return m;
+    };
+    const score = (x: number, y: number) => {
+      const dW = nearest(trees, x, y), dG = nearest(golds, x, y), dF = nearest(foods, x, y);
+      const distHome = Math.hypot(x - cx, y - cy);
+      // Lower is better → negate. Penalise the worst resource hardest so a site
+      // that reaches all three beats one hugging a single resource.
+      return -(dW + dG * 1.15 + dF) - 0.7 * Math.max(dW, dG, dF) - 0.4 * distHome;
+    };
+    // Candidates: the centroid, a coarse grid around it, and points beside each
+    // gold vein (gold is the scarce anchor — settle by it if wood/food are close).
+    const cands: { x: number; y: number }[] = [{ x: cx, y: cy }];
+    for (let gx = -6; gx <= 6; gx += 2) for (let gy = -6; gy <= 6; gy += 2) cands.push({ x: cx + gx * 5 * TILE, y: cy + gy * 5 * TILE });
+    for (const g of golds) {
+      if (Math.hypot(g.x - cx, g.y - cy) > 44 * TILE) continue;
+      for (const a of [0, Math.PI / 2, Math.PI, -Math.PI / 2]) cands.push({ x: g.x + Math.cos(a) * 5 * TILE, y: g.y + Math.sin(a) * 5 * TILE });
+    }
+    const margin = 6 * TILE;
+    let best = cands[0];
+    let bestScore = -Infinity;
+    for (const c of cands) {
+      if (c.x < margin || c.y < margin || c.x > this.world.worldW - margin || c.y > this.world.worldH - margin) continue;
+      const s = score(c.x, c.y);
+      if (s > bestScore) { bestScore = s; best = c; }
+    }
+    return best;
+  }
+
+  /** Cost of the next age the AI is ready to research, or null if not ready. */
+  private ageUpCost(p: ReturnType<World["player"]>): { food: number; wood: number; gold: number } | null {
+    const vills = this.myUnits("villager").length;
+    if (p.age === 0 && this.diff.maxAge >= 1 && this.world.ageRequirementMet(this.team, 1) &&
+        vills >= Math.floor(this.villagerGoal * 0.55)) {
+      return AGES[1].cost;
+    }
+    if (p.age === 1 && this.diff.maxAge >= 2 && this.world.ageRequirementMet(this.team, 2) &&
+        vills >= Math.floor(this.villagerGoal * 0.6)) {
+      return AGES[2].cost;
+    }
+    return null;
+  }
+
+  /** Try to place a building somewhere in a ring around (cx, cy). */
+  private placeNear(type: string, cx: number, cy: number, minR = 2, maxR = 9): Entity | null {
+    for (let attempt = 0; attempt < 24; attempt++) {
+      const r = this.rng.range(minR, maxR) * TILE;
+      const a = this.rng.range(0, Math.PI * 2);
+      const x = cx + Math.cos(a) * r;
+      const y = cy + Math.sin(a) * r;
+      const placed = this.world.placeBuilding(this.team, type, x, y);
+      if (placed) return placed;
+    }
+    return null;
+  }
+
+  /** Send the nearest idle (or gathering) villager to construct `b`. */
+  private assignBuilder(b: Entity, count = 1) {
+    const villagers = this.myUnits("villager")
+      .filter((v) => v.order.kind !== OrderKind.Build)
+      .sort((u, v) => dist(u.x, u.y, b.x, b.y) - dist(v.x, v.y, b.x, b.y));
+    const picked = villagers.slice(0, count);
+    if (picked.length) this.world.issueBuildRepair(picked.map((v) => v.id), b.id);
+  }
+
+  private nearestResource(type: string, x: number, y: number): Entity | null {
+    let best: Entity | null = null;
+    let bestD = Infinity;
+    for (const e of this.world.entities) {
+      if (!e.alive) continue;
+      const isFarm = type === "farm" && e.kind === Kind.Building && e.type === "farm" &&
+        e.team === this.team && e.buildState === BuildState.Done;
+      if (!isFarm && (e.kind !== Kind.Resource || e.type !== type || e.amount <= 0)) continue;
+      const d = dist(x, y, e.x, e.y);
+      if (d < bestD) {
+        bestD = d;
+        best = e;
+      }
+    }
+    return best;
+  }
+
+  // --------------------------------------------------------------- intel --
+
+  private updateIntel() {
+    // Decay memory, then add what's currently visible to our fog.
+    const decay = 0.92;
+    this.seen.infantry *= decay;
+    this.seen.archer *= decay;
+    this.seen.cavalry *= decay;
+    this.seen.siege *= decay;
+    const now: SeenComposition = { infantry: 0, archer: 0, cavalry: 0, siege: 0 };
+    for (const e of this.world.entities) {
+      if (!e.alive || !this.isHostile(e.team) || e.kind !== Kind.Unit) continue;
+      if (this.world.fogAt(this.team, e.x, e.y) !== FOG_VISIBLE) continue;
+      const def = UNITS[e.type];
+      if (!def) continue;
+      if (def.armorClass === "cavalry") now.cavalry++;
+      else if (def.armorClass === "archer") now.archer++;
+      else if (def.armorClass === "siege") now.siege++;
+      else if (e.type !== "villager") now.infantry++;
+    }
+    this.seen.infantry = Math.max(this.seen.infantry, now.infantry);
+    this.seen.archer = Math.max(this.seen.archer, now.archer);
+    this.seen.cavalry = Math.max(this.seen.cavalry, now.cavalry);
+    this.seen.siege = Math.max(this.seen.siege, now.siege);
+
+    // Count the enemy's fortifications we've laid eyes on — drives siege.
+    let walls = 0;
+    for (const e of this.world.entities) {
+      if (!e.alive || !this.isHostile(e.team) || e.kind !== Kind.Building) continue;
+      if (this.world.fogAt(this.team, e.x, e.y) === 0) continue;
+      if (e.type === "stone_wall" || e.type === "gate" || e.type === "palisade" || e.type === "castle") walls++;
+    }
+    this.seenWalls = walls;
+  }
+
+  // ------------------------------------------------------------- economy --
+
+  private economy() {
+    const p = this.world.player(this.team);
+    const base = this.base();
+    // No Town Center (nomad start, or ours was razed): raise one near our
+    // villagers before anything else — without it nothing can be produced.
+    if (!base) {
+      this.foundTownCenter(p);
+      return;
+    }
+
+    // If we're ready to advance an age but can't afford it, stop spending food
+    // (villagers + army) so the cost can actually be banked — otherwise the AI
+    // dribbles every scrap into units and never reaches the next age.
+    //
+    // Time-boxed and progress-aware, because the naive version deadlocks. Saving
+    // pauses villager production *and* caps the army at four; if the age-up is
+    // not actually within reach, the economy stops growing, the cost never
+    // becomes affordable, and the AI saves forever. Measured on highlands seed
+    // 5: still Feudal at twelve minutes with eleven villagers, an army of seven,
+    // 1680 wood and 315 food, having banked toward Castle since minute four.
+    //
+    // So: only hold back when most of the cost is already in hand, and never for
+    // more than a minute at a stretch. Falling out of it re-opens production for
+    // long enough to actually earn the difference.
+    const gate = this.ageUpCost(p);
+    const affordable = gate !== null && this.world.canAfford(p.resources, gate);
+    if (gate === null || affordable) {
+      this.savingForAge = false;
+      this.saveGaveUpAt = -999;
+    } else {
+      const need = gate.food + gate.wood + gate.gold;
+      const have = Math.min(p.resources.food, gate.food) + Math.min(p.resources.wood, gate.wood)
+        + Math.min(p.resources.gold, gate.gold);
+      const close = need > 0 && have / need >= 0.55;
+      const cooling = this.gameTime - this.saveGaveUpAt < AGE_SAVE_COOLDOWN;
+      if (!this.savingForAge) {
+        if (close && !cooling) { this.savingForAge = true; this.saveStartedAt = this.gameTime; }
+      } else if (this.gameTime - this.saveStartedAt > AGE_SAVE_MAX_SEC) {
+        // A minute of holding back and still short: the bank is not filling from
+        // an economy this size. Go and grow one.
+        this.savingForAge = false;
+        this.saveGaveUpAt = this.gameTime;
+      }
+    }
+
+    // 0. The instant the age-up is affordable, research it — before villager or
+    //    army production can nibble the banked cost back below it. (Otherwise the
+    //    AI trains a villager the moment it can afford one and never quite banks
+    //    the full age cost, stalling in an age forever.)
+    if (gate !== null && !this.savingForAge) {
+      const tc0 = this.myBuildings("town_center")[0];
+      if (tc0) this.world.research(this.team, tc0.id, "age");
+    }
+
+    // 1. Keep villager production rolling (paused while saving for an age).
+    const villagers = this.myUnits("villager");
+    for (const tc of this.myBuildings("town_center")) {
+      if (!this.savingForAge && villagers.length < this.villagerGoal && tc.productionQueue.length < 2) {
+        this.world.trainUnit(this.team, tc.id, "villager");
+      }
+    }
+
+    // 2. Houses well ahead of the pop block. Build several at once and start
+    //    early — the old one-at-a-time, nearly-capped trigger left the AI
+    //    perpetually pop-blocked with a tiny army.
+    const housesBuilding = this.myBuildings("house", false).filter(
+      (h) => h.buildState !== BuildState.Done,
+    ).length;
+    const headroom = p.popCap - p.popUsed;
+    const wantAhead = 12 + this.myBuildings("town_center").length * 6; // grow faster with more bases
+    if (headroom < wantAhead && housesBuilding < 2 && p.popCap < POP_CAP_HARD) {
+      const h = this.placeNear("house", base.x, base.y, 3, 8);
+      if (h) this.assignBuilder(h);
+    }
+
+    // 3. Gather balance.
+    this.balanceGatherers(villagers);
+
+    // 4. Drop-off camps near distant clusters.
+    this.maybeBuildCamps(base);
+
+    // 5. Farms once berries thin out.
+    this.maybeBuildFarms(base, villagers.length);
+
+    // 5a. Trade: fix a lopsided bank, and run carts if there is a route.
+    this.marketStep(base, villagers.length);
+
+    // 5b. Replace anything a raid has razed, ahead of normal build gates.
+    this.rebuildStep(base);
+
+    // 6. Military/tech buildings + age advances per the build order.
+    this.buildOrder(p, base, villagers.length);
+
+    // 6b. Put ranged units on Skirmish so they give ground while reloading
+    //     instead of standing to be cut down. Doing this only for the player
+    //     would hand one side free micro — the same trap the Blacksmith-only
+    //     research below used to be.
+    if (this.world.tickCount % 40 === 0) {
+      const skirmishers = this.world
+        .entitiesOf(this.team, Kind.Unit)
+        .filter((e) => e.alive && e.stance !== Stance.Skirmish && (UNITS[e.type]?.range ?? 0) > 40)
+        .map((e) => e.id);
+      if (skirmishers.length) this.world.setStance(skirmishers, Stance.Skirmish);
+    }
+
+    // 7. Research, wherever it lives. This used to look only at the Blacksmith,
+    //    which meant the AI never took a single economy tech — the Mill, Lumber
+    //    Camp, Mining Camp, Town Centre, Stable, Archery Range and Market lines
+    //    were all player-only. Now it researches from any building it owns,
+    //    keeping enough in hand that teching never starves unit production.
+    for (const id of Object.keys(UPGRADES)) {
+      const up = UPGRADES[id];
+      if (p.upgrades.has(id) || p.age < up.age) continue;
+      if (!this.world.canAfford(p.resources, up.cost)) continue;
+      // A working float, so it doesn't spend its army money on research.
+      if (p.resources.gold < up.cost.gold + 200) continue;
+      if (p.resources.food < up.cost.food + 150) continue;
+      if (p.resources.wood < up.cost.wood + 150) continue;
+      const host = this.myBuildings(up.researchedAt).find((b) => b.productionQueue.length === 0);
+      if (!host) continue;
+      if (this.world.research(this.team, host.id, id)) break;
+    }
+
+    // 8. Expansion town center.
+    if (this.diff.expands && p.age >= 2 && this.myBuildings("town_center").length < 2 &&
+        p.resources.wood > 500) {
+      const start = this.world.map.starts[this.team];
+      const c = { x: this.world.worldW / 2, y: this.world.worldH / 2 };
+      const ex = start.x + (c.x - start.x) * 0.45;
+      const ey = start.y + (c.y - start.y) * 0.45;
+      const tc = this.placeNear("town_center", ex, ey, 0, 5);
+      if (tc) this.assignBuilder(tc, 3);
+    }
+
+    // 8b. Fortify the front with a wall + gate once established.
+    this.buildDefenses(base);
+
+    // 9. Castle for late-game defense/elite production.
+    if (this.diff.buildsCastle && p.age >= 2 && this.myBuildings("castle").length === 0 &&
+        this.world.canAfford(p.resources, BUILDINGS.castle.cost)) {
+      const start = this.world.map.starts[this.team];
+      const c = { x: this.world.worldW / 2, y: this.world.worldH / 2 };
+      const fx = start.x + (c.x - start.x) * 0.3;
+      const fy = start.y + (c.y - start.y) * 0.3;
+      const castle = this.placeNear("castle", fx, fy, 0, 6);
+      if (castle) this.assignBuilder(castle, 3);
+    }
+  }
+
+  /**
+   * Lay a defensive wall line with a central gate across the approach from the
+   * base toward the map centre, backed by a watch tower. Built once, when the
+   * economy can spare a few builders. Kept short so it screens the front
+   * without sealing the AI's own resource lines.
+   */
+  private buildDefenses(base: Entity) {
+    if ((!this.diff.buildsWalls && !this.turtles) || this.wallsPlanned) return;
+    const p = this.world.player(this.team);
+    if (p.age < 1 || p.resources.wood < 160) return;
+    if (this.myUnits("villager").length < 16) return;
+
+    const cx = this.world.worldW / 2;
+    const cy = this.world.worldH / 2;
+    const dx = cx - base.x;
+    const dy = cy - base.y;
+    const dl = Math.hypot(dx, dy) || 1;
+    const ux = dx / dl;
+    const uy = dy / dl;
+    const px = -uy;
+    const py = ux;
+    const front = 4.5 * TILE;
+    const fx = base.x + ux * front;
+    const fy = base.y + uy * front;
+
+    const builders: number[] = [];
+    const span = 3; // segments either side of the gate
+    for (let i = -span; i <= span; i++) {
+      const wx = fx + px * i * TILE;
+      const wy = fy + py * i * TILE;
+      const type = i === 0 ? "gate" : "stone_wall";
+      const b = this.world.placeBuilding(this.team, type, wx, wy);
+      if (b) builders.push(b.id);
+    }
+    // A tower on a hill sees and shoots 20% further, which over a whole game is
+    // the cheapest defensive upgrade available — so look before placing.
+    const site = this.readsGround
+      ? bestTowerSite(this.world, fx - ux * TILE, fy - uy * TILE)
+      : { x: fx - ux * TILE, y: fy - uy * TILE };
+    const tower = this.world.placeBuilding(this.team, "watch_tower", site.x, site.y)
+      ?? this.world.placeBuilding(this.team, "watch_tower", fx - ux * TILE, fy - uy * TILE);
+    if (tower) builders.push(tower.id);
+
+    // Send a handful of villagers to raise it all (queued), then resume eco.
+    if (builders.length > 0) {
+      const vills = this.myUnits("villager")
+        .filter((v) => v.order.kind !== OrderKind.Build)
+        .sort((a, b) => dist(a.x, a.y, fx, fy) - dist(b.x, b.y, fx, fy))
+        .slice(0, 4);
+      builders.forEach((bid, i) => {
+        const v = vills[i % vills.length];
+        if (v) this.world.issueBuildRepair([v.id], bid, true);
+      });
+      // Only consider walls "planned" once something actually went down; if every
+      // segment hit blocked tiles, retry next cycle instead of giving up forever.
+      this.wallsPlanned = true;
+    }
+  }
+
+  private gatherTargets(age: number): Record<ResourceKind, number> {
+    if (age === 0) return { food: 0.5, wood: 0.4, gold: 0.1 } as Record<ResourceKind, number>;
+    if (age === 1) return { food: 0.42, wood: 0.33, gold: 0.25 } as Record<ResourceKind, number>;
+    return { food: 0.36, wood: 0.29, gold: 0.35 } as Record<ResourceKind, number>;
+  }
+
+  private villagerTask(v: Entity): ResourceKind | "busy" | "idle" {
+    if (v.order.kind === OrderKind.Gather || v.order.kind === OrderKind.Return) {
+      if (v.carryKind) return v.carryKind;
+      const node = this.world.byId.get(v.order.target);
+      if (node) {
+        if (node.type === "tree") return ResourceKind.Wood;
+        if (node.type === "gold_mine") return ResourceKind.Gold;
+        return ResourceKind.Food;
+      }
+      return ResourceKind.Food;
+    }
+    if (v.order.kind === OrderKind.Build || v.order.kind === OrderKind.Repair) return "busy";
+    if (v.order.kind === OrderKind.Idle) return "idle";
+    return "busy";
+  }
+
+  private balanceGatherers(villagers: Entity[]) {
+    const p = this.world.player(this.team);
+    const base = this.base();
+    if (!base) return;
+    const counts: Record<string, number> = { food: 0, wood: 0, gold: 0 };
+    const idle: Entity[] = [];
+    let working = 0;
+    for (const v of villagers) {
+      const t = this.villagerTask(v);
+      if (t === "idle") idle.push(v);
+      else if (t !== "busy") {
+        counts[t]++;
+        working++;
+      }
+    }
+    const targets = this.gatherTargets(p.age);
+    const wantKind = (): ResourceKind => {
+      const total = working + 1;
+      const deficits: [ResourceKind, number][] = (
+        [ResourceKind.Food, ResourceKind.Wood, ResourceKind.Gold] as ResourceKind[]
+      ).map((k) => [k, targets[k] - counts[k] / total]);
+      deficits.sort((a, b) => b[1] - a[1]);
+      return deficits[0][0];
+    };
+
+    const NODE_FOR: Record<ResourceKind, string[]> = {
+      [ResourceKind.Food]: ["berries", "farm"],
+      [ResourceKind.Wood]: ["tree"],
+      [ResourceKind.Gold]: ["gold_mine"],
+    };
+
+    // Put every idle villager to work; nudge one worker per cycle for balance.
+    const toAssign = idle.slice(0, 6);
+    if (toAssign.length === 0 && villagers.length > 6) {
+      // Rebalance: find the kind with the largest surplus and move one worker.
+      const total = Math.max(1, working);
+      let surplusKind: ResourceKind | null = null;
+      let surplus = 0.08;
+      for (const k of [ResourceKind.Food, ResourceKind.Wood, ResourceKind.Gold]) {
+        const s = counts[k] / total - targets[k];
+        if (s > surplus) {
+          surplus = s;
+          surplusKind = k;
+        }
+      }
+      if (surplusKind) {
+        const v = villagers.find((u) => this.villagerTask(u) === surplusKind);
+        if (v) toAssign.push(v);
+      }
+    }
+
+    for (const v of toAssign) {
+      const kind = wantKind();
+      let node: Entity | null = null;
+      for (const nt of NODE_FOR[kind]) {
+        node = this.nearestResource(nt, v.x, v.y);
+        if (node) break;
+      }
+      if (node) {
+        this.world.issueGather([v.id], node.id);
+        counts[kind]++;
+        working++;
+      }
+    }
+  }
+
+  /**
+   * Promptly replace a core building that's been destroyed. We only rebuild
+   * types we'd actually completed before (so it reacts to razes, not to a build
+   * order we haven't reached yet) and place near the base with two builders so
+   * the hole is filled fast. One rebuild per cycle keeps it from over-spending.
+   */
+  private rebuildStep(base: Entity) {
+    const REBUILDABLE = [
+      "barracks", "archery_range", "stable", "blacksmith", "siege_workshop",
+      "mill", "market", "lumber_camp", "mining_camp",
+    ];
+    const p = this.world.player(this.team);
+    // Remember everything currently standing so we know what "lost" means.
+    for (const b of this.myBuildings()) this.everBuilt.add(b.type);
+    for (const type of REBUILDABLE) {
+      if (!this.everBuilt.has(type)) continue;
+      if (this.myBuildings(type, false).length > 0) continue; // still have one (or building)
+      const def = BUILDINGS[type];
+      if (!def || !this.world.canAfford(p.resources, def.cost)) continue;
+      const b = this.placeNear(type, base.x, base.y, 3, 8);
+      if (b) {
+        this.assignBuilder(b, 2);
+        this.say(`rebuilding our ${def.name.toLowerCase()}.`, b.x, b.y, 20);
+        return; // one per cycle
+      }
+    }
+  }
+
+  private maybeBuildCamps(base: Entity) {
+    const p = this.world.player(this.team);
+    if (p.resources.wood < 100) return;
+    const vil = this.myUnits("villager").length;
+    const camps: [string, string, ResourceKind, number][] = [
+      ["tree", "lumber_camp", ResourceKind.Wood, Math.min(5, 2 + Math.floor(vil / 12))],
+      ["gold_mine", "mining_camp", ResourceKind.Gold, Math.min(3, 1 + Math.floor(vil / 16))],
+    ];
+    for (const [resType, campType, kind, cap] of camps) {
+      if (this.myBuildings(campType, false).length >= cap) continue; // don't blanket the map
+      // Go out onto the map: find the nearest resource node of this type that
+      // isn't yet served by a drop-off, and plant a camp there. As patches near
+      // base deplete the AI keeps pushing camps out to secure new ground.
+      let best: Entity | null = null;
+      let bestD = Infinity;
+      for (const e of this.world.entities) {
+        if (!e.alive || e.kind !== Kind.Resource || e.type !== resType || e.amount <= 0) continue;
+        const d = dist(e.x, e.y, base.x, base.y);
+        if (d >= bestD || d > TILE * 42) continue; // keep expansion within reach
+        const drop = this.world.findNearestDropoff(this.team, e.x, e.y, kind);
+        const dropDist = drop ? dist(drop.x, drop.y, e.x, e.y) : Infinity;
+        if (dropDist > TILE * 6) { best = e; bestD = d; }
+      }
+      if (best) {
+        const camp = this.placeNear(campType, best.x, best.y, 1.5, 3.5);
+        if (camp) { this.assignBuilder(camp); return; } // one camp per cycle
+      }
+    }
+  }
+
+  /**
+   * The Market: the answer to an economy that has too much of one thing.
+   *
+   * This is the other half of the deadlock the age-saving fix addresses. The AI
+   * regularly sat on 1600 wood and 300 food, or 1900 gold and 25 food, with a
+   * building in the game that converts one into the other and no idea it
+   * existed — measured, on the same seeds where it never attacked. Trading a
+   * surplus is not a clever play here, it is first aid.
+   *
+   * It also runs Trade Carts, which arrived as player-only economy: a route is
+   * gold for nothing but the wood to buy the cart and ground you can hold, and
+   * an opponent who never builds one is quietly playing a smaller game.
+   */
+  private marketStep(base: Entity, villagerCount: number) {
+    const p = this.world.player(this.team);
+    if (p.age < 1) return;
+    const markets = this.myBuildings("market");
+    const r = p.resources;
+    const surplus = Math.max(r.wood, r.food);
+    const starving = Math.min(r.food, r.wood);
+
+    // Build one when the bank is lopsided enough to be worth fixing, or simply
+    // once the economy is big enough that trade routes start paying.
+    if (markets.length === 0 && this.myBuildings("market", false).length === 0
+      && r.wood > 260 && (surplus > 700 || villagerCount >= 16)) {
+      const m = this.placeNear("market", base.x, base.y, 4, 8);
+      if (m) { this.assignBuilder(m); return; }
+    }
+    if (markets.length === 0) return;
+
+    // Rate-limited: the price moves against you with every trade, so dumping a
+    // thousand wood in one think step is the worst way to sell it.
+    if (this.gameTime - this.lastTradeTime > 12 && surplus > 900 && starving < 260) {
+      this.lastTradeTime = this.gameTime;
+      if (r.wood > 900 && r.food < 260) {
+        // Wood to gold to food. Two trades, but it is the only bridge there is.
+        this.world.marketTrade(this.team, "sell_wood");
+        if (r.gold > 200) this.world.marketTrade(this.team, "buy_food");
+      } else if (r.food > 900 && r.wood < 260) {
+        this.world.marketTrade(this.team, "sell_food");
+        if (r.gold > 200) this.world.marketTrade(this.team, "buy_wood");
+      }
+    }
+    // Gold is the one thing the Market cannot make from nothing, so a fat bank
+    // of both raw materials and no gold is worth converting outright.
+    if (this.gameTime - this.lastTradeTime > 12 && r.gold < 180 && r.wood > 700) {
+      this.lastTradeTime = this.gameTime;
+      this.world.marketTrade(this.team, "sell_wood");
+    }
+
+    // Trade carts, once there are two Markets to run between. A second Market
+    // placed away from the first *is* the route, so build it deliberately.
+    //
+    // Gated on the size of the economy rather than on a difficulty flag. The
+    // first version required `diff.counters`, which is about picking counter
+    // units and is false for Knight — so the whole trade economy was switched
+    // off for the tier most games are played at, and measured at zero carts
+    // across six full-length matches. A weak AI is kept out of this by never
+    // reaching the villager count, which is the honest gate.
+    if (markets.length === 1 && r.wood > 400 && villagerCount >= 14) {
+      const away = this.world.map.starts[this.team];
+      const m2 = this.placeNear("market", away.x, away.y, 12, 20);
+      if (m2) { this.assignBuilder(m2); return; }
+    }
+    if (markets.length >= 2) {
+      const carts = this.myUnits("trade_cart").length;
+      if (carts < 4 && r.wood > 200 && r.gold > 100 && p.popUsed < p.popCap - 4) {
+        this.world.trainUnit(this.team, markets[0].id, "trade_cart");
+      }
+    }
+  }
+
+  private maybeBuildFarms(base: Entity, villagerCount: number) {
+    const p = this.world.player(this.team);
+    // How much berry food is still within reach of base.
+    let berryFood = 0;
+    for (const e of this.world.entities) {
+      if (e.alive && e.kind === Kind.Resource && e.type === "berries" && e.amount > 0 &&
+          dist(e.x, e.y, base.x, base.y) < TILE * 18) berryFood += e.amount;
+    }
+    const lowBerries = berryFood < 700;
+    // Food pressure: plenty of wood and no food is the signature of an economy
+    // that has run out of things to eat and has nowhere to put the villagers.
+    // Waiting for the berries to be provably gone, or for Castle Age, is too
+    // late — reaching Castle Age *needs* the food.
+    const foodStarved = p.resources.food < 220 && p.resources.wood > 400;
+
+    // A mill anchors a compact farm economy — build it once the eco is rolling
+    // or the berries are thinning, so the transition is ready.
+    if (this.myBuildings("mill", false).length === 0 && p.age >= 1 && p.resources.wood > 150 &&
+        (lowBerries || foodStarved || villagerCount >= 12)) {
+      const mill = this.placeNear("mill", base.x, base.y, 3, 6);
+      if (mill) { this.assignBuilder(mill); return; }
+    }
+
+    // Farm transition: farms are the only food that doesn't run out for good, so
+    // the AI must move onto them for the late game. Ramp toward ~one farm per 3
+    // villagers once the berries thin out or we hit Castle Age — building a
+    // couple at a time so the transition actually keeps up with a growing
+    // population. Individual fields do wear out now, but auto-reseed puts them
+    // back for the wood, so this only has to cover *growth*, not replacement.
+    const transitioning = lowBerries || foodStarved || p.age >= 2;
+    const farmTarget = transitioning ? Math.min(24, Math.max(3, Math.ceil(villagerCount / 3))) : 0;
+    const mill = this.myBuildings("mill")[0];
+    const cx = mill ? mill.x : base.x;
+    const cy = mill ? mill.y : base.y;
+    for (let n = 0; n < 2; n++) {
+      if (this.myBuildings("farm", false).length >= farmTarget || p.resources.wood <= 80) break;
+      const farm = this.placeNear("farm", cx, cy, 2, 6);
+      if (farm) this.assignBuilder(farm); else break;
+    }
+  }
+
+  private buildOrder(p: ReturnType<World["player"]>, base: Entity, villagerCount: number) {
+    const have = (t: string) => this.myBuildings(t, false).length > 0;
+
+    // Dark Age: barracks once the eco can carry it.
+    if (!have("barracks") && villagerCount >= 6 && p.resources.wood >= 170) {
+      const b = this.placeNear("barracks", base.x, base.y, 4, 9);
+      if (b) this.assignBuilder(b);
+    }
+    // Second Feudal qualifier (advancing now needs any 2 of a set) — a Mill is a
+    // cheap, always-useful drop-off that satisfies it.
+    if (p.age === 0 && have("barracks") && !have("mill") &&
+        !this.world.ageRequirementMet(this.team, 1) && p.resources.wood >= 110) {
+      const b = this.placeNear("mill", base.x, base.y, 3, 7);
+      if (b) this.assignBuilder(b);
+    }
+
+    // Advance to Feudal.
+    if (p.age === 0 && this.diff.maxAge >= 1 && this.world.ageRequirementMet(this.team, 1) &&
+        villagerCount >= Math.floor(this.villagerGoal * 0.55)) {
+      const tc = this.myBuildings("town_center")[0];
+      if (tc) this.world.research(this.team, tc.id, "age");
+    }
+
+    if (p.age >= 1) {
+      if (!have("archery_range") && p.resources.wood >= 185) {
+        const b = this.placeNear("archery_range", base.x, base.y, 4, 9);
+        if (b) this.assignBuilder(b);
+      }
+      if (!have("blacksmith") && p.resources.wood >= 160) {
+        const b = this.placeNear("blacksmith", base.x, base.y, 3, 8);
+        if (b) this.assignBuilder(b);
+      }
+      // Stable is a Feudal building now — gets cavalry (Horsemen/Raiders) going.
+      if (!have("stable") && p.resources.wood >= 185) {
+        const b = this.placeNear("stable", base.x, base.y, 4, 9);
+        if (b) this.assignBuilder(b);
+      }
+      // A defensive tower at the front.
+      if (this.myBuildings("watch_tower", false).length < (this.diff.id === "squire" ? 0 : 2) &&
+          p.resources.wood > 220) {
+        const c = { x: this.world.worldW / 2, y: this.world.worldH / 2 };
+        const fx = base.x + (c.x - base.x) * 0.22;
+        const fy = base.y + (c.y - base.y) * 0.22;
+        const t = this.placeNear("watch_tower", fx, fy, 0, 4);
+        if (t) this.assignBuilder(t);
+      }
+    }
+
+    // Advance to Castle (needs any 2 Feudal buildings — we build several).
+    if (p.age === 1 && this.diff.maxAge >= 2 && this.world.ageRequirementMet(this.team, 2) &&
+        villagerCount >= Math.floor(this.villagerGoal * 0.6)) {
+      const tc = this.myBuildings("town_center")[0];
+      if (tc) this.world.research(this.team, tc.id, "age");
+    }
+
+    if (p.age >= 2) {
+      if (!have("siege_workshop") && p.resources.wood >= 210) {
+        const b = this.placeNear("siege_workshop", base.x, base.y, 4, 9);
+        if (b) this.assignBuilder(b);
+      }
+    }
+
+    // Extra military production so a big economy can actually spend into a
+    // full-pop army — one of each building can't fill the cap. Scales with the
+    // villager count, Knight+ only (weaker tiers stay on a single line).
+    if (this.diff.maxAge >= 2 && p.age >= 1 && p.resources.wood >= 240) {
+      const milTypes = ["barracks", "archery_range", "stable"].filter((t) => have(t));
+      const milCount = milTypes.reduce((n, t) => n + this.myBuildings(t, false).length, 0);
+      const target = Math.min(8, 2 + Math.floor(villagerCount / 11));
+      if (milTypes.length && milCount < target) {
+        milTypes.sort((a, b) => this.myBuildings(a, false).length - this.myBuildings(b, false).length);
+        const b = this.placeNear(milTypes[0], base.x, base.y, 4, 12);
+        if (b) this.assignBuilder(b);
+      }
+    }
+  }
+
+  // ------------------------------------------------------------ military --
+
+  private armyUnits(): Entity[] {
+    // Scouts are utility (kept out of battle lines); villagers/monks aren't army.
+    return this.myUnits().filter((e) => e.type !== "villager" && e.type !== "monk" && e.type !== "scout");
+  }
+
+  /** Regicide: our own King, if he still lives. */
+  private myKing(): Entity | null {
+    for (const e of this.world.entities) {
+      if (e.alive && e.type === "king" && e.team === this.team) return e;
+    }
+    return null;
+  }
+
+  /** Regicide: the nearest enemy King we could march on. */
+  private enemyKing(): Entity | null {
+    const base = this.base();
+    const ox = base?.x ?? this.world.map.starts[this.team].x;
+    const oy = base?.y ?? this.world.map.starts[this.team].y;
+    let best: Entity | null = null;
+    let bestD = Infinity;
+    for (const e of this.world.entities) {
+      if (!e.alive || e.type !== "king" || !this.isHostile(e.team)) continue;
+      const d = dist(ox, oy, e.x, e.y);
+      if (d < bestD) { bestD = d; best = e; }
+    }
+    return best;
+  }
+
+  /** A harassing AI keeps a couple of Raiders for eco raids (they're a Feudal
+   *  unit it would otherwise rush past). */
+  private ensureRaiders() {
+    if ((!this.diff.harasses && this.style !== "rush") || this.savingForAge) return;
+    const p = this.world.player(this.team);
+    if (p.age < 1 || this.world.countOf(this.team, "raider") >= 2) return;
+    if (p.popUsed >= p.popCap || !this.world.canAfford(p.resources, UNITS.raider.cost)) return;
+    const stable = this.myBuildings("stable").find((b) => b.productionQueue.length < 2);
+    if (stable) this.world.trainUnit(this.team, stable.id, "raider");
+  }
+
+  /** Keep one cheap Scout around for early map vision. */
+  private trainScout() {
+    if (!this.diff.scouts || this.gameTime > 360) return;
+    if (this.world.countOf(this.team, "scout") > 0) return;
+    const p = this.world.player(this.team);
+    if (p.popUsed >= p.popCap) return;
+    const tc = this.myBuildings("town_center")[0];
+    if (tc && tc.productionQueue.length < 2) this.world.trainUnit(this.team, tc.id, "scout");
+  }
+
+  private military() {
+    this.trainScout();
+    this.ensureRaiders();
+    this.trainArmy();
+    this.heroStep();
+    this.scoutStep();
+
+    // Regicide: guarding our own King pre-empts everything else when he's in
+    // danger. Otherwise it just posts a light bodyguard and lets us play on.
+    const kingEmergency = this.world.mode === "regicide" && this.kingDefense();
+    const defended = !kingEmergency && this.defendStep();
+    if (!kingEmergency && !defended) {
+      this.bridgeStep();
+      this.attackStep();
+      this.harassStep();
+    }
+    this.abilityStep();
+    this.commanderPowerStep();
+  }
+
+  /**
+   * Regicide bodyguard. Keeps a small standing escort on our King and, when an
+   * enemy force closes on him, recalls the army and walks the King back into the
+   * safety of our base. Returns true only for a genuine emergency, so on a quiet
+   * front we still raid eco and grind the enemy army as normal.
+   */
+  private kingDefense(): boolean {
+    const king = this.myKing();
+    if (!king) return false; // already lost — nothing to guard
+    const threat = this.strengthNear(king.x, king.y, 400, false);
+    const army = this.armyUnits();
+
+    if (threat > 50) {
+      this.attacking = false;
+      this.say("protect the King!", king.x, king.y, 16);
+      // Walk the King home, behind whatever defences and bodies we have.
+      const home = this.base() ?? this.world.map.starts[this.team];
+      if (dist(king.x, king.y, home.x, home.y) > 120) {
+        this.world.issueMove([king.id], home.x, home.y);
+      }
+      // Collapse onto the King — everyone for a heavy push, else the spare line.
+      const heavy = threat > 140;
+      const recall = heavy ? army : army.filter((u) => u.order.kind !== OrderKind.Attack);
+      if (recall.length) this.world.issueMove(recall.map((u) => u.id), king.x, king.y, false, true);
+      return true;
+    }
+
+    // Quiet: keep a token escort posted with the King (second-line units only,
+    // so we don't strip a wave that's already out the door).
+    const guards = army.filter((u) => dist(u.x, u.y, king.x, king.y) < 220);
+    if (guards.length < 3) {
+      const spare = army
+        .filter((u) => u.order.kind !== OrderKind.Attack && dist(u.x, u.y, king.x, king.y) >= 220)
+        .slice(0, 3 - guards.length);
+      if (spare.length) {
+        this.world.issueMove(spare.map((u) => u.id), king.x + this.rng.range(-40, 40), king.y + this.rng.range(-40, 40));
+      }
+    }
+    return false;
+  }
+
+  /** Plant the commander banner amid a real fight when it's ready. */
+  private commanderPowerStep() {
+    if (!this.world.powerReady(this.team)) return;
+    const fighters = this.armyUnits().filter(
+      (u) => u.order.kind === OrderKind.Attack || u.order.kind === OrderKind.AttackMove,
+    );
+    if (fighters.length < 5) return;
+    let x = 0;
+    let y = 0;
+    for (const u of fighters) { x += u.x; y += u.y; }
+    this.world.placeBanner(this.team, x / fighters.length, y / fighters.length);
+  }
+
+  /** Field the one Champion once the economy can spare the cost. */
+  private heroStep() {
+    if (!this.diff.usesAbilities || this.savingForAge) return;
+    const p = this.world.player(this.team);
+    if (p.heroState !== "none") return;
+    if (this.myUnits("villager").length < 12) return;
+    if (p.resources.gold < 120 || p.resources.food < 150) return;
+    const tc = this.myBuildings("town_center")[0];
+    if (tc) this.world.trainUnit(this.team, tc.id, "hero");
+  }
+
+  /** Fire signature abilities on a knot of army units that are mid-fight. */
+  private abilityStep() {
+    if (!this.diff.usesAbilities) return;
+    if (this.flub()) return; // fumbled the ability timing
+    const fighters = this.armyUnits().filter(
+      (e) => ABILITIES[e.type] && e.abilityCooldown <= 0 && e.order.kind === OrderKind.Attack,
+    );
+    // Fire in a real melee (2+), or whenever the Champion is in the thick of it.
+    const hero = fighters.find((f) => UNITS[f.type]?.hero);
+    if (fighters.length >= 2 || hero) this.world.useAbility(fighters.map((f) => f.id));
+  }
+
+  /** Composition weights, optionally countering what we've seen. */
+  private composition(): Record<string, number> {
+    const p = this.world.player(this.team);
+    const base: Record<string, number> = {};
+    if (p.age === 0) {
+      base.militia = 0.7;
+      base.spearman = 0.3;
+    } else if (p.age === 1) {
+      base.militia = 0.32;
+      base.archer = 0.26;
+      base.spearman = 0.12;
+      base.skirmisher = 0.08;
+      base.horseman = 0.1; // fast melee cavalry
+      base.javelin = 0.07; // anti-cavalry ranged
+      base.raider = 0.1; // eco harass
+    } else {
+      base.knight = 0.26;
+      base.crossbow = 0.18;
+      base.handcannon = 0.08; // gunpowder line
+      base.twohand = 0.12; // heavy infantry top end
+      base.pikeman = 0.08; // anti-cavalry
+      base.catapult = 0.08;
+      base.ram = 0.05;
+      base.trebuchet = 0.03;
+      base.horseman = 0.05; // anti-siege melee cav
+      // The enemy is walling up — bring the wall-breakers.
+      if (this.seenWalls >= 4 && this.myBuildings("siege_workshop").length > 0) {
+        base.ram += 0.14;
+        base.trebuchet += 0.1;
+        base.catapult += 0.08;
+      }
+    }
+    if (!this.diff.counters) return base;
+
+    // Pool scouted intel across the alliance: counter the strongest read of the
+    // enemy army that any teammate has, not just what we personally can see.
+    const s: SeenComposition = { ...this.seen };
+    for (const ally of this.alliedAIs()) {
+      s.infantry = Math.max(s.infantry, ally.seen.infantry);
+      s.archer = Math.max(s.archer, ally.seen.archer);
+      s.cavalry = Math.max(s.cavalry, ally.seen.cavalry);
+      s.siege = Math.max(s.siege, ally.seen.siege);
+    }
+    const total = s.infantry + s.archer + s.cavalry + s.siege;
+    if (total < 3) return base;
+    // Blend the base comp with counters to the observed army.
+    const counter: Record<string, number> = {};
+    const add = (k: string, v: number) => (counter[k] = (counter[k] ?? 0) + v);
+    add("archer", (s.infantry / total) * 0.5);
+    add("handcannon", (s.infantry / total) * 0.4); // gunpowder shreds infantry (Castle)
+    add("skirmisher", (s.archer / total) * 0.4);
+    add("javelin", (s.archer / total) * 0.2);
+    add("knight", (s.archer / total) * 0.3 + (s.siege / total) * 0.4);
+    add("horseman", (s.siege / total) * 0.4); // melee anti-siege cav
+    add("spearman", (s.cavalry / total) * 0.45);
+    add("pikeman", (s.cavalry / total) * 0.55); // best anti-cav (Castle)
+    add("militia", (s.archer / total) * 0.2 + (s.siege / total) * 0.2);
+    const out: Record<string, number> = {};
+    for (const k of new Set([...Object.keys(base), ...Object.keys(counter)])) {
+      out[k] = (base[k] ?? 0) * 0.45 + (counter[k] ?? 0) * 0.55;
+    }
+    return out;
+  }
+
+  private trainArmy() {
+    // Hold army production too while banking for an age — get to the next tier
+    // first; a Dark-Age army just feeds a Feudal one. (Keep a token defence.)
+    if (this.savingForAge && this.armyUnits().length >= 4) return;
+    const p = this.world.player(this.team);
+    const comp = this.composition();
+    const army = this.armyUnits();
+    // Grow the army steadily; the greedy trainer below only spends what's
+    // affordable, so this naturally scales with the economy (toward the pop cap
+    // late game) without starving villager/age production.
+    const want = Math.max(this.armySize * 1.4, army.length + 5);
+
+    const countByType: Record<string, number> = {};
+    for (const u of army) countByType[u.type] = (countByType[u.type] ?? 0) + 1;
+
+    // Greedy: train the unit type with the biggest deficit that we can afford.
+    const deficits = Object.entries(comp)
+      .map(([type, w]) => [type, w * want - (countByType[type] ?? 0)] as [string, number])
+      .filter(([type, d]) => d > 0.5 && UNITS[type] && p.age >= UNITS[type].age)
+      .sort((a, b) => b[1] - a[1]);
+
+    for (const [type] of deficits) {
+      const def = UNITS[type];
+      const producers = this.myBuildings(def.trainedAt).filter((b) => b.productionQueue.length < 2);
+      for (const b of producers) {
+        if (!this.world.trainUnit(this.team, b.id, type)) break;
+      }
+    }
+  }
+
+  private scoutStep() {
+    if (!this.diff.scouts) return;
+    if (this.gameTime - this.lastScoutTime < 120) return;
+    if (this.flub()) return; // forgot to send the scout this time
+    const scout = this.world.byId.get(this.scoutId);
+    if (scout && scout.alive && scout.order.kind !== OrderKind.Idle) return;
+    // Prefer the dedicated Scout, then a spare soldier, then an early villager.
+    const army = this.armyUnits();
+    const unit = this.myUnits("scout").find((u) => u.order.kind === OrderKind.Idle) ??
+      army.find((u) => u.order.kind === OrderKind.Idle) ??
+      (this.gameTime < 180 ? this.myUnits("villager")[0] : undefined);
+    if (!unit) return;
+    this.scoutId = unit.id;
+    this.lastScoutTime = this.gameTime;
+    const enemyStart = this.world.map.starts[this.enemyTeam];
+    const home = this.world.map.starts[this.team];
+    // Arc to the enemy base edge, then home.
+    this.world.issueMove([unit.id], enemyStart.x + this.rng.range(-200, 200), enemyStart.y + this.rng.range(-200, 200));
+    this.world.issueMove([unit.id], home.x, home.y, true);
+  }
+
+  /** Returns true if we are busy defending. */
+  private defendStep(): boolean {
+    const buildings = this.myBuildings(undefined, false);
+    let threatX = 0;
+    let threatY = 0;
+    let threats = 0;
+    for (const e of this.world.entities) {
+      if (!e.alive || !this.isHostile(e.team) || e.kind !== Kind.Unit) continue;
+      if (e.type === "villager") continue;
+      for (const b of buildings) {
+        if (dist(e.x, e.y, b.x, b.y) < 320) {
+          threatX += e.x;
+          threatY += e.y;
+          threats++;
+          break;
+        }
+      }
+    }
+    if (threats < 2) return this.allyDefendStep();
+    threatX /= threats;
+    threatY /= threats;
+    // A serious raid — call for the cavalry.
+    if (threats >= 3) this.say("my base is under attack — I need help!", threatX, threatY, 18);
+    // Villagers caught in the raid take cover and scatter.
+    const panicked = this.myUnits("villager")
+      .filter((v) => v.abilityCooldown <= 0 && dist(v.x, v.y, threatX, threatY) < 360)
+      .map((v) => v.id);
+    if (panicked.length) this.world.useAbility(panicked);
+    this.attacking = false;
+    const defenders = this.armyUnits().filter((u) => u.order.kind !== OrderKind.Attack);
+    if (defenders.length) {
+      // Meet them on ground worth standing on — but only just. Defence is about
+      // arriving, not about standing somewhere nice: a raid is eating villagers
+      // while the relief force admires a ridge, so this is a tight search (five
+      // tiles) that steps onto the rise you were nearly on anyway and never
+      // trades interception for elevation.
+      let dx2 = 0, dy2 = 0;
+      for (const u of defenders) { dx2 += u.x; dy2 += u.y; }
+      dx2 /= defenders.length; dy2 /= defenders.length;
+      const meet = this.readsGround
+        ? bestGroundNear(this.world, threatX, threatY, { radius: 160, from: { x: dx2, y: dy2 }, detour: 9 })
+        : { x: threatX, y: threatY };
+      this.world.issueMove(defenders.map((u) => u.id), meet.x, meet.y, false, true);
+    }
+    return true;
+  }
+
+  /**
+   * Our own base is safe — if a teammate is being overrun, march a relief force
+   * to the raid. We commit our spare army (idle/defending units, not those
+   * already mid-attack) so we don't abandon an assault we've already launched,
+   * and rate-limit so the relief column doesn't jitter in place.
+   */
+  private allyDefendStep(): boolean {
+    if (!this.hasAlly()) return false;
+    if (this.gameTime - this.lastAllyHelpTime < 8) return false;
+
+    // Find the worst raid on an allied (non-self) base.
+    let bestX = 0;
+    let bestY = 0;
+    let bestThreats = 0;
+    for (let t = 0; t < this.world.numTeams; t++) {
+      if (t === this.team || !this.world.areAllied(this.team, t as Team)) continue;
+      const p = this.world.player(t as Team);
+      if (!p || p.defeated) continue;
+      const allyBuildings = this.world.entities.filter(
+        (e) => e.alive && e.team === t && e.kind === Kind.Building,
+      );
+      let tx = 0;
+      let ty = 0;
+      let n = 0;
+      for (const e of this.world.entities) {
+        if (!e.alive || !this.isHostile(e.team) || e.kind !== Kind.Unit || e.type === "villager") continue;
+        for (const b of allyBuildings) {
+          if (dist(e.x, e.y, b.x, b.y) < 340) { tx += e.x; ty += e.y; n++; break; }
+        }
+      }
+      if (n > bestThreats) { bestThreats = n; bestX = tx / n; bestY = ty / n; }
+    }
+    // Only bother for a real raid (3+ attackers) and if we have a force to send.
+    if (bestThreats < 3) return false;
+    const relief = this.armyUnits().filter((u) => u.order.kind !== OrderKind.Attack);
+    if (relief.length < 4) return false;
+
+    this.lastAllyHelpTime = this.gameTime;
+    this.attacking = false;
+    this.say("hold on — sending help your way!", bestX, bestY, 18);
+    this.world.issueMove(relief.map((u) => u.id), bestX, bestY, false, true);
+    return true;
+  }
+
+  /**
+   * Mid-assault: keep stalled units advancing toward the highest-value enemy we
+   * can see — fleeing villagers first (the eco kill), then the Town Center and
+   * production, then anything. If we can't see a thing, march into their start
+   * to scout and commit rather than idling at the edge. Units already swinging
+   * are left on their target, so this presses the attack without thrashing.
+   */
+  private pressAttack() {
+    const army = this.armyUnits();
+    if (army.length === 0) return;
+    const idle = army.filter((u) => u.order.kind !== OrderKind.Attack);
+    if (idle.length === 0) return; // everyone's already fighting — good
+    let cx = 0;
+    let cy = 0;
+    for (const u of army) { cx += u.x; cy += u.y; }
+    cx /= army.length;
+    cy /= army.length;
+    const ids = idle.map((u) => u.id);
+
+    // 0. Regicide: take the King only when he's there for the taking. If his
+    //    escort is light next to our striking force, cut him down and end it;
+    //    otherwise fall through and keep wearing down their eco/army — as that
+    //    fight is won his guard thins out and this opens up on its own.
+    if (this.world.mode === "regicide") {
+      const ek = this.enemyKing();
+      if (ek && this.world.fogAt(this.team, ek.x, ek.y) !== 0) {
+        const guards = this.strengthNear(ek.x, ek.y, 320, false);
+        const ours = this.strengthNear(cx, cy, 360, true);
+        if (guards < 45 || guards < ours * 0.5) {
+          this.world.issueAttack(ids, ek.id);
+          return;
+        }
+      }
+    }
+
+    // 1. Smash whatever we're piled against (wall, gate, tower, any building) so
+    //    a defended base can't simply wall us out — we breach and pour in.
+    let blocker: Entity | null = null;
+    let blockD = 150;
+    for (const e of this.world.entities) {
+      if (!e.alive || !this.isHostile(e.team) || e.kind !== Kind.Building) continue;
+      if (this.world.fogAt(this.team, e.x, e.y) === 0) continue;
+      const d = dist(cx, cy, e.x, e.y);
+      if (d < blockD) { blockD = d; blocker = e; }
+    }
+    if (blocker) { this.world.issueAttack(ids, blocker.id); return; }
+
+    // 2. Otherwise drive at the highest-value target we can see: fleeing
+    //    villagers (eco kill), then Town Centre / production, then anything.
+    let best: Entity | null = null;
+    let bestScore = -Infinity;
+    for (const e of this.world.entities) {
+      if (!e.alive || e.team === this.team || !this.isHostile(e.team)) continue;
+      if (e.kind !== Kind.Unit && e.kind !== Kind.Building) continue;
+      if (this.world.fogAt(this.team, e.x, e.y) === 0) continue; // unseen
+      let pri: number;
+      if (e.kind === Kind.Unit) pri = e.type === "villager" ? 130 : e.type === "monk" ? 90 : 55;
+      else pri = e.type === "town_center" ? 100 : PRODUCTION.has(e.type) ? 70 : 35;
+      const score = pri - dist(cx, cy, e.x, e.y) * 0.04;
+      if (score > bestScore) { bestScore = score; best = e; }
+    }
+    if (best) { this.world.issueAttack(ids, best.id); return; }
+
+    // 3. Blind — march into their start to scout and commit.
+    const s = this.world.map.starts[this.focusEnemy];
+    this.world.issueMove(ids, s.x, s.y, false, true);
+  }
+
+  /**
+   * Focus fire: when our army is locked in a fight, drive the melee line onto the
+   * single most valuable enemy unit nearby (siege > champion > monk > ranged,
+   * with a bonus for the wounded) so threats die one at a time instead of damage
+   * spreading. Ranged units keep auto-firing/kiting. Re-issues only when the
+   * target changes, so it's cheap to call every cycle. Returns true when it took
+   * over a fight (so the caller skips the generic base-press this cycle).
+   */
+  private focusFireStep(): boolean {
+    if (!this.diff.focusFire) return false;
+    const army = this.armyUnits();
+    if (army.length < 4) return false;
+    let cx = 0;
+    let cy = 0;
+    for (const u of army) { cx += u.x; cy += u.y; }
+    cx /= army.length;
+    cy /= army.length;
+
+    let best: Entity | null = null;
+    let bestScore = -Infinity;
+    for (const e of this.world.entities) {
+      if (!e.alive || e.kind !== Kind.Unit || !this.isHostile(e.team) || e.type === "villager") continue;
+      const d = dist(cx, cy, e.x, e.y);
+      if (d > 260) continue; // only what we're actually fighting
+      if (this.world.fogAt(this.team, e.x, e.y) === 0) continue;
+      const wounded = (1 - e.hp / Math.max(1, e.maxHp)) * 45; // finish low-HP targets
+      const score = armyTargetPriority(e.type) + wounded - d * 0.05;
+      if (score > bestScore) { bestScore = score; best = e; }
+    }
+    if (!best) { this.lastFocusId = -1; return false; }
+
+    const melee = army.filter((u) => (UNITS[u.type]?.range ?? 0) < 60);
+    const ids = (melee.length >= 3 ? melee : army).map((u) => u.id);
+    if (best.id !== this.lastFocusId) {
+      this.world.issueAttack(ids, best.id);
+      this.lastFocusId = best.id;
+    }
+    return true;
+  }
+
+  private attackStep() {
+    const army = this.armyUnits();
+    const armyPop = army.reduce((s, u) => s + (UNITS[u.type]?.pop ?? 1), 0);
+    if (this.attacking) {
+      // Wave over only when the force is genuinely spent.
+      if (armyPop < this.armySize * 0.3) { this.attacking = false; return; }
+      // Smart retreat: bail only from a genuinely overwhelming force (keep the
+      // army alive) — never from a garrison we should be steamrolling.
+      const fighting = army.filter((u) => u.order.kind === OrderKind.Attack || u.order.kind === OrderKind.AttackMove);
+      if (fighting.length >= 5 && this.gameTime - this.lastRetreatTime > 14) {
+        let fx = 0;
+        let fy = 0;
+        for (const u of fighting) { fx += u.x; fy += u.y; }
+        fx /= fighting.length;
+        fy /= fighting.length;
+        const mine = this.strengthNear(fx, fy, 700, true); // our force + reinforcements
+        const foe = this.strengthNear(fx, fy, 440, false);
+        if (foe > 120 && mine < foe * 0.4) {
+          const home = this.world.map.starts[this.team];
+          this.world.issueMove(army.map((u) => u.id), home.x, home.y, false, false);
+          this.attacking = false;
+          this.lastRetreatTime = this.gameTime;
+          this.lastWaveTime = this.gameTime - this.cadence * 0.55; // regroup, then come again
+          return;
+        }
+      }
+      // Keep driving for the kill: re-command any stalled units toward the
+      // enemy's villagers / Town Center / production instead of loitering at the
+      // wall. This is what makes the AI actually finish a base.
+      // Concentrate fire on the deadliest/weakest enemy in the melee (high tiers
+      // only); fall back to driving at the base when no defenders are close.
+      const focusing = this.focusFireStep();
+      if (!focusing && this.gameTime - this.lastPressTime > 1.5) {
+        this.lastPressTime = this.gameTime;
+        this.pressAttack();
+      }
+      return;
+    }
+    // Pile onto a teammate's attack even a little under-strength: a combined
+    // two-army hit lands far harder than two solo waves arriving apart.
+    const joiningAlly = this.allyAssaulting() && armyPop >= this.armySize * 0.6 &&
+      this.gameTime - this.lastWaveTime > this.cadence * 0.4;
+    if (armyPop < this.armySize && !joiningAlly) return;
+    if (!joiningAlly && this.gameTime - this.lastWaveTime < this.cadence) return;
+
+    // Fumbled the timing — dither a few seconds before committing the push.
+    if (this.flub()) { this.lastWaveTime = this.gameTime - this.cadence * 0.7; return; }
+
+    this.lastWaveTime = this.gameTime;
+    this.attacking = true;
+
+    // Concentrate on the alliance's shared focus enemy (the nearest foe in 1v1).
+    const target = this.focusEnemy;
+    // Primary target: nearest known enemy building, else their start position.
+    const enemyBuildings = this.world.entities.filter(
+      (e) => e.alive && e.team === target && e.kind === Kind.Building &&
+        this.world.fogAt(this.team, e.x, e.y) !== 0,
+    );
+    const start = this.world.map.starts[target];
+    let tx = start.x;
+    let ty = start.y;
+    const base = this.base();
+    if (enemyBuildings.length && base) {
+      enemyBuildings.sort((a, b) => dist(a.x, a.y, base.x, base.y) - dist(b.x, b.y, base.x, base.y));
+      tx = enemyBuildings[0].x;
+      ty = enemyBuildings[0].y;
+    }
+
+    // Sloppier tiers mis-stage their push (fat fingers); top tiers hit clean.
+    const jit = this.diff.executionError * 320;
+    if (jit > 1) { tx += this.rng.range(-jit, jit); ty += this.rng.range(-jit, jit); }
+
+    // Call the assault so the player hears a teammate's attack coming in.
+    if (army.length) {
+      let cx = 0;
+      let cy = 0;
+      for (const u of army) { cx += u.x; cy += u.y; }
+      cx /= army.length;
+      cy /= army.length;
+      this.say(`pressing the attack from the ${this.compass(tx, ty, cx, cy)}!`, cx, cy, 16);
+    }
+
+    // Siege engines peel off to smash the nearest fortification on the approach
+    // so the melee isn't left chipping a stone wall with swords.
+    const siege = army.filter((u) => UNITS[u.type]?.armorClass === "siege");
+    let melee = army;
+    if (siege.length > 0) {
+      const forts = this.world.entities.filter(
+        (e) => e.alive && e.kind === Kind.Building && this.isHostile(e.team) &&
+          this.world.fogAt(this.team, e.x, e.y) !== 0 &&
+          ["stone_wall", "gate", "palisade", "watch_tower", "castle"].includes(e.type),
+      );
+      if (forts.length > 0) {
+        forts.sort((a, b) => dist(a.x, a.y, tx, ty) - dist(b.x, b.y, tx, ty));
+        this.world.issueAttack(siege.map((u) => u.id), forts[0].id);
+        melee = army.filter((u) => UNITS[u.type]?.armorClass !== "siege");
+      }
+    }
+
+    const ids = melee.map((u) => u.id);
+    // Where the army is now, so the ground advice knows which way it is coming
+    // from and what it can actually reach.
+    let ax = 0, ay = 0;
+    for (const u of melee) { ax += u.x; ay += u.y; }
+    if (melee.length) { ax /= melee.length; ay /= melee.length; }
+    const from = { x: ax, y: ay };
+    // Read the ground. A wave that walks straight at a Town Centre arrives one
+    // unit at a time; one that gathers on the ridge outside first arrives as an
+    // army — and if there is high ground on the approach it takes it, because
+    // that is 20% more range for the price of walking there.
+    const useGround = this.readsGround && (this.diff.counters || this.style !== "rush");
+    const candidate = useGround && melee.length
+      ? stagingPoint(this.world, { x: tx, y: ty }, from) : null;
+    const stagedOnHill = candidate ? isHighGround(this.world, candidate.x, candidate.y) : false;
+    // Stage only when the ground is worth stopping for. Staging adds a whole
+    // extra marching leg to every wave, and a wave that stops to form up on an
+    // ordinary flat patch has merely arrived late; on a hill the stop buys 20%
+    // range for the fight that follows. Head-to-head this made no measurable
+    // difference either way (see ROADMAP), so it is chosen for being the
+    // cheaper of two indistinguishable options rather than for winning more.
+    const stage = stagedOnHill ? candidate : null;
+
+    if (this.diff.counters && melee.length >= 10) {
+      // Two-prong: main force + flank.
+      const main = ids.slice(0, Math.floor(ids.length * 0.7));
+      const flank = ids.slice(Math.floor(ids.length * 0.7));
+      if (stage) this.world.issueMove(main, stage.x, stage.y, false, true);
+      this.world.issueMove(main, tx, ty, !!stage, true);
+      const side = this.rng.bool() ? 1 : -1;
+      const fp = this.readsGround
+        ? flankPoint(this.world, { x: tx, y: ty }, from, side)
+        : { x: tx + side * 420, y: ty - side * 420 };
+      this.world.issueMove(flank, fp.x, fp.y, false, true);
+      this.world.issueMove(flank, tx, ty, true, true);
+    } else if (ids.length > 0) {
+      if (stage) this.world.issueMove(ids, stage.x, stage.y, false, true);
+      this.world.issueMove(ids, tx, ty, !!stage, true);
+    }
+    if (stagedOnHill) this.say("forming up on the high ground.", stage!.x, stage!.y, 24);
+  }
+
+  /** Raid: send fast units to butcher the enemy's villagers / eco. */
+  /**
+   * Bridge the ford the army keeps wading through.
+   *
+   * Bridges shipped as something only the player understood: the AI would march
+   * every wave through shallows at half speed, past a crossing it could have
+   * bought once for a hundred wood. That is the same failure as not knowing
+   * hills exist and a more embarrassing one, because a bridge is a building the
+   * AI owns and simply never used.
+   *
+   * Deliberately tied to the route it actually takes — the line from its base
+   * toward the enemy — rather than "bridge every ford". A crossing nowhere near
+   * the fighting is a hundred wood set on fire.
+   */
+  private bridgeStep() {
+    if (!this.readsGround) return;
+    const p = this.world.player(this.team);
+    const def = BUILDINGS.bridge;
+    if (!def || !this.world.canAfford(p.resources, def.cost)) return;
+    // Rate-limited hard: this walks a line and scans buildings, and a ford does
+    // not appear halfway through a match.
+    if (this.gameTime - this.lastBridgeTime < 45) return;
+    const base = this.base();
+    if (!base) return;
+    // Don't start a second one while the first is still going up — an AI that
+    // queues four bridges at a ford has spent four hundred wood on one crossing.
+    const building = this.world.entities.some(
+      (e) => e.alive && e.team === this.team && e.type === "bridge" && e.buildState !== BuildState.Done,
+    );
+    if (building) return;
+
+    const target = this.world.map.starts[this.focusEnemy];
+    const ford = fordCrossing(this.world, base, target);
+    // A puddle is not worth a hundred wood; a real ford is several cells of
+    // half-speed ground with an army walking through it every wave.
+    if (!ford || ford.width < 4) return;
+
+    this.lastBridgeTime = this.gameTime;
+    // Nudge around the crossing point: the exact midpoint may be one cell short
+    // of a full water footprint, and a bridge needs every cell to be shallows.
+    for (let attempt = 0; attempt < 10; attempt++) {
+      const jx = attempt === 0 ? 0 : this.rng.range(-TILE * 2, TILE * 2);
+      const jy = attempt === 0 ? 0 : this.rng.range(-TILE * 2, TILE * 2);
+      const b = this.world.placeBuilding(this.team, "bridge", ford.x + jx, ford.y + jy);
+      if (b) {
+        this.assignBuilder(b, 2);
+        this.say("bridging the ford.", b.x, b.y, 20);
+        return;
+      }
+    }
+  }
+
+  private harassStep() {
+    if (!this.diff.harasses && this.style !== "rush") return;
+    const cool = this.style === "rush" ? 55 : 85;
+    if (this.gameTime - this.lastHarassTime < cool) return;
+    if (this.flub()) return; // skipped the raid
+    const idle = (t: string) => this.myUnits(t).filter((u) => u.order.kind === OrderKind.Idle);
+    // Dedicated raiders first (Raider/Horseman), then Knights, then any spare Man-at-Arms.
+    let raiders = [...idle("raider"), ...idle("horseman"), ...idle("knight")];
+    if (raiders.length < 3) raiders = raiders.concat(idle("militia"));
+    if (raiders.length < 3) return;
+    this.lastHarassTime = this.gameTime;
+    const ids = raiders.slice(0, 4).map((u) => u.id);
+    // A crossing the enemy paid for is the cheapest thing on the map to take
+    // away from them: it cost a hundred wood and a builder's time, it is barely
+    // defended by construction because it stands in water, and burning it puts
+    // their next wave back into the shallows at half speed. Raiders are exactly
+    // the wrong unit to besiege a Castle with and exactly the right one for this.
+    if (this.readsGround) {
+      const spans = this.world.entities.filter(
+        (e) => e.alive && e.kind === Kind.Building && e.type === "bridge" && this.isHostile(e.team) &&
+          this.world.fogAt(this.team, e.x, e.y) !== 0,
+      );
+      const home = this.base();
+      if (spans.length && home) {
+        spans.sort((a, b) => dist(a.x, a.y, home.x, home.y) - dist(b.x, b.y, home.x, home.y));
+        this.world.issueAttack(ids, spans[0].id);
+        this.say("burn their bridge.", spans[0].x, spans[0].y, 20);
+        return;
+      }
+    }
+    // Prefer a visible enemy villager; otherwise sweep their base eco.
+    const vills = this.world.entities.filter(
+      (e) => e.alive && e.kind === Kind.Unit && this.isHostile(e.team) && e.type === "villager" &&
+        this.world.fogAt(this.team, e.x, e.y) === FOG_VISIBLE,
+    );
+    const base = this.base();
+    if (vills.length > 0 && base) {
+      vills.sort((a, b) => dist(a.x, a.y, base.x, base.y) - dist(b.x, b.y, base.x, base.y));
+      this.world.issueAttack(ids, vills[0].id);
+      return;
+    }
+    const start = this.world.map.starts[this.enemyTeam];
+    this.world.issueMove(ids, start.x + this.rng.range(-300, 300), start.y + this.rng.range(-300, 300), false, true);
+  }
+}
