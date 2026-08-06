@@ -211,6 +211,30 @@ export function runMapScript(src: string, seed: number, name = "Scripted map"): 
     }
   };
 
+  /**
+   * How close a resource may sit to a seat, in cells.
+   *
+   * A Town Centre is three cells across and its villagers need room to turn
+   * around. Without this the script scattered trees *onto* the start — measured
+   * on the worked example: two nodes within two cells of both seats, and nine
+   * within six cells of one seat against four at the other. A base packed with
+   * blocking nodes gathers at half the rate of an open one, which is how a map
+   * that is symmetric in every measurable way still played 160 against 430 in
+   * the first two minutes.
+   *
+   * Four cells clears the Town Centre and a working ring around it while leaving
+   * the deliberately-close starting clusters (usually authored at six to ten)
+   * exactly where the author put them.
+   */
+  const SPAWN_CLEARANCE = 4;
+  const tooCloseToSeat = (cx: number, cy: number) => {
+    for (const s of map.spawns) {
+      const sx = Math.floor(s.x / TILE), sy = Math.floor(s.y / TILE);
+      if (Math.abs(sx - cx) <= SPAWN_CLEARANCE && Math.abs(sy - cy) <= SPAWN_CLEARANCE) return true;
+    }
+    return false;
+  };
+
   const addNode = (cx: number, cy: number, type: ResourceSpawn["type"]) => {
     if (!inB(cx, cy)) return;
     const i = idx(cx, cy);
@@ -218,6 +242,7 @@ export function runMapScript(src: string, seed: number, name = "Scripted map"): 
     // lake is a resource no villager can ever reach.
     if (occupied.has(i)) return;
     if (TERRAIN_BLOCKS[map.terrain[i]]) return;
+    if (tooCloseToSeat(cx, cy)) return;
     occupied.add(i);
     map.resources.push({
       type, x: cx * TILE + TILE / 2, y: cy * TILE + TILE / 2, amount: RES_AMOUNT[type],
@@ -395,6 +420,24 @@ export function runMapScript(src: string, seed: number, name = "Scripted map"): 
   }
 
   if (errors.length) return { map: null, errors, warnings };
+
+  // Clear the seats again at the end, order-independently. `addNode` already
+  // refuses to crowd a seat, but only against the seats that existed when it
+  // ran — a script that scatters before it seats its players would otherwise
+  // slip through, and nothing in the format forces that order.
+  if (map.spawns.length) {
+    const before = map.resources.length;
+    map.resources = map.resources.filter(
+      (r) => !tooCloseToSeat(Math.floor(r.x / TILE), Math.floor(r.y / TILE)),
+    );
+    const cleared = before - map.resources.length;
+    if (cleared > 0) {
+      warnings.push({
+        line: cmds.length,
+        text: `cleared ${cleared} resource${cleared === 1 ? "" : "s"} sitting on top of a spawn — put the spawns line above the resource lines to place them deliberately`,
+      });
+    }
+  }
 
   map.minPlayers = Math.min(2, Math.max(1, map.spawns.length || 1));
   map.maxPlayers = Math.max(1, map.spawns.length || MAX_SEATS);

@@ -285,3 +285,79 @@ describe("The worked example", () => {
     expect(m.resources.length).toBeGreaterThan(100);
   });
 });
+
+describe("Seats get room to breathe", () => {
+  /** Cells between a resource and the nearest seat, Chebyshev. */
+  const gapToSeat = (m: { resources: { x: number; y: number }[]; spawns: { x: number; y: number }[] }) => {
+    let min = Infinity;
+    for (const r of m.resources) {
+      for (const s of m.spawns) {
+        const d = Math.max(
+          Math.abs(Math.floor(r.x / TILE) - Math.floor(s.x / TILE)),
+          Math.abs(Math.floor(r.y / TILE) - Math.floor(s.y / TILE)),
+        );
+        min = Math.min(min, d);
+      }
+    }
+    return min;
+  };
+
+  it("never scatters a resource onto a start", () => {
+    // Measured on the worked example before this existed: two nodes within two
+    // cells of *both* seats, sitting on the Town Centre, and nine within six
+    // cells of one seat against four at the other. Blocking nodes in a base cost
+    // it half its early gather rate — which is how a map that is symmetric by
+    // every other measure played 160 against 430 in its first two minutes.
+    const m = ok(EXAMPLE_SCRIPT, 33);
+    expect(m.spawns.length).toBeGreaterThan(0);
+    expect(gapToSeat(m), "a resource is sitting on a seat").toBeGreaterThan(4);
+  });
+
+  it("holds across seeds, not just the one that was debugged", () => {
+    for (const seed of [1, 7, 33, 99, 404]) {
+      const m = ok(EXAMPLE_SCRIPT, seed);
+      expect(gapToSeat(m), `seed ${seed}`).toBeGreaterThan(4);
+    }
+  });
+
+  it("clears up afterwards when the script seats players last", () => {
+    // Nothing in the format forces `spawns` above the resource lines, so the
+    // check cannot rely on the order it happens to run in.
+    const r = runMapScript(`
+      size 96
+      seats 2
+      base grass
+      scatter tree count 900
+      spawns ring radius 0.3
+    `, 5);
+    expect(r.map).not.toBeNull();
+    expect(gapToSeat(r.map!), "a late spawns line left nodes on the seats").toBeGreaterThan(4);
+    expect(r.warnings.some((w) => w.text.includes("on top of a spawn")),
+      "cleared nodes silently").toBe(true);
+  });
+
+  it("leaves the author's deliberately-close clusters alone", () => {
+    // The clearance has to be small enough that a starting berry patch authored
+    // at six to ten cells stays exactly where it was put.
+    const m = ok(`
+      size 128
+      seats 2
+      base grass
+      spawns ring radius 0.3
+      cluster berries count 1 near start radius 6-8 nodes 6
+    `, 3);
+    const berries = m.resources.filter((r) => r.type === "berries");
+    expect(berries.length, "the starting berries were cleared away").toBeGreaterThan(4);
+  });
+
+  it("keeps both seats about equally clear", () => {
+    // The asymmetry that started this: one seat's base far more cluttered than
+    // the other's, on a map that is symmetric in every other respect.
+    const m = ok(EXAMPLE_SCRIPT, 33);
+    const within = (s: { x: number; y: number }, tiles: number) =>
+      m.resources.filter((r) => Math.hypot(r.x - s.x, r.y - s.y) < TILE * tiles).length;
+    const counts = m.spawns.map((s) => within(s, 6));
+    const spread = Math.max(...counts) - Math.min(...counts);
+    expect(spread, `nodes within six cells per seat: ${counts.join(", ")}`).toBeLessThanOrEqual(6);
+  });
+});

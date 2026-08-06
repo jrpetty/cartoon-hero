@@ -744,6 +744,32 @@ dragged from *exactly* a cell boundary two pixels upward and asserted one
 segment; that genuinely crosses into the cell above, and the old rounding was
 hiding it — the same rounding that put whole wall runs a cell off the line.
 
+## Scripted maps kept resources off the seats
+
+Chasing why a scripted map played 160 against 430 gathered in its first two
+minutes. Everything measurable about it was fair: seats on a circle, terrain
+quad-symmetric, nearest tree 1.0 cells at both, nearest berries 7.8 against 7.1,
+open ground around both. Forcing both AIs to the same personality changed
+nothing — it was deterministic and tied to the seat.
+
+It was not the AI, and generated maps are not affected: over eight seeds team 0
+gathered 4000 to team 1's 3950 and led in four of eight. The scripted map was
+the outlier.
+
+**The script scattered resources onto the starts.** Two nodes within two cells of
+*both* seats — on the Town Centre — and nine within six cells of one seat against
+four at the other. Blocking nodes in a base cost it roughly half its early
+gather rate. The generator has always guarded this (`nearStart`); the script
+format never did.
+
+Resources now keep four cells clear of every seat: enough for the Town Centre and
+a working ring around it, small enough that a starting berry patch authored at
+six to ten cells stays exactly where the author put it. Checked twice — when each
+node is placed, and again as a pass at the end, because nothing in the format
+forces `spawns` to come above the resource lines and the second pass says out
+loud what it cleared. The gap closed from 2.7× to 1.8×, which is inside the
+normal early spread measured on fair generated maps (370–660 at the same mark).
+
 ## Bigger / later
 - **Naval** — water is currently only an impassable wall, and the Islands
   preset (55% water) is a maze rather than a naval map. Dock, transport,
