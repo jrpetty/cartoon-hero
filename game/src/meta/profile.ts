@@ -7,6 +7,7 @@ import { levelFromXp, levelUpRenown } from "./progression";
 import { COMMANDER_IDS } from "../content/commanders";
 import { BOONS_BY_ID, BoonCategory, BOON_CATEGORIES, BOON_IDS } from "../content/boons";
 import { boonKey } from "./boon_cache";
+import type { AwardState, EarnedAward } from "./achievements";
 
 /** Default age order for the battle plan (which category unlocks at which age). */
 const DEFAULT_BOON_ORDER: BoonCategory[] = ["offensive", "defensive", "supportive"];
@@ -29,6 +30,10 @@ export interface ProfileData {
   boons: string[]; // owned boon keys `boonId:rarity`
   equippedBoons: Record<BoonCategory, string>; // category -> equipped boonId ("" none)
   boonOrder: BoonCategory[]; // which category unlocks at age slot 0/1/2
+  /** Achievement ids already paid out, ever. */
+  achievements: string[];
+  /** `week:challengeId` for weekly challenges already paid out. */
+  challengesDone: string[];
 }
 
 function defaultProfile(): ProfileData {
@@ -55,6 +60,8 @@ function defaultProfile(): ProfileData {
     boons: BOON_IDS.map((id) => boonKey(id, 0)),
     equippedBoons: { offensive: "", defensive: "", supportive: "" },
     boonOrder: [...DEFAULT_BOON_ORDER],
+    achievements: [],
+    challengesDone: [],
   };
 }
 
@@ -103,6 +110,11 @@ export class Profile {
     }
     // Boons / Valor — back-fill for older saves.
     if (typeof this.data.valor !== "number") { this.data.valor = 150; changed = true; }
+    // Added after launch: a profile saved before achievements existed has
+    // neither list, and every screen that reads them would otherwise have to
+    // guard for undefined.
+    if (!Array.isArray(this.data.achievements)) { this.data.achievements = []; changed = true; }
+    if (!Array.isArray(this.data.challengesDone)) { this.data.challengesDone = []; changed = true; }
     if (!Array.isArray(this.data.boons)) { this.data.boons = []; this.boonSet = new Set(); changed = true; }
     // Grant every boon's base (Common) tier to everyone — only the higher
     // rarities are earned. Back-fills older saves and any boons added later.
@@ -322,6 +334,34 @@ export class Profile {
     for (let l = before; l < after; l++) renownFromLevels += levelUpRenown(l);
     this.addRenown(renownFromLevels);
     return { levelsGained: after - before, renownFromLevels, newLevel: after };
+  }
+
+  /**
+   * Bank whatever a finished match earned, and pay the Valor.
+   *
+   * Marks each award as taken before paying, so a double call — a re-render, a
+   * retry — cannot pay twice. Returns what was actually new, which is what the
+   * post-match screen announces.
+   */
+  claimAwards(awards: EarnedAward[]): EarnedAward[] {
+    const done = new Set(this.data.achievements);
+    const weekly = new Set(this.data.challengesDone);
+    const fresh: EarnedAward[] = [];
+    for (const a of awards) {
+      const set = a.weekly ? weekly : done;
+      if (set.has(a.id)) continue;
+      set.add(a.id);
+      fresh.push(a);
+    }
+    if (!fresh.length) return [];
+    this.data.achievements = [...done];
+    this.data.challengesDone = [...weekly];
+    this.addValor(fresh.reduce((n, a) => n + a.valor, 0));
+    return fresh;
+  }
+
+  awardState(): AwardState {
+    return { earned: this.data.achievements, challengesDone: this.data.challengesDone };
   }
 
   recordResult(win: boolean) {

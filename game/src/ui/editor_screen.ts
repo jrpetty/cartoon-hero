@@ -30,58 +30,12 @@ import {
   serialiseMap, validateMap,
 } from "../maps/custom";
 import { PRESETS } from "../maps/generator";
+import { SYMMETRIES, SymmetryId, symmetryCells } from "../maps/symmetry";
+
+export { SYMMETRIES, symmetryCells };
+export type { SymmetryId };
 import { drawMapThumbnail } from "./map_thumb";
-
-// ---------------------------------------------------------------- symmetry --
-
-export type SymmetryId = "none" | "mirrorX" | "mirrorY" | "rot180" | "quad" | "radial3" | "radial6" | "radial8";
-export const SYMMETRIES: { id: SymmetryId; label: string; desc: string }[] = [
-  { id: "none", label: "Free", desc: "Paint exactly where you click." },
-  { id: "mirrorX", label: "Mirror ↔", desc: "Every stroke is mirrored left-to-right." },
-  { id: "mirrorY", label: "Mirror ↕", desc: "Every stroke is mirrored top-to-bottom." },
-  { id: "rot180", label: "Rotate 180°", desc: "The classic two-player mirror: both halves are identical ground." },
-  { id: "quad", label: "Quarters", desc: "Four-way — for a four-player map with equal corners." },
-  // Rotating about the centre of a square map sends the far corners outside it,
-  // so a radial stroke near a corner simply has fewer copies. That is geometry,
-  // not a bug — say so, rather than let an author wonder why.
-  { id: "radial3", label: "Radial ×3", desc: "Three equal slices around the centre. Stay inside the circle that fits the map — corners rotate off the edge." },
-  { id: "radial6", label: "Radial ×6", desc: "Six equal slices. Stay inside the circle that fits the map — corners rotate off the edge." },
-  { id: "radial8", label: "Radial ×8", desc: "Eight equal slices, one per seat on a full lobby. Corners rotate off the edge." },
-];
-
-/**
- * Every cell a stroke at (cx,cy) should also touch. Radial symmetry rotates
- * about the map's centre, which is why it needs the dimensions.
- */
-export function symmetryCells(sym: SymmetryId, cx: number, cy: number, cols: number, rows: number): [number, number][] {
-  const out: [number, number][] = [[cx, cy]];
-  const push = (x: number, y: number) => {
-    const rx = Math.round(x), ry = Math.round(y);
-    if (rx < 0 || ry < 0 || rx >= cols || ry >= rows) return;
-    if (out.some(([a, b]) => a === rx && b === ry)) return;
-    out.push([rx, ry]);
-  };
-  const mx = cols - 1 - cx;
-  const my = rows - 1 - cy;
-  switch (sym) {
-    case "mirrorX": push(mx, cy); break;
-    case "mirrorY": push(cx, my); break;
-    case "rot180": push(mx, my); break;
-    case "quad": push(mx, cy); push(cx, my); push(mx, my); break;
-    case "radial3": case "radial6": case "radial8": {
-      const n = sym === "radial3" ? 3 : sym === "radial6" ? 6 : 8;
-      const ox = (cols - 1) / 2, oy = (rows - 1) / 2;
-      const dx = cx - ox, dy = cy - oy;
-      for (let k = 1; k < n; k++) {
-        const a = (k / n) * Math.PI * 2;
-        push(ox + dx * Math.cos(a) - dy * Math.sin(a), oy + dx * Math.sin(a) + dy * Math.cos(a));
-      }
-      break;
-    }
-    default: break;
-  }
-  return out;
-}
+import { EXAMPLE_SCRIPT, SCRIPT_COMMANDS, runMapScript } from "../maps/script";
 
 // ------------------------------------------------------------------- tools --
 
@@ -156,7 +110,7 @@ export class EditorScreen {
   private statusT = 0;
   private lastPan: { x: number; y: number } | null = null;
   /** Which text field is being typed into, if any. */
-  private editing: "name" | "desc" | "import" | null = null;
+  private editing: "name" | "desc" | "import" | "script" | null = null;
   private importBuf = "";
   private newSize = 128;
   private newBiome: BiomeId = "temperate";
@@ -164,6 +118,11 @@ export class EditorScreen {
   private rollPreset = "highlands";
   private rollSeed = 1 + Math.floor(Math.random() * 99999);
   private rollPlayers = 2;
+  /** The random-map script, its seed, and whatever the last run had to say. */
+  private scriptBuf = EXAMPLE_SCRIPT;
+  private scriptSeed = 1 + Math.floor(Math.random() * 99999);
+  private scriptMsgs: { line: number; text: string; bad: boolean }[] = [];
+  private showScript = false;
   private confirmDelete = "";
   /** Set when a map is opened: the first draw frames the whole thing. */
   private needsFit = true;
@@ -172,16 +131,24 @@ export class EditorScreen {
   handleKey(key: string): boolean {
     if (this.editing) {
       if (key === "Escape") { this.editing = null; return true; }
-      if (key === "Enter") { this.editing = null; return true; }
+      if (key === "Enter") {
+        // A script is the one field where Enter means "new line" rather than
+        // "done" — a one-line script language would be a poor one.
+        if (this.editing === "script") { this.scriptBuf += "\n"; return true; }
+        this.editing = null;
+        return true;
+      }
       if (key === "Backspace") {
         if (this.editing === "name" && this.map) this.map.name = this.map.name.slice(0, -1);
         else if (this.editing === "desc" && this.map) this.map.desc = this.map.desc.slice(0, -1);
+        else if (this.editing === "script") this.scriptBuf = this.scriptBuf.slice(0, -1);
         else this.importBuf = this.importBuf.slice(0, -1);
         return true;
       }
       if (key.length === 1) {
         if (this.editing === "name" && this.map) this.map.name = (this.map.name + key).slice(0, 40);
         else if (this.editing === "desc" && this.map) this.map.desc = (this.map.desc + key).slice(0, 160);
+        else if (this.editing === "script") this.scriptBuf += key;
         else this.importBuf += key;
       }
       return true;
@@ -539,6 +506,90 @@ export class EditorScreen {
       else this.say("That isn't a map code");
     }
     y += 94;
+
+    // ---- random map script ----
+    // Folded away by default. It is the most powerful thing on this screen and
+    // also the one most people will never touch, and an editor that greets you
+    // with a code box has told you it is for programmers.
+    if (this.showScript) {
+      const shH = Math.min(360, H - y - 120);
+      ui.panel(x0, y, colW, shH, { light: true });
+      ui.text("Random map script", x0 + 20, y + 24, { size: 14, bold: true, color: PAL.uiAccent });
+      ui.text("One script, a different map every seed — which is how map pools actually work.",
+        x0 + 150, y + 24, { size: 11, color: "#9a917b" });
+      if (ui.button("Hide", x0 + colW - 90, y + 12, 70, 24, { size: 12 })) this.showScript = false;
+
+      const boxW = colW - 320;
+      const boxH = shH - 96;
+      const bhov = ui.hit(x0 + 20, y + 38, boxW, boxH);
+      ctx.fillStyle = this.editing === "script" ? "rgba(40,34,14,0.85)" : "rgba(0,0,0,0.42)";
+      ctx.beginPath(); ctx.roundRect(x0 + 20, y + 38, boxW, boxH, 4); ctx.fill();
+      ctx.strokeStyle = this.editing === "script" ? "#ffd24a" : "rgba(255,255,255,0.1)";
+      ctx.lineWidth = 1; ctx.stroke();
+      // Line numbers, because every error the runner reports names one.
+      const lines = this.scriptBuf.split("\n");
+      const lh = 12;
+      const visible = Math.floor((boxH - 12) / lh);
+      const bad = new Set(this.scriptMsgs.filter((m2) => m2.bad).map((m2) => m2.line));
+      lines.slice(0, visible).forEach((ln, i) => {
+        ui.text(String(i + 1).padStart(3), x0 + 28, y + 52 + i * lh,
+          { size: 9.5, color: bad.has(i + 1) ? "#e0786a" : "#5a5548", font: "ui-monospace, monospace" });
+        ui.text(ln.slice(0, 78), x0 + 56, y + 52 + i * lh,
+          { size: 10, color: bad.has(i + 1) ? "#ffb0a4" : "#cabfa4", font: "ui-monospace, monospace" });
+      });
+      if (lines.length > visible) {
+        ui.text(`… ${lines.length - visible} more lines`, x0 + 56, y + 52 + visible * lh,
+          { size: 9.5, color: "#6f6a5c" });
+      }
+      if (bhov && ui.clicked) { this.editing = this.editing === "script" ? null : "script"; ui.pointerConsumed = true; }
+
+      // The command reference sits beside the box rather than in a manual —
+      // this is a language nobody has seen before and there is nowhere else to
+      // look it up.
+      const rx = x0 + boxW + 36;
+      ui.text("COMMANDS", rx, y + 50, { size: 9.5, bold: true, color: "#8f8770" });
+      SCRIPT_COMMANDS.slice(0, Math.floor((boxH - 30) / 22)).forEach((cmd, i) => {
+        ui.text(cmd.name, rx, y + 66 + i * 22, { size: 10.5, bold: true, color: "#e7ddc4", font: "ui-monospace, monospace" });
+        ui.text(cmd.args.slice(0, 34), rx + 62, y + 66 + i * 22, { size: 9.5, color: "#8f8770", font: "ui-monospace, monospace" });
+      });
+
+      const by4 = y + shH - 46;
+      ui.text(`seed ${this.scriptSeed}`, x0 + 20, by4 + 18, { size: 11, color: "#cabfa4", font: "ui-monospace, monospace" });
+      if (ui.button("New seed", x0 + 110, by4, 84, 28, { size: 11 })) {
+        this.scriptSeed = 1 + Math.floor(Math.random() * 99999);
+      }
+      if (ui.button("Reset to example", x0 + 202, by4, 130, 28, { size: 11 })) {
+        this.scriptBuf = EXAMPLE_SCRIPT;
+        this.scriptMsgs = [];
+      }
+      // Whatever the last run said, good or bad.
+      const firstBad = this.scriptMsgs.find((m2) => m2.bad);
+      if (this.scriptMsgs.length) {
+        ui.text(firstBad ? `line ${firstBad.line}: ${firstBad.text}` : this.scriptMsgs[0].text,
+          x0 + 344, by4 + 18, { size: 11, color: firstBad ? "#e0786a" : "#c3b98f" });
+      }
+      if (ui.button("Generate & edit", x0 + colW - 170, by4, 150, 28, { accent: true, size: 13 })) {
+        const res = runMapScript(this.scriptBuf, this.scriptSeed, "Scripted map");
+        this.scriptMsgs = [
+          ...res.errors.map((e) => ({ ...e, bad: true })),
+          ...res.warnings.map((e) => ({ ...e, bad: false })),
+        ];
+        if (res.map) {
+          this.open(res.map);
+          this.say(res.warnings.length ? "Generated, with notes" : "Generated");
+        } else {
+          this.say(`${res.errors.length} error${res.errors.length === 1 ? "" : "s"} in the script`);
+        }
+      }
+      y += shH + 16;
+    } else {
+      ui.panel(x0, y, colW, 52, { light: true });
+      ui.text("Random map script", x0 + 20, y + 24, { size: 13, bold: true, color: PAL.uiAccent });
+      ui.text("Write rules instead of a map, and roll a different battlefield every seed.",
+        x0 + 168, y + 24, { size: 11, color: "#9a917b" });
+      if (ui.button("Open", x0 + colW - 110, y + 12, 90, 28, { size: 12 })) this.showScript = true;
+      y += 68;
+    }
 
     // ---- library ----
     const maps = listCustomMaps();

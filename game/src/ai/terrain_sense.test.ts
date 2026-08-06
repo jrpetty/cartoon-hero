@@ -205,29 +205,32 @@ describe("The AI reads the ground", () => {
     // The unit tests above prove the advisors work in isolation; this proves the
     // AI reaches them. Without it the whole feature could be wired to a branch
     // that never runs and every other test here would still pass.
+    // Totalled over several seeds rather than pinned to one. On any given
+    // highlands seed the fighting may simply never happen near a hill — seed 1
+    // produces the identical move count either way — and a test hostage to that
+    // breaks whenever an unrelated economy change shifts where the armies meet.
     const onHill = (readsGround: boolean) => {
-      // Seed chosen because both sides actually launch waves on it. On some
-      // seeds this AI never reaches its army threshold inside twelve minutes and
-      // issues four move orders all game — a real gap, but not this one's.
-      const map = generateMap("highlands", 1, 2);
-      const world = new World(1);
-      world.init(map, [{}, {}], [1, 1], [0, 1]);
-      const ais = [
-        new SkirmishAI(world, Team.Player, DIFFICULTIES.knight),
-        new SkirmishAI(world, Team.Enemy, DIFFICULTIES.knight),
-      ];
-      for (const ai of ais) ai.readsGround = readsGround;
       let hills = 0;
-      const realMove = world.issueMove.bind(world);
-      world.issueMove = (ids, x, y, queue, attack) => {
-        if (isHighGround(world, x, y)) hills++;
-        return realMove(ids, x, y, queue, attack);
-      };
-      for (let i = 0; i < 20 * 60 * 12; i++) {
-        world.tick();
-        for (const ai of ais) ai.update(1 / 20);
-        world.drainEvents();
-        if (world.winner !== null) break;
+      for (const seed of [2, 3, 4, 6]) {
+        const map = generateMap("highlands", seed, 2);
+        const world = new World(seed);
+        world.init(map, [{}, {}], [1, 1], [0, 1]);
+        const ais = [
+          new SkirmishAI(world, Team.Player, DIFFICULTIES.knight),
+          new SkirmishAI(world, Team.Enemy, DIFFICULTIES.knight),
+        ];
+        for (const ai of ais) ai.readsGround = readsGround;
+        const realMove = world.issueMove.bind(world);
+        world.issueMove = (ids, x, y, queue, attack) => {
+          if (isHighGround(world, x, y)) hills++;
+          return realMove(ids, x, y, queue, attack);
+        };
+        for (let i = 0; i < 20 * 60 * 12; i++) {
+          world.tick();
+          for (const ai of ais) ai.update(1 / 20);
+          world.drainEvents();
+          if (world.winner !== null) break;
+        }
       }
       return hills;
     };
@@ -236,7 +239,7 @@ describe("The AI reads the ground", () => {
     expect(aware, "never sent anyone to a hill").toBeGreaterThan(0);
     expect(aware, "reading the ground changed nothing about where armies went")
       .toBeGreaterThan(blind);
-  }, 180000);
+  }, 300000);
 
   it("plays a full match on terrain-heavy ground without stalling", () => {
     // The advisors run inside the think step and can return a point the army

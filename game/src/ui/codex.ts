@@ -14,7 +14,14 @@ import { PAL, shade, withAlpha } from "../render/palette";
 import { ui } from "./ui";
 import { drawMenuBackground } from "./screens";
 
-type Tab = "units" | "buildings" | "tech";
+import type { Profile } from "../meta/profile";
+import { listHistory, summariseHistory } from "../meta/history";
+import { ACHIEVEMENTS, challengesForWeek, weekIndex } from "../meta/achievements";
+
+type Tab = "units" | "buildings" | "tech" | "records";
+
+/** Seconds as m:ss — match lengths read as durations, not as numbers. */
+const mmssOf = (s: number) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
 
 const CLASS_LABEL: Record<string, string> = {
   infantry: "Infantry",
@@ -143,7 +150,7 @@ export class CodexScreen {
     return cy + 28;
   }
 
-  draw(W: number, H: number, time: number): "back" | null {
+  draw(W: number, H: number, time: number, profile: Profile): "back" | null {
     drawMenuBackground(W, H, time);
     const ctx = ui.ctx;
     ctx.fillStyle = "rgba(10, 8, 4, 0.45)";
@@ -154,7 +161,9 @@ export class CodexScreen {
     });
 
     // Tabs.
-    const tabs: [Tab, string][] = [["units", "Units"], ["buildings", "Buildings"], ["tech", "Ages & Tech"]];
+    const tabs: [Tab, string][] = [
+      ["units", "Units"], ["buildings", "Buildings"], ["tech", "Ages & Tech"], ["records", "Records"],
+    ];
     const tw = 150;
     let tx = W / 2 - (tabs.length * (tw + 10) - 10) / 2;
     for (const [id, label] of tabs) {
@@ -165,11 +174,101 @@ export class CodexScreen {
     const top = 124;
     if (this.tab === "units") this.drawUnits(W, H, top, time);
     else if (this.tab === "buildings") this.drawBuildings(W, H, top, time);
+    else if (this.tab === "records") this.drawRecords(W, H, top, profile);
     else this.drawTech(W, H, top);
 
     let action: "back" | null = null;
     if (ui.button("⟵ Back", 24, H - 68, 130, 44, { size: 15 })) action = "back";
     return action;
+  }
+
+  // ---------------------------------------------------------------- records --
+  //
+  // What the last twenty games looked like, and what is still unearned. Lives
+  // in the Codex rather than on its own menu entry because it is the same kind
+  // of thing as the rest of it — a reference you go and look at, not a mode you
+  // enter.
+
+  private drawRecords(W: number, H: number, top: number, profile: Profile) {
+    const ctx = ui.ctx;
+    const rows = listHistory();
+    const sum = summariseHistory(rows);
+    const colW = Math.min(1180, W - 60);
+    const x0 = Math.round(W / 2 - colW / 2);
+    const leftW = Math.round(colW * 0.54);
+    const rightX = x0 + leftW + 20;
+    const rightW = colW - leftW - 20;
+    const panelH = H - top - 84;
+
+    // ---- the last twenty ----
+    ui.panel(x0, top, leftW, panelH, { light: true });
+    ui.text("Last twenty matches", x0 + 18, top + 26, { size: 16, bold: true, color: PAL.uiAccent });
+    if (!rows.length) {
+      ui.text("Nothing recorded yet. Play a skirmish.", x0 + 18, top + 56, { size: 13, color: "#6f6a5c" });
+    } else {
+      // The summary line first: the whole point of keeping a record is the
+      // trend, and a trend belongs above the rows it came from.
+      ui.text(
+        `${sum.won}W ${sum.played - sum.won}L  ·  ${Math.round(sum.winRate * 100)}%  ·  ${sum.killRatio.toFixed(2)} kills per loss  ·  best streak ${sum.bestStreak}`,
+        x0 + 18, top + 46, { size: 11.5, color: "#cabfa4" },
+      );
+      ui.text(
+        `Town Centre idle ${Math.round(sum.avgTcIdleShare * 100)}% of an average match  ·  typical length ${mmssOf(sum.avgDuration)}`,
+        x0 + 18, top + 62, { size: 11.5, color: "#8f8770" },
+      );
+      let ry = top + 84;
+      const rowH = 30;
+      for (const r of rows) {
+        if (ry + rowH > top + panelH - 8) break;
+        ctx.fillStyle = r.won ? "rgba(90,150,90,0.14)" : "rgba(150,80,70,0.13)";
+        ctx.beginPath(); ctx.roundRect(x0 + 12, ry, leftW - 24, rowH - 4, 4); ctx.fill();
+        ctx.fillStyle = r.won ? "#7df2a9" : "#e0786a";
+        ctx.fillRect(x0 + 12, ry, 3, rowH - 4);
+        ui.text(r.won ? "WIN" : "LOSS", x0 + 24, ry + 17,
+          { size: 11, bold: true, color: r.won ? "#7df2a9" : "#e0786a" });
+        ui.text(r.mapName.slice(0, 22), x0 + 66, ry + 17, { size: 11.5, color: "#e7ddc4" });
+        ui.text(`${r.difficulty} · ${r.players}p`, x0 + 220, ry + 17, { size: 10.5, color: "#8f8770" });
+        ui.text(mmssOf(r.durationSec), x0 + 320, ry + 17, { size: 10.5, color: "#8f8770" });
+        ui.text(`${r.unitsKilled}/${r.unitsLost}`, x0 + leftW - 24, ry + 17,
+          { size: 10.5, align: "right", color: "#cabfa4" });
+        ry += rowH;
+      }
+    }
+
+    // ---- achievements and this week's challenges ----
+    ui.panel(rightX, top, rightW, panelH, { light: true });
+    const doneSet = new Set(profile.data.achievements);
+    const weeklyDone = new Set(profile.data.challengesDone);
+    const week = weekIndex(Date.now());
+    ui.text("This week", rightX + 18, top + 26, { size: 16, bold: true, color: PAL.uiAccent });
+    let ay = top + 52;
+    for (const c of challengesForWeek(week)) {
+      const got = weeklyDone.has(`${week}:${c.id}`);
+      ui.text(got ? "◈" : "◇", rightX + 18, ay, { size: 13, bold: true, color: got ? "#7fd0ff" : "#5a5548" });
+      ui.text(c.name, rightX + 38, ay, { size: 12.5, bold: true, color: got ? "#7fd0ff" : "#e7ddc4" });
+      ui.text(`+${c.valor} ⚔`, rightX + rightW - 18, ay, {
+        size: 11.5, align: "right", bold: true, color: got ? "#5a5548" : "#ffd24a",
+      });
+      ui.text(c.desc, rightX + 38, ay + 14, { size: 10.5, color: "#8f8770" });
+      ay += 36;
+    }
+
+    ay += 10;
+    ui.text(`Achievements  ${doneSet.size} / ${ACHIEVEMENTS.length}`, rightX + 18, ay,
+      { size: 16, bold: true, color: PAL.uiAccent });
+    ay += 24;
+    for (const a of ACHIEVEMENTS) {
+      if (ay + 30 > top + panelH - 8) break;
+      const got = doneSet.has(a.id);
+      ui.text(got ? "★" : "☆", rightX + 18, ay + 12,
+        { size: 13, bold: true, color: got ? "#ffd24a" : "#5a5548" });
+      ui.text(a.name, rightX + 38, ay + 12, { size: 12, bold: true, color: got ? "#ffe9b0" : "#9a917b" });
+      ui.text(`+${a.valor} ⚔`, rightX + rightW - 18, ay + 12, {
+        size: 11, align: "right", color: got ? "#5a5548" : "#ffd24a",
+      });
+      ui.text(a.desc, rightX + 38, ay + 25, { size: 10, color: got ? "#6f6a5c" : "#8f8770" });
+      ay += 32;
+    }
   }
 
   // ------------------------------------------------------------------ units --

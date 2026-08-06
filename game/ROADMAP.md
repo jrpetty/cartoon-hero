@@ -431,6 +431,103 @@ Two things this surfaced and did **not** fix, both pre-existing:
   defensive posture that actually *holds* a rise is where the mechanic would
   pay off.
 
+## Crossings, standing orders and the record
+
+**Bridges.** A timber span that can only be laid on shallows — the buildability
+test *inverts* for it rather than relaxing, so a bridge is never a cheap wall on
+dry land, and never half on the bank. Decking is counted per terrain cell rather
+than flagged, because two spans can share an edge cell and a boolean would punch
+a hole in a standing crossing the first time one of them burned. A decked ford
+crosses at full speed instead of the 0.5× wade, which is what makes "go around"
+a decision with a price. Lakes are untouched: deep water stays a hard wall, so
+bridges change the *cost* of the map, never its connectivity.
+
+**Rally points mean something.** Dropped on a resource, new villagers gather it;
+on a building of yours that is going up or damaged, they go and work on it;
+on bare ground everyone walks there as before. Resolved at spawn rather than at
+drop time — the target's state changes in between, and the useful reading is the
+one taken when the villager actually has hands free.
+
+**Drag-place past walls.** A wall wants a gap-free line; a block of houses wants
+the opposite, so it lays them on a one-tile pitch with walking room between, in
+reading order so round-robin builders work a contiguous stretch instead of
+criss-crossing. The ghost greys out once the *treasury* runs dry, not only where
+the ground refuses.
+
+**Farms are finite.** They were literally infinite — `amount = 999999`, and the
+gather step skipped depletion for them — which made the 60-wood cost a one-off
+toll on unlimited food and left auto-reseed with nothing to reseed. A field holds
+350 food now, about four minutes of one villager, and auto-reseed (on by default,
+toggled from the farm or Mill) re-sows the same ground whenever the wood is
+there. Two things had to give way: `placeBuilding`'s "no building on top of
+units" check now skips walkable buildings, because the farmer stands *on* the
+plot and was blocking every in-place re-seed; and a farm test that asserted on a
+villager's instantaneous order target was passing only because the farm held no
+food at all, so the farmer filled up forever and never walked a load back.
+
+**Veterancy was already drawn** — the claim that nothing showed it was wrong —
+but a 1.4px gold chevron vanished against pale ground, and nothing anywhere named
+the rank or the progress toward the next. Chevrons get a dark under-stroke; the
+selection panel spells out rank, kills and the next threshold.
+
+**The record is kept.** A summary of every match goes to localStorage, last
+twenty, and the Codex grows a Records tab: the run of games, win rate, kills per
+loss, best streak, and the share of an average match your Town Centre sat idle.
+Twelve achievements and three weekly challenges are evaluated off that same
+summary — the constraint being that if a condition can't be read from a finished
+match, it doesn't belong. Challenges take a consecutive window of the pool that
+advances by its own width, so consecutive weeks never overlap and the whole pool
+is visited before anything repeats.
+
+## The map editor, finished
+
+**Start from a generated map.** `customFromGenerated` rolls a preset and hands
+it back as an editable CustomMap with ground, resources and spawn points already
+placed. A blank field is a lot of painting before there is anything to react to.
+
+**Path tool.** Rivers, ridges and roads are lines, and a round brush dragged by
+hand makes a wobbly sausage with holes on a steep diagonal. Press and release and
+it walks the line, stamping the brush at every step.
+
+**Scatter brush.** Drag to sprinkle resources at a density. The pattern is a hash
+of the *cell*, not a running random, so dragging back over ground you covered is
+a no-op rather than a pile-up, and the same drag looks the same twice.
+
+**Region copy and stamp**, with flip X/Y. Deliberately *not* mirrored through the
+symmetry setting: symmetry is for strokes, and a considered placement firing into
+three other corners is almost never what is meant.
+
+**Descriptions and preview cards.** Maps carry a description through the share
+code, and the lobby draws a thumbnail with spawn dots and resource specks. Where
+the seats are and how far apart is most of what says whether a map is a knife
+fight or a long game, and neither a name nor a cell count can tell you.
+
+## Random map scripting
+
+`src/maps/script.ts` is a small line-based format that produces a **CustomMap**,
+not a MapData — so a scripted map lands in the editor and can be tweaked, saved
+and shared like any other. A script is a starting point, not a walled garden.
+
+```
+size 128            blob mountain count 10 radius 4-8
+biome alpine        lake water count 4 radius 4-8
+seats 4             river shallow width 3
+symmetry quad       spawns ring radius 0.34
+base grass          cluster gold count 2 near start radius 20-40 nodes 5
+```
+
+Four constraints drove it. **Everything is optional** — an empty script is a
+valid map, because a format where you must say twelve things before the one you
+care about is one nobody writes in. **Errors name the line and say what was
+expected**, because a script language with a silent failure mode is worse than
+none: you get a map, it just isn't the one you wrote. **Deterministic**, so a
+seed is a share code. And **named arguments in any order**, since remembering an
+argument order is exactly the friction that stops someone starting.
+
+The editor's script panel is folded away by default. It is the most powerful
+thing on that screen and also the one most people will never touch, and an editor
+that greets you with a code box has told you it is for programmers.
+
 ## Bigger / later
 - **Naval** — water is currently only an impassable wall, and the Islands
   preset (55% water) is a maze rather than a naval map. Dock, transport,

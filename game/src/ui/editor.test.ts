@@ -203,6 +203,52 @@ describe("Editor", () => {
       expect(() => frame({ mx: 100, my: 400 }), tool).not.toThrow();
     }
   });
+
+  describe("The script panel", () => {
+    it("renders both folded and open without throwing", () => {
+      // Folded by default: it is the most powerful thing on the screen and also
+      // the one most people will never touch, and an editor that greets you with
+      // a code box has told you it is for programmers.
+      const { s, frame } = harness();
+      expect((s as unknown as { showScript: boolean }).showScript).toBe(false);
+      expect(() => frame({ mx: 10, my: 10 })).not.toThrow();
+      (s as unknown as { showScript: boolean }).showScript = true;
+      expect(() => frame({ mx: 10, my: 10 })).not.toThrow();
+    });
+
+    it("renders a script that failed to run, with the bad line marked", () => {
+      const { s, frame } = harness();
+      const inner = s as unknown as {
+        showScript: boolean; scriptBuf: string;
+        scriptMsgs: { line: number; text: string; bad: boolean }[];
+      };
+      inner.showScript = true;
+      inner.scriptBuf = "size 128\nblob nonsense count 3";
+      inner.scriptMsgs = [{ line: 2, text: "wants a terrain", bad: true }];
+      expect(() => frame({ mx: 10, my: 10 })).not.toThrow();
+    });
+
+    it("treats Enter as a newline while typing a script", () => {
+      // The one field where Enter cannot mean "done" — a one-line script language
+      // would be a poor one.
+      const { s } = harness();
+      const inner = s as unknown as { editing: string | null; scriptBuf: string };
+      inner.editing = "script";
+      inner.scriptBuf = "size 64";
+      s.handleKey("Enter");
+      expect(inner.scriptBuf).toBe("size 64\n");
+      expect(inner.editing, "Enter closed the field instead of adding a line").toBe("script");
+    });
+
+    it("still treats Enter as done in the other fields", () => {
+      const { s } = harness();
+      const inner = s as unknown as { editing: string | null };
+      inner.editing = "name";
+      s.handleKey("Enter");
+      expect(inner.editing).toBeNull();
+    });
+  });
+
 });
 
 // ---------------------------------------------------------- the new tools --

@@ -6,6 +6,7 @@ import { CHESTS, ChestDef, rollChest, RollResult } from "../meta/chests";
 import { RARITIES, rarityByIndex } from "../meta/rarity";
 import { CATALOG, COLLECTIBLE_UNIT_IDS, variantKey, VARIANT_BY_KEY } from "../meta/catalog";
 import { MatchRewards, levelFromXp } from "../meta/progression";
+import type { EarnedAward } from "../meta/achievements";
 import { UNITS } from "../content/units";
 import { PRESETS } from "../maps/generator";
 import { GameMode } from "../sim/types";
@@ -1135,6 +1136,7 @@ export class PostMatchScreen {
     xpBefore: number,
     levelsGained: number,
     graph: GraphSeries = null,
+    awards: EarnedAward[] = [],
   ): "continue" | null {
     drawMenuBackground(W, H, time);
     const ctx = ui.ctx;
@@ -1207,9 +1209,30 @@ export class PostMatchScreen {
     }
     ui.bar(x1 + 18, lvlY + 38, right - 36, 10, info.into / info.need, PAL.uiAccent);
 
+    // ---- what this match unlocked ----
+    // Above the graph rather than below it: an achievement is news, and news
+    // that has scrolled off the bottom of a panel is not news.
+    let awardsH = 0;
+    if (awards.length) {
+      awardsH = 40 + awards.length * 24 + 8;
+      const ay = lvlY + 62 + gap;
+      ui.panel(x1, ay, right, awardsH, { light: true });
+      ui.text("Earned", x1 + 18, ay + 24, { size: 15, bold: true, color: PAL.uiAccent });
+      awards.forEach((a, i) => {
+        const ry = ay + 48 + i * 24;
+        ui.text(a.weekly ? "◈" : "★", x1 + 18, ry, {
+          size: 13, bold: true, color: a.weekly ? "#7fd0ff" : "#ffd24a",
+        });
+        ui.text(a.name, x1 + 36, ry, { size: 12.5, color: "#e7ddc4" });
+        ui.text(`+${a.valor} ⚔`, x1 + right - 18, ry, {
+          size: 12.5, bold: true, align: "right", color: "#ffd24a",
+        });
+      });
+    }
+
     // ---- progression graph ----
     if (graph && graph.ts.length >= 2) {
-      const gy = lvlY + 62 + gap;
+      const gy = lvlY + 62 + gap + (awardsH ? awardsH + gap : 0);
       const gh = bottom - gy;
       if (gh > 120) {
         ui.panel(x1, gy, right, gh, { light: true });

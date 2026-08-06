@@ -45,6 +45,8 @@ import { Settings, loadSettings, saveSettings } from "./meta/settings";
 import { SettingsScreen } from "./ui/settings_screen";
 import { setColorblindTeams } from "./render/palette";
 import { TeamMetrics, snapshotMetrics, matchReport, MatchReport, emptyMatchReport } from "./sim/metrics";
+import { recordMatch, summarise } from "./meta/history";
+import { EarnedAward, evaluateAwards } from "./meta/achievements";
 import { drawScoreboard } from "./ui/scoreboard";
 import { drawProductionPanel } from "./ui/production_panel";
 import { Weather } from "./render/weather";
@@ -132,6 +134,8 @@ class App {
   levelsGained = 0;
   /** The whole match, both sides, for the end-of-match report. */
   endReport: MatchReport = emptyMatchReport();
+  /** Achievements and challenges this match earned, for the post-match screen. */
+  matchAwards: EarnedAward[] = [];
   /** The map this match is being fought on, for the end-of-match report. */
   private mapName = "";
   /** Wheel delta this frame, for out-of-match screens that zoom. */
@@ -1351,7 +1355,7 @@ class App {
         if (a?.kind === "back") { this.state = "menu"; audio.play("ui"); }
         else if (a?.kind === "test") this.testCustomMap(a.map);
       } else if (this.state === "codex") {
-        if (this.codexScreen.draw(W, H, this.time) === "back") {
+        if (this.codexScreen.draw(W, H, this.time, this.profile) === "back") {
           this.state = "menu";
           audio.play("ui");
         }
@@ -1370,7 +1374,7 @@ class App {
         const action = this.postmatch.draw(
           W, H, this.time, dt,
           this.matchWon, this.endReport, this.matchRewards,
-          this.profile, this.xpBefore, this.levelsGained, this.endGraph,
+          this.profile, this.xpBefore, this.levelsGained, this.endGraph, this.matchAwards,
         );
         if (action === "continue") {
           // A match launched from the editor goes back to the editor, so
@@ -1941,6 +1945,19 @@ class App {
     this.profile.addRenown(rewards.renown);
     this.profile.addValor(rewards.valor);
     this.profile.recordResult(won);
+    // Keep the game. The deep report is thrown away at Continue, so a summary
+    // goes to the history store before it is; awards are then evaluated off
+    // that same record, which keeps a condition to something that can actually
+    // be read from a finished match.
+    const record = summarise(this.endReport, {
+      won,
+      mode: this.config?.mode ?? "conquest",
+      difficulty: this.config?.difficulty ?? "knight",
+      players: this.config?.players ?? 2,
+      at: Date.now(),
+    });
+    recordMatch(record);
+    this.matchAwards = this.profile.claimAwards(evaluateAwards(record, this.profile.awardState()));
     this.profile.save();
     this.postmatch.reset();
     this.world = null;
