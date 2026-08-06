@@ -279,6 +279,59 @@ sits under ~45fps for most of a second, and restores it after two seconds back
 above ~55. Slow in, slower out: detail that flickers is worse than either
 setting.
 
+## Map editor
+
+**The format is not MapData.** MapData is what the sim consumes for one match —
+it already knows the player count, the starts and the walls. A `CustomMap` is
+the authored thing that outlives any match: ground, resources, spawn points and
+the rules about who may play on it. `toMapData` is the single place the two
+meet, and the only place that knows about player counts, nomad or seating.
+
+**Nomad is a property of the map, not the lobby.** Three states: `off` (always
+played from its spawn points), `optional` (spawn points normally, ignored when
+the match asks for nomad), `forced` (no spawn points at all — the editor takes
+the spawn tool away, and validation stops asking for seats). Random landing
+sites are drawn from the match seed, so a nomad game on a custom map is as
+replayable as any other, and they only ever land where a Town Centre fits.
+
+**Symmetry is the whole job on a competitive map.** Free, mirror ↔, mirror ↕,
+rotate 180°, quarters, and radial ×3/×6/×8. Every stroke — ground, resources
+*and* spawn points — is applied through it, so a four-player map is fair by
+construction rather than by hand. Radial rotation sends far corners off a
+square map, so those copies are dropped rather than clamped (clamping would
+pile several seats onto one edge cell); the tooltip says so.
+
+**Validation runs on every change**, in words, and blocks Test Map on an error:
+- a spawn for every seat, each with room for a Town Centre
+- no spawn walled off from spawn 1 (constant-time, via the nav grid's
+  component labels — the same ones that fixed the pathfinding)
+- wood on the map, and wood within reach of each base
+- seats within 60% of each other on nearby resources
+- Survival: at least a quarter of the map edge open, or waves have nowhere to
+  arrive from
+- King of the Hill: the centre passable and reachable
+- more than half the map impassable
+
+**Sharing is a paste-able string,** because the game is one HTML file and there
+is nowhere else for a map to go. Terrain is RLE'd then base64'd: an empty
+200×200 map (40,000 cells) is under 600 characters. Deserialisation trusts
+nothing — an out-of-range terrain id would index off the end of the lookup
+tables the movement path reads every tick, so it is clamped.
+
+**Custom maps are not a second-class citizen.** Every match resolves its map
+through one seam, `App.resolveMap`, so skirmish, spectate and Test Map all take
+the same path. The setup screen lists your maps beside the presets, filtered by
+`mapSupports` to the ones that allow the current mode and player count, and
+deselects one that stops qualifying. Testing from the editor returns to the
+editor afterwards, so tweak-and-test is a loop rather than a trip through the
+main menu.
+
+A end-to-end test authors a symmetric 1v1 map with a river, a ford, mountain
+spurs and hills, saves it, round-trips it through a share code, renders it
+through the real terrain painter, and then plays a ten-minute AI match on it —
+asserting both economies grew *and* that the two sides actually met, which is
+what proves the ford is crossable.
+
 ## Bigger / later
 - **Naval** — water is currently only an impassable wall, and the Islands
   preset (55% water) is a maze rather than a naval map. Dock, transport,

@@ -9,6 +9,12 @@ export interface UIFrameInput {
   clicked: boolean; // left release this frame
   rightClicked: boolean;
   alt?: boolean; // Alt held this frame (used for minimap pings)
+  // Held state and the wheel, for screens that drag and zoom (the map editor).
+  leftHeld?: boolean;
+  rightHeld?: boolean;
+  ctrlHeld?: boolean;
+  shiftHeld?: boolean;
+  wheel?: number; // scroll delta this frame, 0 when still
 }
 
 export class UI {
@@ -18,6 +24,11 @@ export class UI {
   clicked = false;
   rightClicked = false;
   alt = false;
+  leftHeld = false;
+  rightHeld = false;
+  ctrlHeld = false;
+  shiftHeld = false;
+  wheel = 0;
   /** Set true by any widget that consumed the pointer this frame. */
   pointerConsumed = false;
   hoveredTooltip: { text: string[]; x: number; y: number } | null = null;
@@ -57,6 +68,11 @@ export class UI {
     this.clicked = input.clicked;
     this.rightClicked = input.rightClicked;
     this.alt = !!input.alt;
+    this.leftHeld = !!input.leftHeld;
+    this.rightHeld = !!input.rightHeld;
+    this.ctrlHeld = !!input.ctrlHeld;
+    this.shiftHeld = !!input.shiftHeld;
+    this.wheel = input.wheel ?? 0;
     this.pointerConsumed = false;
     this.hoveredTooltip = null;
     this.scale = 1;

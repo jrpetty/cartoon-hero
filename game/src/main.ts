@@ -11,6 +11,7 @@ import { COMMANDERS, COMMANDER_IDS } from "./content/commanders";
 import { SIM_DT, TILE } from "./content/balance";
 import { dayPhase } from "./content/daynight";
 import { generateMap } from "./maps/generator";
+import { randomSeed } from "./engine/rng";
 import { SkirmishAI } from "./ai/skirmish_ai";
 import { DIFFICULTIES } from "./ai/difficulty";
 import { Camera } from "./engine/camera";
@@ -49,8 +50,10 @@ import { drawProductionPanel } from "./ui/production_panel";
 import { Weather } from "./render/weather";
 import { drawChat, ChatLine } from "./ui/chat";
 import { KeybindResolver, chordOf, chordFor } from "./meta/keybinds";
+import { EditorScreen } from "./ui/editor_screen";
+import { CustomMap, findCustomMap, saveCustomMap, toMapData } from "./maps/custom";
 
-type AppState = "menu" | "setup" | "armory" | "match" | "postmatch" | "codex" | "settings" | "warband";
+type AppState = "menu" | "setup" | "armory" | "match" | "postmatch" | "codex" | "settings" | "warband" | "editor";
 
 // Buildings you can drag-paint into a continuous run.
 const LINE_BUILDABLE = new Set(["palisade", "stone_wall"]);
@@ -69,6 +72,7 @@ class App {
   setup = new SetupScreen();
   armory = new ArmoryScreen();
   postmatch = new PostMatchScreen();
+  editorScreen = new EditorScreen();
   codexScreen = new CodexScreen();
   settingsScreen = new SettingsScreen();
   warbandScreen = new WarbandScreen();
@@ -130,6 +134,10 @@ class App {
   endReport: MatchReport = emptyMatchReport();
   /** The map this match is being fought on, for the end-of-match report. */
   private mapName = "";
+  /** Wheel delta this frame, for out-of-match screens that zoom. */
+  private frameWheel = 0;
+  /** True when this match was launched from the editor, so we go back there. */
+  private editorReturn = false;
   endDuration = 0;
 
   // Frame-level input flags consumed by UI/world each frame.
@@ -211,6 +219,9 @@ class App {
     this.input.onWheel = (x, y, delta) => {
       if (this.state === "match") {
         this.camera.zoomAt(x, y, delta > 0 ? 0.88 : 1.14);
+      } else {
+        // Screens that zoom (the map editor) read this off the frame input.
+        this.frameWheel = delta;
       }
     };
     // Two-finger gestures: pan + pinch-zoom the match camera.
@@ -227,6 +238,7 @@ class App {
     // Warband Tactics has one typed field (the ground seed); give it first
     // refusal on every key while that screen is up.
     if (this.state === "warband") { this.warbandScreen.handleKey(key); return; }
+    if (this.state === "editor" && this.editorScreen.handleKey(key)) return;
     // The settings screen swallows everything while it is listening for a
     // rebind, so a player can bind Escape or Tab without triggering them.
     if (this.state === "settings" && this.settingsScreen.captureKey(key, this.input)) return;
@@ -450,7 +462,7 @@ class App {
     let alliances: number[] | undefined;
     if (mode === "survival") alliances = Array.from({ length: numPlayers }, (_, t) => (t === hordeTeam ? 1 : 0));
     else if (config.allied) alliances = Array.from({ length: numPlayers }, (_, t) => t % 2);
-    const map = generateMap(config.presetId, config.seed, numPlayers, config.nomad, alliances);
+    const map = this.resolveMap(config.presetId, config.seed, numPlayers, config.nomad, alliances);
     const world = new World(config.seed);
     // Team 0 is the human; the rest are AI (allies or opponents), plus the horde.
     const loadouts = [this.profile.matchLoadout(config.fairMode)];
@@ -573,7 +585,7 @@ class App {
     let alliances: number[] | undefined;
     if (mode === "survival") alliances = Array.from({ length: numPlayers }, (_, t) => (t === hordeTeam ? 1 : 0));
     else if (config.allied) alliances = Array.from({ length: numPlayers }, (_, t) => t % 2);
-    const map = generateMap(config.presetId, config.seed, numPlayers, config.nomad, alliances);
+    const map = this.resolveMap(config.presetId, config.seed, numPlayers, config.nomad, alliances);
     const world = new World(config.seed);
     const loadouts: Record<string, number>[] = [];
     const econMults: number[] = [];
@@ -1262,6 +1274,11 @@ class App {
       clicked: !!this.frameClick,
       rightClicked: !!this.frameRight,
       alt: this.input.alt,
+      leftHeld: this.input.leftDown,
+      rightHeld: this.input.rightDown,
+      ctrlHeld: this.input.ctrl,
+      shiftHeld: this.input.shift,
+      wheel: this.frameWheel,
     });
 
     if (this.state === "match" && this.world) {
@@ -1291,6 +1308,9 @@ class App {
         } else if (action === "codex") {
           this.state = "codex";
           audio.play("ui");
+        } else if (action === "editor") {
+          this.state = "editor";
+          audio.play("ui");
         } else if (action === "settings") {
           this.openSettings("menu");
         }
@@ -1308,6 +1328,10 @@ class App {
           this.state = this.settingsReturn;
           audio.play("ui");
         }
+      } else if (this.state === "editor") {
+        const a = this.editorScreen.draw(W, H, this.time, this.input.leftDown);
+        if (a?.kind === "back") { this.state = "menu"; audio.play("ui"); }
+        else if (a?.kind === "test") this.testCustomMap(a.map);
       } else if (this.state === "codex") {
         if (this.codexScreen.draw(W, H, this.time) === "back") {
           this.state = "menu";
@@ -1331,7 +1355,11 @@ class App {
           this.profile, this.xpBefore, this.levelsGained, this.endGraph,
         );
         if (action === "continue") {
-          this.state = "menu";
+          // A match launched from the editor goes back to the editor, so
+          // "test, tweak, test again" is a loop rather than a round trip
+          // through the main menu every time.
+          this.state = this.editorReturn ? "editor" : "menu";
+          this.editorReturn = false;
           audio.play("ui");
         }
       }
@@ -1357,6 +1385,7 @@ class App {
     this.frameDouble = null;
     this.frameRight = null;
     this.frameDragEnd = null;
+    this.frameWheel = 0;
   }
 
   /**
@@ -1816,6 +1845,36 @@ class App {
     this.endNet();
     this.me = Team.Player;
     this.state = "menu";
+  }
+
+  /**
+   * The single place a match decides what it is being played on. A preset id is
+   * generated; a custom map id is looked up and converted. Everything else —
+   * skirmish, spectate, testing from the editor — goes through this, so a
+   * custom map is never a second-class citizen with its own code path.
+   */
+  private resolveMap(presetId: string, seed: number, players: number, nomad: boolean, alliances?: number[]) {
+    if (presetId.startsWith("custom_")) {
+      const m = findCustomMap(presetId);
+      if (m) return toMapData(m, seed, players, nomad);
+      this.hud.addAlert("That custom map is missing — falling back to a generated one.");
+    }
+    return generateMap(presetId, seed, players, nomad, alliances);
+  }
+
+  /** Play the map currently open in the editor, and come back to it after. */
+  testCustomMap(m: CustomMap) {
+    saveCustomMap(m); // so resolveMap can find it by id
+    this.setup.config = {
+      ...this.setup.config,
+      presetId: m.id,
+      players: Math.max(m.minPlayers, Math.min(m.maxPlayers, 2)),
+      mode: m.modes.length ? m.modes[0] : "conquest",
+      nomad: m.nomad === "forced",
+      seed: randomSeed(),
+    };
+    this.editorReturn = true;
+    this.startMatch({ ...this.setup.config });
   }
 
   finishMatch(won: boolean) {

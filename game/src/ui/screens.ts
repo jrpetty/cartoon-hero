@@ -19,6 +19,7 @@ import { RNG, randomSeed } from "../engine/rng";
 import { audio } from "../engine/audio";
 import { Particles } from "../engine/particles";
 import { MatchReport } from "../sim/metrics";
+import { listCustomMaps, mapSupports } from "../maps/custom";
 import { REPORT_TABS, ReportTab, drawReportTab, reportSubtitle } from "./match_report";
 
 export interface SkirmishConfig {
@@ -105,7 +106,7 @@ export function drawMenuBackground(W: number, H: number, time: number) {
 // ------------------------------------------------------------------- menu --
 
 export class MenuScreen {
-  draw(W: number, H: number, time: number, profile: Profile): "skirmish" | "multiplayer" | "warband" | "armory" | "codex" | "settings" | null {
+  draw(W: number, H: number, time: number, profile: Profile): "skirmish" | "multiplayer" | "warband" | "armory" | "codex" | "settings" | "editor" | null {
     drawMenuBackground(W, H, time);
     const ctx = ui.ctx;
 
@@ -161,7 +162,7 @@ export class MenuScreen {
     ui.bar(W / 2 - 150, H * 0.36 + 36, 300, 9, info.into / info.need, PAL.uiAccent);
     ui.text(`${info.into}/${info.need} XP`, W / 2, H * 0.36 + 54, { align: "center", size: 11, color: "#bdb49a" });
 
-    let action: "skirmish" | "multiplayer" | "warband" | "armory" | "codex" | "settings" | null = null;
+    let action: "skirmish" | "multiplayer" | "warband" | "armory" | "codex" | "settings" | "editor" | null = null;
     const bw = 280;
     const bx = W / 2 - bw / 2;
     let by = H * 0.36 + 92;
@@ -173,6 +174,8 @@ export class MenuScreen {
     by += 56;
     if (ui.button(`🗝  Armory   (${profile.data.renown} ✦)`, bx, by, bw, 48, { size: 16 })) action = "armory";
     by += 56;
+    if (ui.button("🗺  Map Editor", bx, by, bw, 44, { size: 15, tooltip: ["Map Editor", "Paint a battlefield, seat the players, decide what it is for."] })) action = "editor";
+    by += 52;
     if (ui.button("📖  Codex", bx, by, bw / 2 - 6, 44, { size: 14 })) action = "codex";
     if (ui.button("⚙  Settings", bx + bw / 2 + 6, by, bw / 2 - 6, 44, { size: 14 })) action = "settings";
     by += 54;
@@ -224,10 +227,24 @@ export class SetupScreen {
 
     // Map presets — laid out in a grid that wraps every 3 cards. A "Random"
     // card (rolled fresh from the seed each match) is appended after the set.
+    // Your own maps sit alongside the presets, filtered to the ones that
+    // actually allow this match — a 1v1-only map has no business offering
+    // itself for a four-player free-for-all.
+    const custom = listCustomMaps().filter((m) => mapSupports(m, this.config.mode, this.config.players));
     const cards = [
-      ...PRESETS.map((p) => ({ id: p.id, name: p.name, desc: p.desc })),
-      { id: "random", name: "🎲 Random", desc: "A surprise battlefield — a different preset every match." },
+      ...PRESETS.map((p) => ({ id: p.id, name: p.name, desc: p.desc, custom: false })),
+      { id: "random", name: "🎲 Random", desc: "A surprise battlefield — a different preset every match.", custom: false },
+      ...custom.map((m) => ({
+        id: m.id,
+        name: m.name,
+        desc: `${m.cols}×${m.rows} · ${m.minPlayers}–${m.maxPlayers} players${m.nomad === "forced" ? " · always nomad" : ""}`,
+        custom: true,
+      })),
     ];
+    // A map that no longer qualifies must not stay selected behind the scenes.
+    if (this.config.presetId.startsWith("custom_") && !custom.some((m) => m.id === this.config.presetId)) {
+      this.config.presetId = "open_plains";
+    }
     const perRow = 3;
     const cardH = 96;
     const rowGap = 12;
@@ -246,6 +263,9 @@ export class SetupScreen {
         audio.play("ui");
       }
       ui.text(p.name, cx + 12, cy + 20, { size: 15, bold: true, color: sel ? "#ffe9b0" : PAL.uiParchment });
+      if (p.custom) {
+        ui.text("YOURS", cx + cardW - 12, cy + 20, { align: "right", size: 9, bold: true, color: "#7fb0e8" });
+      }
       wrapText(p.desc, cx + 12, cy + 42, cardW - 24, 13, "#bdb49a");
     }
     y += panelH + 12;
