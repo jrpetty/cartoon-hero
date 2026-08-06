@@ -105,6 +105,23 @@ export interface PlayerState {
     peakVillagers: number;
     /** Seconds of match time spent with an idle villager somewhere. */
     idleVillagerTime: number;
+    /**
+     * Town-Centre-seconds spent with nothing queued. The classic measure of a
+     * lazy economy: every second a finished TC is empty is a villager you did
+     * not make, and it compounds for the rest of the match.
+     */
+    idleTcTime: number;
+    /**
+     * The same for every other building that trains something — barracks,
+     * ranges, stables, siege workshops, the Castle. An army you never queued
+     * is the other half of the same mistake.
+     */
+    idleProductionTime: number;
+    /** How many finished TCs / production buildings were standing, summed per
+     *  sample, so the idle figures can be read as a share rather than a raw
+     *  total: two TCs idle for a minute is worse than one idle for a minute. */
+    tcSeconds: number;
+    productionSeconds: number;
     /** Resources still in the ground you never collected, at the end. */
     resourcesSpent: number;
   };
@@ -326,6 +343,7 @@ export class World {
           trainedByType: {}, lostByType: {}, killedByType: {}, builtByType: {},
           damageDealt: 0, damageTaken: 0,
           peakArmy: 0, peakVillagers: 0, idleVillagerTime: 0, resourcesSpent: 0,
+          idleTcTime: 0, idleProductionTime: 0, tcSeconds: 0, productionSeconds: 0,
         },
       });
       this.fog.push(new Uint8Array(this.fogCols * this.fogRows));
@@ -2343,12 +2361,28 @@ export class World {
     const army = new Array(this.numTeams).fill(0);
     const vills = new Array(this.numTeams).fill(0);
     const idle = new Array(this.numTeams).fill(0);
+    const tcs = new Array(this.numTeams).fill(0);
+    const tcIdle = new Array(this.numTeams).fill(0);
+    const prod = new Array(this.numTeams).fill(0);
+    const prodIdle = new Array(this.numTeams).fill(0);
     for (const e of this.entities) {
-      if (!e.alive || e.kind !== Kind.Unit || e.team >= this.numTeams) continue;
-      if (e.type === "villager") {
-        vills[e.team]++;
-        if (e.order.kind === OrderKind.Idle) idle[e.team]++;
-      } else army[e.team]++;
+      if (!e.alive || e.team >= this.numTeams) continue;
+      if (e.kind === Kind.Unit) {
+        if (e.type === "villager") {
+          vills[e.team]++;
+          if (e.order.kind === OrderKind.Idle) idle[e.team]++;
+        } else army[e.team]++;
+        continue;
+      }
+      if (e.kind !== Kind.Building) continue;
+      // Only a *finished* building can be idle; one under construction is not
+      // failing to produce, it does not exist yet.
+      if (e.buildState !== BuildState.Done) continue;
+      const def = BUILDINGS[e.type];
+      if (!def?.trains.length) continue;
+      const empty = e.productionQueue.length === 0 ? 1 : 0;
+      if (e.type === "town_center") { tcs[e.team]++; tcIdle[e.team] += empty; }
+      else { prod[e.team]++; prodIdle[e.team] += empty; }
     }
     for (let t = 0; t < this.numTeams; t++) {
       const st = this.players[t]?.stats;
@@ -2356,6 +2390,10 @@ export class World {
       if (army[t] > st.peakArmy) st.peakArmy = army[t];
       if (vills[t] > st.peakVillagers) st.peakVillagers = vills[t];
       st.idleVillagerTime += idle[t]; // villager-seconds of doing nothing
+      st.idleTcTime += tcIdle[t];
+      st.idleProductionTime += prodIdle[t];
+      st.tcSeconds += tcs[t];
+      st.productionSeconds += prod[t];
     }
   }
 

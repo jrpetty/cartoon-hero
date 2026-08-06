@@ -107,6 +107,12 @@ export interface SideReport {
   peakVillagers: number;
   /** Villager-seconds spent idle. */
   idleVillagerTime: number;
+  /** Town-Centre-seconds and production-building-seconds spent with nothing queued. */
+  idleTcTime: number;
+  idleProductionTime: number;
+  /** How long those buildings were standing at all, so idle reads as a share. */
+  tcSeconds: number;
+  productionSeconds: number;
   age: number;
   upgrades: number;
   trainedByType: Record<string, number>;
@@ -131,6 +137,7 @@ const emptySide = (): SideReport => ({
   spent: 0, spentOn: { units: 0, buildings: 0, tech: 0 }, banked: 0,
   unitsKilled: 0, unitsLost: 0, buildingsRazed: 0, buildingsLost: 0,
   damageDealt: 0, damageTaken: 0, peakArmy: 0, peakVillagers: 0, idleVillagerTime: 0,
+  idleTcTime: 0, idleProductionTime: 0, tcSeconds: 0, productionSeconds: 0,
   age: 0, upgrades: 0, trainedByType: {}, lostByType: {}, killedByType: {}, builtByType: {},
 });
 
@@ -162,6 +169,10 @@ function accumulate(side: SideReport, world: World, team: Team) {
   side.peakArmy += s.peakArmy;
   side.peakVillagers += s.peakVillagers;
   side.idleVillagerTime += s.idleVillagerTime;
+  side.idleTcTime += s.idleTcTime;
+  side.idleProductionTime += s.idleProductionTime;
+  side.tcSeconds += s.tcSeconds;
+  side.productionSeconds += s.productionSeconds;
   side.age = Math.max(side.age, p.age);
   side.upgrades += p.upgrades.size;
   addInto(side.trainedByType, s.trainedByType);

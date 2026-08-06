@@ -24,6 +24,11 @@ const YOU = "#7fb0e8";
 const FOE = "#e0786a";
 
 const num = (n: number) => Math.round(n).toLocaleString("en-GB");
+/** Building-seconds read better as minutes once they get big. */
+const secs = (n: number) => (n >= 120 ? `${Math.floor(n / 60)}m ${Math.round(n % 60)}s` : `${Math.round(n)}s`);
+/** Idle time as a share of the time the thing existed at all. */
+const idleShare = (idle: number, standing: number) =>
+  standing > 0 ? `${Math.round((idle / standing) * 100)}%` : "—";
 const mmss = (s: number) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
 
 /**
@@ -200,12 +205,22 @@ export function drawReportTab(
     compareRow(x, ry, w, "Left unspent", you.banked, foe.banked, {
       higherIsBetter: false, hint: "resources that sat in the bank doing nothing",
     }); ry += rowH + 12;
-    heading(x, ry, w, "THE WORKFORCE");
+    heading(x, ry, w, "WHAT STOOD STILL");
     ry += 26;
     compareRow(x, ry, w, "Peak villagers", you.peakVillagers, foe.peakVillagers); ry += rowH;
     compareRow(x, ry, w, "Villager idle time", you.idleVillagerTime, foe.idleVillagerTime, {
-      higherIsBetter: false, format: (n) => `${Math.round(n)}s`,
-      hint: "villager-seconds spent standing around",
+      higherIsBetter: false, format: secs, hint: "villager-seconds spent standing around",
+    }); ry += rowH + 10;
+    // Idle production, as a share of the time those buildings were standing.
+    // A raw total is unreadable: sixty seconds idle means one thing with a
+    // single Town Centre and something much worse with three.
+    compareRow(x, ry, w, "Town Centre idle", you.idleTcTime, foe.idleTcTime, {
+      higherIsBetter: false, format: secs,
+      hint: `${idleShare(you.idleTcTime, you.tcSeconds)} of the time it stood · ${idleShare(foe.idleTcTime, foe.tcSeconds)} for them`,
+    }); ry += rowH + 10;
+    compareRow(x, ry, w, "Production idle", you.idleProductionTime, foe.idleProductionTime, {
+      higherIsBetter: false, format: secs,
+      hint: `barracks, ranges, stables and the rest — ${idleShare(you.idleProductionTime, you.productionSeconds)} vs ${idleShare(foe.idleProductionTime, foe.productionSeconds)}`,
     });
     return;
   }
