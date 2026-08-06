@@ -643,6 +643,68 @@ One rule decides the whole topic and is now stated plainly: **a page served over
 enough for anything but a LAN or a VPN, and why the recommended hosts are the
 ones that terminate TLS for you.
 
+## The AI deadlock — the biggest bug in the project
+
+Measured, on several Highlands seeds: a `knight` AI issued **four to six move
+orders in twelve sim-minutes**, never attacked once, and sat at eleven villagers
+with 1680 wood and 315 food. One loop caused it:
+
+> `savingForAge` pauses villager production *and* caps the army at four. If the
+> age-up is not actually within reach, the economy stops growing, the cost never
+> becomes affordable, and it saves forever.
+
+This is why half of every head-to-head measurement in this file finished
+unresolved, why the terrain A/B could barely detect anything, and why staging
+measured as *harmful* — every combat number here was taken against an opponent
+that was not playing.
+
+Three fixes, all measured:
+
+1. **Saving is time-boxed and progress-aware.** Hold back only when 55% of the
+   cost is already banked, never for more than a minute, then grow for 45
+   seconds before trying again.
+2. **Farms respond to food pressure**, not only to berry depletion or Castle
+   Age. Reaching the age that used to unlock farming *needs* the food farming
+   provides — the same deadlock wearing a different hat.
+3. **The AI uses the Market.** It sat on 1600 wood and 300 food with a building
+   in the game that converts one into the other. Trading a surplus here is not
+   a clever play, it is first aid.
+
+| seed, 12 min | attack orders | kills |
+|---|---|---|
+| 77 | 0 → **87** | 1 → **97** |
+| 909 | 0 → **83** | 0 → **85** |
+| 5 | 0 → **94** | 0 → **99** |
+
+Decided games now resolve around the 15-minute mark instead of grinding. The
+economy comes out balanced — food 24.6k, wood 23.4k, gold 25.1k across six
+20-minute matches, against the 1685-wood/30-food state before.
+
+**Trade carts were player-only too.** The first attempt gated them on
+`diff.counters`, which is about picking counter-units and is *false for Knight*
+— so the whole trade economy was switched off for the tier most games are played
+at, measured at zero carts across six full-length matches. Gated on the size of
+the economy now; a weak AI is kept out by never reaching the villager count,
+which is the honest gate.
+
+**Finite farms, finally measured.** 34 farms across six 20-minute matches cost
+2040 wood — **8.7% of all wood gathered**. That is the intended recurring
+wood-for-food trade, not a strangled economy. The earlier lopsidedness was the
+deadlock, not the farm change.
+
+**Staging, re-measured on an AI that fights.** It previously read 0.87 then 0.82
+kill ratio and was switched off behind a `const false`. On the fixed AI: **3W 3L,
+ratio 1.00, per-match 10–10** — exactly neutral. The "harmful" reading was an
+artifact of measuring a broken opponent. Kept on, since it costs nothing and an
+army that forms up on the ridge reads as an army; the dead flag is gone and it
+is a per-AI field like `readsGround` so it stays measurable.
+
+One test had to change with it. `personalities.test.ts` ran a single AI against
+an empty seat, which was fine while the AI never attacked — it had thirteen
+undisturbed minutes to build an economy. It now wipes that idle opponent out by
+minute six, wins, and stops thinking, so the test was measuring a finished game.
+Both seats get a brain.
+
 ## Bigger / later
 - **Naval** — water is currently only an impassable wall, and the Islands
   preset (55% water) is a maze rather than a naval map. Dock, transport,

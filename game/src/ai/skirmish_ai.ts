@@ -24,6 +24,11 @@ interface SeenComposition {
 
 type AIStyle = "rush" | "boom" | "turtle" | "balanced";
 
+/** How long the AI will hold production back to bank an age-up before giving up. */
+const AGE_SAVE_MAX_SEC = 60;
+/** …and how long it then grows before it is allowed to try banking again. */
+const AGE_SAVE_COOLDOWN = 45;
+
 // Every AI brain in a match registers here (keyed by World, GC-safe). Teammates
 // read each other's scouted composition so intel is pooled across the alliance —
 // what one ally has seen, the whole team reasons about and counters.
@@ -54,6 +59,7 @@ export class SkirmishAI {
   private lastWaveTime = 0;
   private lastHarassTime = 0;
   private lastBridgeTime = -999;
+  private lastTradeTime = -999;
   private lastScoutTime = -999;
   private scoutId = -1;
   private wallsPlanned = false;
@@ -66,6 +72,8 @@ export class SkirmishAI {
   private lastCalloutTime = -999;
   private lastFocusId = -1; // current focus-fire target (avoids re-issuing every tick)
   private savingForAge = false;
+  private saveStartedAt = 0;
+  private saveGaveUpAt = -999;
   /**
    * Whether this AI reads the ground it is fighting on. Public and mutable for
    * one reason: it is the only way to measure whether terrain awareness is
@@ -73,6 +81,12 @@ export class SkirmishAI {
    * with the same seed. A feature that cannot be measured cannot be defended.
    */
   readsGround = true;
+  /**
+   * Whether a wave forms up on good ground before charging. Mutable for the same
+   * reason `readsGround` is: it is the only way to tell whether the extra
+   * marching leg pays for itself.
+   */
+  stagesOnGoodGround = true;
   /** Building types we've finished at least once — drives prompt rebuilds. */
   private everBuilt = new Set<string>();
   /** Shared roster of all AI brains in this match (for ally intel pooling). */
@@ -462,8 +476,37 @@ export class SkirmishAI {
     // If we're ready to advance an age but can't afford it, stop spending food
     // (villagers + army) so the cost can actually be banked — otherwise the AI
     // dribbles every scrap into units and never reaches the next age.
+    //
+    // Time-boxed and progress-aware, because the naive version deadlocks. Saving
+    // pauses villager production *and* caps the army at four; if the age-up is
+    // not actually within reach, the economy stops growing, the cost never
+    // becomes affordable, and the AI saves forever. Measured on highlands seed
+    // 5: still Feudal at twelve minutes with eleven villagers, an army of seven,
+    // 1680 wood and 315 food, having banked toward Castle since minute four.
+    //
+    // So: only hold back when most of the cost is already in hand, and never for
+    // more than a minute at a stretch. Falling out of it re-opens production for
+    // long enough to actually earn the difference.
     const gate = this.ageUpCost(p);
-    this.savingForAge = gate !== null && !this.world.canAfford(p.resources, gate);
+    const affordable = gate !== null && this.world.canAfford(p.resources, gate);
+    if (gate === null || affordable) {
+      this.savingForAge = false;
+      this.saveGaveUpAt = -999;
+    } else {
+      const need = gate.food + gate.wood + gate.gold;
+      const have = Math.min(p.resources.food, gate.food) + Math.min(p.resources.wood, gate.wood)
+        + Math.min(p.resources.gold, gate.gold);
+      const close = need > 0 && have / need >= 0.55;
+      const cooling = this.gameTime - this.saveGaveUpAt < AGE_SAVE_COOLDOWN;
+      if (!this.savingForAge) {
+        if (close && !cooling) { this.savingForAge = true; this.saveStartedAt = this.gameTime; }
+      } else if (this.gameTime - this.saveStartedAt > AGE_SAVE_MAX_SEC) {
+        // A minute of holding back and still short: the bank is not filling from
+        // an economy this size. Go and grow one.
+        this.savingForAge = false;
+        this.saveGaveUpAt = this.gameTime;
+      }
+    }
 
     // 0. The instant the age-up is affordable, research it — before villager or
     //    army production can nibble the banked cost back below it. (Otherwise the
@@ -503,6 +546,9 @@ export class SkirmishAI {
 
     // 5. Farms once berries thin out.
     this.maybeBuildFarms(base, villagers.length);
+
+    // 5a. Trade: fix a lopsided bank, and run carts if there is a route.
+    this.marketStep(base, villagers.length);
 
     // 5b. Replace anything a raid has razed, ahead of normal build gates.
     this.rebuildStep(base);
@@ -771,6 +817,78 @@ export class SkirmishAI {
     }
   }
 
+  /**
+   * The Market: the answer to an economy that has too much of one thing.
+   *
+   * This is the other half of the deadlock the age-saving fix addresses. The AI
+   * regularly sat on 1600 wood and 300 food, or 1900 gold and 25 food, with a
+   * building in the game that converts one into the other and no idea it
+   * existed — measured, on the same seeds where it never attacked. Trading a
+   * surplus is not a clever play here, it is first aid.
+   *
+   * It also runs Trade Carts, which arrived as player-only economy: a route is
+   * gold for nothing but the wood to buy the cart and ground you can hold, and
+   * an opponent who never builds one is quietly playing a smaller game.
+   */
+  private marketStep(base: Entity, villagerCount: number) {
+    const p = this.world.player(this.team);
+    if (p.age < 1) return;
+    const markets = this.myBuildings("market");
+    const r = p.resources;
+    const surplus = Math.max(r.wood, r.food);
+    const starving = Math.min(r.food, r.wood);
+
+    // Build one when the bank is lopsided enough to be worth fixing, or simply
+    // once the economy is big enough that trade routes start paying.
+    if (markets.length === 0 && this.myBuildings("market", false).length === 0
+      && r.wood > 260 && (surplus > 700 || villagerCount >= 16)) {
+      const m = this.placeNear("market", base.x, base.y, 4, 8);
+      if (m) { this.assignBuilder(m); return; }
+    }
+    if (markets.length === 0) return;
+
+    // Rate-limited: the price moves against you with every trade, so dumping a
+    // thousand wood in one think step is the worst way to sell it.
+    if (this.gameTime - this.lastTradeTime > 12 && surplus > 900 && starving < 260) {
+      this.lastTradeTime = this.gameTime;
+      if (r.wood > 900 && r.food < 260) {
+        // Wood to gold to food. Two trades, but it is the only bridge there is.
+        this.world.marketTrade(this.team, "sell_wood");
+        if (r.gold > 200) this.world.marketTrade(this.team, "buy_food");
+      } else if (r.food > 900 && r.wood < 260) {
+        this.world.marketTrade(this.team, "sell_food");
+        if (r.gold > 200) this.world.marketTrade(this.team, "buy_wood");
+      }
+    }
+    // Gold is the one thing the Market cannot make from nothing, so a fat bank
+    // of both raw materials and no gold is worth converting outright.
+    if (this.gameTime - this.lastTradeTime > 12 && r.gold < 180 && r.wood > 700) {
+      this.lastTradeTime = this.gameTime;
+      this.world.marketTrade(this.team, "sell_wood");
+    }
+
+    // Trade carts, once there are two Markets to run between. A second Market
+    // placed away from the first *is* the route, so build it deliberately.
+    //
+    // Gated on the size of the economy rather than on a difficulty flag. The
+    // first version required `diff.counters`, which is about picking counter
+    // units and is false for Knight — so the whole trade economy was switched
+    // off for the tier most games are played at, and measured at zero carts
+    // across six full-length matches. A weak AI is kept out of this by never
+    // reaching the villager count, which is the honest gate.
+    if (markets.length === 1 && r.wood > 400 && villagerCount >= 14) {
+      const away = this.world.map.starts[this.team];
+      const m2 = this.placeNear("market", away.x, away.y, 12, 20);
+      if (m2) { this.assignBuilder(m2); return; }
+    }
+    if (markets.length >= 2) {
+      const carts = this.myUnits("trade_cart").length;
+      if (carts < 4 && r.wood > 200 && r.gold > 100 && p.popUsed < p.popCap - 4) {
+        this.world.trainUnit(this.team, markets[0].id, "trade_cart");
+      }
+    }
+  }
+
   private maybeBuildFarms(base: Entity, villagerCount: number) {
     const p = this.world.player(this.team);
     // How much berry food is still within reach of base.
@@ -780,11 +898,16 @@ export class SkirmishAI {
           dist(e.x, e.y, base.x, base.y) < TILE * 18) berryFood += e.amount;
     }
     const lowBerries = berryFood < 700;
+    // Food pressure: plenty of wood and no food is the signature of an economy
+    // that has run out of things to eat and has nowhere to put the villagers.
+    // Waiting for the berries to be provably gone, or for Castle Age, is too
+    // late — reaching Castle Age *needs* the food.
+    const foodStarved = p.resources.food < 220 && p.resources.wood > 400;
 
     // A mill anchors a compact farm economy — build it once the eco is rolling
     // or the berries are thinning, so the transition is ready.
     if (this.myBuildings("mill", false).length === 0 && p.age >= 1 && p.resources.wood > 150 &&
-        (lowBerries || villagerCount >= 12)) {
+        (lowBerries || foodStarved || villagerCount >= 12)) {
       const mill = this.placeNear("mill", base.x, base.y, 3, 6);
       if (mill) { this.assignBuilder(mill); return; }
     }
@@ -795,7 +918,7 @@ export class SkirmishAI {
     // couple at a time so the transition actually keeps up with a growing
     // population. Individual fields do wear out now, but auto-reseed puts them
     // back for the wood, so this only has to cover *growth*, not replacement.
-    const transitioning = lowBerries || p.age >= 2;
+    const transitioning = lowBerries || foodStarved || p.age >= 2;
     const farmTarget = transitioning ? Math.min(24, Math.max(3, Math.ceil(villagerCount / 3))) : 0;
     const mill = this.myBuildings("mill")[0];
     const cx = mill ? mill.x : base.x;

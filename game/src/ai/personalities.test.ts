@@ -83,8 +83,19 @@ describe("AI population growth", () => {
   it("secures resources with camps and transitions to a farm economy", () => {
     const w = new World(42);
     w.init(generateMap("open_plains", 42, 2), [{}, {}], [1, 1]);
+    // Both sides get a brain. This used to run one AI against an empty seat,
+    // which was fine while the AI never attacked — it had thirteen undisturbed
+    // minutes to build an economy. Now it wipes the idle opponent out by minute
+    // six, wins, and stops thinking, so the test was measuring a finished game.
     const ai = new SkirmishAI(w, Team.Enemy, DIFFICULTIES.warlord);
-    for (let i = 0; i < SIM_HZ * 60 * 13; i++) { w.tick(); ai.update(SIM_DT); w.drainEvents(); }
+    const foe = new SkirmishAI(w, Team.Player, DIFFICULTIES.warlord);
+    for (let i = 0; i < SIM_HZ * 60 * 13; i++) {
+      w.tick();
+      ai.update(SIM_DT);
+      foe.update(SIM_DT);
+      w.drainEvents();
+      if (w.winner !== null) break;
+    }
     const blds = w.entitiesOf(Team.Enemy, Kind.Building);
     const count = (t: string) => blds.filter((e) => e.type === t).length;
     // Went out onto the map to secure wood/gold…
@@ -92,7 +103,7 @@ describe("AI population growth", () => {
     expect(count("mill")).toBeGreaterThanOrEqual(1);
     // …and transitioned onto farms for a sustainable late-game food supply.
     expect(count("farm")).toBeGreaterThanOrEqual(3);
-  }, 60000);
+  }, 120000);
 
   it("doesn't stay pop-blocked — builds houses ahead of the curve", () => {
     const w = new World(99);
