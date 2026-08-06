@@ -30,6 +30,7 @@ import {
   FARM_TICK_MULT,
   POP_CAP_HARD,
   PROJECTILE_SPEED,
+  SIM_HZ,
   RARITY_ABILITY_CD_MULT,
   RARITY_ABILITY_POWER_MULT,
   RARITY_ARMOR_BONUS,
@@ -86,6 +87,26 @@ export interface PlayerState {
     buildingsRazed: number;
     buildingsLost: number;
     gathered: number;
+    /** Gathered, split by what it was — the shape of an economy, not just its size. */
+    gatheredBy: { food: number; wood: number; gold: number };
+    /** Spent, split by where it went. Together with `gathered` this is the whole ledger. */
+    spentOn: { units: number; buildings: number; tech: number };
+    /** Trained, lost and killed per unit type, so an army can be read as a comp. */
+    trainedByType: Record<string, number>;
+    lostByType: Record<string, number>;
+    killedByType: Record<string, number>;
+    /** Buildings put up, by type. */
+    builtByType: Record<string, number>;
+    /** Damage dealt and taken, for the fights that never showed up as kills. */
+    damageDealt: number;
+    damageTaken: number;
+    /** High-water marks — a peak army says something an average never does. */
+    peakArmy: number;
+    peakVillagers: number;
+    /** Seconds of match time spent with an idle villager somewhere. */
+    idleVillagerTime: number;
+    /** Resources still in the ground you never collected, at the end. */
+    resourcesSpent: number;
   };
 }
 
@@ -298,7 +319,14 @@ export class World {
         powerCooldown: 0,
         boonPlan: boonLoadouts?.[t] ?? [],
         boon: aggregateBoons((boonLoadouts?.[t] ?? []).filter((bn) => bn.age <= 0)),
-        stats: { unitsKilled: 0, unitsLost: 0, buildingsRazed: 0, buildingsLost: 0, gathered: 0 },
+        stats: {
+          unitsKilled: 0, unitsLost: 0, buildingsRazed: 0, buildingsLost: 0, gathered: 0,
+          gatheredBy: { food: 0, wood: 0, gold: 0 },
+          spentOn: { units: 0, buildings: 0, tech: 0 },
+          trainedByType: {}, lostByType: {}, killedByType: {}, builtByType: {},
+          damageDealt: 0, damageTaken: 0,
+          peakArmy: 0, peakVillagers: 0, idleVillagerTime: 0, resourcesSpent: 0,
+        },
       });
       this.fog.push(new Uint8Array(this.fogCols * this.fogRows));
     }
@@ -994,7 +1022,8 @@ export class World {
         return null;
       }
     }
-    this.pay(p.resources, cost);
+    this.pay(p.resources, cost, team, "buildings");
+    p.stats.builtByType[type] = (p.stats.builtByType[type] ?? 0) + 1;
     // Pass the RAW click coords — spawnBuilding snaps once. Passing the already
     // snapped sx/sy would double-snap (odd footprints round up a whole tile,
     // landing the building one block down-right of the ghost).
@@ -1071,7 +1100,8 @@ export class World {
     if (p.popUsed + def.pop > p.popCap) return false;
     const cost = this.scaledCost(def.cost, p.boon.unitCostMult); // Quartermaster
     if (!this.canAfford(p.resources, cost)) return false;
-    this.pay(p.resources, cost);
+    this.pay(p.resources, cost, team, "units");
+    p.stats.trainedByType[unitType] = (p.stats.trainedByType[unitType] ?? 0) + 1;
     b.productionQueue.push(`u:${unitType}`);
     if (b.productionQueue.length === 1) b.productionTime = def.buildTime * p.boon.trainSpeedMult;
     return true;
@@ -1102,7 +1132,7 @@ export class World {
       const alreadyAging = this.entities.some((e) =>
         e.alive && e.team === team && e.kind === Kind.Building && e.productionQueue.includes("a:age"));
       if (alreadyAging) return false;
-      this.pay(p.resources, age.cost);
+      this.pay(p.resources, age.cost, team, "tech");
       b.productionQueue.push("a:age");
       if (b.productionQueue.length === 1) b.productionTime = age.advanceTime;
       return true;
@@ -1112,7 +1142,7 @@ export class World {
     if (b.type !== up.researchedAt) return false;
     if (b.productionQueue.includes(`t:${techId}`)) return false;
     if (!this.canAfford(p.resources, up.cost)) return false;
-    this.pay(p.resources, up.cost);
+    this.pay(p.resources, up.cost, team, "tech");
     b.productionQueue.push(`t:${techId}`);
     if (b.productionQueue.length === 1) b.productionTime = up.time;
     return true;
@@ -1188,10 +1218,26 @@ export class World {
     return bag.food >= cost.food && bag.wood >= cost.wood && bag.gold >= cost.gold;
   }
 
-  private pay(bag: ResourceBag, cost: { food: number; wood: number; gold: number }) {
+  private pay(
+    bag: ResourceBag,
+    cost: { food: number; wood: number; gold: number },
+    team?: Team,
+    on?: "units" | "buildings" | "tech",
+  ) {
     bag.food -= cost.food;
     bag.wood -= cost.wood;
     bag.gold -= cost.gold;
+    // The other half of the ledger. "Gathered 4000" says nothing on its own;
+    // "gathered 4000, spent 3100 of it, 2200 on units" is a read of how someone
+    // actually played.
+    if (team != null && on) {
+      const st = this.players[team]?.stats;
+      if (st) {
+        const total = cost.food + cost.wood + cost.gold;
+        st.spentOn[on] += total;
+        st.resourcesSpent += total;
+      }
+    }
   }
 
   /** Cost scaled by a multiplier (boons: cheaper units/buildings), rounded. */
@@ -1252,6 +1298,7 @@ export class World {
     }
 
     if (this.tickCount % 5 === 0) this.recomputeVision();
+    if (this.tickCount % SIM_HZ === 0) this.samplePlayerPeaks();
     if (this.mode !== "conquest") this.tickGameMode();
     if (this.tickCount % 20 === 0) this.checkVictory();
     if (this.tickCount % 600 === 0) this.compact();
@@ -1707,8 +1754,10 @@ export class World {
     if (d <= e.radius + drop.radius + 10) {
       const p = this.players[e.team];
       if (p && e.carryKind) {
-        p.resources[e.carryKind] += Math.round(e.carry);
-        p.stats.gathered += Math.round(e.carry);
+        const amt = Math.round(e.carry);
+        p.resources[e.carryKind] += amt;
+        p.stats.gathered += amt;
+        p.stats.gatheredBy[e.carryKind] += amt;
         this.emit("deposit", drop.x, drop.y, e.team, e.carryKind);
       }
       e.carry = 0;
@@ -2203,6 +2252,14 @@ export class World {
     // of its weight, so armour caps out at heavy mitigation instead of walling.
     const dmg = Math.max(1, raw * ARMOR_MIN_FRACTION, raw - this.effectiveArmor(target, ranged));
     target.hp -= dmg;
+    // Damage dealt and taken, so a match where nobody quite died still shows
+    // who was winning the fights.
+    {
+      const dealt = this.players[fromTeam]?.stats;
+      if (dealt && fromTeam !== target.team) dealt.damageDealt += dmg;
+      const took = this.players[target.team]?.stats;
+      if (took) took.damageTaken += dmg;
+    }
     target.hitFlash = 1;
     target.lastDamageTime = this.time;
     if (fromId >= 0) target.lastAttackerId = fromId;
@@ -2238,8 +2295,12 @@ export class World {
       if (owner) {
         owner.popUsed = Math.max(0, owner.popUsed - (def?.pop ?? 1));
         owner.stats.unitsLost++;
+        owner.stats.lostByType[e.type] = (owner.stats.lostByType[e.type] ?? 0) + 1;
       }
-      if (killer) killer.stats.unitsKilled++;
+      if (killer) {
+        killer.stats.unitsKilled++;
+        killer.stats.killedByType[e.type] = (killer.stats.killedByType[e.type] ?? 0) + 1;
+      }
       this.creditHeroKill(byTeam, e.x, e.y);
       // The Champion falls — but rises again at the Town Center after a while.
       if (def?.hero && owner) {
@@ -2271,6 +2332,32 @@ export class World {
   }
 
   // Vision / fog ---------------------------------------------------------------
+
+  /**
+   * Once a second: high-water marks and idle-worker time. Peaks say something
+   * an average cannot — a realm that fielded sixty units and lost them all
+   * played a very different game from one that never passed twenty — and idle
+   * villager time is the single most honest measure of economic sloppiness.
+   */
+  private samplePlayerPeaks() {
+    const army = new Array(this.numTeams).fill(0);
+    const vills = new Array(this.numTeams).fill(0);
+    const idle = new Array(this.numTeams).fill(0);
+    for (const e of this.entities) {
+      if (!e.alive || e.kind !== Kind.Unit || e.team >= this.numTeams) continue;
+      if (e.type === "villager") {
+        vills[e.team]++;
+        if (e.order.kind === OrderKind.Idle) idle[e.team]++;
+      } else army[e.team]++;
+    }
+    for (let t = 0; t < this.numTeams; t++) {
+      const st = this.players[t]?.stats;
+      if (!st) continue;
+      if (army[t] > st.peakArmy) st.peakArmy = army[t];
+      if (vills[t] > st.peakVillagers) st.peakVillagers = vills[t];
+      st.idleVillagerTime += idle[t]; // villager-seconds of doing nothing
+    }
+  }
 
   private recomputeVision() {
     for (let t = 0; t < this.numTeams; t++) {

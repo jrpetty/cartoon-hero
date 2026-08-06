@@ -18,6 +18,8 @@ import { ui } from "./ui";
 import { RNG, randomSeed } from "../engine/rng";
 import { audio } from "../engine/audio";
 import { Particles } from "../engine/particles";
+import { MatchReport } from "../sim/metrics";
+import { REPORT_TABS, ReportTab, drawReportTab, reportSubtitle } from "./match_report";
 
 export interface SkirmishConfig {
   presetId: string;
@@ -1043,9 +1045,11 @@ type GraphSeries = { ts: number[]; mine: Record<string, number[]>; foe: Record<s
 export class PostMatchScreen {
   private xpAnim = 0;
   private graphMetric: "score" | "military" | "economy" = "score";
+  private reportTab: ReportTab = "overview";
 
   reset() {
     this.xpAnim = 0;
+    this.reportTab = "overview";
   }
 
   /** A two-line time-series chart (your alliance vs enemies). */
@@ -1087,9 +1091,7 @@ export class PostMatchScreen {
     time: number,
     dt: number,
     won: boolean,
-    stats: { unitsKilled: number; unitsLost: number; buildingsRazed: number; buildingsLost: number; gathered: number },
-    foe: { unitsKilled: number; gathered: number; buildingsRazed: number },
-    durationSec: number,
+    report: MatchReport,
     rewards: MatchRewards,
     profile: Profile,
     xpBefore: number,
@@ -1098,125 +1100,97 @@ export class PostMatchScreen {
   ): "continue" | null {
     drawMenuBackground(W, H, time);
     const ctx = ui.ctx;
-    ctx.fillStyle = "rgba(10, 8, 4, 0.55)";
+    ctx.fillStyle = "rgba(10, 8, 4, 0.62)";
     ctx.fillRect(0, 0, W, H);
 
-    ui.text(won ? "VICTORY" : "DEFEAT", W / 2, 96, {
-      align: "center", size: 56, bold: true,
+    ui.text(won ? "VICTORY" : "DEFEAT", W / 2, 62, {
+      align: "center", size: 46, bold: true,
       color: won ? "#ffe9b0" : "#c87a72", font: "Georgia, serif",
     });
-    ui.text(
-      won ? "The field is yours, Commander." : "Your banner falls… but banners rise again.",
-      W / 2, 140, { align: "center", size: 16, color: "#d8cdb4" },
-    );
+    ui.text(reportSubtitle(report), W / 2, 92, { align: "center", size: 13, color: "#9a917b" });
 
-    const colW = 380;
-    const gap = 40;
-    const x0 = W / 2 - colW - gap / 2;
-    const x1 = W / 2 + gap / 2;
-    const y0 = 184;
+    // Two columns: the report gets the room, the spoils get the corner.
+    const pad = Math.max(24, (W - 1360) / 2);
+    const right = 380;
+    const gap = 24;
+    const x0 = pad;
+    const leftW = Math.max(420, W - pad * 2 - right - gap);
+    const x1 = x0 + leftW + gap;
+    const top = 116;
+    const bottom = H - 84;
+    const panelH = bottom - top;
 
-    // Battle report.
-    ui.panel(x0, y0, colW, 240, { light: true });
-    ui.text("Battle Report", x0 + 20, y0 + 26, { size: 17, bold: true, color: PAL.uiAccent });
-    const mins = Math.floor(durationSec / 60);
-    const secs = Math.floor(durationSec % 60);
-    const kd = stats.unitsLost > 0 ? (stats.unitsKilled / stats.unitsLost).toFixed(2) : "—";
-    const lines: [string, string][] = [
-      ["Duration", `${mins}:${secs.toString().padStart(2, "0")}`],
-      ["Units lost", String(stats.unitsLost)],
-      ["Kill / loss ratio", kd],
-      ["Buildings razed", String(stats.buildingsRazed)],
-      ["Buildings lost", String(stats.buildingsLost)],
-    ];
-    let ly = y0 + 54;
-    for (const [k, v] of lines) {
-      ui.text(k, x0 + 20, ly, { size: 14, color: "#bdb49a" });
-      ui.text(v, x0 + colW - 20, ly, { size: 14, bold: true, align: "right" });
-      ly += 23;
+    // ---- the report ----
+    ui.panel(x0, top, leftW, panelH, { light: true });
+    let tx = x0 + 18;
+    for (const t of REPORT_TABS) {
+      if (ui.button(t.label, tx, top + 14, 108, 28, { accent: this.reportTab === t.id, size: 12.5 })) {
+        this.reportTab = t.id;
+        audio.play("ui");
+      }
+      tx += 114;
     }
+    // Whose colour is whose, once, rather than on every row.
+    ctx.fillStyle = "#7fb0e8"; ctx.fillRect(x0 + leftW - 150, top + 22, 10, 10);
+    ui.text("You", x0 + leftW - 136, top + 28, { size: 11, color: "#cabfa4" });
+    ctx.fillStyle = "#e0786a"; ctx.fillRect(x0 + leftW - 92, top + 22, 10, 10);
+    ui.text("Opponent", x0 + leftW - 78, top + 28, { size: 11, color: "#cabfa4" });
+    drawReportTab(this.reportTab, x0 + 24, top + 66, leftW - 48, panelH - 82, report);
 
-    // You-vs-enemy comparison bars (you in azure, foe in crimson).
-    ly += 4;
-    const cmp: [string, number, number][] = [
-      ["Slain", stats.unitsKilled, foe.unitsKilled],
-      ["Razed", stats.buildingsRazed, foe.buildingsRazed],
-      ["Gathered", stats.gathered, foe.gathered],
-    ];
-    for (const [label, mine, theirs] of cmp) {
-      const max = Math.max(mine, theirs, 1);
-      const bw = colW - 40;
-      ctx.fillStyle = withAlpha("#000000", 0.25);
-      ctx.fillRect(x0 + 20, ly, bw, 14);
-      ctx.fillStyle = PAL.teams[0].main;
-      ctx.fillRect(x0 + 20, ly, bw * (mine / max) * 0.5, 6);
-      ctx.fillStyle = PAL.teams[1].main;
-      ctx.fillRect(x0 + 20, ly + 8, bw * (theirs / max) * 0.5, 6);
-      ui.text(`${label}: ${mine} vs ${theirs}`, x0 + 24, ly + 11, { size: 11, color: "#e7ddc4" });
-      ly += 19;
-    }
-
-    // Rewards.
-    ui.panel(x1, y0, colW, 240, { light: true });
-    ui.text("Spoils of War", x1 + 20, y0 + 26, { size: 17, bold: true, color: PAL.uiAccent });
-    ly = y0 + 60;
+    // ---- spoils ----
+    const spoilsH = 42 + Math.min(5, rewards.breakdown.length) * 26 + 62;
+    ui.panel(x1, top, right, spoilsH, { light: true });
+    ui.text("Spoils of War", x1 + 18, top + 26, { size: 16, bold: true, color: PAL.uiAccent });
+    let ly = top + 54;
     for (const b of rewards.breakdown.slice(0, 5)) {
-      ui.text(b.label, x1 + 20, ly, { size: 13, color: "#bdb49a" });
-      ui.text(`+${b.xp} XP  +${b.renown} ✦`, x1 + colW - 20, ly, { size: 13, bold: true, align: "right" });
-      ly += 28;
+      ui.text(b.label, x1 + 18, ly, { size: 12.5, color: "#bdb49a" });
+      ui.text(`+${b.xp} XP  +${b.renown} ✦`, x1 + right - 18, ly, { size: 12.5, bold: true, align: "right" });
+      ly += 26;
     }
-    ui.ctx.strokeStyle = withAlpha(PAL.uiAccent, 0.4);
-    ui.ctx.beginPath();
-    ui.ctx.moveTo(x1 + 20, ly);
-    ui.ctx.lineTo(x1 + colW - 20, ly);
-    ui.ctx.stroke();
-    ly += 22;
-    ui.text("Total", x1 + 20, ly, { size: 15, bold: true });
-    ui.text(`+${rewards.xp} XP   +${rewards.renown} ✦   +${rewards.valor} ⚔`, x1 + colW - 20, ly, {
-      size: 15, bold: true, align: "right", color: PAL.uiAccent,
+    ctx.strokeStyle = withAlpha(PAL.uiAccent, 0.4);
+    ctx.beginPath(); ctx.moveTo(x1 + 18, ly - 4); ctx.lineTo(x1 + right - 18, ly - 4); ctx.stroke();
+    ly += 18;
+    ui.text("Total", x1 + 18, ly, { size: 14, bold: true });
+    ui.text(`+${rewards.xp} XP  +${rewards.renown} ✦  +${rewards.valor} ⚔`, x1 + right - 18, ly, {
+      size: 13.5, bold: true, align: "right", color: PAL.uiAccent,
     });
 
-    // Animated XP bar.
+    // ---- level ----
     this.xpAnim = Math.min(1, this.xpAnim + dt / 1.6);
     const animXp = xpBefore + rewards.xp * this.xpAnim;
     const info = levelFromXp(Math.floor(animXp));
-    const barW = colW * 2 + gap;
-    ui.panel(x0, y0 + 256, barW, 64, { light: true });
-    ui.text(`Level ${info.level}`, x0 + 20, y0 + 256 + 22, { size: 15, bold: true, color: PAL.uiAccent });
+    const lvlY = top + spoilsH + gap;
+    ui.panel(x1, lvlY, right, 62, { light: true });
+    ui.text(`Level ${info.level}`, x1 + 18, lvlY + 22, { size: 14, bold: true, color: PAL.uiAccent });
     if (levelsGained > 0 && this.xpAnim >= 1) {
-      ui.text(`LEVEL UP! +${levelsGained}`, x0 + barW - 20, y0 + 256 + 22, {
-        size: 15, bold: true, align: "right", color: "#ffe9b0",
+      ui.text(`LEVEL UP! +${levelsGained}`, x1 + right - 18, lvlY + 22, {
+        size: 13, bold: true, align: "right", color: "#ffe9b0",
       });
     }
-    ui.bar(x0 + 20, y0 + 256 + 38, barW - 40, 10, info.into / info.need, PAL.uiAccent);
+    ui.bar(x1 + 18, lvlY + 38, right - 36, 10, info.into / info.need, PAL.uiAccent);
 
-    // Progression graph: your alliance vs the enemy, over the match.
+    // ---- progression graph ----
     if (graph && graph.ts.length >= 2) {
-      const gy = y0 + 256 + 76;
-      const gh = Math.min(178, H - 100 - gy);
-      ui.panel(x0, gy, barW, gh, { light: true });
-      ui.text("Progression", x0 + 20, gy + 22, { size: 15, bold: true, color: PAL.uiAccent });
-      // Metric tabs.
-      const tabs: ["score" | "military" | "economy", string][] = [["score", "Score"], ["military", "Army"], ["economy", "Economy"]];
-      let tx = x0 + 150;
-      for (const [id, label] of tabs) {
-        if (ui.button(label, tx, gy + 8, 92, 26, { accent: this.graphMetric === id, size: 12 })) {
-          this.graphMetric = id;
-          audio.play("ui");
+      const gy = lvlY + 62 + gap;
+      const gh = bottom - gy;
+      if (gh > 120) {
+        ui.panel(x1, gy, right, gh, { light: true });
+        ui.text("Progression", x1 + 18, gy + 22, { size: 14, bold: true, color: PAL.uiAccent });
+        const tabs: ["score" | "military" | "economy", string][] = [["score", "Score"], ["military", "Army"], ["economy", "Eco"]];
+        let gx = x1 + 130;
+        for (const [id, label] of tabs) {
+          if (ui.button(label, gx, gy + 8, 74, 26, { accent: this.graphMetric === id, size: 11.5 })) {
+            this.graphMetric = id;
+            audio.play("ui");
+          }
+          gx += 80;
         }
-        tx += 100;
+        this.drawChart(x1 + 34, gy + 46, right - 52, gh - 62,
+          graph.ts, graph.mine[this.graphMetric], graph.foe[this.graphMetric]);
       }
-      // Legend.
-      const ctx = ui.ctx;
-      ctx.fillStyle = PAL.teams[0].main; ctx.fillRect(x0 + barW - 220, gy + 16, 12, 12);
-      ui.text("You", x0 + barW - 204, gy + 26, { size: 12, color: "#e7ddc4" });
-      ctx.fillStyle = PAL.teams[1].main; ctx.fillRect(x0 + barW - 150, gy + 16, 12, 12);
-      ui.text("Enemies", x0 + barW - 134, gy + 26, { size: 12, color: "#e7ddc4" });
-      this.drawChart(x0 + 40, gy + 44, barW - 80, gh - 60,
-        graph.ts, graph.mine[this.graphMetric], graph.foe[this.graphMetric]);
     }
 
-    if (ui.button("Continue", W / 2 - 110, H - 64, 220, 48, { accent: true, size: 18 })) {
+    if (ui.button("Continue", W / 2 - 110, H - 62, 220, 46, { accent: true, size: 17 })) {
       return "continue";
     }
     return null;

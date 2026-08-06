@@ -43,7 +43,7 @@ import { NetLobby, NetStart } from "./ui/net_lobby";
 import { Settings, loadSettings, saveSettings } from "./meta/settings";
 import { SettingsScreen } from "./ui/settings_screen";
 import { setColorblindTeams } from "./render/palette";
-import { TeamMetrics, snapshotMetrics } from "./sim/metrics";
+import { TeamMetrics, snapshotMetrics, matchReport, MatchReport, emptyMatchReport } from "./sim/metrics";
 import { drawScoreboard } from "./ui/scoreboard";
 import { drawProductionPanel } from "./ui/production_panel";
 import { Weather } from "./render/weather";
@@ -126,8 +126,10 @@ class App {
   matchWon = false;
   xpBefore = 0;
   levelsGained = 0;
-  endStats = { unitsKilled: 0, unitsLost: 0, buildingsRazed: 0, buildingsLost: 0, gathered: 0 };
-  endFoeStats = { unitsKilled: 0, gathered: 0, buildingsRazed: 0 };
+  /** The whole match, both sides, for the end-of-match report. */
+  endReport: MatchReport = emptyMatchReport();
+  /** The map this match is being fought on, for the end-of-match report. */
+  private mapName = "";
   endDuration = 0;
 
   // Frame-level input flags consumed by UI/world each frame.
@@ -469,6 +471,7 @@ class App {
       this.ais.push(new SkirmishAI(world, t as Team, diffFor(t)));
     }
     this.renderer.prepare(map);
+    this.mapName = map.name;
     this.weather.configure(map.seed, map.name);
     this.renderer.clearFx();
     this.hud.prepare(map);
@@ -526,6 +529,7 @@ class App {
     this.net.onPing = (m) => this.remotePing(m.x ?? 0, m.y ?? 0, (m.team ?? 0) as Team);
     transport.onClose = () => this.hud.addAlert("⚠ Connection lost.");
     this.renderer.prepare(map);
+    this.mapName = map.name;
     this.weather.configure(map.seed, map.name);
     this.renderer.clearFx();
     this.hud.prepare(map);
@@ -588,6 +592,7 @@ class App {
       this.ais.push(new SkirmishAI(world, t as Team, diffFor(t)));
     }
     this.renderer.prepare(map);
+    this.mapName = map.name;
     this.weather.configure(map.seed, map.name);
     this.renderer.clearFx();
     this.hud.prepare(map);
@@ -1322,9 +1327,8 @@ class App {
       } else if (this.state === "postmatch" && this.matchRewards) {
         const action = this.postmatch.draw(
           W, H, this.time, dt,
-          this.matchWon, this.endStats, this.endFoeStats, this.endDuration,
-          this.matchRewards, this.profile, this.xpBefore, this.levelsGained,
-          this.endGraph,
+          this.matchWon, this.endReport, this.matchRewards,
+          this.profile, this.xpBefore, this.levelsGained, this.endGraph,
         );
         if (action === "continue") {
           this.state = "menu";
@@ -1818,23 +1822,7 @@ class App {
     const world = this.world!;
     const p = world.player(this.me);
     this.matchWon = won;
-    this.endStats = {
-      unitsKilled: p.stats.unitsKilled,
-      unitsLost: p.stats.unitsLost,
-      buildingsRazed: p.stats.buildingsRazed,
-      buildingsLost: p.stats.buildingsLost,
-      gathered: p.stats.gathered,
-    };
-    // Aggregate the opposing alliance for a side-by-side comparison.
-    const foe = { unitsKilled: 0, gathered: 0, buildingsRazed: 0 };
-    for (let t = 0; t < world.numTeams; t++) {
-      if (!world.areHostile(this.me, t as Team)) continue;
-      const s = world.player(t as Team).stats;
-      foe.unitsKilled += s.unitsKilled;
-      foe.gathered += s.gathered;
-      foe.buildingsRazed += s.buildingsRazed;
-    }
-    this.endFoeStats = foe;
+    this.endReport = matchReport(world, this.me, this.mapName || "Skirmish");
     this.endDuration = world.time;
     // Aggregate the time-series into your-alliance vs enemies for the graphs.
     if (this.matchHistory.length >= 2) {
