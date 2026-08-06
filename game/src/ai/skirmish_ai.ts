@@ -13,6 +13,7 @@ import { DifficultyDef } from "./difficulty";
 import { RNG } from "../engine/rng";
 import { dist } from "../engine/math";
 import { FOG_VISIBLE } from "../sim/world";
+import { bestGroundNear, bestTowerSite, flankPoint, isHighGround, stagingPoint } from "./terrain_sense";
 
 interface SeenComposition {
   infantry: number;
@@ -64,6 +65,13 @@ export class SkirmishAI {
   private lastCalloutTime = -999;
   private lastFocusId = -1; // current focus-fire target (avoids re-issuing every tick)
   private savingForAge = false;
+  /**
+   * Whether this AI reads the ground it is fighting on. Public and mutable for
+   * one reason: it is the only way to measure whether terrain awareness is
+   * worth anything, by running an aware AI against a blind one on the same map
+   * with the same seed. A feature that cannot be measured cannot be defended.
+   */
+  readsGround = true;
   /** Building types we've finished at least once — drives prompt rebuilds. */
   private everBuilt = new Set<string>();
   /** Shared roster of all AI brains in this match (for ally intel pooling). */
@@ -591,7 +599,13 @@ export class SkirmishAI {
       const b = this.world.placeBuilding(this.team, type, wx, wy);
       if (b) builders.push(b.id);
     }
-    const tower = this.world.placeBuilding(this.team, "watch_tower", fx - ux * TILE, fy - uy * TILE);
+    // A tower on a hill sees and shoots 20% further, which over a whole game is
+    // the cheapest defensive upgrade available — so look before placing.
+    const site = this.readsGround
+      ? bestTowerSite(this.world, fx - ux * TILE, fy - uy * TILE)
+      : { x: fx - ux * TILE, y: fy - uy * TILE };
+    const tower = this.world.placeBuilding(this.team, "watch_tower", site.x, site.y)
+      ?? this.world.placeBuilding(this.team, "watch_tower", fx - ux * TILE, fy - uy * TILE);
     if (tower) builders.push(tower.id);
 
     // Send a handful of villagers to raise it all (queued), then resume eco.
@@ -1160,7 +1174,18 @@ export class SkirmishAI {
     this.attacking = false;
     const defenders = this.armyUnits().filter((u) => u.order.kind !== OrderKind.Attack);
     if (defenders.length) {
-      this.world.issueMove(defenders.map((u) => u.id), threatX, threatY, false, true);
+      // Meet them on ground worth standing on — but only just. Defence is about
+      // arriving, not about standing somewhere nice: a raid is eating villagers
+      // while the relief force admires a ridge, so this is a tight search (five
+      // tiles) that steps onto the rise you were nearly on anyway and never
+      // trades interception for elevation.
+      let dx2 = 0, dy2 = 0;
+      for (const u of defenders) { dx2 += u.x; dy2 += u.y; }
+      dx2 /= defenders.length; dy2 /= defenders.length;
+      const meet = this.readsGround
+        ? bestGroundNear(this.world, threatX, threatY, { radius: 160, from: { x: dx2, y: dy2 }, detour: 9 })
+        : { x: threatX, y: threatY };
+      this.world.issueMove(defenders.map((u) => u.id), meet.x, meet.y, false, true);
     }
     return true;
   }
@@ -1417,17 +1442,45 @@ export class SkirmishAI {
     }
 
     const ids = melee.map((u) => u.id);
+    // Where the army is now, so the ground advice knows which way it is coming
+    // from and what it can actually reach.
+    let ax = 0, ay = 0;
+    for (const u of melee) { ax += u.x; ay += u.y; }
+    if (melee.length) { ax /= melee.length; ay /= melee.length; }
+    const from = { x: ax, y: ay };
+    // Read the ground. A wave that walks straight at a Town Centre arrives one
+    // unit at a time; one that gathers on the ridge outside first arrives as an
+    // army — and if there is high ground on the approach it takes it, because
+    // that is 20% more range for the price of walking there.
+    const useGround = this.readsGround && (this.diff.counters || this.style !== "rush");
+    const candidate = useGround && melee.length
+      ? stagingPoint(this.world, { x: tx, y: ty }, from) : null;
+    const stagedOnHill = candidate ? isHighGround(this.world, candidate.x, candidate.y) : false;
+    // Stage only when the ground is worth stopping for. Staging adds a whole
+    // extra marching leg to every wave, and a wave that stops to form up on an
+    // ordinary flat patch has merely arrived late; on a hill the stop buys 20%
+    // range for the fight that follows. Head-to-head this made no measurable
+    // difference either way (see ROADMAP), so it is chosen for being the
+    // cheaper of two indistinguishable options rather than for winning more.
+    const stage = stagedOnHill ? candidate : null;
+
     if (this.diff.counters && melee.length >= 10) {
       // Two-prong: main force + flank.
       const main = ids.slice(0, Math.floor(ids.length * 0.7));
       const flank = ids.slice(Math.floor(ids.length * 0.7));
-      this.world.issueMove(main, tx, ty, false, true);
+      if (stage) this.world.issueMove(main, stage.x, stage.y, false, true);
+      this.world.issueMove(main, tx, ty, !!stage, true);
       const side = this.rng.bool() ? 1 : -1;
-      this.world.issueMove(flank, tx + side * 420, ty - side * 420, false, true);
+      const fp = this.readsGround
+        ? flankPoint(this.world, { x: tx, y: ty }, from, side)
+        : { x: tx + side * 420, y: ty - side * 420 };
+      this.world.issueMove(flank, fp.x, fp.y, false, true);
       this.world.issueMove(flank, tx, ty, true, true);
     } else if (ids.length > 0) {
-      this.world.issueMove(ids, tx, ty, false, true);
+      if (stage) this.world.issueMove(ids, stage.x, stage.y, false, true);
+      this.world.issueMove(ids, tx, ty, !!stage, true);
     }
+    if (stagedOnHill) this.say("forming up on the high ground.", stage!.x, stage!.y, 24);
   }
 
   /** Raid: send fast units to butcher the enemy's villagers / eco. */

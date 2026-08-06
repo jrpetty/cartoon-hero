@@ -347,6 +347,90 @@ through the real terrain painter, and then plays a ten-minute AI match on it —
 asserting both economies grew *and* that the two sides actually met, which is
 what proves the ford is crossable.
 
+## The AI reads the ground — measured
+
+Terrain used to affect only the player. The AI had zero references to it: it
+did not know hills existed, would not take one before a fight, and routed
+around a mountain only because the pathfinder did it for them. Geography that
+one side understands is worse than no geography.
+
+`src/ai/terrain_sense.ts` is a cheap advisor, not a planner. It answers one
+question — "of the ground near here, which patch would I rather stand on?" —
+scoring sight at roughly twice speed (a hill is +11, a wood −52, a marsh −34,
+open grass 0). The AI asks it at the three moments the answer changes what it
+does: staging an attack, meeting a raid, and siting a tower. `readsGround` is
+public and mutable purely so an aware AI can be played against a blind one on
+the same map and seed.
+
+Building it was easy. Making it *do* anything took three measured findings, and
+the honest summary is that the first two were bugs in my own work and the third
+is a null result.
+
+**1. The distance penalty and the ground score were in different units.** A
+hill scores 11 points; the search divided distance by a constant of 10, so the
+AI would divert at most 110 world units — three tiles — while searching a
+radius of 260. Five sixths of every search was ground that could not win no
+matter how good it was. The penalty is now a fraction of the search radius, so
+`detour` is denominated in the same points the ground is: below 11 means "cross
+the whole search area for high ground", above it means "only take what is
+close". Before the fix, a twelve-minute match produced **0** orders onto a hill.
+After, 19–38.
+
+**2. High ground was 4% of the map, and did not scale with map size.** Hill
+count was `hills * 10` regardless of area, so the Colossal 320-cell map got the
+same seven small rises as a duel map, and Highlands — the preset that asks for
+the most — measured 4.0% high ground. Open Plains, Crossroads and Continental
+had **zero** hills. At that density an army crossing the map would usually never
+come within reach of one, so the AI's terrain sense measured as worthless
+because there was nothing out there to sense. Count now scales with area and
+the rises are wide enough to hold a battle line:
+
+| preset | hill cells, before | after |
+|---|---|---|
+| Highlands | 4.0% | 11.7% |
+| Riverlands | 2.7% | 7.4% |
+| Gauntlet | 2.2% | 4.6% |
+| Open Plains | 0% | 0% (deliberate — see the preset) |
+
+**3. It does not measurably change who wins.** Aware against blind, ten seeds ×
+both side assignments × 30 sim-minutes, which is 20 paired matches:
+
+| variant | wins | kill ratio | per-match sign |
+|---|---|---|---|
+| before the scale fix (feature inert) | 5W 5L | 1.16 | 12–8 |
+| feature firing, stage on any good ground | 7W 4L | 0.87 | 10–10 |
+| feature firing, stage only on high ground | 6W 4L | 0.82 | 9–11 |
+| feature firing, no staging leg at all | 7W 5L | 0.85 | 10–10 |
+
+Read the last column, not the middle one. Every variant lands on a dead-even
+sign test while the aggregate ratio drifts to 0.82–0.87, which is the signature
+of a handful of high-variance seeds carrying the totals — individual matches
+swing by ±70 kills (`-71, -57, -48` against `+51, +36, +29`). The honest
+reading is **no measurable effect in either direction**: n=20 cannot resolve an
+effect this small, and I originally mis-read the sub-1.0 ratio as evidence that
+staging was costing something. Removing the staging leg entirely changed
+nothing, which is what disproved that.
+
+So staging stays, restricted to high ground — chosen for being the cheaper of
+two indistinguishable options and because an army forming up on a ridge is the
+visible half of the feature. Defence uses a tight five-tile search so a relief
+force never trades interception for elevation.
+
+The defensible claim is the narrow one: the AI now demonstrably reads terrain —
+it takes hills, sites towers on them, avoids woods and marsh, and will not
+stage on a hill it cannot reach. It is a fairness fix, not a strength buff, and
+should not be sold as one.
+
+Two things this surfaced and did **not** fix, both pre-existing:
+- **This AI often never attacks.** On several Highlands seeds a `knight` AI
+  issues four move orders in twelve minutes and fights nobody, never reaching
+  its army threshold. That is why 9–10 of every 20 head-to-heads finish
+  unresolved, and it caps how well any combat change can be measured.
+- **A hill is abandoned at contact.** Units get the range bonus only while
+  standing on it, so holding ground is worth far more than staging on it. A
+  defensive posture that actually *holds* a rise is where the mechanic would
+  pay off.
+
 ## Bigger / later
 - **Naval** — water is currently only an impassable wall, and the Islands
   preset (55% water) is a maze rather than a naval map. Dock, transport,

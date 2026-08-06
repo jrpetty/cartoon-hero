@@ -151,6 +151,41 @@ describe("Map geography", () => {
     }
   });
 
+  it("puts enough high ground on a map for it to be worth fighting over", () => {
+    // A proportion, not a count. The count check above passed happily while
+    // Highlands — the preset that asks for the most hills — was 4% high ground:
+    // seven small rises on a hundred-cell-square map, which an army crossing it
+    // would usually never come within reach of. High ground the armies never
+    // touch is scenery, and it made the AI's terrain sense measure as worthless
+    // because there was nothing out there to be sensed.
+    const density = (presetId: string, seed: number, players: number) => {
+      const map = generateMap(presetId, seed, players);
+      let hill = 0;
+      for (const t of map.terrain) if (t === Terrain.Hill) hill++;
+      return hill / map.terrain.length;
+    };
+    expect(density("highlands", 4242, 4), "Highlands is meant to be hill country")
+      .toBeGreaterThan(0.07);
+    expect(density("riverlands", 4242, 4)).toBeGreaterThan(0.03);
+    // Open Plains is deliberately bare — see the preset for why — and this is
+    // here so a future density change doesn't quietly grow hills into it.
+    expect(density("open_plains", 4242, 4), "Open Plains must stay flat").toBe(0);
+  });
+
+  it("scales high ground with the map rather than to a flat count", () => {
+    // Hill count used to be a constant regardless of size, so the largest maps
+    // got the same seven rises as the smallest and were effectively featureless.
+    const density = (players: number) => {
+      const map = generateMap("highlands", 7, players);
+      let hill = 0;
+      for (const t of map.terrain) if (t === Terrain.Hill) hill++;
+      return { d: hill / map.terrain.length, cells: map.terrain.length };
+    };
+    const small = density(2), big = density(8);
+    expect(big.cells, "the 8-player map should be larger").toBeGreaterThan(small.cells);
+    expect(big.d, "high ground thinned out as the map grew").toBeGreaterThan(small.d * 0.6);
+  });
+
   it("keeps every start on clear, buildable ground", () => {
     for (const preset of ["highlands", "gauntlet", "riverlands"]) {
       const map = generateMap(preset, 77, 4);

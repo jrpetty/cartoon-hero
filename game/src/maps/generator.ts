@@ -361,11 +361,20 @@ export function generateMap(
   // Passable, slower to climb, and worth 20% more range and sight to whoever
   // holds them — so they are the thing to fight over rather than around.
   if (preset.hills && preset.hills > 0) {
-    const count = Math.round(preset.hills * 10);
+    // Scaled by area, not a flat count. This used to be `hills * 10` regardless
+    // of map size, which meant the largest maps got the same seven small rises
+    // as the smallest — and measured out at 4% high ground even on Highlands,
+    // the preset that asks for the most. At that density an army crossing the
+    // map will usually not pass within reach of a single hill, so high ground
+    // was something the map mentioned rather than something you fought over.
+    const areaScale = (cols * rows) / (100 * 100);
+    const count = Math.max(1, Math.round(preset.hills * 18 * areaScale));
     for (let i = 0; i < count; i++) {
       const hx = rng.int(4, cols - 5);
       const hy = rng.int(4, rows - 5);
-      const r = rng.int(2, 5);
+      // Wide enough to hold a battle line. A radius-2 rise is smaller than the
+      // army standing on it, so only part of the force ever got the bonus.
+      const r = rng.int(3, 6);
       for (let dy = -r; dy <= r; dy++) {
         for (let dx = -r; dx <= r; dx++) {
           const d2 = dx * dx + dy * dy;
