@@ -229,6 +229,56 @@ full-screen `drawImage` blits (terrain, fog, vignette), but that is software
 rasterisation in node — a browser composites those on the GPU — so that number
 says nothing about real-world frame time and was not acted on.
 
+## Controls & accessibility
+
+**Hotkeys are data now.** `meta/keybinds.ts` holds an action list (id, label,
+group, default chord); bindings live in Settings and are resolved through a
+cached chord→action map. Adding a hotkey is one entry in `ACTIONS`.
+
+Defaults follow Age of Empires wherever the game has an equivalent, because
+that is the muscle memory players arrive with: `.` / `,` next and previous idle
+villager, `H` select the Town Centre, `Space` go to the last event, `Ctrl+1..9`
+assign a control group (`Shift+1..9` adds, a bare digit selects, twice
+re-centres), `Ctrl+A` select all soldiers, `F3` pause, `Del` disband. Hold
+Position moved to `Shift+H` to free `H` for the Town Centre — that one is a
+deliberate trade, and the test suite asserts the whole AoE set so it can't
+drift silently.
+
+Three things that were quietly broken and are fixed by the same change:
+- **WASD panning only worked in two directions.** `A` and `S` were Attack-move
+  and Stop, so pressing them panned *and* issued an order. Pan defaults to the
+  arrow keys, and there is now a test that no pan direction may share a key
+  with a command.
+- **Shift+= reported `+`, not `=`.** Counting the Shift as well produced
+  `Shift++`, which matched nothing, so Speed Up did nothing on most keyboards.
+  A printable symbol now ignores Shift, because the symbol already encodes it;
+  letters and digits keep it, so `Shift+H` stays distinct from `H`.
+- **Rebinding Escape or Tab was impossible**, because the screen acted on them
+  first. Keys route through the settings screen while it is listening.
+
+Conflicts are allowed but flagged in red with the clashing chord named, and the
+first action in the list wins — silent shadowing was the alternative and it is
+worse.
+
+**Interface scale (80–150%)** scales the HUD and menus but not the world, so
+turning it up costs no view of the battlefield. It works by drawing the UI
+through a canvas transform and dividing the pointer to match; widgets test
+`ui.mx` against their own layout coordinates and never learn a transform is in
+force. A test asserts a widget laid out at (100,100) under 1.5× is hit at
+(150,150) and not at (160,160), because a mis-scaled hit test is the one bug
+this feature can introduce.
+
+**Performance overlay** (`F10`) answers "why is this chugging" without a
+devtools profile: fps, frame time and worst frame, sim ms/tick and worst tick,
+the drawing share, entity count, and whether detail has already been dropped.
+The worst-case readouts are a rolling three-second window so they describe now
+rather than the worst thing that ever happened.
+
+**Adaptive detail** drops to the cheap unit renderer when smoothed frame time
+sits under ~45fps for most of a second, and restores it after two seconds back
+above ~55. Slow in, slower out: detail that flickers is worse than either
+setting.
+
 ## Bigger / later
 - **Naval** — water is currently only an impassable wall, and the Islands
   preset (55% water) is a maze rather than a naval map. Dock, transport,

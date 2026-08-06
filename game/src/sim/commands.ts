@@ -26,7 +26,8 @@ export type Command =
   | { t: "research"; team: Team; buildingId: EntityId; tech: string }
   | { t: "gate"; team: Team; buildingId: EntityId }
   | { t: "trade"; team: Team; action: "sell_wood" | "sell_food" | "buy_wood" | "buy_food" }
-  | { t: "banner"; team: Team; x: number; y: number };
+  | { t: "banner"; team: Team; x: number; y: number }
+  | { t: "delete"; team: Team; ids: EntityId[] };
 
 /** Keep only ids the issuing team actually owns — a client can never command
  *  another player's units, and it keeps application order-independent. */
@@ -76,6 +77,9 @@ export function applyCommand(world: World, c: Command): void {
     case "gate": if (ownsBuilding(world, c.team, c.buildingId)) world.toggleGate(c.buildingId); break;
     case "trade": world.marketTrade(c.team, c.action); break;
     case "banner": world.placeBanner(c.team, c.x, c.y); break;
+    // Disbanding your own troops. Goes through the command layer like anything
+    // else so it stays lockstep-safe and shows up in a replay.
+    case "delete": world.deleteUnits(owned(world, c.team, c.ids)); break;
   }
 }
 

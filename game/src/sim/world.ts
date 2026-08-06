@@ -906,6 +906,20 @@ export class World {
     return true;
   }
 
+  /**
+   * Disband your own units or raze your own buildings. Credited to Neutral, so
+   * deleting an army never feeds an opponent's kill count — and the population
+   * it frees comes back exactly as if they had died.
+   */
+  deleteUnits(ids: EntityId[]) {
+    for (const id of ids) {
+      const e = this.byId.get(id);
+      if (!e || !e.alive) continue;
+      if (e.kind !== Kind.Unit && e.kind !== Kind.Building) continue;
+      this.kill(e, Team.Neutral);
+    }
+  }
+
   /** The active friendly banner covering (x,y), if any. */
   private bannerAt(team: Team, x: number, y: number): Banner | null {
     for (const b of this.banners) {

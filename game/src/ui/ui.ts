@@ -21,6 +21,34 @@ export class UI {
   /** Set true by any widget that consumed the pointer this frame. */
   pointerConsumed = false;
   hoveredTooltip: { text: string[]; x: number; y: number } | null = null;
+  /** Interface scale currently in force. 1 = canvas pixels. */
+  scale = 1;
+  private scaleStack: number[] = [];
+
+  /**
+   * Draw the next block of UI at `s`× size. Widgets lay out in a *smaller*
+   * space (pass W/s, H/s) and the transform blows them up, so a scaled HUD is
+   * genuinely larger rather than a stretched bitmap. Pointer coordinates are
+   * divided to match, which is what keeps hit-testing honest — every widget
+   * tests `ui.mx` against its own layout coordinates and neither knows nor
+   * cares that a transform is in force.
+   */
+  pushScale(s: number) {
+    this.ctx.save();
+    this.ctx.scale(s, s);
+    this.scaleStack.push(this.scale);
+    this.mx /= s;
+    this.my /= s;
+    this.scale = s;
+  }
+
+  popScale() {
+    const prev = this.scaleStack.pop() ?? 1;
+    this.mx *= this.scale;
+    this.my *= this.scale;
+    this.scale = prev;
+    this.ctx.restore();
+  }
 
   begin(ctx: CanvasRenderingContext2D, input: UIFrameInput) {
     this.ctx = ctx;
@@ -31,6 +59,8 @@ export class UI {
     this.alt = !!input.alt;
     this.pointerConsumed = false;
     this.hoveredTooltip = null;
+    this.scale = 1;
+    this.scaleStack.length = 0;
   }
 
   hit(x: number, y: number, w: number, h: number): boolean {

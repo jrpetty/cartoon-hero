@@ -48,6 +48,7 @@ import { drawScoreboard } from "./ui/scoreboard";
 import { drawProductionPanel } from "./ui/production_panel";
 import { Weather } from "./render/weather";
 import { drawChat, ChatLine } from "./ui/chat";
+import { KeybindResolver, chordOf, chordFor } from "./meta/keybinds";
 
 type AppState = "menu" | "setup" | "armory" | "match" | "postmatch" | "codex" | "settings" | "warband";
 
@@ -82,6 +83,14 @@ class App {
   selection: EntityId[] = [];
   controlGroups: EntityId[][] = Array.from({ length: 10 }, () => []);
   lastGroupTap = { idx: -1, time: 0 };
+  private keybinds = new KeybindResolver();
+  /** Rolling frame/tick costs behind the performance overlay and auto-LOD. */
+  private perf = {
+    frameMs: 16.7, worstFrameMs: 0, tickMs: 0, worstTickMs: 0,
+    ticksThisFrame: 0, ticksLastFrame: 1, slipT: 0, autoLod: false, worstReset: 0,
+  };
+  /** Where the last thing that happened to you happened (AoE's Space key). */
+  private lastEvent: { x: number; y: number } | null = null;
   markers: CommandMarker[] = [];
   placing: string | null = null;
   attackMoveArmed = false;
@@ -216,12 +225,24 @@ class App {
     // Warband Tactics has one typed field (the ground seed); give it first
     // refusal on every key while that screen is up.
     if (this.state === "warband") { this.warbandScreen.handleKey(key); return; }
+    // The settings screen swallows everything while it is listening for a
+    // rebind, so a player can bind Escape or Tab without triggering them.
+    if (this.state === "settings" && this.settingsScreen.captureKey(key, this.input)) return;
     if (this.state !== "match" || !this.world) return;
     // Chat capture takes precedence over every game hotkey while typing.
     if (this.chatOpen) { this.handleChatKey(key); return; }
-    if (key === "Enter" && this.net) { this.chatOpen = true; return; } // open chat (MP only)
-    const k = key.length === 1 ? key.toLowerCase() : key;
-    if (k === "Escape") {
+
+    const chord = chordOf(key, { ctrl: this.input.ctrl, shift: this.input.shift, alt: this.input.alt });
+    if (!chord) return; // a bare modifier
+    const action = this.keybinds.resolve(this.settings.keybinds, chord);
+
+    // Control groups are positional rather than bound, exactly as they are in
+    // Age of Empires: Ctrl sets, Shift adds, a bare digit selects, and tapping
+    // the same digit twice takes the camera to the group.
+    const digit = /^(?:Ctrl\+|Shift\+|Alt\+)*([0-9])$/.exec(chord);
+    if (digit && !this.ingameMenu && !this.spectating) { this.controlGroupKey(parseInt(digit[1], 10)); return; }
+
+    if (action === "menu") {
       if (this.spectating) this.exitToMenu();
       else if (this.placing) this.placing = null;
       else if (this.powerArmed) this.powerArmed = false;
@@ -229,50 +250,91 @@ class App {
       else this.ingameMenu = !this.ingameMenu;
       return;
     }
+    if (action === "chat" && this.net) { this.chatOpen = true; return; }
     if (this.ingameMenu) return;
-    // Pause / game-speed work in every mode (including spectating).
-    if (k === "p" || k === " ") this.togglePause();
-    if (k === "+" || k === "=") this.cycleSpeed(1);
-    if (k === "-" || k === "_") this.cycleSpeed(-1);
-    if (k === "Tab") this.showScoreboard = !this.showScoreboard; // live scoreboard
-    if (k === "v") this.showProduction = !this.showProduction; // production overview
-    // Spectators only watch — no army commands.
-    if (this.spectating) return;
-    if (k === "a") this.attackMoveArmed = true;
-    if (k === "s") this.dispatch({ t: "stop", team: this.me, ids: this.playerSelection().map((e) => e.id) });
-    if (k === "h") this.dispatch({ t: "hold", team: this.me, ids: this.playerSelection().map((e) => e.id) });
-    if (k === "q") this.controller.useAbility();
-    if (k === "b") {
-      this.hud.buildMenuOpen = true;
-      this.hud.buildCategory = null;
+
+    // These work in every mode, spectating included.
+    switch (action) {
+      case "pause": this.togglePause(); return;
+      case "speedUp": this.cycleSpeed(1); return;
+      case "speedDown": this.cycleSpeed(-1); return;
+      case "scoreboard": this.showScoreboard = !this.showScoreboard; return;
+      case "productionPanel": this.showProduction = !this.showProduction; return;
+      case "perfOverlay":
+        this.settings.perfOverlay = !this.settings.perfOverlay;
+        this.hud.addAlert(this.settings.perfOverlay ? "Performance overlay on" : "Performance overlay off");
+        saveSettings(this.settings);
+        return;
+      case "cameraLastEvent": this.goToLastEvent(); return;
     }
-    if (k === "g") this.garrisonSelected();
-    if (k === "y") this.cycleStance();
-    if (k === ".") this.selectIdleVillager();
-    if (k === ",") this.selectAllArmy();
-    if (k === "c") this.armCommanderPower();
-    // Control groups.
-    if (/^[0-9]$/.test(k)) {
-      const idx = parseInt(k, 10);
-      if (this.input.ctrl || this.input.alt) {
-        this.controlGroups[idx] = this.playerSelection().map((e) => e.id);
-        this.hud.addAlert(`Group ${idx} set (${this.controlGroups[idx].length})`);
-      } else {
-        const ids = this.controlGroups[idx].filter((id) => {
-          const e = this.world!.byId.get(id);
-          return e && e.alive;
-        });
-        if (ids.length) {
-          const now = performance.now();
-          this.select(ids);
-          if (this.lastGroupTap.idx === idx && now - this.lastGroupTap.time < 350) {
-            const first = this.world!.byId.get(ids[0])!;
-            this.camera.centerOn(first.x, first.y);
-          }
-          this.lastGroupTap = { idx, time: now };
-        }
-      }
+    if (this.spectating) return; // spectators only watch — no army commands
+
+    switch (action) {
+      case "attackMove": this.attackMoveArmed = true; break;
+      case "stop": this.dispatch({ t: "stop", team: this.me, ids: this.playerSelection().map((e) => e.id) }); break;
+      case "hold": this.dispatch({ t: "hold", team: this.me, ids: this.playerSelection().map((e) => e.id) }); break;
+      case "ability": this.controller.useAbility(); break;
+      case "buildMenu": this.hud.buildMenuOpen = true; this.hud.buildCategory = null; break;
+      case "garrison": this.garrisonSelected(); break;
+      case "cycleStance": this.cycleStance(); break;
+      case "commanderPower": this.armCommanderPower(); break;
+      case "deleteUnit": this.deleteSelection(); break;
+      case "idleVillagerNext": this.selectIdleVillager(1); break;
+      case "idleVillagerPrev": this.selectIdleVillager(-1); break;
+      case "selectArmy": this.selectAllArmy(); break;
+      case "selectTownCentre": this.selectTownCentre(true); break;
+      case "cameraTownCentre": this.selectTownCentre(false); break;
     }
+  }
+
+  /** Ctrl sets, Shift adds, a bare digit selects; twice re-centres. */
+  private controlGroupKey(idx: number) {
+    if (!this.world) return;
+    const live = (ids: EntityId[]) => ids.filter((id) => this.world!.byId.get(id)?.alive);
+    if (this.input.ctrl || this.input.alt) {
+      this.controlGroups[idx] = this.playerSelection().map((e) => e.id);
+      this.hud.addAlert(`Group ${idx} set (${this.controlGroups[idx].length})`);
+      return;
+    }
+    if (this.input.shift) {
+      const merged = new Set([...live(this.controlGroups[idx]), ...this.playerSelection().map((e) => e.id)]);
+      this.controlGroups[idx] = [...merged];
+      this.hud.addAlert(`Group ${idx} now ${this.controlGroups[idx].length}`);
+      return;
+    }
+    const ids = live(this.controlGroups[idx]);
+    if (!ids.length) return;
+    const now = performance.now();
+    this.select(ids);
+    if (this.lastGroupTap.idx === idx && now - this.lastGroupTap.time < 350) {
+      const first = this.world.byId.get(ids[0])!;
+      this.camera.centerOn(first.x, first.y);
+    }
+    this.lastGroupTap = { idx, time: now };
+  }
+
+  /** Disband the selection — your own units and buildings only. */
+  deleteSelection() {
+    const ids = this.playerSelection().map((e) => e.id);
+    if (!ids.length) return;
+    this.dispatch({ t: "delete", team: this.me, ids });
+    this.hud.addAlert(`Disbanded ${ids.length}`);
+    audio.play("command");
+  }
+
+  /** H — the Town Centre, selected and centred (AoE's most-worn key). */
+  selectTownCentre(alsoSelect: boolean) {
+    if (!this.world) return;
+    const tc = this.world.entitiesOf(this.me, Kind.Building).find((b) => b.type === "town_center");
+    if (!tc) { this.hud.addAlert("No Town Centre"); return; }
+    if (alsoSelect) this.select([tc.id]);
+    this.camera.centerOn(tc.x, tc.y);
+  }
+
+  /** Space — jump to whatever last happened to you. */
+  goToLastEvent() {
+    if (!this.lastEvent) { this.hud.addAlert("Nothing has happened yet"); return; }
+    this.camera.centerOn(this.lastEvent.x, this.lastEvent.y);
   }
 
   /**
@@ -685,6 +747,11 @@ class App {
 
   /** Push the current settings into the live engine systems. Called at boot and
    *  every frame the settings screen is open (for instant preview). */
+  /** Interface scale, clamped. 1 = the canvas's own pixels. */
+  private uiScale(): number {
+    return Math.max(0.8, Math.min(1.5, this.settings.uiScale || 1));
+  }
+
   applySettings() {
     const s = this.settings;
     audio.masterVol = s.masterVol;
@@ -694,7 +761,7 @@ class App {
     audio.applyVolumes();
     setColorblindTeams(s.colorblind);
     this.particles.density = s.reduceEffects ? 0.4 : 1;
-    this.renderer.aggressiveLod = s.reduceEffects;
+    this.renderer.aggressiveLod = s.reduceEffects || this.perf.autoLod;
     this.showDamageNumbers = s.damageNumbers;
   }
 
@@ -741,18 +808,25 @@ class App {
     this.setSpeed(speeds[i]);
   }
 
-  /** Cycle the camera through idle villagers, selecting each in turn. */
-  selectIdleVillager() {
+  /**
+   * Cycle the camera through idle villagers, selecting each in turn. `dir` is
+   * +1 for "." and −1 for "," — the same pair Age of Empires uses, and the
+   * reason a backwards step exists at all is that overshooting the one you
+   * wanted is the whole reason people press it twice.
+   */
+  selectIdleVillager(dir: 1 | -1 = 1) {
     if (!this.world) return;
     const idle = this.world
       .entitiesOf(this.me, Kind.Unit)
       .filter((e) => e.type === "villager" && e.order.kind === OrderKind.Idle);
     if (idle.length === 0) { this.hud.addAlert("No idle villagers"); return; }
-    this.idleVillIndex = this.idleVillIndex % idle.length;
+    const n = idle.length;
+    this.idleVillIndex = ((this.idleVillIndex % n) + n) % n;
     const v = idle[this.idleVillIndex];
-    this.idleVillIndex++;
+    this.idleVillIndex = (this.idleVillIndex + dir + n) % n;
     this.select([v.id]);
     this.camera.centerOn(v.x, v.y);
+    this.hud.addAlert(`Idle villager (${n} idle)`);
   }
 
   /** Select every military unit you own (everything that isn't a villager). */
@@ -1105,13 +1179,17 @@ class App {
           if (ev.team === this.me) {
             sfx("complete", "complete", 0.5);
             const name = BUILDINGS[ev.data ?? ""]?.name;
-            if (name) this.hud.addAlert(`${name} completed.`);
+            if (name) this.hud.addAlert(`${name} completed.`, ev.x, ev.y);
+            this.lastEvent = { x: ev.x, y: ev.y };
           }
           break;
         case "underattack":
           if (ev.team === this.me) {
             sfx("alert", "alert", 4);
             this.hud.addAlert("⚠ Your forces are under attack!", ev.x, ev.y);
+            // Space jumps here, which is what makes an "under attack" warning
+            // actionable rather than a message you then have to go hunting for.
+            this.lastEvent = { x: ev.x, y: ev.y };
           }
           break;
         case "callout":
@@ -1165,6 +1243,7 @@ class App {
     this.time += dt;
     // Smoothed FPS (EMA) for the optional on-screen counter.
     if (dt > 0) this.fps += (1 / dt - this.fps) * 0.1;
+    this.trackPerf(dt);
 
     const W = this.canvas.width;
     const H = this.canvas.height;
@@ -1183,8 +1262,12 @@ class App {
     if (this.state === "match" && this.world) {
       this.matchFrame(dt, W, H);
     } else {
-      // Out-of-match screens.
+      // Out-of-match screens are pure interface, so the whole block draws
+      // through the interface scale.
       audio.updateMusic(dt, true);
+      const uis = this.uiScale();
+      const W = this.canvas.width / uis, H = this.canvas.height / uis;
+      ui.pushScale(uis);
       if (this.state === "menu") {
         const action = this.menu.draw(W, H, this.time, this.profile);
         if (action === "skirmish") {
@@ -1249,10 +1332,19 @@ class App {
         }
       }
       ui.flushTooltip(W, H);
+      ui.popScale();
     }
 
     // Optional FPS overlay, drawn on top of everything in every state.
-    if (this.settings.showFps) this.drawFps(W);
+    {
+      // The diagnostics scale too — they are the readouts a player squinting at
+      // a chugging match most needs to be able to read.
+      const uis = this.uiScale();
+      ui.pushScale(uis);
+      if (this.settings.showFps) this.drawFps(W / uis);
+      if (this.settings.perfOverlay) this.drawPerfOverlay(W / uis, H / uis);
+      ui.popScale();
+    }
     // On a phone held in portrait, nudge to landscape — the UI is landscape-first.
     if (this.input.usingTouch && H > W * 1.05) this.drawRotatePrompt(W, H);
 
@@ -1261,6 +1353,98 @@ class App {
     this.frameDouble = null;
     this.frameRight = null;
     this.frameDragEnd = null;
+  }
+
+  /**
+   * Frame/tick bookkeeping, plus adaptive detail.
+   *
+   * The rule is deliberately slow on the way in and slower on the way out: a
+   * single stuttery frame is normal (a building finishing, a map reveal), and
+   * detail that flickers on and off is worse than either setting. So the
+   * budget has to be blown for most of a second before detail drops, and the
+   * frame rate has to be comfortably back for two before it returns.
+   */
+  private trackPerf(dt: number) {
+    const ms = dt * 1000;
+    this.perf.frameMs += (ms - this.perf.frameMs) * 0.1;
+    this.perf.ticksLastFrame = this.perf.ticksThisFrame;
+    this.perf.ticksThisFrame = 0;
+    if (ms > this.perf.worstFrameMs) this.perf.worstFrameMs = ms;
+    // The "worst" readouts are a rolling three-second window, so the overlay
+    // shows what is happening now rather than the worst thing that ever did.
+    this.perf.worstReset += dt;
+    if (this.perf.worstReset > 3) {
+      this.perf.worstReset = 0;
+      this.perf.worstFrameMs = ms;
+      this.perf.worstTickMs = this.perf.tickMs;
+    }
+    if (!this.settings.autoLod || this.settings.reduceEffects) {
+      if (this.perf.autoLod) { this.perf.autoLod = false; this.applySettings(); }
+      this.perf.slipT = 0;
+      return;
+    }
+    const SLIPPING = 1000 / 45; // below ~45fps counts as slipping
+    const RECOVERED = 1000 / 55;
+    if (!this.perf.autoLod && this.perf.frameMs > SLIPPING) {
+      this.perf.slipT += dt;
+      if (this.perf.slipT > 0.8) {
+        this.perf.autoLod = true;
+        this.perf.slipT = 0;
+        this.applySettings();
+        this.hud.addAlert("Detail reduced to keep up");
+      }
+    } else if (this.perf.autoLod && this.perf.frameMs < RECOVERED) {
+      this.perf.slipT += dt;
+      if (this.perf.slipT > 2) {
+        this.perf.autoLod = false;
+        this.perf.slipT = 0;
+        this.applySettings();
+      }
+    } else this.perf.slipT = 0;
+  }
+
+  /**
+   * The performance overlay. Its job is to answer "why is this chugging?"
+   * without a devtools profile: whether the cost is the simulation or the
+   * drawing, how much of the map is alive, and whether detail has already been
+   * dropped to cope.
+   */
+  private drawPerfOverlay(W: number, H: number) {
+    const ctx = this.renderer.ctx;
+    const p = this.perf;
+    const fps = Math.max(0, Math.round(this.fps));
+    const ents = this.world ? this.world.entities.length : 0;
+    const budget = 1000 / 60;
+    // Frame cost minus what the simulation took is, near enough, the drawing.
+    const simShare = Math.min(p.frameMs, p.tickMs * Math.max(1, p.ticksLastFrame));
+    const rows: [string, string, string][] = [
+      ["fps", String(fps), fps >= 55 ? "#7df2a9" : fps >= 30 ? "#ffd24a" : "#e0564a"],
+      ["frame", `${p.frameMs.toFixed(1)} ms  (worst ${p.worstFrameMs.toFixed(0)})`,
+        p.frameMs <= budget ? "#7df2a9" : p.frameMs <= budget * 2 ? "#ffd24a" : "#e0564a"],
+      ["sim", `${p.tickMs.toFixed(2)} ms/tick  (worst ${p.worstTickMs.toFixed(1)})`,
+        p.tickMs <= 8 ? "#7df2a9" : p.tickMs <= 20 ? "#ffd24a" : "#e0564a"],
+      ["draw", `${Math.max(0, p.frameMs - simShare).toFixed(1)} ms`, "#cfe0ff"],
+      ["entities", String(ents), ents < 900 ? "#cabfa4" : ents < 1600 ? "#ffd24a" : "#e0564a"],
+      ["detail", this.settings.reduceEffects ? "reduced (setting)" : p.autoLod ? "reduced (auto)" : "full",
+        p.autoLod || this.settings.reduceEffects ? "#ffd24a" : "#cabfa4"],
+    ];
+    const w = 220, rowH = 17, h = 12 + rows.length * rowH + 6;
+    const x = W - w - 12, y = 12;
+    ctx.save();
+    ctx.fillStyle = "rgba(8,6,3,0.82)";
+    ctx.beginPath(); ctx.roundRect(x, y, w, h, 6); ctx.fill();
+    ctx.strokeStyle = "rgba(255,255,255,0.14)"; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.roundRect(x + 0.5, y + 0.5, w - 1, h - 1, 6); ctx.stroke();
+    ctx.font = "11px ui-monospace, SFMono-Regular, monospace";
+    ctx.textBaseline = "middle";
+    rows.forEach(([label, value, col], i) => {
+      const ry = y + 14 + i * rowH;
+      ctx.textAlign = "left";
+      ctx.fillStyle = "#8a8278"; ctx.fillText(label, x + 10, ry);
+      ctx.textAlign = "right";
+      ctx.fillStyle = col; ctx.fillText(value, x + w - 10, ry);
+    });
+    ctx.restore();
   }
 
   /** Small live FPS readout, top-centre, colour-coded by smoothness. */
@@ -1337,8 +1521,13 @@ class App {
       let steps = 0;
       const maxSteps = 5 + Math.ceil(this.gameSpeed) * 2; // allow catch-up at high speed
       while (this.accumulator >= SIM_DT && steps < maxSteps) {
+        const t0 = performance.now();
         world.tick();
         for (const ai of this.ais) ai.update(SIM_DT);
+        const cost = performance.now() - t0;
+        this.perf.tickMs += (cost - this.perf.tickMs) * 0.12;
+        if (cost > this.perf.worstTickMs) this.perf.worstTickMs = cost;
+        this.perf.ticksThisFrame++;
         this.accumulator -= SIM_DT;
         steps++;
       }
@@ -1377,11 +1566,17 @@ class App {
       const edge = 16;
       let dx = 0;
       let dy = 0;
-      if (this.input.isDown("w") || this.input.isDown("ArrowUp")) dy -= 1;
-      if (this.input.isDown("s") && !this.input.ctrl) {/* s = stop; no camera */}
-      if (this.input.isDown("ArrowDown")) dy += 1;
-      if (this.input.isDown("ArrowLeft")) dx -= 1;
-      if (this.input.isDown("d") || this.input.isDown("ArrowRight")) dx += 1;
+      // Panning is held rather than tapped, so it reads the bound key's state
+      // directly. `isDown` stores single characters lower-cased.
+      const held = (id: "panUp" | "panDown" | "panLeft" | "panRight") => {
+        const chord = chordFor(this.settings.keybinds, id);
+        if (!chord || chord.includes("+")) return false; // a modifier chord can't be held sensibly
+        return this.input.isDown(chord.length === 1 ? chord.toLowerCase() : chord);
+      };
+      if (held("panUp")) dy -= 1;
+      if (held("panDown")) dy += 1;
+      if (held("panLeft")) dx -= 1;
+      if (held("panRight")) dx += 1;
       // edge scroll (only with a real mouse, when enabled and inside the window)
       if (this.settings.edgeScroll && !this.input.usingTouch && this.input.mx >= 0 && this.input.my >= 0) {
         if (this.input.mx < edge) dx -= 1;
@@ -1454,39 +1649,46 @@ class App {
     // ---- HUD (consumes pointer if clicked over panels) ----
     // Pass the full selection (any team) so the info panel can show a clicked
     // enemy/neutral unit's health; the command card filters to own units.
-    this.hud.draw(W, H, world, this.camera, this.me, this.selectedEntities(), dt, this.controller, this.attackMoveArmed, this.spectating);
-    if (this.spectating) this.drawSpectatorHud(W, H, world);
-    if (world.mode !== "conquest") this.drawModeStatus(W, H, world);
-    this.drawControlGroups(W, H);
-    this.drawQoLBar(W, H);
+    // Everything from here down is interface, so it draws through the scale.
+    // Widgets lay out against UW/UH and the transform sizes them up; pointer
+    // coordinates are divided to match, so hit-testing needs no special case.
+    const uis = this.uiScale();
+    const UW = W / uis, UH = H / uis;
+    ui.pushScale(uis);
+    this.hud.draw(UW, UH, world, this.camera, this.me, this.selectedEntities(), dt, this.controller, this.attackMoveArmed, this.spectating);
+    if (this.spectating) this.drawSpectatorHud(UW, UH, world);
+    if (world.mode !== "conquest") this.drawModeStatus(UW, UH, world);
+    this.drawControlGroups(UW, UH);
+    this.drawQoLBar(UW, UH);
     if (this.showProduction && !this.spectating) {
-      const jump = drawProductionPanel(W, H, world, this.me);
+      const jump = drawProductionPanel(UW, UH, world, this.me);
       if (jump != null) {
         const b = world.byId.get(jump);
         if (b) { this.select([jump]); this.camera.centerOn(b.x, b.y); }
       }
     }
-    if (this.showScoreboard) drawScoreboard(W, H, world, this.me);
-    if (this.net) drawChat(W, H, this.chatLog, this.chatOpen ? this.chatDraft : null, this.time, H - MINIMAP_SIZE - 70);
-    ui.flushTooltip(W, H);
+    if (this.showScoreboard) drawScoreboard(UW, UH, world, this.me);
+    if (this.net) drawChat(UW, UH, this.chatLog, this.chatOpen ? this.chatDraft : null, this.time, UH - MINIMAP_SIZE - 70);
+    ui.flushTooltip(UW, UH);
 
     // ---- in-game menu overlay ----
     if (this.ingameMenu) {
       const ctx = this.renderer.ctx;
       ctx.fillStyle = "rgba(8, 6, 3, 0.6)";
-      ctx.fillRect(0, 0, W, H);
-      ui.panel(W / 2 - 150, H / 2 - 130, 300, 270, { light: true });
-      ui.text("Paused", W / 2, H / 2 - 100, { align: "center", size: 22, bold: true, color: PAL.uiAccent });
-      if (ui.button("Resume", W / 2 - 110, H / 2 - 64, 220, 44, { accent: true, size: 16 })) {
+      ctx.fillRect(0, 0, UW, UH);
+      ui.panel(UW / 2 - 150, UH / 2 - 130, 300, 270, { light: true });
+      ui.text("Paused", UW / 2, UH / 2 - 100, { align: "center", size: 22, bold: true, color: PAL.uiAccent });
+      if (ui.button("Resume", UW / 2 - 110, UH / 2 - 64, 220, 44, { accent: true, size: 16 })) {
         this.ingameMenu = false;
       }
-      if (ui.button("⚙  Settings", W / 2 - 110, H / 2 - 12, 220, 44, { size: 15 })) {
+      if (ui.button("⚙  Settings", UW / 2 - 110, UH / 2 - 12, 220, 44, { size: 15 })) {
         this.openSettings("match"); // returns to the (still-paused) match
       }
-      if (ui.button("Concede & Quit", W / 2 - 110, H / 2 + 40, 220, 44, { danger: true, size: 15 })) {
+      if (ui.button("Concede & Quit", UW / 2 - 110, UH / 2 + 40, 220, 44, { danger: true, size: 15 })) {
         this.finishMatch(false);
       }
     }
+    ui.popScale();
 
     // ---- route unconsumed pointer input to the world ----
     // Spectators can still left-click/drag to select-and-inspect units, but

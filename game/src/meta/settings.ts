@@ -1,6 +1,8 @@
 // Player-wide options, persisted to localStorage independently of the match
 // profile. Loaded once at boot and applied through App.applySettings().
 
+import { Keybinds } from "./keybinds";
+
 export interface Settings {
   masterVol: number;
   sfxVol: number;
@@ -13,6 +15,10 @@ export interface Settings {
   colorblind: boolean; // high-contrast team palette
   weather: boolean; // atmospheric rain/snow/overcast overlay
   showFps: boolean; // live FPS counter overlay
+  perfOverlay: boolean; // frame/tick/entity readout, for diagnosing a chugging match
+  autoLod: boolean; // drop detail on its own when frames start slipping
+  uiScale: number; // 0.8..1.5 — interface only; the world keeps its apparent size
+  keybinds: Keybinds; // overrides; anything missing uses the action's default
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -27,6 +33,10 @@ export const DEFAULT_SETTINGS: Settings = {
   colorblind: false,
   weather: true,
   showFps: false,
+  perfOverlay: false,
+  autoLod: true,
+  uiScale: 1,
+  keybinds: {},
 };
 
 const KEY = "bb_settings";
@@ -34,7 +44,18 @@ const KEY = "bb_settings";
 export function loadSettings(): Settings {
   try {
     const raw = localStorage.getItem(KEY);
-    if (raw) return { ...DEFAULT_SETTINGS, ...JSON.parse(raw) };
+    if (raw) {
+      const saved = JSON.parse(raw) as Partial<Settings>;
+      // Merge rather than replace: a settings file written before an option
+      // existed must still get that option's default, and a corrupt keybind
+      // map must not take the whole hotkey system down with it.
+      return {
+        ...DEFAULT_SETTINGS,
+        ...saved,
+        keybinds: (saved.keybinds && typeof saved.keybinds === "object") ? saved.keybinds : {},
+        uiScale: Math.max(0.8, Math.min(1.5, Number(saved.uiScale) || 1)),
+      };
+    }
   } catch { /* no storage / bad json -> defaults */ }
   return { ...DEFAULT_SETTINGS };
 }
