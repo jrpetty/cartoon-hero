@@ -2,7 +2,7 @@
 // alerts. Talks back to the match controller through the MatchController
 // interface — the HUD never mutates the world directly.
 
-import { World, FOG_UNSEEN } from "../sim/world";
+import { World, FOG_UNSEEN, VET_RANKS, VET_THRESHOLDS } from "../sim/world";
 import { BuildState, Entity, Kind, Stance, Team } from "../sim/types";
 import { Camera } from "../engine/camera";
 import { UNITS } from "../content/units";
@@ -29,6 +29,7 @@ export interface MatchController {
   startPlacement(type: string): void;
   ungarrison(building: Entity): void;
   toggleGate(building: Entity): void;
+  setAutoReseed(on: boolean): void;
   trade(action: "sell_wood" | "sell_food" | "buy_wood" | "buy_food"): void;
   stopSelection(): void;
   holdSelection(): void;
@@ -53,8 +54,8 @@ const BUILD_CATEGORIES: BuildCategory[] = [
   {
     id: "economy",
     label: "Economy",
-    hint: "Houses, drop-off camps, farms, market and expansion Town Centers.",
-    buildings: ["house", "mill", "lumber_camp", "mining_camp", "farm", "market", "town_center"],
+    hint: "Houses, drop-off camps, farms, bridges, market and expansion Town Centers.",
+    buildings: ["house", "mill", "lumber_camp", "mining_camp", "farm", "bridge", "market", "town_center"],
   },
   {
     id: "military",
@@ -554,6 +555,21 @@ export class HUD {
           ],
         });
       }
+      // Auto-reseed lives on the farm and the Mill because those are the two
+      // things you have selected when you are thinking about food at all.
+      if (building.type === "farm" || building.type === "mill") {
+        place(p.autoReseed ? "Reseed ✓" : "Reseed ✗", () => ctrl.setAutoReseed(!p.autoReseed), {
+          accent: p.autoReseed,
+          size: 10,
+          tooltip: [
+            "Auto-reseed farms",
+            p.autoReseed
+              ? "A spent field is re-sown on the same ground whenever the wood is there."
+              : "Spent fields are left bare and the farmer goes to find other work.",
+            `Each re-sowing costs ${this.cost(BUILDINGS.farm.cost)}.`,
+          ],
+        });
+      }
       if (building.garrison.length > 0) {
         place(`Eject ${building.garrison.length}`, () => ctrl.ungarrison(building), {
           tooltip: ["Ungarrison all units (G)"],
@@ -596,6 +612,23 @@ export class HUD {
         }
       }
       if (line) ui.text(line, x, y + 50, { size: 13 });
+
+      // Veterancy. The chevrons over a unit's head say it has *a* rank; they
+      // can't say which, how it was earned, or how close the next one is — and
+      // a rank that silently added HP and attack was doing real work nobody
+      // could see. Rank ladder ends at Legendary, where there is nothing left
+      // to count toward.
+      if (def && e.veterancy > 0 && !def.hero) {
+        const rank = VET_RANKS[e.veterancy] ?? "";
+        const col = e.veterancy >= 3 ? "#ffe07a" : e.veterancy >= 2 ? "#ffd24a" : "#e8c98a";
+        let vet = `${"⌃".repeat(e.veterancy)} ${rank}  ·  ${e.vetKills} kill${e.vetKills === 1 ? "" : "s"}`;
+        const next = VET_THRESHOLDS[e.veterancy];
+        if (next !== undefined) {
+          const vetMult = world.player(e.team)?.vetMult ?? 1;
+          vet += `  ·  next at ${Math.max(1, Math.round(next / vetMult))}`;
+        }
+        ui.text(vet, x, y + 68, { size: 12, color: col, bold: true });
+      }
 
       // Production queue.
       if (e.kind === Kind.Building && e.productionQueue.length > 0) {

@@ -218,6 +218,7 @@ export function drawBuilding(ctx: Ctx, e: Entity, time: number, selectedTeamView
     case "lumber_camp": drawLumberCamp(ctx, e, half); break;
     case "mining_camp": drawMiningCamp(ctx, e, half); break;
     case "farm": drawFarm(ctx, e, half); break;
+    case "bridge": drawBridge(ctx, e, half); break;
     case "barracks": drawBarracks(ctx, e, half, tc); break;
     case "archery_range": drawArcheryRange(ctx, e, half, tc); break;
     case "stable": drawStable(ctx, e, half, tc); break;
@@ -527,6 +528,35 @@ function drawMiningCamp(ctx: Ctx, e: Entity, half: number) {
   ctx.arc(e.x + half * 0.45, e.y - half * 0.1, 3, 0, Math.PI * 2);
   ctx.arc(e.x + half * 0.6, e.y - half * 0.13, 2.5, 0, Math.PI * 2);
   ctx.fill();
+}
+
+/**
+ * Timber decking over the shallows. Read flat and low on purpose — a bridge is
+ * something troops walk *over*, and anything with height to it would read as an
+ * obstacle in the middle of the water, which is the opposite of what it is.
+ */
+function drawBridge(ctx: Ctx, e: Entity, half: number) {
+  const x = e.x - half, y = e.y - half, s = half * 2;
+  // The deck.
+  ctx.fillStyle = PAL.woodDark;
+  ctx.fillRect(x + 1, y + 1, s - 2, s - 2);
+  // Planks across the span.
+  ctx.strokeStyle = "#9c7b4a";
+  ctx.lineWidth = 1.6;
+  for (let i = 1; i < 7; i++) {
+    const px = x + (s * i) / 7;
+    ctx.beginPath();
+    ctx.moveTo(px, y + 3);
+    ctx.lineTo(px, y + s - 3);
+    ctx.stroke();
+  }
+  // Handrails down both long edges, so the crossing direction is legible.
+  ctx.strokeStyle = "#6b4f2c";
+  ctx.lineWidth = 2.4;
+  ctx.beginPath();
+  ctx.moveTo(x + 1, y + 2.5); ctx.lineTo(x + s - 1, y + 2.5);
+  ctx.moveTo(x + 1, y + s - 2.5); ctx.lineTo(x + s - 1, y + s - 2.5);
+  ctx.stroke();
 }
 
 function drawFarm(ctx: Ctx, e: Entity, half: number) {
@@ -952,19 +982,30 @@ export function drawUnit(ctx: Ctx, e: Entity, time: number, lod = 0) {
   }
 
   // Veterancy chevrons above seasoned units (gold, one per rank).
+  //
+  // Drawn twice: a dark stroke underneath, then the gold on top. A 1.4px gold
+  // line on its own vanished against pale ground and any bright particle, which
+  // meant a rank that was quietly adding HP and attack was invisible exactly
+  // when it mattered — in the middle of a fight.
   if (e.veterancy > 0 && !UNITS[e.type]?.hero) {
     const cy = e.y - e.radius * 1.7;
     const col = e.veterancy >= 3 ? "#ffe07a" : e.veterancy >= 2 ? "#ffd24a" : "#e8c98a";
-    ctx.strokeStyle = col;
-    ctx.lineWidth = 1.4;
-    for (let i = 0; i < e.veterancy; i++) {
-      const cx = e.x - (e.veterancy - 1) * 3 + i * 6;
-      ctx.beginPath();
-      ctx.moveTo(cx - 2.2, cy + 1.4);
-      ctx.lineTo(cx, cy - 1.4);
-      ctx.lineTo(cx + 2.2, cy + 1.4);
-      ctx.stroke();
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+    for (const [stroke, width] of [["rgba(12,10,6,0.75)", 3.2], [col, 1.6]] as const) {
+      ctx.strokeStyle = stroke;
+      ctx.lineWidth = width;
+      for (let i = 0; i < e.veterancy; i++) {
+        const cx = e.x - (e.veterancy - 1) * 3.5 + i * 7;
+        ctx.beginPath();
+        ctx.moveTo(cx - 2.6, cy + 1.6);
+        ctx.lineTo(cx, cy - 1.6);
+        ctx.lineTo(cx + 2.6, cy + 1.6);
+        ctx.stroke();
+      }
     }
+    ctx.lineCap = "butt";
+    ctx.lineJoin = "miter";
   }
 
   shadow(ctx, e.x + 1, e.y + e.radius * 0.55, e.radius * 0.95, e.radius * 0.42);

@@ -27,7 +27,8 @@ export type Command =
   | { t: "gate"; team: Team; buildingId: EntityId }
   | { t: "trade"; team: Team; action: "sell_wood" | "sell_food" | "buy_wood" | "buy_food" }
   | { t: "banner"; team: Team; x: number; y: number }
-  | { t: "delete"; team: Team; ids: EntityId[] };
+  | { t: "delete"; team: Team; ids: EntityId[] }
+  | { t: "autoreseed"; team: Team; on: boolean };
 
 /** Keep only ids the issuing team actually owns — a client can never command
  *  another player's units, and it keeps application order-independent. */
@@ -80,6 +81,13 @@ export function applyCommand(world: World, c: Command): void {
     // Disbanding your own troops. Goes through the command layer like anything
     // else so it stays lockstep-safe and shows up in a replay.
     case "delete": world.deleteUnits(owned(world, c.team, c.ids)); break;
+    // A standing preference rather than an order, but it still changes what the
+    // sim does, so it goes through the command layer like everything else.
+    case "autoreseed": {
+      const p = world.player(c.team);
+      if (p) p.autoReseed = c.on;
+      break;
+    }
   }
 }
 

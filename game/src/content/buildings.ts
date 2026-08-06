@@ -24,6 +24,12 @@ export interface BuildingDef {
   requires?: string;
   /** Garrison capacity (0 = none). Garrisoned units add arrows. */
   garrisonCap?: number;
+  /**
+   * Goes on water instead of on land. A bridge is the only building that wants
+   * ground nothing else can use, so it inverts the usual buildability test
+   * rather than relaxing it — you cannot lay a bridge across a meadow.
+   */
+  onlyOnShallows?: boolean;
 }
 
 const B = (d: Partial<BuildingDef> & { id: string; name: string }): BuildingDef => ({
@@ -117,6 +123,17 @@ export const BUILDINGS: Record<string, BuildingDef> = {
     cost: { food: 0, wood: 60, gold: 0 },
     buildTime: 15,
     tiles: 2,
+  }),
+  bridge: B({
+    id: "bridge",
+    name: "Bridge",
+    desc: "A timber crossing over shallows. Troops cross at full speed instead of wading. Cannot be built on dry land.",
+    hp: 400,
+    cost: { food: 0, wood: 100, gold: 0 },
+    buildTime: 22,
+    tiles: 2,
+    sight: 120,
+    onlyOnShallows: true,
   }),
   barracks: B({
     id: "barracks",

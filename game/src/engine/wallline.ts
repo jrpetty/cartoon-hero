@@ -27,3 +27,40 @@ export function wallLinePoints(
   }
   return out;
 }
+
+/**
+ * Snapped centres filling the dragged rectangle with a block of `tiles`-wide
+ * buildings, in reading order.
+ *
+ * A wall wants to be a gap-free line; a block of houses wants the opposite. Each
+ * building is spaced one tile clear of its neighbour so villagers can still walk
+ * between them and so the whole block doesn't become an accidental wall — laying
+ * twelve houses that seal your own base in is not what anyone means by "drag a
+ * block of houses".
+ *
+ * Reading order matters: builders are handed out round-robin along this list, so
+ * a predictable left-to-right, top-to-bottom sequence keeps each villager
+ * working a contiguous stretch instead of criss-crossing the site.
+ */
+export function blockPoints(
+  wx0: number, wy0: number, wx1: number, wy1: number,
+  tile: number, tiles: number, maxCells = 64,
+): WallCell[] {
+  const pitch = (tiles + 1) * tile; // footprint plus a one-tile walking gap
+  // Odd footprints sit on a tile centre, even ones on a tile corner — the same
+  // rule placeBuilding snaps to, so the preview matches what actually gets built.
+  const half = tiles % 2 === 1 ? tile / 2 : 0;
+  const snap = (v: number) => Math.round((v - half) / tile) * tile + half;
+  const ax = snap(Math.min(wx0, wx1)), ay = snap(Math.min(wy0, wy1));
+  const bx = snap(Math.max(wx0, wx1)), by = snap(Math.max(wy0, wy1));
+  const cols = Math.max(1, Math.floor((bx - ax) / pitch) + 1);
+  const rows = Math.max(1, Math.floor((by - ay) / pitch) + 1);
+  const out: WallCell[] = [];
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      if (out.length >= maxCells) return out;
+      out.push({ x: ax + c * pitch, y: ay + r * pitch });
+    }
+  }
+  return out;
+}

@@ -28,6 +28,7 @@ import {
   GATHER_RATE,
   GATHER_TICK,
   FARM_TICK_MULT,
+  FARM_FOOD,
   POP_CAP_HARD,
   PROJECTILE_SPEED,
   SIM_HZ,
@@ -52,7 +53,7 @@ import { dist, dist2 } from "../engine/math";
 import type { MapData } from "../maps/generator";
 import { COMMANDERS, CommanderPower } from "../content/commanders";
 import { BoonEffect, emptyBoonEffect, aggregateBoons } from "../content/boons";
-import { TERRAIN_SPEED, TERRAIN_SIGHT, TERRAIN_BUILDABLE } from "../maps/terrain_kinds";
+import { TERRAIN_SPEED, TERRAIN_SIGHT, TERRAIN_BUILDABLE, Terrain } from "../maps/terrain_kinds";
 
 export interface PlayerState {
   team: Team;
@@ -65,6 +66,12 @@ export interface PlayerState {
   loadout: Record<string, number>;
   /** Economy handicap/bonus (AI difficulty; player = 1). */
   econMult: number;
+  /**
+   * Rebuild a farm where it stood when its soil runs out, whenever the wood is
+   * there. On by default: re-seeding is a chore, not a decision, and the whole
+   * point of the toggle is for the rare player who wants the wood back instead.
+   */
+  autoReseed: boolean;
   defeated: boolean;
   /** Hero (Champion) lifecycle: none = never trained, alive, or respawning. */
   heroState: "none" | "alive" | "respawning";
@@ -143,13 +150,16 @@ export const HERO_HP_PER_LVL = 24;
 export const HERO_ATK_PER_LVL = 2;
 /** Kills needed to reach veterancy ranks 1..3 (Veteran / Elite / Legendary). */
 export const VET_THRESHOLDS = [2, 5, 9];
+/** What each veterancy rank is called, indexed by rank (0 = no rank yet). */
+export const VET_RANKS = ["", "Veteran", "Elite", "Legendary"];
 const HERO_RESPAWN_SEC = 65;
 
 export interface WorldEvent {
   kind:
     | "sword" | "bow" | "arrowHit" | "siege" | "death" | "collapse"
     | "build" | "complete" | "underattack" | "age" | "deposit" | "spawn" | "hit" | "ability" | "callout"
-    | "leap"; // an arena Infiltrator opening the fight behind the enemy line
+    | "leap" // an arena Infiltrator opening the fight behind the enemy line
+    | "exhaust"; // a resource node worked dry — currently only a spent farm
   x: number;
   y: number;
   team: Team;
@@ -182,7 +192,9 @@ const RES_TYPE_KIND: Record<string, ResourceKind> = {
 };
 
 /** Buildings units can walk over (don't block the nav grid). */
-const BUILDING_WALKABLE = new Set<string>(["farm"]);
+// Buildings units walk over rather than around. A farm is a crop plot; a bridge
+// is decking laid on the shallows — blocking either would defeat its purpose.
+const BUILDING_WALKABLE = new Set<string>(["farm", "bridge"]);
 
 /** Wall-class buildings (Bulwark boon, cheaper/tougher fortifications). */
 const WALL_TYPES = new Set<string>(["palisade", "stone_wall", "gate"]);
@@ -224,6 +236,11 @@ export class World {
   grid!: NavGrid;
   /** The ground, one Terrain per cell — read on the movement path. */
   terrain: Uint8Array = new Uint8Array(0);
+  /**
+   * How many finished bridges cover each terrain cell. Allocated lazily, since
+   * most maps never see one.
+   */
+  bridged: Uint8Array | null = null;
   terrainCols = 0;
   terrainRows = 0;
   spatial = new SpatialGrid(96);
@@ -323,6 +340,7 @@ export class World {
         popCap: b.popBonus ?? 0,
         loadout: loadouts[t] ?? {},
         econMult: econMults[t] ?? 1,
+        autoReseed: true,
         defeated: false,
         heroState: "none",
         heroRespawnTimer: 0,
@@ -554,6 +572,11 @@ export class World {
     // Vigilant Watch: defensive buildings fire faster and farther.
     e.range = def.range + (def.attack > 0 ? bn.towerRangeBonus : 0);
     e.attackInterval = def.attack > 0 ? def.attackInterval * bn.towerCdMult : def.attackInterval;
+    // Soil goes in when the plot is laid, not when it finishes. A farm is a
+    // food node as well as a building, and stocking it at completion left a
+    // state — Done, but empty — that reads as a field worked dry the instant
+    // anyone touches it.
+    if (type === "farm") e.amount = FARM_FOOD;
     if (completed) {
       e.hp = maxHp;
       e.buildState = BuildState.Done;
@@ -596,8 +619,9 @@ export class World {
       p.popCap = Math.min(POP_CAP_HARD, p.popCap + def.popProvided);
     }
     e.popProvided = def.popProvided;
-    // Farms act as a renewable food node once finished.
-    if (def.id === "farm") e.amount = 999999;
+    // Decking only carries traffic once the bridge is actually finished — a
+    // half-built crossing is a construction site standing in a river.
+    if (def.onlyOnShallows) this.stampBridge(e, true);
     if (!silent) this.emit("complete", e.x, e.y, e.team, def.id);
   }
 
@@ -1023,14 +1047,19 @@ export class World {
     const sx = Math.round(wx / TILE) * TILE + (tiles % 2 === 1 ? TILE / 2 : 0);
     const sy = Math.round(wy / TILE) * TILE + (tiles % 2 === 1 ? TILE / 2 : 0);
     if (!this.grid.footprintClear(sx, sy, tiles)) return null;
-    if (!this.groundBuildable(sx, sy, tiles)) return null;
+    if (!this.groundBuildable(sx, sy, tiles, type)) return null;
     const overlaps = (ent: Entity) =>
       Math.abs(ent.x - sx) < (tiles * TILE) / 2 + ent.radius &&
       Math.abs(ent.y - sy) < (tiles * TILE) / 2 + ent.radius;
-    // No building on top of units.
-    const near = this.spatial.query(sx, sy, tiles * TILE * 0.75) as Entity[];
-    for (const n of near) {
-      if (n.alive && (n as Entity).kind === Kind.Unit && overlaps(n as Entity)) return null;
+    // No building on top of units — but only for buildings that would actually
+    // trap them. A farm is walkable, and the farmer works standing on the plot,
+    // so applying this to farms made it impossible to re-seed a spent field on
+    // its own ground: the villager who just worked it dry was in the way.
+    if (!BUILDING_WALKABLE.has(type)) {
+      const near = this.spatial.query(sx, sy, tiles * TILE * 0.75) as Entity[];
+      for (const n of near) {
+        if (n.alive && (n as Entity).kind === Kind.Unit && overlaps(n as Entity)) return null;
+      }
     }
     // No building on top of a walkable building (farm) — those don't stamp the
     // grid, so footprintClear can't catch them. Scanned directly since the
@@ -1056,7 +1085,7 @@ export class World {
     const tiles = def.tiles;
     const sx = Math.round(wx / TILE) * TILE + (tiles % 2 === 1 ? TILE / 2 : 0);
     const sy = Math.round(wy / TILE) * TILE + (tiles % 2 === 1 ? TILE / 2 : 0);
-    return this.grid.footprintClear(sx, sy, tiles) && this.groundBuildable(sx, sy, tiles);
+    return this.grid.footprintClear(sx, sy, tiles) && this.groundBuildable(sx, sy, tiles, type);
   }
 
   /**
@@ -1065,20 +1094,60 @@ export class World {
    * ground: you cannot raise a barracks in a marsh, in a wood, or in a ford.
    * That is what stops a player from simply paving over the map's geography.
    */
-  private groundBuildable(sx: number, sy: number, tiles: number): boolean {
+  private groundBuildable(sx: number, sy: number, tiles: number, type?: string): boolean {
     // Worlds built without a map (the auto-battler's arena, unit tests) have no
     // ground to consult, and everything on them is buildable.
     if (!this.terrainCols) return true;
+    // A bridge is the one building that wants ground nothing else can use, so
+    // its test is the inverse: every cell must be shallows. That also stops it
+    // being used as a cheap wall on dry land.
+    const bridging = !!(type && BUILDINGS[type]?.onlyOnShallows);
     const c0x = Math.floor((sx - (tiles * TILE) / 2) / TILE);
     const c0y = Math.floor((sy - (tiles * TILE) / 2) / TILE);
     for (let y = 0; y < tiles; y++) {
       for (let x = 0; x < tiles; x++) {
         const cx = c0x + x, cy = c0y + y;
         if (cx < 0 || cy < 0 || cx >= this.terrainCols || cy >= this.terrainRows) return false;
-        if (!TERRAIN_BUILDABLE[this.terrain[cy * this.terrainCols + cx]]) return false;
+        const t = this.terrain[cy * this.terrainCols + cx];
+        if (bridging) {
+          if (t !== Terrain.Shallow) return false;
+        } else if (!TERRAIN_BUILDABLE[t]) return false;
       }
     }
     return true;
+  }
+
+  /** True when a finished bridge is carrying this world point. */
+  bridgedAt(wx: number, wy: number): boolean {
+    if (!this.bridged) return false;
+    const cx = (wx / TILE) | 0;
+    const cy = (wy / TILE) | 0;
+    if (cx < 0 || cy < 0 || cx >= this.terrainCols || cy >= this.terrainRows) return false;
+    return this.bridged[cy * this.terrainCols + cx] > 0;
+  }
+
+  /**
+   * Lay or lift the decking a bridge puts over the shallows.
+   *
+   * Counted rather than a flag, because two bridges can overlap at the tile
+   * where their footprints meet and a boolean would leave a hole in the crossing
+   * when only one of them burned down.
+   */
+  private stampBridge(b: Entity, on: boolean) {
+    if (!this.terrainCols) return;
+    if (!this.bridged) this.bridged = new Uint8Array(this.terrainCols * this.terrainRows);
+    const tiles = BUILDINGS[b.type]?.tiles ?? 2;
+    const c0x = Math.floor((b.x - (tiles * TILE) / 2) / TILE);
+    const c0y = Math.floor((b.y - (tiles * TILE) / 2) / TILE);
+    for (let y = 0; y < tiles; y++) {
+      for (let x = 0; x < tiles; x++) {
+        const cx = c0x + x, cy = c0y + y;
+        if (cx < 0 || cy < 0 || cx >= this.terrainCols || cy >= this.terrainRows) continue;
+        const i = cy * this.terrainCols + cx;
+        if (on) this.bridged[i] = Math.min(255, this.bridged[i] + 1);
+        else if (this.bridged[i] > 0) this.bridged[i]--;
+      }
+    }
   }
 
   /** How many distinct qualifying building types `team` has, vs how many an age needs. */
@@ -1172,6 +1241,37 @@ export class World {
       b.rallyX = x;
       b.rallyY = y;
     }
+  }
+
+  /**
+   * What a rally point *means*, as opposed to where it is.
+   *
+   * A rally dropped on something is a standing instruction about that thing, not
+   * a coordinate that happens to sit on top of it: on a resource the villagers
+   * that come out gather it, on a building site or a damaged wall they go and
+   * work on it, and on bare ground everyone just walks there. Doing this at
+   * spawn rather than at drop time is deliberate — the state of the target can
+   * change between setting the rally and the unit appearing, and the useful
+   * reading is the one at the moment the villager actually has hands free.
+   */
+  private applyRally(u: Entity, b: Entity, type: string) {
+    const target = this.entityAt(b.rallyX, b.rallyY);
+    const canGather = !!UNITS[type]?.canGather;
+    if (target && target.alive && canGather) {
+      if (target.kind === Kind.Resource) {
+        this.issueGather([u.id], target.id);
+        return;
+      }
+      // Ours, and either still going up or hurt. A healthy finished building is
+      // just a landmark to stand next to, so that falls through to a move.
+      const needsWork = target.kind === Kind.Building && target.team === b.team
+        && (target.buildState !== BuildState.Done || target.hp < target.maxHp);
+      if (needsWork) {
+        this.issueBuildRepair([u.id], target.id);
+        return;
+      }
+    }
+    this.issueMove([u.id], b.rallyX, b.rallyY);
   }
 
   garrison(ids: EntityId[], buildingId: EntityId) {
@@ -1619,6 +1719,35 @@ export class World {
   }
 
   /** A villager bumped off a taken farm: send it to the nearest free farm, else any resource, else idle. */
+  /**
+   * The soil in a field is spent. Take the plot away, and — if the player has
+   * asked for it and the wood is there — lay a fresh foundation on the same
+   * ground with the same villager already assigned to raise it.
+   *
+   * Re-seeding on the spot rather than anywhere free matters: a farm's value is
+   * mostly its walking distance to the drop-off, so a field that reappears
+   * somewhere else is a worse field. If the wood isn't there the farmer is
+   * reassigned like any other bumped villager rather than left standing in a
+   * bare patch of dirt.
+   */
+  private exhaustFarm(farm: Entity, worker: Entity) {
+    const p = this.players[farm.team];
+    const x = farm.x, y = farm.y;
+    const def = BUILDINGS.farm;
+    farm.alive = false;
+    farm.farmWorker = -1;
+    this.grid.stampFootprint(x, y, def.tiles, false);
+    this.emit("exhaust", x, y, farm.team, "farm");
+    if (p && p.autoReseed && this.canAfford(p.resources, def.cost)) {
+      const fresh = this.placeBuilding(farm.team, "farm", x, y);
+      if (fresh) {
+        this.issueBuildRepair([worker.id], fresh.id);
+        return;
+      }
+    }
+    this.reassignFarmer(worker, farm);
+  }
+
   private reassignFarmer(e: Entity, fromFarm: Entity) {
     let bestFarm: Entity | null = null;
     let bestFd = Infinity;
@@ -1732,9 +1861,10 @@ export class World {
       const take = Math.min(GATHER_RATE * GATHER_TICK * 10, node.amount); // chunked
       const got = Math.min(take, cap - e.carry, 1.2);
       e.carry += got;
-      if (!isFarm) {
-        node.amount -= got;
-        if (node.amount <= 0) {
+      node.amount -= got;
+      if (node.amount <= 0) {
+        if (isFarm) this.exhaustFarm(node, e);
+        else {
           node.alive = false;
           this.grid.stampFootprint(node.x, node.y, 1, false);
         }
@@ -2047,14 +2177,7 @@ export class World {
         this.applyHeroLevel(u, p.heroLevel);
       }
       this.emit("spawn", sx, sy, b.team, type);
-      if (b.rallyX >= 0) {
-        const rallyTarget = this.entityAt(b.rallyX, b.rallyY);
-        if (rallyTarget && rallyTarget.kind === Kind.Resource && UNITS[type].canGather) {
-          this.issueGather([u.id], rallyTarget.id);
-        } else {
-          this.issueMove([u.id], b.rallyX, b.rallyY);
-        }
-      }
+      if (b.rallyX >= 0) this.applyRally(u, b, type);
     } else if (item.startsWith("t:")) {
       const upId = item.slice(2);
       p.upgrades.add(upId);
@@ -2184,7 +2307,9 @@ export class World {
     if (e.slowTimer > 0) s *= SLOW_MULT;
     // The ground underfoot. Siege engines are already slow and get stuck on
     // everything, so they take half the penalty rather than all of it.
-    const ground = TERRAIN_SPEED[this.terrainAt(e.x, e.y)] ?? 1;
+    // Decking counts as ordinary ground: crossing a bridge is the whole point of
+    // paying for one, and a bridge you still wade across is just an ornament.
+    const ground = this.bridgedAt(e.x, e.y) ? 1 : (TERRAIN_SPEED[this.terrainAt(e.x, e.y)] ?? 1);
     if (ground !== 1) {
       const soften = e.armorClass === ArmorClass.Siege ? 0.5 : 1;
       s *= 1 - (1 - ground) * soften;
@@ -2332,6 +2457,8 @@ export class World {
       // Walkable buildings never stamped the grid; don't clear cells they may
       // share with adjacent obstacles.
       if (!BUILDING_WALKABLE.has(e.type)) this.grid.stampFootprint(e.x, e.y, def.tiles, false);
+      // A burned bridge is shallows again.
+      if (def?.onlyOnShallows && e.buildState === BuildState.Done) this.stampBridge(e, false);
       if (owner) {
         owner.popCap = Math.max(0, owner.popCap - e.popProvided);
         owner.stats.buildingsLost++;

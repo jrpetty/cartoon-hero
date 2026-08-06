@@ -788,10 +788,12 @@ export class SkirmishAI {
       if (mill) { this.assignBuilder(mill); return; }
     }
 
-    // Farm transition: farms are an *infinite* food source, so the AI must move
-    // onto them for the late game. Ramp toward ~one farm per 3 villagers once the
-    // berries thin out or we hit Castle Age — building a couple at a time so the
-    // transition actually keeps up with a growing population.
+    // Farm transition: farms are the only food that doesn't run out for good, so
+    // the AI must move onto them for the late game. Ramp toward ~one farm per 3
+    // villagers once the berries thin out or we hit Castle Age — building a
+    // couple at a time so the transition actually keeps up with a growing
+    // population. Individual fields do wear out now, but auto-reseed puts them
+    // back for the wood, so this only has to cover *growth*, not replacement.
     const transitioning = lowBerries || p.age >= 2;
     const farmTarget = transitioning ? Math.min(24, Math.max(3, Math.ceil(villagerCount / 3))) : 0;
     const mill = this.myBuildings("mill")[0];

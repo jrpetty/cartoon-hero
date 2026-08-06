@@ -255,8 +255,24 @@ describe("Farms", () => {
     for (let i = 0; i < 4; i++) vs.push(w.spawnUnit(Team.Player, "villager", 1480 + i * 10, 1560).id);
     w.issueGather(vs, farm!.id);
     run(w, 12);
-    const onFarm = vs.filter((id) => w.byId.get(id)!.order.target === farm!.id).length;
-    expect(onFarm).toBe(1);
+    // Assert the *binding*, not what each villager happens to be pointed at
+    // right now. A farmer spends much of its time walking a full load back to
+    // the drop-off, and during that leg its order target is the granary rather
+    // than the field. (This test used to check the instantaneous target and
+    // passed only because the farm held no food at all, so the farmer filled up
+    // forever and never left — the assertion was measuring a bug.)
+    expect(vs, "nobody claimed the plot").toContain(farm!.farmWorker);
+    const gatherTarget = (id: number) => {
+      const e = w.byId.get(id)!;
+      return e.order.kind === OrderKind.Return
+        ? (e.order.queue?.[0]?.target ?? -1)
+        : e.order.target;
+    };
+    const others = vs.filter((id) => id !== farm!.farmWorker);
+    expect(others).toHaveLength(3);
+    for (const id of others) {
+      expect(gatherTarget(id), "a second villager is working the same farm").not.toBe(farm!.id);
+    }
   });
 
   it("units can walk across a farm (it doesn't block the nav grid)", () => {
@@ -275,6 +291,54 @@ describe("Farms", () => {
     w.issueMove([u.id], farm!.x + 140, farm!.y);
     run(w, 12);
     expect(u.x).toBeGreaterThan(farm!.x);
+  });
+
+  it("re-seeds a spent farm on the same ground, and charges wood for it", () => {
+    const w = makeWorld();
+    const p = w.player(Team.Player);
+    let farm = null;
+    for (const [fx, fy] of [[1500, 1500], [1500, 1400], [1600, 1500], [1400, 1500]]) {
+      farm = w.placeBuilding(Team.Player, "farm", fx, fy);
+      if (farm) break;
+    }
+    farm!.buildState = 0;
+    farm!.amount = 2; // one gather away from bare dirt
+    const at = { x: farm!.x, y: farm!.y };
+    const v = w.spawnUnit(Team.Player, "villager", farm!.x + 30, farm!.y);
+    w.issueGather([v.id], farm!.id);
+    p.resources.wood = 500;
+    const woodBefore = p.resources.wood;
+    run(w, 8);
+    expect(farm!.alive, "the spent plot is still standing").toBe(false);
+    // A new plot on the same ground — a farm's value is mostly its walk to the
+    // drop-off, so one that reappears elsewhere is a worse farm.
+    const fresh = w.entities.find((e) => e.alive && e.kind === Kind.Building
+      && e.type === "farm" && e.id !== farm!.id);
+    expect(fresh, "nothing was re-seeded").toBeDefined();
+    expect(Math.hypot(fresh!.x - at.x, fresh!.y - at.y)).toBeLessThan(1);
+    expect(p.resources.wood, "re-seeding was free").toBeLessThan(woodBefore);
+  });
+
+  it("leaves the field bare when auto-reseed is off, and frees the farmer", () => {
+    const w = makeWorld();
+    const p = w.player(Team.Player);
+    p.autoReseed = false;
+    let farm = null;
+    for (const [fx, fy] of [[1500, 1500], [1500, 1400], [1600, 1500], [1400, 1500]]) {
+      farm = w.placeBuilding(Team.Player, "farm", fx, fy);
+      if (farm) break;
+    }
+    farm!.buildState = 0;
+    farm!.amount = 2;
+    const v = w.spawnUnit(Team.Player, "villager", farm!.x + 30, farm!.y);
+    w.issueGather([v.id], farm!.id);
+    p.resources.wood = 500;
+    run(w, 8);
+    expect(farm!.alive).toBe(false);
+    expect(w.entities.some((e) => e.alive && e.kind === Kind.Building && e.type === "farm"))
+      .toBe(false);
+    // And the farmer isn't left standing in the dirt — it went and found work.
+    expect(v.order.kind, "the farmer was abandoned").not.toBe(OrderKind.Idle);
   });
 
   it("rejects placing another building on top of a farm", () => {
@@ -298,7 +362,7 @@ describe("Farms", () => {
     }
     expect(farm).not.toBeNull();
     farm!.buildState = 0; // Done
-    farm!.amount = 999999; // renewable food (set on completion in real games)
+    farm!.amount = 999999; // more soil than this test could ever work through
     const v = w.spawnUnit(Team.Player, "villager", farm!.x + 50, farm!.y + 40);
     w.issueGather([v.id], farm!.id);
     run(w, 6);

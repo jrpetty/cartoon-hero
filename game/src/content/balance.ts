@@ -12,9 +12,22 @@ export const POP_PER_TOWNCENTER = 10;
 export const VILLAGER_CARRY_CAP = 10;
 export const GATHER_RATE = 0.45; // resource units per gather tick action
 export const GATHER_TICK = 0.6; // seconds per gather action
-// Farms tick slightly slower than foraging — they're infinite and raid-safe,
-// so they pay a small speed tax. Kept mild so farming feels productive.
+// Farms tick slightly slower than foraging — they're raid-safe and sit inside
+// your walls, so they pay a small speed tax. Kept mild so farming feels
+// productive.
 export const FARM_TICK_MULT = 1.1;
+/**
+ * Food in one field before the soil is spent.
+ *
+ * Farms used to be literally infinite (`amount = 999999`), which made the
+ * 60-wood cost a one-off toll on unlimited food and left the late economy with
+ * nothing to spend wood on. A finite field turns each one into a recurring
+ * wood-for-food trade, which is the decision farming is supposed to be. At the
+ * standing rate this is a little over four minutes of work for one villager —
+ * long enough that re-seeding is background noise rather than a job, which is
+ * why auto-reseed exists and defaults on.
+ */
+export const FARM_FOOD = 350;
 
 export const START_RESOURCES = { food: 200, wood: 200, gold: 100 };
 

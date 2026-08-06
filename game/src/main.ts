@@ -15,7 +15,7 @@ import { randomSeed } from "./engine/rng";
 import { SkirmishAI } from "./ai/skirmish_ai";
 import { DIFFICULTIES } from "./ai/difficulty";
 import { Camera } from "./engine/camera";
-import { wallLinePoints as computeWallLine } from "./engine/wallline";
+import { wallLinePoints as computeWallLine, blockPoints } from "./engine/wallline";
 import { WarbandRun } from "./sim/warband";
 import { WarbandScreen } from "./ui/warband_screen";
 import { Input } from "./engine/input";
@@ -656,6 +656,10 @@ class App {
       this.dispatch({ t: "gate", team: this.me, buildingId: b.id });
       audio.play("build");
     },
+    setAutoReseed: (on) => {
+      this.dispatch({ t: "autoreseed", team: this.me, on });
+      audio.play("ui");
+    },
     trade: (action) => {
       this.dispatch({ t: "trade", team: this.me, action });
       audio.play("coin");
@@ -698,6 +702,16 @@ class App {
     return computeWallLine(wx0, wy0, wx1, wy1, TILE);
   }
 
+  /**
+   * Where a drag would put buildings, whichever kind is being placed: a gap-free
+   * run for walls, a spaced grid for everything else. One function so the ghost
+   * preview and the actual placement can never disagree about the answer.
+   */
+  dragPlacements(type: string, wx0: number, wy0: number, wx1: number, wy1: number) {
+    if (LINE_BUILDABLE.has(type)) return computeWallLine(wx0, wy0, wx1, wy1, TILE);
+    return blockPoints(wx0, wy0, wx1, wy1, TILE, BUILDINGS[type]?.tiles ?? 2);
+  }
+
   /** Funnel every player action through here: queued for lockstep in a net game,
    *  applied immediately in single-player. Keeps both paths in one place. */
   dispatch(cmd: Command) {
@@ -705,10 +719,14 @@ class App {
     else if (this.world) applyCommand(this.world, cmd);
   }
 
-  /** Drag-release while a wall is selected: lay a whole run of segments at once. */
+  /**
+   * Drag-release while a building is selected: lay the whole run at once — a
+   * line of wall, or a block of houses/farms.
+   */
   paintWallLine(box: { x0: number; y0: number; x1: number; y1: number }) {
     if (!this.world || !this.placing) return;
-    const pts = this.wallLinePoints(
+    const pts = this.dragPlacements(
+      this.placing,
       this.camera.screenToWorldX(box.x0), this.camera.screenToWorldY(box.y0),
       this.camera.screenToWorldX(box.x1), this.camera.screenToWorldY(box.y1),
     );
@@ -1637,17 +1655,29 @@ class App {
       const p = world.player(this.me);
       const valid = world.canPlace(this.me, this.placing, wx, wy) && world.canAfford(p.resources, def.cost);
       ghost = { type: this.placing, x: wx, y: wy, valid };
-      // Drag-painting a wall: preview the whole snapped run instead of a box.
-      if (LINE_BUILDABLE.has(this.placing) && this.input.drag.active) {
+      // Drag-painting: preview the whole snapped run instead of a selection box.
+      if (this.input.drag.active) {
         const d = this.input.drag;
-        const pts = this.wallLinePoints(
+        const pts = this.dragPlacements(
+          this.placing,
           this.camera.screenToWorldX(d.x0), this.camera.screenToWorldY(d.y0),
           this.camera.screenToWorldX(d.x1), this.camera.screenToWorldY(d.y1),
         );
-        ghost.line = pts.map((pt) => ({
-          x: pt.x, y: pt.y,
-          valid: world.canPlace(this.me, this.placing!, pt.x, pt.y),
-        }));
+        // Mark them invalid once the treasury runs out rather than only once the
+        // ground does, so a twelve-house drag shows you where the wood stops.
+        let budget = { ...p.resources };
+        ghost.line = pts.map((pt) => {
+          const ok = world.canPlace(this.me, this.placing!, pt.x, pt.y)
+            && world.canAfford(budget, def.cost);
+          if (ok) {
+            budget = {
+              food: budget.food - def.cost.food,
+              wood: budget.wood - def.cost.wood,
+              gold: budget.gold - def.cost.gold,
+            };
+          }
+          return { x: pt.x, y: pt.y, valid: ok };
+        });
         suppressDragBox = true;
       }
     }
@@ -1728,7 +1758,7 @@ class App {
     // issue no commands.
     if (!this.ingameMenu) {
       if (this.frameDragEnd && !ui.pointerConsumed) {
-        if (!this.spectating && this.placing && LINE_BUILDABLE.has(this.placing)) this.paintWallLine(this.frameDragEnd);
+        if (!this.spectating && this.placing) this.paintWallLine(this.frameDragEnd);
         else this.worldDragSelect(this.frameDragEnd);
       }
       if (this.frameDouble && !ui.pointerConsumed) {
