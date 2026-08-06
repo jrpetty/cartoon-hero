@@ -62,6 +62,11 @@ export interface GhostPlacement {
   valid: boolean;
   /** When drag-painting a wall, the snapped tile centres of the whole run. */
   line?: { x: number; y: number; valid: boolean }[];
+  /**
+   * "14 segments · 70 wood", drawn at the cursor while dragging. You should not
+   * have to build a wall to find out how long it is or what it costs.
+   */
+  label?: string;
 }
 
 export class Renderer {
@@ -534,6 +539,23 @@ export class Renderer {
           for (const pt of ghost.line) cell(pt.x, pt.y, pt.valid);
         } else {
           cell(ghost.x, ghost.y, ghost.valid);
+        }
+        if (ghost.label) {
+          // Drawn in world space with the rest of the ghost, so it sits by the
+          // cursor at any zoom. Dark plate behind it — a wall run crosses grass,
+          // stone and water, and white text on grass is unreadable.
+          const lx = ghost.x + 18;
+          const ly = ghost.y - 14;
+          ctx.font = "600 13px 'Trebuchet MS', sans-serif";
+          const tw = ctx.measureText(ghost.label).width;
+          ctx.fillStyle = "rgba(10,8,4,0.78)";
+          ctx.beginPath();
+          ctx.roundRect(lx - 6, ly - 12, tw + 12, 19, 4);
+          ctx.fill();
+          ctx.fillStyle = "#ffe9b0";
+          ctx.textAlign = "left";
+          ctx.textBaseline = "alphabetic";
+          ctx.fillText(ghost.label, lx, ly + 2);
         }
       }
     }

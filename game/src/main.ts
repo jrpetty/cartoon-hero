@@ -67,7 +67,13 @@ import {
 type AppState = "menu" | "setup" | "armory" | "match" | "postmatch" | "codex" | "settings" | "warband" | "editor";
 
 // Buildings you can drag-paint into a continuous run.
+// Dragged out as one gap-free run. A wall is never one segment, which is why
+// these also stay armed between runs (see paintWallLine).
 const LINE_BUILDABLE = new Set(["palisade", "stone_wall"]);
+// Dragged out as a spaced grid with walking room between. Only the buildings
+// you genuinely want several of at once — a drag over anything else places one,
+// because nine Town Centres in a grid is a misclick, not a feature.
+const BLOCK_BUILDABLE = new Set(["house", "farm"]);
 
 class App {
   canvas: HTMLCanvasElement;
@@ -810,7 +816,10 @@ class App {
    */
   dragPlacements(type: string, wx0: number, wy0: number, wx1: number, wy1: number) {
     if (LINE_BUILDABLE.has(type)) return computeWallLine(wx0, wy0, wx1, wy1, TILE);
-    return blockPoints(wx0, wy0, wx1, wy1, TILE, BUILDINGS[type]?.tiles ?? 2);
+    if (BLOCK_BUILDABLE.has(type)) return blockPoints(wx0, wy0, wx1, wy1, TILE, BUILDINGS[type]?.tiles ?? 2);
+    // Everything else: a drag is just a click that wandered. Place one, where
+    // the button came up.
+    return [{ x: wx1, y: wy1 }];
   }
 
   /** Funnel every player action through here: queued for lockstep in a net game,
@@ -847,7 +856,11 @@ class App {
     });
     if (any) audio.play("build");
     else this.hud.addAlert("Cannot build there.");
-    if (!this.input.shift) this.placing = null;
+    // Walls stay armed. Laying a wall means laying several runs — around a
+    // corner, along a ridge, across a gap — and having to reopen Build →
+    // Defense → Palisade between every one of them was the whole reason this
+    // felt like work. Right-click or Escape puts the cursor down.
+    if (!LINE_BUILDABLE.has(this.placing!) && !this.input.shift) this.placing = null;
   }
 
   /** A clickable row of control-group chips above the minimap (number + live count). */
@@ -1790,6 +1803,20 @@ class App {
           }
           return { x: pt.x, y: pt.y, valid: ok };
         });
+        // What you are about to spend, before you spend it. Counting only the
+        // placements that will actually land, since the greyed-out tail costs
+        // nothing and reporting it would be a lie.
+        const n = ghost.line.filter((pt) => pt.valid).length;
+        if (n > 0) {
+          const parts: string[] = [];
+          if (def.cost.wood) parts.push(`${def.cost.wood * n} wood`);
+          if (def.cost.gold) parts.push(`${def.cost.gold * n} gold`);
+          if (def.cost.food) parts.push(`${def.cost.food * n} food`);
+          const unit = n === 1 ? "" : "s";
+          ghost.label = `${n} ${LINE_BUILDABLE.has(this.placing) ? `segment${unit}` : `building${unit}`}${parts.length ? `  ·  ${parts.join(", ")}` : ""}`;
+        } else {
+          ghost.label = "can't build there";
+        }
         suppressDragBox = true;
       }
     }
@@ -1830,7 +1857,7 @@ class App {
     const uis = this.uiScale();
     const UW = W / uis, UH = H / uis;
     ui.pushScale(uis);
-    this.hud.draw(UW, UH, world, this.camera, this.me, this.selectedEntities(), dt, this.controller, this.attackMoveArmed, this.spectating);
+    this.hud.draw(UW, UH, world, this.camera, this.me, this.selectedEntities(), dt, this.controller, this.attackMoveArmed, this.spectating, this.placing);
     if (this.spectating) this.drawSpectatorHud(UW, UH, world);
     if (world.mode !== "conquest") this.drawModeStatus(UW, UH, world);
     this.drawControlGroups(UW, UH);

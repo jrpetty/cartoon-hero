@@ -114,6 +114,7 @@ export class HUD {
     ctrl: MatchController,
     attackMoveArmed: boolean,
     spectating = false,
+    placingType: string | null = null,
   ) {
     const ctx = ui.ctx;
     const p = world.player(team);
@@ -188,6 +189,19 @@ export class HUD {
       ui.text("⚔ ATTACK-MOVE: click a target location", W / 2, 52, {
         align: "center", size: 15, color: "#f2a05d", bold: true,
       });
+    }
+    // Placement mode is otherwise invisible except for the ghost under the
+    // cursor, and walls now *stay* armed between runs — which is only an
+    // improvement if you can tell it has happened and how to stop.
+    if (placingType) {
+      const wall = placingType === "palisade" || placingType === "stone_wall";
+      ui.text(
+        wall
+          ? `🧱 ${BUILDINGS[placingType].name.toUpperCase()}: drag to lay a run — keep going, right-click when done`
+          : `🔨 ${BUILDINGS[placingType].name.toUpperCase()}: click to place — right-click to cancel`,
+        W / 2, attackMoveArmed ? 72 : 52,
+        { align: "center", size: 14, color: "#8fd0ff", bold: true },
+      );
     }
 
     // ------------------------------------------------------------ alerts --
