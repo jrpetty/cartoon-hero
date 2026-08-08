@@ -102,7 +102,78 @@ for path in files:
             continue
         missing.append((path, cls, method))
 
-if bad or missing:
+# --- third pass: a variable used that the file never declares ---
+#
+# The third face of the same blind spot, and the one that has now cost a
+# build: DuelManager said `wagered` where the parameter is `wager`. javac
+# reports that as "cannot find symbol" — exactly the error check.sh has to
+# discard wholesale, because offline the Minecraft symbols really are gone.
+#
+# Deliberately over-generous about what counts as declared: EVERY declaration
+# anywhere in the file is treated as in scope everywhere in it. That gives up
+# on catching a variable used outside its block, which no reviewer needs help
+# with, and in exchange makes a false positive very hard to produce. What it
+# still catches is the case that matters — a name that appears nowhere in the
+# file as a declaration, i.e. a typo or a rename that missed a use.
+#
+# Classes extending something outside our tree are skipped: a Screen subclass
+# inherits `font`, `width`, `minecraft` and more, and this cannot see them.
+KEYWORDS = {
+    "abstract", "assert", "boolean", "break", "byte", "case", "catch", "char",
+    "class", "const", "continue", "default", "do", "double", "else", "enum",
+    "extends", "final", "finally", "float", "for", "goto", "if", "implements",
+    "import", "instanceof", "int", "interface", "long", "native", "new",
+    "package", "private", "protected", "public", "return", "short", "static",
+    "strictfp", "super", "switch", "synchronized", "this", "throw", "throws",
+    "transient", "try", "void", "volatile", "while", "var", "yield", "record",
+    "sealed", "permits", "true", "false", "null",
+}
+# roots of fully-qualified names: `com.jrpetty...`, `net.minecraft...`
+PKG_ROOTS = {"com", "net", "java", "javax", "io", "org", "it", "jdk"}
+
+undefined = []
+for path in files:
+    me = os.path.basename(path)[:-5]
+    if decls.get(me + "!extends") is not None:
+        continue
+    src = open(path, encoding="utf-8").read()
+    body = re.sub(r"//[^\n]*", "", src)
+    body = re.sub(r"/\*.*?\*/", "", body, flags=re.S)
+    body = re.sub(r'"(?:\\.|[^"\\])*"', '""', body)
+    body = re.sub(r"'(?:\\.|[^'\\])'", "' '", body)
+
+    known = set(KEYWORDS) | PKG_ROOTS
+    # `Type name` / `Type<..> name` / `var name`, as a declaration or a parameter
+    known |= set(re.findall(r"[\w>\[\]]\s+([a-z_]\w*)\s*(?:[=;,)]|:)", body))
+    # the 2nd..nth declarator of `int bx = 9, by = 9, bh = 11;`, and the
+    # element names of an annotation such as @EventBusSubscriber(modid = ...)
+    known |= set(re.findall(r"[(,]\s*([a-z_]\w*)\s*=[^=]", body))
+    # `instanceof LivingEntity le` binds a name too
+    known |= set(re.findall(r"\binstanceof\s+[\w.<>\[\]]+\s+([a-z_]\w*)", body))
+    # varargs: `Reward... rewards`
+    known |= set(re.findall(r"\.\.\.\s*([a-z_]\w*)", body))
+    # lambda parameters: `x ->` and `(a, b) ->`
+    known |= set(re.findall(r"(?<![\w.])([a-z_]\w*)\s*->", body))
+    for params in re.findall(r"\(([^()]*)\)\s*->", body):
+        known |= set(re.findall(r"[a-z_]\w*", params))
+    # record components, and lowercase members brought in by a static import
+    for header in re.findall(r"\brecord\s+\w+\s*\(([^)]*)\)", src, re.S):
+        known |= set(re.findall(r"([a-z_]\w*)\s*(?:,|$)", header))
+    known |= {i.rsplit(".", 1)[-1]
+              for i in re.findall(r"^\s*import\s+static\s+([\w.]+);", src, re.M)}
+
+    for m in re.finditer(r"(?<![\w.$])([a-z_]\w*)", body):
+        word = m.group(1)
+        if word in known:
+            continue
+        after = body[m.end():m.end() + 2]
+        if after[:1] in ("(", ".") or after.strip()[:1] == ":":
+            continue          # a call, a qualified name, or a label
+        if body[max(0, m.start() - 2):m.start()].endswith("::"):
+            continue          # method reference
+        undefined.append((path, word, body.count(word)))
+
+if bad or missing or undefined:
     if bad:
         print("FAIL  a class is used without an import:")
         for path, name, pkgs in bad:
@@ -111,6 +182,10 @@ if bad or missing:
         print("FAIL  a method is called that its class does not declare:")
         for path, cls, method in sorted(set(missing)):
             print(f"   {path}: {cls}.{method}(...)")
+    if undefined:
+        print("FAIL  a variable is used that its file never declares:")
+        for path, word, _ in sorted(set(undefined)):
+            print(f"   {path}: {word}")
     sys.exit(1)
-print(f"PASS  {len(files)} files: our classes are imported, and every method "
-      f"called on one exists.")
+print(f"PASS  {len(files)} files: our classes are imported, every method "
+      f"called on one exists, and no file uses a name it never declares.")

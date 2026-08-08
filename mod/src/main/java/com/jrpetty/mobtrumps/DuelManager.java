@@ -149,11 +149,10 @@ public final class DuelManager {
             held.shrink(1); // escrow it
         }
 
-        PENDING.put(target.getUUID(),
-                new Pending(challenger.getUUID(), System.currentTimeMillis() + CHALLENGE_TTL_MS, stake, 0, bestOf));
-        showInvite(target, challenger, wagered
-                ? "Both stake the card in hand" + (bestOf > 1 ? " · best of " + bestOf : "")
-                : (bestOf > 1 ? "Best of " + bestOf : "A friendly game"));
+        Pending challenge = new Pending(challenger.getUUID(),
+                System.currentTimeMillis() + CHALLENGE_TTL_MS, stake, 0, bestOf);
+        PENDING.put(target.getUUID(), challenge);
+        showInvite(target, challenger, termsFor(challenge));
 
         String series = bestOf > 1 ? " (best of " + bestOf + ")" : "";
         Component wagerNote = stake.isEmpty() ? Component.literal(series).withStyle(ChatFormatting.AQUA)
@@ -200,10 +199,10 @@ public final class DuelManager {
         }
         takeEmeralds(challenger, bet); // escrow
 
-        PENDING.put(target.getUUID(),
-                new Pending(challenger.getUUID(), System.currentTimeMillis() + CHALLENGE_TTL_MS,
-                        ItemStack.EMPTY, bet, 1));
-        showInvite(target, challenger, bet + " emeralds each");
+        Pending challenge = new Pending(challenger.getUUID(),
+                System.currentTimeMillis() + CHALLENGE_TTL_MS, ItemStack.EMPTY, bet, 1);
+        PENDING.put(target.getUUID(), challenge);
+        showInvite(target, challenger, termsFor(challenge));
 
         challenger.sendSystemMessage(Component.literal("Challenge sent to " + name(target) + " — staking ")
                 .withStyle(ChatFormatting.GREEN)
