@@ -156,6 +156,20 @@ public final class ModNetworking {
                         LinkDisplayPayload.handle(payload, sp);
                     }
                 }));
+        // --- duel handshake, on screen ---
+        registrar.playToClient(DuelInvitePayload.TYPE, DuelInvitePayload.STREAM_CODEC,
+                (payload, context) -> context.enqueueWork(
+                        () -> com.jrpetty.mobtrumps.client.ClientHooks.duelInvite(payload)));
+        registrar.playToServer(DuelReplyPayload.TYPE, DuelReplyPayload.STREAM_CODEC,
+                (payload, context) -> context.enqueueWork(() -> {
+                    if (context.player() instanceof net.minecraft.server.level.ServerPlayer sp) {
+                        if (payload.accept()) {
+                            DuelManager.accept(sp);
+                        } else {
+                            DuelManager.decline(sp);
+                        }
+                    }
+                }));
         registrar.playToClient(BattleSyncPayload.TYPE, BattleSyncPayload.STREAM_CODEC,
                 (payload, context) -> context.enqueueWork(
                         () -> ClientHooks.updateBattle(payload)));

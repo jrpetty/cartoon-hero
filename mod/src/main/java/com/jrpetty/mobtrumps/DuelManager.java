@@ -151,6 +151,9 @@ public final class DuelManager {
 
         PENDING.put(target.getUUID(),
                 new Pending(challenger.getUUID(), System.currentTimeMillis() + CHALLENGE_TTL_MS, stake, 0, bestOf));
+        showInvite(target, challenger, wagered
+                ? "Both stake the card in hand" + (bestOf > 1 ? " · best of " + bestOf : "")
+                : (bestOf > 1 ? "Best of " + bestOf : "A friendly game"));
 
         String series = bestOf > 1 ? " (best of " + bestOf + ")" : "";
         Component wagerNote = stake.isEmpty() ? Component.literal(series).withStyle(ChatFormatting.AQUA)
@@ -200,6 +203,7 @@ public final class DuelManager {
         PENDING.put(target.getUUID(),
                 new Pending(challenger.getUUID(), System.currentTimeMillis() + CHALLENGE_TTL_MS,
                         ItemStack.EMPTY, bet, 1));
+        showInvite(target, challenger, bet + " emeralds each");
 
         challenger.sendSystemMessage(Component.literal("Challenge sent to " + name(target) + " — staking ")
                 .withStyle(ChatFormatting.GREEN)
@@ -218,6 +222,7 @@ public final class DuelManager {
     }
 
     public static int accept(ServerPlayer target) {
+        clearInvite(target);
         Pending pending = PENDING.remove(target.getUUID());
         if (pending == null) {
             target.sendSystemMessage(err("You have no pending duel challenge."));
@@ -248,6 +253,7 @@ public final class DuelManager {
                 target.sendSystemMessage(err("Hold a mob card to match the wager, then accept."));
                 // keep the challenge alive so they can grab a card and retry
                 PENDING.put(target.getUUID(), pending);
+                reshowInvite(target, pending);
                 return 0;
             }
             targetStake = held.copyWithCount(1);
@@ -261,6 +267,7 @@ public final class DuelManager {
                         + " emeralds to match the bet (you have " + countEmeralds(target) + ")."));
                 // keep the challenge alive so they can gather emeralds and retry
                 PENDING.put(target.getUUID(), pending);
+                reshowInvite(target, pending);
                 return 0;
             }
             takeEmeralds(target, pending.bet());
@@ -341,6 +348,7 @@ public final class DuelManager {
     }
 
     public static int decline(ServerPlayer target) {
+        clearInvite(target);
         Pending pending = PENDING.remove(target.getUUID());
         if (pending == null) {
             target.sendSystemMessage(err("You have no pending duel challenge."));
@@ -464,12 +472,21 @@ public final class DuelManager {
             ServerPlayer challenger = player.serverLevel().getServer()
                     .getPlayerList().getPlayer(incoming.challenger());
             returnStake(challenger, incoming.wager());
+            returnBet(challenger, incoming.bet()); // emeralds were escrowed too
         }
-        // pending challenge FROM this player: cancel it, hand back their stake
+        // pending challenge FROM this player: cancel it, hand back their stake,
+        // and take the now-dead invite off whoever it was pointed at
         PENDING.entrySet().removeIf(e -> {
             if (e.getValue().challenger().equals(player.getUUID())) {
                 if (!e.getValue().wager().isEmpty()) player.drop(e.getValue().wager(), false);
                 if (e.getValue().bet() > 0) giveEmeralds(player, e.getValue().bet());
+                ServerPlayer invited = player.serverLevel().getServer()
+                        .getPlayerList().getPlayer(e.getKey());
+                clearInvite(invited);
+                if (invited != null) {
+                    invited.sendSystemMessage(Component.literal(name(player)
+                            + " left — their challenge is off.").withStyle(ChatFormatting.GRAY));
+                }
                 return true;
             }
             return false;
@@ -681,6 +698,7 @@ public final class DuelManager {
 
     /** Auto-play any duel whose per-turn timer has expired (called every server tick). */
     public static void tickTimers(MinecraftServer server) {
+        expirePending(server);
         if (ACTIVE.isEmpty()) return;
         long now = System.currentTimeMillis();
         // both duellists map to the same Duel, so we still need to de-duplicate —
@@ -696,6 +714,39 @@ public final class DuelManager {
             // no chat warning: turns are short and the on-screen timer bar
             // flashes red on its own as the clock runs down
         }
+    }
+
+    /**
+     * Drop challenges nobody answered inside the minute: hand the stake back and
+     * take the invite off the screen.
+     *
+     * <p>Before the invite was a screen, an unanswered challenge simply sat there
+     * holding the challenger's card or emeralds in escrow until the target typed
+     * a command at it. Now that answering is a button that disappears when the
+     * clock runs out, nobody ever would.
+     */
+    private static void expirePending(MinecraftServer server) {
+        if (PENDING.isEmpty()) return;
+        long now = System.currentTimeMillis();
+        PENDING.entrySet().removeIf(entry -> {
+            Pending pending = entry.getValue();
+            if (pending.expiresAt() > now) return false;
+            ServerPlayer target = server.getPlayerList().getPlayer(entry.getKey());
+            ServerPlayer challenger = server.getPlayerList().getPlayer(pending.challenger());
+            clearInvite(target);
+            returnStake(challenger, pending.wager());
+            returnBet(challenger, pending.bet());
+            if (challenger != null) {
+                challenger.sendSystemMessage(Component.literal(
+                                (target != null ? name(target) : "They") + " didn't answer — challenge expired.")
+                        .withStyle(ChatFormatting.GRAY));
+            }
+            if (target != null) {
+                target.sendSystemMessage(Component.literal("The duel challenge expired.")
+                        .withStyle(ChatFormatting.GRAY));
+            }
+            return true;
+        });
     }
 
     private static void autoPlay(Duel duel) {
@@ -962,6 +1013,59 @@ public final class DuelManager {
         BattleCommands.shuffleSound(duel.challenger);
         BattleCommands.shuffleSound(duel.target);
         promptTurn(duel);
+    }
+
+
+    /**
+     * Raise the challenge on the target's screen as well as in their chat.
+     *
+     * <p>Chat stays because a player mid-game does not get their screen taken
+     * over, and because a line they can scroll back to is worth having. The
+     * screen is what actually makes an invite noticeable.
+     */
+    private static void showInvite(ServerPlayer target, ServerPlayer from, String terms) {
+        showInvite(target, name(from), terms, (int) (CHALLENGE_TTL_MS / 1000L));
+    }
+
+    /** Same, but with the clock already part-run — used when a challenge is put back. */
+    private static void showInvite(ServerPlayer target, String fromName, String terms, int seconds) {
+        if (target == null || seconds <= 0) {
+            return;
+        }
+        net.neoforged.neoforge.network.PacketDistributor.sendToPlayer(target,
+                DuelInvitePayload.show(fromName, terms, seconds));
+    }
+
+    /**
+     * Put a challenge back on the target's screen after a failed accept, with
+     * whatever is left of its original minute — otherwise fetching a card to
+     * match a wager would cost you the invite you were trying to answer.
+     */
+    private static void reshowInvite(ServerPlayer target, Pending pending) {
+        ServerPlayer from = target.serverLevel().getServer().getPlayerList().getPlayer(pending.challenger());
+        String fromName = from != null ? name(from) : "Your challenger";
+        int left = (int) ((pending.expiresAt() - System.currentTimeMillis() + 999L) / 1000L);
+        showInvite(target, fromName, termsFor(pending), left);
+    }
+
+    /** The one-line description of what is being played for, rebuilt from the challenge. */
+    private static String termsFor(Pending pending) {
+        if (pending.bet() > 0) {
+            return pending.bet() + " emeralds each";
+        }
+        if (!pending.wager().isEmpty()) {
+            return "Both stake the card in hand"
+                    + (pending.bestOf() > 1 ? " · best of " + pending.bestOf() : "");
+        }
+        return pending.bestOf() > 1 ? "Best of " + pending.bestOf() : "A friendly game";
+    }
+
+    /** Take the challenge off their screen — answered, expired or withdrawn. */
+    private static void clearInvite(ServerPlayer target) {
+        if (target != null) {
+            net.neoforged.neoforge.network.PacketDistributor.sendToPlayer(target,
+                    DuelInvitePayload.clear());
+        }
     }
 
     private static void promptTurn(Duel duel) {

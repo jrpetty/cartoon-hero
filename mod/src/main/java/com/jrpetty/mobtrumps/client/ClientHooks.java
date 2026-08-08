@@ -48,6 +48,23 @@ public final class ClientHooks {
         Minecraft.getInstance().setScreen(new BlackjackScreen());
     }
 
+    /** Raise a duel challenge on screen, or clear one that has been answered. */
+    public static void duelInvite(com.jrpetty.mobtrumps.DuelInvitePayload payload) {
+        ClientDuelInvite.set(payload);
+        Minecraft mc = Minecraft.getInstance();
+        if (!ClientDuelInvite.pending()) {
+            if (mc.screen instanceof DuelInviteScreen) {
+                mc.setScreen(null);
+            }
+            return;
+        }
+        // never steal a screen out from under someone mid-game: if they are
+        // already busy the invite waits, and the chat line still tells them
+        if (mc.screen == null) {
+            mc.setScreen(new DuelInviteScreen());
+        }
+    }
+
     /** Open the Bluff table. */
     public static void openBluff() {
         Minecraft.getInstance().setScreen(new BluffScreen());
