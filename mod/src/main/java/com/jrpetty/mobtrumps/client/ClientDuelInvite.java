@@ -32,7 +32,14 @@ public final class ClientDuelInvite {
             return;
         }
         Minecraft mc = Minecraft.getInstance();
-        if (mc.player != null && mc.screen == null) {
+        if (mc.player == null) {
+            // left the world with a challenge still open: it belonged to that
+            // server and answering it on the next one would only earn a "you
+            // have no pending duel challenge" from a server that is right
+            dismiss();
+            return;
+        }
+        if (mc.screen == null) {
             mc.setScreen(new DuelInviteScreen());
         }
     }
