@@ -127,7 +127,6 @@ public class RankedScreen extends Screen {
             // the rating, large, in the tier's metal — the number the whole
             // screen is about should not be the smallest thing on it
             String big = String.valueOf(rating);
-            var pose = g.pose();
             pose.pushPose();
             pose.translate(px + pw - 12 - font.width(big) * 1.6f, cardY + 14f, 0);
             pose.scale(1.6f, 1.6f, 1f);
