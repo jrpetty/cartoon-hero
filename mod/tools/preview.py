@@ -143,6 +143,34 @@ def plate(d, x, y, w, h, accent):
     outline(d, x, y, w, h, accent)
 
 
+def pool(d, cx, cy, radius, color, peak):
+    steps = 18
+    base = None
+    for i in range(steps, 0, -1):
+        t = i / steps
+        r = round(radius * t)
+        inset = round(r * 0.30)
+        alpha = round(peak * (1 - t) * (1 - t))
+        if alpha <= 0:
+            continue
+        # PIL has no alpha fills on RGB; blend towards the colour instead
+        def blend(x0, y0, x1, y1):
+            if x1 <= x0 or y1 <= y0:
+                return
+            box = (max(0, x0), max(0, y0), x1, y1)
+            try:
+                region = img_for_blend.crop(box)
+            except Exception:
+                return
+            overlay = Image.new("RGB", region.size, color)
+            img_for_blend.paste(Image.blend(region, overlay, alpha / 255), box)
+        blend(cx - r, cy - r + inset, cx + r, cy + r - inset)
+        blend(cx - r + inset, cy - r, cx + r - inset, cy + r)
+
+
+img_for_blend = None
+
+
 def felt(d, w, h):
     for y in range(h):
         t = y / max(1, h - 1)
@@ -315,7 +343,9 @@ YOU = 1
 
 
 def ranked_screen(w=470, h=280):
+    global img_for_blend
     img = Image.new("RGB", (w, h))
+    img_for_blend = img
     d = ImageDraw.Draw(img)
     felt(d, w, h)
     rail(d, w, h)
