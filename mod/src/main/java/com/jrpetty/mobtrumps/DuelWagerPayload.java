@@ -24,8 +24,14 @@ import java.util.List;
  * <p>The opponent's purse is deliberately NOT sent — only whether it covers the
  * price showing. That is the whole of what the other player needs in order to
  * negotiate, and none of what they would need to work out how rich you are.
+ *
+ * <p>{@code yourCard} and {@code theirCard} are the mob card ids each player is
+ * holding when the duel is a card wager — the actual cards on the line, drawn
+ * on the table so both players can see what they are haggling over. Empty when
+ * no card is staked, or when that player is not holding one right now.
  */
-public record DuelWagerPayload(int phase, String opponent, List<Integer> nums)
+public record DuelWagerPayload(int phase, String opponent, String yourCard, String theirCard,
+                               List<Integer> nums)
         implements CustomPacketPayload {
 
     public static final int OPEN = 0;    // the table is up, keep haggling
@@ -47,7 +53,7 @@ public record DuelWagerPayload(int phase, String opponent, List<Integer> nums)
     public static final int THEY_CAN_AFFORD = 8;
 
     public static DuelWagerPayload closed() {
-        return new DuelWagerPayload(CLOSED, "", List.of());
+        return new DuelWagerPayload(CLOSED, "", "", "", List.of());
     }
 
     public static final CustomPacketPayload.Type<DuelWagerPayload> TYPE =
@@ -58,6 +64,8 @@ public record DuelWagerPayload(int phase, String opponent, List<Integer> nums)
             StreamCodec.composite(
                     ByteBufCodecs.VAR_INT, DuelWagerPayload::phase,
                     ByteBufCodecs.STRING_UTF8, DuelWagerPayload::opponent,
+                    ByteBufCodecs.STRING_UTF8, DuelWagerPayload::yourCard,
+                    ByteBufCodecs.STRING_UTF8, DuelWagerPayload::theirCard,
                     ByteBufCodecs.VAR_INT.apply(ByteBufCodecs.list()), DuelWagerPayload::nums,
                     DuelWagerPayload::new);
 

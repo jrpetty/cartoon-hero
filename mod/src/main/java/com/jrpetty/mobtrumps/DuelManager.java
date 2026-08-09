@@ -278,6 +278,7 @@ public final class DuelManager {
         final boolean cardWager;       // both also stake the card in hand
         final int bestOf;
         long expiresAt;
+        long lastSync;                 // for the once-a-second refresh
 
         Haggle(ServerPlayer a, ServerPlayer b, int openingPrice, boolean cardWager, int bestOf) {
             this.a = a;
@@ -486,7 +487,9 @@ public final class DuelManager {
                     : (haggle.table.lastMover() == seat ? DuelWagerPayload.MOVER_YOU
                                                         : DuelWagerPayload.MOVER_THEM);
             net.neoforged.neoforge.network.PacketDistributor.sendToPlayer(me,
-                    new DuelWagerPayload(DuelWagerPayload.OPEN, name(them), java.util.List.of(
+                    new DuelWagerPayload(DuelWagerPayload.OPEN, name(them),
+                            heldCardId(haggle, me), heldCardId(haggle, them),
+                            java.util.List.of(
                             price,
                             haggle.table.agreed(seat) ? 1 : 0,
                             haggle.table.agreed(WagerTable.otherSeat(seat)) ? 1 : 0,
@@ -497,6 +500,19 @@ public final class DuelManager {
                             mover,
                             countEmeralds(them) >= price ? 1 : 0)));
         }
+    }
+
+    /**
+     * The card this player would be staking, for the table to show — only in a
+     * card wager, where the held card genuinely is on the line. In an emerald
+     * game what somebody happens to be holding is their business.
+     */
+    private static String heldCardId(Haggle haggle, ServerPlayer player) {
+        if (!haggle.cardWager) {
+            return "";
+        }
+        MobCard card = MobCardItem.cardOf(player.getMainHandItem());
+        return card == null ? "" : card.id();
     }
 
     /** Sync both screens and give both players the click that says it landed. */
@@ -529,6 +545,11 @@ public final class DuelManager {
             if (haggle.expiresAt <= now) {
                 closeWager(haggle, Component.literal("Nobody agreed a price — the duel is off.")
                         .withStyle(ChatFormatting.GRAY));
+            } else if (now - haggle.lastSync >= 1000L) {
+                // once a second, so the cards on the table track what is
+                // actually in each hand and neither clock drifts far
+                haggle.lastSync = now;
+                syncWager(haggle);
             }
         }
     }

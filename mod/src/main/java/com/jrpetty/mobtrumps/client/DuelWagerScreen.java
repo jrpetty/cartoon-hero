@@ -36,12 +36,26 @@ import static com.jrpetty.mobtrumps.client.TableArt.INK;
  */
 public class DuelWagerScreen extends Screen {
 
-    /** Above this height everything fits; below it the trimmings come off. */
-    private static final int ROOMY_H = 214;
+    /**
+     * Above this height everything fits; below it the trimmings come off.
+     *
+     * <p>Derived, not chosen: the tallest roomy column (best-of series plus a
+     * card wager) bottoms out at y=186, and the clock sits at height-48, so
+     * roomy needs 234. The first value here was 214, picked by eye — the sweep
+     * in tools/checkwagerlayout.py only caught it once it swept below the
+     * vanilla 240 floor, which is also why those twenty-six heights are swept
+     * even though vanilla cannot reach them: modded windows can.
+     */
+    private static final int ROOMY_H = 234;
+
+    /** The staked cards get the gutters; below this width there are none. */
+    private static final int CARDS_MIN_W = 470;
 
     private EditBox price;
     private final List<int[]> hits = new ArrayList<>();   // x, y, w, h, id
     private final long openedAt = System.currentTimeMillis();
+    private final java.util.Map<String, net.minecraft.world.entity.LivingEntity> entityCache =
+            new java.util.HashMap<>();
 
     // hit ids
     private static final int ID_SET = 0;
@@ -95,6 +109,7 @@ public class DuelWagerScreen extends Screen {
 
         TableArt.felt(g, width, height, width / 2, height / 2);
         TableArt.rail(g, width, height);
+        drawStakedCards(g, mouseX, mouseY);
 
         int pw = Math.min(320, width - 2 * TableArt.RAIL - 8);
         int px = (width - pw) / 2;
@@ -206,6 +221,12 @@ public class DuelWagerScreen extends Screen {
 
         boolean canAgree = !youAgreed && youCan;
         String agreeLabel = youAgreed ? "WAITING…" : (youCan ? "AGREE" : "CAN'T AFFORD");
+        if (theyAgreed && canAgree) {
+            // they have said yes and the whole thing is waiting on this button:
+            // give it the pulse their lamp already has
+            int a = 0x2A + (int) (0x2A * (0.5 + 0.5 * Math.sin(t / 320.0)));
+            g.fill(ax - 3, by - 3, ax + agreeW + 3, by + 22, TableArt.alpha(GOOD, a));
+        }
         button(g, ID_AGREE, ax, by, agreeW, 19, fit(agreeLabel, agreeW - 8),
                 youAgreed ? 0xFF243029 : (youCan ? 0xFF2C6E49 : 0xFF5A2530),
                 mouseX, mouseY, canAgree);
@@ -217,6 +238,60 @@ public class DuelWagerScreen extends Screen {
         int left = ClientDuelWager.seconds();
         g.drawCenteredString(font, left + "s", width / 2, by - 11,
                 left <= 15 ? BAD : FAINT);
+    }
+
+    /**
+     * The actual cards on the line, one in each gutter beside the panel — the
+     * same renders as every other table in the mod, live mob and all.
+     *
+     * <p>Drawn at real screen coordinates because that is where renderCard puts
+     * the mob: it places the portrait in screen space from its x,y arguments,
+     * and wrapping it in a pose translation is exactly what once left
+     * Twenty-One dealing mobless cards.
+     *
+     * <p>In an emerald game the gutters get card backs instead: the deck is
+     * dealt fresh at the duel, so there is no honest face to show.
+     */
+    private void drawStakedCards(GuiGraphics g, int mouseX, int mouseY) {
+        if (width < CARDS_MIN_W) {
+            return;
+        }
+        int panelW = Math.min(320, width - 2 * TableArt.RAIL - 8);
+        int gutter = (width - panelW) / 2 - TableArt.RAIL;   // space each side
+        float cardScale = Math.min(0.42f, Math.min(
+                (gutter - 16) / (float) CardRenderer.CARD_W,
+                (height - 2 * TableArt.RAIL - 34) / (float) CardRenderer.CARD_H));
+        if (cardScale < 0.18f) {
+            return;   // a card too small to read is noise, not information
+        }
+        int cw = Math.round(CardRenderer.CARD_W * cardScale);
+        int ch = Math.round(CardRenderer.CARD_H * cardScale);
+        int cy = (height - ch) / 2 + 4;
+        int lx = TableArt.RAIL + (gutter - cw) / 2;
+        int rx = width - TableArt.RAIL - (gutter - cw) / 2 - cw;
+
+        drawStake(g, "YOUR STAKE", ClientDuelWager.yourCard(), lx, cy, cw, ch,
+                cardScale, mouseX, mouseY);
+        drawStake(g, "THEIR STAKE", ClientDuelWager.theirCard(), rx, cy, cw, ch,
+                cardScale, mouseX, mouseY);
+    }
+
+    private void drawStake(GuiGraphics g, String label, String cardId,
+                           int x, int y, int cw, int ch, float scale, int mouseX, int mouseY) {
+        g.drawCenteredString(font, fit(label, cw + 12), x + cw / 2, y - 11,
+                TableArt.BRASS_DIM);
+        com.jrpetty.mobtrumps.game.MobCard card =
+                com.jrpetty.mobtrumps.game.MobCards.byId(cardId);
+        if (card != null && minecraft != null) {
+            var mob = CardRenderer.portraitEntity(minecraft, card, entityCache);
+            CardRenderer.renderCard(g, font, card, x, y, scale, mouseX, mouseY, mob, false, true);
+        } else {
+            CardRenderer.renderBack(g, font, x, y, scale);
+            if (ClientDuelWager.cardWager()) {
+                // a card wager with no card up: say so where the card would be
+                g.drawCenteredString(font, "hold a card", x + cw / 2, y + ch + 3, BAD);
+            }
+        }
     }
 
     private String quickLabel(int amount) {

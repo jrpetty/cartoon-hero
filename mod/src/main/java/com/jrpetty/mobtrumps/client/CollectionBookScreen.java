@@ -414,9 +414,11 @@ public class CollectionBookScreen extends Screen {
         g.fill(panelX - 3, panelY - 3, panelX + panelW + 3, panelY + panelH + 3, CardRenderer.KRAFT_DARK);
         g.fill(panelX, panelY, panelX + panelW, panelY + panelH, CardRenderer.KRAFT);
         g.fill(panelX + 6, panelY + 6, panelX + panelW - 6, panelY + panelH - 6, CardRenderer.FACE);
-        if (section == Section.CARDS) {
-            // the spine only belongs on the card pages; the back pages run
-            // across both leaves and would be cut in half by it
+        if (section == Section.CARDS && !view.isEmpty()) {
+            // The spine only belongs on the card pages; the back pages run
+            // across both leaves and would be cut in half by it. An EMPTY
+            // spread drops it too — with nothing to divide, the line just ran
+            // straight through the "no cards match" message.
             g.fill(panelX + panelW / 2 - 1, gridTop - 6, panelX + panelW / 2 + 1,
                     panelY + panelH - 24, CardRenderer.KRAFT_DARK);
         }
@@ -472,6 +474,14 @@ public class CollectionBookScreen extends Screen {
         g.drawString(font, hint, (width - font.width(hint)) / 2, panelY + panelH + 8, hintColor, true);
 
         boolean overlay = pickerMob != null || eggPicker != null || statsOpen;
+        // Everything from here up is an overlay ON the book, so it all rides at
+        // z=400 the way vanilla tooltips do. The grid's live mob portraits are
+        // 3D models drawn with depth around z 50-150, and a panel left at z=0
+        // gets them poking straight through its face — mobs walking over the
+        // tooltip text was exactly that.
+        var overPose = g.pose();
+        overPose.pushPose();
+        overPose.translate(0, 0, 400);
         if (hoveredSetting != null && !overlay) {
             drawInfoTooltip(g, mouseX, mouseY, hoveredSetting.label(), hoveredSetting.detail(), 0xFF3FA7D6);
         } else if (hoveredCard != null && !overlay) {
@@ -488,6 +498,13 @@ public class CollectionBookScreen extends Screen {
         if (pickerMob != null) renderPicker(g, mouseX, mouseY);
         if (eggPicker != null) renderEggPicker(g, mouseX, mouseY);
         if (statsOpen) renderStats(g);
+        overPose.popPose();
+    }
+
+    /** Cut a typed search down to something quotable in the empty-page note. */
+    private String fitHint(String typed) {
+        String t = typed.strip();
+        return t.length() <= 18 ? t : t.substring(0, 17) + "…";
     }
 
     /** Title, collection tally and progress bar across the top of the spread. */
@@ -538,7 +555,18 @@ public class CollectionBookScreen extends Screen {
         int ch = Math.round(CardRenderer.CARD_H * cardScale);
         int start = spread * perSpread;
         if (view.isEmpty()) {
-            g.drawCenteredString(font, "No cards match.", width / 2, gridTop + 30, CardRenderer.KRAFT_DARK);
+            // A deliberate empty page rather than a stray line: centred in the
+            // card area (the spine is suppressed for it), with the way out
+            // underneath. It used to sit high on the spread with the spine
+            // running straight through it, which read as a rendering bug.
+            int myPos = gridTop + (panelY + panelH - 30 - gridTop) / 2 - 10;
+            g.drawCenteredString(font, "No cards match", width / 2, myPos, CardRenderer.INK);
+            String why = search.getValue().isBlank()
+                    ? "this filter has nothing to show"
+                    : "nothing is called \"" + fitHint(search.getValue()) + "\"";
+            g.drawCenteredString(font, why, width / 2, myPos + 12, CardRenderer.KRAFT_DARK);
+            g.drawCenteredString(font, "try another search or filter", width / 2, myPos + 24,
+                    CardRenderer.KRAFT_DARK);
         }
         boolean overlayOpen = pickerMob != null || statsOpen || eggPicker != null;
         for (int s = 0; s < perSpread; s++) {

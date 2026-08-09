@@ -6,12 +6,15 @@ import com.jrpetty.mobtrumps.DuelWagerPayload;
 public final class ClientDuelWager {
 
     private static volatile DuelWagerPayload state = DuelWagerPayload.closed();
+    /** When the snapshot landed, so the clock can run between syncs. */
+    private static volatile long receivedAt;
 
     private ClientDuelWager() {
     }
 
     public static void set(DuelWagerPayload payload) {
         state = payload;
+        receivedAt = System.currentTimeMillis();
     }
 
     public static boolean open() {
@@ -38,8 +41,24 @@ public final class ClientDuelWager {
         return state.num(DuelWagerPayload.YOUR_PURSE, 0);
     }
 
+    /**
+     * Whole seconds left to settle, run forward from the last snapshot — the
+     * server only syncs when something happens, and a clock that freezes
+     * between moves reads as a broken one.
+     */
     public static int seconds() {
-        return state.num(DuelWagerPayload.SECONDS, 0);
+        long elapsed = (System.currentTimeMillis() - receivedAt) / 1000L;
+        return (int) Math.max(0L, state.num(DuelWagerPayload.SECONDS, 0) - elapsed);
+    }
+
+    /** The card id you are staking (card wagers only; "" when not holding one). */
+    public static String yourCard() {
+        return state.yourCard();
+    }
+
+    /** The card id they are staking (card wagers only; "" when not holding one). */
+    public static String theirCard() {
+        return state.theirCard();
     }
 
     public static int bestOf() {

@@ -13,9 +13,11 @@ Run: python3 tools/checkwagerlayout.py
 import sys
 
 RAIL = 7
-ROOMY_H = 214
+ROOMY_H = 234
 FONT_H = 9          # Minecraft's font.lineHeight
 QUICK = [0, 10, 50, 250, 1000]
+CARDS_MIN_W = 470
+CARD_W, CARD_H = 170, 236
 
 
 def text_w(s):
@@ -94,6 +96,24 @@ def layout(width, height, best_of, card_wager, price):
     widths.append((agree_w + reset_w + leave_w + 8, pw, "button row"))
     widths.append((0 if agree_w > 20 else 1, 0, "agree button too narrow"))
 
+    # the staked cards in the side gutters, mirroring drawStakedCards()
+    if width >= CARDS_MIN_W:
+        panel_w = min(320, width - 2 * RAIL - 8)
+        gutter = (width - panel_w) // 2 - RAIL
+        card_scale = min(0.42, (gutter - 16) / CARD_W, (height - 2 * RAIL - 34) / CARD_H)
+        if card_scale >= 0.18:
+            cw = round(CARD_W * card_scale)
+            ch = round(CARD_H * card_scale)
+            cy = (height - ch) // 2 + 4
+            lx = RAIL + (gutter - cw) // 2
+            panel_left = (width - panel_w) // 2
+            if lx + cw > panel_left:
+                widths.append((lx + cw, panel_left, "left card overlaps the panel"))
+            if cy - 11 < RAIL:
+                widths.append((RAIL, cy - 11, "card label crosses the top rail"))
+            if cy + ch + 12 > height - RAIL:
+                widths.append((cy + ch + 12, height - RAIL, "card hint crosses the bottom rail"))
+
     return rows, widths, content_bottom, clock_y, pw
 
 
@@ -103,7 +123,9 @@ def main():
     # every plausible GUI-space window: Minecraft floors at 320x240 and the
     # widest common ultrawide at gui scale 1 is about 3840
     for width in list(range(320, 800, 7)) + [854, 1024, 1280, 1920, 2560, 3840]:
-        for height in list(range(240, 620, 5)) + [720, 1080, 1440]:
+        # vanilla floors gui height at 240, but ROOMY_H claims to handle less,
+        # so the sweep goes below the floor to keep that claim honest
+        for height in list(range(196, 620, 5)) + [720, 1080, 1440]:
             for best_of in (1, 3):
                 for card_wager in (False, True):
                     for price in (0, 250, 1000000):
