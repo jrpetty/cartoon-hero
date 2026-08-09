@@ -3,6 +3,7 @@ package com.jrpetty.mobtrumps;
 import com.jrpetty.mobtrumps.game.Battle;
 import com.jrpetty.mobtrumps.game.MobCard;
 import com.jrpetty.mobtrumps.game.Stat;
+import com.jrpetty.mobtrumps.game.WagerTable;
 import net.minecraft.ChatFormatting;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
@@ -58,7 +59,17 @@ public final class DuelManager {
     private DuelManager() {
     }
 
-    private record Pending(UUID challenger, long expiresAt, ItemStack wager, int bet, int bestOf) {
+    /**
+     * A challenge waiting for an answer.
+     *
+     * <p>Nothing is escrowed here, which is why {@code cardWager} is a flag and
+     * {@code askingPrice} is only an opening ask. Both stakes are collected in
+     * one go at the moment the wager table settles — until then either player
+     * can walk away having paid nothing, which is the whole point of letting
+     * them haggle over the price in the first place.
+     */
+    private record Pending(UUID challenger, long expiresAt, boolean cardWager,
+                           int askingPrice, int bestOf) {
     }
 
     private record LastFoe(UUID id, String name) {
@@ -138,38 +149,33 @@ public final class DuelManager {
             return 0;
         }
 
-        ItemStack stake = ItemStack.EMPTY;
-        if (wager) {
-            ItemStack held = challenger.getMainHandItem();
-            if (MobCardItem.cardOf(held) == null) {
-                challenger.sendSystemMessage(err("Hold the mob card you want to wager."));
-                return 0;
-            }
-            stake = held.copyWithCount(1);
-            held.shrink(1); // escrow it
+        // Checked but NOT taken: the card only leaves your hand once the other
+        // player has agreed the terms. Re-checked when the table settles, so
+        // putting it away in the meantime costs you the duel, not the card.
+        if (wager && MobCardItem.cardOf(challenger.getMainHandItem()) == null) {
+            challenger.sendSystemMessage(err("Hold the mob card you want to wager."));
+            return 0;
         }
 
         Pending challenge = new Pending(challenger.getUUID(),
-                System.currentTimeMillis() + CHALLENGE_TTL_MS, stake, 0, bestOf);
+                System.currentTimeMillis() + CHALLENGE_TTL_MS, wager, 0, bestOf);
         PENDING.put(target.getUUID(), challenge);
         showInvite(target, challenger, termsFor(challenge));
 
         String series = bestOf > 1 ? " (best of " + bestOf + ")" : "";
-        Component wagerNote = stake.isEmpty() ? Component.literal(series).withStyle(ChatFormatting.AQUA)
+        Component wagerNote = !wager ? Component.literal(series).withStyle(ChatFormatting.AQUA)
                 : Component.literal(" wagering ").withStyle(ChatFormatting.GRAY)
-                        .append(stake.getHoverName()).append(Component.literal(series)
-                                .withStyle(ChatFormatting.AQUA));
+                        .append(challenger.getMainHandItem().getHoverName())
+                        .append(Component.literal(series).withStyle(ChatFormatting.AQUA));
         challenger.sendSystemMessage(Component.literal("Challenge sent to " + name(target) + ".")
                 .withStyle(ChatFormatting.GREEN).append(wagerNote));
         target.sendSystemMessage(Component.literal(name(challenger)
-                        + (stake.isEmpty() ? " challenges you to a Mob Trumps duel" + series + "! "
-                                           : " challenges you to a WAGER duel" + series + "! "))
+                        + (!wager ? " challenges you to a Mob Trumps duel" + series + "! "
+                                  : " challenges you to a WAGER duel" + series + "! "))
                 .withStyle(ChatFormatting.GOLD)
-                .append(stake.isEmpty() ? Component.empty()
-                        : Component.literal("They stake ").withStyle(ChatFormatting.GRAY)
-                                .append(stake.getHoverName())
-                                .append(Component.literal(" — hold a card to match. ")
-                                        .withStyle(ChatFormatting.GRAY)))
+                .append(!wager ? Component.empty()
+                        : Component.literal("Both stake the card in hand — you'll agree the rest at the table. ")
+                                .withStyle(ChatFormatting.GRAY))
                 .append(BattleCommands.button("[Accept]", "/mobtrumps duel accept",
                         ChatFormatting.GREEN, "Accept the duel"))
                 .append(Component.literal(" "))
@@ -178,7 +184,13 @@ public final class DuelManager {
         return 1;
     }
 
-    /** Challenge with an emerald wager: both players stake {@code bet} emeralds; winner takes the pot. */
+    /**
+     * Challenge with an emerald price: both players stake it, winner takes the pot.
+     *
+     * <p>{@code bet} is an opening ask, not a demand — it is the number the
+     * wager table opens on, and either player can move it from there before
+     * anybody's emeralds are touched.
+     */
     public static int challengeBet(ServerPlayer challenger, ServerPlayer target, int bet) {
         if (challenger.getUUID().equals(target.getUUID())) {
             challenger.sendSystemMessage(err("You can't duel yourself."));
@@ -192,15 +204,16 @@ public final class DuelManager {
             challenger.sendSystemMessage(err("The bet must be at least 1 emerald."));
             return 0;
         }
+        // Checked, not taken. Emeralds move when the table settles.
         if (countEmeralds(challenger) < bet) {
             challenger.sendSystemMessage(err("You need " + bet + " emeralds to stake that bet (you have "
                     + countEmeralds(challenger) + ")."));
             return 0;
         }
-        takeEmeralds(challenger, bet); // escrow
 
         Pending challenge = new Pending(challenger.getUUID(),
-                System.currentTimeMillis() + CHALLENGE_TTL_MS, ItemStack.EMPTY, bet, 1);
+                System.currentTimeMillis() + CHALLENGE_TTL_MS, false,
+                WagerTable.clamp(bet), 1);
         PENDING.put(target.getUUID(), challenge);
         showInvite(target, challenger, termsFor(challenge));
 
@@ -209,11 +222,12 @@ public final class DuelManager {
                 .append(emeralds(bet)));
         target.sendSystemMessage(Component.literal(name(challenger) + " challenges you to a WAGER duel! ")
                 .withStyle(ChatFormatting.GOLD)
-                .append(Component.literal("They bet ").withStyle(ChatFormatting.GRAY))
+                .append(Component.literal("They open at ").withStyle(ChatFormatting.GRAY))
                 .append(emeralds(bet))
-                .append(Component.literal(" — match it to accept. ").withStyle(ChatFormatting.GRAY))
+                .append(Component.literal(" — accept and you can haggle the price. ")
+                        .withStyle(ChatFormatting.GRAY))
                 .append(BattleCommands.button("[Accept]", "/mobtrumps duel accept",
-                        ChatFormatting.GREEN, "Match the bet and duel"))
+                        ChatFormatting.GREEN, "Sit down at the wager table"))
                 .append(Component.literal(" "))
                 .append(BattleCommands.button("[Decline]", "/mobtrumps duel decline",
                         ChatFormatting.RED, "Decline the duel")));
@@ -230,8 +244,6 @@ public final class DuelManager {
         ServerPlayer challenger = target.serverLevel().getServer().getPlayerList().getPlayer(pending.challenger());
         if (pending.expiresAt() < System.currentTimeMillis()) {
             target.sendSystemMessage(err("That duel challenge has expired."));
-            returnStake(challenger, pending.wager());
-            returnBet(challenger, pending.bet());
             return 0;
         }
         if (challenger == null) {
@@ -240,46 +252,295 @@ public final class DuelManager {
         }
         if (isInDuel(challenger) || isInDuel(target)) {
             target.sendSystemMessage(err("Someone is already in a duel."));
-            returnStake(challenger, pending.wager());
-            returnBet(challenger, pending.bet());
             return 0;
         }
 
-        ItemStack targetStake = ItemStack.EMPTY;
-        if (!pending.wager().isEmpty()) {
-            ItemStack held = target.getMainHandItem();
-            if (MobCardItem.cardOf(held) == null) {
-                target.sendSystemMessage(err("Hold a mob card to match the wager, then accept."));
-                // keep the challenge alive so they can grab a card and retry
-                PENDING.put(target.getUUID(), pending);
-                reshowInvite(target, pending);
-                return 0;
-            }
-            targetStake = held.copyWithCount(1);
-            held.shrink(1);
-        }
-
-        int targetBet = 0;
-        if (pending.bet() > 0) {
-            if (countEmeralds(target) < pending.bet()) {
-                target.sendSystemMessage(err("You need " + pending.bet()
-                        + " emeralds to match the bet (you have " + countEmeralds(target) + ")."));
-                // keep the challenge alive so they can gather emeralds and retry
-                PENDING.put(target.getUUID(), pending);
-                reshowInvite(target, pending);
-                return 0;
-            }
-            takeEmeralds(target, pending.bet());
-            targetBet = pending.bet();
-        }
-
-        startDuel(challenger, target, pending.wager(), targetStake, pending.bet(), targetBet,
-                pending.bestOf());
+        // Accepting is agreeing to PLAY, not agreeing to a price. That gets
+        // settled between them at the table, where they can both move it.
+        openWager(challenger, target, pending);
         return 1;
     }
 
     private static int normalizeBestOf(int bestOf) {
         return (bestOf == 3 || bestOf == 5) ? bestOf : 1;
+    }
+
+    // --- the wager table: agreeing what the duel is worth ---
+
+    /**
+     * Two players who have agreed to play, working out what they are playing
+     * for. Neither has paid anything to be here and either can get up and go.
+     */
+    private static final class Haggle {
+        final ServerPlayer a;          // the challenger, seat A
+        final ServerPlayer b;          // the one they challenged, seat B
+        final WagerTable table;
+        final boolean cardWager;       // both also stake the card in hand
+        final int bestOf;
+        long expiresAt;
+
+        Haggle(ServerPlayer a, ServerPlayer b, int openingPrice, boolean cardWager, int bestOf) {
+            this.a = a;
+            this.b = b;
+            this.table = new WagerTable(openingPrice);
+            this.cardWager = cardWager;
+            this.bestOf = bestOf;
+            this.expiresAt = System.currentTimeMillis() + HAGGLE_TTL_MS;
+        }
+
+        ServerPlayer seat(int which) {
+            return which == WagerTable.SEAT_A ? a : b;
+        }
+
+        int seatOf(ServerPlayer player) {
+            if (player.getUUID().equals(a.getUUID())) return WagerTable.SEAT_A;
+            if (player.getUUID().equals(b.getUUID())) return WagerTable.SEAT_B;
+            return -1;
+        }
+    }
+
+    /** Both players of a haggle map to the same one, as with ACTIVE. */
+    private static final Map<UUID, Haggle> HAGGLING = new ConcurrentHashMap<>();
+
+    /**
+     * Longer than a challenge gets, because this one is a conversation. Still
+     * bounded: a table nobody is talking at should not hold two players out of
+     * other duels forever.
+     */
+    private static final long HAGGLE_TTL_MS = 180_000L;
+
+    /** Sit both players down at a wager table opened on the challenger's ask. */
+    private static void openWager(ServerPlayer challenger, ServerPlayer target, Pending pending) {
+        Haggle haggle = new Haggle(challenger, target, pending.askingPrice(),
+                pending.cardWager(), normalizeBestOf(pending.bestOf()));
+        HAGGLING.put(challenger.getUUID(), haggle);
+        HAGGLING.put(target.getUUID(), haggle);
+        target.sendSystemMessage(Component.literal("You sit down with " + name(challenger)
+                + " to agree the stakes.").withStyle(ChatFormatting.GOLD));
+        challenger.sendSystemMessage(Component.literal(name(target)
+                + " accepted — agree the stakes and you're on.").withStyle(ChatFormatting.GOLD));
+        syncWager(haggle);
+    }
+
+    /** Handle one click at the wager table. */
+    public static void handleWagerAction(ServerPlayer player, int action, int value) {
+        Haggle haggle = HAGGLING.get(player.getUUID());
+        if (haggle == null) {
+            return;
+        }
+        int seat = haggle.seatOf(player);
+        if (seat < 0) {
+            return;
+        }
+        ServerPlayer other = haggle.seat(WagerTable.otherSeat(seat));
+        switch (action) {
+            case DuelWagerActionPayload.PROPOSE -> {
+                if (haggle.table.propose(seat, value)) {
+                    other.sendSystemMessage(Component.literal(name(player) + " wants ")
+                            .withStyle(ChatFormatting.YELLOW)
+                            .append(priceWords(haggle.table.price())));
+                    clickBoth(haggle);
+                }
+            }
+            case DuelWagerActionPayload.AGREE -> {
+                int price = haggle.table.price();
+                if (price > 0 && countEmeralds(player) < price) {
+                    player.sendSystemMessage(err("You can't cover " + price + " emeralds (you have "
+                            + countEmeralds(player) + ")."));
+                    break;
+                }
+                if (haggle.cardWager && MobCardItem.cardOf(player.getMainHandItem()) == null) {
+                    player.sendSystemMessage(err("Hold the mob card you're staking, then agree."));
+                    break;
+                }
+                if (haggle.table.agree(seat)) {
+                    if (haggle.table.settled()) {
+                        dealHaggled(haggle);
+                    } else {
+                        other.sendSystemMessage(Component.literal(name(player) + " agrees to ")
+                                .withStyle(ChatFormatting.GREEN)
+                                .append(priceWords(haggle.table.price())));
+                        clickBoth(haggle);
+                    }
+                }
+            }
+            case DuelWagerActionPayload.REOPEN -> {
+                if (haggle.table.reopen()) {
+                    sendBothHaggle(haggle, Component.literal(name(player)
+                                    + " put the price back up for discussion.")
+                            .withStyle(ChatFormatting.YELLOW));
+                    clickBoth(haggle);
+                }
+            }
+            case DuelWagerActionPayload.LEAVE -> closeWager(haggle,
+                    Component.literal(name(player) + " walked away from the table — nothing was staked.")
+                            .withStyle(ChatFormatting.GRAY));
+            default -> {
+            }
+        }
+    }
+
+    /**
+     * Both players agreed. Take the stakes — checking that BOTH are still good
+     * for them before either one is touched — and deal.
+     *
+     * <p>The gap between agreeing and paying is small but it is not zero: a
+     * player can spend their emeralds or put their card away in it. Taking one
+     * side's stake and then discovering the other cannot pay would leave the
+     * first player robbed by a duel that never happened.
+     */
+    private static void dealHaggled(Haggle haggle) {
+        int price = haggle.table.price();
+        ServerPlayer a = haggle.a;
+        ServerPlayer b = haggle.b;
+
+        if (price > 0) {
+            ServerPlayer broke = countEmeralds(a) < price ? a : (countEmeralds(b) < price ? b : null);
+            if (broke != null) {
+                haggle.table.reopen();
+                sendBothHaggle(haggle, Component.literal(name(broke) + " can no longer cover "
+                        + price + " emeralds — agree a new price.").withStyle(ChatFormatting.RED));
+                syncWager(haggle);
+                return;
+            }
+        }
+        ItemStack cardA = ItemStack.EMPTY;
+        ItemStack cardB = ItemStack.EMPTY;
+        if (haggle.cardWager) {
+            ItemStack heldA = a.getMainHandItem();
+            ItemStack heldB = b.getMainHandItem();
+            ServerPlayer empty = MobCardItem.cardOf(heldA) == null ? a
+                    : (MobCardItem.cardOf(heldB) == null ? b : null);
+            if (empty != null) {
+                haggle.table.reopen();
+                sendBothHaggle(haggle, Component.literal(name(empty)
+                                + " isn't holding a card any more — agree again when they are.")
+                        .withStyle(ChatFormatting.RED));
+                syncWager(haggle);
+                return;
+            }
+            cardA = heldA.copyWithCount(1);
+            cardB = heldB.copyWithCount(1);
+            heldA.shrink(1);
+            heldB.shrink(1);
+        }
+        if (price > 0) {
+            takeEmeralds(a, price);
+            takeEmeralds(b, price);
+        }
+
+        forgetHaggle(haggle);
+        closeWagerScreens(haggle);
+        if (price > 0 || haggle.cardWager) {
+            sendPair(a, b, Component.literal("Agreed: ").withStyle(ChatFormatting.GOLD)
+                    .append(priceWords(price))
+                    .append(Component.literal(haggle.cardWager
+                            ? " and the card in hand, each." : " each.").withStyle(ChatFormatting.GRAY)));
+        }
+        startDuel(a, b, cardA, cardB, price, price, haggle.bestOf);
+    }
+
+    /** "250 emeralds" / "nothing at all", for a chat line. */
+    private static Component priceWords(int price) {
+        return price <= 0
+                ? Component.literal("a friendly game").withStyle(ChatFormatting.AQUA)
+                : emeralds(price);
+    }
+
+    /**
+     * Drop the table and tell both players why, once. Both of them are keyed to
+     * the same Haggle, so whichever entry is still there decides whether this
+     * close is the real one or a second call about a table that has already
+     * gone — a timeout landing on the same tick as a walk-out, say.
+     */
+    private static void closeWager(Haggle haggle, Component why) {
+        if (!forgetHaggle(haggle)) {
+            return;
+        }
+        closeWagerScreens(haggle);
+        sendBothHaggle(haggle, why);
+    }
+
+    /** Remove the table from both seats. False if it had already gone. */
+    private static boolean forgetHaggle(Haggle haggle) {
+        boolean hadA = HAGGLING.remove(haggle.a.getUUID()) != null;
+        boolean hadB = HAGGLING.remove(haggle.b.getUUID()) != null;
+        return hadA || hadB;
+    }
+
+    /** Take the table off both screens. */
+    private static void closeWagerScreens(Haggle haggle) {
+        for (ServerPlayer p : new ServerPlayer[]{haggle.a, haggle.b}) {
+            net.neoforged.neoforge.network.PacketDistributor.sendToPlayer(p, DuelWagerPayload.closed());
+        }
+    }
+
+    /** Push the table's state to both players, each from their own side of it. */
+    private static void syncWager(Haggle haggle) {
+        int seconds = (int) Math.max(0L, (haggle.expiresAt - System.currentTimeMillis() + 999L) / 1000L);
+        for (int seat : new int[]{WagerTable.SEAT_A, WagerTable.SEAT_B}) {
+            ServerPlayer me = haggle.seat(seat);
+            ServerPlayer them = haggle.seat(WagerTable.otherSeat(seat));
+            int price = haggle.table.price();
+            int mover = haggle.table.lastMover() == WagerTable.NOBODY ? DuelWagerPayload.MOVER_NOBODY
+                    : (haggle.table.lastMover() == seat ? DuelWagerPayload.MOVER_YOU
+                                                        : DuelWagerPayload.MOVER_THEM);
+            net.neoforged.neoforge.network.PacketDistributor.sendToPlayer(me,
+                    new DuelWagerPayload(DuelWagerPayload.OPEN, name(them), java.util.List.of(
+                            price,
+                            haggle.table.agreed(seat) ? 1 : 0,
+                            haggle.table.agreed(WagerTable.otherSeat(seat)) ? 1 : 0,
+                            countEmeralds(me),
+                            seconds,
+                            haggle.bestOf,
+                            haggle.cardWager ? 1 : 0,
+                            mover,
+                            countEmeralds(them) >= price ? 1 : 0)));
+        }
+    }
+
+    /** Sync both screens and give both players the click that says it landed. */
+    private static void clickBoth(Haggle haggle) {
+        syncWager(haggle);
+        for (ServerPlayer p : new ServerPlayer[]{haggle.a, haggle.b}) {
+            p.playNotifySound(SoundEvents.UI_BUTTON_CLICK.value(), SoundSource.PLAYERS, 0.6f, 1.1f);
+        }
+    }
+
+    private static void sendBothHaggle(Haggle haggle, Component message) {
+        sendPair(haggle.a, haggle.b, message);
+    }
+
+    private static void sendPair(ServerPlayer a, ServerPlayer b, Component message) {
+        a.sendSystemMessage(message);
+        b.sendSystemMessage(message);
+    }
+
+    /**
+     * Close tables nobody settled in time.
+     *
+     * <p>Both seats key to the same Haggle, so the values are de-duplicated
+     * before iterating or a timeout would try to close each table twice.
+     */
+    private static void expireHaggles() {
+        if (HAGGLING.isEmpty()) return;
+        long now = System.currentTimeMillis();
+        for (Haggle haggle : new HashSet<>(HAGGLING.values())) {
+            if (haggle.expiresAt <= now) {
+                closeWager(haggle, Component.literal("Nobody agreed a price — the duel is off.")
+                        .withStyle(ChatFormatting.GRAY));
+            }
+        }
+    }
+
+    /** A player leaving mid-negotiation ends it, and costs neither of them anything. */
+    private static void abandonHaggle(ServerPlayer player) {
+        Haggle haggle = HAGGLING.get(player.getUUID());
+        if (haggle != null) {
+            closeWager(haggle, Component.literal(name(player)
+                            + " left before a price was agreed — nothing was staked.")
+                    .withStyle(ChatFormatting.GRAY));
+        }
     }
 
     /** Start an unwagered duel from a dueling table block at the seat's chosen length. */
@@ -353,9 +614,8 @@ public final class DuelManager {
             target.sendSystemMessage(err("You have no pending duel challenge."));
             return 0;
         }
+        // nothing to hand back: a challenge escrows nothing any more
         ServerPlayer challenger = target.serverLevel().getServer().getPlayerList().getPlayer(pending.challenger());
-        returnStake(challenger, pending.wager());
-        returnBet(challenger, pending.bet());
         if (challenger != null) {
             challenger.sendSystemMessage(Component.literal(name(target) + " declined the duel.")
                     .withStyle(ChatFormatting.RED));
@@ -423,8 +683,16 @@ public final class DuelManager {
 
     // --- in-duel play ---
 
+    /**
+     * Committed to a duel — either playing one or still agreeing its price.
+     *
+     * <p>Every caller is a guard ("can this player be challenged / queued /
+     * drafted / rematched right now"), and the answer for someone sat at a
+     * wager table is no. Code that needs the live battle itself reads ACTIVE
+     * directly rather than asking this.
+     */
     public static boolean isInDuel(ServerPlayer player) {
-        return ACTIVE.containsKey(player.getUUID());
+        return ACTIVE.containsKey(player.getUUID()) || HAGGLING.containsKey(player.getUUID());
     }
 
     public static int play(ServerPlayer player, String statKey) {
@@ -465,20 +733,14 @@ public final class DuelManager {
             SideBet bet = watched.sideBets.remove(player.getUUID());
             if (bet != null) giveEmeralds(player, bet.amount());
         }
-        // pending challenge TO this player: return the challenger's stake
-        Pending incoming = PENDING.remove(player.getUUID());
-        if (incoming != null) {
-            ServerPlayer challenger = player.serverLevel().getServer()
-                    .getPlayerList().getPlayer(incoming.challenger());
-            returnStake(challenger, incoming.wager());
-            returnBet(challenger, incoming.bet()); // emeralds were escrowed too
-        }
-        // pending challenge FROM this player: cancel it, hand back their stake,
-        // and take the now-dead invite off whoever it was pointed at
+        // a wager still being argued over: nothing was staked, so it just ends
+        abandonHaggle(player);
+        // pending challenge TO this player — nothing escrowed, just drop it
+        PENDING.remove(player.getUUID());
+        // pending challenge FROM this player: cancel it, and take the now-dead
+        // invite off whoever it was pointed at
         PENDING.entrySet().removeIf(e -> {
             if (e.getValue().challenger().equals(player.getUUID())) {
-                if (!e.getValue().wager().isEmpty()) player.drop(e.getValue().wager(), false);
-                if (e.getValue().bet() > 0) giveEmeralds(player, e.getValue().bet());
                 ServerPlayer invited = player.serverLevel().getServer()
                         .getPlayerList().getPlayer(e.getKey());
                 clearInvite(invited);
@@ -698,6 +960,7 @@ public final class DuelManager {
     /** Auto-play any duel whose per-turn timer has expired (called every server tick). */
     public static void tickTimers(MinecraftServer server) {
         expirePending(server);
+        expireHaggles();
         if (ACTIVE.isEmpty()) return;
         long now = System.currentTimeMillis();
         // both duellists map to the same Duel, so we still need to de-duplicate —
@@ -719,10 +982,10 @@ public final class DuelManager {
      * Drop challenges nobody answered inside the minute: hand the stake back and
      * take the invite off the screen.
      *
-     * <p>Before the invite was a screen, an unanswered challenge simply sat there
-     * holding the challenger's card or emeralds in escrow until the target typed
-     * a command at it. Now that answering is a button that disappears when the
-     * clock runs out, nobody ever would.
+     * <p>Nothing is escrowed by a challenge any more, so there is no stake to
+     * hand back — but a challenge that never dies still blocks both players out
+     * of other duels, and now that answering is a button that disappears with
+     * the clock, nobody would ever clear it by hand.
      */
     private static void expirePending(MinecraftServer server) {
         if (PENDING.isEmpty()) return;
@@ -733,8 +996,6 @@ public final class DuelManager {
             ServerPlayer target = server.getPlayerList().getPlayer(entry.getKey());
             ServerPlayer challenger = server.getPlayerList().getPlayer(pending.challenger());
             clearInvite(target);
-            returnStake(challenger, pending.wager());
-            returnBet(challenger, pending.bet());
             if (challenger != null) {
                 challenger.sendSystemMessage(Component.literal(
                                 (target != null ? name(target) : "They") + " didn't answer — challenge expired.")
@@ -1023,36 +1284,19 @@ public final class DuelManager {
      * screen is what actually makes an invite noticeable.
      */
     private static void showInvite(ServerPlayer target, ServerPlayer from, String terms) {
-        showInvite(target, name(from), terms, (int) (CHALLENGE_TTL_MS / 1000L));
-    }
-
-    /** Same, but with the clock already part-run — used when a challenge is put back. */
-    private static void showInvite(ServerPlayer target, String fromName, String terms, int seconds) {
-        if (target == null || seconds <= 0) {
+        if (target == null) {
             return;
         }
         net.neoforged.neoforge.network.PacketDistributor.sendToPlayer(target,
-                DuelInvitePayload.show(fromName, terms, seconds));
-    }
-
-    /**
-     * Put a challenge back on the target's screen after a failed accept, with
-     * whatever is left of its original minute — otherwise fetching a card to
-     * match a wager would cost you the invite you were trying to answer.
-     */
-    private static void reshowInvite(ServerPlayer target, Pending pending) {
-        ServerPlayer from = target.serverLevel().getServer().getPlayerList().getPlayer(pending.challenger());
-        String fromName = from != null ? name(from) : "Your challenger";
-        int left = (int) ((pending.expiresAt() - System.currentTimeMillis() + 999L) / 1000L);
-        showInvite(target, fromName, termsFor(pending), left);
+                DuelInvitePayload.show(name(from), terms, (int) (CHALLENGE_TTL_MS / 1000L)));
     }
 
     /** The one-line description of what is being played for, rebuilt from the challenge. */
     private static String termsFor(Pending pending) {
-        if (pending.bet() > 0) {
-            return pending.bet() + " emeralds each";
+        if (pending.askingPrice() > 0) {
+            return "They open at " + pending.askingPrice() + " emeralds";
         }
-        if (!pending.wager().isEmpty()) {
+        if (pending.cardWager()) {
             return "Both stake the card in hand"
                     + (pending.bestOf() > 1 ? " · best of " + pending.bestOf() : "");
         }

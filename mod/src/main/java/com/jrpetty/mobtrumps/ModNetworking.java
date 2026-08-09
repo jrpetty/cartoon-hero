@@ -170,6 +170,16 @@ public final class ModNetworking {
                         }
                     }
                 }));
+        // --- agreeing what a duel is worth ---
+        registrar.playToClient(DuelWagerPayload.TYPE, DuelWagerPayload.STREAM_CODEC,
+                (payload, context) -> context.enqueueWork(
+                        () -> com.jrpetty.mobtrumps.client.ClientHooks.updateDuelWager(payload)));
+        registrar.playToServer(DuelWagerActionPayload.TYPE, DuelWagerActionPayload.STREAM_CODEC,
+                (payload, context) -> context.enqueueWork(() -> {
+                    if (context.player() instanceof net.minecraft.server.level.ServerPlayer sp) {
+                        DuelManager.handleWagerAction(sp, payload.action(), payload.value());
+                    }
+                }));
         registrar.playToClient(BattleSyncPayload.TYPE, BattleSyncPayload.STREAM_CODEC,
                 (payload, context) -> context.enqueueWork(
                         () -> ClientHooks.updateBattle(payload)));

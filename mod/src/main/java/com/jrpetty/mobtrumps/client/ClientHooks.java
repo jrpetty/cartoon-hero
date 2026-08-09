@@ -65,6 +65,27 @@ public final class ClientHooks {
         }
     }
 
+    /**
+     * Apply a wager-table snapshot, opening or closing the screen with it.
+     *
+     * <p>This one DOES take the screen: both players have just agreed to play,
+     * so the negotiation is the thing they are doing, and a price moving while
+     * they cannot see it is exactly what the table exists to prevent.
+     */
+    public static void updateDuelWager(com.jrpetty.mobtrumps.DuelWagerPayload payload) {
+        ClientDuelWager.set(payload);
+        Minecraft mc = Minecraft.getInstance();
+        if (!ClientDuelWager.open()) {
+            if (mc.screen instanceof DuelWagerScreen) {
+                mc.setScreen(null);
+            }
+            return;
+        }
+        if (!(mc.screen instanceof DuelWagerScreen)) {
+            mc.setScreen(new DuelWagerScreen());
+        }
+    }
+
     /** Open the Bluff table. */
     public static void openBluff() {
         Minecraft.getInstance().setScreen(new BluffScreen());
