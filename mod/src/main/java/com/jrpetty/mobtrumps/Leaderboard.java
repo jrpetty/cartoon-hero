@@ -29,7 +29,14 @@ public class Leaderboard extends SavedData {
     private static final int K = 32;
     public static final int START = 1000;
 
-    public record Entry(UUID id, String name, int rating, int wins, int losses, int peak) {
+    /**
+     * @param lastPlayed when this player last had a ranked result, for decay.
+     *                   Entries saved before decay existed load with the time
+     *                   the server read them, so nobody is punished for an
+     *                   absence the game was not measuring.
+     */
+    public record Entry(UUID id, String name, int rating, int wins, int losses, int peak,
+                        long lastPlayed) {
     }
 
     private final Map<UUID, Entry> entries = new LinkedHashMap<>();
@@ -70,10 +77,11 @@ public class Leaderboard extends SavedData {
 
     /** Apply a duel result and return the winner's and loser's new ratings. */
     public int[] recordDuel(ServerPlayer winner, ServerPlayer loser) {
+        long now = System.currentTimeMillis();
         Entry w = entries.getOrDefault(winner.getUUID(),
-                new Entry(winner.getUUID(), name(winner), START, 0, 0, START));
+                new Entry(winner.getUUID(), name(winner), START, 0, 0, START, now));
         Entry l = entries.getOrDefault(loser.getUUID(),
-                new Entry(loser.getUUID(), name(loser), START, 0, 0, START));
+                new Entry(loser.getUUID(), name(loser), START, 0, 0, START, now));
 
         double expW = 1.0 / (1.0 + Math.pow(10, (l.rating() - w.rating()) / 400.0));
         double expL = 1.0 - expW;
@@ -81,9 +89,9 @@ public class Leaderboard extends SavedData {
         int newL = (int) Math.round(l.rating() + K * (0 - expL));
 
         entries.put(winner.getUUID(), new Entry(winner.getUUID(), name(winner), newW,
-                w.wins() + 1, w.losses(), Math.max(w.peak(), newW)));
+                w.wins() + 1, w.losses(), Math.max(w.peak(), newW), now));
         entries.put(loser.getUUID(), new Entry(loser.getUUID(), name(loser), newL,
-                l.wins(), l.losses() + 1, l.peak()));
+                l.wins(), l.losses() + 1, l.peak(), now));
         setDirty();
         return new int[]{newW, newL};
     }
@@ -114,6 +122,47 @@ public class Leaderboard extends SavedData {
 
     // --- seasons ---
 
+    /**
+     * Shed rating from players who have stopped defending a high place.
+     *
+     * <p>Applied on a clock rather than on login, or a player who never logs in
+     * would keep their seat at the top of the ladder forever, which is the
+     * whole thing decay exists to prevent. The rules — and the grace period and
+     * floor that keep it from being a punishment — live in
+     * {@link com.jrpetty.mobtrumps.game.RankDecay}.
+     *
+     * @return how many players lost rating, for the caller to log or announce
+     */
+    public int applyDecay() {
+        long now = System.currentTimeMillis();
+        int floor = RankTier.GOLD.min;
+        int touched = 0;
+        for (Map.Entry<UUID, Entry> slot : entries.entrySet()) {
+            Entry e = slot.getValue();
+            if (!com.jrpetty.mobtrumps.game.RankDecay.applies(e.rating(), floor)) {
+                continue;
+            }
+            int next = com.jrpetty.mobtrumps.game.RankDecay.decayed(
+                    e.rating(), now - e.lastPlayed(), floor);
+            if (next == e.rating()) {
+                continue;
+            }
+            // Move the clock forward by the days just charged rather than to
+            // now: charging whole days and then resetting to now would lose the
+            // remainder every pass, so a player idling for weeks would decay
+            // far slower than the rate says. Peak is a record and stays put.
+            int days = com.jrpetty.mobtrumps.game.RankDecay.decayDays(now - e.lastPlayed());
+            long consumed = (long) days * com.jrpetty.mobtrumps.game.RankDecay.DAY_MS;
+            slot.setValue(new Entry(e.id(), e.name(), next, e.wins(), e.losses(),
+                    e.peak(), e.lastPlayed() + consumed));
+            touched++;
+        }
+        if (touched > 0) {
+            setDirty();
+        }
+        return touched;
+    }
+
     /** Roll to the next season if the timer has elapsed. Call periodically. */
     public void maybeRollover(MinecraftServer server) {
         if (msLeft() <= 0L && !entries.isEmpty()) {
@@ -136,7 +185,9 @@ public class Leaderboard extends SavedData {
         Map<UUID, Entry> reset = new LinkedHashMap<>();
         for (Entry e : entries.values()) {
             int r = START + (e.rating() - START) / 2;
-            reset.put(e.id(), new Entry(e.id(), e.name(), r, 0, 0, r));
+            // a fresh season is a fresh clock: nobody starts it already idle
+            reset.put(e.id(), new Entry(e.id(), e.name(), r, 0, 0, r,
+                    System.currentTimeMillis()));
         }
         entries.clear();
         entries.putAll(reset);
@@ -202,6 +253,7 @@ public class Leaderboard extends SavedData {
             t.putInt("wins", e.wins());
             t.putInt("losses", e.losses());
             t.putInt("peak", e.peak());
+            t.putLong("lastPlayed", e.lastPlayed());
             list.add(t);
         }
         tag.put("entries", list);
@@ -236,8 +288,10 @@ public class Leaderboard extends SavedData {
             UUID id = t.getUUID("id");
             int rating = t.getInt("rating");
             int peak = t.contains("peak") ? t.getInt("peak") : rating;
+            long last = t.contains("lastPlayed") ? t.getLong("lastPlayed")
+                    : System.currentTimeMillis();
             board.entries.put(id, new Entry(id, t.getString("name"),
-                    rating, t.getInt("wins"), t.getInt("losses"), peak));
+                    rating, t.getInt("wins"), t.getInt("losses"), peak, last));
         }
         board.season = tag.contains("season") ? tag.getInt("season") : 1;
         board.seasonStartMs = tag.getLong("seasonStart");

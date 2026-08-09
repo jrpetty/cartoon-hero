@@ -73,4 +73,47 @@ public enum RankTier {
             default -> "III";
         };
     }
+
+    /**
+     * Rating at which the next division begins, or -1 at the top of the ladder.
+     *
+     * <p>Master has no next rung, so a climb bar there would be a lie.
+     */
+    public static int nextStep(int rating) {
+        RankTier t = of(rating);
+        if (t == MASTER) {
+            return -1;
+        }
+        int div = division(rating);
+        if (div > 1) {
+            // still climbing inside this tier
+            return t.min + (3 - div + 1) * DIV;
+        }
+        // top division: the next step is the tier above
+        RankTier[] all = values();
+        return all[Math.min(all.length - 1, t.ordinal() + 1)].min;
+    }
+
+    /** Rating the current division started at, for a progress bar's left edge. */
+    public static int stepFloor(int rating) {
+        RankTier t = of(rating);
+        if (t == MASTER) {
+            return MASTER.min;
+        }
+        return t.min + (3 - division(rating)) * DIV;
+    }
+
+    /**
+     * How far through the current division a rating sits, 0..1. Master is
+     * always full — there is nothing above it to be part-way towards.
+     */
+    public static float progress(int rating) {
+        int next = nextStep(rating);
+        if (next < 0) {
+            return 1f;
+        }
+        int floor = stepFloor(rating);
+        int span = Math.max(1, next - floor);
+        return Math.max(0f, Math.min(1f, (rating - floor) / (float) span));
+    }
 }

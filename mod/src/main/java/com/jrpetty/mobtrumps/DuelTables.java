@@ -150,6 +150,11 @@ public final class DuelTables {
                 tableSound(player, key, 1.3F);
                 BlackjackManager.open(player);
             }
+            case TableActionPayload.RANKED -> {
+                // just a board to read: safe to open mid-anything
+                tableSound(player, key, 1.1F);
+                RankedStandings.send(player);
+            }
             default -> {
             }
         }

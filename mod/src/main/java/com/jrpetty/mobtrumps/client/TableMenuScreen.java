@@ -213,6 +213,7 @@ public class TableMenuScreen extends Screen {
         String campLabel = "Campaign " + ClientCampaign.clearedCount()
                 + "/" + com.jrpetty.mobtrumps.game.CampaignDecks.count();
         String hallLabel = "Hall";
+        String rankLabel = "Ranked";
         int rowLeft = barX + 8;
         // The fan is drawn at 0.16 scale from a 170x236 card, three of them
         // stepped 7px apart and tilted +-14 degrees: about 50px wide around its
@@ -227,13 +228,17 @@ public class TableMenuScreen extends Screen {
         // Budget the row before drawing any of it, then trim each label into
         // the width it was given. Shrinking labels and hoping was not enough:
         // whichever element measured widest still ran over its neighbour.
-        int rightCap = room * 62 / 100;
-        int hallW = Math.min(font.width(hallLabel) + 14, rightCap / 5);
-        int campW = Math.min(font.width(campLabel) + 16, rightCap * 45 / 100);
+        // Four buttons share the right of the row now that Ranked has joined
+        // them, so the budget is split four ways rather than three.
+        int rightCap = room * 72 / 100;
+        int hallW = Math.min(font.width(hallLabel) + 14, rightCap / 6);
+        int rankW = Math.min(font.width(rankLabel) + 14, rightCap / 4);
+        int campW = Math.min(font.width(campLabel) + 16, rightCap * 36 / 100);
         int editW = Math.max(26, Math.min(font.width(editLabel) + 16,
-                rightCap - campW - hallW - gap * 2));
+                rightCap - campW - hallW - rankW - gap * 3));
         int hallX = rowRight - hallW;
-        int campX = hallX - gap - campW;
+        int rankX = hallX - gap - rankW;
+        int campX = rankX - gap - campW;
         int editX = campX - gap - editW;
 
         int leftRoom = Math.max(56, editX - gap - rowLeft);
@@ -242,6 +247,8 @@ public class TableMenuScreen extends Screen {
 
         bigButton(g, "hall", hallX, barY + 17, hallW, 14, fit(hallLabel, hallW - 14),
                 0xFF8A6A1A, 0xFFB89228, mouseX, mouseY, true);
+        bigButton(g, "ranked", rankX, barY + 17, rankW, 14, fit(rankLabel, rankW - 14),
+                0xFF2A5F8A, 0xFF3A7FB4, mouseX, mouseY, true);
         bigButton(g, "campaign", campX, barY + 17, campW, 14, fit(campLabel, campW - 16),
                 0xFF5A3A8A, 0xFF7A52B4, mouseX, mouseY, true);
         bigButton(g, "deck_edit", editX, barY + 17, editW, 14, fit(editLabel, editW - 16),
@@ -536,6 +543,10 @@ public class TableMenuScreen extends Screen {
                 useMyDeck = false;
             } else if (key.equals("hall") && minecraft != null) {
                 minecraft.setScreen(new HallScreen());
+            } else if (key.equals("ranked")) {
+                // the server owns the standings, so it opens the screen
+                send(TableActionPayload.RANKED, 0, false);
+                return true;
             } else if (key.equals("campaign") && minecraft != null) {
                 minecraft.setScreen(new CampaignScreen());
                 return true;

@@ -23,6 +23,7 @@ public record TableActionPayload(BlockPos pos, int action, int arg, boolean useD
     public static final int TWENTY_ONE = 4; // open the Twenty-One table
     public static final int GUESS_WHO = 5;  // open the Guess Who board
     public static final int BLUFF = 6;      // open the Mob Bluff table
+    public static final int RANKED = 7;     // show the ranked standings
 
     public static final CustomPacketPayload.Type<TableActionPayload> TYPE =
             new CustomPacketPayload.Type<>(

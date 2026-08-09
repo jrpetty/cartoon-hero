@@ -33,6 +33,12 @@ public final class ClientHooks {
         Minecraft.getInstance().setScreen(new CampaignScreen());
     }
 
+    /** Show the ranked ladder with the server's standings. */
+    public static void openRanked(com.jrpetty.mobtrumps.RankedSyncPayload payload) {
+        ClientRanked.set(payload);
+        Minecraft.getInstance().setScreen(new RankedScreen());
+    }
+
     /** Open the server's Hall of Fame. */
     public static void openHall() {
         Minecraft.getInstance().setScreen(new HallScreen());

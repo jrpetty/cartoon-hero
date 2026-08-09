@@ -50,7 +50,9 @@ public class MobTrumps {
             ServerSync.tick(event.getServer());
             // check for a ranked season rollover about twice a minute
             if (event.getServer().getTickCount() % 640 == 0) {
-                Leaderboard.get(event.getServer()).maybeRollover(event.getServer());
+                Leaderboard board = Leaderboard.get(event.getServer());
+                board.maybeRollover(event.getServer());
+                board.applyDecay();
             }
         });
         NeoForge.EVENT_BUS.addListener((PlayerEvent.PlayerLoggedInEvent event) -> {

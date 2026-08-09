@@ -170,6 +170,9 @@ public final class ModNetworking {
                         }
                     }
                 }));
+        registrar.playToClient(RankedSyncPayload.TYPE, RankedSyncPayload.STREAM_CODEC,
+                (payload, context) -> context.enqueueWork(
+                        () -> com.jrpetty.mobtrumps.client.ClientHooks.openRanked(payload)));
         // --- agreeing what a duel is worth ---
         registrar.playToClient(DuelWagerPayload.TYPE, DuelWagerPayload.STREAM_CODEC,
                 (payload, context) -> context.enqueueWork(

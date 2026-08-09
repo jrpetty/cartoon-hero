@@ -248,6 +248,11 @@ public final class BattleCommands {
                                 .executes(ctx -> TournamentManager.status(ctx.getSource().getPlayerOrException()))))
                 .then(Commands.literal("top")
                         .executes(ctx -> leaderboard(ctx.getSource())))
+                .then(Commands.literal("ranked")
+                        .executes(ctx -> {
+                            RankedStandings.send(ctx.getSource().getPlayerOrException());
+                            return 1;
+                        }))
                 .then(Commands.literal("season")
                         .executes(ctx -> season(ctx.getSource()))
                         .then(Commands.literal("end")
