@@ -1,8 +1,10 @@
 package com.jrpetty.mobtrumps.game;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 
 /**
  * The questions a player may ask in Guess Who, and what they eliminate.
@@ -56,6 +58,24 @@ public final class GuessQuestion {
             return needsValue() ? Stat.values()[index] : null;
         }
 
+        /**
+         * The label either side of its {@code %d}, so a screen that draws the
+         * number in its own box does not have to split the string to find out
+         * where it goes. Worked out once here rather than by a regex split on
+         * every visible row of every frame, which is what the question list
+         * was doing.
+         */
+        public String beforeValue() {
+            int at = label.indexOf("%d");
+            return at < 0 ? label : label.substring(0, at);
+        }
+
+        /** The rest of the label after its {@code %d}; empty when there is none. */
+        public String afterValue() {
+            int at = label.indexOf("%d");
+            return at < 0 ? "" : label.substring(at + 2);
+        }
+
         /** How the row reads with a value filled in. */
         public String text(int value) {
             return needsValue() ? String.format(label, value) : label;
@@ -96,6 +116,26 @@ public final class GuessQuestion {
             all.add(new Template(Kind.TRAIT, trait.ordinal(), trait.question()));
         }
         TEMPLATES = List.copyOf(all);
+        Map<Template, Integer> index = new HashMap<>();
+        for (int i = 0; i < TEMPLATES.size(); i++) {
+            index.put(TEMPLATES.get(i), i);
+        }
+        INDEX = Map.copyOf(index);
+    }
+
+    /** Where each row sits in {@link #TEMPLATES}. */
+    private static final Map<Template, Integer> INDEX;
+
+    /**
+     * A row's position in the catalogue.
+     *
+     * <p>A map rather than {@code TEMPLATES.indexOf}, which is a linear scan
+     * comparing record fields — including the label string — and the question
+     * list was running it for every visible row of every frame.
+     */
+    public static int indexOf(Template template) {
+        Integer at = INDEX.get(template);
+        return at == null ? -1 : at;
     }
 
     private GuessQuestion() {

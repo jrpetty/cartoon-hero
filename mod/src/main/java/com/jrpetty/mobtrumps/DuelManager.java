@@ -51,6 +51,8 @@ public final class DuelManager {
     private static final Map<UUID, Duel> SPECTATING = new ConcurrentHashMap<>();
     /** Scratch set reused by the timer tick, so it allocates nothing per tick. */
     private static final Set<Duel> TICK_SEEN = new HashSet<>();
+    /** The same trick for the wager-table sweep: both seats key to one table. */
+    private static final Set<Haggle> HAGGLE_SEEN = new HashSet<>();
     /** players waiting to be auto-matched into a duel. */
     private static final Set<UUID> QUEUE = ConcurrentHashMap.newKeySet();
     /** player UUID -> their most recent opponent, for /mobtrumps rematch. */
@@ -541,7 +543,12 @@ public final class DuelManager {
     private static void expireHaggles() {
         if (HAGGLING.isEmpty()) return;
         long now = System.currentTimeMillis();
-        for (Haggle haggle : new HashSet<>(HAGGLING.values())) {
+        // reuse one scratch set rather than allocating a fresh one every tick,
+        // the same way the duel timer sweep above does
+        Set<Haggle> seen = HAGGLE_SEEN;
+        seen.clear();
+        seen.addAll(HAGGLING.values());
+        for (Haggle haggle : seen) {
             if (haggle.expiresAt <= now) {
                 closeWager(haggle, Component.literal("Nobody agreed a price — the duel is off.")
                         .withStyle(ChatFormatting.GRAY));

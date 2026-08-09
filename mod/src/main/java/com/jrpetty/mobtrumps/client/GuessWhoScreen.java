@@ -56,10 +56,42 @@ public class GuessWhoScreen extends Screen {
     /** Stagger across the board, so the answer sweeps rather than snaps. */
     private static final long SWEEP_MS = 320L;
 
+    /**
+     * How many faces may be live mobs at once.
+     *
+     * <p>A mob portrait is not a sprite — every one is a full entity model, and
+     * vanilla's inventory renderer flushes the GUI buffer either side of each,
+     * so it is the single most expensive thing a screen can ask for. Every other
+     * table in this mod draws under a dozen. A full board is eighty-one.
+     *
+     * <p>So the board earns them: while the field is wide the tiles are cards,
+     * and once it narrows to the last two dozen suspects they come alive. That
+     * is the half of the game where you are actually looking at faces rather
+     * than eliminating swathes of them, it costs no more than the Bluff table
+     * does, and the board visibly waking up as you close in is worth having on
+     * its own.
+     */
+    private static final int LIVE_MOB_TILES = 24;
+
     /** This frame's partial tick, so hand-drawn widgets can be rendered. */
     private float partial;
 
     private final Map<String, LivingEntity> entityCache = new HashMap<>();
+    /** Window the current board/dock layout was solved for; -1 forces a solve. */
+    private int solvedForW = -1;
+    private int solvedForH = -1;
+    /** The living faces, rebuilt when the board changes rather than per row. */
+    private List<MobCard> aliveCache = List.of();
+    private long aliveCacheAt = -1L;
+    /**
+     * Whether a question would split the field, keyed by template and value.
+     * Answering it means walking every living face, and the list asks it for
+     * every visible row of every frame.
+     */
+    private final Map<Long, Boolean> usefulCache = new HashMap<>();
+    /** Last search box contents and what they matched. */
+    private String searchCacheFor = null;
+    private List<GuessQuestion.Template> searchCache = List.of();
     private EditBox search;
     /** The wager box on the pre-round screen. */
     private EditBox wager;
@@ -326,8 +358,16 @@ public class GuessWhoScreen extends Screen {
         wager.visible = false;
         wager.setEditable(false);
 
-        solveDock();
-        solveBoard();
+        // Both solves search a space of scales and column counts and depend on
+        // nothing but the window, so they run when the window changes and not
+        // sixty times a second. solveBoard alone was ~1,500 iterations and a
+        // Math.log apiece, every frame, to arrive at the same answer.
+        if (solvedForW != width || solvedForH != height) {
+            solvedForW = width;
+            solvedForH = height;
+            solveDock();
+            solveBoard();
+        }
         long since = System.currentTimeMillis() - ClientGuessWho.changedAt();
         boolean playing = ClientGuessWho.playing();
 
@@ -393,6 +433,8 @@ public class GuessWhoScreen extends Screen {
         hoveredMob = null;
         List<MobCard> all = MobCards.ALL;
         String secret = ClientGuessWho.secret();
+        // Whether the faces are live mobs this frame — see liveMobBudget().
+        boolean liveMobs = ClientGuessWho.aliveCount() <= LIVE_MOB_TILES;
         for (int i = 0; i < all.size(); i++) {
             MobCard card = all.get(i);
             int x = boardX + (i % cols) * (tileW + 2);
@@ -416,20 +458,33 @@ public class GuessWhoScreen extends Screen {
 
             var pose = g.pose();
             pose.pushPose();
-            // squeeze horizontally through the turn, so it reads as a card flipping
+            // Squeeze horizontally through the turn so it reads as a card
+            // flipping — around the tile's real centre, because the card below
+            // is drawn AT x,y rather than at the origin. It used to be drawn at
+            // 0,0 and moved entirely by this pose, and renderCard places the
+            // live mob in screen space from the x,y it is handed: every one of
+            // the eighty-one mobs was being rendered into the top-left corner
+            // of the window and scissored away there. Full cost, no faces.
             float squeeze = flip < 0.5f ? 1f - flip * 2f : (flip - 0.5f) * 2f;
-            pose.translate(x + tileW / 2f, y + tileH / 2f, 0);
+            float cx = x + tileW / 2f;
+            float cy = y + tileH / 2f;
+            pose.translate(cx, cy, 0);
             pose.scale(Math.max(0.02f, squeeze), 1f, 1f);
             if (hover) {
                 pose.scale(1.12f, 1.12f, 1f);
             }
-            pose.translate(-tileW / 2f, -tileH / 2f, 0);
+            pose.translate(-cx, -cy, 0);
             if (flip < 0.5f) {
-                LivingEntity mob = CardRenderer.portraitEntity(minecraft, card, entityCache);
-                CardRenderer.renderCard(g, font, card, 0, 0, tileScale, -1, -1, mob, false, false);
+                // A mob only joins a tile that is sitting still and showing:
+                // an entity render inside a squashed pose is not worth the risk
+                // it was never taking before, and a mid-flip mob would be
+                // stretched anyway.
+                LivingEntity mob = liveMobs && squeeze >= 1f
+                        ? CardRenderer.portraitEntity(minecraft, card, entityCache) : null;
+                CardRenderer.renderCard(g, font, card, x, y, tileScale, -1, -1, mob, false, false);
             } else {
-                CardRenderer.renderBack(g, font, 0, 0, tileScale);
-                g.fill(0, 0, tileW, tileH, 0x77000000);
+                CardRenderer.renderBack(g, font, x, y, tileScale);
+                g.fill(x, y, x + tileW, y + tileH, 0x77000000);
             }
             pose.popPose();
 
@@ -453,7 +508,7 @@ public class GuessWhoScreen extends Screen {
         g.fill(panelX, 34, panelX + panelW, 36, GOLD_DIM);
         search.render(g, mouseX, mouseY, partial);
 
-        List<GuessQuestion.Template> hits = GuessQuestion.search(search.getValue());
+        List<GuessQuestion.Template> hits = searchHits(search.getValue());
         int listTop = 60;
         int logH = Math.min(40, Math.max(0, (panelBottom - listTop) / 4));
         int listBottom = panelBottom - 4 - logH;
@@ -465,11 +520,10 @@ public class GuessWhoScreen extends Screen {
         questionIndex.clear();
         for (int r = 0; r < visible && scroll + r < hits.size(); r++) {
             GuessQuestion.Template t = hits.get(scroll + r);
-            int idx = GuessQuestion.TEMPLATES.indexOf(t);
+            int idx = GuessQuestion.indexOf(t);
             int y = listTop + r * rowH;
             int value = valueFor(idx, t);
-            boolean useful = playing
-                    && GuessQuestion.isUseful(aliveCards(), t, t.needsValue() ? value : 0);
+            boolean useful = playing && usefulNow(idx, t, t.needsValue() ? value : 0);
             boolean over = mouseX >= panelX + 3 && mouseX < panelX + panelW - 3
                     && mouseY >= y && mouseY < y + rowH - 1;
 
@@ -482,9 +536,8 @@ public class GuessWhoScreen extends Screen {
             int textColour = useful ? INK : 0xFF4A4560;
             if (t.needsValue()) {
                 // "Is its Health less than [ 5 ]?" — the number sits in its own box
-                String[] parts = t.label().split("%d", 2);
                 int tx = panelX + 7;
-                String head = fit(parts[0], panelW - 46);
+                String head = fit(t.beforeValue(), panelW - 46);
                 g.drawString(font, head, tx, y + 4, textColour, false);
                 int bx = tx + font.width(head) + 1;
                 g.fill(bx, y + 2, bx + 15, y + rowH - 3, 0xFF0B0812);
@@ -492,8 +545,9 @@ public class GuessWhoScreen extends Screen {
                 String v = String.valueOf(value);
                 g.drawString(font, v, bx + 8 - font.width(v) / 2, y + 4,
                         useful ? GOLD : 0xFF4A4560, false);
-                if (parts.length > 1) {
-                    g.drawString(font, fit(parts[1], panelW - 30), bx + 17, y + 4,
+                String tail = t.afterValue();
+                if (!tail.isEmpty()) {
+                    g.drawString(font, fit(tail, panelW - 30), bx + 17, y + 4,
                             textColour, false);
                 }
                 questionRects.add(new int[]{panelX + 3, y, panelW - 6, rowH - 1, bx, 15});
@@ -629,14 +683,57 @@ public class GuessWhoScreen extends Screen {
         g.drawString(font, alive ? "still in" : "struck off", tx, ty + 11, alive ? YES : NO, false);
     }
 
+    /**
+     * The living faces. Rebuilt only when the board actually changes — this was
+     * allocating a fresh list and walking all eighty-one cards once per visible
+     * question row, per frame.
+     */
     private List<MobCard> aliveCards() {
-        List<MobCard> out = new ArrayList<>();
-        for (MobCard card : MobCards.ALL) {
-            if (ClientGuessWho.isAlive(card.id())) {
-                out.add(card);
+        long changed = ClientGuessWho.revision();
+        if (aliveCacheAt != changed) {
+            List<MobCard> out = new ArrayList<>();
+            for (MobCard card : MobCards.ALL) {
+                if (ClientGuessWho.isAlive(card.id())) {
+                    out.add(card);
+                }
             }
+            aliveCache = out;
+            aliveCacheAt = changed;
+            // the answers were about the old field
+            usefulCache.clear();
         }
-        return out;
+        return aliveCache;
+    }
+
+    /**
+     * Would this question actually split what is left? Same answer for the same
+     * board, so it is worked out once per template-and-value rather than for
+     * every row of every frame.
+     */
+    private boolean usefulNow(int index, GuessQuestion.Template t, int value) {
+        List<MobCard> pool = aliveCards();      // also refreshes the cache below
+        long key = (long) index << 32 | (value & 0xFFFFFFFFL);
+        Boolean known = usefulCache.get(key);
+        if (known != null) {
+            return known;
+        }
+        boolean useful = GuessQuestion.isUseful(pool, t, value);
+        usefulCache.put(key, useful);
+        return useful;
+    }
+
+    /**
+     * The rows matching what is typed, remembered until it changes. Searching
+     * lower-cases and strips a placeholder out of every label in the catalogue,
+     * which is not work to repeat sixty times a second for a box nobody is
+     * touching.
+     */
+    private List<GuessQuestion.Template> searchHits(String query) {
+        if (!query.equals(searchCacheFor)) {
+            searchCacheFor = query;
+            searchCache = GuessQuestion.search(query);
+        }
+        return searchCache;
     }
 
     private int valueFor(int index, GuessQuestion.Template t) {

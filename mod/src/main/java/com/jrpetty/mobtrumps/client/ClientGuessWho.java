@@ -32,6 +32,8 @@ public final class ClientGuessWho {
     private static volatile int opponentLeft;
     private static volatile int opponentAsked;
     private static volatile long changedAt;
+    /** Counts boards, so a cache can tell two of them apart — see revision(). */
+    private static volatile long revision;
 
     private ClientGuessWho() {
     }
@@ -43,6 +45,7 @@ public final class ClientGuessWho {
         // a brand new board is not "everything was eliminated"
         justEliminated = next.size() > alive.size() ? Set.of() : Set.copyOf(gone);
         alive = Set.copyOf(next);
+        revision++;
         phase = payload.phase();
         asked = payload.asked();
         secret = payload.secret() == null ? "" : payload.secret();
@@ -72,6 +75,18 @@ public final class ClientGuessWho {
             opponentAsked = bits.length > 2 ? parse(bits[2]) : 0;
         }
         changedAt = System.currentTimeMillis();
+    }
+
+    /**
+     * Bumped on every board the server sends.
+     *
+     * <p>A counter rather than {@link #changedAt}, because anything caching per
+     * board has to be able to tell two boards apart — and a millisecond clock
+     * cannot, when the second one lands inside the same millisecond as the
+     * first. Screens key their caches on this.
+     */
+    public static long revision() {
+        return revision;
     }
 
     public static boolean isAlive(String mobId) {
