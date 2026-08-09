@@ -1403,8 +1403,8 @@ public final class DuelManager {
                     .withStyle(ChatFormatting.GOLD, ChatFormatting.BOLD));
         }
         CollectionTracker.addDuelWin(winner);
+        // applyRanked also records the head-to-head, from both sides
         applyRanked(winner, loser);
-        StatsTracker.recordLossTo(loser, name(winner));
         TournamentManager.onDuelResult(winner, loser);
 
         if (wager) {
@@ -1463,8 +1463,22 @@ public final class DuelManager {
         StatsTracker.recordMax(winner, "ranked_peak", ratings[0]);
         StatsTracker.recordMax(loser, "ranked_peak", ratings[1]);
 
+        // the head-to-head goes in here rather than at the call site: this is
+        // the one place both players' ratings before AND after are known
+        MatchHistory.record(winner, loser, ratings[0] - wOld, ratings[1] - lOld);
+
         announceRank(winner, wOld, ratings[0], board.rankOf(winner.getUUID()), true);
         announceRank(loser, lOld, ratings[1], board.rankOf(loser.getUUID()), false);
+
+        // and the line that makes a rivalry a rivalry
+        Component wLine = MatchHistory.summary(winner, name(loser));
+        if (wLine != null) {
+            winner.sendSystemMessage(wLine);
+        }
+        Component lLine = MatchHistory.summary(loser, name(winner));
+        if (lLine != null) {
+            loser.sendSystemMessage(lLine);
+        }
     }
 
     /** Tell a player their new rating and, on a tier/division change, celebrate it. */

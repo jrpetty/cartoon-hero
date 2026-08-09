@@ -38,6 +38,10 @@ public final class ModBlocks {
                     BlockBehaviour.Properties.of().mapColor(MapColor.METAL).strength(3.0F)
                             .noOcclusion()));
 
+    public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<CardShredderBlockEntity>>
+            CARD_SHREDDER_BE = BLOCK_ENTITIES.register("card_shredder",
+            () -> BlockEntityType.Builder.of(CardShredderBlockEntity::new, CARD_SHREDDER.get()).build(null));
+
     public static final DeferredBlock<PrintingPressBlock> PRINTING_PRESS =
             BLOCKS.register("printing_press", () -> new PrintingPressBlock(
                     BlockBehaviour.Properties.of().mapColor(MapColor.COLOR_BROWN).strength(3.0F)

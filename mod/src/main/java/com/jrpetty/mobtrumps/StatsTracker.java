@@ -3,6 +3,7 @@ package com.jrpetty.mobtrumps;
 import com.jrpetty.mobtrumps.game.Stat;
 import net.minecraft.ChatFormatting;
 import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.server.level.ServerPlayer;
 
 import java.util.HashMap;
@@ -142,9 +143,36 @@ public final class StatsTracker {
                         + "L · " + collected + "/81 cards · " + foils + " holo"
                         + (fav != null ? " · loves " + fav.label : ""))
                 .withStyle(ChatFormatting.GRAY));
+        rivalsLine(player);
         player.sendSystemMessage(Component.literal("╚═════════════════════════════╝")
                 .withStyle(ChatFormatting.GOLD));
         return 1;
+    }
+
+    /**
+     * The three people you duel most, and how those go.
+     *
+     * <p>The nemesis line only ever named whoever had beaten you most, which
+     * tells you nothing about the rivalries you are winning. A record reads
+     * both ways.
+     */
+    private static void rivalsLine(ServerPlayer player) {
+        var rivals = MatchHistory.rivals(player);
+        if (rivals.isEmpty()) {
+            return;
+        }
+        MutableComponent line = Component.literal("  Rivals: ").withStyle(ChatFormatting.GRAY);
+        int shown = Math.min(3, rivals.size());
+        for (int i = 0; i < shown; i++) {
+            MatchHistory.Record r = rivals.get(i);
+            ChatFormatting colour = r.wins() > r.losses() ? ChatFormatting.GREEN
+                    : r.wins() < r.losses() ? ChatFormatting.RED : ChatFormatting.YELLOW;
+            if (i > 0) {
+                line.append(Component.literal(" · ").withStyle(ChatFormatting.DARK_GRAY));
+            }
+            line.append(Component.literal(r.name() + " " + r.line()).withStyle(colour));
+        }
+        player.sendSystemMessage(line);
     }
 
     /** The dedicated ranked block: tier, rating, peak, season W/L, badges. */

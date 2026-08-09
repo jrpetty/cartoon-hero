@@ -51,6 +51,44 @@ public class HoloProjectorBlock extends HorizontalDirectionalBlock implements En
         return new HoloProjectorBlockEntity(pos, state);
     }
 
+    /**
+     * A projector reads out on a comparator, so the card on display can drive
+     * redstone. Nothing else in the mod was automatable at all.
+     */
+    @Override
+    protected boolean hasAnalogOutputSignal(BlockState state) {
+        return true;
+    }
+
+    /**
+     * Signal strength from the displayed card's tier, with holo worth one more.
+     *
+     * <p>Tier rather than the catalogue number, because eighty-one cards do not
+     * fit in fifteen levels without lying about which is which, and tier is the
+     * thing anybody would actually want to wire up: a lamp that only lights for
+     * a Legendary, a door that opens for a holo. Empty reads zero, and a holo
+     * Legendary is exactly 15.
+     */
+    @Override
+    protected int getAnalogOutputSignal(BlockState state, Level level, BlockPos pos) {
+        if (!(level.getBlockEntity(pos) instanceof HoloProjectorBlockEntity be) || !be.hasCard()) {
+            return 0;
+        }
+        com.jrpetty.mobtrumps.game.MobCard card =
+                com.jrpetty.mobtrumps.game.MobCards.byId(be.getMobId());
+        if (card == null) {
+            return 0;
+        }
+        int base = switch (card.tier()) {
+            case COMMON -> 3;
+            case UNCOMMON -> 5;
+            case RARE -> 8;
+            case EPIC -> 11;
+            case LEGENDARY -> 14;
+        };
+        return Math.min(15, base + (be.isFoil() ? 1 : 0));
+    }
+
     @Override
     public BlockState getStateForPlacement(BlockPlaceContext ctx) {
         return defaultBlockState().setValue(FACING, ctx.getHorizontalDirection().getOpposite());

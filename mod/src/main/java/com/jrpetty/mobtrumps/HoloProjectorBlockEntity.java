@@ -67,6 +67,9 @@ public class HoloProjectorBlockEntity extends BlockEntity {
         setChanged();
         if (level != null && !level.isClientSide) {
             level.sendBlockUpdated(worldPosition, getBlockState(), getBlockState(), Block.UPDATE_ALL);
+            // a block update is not enough for a comparator: they read through
+            // a block as well as beside one, and only this call reaches both
+            level.updateNeighbourForOutputSignal(worldPosition, getBlockState().getBlock());
         }
     }
 

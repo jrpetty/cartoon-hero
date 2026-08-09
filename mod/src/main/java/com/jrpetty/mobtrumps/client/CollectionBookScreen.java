@@ -782,6 +782,20 @@ public class CollectionBookScreen extends Screen {
     }
 
     /** Everything about a card, on hover: tier, the stats, the hunt, where it is. */
+    /** "1st" / "2nd" / "3rd" / "11th" — for the rarity placing. */
+    private static String ordinalWord(int n) {
+        int mod100 = n % 100;
+        if (mod100 >= 11 && mod100 <= 13) {
+            return n + "th";
+        }
+        return n + switch (n % 10) {
+            case 1 -> "st";
+            case 2 -> "nd";
+            case 3 -> "rd";
+            default -> "th";
+        };
+    }
+
     private void drawCardTooltip(GuiGraphics g, int mouseX, int mouseY, MobCard card) {
         if (!ClientCollection.has(card.id())) {
             drawUnknownTooltip(g, mouseX, mouseY, card);
@@ -812,6 +826,20 @@ public class CollectionBookScreen extends Screen {
                         + (next < 0 ? " — fully upgraded" : "  ·  next at " + next + " kills")
                 : (next < 0 ? "No holo" : "Holo at " + next + " kills"));
         colors.add(level > 0 ? 0xFF8746C9 : 0xFF9A9083);
+
+        // What the server has actually printed, which is the only rarity
+        // number that is about this world rather than about the drop tables.
+        int printed = ClientCensus.printedOf(card.id());
+        if (printed >= 0) {
+            int place = ClientCensus.rarityPlace(card.id());
+            String census = printed == 0
+                    ? "Never printed on this server"
+                    : printed + " printed here"
+                            + (place > 0 ? "  ·  " + ordinalWord(place) + " rarest of "
+                                    + ClientCensus.printedKinds() : "");
+            lines.add(census);
+            colors.add(printed == 0 ? 0xFF8746C9 : 0xFF6E6154);
+        }
 
         boolean filed = ClientCollection.isStored(card.id(), foil);
         int held = heldCopies(card.id(), foil);

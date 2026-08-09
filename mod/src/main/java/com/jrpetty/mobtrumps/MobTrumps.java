@@ -54,6 +54,12 @@ public class MobTrumps {
                 board.maybeRollover(event.getServer());
                 board.applyDecay();
             }
+            // the census drifts as everyone else opens packs, so refresh it
+            // every couple of minutes rather than only at login. Eighty-one
+            // varints per player is nothing; a stale rarity board is worse.
+            if (event.getServer().getTickCount() % 2400 == 0) {
+                Census.sendAll(event.getServer());
+            }
         });
         NeoForge.EVENT_BUS.addListener((PlayerEvent.PlayerLoggedInEvent event) -> {
             if (event.getEntity() instanceof ServerPlayer player) {
@@ -61,6 +67,7 @@ public class MobTrumps {
                 BinderStorage.sync(player);
                 CollectionTracker.revalidate(player);
                 AchievementManager.sync(player);
+                Census.send(player);
                 // remember what they logged in holding WITHOUT charging them for it
                 ConditionTracker.seed(player);
                 // the book must be correct the instant they land, not half a second later
@@ -72,6 +79,7 @@ public class MobTrumps {
             if (event.getEntity() instanceof ServerPlayer player) {
                 CollectionTracker.sync(player);
                 AchievementManager.sync(player);
+                Census.send(player);
                 ConditionTracker.seed(player); // respawning is not handling
             }
         });

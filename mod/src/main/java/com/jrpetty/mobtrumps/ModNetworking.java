@@ -170,6 +170,9 @@ public final class ModNetworking {
                         }
                     }
                 }));
+        registrar.playToClient(CensusPayload.TYPE, CensusPayload.STREAM_CODEC,
+                (payload, context) -> context.enqueueWork(
+                        () -> com.jrpetty.mobtrumps.client.ClientCensus.set(payload.printed())));
         registrar.playToClient(RankedSyncPayload.TYPE, RankedSyncPayload.STREAM_CODEC,
                 (payload, context) -> context.enqueueWork(
                         () -> com.jrpetty.mobtrumps.client.ClientHooks.openRanked(payload)));

@@ -165,6 +165,21 @@ public final class ModAttachments {
                     .copyOnDeath()
                     .build());
 
+    /**
+     * The last few duels, newest first, one packed line each.
+     *
+     * <p>A list rather than more counters in {@link #PLAY_STATS}, because a
+     * record is "7-2 against Steve" but a history is "and here is what
+     * happened, in order" — and order is exactly what a map of counters throws
+     * away. {@link MatchHistory} owns the format and the cap on its length.
+     */
+    public static final Supplier<AttachmentType<List<String>>> MATCH_LOG =
+            ATTACHMENTS.register("match_log",
+                    () -> AttachmentType.<List<String>>builder(() -> List.of())
+                    .serialize(Codec.STRING.listOf())
+                    .copyOnDeath()
+                    .build());
+
     private ModAttachments() {
     }
 }
