@@ -307,12 +307,15 @@ public class TableMenuScreen extends Screen {
      * last rung is deliberately cramped rather than off-screen — a squashed
      * button can still be read and clicked, and one below the panel cannot.
      */
+    /** Button heights to try, tallest first. Static so the search allocates nothing. */
+    private static final int[][] RUNGS = {{26, 5}, {24, 5}, {22, 4}, {20, 4}, {18, 3},
+            {16, 3}, {14, 2}, {13, 1}, {12, 1}, {11, 1}};
+    private static final boolean[] WITH_NOTES = {true, false};
+
     private void solveModeColumn(int panelH) {
         int avail = panelH - 22;
-        int[][] rungs = {{26, 5}, {24, 5}, {22, 4}, {20, 4}, {18, 3}, {16, 3},
-                {14, 2}, {13, 1}, {12, 1}, {11, 1}};
-        for (int[] rung : rungs) {
-            for (boolean notes : new boolean[]{true, false}) {
+        for (int[] rung : RUNGS) {
+            for (boolean notes : WITH_NOTES) {
                 int need = 6 * (rung[0] + rung[1]) + (notes ? 32 : 0) + 12;
                 if (need <= avail) {
                     modeH = rung[0];

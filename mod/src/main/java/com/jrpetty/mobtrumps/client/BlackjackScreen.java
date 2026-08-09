@@ -111,6 +111,33 @@ public class BlackjackScreen extends Screen {
      * @return the y the card area starts at
      */
     private int solveLayout(int cards, int half) {
+        // The search below is ~700 arrangements and its answer depends on
+        // nothing but the window, so it runs when the window changes rather
+        // than sixty times a second. It also used to allocate a two-element
+        // array in its innermost loop, which at 60fps is some twenty thousand
+        // of them a second to say "false, then true".
+        if (solvedW == width && solvedH == height && solvedHalf == half && solvedCards == cards) {
+            return solvedTop;
+        }
+        solvedW = width;
+        solvedH = height;
+        solvedHalf = half;
+        solvedCards = cards;
+        solvedTop = searchLayout(cards, half);
+        return solvedTop;
+    }
+
+    /** Cached answer of the arrangement search, and the window it was for. */
+    private int solvedW = -1;
+    private int solvedH = -1;
+    private int solvedHalf = -1;
+    private int solvedCards = -1;
+    private int solvedTop;
+
+    /** Header can be roomy or tight; hoisted so the search allocates nothing. */
+    private static final boolean[] TIGHTNESS = {false, true};
+
+    private int searchLayout(int cards, int half) {
         int stats = Stat.values().length;
         // SCALE IS THE OUTER LOOP, descending, so the biggest cards that can be
         // made to fit win. It used to be the innermost loop under a one-column
@@ -125,7 +152,7 @@ public class BlackjackScreen extends Screen {
             int handRows = Math.max(1, (Math.max(1, cards) + perRow - 1) / perRow);
             for (int cols = 1; cols <= 3; cols++) {
                 for (int rh = 15; rh >= 12; rh--) {
-                    for (boolean tight : new boolean[]{false, true}) {
+                    for (boolean tight : TIGHTNESS) {
                         int headH = tight ? 26 : 42;
                         int sRows = (stats + cols - 1) / cols;
                         int total = headH + 24 + 6 + handRows * (ch + CAPTION_H + 4)
