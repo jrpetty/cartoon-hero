@@ -1,0 +1,37 @@
+{
+  "card_flip": {
+    "category": "player",
+    "subtitle": "subtitles.mobtrumps.card_flip",
+    "sounds": [{ "name": "mobtrumps:card_flip", "volume": 0.85 }]
+  },
+  "card_place": {
+    "category": "player",
+    "subtitle": "subtitles.mobtrumps.card_place",
+    "sounds": [{ "name": "mobtrumps:card_place", "volume": 0.85 }]
+  },
+  "shuffle": {
+    "category": "player",
+    "subtitle": "subtitles.mobtrumps.shuffle",
+    "sounds": [{ "name": "mobtrumps:shuffle", "volume": 0.8 }]
+  },
+  "pack_rip": {
+    "category": "player",
+    "subtitle": "subtitles.mobtrumps.pack_rip",
+    "sounds": [{ "name": "mobtrumps:pack_rip", "volume": 0.9 }]
+  },
+  "foil_shimmer": {
+    "category": "player",
+    "subtitle": "subtitles.mobtrumps.foil_shimmer",
+    "sounds": [{ "name": "mobtrumps:foil_shimmer", "volume": 0.8 }]
+  },
+  "gavel": {
+    "category": "player",
+    "subtitle": "subtitles.mobtrumps.gavel",
+    "sounds": [{ "name": "mobtrumps:gavel", "volume": 0.9 }]
+  },
+  "chip": {
+    "category": "player",
+    "subtitle": "subtitles.mobtrumps.chip",
+    "sounds": [{ "name": "mobtrumps:chip", "volume": 0.8 }]
+  }
+}

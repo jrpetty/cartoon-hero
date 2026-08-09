@@ -55,6 +55,13 @@ if ! python3 tools/checkwagerlayout.py; then fail=1; fi
 echo "== 1d. card portraits are placed, not cornered =="
 if ! python3 tools/checkcardcoords.py "$SRC"; then fail=1; fi
 
+echo "== 1e. sounds are quiet and comfortable =="
+if python3 -c "import soundfile" 2>/dev/null; then
+  python3 tools/checksounds.py || fail=1
+else
+  echo "   skipped (no soundfile module here); CI installs it"
+fi
+
 echo "== 2. enum switch exhaustiveness =="
 python3 tools/checkswitch.py "$SRC/com/jrpetty/mobtrumps" || fail=1
 

@@ -107,7 +107,7 @@ public final class BlackjackManager {
         WAGERED.put(player.getUUID(), stake);
         TABLES.put(player.getUUID(), new Blackjack(ThreadLocalRandom.current()));
         player.serverLevel().playSound(null, player.getX(), player.getY(), player.getZ(),
-                SoundEvents.BOOK_PAGE_TURN, SoundSource.PLAYERS, 0.7F, 1.4F);
+                ModSounds.SHUFFLE.get(), SoundSource.PLAYERS, 0.8F, 1.0F);
         send(player);
     }
 
@@ -127,7 +127,7 @@ public final class BlackjackManager {
         Blackjack.Draw draw = game.hit(stat);
         player.serverLevel().playSound(null, player.getX(), player.getY(), player.getZ(),
                 draw.total() > Blackjack.TARGET ? SoundEvents.ITEM_BREAK
-                        : SoundEvents.BOOK_PAGE_TURN,
+                        : ModSounds.CARD_FLIP.get(),
                 SoundSource.PLAYERS, 0.7F, draw.total() > Blackjack.TARGET ? 0.8F : 1.1F);
         if (game.isFinished()) {
             payOut(player, game);

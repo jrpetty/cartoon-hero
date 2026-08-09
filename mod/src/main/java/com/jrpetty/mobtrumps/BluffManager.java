@@ -263,7 +263,7 @@ public final class BluffManager {
         occupants[0] = player.getUUID();   // the rest are computer seats
         Table table = new Table(seats, stake, occupants);
         TABLES.put(player.getUUID(), table);
-        sound(player, SoundEvents.BOOK_PAGE_TURN, 1.3F);
+        sound(player, ModSounds.SHUFFLE.get(), 1.0F);   // the table being dealt
         // whoever leads, the computer seats now move on the server clock, one
         // beat at a time, so the player watches the round open
         armAi(table, FIRST_MOVE_TICKS);
@@ -287,7 +287,7 @@ public final class BluffManager {
             return; // the engine refused it — a bad index, a repeat, or out of turn
         }
         table.sawPlay(seat, before - table.game.handSize(seat));
-        sound(player, SoundEvents.BOOK_PAGE_TURN, 1.0F);
+        sound(player, ModSounds.CARD_PLACE.get(), 1.0F);   // face down on the felt
         armAi(table, FIRST_MOVE_TICKS);
         finishIfOver(player.getServer(), table);
         sendAll(player.getServer(), table);
@@ -424,7 +424,7 @@ public final class BluffManager {
                 return;
             }
             table.sawPlay(seat, count);
-            soundAll(server, table, SoundEvents.BOOK_PAGE_TURN, 0.85F + 0.1F * seat, 0.35F);
+            soundAll(server, table, ModSounds.CARD_PLACE.get(), 0.9F + 0.06F * seat, 0.35F);
             armAi(table, MOVE_TICKS);
         }
         finishIfOver(server, table);

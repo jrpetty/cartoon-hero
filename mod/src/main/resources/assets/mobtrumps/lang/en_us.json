@@ -12,5 +12,12 @@
   "item.mobtrumps.card_fragment": "Card Fragment",
   "block.mobtrumps.card_shredder": "Card Shredder",
   "block.mobtrumps.printing_press": "Printing Press",
-  "mobtrumps.hall.title": "Hall of Fame"
+  "mobtrumps.hall.title": "Hall of Fame",
+  "subtitles.mobtrumps.card_flip": "Card turns",
+  "subtitles.mobtrumps.card_place": "Card laid down",
+  "subtitles.mobtrumps.shuffle": "Deck shuffles",
+  "subtitles.mobtrumps.pack_rip": "Pack tears open",
+  "subtitles.mobtrumps.foil_shimmer": "Holo shimmers",
+  "subtitles.mobtrumps.gavel": "Wager settled",
+  "subtitles.mobtrumps.chip": "Fragment clicks"
 }

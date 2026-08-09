@@ -434,6 +434,10 @@ public final class DuelManager {
 
         forgetHaggle(haggle);
         closeWagerScreens(haggle);
+        // the knock that says the price is settled and the cards are coming out
+        for (ServerPlayer p : new ServerPlayer[]{a, b}) {
+            p.playNotifySound(ModSounds.GAVEL.get(), SoundSource.PLAYERS, 0.8f, 1.0f);
+        }
         if (price > 0 || haggle.cardWager) {
             sendPair(a, b, Component.literal("Agreed: ").withStyle(ChatFormatting.GOLD)
                     .append(priceWords(price))
@@ -521,7 +525,7 @@ public final class DuelManager {
     private static void clickBoth(Haggle haggle) {
         syncWager(haggle);
         for (ServerPlayer p : new ServerPlayer[]{haggle.a, haggle.b}) {
-            p.playNotifySound(SoundEvents.UI_BUTTON_CLICK.value(), SoundSource.PLAYERS, 0.6f, 1.1f);
+            p.playNotifySound(ModSounds.CHIP.get(), SoundSource.PLAYERS, 0.7f, 1.0f);
         }
     }
 

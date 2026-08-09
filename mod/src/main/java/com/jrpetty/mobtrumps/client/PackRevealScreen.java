@@ -366,16 +366,21 @@ public class PackRevealScreen extends Screen {
         g.drawCenteredString(font, glyph, x + ARROW / 2, y + 4, enabled ? 0xFFFFFFFF : 0xFF777777);
     }
 
+    /**
+     * A card turning over. The tier rides on pitch — a common turns dull, a
+     * legendary bright — and anything holo picks up the shimmer over the top.
+     */
     private void playRevealSound(Tier tier, boolean foil) {
         if (minecraft == null) return;
         float pitch = switch (tier) {
-            case COMMON -> 0.9f; case UNCOMMON -> 1.05f; case RARE -> 1.2f;
-            case EPIC -> 1.4f; case LEGENDARY -> 1.7f;
+            case COMMON -> 0.9f; case UNCOMMON -> 1.0f; case RARE -> 1.1f;
+            case EPIC -> 1.2f; case LEGENDARY -> 1.3f;
         };
         minecraft.getSoundManager().play(
-                SimpleSoundInstance.forUI(SoundEvents.NOTE_BLOCK_CHIME.value(), pitch));
+                SimpleSoundInstance.forUI(com.jrpetty.mobtrumps.ModSounds.CARD_FLIP.get(), pitch));
         if (foil || tier == Tier.LEGENDARY) {
-            minecraft.getSoundManager().play(SimpleSoundInstance.forUI(SoundEvents.PLAYER_LEVELUP, 1.4f));
+            minecraft.getSoundManager().play(SimpleSoundInstance.forUI(
+                    com.jrpetty.mobtrumps.ModSounds.FOIL_SHIMMER.get(), 1.0f));
         }
     }
 

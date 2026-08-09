@@ -52,9 +52,9 @@ public class CardPackItem extends Item {
             pack.shrink(1);
         }
 
-        // a quick paper "rip" as the pack tears open
+        // the wrapper tearing — a real rip rather than a bamboo hit standing in
         level.playSound(null, player.getX(), player.getY(), player.getZ(),
-                SoundEvents.BAMBOO_HIT, SoundSource.PLAYERS, 0.7F, 1.4F);
+                ModSounds.PACK_RIP.get(), SoundSource.PLAYERS, 0.9F, 1.0F);
 
         var random = ThreadLocalRandom.current();
         int count = Config.CARDS_PER_PACK.get();

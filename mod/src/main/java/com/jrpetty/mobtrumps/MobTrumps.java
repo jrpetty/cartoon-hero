@@ -34,6 +34,7 @@ public class MobTrumps {
         ModItems.DATA_COMPONENTS.register(modEventBus);
         ModItems.CREATIVE_MODE_TABS.register(modEventBus);
         ModBlocks.register(modEventBus);
+        ModSounds.SOUNDS.register(modEventBus);
         ModAttachments.ATTACHMENTS.register(modEventBus);
         ModTriggers.TRIGGERS.register(modEventBus);
         modEventBus.addListener(ModNetworking::register);

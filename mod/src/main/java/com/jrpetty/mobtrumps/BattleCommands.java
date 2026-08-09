@@ -805,11 +805,15 @@ public final class BattleCommands {
         player.playNotifySound(SoundEvents.NOTE_BLOCK_PLING.value(), SoundSource.PLAYERS, 0.6F, pitch);
     }
 
-    /** A quick riffle of paper "flicks" to sell the deck being shuffled and dealt. */
+    /**
+     * The deck being riffled and dealt.
+     *
+     * <p>This was three vanilla samples stacked — two page turns and a bamboo
+     * hit — which is a fair impression of a shuffle but carries a bookshelf
+     * with it. It is one purpose-made riffle now.
+     */
     static void shuffleSound(ServerPlayer player) {
-        player.playNotifySound(SoundEvents.BOOK_PAGE_TURN, SoundSource.PLAYERS, 0.9F, 0.9F);
-        player.playNotifySound(SoundEvents.BOOK_PAGE_TURN, SoundSource.PLAYERS, 0.7F, 1.2F);
-        player.playNotifySound(SoundEvents.BAMBOO_HIT, SoundSource.PLAYERS, 0.4F, 1.6F);
+        player.playNotifySound(ModSounds.SHUFFLE.get(), SoundSource.PLAYERS, 0.9F, 1.0F);
     }
 
     // --- chat component helpers ---
