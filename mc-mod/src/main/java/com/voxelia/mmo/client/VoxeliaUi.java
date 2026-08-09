@@ -93,9 +93,10 @@ public final class VoxeliaUi {
         if (sheen && fw > 6) {
             long ph = (Util.getMillis() + x * 37L + y * 91L) % 2600L;
             int sx = x + (int) (ph / 2600f * (w + 10)) - 10;
-            g.enableScissor(x, y, x + fw, y + h);
-            g.fill(sx, y, sx + 10, y + h, 0x28FFFFFF);
-            g.disableScissor();
+            // clamp arithmetically instead of scissoring: scissor ignores pose translation
+            int s1 = Math.max(x, sx);
+            int s2 = Math.min(x + fw, sx + 10);
+            if (s1 < s2) g.fill(s1, y, s2, y + h, 0x28FFFFFF);
         }
     }
 

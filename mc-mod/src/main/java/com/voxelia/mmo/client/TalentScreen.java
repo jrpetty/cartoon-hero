@@ -213,7 +213,7 @@ public final class TalentScreen extends Screen {
             // Instant spend acknowledgement: white flash + ghost pip until the server sync lands.
             if (t == flashTalent) {
                 VoxeliaUi.flash(g, rx, cy, rx + RIGHT_W, cy + CARD_H, flashMs);
-                if (ClientTalents.rank(t) == flashRank && flashRank < max) {
+                if (ClientTalents.rank(t) == flashRank && flashRank < max && max <= 10) {
                     int pw = 6, pg = 2;
                     int px = rx + RIGHT_W - 6 - (max * pw + (max - 1) * pg) + flashRank * (pw + pg);
                     g.fill(px, cy + 14, px + pw, cy + 19, 0x80000000 | (cat & 0xFFFFFF));
@@ -266,7 +266,8 @@ public final class TalentScreen extends Screen {
             if (atMax && prestige > 0) {
                 g.drawCenteredString(this.font, "✦ " + selectedSkill.display() + " fully prestiged (" + prestige + ")",
                     x + PANEL_W / 2, footY + 3, VoxeliaUi.GOLD);
-            } else if (available == 0) { // when there's nothing to spend, show the path to the next point
+            } else if (available == 0 && ClientSkillData.level(selectedSkill) < SkillCurve.MAX_LEVEL) {
+                // when there's nothing to spend, show the path to the next point
                 int lvl = ClientSkillData.level(selectedSkill);
                 int next = (lvl / ClientTalents.levelsPerPoint() + 1) * ClientTalents.levelsPerPoint();
                 int togo = next - lvl;
