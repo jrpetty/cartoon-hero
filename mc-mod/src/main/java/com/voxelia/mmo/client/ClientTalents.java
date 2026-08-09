@@ -29,6 +29,9 @@ public final class ClientTalents {
 
     public static int maxRank() { return maxRank; }
 
+    /** Skill levels needed per talent point (synced from server config). */
+    public static int levelsPerPoint() { return levelsPerPoint; }
+
     public static int prestigeMax() { return prestigeMax; }
 
     /** Extra talent points each prestige grants (synced from server config). */

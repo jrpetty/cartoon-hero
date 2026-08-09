@@ -12,13 +12,13 @@ import net.neoforged.neoforge.network.PacketDistributor;
 import java.util.Locale;
 
 /**
- * Character sheet (/voxelia profile, or the P key): headline identity plus the
- * stats that make a run feel like a career — best skill, total prestiges, XP
- * earned, playtime, deaths, mob kills. Playtime/deaths/kills arrive from the
- * server (requested on open); everything else is derived from the client caches.
+ * Character sheet (P): headline identity plus the stats that make a run feel like
+ * a career — best skill, total prestiges, XP earned, playtime, deaths, mob kills.
+ * Playtime/deaths/kills arrive from the server (requested on open); everything
+ * else is derived from the client caches.
  */
 public final class ProfileScreen extends Screen {
-    private static final int PANEL_W = 220;
+    private static final int PANEL_W = 248;
     private static final int PAD = 8;
     private static final int TITLE_H = 17;
     private static final int FOOTER_H = 14;
@@ -27,6 +27,8 @@ public final class ProfileScreen extends Screen {
 
     private int[] tabSkills = new int[4];
     private int[] tabTalents = new int[4];
+    private int[] tabProfile = new int[4];
+    private int[] talentLink = new int[4];
 
     public ProfileScreen() {
         super(Component.literal("Voxelia Profile"));
@@ -36,6 +38,10 @@ public final class ProfileScreen extends Screen {
 
     @Override
     public void render(GuiGraphics g, int mouseX, int mouseY, float partialTick) {
+        float e = VoxeliaUi.introT();
+        g.pose().pushPose();
+        g.pose().translate(0, (1f - e) * 6f, 0);
+
         Skill[] all = Skill.values();
 
         // Derived headline stats.
@@ -43,6 +49,7 @@ public final class ProfileScreen extends Screen {
         Skill best = all[0];
         int prestiges = 0;
         long xpEarned = 0;
+        float progress = 0f;
         int maxXp = SkillCurve.xpForLevel(SkillCurve.MAX_LEVEL);
         for (Skill s : all) {
             int lvl = ClientSkillData.level(s);
@@ -51,6 +58,8 @@ public final class ProfileScreen extends Screen {
             int pres = ClientTalents.prestige(s);
             prestiges += pres;
             xpEarned += (long) pres * maxXp + ClientSkillData.xp(s);
+            int sp = SkillCurve.xpToNext(ClientSkillData.xp(s));
+            progress += sp > 0 ? (float) SkillCurve.xpIntoLevel(ClientSkillData.xp(s)) / sp : 1f;
         }
         int charLevel = Math.max(1, Math.round(totalLvl / (float) all.length));
 
@@ -61,12 +70,14 @@ public final class ProfileScreen extends Screen {
 
         VoxeliaUi.panel(g, x, y, PANEL_W, h);
         VoxeliaUi.titleBar(g, this.font, x, y, PANEL_W, "VOXELIA");
-        tabTalents = VoxeliaUi.tab(g, this.font, "Talents [" + keyName(VoxeliaKeys.OPEN_TALENTS) + "]",
+        tabTalents = VoxeliaUi.tab(g, this.font, "Talents" + VoxeliaUi.keyTag(this.font, VoxeliaKeys.OPEN_TALENTS),
             x + PANEL_W - 4, y, false, mouseX, mouseY);
-        tabSkills = VoxeliaUi.tab(g, this.font, "Skills [" + keyName(VoxeliaKeys.OPEN_MENU) + "]",
+        tabSkills = VoxeliaUi.tab(g, this.font, "Skills" + VoxeliaUi.keyTag(this.font, VoxeliaKeys.OPEN_MENU),
             tabTalents[0] - 2, y, false, mouseX, mouseY);
+        tabProfile = VoxeliaUi.tab(g, this.font, "Profile" + VoxeliaUi.keyTag(this.font, VoxeliaKeys.OPEN_PROFILE),
+            tabSkills[0] - 2, y, true, mouseX, mouseY);
 
-        // Header: player name + character line.
+        // Header: player name + character line + real character-progress bar.
         int hy = y + TITLE_H + 4;
         String name = Minecraft.getInstance().player != null
             ? Minecraft.getInstance().player.getGameProfile().getName() : "Adventurer";
@@ -74,10 +85,13 @@ public final class ProfileScreen extends Screen {
         String stars = prestiges > 0 ? "  " + "✦".repeat(Math.min(prestiges, 5)) : "";
         g.drawString(this.font, "Character Lv " + charLevel + " · " + best.noun() + stars,
             x + PAD, hy + 12, VoxeliaUi.MUTED);
-        g.fill(x + PAD, hy + 24, x + PANEL_W - PAD, hy + 25, 0x40FFCE54);
+        VoxeliaUi.bar(g, x + PAD, hy + 22, PANEL_W - 2 * PAD, 3, progress / all.length, 0xFFCE54, false);
 
-        // Stat rows.
+        // Stat rows over quiet zebra stripes.
         int ry = y + TITLE_H + headerH;
+        for (int i = 1; i < ROWS; i += 2) {
+            g.fill(x + 5, ry + i * ROW_H - 2, x + PANEL_W - 5, ry + i * ROW_H + 11, 0x0DFFFFFF);
+        }
         boolean loaded = ClientProfile.hasData();
         String bestVal = best.display() + "  Lv " + ClientSkillData.level(best);
         row(g, x, ry, "Best skill", bestVal, 0xFF000000 | best.color());
@@ -89,12 +103,18 @@ public final class ProfileScreen extends Screen {
             loaded && ClientProfile.deaths() > 0 ? VoxeliaUi.WARN : VoxeliaUi.TEXT);
         row(g, x, ry + ROW_H * 5, "Mob kills", loaded ? String.valueOf(ClientProfile.mobKills()) : "…", VoxeliaUi.TEXT);
 
-        // Footer hint.
+        // Footer hint with a real, clickable Talents link.
         VoxeliaUi.footer(g, x, y + h - FOOTER_H, PANEL_W, FOOTER_H);
         int fy = y + h - FOOTER_H + 3;
         int fx = seg(g, x + PAD, fy, "Prestige a maxed skill on the ", VoxeliaUi.MUTED);
-        seg(g, fx, fy, "Talents", VoxeliaUi.LINK);
+        String link = "Talents" + VoxeliaUi.keyTag(this.font, VoxeliaKeys.OPEN_TALENTS);
+        int linkX2 = fx + this.font.width(link);
+        talentLink = new int[]{fx, fy - 2, linkX2, fy + 11};
+        boolean overLink = in(talentLink, mouseX, mouseY);
+        g.drawString(this.font, link, fx, fy, overLink ? VoxeliaUi.brighten(VoxeliaUi.LINK, 30) : VoxeliaUi.LINK);
+        g.fill(fx, fy + 9, linkX2, fy + 10, 0x8089C7FF);
 
+        g.pose().popPose();
         super.render(g, mouseX, mouseY, partialTick);
     }
 
@@ -117,10 +137,6 @@ public final class ProfileScreen extends Screen {
         return x + this.font.width(text);
     }
 
-    private static String keyName(net.minecraft.client.KeyMapping key) {
-        return key.getTranslatedKeyMessage().getString();
-    }
-
     private static boolean in(int[] r, double mx, double my) {
         return mx >= r[0] && mx < r[2] && my >= r[1] && my < r[3];
     }
@@ -128,7 +144,7 @@ public final class ProfileScreen extends Screen {
     @Override
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
         if (button == 0) {
-            if (in(tabTalents, mouseX, mouseY)) {
+            if (in(tabTalents, mouseX, mouseY) || in(talentLink, mouseX, mouseY)) {
                 Minecraft.getInstance().setScreen(new TalentScreen());
                 return true;
             }
@@ -136,6 +152,7 @@ public final class ProfileScreen extends Screen {
                 Minecraft.getInstance().setScreen(new SkillsScreen());
                 return true;
             }
+            if (in(tabProfile, mouseX, mouseY)) return true;
         }
         return super.mouseClicked(mouseX, mouseY, button);
     }
