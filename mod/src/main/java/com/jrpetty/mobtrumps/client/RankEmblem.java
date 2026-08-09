@@ -17,17 +17,22 @@ import net.minecraft.client.gui.GuiGraphics;
  */
 public final class RankEmblem {
 
+    /** The pinline is brass on every tier, tying the crests to the tables. */
+    private static final int BRASS_PIN = 0xFFF7E3AE;
+
     private RankEmblem() {
     }
 
     /**
      * Width of the shield at each of sixteen rows, as a fraction of half-width.
-     * A flat top with rounded shoulders that tapers to a point — read down the
-     * list and you are looking at the outline.
+     * Read down the list and you are looking at the outline: a flat top, sides
+     * that barely move for the first half, then a curve that accelerates into a
+     * point. The acceleration matters — an even taper leaves a narrow stub at
+     * the bottom and the crest reads as a balloon rather than a shield.
      */
     private static final float[] PROFILE = {
-            0.72f, 0.92f, 1.00f, 1.00f, 1.00f, 0.99f, 0.97f, 0.94f,
-            0.90f, 0.85f, 0.78f, 0.70f, 0.60f, 0.47f, 0.32f, 0.16f
+            1.00f, 1.00f, 1.00f, 0.99f, 0.98f, 0.96f, 0.94f, 0.91f,
+            0.87f, 0.82f, 0.76f, 0.68f, 0.58f, 0.45f, 0.29f, 0.11f
     };
 
     /** Draw the crest for {@code rating} with its top-left at x,y. */
@@ -71,16 +76,38 @@ public final class RankEmblem {
         // a highlight along the top edge is what makes it read as metal
         int topW = Math.max(1, Math.round(half * PROFILE[0]));
         g.fill(cx - topW, y, cx + topW, y + Math.max(1, rowH / 2), light);
+        // the inner pinline — a second, lighter line inset one pixel — is what
+        // separates a crest from a coloured shape. Only at sizes with room.
+        if (size >= 16) {
+            int inset = Math.max(1, size / 11);
+            for (int r = inset; r < rows - inset; r++) {
+                int w = Math.max(1, Math.round(half * PROFILE[r])) - inset;
+                if (w <= 1) continue;
+                int ry = y + r * rowH;
+                int pin = TableArt.alpha(BRASS_PIN, 0x50);
+                g.fill(cx - w, ry, cx - w + 1, ry + rowH, pin);
+                g.fill(cx + w - 1, ry, cx + w, ry + rowH, pin);
+            }
+            int wTop = Math.max(1, Math.round(half * PROFILE[inset])) - inset;
+            g.fill(cx - wTop, y + inset * rowH, cx + wTop, y + inset * rowH + 1,
+                    TableArt.alpha(BRASS_PIN, 0x50));
+        }
+        // one glint on the top-left shoulder, so every crest catches the same light
+        g.fill(cx - topW + 1, y + rowH, cx - topW + 1 + Math.max(1, size / 8),
+                y + rowH + 1, 0x66FFFFFF);
 
         glyph(g, cx, y + Math.round(size * 0.46f), size, tier, light, dark);
 
-        if (pips && size >= 12) {
-            int shown = tier == RankTier.MASTER ? 1 : Math.max(1, 4 - division);
+        // Master has no divisions, so a lone pip under it would be a rank
+        // marker that marks nothing — and directly below the shield's point it
+        // reads as a little stand rather than a rating.
+        if (pips && size >= 12 && tier != RankTier.MASTER) {
+            int shown = Math.max(1, 4 - division);
             int pipW = Math.max(2, size / 7);
             int gap = Math.max(1, pipW / 2);
             int total = shown * pipW + (shown - 1) * gap;
             int px = cx - total / 2;
-            int py = y + rows * rowH + 2;
+            int py = y + rows * rowH + 4;   // clearance, or they look like a base
             for (int i = 0; i < shown; i++) {
                 g.fill(px, py, px + pipW, py + Math.max(2, pipW - 1), light);
                 g.fill(px, py, px + pipW, py + 1, 0x66FFFFFF);
@@ -93,7 +120,7 @@ public final class RankEmblem {
     public static int height(int size, boolean pips) {
         int rowH = Math.max(1, Math.round(size * 1.18f / PROFILE.length));
         int h = PROFILE.length * rowH;
-        return pips && size >= 12 ? h + 2 + Math.max(2, size / 7 - 1) : h;
+        return pips && size >= 12 ? h + 4 + Math.max(2, size / 7 - 1) : h;
     }
 
     /** The mark inside the shield — it escalates with the tier. */
@@ -109,7 +136,7 @@ public final class RankEmblem {
             case GOLD -> crown(g, cx, cy, u, light, dark);
             case PLATINUM -> diamond(g, cx, cy, u * 2, light, dark, false);
             case DIAMOND -> diamond(g, cx, cy, u * 2, light, dark, true);
-            case MASTER -> star(g, cx, cy, u * 2, light, dark);
+            case MASTER -> star(g, cx, cy, u * 3, light, dark);
         }
     }
 
@@ -125,17 +152,20 @@ public final class RankEmblem {
     private static void crown(GuiGraphics g, int cx, int cy, int u, int light, int dark) {
         int w = u * 3;
         int base = cy + u;
-        g.fill(cx - w, base, cx + w, base + Math.max(1, u), light);
-        // three points, the middle one taller
+        // three solid triangles standing on a band, middle one tallest. Drawn
+        // in the dark metal with lit tips: at thirteen pixels a crown has to be
+        // shape and contrast, because there is no room for detail.
         for (int i = -1; i <= 1; i++) {
-            int px = cx + i * (w - u / 2) - u / 2;
+            int peak = cx + i * (w - u);
             int h = i == 0 ? u * 3 : u * 2;
             for (int r = 0; r < h; r++) {
-                int shrink = Math.round(r * (u / (float) h));
-                g.fill(px + shrink, base - r, px + u - shrink, base - r + 1,
-                        r > h - 2 ? light : dark);
+                int half = Math.max(1, Math.round(u * (1f - r / (float) h)));
+                g.fill(peak - half, base - r, peak + half, base - r + 1,
+                        r >= h - 1 ? light : dark);
             }
         }
+        g.fill(cx - w, base, cx + w, base + Math.max(2, u), dark);
+        g.fill(cx - w, base, cx + w, base + 1, light);
     }
 
     private static void diamond(GuiGraphics g, int cx, int cy, int r, int light,
@@ -155,14 +185,23 @@ public final class RankEmblem {
     }
 
     private static void star(GuiGraphics g, int cx, int cy, int r, int light, int dark) {
-        // a five-point star approximated by a bright core and four tapering arms
-        for (int dy = -r; dy <= r; dy++) {
-            int w = Math.max(0, (r - Math.abs(dy)) / 2);
-            if (w > 0) g.fill(cx - w, cy + dy, cx + w, cy + dy + 1, dy < 0 ? light : dark);
+        // Four long tapering arms and four short diagonals — an eight-point
+        // sparkle. Arms taper to a third rather than a half, which is what
+        // stops it reading as a plus sign at small sizes.
+        for (int d = -r; d <= r; d++) {
+            int t = Math.max(0, (r - Math.abs(d)) / 3);
+            if (t > 0) {
+                g.fill(cx - t, cy + d, cx + t, cy + d + 1, d < 0 ? light : dark);
+                g.fill(cx + d, cy - t, cx + d + 1, cy + t, d < 0 ? light : dark);
+            }
         }
-        for (int dx = -r; dx <= r; dx++) {
-            int h = Math.max(0, (r - Math.abs(dx)) / 2);
-            if (h > 0) g.fill(cx + dx, cy - h, cx + dx + 1, cy + h, dx < 0 ? light : dark);
+        int s = Math.max(1, r / 2);
+        for (int i = 0; i < s; i++) {
+            int t = Math.max(1, (s - i) / 2);
+            g.fill(cx + i, cy + i, cx + i + t, cy + i + t, dark);
+            g.fill(cx - i - t, cy + i, cx - i, cy + i + t, dark);
+            g.fill(cx + i, cy - i - t, cx + i + t, cy - i, light);
+            g.fill(cx - i - t, cy - i - t, cx - i, cy - i, light);
         }
         g.fill(cx - 1, cy - 1, cx + 1, cy + 1, 0xFFFFFFFF);
     }

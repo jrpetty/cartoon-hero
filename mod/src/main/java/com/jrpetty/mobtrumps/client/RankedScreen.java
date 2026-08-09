@@ -28,7 +28,15 @@ import static com.jrpetty.mobtrumps.client.TableArt.INK;
 public class RankedScreen extends Screen {
 
     private static final int ROW_H = 18;
-    private static final int HEAD_H = 74;
+    /**
+     * Where the ladder starts.
+     *
+     * <p>Must clear the whole header: the title, the season line, and the
+     * standing card, which runs to RAIL + 4 + 28 + 38 = 77. It was 74, so the
+     * card's bottom edge and its climb bar sat on top of the first row and the
+     * divider was drawn inside the card.
+     */
+    private static final int HEAD_H = 86;
 
     private int scroll;
 
@@ -110,9 +118,23 @@ public class RankedScreen extends Screen {
         } else {
             int rating = s.rating(you);
             RankTier tier = RankTier.of(rating);
-            RankEmblem.draw(g, px + 6, cardY + 3, 22, rating);
+            // the crest sits in its own pool of the tier's light
+            TableArt.pool(g, px + 19, cardY + cardH / 2, 26, tier.rgb, 0x38);
+            // no pips here: the label beside it already spells out the
+            // division, and at this size they would hang below the plate
+            RankEmblem.draw(g, px + 7, cardY + 4, 26, tier, RankTier.division(rating), false);
 
-            int tx = px + 38;
+            // the rating, large, in the tier's metal — the number the whole
+            // screen is about should not be the smallest thing on it
+            String big = String.valueOf(rating);
+            var pose = g.pose();
+            pose.pushPose();
+            pose.translate(px + pw - 12 - font.width(big) * 1.6f, cardY + 14f, 0);
+            pose.scale(1.6f, 1.6f, 1f);
+            g.drawString(font, big, 0, 0, tier.rgb, true);
+            pose.popPose();
+
+            int tx = px + 42;
             g.drawString(font, RankTier.label(rating).toUpperCase(Locale.ROOT), tx, cardY + 6,
                     tier.rgb, true);
             int place = ClientRanked.yourPlace();
@@ -121,22 +143,25 @@ public class RankedScreen extends Screen {
                     + "   peak " + s.peak(you);
             g.drawString(font, sub, tx, cardY + 18, DIM);
 
-            // climb to the next rung
+            // climb to the next rung, in a brass channel with the fill lit
+            // along its top edge so it reads as inlay rather than paint
             int next = RankTier.nextStep(rating);
             int barX = tx;
-            int barW = Math.max(40, px + pw - 10 - barX);
+            int barW = Math.max(40, px + pw - 88 - barX);
             int barY = cardY + 29;
-            g.fill(barX, barY, barX + barW, barY + 4, 0x66000000);
+            g.fill(barX - 1, barY - 1, barX + barW + 1, barY + 5, 0xFF0A140F);
+            g.renderOutline(barX - 1, barY - 1, barW + 2, 6, TableArt.BRASS_DARK);
             float p = RankTier.progress(rating);
-            g.fill(barX, barY, barX + Math.round(barW * p), barY + 4, tier.rgb);
-            g.fill(barX, barY, barX + barW, barY + 1, 0x22FFFFFF);
+            int fill = Math.round(barW * p);
+            g.fill(barX, barY, barX + fill, barY + 4, tier.rgb);
+            g.fill(barX, barY, barX + fill, barY + 1, TableArt.lighten(tier.rgb, 1.35f));
             String goal = next < 0 ? "top of the ladder"
                     : (next - rating) + " to " + RankTier.badgeLabel(next);
             g.drawString(font, goal, barX + barW - font.width(goal), barY - 9, FAINT);
 
             if (rating > ClientRanked.decayFloor()) {
                 String warn = "decays if idle";
-                g.drawString(font, warn, px + pw - font.width(warn), cardY + 6, FAINT);
+                g.drawString(font, warn, px + pw - font.width(warn), cardY + cardH - 12, FAINT);
             }
         }
         g.fill(px, HEAD_H - 4, px + pw, HEAD_H - 3, BRASS_DARK);
@@ -154,10 +179,27 @@ public class RankedScreen extends Screen {
             g.renderOutline(px, y, pw, ROW_H - 1, GOOD);
         }
 
-        // place — the top three get their number in metal
-        String place = "#" + (i + 1);
-        int placeCol = i == 0 ? 0xFFFFD54A : i == 1 ? 0xFFC7CCD1 : i == 2 ? 0xFFCD7F32 : FAINT;
-        g.drawString(font, place, px + 6, y + 5, placeCol, i < 3);
+        // the tier's colour runs down the row edge, so the ladder reads as
+        // bands of metal even before a single label is read
+        g.fill(px, y, px + 2, y + ROW_H - 1, tier.rgb);
+
+        // the podium gets medal discs; everyone else a quiet number
+        if (i < 3) {
+            int medal = i == 0 ? 0xFFFFD54A : i == 1 ? 0xFFC7CCD1 : 0xFFCD7F32;
+            int mc = px + 12;
+            int my = y + ROW_H / 2 - 1;
+            for (int r = 5; r >= 1; r--) {
+                int shade = r == 5 ? TableArt.darken(medal, 0.55f)
+                        : r >= 4 ? medal : TableArt.lighten(medal, 1.2f);
+                g.fill(mc - r, my - r + 1, mc + r, my + r - 1, shade);
+                g.fill(mc - r + 1, my - r, mc + r - 1, my + r, shade);
+            }
+            String n = String.valueOf(i + 1);
+            g.drawString(font, n, mc - font.width(n) / 2 + 1, my - 4, 0xFF1A1206, false);
+        } else {
+            String place = "#" + (i + 1);
+            g.drawString(font, place, px + 6, y + 5, FAINT, false);
+        }
 
         RankEmblem.draw(g, px + 30, y + 1, 13, tier, RankTier.division(rating), false);
 
@@ -169,7 +211,9 @@ public class RankedScreen extends Screen {
 
         String wl = s.wins(i) + "W " + s.losses(i) + "L";
         String rate = String.valueOf(rating);
-        g.drawString(font, rate, px + pw - 8 - font.width(rate), y + 5, INK, false);
+        // the number in the tier's metal: the column becomes a gradient of
+        // rank, and a glance shows where the tier boundaries fall
+        g.drawString(font, rate, px + pw - 8 - font.width(rate), y + 5, tier.rgb, false);
         g.drawString(font, wl, px + pw - 52 - font.width(wl), y + 5, DIM, false);
     }
 
