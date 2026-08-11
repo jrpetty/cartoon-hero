@@ -43,6 +43,15 @@ public final class DuelManager {
      */
     private static final long SCREEN_HOLD_MS = 1_900L;
 
+    /**
+     * Rating gap that makes a win a giant-killing.
+     *
+     * <p>Two hundred is roughly a tier and a half, and by the Elo curve the
+     * underdog wins about one time in four — often enough to be a goal you can
+     * chase, rare enough to be worth an award.
+     */
+    private static final int GIANT_GAP = 200;
+
     /** target UUID -> pending challenge from a challenger. */
     private static final Map<UUID, Pending> PENDING = new ConcurrentHashMap<>();
     /** player UUID -> the duel they are in (both players map to the same duel). */
@@ -1462,6 +1471,21 @@ public final class DuelManager {
         StatsTracker.bump(loser, "ranked_losses");
         StatsTracker.recordMax(winner, "ranked_peak", ratings[0]);
         StatsTracker.recordMax(loser, "ranked_peak", ratings[1]);
+
+        // A streak is the one counter that has to be able to fall, so it is
+        // kept alongside a personal best that never does — awards read the
+        // best, the player reads the current one.
+        int streak = StatsTracker.count(winner, "ranked_streak") + 1;
+        StatsTracker.set(winner, "ranked_streak", streak);
+        StatsTracker.recordMax(winner, "ranked_streak_best", streak);
+        StatsTracker.set(loser, "ranked_streak", 0);
+
+        // Beating someone well above you. Measured on the ratings as they were
+        // BEFORE the duel: afterwards the gap has already closed by the very
+        // result being judged, and every giant would look a little smaller.
+        if (lOld - wOld >= GIANT_GAP) {
+            StatsTracker.bump(winner, "ranked_giant");
+        }
 
         // the head-to-head goes in here rather than at the call site: this is
         // the one place both players' ratings before AND after are known

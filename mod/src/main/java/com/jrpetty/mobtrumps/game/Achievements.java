@@ -117,6 +117,44 @@ public final class Achievements {
                 "Beat other players 100 times", "duel_wins", 100,
                 new Reward("netherite_ingot", 2), new Reward("enchanted_golden_apple", 1));
 
+        // --- ranked: the season ladder -------------------------------------
+        //
+        // The tier awards target a RATING rather than a counter, because
+        // ranked_peak already stores the best rating ever held and RankTier's
+        // thresholds are the same numbers. That means reaching Diamond and
+        // then decaying back to Gold keeps the award: you did reach it, and an
+        // achievement that can be taken away by not playing is a punishment
+        // rather than a record.
+        add("ranked_first", Group.RANKED, "Placed",
+                "Win your first ranked duel", "ranked_wins", 1, iron(4), xp(1));
+        add("ranked_10", Group.RANKED, "Regular",
+                "Win 10 ranked duels", "ranked_wins", 10, gold(5), xp(3));
+        add("ranked_50", Group.RANKED, "Fixture",
+                "Win 50 ranked duels", "ranked_wins", 50, diamond(4), xp(8));
+        add("ranked_rivals", Group.RANKED, "Making Enemies",
+                "Duel 5 different opponents", "ranked_rivals", 5, gold(4), xp(2));
+        add("ranked_gold", Group.RANKED, "Gold Standard",
+                "Climb to Gold", "ranked_peak", 1050, gold(8), xp(4));
+        add("ranked_diamond", Group.RANKED, "Cut Above",
+                "Climb to Diamond", "ranked_peak", 1350, diamond(5), xp(10));
+        add("ranked_master", Group.RANKED, "Master of the Table",
+                "Climb to Master", "ranked_peak", 1500,
+                new Reward("netherite_ingot", 1), new Reward("enchanted_golden_apple", 1));
+        add("ranked_streak_5", Group.RANKED, "On a Run",
+                "Win 5 ranked duels in a row", "ranked_streak_best", 5, diamond(2), xp(5));
+        add("ranked_streak_10", Group.RANKED, "Untouchable",
+                "Win 10 ranked duels in a row", "ranked_streak_best", 10,
+                new Reward("netherite_scrap", 2), xp(12));
+        add("ranked_giant", Group.RANKED, "Giant Killer",
+                "Beat someone rated 200 above you", "ranked_giant", 1, diamond(3), xp(6));
+        add("ranked_giant_5", Group.RANKED, "Bracket Buster",
+                "Do it five times", "ranked_giant", 5, new Reward("netherite_scrap", 1), xp(10));
+        add("ranked_season_1", Group.RANKED, "Seasoned",
+                "Finish a ranked season", "ranked_seasons", 1, gold(6), xp(4));
+        add("ranked_season_3", Group.RANKED, "Veteran of Three",
+                "Finish three ranked seasons", "ranked_seasons", 3,
+                new Reward("netherite_scrap", 1), diamond(4), xp(10));
+
         // --- the parlour: the other games the deck plays -------------------
         add("twentyone_1", Group.PARLOUR, "Twenty-One",
                 "Beat the dealer at Twenty-One", "twentyone_wins", 1, iron(6), xp(1));

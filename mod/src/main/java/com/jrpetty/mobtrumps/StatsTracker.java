@@ -24,6 +24,19 @@ public final class StatsTracker {
         player.setData(ModAttachments.PLAY_STATS.get(), stats);
     }
 
+    /**
+     * Set a counter outright.
+     *
+     * <p>{@link #bump} and {@link #recordMax} only ever go up, which is right
+     * for totals and personal bests and wrong for a streak — a streak's whole
+     * job is to be able to go back to nothing.
+     */
+    public static void set(ServerPlayer player, String key, int value) {
+        Map<String, Integer> stats = new HashMap<>(player.getData(ModAttachments.PLAY_STATS.get()));
+        stats.put(key, value);
+        player.setData(ModAttachments.PLAY_STATS.get(), stats);
+    }
+
     /** Store {@code value} in {@code key} only if it beats the stored value. */
     public static void recordMax(ServerPlayer player, String key, int value) {
         Map<String, Integer> stats = new HashMap<>(player.getData(ModAttachments.PLAY_STATS.get()));

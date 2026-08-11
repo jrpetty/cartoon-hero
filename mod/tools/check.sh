@@ -55,6 +55,9 @@ if ! python3 tools/checkwagerlayout.py; then fail=1; fi
 echo "== 1d. card portraits are placed, not cornered =="
 if ! python3 tools/checkcardcoords.py "$SRC"; then fail=1; fi
 
+echo "== 1h. no award falls off its page =="
+if ! python3 tools/checkawardpages.py "$SRC"; then fail=1; fi
+
 echo "== 1g. screens open with their state =="
 if ! python3 tools/checkmenusync.py "$SRC"; then fail=1; fi
 

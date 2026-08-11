@@ -71,6 +71,15 @@ public final class AchievementManager {
             case "legendaries" -> tierCount(player, Tier.LEGENDARY);
             case "categories" -> categoriesComplete(player);
             case "holo3" -> maxedCards(player);
+            // ranked. The plain counters fall through to StatsTracker like the
+            // rest; these three are the ones that have to be worked out.
+            case "ranked_wins" -> StatsTracker.count(player, "ranked_wins");
+            case "ranked_streak_best" -> StatsTracker.count(player, "ranked_streak_best");
+            case "ranked_giant" -> StatsTracker.count(player, "ranked_giant");
+            // the best rating ever held, not the current one — see Achievements
+            case "ranked_peak" -> StatsTracker.count(player, "ranked_peak");
+            case "ranked_rivals" -> MatchHistory.rivals(player).size();
+            case "ranked_seasons" -> player.getData(ModAttachments.RANKED_BADGES.get()).size();
             default -> 0;
         };
     }

@@ -37,6 +37,7 @@ public record Achievement(String id, Group group, String title, String descripti
         ARENA("The Arena", "Games against the CPU", 0xFF7FB069),
         DUELIST("Duelist", "Beating real players", 0xFFF2C14E),
         PARLOUR("The Parlour", "Twenty-One, Guess Who and Bluff", 0xFF9B6BD9),
+        RANKED("Ranked", "Climbing the season ladder", 0xFF6FB4FF),
         HUNTER("Hunter", "Out in the world", 0xFFD65A31);
 
         private final String label;

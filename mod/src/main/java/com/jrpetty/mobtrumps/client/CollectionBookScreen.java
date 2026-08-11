@@ -60,10 +60,45 @@ public class CollectionBookScreen extends Screen {
      * both leaves rather than being squeezed into one narrow column, which is
      * what used to chop every title and blurb in half.
      */
-    // one page per group, DERIVED — this was a hardcoded 4, which would have
-    // silently hidden any group added after it (and one just was)
-    private static final int AWARD_SPREADS =
-            com.jrpetty.mobtrumps.game.Achievement.Group.values().length;
+    /**
+     * How many awards one spread holds.
+     *
+     * <p>At the smallest window Minecraft allows, the award area is 72 pixels
+     * and a row cannot be read below twelve, so a spread fits six rows down
+     * each of its two leaves and no arrangement fits more. A group larger than
+     * that has to run onto another spread — the row loop skips anything past
+     * the fold, and a skipped award is invisible AND unclickable, so its reward
+     * simply cannot be collected. The Parlour's twenty-one awards were losing
+     * nine that way.
+     *
+     * <p>Fixed rather than solved from the window on purpose. If capacity moved
+     * with the window, so would the number of spreads, and the page you were
+     * reading would become a different page when you resized.
+     */
+    private static final int AWARDS_PER_SPREAD = 12;
+
+    /**
+     * Which group each award spread shows, and which page of it — one entry per
+     * spread, in reading order. Derived, because this was once a hardcoded 4
+     * that would have silently hidden any group added after it.
+     */
+    private static final java.util.List<int[]> AWARD_PAGES = buildAwardPages();
+
+    private static java.util.List<int[]> buildAwardPages() {
+        java.util.List<int[]> pages = new ArrayList<>();
+        com.jrpetty.mobtrumps.game.Achievement.Group[] groups =
+                com.jrpetty.mobtrumps.game.Achievement.Group.values();
+        for (int g = 0; g < groups.length; g++) {
+            int n = com.jrpetty.mobtrumps.game.Achievements.of(groups[g]).size();
+            int spreads = Math.max(1, (n + AWARDS_PER_SPREAD - 1) / AWARDS_PER_SPREAD);
+            for (int page = 0; page < spreads; page++) {
+                pages.add(new int[]{g, page, spreads});
+            }
+        }
+        return java.util.List.copyOf(pages);
+    }
+
+    private static final int AWARD_SPREADS = AWARD_PAGES.size();
     private static final int BACK_SPREADS = AWARD_SPREADS + 2;
     /** Back pages are drawn through this scale so the text is properly legible. */
     private static final float UI = 1.25f;
@@ -438,8 +473,12 @@ public class CollectionBookScreen extends Screen {
             pose.pushPose();
             pose.scale(UI, UI, 1f);
             switch (section) {
-                case AWARDS -> renderAwardPage(g,
-                        Achievement.Group.values()[spread - cardSpreads], lmx, lmy);
+                case AWARDS -> {
+                    int[] page = AWARD_PAGES.get(
+                            Mth.clamp(spread - cardSpreads, 0, AWARD_PAGES.size() - 1));
+                    renderAwardPage(g, Achievement.Group.values()[page[0]],
+                            page[1], page[2], lmx, lmy);
+                }
                 case SETS -> renderSetRewardsPage(g, lmx, lmy);
                 default -> renderSettingsPage(g, lmx, lmy);
             }
@@ -855,14 +894,23 @@ public class CollectionBookScreen extends Screen {
 
     // --- award pages --------------------------------------------------------
 
-    private void renderAwardPage(GuiGraphics g, Achievement.Group group, int mouseX, int mouseY) {
-        List<Achievement> list = Achievements.of(group);
+    private void renderAwardPage(GuiGraphics g, Achievement.Group group, int page, int pages,
+                                 int mouseX, int mouseY) {
+        List<Achievement> all = Achievements.of(group);
+        // the slice this spread is responsible for
+        int from = Math.min(page * AWARDS_PER_SPREAD, all.size());
+        int to = Math.min(from + AWARDS_PER_SPREAD, all.size());
+        List<Achievement> list = all.subList(from, to);
         int[] b = contentBounds();
         int x0 = b[0], x1 = b[2];
 
-        String done = countCollected(list) + " / " + list.size();
+        // the tally stays over the WHOLE group, not the slice — "3 / 21" is
+        // what a player wants to know, on whichever page they are looking at
+        String done = countCollected(all) + " / " + all.size();
+        String heading = group.label().toUpperCase(Locale.ROOT)
+                + (pages > 1 ? "  (" + (page + 1) + "/" + pages + ")" : "");
         int y = drawPageHeading(g, x0, x1, b[1], group.accent(),
-                group.label().toUpperCase(Locale.ROOT), group.blurb(), done);
+                heading, group.blurb(), done);
 
         // A group used to be one full-width column, with a row height that
         // could not go below sixteen — so a long group simply ran off the foot
