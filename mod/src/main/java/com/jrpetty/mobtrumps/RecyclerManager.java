@@ -35,6 +35,18 @@ public final class RecyclerManager {
 
     /** Opened by the block, which has already recorded itself with BlockReach. */
     public static void open(ServerPlayer player, int mode) {
+        // Tell the client how many fragments it is holding BEFORE opening the
+        // screen.
+        //
+        // The count only ever arrived as part of a machine RESULT, so a freshly
+        // opened press showed whatever the client last heard — which after a
+        // login or a relog is zero. That is not merely a wrong label: the press
+        // greys out its PRINT button and ignores the click when the count is
+        // below the stake, so a player carrying hundreds of fragments found the
+        // machine flatly refusing to spend them. The shredder hid the same bug,
+        // because shredding a card syncs on the way out and the number appears
+        // to fix itself.
+        sync(player);
         PacketDistributor.sendToPlayer(player, new RecyclerMenuPayload(mode));
     }
 

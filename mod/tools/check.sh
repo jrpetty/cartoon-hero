@@ -55,6 +55,9 @@ if ! python3 tools/checkwagerlayout.py; then fail=1; fi
 echo "== 1d. card portraits are placed, not cornered =="
 if ! python3 tools/checkcardcoords.py "$SRC"; then fail=1; fi
 
+echo "== 1g. screens open with their state =="
+if ! python3 tools/checkmenusync.py "$SRC"; then fail=1; fi
+
 echo "== 1f. every block drops itself =="
 if ! python3 tools/checkloot.py "$SRC" src/main/resources; then fail=1; fi
 
@@ -62,7 +65,8 @@ echo "== 1e. sounds are quiet and comfortable =="
 if python3 -c "import soundfile" 2>/dev/null; then
   python3 tools/checksounds.py || fail=1
 else
-  echo "   skipped (no soundfile module here); CI installs it"
+  echo "   SKIPPED - no soundfile module here, so the sounds were NOT checked."
+  echo "   CI installs soundfile and runs this; 'pip install soundfile numpy' to run it here."
 fi
 
 echo "== 2. enum switch exhaustiveness =="

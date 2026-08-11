@@ -26,6 +26,22 @@ jobs:
 
       # Compiles the mod and runs the game-rule tests. `build` depends on
       # `test`, so a broken rule fails here and never reaches a release.
+      # checksounds needs a Vorbis decoder to read the shipped .ogg files back.
+      # Without these two the check quietly skips, which is how it came to be
+      # running nowhere at all: it passed on a developer machine that happened
+      # to have them and was skipped everywhere else.
+      - name: Install audio-check tooling
+        run: pip install --quiet soundfile numpy
+
+      # Every offline gate, in one place. They cover the failures the compiler
+      # cannot see: a screen that opens without its state, a live mob rendered
+      # into the corner of the window, a block that drops nothing when broken,
+      # a UI sound loud enough to be unpleasant. Each was written after the bug
+      # it describes actually shipped.
+      - name: Offline checks
+        working-directory: mod
+        run: bash tools/check.sh
+
       # A skipped popPose() corrupts every later draw in the frame, which shows
       # up as huge misplaced geometry rather than as a missing element.
       - name: Check matrix-stack balance
