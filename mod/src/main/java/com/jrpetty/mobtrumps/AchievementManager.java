@@ -224,9 +224,18 @@ public final class AchievementManager {
 
         for (Achievement.Reward r : a.rewards()) {
             ItemStack stack = stackOf(r);
-            if (!stack.isEmpty()) {
-                player.getInventory().placeItemBackInInventory(stack);
+            if (stack.isEmpty()) {
+                // An item id nothing resolves is a mistake in the catalogue, and
+                // without this line it is an invisible one: the award is already
+                // marked claimed above, the player is told "Collected", and the
+                // item simply never arrives. Say so where somebody can read it.
+                MobTrumps.LOGGER.error(
+                        "Award '{}' promises {} x{} but no such item exists, so the "
+                                + "player was paid nothing for it.",
+                        a.id(), r.item(), r.count());
+                continue;
             }
+            player.getInventory().placeItemBackInInventory(stack);
         }
         player.sendSystemMessage(Component.literal("Collected: " + a.title() + " — " + a.rewardLabel())
                 .withStyle(ChatFormatting.GREEN));
@@ -235,7 +244,20 @@ public final class AchievementManager {
         sendNow(player);
     }
 
+    /** The characters a resource path is allowed to contain. */
+    private static final java.util.regex.Pattern ITEM_PATH =
+            java.util.regex.Pattern.compile("[a-z0-9/._-]+");
+
     private static ItemStack stackOf(Achievement.Reward reward) {
+        // The shape is checked before the id is built, because
+        // withDefaultNamespace THROWS on a path with a capital or a space in
+        // it -- and it would throw HERE, after the award has been marked
+        // claimed and saved. That spends the award, skips the rest of its
+        // rewards and leaves the player with neither. A bad id should cost one
+        // reward and a log line, never the whole payout.
+        if (!ITEM_PATH.matcher(reward.item()).matches()) {
+            return ItemStack.EMPTY;
+        }
         Item item = BuiltInRegistries.ITEM
                 .getOptional(ResourceLocation.withDefaultNamespace(reward.item()))
                 .orElse(null);

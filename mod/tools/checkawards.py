@@ -136,14 +136,31 @@ def main():
                             f"can never unlock")
         if not re.fullmatch(r"-?\d+", target) or int(target) <= 0:
             problems.append(f"UNREACHABLE {aid}: target is {target!r}")
+        for item in re.findall(r'new\s+Reward\s*\(\s*"([^"]*)"', ",".join(args[6:])):
+            # Only the SHAPE is checked. Whether minecraft:foo exists needs the
+            # real registry, which is not here -- and a hand-written list of
+            # vanilla item ids would be invented data pretending to be a check.
+            if not re.fullmatch(r"[a-z0-9/._-]+", item):
+                problems.append(f"UNPAYABLE   {aid}: reward item {item!r} is not a "
+                                f"valid resource path, so it can never resolve")
+
+    # Most rewards are written through helpers -- iron(20), diamond(4) -- whose
+    # item ids sit in the helper body, not in the add(...) call, so the sweep
+    # above never sees them. Check every literal in the file.
+    items = set(re.findall(r'new\s+Reward\s*\(\s*"([^"]*)"', cat))
+    for item in sorted(items):
+        if not re.fullmatch(r"[a-z0-9/._-]+", item):
+            problems.append(f"UNPAYABLE   reward item {item!r} is not a valid "
+                            f"resource path, so it can never resolve")
 
     if problems:
         print("FAIL  awards that can never be earned:")
         for p in problems:
             print("   " + p)
         sys.exit(1)
-    print(f"PASS  {count} awards: every metric resolves, every id is unique and "
-          f"every target is a positive number.")
+    print(f"PASS  {count} awards: every metric resolves, every id is unique, "
+          f"every target is a positive number and all {len(items)} reward item "
+          f"ids are well formed.")
 
 
 if __name__ == "__main__":
