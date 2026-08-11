@@ -67,6 +67,9 @@ if ! python3 tools/checkmenusync.py "$SRC"; then fail=1; fi
 echo "== 1f. every block drops itself =="
 if ! python3 tools/checkloot.py "$SRC" src/main/resources; then fail=1; fi
 
+echo "== 1j. every sound is wired all the way through =="
+if ! python3 tools/checksoundwiring.py "$SRC" src/main/resources; then fail=1; fi
+
 echo "== 1e. sounds are quiet and comfortable =="
 # A skip is tolerable on a developer machine and NOT tolerable in CI. This
 # check spent its whole life skipping silently while its own message claimed
