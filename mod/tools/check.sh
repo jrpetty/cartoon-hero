@@ -62,11 +62,20 @@ echo "== 1f. every block drops itself =="
 if ! python3 tools/checkloot.py "$SRC" src/main/resources; then fail=1; fi
 
 echo "== 1e. sounds are quiet and comfortable =="
+# A skip is tolerable on a developer machine and NOT tolerable in CI. This
+# check spent its whole life skipping silently while its own message claimed
+# "CI installs it" -- CI neither installed it nor ran it -- so a missing
+# decoder is now a hard failure wherever $CI is set. A gate that can quietly
+# not run is not a gate.
 if python3 -c "import soundfile" 2>/dev/null; then
   python3 tools/checksounds.py || fail=1
+elif [ -n "${CI:-}" ]; then
+  echo "   FAIL  soundfile is missing in CI, so the sounds went unchecked."
+  echo "         The workflow must 'pip install soundfile numpy' before this runs."
+  fail=1
 else
   echo "   SKIPPED - no soundfile module here, so the sounds were NOT checked."
-  echo "   CI installs soundfile and runs this; 'pip install soundfile numpy' to run it here."
+  echo "   CI installs soundfile and fails without it; 'pip install soundfile numpy' to run it here."
 fi
 
 echo "== 2. enum switch exhaustiveness =="
