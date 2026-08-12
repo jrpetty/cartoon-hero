@@ -13,6 +13,35 @@ behaviour that was already there · **docs**
 
 ## Unreleased
 
+### Night raids on the Glade
+
+Standing inside the walls at night used to be perfectly safe, which made the
+night a wait. On **raid nights** it is not a wait: a pack of Grievers picks a
+stretch of the Glade wall and batters it — audibly, for the better part of a
+minute, cracked courses spreading before anything gives — and if nobody does
+anything about it, the wall opens and the night comes inside.
+
+- **feat** **Raid nights are part of the fixed calendar**: nights **4, 6 and 8**
+  (gaps of two to five nights, drawn deterministically, the same in every
+  game). The first three nights stay quiet while a group finds its feet; the
+  last raid lands on deadline night. Veterans get to be standing on the wall
+  with torches when the first blow hits.
+- **feat** **The defence has two jobs.** Fighters kill the pack — every raider
+  pays the standing Griever kill bounty. Builders **plug the breach with
+  blocks**: the hole is the one stretch of wall that accepts placement (the
+  ring is otherwise outside buildable ground), and a plugged breach genuinely
+  holds until renewed battering tears it open again.
+- **feat** **Holding the wall pays.** If the pack dies without the wall ever
+  opening, +5 credits into the pot for everyone who stood the night — on top
+  of the kill bounties.
+- **change** Raiders that break through are exempt from the "Grievers get
+  thrown out of the Glade" rule — on a raid night, inside is the point. Dawn
+  still clears them like any other Griever.
+- **fix** **The wall always comes back.** At dawn the ring is rebuilt whole
+  (it is seeded, deterministic construction, so the rebuild is exact) —
+  no drifting damage across days, no permanently ruined safe ground, and a
+  restart mid-raid costs the raid rather than the wall.
+
 ### The calendar is fixed, and the nights are gentle
 
 The door schedule now depends on the day number and **nothing else** — not the

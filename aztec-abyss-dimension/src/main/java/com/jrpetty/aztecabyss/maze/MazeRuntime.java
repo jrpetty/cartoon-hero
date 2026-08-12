@@ -226,6 +226,7 @@ public final class MazeRuntime {
         MazeDayWork.get(level).clearAll();
         MazeOrders.get(level).setHeads(0);
         MazeBell.reset();
+        MazeRaid.reset(level);
         clock.newGame(level.getServer());
         MazeNotes.clearAll();
         GladeBuilder.forgetRoster();
@@ -321,6 +322,7 @@ public final class MazeRuntime {
         MazeBell.tick(level, clock);
         MazeRace.tick(level);
         MazeSting.tick(level);
+        MazeRaid.tick(level, clock);
         tickEscape(level);
         MazeNight.tickWeather(level);
         GladeBuilder.refreshRoster(level);

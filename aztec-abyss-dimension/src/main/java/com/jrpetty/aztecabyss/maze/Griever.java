@@ -139,6 +139,26 @@ public final class Griever {
         level.playSound(null, spot, SoundEvents.WARDEN_ROAR, SoundSource.HOSTILE, 1.4F, 0.55F);
     }
 
+    /**
+     * Spawns a raider for the night raid: a full Griever, plus the raid tag
+     * that exempts it from being thrown back out of the Glade - on raid
+     * nights, getting inside is the whole point.
+     */
+    public static Mob raiderAt(ServerLevel level, BlockPos spot) {
+        Spider mob = EntityType.SPIDER.create(level);
+        if (mob == null) {
+            return null;
+        }
+        mob.moveTo(spot.getX() + 0.5, spot.getY(), spot.getZ() + 0.5, 0.0F, 0.0F);
+        mob.finalizeSpawn(level, level.getCurrentDifficultyAt(spot), MobSpawnType.EVENT, null);
+        dress(level, mob);
+        mob.getPersistentData().putBoolean(MazeRaid.TAG, true);
+        level.addFreshEntity(mob);
+        level.sendParticles(net.minecraft.core.particles.ParticleTypes.LARGE_SMOKE,
+                spot.getX() + 0.5, spot.getY() + 0.5, spot.getZ() + 0.5, 30, 0.7, 0.6, 0.7, 0.04);
+        return mob;
+    }
+
     /** Turns a spider into a Griever. */
     private static void dress(ServerLevel level, Mob mob) {
         mob.getPersistentData().putBoolean(TAG, true);
@@ -218,6 +238,11 @@ public final class Griever {
      */
     public static void keepOut(ServerLevel level, List<Mob> grievers) {
         for (Mob g : grievers) {
+            // Raiders are the exception to the rule: on a raid night, a Griever
+            // that broke through the wall is inside legitimately.
+            if (g.getPersistentData().getBoolean(MazeRaid.TAG)) {
+                continue;
+            }
             BlockPos at = g.blockPosition();
             if (!MazeData.inGlade(at.getX() / MazeData.CELL, at.getZ() / MazeData.CELL)) {
                 continue;

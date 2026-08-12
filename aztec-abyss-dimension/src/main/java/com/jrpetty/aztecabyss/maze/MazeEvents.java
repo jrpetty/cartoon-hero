@@ -91,6 +91,12 @@ public final class MazeEvents {
         if (event.getEntity() instanceof ServerPlayer p && p.isCreative()) {
             return;
         }
+        // On a raid night the breach in the Glade wall takes blocks: plugging
+        // it is the intended play, and the wall ring is otherwise outside the
+        // buildable ground.
+        if (MazeRaid.placeable(event.getPos())) {
+            return;
+        }
         // The Glade is yours. Breaking inside it was already allowed and placing
         // was not, which meant you could pull your own hut apart and never put
         // it back - a rule that only ever destroys is not a rule, it is a hole.
