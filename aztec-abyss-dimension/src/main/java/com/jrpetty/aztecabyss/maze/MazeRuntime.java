@@ -73,6 +73,8 @@ public final class MazeRuntime {
      * pieces of bookkeeping that can each go stale on their own.
      */
     private static String appliedLayoutName = null;
+    /** The toggle set physically standing, for the reshape diff. Null = unknown. */
+    private static java.util.Set<String> appliedOpen = null;
     /** The day the annex horde was last raised, so it happens once a day. */
     private static int hordeDay = -1;
     /** Marks the annex horde, so last night's can be swept when the exit moves. */
@@ -110,6 +112,7 @@ public final class MazeRuntime {
 
     public static void reset() {
         appliedLayoutName = null;
+        appliedOpen = null;
         doorsOpen = false;
         warnedDusk = false;
         reshapeDrama = 0;
@@ -220,6 +223,7 @@ public final class MazeRuntime {
         // Null so the next tick stamps the new opening layout without needing to
         // know whether it differs from the old one.
         appliedLayoutName = null;
+        appliedOpen = null;
         hordeDay = -1;
         escapeUntil = 0L;
         escapees.clear();
@@ -227,6 +231,7 @@ public final class MazeRuntime {
         MazeOrders.get(level).setHeads(0);
         MazeBell.reset();
         MazeRaid.reset(level);
+        MazeWaypoints.get(level).clearAll();
         clock.newGame(level.getServer());
         MazeNotes.clearAll();
         GladeBuilder.forgetRoster();
@@ -329,6 +334,10 @@ public final class MazeRuntime {
         portalAmbience(level, want);
         tickRunners(level, t);
         tickGrievers(level, t);
+        if (level.getGameTime() % 100L == 0L) {
+            // Every five seconds: sweep dead waypoints, repaint the charts.
+            MazeWaypoints.get(level).refresh(level);
+        }
     }
 
     /**
@@ -445,6 +454,20 @@ public final class MazeRuntime {
         MazeBell.reset();
         MazeNight.lift(level);
         TheBox.deliver(level, (int) day);
+        // Chartwrights at rank two get their waypoint torches with the dawn.
+        MazeSkills skills = MazeSkills.get(level);
+        for (ServerPlayer p : level.players()) {
+            if (skills.rank(p.getUUID(), "chartwright") >= 2) {
+                net.minecraft.world.item.ItemStack torches =
+                        new net.minecraft.world.item.ItemStack(
+                                net.minecraft.world.item.Items.SOUL_TORCH, 2);
+                torches.set(net.minecraft.core.component.DataComponents.CUSTOM_NAME,
+                        Component.literal("§bWaypoint Torch"));
+                p.getInventory().placeItemBackInInventory(torches);
+                p.displayClientMessage(Component.literal(
+                        "§b✦ Two waypoint torches §7came up with the Box."), true);
+            }
+        }
         // The field comes on overnight. Seeded off the day number so a world that
         // is reloaded mid-run does not get a second harvest out of the same night.
         GladeBuilder.growField(level, RandomSource.create(0xF1E1D ^ day), greenThumb(level));
@@ -1284,14 +1307,29 @@ public final class MazeRuntime {
             return;
         }
         RandomSource rng = RandomSource.create();
+        // The diff. With a fixed calendar only about eight doors move a night,
+        // so writing all two hundred toggles - roughly fourteen thousand block
+        // updates - was buying nothing with most of them. Three kinds of door
+        // still get written: ones whose state changed, ones the route carve
+        // physically forced open since last time (the state never knew), and
+        // everything, when there is no known previous state to diff against.
+        java.util.Set<String> want = new java.util.HashSet<>(layout.open());
+        java.util.Set<String> carved = MazeBuilder.drainCarvedToggles();
+        boolean full = appliedOpen == null;
         for (MazeData.TogglePoint tp : MazeData.togglePoints().values()) {
             if (touchesDeadGlade(tp)) {
                 // The camp is a clearing. Its walls came down long before you
                 // got here and the reshape does not put them back.
                 continue;
             }
-            MazeBuilder.setToggle(level, tp, layout.open().contains(tp.id()), rng);
+            boolean desired = want.contains(tp.id());
+            if (!full && appliedOpen.contains(tp.id()) == desired
+                    && !carved.contains(tp.id())) {
+                continue;
+            }
+            MazeBuilder.setToggle(level, tp, desired, rng);
         }
+        appliedOpen = want;
         // The camp does not move; the way into it does. Seals its wall and cuts
         // tonight's breaches, chosen from the ones that actually open onto
         // corridor a runner can reach.

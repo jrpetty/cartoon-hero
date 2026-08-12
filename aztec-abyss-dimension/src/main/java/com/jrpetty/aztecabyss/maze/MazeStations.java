@@ -46,6 +46,10 @@ public final class MazeStations {
     private static final int ORDER_X = MazeData.SPAWN_X - 12;
     private static final int ORDER_Z = MazeData.SPAWN_Z + 10;
 
+    /** Between the other two desks, completing the little civic row. */
+    private static final int CHART_X = MazeData.SPAWN_X - 16;
+    private static final int CHART_Z = MazeData.SPAWN_Z + 8;
+
     private MazeStations() {
     }
 
@@ -55,6 +59,10 @@ public final class MazeStations {
 
     public static BlockPos orderDesk() {
         return new BlockPos(ORDER_X, Y + 1, ORDER_Z);
+    }
+
+    public static BlockPos chartTable() {
+        return new BlockPos(CHART_X, Y + 1, CHART_Z);
     }
 
     public static void build(ServerLevel level) {
@@ -68,6 +76,11 @@ public final class MazeStations {
         level.setBlock(orderDesk(), Blocks.SMITHING_TABLE.defaultBlockState(), 2);
         sign(level, new BlockPos(ORDER_X, Y + 2, ORDER_Z + 1), Direction.SOUTH,
                 "§6THE SLATE", "§0What the Box", "§0brings up.", "§8Right-click");
+
+        plinth(level, CHART_X, CHART_Z, Blocks.DEEPSLATE_TILES.defaultBlockState().getBlock());
+        level.setBlock(chartTable(), Blocks.CARTOGRAPHY_TABLE.defaultBlockState(), 2);
+        sign(level, new BlockPos(CHART_X, Y + 2, CHART_Z + 1), Direction.SOUTH,
+                "§6THE CHART TABLE", "§0Pin what you", "§0have walked.", "§8Chartwrights only");
     }
 
     /** A lit two-block base, so a desk in a field reads as somewhere to go. */
@@ -105,7 +118,59 @@ public final class MazeStations {
                     SoundSource.BLOCKS, 0.9F, 0.8F);
             return true;
         }
+        if (at.equals(chartTable())) {
+            pinChart(level, who);
+            return true;
+        }
         return false;
+    }
+
+    /**
+     * Pins a living copy of a Runner's Chart to the table.
+     *
+     * <p>Copies of a vanilla map share their data, so the pinned sheet keeps
+     * filling in as its Runner keeps walking - the Glade watches the picture
+     * grow without anyone standing at the table. It hangs in an item frame,
+     * which is the point: the group's knowledge becomes a physical thing that
+     * lives in the safe ground, rather than dying in a pocket in a corridor.
+     */
+    private static void pinChart(ServerLevel level, ServerPlayer who) {
+        if (MazeSkills.rankOf(level, who.getUUID(), "chartwright") < 1) {
+            who.displayClientMessage(Component.literal(
+                    "§7The table is for Chartwrights. §8Learn it at the trade desk."), true);
+            level.playSound(null, chartTable(), SoundEvents.BOOK_PAGE_TURN,
+                    SoundSource.BLOCKS, 0.7F, 0.6F);
+            return;
+        }
+        net.minecraft.world.item.ItemStack held = who.getMainHandItem();
+        if (!held.is(net.minecraft.world.item.Items.FILLED_MAP)) {
+            who.displayClientMessage(Component.literal(
+                    "§7Hold your Runner's Chart to pin a copy."), true);
+            return;
+        }
+        net.minecraft.world.item.ItemStack copy = held.copy();
+        copy.setCount(1);
+        copy.set(net.minecraft.core.component.DataComponents.CUSTOM_NAME,
+                Component.literal("§bThe Glade's Chart §7— " + who.getGameProfile().getName()));
+        BlockPos framePos = chartTable().above();
+        var frames = level.getEntitiesOfClass(net.minecraft.world.entity.decoration.ItemFrame.class,
+                new net.minecraft.world.phys.AABB(framePos), f -> true);
+        net.minecraft.world.entity.decoration.ItemFrame frame =
+                frames.isEmpty() ? null : frames.get(0);
+        if (frame == null) {
+            frame = new net.minecraft.world.entity.decoration.ItemFrame(
+                    level, framePos, Direction.UP);
+            frame.setInvulnerable(true);
+            level.addFreshEntity(frame);
+        }
+        frame.setItem(copy);
+        level.playSound(null, chartTable(), SoundEvents.BOOK_PAGE_TURN,
+                SoundSource.BLOCKS, 1.0F, 1.2F);
+        for (ServerPlayer p : level.players()) {
+            p.displayClientMessage(Component.literal("§b✦ "
+                    + who.getGameProfile().getName()
+                    + " pinned their chart to the table."), false);
+        }
     }
 
     private static void sign(ServerLevel level, BlockPos pos, Direction facing,

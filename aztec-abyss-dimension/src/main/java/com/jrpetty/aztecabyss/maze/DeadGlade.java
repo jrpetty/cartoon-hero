@@ -697,7 +697,114 @@ public final class DeadGlade {
         }
         // Charting is a Runner's trade, so it pays a Runner's day.
         MazeDayWork.get(level).add(level, who, MazeJobs.RUNNER, Math.min(fresh, 40));
+        // And the real prize: the last group kept notes, and the maze repeats.
+        who.getInventory().placeItemBackInInventory(loreBook());
+        who.displayClientMessage(Component.literal(
+                "§6✦ Among the charts: a bound notebook. §7The last group kept notes."), false);
         return true;
+    }
+
+    // ------------------------------------------------------------------
+    // The Last Group's Notes
+    // ------------------------------------------------------------------
+
+    /**
+     * The lectern's second reward: a written book, one page per day, quoting
+     * the door calendar. The maze's schedule is fixed - day three is day three
+     * in every game - so the previous group's diary genuinely predicts
+     * tomorrow. It reads as lore and functions as intel, which is the best
+     * kind of reward: the words are only worth carrying home because they are
+     * true.
+     */
+    private static ItemStack loreBook() {
+        java.util.List<net.minecraft.server.network.Filterable<Component>> pages =
+                new java.util.ArrayList<>();
+        pages.add(net.minecraft.server.network.Filterable.passThrough(Component.literal(
+                "We counted the days.\n\nThe maze counts them too. It repeats - the same"
+                        + " doors on the same nights, the same way out on the same"
+                        + " mornings.\n\nNobody believed us either.\n\n   - the ones"
+                        + " before")));
+        int limit = Math.max(1, com.jrpetty.aztecabyss.config.AbyssConfig.MAZE_DAY_LIMIT.get());
+        for (int day = 0; day < limit; day++) {
+            StringBuilder page = new StringBuilder();
+            page.append("DAY ").append(day + 1).append("\n\n");
+            if (day == 0) {
+                page.append("The maze wakes the way it always wakes.\n\n");
+            } else {
+                java.util.Set<String> moved = MazeDoors.changedOvernight(day);
+                int opened = 0;
+                int closed = 0;
+                java.util.Map<String, Integer> where = new java.util.LinkedHashMap<>();
+                for (String id : moved) {
+                    MazeData.TogglePoint tp = MazeData.togglePoints().get(id);
+                    if (tp == null) {
+                        continue;
+                    }
+                    if (MazeDoors.dayState(day).contains(id)) {
+                        opened++;
+                    } else {
+                        closed++;
+                    }
+                    where.merge(quadrant(tp), 1, Integer::sum);
+                }
+                page.append("In the night, ").append(opened).append(" ways open and ")
+                        .append(closed).append(" close");
+                if (!where.isEmpty()) {
+                    page.append(" - most of it ");
+                    String busiest = null;
+                    int most = 0;
+                    for (var e : where.entrySet()) {
+                        if (e.getValue() > most) {
+                            most = e.getValue();
+                            busiest = e.getKey();
+                        }
+                    }
+                    page.append("in the ").append(busiest);
+                }
+                page.append(".\n\n");
+            }
+            page.append("The door stands in the ")
+                    .append(exitCompass(MazeDoors.exitOn(day))).append(".");
+            pages.add(net.minecraft.server.network.Filterable.passThrough(
+                    Component.literal(page.toString())));
+        }
+        pages.add(net.minecraft.server.network.Filterable.passThrough(Component.literal(
+                "If you are reading this, we did not carry it out.\n\nCarry it out.")));
+        ItemStack book = new ItemStack(net.minecraft.world.item.Items.WRITTEN_BOOK);
+        book.set(net.minecraft.core.component.DataComponents.WRITTEN_BOOK_CONTENT,
+                new net.minecraft.world.item.component.WrittenBookContent(
+                        net.minecraft.server.network.Filterable.passThrough(
+                                "The Last Group's Notes"),
+                        "the ones before", 0, pages, true));
+        return book;
+    }
+
+    /** Which quarter of the maze a toggle door stands in, by its first end. */
+    private static String quadrant(MazeData.TogglePoint tp) {
+        String[] end = tp.edge().split(">")[0].split(",");
+        try {
+            int x = Integer.parseInt(end[0].trim());
+            int z = Integer.parseInt(end[1].trim());
+            int mid = MazeData.GRID / 2;
+            return (z < mid ? "north" : "south") + "-" + (x < mid ? "west" : "east");
+        } catch (NumberFormatException e) {
+            return "middle";
+        }
+    }
+
+    /** Which wall of the maze a portal opens in. */
+    private static String exitCompass(String exitId) {
+        MazeData.Exit ex = MazeData.exit(exitId);
+        if (ex == null) {
+            return "walls";
+        }
+        if (ex.cellZ() == 0) {
+            return "NORTH";
+        }
+        if (ex.cellZ() == MazeData.GRID - 1) {
+            return "SOUTH";
+        }
+        return ex.cellX() == 0 ? "WEST" : "EAST";
     }
 
     // ------------------------------------------------------------------

@@ -13,6 +13,44 @@ behaviour that was already there · **docs**
 
 ## Unreleased
 
+### The Chartwright, the waypoints, and the notes that predict tomorrow
+
+- **feat** **Chartwright** — a fourth Runner skill. Rank 1: pin a **living
+  copy** of your Runner's Chart to the new chart table in the Glade (vanilla
+  map copies share their data, so the pinned sheet keeps filling in as its
+  Runner keeps walking — the group's picture becomes a physical thing that
+  lives in the safe ground). Rank 2: the Box adds two waypoint torches to your
+  kit at dawn. Rank 3: planting a waypoint torch charts the cells around it as
+  if walked.
+- **feat** **Waypoint torches.** Any soul torch planted in a corridor becomes
+  a blue marker on every Runner's Chart, at the exact spot, for as long as it
+  stands — breadcrumbs that survive the doors moving. Knock it down (or let
+  the reshape wall it over) and the mark quietly leaves the charts. Capped at
+  24, because a chart that is all dots is noise.
+- **feat** **The chart table** — a third civic desk beside the trade board,
+  cartography table on a tiled plinth, Chartwrights only.
+- **feat** **Two new Grievers in the pack.** A quarter are **skitterers** —
+  fast, fragile, small, with a high skittering tell in the dark; a quarter are
+  **bulls** — slow, half again as strong, immovable, announced by a low bellow.
+  In a maze you hear before you see, and hearing *which* one is coming is
+  information. (The standard call is untouched; each kind adds its own on top.)
+- **feat** **The job board shows each Runner's chart percentage** next to
+  their name — the board is where you look to see who to ask about the
+  north-east.
+- **feat** **The Last Group's Notes.** The Dead Glade's lectern now also hands
+  over a written book: one page per day, quoting the door calendar — how many
+  ways open and close in each night, where the movement clusters, and which
+  wall the portal stands in. The maze's schedule is fixed, so the previous
+  group's diary genuinely predicts tomorrow. Lore that is also intel, worth
+  carrying home because it is true.
+- **change** **The midnight reshape writes ~25× fewer blocks.** With a fixed
+  calendar only about eight doors move a night, so the reshape now writes only
+  the doors whose state changed — plus any door the route carve physically
+  forced open since last time, which the state never knew about (tracked in a
+  carve ledger so shortcuts cannot quietly drift the maze open over the days).
+  `MazeDoors` itself became a pure cached calendar (`dayState(day)`), which is
+  what the lore book quotes and the diff reads.
+
 ### Night raids on the Glade
 
 Standing inside the walls at night used to be perfectly safe, which made the

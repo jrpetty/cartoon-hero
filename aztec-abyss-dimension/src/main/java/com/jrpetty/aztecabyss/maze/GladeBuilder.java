@@ -698,7 +698,15 @@ public final class GladeBuilder {
             java.util.List<String> names = new java.util.ArrayList<>();
             for (ServerPlayer p : level.players()) {
                 if (jobs.is(p.getUUID(), job)) {
-                    names.add(p.getGameProfile().getName() + " §8" + jobs.levelOf(p.getUUID(), job));
+                    String line = p.getGameProfile().getName()
+                            + " §8" + jobs.levelOf(p.getUUID(), job);
+                    // A Runner's number is their chart: how much of the maze
+                    // they personally hold. The board is where you look to see
+                    // who to ask about the north-east.
+                    if (MazeJobs.RUNNER.equals(job)) {
+                        line += " §b" + MazeCharts.get(level).myPercent(p.getUUID()) + "%";
+                    }
+                    names.add(line);
                 }
             }
             String[] lines = new String[]{"§8nobody", "", "", ""};

@@ -65,6 +65,10 @@ public final class MazeSkills extends SavedData {
                     "You always know which section of the maze you are standing in.",
                     "And which way the Glade is, and how far.",
                     "And a warning when you come within twenty-odd blocks of a Griever hole."}),
+            new Skill("chartwright", MazeJobs.RUNNER, "Chartwright", new String[]{
+                    "Pin a living copy of your Runner's Chart to the chart table, for everyone.",
+                    "The Box adds two waypoint torches to your kit at dawn.",
+                    "Planting a waypoint torch charts the cells around it as if walked."}),
 
             new Skill("forgemaster", MazeJobs.BUILDER, "Forgemaster", new String[]{
                     "+15% durability on what you forge, over the usual 40%.",

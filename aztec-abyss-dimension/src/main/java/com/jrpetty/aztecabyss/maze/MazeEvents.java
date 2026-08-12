@@ -120,6 +120,12 @@ public final class MazeEvents {
         ServerPlayer player = event.getEntity() instanceof ServerPlayer sp ? sp : null;
         var block = event.getPlacedBlock().getBlock();
         if (isRunnersMark(block)) {
+            // A soul torch in a corridor is a waypoint: it goes on every
+            // Runner's Chart for as long as it stands.
+            if (player != null && (block == net.minecraft.world.level.block.Blocks.SOUL_TORCH
+                    || block == net.minecraft.world.level.block.Blocks.SOUL_WALL_TORCH)) {
+                MazeWaypoints.get(level).planted(level, player, event.getPos());
+            }
             return;
         }
         if (player != null && isBuildersMark(level, player, block)) {

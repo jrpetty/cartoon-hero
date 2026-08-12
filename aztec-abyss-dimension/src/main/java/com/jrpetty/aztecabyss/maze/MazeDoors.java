@@ -224,60 +224,100 @@ public final class MazeDoors extends SavedData {
      * back mid-game recomputes the identical history a running server would
      * have lived through.
      */
+    // ------------------------------------------------------------------
+    // The calendar itself: a pure function of the day, computed once
+    // ------------------------------------------------------------------
+
+    /** Every day's door state so far, index = day. Grows on demand, never shrinks. */
+    private static final List<Set<String>> CALENDAR = new ArrayList<>();
+
+    /**
+     * The doors standing on a given day - the same answer in every game, every
+     * save, every restart, because it is arithmetic on the day number and
+     * nothing else. Walked forward one day at a time and cached, so the lore
+     * book can quote day eight and the reshape can diff two days for the price
+     * of a lookup.
+     */
+    public static synchronized Set<String> dayState(int day) {
+        while (CALENDAR.size() <= day) {
+            int d = CALENDAR.size();
+            String exit = exitFor(d);
+            Set<String> adopted;
+            if (d == 0) {
+                // Day zero is validated like any other: if the base cannot
+                // reach the drawn portal, flip toward one that can, or take
+                // the atlas outright.
+                Set<String> base = baseState();
+                adopted = acceptable(base, exit) ? base : null;
+                for (int salt = 0; salt < RETRIES && adopted == null; salt++) {
+                    Set<String> candidate = flipped(base, 0, salt);
+                    if (acceptable(candidate, exit)) {
+                        adopted = candidate;
+                    }
+                }
+                if (adopted == null) {
+                    adopted = fromAtlas(0, exit, base);
+                }
+            } else {
+                Set<String> from = CALENDAR.get(d - 1);
+                adopted = null;
+                for (int salt = 0; salt < RETRIES && adopted == null; salt++) {
+                    Set<String> candidate = flipped(from, d, salt);
+                    if (acceptable(candidate, exit)) {
+                        adopted = candidate;
+                    }
+                }
+                if (adopted == null && acceptable(from, exit)) {
+                    adopted = from; // the doors hold still tonight
+                }
+                if (adopted == null) {
+                    adopted = fromAtlas(d, exit, flipped(from, d, 0));
+                }
+            }
+            CALENDAR.add(java.util.Collections.unmodifiableSet(adopted));
+        }
+        return CALENDAR.get(day);
+    }
+
+    /** The toggles that move between one day and the next: the night's flips. */
+    public static Set<String> changedOvernight(int newDay) {
+        Set<String> out = new LinkedHashSet<>();
+        if (newDay <= 0) {
+            return out;
+        }
+        Set<String> before = dayState(newDay - 1);
+        Set<String> after = dayState(newDay);
+        for (String id : before) {
+            if (!after.contains(id)) {
+                out.add(id);
+            }
+        }
+        for (String id : after) {
+            if (!before.contains(id)) {
+                out.add(id);
+            }
+        }
+        return out;
+    }
+
+    /** Which portal a given day opens. Public for the lore book. */
+    public static String exitOn(int day) {
+        return exitFor(day);
+    }
+
     public synchronized MazeData.Layout ensure(int forSession, int forDay) {
-        if (forSession != session || forDay < day || open.isEmpty()) {
+        if (cached == null || day != forDay || session != forSession) {
             session = forSession;
-            day = 0;
-            exitId = exitFor(0);
+            day = forDay;
+            exitId = exitFor(forDay);
             open.clear();
-            // Day zero is validated like any other: if the base cannot reach
-            // the drawn portal (it misses most of the seven), flip toward one
-            // that can, or take the atlas outright.
-            Set<String> base = baseState();
-            Set<String> opening = null;
-            if (acceptable(base, exitId)) {
-                opening = base;
-            }
-            for (int salt = 0; salt < RETRIES && opening == null; salt++) {
-                Set<String> candidate = flipped(base, 0, salt);
-                if (acceptable(candidate, exitId)) {
-                    opening = candidate;
-                }
-            }
-            if (opening == null) {
-                opening = fromAtlas(0, exitId, base);
-            }
-            open.addAll(opening);
-            cached = null;
-            setDirty();
-        }
-        while (day < forDay) {
-            day++;
-            exitId = exitFor(day);
-            Set<String> adopted = null;
-            for (int salt = 0; salt < RETRIES && adopted == null; salt++) {
-                Set<String> candidate = flipped(open, day, salt);
-                if (acceptable(candidate, exitId)) {
-                    adopted = candidate;
-                }
-            }
-            if (adopted == null && acceptable(open, exitId)) {
-                adopted = new LinkedHashSet<>(open); // the doors hold still tonight
-            }
-            if (adopted == null) {
-                adopted = fromAtlas(day, exitId, flipped(open, day, 0));
-            }
-            open.clear();
-            open.addAll(adopted);
-            cached = null;
-            setDirty();
-        }
-        if (cached == null) {
+            open.addAll(dayState(forDay));
             // Named by day alone: the calendar is the same in every game, so
             // everything keyed off the name (breach picks, reshape detection)
             // repeats with it.
-            cached = new MazeData.Layout("doors_day_" + day, exitId, 0,
+            cached = new MazeData.Layout("doors_day_" + forDay, exitId, 0,
                     List.copyOf(open));
+            setDirty();
         }
         return cached;
     }

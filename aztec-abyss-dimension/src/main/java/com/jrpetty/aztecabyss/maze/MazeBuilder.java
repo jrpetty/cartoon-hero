@@ -732,6 +732,47 @@ public final class MazeBuilder {
     public static void openEdge(ServerLevel level, int cx, int cz, int nx, int nz, RandomSource rng) {
         writeHalf(level, cx, cz, nx, nz, true, rng);
         writeHalf(level, nx, nz, cx, cz, true, rng);
+        rememberCarved(cx, cz, nx, nz);
+    }
+
+    // ------------------------------------------------------------------
+    // Carve bookkeeping, for the reshape diff
+    // ------------------------------------------------------------------
+
+    /**
+     * Toggle doors the carve has physically opened since the last reshape.
+     *
+     * <p>The nightly reshape writes only the doors whose state changed - but the
+     * route carve opens walls by force, including doors the state says are shut.
+     * Without this ledger a diffed reshape would skip them as "unchanged" and
+     * yesterday's carved shortcuts would quietly stay open forever, drifting the
+     * maze further from its calendar every day.
+     */
+    private static final java.util.Set<String> CARVED_TOGGLES = new java.util.LinkedHashSet<>();
+    private static java.util.Map<String, String> edgeToToggle;
+
+    private static void rememberCarved(int cx, int cz, int nx, int nz) {
+        if (edgeToToggle == null) {
+            edgeToToggle = new java.util.HashMap<>();
+            for (MazeData.TogglePoint tp : MazeData.togglePoints().values()) {
+                int[] c = parseEdge(tp.edge());
+                if (c != null) {
+                    edgeToToggle.put(c[0] + "," + c[1] + ">" + c[2] + "," + c[3], tp.id());
+                    edgeToToggle.put(c[2] + "," + c[3] + ">" + c[0] + "," + c[1], tp.id());
+                }
+            }
+        }
+        String id = edgeToToggle.get(cx + "," + cz + ">" + nx + "," + nz);
+        if (id != null) {
+            CARVED_TOGGLES.add(id);
+        }
+    }
+
+    /** Hands over the ledger and clears it - called once per reshape. */
+    public static java.util.Set<String> drainCarvedToggles() {
+        java.util.Set<String> out = new java.util.LinkedHashSet<>(CARVED_TOGGLES);
+        CARVED_TOGGLES.clear();
+        return out;
     }
 
     /**

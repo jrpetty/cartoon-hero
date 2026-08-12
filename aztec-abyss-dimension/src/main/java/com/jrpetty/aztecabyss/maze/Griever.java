@@ -159,6 +159,9 @@ public final class Griever {
         return mob;
     }
 
+    /** PersistentData key for which kind of Griever this one is. */
+    public static final String KIND = "AztecGrieverKind";
+
     /** Turns a spider into a Griever. */
     private static void dress(ServerLevel level, Mob mob) {
         mob.getPersistentData().putBoolean(TAG, true);
@@ -166,15 +169,29 @@ public final class Griever {
         mob.setCustomName(Component.literal("§4§lGRIEVER"));
         mob.setCustomNameVisible(false);
 
+        // One pack, three silhouettes. Half are the standard; a quarter are
+        // skitterers - fast, fragile, small enough to feel like vermin; a
+        // quarter are bulls - slow, armoured, filling the corridor wall to
+        // wall. The tunings matter less than the sounds: in a maze you hear
+        // before you see, and hearing WHICH one is coming is information.
+        int roll = level.random.nextInt(4);
+        String kind = roll == 0 ? "skitterer" : roll == 1 ? "bull" : "griever";
+        mob.getPersistentData().putString(KIND, kind);
+        double healthMul = kind.equals("skitterer") ? 0.55 : kind.equals("bull") ? 1.8 : 1.0;
+        double speedMul = kind.equals("skitterer") ? 1.30 : kind.equals("bull") ? 0.78 : 1.0;
+        double damageMul = kind.equals("skitterer") ? 0.7 : kind.equals("bull") ? 1.5 : 1.0;
+        double size = kind.equals("skitterer") ? 1.6 : kind.equals("bull") ? 3.0 : 2.4;
+
         // Scaled to the day it was born on. Speed climbs at a quarter of the
         // rate and stops at a quarter over baseline: a Griever that outruns a
         // sprinting runner by a wide margin is not harder, it is unplayable.
         double hard = dayScale(level);
-        set(mob, Attributes.MAX_HEALTH, AbyssConfig.GRIEVER_HEALTH.get() * hard);
+        set(mob, Attributes.MAX_HEALTH, AbyssConfig.GRIEVER_HEALTH.get() * hard * healthMul);
         set(mob, Attributes.MOVEMENT_SPEED,
-                AbyssConfig.GRIEVER_SPEED.get() * Math.min(1.25, 1.0 + (hard - 1.0) * 0.25));
-        set(mob, Attributes.ATTACK_DAMAGE, AbyssConfig.GRIEVER_DAMAGE.get() * hard);
-        set(mob, Attributes.KNOCKBACK_RESISTANCE, 0.7);
+                AbyssConfig.GRIEVER_SPEED.get() * Math.min(1.25, 1.0 + (hard - 1.0) * 0.25)
+                        * speedMul);
+        set(mob, Attributes.ATTACK_DAMAGE, AbyssConfig.GRIEVER_DAMAGE.get() * hard * damageMul);
+        set(mob, Attributes.KNOCKBACK_RESISTANCE, kind.equals("bull") ? 1.0 : 0.7);
         // It must be able to cross the map to reach you; a corridor maze is no
         // place for a mob that loses interest after sixteen blocks.
         set(mob, Attributes.FOLLOW_RANGE, 96.0);
@@ -184,7 +201,7 @@ public final class Griever {
         // four-wide corridor is read as an obstacle before it is read as an enemy.
         AttributeInstance scale = mob.getAttribute(Attributes.SCALE);
         if (scale != null) {
-            scale.setBaseValue(2.4);
+            scale.setBaseValue(size);
         }
         // It does not stagger and it does not drown, and it steps up a full block
         // without slowing - a chase that ends because the thing chasing you caught
@@ -416,6 +433,16 @@ public final class Griever {
             level.playSound(null, g.blockPosition(),
                     rng.nextBoolean() ? SoundEvents.WARDEN_ANGRY : SoundEvents.WARDEN_EMERGE,
                     SoundSource.HOSTILE, 1.6F, 0.6F + rng.nextFloat() * 0.2F);
+            // On top of the standard call, each kind adds its own tell - so a
+            // listener in the dark knows not just that one is near, but which.
+            String kind = g.getPersistentData().getString(KIND);
+            if ("skitterer".equals(kind)) {
+                level.playSound(null, g.blockPosition(), SoundEvents.SPIDER_AMBIENT,
+                        SoundSource.HOSTILE, 1.4F, 1.5F + rng.nextFloat() * 0.3F);
+            } else if ("bull".equals(kind)) {
+                level.playSound(null, g.blockPosition(), SoundEvents.RAVAGER_AMBIENT,
+                        SoundSource.HOSTILE, 1.8F, 0.4F + rng.nextFloat() * 0.1F);
+            }
         }
     }
 
