@@ -43,6 +43,12 @@ behaviour that was already there · **docs**
   wall the portal stands in. The maze's schedule is fixed, so the previous
   group's diary genuinely predicts tomorrow. Lore that is also intel, worth
   carrying home because it is true.
+- **change** **The notes dry out three days at a time.** A volume covers today
+  and the two nights after it — a book that named every portal for the whole
+  game made finding the camp once into solving the game. Return on a later day
+  and the lectern hands over the newly legible pages ("the ink beyond here has
+  run"), so the camp is somewhere you go *back* to, through corridors that
+  have moved since last time.
 - **change** **The midnight reshape writes ~25× fewer blocks.** With a fixed
   calendar only about eight doors move a night, so the reshape now writes only
   the doors whose state changed — plus any door the route carve physically

@@ -682,7 +682,20 @@ public final class DeadGlade {
                 }
             }
         }
+        int today = MazeClock.get(level).day();
         if (fresh == 0) {
+            // The survey is spent, but the notes keep drying: a return visit on
+            // a later day hands over the newly legible pages. The walk back out
+            // here is the price of the next three days of intel.
+            if (who.getPersistentData().getInt(NOTES_DAY) < today + 1) {
+                who.getPersistentData().putInt(NOTES_DAY, today + 1);
+                who.getInventory().placeItemBackInInventory(loreBook(today));
+                who.displayClientMessage(Component.literal(
+                        "§6✦ More of the notes have dried. §7The next days are legible."), false);
+                level.playSound(null, who.blockPosition(), SoundEvents.BOOK_PAGE_TURN,
+                        SoundSource.BLOCKS, 1.0F, 0.8F);
+                return true;
+            }
             who.displayClientMessage(Component.literal(
                     "§7You have already read these. §8Nothing here you do not know."), true);
             return false;
@@ -698,7 +711,8 @@ public final class DeadGlade {
         // Charting is a Runner's trade, so it pays a Runner's day.
         MazeDayWork.get(level).add(level, who, MazeJobs.RUNNER, Math.min(fresh, 40));
         // And the real prize: the last group kept notes, and the maze repeats.
-        who.getInventory().placeItemBackInInventory(loreBook());
+        who.getPersistentData().putInt(NOTES_DAY, today + 1);
+        who.getInventory().placeItemBackInInventory(loreBook(today));
         who.displayClientMessage(Component.literal(
                 "§6✦ Among the charts: a bound notebook. §7The last group kept notes."), false);
         return true;
@@ -708,15 +722,26 @@ public final class DeadGlade {
     // The Last Group's Notes
     // ------------------------------------------------------------------
 
+    /** PersistentData key: one more than the last day a Notes volume was handed over. */
+    private static final String NOTES_DAY = "aztecabyss_notes_day";
+
+    /** How many days of the calendar one volume of the notes covers. */
+    private static final int NOTES_WINDOW = 3;
+
     /**
-     * The lectern's second reward: a written book, one page per day, quoting
-     * the door calendar. The maze's schedule is fixed - day three is day three
-     * in every game - so the previous group's diary genuinely predicts
-     * tomorrow. It reads as lore and functions as intel, which is the best
-     * kind of reward: the words are only worth carrying home because they are
-     * true.
+     * The lectern's second reward: a written book quoting the door calendar.
+     * The maze's schedule is fixed - day three is day three in every game -
+     * so the previous group's diary genuinely predicts tomorrow. It reads as
+     * lore and functions as intel, which is the best kind of reward: the
+     * words are only worth carrying home because they are true.
+     *
+     * <p>Only a three-day window is legible per visit - today and the two
+     * nights after it. A book that named every portal for the whole game made
+     * finding the camp once into solving the game; a diary that keeps drying
+     * makes the camp somewhere you go BACK to, through corridors that have
+     * moved since last time.
      */
-    private static ItemStack loreBook() {
+    private static ItemStack loreBook(int fromDay) {
         java.util.List<net.minecraft.server.network.Filterable<Component>> pages =
                 new java.util.ArrayList<>();
         pages.add(net.minecraft.server.network.Filterable.passThrough(Component.literal(
@@ -725,7 +750,9 @@ public final class DeadGlade {
                         + " mornings.\n\nNobody believed us either.\n\n   - the ones"
                         + " before")));
         int limit = Math.max(1, com.jrpetty.aztecabyss.config.AbyssConfig.MAZE_DAY_LIMIT.get());
-        for (int day = 0; day < limit; day++) {
+        int first = Math.max(0, Math.min(fromDay, limit - 1));
+        int last = Math.min(limit - 1, first + NOTES_WINDOW - 1);
+        for (int day = first; day <= last; day++) {
             StringBuilder page = new StringBuilder();
             page.append("DAY ").append(day + 1).append("\n\n");
             if (day == 0) {
@@ -768,13 +795,20 @@ public final class DeadGlade {
             pages.add(net.minecraft.server.network.Filterable.passThrough(
                     Component.literal(page.toString())));
         }
-        pages.add(net.minecraft.server.network.Filterable.passThrough(Component.literal(
-                "If you are reading this, we did not carry it out.\n\nCarry it out.")));
+        if (last < limit - 1) {
+            // The mechanic, said in the fiction's voice: come back for more.
+            pages.add(net.minecraft.server.network.Filterable.passThrough(Component.literal(
+                    "The ink beyond here has run.\n\nDamp gets into everything in this"
+                            + " place.\n\nCome back when more has dried.")));
+        } else {
+            pages.add(net.minecraft.server.network.Filterable.passThrough(Component.literal(
+                    "If you are reading this, we did not carry it out.\n\nCarry it out.")));
+        }
         ItemStack book = new ItemStack(net.minecraft.world.item.Items.WRITTEN_BOOK);
         book.set(net.minecraft.core.component.DataComponents.WRITTEN_BOOK_CONTENT,
                 new net.minecraft.world.item.component.WrittenBookContent(
                         net.minecraft.server.network.Filterable.passThrough(
-                                "The Last Group's Notes"),
+                                "The Last Group's Notes, days " + (first + 1) + "-" + (last + 1)),
                         "the ones before", 0, pages, true));
         return book;
     }
