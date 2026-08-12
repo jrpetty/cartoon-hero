@@ -180,11 +180,10 @@ public final class MazeEvents {
         if (charts.mark(cellX, cellZ)) {
             jobs.award(player, MazeJobs.BUILDER, 3);
             if (jobs.level(player.getUUID()) >= MazeJobs.MAX_LEVEL) {
-                // With the layout, or a level 4 Builder's mark charts the cell
-                // for the union and never appears on the chart anybody is
-                // actually looking at.
-                MazeData.Layout today = MazeRuntime.todaysLayout(level);
-                charts.chart(player.getUUID(), cellX, cellZ, today == null ? null : today.name());
+                // Union chart only: the maze is one layout with moving doors
+                // now, and a chart named after the night would be a new chart
+                // every day, each stale by morning.
+                charts.chart(player.getUUID(), cellX, cellZ, null);
             }
         }
     }
@@ -460,16 +459,6 @@ public final class MazeEvents {
         if (event.getHand() != net.minecraft.world.InteractionHand.MAIN_HAND) {
             return;
         }
-        if (event.getPos().equals(ChartFloor.dial())) {
-            ChartFloor.cycle(level, p);
-            event.setCanceled(true);
-            return;
-        }
-        if (event.getPos().equals(ChartFloor.zoomDial())) {
-            ChartFloor.zoomCycle(level, p);
-            event.setCanceled(true);
-            return;
-        }
         // The Dead Glade's charts. The one thing out there worth walking to
         // that is not the way out.
         if (event.getPos().equals(DeadGlade.lectern())) {
@@ -511,7 +500,6 @@ public final class MazeEvents {
                 .then(Commands.literal("status").executes(ctx -> status(ctx.getSource())))
                 .then(Commands.literal("section").executes(ctx -> section(ctx.getSource())))
                 .then(Commands.literal("map").executes(ctx -> chart(ctx.getSource())))
-                .then(Commands.literal("chart").executes(ctx -> turnChart(ctx.getSource())))
                 .then(Commands.literal("job")
                         .executes(ctx -> jobInfo(ctx.getSource()))
                         .then(Commands.literal(MazeJobs.RUNNER)
@@ -717,17 +705,6 @@ public final class MazeEvents {
                 "§8█ yours   ▓ brought back by others   §e✚§8 marked   · unknown   ▒ the Glade"), false);
         src.sendSuccess(() -> Component.literal(
                 "§8The Chart Floor in the Glade shows the same thing, walkable, live."), false);
-        return 1;
-    }
-
-    /** Turns the page on the Chart Floor from wherever you are standing. */
-    private static int turnChart(CommandSourceStack src) {
-        ServerPlayer player = src.getPlayer();
-        if (player == null || !isMaze(src.getLevel())) {
-            src.sendFailure(Component.literal("Only in the maze."));
-            return 0;
-        }
-        ChartFloor.cycle(src.getLevel(), player);
         return 1;
     }
 

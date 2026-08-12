@@ -108,8 +108,10 @@ public final class MazeNotes {
         if (mine == null || mine.isEmpty() || level.getServer() == null) {
             return;
         }
-        MazeData.Layout layout = MazeRuntime.todaysLayout(level);
-        int fresh = commit(level, who, mine, layout == null ? null : layout.name());
+        // Union chart only. The maze is one layout with doors that move, so a
+        // chart per night would be a new chart every single day, each obsolete
+        // by morning - and MazeCharts would grow one BitSet per day forever.
+        int fresh = commit(level, who, mine, null);
         if (fresh <= 0) {
             return;
         }
@@ -169,9 +171,7 @@ public final class MazeNotes {
         if (mine == null || mine.isEmpty()) {
             return;
         }
-        MazeData.Layout layout = MazeRuntime.todaysLayout(level);
-        ItemStack notes = create(mine, layout == null ? "" : layout.name(),
-                who.getGameProfile().getName());
+        ItemStack notes = create(mine, "", who.getGameProfile().getName());
         Block.popResource(level, who.blockPosition(), notes);
         who.displayClientMessage(Component.literal(
                 "§4✖ Your survey fell with you. §7" + mine.size()

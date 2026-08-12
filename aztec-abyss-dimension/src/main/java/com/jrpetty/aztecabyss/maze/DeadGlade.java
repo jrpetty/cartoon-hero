@@ -663,8 +663,6 @@ public final class DeadGlade {
             return false;
         }
         MazeCharts charts = MazeCharts.get(level.getServer());
-        MazeData.Layout layout = MazeRuntime.todaysLayout(level);
-        String name = layout == null ? null : layout.name();
         int cellX = centreX() / MazeData.CELL;
         int cellZ = centreZ() / MazeData.CELL;
 
@@ -679,7 +677,7 @@ public final class DeadGlade {
                 if (MazeData.inGlade(x, z)) {
                     continue;
                 }
-                if (charts.chart(who.getUUID(), x, z, name)) {
+                if (charts.chart(who.getUUID(), x, z, null)) {
                     fresh++;
                 }
             }

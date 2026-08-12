@@ -137,8 +137,9 @@ public final class MazeBuilder {
      * <p>12: the Chart Floor gained its lens.
      * <p>13: both clearings got three blocks of soil instead of one.
      * <p>14: the Chart Floor got its legend.
+     * <p>15: the Chart Floor became the lake.
      */
-    private static final int GEOMETRY_VERSION = 14;
+    private static final int GEOMETRY_VERSION = 15;
 
     /** One distinctive block per version, so the marker is readable in-world. */
     private static final BlockState[] VERSION_BLOCKS = {
@@ -162,6 +163,7 @@ public final class MazeBuilder {
             // Fifteenth entry for version 14 - the list has to grow with the
             // number or the modulo wraps a new version onto an old marker.
             Blocks.CRYING_OBSIDIAN.defaultBlockState(),
+            Blocks.SEA_LANTERN.defaultBlockState(),
     };
 
     private static BlockState versionBlock() {
@@ -799,8 +801,10 @@ public final class MazeBuilder {
             if (nx < 0 || nz < 0 || nx >= MazeData.GRID || nz >= MazeData.GRID) {
                 break;
             }
-            if (MazeData.inGlade(nx, nz)) {
-                // Never tunnel back through the clearing; sidestep instead.
+            // Never tunnel through the clearing, and never through the Dead
+            // Glade either - the carve would smash the camp's wall ring open.
+            // Sidestep on the other axis instead.
+            if (MazeData.inGlade(nx, nz) || DeadGlade.coversCell(nx, nz)) {
                 if (stepX && dz != 0) {
                     nx = cx;
                     nz = cz + dz;
@@ -810,7 +814,7 @@ public final class MazeBuilder {
                 } else {
                     break;
                 }
-                if (MazeData.inGlade(nx, nz)) {
+                if (MazeData.inGlade(nx, nz) || DeadGlade.coversCell(nx, nz)) {
                     break;
                 }
             }

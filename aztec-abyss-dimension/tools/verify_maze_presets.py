@@ -1,50 +1,27 @@
-"""Verify all seven maze presets the way the game actually builds them.
+"""Simulate the breathing maze exactly as MazeDoors builds it, and prove the
+one promise that matters: EVERY day, all four Glade doors reach the portal.
 
-Two sources of connectivity, and they matter separately:
-  1. the dataset  - baseOpenEdges plus the day's toggle points
-  2. carveRoute   - four corridors cut from the Glade doors to the day's exit,
-                    at build time, by construction
-
-carveRoute is the load-bearing one: it has three `break` statements that abandon
-the walk, and nothing checks whether it arrived. This replicates it bit for bit,
-including Deco.hash's 32-bit overflow and String.hashCode, and reports whether
-each route actually lands on the exit.
+The old seven-preset rotation is gone. The maze is one layout now, and every
+midnight roughly ten per cent of its two hundred doors flip. This replicates
+the shipped algorithm bit for bit - Deco.hash's 32-bit overflow, the sorted
+toggle order, the flip selection, the retry ladder - so what passes here is
+what runs in game.
 """
 import json
 from collections import deque
 
 GRID, GLADE_MIN, GLADE_MAX = 96, 40, 55
-# The Dead Glade is carved out of the corridors after they are stamped, so its
-# cells are open ground and its perimeter walls are gone. It can only ADD
-# connectivity, but the presets are re-checked with it in place regardless.
+DOORS = [(48, 39), (56, 48), (47, 56), (39, 47)]
 DEAD_X, DEAD_Z, DEAD_SPAN = 16, 70, 10
-
-
-def in_dead_glade(x, z):
-    return DEAD_X <= x < DEAD_X + DEAD_SPAN and DEAD_Z <= z < DEAD_Z + DEAD_SPAN
-
-
-DEAD_BREACHES = 3
-DEAD_PER_SIDE = DEAD_SPAN
-DEAD_CANDIDATES = DEAD_PER_SIDE * 4
-
-
-def dead_candidate_outside(i):
-    """Mirrors DeadGlade.candidateOutside exactly."""
-    k, s = i % DEAD_PER_SIDE, i // DEAD_PER_SIDE
-    if s == 0:
-        return (DEAD_X - 1, DEAD_Z + k)
-    if s == 1:
-        return (DEAD_X + DEAD_SPAN, DEAD_Z + k)
-    if s == 2:
-        return (DEAD_X + k, DEAD_Z - 1)
-    return (DEAD_X + k, DEAD_Z + DEAD_SPAN)
-DOOR_CELLS = [(48, 39), (56, 48), (47, 56), (39, 47)]
+FLIP_DIVISOR, RETRIES = 10, 8
+M32 = 0xFFFFFFFF
 
 d = json.load(open('src/main/resources/data/aztecabyss/maze/maze_config_v2.json'))
-base, tps, exits, layouts = set(d['baseOpenEdges']), d['togglePoints'], d['exits'], d['layouts']
-
-M32 = 0xFFFFFFFF
+base_edges = set(d['baseOpenEdges'])
+tps = d['togglePoints']
+exit_ids = sorted(d['exits'].keys())          # PortalAnnex.EXIT_IDS order
+exits = d['exits']
+layouts = d['layouts']
 
 
 def i32(v):
@@ -52,258 +29,257 @@ def i32(v):
     return v - (1 << 32) if v >= (1 << 31) else v
 
 
-def jhash(x, y, z, salt):
+def deco_hash(x, y, z, salt):
     h = i32(x * 374761393 + y * 668265263 + z * 1274126177 + salt * 1013904223)
     h = i32((h ^ ((h & M32) >> 13)) * 1274126177)
     return i32(h ^ ((h & M32) >> 16))
-
-
-def hash_unit(x, y, z, salt):
-    return ((jhash(x, y, z, salt) & M32) >> 8) / float(1 << 24)
-
-
-def str_hash(s):
-    h = 0
-    for ch in s:
-        h = i32(31 * h + ord(ch))
-    return h
 
 
 def in_glade(x, z):
     return GLADE_MIN <= x <= GLADE_MAX and GLADE_MIN <= z <= GLADE_MAX
 
 
-def sign(v):
-    return (v > 0) - (v < 0)
+def in_camp(x, z):
+    return DEAD_X <= x < DEAD_X + DEAD_SPAN and DEAD_Z <= z < DEAD_Z + DEAD_SPAN
 
 
-def carve_route(fx, fz, tx, tz, salt):
-    """Exactly MazeBuilder.carveRoute. Returns (edges opened, final cell, why it stopped)."""
-    edges, cx, cz, guard = set(), fx, fz, 0
-    while (cx != tx or cz != tz) and guard < GRID * 4:
-        guard += 1
-        dx, dz = sign(tx - cx), sign(tz - cz)
-        if dx == 0:
-            step_x = False
-        elif dz == 0:
-            step_x = True
-        else:
-            step_x = hash_unit(cx, salt, cz, salt) < 0.5
-        nx, nz = (cx + dx, cz) if step_x else (cx, cz + dz)
-        if nx < 0 or nz < 0 or nx >= GRID or nz >= GRID:
-            return edges, (cx, cz), "hit the rim"
-        if in_glade(nx, nz):
-            if step_x and dz != 0:
-                nx, nz = cx, cz + dz
-            elif not step_x and dx != 0:
-                nx, nz = cx + dx, cz
-            else:
-                return edges, (cx, cz), "boxed in by the Glade"
-            if in_glade(nx, nz):
-                return edges, (cx, cz), "sidestep still in the Glade"
-        edges.add(((cx, cz), (nx, nz)))
-        edges.add(((nx, nz), (cx, cz)))
-        cx, cz = nx, nz
-    if cx == tx and cz == tz:
-        return edges, (cx, cz), "arrived"
-    return edges, (cx, cz), "ran out of guard"
-
-
-def opened_for(lay):
-    out = set()
-    for tid in lay['open']:
-        tp = tps.get(tid)
-        if tp:
-            out.add(tp['edge'])
-            a, b = tp['edge'].split('>')
-            out.add(f"{b}>{a}")
-    return out
-
-
-def is_open(ax, az, bx, bz, opened, carved):
-    # Either end standing in the ruined camp means the wall between them is gone.
-    if in_dead_glade(ax, az) or in_dead_glade(bx, bz):
+def frozen(tid):
+    tp = tps.get(tid)
+    if tp is None:
         return True
-    if ((ax, az), (bx, bz)) in carved:
-        return True
-    a, b = f"{ax},{az}>{bx},{bz}", f"{bx},{bz}>{ax},{az}"
-    return a in base or b in base or a in opened or b in opened
+    for end in tp['edge'].split('>'):
+        x, z = map(int, end.split(','))
+        if in_camp(x, z):
+            return True
+    return False
 
 
-def reach(opened, carved, starts=None):
-    starts = starts or DOOR_CELLS
-    dist = {c: 0 for c in starts}
-    q = deque(starts)
-    while q:
-        x, z = q.popleft()
-        for dx, dz in ((0, -1), (0, 1), (-1, 0), (1, 0)):
-            nx, nz = x + dx, z + dz
-            if not (0 <= nx < GRID and 0 <= nz < GRID) or (nx, nz) in dist:
-                continue
-            if in_glade(nx, nz) or not is_open(x, z, nx, nz, opened, carved):
-                continue
-            dist[(nx, nz)] = dist[(x, z)] + 1
-            q.append((nx, nz))
-    return dist
+SORTED_IDS = sorted(tps.keys())
+BASE_STATE = frozenset(t for t in layouts[0]['open'] if not frozen(t))
+# MazeDoors.ATLAS_NAME: the authored layout the ladder falls back to. It must
+# reach ALL seven portals with the camp solid, or the whole ladder is built on
+# sand - asserted below, so a dataset change that breaks it fails loudly here.
+ATLAS_NAME = 'day_6'
+ATLAS_STATE = frozenset(
+    t for lay in layouts if lay.get('name') == ATLAS_NAME
+    for t in lay['open'] if not frozen(t))
+assert ATLAS_STATE, f"atlas layout {ATLAS_NAME!r} missing from dataset"
 
 
-print("=" * 76)
-print("PART 1 — from EACH DOOR, does the dataset alone reach the exit?")
-print("        (this is exactly the check MazeData.exitReachable makes)")
-print("=" * 76)
-print(f"{'preset':8} {'exit':7} {'cell':>10}  {'door1':>6} {'door2':>6} {'door3':>6} {'door4':>6}")
-dataset_ok = []
-for lay in layouts:
-    opened = opened_for(lay)
-    ex = exits[lay['exit']]
-    t = (ex['cell'][0], ex['cell'][1])
-    row = f"{lay['name']:8} {lay['exit']:7} {str(t):>10}  "
-    for door in DOOR_CELLS:
-        ok = t in reach(opened, set(), starts=[door])
-        dataset_ok.append(ok)
-        row += f"{'YES' if ok else '**NO**':>6} "
-    print(row)
+def exit_for(session, day):
+    h = deco_hash(session, day, 0x0E17, 0x5EED) & 0x7FFFFFFF
+    return exit_ids[h % len(exit_ids)]
 
-print()
-print("=" * 76)
-print("PART 2 — does carveRoute actually ARRIVE? (four doors x seven presets)")
-print("=" * 76)
-all_arrived = True
-for lay in layouts:
-    ex = exits[lay['exit']]
-    t = (ex['cell'][0], ex['cell'][1])
-    base_salt = str_hash(lay['name'])
-    line = f"{lay['name']:8} -> {str(t):>10}  "
-    for i, door in enumerate(DOOR_CELLS, start=1):
-        _, end, why = carve_route(door[0], door[1], t[0], t[1], i32(base_salt + i * 7919))
-        good = why == "arrived"
-        all_arrived &= good
-        line += f"[{'OK' if good else why}] "
-    print(line)
 
-print()
-print("=" * 76)
-print("PART 3 — dataset + carving together (what a player actually walks)")
-print("=" * 76)
-print(f"{'preset':8} {'solved':>8} {'steps':>6} {'reachable':>10} {'perfect':>8}")
-reach_sets, all_solved = {}, True
-for lay in layouts:
-    opened = opened_for(lay)
-    ex = exits[lay['exit']]
-    t = (ex['cell'][0], ex['cell'][1])
-    base_salt = str_hash(lay['name'])
-    carved = set()
-    for i, door in enumerate(DOOR_CELLS, start=1):
-        e, _, _ = carve_route(door[0], door[1], t[0], t[1], i32(base_salt + i * 7919))
-        carved |= e
-    dist = reach(opened, carved)
-    ok = t in dist
-    all_solved &= ok
-    reach_sets[lay['name']] = (set(dist), dist)
-    print(f"{lay['name']:8} {'YES' if ok else '** NO **':>8} {dist.get(t, -1):>6} "
-          f"{len(dist):>10} {lay['perfectRouteBlocks']:>8}")
-
-print()
-print("=" * 76)
-print("PART 4 — are they different enough to tell apart?")
-print("=" * 76)
-names = [l['name'] for l in layouts]
-print("Percentage of walkable cells that differ between each pair:")
-print(f"{'':8}" + "".join(f"{n:>8}" for n in names))
-worst = 100.0
-for a in names:
-    row = f"{a:8}"
-    for b in names:
-        if a == b:
-            row += f"{'-':>8}"
+def flipped(from_state, session, day, salt):
+    want = max(1, len(SORTED_IDS) // FLIP_DIVISOR)
+    nxt = set(from_state)
+    chosen = set()
+    i = 0
+    while len(chosen) < want and i < want * 6:
+        tid = SORTED_IDS[(deco_hash(session, day, salt, i) & 0x7FFFFFFF) % len(SORTED_IDS)]
+        i += 1
+        if frozen(tid) or tid in chosen:
             continue
-        ra, rb = reach_sets[a][0], reach_sets[b][0]
-        pct = len(ra ^ rb) / len(ra | rb) * 100
-        worst = min(worst, pct)
-        row += f"{pct:>7.1f}%"
-    print(row)
-
-print()
-print(f"Closest any two presets get: {worst:.1f}% of walkable cells differ")
-print()
-print("Distance from each door to that day's exit, in cells:")
-print(f"{'preset':8}" + "".join(f"{'door' + str(i):>9}" for i in range(1, 5)))
-for lay in layouts:
-    ex = exits[lay['exit']]
-    t = (ex['cell'][0], ex['cell'][1])
-    _, dist = reach_sets[lay['name']]
-    row = f"{lay['name']:8}"
-    for door in DOOR_CELLS:
-        sub = deque([door])
-        row += f"{dist.get(t, -1):>9}"
-    print(row)
-
-print()
-print("=" * 76)
-print(f"every door reaches its exit unaided : {all(dataset_ok)}  <- if True, the carve fallback never fires")
-print(f"every carved route arrives     : {all_arrived}")
-print(f"combined solves all seven      : {all_solved}")
-print("=" * 76)
+        chosen.add(tid)
+        if tid in nxt:
+            nxt.remove(tid)
+        else:
+            nxt.add(tid)
+    return frozenset(nxt)
 
 
-# ---------------------------------------------------------------------------
-# The Dead Glade is walled, and the way in moves with the preset. The thing that
-# has to hold: every preset must leave at least one breach opening onto corridor
-# a runner can actually reach from a Glade door.
-# ---------------------------------------------------------------------------
-print()
-print("=" * 76)
-print("PART 5 — is the Dead Glade enterable on every preset?")
-print("=" * 76)
+def is_open(ax, az, bx, bz, state):
+    a, b = f"{ax},{az}>{bx},{bz}", f"{bx},{bz}>{ax},{az}"
+    if a in base_edges or b in base_edges:
+        return True
+    for tid in state:                         # mirrors MazeData.isOpen's scan
+        edge = tps[tid]['edge']
+        if edge == a or edge == b:
+            return True
+    return False
 
 
-def doors_reach(opened):
-    """Reachable cells with the camp sealed, as DeadGlade.reachableFromDoors does."""
-    seen = set(DOOR_CELLS)
-    q = deque(DOOR_CELLS)
+def solvable(state, exit_id):
+    """MazeData.exitReachable from each door: BFS with the Glade skipped and
+    the Dead Glade treated as SOLID - its wall ring physically seals those
+    cells bar a few one-block breaches, so a route that only exists through
+    the camp is not a route."""
+    target = tuple(exits[exit_id]['cell'])
+    # Precompute open-edge lookup for speed (semantically identical) —
+    # BOTH directions of every edge, base and toggled alike.
+    open_edges = set()
+    for e in base_edges:
+        a, b = e.split('>')
+        open_edges.add(e)
+        open_edges.add(f"{b}>{a}")
+    for tid in state:
+        e = tps[tid]['edge']
+        a, b = e.split('>')
+        open_edges.add(e)
+        open_edges.add(f"{b}>{a}")
+
+    def open_(ax, az, bx, bz):
+        return f"{ax},{az}>{bx},{bz}" in open_edges
+
+    for door in DOORS:
+        seen = {door}
+        q = deque([door])
+        ok = False
+        while q:
+            x, z = q.popleft()
+            if (x, z) == target:
+                ok = True
+                break
+            for dx, dz in ((0, -1), (0, 1), (-1, 0), (1, 0)):
+                n = (x + dx, z + dz)
+                if not (0 <= n[0] < GRID and 0 <= n[1] < GRID) or n in seen:
+                    continue
+                if in_glade(*n) or in_camp(*n) or not open_(x, z, n[0], n[1]):
+                    continue
+                seen.add(n)
+                q.append(n)
+        if not ok:
+            return False
+    return True
+
+
+def breaches_enterable(state):
+    """DeadGlade.breachesFor: at least one reachable breach candidate."""
+    open_edges = set(base_edges)
+    for tid in state:
+        e = tps[tid]['edge']
+        a, b = e.split('>')
+        open_edges.add(e)
+        open_edges.add(f"{b}>{a}")
+    seen = set(DOORS)
+    q = deque(DOORS)
     while q:
         x, z = q.popleft()
         for dx, dz in ((0, -1), (0, 1), (-1, 0), (1, 0)):
             n = (x + dx, z + dz)
             if not (0 <= n[0] < GRID and 0 <= n[1] < GRID) or n in seen:
                 continue
-            if in_glade(*n) or in_dead_glade(*n):
+            if in_glade(*n) or in_camp(*n):
                 continue
-            a = f"{x},{z}>{n[0]},{n[1]}"
-            b = f"{n[0]},{n[1]}>{x},{z}"
-            if not (a in base or b in base or a in opened or b in opened):
+            if f"{x},{z}>{n[0]},{n[1]}" not in open_edges \
+                    and f"{n[0]},{n[1]}>{x},{z}" not in open_edges:
                 continue
             seen.add(n)
             q.append(n)
-    return seen
+    for k in range(DEAD_SPAN):
+        for out in ((DEAD_X - 1, DEAD_Z + k), (DEAD_X + DEAD_SPAN, DEAD_Z + k),
+                    (DEAD_X + k, DEAD_Z - 1), (DEAD_X + k, DEAD_Z + DEAD_SPAN)):
+            if out in seen:
+                return True
+    return False
 
 
-print(f"{'preset':8} {'usable':>7} {'chosen breaches':>34}")
-sets, enterable = {}, True
-for lay in layouts:
-    reach = doors_reach(opened_for(lay))
-    usable = [i for i in range(DEAD_CANDIDATES) if dead_candidate_outside(i) in reach]
-    h = str_hash(lay['name']) & 0x7FFFFFFF
-    picked = []
-    if usable:
-        faces = []
-        for i in usable:
-            f = i // DEAD_PER_SIDE
-            if f not in faces:
-                faces.append(f)
-        for n in range(DEAD_BREACHES):
-            face = faces[(h + n) % len(faces)]
-            onface = [i for i in usable if i // DEAD_PER_SIDE == face and i not in picked]
-            if not onface:
-                continue
-            picked.append(onface[(h + n * 3) % len(onface)])
-    sets[lay['name']] = frozenset(picked)
-    enterable &= len(picked) > 0
-    faces = "".join("WENS"[i // DEAD_PER_SIDE] for i in picked)
-    print(f"{lay['name']:8} {len(usable):>7} {str(sorted(picked)) + '  ' + faces:>34}")
+# ---------------------------------------------------------------------------
+print("=" * 76)
+print("THE BREATHING MAZE — MazeDoors simulated over many sessions")
+print("=" * 76)
 
-pairs = [(a, b) for i, a in enumerate(sets) for b in list(sets)[i + 1:]]
-same = sum(1 for a, b in pairs if sets[a] == sets[b])
+for _e in exit_ids:
+    assert solvable(ATLAS_STATE, _e), \
+        f"atlas {ATLAS_NAME} cannot reach {_e} with the camp solid"
+assert breaches_enterable(ATLAS_STATE), f"atlas {ATLAS_NAME} seals the camp"
+print(f"atlas ({ATLAS_NAME}) reaches all {len(exit_ids)} portals camp-solid : OK")
+
+SESSIONS = range(1, 6)
+DAYS = 15
+total = held = based = carve_needed = 0
+flip_sizes = []
+exit_seen = {}
+camp_ok = True
+
+def acceptable(state, exit_id):
+    """MazeDoors.acceptable: portal reachable from every door, camp open."""
+    return solvable(state, exit_id) and breaches_enterable(state)
+
+
+def from_atlas(session, day, exit_id, last_resort):
+    """MazeDoors.fromAtlas: salted flips of the atlas, then the atlas itself."""
+    for salt in range(RETRIES):
+        cand = flipped(ATLAS_STATE, session, day, RETRIES + salt)
+        if acceptable(cand, exit_id):
+            return cand, False
+    if acceptable(ATLAS_STATE, exit_id):
+        return ATLAS_STATE, False
+    return last_resort, True
+
+
+for session in SESSIONS:
+    state = None
+    for day in range(DAYS):
+        total += 1
+        exit_id = exit_for(session, day)
+        exit_seen[exit_id] = exit_seen.get(exit_id, 0) + 1
+        if day == 0:
+            # Day zero validated like any other: base, else flips of base,
+            # else the atlas (the layout proven good for all seven portals).
+            adopted = None
+            if acceptable(BASE_STATE, exit_id):
+                adopted = BASE_STATE
+            for salt in range(RETRIES):
+                if adopted is not None:
+                    break
+                cand = flipped(BASE_STATE, session, 0, salt)
+                if acceptable(cand, exit_id):
+                    adopted = cand
+            if adopted is None:
+                adopted, carved = from_atlas(session, 0, exit_id, BASE_STATE)
+                if carved:
+                    carve_needed += 1
+                else:
+                    based += 1
+        else:
+            adopted = None
+            for salt in range(RETRIES):
+                cand = flipped(state, session, day, salt)
+                if acceptable(cand, exit_id):
+                    adopted = cand
+                    break
+            if adopted is None and acceptable(state, exit_id):
+                adopted = state
+                held += 1
+            if adopted is None:
+                adopted, carved = from_atlas(session, day, exit_id,
+                                             flipped(state, session, day, 0))
+                if carved:
+                    carve_needed += 1
+                else:
+                    based += 1
+            flip_sizes.append(len(adopted ^ state))
+        assert acceptable(adopted, exit_id) or carve_needed, \
+            f"UNSOLVABLE session {session} day {day}"
+        if not breaches_enterable(adopted):
+            camp_ok = False
+            print(f"  !! camp sealed on session {session} day {day}")
+        state = adopted
+
+print(f"days simulated                  : {total}")
+print(f"solvable by the flip roll       : {total - len(SESSIONS) - held - based - carve_needed}"
+      f" of {total - len(SESSIONS)} reshapes")
+print(f"doors held still (fallback 2)   : {held}")
+print(f"fell back to the atlas (rung 3) : {based}")
+print(f"needed the physical carve       : {carve_needed}  <- must be 0")
+if flip_sizes:
+    print(f"doors moved per night           : min {min(flip_sizes)}"
+          f" avg {sum(flip_sizes)/len(flip_sizes):.1f} max {max(flip_sizes)}"
+          f"  (of {len(SORTED_IDS)} toggles)")
+print(f"portal distribution over {total} days : "
+      + "  ".join(f"{k.split('_')[1]}:{v}" for k, v in sorted(exit_seen.items())))
+repeats = 0
+for session in SESSIONS:
+    prev = None
+    for day in range(DAYS):
+        e = exit_for(session, day)
+        if e == prev:
+            repeats += 1
+        prev = e
+print(f"portal stayed put next morning  : {repeats} times  (allowed, on purpose)")
+print(f"Dead Glade enterable every day  : {camp_ok}")
 print()
-print(f"every preset can be entered      : {enterable}")
-print(f"presets sharing a breach set     : {same} of {len(pairs)}")
+ok = carve_needed == 0 and camp_ok
+print("VERDICT:", "PASS — a route stands every single day" if ok else "** FAIL **")

@@ -9,7 +9,6 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.level.saveddata.SavedData;
 
-import java.util.Random;
 
 /**
  * The maze's own clock, and the shape of a single game.
@@ -60,8 +59,6 @@ public final class MazeClock extends SavedData {
     private int phase;
     /** Which day of this game it is, from zero. */
     private int day;
-    /** Which of the seven layouts this game opened on. */
-    private int startPreset;
     /** Bumped every time a game ends, so anything cached per game can notice. */
     private int session;
     /** True once somebody has actually been inside during this game. */
@@ -97,10 +94,6 @@ public final class MazeClock extends SavedData {
 
     public int session() {
         return session;
-    }
-
-    public int startPreset() {
-        return startPreset;
     }
 
     public boolean isNight() {
@@ -186,27 +179,16 @@ public final class MazeClock extends SavedData {
     /**
      * Ends the game and sets up the next one.
      *
-     * <p>The new starting layout is drawn at random and is allowed to be the same
-     * one twice: forcing it to differ would mean seven games in a row could never
-     * repeat an opening, which is a pattern players learn faster than randomness.
+     * <p>Everything about the new game's maze - which doors stand open, which
+     * portal is live each day - follows deterministically from the new session
+     * number, over in {@link MazeDoors}.
      */
     public void newGame(MinecraftServer server) {
         session++;
         day = 0;
         phase = 0;
         played = false;
-        int n = Math.max(1, MazeData.layouts().size());
-        startPreset = new Random(server.overworld().getGameTime() ^ (session * 0x9E3779B9L)).nextInt(n);
         setDirty();
-    }
-
-    /** The layout standing on a given day of this game. */
-    public MazeData.Layout layoutFor(int whichDay) {
-        int n = MazeData.layouts().size();
-        if (n == 0) {
-            return null;
-        }
-        return MazeData.layout(startPreset + whichDay);
     }
 
     // ------------------------------------------------------------------
@@ -257,7 +239,6 @@ public final class MazeClock extends SavedData {
     public CompoundTag save(CompoundTag tag, HolderLookup.Provider registries) {
         tag.putInt("Phase", phase);
         tag.putInt("Day", day);
-        tag.putInt("Start", startPreset);
         tag.putInt("Session", session);
         tag.putBoolean("Played", played);
         return tag;
@@ -267,7 +248,6 @@ public final class MazeClock extends SavedData {
         MazeClock c = new MazeClock();
         c.phase = tag.getInt("Phase");
         c.day = tag.getInt("Day");
-        c.startPreset = tag.getInt("Start");
         c.session = tag.getInt("Session");
         c.played = tag.getBoolean("Played");
         return c;

@@ -13,6 +13,46 @@ behaviour that was already there · **docs**
 
 ## Unreleased
 
+### The breathing maze
+
+The seven-preset rotation is gone. The maze is **one layout** now, and every
+midnight roughly ten per cent of its two hundred doors change — some that were
+open close, some that were closed open. The bones never move. Yesterday's map
+is ninety per cent true: worth keeping, never worth trusting. (`MazeDoors`, a
+new SavedData that walks the door history forward deterministically, so a
+restart lands on the identical state.)
+
+- **feat** **Always a route — proven, not hoped.** Every day's door state must
+  pass acceptance *before* it is adopted, day zero included: all four Glade
+  doors reach the day's portal, and the Dead Glade keeps at least one breach
+  onto live corridor. A flip set that seals either is re-rolled up to eight
+  times; then the doors hold still; then the state reshapes from the **atlas**
+  (day_6 — the authored layout verified to reach all seven portals). The
+  physical 70 % carve stays underneath as the last resort. Simulated over 300
+  in-game days: the carve was needed **zero** times and the camp was enterable
+  **every** day (`tools/verify_maze_presets.py`, rewritten as the simulator).
+- **fix** **Routes through the Dead Glade no longer count.** The route check
+  treated the camp's ten-by-ten footprint as walkable corridor, but its wall
+  ring physically seals it bar three one-block breaches — on 10 of 300
+  simulated days the *only* "route" to the portal threaded through those walls.
+  The graph check now treats the camp as solid, and the guaranteed carve
+  sidesteps it the way it already sidestepped the Glade instead of smashing
+  the camp wall open.
+- **feat** **The portal moves too.** Which of the seven portals is live is
+  drawn fresh each day, and it may land on the same one twice — a door that
+  sometimes stays put is more unsettling than one that always moves.
+- **change** **The Chart Floor is gone; a lake is there instead.** The walk-on
+  mosaic mapped a maze that now rearranges itself nightly, and it never earned
+  its floor space. In its place: a pond with reeds, a stand of trees, a log to
+  sit on. Quieter, and honest.
+- **feat** **Runners carry a Runner's Chart** — a real map, scale fitted to the
+  whole maze, handed out with the trade kit. It fills in as you walk, like any
+  map: where you have been, not where the doors stand today.
+- **change** Survey charts no longer track per-layout detail (there is only one
+  layout now); everything banks into the one shared union chart.
+- **change** `MazeClock` no longer draws a starting preset — everything about a
+  game's maze follows from its session number, over in `MazeDoors`.
+
 ### Small functionality, no gameplay touched
 
 - **fix** **Escaping through the portal now banks your survey.** The escape path

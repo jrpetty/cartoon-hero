@@ -229,7 +229,11 @@ public final class MazeData {
                 if (nx < 0 || nz < 0 || nx >= GRID || nz >= GRID) {
                     continue;
                 }
-                if (seen[nz * GRID + nx] || inGlade(nx, nz)) {
+                // The Dead Glade counts as solid: its wall ring physically
+                // seals those cells bar a few one-block breaches, so a route
+                // that only exists through the camp is not a route. The check
+                // must be at least as strict as the world it vouches for.
+                if (seen[nz * GRID + nx] || inGlade(nx, nz) || DeadGlade.coversCell(nx, nz)) {
                     continue;
                 }
                 if (!isOpen(at[0], at[1], nx, nz, layout)) {

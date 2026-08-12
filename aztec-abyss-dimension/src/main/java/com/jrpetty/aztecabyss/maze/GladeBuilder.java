@@ -45,11 +45,88 @@ public final class GladeBuilder {
         bellTower(level);
         MazeStations.build(level);
         doorFrames(level);
-        // Last, and it clears its own airspace first: the woods scatter trees
-        // across this quarter of the clearing and a plaza laid under them would
-        // leave forty floating trunks.
-        clearFor(level, ChartFloor.originX() - 1, ChartFloor.originZ() - 1, ChartFloor.SIZE + 2);
-        ChartFloor.build(level);
+        // Last, and it clears its own airspace first, exactly as the map floor
+        // it replaces did: the woods scatter trees across this quarter and
+        // anything laid under them without clearing would keep forty floating
+        // canopies.
+        lakeside(level, rng);
+    }
+
+    /**
+     * The lake, where the Chart Floor used to be.
+     *
+     * <p>The walk-on mosaic is gone - the Runners carry a real chart now, and a
+     * map you hold beats a map you stand on. What the south-west quarter gets
+     * back is the one thing the Glade never had: somewhere that is not work. A
+     * kidney of open water, reeds on the shore, a birch-less little wood of its
+     * own, and a log to sit on facing the water. Camps have a spot like this or
+     * they are barracks.
+     */
+    private static void lakeside(ServerLevel level, RandomSource rng) {
+        int o = min() + 1;
+        int size = 43;
+        clearFor(level, o - 1, o - 1, size + 2);
+        // Fresh turf over the old plaza bed, three deep like everywhere else.
+        for (int x = o; x < o + size; x++) {
+            for (int z = o; z < o + size; z++) {
+                int h = Math.floorMod(x * 40503 ^ z * 26861, 100);
+                level.setBlock(new BlockPos(x, Y, z), h < 8
+                        ? Blocks.COARSE_DIRT.defaultBlockState()
+                        : Blocks.GRASS_BLOCK.defaultBlockState(), 2);
+                level.setBlock(new BlockPos(x, Y - 1, z), Blocks.DIRT.defaultBlockState(), 2);
+                level.setBlock(new BlockPos(x, Y - 2, z), Blocks.DIRT.defaultBlockState(), 2);
+            }
+        }
+        // The water: two overlapping rounds so the shore wobbles.
+        int c1x = o + 18, c1z = o + 15, c2x = o + 26, c2z = o + 22;
+        for (int x = o; x < o + size; x++) {
+            for (int z = o; z < o + size; z++) {
+                double d1 = Math.sqrt((x - c1x) * (x - c1x) + (double) (z - c1z) * (z - c1z));
+                double d2 = Math.sqrt((x - c2x) * (x - c2x) + (double) (z - c2z) * (z - c2z));
+                double d = Math.min(d1, d2) + rng.nextDouble() * 0.8;
+                if (d < 7.0) {
+                    level.setBlock(new BlockPos(x, Y, z), Blocks.WATER.defaultBlockState(), 2);
+                    // A shallow bowl: deeper in the middle, dirt underneath.
+                    level.setBlock(new BlockPos(x, Y - 1, z), d < 4.5
+                            ? Blocks.WATER.defaultBlockState()
+                            : Blocks.DIRT.defaultBlockState(), 2);
+                    level.setBlock(new BlockPos(x, Y - 2, z), Blocks.DIRT.defaultBlockState(), 2);
+                } else if (d < 8.4 && rng.nextInt(3) == 0) {
+                    // Reeds where the ground still touches water.
+                    int stalks = 2 + rng.nextInt(2);
+                    for (int dy = 1; dy <= stalks; dy++) {
+                        level.setBlock(new BlockPos(x, Y + dy, z),
+                                Blocks.SUGAR_CANE.defaultBlockState(), 2);
+                    }
+                }
+            }
+        }
+        // Its own stand of trees, kept off the water.
+        for (int i = 0; i < 12; i++) {
+            int x = o + 2 + rng.nextInt(size - 4);
+            int z = o + 2 + rng.nextInt(size - 4);
+            double d1 = Math.sqrt((x - c1x) * (x - c1x) + (double) (z - c1z) * (z - c1z));
+            double d2 = Math.sqrt((x - c2x) * (x - c2x) + (double) (z - c2z) * (z - c2z));
+            if (Math.min(d1, d2) > 10.0) {
+                tree(level, x, z, rng.nextInt(4) == 0, rng);
+            }
+        }
+        // A log to sit on, facing the water.
+        level.setBlock(new BlockPos(c1x - 9, Y + 1, c1z - 2), Blocks.OAK_LOG.defaultBlockState(), 2);
+        level.setBlock(new BlockPos(c1x - 9, Y + 1, c1z - 1), Blocks.OAK_LOG.defaultBlockState(), 2);
+        // Long grass and the odd poppy, because tended-wild reads warmer than mown.
+        for (int i = 0; i < 40; i++) {
+            int x = o + rng.nextInt(size);
+            int z = o + rng.nextInt(size);
+            BlockPos at = new BlockPos(x, Y + 1, z);
+            if (level.getBlockState(at).isAir()
+                    && level.getBlockState(at.below()).is(Blocks.GRASS_BLOCK)) {
+                level.setBlock(at, rng.nextInt(8) == 0
+                        ? Blocks.POPPY.defaultBlockState()
+                        : rng.nextInt(3) == 0 ? Blocks.TALL_GRASS.defaultBlockState()
+                        : Blocks.SHORT_GRASS.defaultBlockState(), 2);
+            }
+        }
     }
 
     private static int min() {

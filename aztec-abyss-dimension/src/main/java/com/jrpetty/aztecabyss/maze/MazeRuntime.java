@@ -120,7 +120,6 @@ public final class MazeRuntime {
         lastSeen.clear();
         walked.clear();
         secondWind.clear();
-        ChartFloor.reset();
         for (ServerBossEvent bar : BARS.values()) {
             bar.removeAllPlayers();
         }
@@ -155,7 +154,8 @@ public final class MazeRuntime {
     public static MazeData.Layout todaysLayout(ServerLevel level) {
         MazeClock c = MazeClock.get(level);
         int mid = MazeClock.dayTicks() + MazeClock.nightTicks() / 2;
-        return c.layoutFor(c.phase() >= mid ? c.day() + 1 : c.day());
+        return MazeDoors.get(level).ensure(c.session(),
+                c.phase() >= mid ? c.day() + 1 : c.day());
     }
 
     /**
@@ -323,7 +323,6 @@ public final class MazeRuntime {
         MazeSting.tick(level);
         tickEscape(level);
         MazeNight.tickWeather(level);
-        ChartFloor.refresh(level);
         GladeBuilder.refreshRoster(level);
         portalAmbience(level, want);
         tickRunners(level, t);
@@ -543,8 +542,6 @@ public final class MazeRuntime {
                 // that same moment, for the same reason: a survey nobody brought
                 // home did not happen.
                 MazeNotes.record(level, p, cellX, cellZ);
-                // The close chart follows whoever is actually out here.
-                ChartFloor.focusOn(cellX, cellZ);
             }
 
             if (inGlade) {
