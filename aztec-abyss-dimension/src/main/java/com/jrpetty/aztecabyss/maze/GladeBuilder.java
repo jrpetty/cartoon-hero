@@ -704,7 +704,8 @@ public final class GladeBuilder {
                     // they personally hold. The board is where you look to see
                     // who to ask about the north-east.
                     if (MazeJobs.RUNNER.equals(job)) {
-                        line += " §b" + MazeCharts.get(level).myPercent(p.getUUID()) + "%";
+                        line += " §b" + MazeCharts.get(level.getServer())
+                                .myPercent(p.getUUID()) + "%";
                     }
                     names.add(line);
                 }

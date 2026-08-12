@@ -11,8 +11,8 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.saveddata.SavedData;
+import net.minecraft.world.item.component.MapDecorations;
 import net.minecraft.world.level.saveddata.maps.MapDecorationTypes;
-import net.minecraft.world.level.saveddata.maps.MapDecorations;
 
 import java.util.HashMap;
 import java.util.LinkedHashSet;
@@ -58,7 +58,7 @@ public final class MazeWaypoints extends SavedData {
         who.displayClientMessage(Component.literal(
                 "§b✦ Waypoint set. §7It will show on every Runner's Chart."), true);
         if (MazeSkills.rankOf(level, who.getUUID(), "chartwright") >= 3) {
-            MazeCharts charts = MazeCharts.get(level);
+            MazeCharts charts = MazeCharts.get(level.getServer());
             int cx = at.getX() / MazeData.CELL;
             int cz = at.getZ() / MazeData.CELL;
             for (int dx = -1; dx <= 1; dx++) {
