@@ -35,10 +35,11 @@ import java.util.List;
  * <h2>Raid nights are part of the calendar</h2>
  *
  * <p>Like the doors and the portals, raid nights depend on the day number and
- * nothing else: gaps of two to five nights, drawn deterministically, the same
- * in every game. Veterans get to learn "day four is a raid night" and be
- * standing on the wall with torches when the first blow lands - which is
- * better play than a surprise, because the surprise only works once.
+ * nothing else: a small probe on night two, then full raids at gaps of two to
+ * five nights, drawn deterministically, the same in every game. Veterans get
+ * to learn "day four is a raid night" and be standing on the wall with
+ * torches when the first blow lands - which is better play than a surprise,
+ * because the surprise only works once.
  *
  * <h2>The wall always comes back</h2>
  *
@@ -81,6 +82,14 @@ public final class MazeRaid {
     // The calendar
     // ------------------------------------------------------------------
 
+    /**
+     * The probe: a small early raid, two nights in. Two raiders, a hole half
+     * the size, a smaller purse. It exists to teach - the group meets the
+     * battering, the cracks, the plugging, while the stakes are still low -
+     * so that night four's full raid finds them drilled rather than surprised.
+     */
+    private static final int PROBE_DAY = 2;
+
     /** Gap to the next raid night: two to five nights, fixed per step. */
     private static int gap(int k) {
         return 2 + (Deco.hash(SEED, k, 0x9A9, 0x5EED) & 0x7FFFFFFF) % 4;
@@ -88,12 +97,20 @@ public final class MazeRaid {
 
     /** Whether this day's night is a raid night. Same answer in every game. */
     public static boolean raidNight(int day) {
+        if (day == PROBE_DAY) {
+            return true;
+        }
         int next = gap(0);
         int k = 1;
         while (next < day) {
             next += gap(k++);
         }
         return next == day;
+    }
+
+    /** True while the running raid is the small day-two probe. */
+    private static boolean probe() {
+        return raidDay == PROBE_DAY;
     }
 
     // ------------------------------------------------------------------
@@ -164,7 +181,7 @@ public final class MazeRaid {
         face = (Deco.hash(SEED, day, 0xFACE, 1) & 0x7FFFFFFF) % 4;
         alongCell = pickCell(day);
 
-        int count = Math.min(6, 2 + level.players().size());
+        int count = probe() ? 2 : Math.min(6, 2 + level.players().size());
         int made = 0;
         for (int i = 0; i < count * 4 && made < count; i++) {
             BlockPos spot = outsideSpot(level, day, i);
@@ -174,9 +191,12 @@ public final class MazeRaid {
         }
 
         BlockPos mid = segmentCentre();
-        level.playSound(null, mid, SoundEvents.WARDEN_ROAR, SoundSource.HOSTILE, 3.0F, 0.45F);
-        broadcast(level, "§4§l⚠ THE WALL. §r§cSomething is battering the "
-                + faceName() + " wall of the Glade.");
+        level.playSound(null, mid, SoundEvents.WARDEN_ROAR, SoundSource.HOSTILE,
+                probe() ? 2.0F : 3.0F, 0.45F);
+        broadcast(level, probe()
+                ? "§c⚠ Something is testing the " + faceName() + " wall of the Glade."
+                : "§4§l⚠ THE WALL. §r§cSomething is battering the "
+                        + faceName() + " wall of the Glade.");
         for (ServerPlayer p : level.players()) {
             level.playSound(null, p.blockPosition(), SoundEvents.BELL_BLOCK,
                     SoundSource.BLOCKS, 1.4F, 0.6F);
@@ -285,11 +305,12 @@ public final class MazeRaid {
         if (!everBreached) {
             // The wall held the whole way through: a little extra into the pot
             // for everyone who stood the night, on top of the kill bounties.
+            int purse = probe() ? 3 : 5;
             MazeOrders orders = MazeOrders.get(level);
             for (ServerPlayer p : level.players()) {
-                orders.addBonus(p.getUUID(), 5);
+                orders.addBonus(p.getUUID(), purse);
             }
-            broadcast(level, "§a§l✦ THE WALL HELD. §r§7+5 credits each into the pot.");
+            broadcast(level, "§a§l✦ THE WALL HELD. §r§7+" + purse + " credits each into the pot.");
         } else {
             broadcast(level, "§a✦ The pack is dead. §7The hole stands until dawn.");
         }
@@ -357,12 +378,18 @@ public final class MazeRaid {
         return out;
     }
 
-    /** The hole itself: four wide, three high, at the foot of the segment. */
+    /**
+     * The hole itself, at the foot of the segment: four wide and three high
+     * on a full raid, two by two on the probe - a crack you defend with a
+     * handful of blocks, not a gate.
+     */
     private static List<BlockPos> hole() {
         List<BlockPos> out = new ArrayList<>();
-        int a0 = alongCell * MazeData.CELL + 1;
-        for (int a = a0; a < a0 + 4; a++) {
-            for (int y = MazeData.WALL_BASE_Y; y <= MazeData.WALL_BASE_Y + 2; y++) {
+        int wide = probe() ? 2 : 4;
+        int high = probe() ? 1 : 2;
+        int a0 = alongCell * MazeData.CELL + (probe() ? 2 : 1);
+        for (int a = a0; a < a0 + wide; a++) {
+            for (int y = MazeData.WALL_BASE_Y; y <= MazeData.WALL_BASE_Y + high; y++) {
                 out.add(onFace(a, y));
             }
         }

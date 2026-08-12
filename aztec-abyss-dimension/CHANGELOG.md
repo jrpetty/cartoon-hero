@@ -65,11 +65,15 @@ stretch of the Glade wall and batters it — audibly, for the better part of a
 minute, cracked courses spreading before anything gives — and if nobody does
 anything about it, the wall opens and the night comes inside.
 
-- **feat** **Raid nights are part of the fixed calendar**: nights **4, 6 and 8**
-  (gaps of two to five nights, drawn deterministically, the same in every
-  game). The first three nights stay quiet while a group finds its feet; the
-  last raid lands on deadline night. Veterans get to be standing on the wall
-  with torches when the first blow hits.
+- **feat** **Raid nights are part of the fixed calendar**: a small **probe on
+  night 2**, then full raids on nights **4, 6 and 8** (gaps of two to five
+  nights, drawn deterministically, the same in every game). The last raid
+  lands on deadline night. Veterans get to be standing on the wall with
+  torches when the first blow hits.
+- **feat** **The night-2 probe teaches the mechanic while the stakes are
+  low**: two raiders, a two-by-two crack instead of a four-wide breach, a
+  quieter warning ("something is testing the west wall"), and a +3 purse for
+  holding it. Night four's full raid finds the group drilled, not surprised.
 - **feat** **The defence has two jobs.** Fighters kill the pack — every raider
   pays the standing Griever kill bounty. Builders **plug the breach with
   blocks**: the hole is the one stretch of wall that accepts placement (the
