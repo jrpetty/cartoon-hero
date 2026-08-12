@@ -18,17 +18,14 @@ public class SensorScreen extends GadgetScreen {
     @Override
     protected void init() {
         super.init();
-        addRenderableWidget(Button.builder(Component.literal("−"), b ->
-                        send(be.getBlockPos(), "sensor_radius", be.getRadius() - 2))
-                .bounds(left + 128, top + 24, 20, 16).build());
-        addRenderableWidget(Button.builder(Component.literal("+"), b ->
-                        send(be.getBlockPos(), "sensor_radius", be.getRadius() + 2))
-                .bounds(left + 152, top + 24, 20, 16).build());
+        addRenderableWidget(PanelButton.of(Component.literal("−"), b ->
+                        send(be.getBlockPos(), "sensor_radius", be.getRadius() - 2), left + 128, top + 24, 20, 16));
+        addRenderableWidget(PanelButton.of(Component.literal("+"), b ->
+                        send(be.getBlockPos(), "sensor_radius", be.getRadius() + 2), left + 152, top + 24, 20, 16));
         for (int i = 0; i < MODE_NAMES.length; i++) {
             final int idx = i;
-            addRenderableWidget(Button.builder(Component.literal(MODE_NAMES[i]), b ->
-                            send(be.getBlockPos(), "sensor_mode", idx))
-                    .bounds(left + 12 + i * 50, top + 62, 47, 16).build());
+            addRenderableWidget(PanelButton.of(Component.literal(MODE_NAMES[i]), b ->
+                            send(be.getBlockPos(), "sensor_mode", idx), left + 12 + i * 50, top + 62, 47, 16));
         }
     }
 

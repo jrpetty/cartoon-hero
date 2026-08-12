@@ -38,30 +38,28 @@ public class HubMonitorScreen extends GadgetScreen {
             CommandHubMonitorBlockEntity.Choice choice = all.get(i);
             int y = top + 34 + (i - start) * ROW_H;
             boolean showing = be.isShowing(choice);
-            addRenderableWidget(Button.builder(
+            addRenderableWidget(PanelButton.of(
                             Component.literal(showing ? "Showing" : "Show"), b -> {
                                 sendText(be.getBlockPos(), "hubmon_pick", choice.dim() + "@" + choice.pos());
                                 onClose();
-                            })
-                    .bounds(left + panelW - 76, y - 3, 64, 16)
-                    .build()).active = !showing;
+                            }, left + panelW - 76, y - 3, 64, 16)).active = !showing;
         }
 
         if (maxPage() > 0) {
-            addRenderableWidget(Button.builder(Component.literal("◀"), b -> {
+            addRenderableWidget(PanelButton.of(Component.literal("◀"), b -> {
                 page = Math.max(0, page - 1);
                 rebuildWidgets();
-            }).bounds(left + 12, top + panelH - 22, 20, 14).build());
-            addRenderableWidget(Button.builder(Component.literal("▶"), b -> {
+            }, left + 12, top + panelH - 22, 20, 14));
+            addRenderableWidget(PanelButton.of(Component.literal("▶"), b -> {
                 page = Math.min(maxPage(), page + 1);
                 rebuildWidgets();
-            }).bounds(left + 36, top + panelH - 22, 20, 14).build());
+            }, left + 36, top + panelH - 22, 20, 14));
         }
 
-        addRenderableWidget(Button.builder(Component.literal("Clear"), b -> {
+        addRenderableWidget(PanelButton.of(Component.literal("Clear"), b -> {
             sendText(be.getBlockPos(), "hubmon_pick", "");
             onClose();
-        }).bounds(left + panelW - 76, top + panelH - 22, 64, 14).build());
+        }, left + panelW - 76, top + panelH - 22, 64, 14));
     }
 
     @Override

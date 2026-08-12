@@ -66,9 +66,8 @@ public class TransferScreen extends GadgetScreen {
         nameField.setHint(Component.literal(sender ? "name this sender" : "name this receiver"));
         nameField.setValue(shownName);
         addRenderableWidget(nameField);
-        addRenderableWidget(Button.builder(Component.literal("Save"), b ->
-                        sendText(node.getBlockPos(), "set_name", nameField.getValue()))
-                .bounds(left + 172, top + NAME_Y, 56, 14).build());
+        addRenderableWidget(PanelButton.of(Component.literal("Save"), b ->
+                        sendText(node.getBlockPos(), "set_name", nameField.getValue()), left + 172, top + NAME_Y, 56, 14));
 
         if (sender) {
             // Eight digits, typed off the face of the receiver you want.
@@ -78,27 +77,24 @@ public class TransferScreen extends GadgetScreen {
             codeField.setHint(Component.literal("00000000"));
             codeField.setValue(node.getChannel());
             addRenderableWidget(codeField);
-            addRenderableWidget(Button.builder(Component.literal("Link"), b ->
-                            sendText(node.getBlockPos(), "transfer_code", codeField.getValue()))
-                    .bounds(left + 172, top + CODE_Y, 56, 14).build());
+            addRenderableWidget(PanelButton.of(Component.literal("Link"), b ->
+                            sendText(node.getBlockPos(), "transfer_code", codeField.getValue()), left + 172, top + CODE_Y, 56, 14));
         } else {
-            release = addRenderableWidget(Button.builder(Component.literal("Release"), b -> {
+            release = addRenderableWidget(PanelButton.of(Component.literal("Release"), b -> {
                         send(node.getBlockPos(), "transfer_release", 0);
                         rebuildWidgets();
-                    })
-                    .bounds(left + 172, top + CODE_Y + 2, 56, 14).build());
+                    }, left + 172, top + CODE_Y + 2, 56, 14));
         }
 
         boolean maxed = node.getTier() >= TransferNode.MAX_TIER;
-        upgrade = addRenderableWidget(Button.builder(
+        upgrade = addRenderableWidget(PanelButton.of(
                         Component.literal(maxed
                                 ? "Fully upgraded"
                                 : "Upgrade to level " + (node.getTier() + 1)),
                         b -> {
                             send(node.getBlockPos(), "transfer_upgrade", 0);
                             rebuildWidgets();
-                        })
-                .bounds(left + 12, top + BUTTON_Y, 216, 18).build());
+                        }, left + 12, top + BUTTON_Y, 216, 18));
     }
 
     @Override

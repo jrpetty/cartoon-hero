@@ -40,33 +40,31 @@ public class MonitorScreen extends GadgetScreen {
         nameField.setHint(Component.literal("name this monitor"));
         nameField.setValue(be.getCustomName());
         addRenderableWidget(nameField);
-        addRenderableWidget(Button.builder(Component.literal("Save"), b ->
-                        sendText(be.getBlockPos(), "set_name", nameField.getValue()))
-                .bounds(left + 168, top + 18, 60, 14).build());
+        addRenderableWidget(PanelButton.of(Component.literal("Save"), b ->
+                        sendText(be.getBlockPos(), "set_name", nameField.getValue()), left + 168, top + 18, 60, 14));
 
         // Tag mode has no list to edit, so it gets one button back to item mode.
         if (be.isTagMode()) {
-            addRenderableWidget(Button.builder(Component.literal("Clear tag"), b -> {
+            addRenderableWidget(PanelButton.of(Component.literal("Clear tag"), b -> {
                 send(be.getBlockPos(), "monitor_clear", 0);
                 rebuildWidgets();
-            }).bounds(left + 164, top + LIST_TOP - 3, 64, 14).build());
+            }, left + 164, top + LIST_TOP - 3, 64, 14));
         } else {
             List<Item> tracked = be.getTracked();
             for (int i = 0; i < tracked.size(); i++) {
                 String id = BuiltInRegistries.ITEM.getKey(tracked.get(i)).toString();
                 int y = top + LIST_TOP + i * ROW_H;
-                addRenderableWidget(Button.builder(Component.literal("✕"), b -> {
+                addRenderableWidget(PanelButton.of(Component.literal("✕"), b -> {
                     sendText(be.getBlockPos(), "monitor_untrack", id);
                     rebuildWidgets();
-                }).bounds(left + 210, y - 2, 14, 11).build());
+                }, left + 210, y - 2, 14, 11));
             }
         }
 
         for (int i = 0; i < StockMonitorBlockEntity.THRESHOLDS.length; i++) {
             final int value = StockMonitorBlockEntity.THRESHOLDS[i];
-            addRenderableWidget(Button.builder(Component.literal(String.valueOf(value)), b ->
-                            send(be.getBlockPos(), "monitor_threshold", value))
-                    .bounds(left + 12 + i * 31, top + ALERT_TOP + 12, 28, 14).build());
+            addRenderableWidget(PanelButton.of(Component.literal(String.valueOf(value)), b ->
+                            send(be.getBlockPos(), "monitor_threshold", value), left + 12 + i * 31, top + ALERT_TOP + 12, 28, 14));
         }
     }
 
@@ -76,6 +74,7 @@ public class MonitorScreen extends GadgetScreen {
         int x = left + 12;
         gfx.drawString(font, "Name", x, top + 22, DIM, false);
 
+        panel(gfx, left + 8, top + 36, left + panelW - 8, top + 62, 0xFF161A20);
         String stock = !be.hasContainer() ? "no container in front!"
                 : ItemCounterBlockEntity.fmt(be.getCount()) + " in stock";
         gfx.drawString(font, "Stock: " + stock, x, top + 40, be.hasContainer() ? AMBER : RED, false);

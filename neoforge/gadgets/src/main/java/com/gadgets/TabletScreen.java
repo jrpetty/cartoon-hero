@@ -40,7 +40,6 @@ public class TabletScreen extends GadgetScreen {
 
     private static final int CARD_BG = 0xFF161A20;
     private static final int TILE_BG = 0xFF1B2028;
-    private static final int WELL = 0xFF0C0F13;
 
     private EditBox codeField;
     private Button board;
@@ -73,17 +72,14 @@ public class TabletScreen extends GadgetScreen {
         addRenderableWidget(codeField);
         setInitialFocus(codeField);
 
-        addRenderableWidget(Button.builder(Component.literal("Link"), b -> link())
-                .bounds(left + 166, top + CODE_Y, 68, 14).build());
+        addRenderableWidget(PanelButton.of(Component.literal("Link"), b -> link(), left + 166, top + CODE_Y, 68, 14));
 
-        refresh = addRenderableWidget(Button.builder(Component.literal("Refresh"), b -> {
+        refresh = addRenderableWidget(PanelButton.of(Component.literal("Refresh"), b -> {
                     ClientHubReport.asked(ClientHubReport.code());
                     PacketDistributor.sendToServer(new HubReportPayload.Request(ClientHubReport.code()));
-                })
-                .bounds(left + 12, top + BUTTON_Y, 106, 18).build());
+                }, left + 12, top + BUTTON_Y, 106, 18));
 
-        board = addRenderableWidget(Button.builder(Component.literal("Open board"), b -> openBoard())
-                .bounds(left + 128, top + BUTTON_Y, 106, 18).build());
+        board = addRenderableWidget(PanelButton.of(Component.literal("Open board"), b -> openBoard(), left + 128, top + BUTTON_Y, 106, 18));
     }
 
     /** Write the typed code onto the held tablet, and ask with it in the same breath. */
@@ -300,13 +296,6 @@ public class TabletScreen extends GadgetScreen {
         gfx.pose().scale(scale, scale, 1F);
         gfx.drawString(font, value, 0, 0, colour, false);
         gfx.pose().popPose();
-    }
-
-    /** A recessed well with a hairline frame — the look shared with the gauges. */
-    private void panel(GuiGraphics gfx, int x0, int y0, int x1, int y1, int fill) {
-        gfx.fill(x0, y0, x1, y1, WELL);
-        gfx.fill(x0 + 1, y0 + 1, x1 - 1, y1 - 1, fill);
-        gfx.renderOutline(x0, y0, x1 - x0, y1 - y0, FRAME);
     }
 
     private static String trim(String text, int max) {

@@ -47,16 +47,15 @@ public class GaugeScreen extends GadgetScreen {
         nameField.setHint(Component.literal("name this gauge"));
         nameField.setValue(shownName);
         addRenderableWidget(nameField);
-        addRenderableWidget(Button.builder(Component.literal("Save"), b ->
-                        sendText(be.getBlockPos(), "set_name", nameField.getValue()))
-                .bounds(left + 178, top + NAME_Y, 60, 14).build());
+        addRenderableWidget(PanelButton.of(Component.literal("Save"), b ->
+                        sendText(be.getBlockPos(), "set_name", nameField.getValue()), left + 178, top + NAME_Y, 60, 14));
 
         for (int i = 0; i < HubGauge.THRESHOLDS.length; i++) {
             final int value = HubGauge.THRESHOLDS[i];
-            addRenderableWidget(Button.builder(Component.literal(value + "%"), b -> {
+            addRenderableWidget(PanelButton.of(Component.literal(value + "%"), b -> {
                 send(be.getBlockPos(), "gauge_threshold", value);
                 rebuildWidgets();
-            }).bounds(left + 12 + i * 46, top + THRESHOLD_Y + 12, 42, 14).build())
+            }, left + 12 + i * 46, top + THRESHOLD_Y + 12, 42, 14))
                     .active = be.getThreshold() != value;
         }
     }
@@ -72,6 +71,9 @@ public class GaugeScreen extends GadgetScreen {
         super.render(gfx, mouseX, mouseY, delta);
         int x = left + 12;
         gfx.drawString(font, "Name", x, top + NAME_Y + 4, DIM, false);
+
+        // The instrument's face: readout, bar and status share one recessed well.
+        panel(gfx, left + 8, top + READOUT_Y - 6, left + panelW - 8, top + STATUS_Y + 24, 0xFF161A20);
 
         if (!be.hasSource()) {
             gfx.drawString(font, "Nothing readable in front", x, top + READOUT_Y, RED, false);
@@ -97,6 +99,10 @@ public class GaugeScreen extends GadgetScreen {
             int filled = barW * Math.max(0, Math.min(100, percent)) / 100;
             if (filled > 0) {
                 gfx.fill(x, top + BAR_Y, x + filled, top + BAR_Y + BAR_H, colour);
+                // A lit top edge on the fill — liquid in a channel, not paint.
+                gfx.fill(x, top + BAR_Y, x + filled, top + BAR_Y + 2,
+                        be.isLow() ? 0xFFFF8A8A : 0xFFAEF2AE);
+                gfx.fill(x, top + BAR_Y + BAR_H - 2, x + filled, top + BAR_Y + BAR_H, 0x33000000);
             }
             for (int q = 1; q < 4; q++) {
                 int tx = x + barW * q / 4;

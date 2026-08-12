@@ -42,12 +42,12 @@ public class EnhancementScreen extends AbstractContainerScreen<EnhancementMenu> 
     @Override
     protected void init() {
         super.init();
-        enhanceButton = Button.builder(Component.literal("Enhance"), b -> {
+        enhanceButton = PanelButton.of(Component.literal("Enhance"), b -> {
             Minecraft client = Minecraft.getInstance();
             if (client.gameMode != null) {
                 client.gameMode.handleInventoryButtonClick(menu.containerId, EnhancementMenu.BUTTON_ENHANCE);
             }
-        }).bounds(leftPos + 96, topPos + 38, 68, 20).build();
+        }, leftPos + 96, topPos + 38, 68, 20);
         addRenderableWidget(enhanceButton);
     }
 

@@ -50,19 +50,17 @@ public class CounterScreen extends GadgetScreen {
         nameField.setHint(Component.literal("name this counter"));
         nameField.setValue(shownName);
         addRenderableWidget(nameField);
-        addRenderableWidget(Button.builder(Component.literal("Save"), b ->
-                        sendText(be.getBlockPos(), "set_name", nameField.getValue()))
-                .bounds(left + 168, top + NAME_Y, 60, 14).build());
+        addRenderableWidget(PanelButton.of(Component.literal("Save"), b ->
+                        sendText(be.getBlockPos(), "set_name", nameField.getValue()), left + 168, top + NAME_Y, 60, 14));
 
         // Which direction of movement counts.
         for (int i = 0; i < ItemCounterBlockEntity.COUNT_LABELS.length; i++) {
             final int mode = i;
-            addRenderableWidget(Button.builder(
+            addRenderableWidget(PanelButton.of(
                             Component.literal(ItemCounterBlockEntity.COUNT_LABELS[i]), b -> {
                                 send(be.getBlockPos(), "counter_direction", mode);
                                 rebuildWidgets();
-                            })
-                    .bounds(left + 12 + i * 72, top + DIR_Y + 12, 68, 14).build())
+                            }, left + 12 + i * 72, top + DIR_Y + 12, 68, 14))
                     .active = be.getCountMode() != i;
         }
 
@@ -70,23 +68,22 @@ public class CounterScreen extends GadgetScreen {
         List<Item> filter = be.getFilter();
         for (int i = 0; i < shownFilterRows(filter.size()); i++) {
             String id = BuiltInRegistries.ITEM.getKey(filter.get(i)).toString();
-            addRenderableWidget(Button.builder(Component.literal("✕"), b -> {
+            addRenderableWidget(PanelButton.of(Component.literal("✕"), b -> {
                 sendText(be.getBlockPos(), "counter_unfilter", id);
                 rebuildWidgets();
-            }).bounds(left + 210, top + FILTER_Y + 12 + i * 10 - 2, 14, 10).build());
+            }, left + 210, top + FILTER_Y + 12 + i * 10 - 2, 14, 10));
         }
         if (!filter.isEmpty()) {
-            addRenderableWidget(Button.builder(Component.literal("Count everything"), b -> {
+            addRenderableWidget(PanelButton.of(Component.literal("Count everything"), b -> {
                 send(be.getBlockPos(), "counter_unfilter_all", 0);
                 rebuildWidgets();
-            }).bounds(left + CLEAR_X, top + FILTER_Y - 2, 240 - CLEAR_X - 16, 12).build());
+            }, left + CLEAR_X, top + FILTER_Y - 2, 240 - CLEAR_X - 16, 12));
         }
 
         for (int i = 0; i < ItemCounterBlockEntity.THRESHOLDS.length; i++) {
             final int value = ItemCounterBlockEntity.THRESHOLDS[i];
-            addRenderableWidget(Button.builder(Component.literal(String.valueOf(value)), b ->
-                            send(be.getBlockPos(), "counter_threshold", value))
-                    .bounds(left + 12 + i * 36, top + PULSE_Y + 12, 33, 14).build());
+            addRenderableWidget(PanelButton.of(Component.literal(String.valueOf(value)), b ->
+                            send(be.getBlockPos(), "counter_threshold", value), left + 12 + i * 36, top + PULSE_Y + 12, 33, 14));
         }
         // Five modes across the panel's 216 usable pixels — the old 55-pixel
         // pitch fitted four and pushed the fifth off the right-hand edge.
@@ -94,16 +91,14 @@ public class CounterScreen extends GadgetScreen {
         int pitch = 216 / modes;
         for (int i = 0; i < modes; i++) {
             final int idx = i;
-            addRenderableWidget(Button.builder(Component.literal(ItemCounterBlockEntity.MODE_LABELS[i]), b -> {
+            addRenderableWidget(PanelButton.of(Component.literal(ItemCounterBlockEntity.MODE_LABELS[i]), b -> {
                         send(be.getBlockPos(), "counter_mode", idx);
                         rebuildWidgets();
-                    })
-                    .bounds(left + 12 + i * pitch, top + MODE_Y + 12, pitch - 3, 14).build())
+                    }, left + 12 + i * pitch, top + MODE_Y + 12, pitch - 3, 14))
                     .active = be.getDisplayMode() != i;
         }
-        addRenderableWidget(Button.builder(Component.literal("Reset statistics"), b ->
-                        send(be.getBlockPos(), "counter_reset", 0))
-                .bounds(left + 12, top + RESET_Y, 216, 16).build());
+        addRenderableWidget(PanelButton.of(Component.literal("Reset statistics"), b ->
+                        send(be.getBlockPos(), "counter_reset", 0), left + 12, top + RESET_Y, 216, 16));
     }
 
     @Override
@@ -119,6 +114,9 @@ public class CounterScreen extends GadgetScreen {
         super.render(gfx, mouseX, mouseY, delta);
         int x = left + 12;
         gfx.drawString(font, "Name", x, top + NAME_Y + 4, DIM, false);
+
+        // The live numbers sit in their own recessed well, like every gauge face.
+        panel(gfx, left + 8, top + STATS_Y - 5, left + panelW - 8, top + STATS_Y + 33, 0xFF161A20);
 
         gfx.drawString(font, "Rate  " + ItemCounterBlockEntity.fmt(be.getRateMin()) + " /min · "
                 + ItemCounterBlockEntity.fmt(be.getRateHour()) + " /hour", x, top + STATS_Y, AMBER, false);

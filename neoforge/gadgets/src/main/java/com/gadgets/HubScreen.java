@@ -163,27 +163,27 @@ public class HubScreen extends GadgetScreen {
         });
         addRenderableWidget(filterBox);
 
-        sortButton = addRenderableWidget(Button.builder(Component.literal("Sort: " + SORT_LABELS[sortMode]), b -> {
+        sortButton = addRenderableWidget(PanelButton.of(Component.literal("Sort: " + SORT_LABELS[sortMode]), b -> {
             sortMode = (sortMode + 1) % SORT_LABELS.length;
             page = 0;
-        }).bounds(left + panelW - 118, top + CONTROLS_TOP, 106, 14).build());
+        }, left + panelW - 118, top + CONTROLS_TOP, 106, 14));
 
-        viewButton = addRenderableWidget(Button.builder(Component.literal("Log"), b -> {
+        viewButton = addRenderableWidget(PanelButton.of(Component.literal("Log"), b -> {
             showLog = !showLog;
             armed = false;
-        }).bounds(left + 166, top + CONTROLS_TOP, 44, 14).build());
+        }, left + 166, top + CONTROLS_TOP, 44, 14));
 
-        prevButton = addRenderableWidget(Button.builder(Component.literal("◀"), b ->
-                setPage(Math.max(0, page() - 1))).bounds(left + 12, top + panelH - 24, 20, 14).build());
-        nextButton = addRenderableWidget(Button.builder(Component.literal("▶"), b ->
-                setPage(Math.min(maxPage(), page() + 1))).bounds(left + 36, top + panelH - 24, 20, 14).build());
+        prevButton = addRenderableWidget(PanelButton.of(Component.literal("◀"), b ->
+                setPage(Math.max(0, page() - 1)), left + 12, top + panelH - 24, 20, 14));
+        nextButton = addRenderableWidget(PanelButton.of(Component.literal("▶"), b ->
+                setPage(Math.min(maxPage(), page() + 1)), left + 36, top + panelH - 24, 20, 14));
 
         // Doubles as the log's clear button, since the two views never share a
         // moment: whichever is showing is the one this acts on.
         if (readOnly()) {
             return; // no clear-all, and no ✕ hit boxes either — see mouseClicked
         }
-        clearButton = addRenderableWidget(Button.builder(Component.literal("Disconnect all"), b -> {
+        clearButton = addRenderableWidget(PanelButton.of(Component.literal("Disconnect all"), b -> {
             if (showLog) {
                 send(be.getBlockPos(), "hub_log_clear", 0);
                 return;
@@ -194,7 +194,7 @@ public class HubScreen extends GadgetScreen {
             } else {
                 armed = true;
             }
-        }).bounds(left + panelW - 130, top + panelH - 24, 118, 14).build());
+        }, left + panelW - 130, top + panelH - 24, 118, 14));
     }
 
     /** The ✕ box for the row drawn at {@code slot} on the current page. */
