@@ -159,10 +159,13 @@ public final class MazeDayWork extends SavedData {
         int wasCredits = creditsFrom(before, quota);
         int nowCredits = creditsFrom(after, quota);
         if (nowCredits > wasCredits) {
+            // The delta, not the running total - "+18 to the pool" on a tick
+            // that added three misreads as eighteen arriving at once.
             player.displayClientMessage(Component.literal(
                     "§a✦ §7Day's work §f" + after + "§7/§f" + quota + " §8"
-                            + unitName(job) + " §7— §a+" + nowCredits + "§7 to the pool"
-                            + (after >= quota ? " §6(full day)" : "")), true);
+                            + unitName(job) + " §7— §a+" + (nowCredits - wasCredits)
+                            + "§7 to the pool (§f" + nowCredits + "§7 today"
+                            + (after >= quota ? ", §6full day§7" : "") + ")"), true);
         }
     }
 

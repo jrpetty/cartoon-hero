@@ -750,6 +750,26 @@ public final class DeadGlade {
                         + " mornings.\n\nNobody believed us either.\n\n   - the ones"
                         + " before")));
         int limit = Math.max(1, com.jrpetty.aztecabyss.config.AbyssConfig.MAZE_DAY_LIMIT.get());
+        // The raid forecast, in the fiction's voice, from the real calendar -
+        // so it stays true if the schedule is ever retuned. This page is in
+        // every volume: the wall is everyone's problem on every visit.
+        StringBuilder tested = new StringBuilder();
+        StringBuilder came = new StringBuilder();
+        for (int d = 0; d < limit; d++) {
+            if (!MazeRaid.raidNight(d)) {
+                continue;
+            }
+            StringBuilder onto = MazeRaid.probeNight(d) ? tested : came;
+            if (!onto.isEmpty()) {
+                onto.append(", and the ");
+            }
+            onto.append(ordinal(d + 1));
+        }
+        pages.add(net.minecraft.server.network.Filterable.passThrough(Component.literal(
+                "They tried the wall while we slept."
+                        + (tested.isEmpty() ? "" : "\n\nTested it on the " + tested + " night.")
+                        + (came.isEmpty() ? "" : "\n\nCame in strength on the " + came + ".")
+                        + "\n\nCount the nights. They do.")));
         int first = Math.max(0, Math.min(fromDay, limit - 1));
         int last = Math.min(limit - 1, first + NOTES_WINDOW - 1);
         for (int day = first; day <= last; day++) {
@@ -811,6 +831,23 @@ public final class DeadGlade {
                                 "The Last Group's Notes, days " + (first + 1) + "-" + (last + 1)),
                         "the ones before", 0, pages, true));
         return book;
+    }
+
+    /** "third", "fifth" - the notes count nights the way people do. */
+    private static String ordinal(int n) {
+        return switch (n) {
+            case 1 -> "first";
+            case 2 -> "second";
+            case 3 -> "third";
+            case 4 -> "fourth";
+            case 5 -> "fifth";
+            case 6 -> "sixth";
+            case 7 -> "seventh";
+            case 8 -> "eighth";
+            case 9 -> "ninth";
+            case 10 -> "tenth";
+            default -> n + "th";
+        };
     }
 
     /** Which quarter of the maze a toggle door stands in, by its first end. */

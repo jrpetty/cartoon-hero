@@ -228,7 +228,9 @@ public final class MazeRuntime {
         escapeUntil = 0L;
         escapees.clear();
         MazeDayWork.get(level).clearAll();
-        MazeOrders.get(level).setHeads(0);
+        // The whole ledger, not just the head count: unfilled slates and
+        // unspent bounty are per-game, and both used to leak into the next.
+        MazeOrders.get(level).resetAll();
         MazeBell.reset();
         MazeRaid.reset(level);
         MazeWaypoints.get(level).clearAll();
@@ -334,6 +336,7 @@ public final class MazeRuntime {
         portalAmbience(level, want);
         tickRunners(level, t);
         tickGrievers(level, t);
+        Griever.tickStalker(level, clock);
         if (level.getGameTime() % 100L == 0L) {
             // Every five seconds: sweep dead waypoints, repaint the charts.
             MazeWaypoints.get(level).refresh(level);
@@ -1229,6 +1232,9 @@ public final class MazeRuntime {
      */
     private static void tickGrievers(ServerLevel level, long t) {
         List<Mob> loaded = Griever.loaded(level);
+        // The day-stalker walks the corridors in daylight by design - the dawn
+        // sweep that clears the night pack must not clear it with them.
+        loaded.removeIf(g -> g.getPersistentData().getBoolean(Griever.STALKER));
         if (!isNight(t) || !AbyssConfig.GRIEVERS_ENABLED.get()) {
             // Dawn: whatever is left walks back to the corners it came out of,
             // and is cleared once it is there and out of everybody's way.

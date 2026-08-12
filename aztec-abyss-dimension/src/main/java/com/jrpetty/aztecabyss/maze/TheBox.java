@@ -93,6 +93,10 @@ public final class TheBox {
             fillOrders(level, day);
             return;
         }
+        // Use-it-or-lose-it starts on day zero, not day two: without this,
+        // work credits from the handout days piled up and quietly inflated
+        // the first real pool, contradicting the one rule the pool has.
+        MazeDayWork.get(level).clearAll();
 
         List<ItemStack> staples = staples(rng, heads, day);
         if (day == 0) {
@@ -140,33 +144,50 @@ public final class TheBox {
     private static void fillOrders(ServerLevel level, int day) {
         MazeOrders orders = MazeOrders.get(level);
         MazeSkills skills = MazeSkills.get(level);
-        int slot = 0;
+        // Everyone here this morning, and then everyone with a slate who is
+        // not. An order paid for out of the shared pot is owed whether its
+        // owner is standing at the cage, asleep in the real world, or waiting
+        // in the overworld - it used to be quietly destroyed for all three,
+        // because the loop only ever looked at who was in the dimension.
+        java.util.LinkedHashSet<java.util.UUID> everyone = new java.util.LinkedHashSet<>();
         for (ServerPlayer p : level.players()) {
+            everyone.add(p.getUUID());
+        }
+        everyone.addAll(orders.everyone());
+        int slot = 0;
+        for (java.util.UUID who : everyone) {
+            ServerPlayer p = level.getServer().getPlayerList().getPlayer(who);
             List<ItemStack> goods = new ArrayList<>();
             int spent = 0;
-            for (var line : orders.slate(p.getUUID()).entrySet()) {
+            for (var line : orders.slate(who).entrySet()) {
                 MazeOrders.Entry e = MazeOrders.entry(line.getKey());
                 if (e == null) {
                     continue;
                 }
                 goods.addAll(MazeOrders.build(e, line.getValue(),
-                        skills.rank(p.getUUID(), "dressing")));
+                        skills.rank(who, "dressing")));
                 spent += e.cost() * line.getValue();
             }
             boolean ordered = !goods.isEmpty();
+            String name = p != null ? p.getGameProfile().getName()
+                    : level.getServer().getProfileCache() == null ? "away"
+                    : level.getServer().getProfileCache().get(who)
+                            .map(com.mojang.authlib.GameProfile::getName).orElse("away");
             // Nothing ordered, nothing delivered. The crate still arrives and is
             // still yours; it is simply empty, which says what happened far more
             // plainly than no crate at all would. A consolation ration would make
             // the deadline advisory, and an advisory deadline is not one.
-            stock(level, orderSlot(slot++), p.getGameProfile().getName(),
+            stock(level, orderSlot(slot++), name,
                     ordered ? Blocks.LIGHT_GRAY_CONCRETE.defaultBlockState()
                             : Blocks.RED_CONCRETE.defaultBlockState(), goods);
-            final int paid = spent;
-            p.displayClientMessage(Component.literal(ordered
-                    ? "§6▲ The Box came up. §7Your order is in the cage — §f" + paid + "§7 points spent."
-                    : "§c▲ The Box came up empty for you. §7You filed no order last night."), false);
-            level.playSound(null, p.blockPosition(), SoundEvents.BEACON_ACTIVATE,
-                    SoundSource.BLOCKS, 1.0F, 0.7F);
+            if (p != null) {
+                final int paid = spent;
+                p.displayClientMessage(Component.literal(ordered
+                        ? "§6▲ The Box came up. §7Your order is in the cage — §f" + paid + "§7 points spent."
+                        : "§c▲ The Box came up empty for you. §7You filed no order last night."), false);
+                level.playSound(null, p.blockPosition(), SoundEvents.BEACON_ACTIVATE,
+                        SoundSource.BLOCKS, 1.0F, 0.7F);
+            }
         }
         // Yesterday closes: the head allowance and the day's work expire, an
         // unspent bounty rolls. Order matters - settle reads yesterday's work,

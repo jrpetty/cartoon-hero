@@ -391,6 +391,21 @@ public final class MazeOrders extends SavedData {
     }
 
     /**
+     * A new game starts from an empty ledger.
+     *
+     * <p>Without this, the previous game's unfilled slates survived the reset
+     * and were delivered on the next game's second morning - a crate of iron
+     * from a settlement that no longer exists - and bounty credit earned in
+     * one game spent in the next. Both halves of the economy are per-game.
+     */
+    public void resetAll() {
+        slates.clear();
+        bounty.clear();
+        heads = 0;
+        setDirty();
+    }
+
+    /**
      * Closes the day out once the Box has filled the slates.
      *
      * <h2>What expires and what does not</h2>
@@ -450,6 +465,11 @@ public final class MazeOrders extends SavedData {
         CompoundTag paid = new CompoundTag();
         bounty.forEach((id, n) -> paid.putInt(id.toString(), n));
         tag.put("Bonus", paid);
+        // The doc on the field promised this for a long time before the code
+        // kept it: without Heads on disk, a restart mid-day reloaded heads as
+        // zero, the pool collapsed to bounty-plus-work, and every order the
+        // Glade had already filed was suddenly refused as over budget.
+        tag.putInt("Heads", heads);
         return tag;
     }
 
@@ -477,6 +497,7 @@ public final class MazeOrders extends SavedData {
                 // Same.
             }
         }
+        out.heads = Math.max(0, tag.getInt("Heads"));
         return out;
     }
 

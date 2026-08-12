@@ -413,6 +413,150 @@ public final class Griever {
      * A sparse, directional cue so a Griever announces itself before it arrives.
      * Ridden off the runtime's existing once-a-second pass, so it costs nothing.
      */
+    // ------------------------------------------------------------------
+    // The day-stalker
+    // ------------------------------------------------------------------
+
+    /** PersistentData tag marking the one Griever that walks by day. */
+    public static final String STALKER = "AztecStalker";
+
+    /** Ticks of silence before a blind hunter loses the thread: six seconds. */
+    private static final int STALKER_MEMORY = 120;
+
+    private static int stalkerSpawnedDay = -1;
+    private static int stalkerDeadDay = -1;
+
+    /**
+     * The day-stalker: one Griever in the corridors while the sun is up.
+     *
+     * <p>Days used to be threatless - a Runner's only enemy was the clock,
+     * which makes a run a route-planning exercise rather than a place you are
+     * in. The stalker changes the texture of every daylight step without
+     * changing the odds much: it is <em>blind</em>. It acquires you by sound
+     * alone - sprint and it turns toward you, walk and it must be close,
+     * crouch and you do not exist - and it loses you again after six quiet
+     * seconds, because a blind thing chasing silence is just walking.
+     *
+     * <p>One per day, from the second day, and killing it buys the rest of
+     * the day quiet (plus the standing bounty). It does not exist at night -
+     * the night has its own population - and the dawn sweep spares it.
+     */
+    public static void tickStalker(ServerLevel level, MazeClock clock) {
+        List<Mob> stalkers = loaded(level);
+        stalkers.removeIf(g -> !g.getPersistentData().getBoolean(STALKER));
+        if (clock.isNight() || clock.day() < 1 || !AbyssConfig.GRIEVERS_ENABLED.get()) {
+            for (Mob s : stalkers) {
+                // Dusk: it goes down a hole like the rest of its kind come up.
+                level.sendParticles(net.minecraft.core.particles.ParticleTypes.LARGE_SMOKE,
+                        s.getX(), s.getY() + 0.8, s.getZ(), 20, 0.5, 0.7, 0.5, 0.02);
+                s.discard();
+            }
+            return;
+        }
+        int day = clock.day();
+        if (stalkers.isEmpty()) {
+            if (stalkerSpawnedDay == day) {
+                // It was here this morning and is not now: somebody killed it.
+                // The rest of the day is quiet, and they earned that.
+                stalkerDeadDay = day;
+            }
+            if (stalkerDeadDay == day) {
+                return;
+            }
+            spawnStalker(level, day);
+            return;
+        }
+        Mob stalker = stalkers.get(0);
+        for (int i = 1; i < stalkers.size(); i++) {
+            stalkers.get(i).discard(); // one per day, however a restart landed
+        }
+        // The clearing stays safe ground by day too: the stalker is thrown
+        // back out if it crosses the line, and drops a target that reaches it.
+        keepOut(level, List.of(stalker));
+        if (stalker.getTarget() instanceof ServerPlayer fled) {
+            BlockPos at = fled.blockPosition();
+            if (MazeData.inGlade(at.getX() / MazeData.CELL, at.getZ() / MazeData.CELL)) {
+                stalker.setTarget(null);
+            }
+        }
+
+        // Blind: the only sense is this loop. Nearest noise wins.
+        ServerPlayer heard = null;
+        double best = Double.MAX_VALUE;
+        for (ServerPlayer p : level.players()) {
+            if (p.isCreative() || p.isSpectator() || !p.isAlive()) {
+                continue;
+            }
+            BlockPos at = p.blockPosition();
+            if (MazeData.inGlade(at.getX() / MazeData.CELL, at.getZ() / MazeData.CELL)) {
+                continue;
+            }
+            double radius = noiseRadius(p);
+            double dist = stalker.distanceTo(p);
+            if (dist <= radius && dist < best) {
+                best = dist;
+                heard = p;
+            }
+        }
+        if (heard != null) {
+            boolean fresh = stalker.getTarget() != heard;
+            stalker.setTarget(heard);
+            stalker.getPersistentData().putLong("StalkerHeard", level.getGameTime());
+            if (fresh) {
+                level.playSound(null, stalker.blockPosition(), SoundEvents.WARDEN_SONIC_CHARGE,
+                        SoundSource.HOSTILE, 1.8F, 0.8F);
+                heard.displayClientMessage(Component.literal(
+                        "§8Something turned toward you."), true);
+                if (!heard.getPersistentData().getBoolean("aztecabyss_heard_hint")) {
+                    // Said once, ever: the mechanic in one line, the first time
+                    // it matters instead of in a manual nobody reads.
+                    heard.getPersistentData().putBoolean("aztecabyss_heard_hint", true);
+                    heard.displayClientMessage(Component.literal(
+                            "§8It hunts by sound. §7Walk quietly — or crouch, and you are nothing."),
+                            false);
+                }
+            }
+        } else if (stalker.getTarget() != null
+                && level.getGameTime() - stalker.getPersistentData().getLong("StalkerHeard")
+                        > STALKER_MEMORY) {
+            stalker.setTarget(null); // six quiet seconds, and you are lost again
+        }
+        // Its tell: a low dry rasp, unlike anything the night uses. You learn
+        // to stop and listen before a junction, which is the entire feature.
+        if (level.random.nextInt(8) == 0) {
+            level.playSound(null, stalker.blockPosition(), SoundEvents.SPIDER_AMBIENT,
+                    SoundSource.HOSTILE, 1.3F, 0.5F);
+        }
+    }
+
+    private static void spawnStalker(ServerLevel level, int day) {
+        // Out of a hole away from the Glade, like everything else here.
+        BlockPos centre = new BlockPos(MazeData.SPAN / 2, MazeData.FLOOR_Y + 1, MazeData.SPAN / 2);
+        BlockPos den = GrieverHoles.nearestBeyond(centre, 30);
+        BlockPos spot = den == null ? null : GrieverHoles.mouthSpawn(level, den);
+        if (spot == null) {
+            return; // try again next second
+        }
+        Spider mob = EntityType.SPIDER.create(level);
+        if (mob == null) {
+            return;
+        }
+        mob.moveTo(spot.getX() + 0.5, spot.getY(), spot.getZ() + 0.5, 0.0F, 0.0F);
+        mob.finalizeSpawn(level, level.getCurrentDifficultyAt(spot), MobSpawnType.EVENT, null);
+        dress(level, mob);
+        mob.getPersistentData().putBoolean(STALKER, true);
+        level.addFreshEntity(mob);
+        stalkerSpawnedDay = day;
+        level.playSound(null, spot, SoundEvents.WARDEN_EMERGE, SoundSource.HOSTILE, 1.2F, 0.4F);
+        if (day == 1) {
+            for (ServerPlayer p : level.players()) {
+                p.displayClientMessage(Component.literal(
+                        "§8⚠ Something walks the maze by day now. §7It is blind. It listens."),
+                        false);
+            }
+        }
+    }
+
     public static void ambience(ServerLevel level, List<Mob> grievers, RandomSource rng) {
         for (Mob g : grievers) {
             // Always the smoke, sometimes the sound. Without a custom model this

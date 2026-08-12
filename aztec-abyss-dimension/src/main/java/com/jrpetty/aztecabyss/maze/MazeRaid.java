@@ -100,12 +100,24 @@ public final class MazeRaid {
         if (day == PROBE_DAY) {
             return true;
         }
+        // The last night always raids. The deadline used to be the only thing
+        // the final night had, and the hashed schedule's next slot fell just
+        // past the end of the game - so the finale is pinned, not rolled.
+        int limit = com.jrpetty.aztecabyss.config.AbyssConfig.MAZE_DAY_LIMIT.get();
+        if (limit > 0 && day == limit - 1) {
+            return true;
+        }
         int next = gap(0);
         int k = 1;
         while (next < day) {
             next += gap(k++);
         }
         return next == day;
+    }
+
+    /** Whether that raid night is the small day-two probe. */
+    public static boolean probeNight(int day) {
+        return day == PROBE_DAY;
     }
 
     /** True while the running raid is the small day-two probe. */

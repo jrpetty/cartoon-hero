@@ -13,6 +13,50 @@ behaviour that was already there · **docs**
 
 ## Unreleased
 
+### The day-stalker, the forecast, and the economy audit
+
+- **feat** **The day-stalker.** From the second day, one Griever walks the
+  corridors while the sun is up — and it is **blind**. It acquires you by
+  sound alone: sprint and it turns toward you, walk and it must be close,
+  crouch and you do not exist. Six quiet seconds and it loses the thread. It
+  has a dry daytime rasp unlike anything the night uses, it cannot enter the
+  Glade, and killing it (standing bounty applies) buys the rest of the day
+  quiet. First time it hears you, one line — *"It hunts by sound. Walk
+  quietly — or crouch, and you are nothing."* — and never again.
+- **feat** **The raids are in the notes.** Every volume of The Last Group's
+  Notes carries one damp page generated from the real raid calendar: *"Tested
+  it on the third night. Came in strength on the fifth, and the seventh, and
+  the eighth. Count the nights. They do."* The forecast stays true if the
+  schedule is ever retuned, because it is read from the schedule.
+- **feat** **The final night always raids.** The hashed schedule's next slot
+  fell just past the end of the game, so the deadline night was quiet — now
+  the finale is pinned: the last night the Glade is defending the wall *and*
+  the runners are making the last sprint. (In player terms the raid nights
+  are: a probe on night 3, full raids on nights 5 and 7, and the finale on
+  night 8.)
+
+### The requisition economy: audited back to front, five faults fixed
+
+- **fix** **The pool no longer collapses on restart.** The per-head allowance
+  (`heads`) carried a comment swearing it was saved; it never was. A restart
+  mid-day reloaded it as zero, the pool shrank to bounty-plus-work, and every
+  order already filed was refused as over budget. It is on disk now.
+- **fix** **Orders are delivered to everyone who paid, present or not.** The
+  dawn delivery only built crates for players standing in the dimension;
+  anyone asleep in the real world (or waiting in the overworld) had their
+  points spent and their crate silently destroyed by the settle. Every slate
+  is now filled, with the owner's name on the crate.
+- **fix** **A refused order says why.** The over-budget message was computed,
+  returned, and thrown away — the click just silently redrew, which reads as
+  a broken button rather than an empty pot. The reason now shows.
+- **fix** **The ledger is per-game.** Game end cleared neither slates nor
+  bounty: the previous game's unfilled orders were delivered on the next
+  game's second morning, and bounty crossed sessions. Both reset now.
+- **fix** **Use-it-or-lose-it starts on day zero.** Work credits from the two
+  handout mornings piled up and inflated the first real pool; they now expire
+  daily like every other day's. And the day's-work toast shows the increment
+  ("+3 to the pool (18 today)"), not the running total dressed as one.
+
 ### The Chartwright, the waypoints, and the notes that predict tomorrow
 
 - **feat** **Chartwright** — a fourth Runner skill. Rank 1: pin a **living
@@ -65,11 +109,11 @@ stretch of the Glade wall and batters it — audibly, for the better part of a
 minute, cracked courses spreading before anything gives — and if nobody does
 anything about it, the wall opens and the night comes inside.
 
-- **feat** **Raid nights are part of the fixed calendar**: a small **probe on
-  night 2**, then full raids on nights **4, 6 and 8** (gaps of two to five
-  nights, drawn deterministically, the same in every game). The last raid
-  lands on deadline night. Veterans get to be standing on the wall with
-  torches when the first blow hits.
+- **feat** **Raid nights are part of the fixed calendar**: a small probe
+  early, then full raids at deterministic 2–5 night gaps, the same in every
+  game — in player terms, a probe on night 3 and full raids on nights 5 and 7
+  (the pinned night-8 finale arrived in a later entry above). Veterans get to
+  be standing on the wall with torches when the first blow hits.
 - **feat** **The night-2 probe teaches the mechanic while the stakes are
   low**: two raiders, a two-by-two crack instead of a four-wide breach, a
   quieter warning ("something is testing the west wall"), and a +3 purse for

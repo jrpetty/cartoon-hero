@@ -779,8 +779,14 @@ public final class MazeEvents {
         }
         if (delta > 0) {
             int qty = Math.min(delta, 64);
-            if (orders.add(level, player.getUUID(), e, qty) == null) {
+            String why = orders.add(level, player.getUUID(), e, qty);
+            if (why == null) {
                 announceOrder(level, player, e, qty);
+            } else {
+                // The refusal used to be computed, returned, and thrown away -
+                // an over-budget click just silently redrew the screen, which
+                // reads as the button being broken rather than the pot empty.
+                player.displayClientMessage(Component.literal("§c" + why), true);
             }
         } else if (delta < 0) {
             orders.take(player.getUUID(), e.id(), -delta);
