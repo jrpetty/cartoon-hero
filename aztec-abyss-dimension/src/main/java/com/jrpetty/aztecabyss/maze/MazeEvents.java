@@ -945,6 +945,13 @@ public final class MazeEvents {
         src.sendSuccess(() -> Component.literal(
                 "§8The pot stands at " + MazeOrders.remaining(level) + " of "
                         + MazeOrders.pool(level) + ". §8/maze order"), false);
+        int carrying = MazeNotes.carrying(player.getUUID());
+        if (carrying > 0) {
+            // The number a Runner actually weighs "push on or turn back" against.
+            src.sendSuccess(() -> Component.literal(
+                    "§b✎ Carrying §f" + carrying + "§b cells unfiled §8— they bank at the door,"
+                            + " and fall where you fall."), false);
+        }
         return 1;
     }
 

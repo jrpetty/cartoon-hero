@@ -13,6 +13,21 @@ behaviour that was already there · **docs**
 
 ## Unreleased
 
+### Small functionality, no gameplay touched
+
+- **fix** **Escaping through the portal now banks your survey.** The escape path
+  paid the job experience under a comment saying *"out is home"* — and silently
+  stranded the field notes, which the same rule says were earned. An escape is
+  the definition of surviving; the notes (and any recovered ones you were
+  carrying) file exactly as they would walking in the door.
+- **feat** `/maze work` shows what you are carrying unfiled — the number a Runner
+  actually weighs "push on or turn back" against.
+- **change** The picker's enter button is named after the map it will enter —
+  *"Enter — The Long Bridge"* — instead of making you glance back up to check
+  which card was lit.
+
+---
+
 ### The roster honest, the arenas dressed, the maze reviewed
 
 **The Outpost is shelved — COMING SOON.** It needs rethinking rather than

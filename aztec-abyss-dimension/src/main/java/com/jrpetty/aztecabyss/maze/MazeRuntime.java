@@ -579,8 +579,14 @@ public final class MazeRuntime {
                 }
                 openTheWayOut(level, p);
                 // Out is home. Getting through the portal banks the trip exactly
-                // as walking back into the Glade would.
+                // as walking back into the Glade would - the job experience, the
+                // survey, and any notes recovered on the way. It banked only the
+                // experience before, which silently stranded a survey that the
+                // rule says was earned: the reward is for surviving, and an
+                // escape is the definition of surviving.
                 MazeJobs.get(level).bank(p);
+                MazeNotes.bank(level, p);
+                MazeNotes.redeemCarried(level, p);
                 escapees.add(p.getGameProfile().getName());
                 escaped.add(p);
                 escapedSeconds.add(seconds);

@@ -36,6 +36,8 @@ public final class MapSelectScreen extends Screen {
 
     private final int[] bestRounds;
     private int selected;
+    /** Kept so a card click can rename it after the selection it acts on. */
+    private Button enterButton;
     /** Published maps, packed as {@code name|title|difficulty|blurb} by the server. */
     private final java.util.List<String> customMaps;
 
@@ -97,12 +99,16 @@ public final class MapSelectScreen extends Screen {
                                 new com.jrpetty.aztecabyss.network.RequestLeaderboardPayload(0)))
                 .bounds(this.width / 2 + 84, this.height - 42, 76, 20)
                 .build());
-        addRenderableWidget(Button.builder(Component.literal("Enter this Hunt"), b -> {
+        // Named after what it will actually do. "Enter this Hunt" made you
+        // glance back up to check which card was lit; the button carrying the
+        // map's own name removes the round trip.
+        enterButton = Button.builder(enterLabel(), b -> {
                     PacketDistributor.sendToServer(new MapSelectPayload(selected));
                     onClose();
                 })
                 .bounds(this.width / 2 - 160, this.height - 42, 160, 20)
-                .build());
+                .build();
+        addRenderableWidget(enterButton);
         // The maze is deliberately set apart from the arena cards: no rounds, no
         // rewards, no scoring in common with them.
         addRenderableWidget(Button.builder(
@@ -145,6 +151,10 @@ public final class MapSelectScreen extends Screen {
                 .build());
     }
 
+    private Component enterLabel() {
+        return Component.literal("Enter — " + ArenaMap.values()[selected].title());
+    }
+
     /** Where a published map sits in the server's list, which is what it is picked by. */
     private int indexOfName(String name) {
         for (int i = 0; i < customMaps.size(); i++) {
@@ -171,6 +181,9 @@ public final class MapSelectScreen extends Screen {
                     return true;
                 }
                 selected = i;
+                if (enterButton != null) {
+                    enterButton.setMessage(enterLabel());
+                }
                 if (this.minecraft != null) {
                     this.minecraft.getSoundManager().play(
                             net.minecraft.client.resources.sounds.SimpleSoundInstance.forUI(
