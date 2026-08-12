@@ -136,8 +136,9 @@ public final class MazeBuilder {
      * the back of its chamber.
      * <p>12: the Chart Floor gained its lens.
      * <p>13: both clearings got three blocks of soil instead of one.
+     * <p>14: the Chart Floor got its legend.
      */
-    private static final int GEOMETRY_VERSION = 13;
+    private static final int GEOMETRY_VERSION = 14;
 
     /** One distinctive block per version, so the marker is readable in-world. */
     private static final BlockState[] VERSION_BLOCKS = {
@@ -158,6 +159,9 @@ public final class MazeBuilder {
             Blocks.TUFF_BRICKS.defaultBlockState(),
             Blocks.POLISHED_TUFF.defaultBlockState(),
             Blocks.CHISELED_TUFF.defaultBlockState(),
+            // Fifteenth entry for version 14 - the list has to grow with the
+            // number or the modulo wraps a new version onto an old marker.
+            Blocks.CRYING_OBSIDIAN.defaultBlockState(),
     };
 
     private static BlockState versionBlock() {

@@ -183,7 +183,34 @@ public final class ChartFloor {
         level.setBlock(zd.above(), Blocks.SEA_LANTERN.defaultBlockState(), 2);
         sign(level, zd.south(), Direction.SOUTH,
                 "§0THE LENS", "§0Whole map,", "§0quarter, close.", "");
+        legend(level);
         drawn = null;
+    }
+
+    /**
+     * The key, standing along the south kerb.
+     *
+     * <p>The floor speaks nine colours and nothing anywhere said what any of
+     * them meant. A map with an unlabelled palette is a puzzle about a puzzle:
+     * the one person who watched the colours get added knows that gold is the
+     * exit, and everybody else is guessing. Nine samples with a name under
+     * each, in the same row as the two dials, and the floor reads on first
+     * visit.
+     */
+    private static void legend(ServerLevel level) {
+        int z = originZ() + SIZE + 1;
+        byte[] codes = {CORRIDOR, WALL, UNKNOWN, MARKED, RUNNER, DOOR, EXIT, HOLE, DEAD_GLADE};
+        String[] names = {"Corridor", "Wall", "Unknown", "Marked", "Runner",
+                "Glade door", "The way out", "Griever hole", "Dead Glade"};
+        for (int i = 0; i < codes.length; i++) {
+            int x = originX() + i * 2;
+            level.setBlock(new BlockPos(x, Y, z), Blocks.POLISHED_DEEPSLATE.defaultBlockState(), 2);
+            // The sample is the exact block the floor paints, so the key cannot
+            // drift from the map if the palette ever changes.
+            level.setBlock(new BlockPos(x, Y + 1, z), paint(codes[i]), 2);
+            sign(level, new BlockPos(x, Y + 1, z + 1), Direction.SOUTH,
+                    "§0" + names[i], "", "", "");
+        }
     }
 
     // ------------------------------------------------------------------

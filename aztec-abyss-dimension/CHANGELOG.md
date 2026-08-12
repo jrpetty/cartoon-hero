@@ -13,6 +13,55 @@ behaviour that was already there · **docs**
 
 ## Unreleased
 
+### The roster honest, the arenas dressed, the maze reviewed
+
+**The Outpost is shelved — COMING SOON.** It needs rethinking rather than
+shipping half-liked. The card stays on the picker as a teaser: dimmed, tagged
+COMING SOON in gold, unselectable. The server refuses it too, because a client
+can send any id it likes — and `byId` snaps a choice stored before the shelving
+back to the Temple, so nobody falls into a map that is not ready. The picker's
+subtitle now says two battlefields, because it is two.
+
+**The Temple's wall stops being bedrock.** Forty-eight courses of the one block
+that reads as "placeholder", wrapped around the whole arena — the biggest
+visible surface on the map looked like a world-edit mistake. It is banded
+blackstone masonry now: polished bricks with a fifth of them cracked, a dark
+string course every sixth row, a chiselled crown, the same rare gilded glint
+the temple itself uses, and a ring of forty-eight soul-lit sconces at head
+height so the wall holds a line of cold light all the way round at night.
+Existing worlds redress themselves through the same retro-fit path the
+gatehouses already use, and the gates are re-cut through the new facade.
+
+**The Bridge's pylons get the silhouette they were named for.** The banding was
+dead code — both branches of the ternary returned the same block, so the
+"colossal" pylons rendered as plain one-wide brick posts. Chiselled string
+courses every fourth row now, and a second full-height column outboard, so they
+actually carry from the far end of the span. Worlds built before the fix
+restamp just their pylons via a probe on the first string course.
+
+**Maze review:**
+- **fix** **Every interactive block in the maze fired twice per click.** The
+  right-click event fires once per hand and cancelling the main-hand pass does
+  not stop the off-hand one — so the chart dial turned two pages per click, the
+  lens skipped a zoom level, and the trade and order desks opened their screen
+  twice in the same frame (which is what a "broken" skills menu looks like).
+  One main-hand guard fixes all of them.
+- **fix** **The Dead Glade's breaches spread across faces now.** The north wall
+  has far more reachable candidates than the others — ten of ten against
+  nought-to-four — so a flat pick sometimes put all three breaches on the same
+  wall and "the way in moves" quietly became "you always come in from the
+  north". Faces are now covered before any wall doubles up. Re-verified: all
+  seven presets enterable, no two share a set, and every preset spans three
+  distinct faces wherever the maze physically allows it.
+- **feat** **The Chart Floor has a key.** Nine colours and nothing anywhere said
+  what any of them meant — the one person who watched the palette get added knew
+  gold was the exit, and everybody else was guessing. Nine samples now stand
+  along the south kerb beside the dials, each the exact block the floor paints
+  with a name under it, so the key cannot drift from the map.
+- **change** Geometry version 13 → 14.
+
+---
+
 ### Three blocks of soil, where there was one
 
 - **fix** **Both clearings were a single block of turf laid over a six-block drop

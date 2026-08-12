@@ -88,9 +88,24 @@ public enum ArenaMap {
         this.borderSize = borderSize;
     }
 
+    /**
+     * Which maps are shelved.
+     *
+     * <p>The Outpost is being rethought rather than shipped half-liked. It stays
+     * on the picker as a teaser card, but it cannot be selected, and a choice
+     * stored before it was shelved quietly falls back to the Temple instead of
+     * dropping somebody into a map that is not ready.
+     */
+    public boolean comingSoon() {
+        return this == OUTPOST;
+    }
+
     public static ArenaMap byId(int id) {
         ArenaMap[] all = values();
-        return (id >= 0 && id < all.length) ? all[id] : TEMPLE;
+        ArenaMap map = (id >= 0 && id < all.length) ? all[id] : TEMPLE;
+        // One choke point covers every reader: the portal, the round manager,
+        // and any stored choice from before the map was shelved.
+        return map.comingSoon() ? TEMPLE : map;
     }
 
     public String title() {

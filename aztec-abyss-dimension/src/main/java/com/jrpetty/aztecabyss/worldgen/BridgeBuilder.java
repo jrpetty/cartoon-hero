@@ -73,6 +73,17 @@ public final class BridgeBuilder {
 
     public static void generateIfNeeded(ServerLevel level) {
         if (level.getBlockState(SENTINEL).is(Blocks.GILDED_BLACKSTONE)) {
+            // Built before the pylons got their banding back? The probe is the
+            // first string course of the first pylon; if it is still plain
+            // brick, restamp just the pylons.
+            if (!level.getBlockState(new BlockPos(
+                    CENTER_X - HALF_WIDTH, DECK_Y + 4, NORTH_END + 12)).is(Blocks.CHISELED_DEEPSLATE)) {
+                for (int z = NORTH_END; z <= SOUTH_END; z++) {
+                    if (Math.floorMod(z - NORTH_END, 25) == 12) {
+                        buildPylonPair(level, z);
+                    }
+                }
+            }
             return;
         }
         Random rng = new Random(SEED);
@@ -197,21 +208,26 @@ public final class BridgeBuilder {
         int height = 16;
         for (int side : new int[]{-HALF_WIDTH, HALF_WIDTH - 1}) {
             int x = CENTER_X + side;
+            int out = side < 0 ? -1 : 1;
             for (int dy = 1; dy <= height; dy++) {
+                // The banding was dead code - both branches of the ternary were
+                // the same block, so the "colossal" pylons rendered as plain
+                // one-wide brick posts. Chiselled string courses every fourth
+                // row, and a second full-height column outboard, so they carry
+                // the silhouette they were named for.
                 BlockState body = (dy % 4 == 0)
-                        ? Blocks.DEEPSLATE_BRICKS.defaultBlockState()
+                        ? Blocks.CHISELED_DEEPSLATE.defaultBlockState()
                         : Blocks.DEEPSLATE_BRICKS.defaultBlockState();
                 level.setBlock(new BlockPos(x, DECK_Y + dy, z), body, 2);
-                // Widen the foot into a buttress.
-                if (dy <= 3) {
-                    int out = side < 0 ? -1 : 1;
-                    level.setBlock(new BlockPos(x + out, DECK_Y + dy, z),
-                            Blocks.POLISHED_DEEPSLATE.defaultBlockState(), 2);
-                }
+                level.setBlock(new BlockPos(x + out, DECK_Y + dy, z), dy <= 3
+                        ? Blocks.POLISHED_DEEPSLATE.defaultBlockState()
+                        : body, 2);
             }
-            // Crown brazier.
+            // Crown brazier, with the outboard column capped level beside it.
             level.setBlock(new BlockPos(x, DECK_Y + height + 1, z), Blocks.SOUL_SOIL.defaultBlockState(), 2);
             level.setBlock(new BlockPos(x, DECK_Y + height + 2, z), Blocks.SOUL_FIRE.defaultBlockState(), 2);
+            level.setBlock(new BlockPos(x + out, DECK_Y + height + 1, z),
+                    Blocks.POLISHED_DEEPSLATE.defaultBlockState(), 2);
             // Banner cloth hanging down the inner face.
             int inward = side < 0 ? 1 : -1;
             for (int dy = height - 10; dy <= height - 4; dy++) {

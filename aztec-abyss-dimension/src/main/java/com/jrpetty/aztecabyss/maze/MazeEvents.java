@@ -452,6 +452,14 @@ public final class MazeEvents {
         if (!(event.getEntity() instanceof ServerPlayer p)) {
             return;
         }
+        // The event fires once per hand, and cancelling the main-hand pass does
+        // not stop the off-hand one. Every interactive block in here was being
+        // clicked twice per click: the chart dial turned two pages, the lens
+        // skipped a zoom level, and the desks opened their screen twice in the
+        // same frame. One guard fixes all of them at once.
+        if (event.getHand() != net.minecraft.world.InteractionHand.MAIN_HAND) {
+            return;
+        }
         if (event.getPos().equals(ChartFloor.dial())) {
             ChartFloor.cycle(level, p);
             event.setCanceled(true);

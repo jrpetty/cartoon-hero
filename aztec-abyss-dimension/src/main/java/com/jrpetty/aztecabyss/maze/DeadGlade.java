@@ -551,12 +551,31 @@ public final class DeadGlade {
         if (usable.isEmpty()) {
             return picked;
         }
+        // Spread across distinct faces before doubling up on one. The north
+        // face has far more reachable candidates than the others - usually ten
+        // of ten against nought-to-four - so a flat pick landed all three
+        // breaches on the same wall on some presets, and "the way in moves"
+        // quietly became "you always come in from the north".
+        java.util.List<Integer> faces = new java.util.ArrayList<>();
+        for (int i : usable) {
+            int f = i / PER_SIDE;
+            if (!faces.contains(f)) {
+                faces.add(f);
+            }
+        }
         int h = layout.name().hashCode() & 0x7FFFFFFF;
         for (int n = 0; n < BREACHES; n++) {
-            int pick = usable.get((h + n * 7) % usable.size());
-            if (!picked.contains(pick)) {
-                picked.add(pick);
+            int face = faces.get((h + n) % faces.size());
+            java.util.List<Integer> onFace = new java.util.ArrayList<>();
+            for (int i : usable) {
+                if (i / PER_SIDE == face && !picked.contains(i)) {
+                    onFace.add(i);
+                }
             }
+            if (onFace.isEmpty()) {
+                continue;
+            }
+            picked.add(onFace.get((h + n * 3) % onFace.size()));
         }
         return picked;
     }

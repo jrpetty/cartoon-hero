@@ -41,7 +41,9 @@ public final class MapSelectScreen extends Screen {
 
     public MapSelectScreen(int currentChoice, int[] bestRounds, java.util.List<String> customMaps) {
         super(Component.literal("Choose Your Hunt"));
-        this.selected = currentChoice;
+        // A stored choice from before a map was shelved snaps back to the
+        // Temple, exactly as the server will when the run starts.
+        this.selected = ArenaMap.byId(currentChoice).ordinal();
         this.bestRounds = bestRounds;
         this.customMaps = customMaps == null ? java.util.List.of() : customMaps;
     }
@@ -163,6 +165,11 @@ public final class MapSelectScreen extends Screen {
             int y = cardY(i);
             int h = cardHeight(maps[i]);
             if (mouseX >= left && mouseX <= left + CARD_W && mouseY >= y && mouseY <= y + h) {
+                if (maps[i].comingSoon()) {
+                    // The card is a teaser, not a choice. It stays visible so the
+                    // roster reads as three, but nothing selects it.
+                    return true;
+                }
                 selected = i;
                 if (this.minecraft != null) {
                     this.minecraft.getSoundManager().play(
@@ -215,7 +222,7 @@ public final class MapSelectScreen extends Screen {
 
         g.drawCenteredString(this.font, Component.literal("CHOOSE YOUR HUNT").withStyle(s -> s.withBold(true)),
                 cx, 24, 0xFFFFD24A);
-        g.drawCenteredString(this.font, Component.literal("Three battlefields, a maze — or build your own."),
+        g.drawCenteredString(this.font, Component.literal("Two battlefields, a maze — or build your own."),
                 cx, 38, 0xFFB6B0A2);
 
         ArenaMap[] maps = ArenaMap.values();
@@ -225,21 +232,24 @@ public final class MapSelectScreen extends Screen {
             ArenaMap map = maps[i];
             int y = cardY(i);
             int cardH = cardHeight(map);
-            boolean isSelected = i == selected;
-            boolean hovered = mouseX >= left && mouseX <= left + CARD_W && mouseY >= y && mouseY <= y + cardH;
+            boolean shelved = map.comingSoon();
+            boolean isSelected = i == selected && !shelved;
+            boolean hovered = !shelved
+                    && mouseX >= left && mouseX <= left + CARD_W && mouseY >= y && mouseY <= y + cardH;
 
             // Opaque card bodies. These were 0x99-0xCC alpha, which let the ground
             // through and made every card a slightly different muddy grey
             // depending on what was behind it. A card is a surface, not a tint.
             g.fill(left, y, left + CARD_W, y + cardH,
                     isSelected ? 0xFF241C12 : hovered ? 0xFF1C1C1C : 0xFF121212);
-            int edge = isSelected ? 0xFFFFD24A : hovered ? 0xFF9A8A5A : 0xFF4A4A4A;
+            int accent = map.difficultyColor();
+            int edge = isSelected ? accent : hovered ? 0xFF9A8A5A : shelved ? 0xFF2E2E2E : 0xFF4A4A4A;
             g.fill(left, y, left + CARD_W, y + 1, edge);
             g.fill(left, y + cardH - 1, left + CARD_W, y + cardH, edge);
             g.fill(left, y, left + 1, y + cardH, edge);
             g.fill(left + CARD_W - 1, y, left + CARD_W, y + cardH, edge);
             if (isSelected) {
-                g.fill(left + 1, y + 1, left + 4, y + cardH - 1, 0xFFFFD24A);
+                g.fill(left + 1, y + 1, left + 4, y + cardH - 1, accent);
             }
 
             // Every string below is drawn WITH its shadow. Minecraft's font is
@@ -247,29 +257,30 @@ public final class MapSelectScreen extends Screen {
             // goes thin and shimmers, which is most of why this screen was hard to
             // read. It was passing false everywhere.
             g.drawString(this.font, Component.literal(map.title()).withStyle(s -> s.withBold(true)),
-                    left + 10, y + 8, isSelected ? 0xFFFFF0C8 : 0xFFF2F2F2, true);
+                    left + 10, y + 8, shelved ? 0xFF6A6A6A : isSelected ? 0xFFFFF0C8 : 0xFFF2F2F2, true);
 
-            String tag = map.difficulty();
+            String tag = shelved ? "COMING SOON" : map.difficulty();
+            int tagColour = shelved ? 0xFFFFD24A : map.difficultyColor();
             int tagW = this.font.width(tag) + 8;
             int tagX = left + CARD_W - tagW - 8;
             g.fill(tagX, y + 6, tagX + tagW, y + 18, 0xFF000000);
-            g.fill(tagX, y + 6, tagX + tagW, y + 7, map.difficultyColor());
-            g.drawString(this.font, Component.literal(tag), tagX + 4, y + 9,
-                    map.difficultyColor(), true);
+            g.fill(tagX, y + 6, tagX + tagW, y + 7, tagColour);
+            g.drawString(this.font, Component.literal(tag), tagX + 4, y + 9, tagColour, true);
 
             int by = y + CARD_HEAD;
             for (net.minecraft.util.FormattedCharSequence line
                     : this.font.split(Component.literal(map.blurb()), CARD_W - 20)) {
-                g.drawString(this.font, line, left + 10, by, 0xFFC8C4BA, true);
+                g.drawString(this.font, line, left + 10, by, shelved ? 0xFF555555 : 0xFFC8C4BA, true);
                 by += LINE_H;
             }
 
             int best = (i < bestRounds.length) ? bestRounds[i] : 0;
-            String rec = best > 0 ? "Your best: Round " + best : "Never attempted";
+            String rec = shelved ? "Being rethought — back in a future update"
+                    : best > 0 ? "Your best: Round " + best : "Never attempted";
             int recW = this.font.width(rec);
             g.drawString(this.font, Component.literal(rec),
                     left + CARD_W - recW - 10, y + cardH - 13,
-                    best > 0 ? 0xFF7FD4FF : 0xFF8A8A8A, true);
+                    shelved ? 0xFF9A8A5A : best > 0 ? 0xFF7FD4FF : 0xFF8A8A8A, true);
         }
 
         super.render(g, mouseX, mouseY, partialTick);

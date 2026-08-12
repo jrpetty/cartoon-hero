@@ -50,6 +50,14 @@ public final class ArenaGenerator {
             if (!level.getBlockState(probe.above()).is(Blocks.POLISHED_BLACKSTONE_BRICKS)) {
                 buildMobGates(level);
             }
+            // A world walled in before the facade existed still has the bedrock
+            // cylinder. Redress it in place, then re-cut the gates through it.
+            if (level.getBlockState(new BlockPos(
+                    AztecAbyssConstants.ARENA_RADIUS + 1,
+                    AztecAbyssConstants.ARENA_FLOOR_Y + 5, 0)).is(Blocks.BEDROCK)) {
+                buildPerimeterWall(level);
+                buildMobGates(level);
+            }
             buildOutpostIfNeeded(level);
             return; // already built
         }
@@ -344,6 +352,13 @@ public final class ArenaGenerator {
         int top = floorY + AztecAbyssConstants.WALL_HEIGHT;
         int thickness = 2; // world border does the real containment; wall is the visual boundary
 
+        // The wall was solid bedrock: forty-eight courses of the one block in
+        // the game that reads as "placeholder", wrapped around the whole arena.
+        // It is the biggest visible surface on the map and it looked like a
+        // world-edit mistake. The border does the real containment, so the wall
+        // only has to LOOK immovable - and blackstone masonry does that while
+        // actually belonging to the temple it surrounds.
+        Random rng = new Random(WORLDGEN_SEED + 31);
         for (int x = -radius - thickness; x <= radius + thickness; x++) {
             for (int z = -radius - thickness; z <= radius + thickness; z++) {
                 double dist2 = (double) x * x + (double) z * z;
@@ -351,8 +366,62 @@ public final class ArenaGenerator {
                     continue;
                 }
                 for (int y = floorY - 1; y <= top; y++) {
-                    level.setBlock(new BlockPos(x, y, z), Blocks.BEDROCK.defaultBlockState(), 2);
+                    level.setBlock(new BlockPos(x, y, z), wallFacade(rng, y, floorY, top), 2);
                 }
+            }
+        }
+        wallSconces(level);
+    }
+
+    /**
+     * One course of the perimeter wall.
+     *
+     * <p>Banded masonry: a dark blackstone string course every sixth row, a
+     * chiselled crown along the very top, and the body mostly polished bricks
+     * with enough cracked ones that the wall reads as old rather than printed.
+     * The rare gilded block is the same glint the temple itself uses.
+     */
+    private static BlockState wallFacade(Random rng, int y, int floorY, int top) {
+        if (y <= floorY - 1) {
+            return Blocks.BEDROCK.defaultBlockState(); // under the floor, unseen
+        }
+        if (y == top) {
+            return Blocks.CHISELED_POLISHED_BLACKSTONE.defaultBlockState();
+        }
+        if ((y - floorY) % 6 == 0) {
+            return Blocks.BLACKSTONE.defaultBlockState();
+        }
+        double roll = rng.nextDouble();
+        if (roll < 0.70) {
+            return Blocks.POLISHED_BLACKSTONE_BRICKS.defaultBlockState();
+        }
+        if (roll < 0.90) {
+            return Blocks.CRACKED_POLISHED_BLACKSTONE_BRICKS.defaultBlockState();
+        }
+        if (roll < 0.98) {
+            return Blocks.BLACKSTONE.defaultBlockState();
+        }
+        return Blocks.GILDED_BLACKSTONE.defaultBlockState();
+    }
+
+    /**
+     * A ring of soul-lit sconces on the inner face, so the wall holds a line of
+     * cold light at head height all the way round. Forty-eight of them: enough
+     * that the ring reads at night, few enough that each is a landmark.
+     */
+    private static void wallSconces(ServerLevel level) {
+        int radius = AztecAbyssConstants.ARENA_RADIUS;
+        int floorY = AztecAbyssConstants.ARENA_FLOOR_Y;
+        for (int i = 0; i < 48; i++) {
+            double angle = (Math.PI * 2.0 / 48) * i;
+            int x = (int) Math.round(Math.cos(angle) * (radius - 1));
+            int z = (int) Math.round(Math.sin(angle) * (radius - 1));
+            BlockPos bracket = new BlockPos(x, floorY + 9, z);
+            BlockPos lamp = new BlockPos(x, floorY + 8, z);
+            if (level.getBlockState(bracket).isAir() && level.getBlockState(lamp).isAir()) {
+                level.setBlock(bracket, Blocks.POLISHED_BLACKSTONE_BRICKS.defaultBlockState(), 2);
+                level.setBlock(lamp, Blocks.SOUL_LANTERN.defaultBlockState()
+                        .setValue(BlockStateProperties.HANGING, true), 2);
             }
         }
     }

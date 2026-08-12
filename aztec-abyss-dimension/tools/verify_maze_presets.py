@@ -285,12 +285,18 @@ for lay in layouts:
     usable = [i for i in range(DEAD_CANDIDATES) if dead_candidate_outside(i) in reach]
     h = str_hash(lay['name']) & 0x7FFFFFFF
     picked = []
-    for n in range(DEAD_BREACHES):
-        if not usable:
-            break
-        p = usable[(h + n * 7) % len(usable)]
-        if p not in picked:
-            picked.append(p)
+    if usable:
+        faces = []
+        for i in usable:
+            f = i // DEAD_PER_SIDE
+            if f not in faces:
+                faces.append(f)
+        for n in range(DEAD_BREACHES):
+            face = faces[(h + n) % len(faces)]
+            onface = [i for i in usable if i // DEAD_PER_SIDE == face and i not in picked]
+            if not onface:
+                continue
+            picked.append(onface[(h + n * 3) % len(onface)])
     sets[lay['name']] = frozenset(picked)
     enterable &= len(picked) > 0
     faces = "".join("WENS"[i // DEAD_PER_SIDE] for i in picked)

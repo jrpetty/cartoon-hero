@@ -71,6 +71,14 @@ public final class ModNetworking {
                         }
                         int id = Math.max(0, Math.min(payload.mapId(),
                                 com.jrpetty.aztecabyss.worldgen.ArenaMap.values().length - 1));
+                        // Checked on the raw index, because byId deliberately
+                        // snaps shelved maps to the Temple - a client that sends
+                        // one anyway gets told no, not silently rerouted.
+                        if (com.jrpetty.aztecabyss.worldgen.ArenaMap.values()[id].comingSoon()) {
+                            sp.displayClientMessage(net.minecraft.network.chat.Component.literal(
+                                    "§7That battlefield is being rethought. §8Coming soon."), false);
+                            return;
+                        }
                         sp.getPersistentData().putInt("aztecabyss_chosen_map", id);
                         sp.displayClientMessage(net.minecraft.network.chat.Component.literal(
                                 "§6✦ Hunt set: §e" + com.jrpetty.aztecabyss.worldgen.ArenaMap.byId(id).title()
