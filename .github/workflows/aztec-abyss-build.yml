@@ -34,7 +34,16 @@ jobs:
         run: chmod +x ./gradlew
 
       - name: Build
-        run: ./gradlew build --no-daemon --stacktrace
+        # Retried because the Gradle wrapper's distribution download from
+        # services.gradle.org occasionally dies mid-transfer on hosted
+        # runners; a real compile failure still fails after the retries.
+        run: |
+          for attempt in 1 2 3 4; do
+            ./gradlew build --no-daemon --stacktrace && exit 0
+            echo "build attempt $attempt failed; retrying in 30s"
+            sleep 30
+          done
+          exit 1
 
       - name: Upload jar artifact
         uses: actions/upload-artifact@v4
