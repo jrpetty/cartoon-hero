@@ -13,12 +13,35 @@ behaviour that was already there · **docs**
 
 ## Unreleased
 
+### The calendar is fixed, and the nights are gentle
+
+The door schedule now depends on the day number and **nothing else** — not the
+session, not the seed. Day three of this game is day three of every game: the
+same doors standing, the same portal live, the same breaches into the Dead
+Glade camp. Veterans genuinely get to learn "on day three you go north", the
+way you learn a place with weekdays.
+
+- **change** **A handful of doors a night, not a tenth of the maze.** Nightly
+  flips drop from ~20 doors to exactly **8** of the 200. Yesterday's map is
+  96 % true.
+- **feat** **The whole shipping calendar is verified exhaustively, not
+  statistically.** Because the schedule is one fixed sequence, the verifier now
+  walks the literal days that will ship: 30 days, every one passing on small
+  flips alone — no held nights, no atlas nights, no carve — with the camp
+  enterable every day.
+- **feat** **The calendar seed is chosen, not rolled.** `0xCD4` was found by
+  offline search so that day zero is the authored base layout itself and days
+  0–8 (the whole game, deadline included) put **all seven portals** on duty at
+  least once — with one back-to-back repeat left in on purpose.
+- **change** Breach picks and reshape detection key off the day-named layout
+  (`doors_day_N`), so the ways into the Dead Glade repeat with the calendar too.
+
 ### The breathing maze
 
 The seven-preset rotation is gone. The maze is **one layout** now, and every
-midnight roughly ten per cent of its two hundred doors change — some that were
-open close, some that were closed open. The bones never move. Yesterday's map
-is ninety per cent true: worth keeping, never worth trusting. (`MazeDoors`, a
+midnight a few of its two hundred doors change — some that were open close,
+some that were closed open. The bones never move. Yesterday's map stays almost
+entirely true: worth keeping, wrong exactly where it kills you. (`MazeDoors`, a
 new SavedData that walks the door history forward deterministically, so a
 restart lands on the identical state.)
 

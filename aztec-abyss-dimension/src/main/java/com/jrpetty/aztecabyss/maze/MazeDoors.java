@@ -13,7 +13,7 @@ import java.util.List;
 import java.util.Set;
 
 /**
- * The doors: one maze, breathing.
+ * The doors: one maze, one calendar.
  *
  * <p>The maze used to rotate through seven authored presets, which meant seven
  * whole layouts to hold in your head and a map that was only true one night in
@@ -21,45 +21,65 @@ import java.util.Set;
  * a group actually learns is <em>one</em> maze, and what should keep it alive is
  * not swapping the whole thing but the walls moving underneath what you know.
  *
- * <p>So now there is one layout, and every midnight roughly ten per cent of its
- * two hundred doors change - some that were open close, some that were closed
- * open. The bones never move. Yesterday's map is ninety per cent true, which is
- * exactly the right amount: worth keeping, never worth trusting.
+ * <p>So there is one layout, and every midnight a handful of its two hundred
+ * doors change - some that were open close, some that were closed open. The
+ * bones never move, and yesterday's map is almost entirely true: worth keeping,
+ * worth trusting nearly everywhere, wrong in exactly the places that kill you.
+ *
+ * <h2>The calendar is fixed</h2>
+ *
+ * <p>The schedule depends on the day number and nothing else - not the session,
+ * not the world seed. Day three of this game is day three of every game: the
+ * same doors standing, the same portal live, the same breaches into the Dead
+ * Glade. Veterans genuinely get to learn "on day three you go north", the way
+ * you learn a place with weekdays - and because the whole calendar is one fixed
+ * sequence, every day of it has been verified offline before it ever ships
+ * (tools/verify_maze_presets.py walks the identical arithmetic).
  *
  * <h2>The guarantee</h2>
  *
  * <p>Every day's state is checked before it is adopted - day zero included:
- * all four Glade doors must reach the day's portal through the graph, and the
- * Dead Glade must keep at least one breach opening onto live corridor. A flip
- * set that seals either is re-rolled up to eight times; if every roll fails,
- * the doors simply do not move tonight (yesterday's state is re-checked
- * against the new portal); and if even that fails, the state falls back to the
- * atlas - an authored layout verified to reach all seven portals with the camp
- * open and treated as solid. (The base layout cannot serve here: it reaches
- * only three of the seven.) Underneath all of it the physical carve still cuts
- * seventy per cent
- * of a route and warns an operator if it ever has to cut the rest - four
- * layers, because "always a route" is the one promise this mode cannot break
- * even once.
+ * all four Glade doors must reach the day's portal through the graph (with the
+ * Dead Glade's footprint counted as solid, because its wall ring is), and the
+ * camp must keep at least one breach opening onto live corridor. A flip set
+ * that seals either is re-rolled; if every roll fails, the doors simply do not
+ * move tonight; and if even that fails, the state reshapes from the atlas - an
+ * authored layout verified to reach all seven portals. The verified calendar
+ * never needs the atlas, so nights stay small; the rung exists so the promise
+ * survives even a dataset edit. Underneath all of it the physical carve still
+ * cuts seventy per cent of a route and warns an operator if it ever has to cut
+ * the rest - "always a route" is the one promise this mode cannot break even
+ * once.
  *
  * <h2>The portal moves too</h2>
  *
- * <p>Which of the seven portals is live is drawn fresh each day. It can land on
- * the same one twice - a door that sometimes stays put is more unsettling than
- * one that always moves, because you can never conclude anything from it.
+ * <p>Which of the seven portals is live is part of the same fixed calendar. It
+ * can stay put two days running - a door that sometimes does not move is more
+ * unsettling than one that always does, because you can never conclude
+ * anything from it.
  *
  * <p>Saved, so a restart mid-game wakes up with the same doors standing that
- * were standing when it went down - and a fresh save walks the history forward
+ * were standing when it went down - and a fresh save walks the calendar forward
  * from day zero deterministically, so it lands on the identical state.
  */
 public final class MazeDoors extends SavedData {
 
     public static final String NAME = "aztecabyss_maze_doors";
 
-    /** Fraction of the doors that move each midnight: one in ten. */
-    private static final int FLIP_DIVISOR = 10;
+    /** How many doors move each midnight: a handful, out of two hundred. */
+    private static final int FLIP_COUNT = 8;
     /** How many re-rolls a route-sealing flip set gets before we stop flipping. */
-    private static final int RETRIES = 8;
+    private static final int RETRIES = 24;
+    /**
+     * The calendar's seed - standing where the session number used to, so the
+     * schedule is the same in every game. Not arbitrary: chosen by offline
+     * search (tools/verify_maze_presets.py) as a seed whose whole thirty-day
+     * horizon passes on small flips alone - no held nights, no atlas nights -
+     * whose day zero is the authored base itself, and whose first nine days
+     * put every one of the seven portals on duty at least once. Change it and
+     * the verifier must pass again first.
+     */
+    private static final int CAL = 0xCD4;
 
     private final Set<String> open = new LinkedHashSet<>();
     private int session = -1;
@@ -137,21 +157,21 @@ public final class MazeDoors extends SavedData {
         return out;
     }
 
-    /** Which portal is live on a given day. Repeats are allowed on purpose. */
-    private static String exitFor(int session, int day) {
+    /** Which portal is live on a given day - the same day every game. */
+    private static String exitFor(int day) {
         String[] ids = PortalAnnex.EXIT_IDS;
-        int h = Deco.hash(session, day, 0x0E17, 0x5EED) & 0x7FFFFFFF;
+        int h = Deco.hash(CAL, day, 0x0E17, 0x5EED) & 0x7FFFFFFF;
         return ids[h % ids.length];
     }
 
-    /** Tonight's flip set: about a tenth of the doors, drawn deterministically. */
-    private static Set<String> flipped(Set<String> from, int session, int day, int salt) {
+    /** Tonight's flip set: a handful of doors, drawn deterministically. */
+    private static Set<String> flipped(Set<String> from, int day, int salt) {
         List<String> ids = sortedToggles();
-        int want = Math.max(1, ids.size() / FLIP_DIVISOR);
+        int want = FLIP_COUNT;
         Set<String> next = new LinkedHashSet<>(from);
         Set<String> chosen = new LinkedHashSet<>();
         for (int i = 0; chosen.size() < want && i < want * 6; i++) {
-            String id = ids.get((Deco.hash(session, day, salt, i) & 0x7FFFFFFF) % ids.size());
+            String id = ids.get((Deco.hash(CAL, day, salt, i) & 0x7FFFFFFF) % ids.size());
             if (frozen(id) || !chosen.add(id)) {
                 continue;
             }
@@ -186,10 +206,10 @@ public final class MazeDoors extends SavedData {
      * simulation), the given last resort is adopted and the physical carve
      * underneath cuts the route and tells an operator.
      */
-    private static Set<String> fromAtlas(int session, int day, String exit, Set<String> lastResort) {
+    private static Set<String> fromAtlas(int day, String exit, Set<String> lastResort) {
         Set<String> atlas = atlasState();
         for (int salt = 0; salt < RETRIES; salt++) {
-            Set<String> candidate = flipped(atlas, session, day, RETRIES + salt);
+            Set<String> candidate = flipped(atlas, day, RETRIES + salt);
             if (acceptable(candidate, exit)) {
                 return candidate;
             }
@@ -208,10 +228,10 @@ public final class MazeDoors extends SavedData {
         if (forSession != session || forDay < day || open.isEmpty()) {
             session = forSession;
             day = 0;
-            exitId = exitFor(session, 0);
+            exitId = exitFor(0);
             open.clear();
             // Day zero is validated like any other: if the base cannot reach
-            // the drawn portal (it misses one of the seven), flip toward one
+            // the drawn portal (it misses most of the seven), flip toward one
             // that can, or take the atlas outright.
             Set<String> base = baseState();
             Set<String> opening = null;
@@ -219,13 +239,13 @@ public final class MazeDoors extends SavedData {
                 opening = base;
             }
             for (int salt = 0; salt < RETRIES && opening == null; salt++) {
-                Set<String> candidate = flipped(base, session, 0, salt);
+                Set<String> candidate = flipped(base, 0, salt);
                 if (acceptable(candidate, exitId)) {
                     opening = candidate;
                 }
             }
             if (opening == null) {
-                opening = fromAtlas(session, 0, exitId, base);
+                opening = fromAtlas(0, exitId, base);
             }
             open.addAll(opening);
             cached = null;
@@ -233,10 +253,10 @@ public final class MazeDoors extends SavedData {
         }
         while (day < forDay) {
             day++;
-            exitId = exitFor(session, day);
+            exitId = exitFor(day);
             Set<String> adopted = null;
             for (int salt = 0; salt < RETRIES && adopted == null; salt++) {
-                Set<String> candidate = flipped(open, session, day, salt);
+                Set<String> candidate = flipped(open, day, salt);
                 if (acceptable(candidate, exitId)) {
                     adopted = candidate;
                 }
@@ -245,7 +265,7 @@ public final class MazeDoors extends SavedData {
                 adopted = new LinkedHashSet<>(open); // the doors hold still tonight
             }
             if (adopted == null) {
-                adopted = fromAtlas(session, day, exitId, flipped(open, session, day, 0));
+                adopted = fromAtlas(day, exitId, flipped(open, day, 0));
             }
             open.clear();
             open.addAll(adopted);
@@ -253,7 +273,10 @@ public final class MazeDoors extends SavedData {
             setDirty();
         }
         if (cached == null) {
-            cached = new MazeData.Layout("night_" + session + "_" + day, exitId, 0,
+            // Named by day alone: the calendar is the same in every game, so
+            // everything keyed off the name (breach picks, reshape detection)
+            // repeats with it.
+            cached = new MazeData.Layout("doors_day_" + day, exitId, 0,
                     List.copyOf(open));
         }
         return cached;

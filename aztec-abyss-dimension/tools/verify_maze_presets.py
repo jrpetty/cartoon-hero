@@ -1,11 +1,14 @@
-"""Simulate the breathing maze exactly as MazeDoors builds it, and prove the
-one promise that matters: EVERY day, all four Glade doors reach the portal.
+"""Walk the maze's fixed door calendar exactly as MazeDoors builds it, and
+prove the one promise that matters: EVERY day, all four Glade doors reach the
+portal.
 
-The old seven-preset rotation is gone. The maze is one layout now, and every
-midnight roughly ten per cent of its two hundred doors flip. This replicates
-the shipped algorithm bit for bit - Deco.hash's 32-bit overflow, the sorted
-toggle order, the flip selection, the retry ladder - so what passes here is
-what runs in game.
+The calendar depends on the day number and nothing else - day three of this
+game is day three of every game - and each midnight only a handful of doors
+flip. Because the whole schedule is one deterministic sequence, this script is
+not a statistical argument but an exhaustive check of the exact days that will
+ship: it replicates the algorithm bit for bit (Deco.hash's 32-bit overflow,
+the sorted toggle order, the flip selection, the retry ladder), so what passes
+here is what runs in game.
 """
 import json
 from collections import deque
@@ -13,7 +16,7 @@ from collections import deque
 GRID, GLADE_MIN, GLADE_MAX = 96, 40, 55
 DOORS = [(48, 39), (56, 48), (47, 56), (39, 47)]
 DEAD_X, DEAD_Z, DEAD_SPAN = 16, 70, 10
-FLIP_DIVISOR, RETRIES = 10, 8
+FLIP_COUNT, RETRIES, CAL = 8, 24, 0xCD4
 M32 = 0xFFFFFFFF
 
 d = json.load(open('src/main/resources/data/aztecabyss/maze/maze_config_v2.json'))
@@ -66,18 +69,18 @@ ATLAS_STATE = frozenset(
 assert ATLAS_STATE, f"atlas layout {ATLAS_NAME!r} missing from dataset"
 
 
-def exit_for(session, day):
-    h = deco_hash(session, day, 0x0E17, 0x5EED) & 0x7FFFFFFF
+def exit_for(day):
+    h = deco_hash(CAL, day, 0x0E17, 0x5EED) & 0x7FFFFFFF
     return exit_ids[h % len(exit_ids)]
 
 
-def flipped(from_state, session, day, salt):
-    want = max(1, len(SORTED_IDS) // FLIP_DIVISOR)
+def flipped(from_state, day, salt):
+    want = FLIP_COUNT
     nxt = set(from_state)
     chosen = set()
     i = 0
     while len(chosen) < want and i < want * 6:
-        tid = SORTED_IDS[(deco_hash(session, day, salt, i) & 0x7FFFFFFF) % len(SORTED_IDS)]
+        tid = SORTED_IDS[(deco_hash(CAL, day, salt, i) & 0x7FFFFFFF) % len(SORTED_IDS)]
         i += 1
         if frozen(tid) or tid in chosen:
             continue
@@ -177,7 +180,7 @@ def breaches_enterable(state):
 
 # ---------------------------------------------------------------------------
 print("=" * 76)
-print("THE BREATHING MAZE — MazeDoors simulated over many sessions")
+print("THE DOOR CALENDAR — every shipping day, walked exhaustively")
 print("=" * 76)
 
 for _e in exit_ids:
@@ -186,22 +189,24 @@ for _e in exit_ids:
 assert breaches_enterable(ATLAS_STATE), f"atlas {ATLAS_NAME} seals the camp"
 print(f"atlas ({ATLAS_NAME}) reaches all {len(exit_ids)} portals camp-solid : OK")
 
-SESSIONS = range(1, 6)
-DAYS = 15
-total = held = based = carve_needed = 0
+# The game's deadline is day 8; the horizon leaves generous room beyond it.
+HORIZON = 30
+held = based = carve_needed = 0
 flip_sizes = []
 exit_seen = {}
 camp_ok = True
+rows = []
+
 
 def acceptable(state, exit_id):
     """MazeDoors.acceptable: portal reachable from every door, camp open."""
     return solvable(state, exit_id) and breaches_enterable(state)
 
 
-def from_atlas(session, day, exit_id, last_resort):
+def from_atlas(day, exit_id, last_resort):
     """MazeDoors.fromAtlas: salted flips of the atlas, then the atlas itself."""
     for salt in range(RETRIES):
-        cand = flipped(ATLAS_STATE, session, day, RETRIES + salt)
+        cand = flipped(ATLAS_STATE, day, RETRIES + salt)
         if acceptable(cand, exit_id):
             return cand, False
     if acceptable(ATLAS_STATE, exit_id):
@@ -209,77 +214,85 @@ def from_atlas(session, day, exit_id, last_resort):
     return last_resort, True
 
 
-for session in SESSIONS:
-    state = None
-    for day in range(DAYS):
-        total += 1
-        exit_id = exit_for(session, day)
-        exit_seen[exit_id] = exit_seen.get(exit_id, 0) + 1
-        if day == 0:
-            # Day zero validated like any other: base, else flips of base,
-            # else the atlas (the layout proven good for all seven portals).
-            adopted = None
-            if acceptable(BASE_STATE, exit_id):
-                adopted = BASE_STATE
-            for salt in range(RETRIES):
-                if adopted is not None:
-                    break
-                cand = flipped(BASE_STATE, session, 0, salt)
-                if acceptable(cand, exit_id):
-                    adopted = cand
-            if adopted is None:
-                adopted, carved = from_atlas(session, 0, exit_id, BASE_STATE)
-                if carved:
-                    carve_needed += 1
-                else:
-                    based += 1
-        else:
-            adopted = None
-            for salt in range(RETRIES):
-                cand = flipped(state, session, day, salt)
-                if acceptable(cand, exit_id):
-                    adopted = cand
-                    break
-            if adopted is None and acceptable(state, exit_id):
-                adopted = state
-                held += 1
-            if adopted is None:
-                adopted, carved = from_atlas(session, day, exit_id,
-                                             flipped(state, session, day, 0))
-                if carved:
-                    carve_needed += 1
-                else:
-                    based += 1
-            flip_sizes.append(len(adopted ^ state))
-        assert acceptable(adopted, exit_id) or carve_needed, \
-            f"UNSOLVABLE session {session} day {day}"
-        if not breaches_enterable(adopted):
-            camp_ok = False
-            print(f"  !! camp sealed on session {session} day {day}")
-        state = adopted
+state = None
+for day in range(HORIZON):
+    exit_id = exit_for(day)
+    exit_seen[exit_id] = exit_seen.get(exit_id, 0) + 1
+    how = "flip"
+    if day == 0:
+        # Day zero validated like any other: base, else flips of base, else
+        # the atlas (the layout proven good for all seven portals).
+        adopted = None
+        if acceptable(BASE_STATE, exit_id):
+            adopted = BASE_STATE
+            how = "base"
+        for salt in range(RETRIES):
+            if adopted is not None:
+                break
+            cand = flipped(BASE_STATE, 0, salt)
+            if acceptable(cand, exit_id):
+                adopted = cand
+        if adopted is None:
+            adopted, carved = from_atlas(0, exit_id, BASE_STATE)
+            how = "CARVE" if carved else "atlas"
+            if carved:
+                carve_needed += 1
+            else:
+                based += 1
+        moved = len(adopted ^ BASE_STATE)
+    else:
+        adopted = None
+        for salt in range(RETRIES):
+            cand = flipped(state, day, salt)
+            if acceptable(cand, exit_id):
+                adopted = cand
+                break
+        if adopted is None and acceptable(state, exit_id):
+            adopted = state
+            held += 1
+            how = "hold"
+        if adopted is None:
+            adopted, carved = from_atlas(day, exit_id,
+                                         flipped(state, day, 0))
+            how = "CARVE" if carved else "atlas"
+            if carved:
+                carve_needed += 1
+            else:
+                based += 1
+        moved = len(adopted ^ state)
+        flip_sizes.append(moved)
+    assert acceptable(adopted, exit_id) or carve_needed, f"UNSOLVABLE day {day}"
+    if not breaches_enterable(adopted):
+        camp_ok = False
+        print(f"  !! camp sealed on day {day}")
+    rows.append((day, exit_id.split("_")[1], moved, how, len(adopted)))
+    state = adopted
 
-print(f"days simulated                  : {total}")
-print(f"solvable by the flip roll       : {total - len(SESSIONS) - held - based - carve_needed}"
-      f" of {total - len(SESSIONS)} reshapes")
+print()
+print("day | portal | doors moved | via   | doors open")
+for day, ex, moved, how, n_open in rows:
+    mark = "  <- deadline week" if day == 8 else ""
+    print(f"{day:3} | {ex:6} | {moved:11} | {how:5} | {n_open}{mark}")
+print()
+print(f"days in the calendar            : {HORIZON}")
 print(f"doors held still (fallback 2)   : {held}")
-print(f"fell back to the atlas (rung 3) : {based}")
+print(f"fell back to the atlas (rung 3) : {based}  <- must be 0 inside the horizon")
 print(f"needed the physical carve       : {carve_needed}  <- must be 0")
 if flip_sizes:
     print(f"doors moved per night           : min {min(flip_sizes)}"
           f" avg {sum(flip_sizes)/len(flip_sizes):.1f} max {max(flip_sizes)}"
           f"  (of {len(SORTED_IDS)} toggles)")
-print(f"portal distribution over {total} days : "
+print(f"portal distribution             : "
       + "  ".join(f"{k.split('_')[1]}:{v}" for k, v in sorted(exit_seen.items())))
-repeats = 0
-for session in SESSIONS:
-    prev = None
-    for day in range(DAYS):
-        e = exit_for(session, day)
-        if e == prev:
-            repeats += 1
-        prev = e
+repeats = sum(1 for day in range(1, HORIZON)
+              if exit_for(day) == exit_for(day - 1))
 print(f"portal stayed put next morning  : {repeats} times  (allowed, on purpose)")
 print(f"Dead Glade enterable every day  : {camp_ok}")
+window = {exit_for(d) for d in range(9)}
+print(f"all 7 portals inside the game   : {len(window) == len(exit_ids)}"
+      f"  (days 0-8 cover {len(window)})")
 print()
-ok = carve_needed == 0 and camp_ok
-print("VERDICT:", "PASS — a route stands every single day" if ok else "** FAIL **")
+ok = (carve_needed == 0 and based == 0 and camp_ok
+      and len(window) == len(exit_ids) and rows[0][3] == "base")
+print("VERDICT:", "PASS — a route stands every single day, on small flips alone"
+      if ok else "** FAIL **")
