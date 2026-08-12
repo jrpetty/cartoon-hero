@@ -83,7 +83,10 @@ public class HubScreen extends GadgetScreen {
      * than one that is not there.
      */
     public HubScreen(CommandHubBlockEntity be, String provenance, Screen parent) {
-        super(Component.literal(provenance.isEmpty() ? "Command Hub" : "Command Hub  ·  remote"), 320, 276);
+        // The provenance IS the title on a remote board. It used to be drawn
+        // right-aligned in the same strip as a centred "Command Hub · remote",
+        // and the two met in the middle — one header, one string.
+        super(Component.literal(provenance.isEmpty() ? "Command Hub" : "Remote — " + provenance), 320, 276);
         this.be = be;
         this.provenance = provenance;
         this.parent = parent;
@@ -311,11 +314,6 @@ public class HubScreen extends GadgetScreen {
         int alarms = be.alarmCount();
         gfx.fill(left + 8, top + 18, left + panelW - 8, top + 32, TABLE_BG);
         gfx.drawString(font, nodes.size() + "/" + CommandHubBlockEntity.MAX_NODES + " linked", x, top + 21, AMBER, false);
-        if (readOnly()) {
-            // Say plainly whose board this is and how old, since a remote copy
-            // that looked identical to the live one would be a trap.
-            gfx.drawString(font, provenance, left + panelW - 12 - font.width(provenance), top + 5, GRAY, false);
-        }
         gfx.drawString(font, ItemCounterBlockEntity.fmt(be.totalRateMin()) + " items/min",
                 left + 108, top + 21, AMBER, false);
         gfx.drawString(font, alarms == 0 ? "all clear" : alarms + " alert" + (alarms == 1 ? "" : "s"),
