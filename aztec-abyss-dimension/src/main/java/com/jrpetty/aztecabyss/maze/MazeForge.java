@@ -126,6 +126,11 @@ public final class MazeForge {
         // a wall you can put up and take down forty times is not a day's work,
         // and any metric you can farm standing still is one somebody will.
         MazeDayWork.get(level).add(level, player, MazeJobs.BUILDER, 1);
+        // And the trade's experience. Forging paid the Glade's pool but not
+        // the smith's own ladder - the only Builder experience in the game
+        // was placing survey marks in corridors, which is a Runner's verb
+        // wearing a Builder's hat. The forge is the trade; the forge pays it.
+        MazeJobs.get(level).award(player, MazeJobs.BUILDER, 8);
     }
 
     /**

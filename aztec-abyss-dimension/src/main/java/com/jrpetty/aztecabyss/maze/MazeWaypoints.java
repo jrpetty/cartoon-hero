@@ -61,10 +61,20 @@ public final class MazeWaypoints extends SavedData {
             MazeCharts charts = MazeCharts.get(level.getServer());
             int cx = at.getX() / MazeData.CELL;
             int cz = at.getZ() / MazeData.CELL;
+            int fresh = 0;
             for (int dx = -1; dx <= 1; dx++) {
                 for (int dz = -1; dz <= 1; dz++) {
-                    charts.chart(who.getUUID(), cx + dx, cz + dz);
+                    if (charts.chart(who.getUUID(), cx + dx, cz + dz)) {
+                        fresh++;
+                    }
                 }
+            }
+            // Surveying by torch is still surveying: the cells pay the day's
+            // quota and the trade's ladder like walked ones do, at a lighter
+            // rate than walking them.
+            if (fresh > 0) {
+                MazeDayWork.get(level).add(level, who, MazeJobs.RUNNER, fresh);
+                MazeJobs.get(level).award(who, MazeJobs.RUNNER, fresh);
             }
         }
         refresh(level);

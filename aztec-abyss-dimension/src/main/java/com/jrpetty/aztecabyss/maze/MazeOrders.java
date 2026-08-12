@@ -132,6 +132,15 @@ public final class MazeOrders extends SavedData {
             new Entry("Camp", "paper", "Paper", Items.PAPER, 16, 2),
             new Entry("Camp", "bottles", "Glass bottles", Items.GLASS_BOTTLE, 8, 2),
             new Entry("Camp", "carpet", "White carpet", Items.WHITE_CARPET, 16, 1),
+            // Waypoints, on the sheet. Soul torches cannot be crafted in here
+            // (no soul sand grows in a maze) - without this line the waypoint
+            // system belonged exclusively to Chartwrights at rank two, which is
+            // a strange shape for a tool whose whole point is shared knowledge.
+            new Entry("Camp", "waypoints", "Waypoint torches", Items.SOUL_TORCH, 4, 3),
+            // A replacement chart, for the Runner whose sheet went down with
+            // them. The kit's copy was the only one obtainable, and losing the
+            // trade's defining tool with no way back is a dead end, not a cost.
+            new Entry("Camp", "chart", "Runner's Chart", Items.FILLED_MAP, 0, 5),
 
             // --- the two that change how a night ends, priced accordingly
             new Entry("Medical", "bandages", "Bandages", Items.PAPER, 0, 6),
@@ -170,11 +179,12 @@ public final class MazeOrders extends SavedData {
     }
 
     /**
-     * Two entries are built rather than stacked, because they are not items in
-     * the ordinary sense - the serum and the bandage are potions carrying custom
-     * effects, so their {@code count} is zero and this makes them instead.
+     * A few entries are built rather than stacked, because they are not items
+     * in the ordinary sense - the serum and the bandage are potions carrying
+     * custom effects, and the chart is live map data that has to be created in
+     * a level - so their {@code count} is zero and this makes them instead.
      */
-    public static List<ItemStack> build(Entry e, int qty, int dressingRank) {
+    public static List<ItemStack> build(ServerLevel level, Entry e, int qty, int dressingRank) {
         List<ItemStack> out = new ArrayList<>();
         if ("serum".equals(e.id())) {
             for (int i = 0; i < qty; i++) {
@@ -185,6 +195,12 @@ public final class MazeOrders extends SavedData {
         if ("bandages".equals(e.id())) {
             for (int i = 0; i < qty * 4; i++) {
                 out.add(MazeBandage.create(dressingRank));
+            }
+            return out;
+        }
+        if ("chart".equals(e.id())) {
+            for (int i = 0; i < qty; i++) {
+                out.add(MazeInduction.runnersChart(level));
             }
             return out;
         }

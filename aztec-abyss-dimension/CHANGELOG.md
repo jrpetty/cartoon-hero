@@ -35,6 +35,26 @@ behaviour that was already there · **docs**
   are: a probe on night 3, full raids on nights 5 and 7, and the finale on
   night 8.)
 
+### The trades close their loops
+
+- **fix** **Forging finally pays the Builder's own ladder.** The forge paid
+  the Glade's pool but zero trade experience — the only Builder XP in the
+  game was placing survey marks in corridors, a Runner's verb in a Builder's
+  hat. Each forge now pays 8 XP; a day at the anvil is a skill point.
+- **feat** **Raid nights are the Builder's biggest night.** Every block a
+  Builder sets into the breach counts toward the day's quota (the quota
+  clamps it) and pays 4 XP. Defending the wall *is* the trade.
+- **feat** **Waypoint torches join the catalogue** (4 for 3 points). Soul
+  torches cannot be crafted in the maze, so the waypoint system previously
+  belonged exclusively to Chartwrights at rank two — a strange shape for a
+  tool whose whole point is shared knowledge.
+- **feat** **A lost Runner's Chart can be replaced** — on the catalogue at 5
+  points. The kit's copy was the only one obtainable; losing the trade's
+  defining tool with no way back is a dead end, not a cost.
+- **fix** **Torch-surveying pays like walking.** Chartwright rank three
+  charted cells without crediting the day's quota or the trade's ladder;
+  fresh cells from a planted torch now pay both, at a lighter rate.
+
 ### The requisition economy: audited back to front, five faults fixed
 
 - **fix** **The pool no longer collapses on restart.** The per-head allowance

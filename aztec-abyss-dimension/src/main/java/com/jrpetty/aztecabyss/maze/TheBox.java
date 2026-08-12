@@ -164,7 +164,7 @@ public final class TheBox {
                 if (e == null) {
                     continue;
                 }
-                goods.addAll(MazeOrders.build(e, line.getValue(),
+                goods.addAll(MazeOrders.build(level, e, line.getValue(),
                         skills.rank(who, "dressing")));
                 spent += e.cost() * line.getValue();
             }

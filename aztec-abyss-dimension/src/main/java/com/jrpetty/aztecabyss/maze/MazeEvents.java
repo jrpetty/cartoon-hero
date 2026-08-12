@@ -93,8 +93,17 @@ public final class MazeEvents {
         }
         // On a raid night the breach in the Glade wall takes blocks: plugging
         // it is the intended play, and the wall ring is otherwise outside the
-        // buildable ground.
+        // buildable ground. For a Builder it is also the trade: each block in
+        // the hole counts toward the day's work (the quota clamps it) and pays
+        // the ladder - a raid night is the Builder's biggest night.
         if (MazeRaid.placeable(event.getPos())) {
+            if (event.getEntity() instanceof ServerPlayer builder) {
+                MazeJobs jobs = MazeJobs.get(level);
+                if (jobs.is(builder.getUUID(), MazeJobs.BUILDER)) {
+                    jobs.award(builder, MazeJobs.BUILDER, 4);
+                    MazeDayWork.get(level).add(level, builder, MazeJobs.BUILDER, 1);
+                }
+            }
             return;
         }
         // The Glade is yours. Breaking inside it was already allowed and placing

@@ -144,19 +144,27 @@ public final class MazeInduction {
         for (ItemStack stack : kit(job)) {
             p.getInventory().placeItemBackInInventory(stack);
         }
-        // The Runner's chart: a real map, scaled so the whole maze fits on one
-        // sheet. Vanilla does everything the job needs - it fills in only where
-        // its holder has walked, draws walls and corridors in their own colours,
-        // and carries the position arrow - which makes it fog-of-war that the
-        // game engine maintains for free. It cannot be given from kit(), which
-        // has no level to create the map data in.
+        // The Runner's chart cannot be given from kit(), which has no level to
+        // create the map data in.
         if (MazeJobs.RUNNER.equals(job) && p.level() instanceof ServerLevel sl) {
-            ItemStack chart = net.minecraft.world.item.MapItem.create(
-                    sl, MazeData.SPAN / 2, MazeData.SPAN / 2, (byte) 3, true, true);
-            chart.set(net.minecraft.core.component.DataComponents.CUSTOM_NAME,
-                    net.minecraft.network.chat.Component.literal("§bRunner's Chart"));
-            p.getInventory().placeItemBackInInventory(chart);
+            p.getInventory().placeItemBackInInventory(runnersChart(sl));
         }
+    }
+
+    /**
+     * The Runner's chart: a real map, scaled so the whole maze fits on one
+     * sheet. Vanilla does everything the job needs - it fills in only where
+     * its holder has walked, draws walls and corridors in their own colours,
+     * and carries the position arrow - which makes it fog-of-war that the
+     * game engine maintains for free. Also sold on the catalogue, so losing
+     * one is a cost rather than a dead end.
+     */
+    public static ItemStack runnersChart(ServerLevel level) {
+        ItemStack chart = net.minecraft.world.item.MapItem.create(
+                level, MazeData.SPAN / 2, MazeData.SPAN / 2, (byte) 3, true, true);
+        chart.set(net.minecraft.core.component.DataComponents.CUSTOM_NAME,
+                net.minecraft.network.chat.Component.literal("§bRunner's Chart"));
+        return chart;
     }
 
     private static void add(List<ItemStack> out, Item item, int count) {
