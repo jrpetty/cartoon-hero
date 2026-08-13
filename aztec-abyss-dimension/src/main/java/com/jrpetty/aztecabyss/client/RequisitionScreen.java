@@ -49,7 +49,16 @@ public class RequisitionScreen extends Screen {
 
     /** One catalogue line, unpacked. */
     private record Row(String group, String id, String display, int count, int cost,
-                       int yours, int glade) {
+                       int yours, int glade, String item) {
+    }
+
+    /** The actual items, for drawing. Cached so parsing happens once a row. */
+    private final Map<String, net.minecraft.world.item.ItemStack> icons = new LinkedHashMap<>();
+
+    private net.minecraft.world.item.ItemStack icon(Row r) {
+        return icons.computeIfAbsent(r.id(), k -> new net.minecraft.world.item.ItemStack(
+                net.minecraft.core.registries.BuiltInRegistries.ITEM.get(
+                        net.minecraft.resources.ResourceLocation.parse(r.item()))));
     }
 
     private final int day;
@@ -97,7 +106,7 @@ public class RequisitionScreen extends Screen {
      * scrolling, because a supply menu you have to scroll is a supply menu
      * people order the top four items from.
      */
-    private static final int ROW_H = 16;
+    private static final int ROW_H = 18;
 
     public RequisitionScreen(RequisitionPayload payload, int openTab) {
         super(Component.literal("Requisition"));
@@ -121,7 +130,8 @@ public class RequisitionScreen extends Screen {
                     RequisitionPayload.number(packed, 3),
                     RequisitionPayload.number(packed, 4),
                     RequisitionPayload.number(packed, 5),
-                    RequisitionPayload.number(packed, 6));
+                    RequisitionPayload.number(packed, 6),
+                    RequisitionPayload.field(packed, 7));
             rows.add(r);
             byGroup.computeIfAbsent(r.group(), k -> new ArrayList<>()).add(r);
         }
@@ -192,7 +202,7 @@ public class RequisitionScreen extends Screen {
             addRenderableWidget(plus);
         }
 
-        int footY = Math.min(this.height - 24, contentBottom() + 16);
+        int footY = Math.min(this.height - 24, contentBottom() + 34);
         Button clear = Button.builder(Component.literal("Take it all back"),
                         b -> send(RequisitionOrderPayload.CLEAR, 0))
                 .bounds(x, footY, 120, 20).build();
@@ -307,7 +317,11 @@ public class RequisitionScreen extends Screen {
         }
 
         // --- the panel ----------------------------------------------------
-        int panelBottom = contentBottom() + 4;
+        // The extra rows under the list are the crate strip: what YOU are
+        // buying, drawn as the actual items, because a slate you can see is a
+        // slate you trust.
+        int stripTop = contentBottom() + 4;
+        int panelBottom = stripTop + 26;
         g.fill(px - 3, top - 4, px + PANEL_W + 3, panelBottom, PANEL_FILL);
         g.fill(px - 3, top - 4, px + PANEL_W + 3, top - 3, PANEL_EDGE);
         g.fill(px - 3, panelBottom - 1, px + PANEL_W + 3, panelBottom, PANEL_EDGE);
@@ -329,28 +343,69 @@ public class RequisitionScreen extends Screen {
                 g.fill(px, ry, px + 2, ry + ROW_H - 2, GOLD);
             }
 
+            // The item itself, drawn where a name used to stand alone.
+            g.renderItem(icon(r), px + 4, ry);
+
             String name = r.display();
             String bundle = r.count() > 0 ? " §8x" + r.count() : "";
             g.drawString(this.font, Component.literal("§r" + name + bundle),
-                    px + 8, ry + 4, r.glade() > 0 ? TEXT : TEXT_DIM, false);
+                    px + 24, ry + 5, r.glade() > 0 ? TEXT : TEXT_DIM, false);
 
             String price = r.cost() + "p";
             g.drawString(this.font, Component.literal(price),
-                    px + PANEL_W - 60 - this.font.width(price), ry + 4,
+                    px + PANEL_W - 60 - this.font.width(price), ry + 5,
                     r.cost() <= left ? TEXT_DIM : RED, false);
 
             if (r.glade() > 0) {
                 String n = "x" + r.glade();
                 g.drawString(this.font, Component.literal(n),
-                        px + PANEL_W - 52, ry + 4, GOLD, false);
+                        px + PANEL_W - 52, ry + 5, GOLD, false);
             }
+        }
+
+        // --- the crate strip ----------------------------------------------
+        // Everything on YOUR slate, across every tab, as items with counts -
+        // the crate you will actually be opening tomorrow morning.
+        g.fill(px, stripTop - 1, px + PANEL_W, stripTop, PANEL_EDGE);
+        int mineCost = 0;
+        int ix = px + 4;
+        boolean any = false;
+        for (Row r : rows) {
+            if (r.yours() <= 0) {
+                continue;
+            }
+            any = true;
+            mineCost += r.cost() * r.yours();
+            if (ix < px + PANEL_W - 70) {
+                g.renderItem(icon(r), ix, stripTop + 4);
+                String n = String.valueOf(r.count() > 0 ? r.count() * r.yours() : r.yours());
+                g.drawString(this.font, Component.literal(n),
+                        ix + 17 - this.font.width(n), stripTop + 13, TEXT, true);
+                ix += 20;
+            }
+        }
+        if (any) {
+            String total = "= " + mineCost + "p";
+            g.drawString(this.font, Component.literal(total),
+                    px + PANEL_W - 6 - this.font.width(total), stripTop + 9, GOLD, false);
+        } else {
+            g.drawString(this.font, Component.literal(
+                    "§8Your crate is empty. Click + on anything above."),
+                    px + 6, stripTop + 9, TEXT_FAINT, false);
         }
 
         super.render(g, mouseX, mouseY, partialTick);
 
+        // The real tooltip of the real item, so "what even is this" is
+        // answered the way the rest of the game answers it.
+        if (hovered >= 0 && hovered < list.size()
+                && mouseX >= px + 2 && mouseX <= px + 22) {
+            g.renderTooltip(this.font, icon(list.get(hovered)), mouseX, mouseY);
+        }
+
         // --- the footer line ----------------------------------------------
         // Drawn after the widgets so a refusal is never hidden behind a button.
-        int footTextY = Math.min(this.height - 36, contentBottom() + 6);
+        int footTextY = Math.min(this.height - 10, contentBottom() + 58);
         String foot;
         int colour = TEXT_FAINT;
         if (spent == 0) {

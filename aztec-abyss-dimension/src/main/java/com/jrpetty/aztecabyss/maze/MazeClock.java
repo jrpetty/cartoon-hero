@@ -100,6 +100,19 @@ public final class MazeClock extends SavedData {
         return phase >= dayTicks();
     }
 
+    /**
+     * Sleeps the night away: jumps the phase to the last tick before dawn, so
+     * the very next advance rolls the day over through the same code every
+     * dawn goes through - the reshape, the Box, the day counter, all of it.
+     */
+    public void skipToDawn() {
+        if (!isNight()) {
+            return;
+        }
+        phase = cycleTicks() - 1;
+        setDirty();
+    }
+
     /** Seconds left in whichever phase is running. */
     public int secondsLeftInPhase() {
         int end = isNight() ? cycleTicks() : dayTicks();

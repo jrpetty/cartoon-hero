@@ -337,6 +337,33 @@ public final class MazeRuntime {
         tickRunners(level, t);
         tickGrievers(level, t);
         Griever.tickStalker(level, clock);
+        // Sleeping through the night. Everybody in the maze in a bed, and dawn
+        // comes early - through the same rollover every dawn takes, so the
+        // reshape and the Box behave identically to a night waited out. A
+        // raid night cannot be slept through while the raid is running; the
+        // wall does not care that you are tired.
+        if (clock.isNight() && !MazeRaid.active()) {
+            var everyone = level.players();
+            if (!everyone.isEmpty()) {
+                boolean allAsleep = true;
+                for (ServerPlayer sleeper : everyone) {
+                    if (!sleeper.isSleeping() && !sleeper.isSpectator()) {
+                        allAsleep = false;
+                        break;
+                    }
+                }
+                if (allAsleep) {
+                    clock.skipToDawn();
+                    for (ServerPlayer sleeper : everyone) {
+                        if (sleeper.isSleeping()) {
+                            sleeper.stopSleeping();
+                        }
+                        sleeper.displayClientMessage(Component.literal(
+                                "§7The night passes. §8You dream of walls."), false);
+                    }
+                }
+            }
+        }
         if (level.getGameTime() % 100L == 0L) {
             // Every five seconds: sweep dead waypoints, repaint the charts.
             MazeWaypoints.get(level).refresh(level);

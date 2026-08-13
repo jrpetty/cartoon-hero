@@ -76,6 +76,12 @@ public final class ClientAbyssState {
                 payload.currentChoice(), bests, payload.customMaps()));
     }
 
+    /** The trade board's sign-up sheet: one trade, described, with a confirm. */
+    public static void openTradeBoard(com.jrpetty.aztecabyss.network.TradeBoardPayload payload) {
+        Minecraft.getInstance().setScreen(
+                new com.jrpetty.aztecabyss.client.TradeBoardScreen(payload));
+    }
+
     /** The trade sheet, opened fresh each time the server sends one. */
     public static void openSkills(com.jrpetty.aztecabyss.network.SkillTreePayload payload) {
         Minecraft.getInstance().setScreen(

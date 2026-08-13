@@ -487,10 +487,46 @@ public final class MazeEvents {
             event.setCanceled(true);
             return;
         }
+        // The trade board: right-click a post to read the trade and sign on.
+        // No command, no chat - you click RUNNER and the screen asks if you
+        // are sure, the way choosing who you are for a week deserves.
+        String post = tradePostAt(event.getPos());
+        if (post != null) {
+            com.jrpetty.aztecabyss.network.ModNetworking.sendTradeBoard(p, post);
+            level.playSound(null, event.getPos(), net.minecraft.sounds.SoundEvents.BOOK_PAGE_TURN,
+                    net.minecraft.sounds.SoundSource.BLOCKS, 0.9F, 1.1F);
+            event.setCanceled(true);
+            return;
+        }
         // The trade desk and the order desk, so neither screen needs a command.
         if (MazeStations.onUse(level, p, event.getPos())) {
             event.setCanceled(true);
         }
+    }
+
+    /**
+     * Which trade's post this position belongs to, or null.
+     *
+     * <p>The whole post answers - the log column, the trade sign and the
+     * roster sign under it - because "click the sign" should not mean "click
+     * the exact sign, not the wood it hangs on".
+     */
+    private static String tradePostAt(net.minecraft.core.BlockPos at) {
+        int oz = MazeData.SPAWN_Z + 5;
+        if (at.getZ() != oz && at.getZ() != oz + 1) {
+            return null;
+        }
+        int y = at.getY() - MazeData.FLOOR_Y;
+        if (y < 0 || y > 4) {
+            return null;
+        }
+        int ox = MazeData.SPAWN_X - 8;
+        for (int i = 0; i < MazeJobs.ALL.size(); i++) {
+            if (at.getX() == ox + i * 3) {
+                return MazeJobs.ALL.get(i);
+            }
+        }
+        return null;
     }
 
     @SubscribeEvent
@@ -1021,26 +1057,44 @@ public final class MazeEvents {
 
     private static int takeJob(CommandSourceStack src, String job) {
         ServerPlayer player = src.getPlayer();
-        if (player == null || src.getServer() == null) {
+        if (player == null) {
             return 0;
         }
-        MazeJobs jobs = MazeJobs.get(src.getServer());
+        chooseTrade(player, job);
+        return 1;
+    }
+
+    /**
+     * Signs somebody on to a trade - the confirm button on the board screen,
+     * and the old command, both land here.
+     *
+     * <p>The job id is re-checked against the real list because it arrived
+     * from a client; a made-up trade is refused rather than stored.
+     */
+    public static void chooseTrade(ServerPlayer player, String job) {
+        if (player.getServer() == null || !MazeJobs.ALL.contains(job)) {
+            return;
+        }
+        MazeJobs jobs = MazeJobs.get(player.getServer());
         if (!jobs.setJob(player.getUUID(), job)) {
-            src.sendSuccess(() -> Component.literal("§7You already are one."), false);
-            return 0;
+            player.displayClientMessage(Component.literal("§7You already are one."), false);
+            return;
         }
         int rank = jobs.levelOf(player.getUUID(), job);
-        src.sendSuccess(() -> Component.literal(
+        player.displayClientMessage(Component.literal(
                 "§7You are a " + MazeJobs.display(job) + " §8lv" + rank), false);
-        src.sendSuccess(() -> Component.literal("  " + MazeJobs.perkLine(job, rank)), false);
-        for (ServerPlayer other : src.getServer().getPlayerList().getPlayers()) {
+        player.displayClientMessage(Component.literal(
+                "  " + MazeJobs.perkLine(job, rank)), false);
+        player.level().playSound(null, player.blockPosition(),
+                net.minecraft.sounds.SoundEvents.BEACON_ACTIVATE,
+                net.minecraft.sounds.SoundSource.PLAYERS, 0.8F, 1.4F);
+        for (ServerPlayer other : player.getServer().getPlayerList().getPlayers()) {
             if (other != player) {
                 other.displayClientMessage(Component.literal(
                         "§7" + player.getGameProfile().getName() + " is a "
                                 + MazeJobs.display(job) + "§7 now."), false);
             }
         }
-        return 1;
     }
 
     private static int roster(CommandSourceStack src) {

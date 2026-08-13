@@ -131,7 +131,7 @@ public final class AbyssConfig {
         MAZE_DAY_SECONDS = b.comment(
                         "Real seconds of daylight in one maze day - the window the doors are open.",
                         "The maze runs on its own clock, not the overworld's, so this is exact.")
-                .defineInRange("mazeDaySeconds", 600, 60, 7200);
+                .defineInRange("mazeDaySeconds", 1500, 60, 7200);
         MAZE_NIGHT_SECONDS = b.comment(
                         "Real seconds of night in one maze day - the window the doors are sealed",
                         "and the Grievers are out.")

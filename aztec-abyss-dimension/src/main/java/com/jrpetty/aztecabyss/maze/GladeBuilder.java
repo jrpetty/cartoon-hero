@@ -290,6 +290,19 @@ public final class GladeBuilder {
         level.setBlock(new BlockPos(ox + 1, Y + 3, oz + 1), Blocks.LANTERN.defaultBlockState()
                 .setValue(BlockStateProperties.HANGING, true), 2);
         furnish(level, ox, oz, w, d);
+        // A bed against the west wall. Set after the furniture so a hut always
+        // ends up with one whatever else the furnishing put down - the night
+        // can be slept through now, and a bed you have to build first makes
+        // the first exhausted night a scavenger hunt.
+        var bed = Blocks.RED_BED.defaultBlockState()
+                .setValue(net.minecraft.world.level.block.BedBlock.FACING,
+                        net.minecraft.core.Direction.NORTH);
+        level.setBlock(new BlockPos(ox + 1, Y + 1, oz + 2), bed.setValue(
+                net.minecraft.world.level.block.BedBlock.PART,
+                net.minecraft.world.level.block.state.properties.BedPart.FOOT), 2);
+        level.setBlock(new BlockPos(ox + 1, Y + 1, oz + 1), bed.setValue(
+                net.minecraft.world.level.block.BedBlock.PART,
+                net.minecraft.world.level.block.state.properties.BedPart.HEAD), 2);
     }
 
     /**
@@ -641,10 +654,10 @@ public final class GladeBuilder {
         int ox = MazeData.SPAWN_X - 8;
         int oz = MazeData.SPAWN_Z + 5;
         String[][] posts = {
-                {"§1RUNNER", "§0/maze job", "§0runner", "§8the corridors"},
-                {"§6BUILDER", "§0/maze job", "§0builder", "§8the marks"},
-                {"§2MED-JACK", "§0/maze job", "§0medjack", "§8the stung"},
-                {"§0TRACK-HOE", "§0/maze job", "§0trackhoe", "§8the field"},
+                {"§1RUNNER", "§8the corridors", "", "§0» right-click «"},
+                {"§6BUILDER", "§8the forge", "", "§0» right-click «"},
+                {"§2MED-JACK", "§8the stung", "", "§0» right-click «"},
+                {"§0TRACK-HOE", "§8the field", "", "§0» right-click «"},
         };
         // Logs rather than fences for the posts: a wall sign wants a solid face
         // behind it, and a fence is not one - the whole board would pop off the

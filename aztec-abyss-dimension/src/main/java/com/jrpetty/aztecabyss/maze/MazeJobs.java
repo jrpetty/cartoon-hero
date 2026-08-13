@@ -86,6 +86,42 @@ public final class MazeJobs extends SavedData {
         };
     }
 
+    /**
+     * The full pitch, for the sign-up screen: what the days look like, what
+     * the Glade counts on you for, and what it pays. Written to let somebody
+     * choose a trade they have never played, which one chat line never could.
+     */
+    public static String description(String job) {
+        return switch (job) {
+            case RUNNER -> "You go out. Every day the doors open, you are through them - "
+                    + "charting corridors, finding the portal, reading the walls that "
+                    + "moved in the night.\n\n"
+                    + "The Glade counts on you for the map. Every new cell you walk pays "
+                    + "the day's quota and your own ladder, and your Runner's Chart fills "
+                    + "in as you go.\n\n"
+                    + "You will die more than anybody else. That is the trade.";
+            case BUILDER -> "You make things better than the Box sends them. Iron becomes "
+                    + "blades that bite harder and wear longer; the forge mark on them "
+                    + "carries your name.\n\n"
+                    + "The Glade counts on you for gear - and for the wall. On raid "
+                    + "nights, every block you set into the breach is a day's work.\n\n"
+                    + "You choose what the Glade fights with.";
+            case MEDJACK -> "You keep people alive. Bandages, serum, and being there when "
+                    + "a Runner comes through the door with three stings and a minute "
+                    + "left.\n\n"
+                    + "The Glade counts on you at the worst moments. Treating somebody "
+                    + "pays more experience than anything else in the maze - because "
+                    + "nothing else is as hard to be there for.\n\n"
+                    + "Quiet days. Terrible nights.";
+            case TRACKHOE -> "You feed everyone. The field, the harvests, the rations "
+                    + "that go into every kit that walks out the door.\n\n"
+                    + "The Glade counts on you every single day - a hundred food is a "
+                    + "full quota, and a Glade that eats is a Glade that runs.\n\n"
+                    + "Nobody writes songs about the farm. Everybody eats because of it.";
+            default -> "No trade yet.";
+        };
+    }
+
     public static String blurb(String job) {
         return switch (job) {
             case RUNNER -> "§7Faster in the corridors, and the only job paid for charting them.";

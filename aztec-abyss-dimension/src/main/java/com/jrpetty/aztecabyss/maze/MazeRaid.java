@@ -120,6 +120,11 @@ public final class MazeRaid {
         return day == PROBE_DAY;
     }
 
+    /** Whether a raid is running right now - a night nobody sleeps through. */
+    public static boolean active() {
+        return active;
+    }
+
     /** True while the running raid is the small day-two probe. */
     private static boolean probe() {
         return raidDay == PROBE_DAY;

@@ -97,7 +97,7 @@ public final class MazeInduction {
         p.setDeltaMovement(net.minecraft.world.phys.Vec3.ZERO);
 
         p.displayClientMessage(Component.literal(
-                "§e§lCHOOSE A TRADE §8— §b/maze job runner §8· §6builder §8· §amedjack §8· §2trackhoe"), true);
+                "§e§lCHOOSE A TRADE §8— §7right-click a post on the board by the bell"), true);
         // The full pitch every five seconds. Once would be missed by anybody
         // still loading in; every second would be unreadable.
         if (level.getGameTime() % 100L == 0L) {

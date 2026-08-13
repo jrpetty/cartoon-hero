@@ -13,6 +13,31 @@ behaviour that was already there · **docs**
 
 ## Unreleased
 
+### The screens, and the clock
+
+- **feat** **Choosing a trade is a screen now, not a command.** Right-click any
+  post on the trade board — the sign, the roster board under it, or the wood
+  they hang on — and the sign-up sheet opens: the trade's name in its colour,
+  a real description of what the days look like and what the Glade counts on
+  you for, who is already on the roster, and a deliberate confirm ("Take the
+  trade? The Glade will be counting on you") — with a gold warning if you
+  already have a different trade. Chat and commands are out of the loop; the
+  old command still works but just lands on the same signing-on path.
+- **feat** **The requisition slate shows what you are buying.** Every
+  catalogue line now draws the actual item, hovering the icon shows the real
+  item tooltip, and a new **crate strip** under the list shows *your* slate as
+  items with counts and a running total — the crate you will actually open
+  tomorrow, visible while you fill it. (The payload now carries item registry
+  ids so the client can draw the real thing.)
+- **change** **Days are 25 minutes now** (up from 10; nights stay 10). The
+  maze day finally has room for a real run, a second trip, and an evening
+  decision, and the night stays the short sharp thing it was designed as.
+- **feat** **Sleep skips the night.** Every hut has a bed, and if everybody in
+  the maze is asleep, dawn comes early — through the same rollover a waited
+  night takes, so the reshape, the Box, and the day counter behave
+  identically. A raid night cannot be slept through while the raid is
+  running; the wall does not care that you are tired.
+
 ### The day-stalker, the forecast, and the economy audit
 
 - **feat** **The day-stalker.** From the second day, one Griever walks the

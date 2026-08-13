@@ -112,6 +112,19 @@ public final class ModNetworking {
                     }
                 }));
         registrar.playToClient(
+                TradeBoardPayload.TYPE,
+                TradeBoardPayload.STREAM_CODEC,
+                (payload, context) -> context.enqueueWork(
+                        () -> ClientAbyssState.openTradeBoard(payload)));
+        registrar.playToServer(
+                TradeChoicePayload.TYPE,
+                TradeChoicePayload.STREAM_CODEC,
+                (payload, context) -> context.enqueueWork(() -> {
+                    if (context.player() instanceof ServerPlayer sp) {
+                        com.jrpetty.aztecabyss.maze.MazeEvents.chooseTrade(sp, payload.job());
+                    }
+                }));
+        registrar.playToClient(
                 RequisitionPayload.TYPE,
                 RequisitionPayload.STREAM_CODEC,
                 (payload, context) -> context.enqueueWork(
@@ -145,6 +158,31 @@ public final class ModNetworking {
      * point can never leave the client showing a rank the server does not agree
      * exists.
      */
+    /** The trade board: one post, described in full, for the sign-up screen. */
+    public static void sendTradeBoard(ServerPlayer player, String job) {
+        if (player.getServer() == null) {
+            return;
+        }
+        var jobs = com.jrpetty.aztecabyss.maze.MazeJobs.get(player.getServer());
+        StringBuilder takers = new StringBuilder();
+        for (ServerPlayer p : player.getServer().getPlayerList().getPlayers()) {
+            if (jobs.is(p.getUUID(), job)) {
+                if (!takers.isEmpty()) {
+                    takers.append("§8, ");
+                }
+                takers.append("§f").append(p.getGameProfile().getName())
+                        .append(" §8lv").append(jobs.levelOf(p.getUUID(), job));
+            }
+        }
+        String current = jobs.jobOf(player.getUUID());
+        PacketDistributor.sendToPlayer(player, new TradeBoardPayload(
+                job,
+                com.jrpetty.aztecabyss.maze.MazeJobs.display(job),
+                com.jrpetty.aztecabyss.maze.MazeJobs.description(job),
+                takers.toString(),
+                current == null ? "" : com.jrpetty.aztecabyss.maze.MazeJobs.display(current)));
+    }
+
     public static void sendSkills(ServerPlayer player) {
         if (player.getServer() == null) {
             return;
@@ -207,7 +245,10 @@ public final class ModNetworking {
             rows.add(e.group() + "|" + e.id() + "|" + e.display() + "|"
                     + e.count() + "|" + e.cost() + "|"
                     + mine.getOrDefault(e.id(), 0) + "|"
-                    + glade.getOrDefault(e.id(), 0));
+                    + glade.getOrDefault(e.id(), 0) + "|"
+                    // The item's registry name, so the screen can draw the
+                    // actual thing being bought rather than a line of text.
+                    + net.minecraft.core.registries.BuiltInRegistries.ITEM.getKey(e.item()));
         }
 
         String job = com.jrpetty.aztecabyss.maze.MazeJobs.get(level).jobOf(player.getUUID());
