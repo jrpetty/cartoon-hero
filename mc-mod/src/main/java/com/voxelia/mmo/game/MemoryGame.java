@@ -71,18 +71,16 @@ public final class MemoryGame {
     private long startedAtMillis;
     private long finishedAtMillis;
 
-    public MemoryGame(Difficulty difficulty, int faceCount, long seed) {
+    public MemoryGame(Difficulty difficulty, long seed) {
         this.difficulty = difficulty;
         int cells = difficulty.cols() * difficulty.rows();
         this.faces = new int[cells];
         this.state = new int[cells];
         this.pairsLeft = cells / 2;
 
-        // Draw a random subset of faces so two boards of the same size don't share a deck.
+        // Faces come from the mod's own cards, skills first (see MemoryDeck).
         Random rng = new Random(seed);
-        List<Integer> pool = new ArrayList<>();
-        for (int i = 0; i < Math.max(1, faceCount); i++) pool.add(i);
-        Collections.shuffle(pool, rng);
+        List<Integer> pool = MemoryDeck.pool(rng);
 
         List<Integer> deck = new ArrayList<>(cells);
         for (int i = 0; i < cells / 2; i++) {

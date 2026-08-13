@@ -1,6 +1,6 @@
 package com.voxelia.mmo.client;
 
-import com.voxelia.mmo.game.MemoryFace;
+import com.voxelia.mmo.game.MemoryDeck;
 import com.voxelia.mmo.game.MemoryGame;
 import com.voxelia.mmo.network.MemoryActionPacket;
 import com.voxelia.mmo.skill.Skill;
@@ -233,20 +233,53 @@ public final class MemoryScreen extends Screen {
             return;
         }
 
-        MemoryFace face = MemoryFace.byId(ClientMemory.faceForRender(index));
-        int base = 0xFF000000 | (face != null ? face.color() : 0x8FA0AD);
+        MemoryDeck.Face face = MemoryDeck.byId(ClientMemory.faceForRender(index));
         boolean matched = state == MemoryGame.MATCHED;
+        int rgb = face != null ? face.color() : 0x8FA0AD;
+        int base = 0xFF000000 | rgb;
+
+        if (face != null && face.kind() == MemoryDeck.Kind.TALENT) {
+            // Talent cards wear the talent screen's look: slate body, category badge.
+            int body = matched ? 0xFF141B24 : 0xFF1B2532;
+            g.fillGradient(x1, cy, x2, cy + ch, VoxeliaUi.brighten(body, 10), body);
+            g.fill(x1, cy, x2, cy + 1, 0x50FFFFFF);
+            g.fill(x1, cy + ch - 1, x2, cy + ch, 0x50000000);
+            g.fill(x1, cy, x1 + Math.min(3, half * 2), cy + ch, matched
+                ? VoxeliaUi.lerp(base, 0xFF0A0F14, 0.5f) : base);
+            if (half > 8) {
+                int bw = (x2 - x1) - 10;
+                int by2 = cy + ch / 2 - 6;
+                g.fill(x1 + 5, by2, x1 + 5 + bw, by2 + 12, matched
+                    ? VoxeliaUi.lerp(base, 0xFF0A0F14, 0.45f) : base);
+                g.fill(x1 + 5, by2, x1 + 5 + bw, by2 + 1, 0x50FFFFFF);
+                g.drawCenteredString(this.font, face.code(), (x1 + x2) / 2, by2 + 2,
+                    matched ? 0xFF6C7A6C : 0xFF14181C);
+            }
+            if (matched) {
+                g.fill(x1, cy, x2, cy + 1, 0x806EE86E);
+                g.fill(x1, cy + ch - 1, x2, cy + ch, 0x806EE86E);
+            }
+            return;
+        }
+
+        // Skill and Character cards: the skills-screen card, shrunk to a playing card.
         int top = matched ? VoxeliaUi.lerp(base, 0xFF0A0F14, 0.45f) : VoxeliaUi.brighten(base, 20);
         int bot = matched ? VoxeliaUi.lerp(base, 0xFF0A0F14, 0.65f) : VoxeliaUi.lerp(base, 0xFF0A0F14, 0.35f);
         g.fillGradient(x1, cy, x2, cy + ch, top, bot);
         g.fill(x1, cy, x2, cy + 1, 0x60FFFFFF);
         g.fill(x1, cy + ch - 1, x2, cy + ch, 0x50000000);
+        if (half > 4) { // the accent strip every Voxelia card carries
+            g.fillGradient(x1, cy, x1 + Math.min(3, half), cy + ch,
+                VoxeliaUi.brighten(base, 40), VoxeliaUi.lerp(base, 0xFF0A0F14, 0.4f));
+        }
         if (matched) { // quiet green frame: this pair is banked
             g.fill(x1, cy, x2, cy + 1, 0x806EE86E);
             g.fill(x1, cy + ch - 1, x2, cy + ch, 0x806EE86E);
         }
         if (half > 8 && face != null) {
-            g.drawCenteredString(this.font, face.code(), (x1 + x2) / 2, textY,
+            boolean character = face.kind() == MemoryDeck.Kind.CHARACTER;
+            String text = character ? "✦" : face.code();
+            g.drawCenteredString(this.font, text, (x1 + x2) / 2 + 1, textY,
                 matched ? 0xFFBFD0BF : 0xFF14181C);
         }
     }

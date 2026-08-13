@@ -83,9 +83,12 @@ New players (zero XP) get a one-line pointer to `K` on first login.
 ## Memory — the card game
 
 A game of Memory (Concentration) built into the mod, playable **solo or head to
-head**. Card faces are the eleven skills in their familiar HUD colours plus seven
-material cards, which is what the big 6×6 board needs — 18 distinct pairs. Each
-board draws a random subset, so two games of the same size never share a deck.
+head**. The deck is built from the mod's own cards — no new art, no invented
+faces: the **eleven skill cards** in their HUD colours, the gold **Character
+card**, and **talent cards** drawn in the talent screen's badge style (one per
+category, so no two share a colour). Small boards are pure skill cards; only 6×6
+reaches into the talents. Each board draws a random subset, so two games of the
+same size never share a deck.
 
 - **Solo** — `/voxelia memory [easy|medium|hard]`, or pick a size in the lobby.
   Boards are **4×4 (8 pairs) / 6×4 (12 pairs) / 6×6 (18 pairs)**. Scored on moves
@@ -194,7 +197,7 @@ mc-mod/
     ├── main/java/com/voxelia/mmo/
     │   ├── VoxeliaMMO.java                 @Mod entry point
     │   ├── skill/        Skill, SkillCurve, PlayerSkills, PlayerTalents, PlayerPrestige, Talent
-    │   ├── game/         MemoryGame (rules), MemoryFace (card faces), MemoryGames (registry)
+    │   ├── game/         MemoryGame (rules), MemoryDeck (faces from skills/talents), MemoryGames
     │   ├── registry/     VoxeliaAttachments, VoxeliaEntityAttributes
     │   ├── progression/  Progression, SkillEffects, TalentLogic, PrestigeLogic, Abilities
     │   ├── event/        ProgressionEvents, ChatTitleEvents, BonusDropEvents, ...

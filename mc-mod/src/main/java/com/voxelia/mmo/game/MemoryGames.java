@@ -180,7 +180,7 @@ public final class MemoryGames {
 
     private static MemoryGame newGame(MemoryGame.Difficulty difficulty) {
         long seed = System.nanoTime() ^ (seedCounter++ * 0x9E3779B97F4A7C15L);
-        return new MemoryGame(difficulty, MemoryFace.values().length, seed);
+        return new MemoryGame(difficulty, seed);
     }
 
     private static void register(MemoryGame game) {
