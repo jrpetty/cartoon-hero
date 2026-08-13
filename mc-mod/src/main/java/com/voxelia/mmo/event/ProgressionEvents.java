@@ -83,11 +83,9 @@ public final class ProgressionEvents {
                     .append(Component.literal("Everything you do trains a skill. Press ")
                         .withStyle(ChatFormatting.GRAY))
                     .append(Component.literal("K").withStyle(ChatFormatting.AQUA))
-                    .append(Component.literal(" for skills, ").withStyle(ChatFormatting.GRAY))
-                    .append(Component.literal("N").withStyle(ChatFormatting.AQUA))
-                    .append(Component.literal(" for talents, ").withStyle(ChatFormatting.GRAY))
-                    .append(Component.literal("P").withStyle(ChatFormatting.AQUA))
-                    .append(Component.literal(" for your profile.").withStyle(ChatFormatting.GRAY)));
+                    .append(Component.literal(" for your skills — talents, profile and display "
+                        + "settings are all under the Menu button in there.")
+                        .withStyle(ChatFormatting.GRAY)));
             }
         }
     }

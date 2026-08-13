@@ -12,13 +12,14 @@ import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 import net.neoforged.neoforge.network.PacketDistributor;
+import org.lwjgl.glfw.GLFW;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 
 /**
- * Talent tree (N): pick a skill on the left, spend its points on that skill's own
+ * Talent tree (Menu ▸ Talent Tree): pick a skill on the left, spend its points on that skill's own
  * thematic talents on the right — Mining boosts break speed and ore Fortune, Combat
  * boosts damage and life steal, and so on. Each talent card shows exactly what a
  * point buys, at its current rank and the next.
@@ -42,9 +43,7 @@ public final class TalentScreen extends Screen {
     private record Card(int x1, int y1, int x2, int y2, Talent talent) {}
     private final List<SkillRow> skillRows = new ArrayList<>();
     private final List<Card> cards = new ArrayList<>();
-    private int[] tabSkills = new int[4];
-    private int[] tabTalents = new int[4];
-    private int[] tabProfile = new int[4];
+    private final ScreenMenu menu = new ScreenMenu();
     private int[] prestigeBtn = new int[4];
     private boolean prestigeReady = false;
     // Prestige takes two clicks: the first arms the button, the second confirms.
@@ -87,12 +86,9 @@ public final class TalentScreen extends Screen {
 
         VoxeliaUi.panel(g, x, y, PANEL_W, h);
         VoxeliaUi.titleBar(g, this.font, x, y, PANEL_W, "VOXELIA");
-        tabTalents = VoxeliaUi.tab(g, this.font, "Talents" + VoxeliaUi.keyTag(this.font, VoxeliaKeys.OPEN_TALENTS),
-            x + PANEL_W - 4, y, true, mouseX, mouseY);
-        tabSkills = VoxeliaUi.tab(g, this.font, "Skills" + VoxeliaUi.keyTag(this.font, VoxeliaKeys.OPEN_MENU),
-            tabTalents[0] - 2, y, false, mouseX, mouseY);
-        tabProfile = VoxeliaUi.tab(g, this.font, "Profile" + VoxeliaUi.keyTag(this.font, VoxeliaKeys.OPEN_PROFILE),
-            tabSkills[0] - 2, y, false, mouseX, mouseY);
+        int totalPts = 0;
+        for (Skill s : Skill.values()) totalPts += ClientTalents.available(s);
+        menu.renderButton(g, this.font, x, y, PANEL_W, mouseX, mouseY, totalPts > 0);
 
         int contentTop = y + TITLE_H + 4;
 
@@ -103,7 +99,8 @@ public final class TalentScreen extends Screen {
             Skill s = Skill.values()[i];
             int ry = contentTop + i * SKILL_ROW_H;
             boolean sel = s == selectedSkill;
-            boolean over = mouseX >= lx && mouseX < lx + SKILL_W && mouseY >= ry && mouseY < ry + SKILL_ROW_H;
+            boolean over = !menu.isOpen()
+                && mouseX >= lx && mouseX < lx + SKILL_W && mouseY >= ry && mouseY < ry + SKILL_ROW_H;
             int color = 0xFF000000 | s.color();
             rowHoverA[i] = Math.max(0f, Math.min(1f, rowHoverA[i] + (over ? hdt : -hdt)));
 
@@ -165,7 +162,8 @@ public final class TalentScreen extends Screen {
             int rank = ClientTalents.rank(t);
             boolean canBuy = available > 0 && rank < max;
             boolean maxed = rank >= max;
-            boolean over = mouseX >= rx && mouseX < rx + RIGHT_W && mouseY >= cy && mouseY < cy + CARD_H;
+            boolean over = !menu.isOpen()
+                && mouseX >= rx && mouseX < rx + RIGHT_W && mouseY >= cy && mouseY < cy + CARD_H;
             cardHoverA[t.ordinal()] = Math.max(0f, Math.min(1f, cardHoverA[t.ordinal()] + (over ? hdt : -hdt)));
             float a = cardHoverA[t.ordinal()];
 
@@ -241,7 +239,8 @@ public final class TalentScreen extends Screen {
             int lw = this.font.width(label) + 14;
             int bx = x + (PANEL_W - lw) / 2;
             int by = footY + 1;
-            overPrestige = mouseX >= bx && mouseX < bx + lw && mouseY >= by && mouseY < by + 12;
+            overPrestige = !menu.isOpen()
+                && mouseX >= bx && mouseX < bx + lw && mouseY >= by && mouseY < by + 12;
             int base = prestigeArmed
                 ? VoxeliaUi.lerp(0xFF8A2E2E, 0xFFC24444, 0.5f + 0.5f * (float) Math.sin(Util.getMillis() / 120.0))
                 : 0xFF7A34A8;
@@ -280,9 +279,11 @@ public final class TalentScreen extends Screen {
             }
         }
 
+        menu.renderDropdown(g, this.font, ScreenMenu.Page.TALENTS, mouseX, mouseY);
         g.pose().popPose();
         super.render(g, mouseX, mouseY, partialTick);
 
+        if (menu.isOpen()) return; // the dropdown owns the pointer while it's down
         if (hoveredCard != null) renderCardTooltip(g, hoveredCard.talent, max, mouseX, mouseY);
         else if (overPrestige) {
             int perPrestige = ClientTalents.pointsPerPrestige();
@@ -357,15 +358,7 @@ public final class TalentScreen extends Screen {
         if (button == 0) {
             boolean onPrestigeBtn = prestigeReady && in(prestigeBtn, mouseX, mouseY);
             if (!onPrestigeBtn) prestigeArmed = false; // clicking anywhere else disarms
-            if (in(tabSkills, mouseX, mouseY)) {
-                Minecraft.getInstance().setScreen(new SkillsScreen());
-                return true;
-            }
-            if (in(tabProfile, mouseX, mouseY)) {
-                Minecraft.getInstance().setScreen(new ProfileScreen());
-                return true;
-            }
-            if (in(tabTalents, mouseX, mouseY)) return true;
+            if (menu.mouseClicked(mouseX, mouseY, ScreenMenu.Page.TALENTS)) return true;
             if (onPrestigeBtn) {
                 if (prestigeArmed) {
                     PacketDistributor.sendToServer(new PrestigePacket(selectedSkill.ordinal()));
@@ -402,16 +395,9 @@ public final class TalentScreen extends Screen {
 
     @Override
     public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
-        if (VoxeliaKeys.OPEN_TALENTS.matches(keyCode, scanCode)) { // same key toggles closed
-            this.onClose();
-            return true;
-        }
-        if (VoxeliaKeys.OPEN_MENU.matches(keyCode, scanCode)) { // hop to the sibling screens
+        if (keyCode == GLFW.GLFW_KEY_ESCAPE && menu.close()) return true; // ESC closes the dropdown first
+        if (VoxeliaKeys.OPEN_MENU.matches(keyCode, scanCode)) { // back to the hub screen
             Minecraft.getInstance().setScreen(new SkillsScreen());
-            return true;
-        }
-        if (VoxeliaKeys.OPEN_PROFILE.matches(keyCode, scanCode)) {
-            Minecraft.getInstance().setScreen(new ProfileScreen());
             return true;
         }
         return super.keyPressed(keyCode, scanCode, modifiers);

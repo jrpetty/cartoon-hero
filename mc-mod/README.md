@@ -39,7 +39,7 @@ Fortune never applies with Silk Touch (no dupes). Abilities are deliberately
 
 | System | What it does |
 | --- | --- |
-| **Talents** | Each skill has its own 5-talent tree (max rank 5 each). You earn **1 talent point per 8 levels** in that skill — 12 points by level 100. Spend them on the Talent screen (`N`). `/voxelia talent reset` refunds everything. |
+| **Talents** | Each skill has its own 5-talent tree (max rank 5 each). You earn **1 talent point per 8 levels** in that skill — 12 points by level 100. Spend them on the Talent screen (Menu ▸ Talent Tree). `/voxelia talent reset` refunds everything. |
 | **Prestige** | At level 100 a skill can be **prestiged** (button on the Talent screen — takes **two clicks**, no accidents — or `/voxelia prestige <skill>`): it resets to level 1, its talents refund, and you gain **+2 permanent talent points** for that skill, granted immediately (14/16/18 possible points at Prestige 1/2/3, cap 3). Prestige stars (✦) show on every surface and in your chat title, a full-screen celebration + particles/sound plays, and the server gets one gold announcement line. |
 | **Death penalty** | Dying costs **20% of every skill's XP** (config). Levels genuinely drop — the respawn message tells you what you lost. |
 | **Character level & titles** | Your character level is the average of all skills. Chat shows `[Lv 42 • Master Miner ✦✦] Name`, ranked Novice → Grandmaster. |
@@ -50,15 +50,33 @@ cooldowns are validated server-side; clients only render.
 
 ## UI surfaces
 
+The mod claims **one screen keybind**. `K` opens the Skills screen — the hub — and
+the **Menu** button in its top-right drops down everything else:
+
+```
+Menu ▾
+  Skills [K]            ← you are here
+  Talent Tree      (3)  ← unspent points show as a green pill
+  Character Profile
+  ───────────────
+  Skill Sidebar   On/Off
+  Corner HUD      On/Off
+  HUD Corner      Top Left →  (click to cycle the four corners)
+```
+
+The same Menu button sits on every Voxelia panel, so you can hop between the three
+screens and flip the display toggles without ever leaving the UI. ESC closes the
+dropdown; ESC again closes the screen.
+
 | Surface | Open with | Shows |
 | --- | --- | --- |
 | **Skills screen** | `K` / `/voxelia menu` | Card per skill with XP bars + tooltips; click a card to select its ability; Character card opens the profile |
-| **Talent screen** | `N` | Skill list (with prestige stars + unspent-point pills), the selected skill's 5 talents, and the Prestige button when eligible |
-| **Character profile** | `P` / `/voxelia profile` | Best skill, total prestiges, XP earned, playtime, deaths, mob kills |
-| **Corner HUD** | `/voxelia hud`, corner via `/voxelia hudpos` | Per-skill levels + XP bars, prestige stars, selected ability with live cooldown |
-| **Sidebar** | `J` / `/voxelia sidebar` (off by default) | Vanilla-scoreboard-style list of all skill levels + Character line |
+| **Talent screen** | Menu ▸ Talent Tree | Skill list (with prestige stars + unspent-point pills), the selected skill's 5 talents, and the Prestige button when eligible |
+| **Character profile** | Menu ▸ Character Profile, or `/voxelia profile` | Best skill, total prestiges, XP earned, playtime, deaths, mob kills |
+| **Corner HUD** | Menu ▸ Corner HUD / HUD Corner (or `/voxelia hud`, `/voxelia hudpos`) | Per-skill levels + XP bars, prestige stars, selected ability with live cooldown |
+| **Sidebar** | Menu ▸ Skill Sidebar (or `/voxelia sidebar`; off by default) | Vanilla-scoreboard-style list of all skill levels + Character line |
 
-New players (zero XP) get a one-line pointer to `K`/`N`/`P` on first login.
+New players (zero XP) get a one-line pointer to `K` on first login.
 
 ## Commands
 
@@ -73,20 +91,19 @@ New players (zero XP) get a one-line pointer to `K`/`N`/`P` on first login.
 | `/voxelia top <skill>` | server | Leaderboard of online players |
 | `/voxelia grant <skill> <amount>` | server (op) | Grant XP |
 | `/voxelia menu` / `profile` | client | Open the Skills / Profile screens |
-| `/voxelia hud` / `sidebar` | client | Toggle the HUD / sidebar |
+| `/voxelia hud` / `sidebar` | client | Toggle the HUD / sidebar (also in the Menu dropdown) |
 | `/voxelia hudpos <corner>` | client | Move the HUD (`top_left`/`top_right`/`bottom_left`/`bottom_right`) |
 | `/voxelia rewards` | client | Print what each skill grants |
 
 ## Keybinds (rebindable in Options → Controls)
 
+Only three — everything that isn't an ability lives in the Skills screen's Menu.
+
 | Key | Action |
 | --- | --- |
-| `K` | Skills menu |
-| `N` | Talent tree |
-| `P` | Character profile |
+| `K` | Skills menu (the hub) |
 | `R` | Use selected ability |
 | `G` | Cycle selected ability |
-| `J` | Toggle skill sidebar |
 
 ## Config
 

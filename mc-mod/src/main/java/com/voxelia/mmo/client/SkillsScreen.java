@@ -8,16 +8,18 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
+import org.lwjgl.glfw.GLFW;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 
 /**
- * Skills panel (K): a 2-column card grid — one card per skill plus a gold Character
- * card — with animated XP bars and rich hover tooltips. Active-ability cards are
- * clickable to select that ability; tabs (or the N / P keys) hop to the sibling
- * screens. Compact enough (~215px tall) to fit a 240px-tall scaled GUI.
+ * Skills panel (K) — the mod's hub screen: a 2-column card grid, one card per skill
+ * plus a gold Character card, with animated XP bars and rich hover tooltips.
+ * Active-ability cards are clickable to select that ability, and the Menu button in
+ * the title bar reaches everything else (talents, profile, display toggles).
+ * Compact enough (~215px tall) to fit a 240px-tall scaled GUI.
  */
 public final class SkillsScreen extends Screen {
     private static final int PAD = 6;
@@ -30,9 +32,7 @@ public final class SkillsScreen extends Screen {
 
     private record Card(int x1, int y1, int x2, int y2, Skill skill) {}
     private final List<Card> cards = new ArrayList<>();
-    private int[] tabSkills = new int[4];
-    private int[] tabTalents = new int[4];
-    private int[] tabProfile = new int[4];
+    private final ScreenMenu menu = new ScreenMenu();
     private int[] charCard = new int[4];
     // 100ms hover crossfades: one slot per skill card + one for the Character card.
     private final float[] hoverA = new float[Skill.values().length + 1];
@@ -61,21 +61,9 @@ public final class SkillsScreen extends Screen {
 
         VoxeliaUi.panel(g, x, y, PANEL_W, h);
         VoxeliaUi.titleBar(g, this.font, x, y, PANEL_W, "VOXELIA");
-        tabTalents = VoxeliaUi.tab(g, this.font, "Talents" + VoxeliaUi.keyTag(this.font, VoxeliaKeys.OPEN_TALENTS),
-            x + PANEL_W - 4, y, false, mouseX, mouseY);
-        tabSkills = VoxeliaUi.tab(g, this.font, "Skills" + VoxeliaUi.keyTag(this.font, VoxeliaKeys.OPEN_MENU),
-            tabTalents[0] - 2, y, true, mouseX, mouseY);
-        tabProfile = VoxeliaUi.tab(g, this.font, "Profile" + VoxeliaUi.keyTag(this.font, VoxeliaKeys.OPEN_PROFILE),
-            tabSkills[0] - 2, y, false, mouseX, mouseY);
-
-        // Unspent points anywhere → breathing green dot on the Talents tab.
         int totalPts = 0;
         for (Skill s : all) totalPts += ClientTalents.available(s);
-        if (totalPts > 0) {
-            g.fill(tabTalents[2] - 6, y + 1, tabTalents[2], y + 7, 0xFF0A0F14);
-            int da = 0xA0 + (int) (0x5F * VoxeliaUi.pulse());
-            g.fill(tabTalents[2] - 5, y + 2, tabTalents[2] - 1, y + 6, (da << 24) | 0x6EE86E);
-        }
+        menu.renderButton(g, this.font, x, y, PANEL_W, mouseX, mouseY, totalPts > 0);
 
         Skill selected = ClientAbilities.selectedSkill();
         Card hovered = null;
@@ -83,7 +71,8 @@ public final class SkillsScreen extends Screen {
             Skill skill = all[i];
             int cx = x + PAD + (i % 2) * (CARD_W + 4);
             int cy = y + TITLE_H + GAP + (i / 2) * (CARD_H + GAP);
-            boolean over = mouseX >= cx && mouseX < cx + CARD_W && mouseY >= cy && mouseY < cy + CARD_H;
+            boolean over = !menu.isOpen()
+                && mouseX >= cx && mouseX < cx + CARD_W && mouseY >= cy && mouseY < cy + CARD_H;
             boolean sel = skill == selected;
             int color = 0xFF000000 | skill.color();
             hoverA[i] = Math.max(0f, Math.min(1f, hoverA[i] + (over ? hdt : -hdt)));
@@ -136,7 +125,8 @@ public final class SkillsScreen extends Screen {
         // Character card in the last grid slot — the premium gold card.
         int ccx = x + PAD + CARD_W + 4;
         int ccy = y + TITLE_H + GAP + (rows - 1) * (CARD_H + GAP);
-        boolean overChar = mouseX >= ccx && mouseX < ccx + CARD_W && mouseY >= ccy && mouseY < ccy + CARD_H;
+        boolean overChar = !menu.isOpen()
+            && mouseX >= ccx && mouseX < ccx + CARD_W && mouseY >= ccy && mouseY < ccy + CARD_H;
         int ci = all.length;
         hoverA[ci] = Math.max(0f, Math.min(1f, hoverA[ci] + (overChar ? hdt : -hdt)));
         float ca = hoverA[ci];
@@ -178,9 +168,11 @@ public final class SkillsScreen extends Screen {
         fx = seg(g, fx, fy, "  ▶ ", VoxeliaUi.MUTED);
         seg(g, fx, fy, VoxeliaUi.trim(this.font, selected.abilityName(), x + PANEL_W - PAD - fx), VoxeliaUi.LINK);
 
+        menu.renderDropdown(g, this.font, ScreenMenu.Page.SKILLS, mouseX, mouseY);
         g.pose().popPose();
         super.render(g, mouseX, mouseY, partialTick);
 
+        if (menu.isOpen()) return; // the dropdown owns the pointer while it's down
         if (hovered != null) {
             renderSkillTooltip(g, hovered.skill, selected, mouseX, mouseY);
         } else if (overChar) {
@@ -192,8 +184,7 @@ public final class SkillsScreen extends Screen {
             tip.add(Component.literal(total + " total skill levels").withStyle(ChatFormatting.WHITE));
             tip.add(Component.literal("Highest: " + top.display() + " Lv " + ClientSkillData.level(top))
                 .withStyle(ChatFormatting.GRAY));
-            tip.add(Component.literal("Click for full profile" + VoxeliaUi.keyTag(this.font, VoxeliaKeys.OPEN_PROFILE))
-                .withStyle(ChatFormatting.GREEN));
+            tip.add(Component.literal("Click for your full profile").withStyle(ChatFormatting.GREEN));
             g.renderComponentTooltip(this.font, tip, mouseX, mouseY);
         }
     }
@@ -224,8 +215,8 @@ public final class SkillsScreen extends Screen {
         }
         int pts = ClientTalents.available(skill);
         if (pts > 0) {
-            tip.add(Component.literal(pts + " talent point" + (pts == 1 ? "" : "s") + " unspent ["
-                + keyName(VoxeliaKeys.OPEN_TALENTS) + "]").withStyle(ChatFormatting.GREEN));
+            tip.add(Component.literal(pts + " talent point" + (pts == 1 ? "" : "s")
+                + " unspent — Menu ▸ Talent Tree").withStyle(ChatFormatting.GREEN));
         }
         g.renderComponentTooltip(this.font, tip, mouseX, mouseY);
     }
@@ -246,15 +237,7 @@ public final class SkillsScreen extends Screen {
     @Override
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
         if (button == 0) {
-            if (in(tabTalents, mouseX, mouseY)) {
-                Minecraft.getInstance().setScreen(new TalentScreen());
-                return true;
-            }
-            if (in(tabProfile, mouseX, mouseY)) {
-                Minecraft.getInstance().setScreen(new ProfileScreen());
-                return true;
-            }
-            if (in(tabSkills, mouseX, mouseY)) return true;
+            if (menu.mouseClicked(mouseX, mouseY, ScreenMenu.Page.SKILLS)) return true;
             if (in(charCard, mouseX, mouseY)) {
                 Minecraft.getInstance().setScreen(new ProfileScreen());
                 return true;
@@ -271,16 +254,9 @@ public final class SkillsScreen extends Screen {
 
     @Override
     public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
+        if (keyCode == GLFW.GLFW_KEY_ESCAPE && menu.close()) return true; // ESC closes the dropdown first
         if (VoxeliaKeys.OPEN_MENU.matches(keyCode, scanCode)) { // same key toggles closed
             this.onClose();
-            return true;
-        }
-        if (VoxeliaKeys.OPEN_TALENTS.matches(keyCode, scanCode)) { // hop to the sibling screens
-            Minecraft.getInstance().setScreen(new TalentScreen());
-            return true;
-        }
-        if (VoxeliaKeys.OPEN_PROFILE.matches(keyCode, scanCode)) {
-            Minecraft.getInstance().setScreen(new ProfileScreen());
             return true;
         }
         return super.keyPressed(keyCode, scanCode, modifiers);

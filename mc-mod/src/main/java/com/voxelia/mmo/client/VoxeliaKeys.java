@@ -2,7 +2,6 @@ package com.voxelia.mmo.client;
 
 import com.mojang.blaze3d.platform.InputConstants;
 import com.voxelia.mmo.VoxeliaMMO;
-import com.voxelia.mmo.config.VoxeliaClientConfig;
 import com.voxelia.mmo.network.AbilityPacket;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.KeyMapping;
@@ -17,7 +16,12 @@ import net.neoforged.neoforge.client.event.RegisterKeyMappingsEvent;
 import net.neoforged.neoforge.network.PacketDistributor;
 import org.lwjgl.glfw.GLFW;
 
-/** Keybinds: open the Skills menu (K), use the selected ability (R), cycle it (G). */
+/**
+ * Just three keybinds: open the Skills menu (K), use the selected ability (R),
+ * cycle it (G). Everything that isn't an ability — the talent tree, the character
+ * profile, the sidebar and HUD toggles — lives behind the Menu button inside the
+ * Skills screen, so the mod only claims one screen key.
+ */
 public final class VoxeliaKeys {
     private VoxeliaKeys() {}
 
@@ -29,12 +33,6 @@ public final class VoxeliaKeys {
         "key.voxelia_mmo.ability", InputConstants.Type.KEYSYM, GLFW.GLFW_KEY_R, CATEGORY);
     public static final KeyMapping CYCLE_ABILITY = new KeyMapping(
         "key.voxelia_mmo.cycle", InputConstants.Type.KEYSYM, GLFW.GLFW_KEY_G, CATEGORY);
-    public static final KeyMapping OPEN_TALENTS = new KeyMapping(
-        "key.voxelia_mmo.talents", InputConstants.Type.KEYSYM, GLFW.GLFW_KEY_N, CATEGORY);
-    public static final KeyMapping OPEN_PROFILE = new KeyMapping(
-        "key.voxelia_mmo.profile", InputConstants.Type.KEYSYM, GLFW.GLFW_KEY_P, CATEGORY);
-    public static final KeyMapping TOGGLE_SIDEBAR = new KeyMapping(
-        "key.voxelia_mmo.sidebar", InputConstants.Type.KEYSYM, GLFW.GLFW_KEY_J, CATEGORY);
 
     @EventBusSubscriber(modid = VoxeliaMMO.MOD_ID, bus = EventBusSubscriber.Bus.MOD, value = Dist.CLIENT)
     public static final class ModBus {
@@ -45,9 +43,6 @@ public final class VoxeliaKeys {
             event.register(OPEN_MENU);
             event.register(USE_ABILITY);
             event.register(CYCLE_ABILITY);
-            event.register(OPEN_TALENTS);
-            event.register(OPEN_PROFILE);
-            event.register(TOGGLE_SIDEBAR);
         }
     }
 
@@ -63,14 +58,6 @@ public final class VoxeliaKeys {
 
             if (Minecraft.getInstance().screen == null) {
                 while (OPEN_MENU.consumeClick()) Minecraft.getInstance().setScreen(new SkillsScreen());
-                while (OPEN_TALENTS.consumeClick()) Minecraft.getInstance().setScreen(new TalentScreen());
-                while (OPEN_PROFILE.consumeClick()) Minecraft.getInstance().setScreen(new ProfileScreen());
-            }
-            while (TOGGLE_SIDEBAR.consumeClick()) {
-                boolean now = !VoxeliaClientConfig.showSidebar();
-                VoxeliaClientConfig.setShowSidebar(now);
-                player.displayClientMessage(Component.literal("Skill sidebar " + (now ? "shown" : "hidden"))
-                    .withStyle(ChatFormatting.YELLOW), true);
             }
             while (CYCLE_ABILITY.consumeClick()) {
                 ClientAbilities.cycle(1);

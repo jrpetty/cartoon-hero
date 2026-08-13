@@ -8,11 +8,12 @@ import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 import net.neoforged.neoforge.network.PacketDistributor;
+import org.lwjgl.glfw.GLFW;
 
 import java.util.Locale;
 
 /**
- * Character sheet (P): headline identity plus the stats that make a run feel like
+ * Character sheet (Menu ▸ Character Profile): headline identity plus the stats that make a run feel like
  * a career — best skill, total prestiges, XP earned, playtime, deaths, mob kills.
  * Playtime/deaths/kills arrive from the server (requested on open); everything
  * else is derived from the client caches.
@@ -25,9 +26,7 @@ public final class ProfileScreen extends Screen {
     private static final int ROW_H = 13;
     private static final int ROWS = 6;
 
-    private int[] tabSkills = new int[4];
-    private int[] tabTalents = new int[4];
-    private int[] tabProfile = new int[4];
+    private final ScreenMenu menu = new ScreenMenu();
     private int[] talentLink = new int[4];
 
     public ProfileScreen() {
@@ -70,12 +69,9 @@ public final class ProfileScreen extends Screen {
 
         VoxeliaUi.panel(g, x, y, PANEL_W, h);
         VoxeliaUi.titleBar(g, this.font, x, y, PANEL_W, "VOXELIA");
-        tabTalents = VoxeliaUi.tab(g, this.font, "Talents" + VoxeliaUi.keyTag(this.font, VoxeliaKeys.OPEN_TALENTS),
-            x + PANEL_W - 4, y, false, mouseX, mouseY);
-        tabSkills = VoxeliaUi.tab(g, this.font, "Skills" + VoxeliaUi.keyTag(this.font, VoxeliaKeys.OPEN_MENU),
-            tabTalents[0] - 2, y, false, mouseX, mouseY);
-        tabProfile = VoxeliaUi.tab(g, this.font, "Profile" + VoxeliaUi.keyTag(this.font, VoxeliaKeys.OPEN_PROFILE),
-            tabSkills[0] - 2, y, true, mouseX, mouseY);
+        int totalPts = 0;
+        for (Skill s : all) totalPts += ClientTalents.available(s);
+        menu.renderButton(g, this.font, x, y, PANEL_W, mouseX, mouseY, totalPts > 0);
 
         // Header: player name + character line + real character-progress bar.
         int hy = y + TITLE_H + 4;
@@ -107,13 +103,14 @@ public final class ProfileScreen extends Screen {
         VoxeliaUi.footer(g, x, y + h - FOOTER_H, PANEL_W, FOOTER_H);
         int fy = y + h - FOOTER_H + 3;
         int fx = seg(g, x + PAD, fy, "Prestige a maxed skill on the ", VoxeliaUi.MUTED);
-        String link = "Talents" + VoxeliaUi.keyTag(this.font, VoxeliaKeys.OPEN_TALENTS);
+        String link = "Talent Tree";
         int linkX2 = fx + this.font.width(link);
         talentLink = new int[]{fx, fy - 2, linkX2, fy + 11};
-        boolean overLink = in(talentLink, mouseX, mouseY);
+        boolean overLink = !menu.isOpen() && in(talentLink, mouseX, mouseY);
         g.drawString(this.font, link, fx, fy, overLink ? VoxeliaUi.brighten(VoxeliaUi.LINK, 30) : VoxeliaUi.LINK);
         g.fill(fx, fy + 9, linkX2, fy + 10, 0x8089C7FF);
 
+        menu.renderDropdown(g, this.font, ScreenMenu.Page.PROFILE, mouseX, mouseY);
         g.pose().popPose();
         super.render(g, mouseX, mouseY, partialTick);
     }
@@ -144,31 +141,20 @@ public final class ProfileScreen extends Screen {
     @Override
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
         if (button == 0) {
-            if (in(tabTalents, mouseX, mouseY) || in(talentLink, mouseX, mouseY)) {
+            if (menu.mouseClicked(mouseX, mouseY, ScreenMenu.Page.PROFILE)) return true;
+            if (in(talentLink, mouseX, mouseY)) {
                 Minecraft.getInstance().setScreen(new TalentScreen());
                 return true;
             }
-            if (in(tabSkills, mouseX, mouseY)) {
-                Minecraft.getInstance().setScreen(new SkillsScreen());
-                return true;
-            }
-            if (in(tabProfile, mouseX, mouseY)) return true;
         }
         return super.mouseClicked(mouseX, mouseY, button);
     }
 
     @Override
     public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
-        if (VoxeliaKeys.OPEN_PROFILE.matches(keyCode, scanCode)) { // same key toggles closed
-            this.onClose();
-            return true;
-        }
-        if (VoxeliaKeys.OPEN_MENU.matches(keyCode, scanCode)) {
+        if (keyCode == GLFW.GLFW_KEY_ESCAPE && menu.close()) return true; // ESC closes the dropdown first
+        if (VoxeliaKeys.OPEN_MENU.matches(keyCode, scanCode)) { // back to the hub screen
             Minecraft.getInstance().setScreen(new SkillsScreen());
-            return true;
-        }
-        if (VoxeliaKeys.OPEN_TALENTS.matches(keyCode, scanCode)) {
-            Minecraft.getInstance().setScreen(new TalentScreen());
             return true;
         }
         return super.keyPressed(keyCode, scanCode, modifiers);
