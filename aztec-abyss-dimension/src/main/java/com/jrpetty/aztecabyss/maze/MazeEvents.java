@@ -547,6 +547,9 @@ public final class MazeEvents {
         // clock only read once a second is wrong by up to a second - which is
         // the difference between getting through the door and not.
         MazeRuntime.tick(level);
+        if (level.getGameTime() % 20L == 0L) {
+            tickDeathKicks(level);
+        }
     }
 
     @SubscribeEvent
@@ -1418,10 +1421,57 @@ public final class MazeEvents {
         MazeRace.dropOut(level, player.getUUID());
         MazeSting.clear(player.getUUID());
         DIED_IN_MAZE.add(player.getUUID());
+        // The walls put you out - all the way out. On a dedicated server the
+        // death ends at the server door: four seconds to read the red screen,
+        // then disconnected, with your record as the parting words. Dying in
+        // a group game with permanent death should not leave you standing in
+        // a lobby watching other people's game; it should put you OUT, and
+        // the disconnect screen is the one place the game can say what your
+        // run amounted to with your full attention on it.
+        if (level.getServer().isDedicatedServer()) {
+            int days = MazeClock.get(level.getServer()).day() + 1;
+            int pct = MazeCharts.get(level.getServer()).myPercent(player.getUUID());
+            KICK_AT.put(player.getUUID(), level.getGameTime() + 80);
+            KICK_WORDS.put(player.getUUID(), Component.literal(
+                    "§4§lTHE MAZE TOOK YOU\n\n"
+                            + "§7You lasted §f" + days + (days == 1 ? " day" : " days")
+                            + "§7 in the corridors"
+                            + (pct > 0 ? ", and charted §f" + pct + "%§7 of the maze" : "")
+                            + ".\n"
+                            + "§7Your charts fell where you died. §8Someone can still"
+                            + " recover them.\n\n"
+                            + "§8Die and the walls put you out. There is no second try"
+                            + " at a run."));
+        }
     }
 
     /** Who died in the maze and is owed a trip out of it on respawn. */
     private static final java.util.Set<java.util.UUID> DIED_IN_MAZE = new java.util.HashSet<>();
+
+    /** Deaths owed a walk to the server door: when, and with what words. */
+    private static final java.util.Map<java.util.UUID, Long> KICK_AT = new java.util.HashMap<>();
+    private static final java.util.Map<java.util.UUID, Component> KICK_WORDS = new java.util.HashMap<>();
+
+    /** Runs the pending disconnects. Called once a second from the level tick. */
+    private static void tickDeathKicks(ServerLevel level) {
+        if (KICK_AT.isEmpty()) {
+            return;
+        }
+        var it = KICK_AT.entrySet().iterator();
+        while (it.hasNext()) {
+            var e = it.next();
+            if (level.getGameTime() < e.getValue()) {
+                continue;
+            }
+            ServerPlayer p = level.getServer().getPlayerList().getPlayer(e.getKey());
+            Component words = KICK_WORDS.remove(e.getKey());
+            it.remove();
+            if (p != null) {
+                p.connection.disconnect(words != null ? words
+                        : Component.literal("§4The maze took you."));
+            }
+        }
+    }
 
     /**
      * A Griever landing a hit adds to the tally. Four is what turns it - so a

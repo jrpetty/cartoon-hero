@@ -13,6 +13,17 @@ behaviour that was already there · **docs**
 
 ## Unreleased
 
+### Death puts you out — all the way out
+
+- **feat** **Dying in the maze disconnects you from the server** (dedicated
+  servers only — singleplayer and LAN keep the old behaviour). Four seconds to
+  read the red screen, then the server door, with your record as the parting
+  words: how many days you lasted, how much of the maze you charted, and where
+  your charts fell. Permanent death in a group game should not leave you
+  standing in a lobby watching other people's game — and the disconnect screen
+  is the one place the game can say what your run amounted to with your full
+  attention on it.
+
 ### The screens, and the clock
 
 - **feat** **Choosing a trade is a screen now, not a command.** Right-click any
