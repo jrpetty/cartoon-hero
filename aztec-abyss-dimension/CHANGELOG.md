@@ -13,6 +13,14 @@ behaviour that was already there · **docs**
 
 ## Unreleased
 
+### Small functionality
+
+- **fix** **The horde groans a quarter as often.** On the Temple and the
+  Bridge, every zombie moaned on vanilla's own eight-second clock — thirty of
+  them was a wall of noise that never stopped. Each mob's idle call is now
+  spaced roughly four times further apart; the horde still sounds like a
+  horde, without being a car alarm. Hurt, death and attack sounds untouched.
+
 ### The ceremony, and the ruins
 
 - **feat** **Escaping gets its ceremony.** Getting out now opens a victory

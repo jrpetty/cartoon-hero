@@ -2014,6 +2014,18 @@ public final class RoundManager {
         long now = level.getGameTime();
 
         for (Mob mob : mobs) {
+            // Quieter groaning. Vanilla has every zombie moan on its own
+            // eight-second clock, and thirty of them is a wall of noise that
+            // never stops. Caught just after each mob's ambient timer resets
+            // (it climbs from -80, and this sweep runs every 40 ticks, so the
+            // window cannot be missed) and pushed far lower, each mob calls
+            // out roughly a quarter as often - the horde still sounds like a
+            // horde, without being a car alarm. Hurt, death and attack sounds
+            // are untouched; only the idle chorus is thinned.
+            if (mob.ambientSoundTime >= -80 && mob.ambientSoundTime < -40) {
+                mob.ambientSoundTime = -400 - mob.getRandom().nextInt(400);
+            }
+
             // Anything still behind the boards belongs to the barricade tick - it
             // has no business being pointed at a player it cannot reach.
             if (mob.getPersistentData().getInt("aztecabyss_gate_index") >= 0) {
