@@ -52,14 +52,19 @@ public class MemoryScreen extends Screen {
 
     @Override
     public void render(GuiGraphics g, int mouseX, int mouseY, float partialTick) {
-        renderBackground(g, mouseX, mouseY, partialTick);
+        // The vanilla background, and the BLUR PASS it runs, must go FIRST.
+        // Screen.render draws that background itself, so calling it at the end
+        // of the frame re-blurs everything already drawn -- the whole table
+        // came out smeared, menu text and all, instead of the world behind it.
+        // Every other screen in the mod calls super first for this reason;
+        // tools/checkscreenblur.py now fails the build if one stops.
+        super.render(g, mouseX, mouseY, partialTick);
         MemorySyncPayload p = ClientMemory.state();
         int phase = p.num(MemorySyncPayload.PHASE);
         hits.clear();
 
         if (phase == MemorySyncPayload.PHASE_MENU) {
             renderMenu(g, p, mouseX, mouseY);
-            super.render(g, mouseX, mouseY, partialTick);
             return;
         }
         renderHeader(g, p);
@@ -73,7 +78,6 @@ public class MemoryScreen extends Screen {
                 : p.num(MemorySyncPayload.YOUR_TURN) == 1 ? "Turn over two cards"
                 : "Waiting for " + p.text(MemorySyncPayload.T_THEM);
         g.drawCenteredString(font, hint, width / 2, height - MemoryLayout.FOOTER_H + 2, 0xFFBBBBBB);
-        super.render(g, mouseX, mouseY, partialTick);
     }
 
     // --- the size menu ------------------------------------------------------
