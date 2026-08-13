@@ -23,7 +23,7 @@ import java.util.List;
 public final class MemoryScreen extends Screen {
     private static final int PAD = 8;
     private static final int TITLE_H = 17;
-    private static final int HEADER_H = 24;
+    private static final int HEADER_H = 27;
     private static final int FOOTER_H = 18;
     private static final int CARD_GAP = 4;
     private static final int PANEL_W = 220;
