@@ -31,6 +31,10 @@ public final class ScreenMenu {
     private boolean open;
     private int[] button = new int[4];
     private int[] popup;
+    // Panel bounds from the last renderButton, so the dropdown can sit beside it.
+    private int panelX;
+    private int panelY;
+    private int panelW;
     private final List<Item> items = new ArrayList<>();
     private final List<int[]> rows = new ArrayList<>();
 
@@ -58,6 +62,9 @@ public final class ScreenMenu {
         int x1 = panelX + panelW - 4 - tw;
         boolean hover = mouseX >= x1 && mouseX < x1 + tw && mouseY >= panelY && mouseY < panelY + 16;
         button = new int[]{x1, panelY, x1 + tw, panelY + 16};
+        this.panelX = panelX;
+        this.panelY = panelY;
+        this.panelW = panelW;
 
         if (open) g.fill(x1, panelY + 2, x1 + tw, panelY + 16, 0x30060B12);
         int col = open ? VoxeliaUi.GOLD : (hover ? 0xFFC8D6E0 : VoxeliaUi.MUTED);
@@ -112,10 +119,25 @@ public final class ScreenMenu {
         for (int i = 0; i < order.length; i++) {
             w = Math.max(w, font.width(labels[i]) + 16 + font.width(values[i]) + 14);
         }
-        int x2 = button[2];
-        int x1 = x2 - w;
-        int y1 = button[3] + 1;
         int h = order.length * ROW_H + SEP_H + 6;
+
+        // Open alongside the panel, never over its content. Prefer the right; fall
+        // back to the left, and only clamp to the screen if neither side fits.
+        Minecraft mc = Minecraft.getInstance();
+        int screenW = mc.getWindow().getGuiScaledWidth();
+        int screenH = mc.getWindow().getGuiScaledHeight();
+        int x1 = panelX + panelW + 6;
+        if (x1 + w > screenW - 3) {
+            int leftX1 = panelX - 6 - w;
+            x1 = leftX1 >= 3 ? leftX1 : Math.max(3, screenW - 3 - w);
+        }
+        int y1 = Math.max(3, Math.min(panelY, screenH - 3 - h));
+        int x2 = x1 + w;
+
+        // Lift the whole popup above the panel: Minecraft flushes GUI text in its own
+        // batch, so without a z-step the cards' labels would draw straight through it.
+        g.pose().pushPose();
+        g.pose().translate(0, 0, 300);
 
         g.fill(x1 + 2, y1 + h + 1, x2 + 2, y1 + h + 3, 0x50000000);
         g.fill(x2, y1 + 2, x2 + 2, y1 + h + 1, 0x50000000);
@@ -156,6 +178,7 @@ public final class ScreenMenu {
             rows.add(new int[]{x1, ry, x2, ry + ROW_H});
             ry += ROW_H;
         }
+        g.pose().popPose();
     }
 
     /** Handles the button and every dropdown row. Returns true when the click was consumed. */
