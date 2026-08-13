@@ -112,6 +112,11 @@ public final class ModNetworking {
                     }
                 }));
         registrar.playToClient(
+                MazeVictoryPayload.TYPE,
+                MazeVictoryPayload.STREAM_CODEC,
+                (payload, context) -> context.enqueueWork(
+                        () -> ClientAbyssState.openVictory(payload)));
+        registrar.playToClient(
                 TradeBoardPayload.TYPE,
                 TradeBoardPayload.STREAM_CODEC,
                 (payload, context) -> context.enqueueWork(

@@ -125,6 +125,13 @@ public final class MazeRaid {
         return active;
     }
 
+    /** How many raids this game ended with the wall never opened. */
+    private static int heldCount;
+
+    public static int heldThisGame() {
+        return heldCount;
+    }
+
     /** True while the running raid is the small day-two probe. */
     private static boolean probe() {
         return raidDay == PROBE_DAY;
@@ -181,6 +188,7 @@ public final class MazeRaid {
             dawnRepair(level);
         }
         raidDay = -1;
+        heldCount = 0;
     }
 
     // ------------------------------------------------------------------
@@ -320,6 +328,7 @@ public final class MazeRaid {
     private static void endEarly(ServerLevel level) {
         active = false;
         if (!everBreached) {
+            heldCount++;
             // The wall held the whole way through: a little extra into the pot
             // for everyone who stood the night, on top of the kill bounties.
             int purse = probe() ? 3 : 5;

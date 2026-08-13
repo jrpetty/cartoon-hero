@@ -76,6 +76,12 @@ public final class ClientAbyssState {
                 payload.currentChoice(), bests, payload.customMaps()));
     }
 
+    /** The escape ceremony, opened over the arrival back home. */
+    public static void openVictory(com.jrpetty.aztecabyss.network.MazeVictoryPayload payload) {
+        Minecraft.getInstance().setScreen(
+                new com.jrpetty.aztecabyss.client.MazeVictoryScreen(payload));
+    }
+
     /** The trade board's sign-up sheet: one trade, described, with a confirm. */
     public static void openTradeBoard(com.jrpetty.aztecabyss.network.TradeBoardPayload payload) {
         Minecraft.getInstance().setScreen(

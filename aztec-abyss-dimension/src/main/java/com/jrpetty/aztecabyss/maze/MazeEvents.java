@@ -1448,6 +1448,19 @@ public final class MazeEvents {
     /** Who died in the maze and is owed a trip out of it on respawn. */
     private static final java.util.Set<java.util.UUID> DIED_IN_MAZE = new java.util.HashSet<>();
 
+    /** Grievers killed per player this game, for the epitaphs and the hall. */
+    private static final java.util.Map<java.util.UUID, Integer> GRIEVER_KILLS
+            = new java.util.HashMap<>();
+
+    public static int grieverKills(java.util.UUID who) {
+        return GRIEVER_KILLS.getOrDefault(who, 0);
+    }
+
+    /** A new game; the tallies are the old game's. */
+    public static void clearKills() {
+        GRIEVER_KILLS.clear();
+    }
+
     /** Deaths owed a walk to the server door: when, and with what words. */
     private static final java.util.Map<java.util.UUID, Long> KICK_AT = new java.util.HashMap<>();
     private static final java.util.Map<java.util.UUID, Component> KICK_WORDS = new java.util.HashMap<>();
@@ -1513,6 +1526,7 @@ public final class MazeEvents {
         Griever.onDeath(level, mob);
         boolean dropped = MazeSerum.maybeDrop(level, mob, net.minecraft.util.RandomSource.create());
         if (event.getSource().getEntity() instanceof ServerPlayer killer) {
+            GRIEVER_KILLS.merge(killer.getUUID(), 1, Integer::sum);
             MazeAdvancements.grant(killer, MazeAdvancements.GRIEVER_SLAYER);
             if (dropped) {
                 MazeAdvancements.grant(killer, MazeAdvancements.SERUM);

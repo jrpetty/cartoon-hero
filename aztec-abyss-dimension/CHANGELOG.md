@@ -13,6 +13,26 @@ behaviour that was already there · **docs**
 
 ## Unreleased
 
+### The ceremony, and the ruins
+
+- **feat** **Escaping gets its ceremony.** Getting out now opens a victory
+  screen over your arrival home: *YOU GOT OUT*, your run in the numbers that
+  were actually the run — days survived, share of the maze charted, Grievers
+  killed, raids the wall held, your final sprint's time — and your line
+  written into **THE HALL OF THE OUT**, a permanent ledger of every escape
+  the server has ever seen. It survives the game, the session, and the
+  restart; nothing a later game does takes a line off it. Death has had a red
+  screen and the server door for a while — the win finally weighs the same.
+- **feat** **Three ruins stand in the corridors.** Somebody sheltered out
+  here once: a room hollowed inside a cell, broken pillars, moss and cracked
+  brick underfoot, cobwebs in the rafters, and a stocked barrel under a
+  lantern — bread, torches, string, flint. Spread across three quarters of
+  the maze, sited deterministically away from the Glade, the camp, and every
+  toggle door (the reshape never writes a wall through a shelter), and carved
+  strictly inside their cells so the maze graph — and every route the
+  verifier proves — is untouched. A Runner caught by dusk finally has
+  somewhere to steer for. (`GEOMETRY_VERSION` 16 — existing worlds restamp.)
+
 ### Death puts you out — all the way out
 
 - **feat** **Dying in the maze disconnects you from the server** (dedicated

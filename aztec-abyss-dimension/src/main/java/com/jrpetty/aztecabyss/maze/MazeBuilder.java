@@ -139,7 +139,7 @@ public final class MazeBuilder {
      * <p>14: the Chart Floor got its legend.
      * <p>15: the Chart Floor became the lake.
      */
-    private static final int GEOMETRY_VERSION = 15;
+    private static final int GEOMETRY_VERSION = 16;
 
     /** One distinctive block per version, so the marker is readable in-world. */
     private static final BlockState[] VERSION_BLOCKS = {
@@ -164,6 +164,8 @@ public final class MazeBuilder {
             // number or the modulo wraps a new version onto an old marker.
             Blocks.CRYING_OBSIDIAN.defaultBlockState(),
             Blocks.SEA_LANTERN.defaultBlockState(),
+            // Seventeenth, for version 16: the corridor ruins arrived.
+            Blocks.MOSSY_STONE_BRICKS.defaultBlockState(),
     };
 
     private static BlockState versionBlock() {
@@ -524,6 +526,10 @@ public final class MazeBuilder {
         gladeWall(level);
         // After the wall, because it writes the cells the wall stands between.
         sealGladeRing(level);
+        // The three shelters, deep in the corridors. Carved inside their own
+        // cells, so the maze graph - and everything verified against it - is
+        // untouched.
+        ruins(level);
         // Stamp the markers last, so a build interrupted by a crash or a restart
         // is treated as unbuilt and simply runs again.
         level.setBlock(VERSION_MARKER, versionBlock(), 2);
@@ -726,6 +732,118 @@ public final class MazeBuilder {
             return false;
         }
         return cx == lo || cx == hi || cz == lo || cz == hi;
+    }
+
+    // ------------------------------------------------------------------
+    // The ruins: three shelters, deep in the corridors
+    // ------------------------------------------------------------------
+
+    /**
+     * Where the three ruins stand, as cells. Deterministic, and chosen so a
+     * ruin can never fight the rest of the maze: never near the Glade or the
+     * Dead Glade, never on the rim, and never in a cell any toggle door
+     * touches - so the nightly reshape never writes a wall through somebody's
+     * shelter. The rooms are carved INSIDE their cells, so the maze graph the
+     * verifier proves is exactly the maze that stands.
+     */
+    public static java.util.List<int[]> ruinCells() {
+        java.util.List<int[]> out = new java.util.ArrayList<>();
+        java.util.Set<Long> toggled = new java.util.HashSet<>();
+        for (MazeData.TogglePoint tp : MazeData.togglePoints().values()) {
+            int[] c = parseEdge(tp.edge());
+            if (c != null) {
+                toggled.add(((long) c[0] << 32) | (c[1] & 0xFFFFFFFFL));
+                toggled.add(((long) c[2] << 32) | (c[3] & 0xFFFFFFFFL));
+            }
+        }
+        for (int i = 0; out.size() < 3 && i < 400; i++) {
+            int h = com.jrpetty.aztecabyss.worldgen.Deco.hash(0x201E, i, 0x5EED, 7) & 0x7FFFFFFF;
+            int cx = 4 + h % (MazeData.GRID - 8);
+            int cz = 4 + (h >> 8) % (MazeData.GRID - 8);
+            if (cx >= 37 && cx <= 58 && cz >= 37 && cz <= 58) {
+                continue; // the Glade, with room to breathe
+            }
+            if (cx >= 14 && cx <= 27 && cz >= 68 && cz <= 81) {
+                continue; // the Dead Glade, likewise
+            }
+            if (toggled.contains(((long) cx << 32) | (cz & 0xFFFFFFFFL))) {
+                continue; // a door touches this cell; the reshape owns it
+            }
+            boolean crowded = false;
+            for (int[] have : out) {
+                if (Math.abs(have[0] - cx) + Math.abs(have[1] - cz) < 24) {
+                    crowded = true;
+                    break;
+                }
+            }
+            if (!crowded) {
+                out.add(new int[]{cx, cz});
+            }
+        }
+        return out;
+    }
+
+    /**
+     * Somebody sheltered out here once. Three small ruins - a room carved
+     * inside a cell, broken pillars, moss underfoot, a stocked barrel under a
+     * lantern - so the corridors have somewhere to arrive at that is not the
+     * portal, and a Runner caught by dusk has somewhere to try to live
+     * through the night.
+     */
+    private static void ruins(ServerLevel level) {
+        for (int[] cell : ruinCells()) {
+            RandomSource rng = RandomSource.create(0x201E ^ ((long) cell[0] << 16 | cell[1]));
+            int bx = cell[0] * MazeData.CELL;
+            int bz = cell[1] * MazeData.CELL;
+            // The room: the cell's interior, hollowed. Edges stay - they are
+            // the shared walls the maze graph is made of.
+            for (int lx = 1; lx <= 4; lx++) {
+                for (int lz = 1; lz <= 4; lz++) {
+                    for (int y = MazeData.WALL_BASE_Y; y <= MazeData.WALL_BASE_Y + 4; y++) {
+                        level.setBlock(new BlockPos(bx + lx, y, bz + lz),
+                                Blocks.AIR.defaultBlockState(), 2);
+                    }
+                    // Worn flooring where grass was: somebody lived here.
+                    if (rng.nextInt(3) != 0) {
+                        level.setBlock(new BlockPos(bx + lx, MazeData.FLOOR_Y, bz + lz),
+                                (rng.nextBoolean() ? Blocks.MOSSY_STONE_BRICKS
+                                        : Blocks.CRACKED_STONE_BRICKS).defaultBlockState(), 2);
+                    }
+                }
+            }
+            // Broken corner pillars, no two the same height.
+            int[][] corners = {{1, 1}, {4, 1}, {1, 4}, {4, 4}};
+            for (int[] c : corners) {
+                int h = 1 + rng.nextInt(3);
+                for (int dy = 1; dy <= h; dy++) {
+                    level.setBlock(new BlockPos(bx + c[0], MazeData.FLOOR_Y + dy, bz + c[1]),
+                            (dy == h && rng.nextBoolean() ? Blocks.CRACKED_STONE_BRICKS
+                                    : Blocks.STONE_BRICKS).defaultBlockState(), 2);
+                }
+            }
+            // The barrel, stocked, with a lantern on it: shelter, supplies,
+            // and a light a Runner can steer for at dusk.
+            BlockPos barrel = new BlockPos(bx + 2, MazeData.FLOOR_Y + 1, bz + 3);
+            level.setBlock(barrel, Blocks.BARREL.defaultBlockState(), 2);
+            if (level.getBlockEntity(barrel) instanceof net.minecraft.world.Container box) {
+                box.setItem(0, new net.minecraft.world.item.ItemStack(
+                        net.minecraft.world.item.Items.BREAD, 2 + rng.nextInt(3)));
+                box.setItem(1, new net.minecraft.world.item.ItemStack(
+                        net.minecraft.world.item.Items.TORCH, 4 + rng.nextInt(5)));
+                box.setItem(2, new net.minecraft.world.item.ItemStack(
+                        net.minecraft.world.item.Items.STRING, 1 + rng.nextInt(3)));
+                box.setItem(3, new net.minecraft.world.item.ItemStack(
+                        net.minecraft.world.item.Items.FLINT, 1 + rng.nextInt(2)));
+            }
+            level.setBlock(barrel.above(), Blocks.LANTERN.defaultBlockState(), 2);
+            // A cobweb or two in the rafters. Ruins have spiders; this maze
+            // especially.
+            for (int i = 0; i < 2; i++) {
+                level.setBlock(new BlockPos(bx + 1 + rng.nextInt(4),
+                                MazeData.FLOOR_Y + 3 + rng.nextInt(2), bz + 1 + rng.nextInt(4)),
+                        Blocks.COBWEB.defaultBlockState(), 2);
+            }
+        }
     }
 
     /** Opens the wall between two neighbouring cells, both halves. */

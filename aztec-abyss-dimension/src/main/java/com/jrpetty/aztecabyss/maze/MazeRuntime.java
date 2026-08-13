@@ -234,6 +234,7 @@ public final class MazeRuntime {
         MazeBell.reset();
         MazeRaid.reset(level);
         MazeWaypoints.get(level).clearAll();
+        MazeEvents.clearKills();
         clock.newGame(level.getServer());
         MazeNotes.clearAll();
         GladeBuilder.forgetRoster();
@@ -648,7 +649,25 @@ public final class MazeRuntime {
             updateBar(level, p, layout, t);
         }
         for (int i = 0; i < escaped.size(); i++) {
-            sendHome(level, escaped.get(i), escapedSeconds.get(i));
+            ServerPlayer out = escaped.get(i);
+            int seconds = Math.max(0, escapedSeconds.get(i));
+            sendHome(level, out, seconds);
+            // The ceremony. Death gets a red screen and the server door;
+            // getting out gets your run read back to you and a permanent line
+            // in the hall. Written before the screen is sent, so the list the
+            // escapee sees already has their own name at the top of it.
+            MazeClock c = MazeClock.get(level);
+            int days = c.day() + 1;
+            int pct = MazeCharts.get(level.getServer()).myPercent(out.getUUID());
+            int kills = MazeEvents.grieverKills(out.getUUID());
+            MazeHall hall = MazeHall.get(level);
+            hall.add(out.getGameProfile().getName(), days, pct, kills, seconds, c.session() + 1);
+            net.neoforged.neoforge.network.PacketDistributor.sendToPlayer(out,
+                    new com.jrpetty.aztecabyss.network.MazeVictoryPayload(
+                            out.getGameProfile().getName() + "|" + days + "|" + pct + "|"
+                                    + kills + "|" + MazeRaid.heldThisGame() + "|"
+                                    + seconds + "|" + (c.session() + 1),
+                            hall.recent(6), hall.total()));
         }
         // Drop bars for anyone who has left the dimension. The bar has to be
         // emptied, not just forgotten: dropping the reference alone leaves the
