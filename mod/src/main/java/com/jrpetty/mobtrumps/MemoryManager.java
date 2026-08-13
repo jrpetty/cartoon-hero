@@ -1,6 +1,7 @@
 package com.jrpetty.mobtrumps;
 
 import com.jrpetty.mobtrumps.game.Memory;
+import com.jrpetty.mobtrumps.game.MemoryMatch;
 import com.jrpetty.mobtrumps.game.MobCards;
 import net.minecraft.ChatFormatting;
 import net.minecraft.network.chat.Component;
@@ -41,27 +42,25 @@ public final class MemoryManager {
     /** A finished board is swept once both sides have had this long to read it. */
     private static final long LINGER_MS = 5 * 60_000L;
 
+    /**
+     * The players and the clock around a {@link MemoryMatch}.
+     *
+     * <p>Every rule — turns, scores, the peek, who won — lives in MemoryMatch,
+     * which has no Minecraft in it and is played several thousand times by the
+     * regression harness on every build. This class only knows who is sitting
+     * at the table and when they sat down.
+     */
     private static final class Game {
         final UUID a;
         final UUID b;                    // null for a solo board
-        final Memory.BoardSize size;
-        final Memory.Board board;
+        final MemoryMatch match;
         final long startedMs = System.currentTimeMillis();
-        UUID turn;
-        int scoreA;
-        int scoreB;
-        long peekUntilMs;
-        boolean done;
         long doneMs;
-        /** Set when somebody walks out, so the other side is told why. */
-        UUID forfeited;
 
         Game(UUID a, UUID b, Memory.BoardSize size, List<String> faces) {
             this.a = a;
             this.b = b;
-            this.size = size;
-            this.board = new Memory.Board(faces);
-            this.turn = a;
+            this.match = new MemoryMatch(a, b, size, faces);
         }
 
         boolean solo() {
@@ -69,19 +68,7 @@ public final class MemoryManager {
         }
 
         UUID other(UUID id) {
-            return id.equals(a) ? b : a;
-        }
-
-        int scoreOf(UUID id) {
-            return id.equals(a) ? scoreA : scoreB;
-        }
-
-        void award(UUID id) {
-            if (id.equals(a)) {
-                scoreA++;
-            } else {
-                scoreB++;
-            }
+            return match.other(id);
         }
     }
 
@@ -104,7 +91,7 @@ public final class MemoryManager {
 
     public static boolean inGame(ServerPlayer player) {
         Game game = GAMES.get(player.getUUID());
-        return game != null && !game.done;
+        return game != null && !game.match.done();
     }
 
     private static Memory.BoardSize sizeOf(ServerPlayer player) {
@@ -251,32 +238,23 @@ public final class MemoryManager {
      */
     private static void flip(ServerPlayer player, int tile) {
         Game game = GAMES.get(player.getUUID());
-        if (game == null || game.done) {
+        if (game == null) {
             return;
         }
-        if (!game.solo() && !player.getUUID().equals(game.turn)) {
-            return;   // not your turn
-        }
-        if (game.peekUntilMs > 0) {
-            return;   // a miss is being shown; the board is frozen
-        }
-        Memory.Flip result = game.board.flip(tile);
-        if (result == Memory.Flip.REJECTED) {
-            return;   // out of range, already turned over, or the board is done
-        }
+        // Every reason to refuse lives in MemoryMatch, so a modified client
+        // sending any tile at any moment meets the same rules the harness
+        // plays against -- not a second, looser copy of them written here.
+        MemoryMatch.Outcome result = game.match.flip(player.getUUID(), tile,
+                System.currentTimeMillis());
         switch (result) {
             case FIRST -> soundBoth(player, game, ModSounds.CARD_FLIP.get(), 1.0F);
-            case MATCH -> {
-                game.award(player.getUUID());
-                soundBoth(player, game, ModSounds.CHIP.get(), 1.25F);
+            case MATCH -> soundBoth(player, game, ModSounds.CHIP.get(), 1.25F);
+            case MISS -> soundBoth(player, game, ModSounds.CARD_FLIP.get(), 0.72F);
+            case REJECTED -> {
+                return;   // nothing moved, so nothing to send
             }
-            case MISS -> {
-                game.peekUntilMs = System.currentTimeMillis() + PEEK_MS;
-                soundBoth(player, game, ModSounds.CARD_FLIP.get(), 0.72F);
-            }
-            default -> { }
         }
-        if (game.board.complete()) {
+        if (game.match.done()) {
             finish(player.getServer(), game);
         }
         sendBoth(player, game);
@@ -295,37 +273,31 @@ public final class MemoryManager {
         long now = System.currentTimeMillis();
         INVITES.entrySet().removeIf(e -> (Long) e.getValue()[2] < now);
 
+        // A match is reached through two map entries, so the work is done once
+        // per GAME rather than once per entry.
         Set<Game> seen = java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<>());
         for (Game game : GAMES.values()) {
-            if (!seen.add(game)) {
+            if (!seen.add(game) || !game.match.tick(now)) {
                 continue;
             }
-            if (game.peekUntilMs > 0 && now >= game.peekUntilMs) {
-                game.peekUntilMs = 0;
-                game.board.resolvePeek();
-                if (!game.solo()) {
-                    game.turn = game.other(game.turn);
-                }
-                ServerPlayer a = online(server, game.a);
-                if (a != null) {
-                    send(a);
-                }
-                ServerPlayer b = game.solo() ? null : online(server, game.b);
-                if (b != null) {
-                    send(b);
-                }
+            ServerPlayer a = online(server, game.a);
+            if (a != null) {
+                send(a);
+            }
+            ServerPlayer b = game.solo() ? null : online(server, game.b);
+            if (b != null) {
+                send(b);
             }
         }
         // A finished board stays put for a while so both players can read it,
         // then goes. Without this every game ever played would sit in the map
         // until the server restarted.
-        GAMES.values().removeIf(g -> g.done && g.doneMs > 0 && now - g.doneMs > LINGER_MS);
+        GAMES.values().removeIf(g -> g.match.done() && g.doneMs > 0
+                && now - g.doneMs > LINGER_MS);
     }
 
     private static void finish(MinecraftServer server, Game game) {
-        game.done = true;
         game.doneMs = System.currentTimeMillis();
-        game.peekUntilMs = 0;
         if (server == null) {
             return;
         }
@@ -333,7 +305,7 @@ public final class MemoryManager {
         ServerPlayer b = game.solo() ? null : online(server, game.b);
         if (game.solo()) {
             if (a != null) {
-                a.sendSystemMessage(Component.literal("Board cleared in " + game.board.moves()
+                a.sendSystemMessage(Component.literal("Board cleared in " + game.match.board().moves()
                                 + " moves and " + StatsTracker.humanDuration(
                                         game.doneMs - game.startedMs) + ".")
                         .withStyle(ChatFormatting.GREEN));
@@ -350,8 +322,8 @@ public final class MemoryManager {
             }
             StatsTracker.bump(p, "memory_played");
             StatsTracker.bump(p, "games_played");
-            int mine = game.scoreOf(p.getUUID());
-            int theirs = game.scoreOf(game.other(p.getUUID()));
+            int mine = game.match.scoreOf(p.getUUID());
+            int theirs = game.match.scoreOf(game.other(p.getUUID()));
             if (mine > theirs) {
                 StatsTracker.bump(p, "memory_wins");
                 win(p);
@@ -372,7 +344,7 @@ public final class MemoryManager {
     /** Clear a finished board so the table returns to the size menu. */
     private static void clearIfDone(ServerPlayer player) {
         Game game = GAMES.get(player.getUUID());
-        if (game != null && game.done) {
+        if (game != null && game.match.done()) {
             GAMES.remove(player.getUUID());
         }
         send(player);
@@ -387,12 +359,11 @@ public final class MemoryManager {
             return;
         }
         UUID them = game.other(player.getUUID());
-        if (!game.done) {
+        if (!game.match.done()) {
             // The board dies with the player who left, and the other side is
             // told rather than being left staring at a turn that will never come.
-            game.done = true;
+            game.match.forfeit(player.getUUID());
             game.doneMs = System.currentTimeMillis();
-            game.forfeited = player.getUUID();
             ServerPlayer other = online(player.getServer(), them);
             if (other != null) {
                 other.sendSystemMessage(Component.literal(name(player) + " left the game.")
@@ -442,7 +413,7 @@ public final class MemoryManager {
         }
         UUID me = player.getUUID();
         boolean solo = game.solo();
-        int tiles = game.board.size();
+        int tiles = game.match.board().size();
 
         List<String> texts = new ArrayList<>(MemorySyncPayload.TEXT_HEADER + tiles);
         texts.add(name(player));
@@ -458,14 +429,14 @@ public final class MemoryManager {
             nums.add(0);
         }
         int result = MemorySyncPayload.RESULT_NONE;
-        if (game.done) {
+        if (game.match.done()) {
             if (solo) {
                 result = MemorySyncPayload.RESULT_WON;
             } else {
-                int mine = game.scoreOf(me);
-                int yours = game.scoreOf(game.other(me));
-                if (game.forfeited != null) {
-                    result = game.forfeited.equals(me)
+                int mine = game.match.scoreOf(me);
+                int yours = game.match.scoreOf(game.other(me));
+                if (game.match.forfeited() != null) {
+                    result = game.match.forfeited().equals(me)
                             ? MemorySyncPayload.RESULT_LOST : MemorySyncPayload.RESULT_WON;
                 } else {
                     result = mine > yours ? MemorySyncPayload.RESULT_WON
@@ -475,26 +446,26 @@ public final class MemoryManager {
             }
         }
         nums.set(MemorySyncPayload.PHASE,
-                game.done ? MemorySyncPayload.PHASE_OVER : MemorySyncPayload.PHASE_PLAYING);
+                game.match.done() ? MemorySyncPayload.PHASE_OVER : MemorySyncPayload.PHASE_PLAYING);
         nums.set(MemorySyncPayload.RESULT, result);
-        nums.set(MemorySyncPayload.BOARD, game.size.ordinal());
-        nums.set(MemorySyncPayload.COLS, game.size.cols);
-        nums.set(MemorySyncPayload.ROWS, game.size.rows);
+        nums.set(MemorySyncPayload.BOARD, game.match.size().ordinal());
+        nums.set(MemorySyncPayload.COLS, game.match.size().cols);
+        nums.set(MemorySyncPayload.ROWS, game.match.size().rows);
         nums.set(MemorySyncPayload.TILES, tiles);
-        nums.set(MemorySyncPayload.MOVES, game.board.moves());
-        nums.set(MemorySyncPayload.SCORE_YOU, solo ? game.board.matchedPairs() : game.scoreOf(me));
-        nums.set(MemorySyncPayload.SCORE_THEM, solo ? 0 : game.scoreOf(game.other(me)));
-        nums.set(MemorySyncPayload.YOUR_TURN, solo || me.equals(game.turn) ? 1 : 0);
+        nums.set(MemorySyncPayload.MOVES, game.match.board().moves());
+        nums.set(MemorySyncPayload.SCORE_YOU, game.match.scoreOf(me));
+        nums.set(MemorySyncPayload.SCORE_THEM, solo ? 0 : game.match.scoreOf(game.other(me)));
+        nums.set(MemorySyncPayload.YOUR_TURN, game.match.isTurn(me) ? 1 : 0);
         nums.set(MemorySyncPayload.SOLO, solo ? 1 : 0);
-        nums.set(MemorySyncPayload.ELAPSED_S, (int) (((game.done ? game.doneMs
+        nums.set(MemorySyncPayload.ELAPSED_S, (int) (((game.match.done() ? game.doneMs
                 : System.currentTimeMillis()) - game.startedMs) / 1000L));
-        nums.set(MemorySyncPayload.PEEK_MS, game.peekUntilMs == 0 ? 0
-                : (int) Math.max(0, game.peekUntilMs - System.currentTimeMillis()));
+        nums.set(MemorySyncPayload.PEEK_MS,
+                game.match.peekLeftMs(System.currentTimeMillis()));
 
-        List<String> reveal = game.done ? game.board.revealAll() : null;
+        List<String> reveal = game.match.done() ? game.match.board().revealAll() : null;
         for (int i = 0; i < tiles; i++) {
-            nums.add(game.board.stateAt(i));
-            texts.add(reveal != null ? reveal.get(i) : game.board.faceAt(i));
+            nums.add(game.match.board().stateAt(i));
+            texts.add(reveal != null ? reveal.get(i) : game.match.board().faceAt(i));
         }
         PacketDistributor.sendToPlayer(player, new MemorySyncPayload(texts, nums));
     }

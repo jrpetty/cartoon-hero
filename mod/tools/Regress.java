@@ -104,7 +104,128 @@ public class Regress {
                 "a cleared board counts moves per pair, not per flip");
         check(small.flip(0) == Memory.Flip.REJECTED, "a finished board refuses flips");
 
-                System.out.println("memory layout");
+                System.out.println("memory: single player");
+        List<String> mpool = new ArrayList<>();
+        for (MobCard c : MobCards.ALL) mpool.add(c.id());
+        UUID solo = new UUID(1, 1);
+        {
+            MemoryMatch m = new MemoryMatch(solo, null, Memory.BoardSize.MEDIUM,
+                    Memory.deal(mpool, 12, new Random(3)));
+            check(m.solo() && m.isTurn(solo), "solo: it is always your turn");
+            long t = 1000;
+            // a miss freezes the board until the peek elapses, solo included
+            int i = 0, j = 1;
+            while (!m.board().faceAt(i).equals("") || i == j) i++;
+            m.flip(solo, 0, t);
+            MemoryMatch.Outcome second = m.flip(solo, 1, t);
+            if (second == MemoryMatch.Outcome.MISS) {
+                check(m.flip(solo, 2, t) == MemoryMatch.Outcome.REJECTED,
+                        "solo: no flipping while the pair is being peeked at");
+                check(!m.tick(t + MemoryMatch.PEEK_MS - 1), "solo: the peek does not end early");
+                check(m.tick(t + MemoryMatch.PEEK_MS), "solo: the peek ends on time");
+                check(m.board().faceAt(0).isEmpty(), "solo: the peeked pair goes back down");
+            }
+            // play it out
+            MemoryMatch g = new MemoryMatch(solo, null, Memory.BoardSize.MEDIUM,
+                    Memory.deal(mpool, 12, new Random(3)));
+            long now = 0;
+            int guard = 0;
+            // Pick at RANDOM, not "the two lowest hidden tiles": a deterministic
+            // chooser turns the same mismatched pair over forever and never
+            // finishes, which says nothing about the game and everything about
+            // the chooser. That bug was in this file twice before it was in the
+            // rules never.
+            Random pick = new Random(77);
+            while (!g.done() && guard++ < 20000) {
+                now += 50;
+                if (g.tick(now)) continue;
+                if (g.peeking()) { now += MemoryMatch.PEEK_MS; continue; }
+                List<Integer> hidden = new ArrayList<>();
+                for (int k = 0; k < g.board().size(); k++)
+                    if (g.board().stateAt(k) == Memory.HIDDEN) hidden.add(k);
+                if (hidden.size() < 2) break;
+                g.flip(solo, hidden.remove(pick.nextInt(hidden.size())), now);
+                g.flip(solo, hidden.remove(pick.nextInt(hidden.size())), now);
+            }
+            check(g.done() && g.board().complete(), "solo: a board can be cleared");
+            check(g.scoreOf(solo) == 12, "solo: score is the 12 pairs taken");
+            check(g.winner() == null, "solo: there is no opponent to beat");
+        }
+
+        System.out.println("memory: two player");
+        UUID pa = new UUID(2, 2), pb = new UUID(3, 3);
+        {
+            MemoryMatch m = new MemoryMatch(pa, pb, Memory.BoardSize.EASY,
+                    List.of("a","a","b","b","c","c","d","d","e","e","f","f","g","g","h","h"));
+            check(m.isTurn(pa) && !m.isTurn(pb), "2p: the challenger goes first");
+            check(m.flip(pb, 0, 100) == MemoryMatch.Outcome.REJECTED,
+                    "2p: you cannot flip out of turn");
+            check(m.board().faceAt(0).isEmpty(),
+                    "2p: an out-of-turn flip does not even reveal the card");
+            check(m.flip(pa, 0, 100) == MemoryMatch.Outcome.FIRST, "2p: first flip");
+            check(m.flip(pa, 1, 100) == MemoryMatch.Outcome.MATCH, "2p: 'a' pairs with 'a'");
+            check(m.isTurn(pa), "2p: a match KEEPS your turn");
+            check(m.scoreOf(pa) == 1 && m.scoreOf(pb) == 0, "2p: the pair is scored to you");
+            m.flip(pa, 2, 200);
+            check(m.flip(pa, 4, 200) == MemoryMatch.Outcome.MISS, "2p: 'b' does not pair with 'c'");
+            check(m.isTurn(pa), "2p: the turn does NOT pass until the peek ends");
+            check(m.flip(pb, 6, 200) == MemoryMatch.Outcome.REJECTED,
+                    "2p: nor can they jump in during the peek");
+            check(!m.tick(200 + MemoryMatch.PEEK_MS - 1), "2p: the peek runs its full 1.4s");
+            check(m.tick(200 + MemoryMatch.PEEK_MS), "2p: then it resolves");
+            check(m.isTurn(pb) && !m.isTurn(pa), "2p: and the turn passes");
+            check(m.board().faceAt(2).isEmpty() && m.board().faceAt(4).isEmpty(),
+                    "2p: both cards go back face down");
+        }
+        {   // forfeit
+            MemoryMatch m = new MemoryMatch(pa, pb, Memory.BoardSize.EASY,
+                    Memory.deal(mpool, 8, new Random(9)));
+            m.forfeit(pa);
+            check(m.done() && pb.equals(m.winner()), "2p: walking out hands them the win");
+            check(m.flip(pb, 0, 500) == MemoryMatch.Outcome.REJECTED,
+                    "2p: a forfeited board is closed");
+        }
+        {   // full random playouts of both modes
+            int games = 0, drawn = 0, badTurn = 0, badScore = 0, unfinished = 0;
+            for (int seed = 0; seed < 400; seed++) {
+                Random rng = new Random(seed);
+                Memory.BoardSize size = Memory.BoardSize.byOrdinal(seed % 3);
+                MemoryMatch m = new MemoryMatch(pa, pb, size, Memory.deal(mpool, size.pairs(), rng));
+                long now = 0;
+                int guard = 0;
+                while (!m.done() && guard++ < 40000) {
+                    now += 60;
+                    if (m.tick(now)) continue;
+                    if (m.peeking()) { now += MemoryMatch.PEEK_MS; continue; }
+                    UUID who = m.turn();
+                    List<Integer> hidden = new ArrayList<>();
+                    for (int k = 0; k < m.board().size(); k++)
+                        if (m.board().stateAt(k) == Memory.HIDDEN) hidden.add(k);
+                    if (hidden.size() < 2) break;
+                    int x = hidden.remove(rng.nextInt(hidden.size()));
+                    int y = hidden.remove(rng.nextInt(hidden.size()));
+                    m.flip(who, x, now);
+                    MemoryMatch.Outcome o = m.flip(who, y, now);
+                    // the rule that makes it a game: a match keeps the turn
+                    if (o == MemoryMatch.Outcome.MATCH && !m.done() && !m.isTurn(who)) badTurn++;
+                    // and the loser of a pair never scores it
+                    if (o == MemoryMatch.Outcome.MISS && m.scoreOf(who) != m.scoreOf(who)) badScore++;
+                }
+                if (!m.done()) { unfinished++; continue; }
+                games++;
+                if (m.scoreOf(pa) + m.scoreOf(pb) != size.pairs()) badScore++;
+                UUID w = m.winner();
+                if (w == null) drawn++;
+                else if (m.scoreOf(w) <= m.scoreOf(m.other(w))) badScore++;
+            }
+            check(unfinished == 0, "2p: all 400 random games reached an end");
+            check(badTurn == 0, "2p: a match never passed the turn (400 games)");
+            check(badScore == 0, "2p: every game's scores summed to its pairs, "
+                    + "and the winner always had more (" + drawn + " draws)");
+            check(games == 400, "2p: " + games + " complete games played this build");
+        }
+
+        System.out.println("memory layout");
         // This sweeps the REAL solve, not a copy of it. An earlier version of
         // this check was a Python transcription of the same arithmetic, and it
         // could not see a single change to the algorithm: flooring turned back
