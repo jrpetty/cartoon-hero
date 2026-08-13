@@ -58,6 +58,11 @@ if ! python3 tools/checkcardcoords.py "$SRC"; then fail=1; fi
 echo "== 1h. no award falls off its page =="
 if ! python3 tools/checkawardpages.py "$SRC"; then fail=1; fi
 
+echo "== 1l. the memory sweep measures a real card =="
+# The board sweep itself lives in the Java harness (step 3) so that it
+# exercises MemoryLayout.solve rather than a Python copy of it.
+if ! python3 tools/checkmemorycards.py "$SRC"; then fail=1; fi
+
 echo "== 1k. the profile page fits its own statistics =="
 if ! python3 tools/checkprofilepage.py "$SRC"; then fail=1; fi
 

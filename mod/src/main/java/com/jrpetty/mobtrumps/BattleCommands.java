@@ -140,6 +140,22 @@ public final class BattleCommands {
                                 .executes(ctx -> GuessWhoManager.challenge(
                                         ctx.getSource().getPlayerOrException(),
                                         EntityArgument.getPlayer(ctx, "player")))))
+                .then(Commands.literal("memory")
+                        .executes(ctx -> {
+                            MemoryManager.open(ctx.getSource().getPlayerOrException());
+                            return 1;
+                        })
+                        .then(Commands.literal("accept")
+                                .executes(ctx -> MemoryManager.accept(
+                                        ctx.getSource().getPlayerOrException())))
+                        .then(Commands.literal("decline")
+                                .executes(ctx -> MemoryManager.decline(
+                                        ctx.getSource().getPlayerOrException())))
+                        .then(Commands.literal("challenge")
+                                .then(Commands.argument("player", EntityArgument.player())
+                                        .executes(ctx -> MemoryManager.challenge(
+                                                ctx.getSource().getPlayerOrException(),
+                                                EntityArgument.getPlayer(ctx, "player"))))))
                 .then(Commands.literal("queue")
                         .executes(ctx -> DuelManager.queue(ctx.getSource().getPlayerOrException()))
                         .then(Commands.literal("leave")

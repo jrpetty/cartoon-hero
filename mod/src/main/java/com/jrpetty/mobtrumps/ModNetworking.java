@@ -84,6 +84,18 @@ public final class ModNetworking {
                         PacketDistributor.sendToPlayer(sp, PlayerProfile.snapshot(sp));
                     }
                 }));
+        registrar.playToClient(MemoryMenuPayload.TYPE, MemoryMenuPayload.STREAM_CODEC,
+                (payload, context) -> context.enqueueWork(
+                        () -> com.jrpetty.mobtrumps.client.ClientHooks.openMemory()));
+        registrar.playToClient(MemorySyncPayload.TYPE, MemorySyncPayload.STREAM_CODEC,
+                (payload, context) -> context.enqueueWork(
+                        () -> com.jrpetty.mobtrumps.client.ClientMemory.set(payload)));
+        registrar.playToServer(MemoryActionPayload.TYPE, MemoryActionPayload.STREAM_CODEC,
+                (payload, context) -> context.enqueueWork(() -> {
+                    if (context.player() instanceof net.minecraft.server.level.ServerPlayer sp) {
+                        MemoryManager.handle(sp, payload.action(), payload.value());
+                    }
+                }));
         registrar.playToClient(RecyclerMenuPayload.TYPE, RecyclerMenuPayload.STREAM_CODEC,
                 (payload, context) -> context.enqueueWork(
                         () -> ClientHooks.openRecycler(payload.mode())));

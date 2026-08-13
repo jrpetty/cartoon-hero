@@ -49,6 +49,11 @@ public final class ClientHooks {
         Minecraft.getInstance().setScreen(new GuessWhoScreen());
     }
 
+    /** Open the Memory table. */
+    public static void openMemory() {
+        Minecraft.getInstance().setScreen(new MemoryScreen());
+    }
+
     /** Open the Twenty-One table. */
     public static void openBlackjack() {
         Minecraft.getInstance().setScreen(new BlackjackScreen());

@@ -46,6 +46,7 @@ public class MobTrumps {
         NeoForge.EVENT_BUS.addListener((net.neoforged.neoforge.event.tick.ServerTickEvent.Post event) -> {
             DuelManager.tickTimers(event.getServer());
             BluffManager.tick(event.getServer());
+            MemoryManager.tick(event.getServer());
             ConditionTracker.tick(event.getServer());
             ServerSync.tick(event.getServer());
             // check for a ranked season rollover about twice a minute
@@ -95,6 +96,7 @@ public class MobTrumps {
                 TournamentManager.handleLogout(player);
                 BlackjackManager.handleLogout(player);
                 GuessWhoManager.handleLogout(player);
+            MemoryManager.handleLogout(player);
                 DuelTables.clearSeatsOf(player.getUUID());
                 TableBattleManager.clear(player.getUUID());
                 CampaignManager.clear(player.getUUID());
