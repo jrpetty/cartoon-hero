@@ -39,12 +39,10 @@ public final class VoxeliaNetwork {
         registrar.playToClient(TalentsSyncPayload.TYPE, TalentsSyncPayload.STREAM_CODEC, TalentsSyncPayload::handle);
         registrar.playToClient(PrestigeCelebrationPacket.TYPE, PrestigeCelebrationPacket.STREAM_CODEC, PrestigeCelebrationPacket::handle);
         registrar.playToClient(ProfileStatsPayload.TYPE, ProfileStatsPayload.STREAM_CODEC, ProfileStatsPayload::handle);
-        registrar.playToClient(MemoryStatePayload.TYPE, MemoryStatePayload.STREAM_CODEC, MemoryStatePayload::handle);
         registrar.playToServer(AbilityPacket.TYPE, AbilityPacket.STREAM_CODEC, AbilityPacket::handle);
         registrar.playToServer(SpendTalentPacket.TYPE, SpendTalentPacket.STREAM_CODEC, SpendTalentPacket::handle);
         registrar.playToServer(PrestigePacket.TYPE, PrestigePacket.STREAM_CODEC, PrestigePacket::handle);
         registrar.playToServer(ProfileRequestPacket.TYPE, ProfileRequestPacket.STREAM_CODEC, ProfileRequestPacket::handle);
-        registrar.playToServer(MemoryActionPacket.TYPE, MemoryActionPacket.STREAM_CODEC, MemoryActionPacket::handle);
     }
 
     /** Send the profile screen the vanilla stats it can't derive client-side (playtime, deaths, mob kills). */
