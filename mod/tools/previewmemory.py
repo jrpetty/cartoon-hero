@@ -87,6 +87,93 @@ def draw_back(d, x, y, w, h):
               fill=KRAFT_DARK)
 
 
+
+# --- mob portraits -----------------------------------------------------------
+# Minecraft mob faces ARE 8x8 textures, so each portrait here is an 8x8 pixel
+# grid in that same idiom, drawn where the live 3D mob poses in the real game.
+# '.' is transparent and lets the portrait backdrop show through. These are
+# hand-made renditions of the vanilla faces, not the game's own textures.
+
+def _fish(body, stripe, eye):
+    """Side-on fish, facing right; used by the fish that have no 'face'."""
+    pal = {"o": body, "w": stripe, "k": eye}
+    rows = ["........",
+            "o..ooo..",
+            "ooowwoo.",
+            "ooowwoko",
+            "ooowwoo.",
+            "o..ooo..",
+            "........",
+            "........"]
+    return pal, rows
+
+
+MOB_FACES = {
+    "pig": ({"p": (229, 153, 150), "d": (198, 110, 110), "n": (86, 40, 42),
+             "w": (240, 240, 240), "k": (30, 30, 30)},
+            ["pppppppp", "pppppppp", "wkppppkw", "pppppppp",
+             "pddddddp", "pdnddndp", "pddddddp", "pppppppp"]),
+    "enderman": ({"k": (18, 16, 20), "m": (208, 78, 250), "w": (236, 190, 255)},
+                 ["kkkkkkkk", "kkkkkkkk", "kkkkkkkk", "mwmkkmwm",
+                  "kkkkkkkk", "kkkkkkkk", "kkkkkkkk", "kkkkkkkk"]),
+    "warden": ({"t": (16, 62, 66), "c": (92, 225, 210), "k": (8, 30, 32)},
+               ["tttttttt", "tttttttt", "tcttttct", "tcttttct",
+                "tttttttt", "ttkkkktt", "tttttttt", "tttttttt"]),
+    "panda": ({"w": (235, 235, 235), "k": (44, 44, 44)},
+              ["kwwwwwwk", "wwwwwwww", "wkkwwkkw", "wkkwwkkw",
+               "wwwwwwww", "wwwkkwww", "wwwwwwww", "wwwwwwww"]),
+    "mule": ({"b": (94, 66, 46), "k": (40, 28, 20), "w": (235, 235, 235),
+              "m": (168, 132, 96), "n": (60, 42, 30)},
+             ["bkbbbbkb", "bbbbbbbb", "bwkbbkwb", "bbbbbbbb",
+              "bmmmmmmb", "bmnmmnmb", "bmmmmmmb", "bbbbbbbb"]),
+    "tropical_fish": _fish((235, 122, 42), (245, 245, 245), (20, 20, 20)),
+    "cod": _fish((150, 122, 92), (196, 176, 148), (20, 20, 20)),
+    "fox": ({"o": (219, 122, 44), "k": (35, 30, 26), "w": (242, 238, 230)},
+            ["ko....ok", "oooooooo", "okooooko", "oooooooo",
+             "owwwwwwo", "wwwkkwww", "wwwwwwww", "........"]),
+    "goat": ({"c": (206, 199, 184), "h": (148, 138, 118), "k": (36, 34, 30),
+              "p": (226, 220, 206)},
+             ["hhcccchh", "cccccccc", "ckcccckc", "cccccccc",
+              "cccccccc", "ccppppcc", "ccpkkpcc", "cccccccc"]),
+    "vex": ({"v": (134, 152, 184), "d": (92, 106, 132), "k": (28, 32, 44)},
+            ["vvvvvvvv", "vvvvvvvv", "vkvvvvkv", "vvvvvvvv",
+             "vvddddvv", "vvvvvvvv", "vvvvvvvv", "vvvvvvvv"]),
+    "bogged": ({"g": (108, 140, 74), "s": (170, 180, 142), "k": (38, 44, 32)},
+               ["gggggggg", "ssssssss", "skssssks", "ssssssss",
+                "ssssssss", "sksksksk", "ssssssss", "ssssssss"]),
+    "strider": ({"r": (180, 58, 58), "d": (122, 32, 34), "k": (30, 20, 20),
+                 "e": (222, 218, 214)},
+                ["rrrrrrrr", "ekrrrrke", "rrrrrrrr", "dddddddd",
+                 "rrrrrrrr", "dddddddd", "rrrrrrrr", "rrrrrrrr"]),
+}
+
+
+def draw_mob_face(c, mob_id, band):
+    """The 8x8 portrait, centred in the well; a plain head if the mob has no grid."""
+    well_x0, well_y0, well_x1, well_y1 = 12, 38, CARD_W - 12, 116
+    face = MOB_FACES.get(mob_id)
+    px = min((well_x1 - well_x0 - 10) // 8, (well_y1 - well_y0 - 10) // 8)
+    fx = (well_x0 + well_x1 - px * 8) // 2
+    fy = (well_y0 + well_y1 - px * 8) // 2
+    if face is None:
+        rect(c, fx, fy, px * 8, px * 8, fill=band, outline=KRAFT_DARK, width=max(1, ZOOM))
+        rect(c, fx + px * 2, fy + px * 2, px, px, fill=(30, 30, 30))
+        rect(c, fx + px * 5, fy + px * 2, px, px, fill=(30, 30, 30))
+        return
+    pal, rows = face
+    # a one-pixel drop shadow behind every solid pixel, so a white panda still
+    # reads against the pale backdrop without boxing the fish into a frame
+    off = max(1, px // 3)
+    for ry, row in enumerate(rows):
+        for rx, ch in enumerate(row):
+            if ch != ".":
+                rect(c, fx + rx * px + off, fy + ry * px + off, px, px, fill=(70, 78, 66))
+    for ry, row in enumerate(rows):
+        for rx, ch in enumerate(row):
+            if ch != ".":
+                rect(c, fx + rx * px, fy + ry * px, px, px, fill=pal[ch])
+
+
 def draw_face(img, x, y, w, h, tile, dim=False):
     """
     The real card, transcribed from CardRenderer.renderCard.
@@ -123,10 +210,7 @@ def draw_face(img, x, y, w, h, tile, dim=False):
                     for k in range(3))
         c.rectangle([12 * ZOOM, i * ZOOM, (CARD_W - 12) * ZOOM, (i + 1) * ZOOM], fill=col)
     rect(c, 11, 37, CARD_W - 22, 81, outline=KRAFT_DARK, width=max(1, ZOOM))
-    cx, cy, r = CARD_W / 2, 79, 26
-    c.ellipse([(cx - r) * ZOOM, (cy - r) * ZOOM, (cx + r) * ZOOM, (cy + r) * ZOOM],
-              fill=band, outline=KRAFT_DARK, width=max(1, ZOOM))
-    text(c, cx, cy - 5, "mob", (255, 255, 255), size=7, anchor="ma")
+    draw_mob_face(c, tile["face"], band)
 
     # stat table: five rows alternating blue/green, then the gold rating row
     rows = [("HP", tile["hp"], False), ("ATK", tile["atk"], False), ("SIZE", tile["size"], False),
