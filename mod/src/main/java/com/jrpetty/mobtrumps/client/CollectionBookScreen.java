@@ -2,6 +2,8 @@ package com.jrpetty.mobtrumps.client;
 
 import com.jrpetty.mobtrumps.AwardActionPayload;
 import com.jrpetty.mobtrumps.MobCardItem;
+import com.jrpetty.mobtrumps.ProfileSyncPayload;
+import com.jrpetty.mobtrumps.RankTier;
 import com.jrpetty.mobtrumps.SetDisplayPayload;
 import com.jrpetty.mobtrumps.SetEggs;
 import com.jrpetty.mobtrumps.StorageActionPayload;
@@ -99,14 +101,17 @@ public class CollectionBookScreen extends Screen {
     }
 
     private static final int AWARD_SPREADS = AWARD_PAGES.size();
-    private static final int BACK_SPREADS = AWARD_SPREADS + 2;
+    /** Standing, then The Record. Splitting them is what lets every row fit
+     *  on a 320x240 window, where one leaf holds only eight lines. */
+    private static final int PROFILE_SPREADS = 2;
+    private static final int BACK_SPREADS = AWARD_SPREADS + 2 + PROFILE_SPREADS;
     /** Back pages are drawn through this scale so the text is properly legible. */
     private static final float UI = 1.25f;
     /** Panel chrome that must be budgeted for: page arrows and numbers inside
      *  the panel, the tab row above it, the hint line below it. */
     private static final int FOOTER_H = 26, TAB_RESERVE = 20, HINT_RESERVE = 22;
 
-    private enum Section { CARDS, AWARDS, SETS, SETTINGS }
+    private enum Section { CARDS, AWARDS, SETS, PROFILE, SETTINGS }
 
     private enum Filter { ALL("All"), OWNED("Owned"), MISSING("Missing"), FOIL("Foil");
         final String label; Filter(String l) { label = l; } }
@@ -166,7 +171,6 @@ public class CollectionBookScreen extends Screen {
     private int spread;
     private Filter filter = Filter.ALL;
     private Sort sort = Sort.NUMBER;
-    private boolean statsOpen = false;
     private String pickerMob = null;
     private Category eggPicker = null;
     /** The award row under the cursor this frame — its description fills the footer. */
@@ -287,7 +291,9 @@ public class CollectionBookScreen extends Screen {
     private Section section() {
         if (spread < cardSpreads) return Section.CARDS;
         if (spread < cardSpreads + AWARD_SPREADS) return Section.AWARDS;
-        return spread == cardSpreads + AWARD_SPREADS ? Section.SETS : Section.SETTINGS;
+        int back = spread - cardSpreads - AWARD_SPREADS;
+        if (back == 0) return Section.SETS;
+        return back <= PROFILE_SPREADS ? Section.PROFILE : Section.SETTINGS;
     }
 
     /** The first spread of a section, for the tabs to jump to. */
@@ -296,7 +302,8 @@ public class CollectionBookScreen extends Screen {
             case CARDS -> 0;
             case AWARDS -> cardSpreads;
             case SETS -> cardSpreads + AWARD_SPREADS;
-            case SETTINGS -> cardSpreads + AWARD_SPREADS + 1;
+            case PROFILE -> cardSpreads + AWARD_SPREADS + 1;
+            case SETTINGS -> cardSpreads + AWARD_SPREADS + 1 + PROFILE_SPREADS;
         };
     }
 
@@ -304,7 +311,8 @@ public class CollectionBookScreen extends Screen {
         tabs.clear();
         int x = panelX + panelW - 12;
         // laid out right to left so the rightmost tab is the last leaf
-        Section[] keys = {Section.SETTINGS, Section.SETS, Section.AWARDS, Section.CARDS};
+        Section[] keys = {Section.SETTINGS, Section.PROFILE, Section.SETS,
+                Section.AWARDS, Section.CARDS};
         for (Section key : keys) {
             int w = font.width(tabLabel(key)) + 14;
             x -= w + 3;
@@ -317,6 +325,7 @@ public class CollectionBookScreen extends Screen {
             case CARDS -> "Cards";
             case AWARDS -> "Awards";
             case SETS -> "Sets";
+            case PROFILE -> "Profile";
             case SETTINGS -> "Settings";
         };
     }
@@ -361,7 +370,7 @@ public class CollectionBookScreen extends Screen {
         // out as one measured group and pushing the whole thing right keeps them
         // together and keeps the centre of the book clear.
         String sortLabel = "Sort: " + sort.label;
-        String[] actions = {"Stats", sortLabel, "Deck", "Store"};
+        String[] actions = {"Profile", sortLabel, "Deck", "Store"};
         String[] keys = {"stats", "sort", "deck", "store"};
         int right = panelX + panelW - 12;
         for (int i = 0; i < actions.length; i++) {
@@ -480,6 +489,7 @@ public class CollectionBookScreen extends Screen {
                             page[1], page[2], lmx, lmy);
                 }
                 case SETS -> renderSetRewardsPage(g, lmx, lmy);
+                case PROFILE -> renderProfilePage(g);
                 default -> renderSettingsPage(g, lmx, lmy);
             }
             pose.popPose();
@@ -504,6 +514,7 @@ public class CollectionBookScreen extends Screen {
                 case CARDS -> "Click a card to view it  ·  hover it to File or Take out";
                 case AWARDS -> "Press Collect on a finished award and the reward lands straight in your inventory";
                 case SETS -> "Complete every mob in a set to choose one of them as a spawn egg";
+                case PROFILE -> "Everything you have done, counted — this page updates itself as you play";
                 case SETTINGS -> "Settings are yours alone — they change how the mod looks, never how it plays";
             };
         }
@@ -512,7 +523,7 @@ public class CollectionBookScreen extends Screen {
         }
         g.drawString(font, hint, (width - font.width(hint)) / 2, panelY + panelH + 8, hintColor, true);
 
-        boolean overlay = pickerMob != null || eggPicker != null || statsOpen;
+        boolean overlay = pickerMob != null || eggPicker != null;
         // Everything from here up is an overlay ON the book, so it all rides at
         // z=400 the way vanilla tooltips do. The grid's live mob portraits are
         // 3D models drawn with depth around z 50-150, and a panel left at z=0
@@ -536,7 +547,6 @@ public class CollectionBookScreen extends Screen {
         }
         if (pickerMob != null) renderPicker(g, mouseX, mouseY);
         if (eggPicker != null) renderEggPicker(g, mouseX, mouseY);
-        if (statsOpen) renderStats(g);
         overPose.popPose();
     }
 
@@ -607,7 +617,7 @@ public class CollectionBookScreen extends Screen {
             g.drawCenteredString(font, "try another search or filter", width / 2, myPos + 24,
                     CardRenderer.KRAFT_DARK);
         }
-        boolean overlayOpen = pickerMob != null || statsOpen || eggPicker != null;
+        boolean overlayOpen = pickerMob != null || eggPicker != null;
         for (int s = 0; s < perSpread; s++) {
             int i = start + s;
             if (i >= view.size()) break;
@@ -1150,6 +1160,211 @@ public class CollectionBookScreen extends Screen {
         }
     }
 
+    // --- profile leaf -------------------------------------------------------
+
+    /**
+     * One line of the profile. A {@code heading} row is a section title rather
+     * than a statistic, which is why it carries no value.
+     */
+    private record ProfileRow(String label, String value, int color, boolean heading) {
+
+        static ProfileRow of(String label, String value) {
+            return new ProfileRow(label, value, CardRenderer.INK, false);
+        }
+
+        static ProfileRow of(String label, int value) {
+            return of(label, String.valueOf(value));
+        }
+
+        static ProfileRow head(String label, int color) {
+            return new ProfileRow(label, "", color, true);
+        }
+    }
+
+    /**
+     * Ranked standing. Seven rows, because the smallest window the book opens
+     * in leaves room for eight lines in a leaf -- see tools/checkprofilepage.py.
+     */
+    private List<ProfileRow> profileRanked(ProfileSyncPayload p) {
+        List<ProfileRow> rows = new ArrayList<>();
+        int rating = p.num(ProfileSyncPayload.RATING);
+        RankTier tier = RankTier.of(rating);
+        rows.add(ProfileRow.head("RANKED", tier.rgb));
+        rows.add(new ProfileRow("Rank", RankTier.label(rating), tier.rgb, false));
+        rows.add(ProfileRow.of("Rating", rating + "   (best " + p.num(ProfileSyncPayload.PEAK) + ")"));
+        int place = p.num(ProfileSyncPayload.PLACE);
+        rows.add(ProfileRow.of("Standing", place <= 0 ? "unranked"
+                : "#" + place + " of " + p.num(ProfileSyncPayload.TOTAL_RANKED)));
+        rows.add(ProfileRow.of("Record", p.num(ProfileSyncPayload.RANKED_WINS) + "W  "
+                + p.num(ProfileSyncPayload.RANKED_LOSSES) + "L"));
+        int streak = p.num(ProfileSyncPayload.STREAK);
+        rows.add(new ProfileRow("Streak", streak + "   (best "
+                + p.num(ProfileSyncPayload.STREAK_BEST) + ")",
+                streak >= 3 ? 0xFFB8860B : CardRenderer.INK, false));
+        rows.add(ProfileRow.of("Season " + p.num(ProfileSyncPayload.SEASON),
+                p.num(ProfileSyncPayload.BADGES) + " badges  ·  "
+                + p.num(ProfileSyncPayload.GIANT) + " giants"));
+        return rows;
+    }
+
+    /** Who you actually play, and how it has gone. */
+    private List<ProfileRow> profileRivals(ProfileSyncPayload p, int shown) {
+        List<ProfileRow> rows = new ArrayList<>();
+        rows.add(ProfileRow.head("HEAD TO HEAD", 0xFFB57EDC));
+        if (shown <= 0) {
+            rows.add(new ProfileRow("No duels yet", "", 0xFF9A9083, false));
+        }
+        for (int i = 0; i < shown; i++) {
+            int w = p.rivalWins(i);
+            int l = p.rivalLosses(i);
+            rows.add(new ProfileRow(p.rivalName(i), w + "\u2013" + l,
+                    w > l ? 0xFF3D8B3D : w < l ? 0xFF9E4444 : CardRenderer.INK, false));
+        }
+        return rows;
+    }
+
+    private List<ProfileRow> profileGames(ProfileSyncPayload p) {
+        List<ProfileRow> rows = new ArrayList<>();
+        rows.add(ProfileRow.head("GAMES PLAYED", 0xFF3FA7D6));
+        rows.add(ProfileRow.of("Games", p.num(ProfileSyncPayload.GAMES)));
+        rows.add(ProfileRow.of("Duel wins", p.num(ProfileSyncPayload.DUEL_WINS)));
+        rows.add(ProfileRow.of("CPU wins", p.num(ProfileSyncPayload.CPU_TOTAL) + "   ("
+                + p.num(ProfileSyncPayload.CPU_EASY) + "/"
+                + p.num(ProfileSyncPayload.CPU_NORMAL) + "/"
+                + p.num(ProfileSyncPayload.CPU_HARD) + ")"));
+        rows.add(ProfileRow.of("Twenty-One", p.num(ProfileSyncPayload.T21_WINS) + " won  ·  "
+                + p.num(ProfileSyncPayload.T21_EXACT) + " exact"));
+        rows.add(ProfileRow.of("Guess Who", p.num(ProfileSyncPayload.GW_WINS) + " won  ·  "
+                + p.num(ProfileSyncPayload.GW_SHARP) + " sharp"));
+        rows.add(ProfileRow.of("Bluff", p.num(ProfileSyncPayload.BLUFF_WINS) + "W  "
+                + p.num(ProfileSyncPayload.BLUFF_LOSSES) + "L  ·  "
+                + p.num(ProfileSyncPayload.BLUFF_CATCHES) + " caught"));
+        return rows;
+    }
+
+    private List<ProfileRow> profileCollection(ProfileSyncPayload p) {
+        List<ProfileRow> rows = new ArrayList<>();
+        rows.add(ProfileRow.head("COLLECTION", 0xFF55A82F));
+        int total = MobCards.ALL.size();
+        int have = p.num(ProfileSyncPayload.COLLECTED);
+        rows.add(ProfileRow.of("Cards", have + " / " + total
+                + "   (" + Math.round(have * 100f / Math.max(1, total)) + "%)"));
+        rows.add(ProfileRow.of("Holographic", p.num(ProfileSyncPayload.FOILS) + " / " + total));
+        rows.add(ProfileRow.of("Holo III", p.num(ProfileSyncPayload.HOLO_MAX)));
+        rows.add(ProfileRow.of("Filed in book", ClientCollection.storedCount()));
+        rows.add(ProfileRow.of("Sets finished", p.num(ProfileSyncPayload.SETS_DONE) + " / "
+                + p.num(ProfileSyncPayload.SETS_TOTAL)));
+        rows.add(ProfileRow.of("Awards", p.num(ProfileSyncPayload.AWARDS_CLAIMED) + " / "
+                + p.num(ProfileSyncPayload.AWARDS_TOTAL)));
+        rows.add(ProfileRow.of("Mobs hunted", p.num(ProfileSyncPayload.KILLS)));
+        return rows;
+    }
+
+    /**
+     * The Profile pages: everything the mod counts about you.
+     *
+     * <p>Two spreads rather than one because a 320x240 window leaves eight
+     * lines in a leaf, and there are twenty-five things to say. The identity
+     * strip is drawn only once the rows are known to fit, so decoration can
+     * never be what pushes a statistic off the page.
+     *
+     * <p>The numbers come from the server rather than being recomputed here, so
+     * the page cannot disagree with the award sitting beside it. The request is
+     * throttled inside {@link ClientProfile}: asking every frame costs one small
+     * packet a second, and only while this page is the one being looked at.
+     */
+    private void renderProfilePage(GuiGraphics g) {
+        ClientProfile.request();
+        ProfileSyncPayload p = ClientProfile.state();
+        boolean standing = spread == firstSpread(Section.PROFILE);
+
+        int[] b = contentBounds();
+        int x0 = b[0], x1 = b[2], bottom = b[3];
+        int rating = p.num(ProfileSyncPayload.RATING);
+        RankTier tier = RankTier.of(rating);
+
+        List<ProfileRow> leftRows;
+        List<ProfileRow> rightRows;
+        int y;
+        if (standing) {
+            y = drawPageHeading(g, x0, x1, b[1], tier.rgb, "PLAYER PROFILE",
+                    p.text(ProfileSyncPayload.T_TITLE), null);
+            leftRows = profileRanked(p);
+            rightRows = profileRivals(p, p.rivalCount());
+        } else {
+            y = drawPageHeading(g, x0, x1, b[1], 0xFF3FA7D6, "THE RECORD",
+                    "Every game you have played and every card you have found", null);
+            leftRows = profileGames(p);
+            rightRows = profileCollection(p);
+        }
+
+        int rowH = 9;
+        int need = Math.max(leftRows.size(), rightRows.size());
+        // Rivals are the only variable block, so they give way first.
+        int rivals = p.rivalCount();
+        while (standing && need * rowH > bottom - y && rivals > 0) {
+            rivals--;
+            rightRows = profileRivals(p, rivals);
+            need = Math.max(leftRows.size(), rightRows.size());
+        }
+        // Rows first, decoration second: the identity strip is only drawn when
+        // the page already has room for every line without it.
+        int emblem = 26;
+        int strip = emblem + 10;
+        if (standing && need * rowH + strip <= bottom - y) {
+            y = drawIdentityStrip(g, p, x0, x1, y, emblem, rating);
+        }
+        // Spend any space left over on breathing room between the lines.
+        rowH = Mth.clamp((bottom - y) / Math.max(1, need), rowH, 13);
+
+        int gap = 10;
+        int colW = (x1 - x0 - gap) / 2;
+        drawProfileColumn(g, leftRows, x0, y, colW, rowH);
+        drawProfileColumn(g, rightRows, x0 + colW + gap, y, colW, rowH);
+    }
+
+    /** Emblem, name and the one-line summary. Returns the new top of the rows. */
+    private int drawIdentityStrip(GuiGraphics g, ProfileSyncPayload p, int x0, int x1, int y,
+                                  int emblem, int rating) {
+        String name = p.text(ProfileSyncPayload.T_NAME);
+        if (name.isEmpty() && minecraft != null && minecraft.player != null) {
+            name = minecraft.player.getGameProfile().getName();
+        }
+        g.fill(x0, y, x1, y + emblem + 4, 0x0E000000);
+        RankEmblem.draw(g, x0 + 3, y + 2, emblem, rating);
+        int textX = x0 + emblem + 10;
+        g.drawString(font, trim(name.toUpperCase(Locale.ROOT), x1 - textX - 4),
+                textX, y + 3, CardRenderer.INK, false);
+        String fav = p.text(ProfileSyncPayload.T_FAVOURITE);
+        String nemesis = p.text(ProfileSyncPayload.T_NEMESIS);
+        StringBuilder sub = new StringBuilder(RankTier.label(rating));
+        if (!fav.isEmpty()) {
+            sub.append("   ·   favours ").append(fav);
+        }
+        if (!nemesis.isEmpty()) {
+            sub.append("   ·   nemesis ").append(nemesis);
+        }
+        g.drawString(font, trim(sub.toString(), x1 - textX - 4), textX, y + 14, 0xFF8B8074, false);
+        return y + emblem + 10;
+    }
+
+    private void drawProfileColumn(GuiGraphics g, List<ProfileRow> rows, int x, int y,
+                                   int w, int rowH) {
+        for (int i = 0; i < rows.size(); i++) {
+            ProfileRow row = rows.get(i);
+            int ry = y + i * rowH;
+            if (row.heading()) {
+                g.drawString(font, row.label(), x, ry, row.color(), false);
+                g.fill(x, ry + 9, x + w, ry + 10, (row.color() & 0x00FFFFFF) | 0x55000000);
+            } else {
+                int valueW = font.width(row.value());
+                g.drawString(font, trim(row.label(), w - valueW - 6), x, ry,
+                        CardRenderer.KRAFT_DARK, false);
+                g.drawString(font, row.value(), x + w - valueW, ry, row.color(), false);
+            }
+        }
+    }
+
     // --- settings leaf ------------------------------------------------------
 
     private void renderSettingsPage(GuiGraphics g, int mouseX, int mouseY) {
@@ -1337,39 +1552,6 @@ public class CollectionBookScreen extends Screen {
         return done;
     }
 
-    private void renderStats(GuiGraphics g) {
-        int pw = 220, ph = 190;
-        int px = (width - pw) / 2, py = (height - ph) / 2;
-        g.fill(0, 0, width, height, 0x99000000);
-        g.fill(px - 3, py - 3, px + pw + 3, py + ph + 3, CardRenderer.KRAFT_DARK);
-        g.fill(px, py, px + pw, py + ph, CardRenderer.KRAFT);
-        g.fill(px + 5, py + 5, px + pw - 5, py + ph - 5, CardRenderer.FACE);
-        g.drawCenteredString(font, "COLLECTION STATS", width / 2, py + 12, CardRenderer.INK);
-        int total = MobCards.ALL.size();
-        int have = ClientCollection.count();
-        int pct = Math.round(have * 100f / total);
-        int valX = width / 2 + 40;
-        int y = py + 30;
-        statLine(g, px + 14, valX, y, "Collected", have + " / " + total + "  (" + pct + "%)"); y += 12;
-        statLine(g, px + 14, valX, y, "Holographic foils", ClientCollection.foilCount() + " / " + total); y += 12;
-        statLine(g, px + 14, valX, y, "Filed in book", String.valueOf(ClientCollection.storedCount())); y += 12;
-        statLine(g, px + 14, valX, y, "Duel wins", String.valueOf(ClientCollection.duelWins())); y += 12;
-        statLine(g, px + 14, valX, y, "Sets done", categoriesComplete() + " / " + Category.values().length); y += 12;
-        statLine(g, px + 14, valX, y, "Awards waiting", String.valueOf(ClientAwards.collectableCount())); y += 16;
-        for (Tier t : new Tier[]{Tier.LEGENDARY, Tier.EPIC, Tier.RARE, Tier.UNCOMMON, Tier.COMMON}) {
-            int tt = 0, th = 0;
-            for (MobCard c : MobCards.ALL) {
-                if (c.tier() == t) { tt++; if (ClientCollection.has(c.id())) th++; }
-            }
-            Integer rgb = MobCardItem.tierColor(t).getColor();
-            g.drawString(font, t.label(), px + 14, y, 0xFF000000 | (rgb == null ? 0x555555 : rgb), false);
-            String v = th + " / " + tt;
-            g.drawString(font, v, px + pw - 14 - font.width(v), y, CardRenderer.INK, false);
-            y += 11;
-        }
-        g.drawCenteredString(font, "click to close", width / 2, py + ph - 12, 0xFF9A9083);
-    }
-
     private void statLine(GuiGraphics g, int labelX, int valueX, int y, String label, String value) {
         g.drawString(font, label, labelX, y, CardRenderer.KRAFT_DARK, false);
         g.drawString(font, value, valueX, y, CardRenderer.INK, false);
@@ -1378,7 +1560,7 @@ public class CollectionBookScreen extends Screen {
     private void renderChips(GuiGraphics g, int mouseX, int mouseY) {
         for (Chip chip : chips) {
             boolean active = switch (chip.key()) {
-                case "stats" -> statsOpen;
+                case "stats" -> false;
                 case "sort", "deck", "store" -> false;
                 default -> chip.key().equals("f_" + filter.name());
             };
@@ -1387,7 +1569,7 @@ public class CollectionBookScreen extends Screen {
             g.fill(chip.x(), chip.y(), chip.x() + chip.w(), chip.y() + chip.h(), bg);
             g.renderOutline(chip.x(), chip.y(), chip.w(), chip.h(), CardRenderer.KRAFT_DARK);
             String label = switch (chip.key()) {
-                case "stats" -> "Stats";
+                case "stats" -> "Profile";
                 case "sort" -> "Sort: " + sort.label;
                 case "deck" -> "Deck";
                 case "store" -> "Store";
@@ -1409,7 +1591,6 @@ public class CollectionBookScreen extends Screen {
 
     @Override
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
-        if (statsOpen) { statsOpen = false; return true; }
         if (eggPicker != null) {
             // the overlay swallows every click; only its own slots do anything,
             // so a stray click can't reach a settings button underneath it
@@ -1580,7 +1761,10 @@ public class CollectionBookScreen extends Screen {
 
     private void onChip(String key) {
         switch (key) {
-            case "stats" -> statsOpen = true;
+            // The Stats chip used to open a small overlay showing a subset of
+            // these numbers. It now turns to the page that shows all of them,
+            // so there is one place to look rather than two that overlap.
+            case "stats" -> { spread = firstSpread(Section.PROFILE); layoutChips(); }
             case "deck" -> { if (minecraft != null) minecraft.setScreen(new DeckBuilderScreen(this)); }
             case "store" -> PacketDistributor.sendToServer(StorageActionPayload.depositAll());
             case "sort" -> { sort = Sort.values()[(sort.ordinal() + 1) % Sort.values().length]; layoutChips(); rebuild(); }
@@ -1595,7 +1779,7 @@ public class CollectionBookScreen extends Screen {
 
     @Override
     public boolean mouseScrolled(double mouseX, double mouseY, double sx, double sy) {
-        if (pickerMob != null || statsOpen || eggPicker != null) return true;
+        if (pickerMob != null || eggPicker != null) return true;
         if (sy < 0 && spread < spreadCount - 1) { flip(1); return true; }
         if (sy > 0 && spread > 0) { flip(-1); return true; }
         return super.mouseScrolled(mouseX, mouseY, sx, sy);
@@ -1605,7 +1789,6 @@ public class CollectionBookScreen extends Screen {
     public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
         if (pickerMob != null && keyCode == 256) { pickerMob = null; return true; }
         if (eggPicker != null && keyCode == 256) { eggPicker = null; return true; }
-        if (statsOpen && keyCode == 256) { statsOpen = false; return true; }
         if (search.isFocused() && search.keyPressed(keyCode, scanCode, modifiers)) return true;
         if (keyCode == 263 && spread > 0) { flip(-1); return true; }
         if (keyCode == 262 && spread < spreadCount - 1) { flip(1); return true; }

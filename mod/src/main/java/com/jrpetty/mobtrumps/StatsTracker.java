@@ -223,7 +223,12 @@ public final class StatsTracker {
         return mins + "m";
     }
 
-    private static String title(int rating, int collected) {
+    /**
+     * The flavour title on the profile. Public because the collection
+     * book's Profile page shows the same title as the chat card, and two
+     * copies of this ladder would eventually disagree.
+     */
+    public static String title(int rating, int collected) {
         if (collected >= 81) return "Master Collector";
         if (rating >= 1200) return "Duel Champion";
         if (rating >= 1100) return "Card Shark";

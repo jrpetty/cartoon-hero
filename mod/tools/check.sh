@@ -58,6 +58,9 @@ if ! python3 tools/checkcardcoords.py "$SRC"; then fail=1; fi
 echo "== 1h. no award falls off its page =="
 if ! python3 tools/checkawardpages.py "$SRC"; then fail=1; fi
 
+echo "== 1k. the profile page fits its own statistics =="
+if ! python3 tools/checkprofilepage.py "$SRC"; then fail=1; fi
+
 echo "== 1i. every award can actually be earned =="
 if ! python3 tools/checkawards.py "$SRC"; then fail=1; fi
 

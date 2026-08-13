@@ -74,6 +74,16 @@ public final class ModNetworking {
                         PacketDistributor.sendToPlayer(sp, HallOfFame.get(sp.getServer()).snapshot());
                     }
                 }));
+        registrar.playToClient(ProfileSyncPayload.TYPE, ProfileSyncPayload.STREAM_CODEC,
+                (payload, context) -> context.enqueueWork(
+                        () -> com.jrpetty.mobtrumps.client.ClientProfile.set(payload)));
+        registrar.playToServer(ProfileRequestPayload.TYPE, ProfileRequestPayload.STREAM_CODEC,
+                (payload, context) -> context.enqueueWork(() -> {
+                    if (context.player() instanceof net.minecraft.server.level.ServerPlayer sp
+                            && sp.getServer() != null) {
+                        PacketDistributor.sendToPlayer(sp, PlayerProfile.snapshot(sp));
+                    }
+                }));
         registrar.playToClient(RecyclerMenuPayload.TYPE, RecyclerMenuPayload.STREAM_CODEC,
                 (payload, context) -> context.enqueueWork(
                         () -> ClientHooks.openRecycler(payload.mode())));
