@@ -619,7 +619,7 @@ public class GuessWhoScreen extends Screen {
                 newGameRect = new int[]{width / 2 - 50, y, 100, 16};
                 button(g, newGameRect, "NEW BOARD", mouseX, mouseY, true);
             } else {
-                g.drawString(font, "/mobtrumps guesswho <player> to play again",
+                g.drawString(font, "Meet at a dueling table to play again",
                         width / 2 - 90, y + 4, FAINT, false);
             }
             return;

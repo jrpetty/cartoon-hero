@@ -30,7 +30,14 @@ public final class DuelTables {
         BO1("Best of 1", 1),
         BO3("Best of 3", 3),
         BO5("Best of 5", 5),
-        DRAFT("Draft", 0);
+        DRAFT("Draft", 0),
+        // The parlour games join the seat system so that EVERY two-player game
+        // starts the same way: sit down in a mode, and the seat itself is the
+        // invitation. Nothing goes through chat -- the challenger right-clicks
+        // the table and presses one button, exactly as duels always worked.
+        MEMORY("Memory", 0),
+        GUESS_WHO("Guess Who", 0),
+        BLUFF("Mob Bluff", 0);
 
         public final String label;
         final int bestOf; // 0 = not applicable (draft)
@@ -150,6 +157,14 @@ public final class DuelTables {
                 tableSound(player, key, 1.3F);
                 BlackjackManager.open(player);
             }
+            case TableActionPayload.MEMORY -> {
+                if (busy(player)) {
+                    player.sendSystemMessage(err("Finish your current game first."));
+                    return;
+                }
+                tableSound(player, key, 1.15F);
+                MemoryManager.open(player);
+            }
             case TableActionPayload.RANKED -> {
                 // just a board to read: safe to open mid-anything
                 tableSound(player, key, 1.1F);
@@ -182,12 +197,20 @@ public final class DuelTables {
             return;
         }
         SEATS.remove(key);
-        if (seat.mode() == Mode.DRAFT) {
-            if (!DraftManager.startDirect(opponent, player)) {
-                player.sendSystemMessage(err("Couldn't start the draft — someone's already busy."));
+        switch (seat.mode()) {
+            case DRAFT -> {
+                if (!DraftManager.startDirect(opponent, player)) {
+                    player.sendSystemMessage(err("Couldn't start the draft — someone's already busy."));
+                }
             }
-        } else {
-            DuelManager.startFromTable(opponent, player, seat.mode().bestOf);
+            case MEMORY -> MemoryManager.startFromTable(opponent, player);
+            case GUESS_WHO -> GuessWhoManager.startFromTable(opponent, player);
+            case BLUFF -> {
+                if (!BluffManager.startFromTable(opponent, player)) {
+                    player.sendSystemMessage(err("Couldn't start the hand — check you can both cover the stake."));
+                }
+            }
+            default -> DuelManager.startFromTable(opponent, player, seat.mode().bestOf);
         }
     }
 
@@ -215,7 +238,7 @@ public final class DuelTables {
         return TableBattleManager.isInBattle(player)
                 || DuelManager.isInDuel(player) || DraftManager.isDrafting(player)
                 || BluffManager.isPlaying(player) || BlackjackManager.isPlaying(player)
-                || GuessWhoManager.inGame(player);
+                || GuessWhoManager.inGame(player) || MemoryManager.inGame(player);
     }
 
     private static void tableSound(ServerPlayer player, BlockPos pos, float pitch) {

@@ -37,8 +37,6 @@ public final class MemoryManager {
 
     /** How long a missed pair stays up, so both players get to see it. */
     public static final long PEEK_MS = 1400L;
-    /** How long an unanswered challenge stands. */
-    private static final long INVITE_MS = 60_000L;
     /** A finished board is swept once both sides have had this long to read it. */
     private static final long LINGER_MS = 5 * 60_000L;
 
@@ -75,8 +73,6 @@ public final class MemoryManager {
     private static final Map<UUID, Game> GAMES = new ConcurrentHashMap<>();
     /** What board size each player last chose, remembered between rounds. */
     private static final Map<UUID, Integer> SIZE_CHOICE = new ConcurrentHashMap<>();
-    /** target -> (challenger, board size, expiry) for a pending invitation. */
-    private static final Map<UUID, Object[]> INVITES = new ConcurrentHashMap<>();
 
     private MemoryManager() {
     }
@@ -145,69 +141,31 @@ public final class MemoryManager {
         send(player);
     }
 
-    public static int challenge(ServerPlayer from, ServerPlayer to) {
-        if (from.getUUID().equals(to.getUUID())) {
-            from.sendSystemMessage(err("You cannot play yourself."));
-            return 0;
+    /**
+     * Start a match from the dueling table.
+     *
+     * <p>There is no invitation and no accept step, because the seat IS the
+     * consent: the seated player chose Memory when they sat down, and the
+     * challenger pressed the one button the table offers. Nothing about
+     * starting a game goes through chat. The board size is whatever the seated
+     * player last chose at a Memory table, so the mode label on the bench is
+     * the game they actually get.
+     */
+    public static void startFromTable(ServerPlayer seated, ServerPlayer challenger) {
+        if (inGame(seated) || inGame(challenger)) {
+            return;
         }
-        if (inGame(from) || inGame(to)) {
-            from.sendSystemMessage(err("One of you is already in a game."));
-            return 0;
-        }
-        Memory.BoardSize size = sizeOf(from);
-        INVITES.put(to.getUUID(), new Object[]{from.getUUID(), size.ordinal(),
-                System.currentTimeMillis() + INVITE_MS});
-        from.sendSystemMessage(Component.literal("Challenge sent to " + name(to) + ".")
-                .withStyle(ChatFormatting.GREEN));
-        to.sendSystemMessage(Component.literal(
-                        name(from) + " challenges you at Memory (" + size.label + "). ")
-                .withStyle(ChatFormatting.GOLD)
-                .append(BattleCommands.button("[Accept]", "/mobtrumps memory accept",
-                        ChatFormatting.GREEN, "Turn two cards a turn; a match keeps your turn"))
-                .append(Component.literal(" "))
-                .append(BattleCommands.button("[Decline]", "/mobtrumps memory decline",
-                        ChatFormatting.RED, "Turn it down")));
-        return 1;
-    }
-
-    public static int accept(ServerPlayer target) {
-        Object[] invite = INVITES.remove(target.getUUID());
-        if (invite == null || (Long) invite[2] < System.currentTimeMillis()) {
-            target.sendSystemMessage(err("No challenge waiting."));
-            return 0;
-        }
-        ServerPlayer from = target.getServer() == null ? null
-                : target.getServer().getPlayerList().getPlayer((UUID) invite[0]);
-        if (from == null || inGame(from) || inGame(target)) {
-            target.sendSystemMessage(err("That challenge has lapsed."));
-            return 0;
-        }
-        Memory.BoardSize size = Memory.BoardSize.byOrdinal((Integer) invite[1]);
-        List<String> faces = Memory.deal(pool(from, target, size.pairs()), size.pairs(),
+        Memory.BoardSize size = sizeOf(seated);
+        List<String> faces = Memory.deal(pool(seated, challenger, size.pairs()), size.pairs(),
                 new Random());
-        Game game = new Game(from.getUUID(), target.getUUID(), size, faces);
-        GAMES.put(from.getUUID(), game);
-        GAMES.put(target.getUUID(), game);
-        for (ServerPlayer p : new ServerPlayer[]{from, target}) {
+        Game game = new Game(seated.getUUID(), challenger.getUUID(), size, faces);
+        GAMES.put(seated.getUUID(), game);
+        GAMES.put(challenger.getUUID(), game);
+        for (ServerPlayer p : new ServerPlayer[]{seated, challenger}) {
             PacketDistributor.sendToPlayer(p, new MemoryMenuPayload(0));
-            p.sendSystemMessage(Component.literal("Memory — " + name(from) + " goes first.")
-                    .withStyle(ChatFormatting.GOLD));
             sound(p, ModSounds.SHUFFLE.get(), 1.0F);
             send(p);
         }
-        return 1;
-    }
-
-    public static int decline(ServerPlayer target) {
-        Object[] invite = INVITES.remove(target.getUUID());
-        if (invite != null && target.getServer() != null) {
-            ServerPlayer from = target.getServer().getPlayerList().getPlayer((UUID) invite[0]);
-            if (from != null) {
-                from.sendSystemMessage(Component.literal(name(target) + " declined.")
-                        .withStyle(ChatFormatting.RED));
-            }
-        }
-        return 1;
     }
 
     // --- playing ------------------------------------------------------------
@@ -267,11 +225,10 @@ public final class MemoryManager {
      * a match, so the work is done once per GAME rather than once per entry.
      */
     public static void tick(MinecraftServer server) {
-        if (GAMES.isEmpty() && INVITES.isEmpty()) {
+        if (GAMES.isEmpty()) {
             return;
         }
         long now = System.currentTimeMillis();
-        INVITES.entrySet().removeIf(e -> (Long) e.getValue()[2] < now);
 
         // A match is reached through two map entries, so the work is done once
         // per GAME rather than once per entry.
@@ -375,7 +332,6 @@ public final class MemoryManager {
     }
 
     public static void handleLogout(ServerPlayer player) {
-        INVITES.remove(player.getUUID());
         quit(player);
         GAMES.remove(player.getUUID());
     }

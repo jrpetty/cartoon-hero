@@ -152,8 +152,10 @@ public class TableMenuScreen extends Screen {
                 "Call a stat, then the card turns", 0xFF7A5AA8, mouseX, mouseY, t);
         tw = modeButton(g, "guesswho", leftX + 8, tw, colW - 16, "GUESS WHO", 0,
                 "Narrow 81 mobs down to one", 0xFF2E6E8A, mouseX, mouseY, t);
-        modeButton(g, "bluff", leftX + 8, tw, colW - 16, "MOB BLUFF", 0,
+        tw = modeButton(g, "bluff", leftX + 8, tw, colW - 16, "MOB BLUFF", 0,
                 "Play face down and lie about it", 0xFF2C6E49, mouseX, mouseY, t);
+        modeButton(g, "memory", leftX + 8, tw, colW - 16, "MEMORY", 0,
+                "Turn two cards, keep the pairs", 0xFF8A6A2E, mouseX, mouseY, t);
 
         // --- VS PLAYER panel ---
         panel(g, rightX, panelTop, colW, panelH, "VS  PLAYER");
@@ -181,16 +183,17 @@ public class TableMenuScreen extends Screen {
             bigButton(g, "stand", rightX + 14, py + 34, colW - 28, 18, "Stand up",
                     0xFF5A2530, 0xFF7A3140, mouseX, mouseY, true);
         } else {
-            py = modeButton(g, "seat_0", rightX + 8, py, colW - 16, "BEST OF 1", 0,
-                    "One game, sudden death", 0xFF3A5E2C, mouseX, mouseY, t);
-            py = modeButton(g, "seat_1", rightX + 8, py, colW - 16, "BEST OF 3", 0,
-                    "First to two wins", 0xFF3A5E2C, mouseX, mouseY, t);
-            py = modeButton(g, "seat_2", rightX + 8, py, colW - 16, "BEST OF 5", 0,
-                    "First to three wins", 0xFF3A5E2C, mouseX, mouseY, t);
-            py = modeButton(g, "seat_3", rightX + 8, py, colW - 16, "DRAFT", 0,
-                    "Draft from ALL cards, this game only", 0xFF5E4A8A, mouseX, mouseY, t);
-            drawCenteredFitted(g, "You'll wait at the table until", rightX + colW / 2, py + 2, colW - 12, TEXT_DIM);
-            drawCenteredFitted(g, "another player clicks it", rightX + colW / 2, py + 12, colW - 12, TEXT_DIM);
+            // one row per seat mode, driven off the enum so a new game cannot
+            // be added server-side and silently missing from this list
+            for (DuelTables.Mode m : DuelTables.Mode.values()) {
+                py = modeButton(g, "seat_" + m.ordinal(), rightX + 8, py, colW - 16,
+                        m.label.toUpperCase(Locale.ROOT), 0, seatBlurb(m),
+                        seatColor(m), mouseX, mouseY, t);
+            }
+            if (showCpuNotes) {
+                drawCenteredFitted(g, "You'll wait at the table until", rightX + colW / 2, py + 2, colW - 12, TEXT_DIM);
+                drawCenteredFitted(g, "another player clicks it", rightX + colW / 2, py + 12, colW - 12, TEXT_DIM);
+            }
         }
 
         // --- deck bar: rises in from the bottom ---
@@ -275,6 +278,28 @@ public class TableMenuScreen extends Screen {
 
     // --- widgets ---
 
+    private static String seatBlurb(DuelTables.Mode m) {
+        return switch (m) {
+            case BO1 -> "One game, sudden death";
+            case BO3 -> "First to two wins";
+            case BO5 -> "First to three wins";
+            case DRAFT -> "Draft from ALL cards, this game only";
+            case MEMORY -> "Turn two cards a turn; most pairs wins";
+            case GUESS_WHO -> "Each of you picks the other's mob";
+            case BLUFF -> "Head to head, your stake on the table";
+        };
+    }
+
+    private static int seatColor(DuelTables.Mode m) {
+        return switch (m) {
+            case BO1, BO3, BO5 -> 0xFF3A5E2C;
+            case DRAFT -> 0xFF5E4A8A;
+            case MEMORY -> 0xFF8A6A2E;
+            case GUESS_WHO -> 0xFF2E6E8A;
+            case BLUFF -> 0xFF2C6E49;
+        };
+    }
+
     private void panel(GuiGraphics g, int x, int y, int w, int h, String head) {
         g.fill(x + 2, y + 3, x + w + 2, y + h + 3, 0x44000000); // drop shadow
         g.fill(x, y, x + w, y + h, PANEL);
@@ -323,7 +348,11 @@ public class TableMenuScreen extends Screen {
         int avail = panelH - 22;
         for (int[] rung : RUNGS) {
             for (boolean notes : WITH_NOTES) {
-                int need = 6 * (rung[0] + rung[1]) + (notes ? 32 : 0) + 12;
+                // the two columns are side by side, so the budget is the
+                // TALLER of them: 3 CPU + 4 parlour games on the left, every
+                // seat mode on the right
+                int rows = Math.max(3 + 4, DuelTables.Mode.values().length);
+                int need = rows * (rung[0] + rung[1]) + (notes ? 32 : 0) + 12;
                 if (need <= avail) {
                     modeH = rung[0];
                     modeGap = rung[1];
@@ -558,6 +587,9 @@ public class TableMenuScreen extends Screen {
                 return true;
             } else if (key.equals("bluff")) {
                 send(TableActionPayload.BLUFF, 0, false);
+                return true;
+            } else if (key.equals("memory")) {
+                send(TableActionPayload.MEMORY, 0, false);
                 return true;
             } else if (key.equals("deck_edit") && minecraft != null) {
                 minecraft.setScreen(new DeckBuilderScreen(this));

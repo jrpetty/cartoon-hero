@@ -50,8 +50,6 @@ public final class GuessWhoManager {
     /** No board yet — the player is naming their wager. */
     public static final int PHASE_STAKE = 6;
 
-    /** How long an unanswered challenge stands. */
-    private static final long INVITE_MS = 60_000L;
 
     private record Asked(int template, int value, boolean answer) {
     }
@@ -104,8 +102,6 @@ public final class GuessWhoManager {
     private static final Map<UUID, Game> GAMES = new ConcurrentHashMap<>();
     /** What each player last typed into the wager box, remembered between rounds. */
     private static final Map<UUID, Integer> STAKE_CHOICE = new ConcurrentHashMap<>();
-    /** target -> (challenger, expiry) for a pending invitation. */
-    private static final Map<UUID, Object[]> INVITES = new ConcurrentHashMap<>();
 
     private GuessWhoManager() {
     }
@@ -169,64 +165,23 @@ public final class GuessWhoManager {
     }
 
     /** Challenge another player. They pick your mob and you pick theirs. */
-    public static int challenge(ServerPlayer from, ServerPlayer to) {
-        if (from.getUUID().equals(to.getUUID())) {
-            from.sendSystemMessage(err("You cannot play yourself."));
-            return 0;
+    /**
+     * Start a match from the dueling table. The seat is the consent — the
+     * seated player chose Guess Who when they sat down and the challenger
+     * pressed the table's one button — so there is no invitation, no accept
+     * step and nothing in chat.
+     */
+    public static void startFromTable(ServerPlayer seated, ServerPlayer challenger) {
+        if (inGame(seated) || inGame(challenger)) {
+            return;
         }
-        if (inGame(from) || inGame(to)) {
-            from.sendSystemMessage(err("One of you is already in a game."));
-            return 0;
-        }
-        INVITES.put(to.getUUID(), new Object[]{from.getUUID(),
-                System.currentTimeMillis() + INVITE_MS});
-        from.sendSystemMessage(Component.literal("Challenge sent to " + name(to) + ".")
-                .withStyle(ChatFormatting.GREEN));
-        to.sendSystemMessage(Component.literal(name(from) + " challenges you at Guess Who. ")
-                .withStyle(ChatFormatting.GOLD)
-                .append(BattleCommands.button("[Accept]", "/mobtrumps guesswho accept",
-                        ChatFormatting.GREEN, "Each of you picks the other's mob"))
-                .append(Component.literal(" "))
-                .append(BattleCommands.button("[Decline]", "/mobtrumps guesswho decline",
-                        ChatFormatting.RED, "Turn it down")));
-        return 1;
-    }
-
-    public static int accept(ServerPlayer target) {
-        Object[] invite = INVITES.remove(target.getUUID());
-        if (invite == null || (Long) invite[1] < System.currentTimeMillis()) {
-            target.sendSystemMessage(err("No challenge waiting."));
-            return 0;
-        }
-        ServerPlayer from = target.getServer() == null ? null
-                : target.getServer().getPlayerList().getPlayer((UUID) invite[0]);
-        if (from == null || inGame(from) || inGame(target)) {
-            target.sendSystemMessage(err("That challenge has lapsed."));
-            return 0;
-        }
-        Game game = new Game(from.getUUID(), target.getUUID());
-        GAMES.put(from.getUUID(), game);
-        GAMES.put(target.getUUID(), game);
-        for (ServerPlayer p : new ServerPlayer[]{from, target}) {
+        Game game = new Game(seated.getUUID(), challenger.getUUID());
+        GAMES.put(seated.getUUID(), game);
+        GAMES.put(challenger.getUUID(), game);
+        for (ServerPlayer p : new ServerPlayer[]{seated, challenger}) {
             PacketDistributor.sendToPlayer(p, new GuessWhoMenuPayload());
-            p.sendSystemMessage(Component.literal(
-                            "Guess Who — pick the mob your opponent has to find.")
-                    .withStyle(ChatFormatting.GOLD));
             send(p);
         }
-        return 1;
-    }
-
-    public static int decline(ServerPlayer target) {
-        Object[] invite = INVITES.remove(target.getUUID());
-        if (invite != null && target.getServer() != null) {
-            ServerPlayer from = target.getServer().getPlayerList().getPlayer((UUID) invite[0]);
-            if (from != null) {
-                from.sendSystemMessage(Component.literal(name(target) + " declined.")
-                        .withStyle(ChatFormatting.RED));
-            }
-        }
-        return 1;
     }
 
     public static boolean inGame(ServerPlayer player) {
@@ -470,7 +425,6 @@ public final class GuessWhoManager {
     }
 
     public static void handleLogout(ServerPlayer player) {
-        INVITES.remove(player.getUUID());
         quit(player);
         GAMES.remove(player.getUUID());
     }

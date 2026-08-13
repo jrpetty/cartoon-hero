@@ -97,10 +97,6 @@ public final class BluffManager {
 
     /** Every human at a table maps to the SAME Table instance. */
     private static final Map<UUID, Table> TABLES = new ConcurrentHashMap<>();
-    /** Pending challenges: invitee -> {challenger, expiry, seats}. */
-    private static final Map<UUID, Object[]> INVITES = new ConcurrentHashMap<>();
-    /** How long an unanswered challenge stands. */
-    private static final long INVITE_MS = 60_000L;
 
     /** Which seat this player occupies at their table, or -1. */
     private static int seatOf(Table table, UUID who) {
@@ -608,102 +604,52 @@ public final class BluffManager {
      * house, so a two-player challenge at a four-seat table is a four-way game
      * and the pot is the same either way.
      */
-    public static int challenge(ServerPlayer from, ServerPlayer to) {
-        if (from.getUUID().equals(to.getUUID())) {
-            from.sendSystemMessage(Component.literal("You cannot play yourself.")
-                    .withStyle(ChatFormatting.RED));
-            return 0;
-        }
-        if (isPlaying(from) || isPlaying(to)) {
-            from.sendSystemMessage(Component.literal("One of you is already in a hand.")
-                    .withStyle(ChatFormatting.RED));
-            return 0;
-        }
-        INVITES.put(to.getUUID(), new Object[]{from.getUUID(),
-                System.currentTimeMillis() + INVITE_MS, stakeOf(from)});
-        to.sendSystemMessage(Component.literal(from.getGameProfile().getName()
-                        + " wants a hand of Mob Bluff for " + stakeOf(from)
-                        + " fragments  —  /mobtrumps bluff accept")
-                .withStyle(ChatFormatting.GOLD));
-        from.sendSystemMessage(Component.literal("Challenge sent to "
-                + to.getGameProfile().getName() + ".").withStyle(ChatFormatting.GRAY));
-        return 1;
-    }
-
     /**
-     * Take a challenge on.
+     * Start a head-to-head hand from the dueling table. The seat is the
+     * consent — no invitation, no accept step, nothing in chat. Both wagers
+     * are checked before either is taken: taking one and then finding the
+     * other player short would leave the first player's fragments gone with
+     * no board to show for them. The stake is the seated player's, so the
+     * bench's mode label is the hand the challenger actually joins.
      *
-     * <p>Both wagers are checked before either is taken. Taking one and then
-     * finding the other player short would leave the first player's fragments
-     * gone with no board to show for them.
+     * @return false if the hand could not start, so the table can say why.
      */
-    public static int accept(ServerPlayer target) {
-        Object[] invite = INVITES.remove(target.getUUID());
-        if (invite == null || System.currentTimeMillis() > (Long) invite[1]) {
-            target.sendSystemMessage(Component.literal("No challenge is waiting.")
-                    .withStyle(ChatFormatting.RED));
-            return 0;
+    public static boolean startFromTable(ServerPlayer seated, ServerPlayer challenger) {
+        if (isPlaying(seated) || isPlaying(challenger)) {
+            return false;
         }
-        ServerPlayer from = target.getServer() == null ? null
-                : target.getServer().getPlayerList().getPlayer((UUID) invite[0]);
-        if (from == null) {
-            target.sendSystemMessage(Component.literal("They have gone offline.")
-                    .withStyle(ChatFormatting.RED));
-            return 0;
-        }
-        if (isPlaying(from) || isPlaying(target)) {
-            target.sendSystemMessage(Component.literal("One of you is already in a hand.")
-                    .withStyle(ChatFormatting.RED));
-            return 0;
-        }
-        int stake = Math.max(STAKES[0], (Integer) invite[2]);
-        for (ServerPlayer p : new ServerPlayer[]{from, target}) {
+        int stake = Math.max(STAKES[0], stakeOf(seated));
+        for (ServerPlayer p : new ServerPlayer[]{seated, challenger}) {
             if (RecyclerManager.fragments(p) < stake) {
                 String msg = p.getGameProfile().getName() + " cannot cover "
                         + stake + " fragments.";
-                from.sendSystemMessage(Component.literal(msg).withStyle(ChatFormatting.RED));
-                target.sendSystemMessage(Component.literal(msg).withStyle(ChatFormatting.RED));
-                return 0;
+                seated.sendSystemMessage(Component.literal(msg).withStyle(ChatFormatting.RED));
+                challenger.sendSystemMessage(Component.literal(msg).withStyle(ChatFormatting.RED));
+                return false;
             }
         }
-        if (!RecyclerManager.takeFragments(from, stake)) {
-            return 0;
+        if (!RecyclerManager.takeFragments(seated, stake)) {
+            return false;
         }
-        if (!RecyclerManager.takeFragments(target, stake)) {
-            RecyclerManager.giveFragments(from, stake);  // put the first one back
-            return 0;
+        if (!RecyclerManager.takeFragments(challenger, stake)) {
+            RecyclerManager.giveFragments(seated, stake);  // put the first one back
+            return false;
         }
-
-        int seats = Math.max(2, seatsOf(from));
+        int seats = Math.max(2, seatsOf(seated));
         UUID[] occupants = new UUID[seats];
-        occupants[0] = from.getUUID();
-        occupants[1] = target.getUUID();
+        occupants[0] = seated.getUUID();
+        occupants[1] = challenger.getUUID();
         Table table = new Table(seats, stake, occupants);
-        table.names[0] = from.getGameProfile().getName();
-        table.names[1] = target.getGameProfile().getName();
-        TABLES.put(from.getUUID(), table);
-        TABLES.put(target.getUUID(), table);
+        table.names[0] = seated.getGameProfile().getName();
+        table.names[1] = challenger.getGameProfile().getName();
+        TABLES.put(seated.getUUID(), table);
+        TABLES.put(challenger.getUUID(), table);
         armAi(table, FIRST_MOVE_TICKS);
-        open(from);
-        open(target);
-        return 1;
+        open(seated);
+        open(challenger);
+        return true;
     }
 
-    public static int decline(ServerPlayer target) {
-        Object[] invite = INVITES.remove(target.getUUID());
-        if (invite == null) {
-            target.sendSystemMessage(Component.literal("No challenge is waiting.")
-                    .withStyle(ChatFormatting.RED));
-            return 0;
-        }
-        ServerPlayer from = target.getServer() == null ? null
-                : target.getServer().getPlayerList().getPlayer((UUID) invite[0]);
-        if (from != null) {
-            from.sendSystemMessage(Component.literal(target.getGameProfile().getName()
-                    + " declined.").withStyle(ChatFormatting.GRAY));
-        }
-        return 1;
-    }
 
     /**
      * Whether the player has an unfinished hand waiting. The table menu uses

@@ -112,7 +112,7 @@ public class MemoryScreen extends Screen {
         g.renderOutline(bx, y, bw, 14, CardRenderer.KRAFT_DARK);
         g.drawCenteredString(font, "Deal", bx + bw / 2, y + 3, 0xFFFFFFFF);
         hits.add(new int[]{bx, y, bw, 14, -1});
-        g.drawCenteredString(font, "/mobtrumps memory challenge <player> for two",
+        g.drawCenteredString(font, "For two: sit at a dueling table in Memory mode",
                 width / 2, py + ph + 8, 0xFF9A9083);
     }
 

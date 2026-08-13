@@ -91,13 +91,11 @@ public final class GuideBook {
             Look for the small §7▼§r beside it on the card.""",
 
             """
-            §l§6Duels§r
+            §l§6Duels — at the table§r
 
-            §e/mobtrumps duel <player>§r challenges a friend.
+            Every two-player game starts at a §6Dueling Table§r. §oSit§r in the mode you want — Best of 1/3/5, Draft, Memory, Guess Who or Mob Bluff — and your seat is the open challenge.
 
-            Add §ewager§r (hold a card) or §ebet <emeralds>§r to play for stakes.
-
-            §e/mobtrumps queue§r auto-matches you. §e/mobtrumps rematch§r replays.""",
+            The next player to right-click the table sees who is waiting and presses §eCHALLENGE§r. Wagers are agreed on the wager screen, never in chat.""",
 
             """
             §l§6Spectating§r

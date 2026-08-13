@@ -73,7 +73,14 @@ for path in java_files():
         body = s[m.end():i]
         if re.search(r'\bdefault\s*(->|:)', body):
             continue
-        cases = set(re.findall(r'case\s+([A-Z][A-Z0-9_]*)\s*(?:,|->|:)', body))
+        # A case can carry several labels -- `case BO1, BO3, BO5 ->` -- and the
+        # old pattern only saw the label right after `case`, reporting the rest
+        # missing. That is a false alarm on perfectly exhaustive code, so every
+        # comma-separated label is collected.
+        cases = set()
+        for labels in re.findall(r'case\s+([A-Z][A-Z0-9_]*(?:\s*,\s*[A-Z][A-Z0-9_]*)*)\s*(?:->|:)', body):
+            for label in labels.split(','):
+                cases.add(label.strip())
         if len(cases) < 2:
             continue
         for name, consts in sizes.items():
