@@ -3,7 +3,10 @@ package com.voxelia.mmo.command;
 import com.mojang.brigadier.arguments.IntegerArgumentType;
 import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.context.CommandContext;
+import com.mojang.brigadier.exceptions.CommandSyntaxException;
 import com.voxelia.mmo.VoxeliaMMO;
+import com.voxelia.mmo.game.MemoryGame;
+import com.voxelia.mmo.game.MemoryGames;
 import com.voxelia.mmo.network.VoxeliaNetwork;
 import com.voxelia.mmo.progression.PrestigeLogic;
 import com.voxelia.mmo.progression.Progression;
@@ -17,6 +20,7 @@ import com.voxelia.mmo.skill.SkillCurve;
 import net.minecraft.ChatFormatting;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
+import net.minecraft.commands.arguments.EntityArgument;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
 import net.neoforged.bus.api.SubscribeEvent;
@@ -51,6 +55,22 @@ public final class VoxeliaCommands {
                 .then(Commands.literal("top")
                     .then(Commands.argument("skill", StringArgumentType.word())
                         .executes(VoxeliaCommands::top)))
+                .then(Commands.literal("memory")
+                    .executes(ctx -> memorySolo(ctx, MemoryGame.Difficulty.NORMAL))
+                    .then(Commands.literal("easy").executes(ctx -> memorySolo(ctx, MemoryGame.Difficulty.EASY)))
+                    .then(Commands.literal("normal").executes(ctx -> memorySolo(ctx, MemoryGame.Difficulty.NORMAL)))
+                    .then(Commands.literal("hard").executes(ctx -> memorySolo(ctx, MemoryGame.Difficulty.HARD)))
+                    .then(Commands.literal("accept").executes(VoxeliaCommands::memoryAccept))
+                    .then(Commands.literal("leave").executes(VoxeliaCommands::memoryLeave))
+                    .then(Commands.literal("invite")
+                        .then(Commands.argument("player", EntityArgument.player())
+                            .executes(ctx -> memoryInvite(ctx, MemoryGame.Difficulty.NORMAL))
+                            .then(Commands.literal("easy")
+                                .executes(ctx -> memoryInvite(ctx, MemoryGame.Difficulty.EASY)))
+                            .then(Commands.literal("normal")
+                                .executes(ctx -> memoryInvite(ctx, MemoryGame.Difficulty.NORMAL)))
+                            .then(Commands.literal("hard")
+                                .executes(ctx -> memoryInvite(ctx, MemoryGame.Difficulty.HARD))))))
         );
     }
 
@@ -235,6 +255,54 @@ public final class VoxeliaCommands {
         Progression.grant(player, skill, amount);
         ctx.getSource().sendSuccess(() -> Component.literal(
             "Granted " + amount + " " + skill.display() + " XP."), true);
+        return 1;
+    }
+
+    // ── Memory (Concentration) ──────────────────────────────────────────────
+
+    private static int memorySolo(CommandContext<CommandSourceStack> ctx, MemoryGame.Difficulty difficulty) {
+        ServerPlayer player = ctx.getSource().getPlayer();
+        if (player == null) return 0;
+        MemoryGames.startSolo(player, difficulty);
+        ctx.getSource().sendSuccess(() -> Component.literal(
+            "Memory: new " + difficulty.display() + " board (" + difficulty.cols() + "×"
+                + difficulty.rows() + "). Good luck!").withStyle(ChatFormatting.YELLOW), false);
+        return 1;
+    }
+
+    private static int memoryInvite(CommandContext<CommandSourceStack> ctx, MemoryGame.Difficulty difficulty)
+            throws CommandSyntaxException {
+        ServerPlayer player = ctx.getSource().getPlayer();
+        if (player == null) return 0;
+        ServerPlayer target = EntityArgument.getPlayer(ctx, "player");
+        if (target == player) {
+            ctx.getSource().sendFailure(Component.literal("You can't challenge yourself — try /voxelia memory."));
+            return 0;
+        }
+        MemoryGames.invite(player, target, difficulty);
+        return 1;
+    }
+
+    private static int memoryAccept(CommandContext<CommandSourceStack> ctx) {
+        ServerPlayer player = ctx.getSource().getPlayer();
+        if (player == null) return 0;
+        Component problem = MemoryGames.accept(player);
+        if (problem != null) {
+            ctx.getSource().sendFailure(problem);
+            return 0;
+        }
+        return 1;
+    }
+
+    private static int memoryLeave(CommandContext<CommandSourceStack> ctx) {
+        ServerPlayer player = ctx.getSource().getPlayer();
+        if (player == null) return 0;
+        if (MemoryGames.gameOf(player) == null) {
+            ctx.getSource().sendFailure(Component.literal("You're not in a Memory game."));
+            return 0;
+        }
+        MemoryGames.leave(player, true);
+        ctx.getSource().sendSuccess(() -> Component.literal("You left the Memory game."), false);
         return 1;
     }
 

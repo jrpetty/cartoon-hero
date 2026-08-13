@@ -20,13 +20,13 @@ import java.util.List;
  */
 public final class ScreenMenu {
     /** Which screen is hosting this menu (its own row is marked current). */
-    public enum Page { SKILLS, TALENTS, PROFILE }
+    public enum Page { SKILLS, TALENTS, PROFILE, MEMORY }
 
-    private enum Item { SKILLS, TALENTS, PROFILE, SIDEBAR, HUD, HUD_CORNER }
+    private enum Item { SKILLS, TALENTS, PROFILE, MEMORY, SIDEBAR, HUD, HUD_CORNER }
 
     private static final int ROW_H = 12;
     private static final int SEP_H = 4;
-    private static final int SEP_BEFORE = 3; // separator sits before the display toggles
+    private static final int SEP_BEFORE = 4; // separator sits before the display toggles
 
     private boolean open;
     private int[] button = new int[4];
@@ -99,10 +99,10 @@ public final class ScreenMenu {
         Item[] order = Item.values();
         String[] labels = {
             "Skills" + VoxeliaUi.keyTag(font, VoxeliaKeys.OPEN_MENU), "Talent Tree", "Character Profile",
-            "Skill Sidebar", "Corner HUD", "HUD Corner",
+            "Memory Game", "Skill Sidebar", "Corner HUD", "HUD Corner",
         };
         String[] values = {
-            "", unspent > 0 ? String.valueOf(unspent) : "", "",
+            "", unspent > 0 ? String.valueOf(unspent) : "", "", "",
             VoxeliaClientConfig.showSidebar() ? "On" : "Off",
             VoxeliaClientConfig.showHud() ? "On" : "Off",
             cornerName(VoxeliaClientConfig.anchor()),
@@ -133,7 +133,8 @@ public final class ScreenMenu {
             boolean over = mouseX >= x1 && mouseX < x2 && mouseY >= ry && mouseY < ry + ROW_H;
             boolean isCurrent = (order[i] == Item.SKILLS && current == Page.SKILLS)
                 || (order[i] == Item.TALENTS && current == Page.TALENTS)
-                || (order[i] == Item.PROFILE && current == Page.PROFILE);
+                || (order[i] == Item.PROFILE && current == Page.PROFILE)
+                || (order[i] == Item.MEMORY && current == Page.MEMORY);
 
             if (over) g.fill(x1 + 1, ry, x2 - 1, ry + ROW_H, 0x2889C7FF);
             if (isCurrent) g.fill(x1 + 1, ry, x1 + 3, ry + ROW_H, VoxeliaUi.GOLD);
@@ -192,6 +193,10 @@ public final class ScreenMenu {
             case PROFILE -> {
                 open = false;
                 if (current != Page.PROFILE) mc.setScreen(new ProfileScreen());
+            }
+            case MEMORY -> {
+                open = false;
+                if (current != Page.MEMORY) mc.setScreen(new MemoryScreen());
             }
             // Toggles keep the dropdown open so you can see the change and flip another.
             case SIDEBAR -> VoxeliaClientConfig.setShowSidebar(!VoxeliaClientConfig.showSidebar());

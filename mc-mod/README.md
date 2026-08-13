@@ -58,6 +58,7 @@ Menu ▾
   Skills [K]            ← you are here
   Talent Tree      (3)  ← unspent points show as a green pill
   Character Profile
+  Memory Game
   ───────────────
   Skill Sidebar   On/Off
   Corner HUD      On/Off
@@ -75,8 +76,27 @@ dropdown; ESC again closes the screen.
 | **Character profile** | Menu ▸ Character Profile, or `/voxelia profile` | Best skill, total prestiges, XP earned, playtime, deaths, mob kills |
 | **Corner HUD** | Menu ▸ Corner HUD / HUD Corner (or `/voxelia hud`, `/voxelia hudpos`) | Per-skill levels + XP bars, prestige stars, selected ability with live cooldown |
 | **Sidebar** | Menu ▸ Skill Sidebar (or `/voxelia sidebar`; off by default) | Vanilla-scoreboard-style list of all skill levels + Character line |
+| **Memory game** | Menu ▸ Memory Game, or `/voxelia memory` | The card-matching minigame (see below) |
 
 New players (zero XP) get a one-line pointer to `K` on first login.
+
+## Memory — the card game
+
+A game of Memory (Concentration) built into the mod, playable **solo or head to
+head**. Cards are the eleven skills, so a pair is two cards of the same skill.
+
+- **Solo** — `/voxelia memory [easy|normal|hard]`, or pick a size in the lobby.
+  Boards are **4×3 / 4×4 / 5×4**. Scored on moves and elapsed time.
+- **Versus** — `/voxelia memory invite <player> [easy|normal|hard]`; they reply
+  with `/voxelia memory accept` within 60 seconds and the board opens for both.
+  Classic turn-based rules: flip two cards, **a match keeps your turn**, a miss
+  hands over after a ~1.4s peek so both players see it. Most pairs wins.
+- `/voxelia memory leave` forfeits; disconnecting does the same.
+
+The server owns the board and validates every flip — **face-down cards are never
+sent to a client**, so the deck can't be read out of the packet stream, and you
+can't flip out of turn or during the peek. Games live in memory only; a restart
+clears them.
 
 ## Commands
 
@@ -89,6 +109,9 @@ New players (zero XP) get a one-line pointer to `K` on first login.
 | `/voxelia talent reset` | server | Refund all talent points |
 | `/voxelia prestige <skill>` | server | Prestige a level-100 skill |
 | `/voxelia top <skill>` | server | Leaderboard of online players |
+| `/voxelia memory [easy\|normal\|hard]` | server | Start a solo Memory board |
+| `/voxelia memory invite <player> [size]` | server | Challenge someone to Memory |
+| `/voxelia memory accept` / `leave` | server | Accept a challenge / forfeit |
 | `/voxelia grant <skill> <amount>` | server (op) | Grant XP |
 | `/voxelia menu` / `profile` | client | Open the Skills / Profile screens |
 | `/voxelia hud` / `sidebar` | client | Toggle the HUD / sidebar (also in the Menu dropdown) |
@@ -168,13 +191,14 @@ mc-mod/
     ├── main/java/com/voxelia/mmo/
     │   ├── VoxeliaMMO.java                 @Mod entry point
     │   ├── skill/        Skill, SkillCurve, PlayerSkills, PlayerTalents, PlayerPrestige, Talent
+    │   ├── game/         MemoryGame (rules), MemoryGames (server registry + invites)
     │   ├── registry/     VoxeliaAttachments, VoxeliaEntityAttributes
     │   ├── progression/  Progression, SkillEffects, TalentLogic, PrestigeLogic, Abilities
     │   ├── event/        ProgressionEvents, ChatTitleEvents, BonusDropEvents, ...
     │   ├── network/      payloads + VoxeliaNetwork (server-authoritative sync)
     │   ├── command/      VoxeliaCommands
     │   ├── config/       VoxeliaConfig, VoxeliaClientConfig
-    │   └── client/       screens (Skills/Talent/Profile), HUD, sidebar,
+    │   └── client/       screens (Skills/Talent/Profile/Memory), ScreenMenu, HUD, sidebar,
     │                     prestige celebration, keybinds, client caches
     ├── main/templates/META-INF/neoforge.mods.toml       (expanded at build)
     ├── main/resources/   pack.mcmeta, lang, advancements
