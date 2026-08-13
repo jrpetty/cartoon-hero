@@ -19,9 +19,9 @@ public final class MemoryGame {
 
     /** Board sizes. Every board has an even number of cells. */
     public enum Difficulty {
-        EASY("Easy", 4, 3),
-        NORMAL("Normal", 4, 4),
-        HARD("Hard", 5, 4);
+        EASY("Easy", 4, 4),
+        MEDIUM("Medium", 6, 4),
+        HARD("Hard", 6, 6);
 
         private final String display;
         private final int cols;
@@ -78,13 +78,19 @@ public final class MemoryGame {
         this.state = new int[cells];
         this.pairsLeft = cells / 2;
 
+        // Draw a random subset of faces so two boards of the same size don't share a deck.
+        Random rng = new Random(seed);
+        List<Integer> pool = new ArrayList<>();
+        for (int i = 0; i < Math.max(1, faceCount); i++) pool.add(i);
+        Collections.shuffle(pool, rng);
+
         List<Integer> deck = new ArrayList<>(cells);
         for (int i = 0; i < cells / 2; i++) {
-            int face = i % Math.max(1, faceCount);
+            int face = pool.get(i % pool.size());
             deck.add(face);
             deck.add(face);
         }
-        Collections.shuffle(deck, new Random(seed));
+        Collections.shuffle(deck, rng);
         for (int i = 0; i < cells; i++) faces[i] = deck.get(i);
         this.startedAtMillis = System.currentTimeMillis();
     }

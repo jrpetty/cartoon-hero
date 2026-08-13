@@ -2,7 +2,6 @@ package com.voxelia.mmo.game;
 
 import com.voxelia.mmo.VoxeliaMMO;
 import com.voxelia.mmo.network.MemoryStatePayload;
-import com.voxelia.mmo.skill.Skill;
 import net.minecraft.ChatFormatting;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.MinecraftServer;
@@ -181,7 +180,7 @@ public final class MemoryGames {
 
     private static MemoryGame newGame(MemoryGame.Difficulty difficulty) {
         long seed = System.nanoTime() ^ (seedCounter++ * 0x9E3779B97F4A7C15L);
-        return new MemoryGame(difficulty, Skill.values().length, seed);
+        return new MemoryGame(difficulty, MemoryFace.values().length, seed);
     }
 
     private static void register(MemoryGame game) {

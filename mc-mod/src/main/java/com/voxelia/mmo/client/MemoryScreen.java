@@ -1,5 +1,6 @@
 package com.voxelia.mmo.client;
 
+import com.voxelia.mmo.game.MemoryFace;
 import com.voxelia.mmo.game.MemoryGame;
 import com.voxelia.mmo.network.MemoryActionPacket;
 import com.voxelia.mmo.skill.Skill;
@@ -12,7 +13,6 @@ import org.lwjgl.glfw.GLFW;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Locale;
 
 /**
  * Memory (Menu ▸ Memory Game): flip two cards, keep the pairs you match. Solo is
@@ -25,8 +25,6 @@ public final class MemoryScreen extends Screen {
     private static final int TITLE_H = 17;
     private static final int HEADER_H = 24;
     private static final int FOOTER_H = 18;
-    private static final int CARD_W = 34;
-    private static final int CARD_H = 26;
     private static final int CARD_GAP = 4;
     private static final int PANEL_W = 220;
     private static final int LOBBY_H = 112;
@@ -54,8 +52,9 @@ public final class MemoryScreen extends Screen {
         btnLeave = NONE;
 
         boolean playing = ClientMemory.inGame();
-        int boardW = playing ? ClientMemory.cols() * CARD_W + (ClientMemory.cols() - 1) * CARD_GAP : 0;
-        int boardH = playing ? ClientMemory.rows() * CARD_H + (ClientMemory.rows() - 1) * CARD_GAP : 0;
+        int cw = cardW(), ch = cardH();
+        int boardW = playing ? ClientMemory.cols() * cw + (ClientMemory.cols() - 1) * CARD_GAP : 0;
+        int boardH = playing ? ClientMemory.rows() * ch + (ClientMemory.rows() - 1) * CARD_GAP : 0;
         int h = playing ? TITLE_H + HEADER_H + boardH + PAD + FOOTER_H : LOBBY_H;
         int panelW = Math.max(PANEL_W, boardW + 2 * PAD);
         int x = (this.width - panelW) / 2;
@@ -170,14 +169,15 @@ public final class MemoryScreen extends Screen {
         int bx0 = x + (panelW - boardW) / 2;
         int by0 = y + TITLE_H + HEADER_H;
         boolean clickable = ClientMemory.yourTurn() && !ClientMemory.peeking() && !menu.isOpen();
+        int cw = cardW(), ch = cardH();
         for (int i = 0; i < ClientMemory.cards(); i++) {
-            int cx = bx0 + (i % ClientMemory.cols()) * (CARD_W + CARD_GAP);
-            int cy = by0 + (i / ClientMemory.cols()) * (CARD_H + CARD_GAP);
+            int cx = bx0 + (i % ClientMemory.cols()) * (cw + CARD_GAP);
+            int cy = by0 + (i / ClientMemory.cols()) * (ch + CARD_GAP);
             int st = ClientMemory.stateOf(i);
             boolean hover = clickable && st == MemoryGame.HIDDEN
-                && mouseX >= cx && mouseX < cx + CARD_W && mouseY >= cy && mouseY < cy + CARD_H;
-            drawCard(g, cx, cy, i, st, hover);
-            cardRects.add(new int[]{cx, cy, cx + CARD_W, cy + CARD_H});
+                && mouseX >= cx && mouseX < cx + cw && mouseY >= cy && mouseY < cy + ch;
+            drawCard(g, cx, cy, cw, ch, i, st, hover);
+            cardRects.add(new int[]{cx, cy, cx + cw, cy + ch});
         }
 
         // Footer buttons.
@@ -197,46 +197,56 @@ public final class MemoryScreen extends Screen {
         }
     }
 
-    /** One card: slate back with a gold ✦, or its skill face; squeezed mid-flip. */
-    private void drawCard(GuiGraphics g, int cx, int cy, int index, int state, boolean hover) {
+    /** Cards shrink as the board grows so even 6×6 fits a 240px-tall GUI. */
+    private static int cardW() {
+        int rows = ClientMemory.rows();
+        return rows >= 6 ? 26 : (rows == 5 ? 28 : 32);
+    }
+
+    private static int cardH() {
+        int rows = ClientMemory.rows();
+        return rows >= 6 ? 20 : (rows == 5 ? 22 : 24);
+    }
+
+    /** One card: slate back with a gold ✦, or its face; squeezed mid-flip. */
+    private void drawCard(GuiGraphics g, int cx, int cy, int cw, int ch,
+                          int index, int state, boolean hover) {
         float t = ClientMemory.flipT(index);
         boolean revealed = state != MemoryGame.HIDDEN;
         // Before the halfway point the card still shows its previous side.
         boolean showFace = (t >= 0.5f) == revealed;
         float squeeze = Math.max(0.06f, Math.abs((float) Math.cos(Math.PI * t)));
-        int half = Math.max(1, (int) (CARD_W / 2f * squeeze));
-        int x1 = cx + CARD_W / 2 - half;
-        int x2 = cx + CARD_W / 2 + half;
+        int half = Math.max(1, (int) (cw / 2f * squeeze));
+        int x1 = cx + cw / 2 - half;
+        int x2 = cx + cw / 2 + half;
+        int textY = cy + ch / 2 - 4;
 
         if (!showFace) { // face down
-            g.fillGradient(x1, cy, x2, cy + CARD_H,
+            g.fillGradient(x1, cy, x2, cy + ch,
                 hover ? 0xFF2A3C51 : 0xFF1E2B3A, hover ? 0xFF1B2938 : 0xFF131C27);
             g.fill(x1, cy, x2, cy + 1, hover ? 0x90FFCE54 : 0x40FFFFFF);
-            g.fill(x1, cy + CARD_H - 1, x2, cy + CARD_H, 0x50000000);
-            if (half > 6) {
-                g.drawCenteredString(this.font, "✦", (x1 + x2) / 2, cy + CARD_H / 2 - 4,
+            g.fill(x1, cy + ch - 1, x2, cy + ch, 0x50000000);
+            if (half > 5) {
+                g.drawCenteredString(this.font, "✦", (x1 + x2) / 2, textY,
                     hover ? VoxeliaUi.GOLD : 0xFF3A4E63);
             }
             return;
         }
 
-        int face = ClientMemory.faceForRender(index);
-        Skill[] skills = Skill.values();
-        int rgb = face >= 0 && face < skills.length ? skills[face].color() : 0x8FA0AD;
-        int base = 0xFF000000 | rgb;
+        MemoryFace face = MemoryFace.byId(ClientMemory.faceForRender(index));
+        int base = 0xFF000000 | (face != null ? face.color() : 0x8FA0AD);
         boolean matched = state == MemoryGame.MATCHED;
         int top = matched ? VoxeliaUi.lerp(base, 0xFF0A0F14, 0.45f) : VoxeliaUi.brighten(base, 20);
         int bot = matched ? VoxeliaUi.lerp(base, 0xFF0A0F14, 0.65f) : VoxeliaUi.lerp(base, 0xFF0A0F14, 0.35f);
-        g.fillGradient(x1, cy, x2, cy + CARD_H, top, bot);
+        g.fillGradient(x1, cy, x2, cy + ch, top, bot);
         g.fill(x1, cy, x2, cy + 1, 0x60FFFFFF);
-        g.fill(x1, cy + CARD_H - 1, x2, cy + CARD_H, 0x50000000);
+        g.fill(x1, cy + ch - 1, x2, cy + ch, 0x50000000);
         if (matched) { // quiet green frame: this pair is banked
             g.fill(x1, cy, x2, cy + 1, 0x806EE86E);
-            g.fill(x1, cy + CARD_H - 1, x2, cy + CARD_H, 0x806EE86E);
+            g.fill(x1, cy + ch - 1, x2, cy + ch, 0x806EE86E);
         }
-        if (half > 8 && face >= 0 && face < skills.length) {
-            String code = skills[face].display().substring(0, 3).toUpperCase(Locale.ROOT);
-            g.drawCenteredString(this.font, code, (x1 + x2) / 2, cy + CARD_H / 2 - 4,
+        if (half > 8 && face != null) {
+            g.drawCenteredString(this.font, face.code(), (x1 + x2) / 2, textY,
                 matched ? 0xFFBFD0BF : 0xFF14181C);
         }
     }

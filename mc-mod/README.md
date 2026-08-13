@@ -83,11 +83,14 @@ New players (zero XP) get a one-line pointer to `K` on first login.
 ## Memory — the card game
 
 A game of Memory (Concentration) built into the mod, playable **solo or head to
-head**. Cards are the eleven skills, so a pair is two cards of the same skill.
+head**. Card faces are the eleven skills in their familiar HUD colours plus seven
+material cards, which is what the big 6×6 board needs — 18 distinct pairs. Each
+board draws a random subset, so two games of the same size never share a deck.
 
-- **Solo** — `/voxelia memory [easy|normal|hard]`, or pick a size in the lobby.
-  Boards are **4×3 / 4×4 / 5×4**. Scored on moves and elapsed time.
-- **Versus** — `/voxelia memory invite <player> [easy|normal|hard]`; they reply
+- **Solo** — `/voxelia memory [easy|medium|hard]`, or pick a size in the lobby.
+  Boards are **4×4 (8 pairs) / 6×4 (12 pairs) / 6×6 (18 pairs)**. Scored on moves
+  and elapsed time.
+- **Versus** — `/voxelia memory invite <player> [easy|medium|hard]`; they reply
   with `/voxelia memory accept` within 60 seconds and the board opens for both.
   Classic turn-based rules: flip two cards, **a match keeps your turn**, a miss
   hands over after a ~1.4s peek so both players see it. Most pairs wins.
@@ -109,7 +112,7 @@ clears them.
 | `/voxelia talent reset` | server | Refund all talent points |
 | `/voxelia prestige <skill>` | server | Prestige a level-100 skill |
 | `/voxelia top <skill>` | server | Leaderboard of online players |
-| `/voxelia memory [easy\|normal\|hard]` | server | Start a solo Memory board |
+| `/voxelia memory [easy\|medium\|hard]` | server | Start a solo Memory board (4×4 / 6×4 / 6×6) |
 | `/voxelia memory invite <player> [size]` | server | Challenge someone to Memory |
 | `/voxelia memory accept` / `leave` | server | Accept a challenge / forfeit |
 | `/voxelia grant <skill> <amount>` | server (op) | Grant XP |
@@ -191,7 +194,7 @@ mc-mod/
     ├── main/java/com/voxelia/mmo/
     │   ├── VoxeliaMMO.java                 @Mod entry point
     │   ├── skill/        Skill, SkillCurve, PlayerSkills, PlayerTalents, PlayerPrestige, Talent
-    │   ├── game/         MemoryGame (rules), MemoryGames (server registry + invites)
+    │   ├── game/         MemoryGame (rules), MemoryFace (card faces), MemoryGames (registry)
     │   ├── registry/     VoxeliaAttachments, VoxeliaEntityAttributes
     │   ├── progression/  Progression, SkillEffects, TalentLogic, PrestigeLogic, Abilities
     │   ├── event/        ProgressionEvents, ChatTitleEvents, BonusDropEvents, ...
