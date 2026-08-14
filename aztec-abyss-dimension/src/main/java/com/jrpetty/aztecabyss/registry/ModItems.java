@@ -5,9 +5,12 @@ import net.neoforged.bus.api.IEventBus;
 import net.neoforged.neoforge.registries.DeferredRegister;
 
 /**
- * No custom items - the portal frame is vanilla diamond/iron blocks and the
- * portal surface has no item form. Kept as an (empty) registry so the wiring
- * stays consistent if items are added later.
+ * The mod's own items: the Marker block's item form, and the two relics each
+ * mode pays out - the Temple's Obsidian Edge and the maze's Griever Fang,
+ * with the stinger the Fang is built from.
+ *
+ * <p>The portal frame is still vanilla blocks and the portal surface still has
+ * no item form; nothing here is scenery.
  */
 public final class ModItems {
 
@@ -34,8 +37,7 @@ public final class ModItems {
      * more obsidian. Fireproof, since it came out of lava to begin with.
      */
     public static final net.minecraft.world.item.Tier OBSIDIAN_TIER =
-            new net.minecraft.world.item.SimpleTier(
-                    net.minecraft.tags.BlockTags.INCORRECT_FOR_DIAMOND_TOOL,
+            new com.jrpetty.aztecabyss.item.RelicTier(
                     720, 6.0F, 4.0F, 12,
                     () -> net.minecraft.world.item.crafting.Ingredient.of(
                             net.minecraft.world.item.Items.OBSIDIAN));
@@ -71,8 +73,7 @@ public final class ModItems {
 
     /** Chitin does not hold an edge the way steel does; it makes up for it. */
     public static final net.minecraft.world.item.Tier CHITIN_TIER =
-            new net.minecraft.world.item.SimpleTier(
-                    net.minecraft.tags.BlockTags.INCORRECT_FOR_IRON_TOOL,
+            new com.jrpetty.aztecabyss.item.RelicTier(
                     500, 7.0F, 2.0F, 16,
                     () -> net.minecraft.world.item.crafting.Ingredient.of(
                             GRIEVER_STINGER.get()));
