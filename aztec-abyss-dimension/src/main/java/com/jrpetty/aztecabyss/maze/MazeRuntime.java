@@ -235,6 +235,7 @@ public final class MazeRuntime {
         MazeRaid.reset(level);
         MazeWaypoints.get(level).clearAll();
         MazeEvents.clearKills();
+        MazeVenom.clearAll();
         clock.newGame(level.getServer());
         MazeNotes.clearAll();
         GladeBuilder.forgetRoster();
@@ -662,6 +663,12 @@ public final class MazeRuntime {
             int kills = MazeEvents.grieverKills(out.getUUID());
             MazeHall hall = MazeHall.get(level);
             hall.add(out.getGameProfile().getName(), days, pct, kills, seconds, c.session() + 1);
+            // What you carry out. Not a trophy for a chest - a verb, for
+            // whatever weapon you already fight with, forever after.
+            out.getInventory().placeItemBackInInventory(MazeVenom.book(level));
+            out.displayClientMessage(net.minecraft.network.chat.Component.literal(
+                    "§2✦ You came out carrying something. §7Griever Venom — an anvil,"
+                            + " and any weapon you like."), false);
             net.neoforged.neoforge.network.PacketDistributor.sendToPlayer(out,
                     new com.jrpetty.aztecabyss.network.MazeVictoryPayload(
                             out.getGameProfile().getName() + "|" + days + "|" + pct + "|"

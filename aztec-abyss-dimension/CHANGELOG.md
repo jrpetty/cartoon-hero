@@ -13,6 +13,28 @@ behaviour that was already there · **docs**
 
 ## Unreleased
 
+### Griever Venom — what you carry out of the maze
+
+- **feat** **Escaping now hands you an enchantment, not a trophy.** Every
+  escapee walks out with a **Griever Venom** book: take it to an anvil and put
+  it on whatever you already fight with — sword, axe, bow, crossbow, trident.
+  The reward is a verb, not an item to leave in a chest, and it works
+  everywhere: the arenas, the overworld, and the maze itself if you go back.
+- **feat** **What it does.** A hit envenoms: **7 damage a second for 5
+  seconds**, straight through armour, and for the first **3 seconds the target
+  loses you completely** — it cannot hold a target while its blood is burning.
+  Bosses take the damage and shrug off the blindness, because a finale you can
+  switch off with one arrow is not a finale. It refreshes rather than stacks,
+  and it never affects players.
+- **fix** **The blindness is real, not cosmetic.** Vanilla's Blindness effect
+  does not actually stop a mob tracking you, so the venom clears the target
+  itself and holds it clear — through the arena's retarget sweep, the
+  Grievers' hearing, and the day-stalker's ears alike, all three of which
+  would otherwise hand the target straight back.
+- **feat** Venom kills are credited to whoever applied it, so a Griever that
+  dies of it still pays their bounty and lands on their tally.
+- Tunable: `mazeVenomDamage`, `mazeVenomSeconds`, `mazeVenomBlindSeconds`.
+
 ### Small functionality
 
 - **fix** **The horde groans a quarter as often.** On the Temple and the

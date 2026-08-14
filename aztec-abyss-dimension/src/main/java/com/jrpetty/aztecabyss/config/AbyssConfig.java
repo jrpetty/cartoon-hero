@@ -128,6 +128,16 @@ public final class AbyssConfig {
                 .defineInRange("mazeDeathLockoutSeconds", 60, 0, 3600);
         MAZE_SHOW_BRIEFING = b.comment("Show newcomers the one-time maze rules message.")
                 .define("mazeShowBriefing", true);
+        MAZE_VENOM_DAMAGE = b.comment(
+                        "Damage a second dealt by Griever Venom, the enchantment an escapee",
+                        "brings out of the maze. Bypasses armour.")
+                .defineInRange("mazeVenomDamage", 7.0, 0.0, 100.0);
+        MAZE_VENOM_SECONDS = b.comment("How long Griever Venom burns for.")
+                .defineInRange("mazeVenomSeconds", 5, 1, 60);
+        MAZE_VENOM_BLIND_SECONDS = b.comment(
+                        "How long an envenomed mob loses its target for. Bosses are immune to",
+                        "this part; they still take the damage.")
+                .defineInRange("mazeVenomBlindSeconds", 3, 0, 60);
         MAZE_DAY_SECONDS = b.comment(
                         "Real seconds of daylight in one maze day - the window the doors are open.",
                         "The maze runs on its own clock, not the overworld's, so this is exact.")
@@ -226,6 +236,9 @@ public final class AbyssConfig {
     public static final ModConfigSpec.ConfigValue<String> CREATOR_PASSWORD;
     public static final ModConfigSpec.IntValue MAZE_DEATH_LOCKOUT_SECONDS;
     public static final ModConfigSpec.BooleanValue MAZE_SHOW_BRIEFING;
+    public static final ModConfigSpec.DoubleValue MAZE_VENOM_DAMAGE;
+    public static final ModConfigSpec.IntValue MAZE_VENOM_SECONDS;
+    public static final ModConfigSpec.IntValue MAZE_VENOM_BLIND_SECONDS;
     public static final ModConfigSpec.IntValue MAZE_DAY_SECONDS;
     public static final ModConfigSpec.IntValue MAZE_NIGHT_SECONDS;
     public static final ModConfigSpec.IntValue MAZE_DAY_SCALING;

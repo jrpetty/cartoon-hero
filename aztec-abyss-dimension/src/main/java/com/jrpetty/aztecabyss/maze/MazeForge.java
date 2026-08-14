@@ -151,6 +151,14 @@ public final class MazeForge {
         if (event.getEntity() instanceof ServerPlayer) {
             return;
         }
+        // Griever Venom, wherever it is being carried. Unlike the forge bonus
+        // this is not a maze perk - it is what somebody carried OUT of the
+        // maze, so it works in the arenas, in the overworld, everywhere. That
+        // is the entire reward.
+        if (event.getEntity().level() instanceof net.minecraft.server.level.ServerLevel sl) {
+            MazeVenom.onHit(sl, event.getEntity(),
+                    event.getSource().getDirectEntity(), event.getSource().getEntity());
+        }
         if (!(event.getSource().getEntity() instanceof ServerPlayer attacker)
                 || !isMaze(attacker.level())) {
             return;
@@ -160,5 +168,26 @@ public final class MazeForge {
             return;
         }
         event.setAmount(event.getAmount() * (1.0F + edge));
+    }
+
+    /**
+     * The venom burns in every dimension, so it is ticked from the one hook
+     * that runs in all of them rather than from any mode's own loop.
+     */
+    @SubscribeEvent
+    public static void onAnyLevelTick(net.neoforged.neoforge.event.tick.LevelTickEvent.Post event) {
+        if (event.getLevel() instanceof net.minecraft.server.level.ServerLevel sl
+                && sl.getGameTime() % 10L == 0L) {
+            MazeVenom.tick(sl);
+        }
+    }
+
+    /** Arrows leave the string carrying whatever the bow was carrying. */
+    @SubscribeEvent
+    public static void onArrowLoosed(net.neoforged.neoforge.event.entity.EntityJoinLevelEvent event) {
+        if (event.getEntity() instanceof net.minecraft.world.entity.projectile.AbstractArrow arrow
+                && event.getLevel() instanceof net.minecraft.server.level.ServerLevel sl) {
+            MazeVenom.stampArrow(sl, arrow);
+        }
     }
 }

@@ -366,6 +366,10 @@ public final class Griever {
      */
     public static void hear(ServerLevel level, List<Mob> grievers, List<ServerPlayer> runners) {
         for (Mob g : grievers) {
+            // Venom in it: it could not follow a marching band right now.
+            if (MazeVenom.blinded(g)) {
+                continue;
+            }
             // Something already has its attention. Noise finds the unoccupied.
             if (g.getTarget() != null && g.getTarget().isAlive()) {
                 continue;
@@ -478,6 +482,12 @@ public final class Griever {
             if (MazeData.inGlade(at.getX() / MazeData.CELL, at.getZ() / MazeData.CELL)) {
                 stalker.setTarget(null);
             }
+        }
+
+        // Venom overrides its hearing too - the one counter the stalker has.
+        if (MazeVenom.blinded(stalker)) {
+            stalker.setTarget(null);
+            return;
         }
 
         // Blind: the only sense is this loop. Nearest noise wins.

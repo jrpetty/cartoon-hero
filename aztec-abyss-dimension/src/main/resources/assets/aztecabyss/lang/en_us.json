@@ -12,5 +12,6 @@
   "subtitles.aztecabyss.player_downed": "A hunter falls",
   "subtitles.aztecabyss.player_revived": "A hunter rises",
   "block.aztecabyss.marker": "Marker Block",
-  "item.aztecabyss.marker": "Marker Block"
+  "item.aztecabyss.marker": "Marker Block",
+  "enchantment.aztecabyss.griever_venom": "Griever Venom"
 }

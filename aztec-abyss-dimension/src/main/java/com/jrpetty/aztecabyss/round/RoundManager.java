@@ -2026,6 +2026,13 @@ public final class RoundManager {
                 mob.ambientSoundTime = -400 - mob.getRandom().nextInt(400);
             }
 
+            // Envenomed and blind: it has lost whoever stung it and this sweep
+            // is not going to hand them back.
+            if (com.jrpetty.aztecabyss.maze.MazeVenom.blinded(mob)) {
+                mob.setTarget(null);
+                continue;
+            }
+
             // Anything still behind the boards belongs to the barricade tick - it
             // has no business being pointed at a player it cannot reach.
             if (mob.getPersistentData().getInt("aztecabyss_gate_index") >= 0) {
