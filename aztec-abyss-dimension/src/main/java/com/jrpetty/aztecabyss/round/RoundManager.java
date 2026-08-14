@@ -1565,6 +1565,19 @@ public final class RoundManager {
         player.changeDimension(AbyssTeleporter.toFixedHome(homeLevel, returnPos));
 
         ItemStack[] loot = RewardTable.rewardsFor(round, victory, ritual);
+        // The Temple's own reward, and only the Temple's: the weapon its
+        // builders fought with. Beating the horde hands you the answer to
+        // armour, which is the fight that map is actually about.
+        if (victory && game != null
+                && game.getMap() == com.jrpetty.aztecabyss.worldgen.ArenaMap.TEMPLE) {
+            ItemStack[] withEdge = java.util.Arrays.copyOf(loot, loot.length + 1);
+            withEdge[loot.length] = new ItemStack(
+                    com.jrpetty.aztecabyss.registry.ModItems.OBSIDIAN_EDGE.get());
+            loot = withEdge;
+            player.displayClientMessage(net.minecraft.network.chat.Component.literal(
+                    "§5✦ The Obsidian Edge §7— their blade opens armour steel skates off."),
+                    false);
+        }
         spawnRewardChest(homeLevel, returnPos, loot);
 
         if (!victory) {

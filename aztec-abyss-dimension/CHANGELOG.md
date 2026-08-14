@@ -13,6 +13,28 @@ behaviour that was already there · **docs**
 
 ## Unreleased
 
+### The Obsidian Edge — the Temple's weapon
+
+- **feat** **A new weapon: the Obsidian Edge**, the mod's first real item. The
+  Aztec *macuahuitl* — a wooden blade set with teeth of knapped obsidian,
+  which takes an edge sharper than surgical steel and opens armour a sword
+  would skate off.
+- **feat** **It ignores 70% of whatever the target is wearing.** Against a
+  bare zombie it is a heavy club; against anything armoured it is the
+  difference between chipping at a wall and getting through it. Done by
+  working out what armour is *about* to eat and cancelling most of it, so the
+  hit keeps its knockback, sweep and enchantments — it just lands like the
+  plate was not there.
+- **feat** **Crafted with 7 obsidian and 2 sticks**, in the weapon's own
+  shape: obsidian all the way around, two sticks up the middle for the shaft.
+  The item's texture is that same shape — teeth down both edges, wooden core.
+- **change** Heavy rather than quick: 8 attack damage (netherite's number) at
+  a third slower swing than a sword. 720 uses, mended with obsidian,
+  fireproof — it came out of lava to begin with. Takes ordinary sword
+  enchantments, and Griever Venom goes on it happily.
+- **feat** **Beating the Temple hands you one**, in the reward chest. The
+  Bridge does not give it; that map's reward is still to come.
+
 ### Griever Venom — what you carry out of the maze
 
 - **feat** **Escaping now hands you an enchantment, not a trophy.** Every
