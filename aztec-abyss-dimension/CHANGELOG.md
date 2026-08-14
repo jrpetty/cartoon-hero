@@ -13,6 +13,24 @@ behaviour that was already there · **docs**
 
 ## Unreleased
 
+### The Griever Fang — the maze's weapon
+
+- **feat** **Grievers now drop a Griever Stinger.** The barb survives the
+  thing it belonged to, and it is the only material the Fang can be built or
+  mended with — so the maze's weapon is paid for in the hardest currency the
+  maze has.
+- **feat** **The Griever Fang**: two stingers and a haft, crafted in the shape
+  of the thing itself. It **envenoms on every hit** with no enchantment
+  needed — it *is* a Griever's barb — and it is the Obsidian Edge's opposite
+  number in every respect: light and quick where the Edge is heavy and slow.
+  6 attack damage at a faster-than-sword swing, 500 uses.
+- **change** **Both relics now say what they do.** A power a player cannot see
+  is one they will never plan around, so the Edge and the Fang carry their
+  real mechanic on the tooltip — *"Ignores 70% of armour"*, *"Envenoms on
+  every hit"* — under their own flavour lines.
+- The Venom book still matters: the Fang carries venom natively, so the book
+  is what puts it on your axe, your bow, or a netherite sword instead.
+
 ### The Obsidian Edge — the Temple's weapon
 
 - **feat** **A new weapon: the Obsidian Edge**, the mod's first real item. The

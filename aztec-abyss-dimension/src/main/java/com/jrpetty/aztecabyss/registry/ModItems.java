@@ -48,12 +48,52 @@ public final class ModItems {
      * {@link com.jrpetty.aztecabyss.item.ObsidianEdge}.
      */
     public static final net.neoforged.neoforge.registries.DeferredItem<net.minecraft.world.item.Item> OBSIDIAN_EDGE =
-            ITEMS.register("obsidian_edge", id -> new net.minecraft.world.item.SwordItem(
+            ITEMS.register("obsidian_edge", id -> new com.jrpetty.aztecabyss.item.RelicSword(
                     OBSIDIAN_TIER,
                     new net.minecraft.world.item.Item.Properties()
                             .fireResistant()
                             .attributes(net.minecraft.world.item.SwordItem.createAttributes(
-                                    OBSIDIAN_TIER, 3, -2.8F))));
+                                    OBSIDIAN_TIER, 3, -2.8F)),
+                    "§7Ignores §f70%§7 of armour",
+                    "§8Teeth of volcanic glass, set in wood.",
+                    "§8Carried out of the Temple."));
+
+    /**
+     * A Griever's barb, left behind when one is put down.
+     *
+     * <p>The only thing in the maze anybody would ever want off a corpse, and
+     * the only material the Fang can be built or mended with - so the weapon
+     * has a price paid in the exact currency it is good against.
+     */
+    public static final net.neoforged.neoforge.registries.DeferredItem<net.minecraft.world.item.Item> GRIEVER_STINGER =
+            ITEMS.register("griever_stinger", id -> new net.minecraft.world.item.Item(
+                    new net.minecraft.world.item.Item.Properties()));
+
+    /** Chitin does not hold an edge the way steel does; it makes up for it. */
+    public static final net.minecraft.world.item.Tier CHITIN_TIER =
+            new net.minecraft.world.item.SimpleTier(
+                    net.minecraft.tags.BlockTags.INCORRECT_FOR_IRON_TOOL,
+                    500, 7.0F, 2.0F, 16,
+                    () -> net.minecraft.world.item.crafting.Ingredient.of(
+                            GRIEVER_STINGER.get()));
+
+    /**
+     * The Griever Fang: the barb, bound to a grip.
+     *
+     * <p>The Temple's weapon is heavy and slow and opens armour. This is the
+     * opposite number in every respect - light, quick, and it poisons - which
+     * is what the maze is about: you are not there to win a fight, you are
+     * there to make something stop chasing you and get out.
+     */
+    public static final net.neoforged.neoforge.registries.DeferredItem<net.minecraft.world.item.Item> GRIEVER_FANG =
+            ITEMS.register("griever_fang", id -> new com.jrpetty.aztecabyss.item.RelicSword(
+                    CHITIN_TIER,
+                    new net.minecraft.world.item.Item.Properties()
+                            .attributes(net.minecraft.world.item.SwordItem.createAttributes(
+                                    CHITIN_TIER, 3, -1.8F)),
+                    "§2Envenoms on every hit",
+                    "§8Cut from the thing that hunted you.",
+                    "§8Quick where the Edge is heavy."));
 
     private ModItems() {
     }

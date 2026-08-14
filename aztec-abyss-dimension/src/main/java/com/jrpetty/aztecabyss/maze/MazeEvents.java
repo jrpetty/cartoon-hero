@@ -1524,6 +1524,10 @@ public final class MazeEvents {
             return;
         }
         Griever.onDeath(level, mob);
+        // The barb survives. Two of them and a haft make the Fang, so the
+        // maze's own weapon is paid for in the hardest thing the maze has.
+        mob.spawnAtLocation(new net.minecraft.world.item.ItemStack(
+                com.jrpetty.aztecabyss.registry.ModItems.GRIEVER_STINGER.get()));
         boolean dropped = MazeSerum.maybeDrop(level, mob, net.minecraft.util.RandomSource.create());
         if (event.getSource().getEntity() instanceof ServerPlayer killer) {
             GRIEVER_KILLS.merge(killer.getUUID(), 1, Integer::sum);

@@ -144,9 +144,13 @@ public final class MazeVenom {
         if (!(target instanceof Mob mob) || !(cause instanceof ServerPlayer attacker)) {
             return false; // never players, never anything without a person behind it
         }
+        // The Fang carries it in the blade itself - it IS a Griever's barb -
+        // so it needs no enchantment. Anything else has to be taught.
+        ItemStack hand = attacker.getMainHandItem();
         boolean venomous = direct instanceof AbstractArrow arrow
                 ? arrow.getPersistentData().getBoolean(ARROW_TAG)
-                : on(level, attacker.getMainHandItem());
+                : on(level, hand)
+                        || hand.is(com.jrpetty.aztecabyss.registry.ModItems.GRIEVER_FANG.get());
         if (!venomous) {
             return false;
         }

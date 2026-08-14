@@ -14,5 +14,7 @@
   "block.aztecabyss.marker": "Marker Block",
   "item.aztecabyss.marker": "Marker Block",
   "enchantment.aztecabyss.griever_venom": "Griever Venom",
-  "item.aztecabyss.obsidian_edge": "Obsidian Edge"
+  "item.aztecabyss.obsidian_edge": "Obsidian Edge",
+  "item.aztecabyss.griever_fang": "Griever Fang",
+  "item.aztecabyss.griever_stinger": "Griever Stinger"
 }
