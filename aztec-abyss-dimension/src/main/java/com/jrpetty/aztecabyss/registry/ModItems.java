@@ -7,7 +7,11 @@ import net.neoforged.neoforge.registries.DeferredRegister;
 /**
  * The mod's own items: the Marker block's item form, and the two relics each
  * mode pays out - the Temple's Obsidian Edge and the maze's Griever Fang,
- * with the stinger the Fang is built from.
+ * with the stinger the Fang is mended with.
+ *
+ * <p>Neither relic has a recipe. They are handed to the people who finished
+ * the mode that owns them and to nobody else, which is the only thing that
+ * makes them worth having.
  *
  * <p>The portal frame is still vanilla blocks and the portal surface still has
  * no item form; nothing here is scenery.
@@ -63,9 +67,9 @@ public final class ModItems {
     /**
      * A Griever's barb, left behind when one is put down.
      *
-     * <p>The only thing in the maze anybody would ever want off a corpse, and
-     * the only material the Fang can be built or mended with - so the weapon
-     * has a price paid in the exact currency it is good against.
+     * <p>The Fang cannot be built from these - it cannot be built at all, it
+     * is handed to people who got out - but it is what the Fang is mended
+     * with, so keeping one in the field costs you Grievers.
      */
     public static final net.neoforged.neoforge.registries.DeferredItem<net.minecraft.world.item.Item> GRIEVER_STINGER =
             ITEMS.register("griever_stinger", id -> new net.minecraft.world.item.Item(
@@ -94,7 +98,8 @@ public final class ModItems {
                                     CHITIN_TIER, 3, -1.8F)),
                     "§2Envenoms on every hit",
                     "§8Cut from the thing that hunted you.",
-                    "§8Quick where the Edge is heavy."));
+                    "§8Quick where the Edge is heavy.",
+                    "§8Carried out of the maze."));
 
     private ModItems() {
     }

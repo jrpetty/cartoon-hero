@@ -663,12 +663,16 @@ public final class MazeRuntime {
             int kills = MazeEvents.grieverKills(out.getUUID());
             MazeHall hall = MazeHall.get(level);
             hall.add(out.getGameProfile().getName(), days, pct, kills, seconds, c.session() + 1);
-            // What you carry out. Not a trophy for a chest - a verb, for
-            // whatever weapon you already fight with, forever after.
+            // What you carry out, and the only way either of these exists.
+            // Neither can be crafted: the maze's weapons belong to people who
+            // got out of the maze, which is the entire point of them.
+            out.getInventory().placeItemBackInInventory(
+                    new net.minecraft.world.item.ItemStack(
+                            com.jrpetty.aztecabyss.registry.ModItems.GRIEVER_FANG.get()));
             out.getInventory().placeItemBackInInventory(MazeVenom.book(level));
             out.displayClientMessage(net.minecraft.network.chat.Component.literal(
-                    "§2✦ You came out carrying something. §7Griever Venom — an anvil,"
-                            + " and any weapon you like."), false);
+                    "§2✦ You came out carrying something. §7The Griever Fang, and the"
+                            + " venom to put on anything else."), false);
             net.neoforged.neoforge.network.PacketDistributor.sendToPlayer(out,
                     new com.jrpetty.aztecabyss.network.MazeVictoryPayload(
                             out.getGameProfile().getName() + "|" + days + "|" + pct + "|"

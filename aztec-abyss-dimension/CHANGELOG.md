@@ -13,6 +13,24 @@ behaviour that was already there · **docs**
 
 ## Unreleased
 
+### The relics are earned, not crafted
+
+- **change** **Both recipes are gone.** The Obsidian Edge and the Griever Fang
+  were craftable by anyone with obsidian or a couple of Griever kills, which
+  made "the reward for beating the Temple" into "a thing you can make on day
+  one". Neither has a recipe now. They exist only in the hands of people who
+  actually finished the mode that owns them.
+- **change** **The Griever Fang is now the maze's escape reward**, handed over
+  alongside the Venom book at the moment you come through the portal — not
+  built from stingers.
+- **The bar for each, stated plainly:** the **Temple's Edge** requires
+  *clearing the final round* (round 20 by default — the boss round; dying on
+  19 gets you the ordinary tiered loot and no relic). The **maze's Fang and
+  Venom** require *escaping* — surviving to the deadline without getting out
+  is a loss, and pays nothing.
+- **change** Griever Stingers still drop, and are now purely the Fang's repair
+  material — so keeping one in the field costs you Grievers.
+
 ### The Griever Fang — the maze's weapon
 
 - **feat** **Grievers now drop a Griever Stinger.** The barb survives the
