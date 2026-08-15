@@ -13,16 +13,23 @@ behaviour that was already there · **docs**
 
 ## Unreleased
 
-### The relics are earned, not crafted
+### Only the people who finished can make them
 
-- **change** **Both recipes are gone.** The Obsidian Edge and the Griever Fang
-  were craftable by anyone with obsidian or a couple of Griever kills, which
-  made "the reward for beating the Temple" into "a thing you can make on day
-  one". Neither has a recipe now. They exist only in the hands of people who
-  actually finished the mode that owns them.
-- **change** **The Griever Fang is now the maze's escape reward**, handed over
-  alongside the Venom book at the moment you come through the portal — not
-  built from stingers.
+Both relics are still crafted — with the same recipe shape — but the
+*materials* are the gate, because that is the only gate Minecraft actually
+enforces. (A recipe-book "unlock" is a UI hint: anyone who knows the pattern
+can still craft the item.)
+
+- **feat** **Altar Obsidian.** Clearing the Temple's final round hands you
+  **seven pieces of the altar** — exactly one blade's worth. The Obsidian
+  Edge's recipe is unchanged in shape (seven around two sticks), but ordinary
+  obsidian will no longer do it.
+- **feat** **The Way Out.** Escaping the maze hands you a shard of the portal
+  you came through. The Griever Fang is two Griever barbs bound to it, so the
+  Fang cannot exist in the hands of anyone who did not get out.
+- **change** Griever Stingers still drop from kills, so an escapee who never
+  fought one carries their shard until they go back in and earn the barbs —
+  the token keeps.
 - **The bar for each, stated plainly:** the **Temple's Edge** requires
   *clearing the final round* (round 20 by default — the boss round; dying on
   19 gets you the ordinary tiered loot and no relic). The **maze's Fang and

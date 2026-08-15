@@ -33,6 +33,30 @@ public final class ModItems {
             ITEMS.registerSimpleBlockItem("marker", ModBlocks.MARKER);
 
     /**
+     * Obsidian off the altar itself, and the only stone the Edge can be built
+     * from.
+     *
+     * <p>This is what makes the weapon exclusive without taking the crafting
+     * away: the recipe is the same nine squares it always was, but ordinary
+     * obsidian will not do. Seven of these come out of the Temple with anyone
+     * who clears its last round, which is exactly one blade's worth.
+     */
+    public static final net.neoforged.neoforge.registries.DeferredItem<net.minecraft.world.item.Item> ALTAR_OBSIDIAN =
+            ITEMS.register("altar_obsidian", id -> new net.minecraft.world.item.Item(
+                    new net.minecraft.world.item.Item.Properties().fireResistant()));
+
+    /**
+     * A shard of the portal you came out through.
+     *
+     * <p>Granted for escaping the maze and nothing else - not for surviving to
+     * the deadline, not for dying well. The Fang is bound to it, so the
+     * weapon cannot exist in the hands of anybody who did not get out.
+     */
+    public static final net.neoforged.neoforge.registries.DeferredItem<net.minecraft.world.item.Item> WAY_OUT =
+            ITEMS.register("way_out", id -> new net.minecraft.world.item.Item(
+                    new net.minecraft.world.item.Item.Properties()));
+
+    /**
      * The macuahuitl's stone: obsidian teeth in a wooden shaft.
      *
      * <p>Brutal and slow rather than sharp and quick - the swing is a third

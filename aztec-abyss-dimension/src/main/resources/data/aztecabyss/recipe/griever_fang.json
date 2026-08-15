@@ -1,0 +1,17 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "equipment",
+  "pattern": [
+    " T ",
+    " T ",
+    " W "
+  ],
+  "key": {
+    "T": "aztecabyss:griever_stinger",
+    "W": "aztecabyss:way_out"
+  },
+  "result": {
+    "id": "aztecabyss:griever_fang",
+    "count": 1
+  }
+}

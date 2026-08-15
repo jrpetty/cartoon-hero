@@ -668,11 +668,11 @@ public final class MazeRuntime {
             // got out of the maze, which is the entire point of them.
             out.getInventory().placeItemBackInInventory(
                     new net.minecraft.world.item.ItemStack(
-                            com.jrpetty.aztecabyss.registry.ModItems.GRIEVER_FANG.get()));
+                            com.jrpetty.aztecabyss.registry.ModItems.WAY_OUT.get()));
             out.getInventory().placeItemBackInInventory(MazeVenom.book(level));
             out.displayClientMessage(net.minecraft.network.chat.Component.literal(
-                    "§2✦ You came out carrying something. §7The Griever Fang, and the"
-                            + " venom to put on anything else."), false);
+                    "§2✦ You came out carrying something. §7A shard of the way out —"
+                            + " bind two Griever barbs to it for the Fang."), false);
             net.neoforged.neoforge.network.PacketDistributor.sendToPlayer(out,
                     new com.jrpetty.aztecabyss.network.MazeVictoryPayload(
                             out.getGameProfile().getName() + "|" + days + "|" + pct + "|"

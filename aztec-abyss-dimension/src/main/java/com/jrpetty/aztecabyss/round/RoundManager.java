@@ -1570,13 +1570,13 @@ public final class RoundManager {
         // armour, which is the fight that map is actually about.
         if (victory && game != null
                 && game.getMap() == com.jrpetty.aztecabyss.worldgen.ArenaMap.TEMPLE) {
-            ItemStack[] withEdge = java.util.Arrays.copyOf(loot, loot.length + 1);
-            withEdge[loot.length] = new ItemStack(
-                    com.jrpetty.aztecabyss.registry.ModItems.OBSIDIAN_EDGE.get());
-            loot = withEdge;
+            ItemStack[] withStone = java.util.Arrays.copyOf(loot, loot.length + 1);
+            withStone[loot.length] = new ItemStack(
+                    com.jrpetty.aztecabyss.registry.ModItems.ALTAR_OBSIDIAN.get(), 7);
+            loot = withStone;
             player.displayClientMessage(net.minecraft.network.chat.Component.literal(
-                    "§5✦ The Obsidian Edge §7— their blade opens armour steel skates off."),
-                    false);
+                    "§5✦ Seven pieces of the altar. §7Enough for one Obsidian Edge —"
+                            + " seven around two sticks."), false);
         }
         spawnRewardChest(homeLevel, returnPos, loot);
 
