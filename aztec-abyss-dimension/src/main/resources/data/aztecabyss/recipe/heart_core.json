@@ -1,0 +1,16 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "equipment",
+  "pattern": [
+    "S S",
+    "SSS",
+    " S "
+  ],
+  "key": {
+    "S": "aztecabyss:heart_shard"
+  },
+  "result": {
+    "id": "aztecabyss:heart_core",
+    "count": 1
+  }
+}

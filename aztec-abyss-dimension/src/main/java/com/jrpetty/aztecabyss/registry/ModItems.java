@@ -57,6 +57,41 @@ public final class ModItems {
                     new net.minecraft.world.item.Item.Properties()));
 
     /**
+     * A chip of the Heart the Bridge is defended for. Six of them come out
+     * with anyone who holds the span to its last round - exactly one Core.
+     */
+    public static final net.neoforged.neoforge.registries.DeferredItem<net.minecraft.world.item.Item> HEART_SHARD =
+            ITEMS.register("heart_shard", id -> new net.minecraft.world.item.Item(
+                    new net.minecraft.world.item.Item.Properties()));
+
+    /**
+     * The Heart Core: ten more hearts, for one hand.
+     *
+     * <p>The Bridge is the one map with something other than yourself to keep
+     * alive, and its reward is that thing's own strength. Carried rather than
+     * consumed, and priced in the only currency that stops it being free: it
+     * lives in a hand, so it is your shield or the Heart, never both.
+     */
+    public static final net.neoforged.neoforge.registries.DeferredItem<net.minecraft.world.item.Item> HEART_CORE =
+            ITEMS.register("heart_core", id -> new com.jrpetty.aztecabyss.item.RelicItem(
+                    new net.minecraft.world.item.Item.Properties()
+                            .stacksTo(1)
+                            .fireResistant()
+                            .rarity(net.minecraft.world.item.Rarity.EPIC)
+                            .attributes(net.minecraft.world.item.component.ItemAttributeModifiers.builder()
+                                    .add(net.minecraft.world.entity.ai.attributes.Attributes.MAX_HEALTH,
+                                            new net.minecraft.world.entity.ai.attributes.AttributeModifier(
+                                                    net.minecraft.resources.ResourceLocation.fromNamespaceAndPath(
+                                                            AztecAbyssConstants.MOD_ID, "heart_core"),
+                                                    20.0,
+                                                    net.minecraft.world.entity.ai.attributes.AttributeModifier.Operation.ADD_VALUE),
+                                            net.minecraft.world.entity.EquipmentSlotGroup.HAND)
+                                    .build()),
+                    "§c+10 hearts while you hold it",
+                    "§8Cut from the Heart you kept alive.",
+                    "§8It costs you a hand — your shield, or this."));
+
+    /**
      * The macuahuitl's stone: obsidian teeth in a wooden shaft.
      *
      * <p>Brutal and slow rather than sharp and quick - the swing is a third

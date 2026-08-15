@@ -13,6 +13,20 @@ behaviour that was already there · **docs**
 
 ## Unreleased
 
+### The Heart Core — the Bridge's relic
+
+- **feat** **The Bridge finally pays out.** Holding the span to its final round
+  hands you **six Heart Shards** — chips of the Heart the whole map exists to
+  keep alive. Laid out in the shape of the thing itself (two lobes, a body, a
+  point) they make the **Heart Core**.
+- **feat** **+10 hearts while you hold it.** Doubles your health outright —
+  and it lives in a hand, so it is your shield or the Heart, never both. That
+  price is the whole design: the strongest thing in the mod, paid for in the
+  slot that keeps you alive on every other map.
+- The set is complete: the Temple gives armour-shredding, the maze gives venom
+  and escape, the Bridge gives survivability — one relic each, all three only
+  for finishing the mode that owns them.
+
 ### Only the people who finished can make them
 
 Both relics are still crafted — with the same recipe shape — but the

@@ -1568,15 +1568,28 @@ public final class RoundManager {
         // The Temple's own reward, and only the Temple's: the weapon its
         // builders fought with. Beating the horde hands you the answer to
         // armour, which is the fight that map is actually about.
-        if (victory && game != null
-                && game.getMap() == com.jrpetty.aztecabyss.worldgen.ArenaMap.TEMPLE) {
-            ItemStack[] withStone = java.util.Arrays.copyOf(loot, loot.length + 1);
-            withStone[loot.length] = new ItemStack(
-                    com.jrpetty.aztecabyss.registry.ModItems.ALTAR_OBSIDIAN.get(), 7);
-            loot = withStone;
-            player.displayClientMessage(net.minecraft.network.chat.Component.literal(
-                    "§5✦ Seven pieces of the altar. §7Enough for one Obsidian Edge —"
-                            + " seven around two sticks."), false);
+        if (victory && game != null) {
+            // Each map pays in its own stuff, and only for finishing it: the
+            // Temple in altar stone, the Bridge in pieces of the Heart the
+            // whole map exists to keep alive.
+            ItemStack prize = switch (game.getMap()) {
+                case TEMPLE -> new ItemStack(
+                        com.jrpetty.aztecabyss.registry.ModItems.ALTAR_OBSIDIAN.get(), 7);
+                case BRIDGE -> new ItemStack(
+                        com.jrpetty.aztecabyss.registry.ModItems.HEART_SHARD.get(), 6);
+                default -> ItemStack.EMPTY;
+            };
+            if (!prize.isEmpty()) {
+                ItemStack[] withPrize = java.util.Arrays.copyOf(loot, loot.length + 1);
+                withPrize[loot.length] = prize;
+                loot = withPrize;
+                player.displayClientMessage(net.minecraft.network.chat.Component.literal(
+                        game.getMap() == com.jrpetty.aztecabyss.worldgen.ArenaMap.TEMPLE
+                                ? "§5✦ Seven pieces of the altar. §7Enough for one"
+                                        + " Obsidian Edge — seven around two sticks."
+                                : "§c✦ Six pieces of the Heart. §7Enough for one Heart"
+                                        + " Core — lay them out as the thing itself."), false);
+            }
         }
         spawnRewardChest(homeLevel, returnPos, loot);
 
