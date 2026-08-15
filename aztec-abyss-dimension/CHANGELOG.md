@@ -13,6 +13,20 @@ behaviour that was already there · **docs**
 
 ## Unreleased
 
+### The Griever Fang reaches 1.5 blocks
+
+- **change** **The Fang's attack range is now 1.5 blocks, down from the player's
+  default 3.0.** It had no range attribute at all before, so it reached exactly
+  as far as a fist. It now carries a `-1.5` modifier on
+  `entity_interaction_range` in the main hand — an item cannot *set* an
+  attribute it does not own, only move it, so the number is expressed as the
+  distance taken off rather than the distance left.
+
+  It reads correctly for what the thing is: a fang is a knife, not a sword, and
+  envenoming a Griever now means standing close enough to be hit by one. The
+  tooltip says so outright rather than leaving players to notice their swings
+  missing.
+
 ### An efficiency pass, starting where the work actually is
 
 - **change** **Bulk block writing goes through a cursor now, not

@@ -95,6 +95,18 @@ public final class ModItems {
                     () -> net.minecraft.world.item.crafting.Ingredient.of(
                             GRIEVER_STINGER.get()));
 
+    /** The Fang's reach modifier, so the attribute can be found and undone. */
+    private static final net.minecraft.resources.ResourceLocation FANG_REACH_ID =
+            net.minecraft.resources.ResourceLocation.fromNamespaceAndPath(
+                    AztecAbyssConstants.MOD_ID, "fang_reach");
+
+    /**
+     * How far a Fang can hit, in blocks. A player's own reach is three, so the
+     * modifier below takes one and a half off it rather than setting it - which
+     * is the only way an item can move an attribute it does not own.
+     */
+    public static final double FANG_REACH = 1.5;
+
     /**
      * The Griever Fang: the barb, bound to a grip.
      *
@@ -102,14 +114,28 @@ public final class ModItems {
      * opposite number in every respect - light, quick, and it poisons - which
      * is what the maze is about: you are not there to win a fight, you are
      * there to make something stop chasing you and get out.
+     *
+     * <p>And it is short. A fang is a knife, not a sword: you reach half as far
+     * with it as with your bare hands, so envenoming a Griever means standing
+     * close enough to be hit by one. That is the price of the poison.
      */
     public static final net.neoforged.neoforge.registries.DeferredItem<net.minecraft.world.item.Item> GRIEVER_FANG =
             ITEMS.register("griever_fang", id -> new com.jrpetty.aztecabyss.item.RelicSword(
                     CHITIN_TIER,
                     new net.minecraft.world.item.Item.Properties()
                             .attributes(net.minecraft.world.item.SwordItem.createAttributes(
-                                    CHITIN_TIER, 3, -1.8F)),
+                                            CHITIN_TIER, 3, -1.8F)
+                                    .withModifierAdded(
+                                            net.minecraft.world.entity.ai.attributes.Attributes
+                                                    .ENTITY_INTERACTION_RANGE,
+                                            new net.minecraft.world.entity.ai.attributes.AttributeModifier(
+                                                    FANG_REACH_ID,
+                                                    FANG_REACH - 3.0,
+                                                    net.minecraft.world.entity.ai.attributes
+                                                            .AttributeModifier.Operation.ADD_VALUE),
+                                            net.minecraft.world.entity.EquipmentSlotGroup.MAINHAND)),
                     "§2Envenoms on every hit",
+                    "§cReach §f1.5§c blocks §8- half your own",
                     "§8Cut from the thing that hunted you.",
                     "§8Quick where the Edge is heavy.",
                     "§8Carried out of the maze."));
