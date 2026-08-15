@@ -33,19 +33,19 @@ behaviour that was already there · **docs**
   ceiling — and re-checked on a slow tick, because a respawned player is a
   fresh entity with fresh attributes and the flag is what carries across.
 
-### You get the relic, and the means to rebuild it
+### The Edge is open; the Fang is not
 
-- **change** **Finishing a map now hands over the finished weapon**, not just
-  the materials — **every** player who was standing there at the end, not one
-  of them. The Temple pays the **Obsidian Edge**; the maze pays the **Griever
-  Fang** and the Venom book.
-- **change** **And a spare set of materials with it**, so losing the weapon
-  later is a setback rather than a dead end: seven more Altar Obsidian from
-  the Temple, another Way Out shard from the maze. Craft a replacement
-  whenever you need one — the Fang still wants two Griever barbs, which means
-  going back in for them.
-- The Bridge needs none of this: its reward is ten permanent hearts, and
-  there is nothing to drop.
+- **change** **The Obsidian Edge is crafted from ordinary obsidian again** —
+  seven around two sticks, for anybody who wants to mine for it. Beating the
+  Temple simply hands you one, which is the reward: having it now, and
+  without the digging. (Altar Obsidian is gone; it had no job left.)
+- **change** **Finishing a map hands over the finished weapon** to *every*
+  player standing there at the end — the Temple the Edge, the maze the
+  Griever Fang and the Venom book, plus a spare Way Out shard so a lost Fang
+  can be rebuilt.
+- The Fang stays exclusive, because its haft is a shard of the portal and
+  only escapees carry those out. The Bridge needs none of it: ten permanent
+  hearts, nothing to drop.
 
 ### Only the people who finished can make them
 

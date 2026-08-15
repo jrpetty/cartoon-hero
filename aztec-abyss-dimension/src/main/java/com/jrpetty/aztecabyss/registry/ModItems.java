@@ -6,13 +6,15 @@ import net.neoforged.neoforge.registries.DeferredRegister;
 
 /**
  * The mod's own items: the Marker block's item form, and the two relic
- * weapons - the Temple's Obsidian Edge and the maze's Griever Fang - with the
- * proof materials each is built from. (The Bridge's reward is not an item at all -
- * see {@link com.jrpetty.aztecabyss.item.HeartCore}.)
+ * weapons - the Temple's Obsidian Edge and the maze's Griever Fang. (The
+ * Bridge's reward is not an item at all - see
+ * {@link com.jrpetty.aztecabyss.item.HeartCore}.)
  *
- * <p>Every relic is crafted, and every recipe needs a material that only
- * comes out of a finished run. That is the gate: not the recipe book, which
- * is a hint rather than a lock, but the stuff itself.
+ * <p>The two are gated differently on purpose. The Edge is open: seven
+ * obsidian and two sticks, for anybody who wants to mine for it. Beating the
+ * Temple simply hands you one, which is the reward - having it now, and
+ * without the digging. The Fang is not open, because its haft is a shard of
+ * the portal, and only people who escaped the maze carry those out.
  *
  * <p>The portal frame is still vanilla blocks and the portal surface still has
  * no item form; nothing here is scenery.
@@ -32,19 +34,6 @@ public final class ModItems {
      */
     public static final net.neoforged.neoforge.registries.DeferredItem<net.minecraft.world.item.BlockItem> MARKER =
             ITEMS.registerSimpleBlockItem("marker", ModBlocks.MARKER);
-
-    /**
-     * Obsidian off the altar itself, and the only stone the Edge can be built
-     * from.
-     *
-     * <p>This is what makes the weapon exclusive without taking the crafting
-     * away: the recipe is the same nine squares it always was, but ordinary
-     * obsidian will not do. Seven of these come out of the Temple with anyone
-     * who clears its last round, which is exactly one blade's worth.
-     */
-    public static final net.neoforged.neoforge.registries.DeferredItem<net.minecraft.world.item.Item> ALTAR_OBSIDIAN =
-            ITEMS.register("altar_obsidian", id -> new net.minecraft.world.item.Item(
-                    new net.minecraft.world.item.Item.Properties().fireResistant()));
 
     /**
      * A shard of the portal you came out through.
@@ -92,9 +81,8 @@ public final class ModItems {
     /**
      * A Griever's barb, left behind when one is put down.
      *
-     * <p>The Fang cannot be built from these - it cannot be built at all, it
-     * is handed to people who got out - but it is what the Fang is mended
-     * with, so keeping one in the field costs you Grievers.
+     * <p>Two of them and a Way Out shard make a Fang, and they are what a
+     * Fang is mended with - so both building and keeping one costs Grievers.
      */
     public static final net.neoforged.neoforge.registries.DeferredItem<net.minecraft.world.item.Item> GRIEVER_STINGER =
             ITEMS.register("griever_stinger", id -> new net.minecraft.world.item.Item(
