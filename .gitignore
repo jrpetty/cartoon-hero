@@ -1,3 +1,6 @@
 __pycache__/
 data.db
 
+
+# javac argfiles from local syntax checks
+javac.*.args

@@ -108,6 +108,7 @@ public final class RoundManager {
         }
         HEART_BARS.clear();
         LAST_HUD_STAMP.clear();
+        LAST_BAR_TITLE.clear();
         OutpostPowerUps.reset();
         Draughts.clearAll();
         game = new AbyssGame();
@@ -208,8 +209,17 @@ public final class RoundManager {
 
         tickDownedAndRevive(level, present);
 
-        // Everyone still in the run is downed -> total wipe.
-        boolean anyUp = present.stream().anyMatch(p -> !p.getData(ModAttachments.RUN_STATE).isDowned());
+        // Everyone still in the run is downed -> total wipe. A plain loop rather
+        // than a stream: this is every tick of every run, and a stream here is a
+        // pipeline object and a lambda capture twenty times a second to answer a
+        // question that usually resolves on the first player.
+        boolean anyUp = false;
+        for (ServerPlayer p : present) {
+            if (!p.getData(ModAttachments.RUN_STATE).isDowned()) {
+                anyUp = true;
+                break;
+            }
+        }
         if (!anyUp) {
             endGame(level, false);
             return;
@@ -1938,6 +1948,9 @@ public final class RoundManager {
     /** Last HUD payload fingerprint per player, so unchanged frames aren't resent. */
     private static final Map<UUID, Long> LAST_HUD_STAMP = new HashMap<>();
 
+    /** Last boss-bar title per player, for the same reason. */
+    private static final Map<UUID, String> LAST_BAR_TITLE = new HashMap<>();
+
     /** A player pinged a spot: flash a marker there and call it out to the squad. */
     public static void onPing(ServerPlayer player, BlockPos target) {
         if (!game.isParticipant(player.getUUID()) || !(player.level() instanceof ServerLevel level)) {
@@ -2540,12 +2553,22 @@ public final class RoundManager {
                 if (p == null) {
                     continue;
                 }
-                e.getValue().setName(Component.literal(
-                        "§6✦ §fRound " + game.getRound()
-                                + " §8| §e" + OutpostEconomy.points(e.getKey()) + " pts"
-                                + (game.isFogRound() ? " §8| §7≈ fog" : "")
-                                + OutpostPowerUps.hudFragment(level)
-                                + Draughts.hudFragment(e.getKey())));
+                // Built once per change, not once per tick. This runs every tick
+                // of every round, and the title only moves when a player's points
+                // do - so the old code was concatenating six fragments, calling
+                // into the power-up and draught tables, and allocating a
+                // Component twenty times a second per player to produce the same
+                // string it produced last tick. The text is the cheap thing to
+                // compare, so compare that and skip the rest.
+                String title = "§6✦ §fRound " + game.getRound()
+                        + " §8| §e" + OutpostEconomy.points(e.getKey()) + " pts"
+                        + (game.isFogRound() ? " §8| §7≈ fog" : "")
+                        + OutpostPowerUps.hudFragment(level)
+                        + Draughts.hudFragment(e.getKey());
+                if (!title.equals(LAST_BAR_TITLE.get(e.getKey()))) {
+                    LAST_BAR_TITLE.put(e.getKey(), title);
+                    e.getValue().setName(Component.literal(title));
+                }
             }
         }
         float progress;

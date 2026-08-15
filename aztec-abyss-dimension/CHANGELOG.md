@@ -13,6 +13,78 @@ behaviour that was already there · **docs**
 
 ## Unreleased
 
+### An efficiency pass, starting where the work actually is
+
+- **change** **Bulk block writing goes through a cursor now, not
+  `level.setBlock` per block.** New `worldgen/Bulk.java`. Stamping the maze is
+  4.3 million writes — 468 blocks a cell across 9,216 cells — and every one of
+  them went through `ServerLevel.setBlock(pos, state, 2)`. That is the right
+  call for placing one block and the wrong one for placing four million, in
+  three ways:
+
+  - a fresh `BlockPos` per write, all of it garbage a moment later;
+  - a chunk resolved from the position per write, even when the last six hundred
+    writes were in the same chunk;
+  - **and the expensive one: a neighbour-shape cascade per write.**
+    `Level.markAndNotifyBlock` runs `updateNeighbourShapes` unless flag 16 is
+    set, and flag 16 was not set anywhere in this mod. Every write read its six
+    neighbours and asked each whether it wanted to change shape — roughly fifty
+    million extra operations across a build, spent reconciling stone bricks
+    against stone bricks.
+
+  A `Bulk.Writer` holds one mutable position and one resolved chunk, so a run
+  down a wall column costs one chunk lookup and no allocation. When nobody is in
+  the level — which is every tick of the initial build, since the maze refuses
+  entry while it is stamping — writes go straight into the chunk: no client
+  packet, no point-of-interest check, no shape cascade. When somebody *is* in
+  the level, as during the nightly reshape, writes go through `setBlock` with
+  `2 | 16`: clients are told, because somebody can see it, but the cascade is
+  still skipped.
+
+  This is safe for what it writes and only for what it writes — floors, walls,
+  bedrock, barriers, air, none of which have connection state. Every wall block,
+  fence, pane and pane-like thing in the mod is a one-off decoration placed
+  outside these loops and still goes through the ordinary path.
+
+- **change** The nightly reshape gets the same treatment, which also stops it
+  knocking the ivy off the wall next to a door it opens and dropping it as an
+  item. The maze no longer litters itself with vines every midnight, and no
+  longer pays for the drop.
+
+- **fix** **Griever Venom was cancelling itself within a tick of being applied.**
+  The venom ticks from the one hook that runs in every dimension, and its bite
+  ledger asked `ServerLevel.getEntity(uuid)` for the bitten mob — which is
+  level-scoped. A mob burning in the maze is not in the overworld, so the
+  overworld's pass looked for it, did not find it, and dropped the bite. With
+  five levels ticking, a bite was thrown away almost as soon as it was dealt and
+  seven damage a second for five seconds was landing as roughly one hit. Bites
+  now expire on their own clock and nothing else; a pass that cannot see the mob
+  simply is not the pass that owns it.
+
+- **change** Smaller per-tick work, all of it on paths that run twenty times a
+  second for the length of a run:
+  - the arena's boss bar rebuilt its title every tick — six string fragments, a
+    lookup into the power-up and draught tables, and a `Component` — to produce
+    the same text as the tick before. It is built once per change now, like the
+    HUD next to it already was.
+  - the total-wipe check allocated a stream pipeline and a lambda capture every
+    tick to answer a question that usually resolves on the first player.
+  - `MazeData.load()` took a monitor every tick of every maze game for a flag
+    that has been true since the first tick of the first game. It reads a
+    volatile and branches now, and only locks on the one call that does work.
+  - the reshape drama and the Griever sweep each seeded a fresh `RandomSource`
+    per pass to draw one float out of it; both use the level's own.
+
+  Nothing here is dramatic on its own. They are on the hottest paths in the mod,
+  which is the only reason they are worth naming.
+
+**Not done, and deliberately:** the arena, temple, bridge, outpost and Glade
+builders still write through `level.setBlock`. They are one-shot builds of a few
+hundred thousand blocks against the maze's four million, and their loops are
+threaded through walls, fences, stairs and trapdoors whose shapes genuinely do
+depend on their neighbours — so converting them is a much larger diff for a much
+smaller win, and would need doing block by block rather than loop by loop.
+
 ### The Obsidian Edge is drawn properly
 
 - **change** **The Edge's item texture is redrawn as an actual macuahuitl.** The

@@ -437,7 +437,10 @@ public final class MazeRuntime {
         }
         int elapsed = RESHAPE_DRAMA_TICKS - reshapeDrama;
         reshapeDrama--;
-        RandomSource rng = RandomSource.create();
+        // The level's own RNG rather than a new one. This runs every tick for the
+        // length of the drama and only ever wants a jittered pitch; seeding a
+        // fresh generator each tick to draw one float from it is pure waste.
+        RandomSource rng = level.random;
         for (ServerPlayer p : level.players()) {
             BlockPos at = p.blockPosition();
             boolean inside = !MazeData.inGlade(at.getX() / MazeData.CELL, at.getZ() / MazeData.CELL);
@@ -1313,7 +1316,7 @@ public final class MazeRuntime {
         }
         // Before anything else: the clearing is not theirs, ever.
         Griever.keepOut(level, loaded);
-        RandomSource rng = RandomSource.create();
+        RandomSource rng = level.random;
         List<ServerPlayer> runners = new ArrayList<>();
         for (ServerPlayer p : level.players()) {
             int cellX = p.blockPosition().getX() / MazeData.CELL;

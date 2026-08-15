@@ -1,5 +1,6 @@
 package com.jrpetty.aztecabyss.maze;
 
+import com.jrpetty.aztecabyss.worldgen.Bulk;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.server.level.ServerLevel;
@@ -226,9 +227,13 @@ public final class MazeBuilder {
         int cells = MazeData.GRID * MazeData.GRID;
         if (cursor < cells) {
             int end = Math.min(cursor + CELLS_PER_TICK, cells);
-            RandomSource rng = RandomSource.create();
+            // One cursor for the whole tick's worth of cells rather than a fresh
+            // RandomSource per tick and a fresh BlockPos per block. The writer is
+            // what makes the stamp affordable - see Bulk - and it caches a chunk,
+            // so the more cells share one the fewer chunk lookups the tick does.
+            Bulk.Writer w = Bulk.writer(level);
             for (int i = cursor; i < end; i++) {
-                stampCell(level, i % MazeData.GRID, i / MazeData.GRID, rng);
+                stampCell(w, i % MazeData.GRID, i / MazeData.GRID);
             }
             cursor = end;
             return;
@@ -258,7 +263,7 @@ public final class MazeBuilder {
      * needs to know whether its neighbour has been stamped yet. That is what
      * makes the build safe to interrupt and resume across ticks.
      */
-    private static void stampCell(ServerLevel level, int cx, int cz, RandomSource rng) {
+    private static void stampCell(Bulk.Writer w, int cx, int cz) {
         int ox = cx * MazeData.CELL;
         int oz = cz * MazeData.CELL;
         boolean glade = MazeData.inGlade(cx, cz);
@@ -272,28 +277,29 @@ public final class MazeBuilder {
             for (int lz = 0; lz < MazeData.CELL; lz++) {
                 int x = ox + lx;
                 int z = oz + lz;
-                level.setBlock(new BlockPos(x, MazeData.FLOOR_Y - 7, z), BEDROCK, 2);
-                level.setBlock(new BlockPos(x, MazeData.FLOOR_Y, z),
-                        glade ? GLADE_GROUND : FLOOR, 2);
+                w.set(x, MazeData.FLOOR_Y - 7, z, BEDROCK);
+                w.set(x, MazeData.FLOOR_Y, z, glade ? GLADE_GROUND : FLOOR);
                 // The lid. Written here rather than in its own pass because this
                 // loop already visits every column in the map, so it costs one
                 // more block per column and inherits the staging for nothing.
                 if (!glade) {
-                    level.setBlock(new BlockPos(x, SKY_LID_Y, z), BARRIER, 2);
+                    w.set(x, SKY_LID_Y, z, BARRIER);
                 }
 
                 if (glade || isCorridor(lx, lz, openW, openE, openN, openS)) {
                     continue;
                 }
+                // The eighteen courses of one wall column, in order, so the
+                // cursor stays inside one chunk for the whole run.
                 for (int y = MazeData.WALL_BASE_Y; y <= MazeData.WALL_TOP_Y; y++) {
-                    level.setBlock(new BlockPos(x, y, z), wallBlock(x, y, z), 2);
+                    w.set(x, y, z, wallBlock(x, y, z));
                 }
             }
         }
         if (!glade) {
-            corridorFloor(level, cx, cz, openW, openE, openN, openS);
-            ivy(level, cx, cz, openW, openE, openN, openS);
-            landmark(level, cx, cz, openW, openE, openN, openS);
+            corridorFloor(w, cx, cz, openW, openE, openN, openS);
+            ivy(w, cx, cz, openW, openE, openN, openS);
+            landmark(w, cx, cz, openW, openE, openN, openS);
         }
     }
 
@@ -352,7 +358,7 @@ public final class MazeBuilder {
     }
 
     /** Corridor underfoot: worn flags, grit, and moss creeping out of the joints. */
-    private static void corridorFloor(ServerLevel level, int cx, int cz,
+    private static void corridorFloor(Bulk.Writer w, int cx, int cz,
                                       boolean openW, boolean openE, boolean openN, boolean openS) {
         for (int lx = 0; lx < MazeData.CELL; lx++) {
             for (int lz = 0; lz < MazeData.CELL; lz++) {
@@ -367,10 +373,9 @@ public final class MazeBuilder {
                         : h < 32 ? Blocks.COBBLESTONE.defaultBlockState()
                         : h < 45 ? Blocks.MOSSY_STONE_BRICKS.defaultBlockState()
                         : Blocks.STONE_BRICKS.defaultBlockState();
-                level.setBlock(new BlockPos(x, MazeData.FLOOR_Y, z), floor, 2);
+                w.set(x, MazeData.FLOOR_Y, z, floor);
                 if (h < 5) {
-                    level.setBlock(new BlockPos(x, MazeData.FLOOR_Y + 1, z),
-                            Blocks.MOSS_CARPET.defaultBlockState(), 2);
+                    w.set(x, MazeData.FLOOR_Y + 1, z, Blocks.MOSS_CARPET.defaultBlockState());
                 }
             }
         }
@@ -381,17 +386,17 @@ public final class MazeBuilder {
      * reading as a stone box. Hung from the wall face into the corridor air, so
      * it only ever appears where somebody can actually see it.
      */
-    private static void ivy(ServerLevel level, int cx, int cz,
+    private static void ivy(Bulk.Writer w, int cx, int cz,
                             boolean openW, boolean openE, boolean openN, boolean openS) {
         for (int across = MazeData.CORRIDOR_MIN; across <= MazeData.CORRIDOR_MAX; across++) {
-            hangIvy(level, cx, cz, across, !openN, Direction.NORTH);
-            hangIvy(level, cx, cz, across, !openS, Direction.SOUTH);
-            hangIvy(level, cx, cz, across, !openW, Direction.WEST);
-            hangIvy(level, cx, cz, across, !openE, Direction.EAST);
+            hangIvy(w, cx, cz, across, !openN, Direction.NORTH);
+            hangIvy(w, cx, cz, across, !openS, Direction.SOUTH);
+            hangIvy(w, cx, cz, across, !openW, Direction.WEST);
+            hangIvy(w, cx, cz, across, !openE, Direction.EAST);
         }
     }
 
-    private static void hangIvy(ServerLevel level, int cx, int cz, int across,
+    private static void hangIvy(Bulk.Writer w, int cx, int cz, int across,
                                 boolean hasWall, Direction wallSide) {
         if (!hasWall) {
             return;
@@ -412,9 +417,12 @@ public final class MazeBuilder {
                 .setValue(sideProperty(wallSide), true);
         int len = 2 + h % 5;
         for (int i = 0; i < len; i++) {
-            BlockPos at = new BlockPos(x, MazeData.WALL_TOP_Y - 1 - i, z);
-            if (level.getBlockState(at).isAir()) {
-                level.setBlock(at, vine, 2);
+            int y = MazeData.WALL_TOP_Y - 1 - i;
+            // The vine's face is set explicitly above, so it has nothing to
+            // learn from a shape update and goes through the bulk cursor like
+            // everything else in this loop.
+            if (w.state(x, y, z).isAir()) {
+                w.set(x, y, z, vine);
             }
         }
     }
@@ -443,7 +451,7 @@ public final class MazeBuilder {
      * the same corridor is marked the same way on every server and a route
      * described by one player is followable by another.
      */
-    private static void landmark(ServerLevel level, int cx, int cz,
+    private static void landmark(Bulk.Writer w, int cx, int cz,
                                  boolean openW, boolean openE, boolean openN, boolean openS) {
         int hash = Math.abs((cx * 73856093) ^ (cz * 19349663));
         if (hash % 5 != 0) {
@@ -451,40 +459,39 @@ public final class MazeBuilder {
         }
         BlockState colour = SECTION_COLOURS[sectionOf(cx, cz)];
         int y = MazeData.WALL_BASE_Y + 2;
+        int ox = cx * MazeData.CELL;
+        int oz = cz * MazeData.CELL;
 
         // A band set into whichever wall the corridor actually runs past, so it
         // is always facing someone walking through.
         for (int across = MazeData.CORRIDOR_MIN; across <= MazeData.CORRIDOR_MAX; across++) {
             if (!openN) {
-                level.setBlock(new BlockPos(cx * MazeData.CELL + across, y,
-                        cz * MazeData.CELL + MazeData.CORRIDOR_MIN - 1), colour, 2);
+                w.set(ox + across, y, oz + MazeData.CORRIDOR_MIN - 1, colour);
             }
             if (!openS) {
-                level.setBlock(new BlockPos(cx * MazeData.CELL + across, y,
-                        cz * MazeData.CELL + MazeData.CORRIDOR_MAX + 1), colour, 2);
+                w.set(ox + across, y, oz + MazeData.CORRIDOR_MAX + 1, colour);
             }
             if (!openW) {
-                level.setBlock(new BlockPos(cx * MazeData.CELL + MazeData.CORRIDOR_MIN - 1, y,
-                        cz * MazeData.CELL + across), colour, 2);
+                w.set(ox + MazeData.CORRIDOR_MIN - 1, y, oz + across, colour);
             }
             if (!openE) {
-                level.setBlock(new BlockPos(cx * MazeData.CELL + MazeData.CORRIDOR_MAX + 1, y,
-                        cz * MazeData.CELL + across), colour, 2);
+                w.set(ox + MazeData.CORRIDOR_MAX + 1, y, oz + across, colour);
             }
         }
 
         // One in five of those gets something with a silhouette, so a junction is
         // recognisable from down the corridor and not just up close.
         if (hash % 25 == 0) {
-            BlockPos centre = new BlockPos(cx * MazeData.CELL + MazeData.CORRIDOR_MIN,
-                    MazeData.FLOOR_Y + 1, cz * MazeData.CELL + MazeData.CORRIDOR_MIN);
+            int lx = ox + MazeData.CORRIDOR_MIN;
+            int ly = MazeData.FLOOR_Y + 1;
+            int lz = oz + MazeData.CORRIDOR_MIN;
             int kind = (hash / 25) % 4;
             switch (kind) {
-                case 0 -> level.setBlock(centre, Blocks.CHAIN.defaultBlockState(), 2);
-                case 1 -> level.setBlock(centre.above(2), Blocks.LANTERN.defaultBlockState()
-                        .setValue(net.minecraft.world.level.block.state.properties.BlockStateProperties.HANGING, true), 2);
-                case 2 -> level.setBlock(centre, Blocks.VINE.defaultBlockState(), 2);
-                default -> level.setBlock(centre, Blocks.COBWEB.defaultBlockState(), 2);
+                case 0 -> w.set(lx, ly, lz, Blocks.CHAIN.defaultBlockState());
+                case 1 -> w.set(lx, ly + 2, lz, Blocks.LANTERN.defaultBlockState()
+                        .setValue(net.minecraft.world.level.block.state.properties.BlockStateProperties.HANGING, true));
+                case 2 -> w.set(lx, ly, lz, Blocks.VINE.defaultBlockState());
+                default -> w.set(lx, ly, lz, Blocks.COBWEB.defaultBlockState());
             }
         }
     }
@@ -569,8 +576,9 @@ public final class MazeBuilder {
         if (cells == null) {
             return;
         }
-        writeHalf(level, cells[0], cells[1], cells[2], cells[3], open, rng);
-        writeHalf(level, cells[2], cells[3], cells[0], cells[1], open, rng);
+        Bulk.Writer w = Bulk.writer(level);
+        writeHalf(w, cells[0], cells[1], cells[2], cells[3], open, rng);
+        writeHalf(w, cells[2], cells[3], cells[0], cells[1], open, rng);
     }
 
     /** Carves (or refills) the half of a shared edge that belongs to one cell. */
@@ -705,6 +713,7 @@ public final class MazeBuilder {
      */
     public static void sealGladeRing(ServerLevel level) {
         RandomSource rng = RandomSource.create(0x5EA1);
+        Bulk.Writer w = Bulk.writer(level);
         int lo = MazeData.GLADE_MIN_CELL - 1;
         int hi = MazeData.GLADE_MAX_CELL + 1;
         for (int cx = lo; cx <= hi; cx++) {
@@ -715,12 +724,12 @@ public final class MazeBuilder {
                 // East and south only; the neighbour's own pass covers the others,
                 // and doing all four would write every edge twice.
                 if (onRing(cx + 1, cz, lo, hi)) {
-                    writeHalf(level, cx, cz, cx + 1, cz, false, rng);
-                    writeHalf(level, cx + 1, cz, cx, cz, false, rng);
+                    writeHalf(w, cx, cz, cx + 1, cz, false, rng);
+                    writeHalf(w, cx + 1, cz, cx, cz, false, rng);
                 }
                 if (onRing(cx, cz + 1, lo, hi)) {
-                    writeHalf(level, cx, cz, cx, cz + 1, false, rng);
-                    writeHalf(level, cx, cz + 1, cx, cz, false, rng);
+                    writeHalf(w, cx, cz, cx, cz + 1, false, rng);
+                    writeHalf(w, cx, cz + 1, cx, cz, false, rng);
                 }
             }
         }
@@ -848,8 +857,9 @@ public final class MazeBuilder {
 
     /** Opens the wall between two neighbouring cells, both halves. */
     public static void openEdge(ServerLevel level, int cx, int cz, int nx, int nz, RandomSource rng) {
-        writeHalf(level, cx, cz, nx, nz, true, rng);
-        writeHalf(level, nx, nz, cx, cz, true, rng);
+        Bulk.Writer w = Bulk.writer(level);
+        writeHalf(w, cx, cz, nx, nz, true, rng);
+        writeHalf(w, nx, nz, cx, cz, true, rng);
         rememberCarved(cx, cz, nx, nz);
     }
 
@@ -983,10 +993,11 @@ public final class MazeBuilder {
         }
     }
 
-    private static void writeHalf(ServerLevel level, int cx, int cz, int nx, int nz,
+    private static void writeHalf(Bulk.Writer w, int cx, int cz, int nx, int nz,
                                   boolean open, RandomSource rng) {
         int dx = Integer.signum(nx - cx);
         int dz = Integer.signum(nz - cz);
+        BlockState air = Blocks.AIR.defaultBlockState();
         for (int step = 0; step < MazeData.CORRIDOR_MIN; step++) {
             for (int across = MazeData.CORRIDOR_MIN; across <= MazeData.CORRIDOR_MAX; across++) {
                 int lx = dx == 0 ? across : (dx > 0 ? MazeData.CELL - 1 - step : step);
@@ -994,8 +1005,7 @@ public final class MazeBuilder {
                 int x = cx * MazeData.CELL + lx;
                 int z = cz * MazeData.CELL + lz;
                 for (int y = MazeData.WALL_BASE_Y; y <= MazeData.WALL_TOP_Y; y++) {
-                    level.setBlock(new BlockPos(x, y, z),
-                            open ? Blocks.AIR.defaultBlockState() : wallStone(rng), 2);
+                    w.set(x, y, z, open ? air : wallStone(rng));
                 }
             }
         }

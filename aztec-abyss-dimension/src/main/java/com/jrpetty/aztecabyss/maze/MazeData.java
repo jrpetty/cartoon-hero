@@ -90,7 +90,7 @@ public final class MazeData {
     private static Map<String, TogglePoint> togglePoints = Map.of();
     private static Map<String, Exit> exits = Map.of();
     private static List<Layout> layouts = List.of();
-    private static boolean loaded = false;
+    private static volatile boolean loaded = false;
 
     private MazeData() {
     }
@@ -100,11 +100,21 @@ public final class MazeData {
      * the maze's shape is code, not content, and loading it here means it cannot
      * arrive half-built or be reloaded out from under a run in progress.
      */
-    public static synchronized void load() {
+    public static void load() {
+        // Read the flag before taking the monitor. This is called every tick the
+        // maze is running, and after the first tick of the first game the answer
+        // is always yes - so the common case should be a volatile read and a
+        // branch, not a lock acquisition twenty times a second forever.
         if (loaded) {
             return;
         }
-        loaded = true;
+        loadOnce();
+    }
+
+    private static synchronized void loadOnce() {
+        if (loaded) {
+            return;
+        }
         try (InputStream in = MazeData.class.getResourceAsStream(
                 "/data/aztecabyss/maze/maze_config_v2.json")) {
             if (in == null) {
@@ -152,6 +162,10 @@ public final class MazeData {
         } catch (Exception e) {
             throw new IllegalStateException("Could not read the maze dataset", e);
         }
+        // Published last, after every field above is populated. A reader that
+        // sees this flag set is guaranteed to see the data too, which is the
+        // whole reason the field is volatile.
+        loaded = true;
     }
 
     // ------------------------------------------------------------------

@@ -206,15 +206,21 @@ public final class MazeVenom {
         Iterator<Map.Entry<UUID, Bite>> it = BITTEN.entrySet().iterator();
         while (it.hasNext()) {
             Map.Entry<UUID, Bite> e = it.next();
-            Entity entity = level.getEntity(e.getKey());
-            if (!(entity instanceof Mob mob) || !mob.isAlive()) {
-                it.remove();
-                continue;
-            }
             Bite bite = e.getValue();
+            // Time first, and time only. This runs once per level, and
+            // ServerLevel.getEntity is level-scoped: a mob burning in the maze is
+            // simply not in the overworld, so the overworld's pass used to look
+            // for it, not find it, and drop the bite. With five dimensions
+            // ticking, a bite was cancelled within the same tick it was dealt and
+            // the venom did roughly one hit's worth of damage instead of five
+            // seconds of it. Bites now expire on their clock and nothing else.
             if (now >= bite.until()) {
                 it.remove();
                 continue;
+            }
+            Entity entity = level.getEntity(e.getKey());
+            if (!(entity instanceof Mob mob) || !mob.isAlive()) {
+                continue; // not in this level, or already dead - not this pass's business
             }
             if (now < bite.blindUntil()) {
                 // Kept clear every pass rather than once: the arena's retarget
