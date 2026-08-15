@@ -666,12 +666,12 @@ public final class MazeRuntime {
             int kills = MazeEvents.grieverKills(out.getUUID());
             MazeHall hall = MazeHall.get(level);
             hall.add(out.getGameProfile().getName(), days, pct, kills, seconds, c.session() + 1);
-            // What you carry out, and the only way either of these exists.
-            // Neither can be crafted: the maze's weapons belong to people who
-            // got out of the maze, which is the entire point of them.
-            // The Fang itself, plus the shard to bind another one to if this
-            // one is ever lost - and the venom, for whatever else you fight
-            // with. Everyone who comes through the portal gets all three.
+            // What you carry out, and the only way any of it exists. None of it
+            // can be crafted: the maze's weapons belong to people who got out
+            // of the maze, which is the entire point of them. The Fang, the
+            // venom for whatever else you fight with, and the shard itself -
+            // which is now purely a keepsake, since nothing is bound to it any
+            // more. Everyone who comes through the portal gets all three.
             out.getInventory().placeItemBackInInventory(
                     new net.minecraft.world.item.ItemStack(
                             com.jrpetty.aztecabyss.registry.ModItems.GRIEVER_FANG.get()));
@@ -681,7 +681,9 @@ public final class MazeRuntime {
             out.getInventory().placeItemBackInInventory(MazeVenom.book(level));
             out.displayClientMessage(net.minecraft.network.chat.Component.literal(
                     "§2✦ You came out carrying something. §7The Griever Fang, the venom"
-                            + " for anything else, and a spare shard of the way out."), false);
+                            + " for anything else, and a shard of the way out."), false);
+            out.displayClientMessage(net.minecraft.network.chat.Component.literal(
+                    "§8None of it can be made. Getting out is the only way it exists."), false);
             net.neoforged.neoforge.network.PacketDistributor.sendToPlayer(out,
                     new com.jrpetty.aztecabyss.network.MazeVictoryPayload(
                             out.getGameProfile().getName() + "|" + days + "|" + pct + "|"

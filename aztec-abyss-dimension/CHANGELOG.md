@@ -13,6 +13,53 @@ behaviour that was already there · **docs**
 
 ## Unreleased
 
+### The relics cannot be made. They can only be won.
+
+- **change** **Both recipes are deleted.** `obsidian_edge.json` and
+  `griever_fang.json` are gone from the datapack. There is no arrangement of
+  materials that produces either weapon any more — the crafting table has never
+  heard of them.
+
+  The only way either exists in the world is being handed to a player who
+  finished the mode it belongs to: the Edge on clearing the Temple's final
+  round, the Fang on walking out of the maze's exit portal. Both grants were
+  already gated on actually finishing — `victory && map == TEMPLE` for one,
+  the escape block itself for the other — so removing the recipes leaves
+  exactly one door in, and it is the right one.
+
+  **The consequence, stated plainly:** lose one and it is gone. There is no
+  replacement path. This reverses the earlier decision to keep a recipe as a
+  safety net for players who died holding it.
+
+- **fix** **Knockback, Looting and Sweeping Edge did not work on either
+  weapon.** All three target `#minecraft:enchantable/sword`, and that tag file
+  did not exist in the mod — only `sharp_weapon`, `weapon`, `fire_aspect`,
+  `durability` and `vanishing` did. So Sharpness worked and Looting silently
+  did not, which is the worst kind of gap because nothing tells you.
+
+  With `enchantable/sword.json` added, both weapons now take the complete
+  vanilla sword set and nothing else:
+
+  | Enchantment | Tag it needs | Status |
+  |---|---|---|
+  | Sharpness, Smite, Bane of Arthropods | `enchantable/sharp_weapon` | already worked |
+  | Fire Aspect | `enchantable/fire_aspect` | already worked |
+  | Unbreaking, **Mending** | `enchantable/durability` | already worked |
+  | Curse of Vanishing | `enchantable/vanishing` | already worked |
+  | **Knockback, Looting, Sweeping Edge** | `enchantable/sword` | **fixed** |
+
+  Deliberately absent: `enchantable/mining`, `mining_loot`, `bow`, `crossbow`,
+  `trident`, `mace`, `armor`, `equippable`, `fishing`. Nothing meant for a
+  pickaxe, a bow or a breastplate will go on a sword, and these are swords.
+
+- **change** The messages both modes print on victory said the weapons could be
+  rebuilt — "seven obsidian and two sticks builds another", and a "spare shard"
+  to bind a new Fang to. Both were about to become lies, so both are rewritten
+  to say the opposite: there is no other way to get one. The Way Out shard is
+  still handed out, and is now openly what it always looked like — proof you
+  came through, binding nothing. Griever Stingers still mend a Fang on an
+  anvil; they just no longer build one.
+
 ### The Griever Fang reaches 1.5 blocks
 
 - **change** **The Fang's attack range is now 1.5 blocks, down from the player's

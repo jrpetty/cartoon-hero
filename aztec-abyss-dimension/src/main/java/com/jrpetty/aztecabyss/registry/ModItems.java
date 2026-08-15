@@ -10,11 +10,18 @@ import net.neoforged.neoforge.registries.DeferredRegister;
  * Bridge's reward is not an item at all - see
  * {@link com.jrpetty.aztecabyss.item.HeartCore}.)
  *
- * <p>The two are gated differently on purpose. The Edge is open: seven
- * obsidian and two sticks, for anybody who wants to mine for it. Beating the
- * Temple simply hands you one, which is the reward - having it now, and
- * without the digging. The Fang is not open, because its haft is a shard of
- * the portal, and only people who escaped the maze carry those out.
+ * <p>Neither has a recipe, and that is the whole design of them. There is no
+ * crafting grid arrangement, no material, and no workaround: the only way
+ * either weapon comes into the world is being handed to a player who finished
+ * the mode it belongs to - the last round of the Temple, the exit portal of
+ * the maze. Lose one and the only way to hold another is to do it again.
+ *
+ * <p>They enchant exactly as a vanilla sword does, and that is deliberate too.
+ * Both are listed in the {@code minecraft:enchantable/*} tags a sword is
+ * listed in and no others, so Sharpness, Smite, Bane of Arthropods, Knockback,
+ * Fire Aspect, Looting, Sweeping Edge, Unbreaking, Mending and Curse of
+ * Vanishing all apply, while nothing meant for a pickaxe, a bow or a set of
+ * armour does.
  *
  * <p>The portal frame is still vanilla blocks and the portal surface still has
  * no item form; nothing here is scenery.
@@ -39,8 +46,10 @@ public final class ModItems {
      * A shard of the portal you came out through.
      *
      * <p>Granted for escaping the maze and nothing else - not for surviving to
-     * the deadline, not for dying well. The Fang is bound to it, so the
-     * weapon cannot exist in the hands of anybody who did not get out.
+     * the deadline, not for dying well. It used to be the Fang's haft, which
+     * was how the weapon was kept out of the hands of anybody who had not got
+     * out. The Fang has no recipe at all now, so the shard binds nothing and is
+     * what it always looked like: proof you came through.
      */
     public static final net.neoforged.neoforge.registries.DeferredItem<net.minecraft.world.item.Item> WAY_OUT =
             ITEMS.register("way_out", id -> new net.minecraft.world.item.Item(
@@ -81,8 +90,9 @@ public final class ModItems {
     /**
      * A Griever's barb, left behind when one is put down.
      *
-     * <p>Two of them and a Way Out shard make a Fang, and they are what a
-     * Fang is mended with - so both building and keeping one costs Grievers.
+     * <p>They no longer build anything - the Fang has no recipe - but they are
+     * still what a Fang is mended with on an anvil, so keeping one alive costs
+     * Grievers even though getting one costs an escape.
      */
     public static final net.neoforged.neoforge.registries.DeferredItem<net.minecraft.world.item.Item> GRIEVER_STINGER =
             ITEMS.register("griever_stinger", id -> new net.minecraft.world.item.Item(
