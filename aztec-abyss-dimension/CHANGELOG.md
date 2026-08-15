@@ -13,6 +13,31 @@ behaviour that was already there · **docs**
 
 ## Unreleased
 
+### The Obsidian Edge is drawn properly
+
+- **change** **The Edge's item texture is redrawn as an actual macuahuitl.** The
+  old one was a brown stick with dark speckles on it: teeth scattered at
+  sub-pixel spacing that merged into a mass, wood that was the brightest and
+  most saturated thing in the sprite, and a rake that stepped by nought or two
+  columns at random so the silhouette read as noise. It is now a flat hardwood
+  paddle with prismatic obsidian blades set down both long edges, a cord-bound
+  haft and a flared pommel.
+
+  Three things make it read at sixteen pixels. The rake is dead regular — one
+  column of travel every two rows, snapped to whole pixels — so the stepping is
+  uniform and the eye follows a straight weapon. The teeth alternate sides on
+  that same two-row beat, so each edge saws in step with the rake instead of
+  fighting it. And every edge pixel is glass, with the wood pulled darker and
+  less saturated than before, so the silhouette is obsidian and the wood is only
+  what holds it. Checked at magnification against both a dark background and the
+  vanilla inventory slot grey, since the shadowed teeth have to survive both.
+
+- **docs** `tools/obsidian_edge_texture.py` draws the sprite and writes it into
+  the resource tree. The texture is now generated rather than hand-poked, so the
+  reasoning above lives next to the pixels and the next revision starts from the
+  geometry instead of from a PNG. Pass a path as an argument to also get a
+  magnified proof sheet.
+
 ### The Heart of the Bridge — permanent, and death cannot take it
 
 - **feat** **Clearing the Bridge's final round permanently gives you ten more
