@@ -22,6 +22,28 @@ public final class ModAttachments {
                             .build()
             );
 
+    /**
+     * Whether this player has held the Bridge to its last round.
+     *
+     * <p>Kept apart from {@link RunState} rather than added to it: that
+     * record's codec is already at {@code RecordCodecBuilder}'s sixteen-field
+     * ceiling, and a seventeenth would not compile. A separate attachment is
+     * also the honest shape for this - it is not part of a run, it is
+     * something true about the player forever after.
+     *
+     * <p>Serialized, so it survives a restart, and {@code copyOnDeath}, so it
+     * survives dying. The whole point of the Bridge's reward is that nothing
+     * takes it back off you.
+     */
+    public static final DeferredHolder<AttachmentType<?>, AttachmentType<Boolean>> BRIDGE_HEART =
+            ATTACHMENT_TYPES.register(
+                    "bridge_heart",
+                    () -> AttachmentType.builder(() -> Boolean.FALSE)
+                            .serialize(com.mojang.serialization.Codec.BOOL)
+                            .copyOnDeath()
+                            .build()
+            );
+
     private ModAttachments() {
     }
 

@@ -1,47 +1,41 @@
 package com.jrpetty.aztecabyss.item;
 
 import com.jrpetty.aztecabyss.AztecAbyssConstants;
-import com.jrpetty.aztecabyss.registry.ModItems;
-import net.minecraft.core.Holder;
+import com.jrpetty.aztecabyss.registry.ModAttachments;
+import net.minecraft.ChatFormatting;
+import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerPlayer;
-import net.minecraft.world.entity.ai.attributes.Attribute;
+import net.minecraft.sounds.SoundEvents;
+import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.entity.ai.attributes.AttributeInstance;
 import net.minecraft.world.entity.ai.attributes.AttributeModifier;
 import net.minecraft.world.entity.ai.attributes.Attributes;
-import net.minecraft.world.item.ItemStack;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.neoforge.event.tick.PlayerTickEvent;
 
 /**
- * The Heart Core: ten hearts, carried anywhere, at the price of your speed.
+ * The Heart of the Bridge: ten hearts, permanently, for holding the span.
  *
- * <h2>Why it is not held</h2>
+ * <h2>Why it is not an item</h2>
  *
- * <p>It started as an off-hand item, which was a mistake that would have
- * killed it. The arenas hand out Totems of Undying - three of them in the
- * grand prize alone - and a totem beats ten hearts in that slot every single
- * time: hearts delay a death, a totem cancels one. The Core would have gone
- * in a chest the first time anybody won anything, which is a miserable fate
- * for the reward of a whole mode.
+ * <p>It was one, twice, and both versions were wrong. Bound to the off hand
+ * it lost to a Totem of Undying forever - the arenas hand out three totems in
+ * the grand prize alone, and a totem cancels a death where hearts only delay
+ * one. Carried loose in the pack it was better, but it was still a thing that
+ * could be dropped, burned, or left in a chest on the wrong day, and it could
+ * be taken off you by the one event this reward is supposed to outlast:
+ * dying.
  *
- * <p>So it does not want a slot. It works from anywhere in your inventory,
- * and it never competes with a totem again - you carry both, and the totem
- * catches the death that the extra hearts did not prevent.
+ * <p>So it is not a thing you hold. It is a thing that is true about you.
+ * Clear the Bridge's last round and your maximum health is twenty points
+ * higher from then on - through death, through respawn, through a server
+ * restart, in every dimension, forever. There is nothing to lose and nothing
+ * to carry.
  *
- * <h2>What it costs instead</h2>
- *
- * <p>Weight. It is a heart of stone the size of your chest, and carrying it
- * takes fifteen per cent off your movement. That price lands very differently
- * depending on where you are, which is the interesting part: on the Bridge and
- * in the Temple, where the whole job is holding ground, it is nearly free. In
- * the maze, where the job is covering distance before the doors shut, it is a
- * genuine sacrifice - a Runner who carries it will not make the run.
- *
- * <p>So the three relics end up wanting different homes: the Fang for the
- * maze, the Edge for anything armoured, and the Core for the two maps that
- * ask you to stand still and not die.
+ * <p>Granted once. Holding the Bridge a second time is its own reward; it
+ * does not stack into forty hearts.
  */
 @EventBusSubscriber(modid = AztecAbyssConstants.MOD_ID)
 public final class HeartCore {
@@ -50,66 +44,56 @@ public final class HeartCore {
     }
 
     private static final ResourceLocation HEALTH_ID =
-            ResourceLocation.fromNamespaceAndPath(AztecAbyssConstants.MOD_ID, "heart_core_health");
-    private static final ResourceLocation WEIGHT_ID =
-            ResourceLocation.fromNamespaceAndPath(AztecAbyssConstants.MOD_ID, "heart_core_weight");
+            ResourceLocation.fromNamespaceAndPath(AztecAbyssConstants.MOD_ID, "bridge_heart");
 
-    /** Twenty points of health: ten hearts, exactly doubling a player. */
-    private static final double HEARTS = 20.0;
-    /** And fifteen per cent off the top of your speed for the privilege. */
-    private static final double WEIGHT = -0.15;
+    /** Twenty points: ten hearts, exactly doubling a player. */
+    public static final double HEARTS = 20.0;
 
-    @SubscribeEvent
-    public static void onPlayerTick(PlayerTickEvent.Post event) {
-        if (!(event.getEntity() instanceof ServerPlayer player)) {
+    /** Records the Bridge as held, and says so. Idempotent. */
+    public static void grant(ServerPlayer player) {
+        if (Boolean.TRUE.equals(player.getData(ModAttachments.BRIDGE_HEART.get()))) {
+            player.displayClientMessage(Component.literal(
+                    "§c✦ The Heart knows you already. §7Your ten hearts stand."), false);
             return;
         }
-        // Once a second is plenty for something that changes when an item
-        // moves between two slots.
-        if (player.tickCount % 20 != 0) {
-            return;
-        }
-        boolean carried = carrying(player);
-        set(player, Attributes.MAX_HEALTH, HEALTH_ID, HEARTS,
-                AttributeModifier.Operation.ADD_VALUE, carried);
-        set(player, Attributes.MOVEMENT_SPEED, WEIGHT_ID, WEIGHT,
-                AttributeModifier.Operation.ADD_MULTIPLIED_BASE, carried);
-    }
-
-    /** Anywhere at all - main hand, off hand, or the bottom of the pack. */
-    private static boolean carrying(ServerPlayer player) {
-        for (int i = 0; i < player.getInventory().getContainerSize(); i++) {
-            ItemStack stack = player.getInventory().getItem(i);
-            if (!stack.isEmpty() && stack.is(ModItems.HEART_CORE.get())) {
-                return true;
-            }
-        }
-        return false;
+        player.setData(ModAttachments.BRIDGE_HEART.get(), Boolean.TRUE);
+        apply(player);
+        // Topped up as well as extended: finishing the Bridge should not leave
+        // you standing there on half a bar with a bigger bar.
+        player.setHealth(player.getMaxHealth());
+        player.displayClientMessage(Component.literal(
+                "§c§l✦ THE HEART IS YOURS").withStyle(ChatFormatting.BOLD), false);
+        player.displayClientMessage(Component.literal(
+                "§7Ten hearts more, for good. §8Death does not take it back."), false);
+        player.level().playSound(null, player.blockPosition(), SoundEvents.BEACON_ACTIVATE,
+                SoundSource.PLAYERS, 1.0F, 0.7F);
     }
 
     /**
-     * Adds or removes one modifier, and only when it actually has to.
+     * Keeps the modifier in step with the flag.
      *
-     * <p>Re-applying a max-health modifier every second would churn the
-     * player's health bar for no reason, so the state is checked first.
+     * <p>Re-checked on a slow tick rather than only at the moment it is
+     * granted, because the attribute itself does not survive everything the
+     * flag does: a respawned player is a fresh entity with fresh attributes,
+     * and the flag is what carries across. One cheap check a second puts the
+     * hearts back on before anybody notices they were gone.
      */
-    private static void set(ServerPlayer player, Holder<Attribute> attribute,
-                            ResourceLocation id, double amount,
-                            AttributeModifier.Operation op, boolean wanted) {
-        AttributeInstance instance = player.getAttribute(attribute);
-        if (instance == null) {
+    @SubscribeEvent
+    public static void onPlayerTick(PlayerTickEvent.Post event) {
+        if (!(event.getEntity() instanceof ServerPlayer player) || player.tickCount % 20 != 0) {
             return;
         }
-        boolean has = instance.getModifier(id) != null;
-        if (wanted && !has) {
-            instance.addPermanentModifier(new AttributeModifier(id, amount, op));
-        } else if (!wanted && has) {
-            instance.removeModifier(id);
-            // Dropping max health leaves the bar over its own top until
-            // something clamps it; do it here rather than wait for a hit.
-            if (player.getHealth() > player.getMaxHealth()) {
-                player.setHealth(player.getMaxHealth());
-            }
+        if (Boolean.TRUE.equals(player.getData(ModAttachments.BRIDGE_HEART.get()))) {
+            apply(player);
         }
+    }
+
+    private static void apply(ServerPlayer player) {
+        AttributeInstance health = player.getAttribute(Attributes.MAX_HEALTH);
+        if (health == null || health.getModifier(HEALTH_ID) != null) {
+            return;
+        }
+        health.addPermanentModifier(new AttributeModifier(
+                HEALTH_ID, HEARTS, AttributeModifier.Operation.ADD_VALUE));
     }
 }

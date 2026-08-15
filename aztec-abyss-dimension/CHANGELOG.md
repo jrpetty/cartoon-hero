@@ -13,31 +13,25 @@ behaviour that was already there · **docs**
 
 ## Unreleased
 
-### The Heart Core — the Bridge's relic
+### The Heart of the Bridge — permanent, and death cannot take it
 
-- **feat** **The Bridge finally pays out.** Holding the span to its final round
-  hands you **six Heart Shards** — chips of the Heart the whole map exists to
-  keep alive. Laid out in the shape of the thing itself (two lobes, a body, a
-  point) they make the **Heart Core**.
-- **feat** **+10 hearts just for carrying it**, from anywhere in your pack.
-- **fix** **It does not want your off-hand, and that is the point.** Bound to
-  a hand it would have been dead on arrival: the arenas hand out Totems of
-  Undying — three in the grand prize alone — and a totem beats ten hearts in
-  that slot every time, because hearts delay a death and a totem cancels one.
-  The Core would have gone in a chest the first time anyone won anything. It
-  now works from any inventory slot and never competes with a totem again —
-  you carry both, and the totem catches the death the extra hearts did not
-  prevent.
-- **change** **It costs weight instead: −15% movement.** A price that lands
-  differently depending on where you are, which is the interesting part — on
-  the Bridge and in the Temple, where the job is holding ground, it is nearly
-  free; in the maze, where the job is covering distance before the doors
-  shut, a Runner carrying it will not make the run. So the three relics want
-  different homes: the Fang for the maze, the Edge for anything armoured, the
-  Core for the two maps that ask you to stand still and not die.
-- The set is complete: the Temple gives armour-shredding, the maze gives venom
-  and escape, the Bridge gives survivability — one relic each, all three only
-  for finishing the mode that owns them.
+- **feat** **Clearing the Bridge's final round permanently gives you ten more
+  hearts.** Not an item: a fact about the player. It survives dying, respawn,
+  logging out and server restarts, applies in every dimension, and there is
+  nothing to carry, drop, burn or forget in a chest. Granted once — holding
+  the Bridge twice does not make forty hearts — and your health is topped up
+  as it lands, so you do not finish the map on half of a bigger bar.
+- **fix** **This replaces two versions that were both wrong.** As an off-hand
+  item it lost to a Totem of Undying forever (the grand prize alone hands out
+  three totems, and a totem cancels a death where hearts only delay one). As a
+  carried item it was better, but it could still be dropped, burned, or taken
+  off you by the exact event this reward is meant to outlast. So the Heart
+  Core item, the Heart Shards and their recipe are all gone; the reward is the
+  effect itself.
+- Stored on its own persistent, copy-on-death attachment rather than in the
+  run state, whose codec is already at `RecordCodecBuilder`'s sixteen-field
+  ceiling — and re-checked on a slow tick, because a respawned player is a
+  fresh entity with fresh attributes and the flag is what carries across.
 
 ### Only the people who finished can make them
 

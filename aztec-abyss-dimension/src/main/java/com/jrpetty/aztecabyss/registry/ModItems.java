@@ -5,9 +5,10 @@ import net.neoforged.bus.api.IEventBus;
 import net.neoforged.neoforge.registries.DeferredRegister;
 
 /**
- * The mod's own items: the Marker block's item form, and the three relics -
- * the Temple's Obsidian Edge, the maze's Griever Fang and the Bridge's Heart
- * Core - with the proof materials each of them is built from.
+ * The mod's own items: the Marker block's item form, and the two relic
+ * weapons - the Temple's Obsidian Edge and the maze's Griever Fang - with the
+ * proof materials each is built from. (The Bridge's reward is not an item at all -
+ * see {@link com.jrpetty.aztecabyss.item.HeartCore}.)
  *
  * <p>Every relic is crafted, and every recipe needs a material that only
  * comes out of a finished run. That is the gate: not the recipe book, which
@@ -55,33 +56,6 @@ public final class ModItems {
     public static final net.neoforged.neoforge.registries.DeferredItem<net.minecraft.world.item.Item> WAY_OUT =
             ITEMS.register("way_out", id -> new net.minecraft.world.item.Item(
                     new net.minecraft.world.item.Item.Properties()));
-
-    /**
-     * A chip of the Heart the Bridge is defended for. Six of them come out
-     * with anyone who holds the span to its last round - exactly one Core.
-     */
-    public static final net.neoforged.neoforge.registries.DeferredItem<net.minecraft.world.item.Item> HEART_SHARD =
-            ITEMS.register("heart_shard", id -> new net.minecraft.world.item.Item(
-                    new net.minecraft.world.item.Item.Properties()));
-
-    /**
-     * The Heart Core: ten more hearts, wherever you keep it.
-     *
-     * <p>Deliberately not bound to a slot - see
-     * {@link com.jrpetty.aztecabyss.item.HeartCore} for why an off-hand item
-     * would have lost to a Totem of Undying forever. The weight it costs you
-     * is applied there too; this is only the object.
-     */
-    public static final net.neoforged.neoforge.registries.DeferredItem<net.minecraft.world.item.Item> HEART_CORE =
-            ITEMS.register("heart_core", id -> new com.jrpetty.aztecabyss.item.RelicItem(
-                    new net.minecraft.world.item.Item.Properties()
-                            .stacksTo(1)
-                            .fireResistant()
-                            .rarity(net.minecraft.world.item.Rarity.EPIC),
-                    "§c+10 hearts §7just for carrying it",
-                    "§7-15% movement §8— it weighs what a heart weighs.",
-                    "§8Cut from the Heart you kept alive.",
-                    "§8Works from anywhere in your pack."));
 
     /**
      * The macuahuitl's stone: obsidian teeth in a wooden shaft.
