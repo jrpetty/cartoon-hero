@@ -19,10 +19,22 @@ behaviour that was already there · **docs**
   hands you **six Heart Shards** — chips of the Heart the whole map exists to
   keep alive. Laid out in the shape of the thing itself (two lobes, a body, a
   point) they make the **Heart Core**.
-- **feat** **+10 hearts while you hold it.** Doubles your health outright —
-  and it lives in a hand, so it is your shield or the Heart, never both. That
-  price is the whole design: the strongest thing in the mod, paid for in the
-  slot that keeps you alive on every other map.
+- **feat** **+10 hearts just for carrying it**, from anywhere in your pack.
+- **fix** **It does not want your off-hand, and that is the point.** Bound to
+  a hand it would have been dead on arrival: the arenas hand out Totems of
+  Undying — three in the grand prize alone — and a totem beats ten hearts in
+  that slot every time, because hearts delay a death and a totem cancels one.
+  The Core would have gone in a chest the first time anyone won anything. It
+  now works from any inventory slot and never competes with a totem again —
+  you carry both, and the totem catches the death the extra hearts did not
+  prevent.
+- **change** **It costs weight instead: −15% movement.** A price that lands
+  differently depending on where you are, which is the interesting part — on
+  the Bridge and in the Temple, where the job is holding ground, it is nearly
+  free; in the maze, where the job is covering distance before the doors
+  shut, a Runner carrying it will not make the run. So the three relics want
+  different homes: the Fang for the maze, the Edge for anything armoured, the
+  Core for the two maps that ask you to stand still and not die.
 - The set is complete: the Temple gives armour-shredding, the maze gives venom
   and escape, the Bridge gives survivability — one relic each, all three only
   for finishing the mode that owns them.
