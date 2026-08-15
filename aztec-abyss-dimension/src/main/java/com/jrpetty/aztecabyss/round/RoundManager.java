@@ -1573,13 +1573,18 @@ public final class RoundManager {
             // Temple in altar stone, the Bridge in pieces of the Heart the
             // whole map exists to keep alive.
             if (game.getMap() == com.jrpetty.aztecabyss.worldgen.ArenaMap.TEMPLE) {
-                ItemStack[] withStone = java.util.Arrays.copyOf(loot, loot.length + 1);
-                withStone[loot.length] = new ItemStack(
+                // The blade itself, and the stone for another. Everybody who
+                // stood the last round gets both: the weapon now, and the
+                // means to rebuild it the day it burns in a lava pit.
+                ItemStack[] withPrize = java.util.Arrays.copyOf(loot, loot.length + 2);
+                withPrize[loot.length] = new ItemStack(
+                        com.jrpetty.aztecabyss.registry.ModItems.OBSIDIAN_EDGE.get());
+                withPrize[loot.length + 1] = new ItemStack(
                         com.jrpetty.aztecabyss.registry.ModItems.ALTAR_OBSIDIAN.get(), 7);
-                loot = withStone;
+                loot = withPrize;
                 player.displayClientMessage(net.minecraft.network.chat.Component.literal(
-                        "§5✦ Seven pieces of the altar. §7Enough for one Obsidian Edge —"
-                                + " seven around two sticks."), false);
+                        "§5✦ The Obsidian Edge, §7and seven more pieces of the altar —"
+                                + " enough to build it again if you ever lose it."), false);
             } else if (game.getMap() == com.jrpetty.aztecabyss.worldgen.ArenaMap.BRIDGE) {
                 // Not an item. The Bridge's reward is a fact about the player,
                 // so nothing can drop it, burn it, or take it back on death.

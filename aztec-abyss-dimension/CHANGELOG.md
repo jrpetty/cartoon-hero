@@ -33,6 +33,20 @@ behaviour that was already there · **docs**
   ceiling — and re-checked on a slow tick, because a respawned player is a
   fresh entity with fresh attributes and the flag is what carries across.
 
+### You get the relic, and the means to rebuild it
+
+- **change** **Finishing a map now hands over the finished weapon**, not just
+  the materials — **every** player who was standing there at the end, not one
+  of them. The Temple pays the **Obsidian Edge**; the maze pays the **Griever
+  Fang** and the Venom book.
+- **change** **And a spare set of materials with it**, so losing the weapon
+  later is a setback rather than a dead end: seven more Altar Obsidian from
+  the Temple, another Way Out shard from the maze. Craft a replacement
+  whenever you need one — the Fang still wants two Griever barbs, which means
+  going back in for them.
+- The Bridge needs none of this: its reward is ten permanent hearts, and
+  there is nothing to drop.
+
 ### Only the people who finished can make them
 
 Both relics are still crafted — with the same recipe shape — but the

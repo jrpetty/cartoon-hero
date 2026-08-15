@@ -666,13 +666,19 @@ public final class MazeRuntime {
             // What you carry out, and the only way either of these exists.
             // Neither can be crafted: the maze's weapons belong to people who
             // got out of the maze, which is the entire point of them.
+            // The Fang itself, plus the shard to bind another one to if this
+            // one is ever lost - and the venom, for whatever else you fight
+            // with. Everyone who comes through the portal gets all three.
+            out.getInventory().placeItemBackInInventory(
+                    new net.minecraft.world.item.ItemStack(
+                            com.jrpetty.aztecabyss.registry.ModItems.GRIEVER_FANG.get()));
             out.getInventory().placeItemBackInInventory(
                     new net.minecraft.world.item.ItemStack(
                             com.jrpetty.aztecabyss.registry.ModItems.WAY_OUT.get()));
             out.getInventory().placeItemBackInInventory(MazeVenom.book(level));
             out.displayClientMessage(net.minecraft.network.chat.Component.literal(
-                    "§2✦ You came out carrying something. §7A shard of the way out —"
-                            + " bind two Griever barbs to it for the Fang."), false);
+                    "§2✦ You came out carrying something. §7The Griever Fang, the venom"
+                            + " for anything else, and a spare shard of the way out."), false);
             net.neoforged.neoforge.network.PacketDistributor.sendToPlayer(out,
                     new com.jrpetty.aztecabyss.network.MazeVictoryPayload(
                             out.getGameProfile().getName() + "|" + days + "|" + pct + "|"
