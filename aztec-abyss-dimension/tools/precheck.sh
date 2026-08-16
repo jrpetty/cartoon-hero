@@ -51,6 +51,19 @@ REAL=$(printf '%s\n' "$OUT" \
   | grep -vE 'error: method does not override or implement a method from a supertype')
 
 
+# The one kind of "cannot find symbol" that is NOT classpath noise: a type used
+# but never imported. javac words both identically, so the distinction has to
+# come from the source - see tools/missing_imports.py. This has cost three CI
+# cycles, which is why it is worth a second pass over the same output.
+IMPORTS=$(python3 "$(dirname "$0")/missing_imports.py")
+if [ -n "$IMPORTS" ]; then
+  echo "precheck: MISSING IMPORTS"
+  echo "------------------------"
+  printf '%s\n' "$IMPORTS"
+  [ -n "$REAL" ] && { echo; echo "precheck: REAL ERRORS"; printf '%s\n' "$REAL"; }
+  exit 1
+fi
+
 if [ -z "$REAL" ]; then
   echo "precheck: clean (classpath noise only)"
   exit 0

@@ -13,6 +13,35 @@ behaviour that was already there · **docs**
 
 ## Unreleased
 
+### Fix: two missing imports, and a check that can actually find them
+
+- **fix** **`Ruleset.java` used `JsonElement` and `EntityType` without importing
+  either.** Three builds failed on it — E3, F1 and F2 — because the parsers added
+  in Stages E and F introduced both types and neither was in the import block.
+
+- **change** **`tools/missing_imports.py` reads the source, not javac.** The
+  earlier attempt drove this off javac's output and could never have worked, for
+  a reason worth writing down: without gson or Minecraft on the classpath, a file
+  with a missing import fails at its *import block* first — "package
+  com.google.gson does not exist" — and javac never reaches the line where the
+  unimported type is used. The very case the check exists for is invisible in its
+  output. That was tried twice and produced nothing both times.
+
+  Reading the source needs no classpath at all. For each file: collect the
+  CamelCase identifiers used unqualified, subtract everything the file is
+  entitled to see — imports, own declarations, package siblings, `java.lang` —
+  and report what is left.
+
+  Nested types inherited from a supertype (`CustomPacketPayload.Type`,
+  `BlockBehaviour.Properties`) are legal unqualified and unresolvable without the
+  classpath, so they surface as false positives. Nineteen of those are baselined
+  in `precheck-known.txt` and only *new* names are reported — which is sufficient,
+  because the bug this catches is always a type introduced by the edit in hand.
+
+  **Verified by removing each import in turn and confirming it fires**, then
+  confirming the restored tree passes. The previous two versions of this check
+  were shipped untested and did nothing; this one was tested first.
+
 ### Stage F2 — skills, and getting better at a map across runs
 
 - **feat** **Skill trees as data.**
