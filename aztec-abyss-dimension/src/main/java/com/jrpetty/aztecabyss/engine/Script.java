@@ -35,20 +35,40 @@ import java.util.Map;
  * actually different games.
  *
  * <p>The model is borrowed from Hammer's entity I/O rather than from a scripting
- * language, and that is a deliberate limitation. There is no loop, no variable and
- * no arithmetic - a rule is "when this happens, if these things are true, do these
- * things", and nothing else. A map author cannot write an infinite loop into a
- * server, cannot leak memory, and cannot produce a stack trace nobody can read. The
- * ceiling is lower than a real language and the floor is enormously higher.
+ * language, and that is still the shape of it: a rule is "when this happens, if
+ * these things are true, do these things". What it now also has is the three
+ * things whose absence made real maps unwritable rather than merely limited -
+ * branching, reuse, and sums.
  *
  * <pre>
+ * "functions": {
+ *   "pay_out": [ { "award": { "amount": "50 + {var:streak} * 10" } } ]
+ * },
  * "script": [
  *   { "on": "round_start",
  *     "when": { "round": { "every": 10 } },
  *     "do": [ { "title": { "main": "§4THEY SENT SOMETHING" } },
- *             { "spawn": { "id": "minecraft:warden", "at": "boss", "health": 600 } } ] }
+ *             { "spawn": { "id": "minecraft:warden", "at": "boss", "health": 600 } } ] },
+ *
+ *   { "on": "mob_killed",
+ *     "do": [ { "if": { "when": { "var": { "name": "streak", "at_least": 10 } },
+ *                       "do":   [ { "call": "pay_out" }, { "set_var": { "name": "streak", "to": 0 } } ],
+ *                       "else": [ { "add_var": { "name": "streak", "by": 1 } } ] } },
+ *             { "one_of": [ { "weight": 9, "do": [] },
+ *                           { "weight": 1, "do": [ { "give": { "id": "minecraft:golden_apple",
+ *                                                             "target": "@nearest" } } ] } ] } ] }
  * ]
  * </pre>
+ *
+ * <h2>Still not a language</h2>
+ *
+ * <p>The original promise holds: a map downloaded off the internet cannot run a
+ * program on your server. {@code if} and {@code one_of} branch but never loop.
+ * {@code call} nests eight deep and stops. The action budget is spent across the
+ * whole tree rather than per level, so a runaway exhausts it once instead of
+ * once per frame. {@link Expr} does arithmetic on integers and has no
+ * assignment, no function and no way back into the script. There is still no
+ * construct here that can fail to terminate.
  */
 public final class Script {
 
@@ -63,6 +83,66 @@ public final class Script {
 
     /** Rules per ruleset id, rebuilt whenever datapacks reload. */
     private static final Map<String, List<Rule>> BY_RULESET = new HashMap<>();
+
+    /**
+     * Named action lists, per ruleset: the {@code functions} block.
+     *
+     * <p>Every trigger used to carry its own copy of what it did. A map with one
+     * reward sequence and six ways to earn it wrote that sequence six times, and
+     * the seventh edit missed one of them - which is not a hypothetical, it is
+     * what always happens. A function is the same list of actions with a name,
+     * and {@code call} runs it.
+     *
+     * <pre>
+     * "functions": {
+     *   "pay_out": [ { "award": { "amount": 250 } },
+     *                { "sound": "minecraft:entity.player.levelup" } ]
+     * },
+     * "script": [ { "on": "mob_killed", "do": [ { "call": "pay_out" } ] } ]
+     * </pre>
+     */
+    private static final Map<String, Map<String, JsonArray>> FUNCTIONS = new HashMap<>();
+
+    /**
+     * How deep {@code call} may nest.
+     *
+     * <p>A function may call a function, because that is the whole point of
+     * having them, and therefore a function may call itself. This is the wall
+     * that turns infinite recursion into a rule that stops - together with the
+     * shared action budget, which a runaway would exhaust first.
+     */
+    private static final int MAX_DEPTH = 8;
+
+    /**
+     * What a running action knows about the event that started it.
+     *
+     * <p>Actions used to receive the triggering player and nothing else, which
+     * was survivable while conditions could only be asked once, at the top of a
+     * rule. {@code if} asks them again, in the middle, so the answers - which
+     * region fired, what the event was about - have to travel with the run.
+     *
+     * <p>It also carries the two things that must be shared rather than copied
+     * per nesting level: the action budget, so a deep tree of calls cannot spend
+     * thirty-two actions per level, and the cancel flag, so an {@code if} three
+     * branches down can still veto the event that started it.
+     */
+    static final class Ctx {
+        String region;
+        String subject;
+        int budget = ACTION_BUDGET;
+        int depth;
+        boolean cancelled;
+
+        Ctx(String region, String subject) {
+            this.region = region;
+            this.subject = subject;
+        }
+
+        /** Spends one action. False once the rule has had its allowance. */
+        boolean spend() {
+            return budget-- > 0;
+        }
+    }
 
     /**
      * Problems found while reading a script, per ruleset.
@@ -93,13 +173,15 @@ public final class Script {
             "add_my_var", "win", "lose", "set_bar", "join_team", "balance_teams",
             "team_message", "add_team_var", "set_team_var", "teleport_to_spawn",
             "delay", "every", "take", "set_phase", "teleport", "heal", "clear_effects",
-            "set_saved_var", "add_saved_var", "set_my_saved_var", "add_my_saved_var");
+            "set_saved_var", "add_saved_var", "set_my_saved_var", "add_my_saved_var",
+            // The language, rather than the verbs: branching, reuse and chance.
+            "if", "call", "one_of", "tag", "untag");
 
     /** Every condition the matcher understands. */
     private static final java.util.Set<String> CONDITIONS = java.util.Set.of(
             "round", "area_open", "region", "var", "my_var", "team", "team_var", "seconds", "block",
             "has_item", "killed", "chance", "phase", "subject", "players",
-            "saved_var", "my_saved_var");
+            "saved_var", "my_saved_var", "tag", "not");
 
     public static List<String> warnings(String rulesetId) {
         return WARNINGS.getOrDefault(rulesetId, List.of());
@@ -108,15 +190,35 @@ public final class Script {
     public static void clear() {
         BY_RULESET.clear();
         WARNINGS.clear();
+        FUNCTIONS.clear();
     }
 
     /** Pulls the {@code script} array out of a ruleset file. */
     public static void load(String rulesetId, JsonObject root) {
+        List<String> warn = new ArrayList<>();
+        // Functions first, so a rule that calls one can be checked against the
+        // list rather than only failing at the moment somebody plays the map.
+        if (root.has("functions") && root.get("functions").isJsonObject()) {
+            Map<String, JsonArray> fns = new HashMap<>();
+            JsonObject block = root.getAsJsonObject("functions");
+            for (String name : block.keySet()) {
+                if (block.get(name).isJsonArray()) {
+                    fns.put(name.toLowerCase(Locale.ROOT), block.getAsJsonArray(name));
+                } else {
+                    warn.add("function \"" + name + "\" is not a list of actions — ignored");
+                }
+            }
+            if (!fns.isEmpty()) {
+                FUNCTIONS.put(rulesetId, fns);
+            }
+        }
         if (!root.has("script") || !root.get("script").isJsonArray()) {
+            if (!warn.isEmpty()) {
+                WARNINGS.put(rulesetId, List.copyOf(warn));
+            }
             return;
         }
         List<Rule> rules = new ArrayList<>();
-        List<String> warn = new ArrayList<>();
         int index = 0;
         for (JsonElement el : root.getAsJsonArray("script")) {
             index++;
@@ -140,16 +242,7 @@ public final class Script {
                     }
                 }
             }
-            for (JsonElement act : o.getAsJsonArray("do")) {
-                if (!act.isJsonObject()) {
-                    continue;
-                }
-                for (String a : act.getAsJsonObject().keySet()) {
-                    if (!ACTIONS.contains(a.toLowerCase(Locale.ROOT))) {
-                        warn.add("rule " + index + ": unknown action \"" + a + "\" — does nothing");
-                    }
-                }
-            }
+            checkActions(rulesetId, o.getAsJsonArray("do"), "rule " + index, warn, 0);
             rules.add(new Rule(on,
                     o.has("when") && o.get("when").isJsonObject() ? o.getAsJsonObject("when") : null,
                     o.getAsJsonArray("do")));
@@ -164,6 +257,96 @@ public final class Script {
 
     public static int ruleCount(String rulesetId) {
         return BY_RULESET.getOrDefault(rulesetId, List.of()).size();
+    }
+
+    /** How many named functions a ruleset declared, for {@code /arena rules}. */
+    public static int functionCount(String rulesetId) {
+        return FUNCTIONS.getOrDefault(rulesetId, Map.of()).size();
+    }
+
+    /**
+     * Walks an action list looking for names nothing will answer to.
+     *
+     * <p>Recursive, because {@code if}, {@code one_of}, {@code delay} and
+     * {@code every} all carry action lists of their own, and a typo two levels
+     * down is exactly as silent as a typo at the top - more so, because it only
+     * runs when a branch is taken.
+     */
+    private static void checkActions(String rulesetId, JsonArray actions,
+                                     String where, List<String> warn, int depth) {
+        if (actions == null || depth > MAX_DEPTH) {
+            return;
+        }
+        for (JsonElement act : actions) {
+            if (!act.isJsonObject()) {
+                continue;
+            }
+            JsonObject o = act.getAsJsonObject();
+            for (String a : o.keySet()) {
+                String key = a.toLowerCase(Locale.ROOT);
+                if (!ACTIONS.contains(key)) {
+                    warn.add(where + ": unknown action \"" + a + "\" — does nothing");
+                    continue;
+                }
+                JsonElement body = o.get(a);
+                switch (key) {
+                    case "if" -> {
+                        if (body.isJsonObject()) {
+                            JsonObject b = body.getAsJsonObject();
+                            checkWhen(b.has("when") && b.get("when").isJsonObject()
+                                    ? b.getAsJsonObject("when") : null, where, warn);
+                            if (b.has("do") && b.get("do").isJsonArray()) {
+                                checkActions(rulesetId, b.getAsJsonArray("do"), where, warn, depth + 1);
+                            }
+                            if (b.has("else") && b.get("else").isJsonArray()) {
+                                checkActions(rulesetId, b.getAsJsonArray("else"), where, warn, depth + 1);
+                            }
+                        }
+                    }
+                    case "one_of" -> {
+                        if (body.isJsonArray()) {
+                            for (JsonElement branch : body.getAsJsonArray()) {
+                                if (branch.isJsonObject() && branch.getAsJsonObject().has("do")
+                                        && branch.getAsJsonObject().get("do").isJsonArray()) {
+                                    checkActions(rulesetId,
+                                            branch.getAsJsonObject().getAsJsonArray("do"),
+                                            where, warn, depth + 1);
+                                }
+                            }
+                        }
+                    }
+                    case "delay", "every" -> {
+                        if (body.isJsonObject() && body.getAsJsonObject().has("do")
+                                && body.getAsJsonObject().get("do").isJsonArray()) {
+                            checkActions(rulesetId, body.getAsJsonObject().getAsJsonArray("do"),
+                                    where, warn, depth + 1);
+                        }
+                    }
+                    case "call" -> {
+                        String name = asText(body).toLowerCase(Locale.ROOT);
+                        Map<String, JsonArray> fns = FUNCTIONS.get(rulesetId);
+                        if (fns == null || !fns.containsKey(name)) {
+                            warn.add(where + ": calls \"" + name + "\", which is not in \"functions\"");
+                        }
+                    }
+                    default -> {
+                        // A plain verb. Nothing nested to look inside.
+                    }
+                }
+            }
+        }
+    }
+
+    /** The same unknown-name check for a nested {@code when}. */
+    private static void checkWhen(JsonObject when, String where, List<String> warn) {
+        if (when == null) {
+            return;
+        }
+        for (String c : when.keySet()) {
+            if (!CONDITIONS.contains(c.toLowerCase(Locale.ROOT))) {
+                warn.add(where + ": unknown condition \"" + c + "\" — ignored");
+            }
+        }
     }
 
     // ------------------------------------------------------------------
@@ -214,15 +397,8 @@ public final class Script {
             }
             trace(arena, "§afire §f" + event + " §7(" + blockId + ")"
                     + (region == null ? "" : " §8in " + region));
-            int budget = ACTION_BUDGET;
-            for (JsonElement el : rule.actions()) {
-                if (budget-- <= 0) {
-                    break;
-                }
-                if (el.isJsonObject()) {
-                    run(arena, level, el.getAsJsonObject(), who);
-                }
-            }
+            Ctx ctx = new Ctx(region, blockId);
+            body(arena, level, rule.actions(), who, ctx);
         }
     }
 
@@ -301,17 +477,54 @@ public final class Script {
             trace(arena, "§afire §f" + event
                     + (regionId == null ? "" : " §7(" + regionId + ")")
                     + (who == null ? "" : " §8for " + who.getGameProfile().getName()));
-            int budget = ACTION_BUDGET;
-            for (JsonElement el : rule.actions()) {
-                if (budget-- <= 0) {
-                    break;
-                }
-                if (el.isJsonObject()) {
-                    try {
-                        run(arena, level, el.getAsJsonObject(), who);
-                    } catch (RuntimeException ignored) {
-                        // One bad action, not one bad run.
-                    }
+            Ctx ctx = new Ctx(regionId, subject);
+            body(arena, level, rule.actions(), who, ctx);
+            if (ctx.cancelled) {
+                cancelled = true;
+            }
+        }
+    }
+
+    /**
+     * Whether the last event fired was vetoed by a {@code cancel}.
+     *
+     * <p>Read immediately after firing, by the handlers that have something to
+     * cancel. A field rather than a return value because {@code fire} is called
+     * from seventeen places that do not care, and making all of them handle a
+     * boolean to serve the three that do is the wrong trade.
+     */
+    private static boolean cancelled;
+
+    /** True if the event just fired asked to be called off. Clears on read. */
+    public static boolean wasCancelled() {
+        boolean was = cancelled;
+        cancelled = false;
+        return was;
+    }
+
+    /**
+     * Runs a list of actions against one context.
+     *
+     * <p>The single path every action list goes through - a rule's own
+     * {@code do}, a branch of an {@code if}, the body of a {@code call}, a
+     * scheduled block coming back later. One implementation, so a branch and a
+     * top-level action cannot drift into behaving differently.
+     */
+    private static void body(EngineArena arena, ServerLevel level,
+                             JsonArray actions, ServerPlayer who, Ctx ctx) {
+        if (actions == null) {
+            return;
+        }
+        for (JsonElement el : actions) {
+            if (!ctx.spend()) {
+                trace(arena, "§cbudget spent §7— remaining actions skipped");
+                return;
+            }
+            if (el.isJsonObject()) {
+                try {
+                    run(arena, level, el.getAsJsonObject(), who, ctx);
+                } catch (RuntimeException ignored) {
+                    // One bad action, not one bad run.
                 }
             }
         }
@@ -482,6 +695,23 @@ public final class Script {
                 return false;
             }
         }
+        // A tag somebody is carrying, put there by the "tag" action. The
+        // engine's own memory of a player that is not a number: who has the
+        // flag, who has been marked, who already opened this door once.
+        if (when.has("tag")) {
+            if (who == null || !who.getTags().contains(
+                    str(when, "tag", "").toLowerCase(Locale.ROOT))) {
+                return false;
+            }
+        }
+        // The inverse of any condition, including itself. Without this every
+        // negative test needed a variable flipped by a second rule, because
+        // there was no way to say "and this is not true" about anything.
+        if (when.has("not") && when.get("not").isJsonObject()) {
+            if (matches(when.getAsJsonObject("not"), arena, who, regionId, subject)) {
+                return false;
+            }
+        }
         if (when.has("area_open")) {
             return arena.isAreaOpen(str(when, "area_open", ""));
         }
@@ -558,10 +788,10 @@ public final class Script {
         if (!o.has("do") || !o.get("do").isJsonArray()) {
             return;
         }
-        int seconds = Math.max(1, Math.min(3600, intOf(o, "seconds", 1)));
+        int seconds = Math.max(1, Math.min(3600, num(o, "seconds", 1, arena, who)));
         int ticks = seconds * 20;
         arena.schedule(o.getAsJsonArray("do"), who, ticks,
-                repeating ? ticks : 0, repeating ? intOf(o, "times", 0) : 0);
+                repeating ? ticks : 0, repeating ? num(o, "times", 0, arena, who) : 0);
     }
 
     /** {@code { "team_message": { "team": "red", "text": "The flag is out" } }} */
@@ -610,7 +840,7 @@ public final class Script {
             return;
         }
         String key = "team:" + team.toLowerCase(Locale.ROOT) + ":" + name;
-        int amount = intOf(o, absolute ? "to" : "by", absolute ? 0 : 1);
+        int amount = num(o, absolute ? "to" : "by", absolute ? 0 : 1, arena, who);
         if (absolute) {
             arena.vars().set(key, amount);
         } else {
@@ -629,7 +859,7 @@ public final class Script {
         if (name.isEmpty()) {
             return;
         }
-        int amount = intOf(o, absolute ? "to" : "by", absolute ? 0 : 1);
+        int amount = num(o, absolute ? "to" : "by", absolute ? 0 : 1, arena, who);
         if (mine) {
             if (who == null) {
                 return;
@@ -680,15 +910,7 @@ public final class Script {
      */
     public static void runActions(EngineArena arena, ServerLevel level,
                                   JsonArray actions, ServerPlayer who) {
-        int budget = ACTION_BUDGET;
-        for (JsonElement el : actions) {
-            if (budget-- <= 0) {
-                break;
-            }
-            if (el.isJsonObject()) {
-                run(arena, level, el.getAsJsonObject(), who);
-            }
-        }
+        body(arena, level, actions, who, new Ctx(null, null));
     }
 
     /** A line for anyone tracing, from outside this class. */
@@ -696,14 +918,21 @@ public final class Script {
         trace(arena, text);
     }
 
-    private static void run(EngineArena arena, ServerLevel level, JsonObject action, ServerPlayer who) {
+    private static void run(EngineArena arena, ServerLevel level,
+                            JsonObject action, ServerPlayer who, Ctx ctx) {
         for (String key : action.keySet()) {
             JsonElement body = action.get(key);
             switch (key.toLowerCase(Locale.ROOT)) {
-                case "message" -> forEach(arena, who, p ->
+                // ---- the language ---------------------------------------
+                case "if" -> branch(arena, level, body, who, ctx);
+                case "call" -> call(arena, level, asText(body), who, ctx);
+                case "one_of" -> oneOf(arena, level, body, who, ctx);
+                case "tag" -> forEach(arena, who, body, p -> p.addTag(tagName(body)));
+                case "untag" -> forEach(arena, who, body, p -> p.removeTag(tagName(body)));
+                case "message" -> forEach(arena, who, body, p ->
                         p.displayClientMessage(Component.literal(
                                 render(arena, p, asText(body))), false));
-                case "actionbar" -> forEach(arena, who, p ->
+                case "actionbar" -> forEach(arena, who, body, p ->
                         p.displayClientMessage(Component.literal(
                                 render(arena, p, asText(body))), true));
                 case "title" -> title(arena, who, body);
@@ -725,16 +954,16 @@ public final class Script {
                 case "take" -> take(arena, who, body);
                 case "set_phase" -> arena.setPhase(asText(body));
                 case "teleport" -> teleport(arena, level, who, body);
-                case "heal" -> forEach(arena, who, p -> {
+                case "heal" -> forEach(arena, who, body, p -> {
                     JsonObject h = body.isJsonObject() ? body.getAsJsonObject() : null;
-                    float amount = h != null ? intOf(h, "hearts", 0) * 2.0F : 0.0F;
+                    float amount = h != null ? num(h, "hearts", 0, arena, p) * 2.0F : 0.0F;
                     // No amount means all of it, because "heal" with no argument
                     // obviously means heal, and making an author write the number
                     // for the common case is a tax on the common case.
                     p.setHealth(amount <= 0.0F ? p.getMaxHealth()
                             : Math.min(p.getMaxHealth(), p.getHealth() + amount));
                 });
-                case "clear_effects" -> forEach(arena, who, p -> p.removeAllEffects());
+                case "clear_effects" -> forEach(arena, who, body, p -> p.removeAllEffects());
                 case "set_saved_var" -> savedVar(arena, level, who, body, false, true);
                 case "add_saved_var" -> savedVar(arena, level, who, body, false, false);
                 case "set_my_saved_var" -> savedVar(arena, level, who, body, true, true);
@@ -767,21 +996,250 @@ public final class Script {
         }
     }
 
-    private static void forEach(EngineArena arena, ServerPlayer who, java.util.function.Consumer<ServerPlayer> fn) {
-        List<ServerPlayer> targets = arena != null ? arena.playersPublic() : List.of();
-        if (targets.isEmpty() && who != null) {
-            fn.accept(who);
+    /**
+     * {@code if} — the condition, asked in the middle of a rule.
+     *
+     * <pre>
+     * { "if": { "when": { "var": { "name": "keys", "at_least": 3 } },
+     *           "do":   [ { "open_area": "vault" } ],
+     *           "else": [ { "message": "Still locked." } ] } }
+     * </pre>
+     *
+     * <p>Conditions existed only at the top of a rule, which meant every branch
+     * of every decision was a whole separate rule listening to the same event
+     * with the opposite test written out by hand. Two branches doubled the rule
+     * count, three tripled it, and none of them could share a step. This is the
+     * same {@code when} block, in the same grammar, asked where the decision is.
+     */
+    private static void branch(EngineArena arena, ServerLevel level,
+                               JsonElement body, ServerPlayer who, Ctx ctx) {
+        if (!body.isJsonObject() || ctx.depth >= MAX_DEPTH) {
             return;
         }
-        for (ServerPlayer p : targets) {
+        JsonObject o = body.getAsJsonObject();
+        JsonObject when = o.has("when") && o.get("when").isJsonObject()
+                ? o.getAsJsonObject("when") : null;
+        boolean pass = matches(when, arena, who, ctx.region, ctx.subject);
+        JsonArray take = pass
+                ? (o.has("do") && o.get("do").isJsonArray() ? o.getAsJsonArray("do") : null)
+                : (o.has("else") && o.get("else").isJsonArray() ? o.getAsJsonArray("else") : null);
+        trace(arena, (pass ? "§aif §7— taken" : "§8if §7— else"));
+        if (take == null) {
+            return;
+        }
+        ctx.depth++;
+        body(arena, level, take, who, ctx);
+        ctx.depth--;
+    }
+
+    /** {@code call} — runs a named block out of the ruleset's {@code functions}. */
+    private static void call(EngineArena arena, ServerLevel level,
+                             String name, ServerPlayer who, Ctx ctx) {
+        if (name == null || name.isEmpty() || ctx.depth >= MAX_DEPTH) {
+            if (ctx.depth >= MAX_DEPTH) {
+                trace(arena, "§ccall §7— too deep, stopped at " + MAX_DEPTH);
+            }
+            return;
+        }
+        Map<String, JsonArray> fns = FUNCTIONS.get(arena.rulesetId());
+        JsonArray fn = fns == null ? null : fns.get(name.toLowerCase(Locale.ROOT));
+        if (fn == null) {
+            trace(arena, "§ccall §7— no function called §f" + name);
+            return;
+        }
+        trace(arena, "§7call §f" + name);
+        ctx.depth++;
+        body(arena, level, fn, who, ctx);
+        ctx.depth--;
+    }
+
+    /**
+     * {@code one_of} — one branch, chosen by weight.
+     *
+     * <pre>
+     * { "one_of": [ { "weight": 3, "do": [ { "message": "Nothing here." } ] },
+     *               { "weight": 1, "do": [ { "give": "minecraft:diamond" } ] } ] }
+     * </pre>
+     *
+     * <p>{@code chance} could already make one thing happen sometimes, but a
+     * choice between three outcomes had to be written as three rules with
+     * hand-computed percentages that stopped adding up the moment a fourth was
+     * added. Weights are relative and need no arithmetic from the author.
+     */
+    private static void oneOf(EngineArena arena, ServerLevel level,
+                              JsonElement body, ServerPlayer who, Ctx ctx) {
+        if (!body.isJsonArray() || ctx.depth >= MAX_DEPTH) {
+            return;
+        }
+        JsonArray branches = body.getAsJsonArray();
+        int total = 0;
+        for (JsonElement el : branches) {
+            if (el.isJsonObject()) {
+                total += Math.max(0, intOf(el.getAsJsonObject(), "weight", 1));
+            }
+        }
+        if (total <= 0) {
+            return;
+        }
+        int roll = arena.rng().nextInt(total);
+        for (JsonElement el : branches) {
+            if (!el.isJsonObject()) {
+                continue;
+            }
+            JsonObject o = el.getAsJsonObject();
+            roll -= Math.max(0, intOf(o, "weight", 1));
+            if (roll >= 0) {
+                continue;
+            }
+            if (o.has("do") && o.get("do").isJsonArray()) {
+                ctx.depth++;
+                body(arena, level, o.getAsJsonArray("do"), who, ctx);
+                ctx.depth--;
+            }
+            return;
+        }
+    }
+
+    /** A scoreboard tag, read from either the short or the long form. */
+    private static String tagName(JsonElement body) {
+        String raw = body.isJsonObject() ? str(body.getAsJsonObject(), "name", "") : asText(body);
+        return raw.toLowerCase(Locale.ROOT);
+    }
+
+    /**
+     * Who an action happens to.
+     *
+     * <p>Actions hit the whole run or the one player who tripped the trigger,
+     * and nothing in between - so "the carrier drops the flag", "the nearest
+     * player hears the whisper", "only red gets the key" could not be said at
+     * all. A {@code target} on the action's body picks a narrower set:
+     *
+     * <ul>
+     *   <li>{@code all} — everybody in the run. The default, unchanged.</li>
+     *   <li>{@code @self} — whoever triggered the event, and nobody else.</li>
+     *   <li>{@code @nearest} — the player closest to the one who triggered it.</li>
+     *   <li>{@code @random} — one of them, picked fresh each time.</li>
+     *   <li>{@code @team:red} — one side.</li>
+     *   <li>{@code @tagged:carrier} — everyone carrying a tag, set by {@code tag}.</li>
+     *   <li>{@code @others} — everybody except the trigger.</li>
+     * </ul>
+     */
+    private static List<ServerPlayer> targets(EngineArena arena, ServerPlayer who, JsonElement src) {
+        List<ServerPlayer> all = arena != null ? arena.playersPublic() : List.of();
+        if (all.isEmpty() && who != null) {
+            all = List.of(who);
+        }
+        String spec = src != null && src.isJsonObject()
+                ? str(src.getAsJsonObject(), "target", "").toLowerCase(Locale.ROOT) : "";
+        if (spec.isEmpty() || spec.equals("all")) {
+            return all;
+        }
+        if (spec.equals("@self") || spec.equals("self")) {
+            return who == null ? List.of() : List.of(who);
+        }
+        if (spec.equals("@others")) {
+            if (who == null) {
+                return all;
+            }
+            List<ServerPlayer> out = new ArrayList<>(all);
+            out.remove(who);
+            return out;
+        }
+        if (spec.equals("@random")) {
+            return all.isEmpty() ? all : List.of(all.get(arena.rng().nextInt(all.size())));
+        }
+        if (spec.equals("@nearest")) {
+            if (who == null) {
+                return all;
+            }
+            ServerPlayer best = null;
+            double bestDist = Double.MAX_VALUE;
+            for (ServerPlayer p : all) {
+                if (p == who) {
+                    continue;
+                }
+                double d = p.distanceToSqr(who);
+                if (d < bestDist) {
+                    bestDist = d;
+                    best = p;
+                }
+            }
+            return best == null ? List.of() : List.of(best);
+        }
+        if (spec.startsWith("@team:")) {
+            return arena.teams().membersOf(spec.substring(6), all);
+        }
+        if (spec.startsWith("@tagged:")) {
+            String tag = spec.substring(8);
+            List<ServerPlayer> out = new ArrayList<>();
+            for (ServerPlayer p : all) {
+                if (p.getTags().contains(tag)) {
+                    out.add(p);
+                }
+            }
+            return out;
+        }
+        // An unrecognised selector means everybody, the same as leaving it off:
+        // a map written for a later engine keeps running on this one.
+        return all;
+    }
+
+    private static void forEach(EngineArena arena, ServerPlayer who, JsonElement src,
+                                java.util.function.Consumer<ServerPlayer> fn) {
+        for (ServerPlayer p : targets(arena, who, src)) {
             fn.accept(p);
+        }
+    }
+
+    /**
+     * A number, which may be a sum.
+     *
+     * <p>A JSON number is taken as written. A JSON <em>string</em> goes to
+     * {@link Expr}, so {@code "to": "{var:kills} * 10"} means what it looks like
+     * it means. Every numeric field in every action reads through here, so there
+     * is no list of which ones accept arithmetic - they all do.
+     */
+    private static int num(JsonObject o, String key, int fallback,
+                           EngineArena arena, ServerPlayer who) {
+        if (o == null || !o.has(key)) {
+            return fallback;
+        }
+        JsonElement el = o.get(key);
+        if (!el.isJsonPrimitive()) {
+            return fallback;
+        }
+        var prim = el.getAsJsonPrimitive();
+        if (prim.isNumber()) {
+            return prim.getAsInt();
+        }
+        if (prim.isString()) {
+            return Expr.eval(prim.getAsString(), name -> lookup(arena, who, name), fallback);
+        }
+        return fallback;
+    }
+
+    /** Resolves a placeholder inside an expression to an integer. */
+    private static int lookup(EngineArena arena, ServerPlayer who, String name) {
+        if (arena == null) {
+            return 0;
+        }
+        String n = name.toLowerCase(Locale.ROOT);
+        int colon = n.indexOf(':');
+        String head = colon < 0 ? n : n.substring(0, colon);
+        String arg = colon < 0 ? "" : n.substring(colon + 1);
+        try {
+            return Integer.parseInt(placeholder(arena, who, head, arg.isEmpty() ? null : arg));
+        } catch (NumberFormatException e) {
+            // {player} and {team} are words, not numbers. Nought is the least
+            // surprising thing for arithmetic to do with them.
+            return 0;
         }
     }
 
     private static void title(EngineArena arena, ServerPlayer who, JsonElement body) {
         String main = body.isJsonObject() ? str(body.getAsJsonObject(), "main", "") : asText(body);
         String sub = body.isJsonObject() ? str(body.getAsJsonObject(), "sub", "") : "";
-        forEach(arena, who, p -> {
+        forEach(arena, who, body, p -> {
             p.connection.send(new net.minecraft.network.protocol.game.ClientboundSetTitleTextPacket(
                     Component.literal(render(arena, p, main))));
             if (!sub.isEmpty()) {
@@ -812,7 +1270,7 @@ public final class Script {
         }
         float volume = body.isJsonObject() ? (float) dbl(body.getAsJsonObject(), "volume", 1.0) : 1.0F;
         float pitch = body.isJsonObject() ? (float) dbl(body.getAsJsonObject(), "pitch", 1.0) : 1.0F;
-        forEach(arena, who, p -> level.playSound(null, p.blockPosition(),
+        forEach(arena, who, body, p -> level.playSound(null, p.blockPosition(),
                 holder.get().value(), SoundSource.MASTER, volume, pitch));
     }
 
@@ -830,9 +1288,9 @@ public final class Script {
         if (holder.isEmpty()) {
             return;
         }
-        int ticks = Math.max(1, Math.min(20 * 60 * 60, intOf(o, "seconds", 10) * 20));
-        int amp = Math.max(0, Math.min(9, intOf(o, "amp", 0)));
-        forEach(arena, who, p -> p.addEffect(new MobEffectInstance(holder.get(), ticks, amp, false, true)));
+        int ticks = Math.max(1, Math.min(20 * 60 * 60, num(o, "seconds", 10, arena, who) * 20));
+        int amp = Math.max(0, Math.min(9, num(o, "amp", 0, arena, who)));
+        forEach(arena, who, body, p -> p.addEffect(new MobEffectInstance(holder.get(), ticks, amp, false, true)));
     }
 
     /**
@@ -898,8 +1356,8 @@ public final class Script {
             return;
         }
         Item item = BuiltInRegistries.ITEM.get(rl);
-        int count = o != null ? Math.max(1, intOf(o, "count", 1)) : 1;
-        forEach(arena, who, p -> {
+        int count = o != null ? Math.max(1, num(o, "count", 1, arena, who)) : 1;
+        forEach(arena, who, body, p -> {
             int left = count;
             for (int i = 0; i < p.getInventory().getContainerSize() && left > 0; i++) {
                 ItemStack stack = p.getInventory().getItem(i);
@@ -946,7 +1404,7 @@ public final class Script {
             trace(arena, "§csaved var §7— no name given");
             return;
         }
-        int value = intOf(o, "value", absolute ? 0 : 1);
+        int value = num(o, "value", absolute ? 0 : 1, arena, who);
         boolean global = o.has("global") && o.get("global").getAsBoolean();
         SavedVars saved = SavedVars.get(level.getServer());
         String rules = arena.rulesetId();
@@ -958,7 +1416,7 @@ public final class Script {
             }
             return;
         }
-        forEach(arena, who, p -> {
+        forEach(arena, who, body, p -> {
             if (absolute) {
                 saved.set(p.getUUID(), rules, name, value, global);
             } else {
@@ -988,7 +1446,7 @@ public final class Script {
             return;
         }
         final net.minecraft.core.BlockPos at = to;
-        forEach(arena, who, p -> p.teleportTo(level,
+        forEach(arena, who, body, p -> p.teleportTo(level,
                 at.getX() + 0.5, at.getY() + 1, at.getZ() + 0.5,
                 java.util.Set.of(), p.getYRot(), 0.0F));
     }
@@ -1000,8 +1458,8 @@ public final class Script {
         if (rl == null || !BuiltInRegistries.ITEM.containsKey(rl)) {
             return;
         }
-        int count = o != null ? Math.max(1, Math.min(64, intOf(o, "count", 1))) : 1;
-        forEach(arena, who, p -> {
+        int count = o != null ? Math.max(1, Math.min(64, num(o, "count", 1, arena, who))) : 1;
+        forEach(arena, who, body, p -> {
             ItemStack stack = new ItemStack(BuiltInRegistries.ITEM.get(rl), count);
             if (!p.getInventory().add(stack)) {
                 p.drop(stack, false);
@@ -1011,9 +1469,9 @@ public final class Script {
 
     private static void award(EngineArena arena, ServerPlayer who, JsonElement body) {
         JsonObject o = body.isJsonObject() ? body.getAsJsonObject() : null;
-        int amount = o != null ? intOf(o, "amount", 0) : asInt(body);
+        int amount = o != null ? num(o, "amount", 0, arena, who) : asInt(body);
         Currency c = Currency.byId(o != null ? str(o, "currency", null) : null);
-        forEach(arena, who, p -> c.award(p, amount));
+        forEach(arena, who, body, p -> c.award(p, amount));
     }
 
     private static void spawn(EngineArena arena, ServerLevel level, JsonElement body) {
@@ -1029,14 +1487,14 @@ public final class Script {
         if (at == null) {
             return;
         }
-        int count = Math.max(1, Math.min(24, intOf(o, "count", 1)));
+        int count = Math.max(1, Math.min(24, num(o, "count", 1, arena, null)));
         for (int i = 0; i < count; i++) {
             Entity e = type.get().create(level);
             if (!(e instanceof Mob mob)) {
                 return;
             }
             mob.moveTo(at.getX() + 0.5, at.getY(), at.getZ() + 0.5, 0.0F, 0.0F);
-            int health = intOf(o, "health", 0);
+            int health = num(o, "health", 0, arena, null);
             if (health > 0) {
                 var inst = mob.getAttribute(net.minecraft.world.entity.ai.attributes.Attributes.MAX_HEALTH);
                 if (inst != null) {

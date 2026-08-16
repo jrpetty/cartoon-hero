@@ -13,6 +13,64 @@ behaviour that was already there · **docs**
 
 ## Unreleased
 
+### The script layer gets branching, reuse and sums
+
+Stage A of the engine programme. Three absences made real maps unwritable rather
+than merely limited, and all three are the same shape: the state was expressible
+and the *relationship between* states was not.
+
+- **feat** **`if` / `else` inside `do`.** Conditions lived only at the top of a
+  rule, so every branch of every decision was a whole separate rule listening to
+  the same event with the opposite test written out by hand. Two branches doubled
+  the rule count; three tripled it; none could share a step. It is the same
+  `when` grammar, asked where the decision actually is.
+
+  ```json
+  { "if": { "when": { "var": { "name": "keys", "at_least": 3 } },
+            "do":   [ { "open_area": "vault" } ],
+            "else": [ { "message": "Still locked." } ] } }
+  ```
+
+- **feat** **`functions` and `call`.** A named action list, run by name. A map
+  with one reward sequence and six ways to earn it wrote that sequence six times,
+  and the seventh edit missed one of them. Calls nest eight deep and stop.
+
+- **feat** **Arithmetic, in every numeric field.** New `Expr`: a JSON number is
+  taken as written, a JSON *string* is evaluated. `"to": "{var:kills} * 10 -
+  {var:deaths} * 25"`, `"count": "2 + {players}"`. Eleven numeric fields read
+  through it — amounts, counts, healths, durations, hearts, weights, delays — so
+  there is no list of which ones accept sums. They all do.
+
+- **feat** **`one_of` — weighted choice.** `chance` could make one thing happen
+  sometimes; a choice between four outcomes meant four rules with hand-computed
+  percentages that stopped adding up the moment a fifth arrived. Weights are
+  relative and need no arithmetic from the author.
+
+- **feat** **Selectors.** Actions hit the whole run or the one player who tripped
+  the trigger, and nothing in between. A `target` on the action now picks:
+  `@self`, `@others`, `@nearest`, `@random`, `@team:red`, `@tagged:carrier`.
+
+- **feat** **`tag` / `untag` and the `tag` condition.** The engine's memory of a
+  player that is not a number — who has the flag, who has been marked, who
+  already opened this door once. `@tagged:` targets them.
+
+- **feat** **`not`** — the inverse of any condition, including itself. Every
+  negative test previously needed a variable flipped by a second rule.
+
+- **change** **The action budget is now spent across the whole tree**, not per
+  level. Thirty-two actions is thirty-two actions whether they are flat or eight
+  calls deep, so branching cannot multiply the ceiling.
+
+- **change** **Unknown-name warnings now recurse.** A typo inside an `if`, a
+  `one_of` branch or a `delay` body was invisible to `/arena rules` — worse than
+  a typo at the top level, because it only misfires when that branch is taken.
+  `call` also warns when it names a function that does not exist.
+
+**Still not a language, and deliberately.** `if` and `one_of` branch but never
+loop. `call` has a depth wall. `Expr` does integer arithmetic with no assignment,
+no function and no way back into the script. Nothing here can fail to terminate,
+which was the original promise of this layer and is worth more than the ceiling.
+
 ### The relics cannot be made. They can only be won.
 
 - **change** **Both recipes are deleted.** `obsidian_edge.json` and
