@@ -13,6 +13,34 @@ behaviour that was already there · **docs**
 
 ## Unreleased
 
+### Stage H4 — twenty-four comments that were describing the wrong thing
+
+Not a line of behaviour in this one. H2 turned up two javadoc blocks in
+`EngineArena` left stranded above the wrong methods, which was worth asking how
+many more there were. Twenty-four, in every package.
+
+- **docs** **Removed 24 orphaned comment blocks.** A javadoc sitting directly
+  above another javadoc, with no declaration between them, is always a mistake
+  here: the first describes a member that has since moved, been renamed or been
+  replaced, and it is now attached to whatever ended up underneath it. `/arena
+  rules`' documentation was sitting on `/arena ready`. A comment about picking a
+  weighted gate was on the method that picks a *steered* one. `Script.fireBlock`
+  was documented as "runs every rule listening for an event". Every one of them
+  was confidently wrong, which is worse than absent, because the whole style of
+  this codebase is that the prose is the explanation.
+
+  Three were not deleted but moved, because the orphan was the correct
+  documentation for a neighbour that had none: the purchase contract on
+  `DealerSign.buy`, `rulesetId()`, and `livingPlayers()`.
+
+  The diff removes no line that is not a comment, and adds none that is not one
+  of those three.
+
+- **docs** **`tools/orphan_docs.py`, wired into `tools/precheck.sh`.** These are
+  invisible to javac, to a linter, and to a review of the change that created
+  them — the orphan is only wrong relative to a line somewhere else that moved.
+  Tested by injecting one and confirming both the detector and precheck fail.
+
 ### Stage H3 — the script layer stops reading the whole rulebook
 
 H1 and H2 were about work done more often than it needed to be. This one is about

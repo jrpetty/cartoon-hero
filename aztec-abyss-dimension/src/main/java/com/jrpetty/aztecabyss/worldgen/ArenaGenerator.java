@@ -79,11 +79,6 @@ public final class ArenaGenerator {
     }
 
     /**
-     * The Outpost sits far along X in the same dimension, like the bridge, so it
-     * needs no dimension of its own. Built on its own sentinel so it appears in
-     * worlds generated before it existed.
-     */
-    /**
      * Clears the Outpost's sentinel so the next check restamps it from scratch.
      *
      * <p>The map is only ever built once per world, which means a change to its

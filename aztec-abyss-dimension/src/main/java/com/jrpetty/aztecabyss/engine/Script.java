@@ -412,13 +412,6 @@ public final class Script {
     // ------------------------------------------------------------------
 
     /**
-     * Runs every rule listening for an event.
-     *
-     * <p>Never throws. A map that misspells an action name loses that action and
-     * keeps its run; the alternative is a scripting mistake in someone else's
-     * downloaded map taking down a server mid-round.
-     */
-    /**
      * A block a player touched, and where.
      *
      * <p>Rounds answer <em>when</em>, regions answer <em>where somebody is
@@ -1937,20 +1930,6 @@ public final class Script {
         });
     }
 
-    /**
-     * Moves people to a named place.
-     *
-     * <p>{@code teleport_to_spawn} was the only way the script could move
-     * anybody, which meant the one destination a map could ever name was the one
-     * the engine had already named. No checkpoints, no jail, no second stage, no
-     * start line - and the last of those is a hole I put there myself an hour
-     * ago, because a lobby that cannot move people to the start when the
-     * countdown ends is half a lobby.
-     *
-     * <p>Regions are the destination because they are the only named places an
-     * author has. Raw coordinates are accepted too, for the map that wants a spot
-     * it never needed to name.
-     */
     /**
      * Writes something the world will still know tomorrow.
      *

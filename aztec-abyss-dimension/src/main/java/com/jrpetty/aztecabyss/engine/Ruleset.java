@@ -226,7 +226,6 @@ public final class Ruleset {
      */
     public final List<String> warnings;
 
-    /** One kind of thing that can turn up in a wave. */
     /**
      * One line of an explicit wave: this many of that, exactly.
      *

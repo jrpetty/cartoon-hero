@@ -250,12 +250,6 @@ public final class DealerSign {
         return item == Items.AIR ? null : item;
     }
 
-    /**
-     * Attempts a purchase.
-     *
-     * @return true if the click was a dealer interaction at all - whether or not
-     *         it succeeded - so the caller knows to swallow the click.
-     */
     /** Buying from an invisible dealer. Same shop, no sign on the wall. */
     public static boolean buyFrom(ServerLevel level, ServerPlayer player,
                                   com.jrpetty.aztecabyss.block.MarkerBlockEntity block) {
@@ -263,6 +257,12 @@ public final class DealerSign {
         return offer != null && complete(level, player, offer, block.getBlockPos());
     }
 
+    /**
+     * Attempts a purchase.
+     *
+     * @return true if the click was a dealer interaction at all - whether or not
+     *         it succeeded - so the caller knows to swallow the click.
+     */
     public static boolean buy(ServerLevel level, ServerPlayer player, SignBlockEntity sign) {
         Offer offer = parse(sign);
         if (offer == null) {

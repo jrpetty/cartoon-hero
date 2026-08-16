@@ -49,12 +49,6 @@ public final class AbyssCommands {
     }
 
     /**
-     * {@code /abyss ready [player]} - clears every lockout standing between you
-     * and going back in: the arena re-entry cooldown and the maze's death
-     * lockout. Op-gated, and purely for testing; a twenty-hour wait between
-     * attempts makes iterating on a hunt impossible.
-     */
-    /**
      * {@code /abyss rebuild} - restamps the Outpost over the top of itself.
      *
      * <p>The arena is built once per world, so a world that already has one keeps

@@ -373,18 +373,6 @@ public final class MazeRuntime {
     }
 
     /**
-     * Everything that is measured in days gets put back to zero here.
-     *
-     * <p>The maze reshapes at midnight and the day number goes up, but the state
-     * hanging off it did not: a run clock started yesterday kept counting through
-     * the rollover into a maze that no longer had the corridor it was timing, and
-     * a sting tally survived a night's sleep in the Glade. Both make the day
-     * counter decorative - it advertises a fresh start the game does not give you.
-     *
-     * <p>So a new day is a new day. Clocks stop, tallies clear, and the venom in
-     * anyone who made it back is out of their system.
-     */
-    /**
      * The walls moving, made audible.
      *
      * <p>The entire maze rearranged itself at midnight and nothing said so. It is
@@ -904,7 +892,6 @@ public final class MazeRuntime {
         level.playSound(null, portal, SoundEvents.PORTAL_AMBIENT, SoundSource.BLOCKS, 1.2F, 0.9F);
     }
 
-    /** Within a couple of blocks of today's exit portal. */
     /**
      * Standing on the way out.
      *
@@ -923,15 +910,6 @@ public final class MazeRuntime {
                 && Math.abs(at.getY() - p.getY()) <= 3;
     }
 
-    /**
-     * The last forty blocks.
-     *
-     * <p>Sixty of them, standing between the doorway and the portal, spawned the
-     * first time anybody sets foot in the lane on a given day. Once per day, not
-     * once per entry, so backing out and walking in again is a retreat rather
-     * than a reset - and so a squad that gets halfway and loses two people has to
-     * decide whether to finish it tonight.
-     */
     /**
      * The best Green Thumb in the Glade.
      *
@@ -1346,15 +1324,6 @@ public final class MazeRuntime {
         Griever.ambience(level, loaded, rng);
     }
 
-    /**
-     * Moves the two hundred toggles to match a layout.
-     *
-     * <p>Only the toggles ever move - the base graph is stamped once and never
-     * touched again. That is what keeps a reshape to roughly fourteen thousand
-     * blocks instead of two million, and it is also why every layout is
-     * guaranteed solvable: the dataset only ever lists toggle sets that leave a
-     * route to that day's exit.
-     */
     /** Whether a toggle point stands on ground the Dead Glade has cleared. */
     private static boolean touchesDeadGlade(MazeData.TogglePoint tp) {
         String[] ends = tp.edge().split(">");

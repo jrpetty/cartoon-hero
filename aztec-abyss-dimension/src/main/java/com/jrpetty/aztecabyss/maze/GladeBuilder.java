@@ -594,7 +594,6 @@ public final class GladeBuilder {
         }
     }
 
-    /** The fire everyone sits round when the doors shut. */
     /**
      * The Map Room.
      *

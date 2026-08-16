@@ -466,7 +466,6 @@ public final class RoundManager {
     /** Slow and armoured, but tears chunks out of the objective. */
     static final int ROLE_SAPPER = 2;
 
-    /** How much objective damage each role deals per damage tick. */
     /**
      * Picks a window to spawn at, skipping any in a part of the map still sealed
      * behind rubble. Without this, half the horde would climb into rooms the
@@ -897,7 +896,6 @@ public final class RoundManager {
         };
     }
 
-    /** True when the current boss round is the final round (the Warden); otherwise it's the mid-boss Warlord. */
     /** The bigger grade of boss: every thirtieth round endlessly, else the last. */
     private static boolean isFinaleBoss() {
         if (game.getMap().isEndless()) {
@@ -1538,10 +1536,6 @@ public final class RoundManager {
         resetSession();
     }
 
-    /**
-     * Sends one player home with a round-scaled reward chest and (on death)
-     * the re-entry cooldown, then drops them from the run.
-     */
     /** Hands back the vault and pays out materials on the way out of the Outpost. */
     private static void settleOutpost(ServerPlayer player, int round) {
         if (!game.getMap().hasEconomy() || player.getServer() == null) {

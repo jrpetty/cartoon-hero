@@ -210,16 +210,6 @@ public enum ArenaMap {
     }
 
     /**
-     * Whether the horde gates on this map are boarded up and have to be broken
-     * through - and can be nailed back together by hunters.
-     *
-     * <p>The Outpost alone. It is built around the mechanic - ten windows in one
-     * small house, all within seconds of each other. The Temple is deliberately
-     * left as it always was: an open ruin-field where the horde simply comes for
-     * you, with nothing to maintain. The Bridge has the Heart, which is already
-     * its one thing to look after.
-     */
-    /**
      * Whether the horde materialises in a sealed chamber behind each way in.
      *
      * <p>Kept separate from {@link #hasBarricades()} on purpose. The two used to

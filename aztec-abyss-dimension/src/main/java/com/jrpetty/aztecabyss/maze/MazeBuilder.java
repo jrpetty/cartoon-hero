@@ -83,7 +83,6 @@ public final class MazeBuilder {
     private MazeBuilder() {
     }
 
-    /** True once the maze has been stamped in this world. */
     /**
      * Where the "this world already has a maze" marker lives.
      *
@@ -581,7 +580,6 @@ public final class MazeBuilder {
         writeHalf(w, cells[2], cells[3], cells[0], cells[1], open, rng);
     }
 
-    /** Carves (or refills) the half of a shared edge that belongs to one cell. */
     /** The four cells the Glade's doors sit in, in build order N, E, S, W. */
     public static final int[][] DOOR_CELLS = {{48, 39}, {56, 48}, {47, 56}, {39, 47}};
 

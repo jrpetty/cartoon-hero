@@ -942,20 +942,6 @@ public final class EngineArena {
     }
 
     /**
-     * Banking a run: stand on the extraction glyph between rounds.
-     *
-     * <p>Without this an engine map has no way to win. You play until you die, and
-     * a game whose only ending is failure teaches players that survival was never
-     * the point - so there is nothing to be careful about and no reason to stop on
-     * a good round. Extraction makes leaving a decision, which is what gives
-     * staying any weight.
-     *
-     * <p>Only between rounds, and only while stood still. Bailing out of a fight
-     * you are losing would make it a panic button rather than a judgement call,
-     * and the interesting version of the question is asked in the quiet: you have
-     * what you have, and the next round is bigger.
-     */
-    /**
      * The lobby and the countdown, which are the two phases the engine owns.
      *
      * <p>The lobby waits for people and the countdown warns them. Both are on a
@@ -1233,12 +1219,12 @@ public final class EngineArena {
         };
     }
 
-    /** The ruleset this run is being played under, for script lookups. */
     /** The world this run is happening in. Conditions need it to read saved state. */
     public ServerLevel level() {
         return level;
     }
 
+    /** The ruleset this run is being played under, for script lookups. */
     public String rulesetId() {
         return rules.id;
     }
@@ -1313,11 +1299,6 @@ public final class EngineArena {
         restore.clear();
     }
 
-    /**
-     * Arms a trap, if it is not already burning or cooling.
-     *
-     * @return a message for the buyer, or null if it fired
-     */
     /** Why this trap cannot be armed right now, or null if it can. */
     public String trapUnavailable(BlockPos at, long now) {
         if (trapsActive.getOrDefault(at, 0L) > now) {
@@ -1523,13 +1504,6 @@ public final class EngineArena {
         }
     }
 
-    /**
-     * Which region contains a given block, or null.
-     *
-     * <p>Used by block events so a rule can say "the lever in the vault" rather
-     * than "a lever, pulled by somebody standing in the vault" - which are
-     * different sentences and only one of them is what an author means.
-     */
     /**
      * Where a named region is.
      *
@@ -2680,14 +2654,6 @@ public final class EngineArena {
     }
 
     /**
-     * Picks a gate, respecting per-gate weight.
-     *
-     * <p>Every gate was equally likely, which made a map's four ways in
-     * interchangeable no matter how different the rooms behind them were. A
-     * weight lets an author say "most of it comes through the front" without
-     * needing four rulesets or any code.
-     */
-    /**
      * Which way in the next mob uses.
      *
      * <p>Weighted, and now steered. The Director has always measured how a run
@@ -2979,13 +2945,6 @@ public final class EngineArena {
         }
     }
 
-    /**
-     * Participants still actually in the fight.
-     *
-     * <p>{@link #players()} is everyone who ever joined, which includes the dead.
-     * That is the right list for telling people what happened and the wrong one
-     * for anything the run acts on - hence both, named for what they are.
-     */
     /** Hands the round bar to whichever player object is currently live. */
     private void refreshBars(List<ServerPlayer> present) {
         for (ServerPlayer p : present) {
@@ -3001,6 +2960,13 @@ public final class EngineArena {
         }
     }
 
+    /**
+     * Participants still actually in the fight.
+     *
+     * <p>{@link #players()} is everyone who ever joined, which includes the dead.
+     * That is the right list for telling people what happened and the wrong one
+     * for anything the run acts on - hence both, named for what they are.
+     */
     private List<ServerPlayer> livingPlayers() {
         List<ServerPlayer> out = new ArrayList<>();
         for (ServerPlayer p : players()) {

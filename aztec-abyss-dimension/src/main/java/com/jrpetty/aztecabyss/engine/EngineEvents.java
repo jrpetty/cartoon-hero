@@ -683,14 +683,6 @@ public final class EngineEvents {
     }
 
     /**
-     * {@code /arena rules [id]} - what is loaded, and what a given round works out to.
-     *
-     * <p>The per-round readout is the useful half. A scaling curve written as four
-     * numbers in a file is impossible to picture; the same curve printed as the
-     * health and damage multipliers at rounds 1, 10, 25 and 50 tells you instantly
-     * whether you have built a fair fight or a wall.
-     */
-    /**
      * {@code /arena ready} — tells the lobby you are done faffing.
      *
      * <p>The lobby could count heads and count seconds and nothing else, so a

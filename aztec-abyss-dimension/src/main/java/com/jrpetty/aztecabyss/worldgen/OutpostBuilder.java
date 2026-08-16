@@ -615,7 +615,6 @@ public final class OutpostBuilder {
         }
     }
 
-    /** A sealed chamber behind every window. There is no outside to this map. */
     /**
      * A sealed chamber behind every window. There is no outside to this map.
      *

@@ -773,13 +773,6 @@ public final class MazeEvents {
     // ------------------------------------------------------------------
 
     /**
-     * The catalogue and what you have already committed.
-     *
-     * <p>Prices and budget on the same screen on purpose. A shop that makes you
-     * remember what you can afford while you read what things cost is a shop
-     * nobody uses properly.
-     */
-    /**
      * Opens the slate.
      *
      * <p>The chat sheet is still there under {@code /maze order text}, for the

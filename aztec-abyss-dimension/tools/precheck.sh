@@ -64,6 +64,17 @@ if [ -n "$IMPORTS" ]; then
   exit 1
 fi
 
+# Not a compile error, but the same kind of thing: a mistake that survives every
+# other check because nothing executes a comment. See tools/orphan_docs.py.
+ORPHANS=$(python3 "$(dirname "$0")/orphan_docs.py")
+if [ -n "$ORPHANS" ]; then
+  echo "precheck: ORPHANED DOC COMMENTS"
+  echo "------------------------------"
+  printf '%s\n' "$ORPHANS"
+  [ -n "$REAL" ] && { echo; echo "precheck: REAL ERRORS"; printf '%s\n' "$REAL"; }
+  exit 1
+fi
+
 if [ -z "$REAL" ]; then
   echo "precheck: clean (classpath noise only)"
   exit 0

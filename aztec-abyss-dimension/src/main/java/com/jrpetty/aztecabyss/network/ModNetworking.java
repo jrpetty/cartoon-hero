@@ -154,15 +154,6 @@ public final class ModNetworking {
                 }));
     }
 
-    /**
-     * Sends a player their whole trade sheet.
-     *
-     * <p>One packet for the lot, so opening the screen never waits on a second
-     * round trip and re-sending after a point is spent is a single message. The
-     * screen is rebuilt from this rather than patched, which is why spending a
-     * point can never leave the client showing a rank the server does not agree
-     * exists.
-     */
     /** The trade board: one post, described in full, for the sign-up screen. */
     public static void sendTradeBoard(ServerPlayer player, String job) {
         if (player.getServer() == null) {
