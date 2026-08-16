@@ -174,6 +174,8 @@ public final class EngineArena {
     private final List<Marker> teleports = new ArrayList<>();
     /** Named volumes that fire an event when somebody walks in or out. */
     private final List<Marker> regions = new ArrayList<>();
+    /** The map's boarded openings, if it marked any. */
+    private Barricades barricades;
     /** Who is currently inside which region, so enter and leave fire once each. */
     private final java.util.Map<UUID, java.util.Set<String>> inRegion = new java.util.HashMap<>();
     /** What this run remembers. */
@@ -450,6 +452,7 @@ public final class EngineArena {
         current.pens.addAll(scan.of("pen"));
         current.teleports.addAll(scan.of("teleport"));
         current.regions.addAll(scan.of("region"));
+        current.barricades = new Barricades(current, current.level, scan.of("barricade"));
         // A [Spawn] carrying team= is that side's spawn rather than the map's.
         current.allSpawns.addAll(scan.of("spawn"));
         for (Marker sp : scan.of("spawn")) {
@@ -731,6 +734,9 @@ public final class EngineArena {
         // round-mode one alike. A countdown is not a free-mode idea.
         tickScheduled();
         tickTimers();
+        if (barricades != null && !barricades.isEmpty()) {
+            barricades.tick();
+        }
         if (level.getGameTime() % 20L == 0L) {
             tickZoneRules(present);
         }
@@ -885,6 +891,11 @@ public final class EngineArena {
      */
     private void beginPlay(List<ServerPlayer> present) {
         setPhase(PHASE_ACTIVE);
+        // Boards go up when the run does, not when the map was stamped: a
+        // barricade mended during a lobby is a barricade nobody paid for.
+        if (barricades != null && !barricades.isEmpty()) {
+            barricades.resetAll();
+        }
         for (ServerPlayer p : present) {
             p.displayClientMessage(Component.literal("§a§lGO"), true);
             level.playSound(null, p.blockPosition(),
@@ -1402,6 +1413,11 @@ public final class EngineArena {
     }
 
     /** Whether a position is inside the map at all, for the block-event guard. */
+    /** The map's barricades, or null if it marked none. */
+    public Barricades barricades() {
+        return barricades;
+    }
+
     // ------------------------------------------------------------------
     // Power
     // ------------------------------------------------------------------

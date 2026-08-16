@@ -99,6 +99,19 @@ public final class EngineEvents {
      */
     @SubscribeEvent
     public static void onBlockTouched(PlayerInteractEvent.RightClickBlock event) {
+        // Nailing a board back on comes first, and eats the click. A player
+        // stood at a stripped barricade holding planks is repairing it, not
+        // trying to place a block against it, and asking them to aim at the
+        // exact missing plank would be a puzzle nobody wants during a horde.
+        if (event.getEntity() instanceof ServerPlayer player
+                && event.getHand() == net.minecraft.world.InteractionHand.MAIN_HAND) {
+            EngineArena arena = EngineArena.active();
+            if (arena != null && EngineArena.isRunning() && arena.barricades() != null
+                    && !arena.barricades().isEmpty() && arena.barricades().repair(player)) {
+                event.setCanceled(true);
+                return;
+            }
+        }
         blockEvent(event.getLevel(), event.getEntity(), event.getPos(), "use_block");
     }
 

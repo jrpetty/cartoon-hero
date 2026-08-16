@@ -175,7 +175,9 @@ public final class Script {
             // Stage B: the half of the game the script could not hear.
             "player_hurt", "player_down", "player_revived",
             "purchase", "powerup_taken", "objective_damaged",
-            "block_placed", "item_dropped", "interact_entity", "timer_end");
+            "block_placed", "item_dropped", "interact_entity", "timer_end",
+            // Boards coming off and going back on.
+            "barricade_broken", "barricade_repaired");
 
     /** Every action the runner understands. */
     private static final java.util.Set<String> ACTIONS = java.util.Set.of(

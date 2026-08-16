@@ -13,6 +13,49 @@ behaviour that was already there · **docs**
 
 ## Unreleased
 
+### Stage D3 — barricades any map can have
+
+- **feat** **`[Barricade]` markers.** Boards a horde tears off and players nail
+  back on, for any authored map.
+
+  ```
+  [Barricade]
+  id=east_door
+  boards=5 width=3 height=4 seconds=3 block=minecraft:oak_planks
+  ```
+
+  **Why this is not the Bridge's barricades.** Those exist and could not be
+  reused: they are addressed by gate index against a hardcoded `ArenaMap`, with
+  board layout, gate width and pen geometry all constants for four gates that
+  exist in one map. Everything true about them is true about *that map*, which is
+  exactly the property an engine cannot have. This is the same idea rebuilt on
+  the only thing an authored map has — a marker you stood next to and named — so
+  size, board count, material and how fast it comes apart are all read off the
+  marker.
+
+  Three things carried over from the Bridge because they are what makes a
+  barricade work, and one deliberately changed:
+
+  - **Boards strip from the top down**, so the last plank standing is the one
+    across the floor. A glance tells you how long a barricade has left, with no
+    number anywhere.
+  - **They do not mend between rounds.** The breather is the repair window, which
+    is what gives the breather something to be for.
+  - **A barricade is a throttle, never a wall.** One a horde cannot pass is a map
+    that plays itself; one it passes instantly is scenery.
+  - **Changed:** gnawing is counted per barricade, not per mob. Ten zombies on
+    one gate is still one gate coming apart at the speed the map asked for —
+    otherwise a big round strips every barricade in the time it takes to walk to
+    one, and the throttle stops throttling exactly when it is needed.
+
+  Right-clicking near a stripped barricade repairs it and eats the click: a
+  player stood there holding planks is repairing, not trying to place a block
+  against it, and asking them to aim at the exact missing plank is a puzzle
+  nobody wants mid-horde.
+
+- **feat** Two more events: `barricade_broken` and `barricade_repaired`, both
+  carrying the barricade's id as subject and the boards left as `amount`.
+
 ### Stage D2 — the lights
 
 - **feat** **`power`** — cuts or restores every light in a named region.
