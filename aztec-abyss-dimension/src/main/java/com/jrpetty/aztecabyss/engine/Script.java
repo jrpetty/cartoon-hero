@@ -191,8 +191,8 @@ public final class Script {
             "cancel", "timer",
             // The sky, rules that live in a place, and the ruleset itself.
             "set_time", "weather", "zone", "set_rule",
-            // Geometry as a verb.
-            "fill", "move");
+            // Geometry as a verb, and the lights.
+            "fill", "move", "power");
 
     /** Every condition the matcher understands. */
     private static final java.util.Set<String> CONDITIONS = java.util.Set.of(
@@ -1047,6 +1047,7 @@ public final class Script {
                 case "set_rule" -> setRule(arena, body, who);
                 case "fill" -> fill(arena, level, body, who);
                 case "move" -> move(arena, level, body, who);
+                case "power" -> power(arena, body);
                 case "tag" -> forEach(arena, who, body, p -> p.addTag(tagName(body)));
                 case "untag" -> forEach(arena, who, body, p -> p.removeTag(tagName(body)));
                 case "message" -> forEach(arena, who, body, p ->
@@ -1262,6 +1263,33 @@ public final class Script {
                 ? o.getAsJsonArray("on_end") : null;
         arena.startTimer(id, seconds, bar, onEnd, who);
         trace(arena, "§7timer §f" + id + " §7— " + seconds + "s");
+    }
+
+    /**
+     * {@code power} — the lights in a region, off or on.
+     *
+     * <pre>
+     * { "power": { "region": "east_wing", "on": false } }
+     * </pre>
+     *
+     * <p>Darkness was something a map could describe and not do. It is the
+     * cheapest way there is to change a room somebody has already been shown,
+     * and it was the one thing ENGINE.md designed a marker for and never built.
+     *
+     * <p>Restoring puts the exact blocks back - wall torches facing the way they
+     * faced - because the taking-out goes through the same tracked-block system
+     * that cleans a run up afterwards, rather than remembering it twice.
+     */
+    private static void power(EngineArena arena, JsonElement body) {
+        if (arena == null) {
+            return;
+        }
+        JsonObject o = body.isJsonObject() ? body.getAsJsonObject() : null;
+        String region = o != null ? str(o, "region", str(o, "circuit", "")) : asText(body);
+        boolean on = o == null || !o.has("on") || o.get("on").getAsBoolean();
+        int changed = arena.power(region, on);
+        trace(arena, "§7power §f" + region + " §7" + (on ? "on" : "off")
+                + " §8— " + changed + " blocks");
     }
 
     /** Reads a three-number corner, each of which may be a sum. */

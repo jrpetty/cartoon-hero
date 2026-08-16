@@ -1403,6 +1403,84 @@ public final class EngineArena {
 
     /** Whether a position is inside the map at all, for the block-event guard. */
     // ------------------------------------------------------------------
+    // Power
+    // ------------------------------------------------------------------
+
+    /**
+     * Cuts or restores the light in a named region.
+     *
+     * <p>ENGINE.md designed an {@code abyss:light} marker - "a light the engine
+     * may turn off" - and it was never built, so darkness was something a map
+     * could describe and not do. Which matters more than it sounds: the lights
+     * going out is the single cheapest way to change a room you have already
+     * shown somebody, and every horror map ever written turns on it.
+     *
+     * <p>Every emitter in the region is taken out through the tracked-block
+     * system, so restoring is the same machinery that cleans a run up afterwards
+     * rather than a second remembering of the same thing. Turning the power back
+     * on puts the exact blocks back, wall torches facing the way they faced.
+     *
+     * @return how many blocks were changed
+     */
+    public int power(String regionId, boolean on) {
+        Marker region = null;
+        String want = regionId == null ? "" : regionId.toLowerCase(java.util.Locale.ROOT);
+        for (Marker r : regions) {
+            if (r.arg("id", r.arg("value", "")).toLowerCase(java.util.Locale.ROOT).equals(want)) {
+                region = r;
+                break;
+            }
+        }
+        if (region == null) {
+            return 0;
+        }
+        int radius = Math.max(1, region.intArg("radius", 8));
+        int height = Math.max(1, region.intArg("height", 6));
+        BlockPos centre = region.pos();
+        int changed = 0;
+        if (on) {
+            // Put back everything inside this region that we took out. Walked as
+            // a copy: restoring writes to the same map it is reading.
+            for (java.util.Map.Entry<BlockPos, BlockState> e
+                    : new ArrayList<>(restore.entrySet())) {
+                BlockPos at = e.getKey();
+                double dx = at.getX() - centre.getX();
+                double dz = at.getZ() - centre.getZ();
+                if (dx * dx + dz * dz > (double) radius * radius
+                        || Math.abs(at.getY() - centre.getY()) > height) {
+                    continue;
+                }
+                if (e.getValue().getLightEmission() <= 0) {
+                    continue; // not ours; some other action changed this block
+                }
+                level.setBlock(at, e.getValue(), 3);
+                restore.remove(at);
+                changed++;
+            }
+            return changed;
+        }
+        BlockState air = net.minecraft.world.level.block.Blocks.AIR.defaultBlockState();
+        for (int x = centre.getX() - radius; x <= centre.getX() + radius; x++) {
+            for (int y = centre.getY() - height; y <= centre.getY() + height; y++) {
+                for (int z = centre.getZ() - radius; z <= centre.getZ() + radius; z++) {
+                    BlockPos at = new BlockPos(x, y, z);
+                    double dx = x - centre.getX();
+                    double dz = z - centre.getZ();
+                    if (dx * dx + dz * dz > (double) radius * radius || !contains(at)) {
+                        continue;
+                    }
+                    if (level.getBlockState(at).getLightEmission() <= 0) {
+                        continue;
+                    }
+                    setTracked(at, air);
+                    changed++;
+                }
+            }
+        }
+        return changed;
+    }
+
+    // ------------------------------------------------------------------
     // Rule overrides
     // ------------------------------------------------------------------
 

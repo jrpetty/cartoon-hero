@@ -13,6 +13,28 @@ behaviour that was already there · **docs**
 
 ## Unreleased
 
+### Stage D2 — the lights
+
+- **feat** **`power`** — cuts or restores every light in a named region.
+
+  ```json
+  { "power": { "region": "east_wing", "on": false } }
+  ```
+
+  ENGINE.md designed an `abyss:light` marker — "a light the engine may turn off"
+  — and it was never built, so darkness was something a map could describe and
+  not do. That matters more than it sounds: the lights going out is the cheapest
+  way there is to change a room you have already shown somebody, and most of
+  what makes a horde frightening is not being able to see it arrive.
+
+  Emitters are taken out through the **tracked-block system**, so restoring is
+  the same machinery that cleans a run up afterwards rather than a second
+  remembering of the same thing — and turning the power back on puts the exact
+  blocks back, wall torches facing the way they faced. Restore walks a copy of
+  the tracked map, because putting blocks back writes to the map it is reading,
+  and it skips anything whose remembered state was not a light, so a `fill` or a
+  `move` in the same region is not quietly undone by the lights coming on.
+
 ### Stage D1 — geometry as a verb
 
 - **feat** **`fill`** — a box of blocks in one action. Promised in ENGINE.md,
