@@ -16,12 +16,19 @@
 # some - so declaration-level faults (syntax, duplicate names, bad arity, broken
 # structure) are reported, and nothing inside a method body is ever reached.
 #
-# That second half is not a small gap and it has cost a CI cycle already. A block
-# of code pasted into the WRONG METHOD - referencing a local that does not exist
+# That second half is not a small gap and it has cost CI cycles twice. A block of
+# code pasted into the WRONG METHOD - referencing a local that does not exist
 # there - is invisible here, because javac never attributes any method body. It
 # was tried: a deliberate out-of-scope reference produced no error at all, only
 # the unrelated missing-class one from the same file. There is no filter that
 # recovers it, so do not go looking for one.
+#
+# The note above once claimed a duplicate local variable "was sitting in javac's
+# output the whole time". That was wrong, and believing it cost the second cycle:
+# a full javac pass with a real duplicate in place produced 3,806 errors and not
+# one of them mentioned it. Method bodies are not attributed, so THAT check never
+# runs either. It is covered from the source instead - see
+# tools/duplicate_locals.py, which is the same trick as missing_imports.py.
 #
 # The guard against that class of mistake is not this script, it is discipline in
 # the edit itself: when replacing text programmatically, ALWAYS assert the match
@@ -60,6 +67,17 @@ if [ -n "$IMPORTS" ]; then
   echo "precheck: MISSING IMPORTS"
   echo "------------------------"
   printf '%s\n' "$IMPORTS"
+  [ -n "$REAL" ] && { echo; echo "precheck: REAL ERRORS"; printf '%s\n' "$REAL"; }
+  exit 1
+fi
+
+# Locals declared twice in one scope. javac would catch this instantly with a
+# classpath and cannot see it without one, so it is read off the source instead.
+DUPES=$(python3 "$(dirname "$0")/duplicate_locals.py")
+if [ -n "$DUPES" ]; then
+  echo "precheck: DUPLICATE LOCALS"
+  echo "-------------------------"
+  printf '%s\n' "$DUPES"
   [ -n "$REAL" ] && { echo; echo "precheck: REAL ERRORS"; printf '%s\n' "$REAL"; }
   exit 1
 fi

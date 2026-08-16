@@ -13,6 +13,32 @@ behaviour that was already there · **docs**
 
 ## Unreleased
 
+### Stage H6a — the check that should have caught H6
+
+H6 failed to build. `portalAmbience` already had a local called `portal` — the
+real portal, at the far end of the annex — and hoisting the *doorway* position
+out of a loop introduced a second one. Renamed to `doorway`, which is what it
+is, and which the comment two lines below was already calling it.
+
+- **docs** **`tools/duplicate_locals.py`, wired into `tools/precheck.sh`.**
+  precheck reported clean and CI failed four minutes later, so the interesting
+  question was why. The header of `precheck.sh` claimed a duplicate local
+  "was sitting in javac's output the whole time" and only a truncated histogram
+  had hidden it. **That was wrong**, and believing it is what let this through: a
+  full javac pass with the real duplicate in place produced 3,806 errors and not
+  one of them mentioned it. Without Minecraft on the classpath javac never
+  attributes a method body, so the duplicate-local check never runs at all. The
+  claim in the header is now corrected rather than left to mislead the next
+  reader.
+
+  Java's scoping rule is simple enough to check without a parser: push a scope on
+  `{`, pop on `}`, complain when a declaration names something already visible.
+  The one subtlety is that `for`/`catch`/`try` headers scope to the block that
+  *follows* them — without that, every second `for (ServerPlayer p : …)` in a
+  method reads as a redeclaration, which was **29 false alarms** on this source
+  on the first run. Validated both ways: zero findings on the tree as it stands,
+  and it pinpoints the exact line when the real bug is put back.
+
 ### Stage H6 — outside the engine: the job board was counting to nine thousand
 
 H1–H5 covered the Arena Engine. This is the same audit over the maze, the round
