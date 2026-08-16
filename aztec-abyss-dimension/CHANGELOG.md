@@ -13,6 +13,46 @@ behaviour that was already there · **docs**
 
 ## Unreleased
 
+### Stage D1 — geometry as a verb
+
+- **feat** **`fill`** — a box of blocks in one action. Promised in ENGINE.md,
+  never built, and its absence is why a map could not have a tide, a closing
+  wall, a flooding cellar or a bridge that builds itself: `set_block` does one
+  block, and a hundred of them is not a rule, it is a transcription.
+
+  ```json
+  { "fill": { "from": [0, 64, 0], "to": [16, 64, 16], "id": "minecraft:water" } }
+  ```
+
+  **Corners go through the same expression reader as every other number**, and
+  that is the whole of item 14. A scheduled hazard is not a bespoke verb, it is
+  `every` + `fill` + a variable:
+
+  ```json
+  { "every": { "seconds": 5, "times": 12, "do": [
+      { "add_var": { "name": "tide", "by": 1 } },
+      { "fill": { "from": [0, "{var:tide}", 0], "to": [64, "{var:tide}", 64],
+                  "id": "minecraft:water" } } ] } }
+  ```
+
+  Rising water, spreading gas, a lava floor and a ceiling coming down are all
+  that shape. Composed out of pieces that already existed rather than a verb per
+  hazard — which is the difference between an engine and a feature list.
+
+- **feat** **`move`** — takes a box of blocks and puts it somewhere else. One
+  translation per call, deliberately: animation is `every` wrapped round it,
+  which is simpler than a track *and* more useful, because the same verb makes a
+  lift, a closing wall, a rotating bridge and a platform that only moves while
+  somebody stands on a plate. The schedule belongs to the author, not the engine.
+
+  Read first, then written, so a move overlapping its own source does not eat
+  its own tail — which a one-block lift always does.
+
+- **change** Both are bounded and reversible: capped at 32,768 blocks an action,
+  refused outside the arena's own bounds so a map can only reshape itself, and
+  every write goes through the tracked-block system, so a run that rearranges the
+  map leaves it unrearranged for the next one.
+
 ### Stage C2 — `set_rule`: a run that can change its mind
 
 - **feat** **`set_rule`** — the last of the promises ENGINE.md made and never

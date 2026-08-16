@@ -190,7 +190,9 @@ public final class Script {
             // Vetoing an event, and clocks with names.
             "cancel", "timer",
             // The sky, rules that live in a place, and the ruleset itself.
-            "set_time", "weather", "zone", "set_rule");
+            "set_time", "weather", "zone", "set_rule",
+            // Geometry as a verb.
+            "fill", "move");
 
     /** Every condition the matcher understands. */
     private static final java.util.Set<String> CONDITIONS = java.util.Set.of(
@@ -1043,6 +1045,8 @@ public final class Script {
                 case "weather" -> weather(arena, level, body, who);
                 case "zone" -> zone(arena, body, who);
                 case "set_rule" -> setRule(arena, body, who);
+                case "fill" -> fill(arena, level, body, who);
+                case "move" -> move(arena, level, body, who);
                 case "tag" -> forEach(arena, who, body, p -> p.addTag(tagName(body)));
                 case "untag" -> forEach(arena, who, body, p -> p.removeTag(tagName(body)));
                 case "message" -> forEach(arena, who, body, p ->
@@ -1258,6 +1262,168 @@ public final class Script {
                 ? o.getAsJsonArray("on_end") : null;
         arena.startTimer(id, seconds, bar, onEnd, who);
         trace(arena, "§7timer §f" + id + " §7— " + seconds + "s");
+    }
+
+    /** Reads a three-number corner, each of which may be a sum. */
+    private static BlockPos corner(JsonObject o, String key, EngineArena arena, ServerPlayer who) {
+        if (o.has(key) && o.get(key).isJsonArray()) {
+            com.google.gson.JsonArray a = o.getAsJsonArray(key);
+            if (a.size() >= 3) {
+                JsonObject shim = new JsonObject();
+                shim.add("x", a.get(0));
+                shim.add("y", a.get(1));
+                shim.add("z", a.get(2));
+                return new BlockPos(num(shim, "x", 0, arena, who),
+                        num(shim, "y", 0, arena, who),
+                        num(shim, "z", 0, arena, who));
+            }
+        }
+        // A region name is a corner too - the only named places an author has.
+        String region = str(o, key, "");
+        if (!region.isEmpty() && arena != null) {
+            return arena.regionPos(region);
+        }
+        return null;
+    }
+
+    /** How many blocks one action may write, so a typo cannot stamp a world. */
+    private static final int FILL_LIMIT = 32768;
+
+    /**
+     * {@code fill} — a box of blocks, in one action.
+     *
+     * <pre>
+     * { "fill": { "from": [0, 64, 0], "to": [16, 64, 16], "id": "minecraft:water" } }
+     * { "fill": { "from": [0, "{var:tide}", 0], "to": [64, "{var:tide}", 64],
+     *             "id": "minecraft:water" } }
+     * </pre>
+     *
+     * <p>Promised in ENGINE.md and never built, and its absence is why a map
+     * could not have a tide, a closing wall, a flooding cellar or a bridge that
+     * builds itself: {@code set_block} does one block, and a hundred of them is
+     * not a rule, it is a transcription.
+     *
+     * <p>Coordinates go through the same expression reader as every other
+     * number, which is what turns this from "fill a box" into "fill the box the
+     * water has reached" — the whole of a scheduled hazard, composed out of
+     * pieces that already exist, rather than a bespoke verb for tides.
+     *
+     * <p>Every write is tracked, so a run that reshapes the map leaves the map
+     * unreshaped for the next one.
+     */
+    private static void fill(EngineArena arena, ServerLevel level,
+                             JsonElement body, ServerPlayer who) {
+        if (!body.isJsonObject() || arena == null) {
+            return;
+        }
+        JsonObject o = body.getAsJsonObject();
+        BlockPos a = corner(o, "from", arena, who);
+        BlockPos b = corner(o, "to", arena, who);
+        if (a == null || b == null) {
+            trace(arena, "§cfill §7— needs \"from\" and \"to\"");
+            return;
+        }
+        ResourceLocation rl = ResourceLocation.tryParse(
+                str(o, "id", "minecraft:air").toLowerCase(Locale.ROOT));
+        if (rl == null || !BuiltInRegistries.BLOCK.containsKey(rl)) {
+            return;
+        }
+        BlockState state = BuiltInRegistries.BLOCK.get(rl).defaultBlockState();
+        int x0 = Math.min(a.getX(), b.getX());
+        int y0 = Math.min(a.getY(), b.getY());
+        int z0 = Math.min(a.getZ(), b.getZ());
+        int x1 = Math.max(a.getX(), b.getX());
+        int y1 = Math.max(a.getY(), b.getY());
+        int z1 = Math.max(a.getZ(), b.getZ());
+        long volume = (long) (x1 - x0 + 1) * (y1 - y0 + 1) * (z1 - z0 + 1);
+        if (volume > FILL_LIMIT) {
+            trace(arena, "§cfill §7— " + volume + " blocks is past the limit of " + FILL_LIMIT);
+            return;
+        }
+        boolean keepAir = o.has("replace_air") && !o.get("replace_air").getAsBoolean();
+        for (int x = x0; x <= x1; x++) {
+            for (int y = y0; y <= y1; y++) {
+                for (int z = z0; z <= z1; z++) {
+                    BlockPos at = new BlockPos(x, y, z);
+                    if (!arena.contains(at)) {
+                        continue; // a map may only reshape itself
+                    }
+                    if (keepAir && level.getBlockState(at).isAir()) {
+                        continue;
+                    }
+                    arena.setTracked(at, state);
+                }
+            }
+        }
+        trace(arena, "§7fill §f" + volume + " §7blocks");
+    }
+
+    /**
+     * {@code move} — takes a box of blocks and puts it somewhere else.
+     *
+     * <pre>
+     * { "move": { "from": [0, 64, 0], "to": [8, 64, 8], "by": [0, 1, 0] } }
+     * </pre>
+     *
+     * <p>One translation per call, deliberately. Animation is
+     * {@code every} wrapped round this, which is both simpler than a bespoke
+     * track and more useful: the same verb makes a lift, a closing wall, a
+     * rotating bridge and a platform that only moves while somebody stands on a
+     * plate, because the schedule is the author's rather than the engine's.
+     *
+     * <p>Read first, then written, so a move that overlaps its own source does
+     * not eat its own tail - which is what a one-block lift always does.
+     */
+    private static void move(EngineArena arena, ServerLevel level,
+                             JsonElement body, ServerPlayer who) {
+        if (!body.isJsonObject() || arena == null) {
+            return;
+        }
+        JsonObject o = body.getAsJsonObject();
+        BlockPos a = corner(o, "from", arena, who);
+        BlockPos b = corner(o, "to", arena, who);
+        BlockPos by = corner(o, "by", arena, who);
+        if (a == null || b == null || by == null) {
+            trace(arena, "§cmove §7— needs \"from\", \"to\" and \"by\"");
+            return;
+        }
+        int x0 = Math.min(a.getX(), b.getX());
+        int y0 = Math.min(a.getY(), b.getY());
+        int z0 = Math.min(a.getZ(), b.getZ());
+        int x1 = Math.max(a.getX(), b.getX());
+        int y1 = Math.max(a.getY(), b.getY());
+        int z1 = Math.max(a.getZ(), b.getZ());
+        long volume = (long) (x1 - x0 + 1) * (y1 - y0 + 1) * (z1 - z0 + 1);
+        if (volume > FILL_LIMIT) {
+            trace(arena, "§cmove §7— " + volume + " blocks is past the limit");
+            return;
+        }
+        // Read the whole shape before writing any of it.
+        java.util.List<BlockPos> from = new ArrayList<>();
+        java.util.List<BlockState> what = new ArrayList<>();
+        for (int x = x0; x <= x1; x++) {
+            for (int y = y0; y <= y1; y++) {
+                for (int z = z0; z <= z1; z++) {
+                    BlockPos at = new BlockPos(x, y, z);
+                    from.add(at);
+                    what.add(level.getBlockState(at));
+                }
+            }
+        }
+        BlockState air = net.minecraft.world.level.block.Blocks.AIR.defaultBlockState();
+        for (BlockPos at : from) {
+            if (arena.contains(at)) {
+                arena.setTracked(at, air);
+            }
+        }
+        for (int i = 0; i < from.size(); i++) {
+            BlockPos to = from.get(i).offset(by.getX(), by.getY(), by.getZ());
+            if (arena.contains(to)) {
+                arena.setTracked(to, what.get(i));
+            }
+        }
+        trace(arena, "§7move §f" + volume + " §7blocks by "
+                + by.getX() + "," + by.getY() + "," + by.getZ());
     }
 
     /**
