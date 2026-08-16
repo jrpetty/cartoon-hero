@@ -81,8 +81,40 @@ public final class Script {
     public record Rule(String event, JsonObject when, JsonArray actions) {
     }
 
-    /** Rules per ruleset id, rebuilt whenever datapacks reload. */
-    private static final Map<String, List<Rule>> BY_RULESET = new HashMap<>();
+    /**
+     * Rules per ruleset id, indexed by the event they answer to.
+     *
+     * <p>A flat list per ruleset until now, walked end to end on every event with
+     * a string comparison per rule to find the few that cared. That is the wrong
+     * shape for how it is used: {@code player_hurt} fires on every blow anybody
+     * takes, {@code break_block} on every block anybody mines, {@code tick} once
+     * a second, and a map with forty rules paid forty comparisons each time to
+     * run two of them. Indexed, a fire is two map lookups and iterates only the
+     * rules written for it.
+     *
+     * <p>The list under each event keeps the order the author wrote them in,
+     * which is the order they run in and the only order that was ever load
+     * bearing.
+     */
+    private static final Map<String, Map<String, List<Rule>>> BY_RULESET = new HashMap<>();
+
+    /** The rules a ruleset wrote for one event, in file order. Never null. */
+    private static List<Rule> rulesFor(String rulesetId, String event) {
+        Map<String, List<Rule>> byEvent = BY_RULESET.get(rulesetId);
+        return byEvent == null ? List.of() : byEvent.getOrDefault(event, List.of());
+    }
+
+    /**
+     * Whether a ruleset has anything at all to say about an event.
+     *
+     * <p>For callers that must build something before they can fire - the block
+     * hooks turn a {@code BlockState} into a registry id string on every click
+     * inside a running arena - so a map with no rule for that event stops paying
+     * for the answer.
+     */
+    public static boolean handles(String rulesetId, String event) {
+        return !rulesFor(rulesetId, event).isEmpty();
+    }
 
     /**
      * Named action lists, per ruleset: the {@code functions} block.
@@ -240,7 +272,7 @@ public final class Script {
             }
             return;
         }
-        List<Rule> rules = new ArrayList<>();
+        Map<String, List<Rule>> rules = new java.util.LinkedHashMap<>();
         int index = 0;
         for (JsonElement el : root.getAsJsonArray("script")) {
             index++;
@@ -265,7 +297,7 @@ public final class Script {
                 }
             }
             checkActions(rulesetId, o.getAsJsonArray("do"), "rule " + index, warn, 0);
-            rules.add(new Rule(on,
+            rules.computeIfAbsent(on, k -> new ArrayList<>()).add(new Rule(on,
                     o.has("when") && o.get("when").isJsonObject() ? o.getAsJsonObject("when") : null,
                     o.getAsJsonArray("do")));
         }
@@ -278,7 +310,11 @@ public final class Script {
     }
 
     public static int ruleCount(String rulesetId) {
-        return BY_RULESET.getOrDefault(rulesetId, List.of()).size();
+        int total = 0;
+        for (List<Rule> rules : BY_RULESET.getOrDefault(rulesetId, Map.of()).values()) {
+            total += rules.size();
+        }
+        return total;
     }
 
     /** How many named functions a ruleset declared, for {@code /arena rules}. */
@@ -397,15 +433,12 @@ public final class Script {
      */
     public static void fireBlock(EngineArena arena, ServerLevel level, String rulesetId,
                                  String event, ServerPlayer who, BlockPos at, String blockId) {
-        List<Rule> rules = BY_RULESET.get(rulesetId);
-        if (rules == null || rules.isEmpty()) {
+        List<Rule> rules = rulesFor(rulesetId, event);
+        if (rules.isEmpty()) {
             return;
         }
         String region = arena.regionAt(at);
         for (Rule rule : rules) {
-            if (!rule.event().equals(event)) {
-                continue;
-            }
             if (rule.when() != null && rule.when().has("block")) {
                 String want = str(rule.when(), "block", "").toLowerCase(Locale.ROOT);
                 if (!want.isEmpty() && !blockId.equalsIgnoreCase(want)
@@ -483,14 +516,11 @@ public final class Script {
      */
     public static void fire(EngineArena arena, ServerLevel level, String rulesetId,
                             String event, ServerPlayer who, String regionId, String subject) {
-        List<Rule> rules = BY_RULESET.get(rulesetId);
-        if (rules == null || rules.isEmpty()) {
+        List<Rule> rules = rulesFor(rulesetId, event);
+        if (rules.isEmpty()) {
             return;
         }
         for (Rule rule : rules) {
-            if (!rule.event().equals(event)) {
-                continue;
-            }
             if (!matches(rule.when(), arena, who, regionId, subject)) {
                 trace(arena, "§8skip §7" + event + (regionId == null ? "" : " (" + regionId + ")")
                         + " §8— conditions not met");
@@ -521,15 +551,12 @@ public final class Script {
     public static boolean fireCancellable(EngineArena arena, ServerLevel level, String rulesetId,
                                           String event, ServerPlayer who, String regionId,
                                           String subject, int amount) {
-        List<Rule> rules = BY_RULESET.get(rulesetId);
-        if (rules == null || rules.isEmpty()) {
+        List<Rule> rules = rulesFor(rulesetId, event);
+        if (rules.isEmpty()) {
             return false;
         }
         boolean veto = false;
         for (Rule rule : rules) {
-            if (!rule.event().equals(event)) {
-                continue;
-            }
             if (!matches(rule.when(), arena, who, regionId, subject, amount)) {
                 continue;
             }

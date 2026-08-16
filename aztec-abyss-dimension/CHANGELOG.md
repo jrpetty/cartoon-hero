@@ -13,6 +13,40 @@ behaviour that was already there · **docs**
 
 ## Unreleased
 
+### Stage H3 — the script layer stops reading the whole rulebook
+
+H1 and H2 were about work done more often than it needed to be. This one is about
+work done on behalf of maps that never asked for it, and it reaches outside the
+engine: one of these was costing servers that have never run an arena at all.
+
+- **change** **Rules are indexed by the event they answer to.** Every `fire`
+  walked the ruleset's whole list and string-compared each rule's event to find
+  the few that cared. That is the wrong shape for how it is used: `player_hurt`
+  fires on every blow anybody takes, `break_block` on every block anybody mines,
+  `tick` once a second — so a map with forty rules paid forty comparisons each
+  time to run two of them. A fire is now two map lookups and iterates only the
+  rules written for it. The order inside an event is the order the author wrote
+  them in, which is the order they run in and the only one that was ever load
+  bearing.
+
+- **change** **The hooks ask whether a map cares before doing the work of
+  telling it.** `break_block`, `block_placed`, `use_block`, `item_dropped`,
+  `interact_entity` and `player_hurt` each turned a block state, an item or an
+  entity type into a registry-id String, and worked out which region the player
+  was standing in, *before* handing all of it to a script that in most maps has
+  no rule for that event at all. New `Script.handles` answers that in a map
+  lookup, and the whole preparation is skipped.
+
+- **fix** **`onEngineDamage` no longer touches every mob on the server.** It is
+  called for every living thing hurt anywhere, in any dimension, whether an arena
+  is running or not — and it opened the mob's persistent data before asking
+  anything else. Reading that data *creates* it, so a server where nobody has
+  ever entered the Abyss was still attaching an empty NBT compound to every
+  zombie a player swung at, and then writing it to disk with the chunk. The
+  Insta-Kill check — a long comparison, and false almost always — goes first now.
+  Filed as a fix rather than a change because a mod should not leave marks on a
+  world it is not being used in.
+
 ### Stage H2 — the questions signs were being asked twenty times a second
 
 Same shape of pass as H1, one level down: not "which region is this" but "how big

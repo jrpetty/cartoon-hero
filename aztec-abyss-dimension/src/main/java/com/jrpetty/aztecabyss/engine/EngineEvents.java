@@ -182,6 +182,12 @@ public final class EngineEvents {
             event.setCanceled(true);
             return;
         }
+        // Every blow anybody takes reaches here. Naming the damage source and
+        // working out which region they are standing in are both a loop or an
+        // allocation, and a map with no player_hurt rule needs neither.
+        if (!Script.handles(arena.rulesetId(), "player_hurt")) {
+            return;
+        }
         String source = event.getSource().getMsgId();
         if (Script.fireCancellable(arena, level, arena.rulesetId(), "player_hurt",
                 player, arena.regionAt(player.blockPosition()), source,
@@ -203,7 +209,8 @@ public final class EngineEvents {
             return;
         }
         EngineArena arena = EngineArena.active();
-        if (arena == null || !EngineArena.isRunning() || !arena.isParticipant(player)) {
+        if (arena == null || !EngineArena.isRunning() || !arena.isParticipant(player)
+                || !Script.handles(arena.rulesetId(), "item_dropped")) {
             return;
         }
         net.minecraft.world.item.ItemStack stack = event.getEntity().getItem();
@@ -231,7 +238,8 @@ public final class EngineEvents {
             return;
         }
         EngineArena arena = EngineArena.active();
-        if (arena == null || !EngineArena.isRunning() || !arena.isParticipant(player)) {
+        if (arena == null || !EngineArena.isRunning() || !arena.isParticipant(player)
+                || !Script.handles(arena.rulesetId(), "interact_entity")) {
             return;
         }
         String id = net.minecraft.core.registries.BuiltInRegistries.ENTITY_TYPE
@@ -270,6 +278,13 @@ public final class EngineEvents {
         if (arena == null || !EngineArena.isRunning() || !arena.contains(pos)) {
             return false;
         }
+        // Asked before the block is looked up, because naming it means reading
+        // its state and turning a ResourceLocation into a String - on every
+        // block anybody mines inside a running arena, for a map that may have no
+        // rule about blocks at all.
+        if (!Script.handles(arena.rulesetId(), eventName)) {
+            return false;
+        }
         var block = level.getBlockState(pos).getBlock();
         String id = net.minecraft.core.registries.BuiltInRegistries.BLOCK.getKey(block).toString();
         return Script.fireCancellable(arena, level, arena.rulesetId(), eventName,
@@ -283,7 +298,8 @@ public final class EngineEvents {
             return;
         }
         EngineArena arena = EngineArena.active();
-        if (arena == null || !EngineArena.isRunning() || !arena.contains(pos)) {
+        if (arena == null || !EngineArena.isRunning() || !arena.contains(pos)
+                || !Script.handles(arena.rulesetId(), eventName)) {
             return;
         }
         var block = level.getBlockState(pos).getBlock();
@@ -1433,13 +1449,22 @@ public final class EngineEvents {
                 || !(event.getEntity().level() instanceof ServerLevel level)) {
             return;
         }
+        // Cheapest and most selective test first, and the ordering is the whole
+        // point. This handler is called for every mob hurt anywhere on the
+        // server, in any dimension, whether the engine is running or not - and
+        // it used to open the mob's persistent data before asking anything else.
+        // Reading that data creates it: a server where nobody has ever touched
+        // this mod was still attaching an empty NBT compound to every zombie a
+        // player swung at, and then writing it to disk with the chunk. An
+        // Insta-Kill that is not up is a long comparison.
+        if (!EnginePowerUps.instaKill(level)
+                || !(event.getSource().getEntity() instanceof ServerPlayer)) {
+            return;
+        }
         if (!mob.getPersistentData().getBoolean("aztecabyss_engine_mob")) {
             return;
         }
-        if (EnginePowerUps.instaKill(level)
-                && event.getSource().getEntity() instanceof ServerPlayer) {
-            event.setAmount(Math.max(event.getAmount(), mob.getMaxHealth() * 2.0F));
-        }
+        event.setAmount(Math.max(event.getAmount(), mob.getMaxHealth() * 2.0F));
     }
 
     /**
