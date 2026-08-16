@@ -13,6 +13,43 @@ behaviour that was already there · **docs**
 
 ## Unreleased
 
+### Stage C1 — the sky, the weather, and places that hold their own rules
+
+- **feat** **`set_time`** — moves the sky, in numbers or in words
+  (`dawn`, `noon`, `dusk`, `midnight`), absolutely or by an offset, with an
+  optional `frozen` that holds it there. Sent as a packet per player rather than
+  written to the level, because `setDayTime` on a non-overworld level is a no-op
+  — its level data is a read-only view of the overworld's. This is the same
+  technique the maze already proves works for its own clock.
+
+- **feat** **`weather`** — `clear`, `rain` or `storm`, per player, for the same
+  reason: a custom dimension reads the overworld's weather and cannot be told its
+  own. The game-event packet is what the client actually listens to.
+
+- **feat** **`zone` — a region that carries its own rules.** A region could be
+  entered and left and that was the whole of it: the script was told about the
+  crossing and the place itself had no properties. So everything true "in the
+  vault" had to be written as a rule for going in and a matching one for coming
+  out, kept in step by hand forever, and wrong the first time somebody died
+  inside and respawned elsewhere.
+
+  ```json
+  { "zone": { "id": "flooded", "effect": "minecraft:slowness", "amp": 1 } }
+  { "zone": { "id": "vault", "no_build": true, "no_pvp": true } }
+  { "zone": { "id": "plinth", "no_damage": true, "heal": 1 } }
+  { "zone": { "id": "flooded", "clear": true } }
+  ```
+
+  Vocabulary: `effect` + `amp`, `damage`, `heal`, `no_fall`, `no_build`,
+  `no_pvp`, `no_damage`. Effects are **reapplied** every second rather than
+  tracked-and-removed — a three-second effect topped up each second cleans itself
+  up when you walk out, whereas tracking who is in what is the version that
+  leaves somebody permanently slowed after a disconnect.
+
+  `no_build`, `no_pvp` and `no_damage` are enforced ahead of the script, because
+  they are properties of the place and should hold whether or not the map has a
+  script at all.
+
 ### Stage B — the half of the game the script could not hear
 
 Nine events, a veto, and clocks with names. Every one of these was a thing the

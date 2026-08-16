@@ -188,7 +188,9 @@ public final class Script {
             // The language, rather than the verbs: branching, reuse and chance.
             "if", "call", "one_of", "tag", "untag",
             // Vetoing an event, and clocks with names.
-            "cancel", "timer");
+            "cancel", "timer",
+            // The sky, and rules that live in a place rather than in a rule.
+            "set_time", "weather", "zone");
 
     /** Every condition the matcher understands. */
     private static final java.util.Set<String> CONDITIONS = java.util.Set.of(
@@ -1037,6 +1039,9 @@ public final class Script {
                     trace(arena, "§ccancel §7— event vetoed");
                 }
                 case "timer" -> timer(arena, body, who);
+                case "set_time" -> setTime(arena, level, body, who);
+                case "weather" -> weather(arena, level, body, who);
+                case "zone" -> zone(arena, body, who);
                 case "tag" -> forEach(arena, who, body, p -> p.addTag(tagName(body)));
                 case "untag" -> forEach(arena, who, body, p -> p.removeTag(tagName(body)));
                 case "message" -> forEach(arena, who, body, p ->
@@ -1252,6 +1257,111 @@ public final class Script {
                 ? o.getAsJsonArray("on_end") : null;
         arena.startTimer(id, seconds, bar, onEnd, who);
         trace(arena, "§7timer §f" + id + " §7— " + seconds + "s");
+    }
+
+    /**
+     * {@code set_time} — moves the sky.
+     *
+     * <pre>
+     * { "set_time": { "to": 18000 } }        midnight
+     * { "set_time": { "add": 1000 } }
+     * { "set_time": { "to": "night", "frozen": true } }
+     * </pre>
+     *
+     * <p>Sent as a packet per player rather than written to the level, because
+     * {@code setDayTime} on a non-overworld level is a no-op - the level data is
+     * a read-only view of the overworld's. This is the same technique the maze
+     * uses for its own clock, which is the proof it works: hold the daylight
+     * cycle off and the client keeps exactly what it is given.
+     */
+    private static void setTime(EngineArena arena, ServerLevel level,
+                                JsonElement body, ServerPlayer who) {
+        if (!body.isJsonObject()) {
+            return;
+        }
+        JsonObject o = body.getAsJsonObject();
+        long now = level.getDayTime() % 24000L;
+        long want;
+        if (o.has("add")) {
+            want = now + num(o, "add", 0, arena, who);
+        } else if (o.has("to") && o.get("to").isJsonPrimitive()
+                && o.get("to").getAsJsonPrimitive().isString()
+                && !Expr.looksLikeExpression(str(o, "to", ""))) {
+            // Words, because "dawn" is what an author means and 23000 is not.
+            want = switch (str(o, "to", "").toLowerCase(Locale.ROOT)) {
+                case "dawn", "sunrise" -> 23000L;
+                case "day", "noon" -> 6000L;
+                case "dusk", "sunset" -> 12000L;
+                case "night", "midnight" -> 18000L;
+                default -> now;
+            };
+        } else {
+            want = num(o, "to", (int) now, arena, who);
+        }
+        final long at = ((want % 24000L) + 24000L) % 24000L;
+        boolean cycle = !(o.has("frozen") && o.get("frozen").getAsBoolean());
+        forEach(arena, who, body, p -> p.connection.send(
+                new net.minecraft.network.protocol.game.ClientboundSetTimePacket(
+                        level.getGameTime(), at, cycle)));
+    }
+
+    /**
+     * {@code weather} — rain, thunder or clear, for the people in the run.
+     *
+     * <p>Also per player, and for the same reason: a custom dimension reads the
+     * overworld's weather and cannot be told its own. The game-event packet is
+     * what the client actually listens to, so sending it directly gets the
+     * result without pretending the level owns anything.
+     */
+    private static void weather(EngineArena arena, ServerLevel level,
+                                JsonElement body, ServerPlayer who) {
+        String kind = body.isJsonObject()
+                ? str(body.getAsJsonObject(), "type", "clear") : asText(body);
+        float rain = switch (kind.toLowerCase(Locale.ROOT)) {
+            case "rain", "raining" -> 1.0F;
+            case "storm", "thunder" -> 1.0F;
+            default -> 0.0F;
+        };
+        boolean storm = kind.equalsIgnoreCase("storm") || kind.equalsIgnoreCase("thunder");
+        forEach(arena, who, body, p -> {
+            p.connection.send(new net.minecraft.network.protocol.game.ClientboundGameEventPacket(
+                    net.minecraft.network.protocol.game.ClientboundGameEventPacket.RAIN_LEVEL_CHANGE, rain));
+            p.connection.send(new net.minecraft.network.protocol.game.ClientboundGameEventPacket(
+                    net.minecraft.network.protocol.game.ClientboundGameEventPacket.THUNDER_LEVEL_CHANGE,
+                    storm ? 1.0F : 0.0F));
+        });
+    }
+
+    /**
+     * {@code zone} — turns a region's rules on or off.
+     *
+     * <pre>
+     * { "zone": { "id": "flooded", "effect": "minecraft:slowness", "amp": 1 } }
+     * { "zone": { "id": "vault",   "no_build": true, "no_pvp": true } }
+     * { "zone": { "id": "flooded", "clear": true } }
+     * </pre>
+     *
+     * <p>A region could be entered and left and that was the whole of it - the
+     * script was told about the crossing and the place itself had no properties.
+     * Every rule about somewhere therefore had to be written as a pair of rules
+     * about going in and coming out, and kept in step by hand forever. A zone
+     * holds its own rules, so the place is the rule.
+     */
+    private static void zone(EngineArena arena, JsonElement body, ServerPlayer who) {
+        if (!body.isJsonObject() || arena == null) {
+            return;
+        }
+        JsonObject o = body.getAsJsonObject();
+        String id = str(o, "id", "").toLowerCase(Locale.ROOT);
+        if (id.isEmpty()) {
+            trace(arena, "§czone §7— no id given");
+            return;
+        }
+        if (o.has("clear") && o.get("clear").getAsBoolean()) {
+            arena.clearZoneRules(id);
+            return;
+        }
+        arena.setZoneRules(id, o.deepCopy());
     }
 
     /** A scoreboard tag, read from either the short or the long form. */

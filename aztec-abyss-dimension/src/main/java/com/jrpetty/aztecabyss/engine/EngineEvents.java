@@ -104,6 +104,13 @@ public final class EngineEvents {
 
     @SubscribeEvent
     public static void onBlockBroken(net.neoforged.neoforge.event.level.BlockEvent.BreakEvent event) {
+        EngineArena a = EngineArena.active();
+        if (a != null && EngineArena.isRunning()
+                && event.getPlayer() instanceof ServerPlayer sp
+                && zoneForbidsBuild(a, event.getPos(), sp, "break blocks")) {
+            event.setCanceled(true);
+            return;
+        }
         if (cancellableBlock(event.getLevel(), event.getPlayer(), event.getPos(), "break_block")) {
             event.setCanceled(true);
         }
@@ -120,6 +127,12 @@ public final class EngineEvents {
     @SubscribeEvent
     public static void onBlockPlaced(net.neoforged.neoforge.event.level.BlockEvent.EntityPlaceEvent event) {
         if (!(event.getEntity() instanceof ServerPlayer player)) {
+            return;
+        }
+        EngineArena a = EngineArena.active();
+        if (a != null && EngineArena.isRunning()
+                && zoneForbidsBuild(a, event.getPos(), player, "build")) {
+            event.setCanceled(true);
             return;
         }
         if (cancellableBlock(event.getLevel(), player, event.getPos(), "block_placed")) {
@@ -144,6 +157,16 @@ public final class EngineEvents {
         }
         EngineArena arena = EngineArena.active();
         if (arena == null || !EngineArena.isRunning() || !arena.isParticipant(player)) {
+            return;
+        }
+        // A zone that forbids fighting stops the blow before anything is asked.
+        if (event.getSource().getEntity() instanceof ServerPlayer
+                && arena.zoneForbids(player.blockPosition(), "no_pvp")) {
+            event.setCanceled(true);
+            return;
+        }
+        if (arena.zoneForbids(player.blockPosition(), "no_damage")) {
+            event.setCanceled(true);
             return;
         }
         String source = event.getSource().getMsgId();
@@ -204,6 +227,23 @@ public final class EngineEvents {
                 player, arena.regionAt(event.getTarget().blockPosition()), id, 0)) {
             event.setCanceled(true);
         }
+    }
+
+    /**
+     * A zone's own flags, enforced before the script is even asked.
+     *
+     * <p>{@code no_build} on the vault is a property of the vault, not a rule
+     * somebody has to remember to write, and it should hold whether or not the
+     * map has a script at all.
+     */
+    private static boolean zoneForbidsBuild(EngineArena arena, net.minecraft.core.BlockPos pos,
+                                            ServerPlayer player, String what) {
+        if (!arena.zoneForbids(pos, "no_build")) {
+            return false;
+        }
+        player.displayClientMessage(net.minecraft.network.chat.Component.literal(
+                "§7You cannot " + what + " here."), true);
+        return true;
     }
 
     /** Asks the script whether a block event should be allowed to happen. */

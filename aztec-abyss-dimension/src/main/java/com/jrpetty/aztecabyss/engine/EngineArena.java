@@ -712,7 +712,6 @@ public final class EngineArena {
             phaseTicks++;
             tickScheduled();
             tickTimers();
-        tickTimers();
             tickRegions(present);
             if (phaseTicks % 20 == 0) {
                 Script.fire(this, level, rules.id, "tick", present.get(0));
@@ -732,6 +731,9 @@ public final class EngineArena {
         // round-mode one alike. A countdown is not a free-mode idea.
         tickScheduled();
         tickTimers();
+        if (level.getGameTime() % 20L == 0L) {
+            tickZoneRules(present);
+        }
         tickBorder();
         tickLastStanding(present);
         // Once a second, in both modes. A deadline, a countdown and a "have they
@@ -1400,6 +1402,92 @@ public final class EngineArena {
     }
 
     /** Whether a position is inside the map at all, for the block-event guard. */
+    // ------------------------------------------------------------------
+    // Zone rules
+    // ------------------------------------------------------------------
+
+    /**
+     * The properties a named region carries, if any.
+     *
+     * <p>A region used to be a shape that fired two events and nothing else, so
+     * everything true "in the vault" had to be written as a rule for going in
+     * and a matching rule for coming out - two halves kept in step by hand, and
+     * wrong the first time anybody died inside and respawned elsewhere. A zone
+     * holds its rules itself and they apply to whoever is standing in it, which
+     * is what a place is.
+     */
+    private final java.util.Map<String, com.google.gson.JsonObject> zoneRules =
+            new java.util.HashMap<>();
+
+    public void setZoneRules(String id, com.google.gson.JsonObject rules) {
+        if (zoneRules.size() < 64 || zoneRules.containsKey(id)) {
+            zoneRules.put(id, rules);
+        }
+    }
+
+    public void clearZoneRules(String id) {
+        zoneRules.remove(id);
+    }
+
+    /** The rules of whichever zone a position sits in, or null. */
+    public com.google.gson.JsonObject zoneRulesAt(BlockPos at) {
+        String id = regionAt(at);
+        return id == null ? null : zoneRules.get(id.toLowerCase(java.util.Locale.ROOT));
+    }
+
+    /** Whether a zone forbids something, by flag name. */
+    public boolean zoneForbids(BlockPos at, String flag) {
+        com.google.gson.JsonObject r = zoneRulesAt(at);
+        return r != null && r.has(flag) && r.get(flag).getAsBoolean();
+    }
+
+    /**
+     * Applies whatever the zones say, once a second.
+     *
+     * <p>Effects are reapplied rather than tracked: a three-second effect topped
+     * up every second is self-cleaning, because walking out simply stops the
+     * top-up and it lapses on its own. Tracking who is in what and removing on
+     * exit is the version of this that leaves someone permanently slowed after
+     * a disconnect.
+     */
+    private void tickZoneRules(List<ServerPlayer> present) {
+        if (zoneRules.isEmpty()) {
+            return;
+        }
+        for (ServerPlayer p : present) {
+            com.google.gson.JsonObject r = zoneRulesAt(p.blockPosition());
+            if (r == null) {
+                continue;
+            }
+            if (r.has("effect")) {
+                var rl = net.minecraft.resources.ResourceLocation.tryParse(
+                        r.get("effect").getAsString().toLowerCase(java.util.Locale.ROOT));
+                if (rl != null) {
+                    var holder = net.minecraft.core.registries.BuiltInRegistries.MOB_EFFECT
+                            .getHolder(net.minecraft.resources.ResourceKey.create(
+                                    net.minecraft.core.registries.Registries.MOB_EFFECT, rl));
+                    if (holder.isPresent()) {
+                        int amp = r.has("amp") ? Math.max(0, Math.min(9, r.get("amp").getAsInt())) : 0;
+                        p.addEffect(new net.minecraft.world.effect.MobEffectInstance(
+                                holder.get(), 60, amp, false, false));
+                    }
+                }
+            }
+            if (r.has("damage")) {
+                float dmg = r.get("damage").getAsFloat();
+                if (dmg > 0.0F) {
+                    p.hurt(level.damageSources().magic(), dmg);
+                }
+            }
+            if (r.has("heal")) {
+                p.heal(r.get("heal").getAsFloat());
+            }
+            if (r.has("no_fall") && r.get("no_fall").getAsBoolean()) {
+                p.fallDistance = 0.0F;
+            }
+        }
+    }
+
     /** Whether somebody is in this run, for the handlers that fire per player. */
     public boolean isParticipant(ServerPlayer player) {
         return participants.contains(player.getUUID());
