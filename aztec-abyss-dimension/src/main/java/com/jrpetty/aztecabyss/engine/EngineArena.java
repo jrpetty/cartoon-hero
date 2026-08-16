@@ -178,6 +178,8 @@ public final class EngineArena {
     private final List<Marker> zones = new ArrayList<>();
     private final List<Marker> spawners = new ArrayList<>();
     private final List<Marker> bossPoints = new ArrayList<>();
+    /** Patrol legs, in the order an author numbered them. */
+    private final List<Marker> waypoints = new ArrayList<>();
     /** Optional out-of-sight spawn chambers, paired to the nearest way in. */
     private final List<Marker> pens = new ArrayList<>();
     private final List<Marker> teleports = new ArrayList<>();
@@ -458,6 +460,7 @@ public final class EngineArena {
         current.zones.addAll(scan.of("zone"));
         current.spawners.addAll(scan.of("spawner"));
         current.bossPoints.addAll(scan.of("boss"));
+        current.waypoints.addAll(scan.of("waypoint"));
         current.pens.addAll(scan.of("pen"));
         current.teleports.addAll(scan.of("teleport"));
         current.regions.addAll(scan.of("region"));
@@ -746,7 +749,8 @@ public final class EngineArena {
         if (barricades != null && !barricades.isEmpty()) {
             barricades.tick();
         }
-        MobBrains.tick(level, alive);
+        MobBrains.tick(level, alive, this);
+        tickBossPhases();
         if (level.getGameTime() % 20L == 0L) {
             tickZoneRules(present);
         }
@@ -1439,6 +1443,28 @@ public final class EngineArena {
     }
 
     /** Whether a position is inside the map at all, for the block-event guard. */
+    /**
+     * The legs of a named route, in order.
+     *
+     * <p>Sorted by the {@code order} an author wrote rather than by the order the
+     * scan happened to find them in, because a structure block's position inside
+     * an NBT file is not a thing anybody can see or control.
+     */
+    public List<Marker> route(String id) {
+        if (id == null || id.isEmpty() || waypoints.isEmpty()) {
+            return List.of();
+        }
+        String want = id.toLowerCase(java.util.Locale.ROOT);
+        List<Marker> legs = new ArrayList<>();
+        for (Marker w : waypoints) {
+            if (w.arg("route", w.arg("value", "")).toLowerCase(java.util.Locale.ROOT).equals(want)) {
+                legs.add(w);
+            }
+        }
+        legs.sort(java.util.Comparator.comparingInt(m -> m.intArg("order", 0)));
+        return legs;
+    }
+
     /** The map's barricades, or null if it marked none. */
     public Barricades barricades() {
         return barricades;
@@ -1568,6 +1594,55 @@ public final class EngineArena {
 
     public void clearRule(String path) {
         ruleOverrides.remove(path);
+    }
+
+    /**
+     * Health bands each boss has already dropped through.
+     *
+     * <p>A boss was a mob with a lot of health and a bar over it, and the only
+     * thing that could happen to it was dying. Every boss in this mod is written
+     * in Java for that reason - there was no way to say "at half health it calls
+     * for help and the lights go out" in data.
+     *
+     * <p>So rather than a phase system with its own vocabulary of attacks,
+     * immunities and enrages, a boss crossing a threshold <em>fires an event</em>.
+     * Everything a phase might want to do - spawn adds, cut the power, rewrite a
+     * rule, retitle the bar, hasten itself - is a verb the script already has, so
+     * a phase is an ordinary rule and needed no new grammar at all.
+     */
+    private final java.util.Map<java.util.UUID, Integer> bossPhase = new java.util.HashMap<>();
+
+    /**
+     * Watches every boss's health and fires {@code boss_phase} as it falls.
+     *
+     * <p>The subject is the entity id and the amount is the band just entered, so
+     * {@code {"when": {"amount": {"at_most": 50}}}} reads as "at half or worse".
+     * The first sighting is not a phase change - otherwise every boss would fire
+     * one the instant it spawned, at full health, which is the kind of off-by-one
+     * that makes an author distrust the whole feature.
+     */
+    private void tickBossPhases() {
+        if (alive.isEmpty() || level.getGameTime() % 10L != 0L) {
+            return;
+        }
+        for (Mob mob : alive) {
+            if (!mob.isAlive() || !mob.getPersistentData().getBoolean("aztecabyss_boss")) {
+                continue;
+            }
+            int pct = (int) Math.floor(mob.getHealth() * 100.0F / Math.max(1.0F, mob.getMaxHealth()));
+            int band = pct >= 75 ? 100 : pct >= 50 ? 75 : pct >= 25 ? 50 : 25;
+            Integer was = bossPhase.get(mob.getUUID());
+            if (was != null && band >= was) {
+                continue;
+            }
+            bossPhase.put(mob.getUUID(), band);
+            if (was == null) {
+                continue;
+            }
+            String id = net.minecraft.core.registries.BuiltInRegistries.ENTITY_TYPE
+                    .getKey(mob.getType()).toString();
+            Script.fireAmount(this, level, rules.id, "boss_phase", null, id, band);
+        }
     }
 
     /** How many numbers this run has had rewritten, for {@code /arena status}. */
@@ -2321,7 +2396,22 @@ public final class EngineArena {
             String id = s.arg("id", s.arg("value", "minecraft:zombie"));
             int count = Math.max(1, Math.min(32, s.intArg("count", 1)));
             for (int i = 0; i < count; i++) {
-                spawnAt(id, s.pos(), s.intArg("health", 0), s.intArg("damage", 0));
+                Mob made = spawnAt(id, s.pos(), s.intArg("health", 0), s.intArg("damage", 0));
+                if (made == null) {
+                    continue;
+                }
+                // A hand-placed enemy is the one an author is most likely to want
+                // walking a beat, so behaviour and route come off the marker that
+                // put it there. Without the route a patroller has nowhere to go
+                // and stands still, which reads as a broken mob rather than a
+                // missing argument.
+                MobBrains.mark(made, s.arg("behaviour", s.arg("behavior", "")));
+                String route = s.arg("route", "");
+                if (!route.isEmpty()) {
+                    made.getPersistentData().putString("aztecabyss_route",
+                            route.toLowerCase(java.util.Locale.ROOT));
+                    MobBrains.mark(made, "patrol");
+                }
             }
         }
     }
@@ -2346,14 +2436,14 @@ public final class EngineArena {
     }
 
     /** Puts one named entity at a point, optionally overriding its numbers. */
-    private void spawnAt(String entityId, BlockPos at, int health, int damage) {
+    private Mob spawnAt(String entityId, BlockPos at, int health, int damage) {
         var type = EntityType.byString(entityId);
         if (type.isEmpty()) {
-            return;
+            return null;
         }
         Entity entity = type.get().create(level);
         if (!(entity instanceof Mob mob)) {
-            return;
+            return null;
         }
         mob.moveTo(at.getX() + 0.5, at.getY(), at.getZ() + 0.5, rng.nextFloat() * 360.0F, 0.0F);
         if (health > 0) {
@@ -2371,6 +2461,7 @@ public final class EngineArena {
             mob.setTarget(target);
         }
         alive.add(mob);
+        return mob;
     }
 
     /**

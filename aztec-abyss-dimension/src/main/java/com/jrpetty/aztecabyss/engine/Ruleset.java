@@ -339,43 +339,6 @@ public final class Ruleset {
     public static Ruleset defaults(String id) {
         Builder b = new Builder();
         b.id = id;
-        // Exact rosters for named rounds. A round listed here does not roll.
-        if (root.has("waves") && root.get("waves").isJsonArray()) {
-            for (JsonElement el : root.getAsJsonArray("waves")) {
-                if (!el.isJsonObject()) {
-                    continue;
-                }
-                JsonObject w = el.getAsJsonObject();
-                int round = intOf(w, "round", 0);
-                if (round <= 0 || !w.has("mobs") || !w.get("mobs").isJsonArray()) {
-                    continue;
-                }
-                java.util.List<WaveEntry> line = new ArrayList<>();
-                int total = 0;
-                for (JsonElement me : w.getAsJsonArray("mobs")) {
-                    if (!me.isJsonObject()) {
-                        continue;
-                    }
-                    JsonObject m = me.getAsJsonObject();
-                    String entity = str(m, "id", "");
-                    if (entity.isEmpty() || EntityType.byString(entity).isEmpty()) {
-                        continue;
-                    }
-                    // Capped in the same breath as it is read, so an exact wave
-                    // cannot ask for more than a rolled one is allowed.
-                    int count = clampInt(intOf(m, "count", 1), 1, MAX_CONCURRENT * 4 - total);
-                    if (count <= 0) {
-                        break;
-                    }
-                    total += count;
-                    line.add(new WaveEntry(entity, count,
-                            str(m, "behaviour", str(m, "behavior", "")).toLowerCase(Locale.ROOT)));
-                }
-                if (!line.isEmpty()) {
-                    b.waves.put(round, java.util.List.copyOf(line));
-                }
-            }
-        }
         return new Ruleset(b);
     }
 
@@ -566,6 +529,43 @@ public final class Ruleset {
                         gear == null ? "" : str(gear, "head", ""),
                         // What it does, as opposed to what it is worth.
                         str(m, "behaviour", str(m, "behavior", "")).toLowerCase(Locale.ROOT)));
+            }
+        }
+        // Exact rosters for named rounds. A round listed here does not roll.
+        if (root.has("waves") && root.get("waves").isJsonArray()) {
+            for (JsonElement el : root.getAsJsonArray("waves")) {
+                if (!el.isJsonObject()) {
+                    continue;
+                }
+                JsonObject w = el.getAsJsonObject();
+                int round = intOf(w, "round", 0);
+                if (round <= 0 || !w.has("mobs") || !w.get("mobs").isJsonArray()) {
+                    continue;
+                }
+                java.util.List<WaveEntry> line = new ArrayList<>();
+                int total = 0;
+                for (JsonElement me : w.getAsJsonArray("mobs")) {
+                    if (!me.isJsonObject()) {
+                        continue;
+                    }
+                    JsonObject m = me.getAsJsonObject();
+                    String entity = str(m, "id", "");
+                    if (entity.isEmpty() || EntityType.byString(entity).isEmpty()) {
+                        continue;
+                    }
+                    // Capped in the same breath as it is read, so an exact wave
+                    // cannot ask for more than a rolled one is allowed.
+                    int count = clampInt(intOf(m, "count", 1), 1, MAX_CONCURRENT * 4 - total);
+                    if (count <= 0) {
+                        break;
+                    }
+                    total += count;
+                    line.add(new WaveEntry(entity, count,
+                            str(m, "behaviour", str(m, "behavior", "")).toLowerCase(Locale.ROOT)));
+                }
+                if (!line.isEmpty()) {
+                    b.waves.put(round, java.util.List.copyOf(line));
+                }
             }
         }
         return new Ruleset(b);

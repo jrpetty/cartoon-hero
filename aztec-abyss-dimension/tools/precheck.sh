@@ -14,9 +14,21 @@
 # What it does and does not catch, honestly. javac stops after the phase that
 # produced errors, and without Minecraft the resolution phase always produces
 # some - so declaration-level faults (syntax, duplicate names, bad arity, broken
-# structure) are reported, and type-level ones inside method bodies are not
-# reached. That is still most of what actually goes wrong in a large mechanical
-# edit, and it is free. CI remains the real compiler.
+# structure) are reported, and nothing inside a method body is ever reached.
+#
+# That second half is not a small gap and it has cost a CI cycle already. A block
+# of code pasted into the WRONG METHOD - referencing a local that does not exist
+# there - is invisible here, because javac never attributes any method body. It
+# was tried: a deliberate out-of-scope reference produced no error at all, only
+# the unrelated missing-class one from the same file. There is no filter that
+# recovers it, so do not go looking for one.
+#
+# The guard against that class of mistake is not this script, it is discipline in
+# the edit itself: when replacing text programmatically, ALWAYS assert the match
+# count is what you expect before writing. Every instance of this bug so far has
+# been a replace() that silently took the first of two matches.
+#
+# CI remains the real compiler.
 #
 #   usage: tools/precheck.sh
 #   exit 0 = nothing but classpath noise; exit 1 = look at what it prints
@@ -37,6 +49,7 @@ REAL=$(printf '%s\n' "$OUT" \
   | grep -E '\.java:[0-9]+: error:' \
   | grep -vE 'error: (package [A-Za-z0-9_.]+ does not exist|cannot find symbol)' \
   | grep -vE 'error: method does not override or implement a method from a supertype')
+
 
 if [ -z "$REAL" ]; then
   echo "precheck: clean (classpath noise only)"

@@ -77,8 +77,11 @@ public final class MobBrains {
         return mob.getPersistentData().getString(TAG);
     }
 
+    /** Which leg of its route a patroller is on. */
+    private static final String LEG = "aztecabyss_leg";
+
     /** Runs every behaviour once. Called on the arena's tick, throttled. */
-    public static void tick(ServerLevel level, List<Mob> mobs) {
+    public static void tick(ServerLevel level, List<Mob> mobs, EngineArena arena) {
         if (mobs.isEmpty() || level.getGameTime() % INTERVAL != 0L) {
             return;
         }
@@ -98,11 +101,52 @@ public final class MobBrains {
                 case "sniper" -> sniper(level, mob, target);
                 case "burrower" -> burrower(level, mob, target, now);
                 case "support" -> support(level, mob, mobs);
+                case "patrol" -> patrol(level, mob, target, arena);
                 default -> {
                     // A behaviour this engine has never heard of. A map written
                     // for a later one keeps running.
                 }
             }
+        }
+    }
+
+    /**
+     * Walks a named route, and stops walking it the moment it sees you.
+     *
+     * <p>Everything the engine spawns beelines at the nearest player from the
+     * instant it exists, which makes every enemy the same enemy and every room
+     * the same room. A patroller has somewhere to be, so a map can have a
+     * guarded corridor you time rather than a horde you outrun - and, more
+     * usefully, it can have quiet that ends.
+     *
+     * <p>The route is abandoned on sight rather than politely finished, because
+     * a guard that walks on past you having noticed is not a guard.
+     *
+     * <pre>
+     *   [Waypoint]
+     *   route=east order=1
+     * </pre>
+     */
+    private static void patrol(ServerLevel level, Mob mob, LivingEntity target, EngineArena arena) {
+        if (target != null && mob.hasLineOfSight(target) && mob.distanceTo(target) < 16.0) {
+            return; // seen you; the route stops mattering
+        }
+        if (arena == null) {
+            return;
+        }
+        String route = mob.getPersistentData().getString("aztecabyss_route");
+        java.util.List<Marker> legs = arena.route(route);
+        if (legs.isEmpty()) {
+            return;
+        }
+        int leg = mob.getPersistentData().getInt(LEG) % legs.size();
+        net.minecraft.core.BlockPos at = legs.get(leg).pos();
+        if (mob.blockPosition().distSqr(at) <= 4.0) {
+            mob.getPersistentData().putInt(LEG, (leg + 1) % legs.size());
+            return;
+        }
+        if (mob.getNavigation().isDone() || level.getGameTime() % 40L == 0L) {
+            mob.getNavigation().moveTo(at.getX() + 0.5, at.getY(), at.getZ() + 0.5, 0.9);
         }
     }
 

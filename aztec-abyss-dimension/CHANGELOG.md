@@ -13,6 +13,48 @@ behaviour that was already there · **docs**
 
 ## Unreleased
 
+### Stage E3 — patrol routes, boss phases, and the wave parser put back in scope
+
+- **fix** **The wave-table parser was pasted into `defaults()`.** It referenced
+  `root`, which does not exist there, and the build failed. Two methods end
+  `return new Ruleset(b);` and the programmatic replace silently took the first.
+  Moved into `parse(String, JsonObject)`, where `root` is the argument.
+
+- **feat** **Patrol routes.** `[Waypoint] route=east order=1`, and a spawner that
+  names a route gets a mob that walks it.
+
+  Everything the engine spawns beelines at the nearest player from the instant it
+  exists, which makes every enemy the same enemy and every room the same room. A
+  patroller has somewhere to be — so a map can have a guarded corridor you *time*
+  rather than a horde you outrun, and, more usefully, it can have quiet that ends.
+  Legs sort by the `order` an author wrote, not by where the scan found them,
+  because a structure block's position inside an NBT file is not something anybody
+  can see or control. The route is abandoned on sight rather than politely
+  finished: a guard that walks past you having noticed is not a guard.
+
+- **feat** **Boss phases.** A boss crossing 75%, 50% or 25% health fires
+  `boss_phase`, carrying the entity id as subject and the band as `amount`.
+
+  Every boss in this mod is written in Java, because there was no way to say "at
+  half health it calls for help and the lights go out" in data. Rather than build
+  a phase system with its own vocabulary of attacks, immunities and enrages, a
+  threshold simply **fires an event** — and everything a phase might want is a
+  verb the script already has: `spawn` adds, `power` off, `set_rule` harder,
+  `set_bar` retitled, `effect` to enrage. A phase is an ordinary rule, and needed
+  no new grammar at all.
+
+  The first sighting is deliberately not a phase change, or every boss would fire
+  one the instant it spawned at full health — the kind of off-by-one that makes an
+  author distrust a whole feature.
+
+- **change** `tools/precheck.sh` now states its real limit rather than implying
+  coverage it does not have. **A block pasted into the wrong method is invisible
+  to it** — javac never attributes any method body without the classpath, so the
+  bad reference is never reached. This was tested, not assumed: a deliberate
+  out-of-scope reference produced no error at all. The guard against that class of
+  mistake is not the script, it is asserting the match count before every
+  programmatic replace, which is what would have caught this one.
+
 ### Stage E2 — exact waves, and gates that know what they are for
 
 - **feat** **Wave tables.** A round can be written out instead of rolled for.
