@@ -312,6 +312,21 @@ public final class DealerSign {
             return true;
         }
 
+        // The economy could not hear itself. A purchase is the single most
+        // meaningful thing a player does in a points map and nothing could react
+        // to one - no "first weapon bought opens the door", no bulk discount, no
+        // shopkeeper who says something. Fired before the charge so a rule may
+        // still refuse the sale outright.
+        if (arena != null && Script.fireCancellable(arena, level, arena.rulesetId(),
+                "purchase", player, null,
+                net.minecraft.core.registries.BuiltInRegistries.ITEM
+                        .getKey(offer.stack().getItem()).toString(),
+                offer.price())) {
+            player.displayClientMessage(Component.literal(
+                    "§7" + label + " §8— §7not for sale to you."), true);
+            return true;
+        }
+
         if (!offer.currency().charge(player, offer.price())) {
             player.displayClientMessage(Component.literal(
                     "§cNot enough. §7" + label + " costs "

@@ -129,13 +129,20 @@ public final class Script {
     static final class Ctx {
         String region;
         String subject;
+        /** How much the event was about - damage, price, hit points. */
+        int amount;
         int budget = ACTION_BUDGET;
         int depth;
         boolean cancelled;
 
         Ctx(String region, String subject) {
+            this(region, subject, 0);
+        }
+
+        Ctx(String region, String subject, int amount) {
             this.region = region;
             this.subject = subject;
+            this.amount = amount;
         }
 
         /** Spends one action. False once the rule has had its allowance. */
@@ -164,7 +171,11 @@ public final class Script {
             "run_start", "round_start", "round_end", "mob_killed", "extracted",
             "objective_complete", "objective_failed", "region_enter", "region_leave", "tick",
             "use_block", "break_block", "run_won", "phase_start",
-            "player_died", "player_joined");
+            "player_died", "player_joined",
+            // Stage B: the half of the game the script could not hear.
+            "player_hurt", "player_down", "player_revived",
+            "purchase", "powerup_taken", "objective_damaged",
+            "block_placed", "item_dropped", "interact_entity", "timer_end");
 
     /** Every action the runner understands. */
     private static final java.util.Set<String> ACTIONS = java.util.Set.of(
@@ -175,13 +186,15 @@ public final class Script {
             "delay", "every", "take", "set_phase", "teleport", "heal", "clear_effects",
             "set_saved_var", "add_saved_var", "set_my_saved_var", "add_my_saved_var",
             // The language, rather than the verbs: branching, reuse and chance.
-            "if", "call", "one_of", "tag", "untag");
+            "if", "call", "one_of", "tag", "untag",
+            // Vetoing an event, and clocks with names.
+            "cancel", "timer");
 
     /** Every condition the matcher understands. */
     private static final java.util.Set<String> CONDITIONS = java.util.Set.of(
             "round", "area_open", "region", "var", "my_var", "team", "team_var", "seconds", "block",
             "has_item", "killed", "chance", "phase", "subject", "players",
-            "saved_var", "my_saved_var", "tag", "not");
+            "saved_var", "my_saved_var", "tag", "not", "timer", "amount");
 
     public static List<String> warnings(String rulesetId) {
         return WARNINGS.getOrDefault(rulesetId, List.of());
@@ -486,6 +499,54 @@ public final class Script {
     }
 
     /**
+     * Fires an event that can be called off, and says whether it was.
+     *
+     * <p>Everything before this reported the past: the block <em>was</em> broken,
+     * the player <em>was</em> hurt. A map could dress that up but never prevent
+     * it, so "this wall cannot be mined", "no fall damage in the pit", "the
+     * carrier cannot open doors" were unsayable — every one of them a rule about
+     * what must <em>not</em> happen.
+     *
+     * @return true if a rule ran {@code cancel}, and the caller should stop
+     */
+    public static boolean fireCancellable(EngineArena arena, ServerLevel level, String rulesetId,
+                                          String event, ServerPlayer who, String regionId,
+                                          String subject, int amount) {
+        List<Rule> rules = BY_RULESET.get(rulesetId);
+        if (rules == null || rules.isEmpty()) {
+            return false;
+        }
+        boolean veto = false;
+        for (Rule rule : rules) {
+            if (!rule.event().equals(event)) {
+                continue;
+            }
+            if (!matches(rule.when(), arena, who, regionId, subject, amount)) {
+                continue;
+            }
+            trace(arena, "§afire §f" + event + (subject == null ? "" : " §7(" + subject + ")"));
+            Ctx ctx = new Ctx(regionId, subject, amount);
+            body(arena, level, rule.actions(), who, ctx);
+            if (ctx.cancelled) {
+                veto = true;
+            }
+        }
+        return veto;
+    }
+
+    /** The same, for events that carry no number. */
+    public static boolean fireCancellable(EngineArena arena, ServerLevel level, String rulesetId,
+                                          String event, ServerPlayer who, String subject) {
+        return fireCancellable(arena, level, rulesetId, event, who, null, subject, 0);
+    }
+
+    /** Fires an ordinary event that carries a quantity. */
+    public static void fireAmount(EngineArena arena, ServerLevel level, String rulesetId,
+                                  String event, ServerPlayer who, String subject, int amount) {
+        fireCancellable(arena, level, rulesetId, event, who, null, subject, amount);
+    }
+
+    /**
      * Whether the last event fired was vetoed by a {@code cancel}.
      *
      * <p>Read immediately after firing, by the handlers that have something to
@@ -533,11 +594,16 @@ public final class Script {
     /** Conditions. Absent means always. */
     private static boolean matches(JsonObject when, EngineArena arena,
                                    ServerPlayer who, String regionId) {
-        return matches(when, arena, who, regionId, null);
+        return matches(when, arena, who, regionId, null, 0);
     }
 
     private static boolean matches(JsonObject when, EngineArena arena,
                                    ServerPlayer who, String regionId, String subject) {
+        return matches(when, arena, who, regionId, subject, 0);
+    }
+
+    private static boolean matches(JsonObject when, EngineArena arena, ServerPlayer who,
+                                   String regionId, String subject, int amount) {
         if (when == null) {
             return true;
         }
@@ -695,6 +761,41 @@ public final class Script {
                 return false;
             }
         }
+        // How long is left on a named clock. Zero when it is not running, so
+        // {"timer":{"id":"bomb","at_most":10}} is also how a map asks "is the
+        // bomb nearly out" without a second variable shadowing the first.
+        if (when.has("timer") && when.get("timer").isJsonObject()) {
+            JsonObject t = when.getAsJsonObject("timer");
+            int left = arena.timerSeconds(str(t, "id", "").toLowerCase(Locale.ROOT));
+            if (t.has("equals") && left != intOf(t, "equals", -1)) {
+                return false;
+            }
+            if (t.has("at_least") && left < intOf(t, "at_least", 0)) {
+                return false;
+            }
+            if (t.has("at_most") && left > intOf(t, "at_most", Integer.MAX_VALUE)) {
+                return false;
+            }
+            if (t.has("running") && (left > 0) != t.get("running").getAsBoolean()) {
+                return false;
+            }
+        }
+        // How much of something an event was about - damage dealt, points
+        // spent, hit points taken off an objective. Carried on the events that
+        // have a number in them and compared the same way as everything else.
+        if (when.has("amount") && when.get("amount").isJsonObject()) {
+            JsonObject a = when.getAsJsonObject("amount");
+            int got = amount;
+            if (a.has("equals") && got != intOf(a, "equals", Integer.MIN_VALUE)) {
+                return false;
+            }
+            if (a.has("at_least") && got < intOf(a, "at_least", 0)) {
+                return false;
+            }
+            if (a.has("at_most") && got > intOf(a, "at_most", Integer.MAX_VALUE)) {
+                return false;
+            }
+        }
         // A tag somebody is carrying, put there by the "tag" action. The
         // engine's own memory of a player that is not a number: who has the
         // flag, who has been marked, who already opened this door once.
@@ -708,7 +809,7 @@ public final class Script {
         // negative test needed a variable flipped by a second rule, because
         // there was no way to say "and this is not true" about anything.
         if (when.has("not") && when.get("not").isJsonObject()) {
-            if (matches(when.getAsJsonObject("not"), arena, who, regionId, subject)) {
+            if (matches(when.getAsJsonObject("not"), arena, who, regionId, subject, amount)) {
                 return false;
             }
         }
@@ -927,6 +1028,15 @@ public final class Script {
                 case "if" -> branch(arena, level, body, who, ctx);
                 case "call" -> call(arena, level, asText(body), who, ctx);
                 case "one_of" -> oneOf(arena, level, body, who, ctx);
+                case "cancel" -> {
+                    // Only meaningful on an event that has something left to
+                    // stop. On any other it is a no-op rather than an error,
+                    // because which events are cancellable is the engine's
+                    // business and not something a map should have to track.
+                    ctx.cancelled = true;
+                    trace(arena, "§ccancel §7— event vetoed");
+                }
+                case "timer" -> timer(arena, body, who);
                 case "tag" -> forEach(arena, who, body, p -> p.addTag(tagName(body)));
                 case "untag" -> forEach(arena, who, body, p -> p.removeTag(tagName(body)));
                 case "message" -> forEach(arena, who, body, p ->
@@ -1019,7 +1129,7 @@ public final class Script {
         JsonObject o = body.getAsJsonObject();
         JsonObject when = o.has("when") && o.get("when").isJsonObject()
                 ? o.getAsJsonObject("when") : null;
-        boolean pass = matches(when, arena, who, ctx.region, ctx.subject);
+        boolean pass = matches(when, arena, who, ctx.region, ctx.subject, ctx.amount);
         JsonArray take = pass
                 ? (o.has("do") && o.get("do").isJsonArray() ? o.getAsJsonArray("do") : null)
                 : (o.has("else") && o.get("else").isJsonArray() ? o.getAsJsonArray("else") : null);
@@ -1098,6 +1208,50 @@ public final class Script {
             }
             return;
         }
+    }
+
+    /**
+     * {@code timer} — a clock with a name.
+     *
+     * <pre>
+     * { "timer": { "id": "bomb", "seconds": 90, "bar": "§cDetonation",
+     *              "on_end": [ { "lose": {} } ] } }
+     * { "timer": { "id": "bomb", "stop": true } }
+     * { "timer": { "id": "bomb", "add": 30 } }
+     * </pre>
+     *
+     * <p>Every countdown in every map so far was hand-built out of {@code every}
+     * plus a variable plus a rule to notice it reaching zero - four moving parts
+     * to express one, rewritten slightly differently each time and wrong in a
+     * different way each time. A timer counts itself down, shows itself if asked,
+     * fires its own actions at zero, and can be read by a condition and printed
+     * by a placeholder while it runs.
+     */
+    private static void timer(EngineArena arena, JsonElement body, ServerPlayer who) {
+        if (!body.isJsonObject() || arena == null) {
+            return;
+        }
+        JsonObject o = body.getAsJsonObject();
+        String id = str(o, "id", "").toLowerCase(Locale.ROOT);
+        if (id.isEmpty()) {
+            trace(arena, "§ctimer §7— no id given");
+            return;
+        }
+        if (o.has("stop") && o.get("stop").getAsBoolean()) {
+            arena.stopTimer(id);
+            trace(arena, "§7timer §f" + id + " §7stopped");
+            return;
+        }
+        if (o.has("add")) {
+            arena.addTimer(id, num(o, "add", 0, arena, who));
+            return;
+        }
+        int seconds = Math.max(1, Math.min(36000, num(o, "seconds", 60, arena, who)));
+        String bar = o.has("bar") ? str(o, "bar", "") : null;
+        JsonArray onEnd = o.has("on_end") && o.get("on_end").isJsonArray()
+                ? o.getAsJsonArray("on_end") : null;
+        arena.startTimer(id, seconds, bar, onEnd, who);
+        trace(arena, "§7timer §f" + id + " §7— " + seconds + "s");
     }
 
     /** A scoreboard tag, read from either the short or the long form. */
@@ -1603,6 +1757,14 @@ public final class Script {
                 return String.valueOf(arena.vars().get(
                         "team:" + team.toLowerCase(Locale.ROOT) + ":" + key));
             }
+            case "timer":
+                return String.valueOf(arena.timerSeconds(a.toLowerCase(Locale.ROOT)));
+            case "timer_clock": {
+                int t = arena.timerSeconds(a.toLowerCase(Locale.ROOT));
+                return (t / 60) + ":" + (t % 60 < 10 ? "0" : "") + (t % 60);
+            }
+            case "amount":
+                return "0";
             case "round":
                 return String.valueOf(arena.round());
             case "seconds":

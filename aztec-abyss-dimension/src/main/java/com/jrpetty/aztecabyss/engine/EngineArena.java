@@ -711,6 +711,8 @@ public final class EngineArena {
         if (!PHASE_ACTIVE.equals(phase)) {
             phaseTicks++;
             tickScheduled();
+            tickTimers();
+        tickTimers();
             tickRegions(present);
             if (phaseTicks % 20 == 0) {
                 Script.fire(this, level, rules.id, "tick", present.get(0));
@@ -729,6 +731,7 @@ public final class EngineArena {
         // Before the mode split, so delayed work fires in a free-mode map and a
         // round-mode one alike. A countdown is not a free-mode idea.
         tickScheduled();
+        tickTimers();
         tickBorder();
         tickLastStanding(present);
         // Once a second, in both modes. A deadline, a countdown and a "have they
@@ -1397,6 +1400,11 @@ public final class EngineArena {
     }
 
     /** Whether a position is inside the map at all, for the block-event guard. */
+    /** Whether somebody is in this run, for the handlers that fire per player. */
+    public boolean isParticipant(ServerPlayer player) {
+        return participants.contains(player.getUUID());
+    }
+
     public boolean contains(BlockPos at) {
         return bounds.isInside(at);
     }
@@ -1472,6 +1480,102 @@ public final class EngineArena {
     /** How many pieces of delayed work are queued, for {@code /arena status}. */
     public int scheduledCount() {
         return scheduled.size();
+    }
+
+    // ------------------------------------------------------------------
+    // Named timers
+    // ------------------------------------------------------------------
+
+    /**
+     * A clock with a name, counting down.
+     *
+     * <p>Every countdown a map wanted was previously assembled out of
+     * {@code every} plus a variable plus a rule watching for zero - four moving
+     * parts for one idea, rebuilt slightly differently in every map and wrong in
+     * a different way in each. One of these counts itself down, can be read by a
+     * condition while it runs, prints itself through {@code {timer:id}}, and
+     * fires its own actions when it reaches nothing.
+     */
+    private record Timer(int ticksLeft, String bar, com.google.gson.JsonArray onEnd, UUID who) {
+    }
+
+    private final java.util.Map<String, Timer> timers = new java.util.LinkedHashMap<>();
+
+    /** Starts or replaces a timer. Restarting one is how a map extends a siege. */
+    public void startTimer(String id, int seconds, String bar,
+                           com.google.gson.JsonArray onEnd, ServerPlayer who) {
+        if (timers.size() >= 32 && !timers.containsKey(id)) {
+            return; // a cap, for the same reason the scheduler has one
+        }
+        timers.put(id, new Timer(Math.max(1, seconds) * 20, bar, onEnd,
+                who == null ? null : who.getUUID()));
+    }
+
+    public void stopTimer(String id) {
+        timers.remove(id);
+    }
+
+    /** Adds (or, negative, takes off) seconds without disturbing the rest. */
+    public void addTimer(String id, int seconds) {
+        Timer t = timers.get(id);
+        if (t == null) {
+            return;
+        }
+        int left = Math.max(1, t.ticksLeft() + seconds * 20);
+        timers.put(id, new Timer(left, t.bar(), t.onEnd(), t.who()));
+    }
+
+    /** Seconds left, rounded up. Zero when no such timer is running. */
+    public int timerSeconds(String id) {
+        Timer t = timers.get(id);
+        return t == null ? 0 : (t.ticksLeft() + 19) / 20;
+    }
+
+    /** The label of the first timer asking to be shown, or null. */
+    public String timerBar() {
+        for (Timer t : timers.values()) {
+            if (t.bar() != null && !t.bar().isEmpty()) {
+                int left = (t.ticksLeft() + 19) / 20;
+                return t.bar() + " §f" + (left / 60) + ":"
+                        + (left % 60 < 10 ? "0" : "") + (left % 60);
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Counts every timer down and fires the ones that land.
+     *
+     * <p>Collected then run, like everything else here: the actions at zero may
+     * start another timer, and mutating the map being walked is how three
+     * separate bugs in this class started.
+     */
+    private void tickTimers() {
+        if (timers.isEmpty()) {
+            return;
+        }
+        List<String> done = new ArrayList<>();
+        for (java.util.Map.Entry<String, Timer> e : timers.entrySet()) {
+            Timer t = e.getValue();
+            int left = t.ticksLeft() - 1;
+            if (left <= 0) {
+                done.add(e.getKey());
+            } else {
+                e.setValue(new Timer(left, t.bar(), t.onEnd(), t.who()));
+            }
+        }
+        for (String id : done) {
+            Timer t = timers.remove(id);
+            if (t == null) {
+                continue;
+            }
+            ServerPlayer who = t.who() == null || level.getServer() == null ? null
+                    : level.getServer().getPlayerList().getPlayer(t.who());
+            Script.fire(this, level, rules.id, "timer_end", who, null, id);
+            if (t.onEnd() != null) {
+                Script.runActions(this, level, t.onEnd(), who);
+            }
+        }
     }
 
     /** Whether the border has already been told to close. */
@@ -1688,6 +1792,9 @@ public final class EngineArena {
         }
         level.playSound(null, player.blockPosition(), SoundEvents.WARDEN_ANGRY,
                 SoundSource.PLAYERS, 1.0F, 0.6F);
+        // The whole downed-and-revive system was invisible to scripts, so a map
+        // could not react to the moment that decides most co-op runs.
+        Script.fire(this, level, rules.id, "player_down", player);
     }
 
     /** Bleed-out, and teammates picking people up. */
@@ -1715,6 +1822,10 @@ public final class EngineArena {
                 if (progress >= need) {
                     lift(victim, helper);
                     lost.add(e.getKey());
+                    // Fired for the one who was picked up; the helper is the
+                    // subject, so a rule can pay whoever did the picking.
+                    Script.fire(this, level, rules.id, "player_revived", victim, null,
+                            helper.getGameProfile().getName());
                     continue;
                 }
                 if (progress % 10 == 0) {

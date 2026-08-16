@@ -153,6 +153,15 @@ public final class EnginePowerUps {
         if (kind == null) {
             return;
         }
+        // Which power-up landed, so a map can react to the thing itself rather
+        // than to its side effects. The name is the subject, so
+        // {"when":{"subject":"insta_kill"}} reads the way it sounds.
+        EngineArena arena = EngineArena.active();
+        if (arena != null) {
+            Script.fire(arena, level, arena.rulesetId(), "powerup_taken",
+                    present.isEmpty() ? null : present.get(0), null,
+                    kind.name().toLowerCase(java.util.Locale.ROOT));
+        }
         long now = level.getGameTime();
         switch (kind) {
             case AEGIS -> {

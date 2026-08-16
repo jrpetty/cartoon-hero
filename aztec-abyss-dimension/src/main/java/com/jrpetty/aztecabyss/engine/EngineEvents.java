@@ -104,7 +104,123 @@ public final class EngineEvents {
 
     @SubscribeEvent
     public static void onBlockBroken(net.neoforged.neoforge.event.level.BlockEvent.BreakEvent event) {
-        blockEvent(event.getLevel(), event.getPlayer(), event.getPos(), "break_block");
+        if (cancellableBlock(event.getLevel(), event.getPlayer(), event.getPos(), "break_block")) {
+            event.setCanceled(true);
+        }
+    }
+
+    /**
+     * Somebody put a block down.
+     *
+     * <p>The counterpart {@code break_block} never had. Half of what players do
+     * with blocks is add them, and a map could see only the taking away - so
+     * barricading, bridging, walling a door and building anything at all were
+     * things the engine watched happen and could not name.
+     */
+    @SubscribeEvent
+    public static void onBlockPlaced(net.neoforged.neoforge.event.level.BlockEvent.EntityPlaceEvent event) {
+        if (!(event.getEntity() instanceof ServerPlayer player)) {
+            return;
+        }
+        if (cancellableBlock(event.getLevel(), player, event.getPos(), "block_placed")) {
+            event.setCanceled(true);
+        }
+    }
+
+    /**
+     * Damage about to land on a player, before armour and before it lands.
+     *
+     * <p>Fired ahead of the hit rather than after it, which is what makes
+     * {@code cancel} mean something: "no fall damage in the pit", "the carrier
+     * takes double", "nothing can hurt you on the plinth" are all rules about a
+     * blow that has not happened yet.
+     */
+    @SubscribeEvent
+    public static void onPlayerHurt(
+            net.neoforged.neoforge.event.entity.living.LivingIncomingDamageEvent event) {
+        if (!(event.getEntity() instanceof ServerPlayer player)
+                || !(player.level() instanceof ServerLevel level)) {
+            return;
+        }
+        EngineArena arena = EngineArena.active();
+        if (arena == null || !EngineArena.isRunning() || !arena.isParticipant(player)) {
+            return;
+        }
+        String source = event.getSource().getMsgId();
+        if (Script.fireCancellable(arena, level, arena.rulesetId(), "player_hurt",
+                player, arena.regionAt(player.blockPosition()), source,
+                Math.round(event.getAmount()))) {
+            event.setCanceled(true);
+        }
+    }
+
+    /**
+     * Something left a player's hands.
+     *
+     * <p>Cancellable, because "you cannot drop the flag" is the rule that makes
+     * a carrier mechanic work at all.
+     */
+    @SubscribeEvent
+    public static void onItemDropped(net.neoforged.neoforge.event.entity.item.ItemTossEvent event) {
+        if (!(event.getPlayer() instanceof ServerPlayer player)
+                || !(player.level() instanceof ServerLevel level)) {
+            return;
+        }
+        EngineArena arena = EngineArena.active();
+        if (arena == null || !EngineArena.isRunning() || !arena.isParticipant(player)) {
+            return;
+        }
+        net.minecraft.world.item.ItemStack stack = event.getEntity().getItem();
+        String id = net.minecraft.core.registries.BuiltInRegistries.ITEM
+                .getKey(stack.getItem()).toString();
+        if (Script.fireCancellable(arena, level, arena.rulesetId(), "item_dropped",
+                player, arena.regionAt(player.blockPosition()), id, stack.getCount())) {
+            event.setCanceled(true);
+        }
+    }
+
+    /**
+     * A player right-clicked a living thing.
+     *
+     * <p>The last of the four ways a player can touch the world. Blocks were
+     * covered in both directions and entities in neither, so a hostage to free,
+     * a mount to claim, a trader to talk to or a teammate to hand something to
+     * could not be written.
+     */
+    @SubscribeEvent
+    public static void onInteractEntity(
+            net.neoforged.neoforge.event.entity.player.PlayerInteractEvent.EntityInteract event) {
+        if (!(event.getEntity() instanceof ServerPlayer player)
+                || !(player.level() instanceof ServerLevel level)) {
+            return;
+        }
+        EngineArena arena = EngineArena.active();
+        if (arena == null || !EngineArena.isRunning() || !arena.isParticipant(player)) {
+            return;
+        }
+        String id = net.minecraft.core.registries.BuiltInRegistries.ENTITY_TYPE
+                .getKey(event.getTarget().getType()).toString();
+        if (Script.fireCancellable(arena, level, arena.rulesetId(), "interact_entity",
+                player, arena.regionAt(event.getTarget().blockPosition()), id, 0)) {
+            event.setCanceled(true);
+        }
+    }
+
+    /** Asks the script whether a block event should be allowed to happen. */
+    private static boolean cancellableBlock(net.minecraft.world.level.LevelAccessor levelAccess,
+                                            net.minecraft.world.entity.player.Player entity,
+                                            net.minecraft.core.BlockPos pos, String eventName) {
+        if (!(levelAccess instanceof ServerLevel level) || !(entity instanceof ServerPlayer player)) {
+            return false;
+        }
+        EngineArena arena = EngineArena.active();
+        if (arena == null || !EngineArena.isRunning() || !arena.contains(pos)) {
+            return false;
+        }
+        var block = level.getBlockState(pos).getBlock();
+        String id = net.minecraft.core.registries.BuiltInRegistries.BLOCK.getKey(block).toString();
+        return Script.fireCancellable(arena, level, arena.rulesetId(), eventName,
+                player, arena.regionAt(pos), id, 0);
     }
 
     private static void blockEvent(net.minecraft.world.level.LevelAccessor levelAccess,

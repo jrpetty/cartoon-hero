@@ -142,12 +142,28 @@ public final class Objective {
         if (biting == 0) {
             return false;
         }
+        int bite = Math.max(1, Math.round(biting * 0.25f));
         health -= biting * 0.25f;
+        // The thing the whole map is about was losing hit points in silence.
+        // Nothing could sound an alarm, darken the sky at a quarter left, or
+        // pay the players who drove the biters off - the drama of a defend map
+        // was entirely in a number nobody was told about.
+        EngineArena arena = EngineArena.active();
+        if (arena != null) {
+            Script.fireAmount(arena, level, arena.rulesetId(), "objective_damaged",
+                    null, String.valueOf(percent()), bite);
+        }
         if (health <= 0) {
             failed = true;
             return true;
         }
         return false;
+    }
+
+    /** How much of the objective is left, nought to a hundred. */
+    public int percent() {
+        int max = Math.max(1, marker.intArg("hp", 600));
+        return Math.max(0, Math.min(100, Math.round(health * 100.0f / max)));
     }
 
     /** Someone has to be stood in it, and stay stood in it. */

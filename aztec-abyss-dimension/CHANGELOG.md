@@ -13,6 +13,44 @@ behaviour that was already there · **docs**
 
 ## Unreleased
 
+### Stage B — the half of the game the script could not hear
+
+Nine events, a veto, and clocks with names. Every one of these was a thing the
+engine already did and could not be reacted to.
+
+- **feat** **`player_hurt`, `player_down`, `player_revived`.** The entire
+  downed-and-revive system — the thing that decides most co-op runs — was
+  invisible to scripts. `player_hurt` fires *before* the blow lands, which is
+  what makes vetoing it mean anything.
+- **feat** **`purchase`, `powerup_taken`, `objective_damaged`.** A purchase is
+  the most meaningful thing a player does in a points map and nothing could react
+  to one. An objective was losing hit points in silence — no alarm at a quarter
+  left, no reward for driving the biters off. `objective_damaged` carries the
+  bite as `amount` and the percentage left as its subject.
+- **feat** **`block_placed`, `item_dropped`, `interact_entity`.** Half of what
+  players do with blocks is *add* them, and the engine watched only the taking
+  away. `interact_entity` closes the last of the four ways a player can touch the
+  world: blocks were covered in both directions and entities in neither.
+- **feat** **`cancel`.** Every event reported the past — the block *was* broken,
+  the player *was* hurt — so a map could dress an outcome up but never prevent
+  it. "This wall cannot be mined", "no fall damage in the pit", "you cannot drop
+  the flag", "not for sale to you" are all now one action. Cancellable on
+  `player_hurt`, `break_block`, `block_placed`, `item_dropped`,
+  `interact_entity` and `purchase`; a harmless no-op anywhere else, because
+  which events can be stopped is the engine's business and not something a map
+  should have to track.
+- **feat** **Named timers.** `{ "timer": { "id": "bomb", "seconds": 90,
+  "bar": "§cDetonation", "on_end": [ … ] } }`, plus `stop` and `add`. Every
+  countdown so far was hand-assembled from `every` plus a variable plus a rule
+  watching for zero — four moving parts for one idea, rebuilt slightly
+  differently in every map and wrong differently in each. A timer counts itself
+  down, shows itself if asked, fires its own actions at zero, answers the
+  `timer` condition while it runs, and prints through `{timer:bomb}` and
+  `{timer_clock:bomb}`. Fires `timer_end` as well, so other rules can listen.
+- **feat** **The `amount` condition.** How much an event was about — damage
+  dealt, price paid, hit points taken off. Compared with the same four
+  comparators as everything else.
+
 ### The script layer gets branching, reuse and sums
 
 Stage A of the engine programme. Three absences made real maps unwritable rather
