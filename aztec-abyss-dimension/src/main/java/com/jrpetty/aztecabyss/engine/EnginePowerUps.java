@@ -174,7 +174,6 @@ public final class EnginePowerUps {
             case DOUBLE_POINTS -> doubleUntil = now + DURATION;
             case INSTA_KILL -> instaUntil = now + DURATION;
             case PURGE -> {
-                EngineArena arena = EngineArena.active();
                 if (arena != null) {
                     arena.purge();
                 }
