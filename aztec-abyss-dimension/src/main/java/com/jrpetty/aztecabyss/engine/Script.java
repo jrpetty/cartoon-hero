@@ -194,7 +194,9 @@ public final class Script {
             // The sky, rules that live in a place, and the ruleset itself.
             "set_time", "weather", "zone", "set_rule",
             // Geometry as a verb, and the lights.
-            "fill", "move", "power");
+            "fill", "move", "power",
+            // Roles, as a loadout rather than a system.
+            "give_class");
 
     /** Every condition the matcher understands. */
     private static final java.util.Set<String> CONDITIONS = java.util.Set.of(
@@ -1050,6 +1052,7 @@ public final class Script {
                 case "fill" -> fill(arena, level, body, who);
                 case "move" -> move(arena, level, body, who);
                 case "power" -> power(arena, body);
+                case "give_class" -> giveClass(arena, body, who);
                 case "tag" -> forEach(arena, who, body, p -> p.addTag(tagName(body)));
                 case "untag" -> forEach(arena, who, body, p -> p.removeTag(tagName(body)));
                 case "message" -> forEach(arena, who, body, p ->
@@ -1961,9 +1964,128 @@ public final class Script {
                 java.util.Set.of(), p.getYRot(), 0.0F));
     }
 
+    /**
+     * Builds a map's own invented item, or null if it never declared one.
+     *
+     * <p>A key, a quest token, a named relic: things a map needs to exist and
+     * cannot register. Almost nothing about a key needs registering - it needs a
+     * name, a look, and an identity a script can test for, and all three are
+     * components on an ordinary stack.
+     */
+    static ItemStack custom(EngineArena arena, String id) {
+        if (arena == null || id == null || id.isEmpty()) {
+            return null;
+        }
+        Ruleset.ItemDef def = arena.rules().items.get(id.toLowerCase(Locale.ROOT));
+        if (def == null) {
+            return null;
+        }
+        ResourceLocation rl = ResourceLocation.tryParse(def.base().toLowerCase(Locale.ROOT));
+        if (rl == null || !BuiltInRegistries.ITEM.containsKey(rl)) {
+            return null;
+        }
+        ItemStack stack = new ItemStack(BuiltInRegistries.ITEM.get(rl), def.count());
+        if (!def.name().isEmpty()) {
+            stack.set(net.minecraft.core.component.DataComponents.CUSTOM_NAME,
+                    Component.literal(def.name()));
+        }
+        if (!def.lore().isEmpty()) {
+            List<Component> lines = new ArrayList<>();
+            for (String l : def.lore()) {
+                lines.add(Component.literal(l));
+            }
+            stack.set(net.minecraft.core.component.DataComponents.LORE,
+                    new net.minecraft.world.item.component.ItemLore(lines));
+        }
+        if (def.glow()) {
+            stack.set(net.minecraft.core.component.DataComponents.ENCHANTMENT_GLINT_OVERRIDE, true);
+        }
+        // The identity a script tests for. Written into the stack rather than
+        // inferred from the name, because a name is a display string and a
+        // player with an anvil can change it.
+        net.minecraft.world.item.component.CustomData.update(
+                net.minecraft.core.component.DataComponents.CUSTOM_DATA, stack,
+                tag -> tag.putString("aztecabyss_item", def.id()));
+        return stack;
+    }
+
+    /**
+     * {@code give_class} — hands somebody a role.
+     *
+     * <p>Deliberately not a class system. A class is a tag plus some things in
+     * your hands, and tags, selectors and per-player variables already exist - so
+     * this is one action and no new grammar. {@code @tagged:class_medic} was
+     * already how you address them, and {@code {"tag":"class_medic"}} was already
+     * how you ask.
+     */
+    private static void giveClass(EngineArena arena, JsonElement body, ServerPlayer who) {
+        if (arena == null) {
+            return;
+        }
+        JsonObject o = body.isJsonObject() ? body.getAsJsonObject() : null;
+        String id = o != null ? str(o, "id", "") : asText(body);
+        Ruleset.ClassDef def = arena.rules().classes.get(id.toLowerCase(Locale.ROOT));
+        if (def == null) {
+            trace(arena, "§cgive_class §7— no class called §f" + id);
+            return;
+        }
+        forEach(arena, who, body, p -> {
+            // One class at a time: the old tag goes before the new one arrives,
+            // or a player who switches keeps every selector they ever matched.
+            for (String t : new ArrayList<>(p.getTags())) {
+                if (t.startsWith("class_")) {
+                    p.removeTag(t);
+                }
+            }
+            p.addTag("class_" + def.id());
+            for (String want : def.items()) {
+                ItemStack stack = custom(arena, want);
+                if (stack == null) {
+                    ResourceLocation rl = ResourceLocation.tryParse(want.toLowerCase(Locale.ROOT));
+                    if (rl == null || !BuiltInRegistries.ITEM.containsKey(rl)) {
+                        continue;
+                    }
+                    stack = new ItemStack(BuiltInRegistries.ITEM.get(rl));
+                }
+                if (!p.getInventory().add(stack)) {
+                    p.drop(stack, false);
+                }
+            }
+            if (def.maxHealth() > 0.0) {
+                var inst = p.getAttribute(net.minecraft.world.entity.ai.attributes.Attributes.MAX_HEALTH);
+                if (inst != null) {
+                    inst.setBaseValue(def.maxHealth());
+                    p.setHealth(p.getMaxHealth());
+                }
+            }
+            if (!def.effect().isEmpty()) {
+                ResourceLocation rl = ResourceLocation.tryParse(
+                        def.effect().toLowerCase(Locale.ROOT));
+                if (rl != null) {
+                    var holder = BuiltInRegistries.MOB_EFFECT.getHolder(
+                            ResourceKey.create(Registries.MOB_EFFECT, rl));
+                    holder.ifPresent(h -> p.addEffect(new MobEffectInstance(
+                            h, Integer.MAX_VALUE, def.effectAmp(), false, false)));
+                }
+            }
+            p.displayClientMessage(Component.literal("§6You are the §f" + def.name()), false);
+        });
+    }
+
     private static void give(EngineArena arena, ServerPlayer who, JsonElement body) {
         JsonObject o = body.isJsonObject() ? body.getAsJsonObject() : null;
         String id = o != null ? str(o, "id", "") : asText(body);
+        // A map's own item wins over a vanilla id of the same name.
+        ItemStack invented = custom(arena, id);
+        if (invented != null) {
+            forEach(arena, who, body, p -> {
+                ItemStack copy = invented.copy();
+                if (!p.getInventory().add(copy)) {
+                    p.drop(copy, false);
+                }
+            });
+            return;
+        }
         ResourceLocation rl = ResourceLocation.tryParse(id.toLowerCase(Locale.ROOT));
         if (rl == null || !BuiltInRegistries.ITEM.containsKey(rl)) {
             return;

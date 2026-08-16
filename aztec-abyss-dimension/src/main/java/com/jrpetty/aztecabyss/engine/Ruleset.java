@@ -143,6 +143,12 @@ public final class Ruleset {
 
     /** Rounds with an exact roster, by round number. Empty means "roll for it". */
     public final java.util.Map<Integer, java.util.List<WaveEntry>> waves;
+
+    /** Items this map invented, by the name a script calls them. */
+    public final java.util.Map<String, ItemDef> items;
+
+    /** Roles a player may be given, by id. */
+    public final java.util.Map<String, ClassDef> classes;
     public final float directorTarget;
     public final float directorMinPace;
     public final float directorMaxPace;
@@ -215,6 +221,33 @@ public final class Ruleset {
     public record WaveEntry(String entityId, int count, String behaviour) {
     }
 
+    /**
+     * An item a map invented, described rather than registered.
+     *
+     * <p>A map could hand out any vanilla item and nothing else, so a key, a
+     * quest token, a named relic or a briefcase full of documents all had to be
+     * some existing thing the player was told to pretend about. Registering real
+     * items is not available to a datapack, but almost nothing about a key needs
+     * to be registered - it needs a name, a look and an identity the script can
+     * test for, all of which are data components on an ordinary stack.
+     */
+    public record ItemDef(String id, String base, String name, List<String> lore,
+                          boolean glow, int count) {
+    }
+
+    /**
+     * A role a player takes, as a loadout rather than as a system.
+     *
+     * <p>Deliberately not a class system with its own storage, screens and
+     * conditions. A class is a tag plus some things in your hands - and tags,
+     * selectors and per-player variables already exist, so this needed one action
+     * and no new grammar. {@code @tagged:class_medic} was already how you address
+     * them.
+     */
+    public record ClassDef(String id, String name, List<String> items,
+                           double maxHealth, String effect, int effectAmp) {
+    }
+
     public record MobEntry(String entityId, int weight, int fromRound, String role,
                            double maxHealth, double speed, double attackDamage,
                            String mainHand, String head, String behaviour) {
@@ -263,6 +296,8 @@ public final class Ruleset {
         this.pools = Map.copyOf(b.pools);
         this.directorEnabled = b.directorEnabled;
         this.waves = java.util.Map.copyOf(b.waves);
+        this.items = java.util.Map.copyOf(b.items);
+        this.classes = java.util.Map.copyOf(b.classes);
         this.directorTarget = b.directorTarget;
         this.directorMinPace = b.directorMinPace;
         this.directorMaxPace = b.directorMaxPace;
@@ -328,6 +363,8 @@ public final class Ruleset {
         Map<String, ItemPool> pools = new LinkedHashMap<>();
         boolean directorEnabled = false;
         final java.util.Map<Integer, java.util.List<WaveEntry>> waves = new java.util.HashMap<>();
+        final java.util.Map<String, ItemDef> items = new java.util.HashMap<>();
+        final java.util.Map<String, ClassDef> classes = new java.util.HashMap<>();
         float directorTarget = 0.55f;
         float directorMinPace = 0.5f;
         float directorMaxPace = 2.0f;
@@ -529,6 +566,54 @@ public final class Ruleset {
                         gear == null ? "" : str(gear, "head", ""),
                         // What it does, as opposed to what it is worth.
                         str(m, "behaviour", str(m, "behavior", "")).toLowerCase(Locale.ROOT)));
+            }
+        }
+        // Items a map invented: a name, a look, and an identity to test for.
+        if (root.has("items") && root.get("items").isJsonArray()) {
+            for (JsonElement el : root.getAsJsonArray("items")) {
+                if (!el.isJsonObject()) {
+                    continue;
+                }
+                JsonObject it = el.getAsJsonObject();
+                String key = str(it, "id", "").toLowerCase(Locale.ROOT);
+                String base = str(it, "base", "minecraft:paper");
+                if (key.isEmpty()) {
+                    continue;
+                }
+                List<String> lore = new ArrayList<>();
+                if (it.has("lore") && it.get("lore").isJsonArray()) {
+                    for (JsonElement l : it.getAsJsonArray("lore")) {
+                        lore.add(l.getAsString());
+                    }
+                }
+                b.items.put(key, new ItemDef(key, base, str(it, "name", ""),
+                        List.copyOf(lore),
+                        it.has("glow") && it.get("glow").getAsBoolean(),
+                        clampInt(intOf(it, "count", 1), 1, 64)));
+            }
+        }
+        // Roles, as loadouts rather than as a system.
+        if (root.has("classes") && root.get("classes").isJsonArray()) {
+            for (JsonElement el : root.getAsJsonArray("classes")) {
+                if (!el.isJsonObject()) {
+                    continue;
+                }
+                JsonObject c = el.getAsJsonObject();
+                String key = str(c, "id", "").toLowerCase(Locale.ROOT);
+                if (key.isEmpty()) {
+                    continue;
+                }
+                List<String> kit = new ArrayList<>();
+                if (c.has("items") && c.get("items").isJsonArray()) {
+                    for (JsonElement l : c.getAsJsonArray("items")) {
+                        kit.add(l.getAsString());
+                    }
+                }
+                b.classes.put(key, new ClassDef(key, str(c, "name", key),
+                        List.copyOf(kit),
+                        clamp(dbl(c, "max_health", 0.0), 0.0, MAX_HEALTH),
+                        str(c, "effect", ""),
+                        clampInt(intOf(c, "effect_amp", 0), 0, 9)));
             }
         }
         // Exact rosters for named rounds. A round listed here does not roll.

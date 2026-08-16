@@ -13,6 +13,47 @@ behaviour that was already there · **docs**
 
 ## Unreleased
 
+### Stage F1 — items a map invents, and roles as loadouts
+
+- **feat** **Data-authored items.** A map can declare its own:
+
+  ```json
+  "items": [
+    { "id": "vault_key", "base": "minecraft:tripwire_hook",
+      "name": "§eVault Key", "lore": ["Opens the east vault"], "glow": true }
+  ]
+  ```
+
+  `{"give": {"id": "vault_key"}}` hands one over; a map's own id wins over a
+  vanilla one of the same name.
+
+  A map could hand out any vanilla item and nothing else, so a key, a quest
+  token, a named relic or a briefcase of documents all had to be some existing
+  thing the player was *told* to pretend about. Registering real items is not
+  available to a datapack — but almost nothing about a key needs registering. It
+  needs a name, a look, and an identity a script can test for, and all three are
+  data components on an ordinary stack.
+
+  The identity is written into `CUSTOM_DATA`, not inferred from the name,
+  because a name is a display string and a player with an anvil can change it.
+
+- **feat** **Classes, as loadouts rather than as a system.**
+
+  ```json
+  "classes": [
+    { "id": "medic", "name": "Med-jack", "items": ["minecraft:golden_apple"],
+      "max_health": 24, "effect": "minecraft:regeneration" } ]
+  ```
+
+  `{"give_class": {"id": "medic", "target": "@self"}}`.
+
+  This needed **one action and no new grammar**, because a class is a tag plus
+  some things in your hands — and Stage A already shipped tags, `@tagged:`
+  selectors and the `tag` condition. `@tagged:class_medic` was already how you
+  address them; `{"tag": "class_medic"}` was already how you ask. The only
+  genuinely new logic is dropping the previous `class_` tag before adding the
+  next, or a player who switches keeps every selector they ever matched.
+
 ### Stage E3 — patrol routes, boss phases, and the wave parser put back in scope
 
 - **fix** **The wave-table parser was pasted into `defaults()`.** It referenced
