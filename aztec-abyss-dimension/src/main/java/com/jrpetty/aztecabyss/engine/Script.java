@@ -189,8 +189,8 @@ public final class Script {
             "if", "call", "one_of", "tag", "untag",
             // Vetoing an event, and clocks with names.
             "cancel", "timer",
-            // The sky, and rules that live in a place rather than in a rule.
-            "set_time", "weather", "zone");
+            // The sky, rules that live in a place, and the ruleset itself.
+            "set_time", "weather", "zone", "set_rule");
 
     /** Every condition the matcher understands. */
     private static final java.util.Set<String> CONDITIONS = java.util.Set.of(
@@ -1042,6 +1042,7 @@ public final class Script {
                 case "set_time" -> setTime(arena, level, body, who);
                 case "weather" -> weather(arena, level, body, who);
                 case "zone" -> zone(arena, body, who);
+                case "set_rule" -> setRule(arena, body, who);
                 case "tag" -> forEach(arena, who, body, p -> p.addTag(tagName(body)));
                 case "untag" -> forEach(arena, who, body, p -> p.removeTag(tagName(body)));
                 case "message" -> forEach(arena, who, body, p ->
@@ -1257,6 +1258,55 @@ public final class Script {
                 ? o.getAsJsonArray("on_end") : null;
         arena.startTimer(id, seconds, bar, onEnd, who);
         trace(arena, "§7timer §f" + id + " §7— " + seconds + "s");
+    }
+
+    /**
+     * {@code set_rule} — the run changes its mind about a number.
+     *
+     * <pre>
+     * { "set_rule": { "path": "rounds.per_round", "to": 8 } }
+     * { "set_rule": { "path": "rounds.per_round", "by": "{var:rage}" } }
+     * { "set_rule": { "path": "rounds.per_round", "reset": true } }
+     * </pre>
+     *
+     * <p>The ruleset file stays immutable and read-once, because two runs of the
+     * same map should be the same game. What changes is a layer the <em>run</em>
+     * carries over it, which dies with the run - so nothing a script does can
+     * leak into the next game or back to the file on disk.
+     *
+     * <p>Overrides are clamped to the same bounds the loader uses. A script is
+     * data from a stranger exactly as a ruleset is, and does not get to ask for
+     * four hundred simultaneous zombies by a route the file was not allowed to
+     * take.
+     *
+     * <p>Paths, all optional to know: {@code rounds.base_count},
+     * {@code rounds.per_round}, {@code rounds.concurrent_cap},
+     * {@code rounds.breather_start}, {@code rounds.breather_min},
+     * {@code economy.powerup_chance}, {@code downed.bleedout_seconds},
+     * {@code downed.revive_seconds}.
+     */
+    private static void setRule(EngineArena arena, JsonElement body, ServerPlayer who) {
+        if (!body.isJsonObject() || arena == null) {
+            return;
+        }
+        JsonObject o = body.getAsJsonObject();
+        String path = str(o, "path", "").toLowerCase(Locale.ROOT);
+        if (path.isEmpty()) {
+            trace(arena, "§cset_rule §7— no path given");
+            return;
+        }
+        if (o.has("reset") && o.get("reset").getAsBoolean()) {
+            arena.clearRule(path);
+            trace(arena, "§7set_rule §f" + path + " §7— back to the file");
+            return;
+        }
+        // The value in play, which is the file's until somebody overrides it -
+        // otherwise "add two" to an untouched rule quietly means "set to two".
+        double now = arena.ruleNow(path);
+        double want = o.has("by") ? now + num(o, "by", 0, arena, who)
+                : num(o, "to", (int) Math.round(now), arena, who);
+        arena.setRule(path, want);
+        trace(arena, "§7set_rule §f" + path + " §7→ " + arena.rule(path, want));
     }
 
     /**
@@ -1875,6 +1925,8 @@ public final class Script {
             }
             case "amount":
                 return "0";
+            case "rule":
+                return String.valueOf((int) arena.ruleNow(a.toLowerCase(Locale.ROOT)));
             case "round":
                 return String.valueOf(arena.round());
             case "seconds":

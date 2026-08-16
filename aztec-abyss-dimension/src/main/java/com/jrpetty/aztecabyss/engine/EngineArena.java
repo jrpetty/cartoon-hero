@@ -753,7 +753,7 @@ public final class EngineArena {
         }
         tickTraps();
         tickTeleports(present);
-        if (rules.powerupChance > 0 && (special == null || !special.noPowerups())) {
+        if (powerupChance() > 0 && (special == null || !special.noPowerups())) {
             EnginePowerUps.tick(level, present, bounds);
         }
         alive.removeIf(m -> !m.isAlive());
@@ -771,7 +771,7 @@ public final class EngineArena {
             bar.setName(Component.literal("§7Next round in §f"
                     + Math.max(1, breather / 20) + "s"
                     + (extract != null ? " §8| §6extract point is open" : "")));
-            bar.setProgress(1.0F - (breather / (float) Math.max(1, rules.breatherFor(round))));
+            bar.setProgress(1.0F - (breather / (float) Math.max(1, breatherFor(round))));
             if (breather == 0) {
                 beginRound(round + 1);
             }
@@ -784,7 +784,7 @@ public final class EngineArena {
         // unreliable, whereas a gap in the stream just reads as a lull.
         float pace = director.pace();
         int interval = Math.max(4, Math.round(SPAWN_INTERVAL_TICKS / pace));
-        int cap = Math.max(4, Math.round(rules.concurrentCap * Math.min(1.5f, Math.max(0.5f, pace))));
+        int cap = Math.max(4, Math.round(concurrentCap() * Math.min(1.5f, Math.max(0.5f, pace))));
         if (leftToSpawn > 0 && level.getGameTime() % interval == 0 && alive.size() < cap) {
             spawnOne();
         }
@@ -809,7 +809,7 @@ public final class EngineArena {
                         + (alive.size() + leftToSpawn) + "§7 left"
                         + (objective == null ? "" : objective.hud())
                 : barText + " §8| §7R" + round));
-        int total = Math.max(1, rules.countFor(round));
+        int total = Math.max(1, countFor(round));
         bar.setProgress(Math.max(0.0F, Math.min(1.0F, (alive.size() + leftToSpawn) / (float) total)));
     }
 
@@ -972,7 +972,7 @@ public final class EngineArena {
 
     private void beginRound(int n) {
         round = n;
-        leftToSpawn = rules.countFor(n);
+        leftToSpawn = countFor(n);
         breather = 0;
         lootTaken.clear();
         special = rules.specialFor(n);
@@ -1012,7 +1012,7 @@ public final class EngineArena {
             return;
         }
         Script.fire(this, level, rules.id, "round_end", null);
-        breather = Math.max(1, rules.breatherFor(round));
+        breather = Math.max(1, breatherFor(round));
     }
 
     /**
@@ -1402,6 +1402,139 @@ public final class EngineArena {
     }
 
     /** Whether a position is inside the map at all, for the block-event guard. */
+    // ------------------------------------------------------------------
+    // Rule overrides
+    // ------------------------------------------------------------------
+
+    /**
+     * Numbers a running script has changed its mind about.
+     *
+     * <p>Everything in a {@link Ruleset} is final, and deliberately: a ruleset is
+     * a file, read once, and two runs of the same map should be the same game.
+     * But that also meant a map's difficulty was decided before anybody arrived
+     * and could never answer to what happened - "from round thirty the horde is
+     * twice the size", "killing the warden halves every price for the rest of
+     * the night", "on the last life the breather doubles" were all unsayable.
+     *
+     * <p>So the file stays immutable and the <em>run</em> carries a layer over
+     * it. Overrides live and die with the run, which is the property that makes
+     * this safe: nothing a script does can leak into the next game or back into
+     * the file on disk.
+     *
+     * <p>Clamped on the way in, to the same bounds the loader uses. A script is
+     * data from a stranger exactly as a ruleset is, and it does not get to ask
+     * for a thousand simultaneous zombies by a route the file could not.
+     */
+    private final java.util.Map<String, Double> ruleOverrides = new java.util.HashMap<>();
+
+    /** The bounds an override is held to, matching the loader's own. */
+    private static double clampRule(String path, double v) {
+        return switch (path) {
+            case "rounds.base_count", "rounds.per_round" -> Math.max(0, Math.min(400, v));
+            case "rounds.concurrent_cap" -> Math.max(1, Math.min(400, v));
+            case "rounds.breather_start", "rounds.breather_min" -> Math.max(0, Math.min(6000, v));
+            case "economy.powerup_chance" -> Math.max(0, Math.min(100, v));
+            case "downed.bleedout_seconds", "downed.revive_seconds" -> Math.max(1, Math.min(600, v));
+            case "rounds.health_per_round", "rounds.damage_per_round" -> Math.max(0.0, Math.min(4.0, v));
+            default -> v;
+        };
+    }
+
+    public void setRule(String path, double value) {
+        if (ruleOverrides.size() < 64 || ruleOverrides.containsKey(path)) {
+            ruleOverrides.put(path, clampRule(path, value));
+        }
+    }
+
+    public void clearRule(String path) {
+        ruleOverrides.remove(path);
+    }
+
+    /** How many numbers this run has had rewritten, for {@code /arena status}. */
+    public int ruleOverrideCount() {
+        return ruleOverrides.size();
+    }
+
+    /**
+     * What a path is worth right now, override or file.
+     *
+     * <p>Needed because {@code set_rule} with {@code by} has to add to the
+     * number in play, and the number in play is usually the file's - reading the
+     * override map alone would treat "add two" on an untouched rule as "set to
+     * two", which is a quiet, wrong answer of exactly the kind this engine keeps
+     * producing.
+     */
+    public double ruleNow(String path) {
+        Double d = ruleOverrides.get(path);
+        if (d != null) {
+            return d;
+        }
+        return switch (path) {
+            case "rounds.base_count" -> rules.baseCount;
+            case "rounds.per_round" -> rules.perRound;
+            case "rounds.concurrent_cap" -> rules.concurrentCap;
+            case "rounds.breather_start" -> rules.breatherStart;
+            case "rounds.breather_min" -> rules.breatherMin;
+            case "economy.powerup_chance" -> rules.powerupChance;
+            case "downed.bleedout_seconds" -> rules.bleedoutSeconds;
+            case "downed.revive_seconds" -> rules.reviveSeconds;
+            case "rounds.health_per_round" -> rules.healthPerRound;
+            case "rounds.damage_per_round" -> rules.damagePerRound;
+            default -> 0.0;
+        };
+    }
+
+    public double rule(String path, double fallback) {
+        Double d = ruleOverrides.get(path);
+        return d == null ? fallback : d;
+    }
+
+    public int ruleInt(String path, int fallback) {
+        return (int) Math.round(rule(path, fallback));
+    }
+
+    /**
+     * The wave size for a round, override-aware.
+     *
+     * <p>Shadows {@link Ruleset#countFor} rather than replacing it: the ruleset
+     * still answers for anyone asking what the <em>file</em> says, and the arena
+     * answers for what this run is actually doing.
+     */
+    public int countFor(int round) {
+        int base = ruleInt("rounds.base_count", rules.baseCount);
+        int per = ruleInt("rounds.per_round", rules.perRound);
+        int cap = ruleInt("rounds.concurrent_cap", rules.concurrentCap);
+        return Math.min(cap * 4, base + per * Math.max(0, round - 1));
+    }
+
+    /** The gap between rounds, override-aware. */
+    public int breatherFor(int round) {
+        int start = ruleInt("rounds.breather_start", rules.breatherStart);
+        int min = ruleInt("rounds.breather_min", rules.breatherMin);
+        if (start <= min) {
+            return min;
+        }
+        double t = Math.min(1.0, Math.max(0, round - 1)
+                / (double) Math.max(1, rules.breatherTightenBy));
+        return (int) Math.round(start - (start - min) * t);
+    }
+
+    public int concurrentCap() {
+        return ruleInt("rounds.concurrent_cap", rules.concurrentCap);
+    }
+
+    public int powerupChance() {
+        return ruleInt("economy.powerup_chance", rules.powerupChance);
+    }
+
+    public int bleedoutSeconds() {
+        return ruleInt("downed.bleedout_seconds", rules.bleedoutSeconds);
+    }
+
+    public int reviveSeconds() {
+        return ruleInt("downed.revive_seconds", rules.reviveSeconds);
+    }
+
     // ------------------------------------------------------------------
     // Zone rules
     // ------------------------------------------------------------------
@@ -1862,17 +1995,17 @@ public final class EngineArena {
 
     /** Puts a player on the floor with a clock running. */
     public void goDown(ServerPlayer player) {
-        downed.put(player.getUUID(), rules.bleedoutSeconds * 20);
+        downed.put(player.getUUID(), bleedoutSeconds() * 20);
         reviving.put(player.getUUID(), 0);
         player.setHealth(1.0F);
         // Immobilised and unmistakable: a downed teammate has to be findable
         // across a dark room or nobody can choose to go for them.
         player.addEffect(new net.minecraft.world.effect.MobEffectInstance(
                 net.minecraft.world.effect.MobEffects.MOVEMENT_SLOWDOWN,
-                rules.bleedoutSeconds * 20, 5, false, false));
+                bleedoutSeconds() * 20, 5, false, false));
         player.addEffect(new net.minecraft.world.effect.MobEffectInstance(
                 net.minecraft.world.effect.MobEffects.WEAKNESS,
-                rules.bleedoutSeconds * 20, 9, false, false));
+                bleedoutSeconds() * 20, 9, false, false));
         player.setGlowingTag(true);
         for (ServerPlayer p : players()) {
             p.displayClientMessage(Component.literal(
@@ -1906,7 +2039,7 @@ public final class EngineArena {
             ServerPlayer helper = reviverFor(victim, present);
             if (helper != null) {
                 int progress = reviving.merge(victim.getUUID(), 1, Integer::sum);
-                int need = rules.reviveSeconds * 20;
+                int need = reviveSeconds() * 20;
                 if (progress >= need) {
                     lift(victim, helper);
                     lost.add(e.getKey());
@@ -2482,7 +2615,7 @@ public final class EngineArena {
             }
             Currency.byId(a.rules.defaultCurrency).award(killer, paid);
         }
-        EnginePowerUps.maybeDrop(a.level, mob, a.rules.powerupChance, a.rng);
+        EnginePowerUps.maybeDrop(a.level, mob, a.powerupChance(), a.rng);
         // A kill is progress, which resets the stall clock. Without this a long
         // hard round with a slow weapon would be mistaken for a stuck one.
         a.lastProgress = a.level.getGameTime();

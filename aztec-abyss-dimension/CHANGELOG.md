@@ -13,6 +13,47 @@ behaviour that was already there · **docs**
 
 ## Unreleased
 
+### Stage C2 — `set_rule`: a run that can change its mind
+
+- **feat** **`set_rule`** — the last of the promises ENGINE.md made and never
+  kept, and the one it called "the dangerous, wonderful one".
+
+  ```json
+  { "set_rule": { "path": "rounds.per_round", "to": 8 } }
+  { "set_rule": { "path": "rounds.per_round", "by": "{var:rage}" } }
+  { "set_rule": { "path": "rounds.per_round", "reset": true } }
+  ```
+
+  A map's difficulty was decided before anybody arrived and could never answer to
+  what happened. "From round thirty the horde is twice the size", "killing the
+  warden halves every price for the rest of the night", "on the last life the
+  breather doubles" were all unsayable.
+
+  **The ruleset file stays immutable and read-once** — two runs of the same map
+  should be the same game. What changes is a layer the *run* carries over it,
+  which dies with the run, so nothing a script does can leak into the next game
+  or back to the file on disk.
+
+  **Overrides are clamped to the same bounds the loader uses.** A script is data
+  from a stranger exactly as a ruleset is, and does not get to ask for four
+  hundred simultaneous zombies by a route the file was not allowed to take.
+
+  Paths: `rounds.base_count`, `rounds.per_round`, `rounds.concurrent_cap`,
+  `rounds.breather_start`, `rounds.breather_min`, `economy.powerup_chance`,
+  `downed.bleedout_seconds`, `downed.revive_seconds`. Readable back through
+  `{rule:rounds.per_round}`.
+
+- **change** Ten read sites in `EngineArena` now go through override-aware
+  accessors — `countFor`, `breatherFor`, `concurrentCap`, `powerupChance`,
+  `bleedoutSeconds`, `reviveSeconds`. These *shadow* the `Ruleset` methods rather
+  than replacing them: the ruleset still answers for what the file says, the
+  arena for what this run is actually doing.
+
+  One bug caught in my own work before it shipped: `by` was adding to the
+  override map's value, which is nought until something writes to it — so "add
+  two" to an untouched rule would quietly have meant "set to two". `ruleNow`
+  resolves override-or-file, which is the number actually in play.
+
 ### Stage C1 — the sky, the weather, and places that hold their own rules
 
 - **feat** **`set_time`** — moves the sky, in numbers or in words
