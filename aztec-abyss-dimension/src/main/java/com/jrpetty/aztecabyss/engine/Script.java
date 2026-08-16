@@ -196,13 +196,14 @@ public final class Script {
             // Geometry as a verb, and the lights.
             "fill", "move", "power",
             // Roles, as a loadout rather than a system.
-            "give_class");
+            "give_class", "learn_skill", "grant_xp");
 
     /** Every condition the matcher understands. */
     private static final java.util.Set<String> CONDITIONS = java.util.Set.of(
             "round", "area_open", "region", "var", "my_var", "team", "team_var", "seconds", "block",
             "has_item", "killed", "chance", "phase", "subject", "players",
-            "saved_var", "my_saved_var", "tag", "not", "timer", "amount");
+            "saved_var", "my_saved_var", "tag", "not", "timer", "amount",
+            "level", "skill");
 
     public static List<String> warnings(String rulesetId) {
         return WARNINGS.getOrDefault(rulesetId, List.of());
@@ -804,6 +805,29 @@ public final class Script {
                 return false;
             }
         }
+        // What this map has taught somebody, across every run of it.
+        if (when.has("level") && when.get("level").isJsonObject()) {
+            JsonObject lv = when.getAsJsonObject("level");
+            int now = who == null ? 0
+                    : xpOf(arena, who) / Math.max(1, arena.rules().xpPerLevel);
+            if (lv.has("at_least") && now < intOf(lv, "at_least", 0)) {
+                return false;
+            }
+            if (lv.has("at_most") && now > intOf(lv, "at_most", Integer.MAX_VALUE)) {
+                return false;
+            }
+        }
+        if (when.has("skill") && when.get("skill").isJsonObject()) {
+            JsonObject sk = when.getAsJsonObject("skill");
+            int rank = who == null ? 0
+                    : rankOf(arena, who, str(sk, "id", "").toLowerCase(Locale.ROOT));
+            if (sk.has("at_least") && rank < intOf(sk, "at_least", 1)) {
+                return false;
+            }
+            if (sk.has("at_most") && rank > intOf(sk, "at_most", Integer.MAX_VALUE)) {
+                return false;
+            }
+        }
         // A tag somebody is carrying, put there by the "tag" action. The
         // engine's own memory of a player that is not a number: who has the
         // flag, who has been marked, who already opened this door once.
@@ -1053,6 +1077,8 @@ public final class Script {
                 case "move" -> move(arena, level, body, who);
                 case "power" -> power(arena, body);
                 case "give_class" -> giveClass(arena, body, who);
+                case "learn_skill" -> learnSkill(arena, level, body, who);
+                case "grant_xp" -> grantXp(arena, level, body, who);
                 case "tag" -> forEach(arena, who, body, p -> p.addTag(tagName(body)));
                 case "untag" -> forEach(arena, who, body, p -> p.removeTag(tagName(body)));
                 case "message" -> forEach(arena, who, body, p ->
@@ -2009,6 +2035,144 @@ public final class Script {
         return stack;
     }
 
+    /** A player's total experience on this ruleset, across every run. */
+    static int xpOf(EngineArena arena, ServerPlayer p) {
+        if (arena.level().getServer() == null) {
+            return 0;
+        }
+        return SavedVars.get(arena.level().getServer())
+                .get(p.getUUID(), arena.rulesetId(), "xp", false);
+    }
+
+    /** What rank a player holds in one skill. */
+    static int rankOf(EngineArena arena, ServerPlayer p, String skill) {
+        if (arena.level().getServer() == null) {
+            return 0;
+        }
+        return SavedVars.get(arena.level().getServer())
+                .get(p.getUUID(), arena.rulesetId(), "skill_" + skill, false);
+    }
+
+    /**
+     * {@code grant_xp} — pays experience that outlives the run.
+     *
+     * <p>Written through {@link SavedVars}, which already survives restarts and
+     * is already scoped per player per ruleset, so nothing new remembers
+     * anything. Levels are derived rather than stored: one number that can drift
+     * out of step with another is a bug waiting for a long enough session.
+     */
+    private static void grantXp(EngineArena arena, ServerLevel level,
+                                JsonElement body, ServerPlayer who) {
+        if (arena == null || level.getServer() == null) {
+            return;
+        }
+        JsonObject o = body.isJsonObject() ? body.getAsJsonObject() : null;
+        int amount = o != null ? num(o, "amount", 0, arena, who) : asInt(body);
+        if (amount == 0) {
+            return;
+        }
+        SavedVars saved = SavedVars.get(level.getServer());
+        forEach(arena, who, body, p -> {
+            int was = xpOf(arena, p) / Math.max(1, arena.rules().xpPerLevel);
+            saved.add(p.getUUID(), arena.rulesetId(), "xp", amount, false);
+            int now = xpOf(arena, p) / Math.max(1, arena.rules().xpPerLevel);
+            if (now > was) {
+                p.displayClientMessage(Component.literal(
+                        "§6✦ Level §f" + now + " §8— a skill point"), false);
+                p.level().playSound(null, p.blockPosition(),
+                        net.minecraft.sounds.SoundEvents.PLAYER_LEVELUP,
+                        SoundSource.PLAYERS, 0.7F, 1.2F);
+            }
+        });
+    }
+
+    /**
+     * {@code learn_skill} — spends a point on a rank.
+     *
+     * <p>Points are levels not yet spent, worked out rather than tracked: total
+     * level minus the cost of everything already bought. A separate "points"
+     * counter is one more number that can disagree with the others, and the
+     * whole reason this is derived is that a progression system nobody can audit
+     * is a progression system nobody trusts.
+     */
+    private static void learnSkill(EngineArena arena, ServerLevel level,
+                                   JsonElement body, ServerPlayer who) {
+        if (arena == null || level.getServer() == null) {
+            return;
+        }
+        JsonObject o = body.isJsonObject() ? body.getAsJsonObject() : null;
+        String id = (o != null ? str(o, "id", "") : asText(body)).toLowerCase(Locale.ROOT);
+        Ruleset.SkillDef def = arena.rules().skills.get(id);
+        if (def == null) {
+            trace(arena, "§clearn_skill §7— no skill called §f" + id);
+            return;
+        }
+        SavedVars saved = SavedVars.get(level.getServer());
+        forEach(arena, who, body, p -> {
+            int rank = rankOf(arena, p, id);
+            if (rank >= def.maxRank()) {
+                p.displayClientMessage(Component.literal(
+                        "§7" + def.name() + " §8is already at its highest rank."), true);
+                return;
+            }
+            int spent = 0;
+            for (Ruleset.SkillDef other : arena.rules().skills.values()) {
+                spent += rankOf(arena, p, other.id()) * other.cost();
+            }
+            int have = xpOf(arena, p) / Math.max(1, arena.rules().xpPerLevel) - spent;
+            if (have < def.cost()) {
+                p.displayClientMessage(Component.literal(
+                        "§c" + def.name() + " §7costs §f" + def.cost()
+                                + "§7 — you have §f" + Math.max(0, have)), true);
+                return;
+            }
+            saved.set(p.getUUID(), arena.rulesetId(), "skill_" + id, rank + 1, false);
+            applySkills(arena, p);
+            p.displayClientMessage(Component.literal(
+                    "§a" + def.name() + " §f" + (rank + 1) + "§7/" + def.maxRank()), false);
+        });
+    }
+
+    /**
+     * Puts every skill a player owns back onto them.
+     *
+     * <p>Called on learning one and on joining a run, because a skill bought
+     * last week is worth nothing if it only takes effect at the moment of
+     * purchase - and that is the failure mode a persistent system falls into
+     * first.
+     */
+    public static void applySkills(EngineArena arena, ServerPlayer p) {
+        if (arena == null || arena.rules().skills.isEmpty()) {
+            return;
+        }
+        double bonusHealth = 0.0;
+        for (Ruleset.SkillDef def : arena.rules().skills.values()) {
+            int rank = rankOf(arena, p, def.id());
+            if (rank <= 0) {
+                continue;
+            }
+            bonusHealth += def.healthPerRank() * rank;
+            if (def.effect().isEmpty()) {
+                continue;
+            }
+            ResourceLocation rl = ResourceLocation.tryParse(def.effect().toLowerCase(Locale.ROOT));
+            if (rl == null) {
+                continue;
+            }
+            var holder = BuiltInRegistries.MOB_EFFECT.getHolder(
+                    ResourceKey.create(Registries.MOB_EFFECT, rl));
+            final int amp = Math.max(0, Math.min(9, def.ampPerRank() * rank));
+            holder.ifPresent(h -> p.addEffect(new MobEffectInstance(
+                    h, Integer.MAX_VALUE, amp, false, false)));
+        }
+        if (bonusHealth > 0.0) {
+            var inst = p.getAttribute(net.minecraft.world.entity.ai.attributes.Attributes.MAX_HEALTH);
+            if (inst != null) {
+                inst.setBaseValue(20.0 + bonusHealth);
+            }
+        }
+    }
+
     /**
      * {@code give_class} — hands somebody a role.
      *
@@ -2243,6 +2407,14 @@ public final class Script {
             }
             case "amount":
                 return "0";
+            case "level":
+                return viewer == null ? "0" : String.valueOf(
+                        xpOf(arena, viewer) / Math.max(1, arena.rules().xpPerLevel));
+            case "xp":
+                return viewer == null ? "0" : String.valueOf(xpOf(arena, viewer));
+            case "skill":
+                return viewer == null ? "0" : String.valueOf(
+                        rankOf(arena, viewer, a.toLowerCase(Locale.ROOT)));
             case "rule":
                 return String.valueOf((int) arena.ruleNow(a.toLowerCase(Locale.ROOT)));
             case "round":

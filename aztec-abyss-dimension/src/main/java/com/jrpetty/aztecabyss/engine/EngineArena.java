@@ -905,6 +905,12 @@ public final class EngineArena {
      */
     private void beginPlay(List<ServerPlayer> present) {
         setPhase(PHASE_ACTIVE);
+        // Skills bought in an earlier run are worth nothing if they only take
+        // effect at the moment of purchase, which is the first thing a
+        // persistent system gets wrong.
+        for (ServerPlayer p : players()) {
+            Script.applySkills(this, p);
+        }
         // Boards go up when the run does, not when the map was stamped: a
         // barricade mended during a lobby is a barricade nobody paid for.
         if (barricades != null && !barricades.isEmpty()) {
@@ -1051,6 +1057,9 @@ public final class EngineArena {
             }
             stop(false);
             return;
+        }
+        for (ServerPlayer p : players()) {
+            awardXp(p, rules.xpPerRound);
         }
         Script.fire(this, level, rules.id, "round_end", null);
         breather = Math.max(1, breatherFor(round));
@@ -2907,9 +2916,38 @@ public final class EngineArena {
         // A kill is progress, which resets the stall clock. Without this a long
         // hard round with a slow weapon would be mistaken for a stuck one.
         a.lastProgress = a.level.getGameTime();
+        // Experience for the kill, if this map keeps score across runs. Paid
+        // before the script fires, so a rule reacting to the kill already sees
+        // the level it produced.
+        a.awardXp(killer, a.rules.xpPerKill);
         Script.fire(a, a.level, a.rules.id, "mob_killed", killer, null,
                 net.minecraft.core.registries.BuiltInRegistries.ENTITY_TYPE
                         .getKey(mob.getType()).toString());
+    }
+
+    /**
+     * Pays experience that outlives the run.
+     *
+     * <p>A no-op unless the ruleset asked for progression, which is most of them
+     * and costs a comparison. Levels are derived from the total rather than
+     * stored beside it: one number that can drift out of step with another is a
+     * bug waiting for a long enough session.
+     */
+    void awardXp(ServerPlayer who, int amount) {
+        if (who == null || amount <= 0 || level.getServer() == null) {
+            return;
+        }
+        SavedVars saved = SavedVars.get(level.getServer());
+        int per = Math.max(1, rules.xpPerLevel);
+        int was = saved.get(who.getUUID(), rules.id, "xp", false) / per;
+        saved.add(who.getUUID(), rules.id, "xp", amount, false);
+        int now = saved.get(who.getUUID(), rules.id, "xp", false) / per;
+        if (now > was) {
+            who.displayClientMessage(Component.literal(
+                    "§6✦ Level §f" + now + " §8— a skill point"), false);
+            level.playSound(null, who.blockPosition(), SoundEvents.PLAYER_LEVELUP,
+                    SoundSource.PLAYERS, 0.7F, 1.2F);
+        }
     }
 
     public int round() {

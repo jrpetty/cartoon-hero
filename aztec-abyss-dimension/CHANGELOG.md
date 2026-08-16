@@ -13,6 +13,45 @@ behaviour that was already there · **docs**
 
 ## Unreleased
 
+### Stage F2 — skills, and getting better at a map across runs
+
+- **feat** **Skill trees as data.**
+
+  ```json
+  "progression": { "xp_per_kill": 10, "xp_per_round": 250, "xp_per_level": 1000 },
+  "skills": [
+    { "id": "tough", "name": "Tough", "cost": 1, "max_rank": 3, "health_per_rank": 4 },
+    { "id": "quick", "name": "Quick", "cost": 2, "max_rank": 2,
+      "effect": "minecraft:speed", "amp_per_rank": 1 } ]
+  ```
+
+  The maze has a skill tree and it is written in Java, so it belongs to the maze
+  and nowhere else. Lifting it into data means any map can have one — and more
+  usefully, a map can have one that is *about* that map, because the effects are
+  named by the author rather than chosen from a list somebody else wrote.
+
+- **feat** **Experience that outlives the run.** Paid automatically per kill and
+  per round cleared, plus `{"grant_xp": {"amount": 500}}` for anything else a map
+  wants to reward. New conditions `level` and `skill`, and placeholders `{level}`,
+  `{xp}`, `{skill:tough}`.
+
+  `saved_var` could already remember a number forever, which is the hard half —
+  but a map wanting levels had to invent the whole shape of them out of
+  arithmetic every time, and no two maps would have agreed on it. Zero for either
+  rate means no progression, which is most maps, and costs a comparison.
+
+- **change** **Two things are derived rather than stored, deliberately.** A
+  player's *level* is total experience divided by the rate, and their unspent
+  *points* are their level minus the cost of everything already bought. Storing
+  either beside the total gives you two numbers that can disagree after a long
+  enough session — and a progression system nobody can audit is one nobody
+  trusts. Ranks live in `SavedVars`, which already survives restarts and is
+  already scoped per player per ruleset, so nothing new remembers anything.
+
+- **change** Skills are reapplied when a run starts, not only when bought. A
+  skill purchased last week is worth nothing if it takes effect solely at the
+  moment of purchase, which is the first thing a persistent system gets wrong.
+
 ### Stage F1 — items a map invents, and roles as loadouts
 
 - **feat** **Data-authored items.** A map can declare its own:

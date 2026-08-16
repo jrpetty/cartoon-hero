@@ -149,6 +149,22 @@ public final class Ruleset {
 
     /** Roles a player may be given, by id. */
     public final java.util.Map<String, ClassDef> classes;
+
+    /** Skills this map sells, by id. */
+    public final java.util.Map<String, SkillDef> skills;
+
+    /**
+     * How a player gets better at this map across runs.
+     *
+     * <p>{@code saved_var} could already remember a number forever, which is the
+     * hard half - but a map wanting levels had to invent the whole shape of them
+     * out of arithmetic every time, and no two maps would have agreed on it.
+     * Zero for either number means this map has no progression, which is most of
+     * them, and costs nothing.
+     */
+    public final int xpPerKill;
+    public final int xpPerRound;
+    public final int xpPerLevel;
     public final float directorTarget;
     public final float directorMinPace;
     public final float directorMaxPace;
@@ -248,6 +264,23 @@ public final class Ruleset {
                            double maxHealth, String effect, int effectAmp) {
     }
 
+    /**
+     * A skill a player buys once and keeps forever.
+     *
+     * <p>The maze has a skill tree and it is written in Java, so it belongs to
+     * the maze and nowhere else. Lifting it into data means any map can have
+     * one - but more than that, it means a map can have one that is <em>about</em>
+     * that map, because the effects are named by the author rather than chosen
+     * from a list somebody else wrote.
+     *
+     * <p>Ranks are stored in {@link SavedVars}, which already survives restarts
+     * and is already scoped per player per ruleset. Nothing new remembers
+     * anything.
+     */
+    public record SkillDef(String id, String name, int cost, int maxRank,
+                           String effect, int ampPerRank, double healthPerRank) {
+    }
+
     public record MobEntry(String entityId, int weight, int fromRound, String role,
                            double maxHealth, double speed, double attackDamage,
                            String mainHand, String head, String behaviour) {
@@ -298,6 +331,10 @@ public final class Ruleset {
         this.waves = java.util.Map.copyOf(b.waves);
         this.items = java.util.Map.copyOf(b.items);
         this.classes = java.util.Map.copyOf(b.classes);
+        this.skills = java.util.Map.copyOf(b.skills);
+        this.xpPerKill = b.xpPerKill;
+        this.xpPerRound = b.xpPerRound;
+        this.xpPerLevel = b.xpPerLevel;
         this.directorTarget = b.directorTarget;
         this.directorMinPace = b.directorMinPace;
         this.directorMaxPace = b.directorMaxPace;
@@ -365,6 +402,10 @@ public final class Ruleset {
         final java.util.Map<Integer, java.util.List<WaveEntry>> waves = new java.util.HashMap<>();
         final java.util.Map<String, ItemDef> items = new java.util.HashMap<>();
         final java.util.Map<String, ClassDef> classes = new java.util.HashMap<>();
+        final java.util.Map<String, SkillDef> skills = new java.util.HashMap<>();
+        int xpPerKill = 0;
+        int xpPerRound = 0;
+        int xpPerLevel = 1000;
         float directorTarget = 0.55f;
         float directorMinPace = 0.5f;
         float directorMaxPace = 2.0f;
@@ -566,6 +607,31 @@ public final class Ruleset {
                         gear == null ? "" : str(gear, "head", ""),
                         // What it does, as opposed to what it is worth.
                         str(m, "behaviour", str(m, "behavior", "")).toLowerCase(Locale.ROOT)));
+            }
+        }
+        // Skills, and the experience that buys them.
+        JsonObject prog = obj(root, "progression");
+        if (prog != null) {
+            b.xpPerKill = clampInt(intOf(prog, "xp_per_kill", 0), 0, 10000);
+            b.xpPerRound = clampInt(intOf(prog, "xp_per_round", 0), 0, 100000);
+            b.xpPerLevel = clampInt(intOf(prog, "xp_per_level", 1000), 1, 1000000);
+        }
+        if (root.has("skills") && root.get("skills").isJsonArray()) {
+            for (JsonElement el : root.getAsJsonArray("skills")) {
+                if (!el.isJsonObject()) {
+                    continue;
+                }
+                JsonObject sk = el.getAsJsonObject();
+                String key = str(sk, "id", "").toLowerCase(Locale.ROOT);
+                if (key.isEmpty()) {
+                    continue;
+                }
+                b.skills.put(key, new SkillDef(key, str(sk, "name", key),
+                        clampInt(intOf(sk, "cost", 1), 0, 1000),
+                        clampInt(intOf(sk, "max_rank", 1), 1, 10),
+                        str(sk, "effect", ""),
+                        clampInt(intOf(sk, "amp_per_rank", 0), 0, 9),
+                        clamp(dbl(sk, "health_per_rank", 0.0), 0.0, 40.0)));
             }
         }
         // Items a map invented: a name, a look, and an identity to test for.
