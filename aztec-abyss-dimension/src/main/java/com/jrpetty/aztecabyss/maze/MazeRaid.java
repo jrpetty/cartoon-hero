@@ -469,7 +469,9 @@ public final class MazeRaid {
         int hi = hiLine() + 24;
         List<Mob> out = level.getEntitiesOfClass(Mob.class,
                 new AABB(lo, MazeData.FLOOR_Y - 4, lo, hi, MazeData.WALL_TOP_Y + 4, hi),
-                m -> m.getPersistentData().getBoolean(TAG) && m.isAlive());
+                // isAlive first: reading a mob's persistent data creates it, and
+                // this box covers a whole side of the maze, pets and all.
+                m -> m.isAlive() && m.getPersistentData().getBoolean(TAG));
         return out;
     }
 

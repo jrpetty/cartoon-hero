@@ -193,21 +193,51 @@ public final class MazeCharts extends SavedData {
         return b == null ? 0 : percentOf(b);
     }
 
-    private static int percentOf(BitSet b) {
-        int total = 0;
-        int done = 0;
+    /**
+     * The cells that count toward a chart: the whole grid bar the Glade itself.
+     *
+     * <p>Fixed by the grid's dimensions and the Glade's, so it is worked out once
+     * at class load and never again.
+     */
+    private static final BitSet CHARTABLE = chartable();
+
+    /** How many cells there are to find. The denominator of every percentage. */
+    private static final int CHARTABLE_COUNT = CHARTABLE.cardinality();
+
+    private static BitSet chartable() {
+        BitSet out = new BitSet(CELLS);
         for (int cx = 0; cx < MazeData.GRID; cx++) {
             for (int cz = 0; cz < MazeData.GRID; cz++) {
-                if (MazeData.inGlade(cx, cz)) {
-                    continue;
-                }
-                total++;
-                if (b.get(index(cx, cz))) {
-                    done++;
+                if (!MazeData.inGlade(cx, cz)) {
+                    out.set(index(cx, cz));
                 }
             }
         }
-        return total == 0 ? 0 : (done * 100) / total;
+        return out;
+    }
+
+    /**
+     * How much of the maze a chart holds, nought to a hundred.
+     *
+     * <p>This used to walk the whole ninety-six by ninety-six grid - nine
+     * thousand two hundred and sixteen cells - asking {@code inGlade} and then
+     * {@code BitSet.get} for each. The job board asks
+     * every Runner for their number once a second, so four Runners meant
+     * <em>thirty-seven thousand</em> grid steps a second, forever, to produce
+     * numbers that change only when somebody walks down a corridor they have not
+     * walked before.
+     *
+     * <p>The same answer comes out of one masked population count: the denominator
+     * never varies, and a {@link BitSet} counts its own bits sixty-four at a time.
+     * Nine thousand steps becomes a hundred and forty-four words.
+     */
+    private static int percentOf(BitSet b) {
+        if (CHARTABLE_COUNT == 0) {
+            return 0;
+        }
+        BitSet hit = (BitSet) b.clone();
+        hit.and(CHARTABLE);
+        return (hit.cardinality() * 100) / CHARTABLE_COUNT;
     }
 
     /**

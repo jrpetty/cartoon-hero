@@ -858,9 +858,12 @@ public final class MazeRuntime {
         }
         int[] p = MazeData.exitPortal(ex);
         boolean alongX = "north".equals(ex.facing()) || "south".equals(ex.facing());
+        // Built once rather than per player: the portal does not move while the
+        // loop that is looking for somebody near it is running.
+        BlockPos portal = new BlockPos(p[0], p[1], p[2]);
         boolean anyoneNear = false;
         for (ServerPlayer pl : level.players()) {
-            if (pl.blockPosition().distSqr(new BlockPos(p[0], p[1], p[2])) < 64.0 * 64.0) {
+            if (pl.blockPosition().distSqr(portal) < 64.0 * 64.0) {
                 anyoneNear = true;
                 break;
             }
@@ -876,7 +879,7 @@ public final class MazeRuntime {
             level.sendParticles(net.minecraft.core.particles.ParticleTypes.END_ROD,
                     x, MazeData.WALL_BASE_Y + 2.0, z, 3, 0.25, 1.0, 0.25, 0.005);
         }
-        level.playSound(null, new BlockPos(p[0], p[1], p[2]),
+        level.playSound(null, portal,
                 SoundEvents.PORTAL_AMBIENT, SoundSource.BLOCKS, 0.6F, 1.1F);
 
         // And the real thing, at the far end of the annex. The doorway now means

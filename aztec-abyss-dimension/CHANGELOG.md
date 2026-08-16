@@ -13,6 +13,66 @@ behaviour that was already there · **docs**
 
 ## Unreleased
 
+### Stage H6 — outside the engine: the job board was counting to nine thousand
+
+H1–H5 covered the Arena Engine. This is the same audit over the maze, the round
+manager and the global event handlers, and it found one thing much larger than
+anything in the engine.
+
+- **change** **`MazeCharts.percentOf` stops walking the grid.** It counted a
+  chart's progress by stepping through all ninety-six by ninety-six cells —
+  **nine thousand two hundred and sixteen** — asking `inGlade` and then
+  `BitSet.get` for each. The Glade's job board asks every Runner for their
+  percentage once a second, so four Runners meant roughly **thirty-seven thousand
+  grid steps a second, forever**, to produce numbers that change only when
+  somebody walks down a corridor they have not walked before.
+
+  The denominator never varies — 8,960 chartable cells — and a `BitSet` counts
+  its own bits sixty-four at a time, so the same answer comes out of one masked
+  population count: **9,216 steps become 144 words.** The mask is built once at
+  class load. Verified equivalent to the old loop by exhaustive comparison of the
+  cell set and by random trials of the arithmetic, including the empty and full
+  cases.
+
+- **change** `Griever.loaded` holds its search box instead of rebuilding it. The
+  box is the whole maze and has not changed since the maze was stamped, and the
+  method is asked twice a second — once by the night pack, once by the
+  day-stalker.
+
+- **change** `portalAmbience` built a `BlockPos` for the portal inside the loop
+  looking for a player near it, once per player per second. Built once now, and
+  reused for the sound that follows.
+
+- **change** `MazeRaid.raiders` tests `isAlive()` before reaching into a mob's
+  persistent data — the same reason as H3 and H5, and it matters more here
+  because the box covers a whole side of the maze, pets and all.
+
+**Found and deliberately left alone**, with reasons, because "efficient" is not
+worth a behaviour change I cannot test:
+
+- `Griever.loaded` is called **twice** a second and each call scans the whole
+  576×576 maze. `tickGrievers` and `tickStalker` filter it to *disjoint* subsets
+  — non-stalkers and stalkers — so one shared snapshot would serve both and halve
+  the scans. It is probably safe. It also rests on an invariant no compiler
+  checks, and a future edit that made either function touch the other's subset
+  would break the day-stalker silently. Left as two scans.
+- `MazeClock.pushSky` sends a time packet to every player **every tick**, twenty
+  times vanilla's rate. The packet carries `doDaylightCycle=false`, so the client
+  holds the value between packets rather than drifting — which means the earlier
+  reason for keeping it per-tick was wrong, and cutting it to once a second would
+  quantise the sky into steps of about 0.17°, almost certainly invisible. Almost
+  certainly is not certainly, and this is the sky.
+- `PortalEvents.onPlayerTick` reads every player's persistent data on every tick,
+  in every dimension. Creating that data is a one-time cost per player, so the
+  per-tick expense is small; what is left is that every player on a server gains
+  a `NeoForgeData` compound in their save file whether or not they have ever
+  touched this mod. Fixing it properly needs a "does this entity already have
+  persistent data" probe, and guessing at an API signature has cost three CI
+  cycles on this project already.
+- `RoundManager` already carries this pass — its hot paths have explicit comments
+  about a full entity sweep per tick having been the most expensive thing the
+  mode did, and about a plain loop replacing a stream. Nothing left worth taking.
+
 ### Stage H5 — the last two loops that ran every tick
 
 The engine files H1–H3 had not reached. Both of these are hotter than anything

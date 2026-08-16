@@ -95,11 +95,20 @@ public final class Griever {
         return Math.max(1, 4 - day / 4);
     }
 
+    /**
+     * The whole maze, floor to lid. Fixed by the map's dimensions.
+     *
+     * <p>Held rather than rebuilt because {@link #loaded} is asked for twice a
+     * second - once by the night pack and once by the day-stalker - and the box
+     * it searches has been the same box since the maze was stamped.
+     */
+    private static final AABB WHOLE_MAZE = new AABB(
+            0, MazeData.FLOOR_Y - 4, 0,
+            MazeData.SPAN, MazeData.WALL_TOP_Y + 4, MazeData.SPAN);
+
     /** Every Griever currently loaded in the maze. */
     public static List<Mob> loaded(ServerLevel level) {
-        return level.getEntitiesOfClass(Mob.class,
-                new AABB(0, MazeData.FLOOR_Y - 4, 0, MazeData.SPAN, MazeData.WALL_TOP_Y + 4, MazeData.SPAN),
-                Griever::isGriever);
+        return level.getEntitiesOfClass(Mob.class, WHOLE_MAZE, Griever::isGriever);
     }
 
     /**
