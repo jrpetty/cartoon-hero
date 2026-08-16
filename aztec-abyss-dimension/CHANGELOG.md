@@ -13,6 +13,54 @@ behaviour that was already there · **docs**
 
 ## Unreleased
 
+### Stage H2 — the questions signs were being asked twenty times a second
+
+Same shape of pass as H1, one level down: not "which region is this" but "how big
+is it". A marker is a sign, and a sign cannot change while a run is going, yet the
+engine was reading shapes back off them on a tick. Nothing here changes what any
+of it does.
+
+- **change** **`Marker.intArg` no longer builds a String for a default it is
+  about to throw away.** It read
+  `args.getOrDefault(key, String.valueOf(fallback))`, and Java evaluates that
+  second argument whether the key is present or not — so every ask for an option
+  a sign did not set allocated a String of the default, trimmed it, and parsed it
+  back into the number it started as. This is the most-called accessor in the
+  engine and **the miss is the common case**, because defaults are the point of
+  having defaults. One `get` and a null check now.
+
+- **change** **A region's shape is worked out once, with its id.** H1 fixed the
+  id and left the radius and the height being re-read per region, per player,
+  five times a second — each one an `intArg` miss, so each one a String built and
+  parsed. Ids, radii and heights now live together in a `RegionShape` built when
+  the map is scanned, and the radius is stored squared because every reader
+  compares it against a squared distance. `power` keeps its own reads: it uses
+  different defaults (8 and 6, not 4 and 4) and is not on a tick.
+
+- **change** **The objective reads its marker once.** `hold` asked for its radius
+  twenty times a second, `percent()` re-read the maximum health every time
+  anything drew the bar, and `defend` rebuilt its bounding box every second. The
+  two radii are kept separately on purpose — `defend` floors at two blocks and
+  `hold` at one, and collapsing that would quietly resize every objective written
+  with `radius=1`. The `defend` scan also tests `isAlive()` before reaching into
+  a mob's persistent data, which is the cheaper half of the pair.
+
+- **change** A collected power-up is identified once rather than twice. Working
+  out which kind a drop is means deep-copying the stack's custom data, and the
+  sweep's filter had already done it. The key it stores its birth time under is a
+  constant now instead of a concatenation built on every read.
+
+- **change** `support` compares squared distances. It is the only quadratic loop
+  in `MobBrains` — every supporter walks the whole horde — so it is the only one
+  where a square root per pair was buying nothing.
+
+- **docs** Removed two orphaned javadoc blocks left behind in `EngineArena` by
+  H1: a comment for a `block-event guard` method that does not exist, and a
+  duplicate of the `routes` comment sitting directly above the real one.
+
+**Still unverified in play.** Everything in H1 and H2 is checked by reading the
+published jar's bytecode. None of it has been run in Minecraft.
+
 ### Stage H1 — the same work, without the garbage
 
 All thirty capabilities are in. This is the efficiency pass over what they added,

@@ -287,8 +287,11 @@ public final class MobBrains {
             return;
         }
         int helped = 0;
+        // Squared, because this is the one loop in here that is quadratic - every
+        // supporter walks the whole horde - and a square root per pair to answer
+        // "is it within eight blocks" is the one that buys nothing.
         for (Mob other : all) {
-            if (other == mob || !other.isAlive() || other.distanceTo(mob) > 8.0) {
+            if (other == mob || !other.isAlive() || other.distanceToSqr(mob) > 64.0) {
                 continue;
             }
             other.heal(2.0F);

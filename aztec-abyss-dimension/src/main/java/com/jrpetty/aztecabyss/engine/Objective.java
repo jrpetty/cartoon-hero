@@ -46,6 +46,22 @@ public final class Objective {
     private final Marker marker;
     private final int target;
     private final boolean failEndsRun;
+    /**
+     * The shape and size the author asked for, read once.
+     *
+     * <p>A marker is a sign, and a sign does not change while a run is going, but
+     * these were read back off it on a tick: {@code hold} asked for its radius
+     * twenty times a second and {@code percent()} re-read the maximum health
+     * every time anything drew the bar. The objective is the one marker in a map
+     * guaranteed to be ticked, so it is the one where that mattered.
+     *
+     * <p>Two radii rather than one, because the two kinds floor it differently -
+     * {@code defend} at two blocks and {@code hold} at one - and collapsing that
+     * would quietly resize every objective written with {@code radius=1}.
+     */
+    private final int holdRadiusSq;
+    private final net.minecraft.world.phys.AABB defendBox;
+    private final int maxHealth;
 
     private int progress;
     private float health;
@@ -68,7 +84,12 @@ public final class Objective {
             case COLLECT -> Math.max(1, marker.intArg("count", 8));
             default -> 0;
         };
-        this.health = Math.max(1, marker.intArg("hp", 600));
+        this.maxHealth = Math.max(1, marker.intArg("hp", 600));
+        this.health = this.maxHealth;
+        int hold = Math.max(1, marker.intArg("radius", 4));
+        this.holdRadiusSq = hold * hold;
+        this.defendBox = new net.minecraft.world.phys.AABB(marker.pos())
+                .inflate(Math.max(2, marker.intArg("radius", 4)));
         // "fail=end" is the interesting setting and not the default. An objective
         // that ends the run when it breaks is a hard rule; one that merely stops
         // paying out lets a map have a side task without turning every map into a
@@ -131,12 +152,11 @@ public final class Objective {
             return false;
         }
         gnaw = 0;
-        double radius = Math.max(2, marker.intArg("radius", 4));
-        var box = new net.minecraft.world.phys.AABB(marker.pos()).inflate(radius);
         int biting = 0;
         for (net.minecraft.world.entity.Mob m
-                : level.getEntitiesOfClass(net.minecraft.world.entity.Mob.class, box,
-                        e -> e.getPersistentData().getBoolean("aztecabyss_engine_mob") && e.isAlive())) {
+                : level.getEntitiesOfClass(net.minecraft.world.entity.Mob.class, defendBox,
+                        e -> e.isAlive()
+                                && e.getPersistentData().getBoolean("aztecabyss_engine_mob"))) {
             biting++;
         }
         if (biting == 0) {
@@ -162,16 +182,14 @@ public final class Objective {
 
     /** How much of the objective is left, nought to a hundred. */
     public int percent() {
-        int max = Math.max(1, marker.intArg("hp", 600));
-        return Math.max(0, Math.min(100, Math.round(health * 100.0f / max)));
+        return Math.max(0, Math.min(100, Math.round(health * 100.0f / maxHealth)));
     }
 
     /** Someone has to be stood in it, and stay stood in it. */
     private boolean tickHold(List<ServerPlayer> present) {
-        double radius = Math.max(1, marker.intArg("radius", 4));
         boolean anyone = false;
         for (ServerPlayer p : present) {
-            if (p.blockPosition().distSqr(marker.pos()) <= radius * radius) {
+            if (p.blockPosition().distSqr(marker.pos()) <= holdRadiusSq) {
                 anyone = true;
                 break;
             }

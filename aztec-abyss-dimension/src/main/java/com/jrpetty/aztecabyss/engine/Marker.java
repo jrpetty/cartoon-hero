@@ -58,9 +58,25 @@ public record Marker(String kind, BlockPos pos, Direction facing, Map<String, St
         return args.getOrDefault(key, fallback);
     }
 
+    /**
+     * A numeric argument, or the fallback if it is absent or unreadable.
+     *
+     * <p>The absent case returns without touching the parser. It used to go
+     * through {@code getOrDefault(key, String.valueOf(fallback))}, and Java
+     * evaluates that second argument whether the key is there or not - so every
+     * ask for an option a sign did not set built a String, trimmed it and parsed
+     * it back to the number it started as. This is the most-called accessor in
+     * the engine: the region sweep, the zone sweep, the traps and the objective
+     * all read radii off markers several times a second, and nearly every read
+     * is a miss, because the defaults are the point of having defaults.
+     */
     public int intArg(String key, int fallback) {
+        String raw = args.get(key);
+        if (raw == null) {
+            return fallback;
+        }
         try {
-            return Integer.parseInt(args.getOrDefault(key, String.valueOf(fallback)).trim());
+            return Integer.parseInt(raw.trim());
         } catch (NumberFormatException e) {
             return fallback;
         }

@@ -179,16 +179,31 @@ public final class EngineArena {
     private final List<Marker> spawners = new ArrayList<>();
     private final List<Marker> bossPoints = new ArrayList<>();
     /**
-     * The regions' ids, lower-cased once, positionally matching {@link #regions}.
+     * A region's identity and shape, worked out once when the map is scanned.
      *
-     * <p>Built when the map is scanned rather than derived on every lookup. The
-     * region sweep alone asked every region its id for every player five times a
-     * second, and each ask allocated a fresh String for a value fixed when the
-     * map was stamped. With nine regions and four players that is a hundred and
-     * forty-four throwaway Strings a second, to answer a question whose answer
-     * never changes.
+     * <p>All three come off a sign that will never be rewritten while the run is
+     * going, and all three were being re-derived on every lookup. The region
+     * sweep asked every region its id, its radius and its height for every
+     * player five times a second: the id allocated a lower-cased String, and each
+     * radius went through {@code intArg} with a default, which built a String of
+     * the default and parsed it back. Nine regions and four players is around
+     * four hundred throwaway objects a second to answer three questions whose
+     * answers never change.
+     *
+     * <p>The radius is kept squared because every reader compares it against a
+     * squared distance.
      */
-    private final List<String> regionIds = new ArrayList<>();
+    private record RegionShape(String id, int radiusSq, int height) {
+
+        /** Reads a region marker's shape, using the region sweep's defaults. */
+        static RegionShape of(Marker r) {
+            int radius = Math.max(1, r.intArg("radius", 4));
+            return new RegionShape(r.id(), radius * radius, Math.max(1, r.intArg("height", 4)));
+        }
+    }
+
+    /** The regions' shapes, positionally matching {@link #regions}. */
+    private final List<RegionShape> regionShapes = new ArrayList<>();
 
     /** Patrol legs, in the order an author numbered them. */
     private final List<Marker> waypoints = new ArrayList<>();
@@ -478,7 +493,7 @@ public final class EngineArena {
         current.teleports.addAll(scan.of("teleport"));
         current.regions.addAll(scan.of("region"));
         for (Marker r : current.regions) {
-            current.regionIds.add(r.id());
+            current.regionShapes.add(RegionShape.of(r));
         }
         current.barricades = new Barricades(current, current.level, scan.of("barricade"));
         // A [Spawn] carrying team= is that side's spawn rather than the map's.
@@ -1530,7 +1545,7 @@ public final class EngineArena {
         }
         String want = id.toLowerCase(java.util.Locale.ROOT);
         for (int i = 0; i < regions.size(); i++) {
-            if (regionIds.get(i).equals(want)) {
+            if (regionShapes.get(i).id().equals(want)) {
                 return regions.get(i).pos();
             }
         }
@@ -1539,31 +1554,21 @@ public final class EngineArena {
 
     public String regionAt(BlockPos at) {
         for (int i = 0; i < regions.size(); i++) {
-            Marker r = regions.get(i);
-            String id = regionIds.get(i);
-            if (id.isEmpty()) {
+            RegionShape shape = regionShapes.get(i);
+            if (shape.id().isEmpty()) {
                 continue;
             }
-            double radius = Math.max(1, r.intArg("radius", 4));
-            int height = Math.max(1, r.intArg("height", 4));
-            double dx = at.getX() - r.pos().getX();
-            double dz = at.getZ() - r.pos().getZ();
-            if (dx * dx + dz * dz <= radius * radius
-                    && Math.abs(at.getY() - r.pos().getY()) <= height) {
-                return id;
+            BlockPos centre = regions.get(i).pos();
+            double dx = at.getX() - centre.getX();
+            double dz = at.getZ() - centre.getZ();
+            if (dx * dx + dz * dz <= shape.radiusSq()
+                    && Math.abs(at.getY() - centre.getY()) <= shape.height()) {
+                return shape.id();
             }
         }
         return null;
     }
 
-    /** Whether a position is inside the map at all, for the block-event guard. */
-    /**
-     * The legs of a named route, in order.
-     *
-     * <p>Sorted by the {@code order} an author wrote rather than by the order the
-     * scan happened to find them in, because a structure block's position inside
-     * an NBT file is not a thing anybody can see or control.
-     */
     /**
      * The legs of a named route, in order.
      *
@@ -1631,7 +1636,7 @@ public final class EngineArena {
         Marker region = null;
         String want = regionId == null ? "" : regionId.toLowerCase(java.util.Locale.ROOT);
         for (int i = 0; i < regions.size(); i++) {
-            if (regionIds.get(i).equals(want)) {
+            if (regionShapes.get(i).id().equals(want)) {
                 region = regions.get(i);
                 break;
             }
@@ -2218,20 +2223,18 @@ public final class EngineArena {
             java.util.Set<String> was = inRegion.computeIfAbsent(
                     p.getUUID(), id -> new java.util.HashSet<>());
             java.util.Set<String> now = new java.util.HashSet<>();
+            BlockPos at = p.blockPosition();
             for (int i = 0; i < regions.size(); i++) {
-                Marker r = regions.get(i);
-                String id = regionIds.get(i);
-                if (id.isEmpty()) {
+                RegionShape shape = regionShapes.get(i);
+                if (shape.id().isEmpty()) {
                     continue;
                 }
-                double radius = Math.max(1, r.intArg("radius", 4));
-                int height = Math.max(1, r.intArg("height", 4));
-                BlockPos at = p.blockPosition();
+                BlockPos centre = regions.get(i).pos();
                 boolean inside = at.distToLowCornerSqr(
-                        r.pos().getX(), at.getY(), r.pos().getZ()) <= radius * radius
-                        && Math.abs(at.getY() - r.pos().getY()) <= height;
+                        centre.getX(), at.getY(), centre.getZ()) <= shape.radiusSq()
+                        && Math.abs(at.getY() - centre.getY()) <= shape.height();
                 if (inside) {
-                    now.add(id);
+                    now.add(shape.id());
                 }
             }
             for (String id : now) {

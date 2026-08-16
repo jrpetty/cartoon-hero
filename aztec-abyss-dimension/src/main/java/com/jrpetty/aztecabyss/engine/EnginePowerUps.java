@@ -39,6 +39,8 @@ import java.util.List;
 public final class EnginePowerUps {
 
     private static final String TAG = "aztecabyss_engine_powerup";
+    /** When a drop was made, so the sweep can rot it. Built once, not per read. */
+    private static final String BORN = TAG + "_born";
     /** How long a drop lies there before it rots. */
     private static final int LIFETIME = 600;
     /** How long the timed ones last. */
@@ -99,7 +101,7 @@ public final class EnginePowerUps {
         drop.setPickUpDelay(Short.MAX_VALUE);
         drop.setUnlimitedLifetime();
         drop.setGlowingTag(true);
-        drop.getPersistentData().putLong(TAG + "_born", level.getGameTime());
+        drop.getPersistentData().putLong(BORN, level.getGameTime());
         level.addFreshEntity(drop);
         level.playSound(null, mob.blockPosition(), SoundEvents.BEACON_ACTIVATE,
                 SoundSource.HOSTILE, 1.1F, 1.6F);
@@ -114,7 +116,7 @@ public final class EnginePowerUps {
                 box.maxX() + 1.0, box.maxY() + 1.0, box.maxZ() + 1.0);
         for (ItemEntity item : level.getEntitiesOfClass(ItemEntity.class, area,
                 e -> kindOf(e.getItem()) != null)) {
-            if (now - item.getPersistentData().getLong(TAG + "_born") > LIFETIME) {
+            if (now - item.getPersistentData().getLong(BORN) > LIFETIME) {
                 level.sendParticles(ParticleTypes.SMOKE, item.getX(), item.getY(), item.getZ(),
                         6, 0.2, 0.2, 0.2, 0.01);
                 item.discard();
@@ -124,7 +126,11 @@ public final class EnginePowerUps {
                     2, 0.2, 0.2, 0.2, 0.01);
             for (ServerPlayer p : present) {
                 if (p.distanceToSqr(item) <= PICKUP * PICKUP) {
-                    collect(level, kindOf(item.getItem()), present);
+                    // Read once. The filter above already worked out what this
+                    // is, and working it out means deep-copying the stack's
+                    // custom data - not something to do twice for one pickup.
+                    Kind kind = kindOf(item.getItem());
+                    collect(level, kind, present);
                     item.discard();
                     break;
                 }
