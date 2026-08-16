@@ -37,28 +37,21 @@ import java.util.Map;
 public record Marker(String kind, BlockPos pos, Direction facing, Map<String, String> args) {
 
     /**
-     * Markers that are instructions only, and are deleted once read.
+     * This marker's identity, lower-cased.
      *
-     * <p>{@code loot} and {@code extract} are deliberately absent even though they
-     * look like scenery. A supply cache is claimed by right-clicking it, and an
-     * extraction point is somewhere a player has to be able to find and stand on -
-     * deleting either sign removes the only thing telling anyone it is there.
-     * Anything the engine merely needs to <em>know</em> gets consumed; anything a
-     * player touches, or has to go to, stays.
-     */
-    private static final java.util.Set<String> CONSUMED = java.util.Set.of(
-            "spawn", "horde", "pen", "boss", "powerup", "zone", "spawner", "region");
-
-    /**
-     * Whether this marker is scaffolding rather than furniture.
+     * <p>Six places ask "which region is this" on a tick - the region sweep, the
+     * zone rules, {@code regionAt}, {@code route}, {@code power} and the script's
+     * lookups - and each was calling {@code arg("id", ...)} then
+     * {@code toLowerCase()} per marker, per player, several times a second, for a
+     * value fixed when the map was stamped.
      *
-     * <p>A {@code [Horde]} sign is a note to the engine and should not be left
-     * nailed to the wall of a finished map. A {@code [Dealer]} sign is the shop
-     * front the player reads from across the room, and must stay exactly where the
-     * author put it.
+     * <p>Not cached on the marker itself: a record hashes every component, args
+     * map included, so keying a cache on one costs more than the lower-casing it
+     * would save. The callers that loop hold the lower-cased ids beside the list
+     * instead, computed once when the map is scanned.
      */
-    public boolean consumedOnLoad() {
-        return CONSUMED.contains(kind);
+    public String id() {
+        return arg("id", arg("value", "")).toLowerCase(java.util.Locale.ROOT);
     }
 
     public String arg(String key, String fallback) {

@@ -13,6 +13,34 @@ behaviour that was already there · **docs**
 
 ## Unreleased
 
+### Stage H1 — the same work, without the garbage
+
+All thirty capabilities are in. This is the efficiency pass over what they added,
+and it changes no behaviour: every optimisation here produces byte-identical
+results, just fewer times and with fewer allocations.
+
+- **change** **Region ids are lower-cased once, when the map is scanned.** Six
+  places ask "which region is this" on a tick — the region sweep, the zone rules,
+  `regionAt`, `regionPos`, `power` and the script's own lookups — and every one
+  called `arg("id", …)` then `toLowerCase()` per marker, per player, several
+  times a second. Each call allocates a fresh String for a value that was fixed
+  when the map was stamped and cannot change while a run is going. Nine regions
+  and four players is about **a hundred and forty-four throwaway Strings a
+  second** to answer a question whose answer never changes.
+
+- **change** **Routes are grouped once instead of assembled per call**, and this
+  was the worst of them. `patrol` asks for its route for every patrolling mob
+  every five ticks, and the old `route()` lower-cased every waypoint on the map,
+  allocated a list, **and sorted it** — so ten patrollers on an eight-waypoint map
+  meant forty sorts a second producing forty identical lists. It is a map lookup
+  now.
+
+- **change** Rejected an optimisation of my own before it shipped: caching the
+  lower-cased id *on* `Marker` in a `WeakHashMap`. `Marker` is a record, so its
+  `hashCode` hashes every component — the args map included — which makes the
+  cache lookup more expensive than the lower-casing it was meant to save. The
+  callers that loop hold the ids beside their lists instead.
+
 ### Stage G2 — ready-up, and death that leaves you in the room
 
 **All thirty capabilities are now implemented.**

@@ -178,6 +178,18 @@ public final class EngineArena {
     private final List<Marker> zones = new ArrayList<>();
     private final List<Marker> spawners = new ArrayList<>();
     private final List<Marker> bossPoints = new ArrayList<>();
+    /**
+     * The regions' ids, lower-cased once, positionally matching {@link #regions}.
+     *
+     * <p>Built when the map is scanned rather than derived on every lookup. The
+     * region sweep alone asked every region its id for every player five times a
+     * second, and each ask allocated a fresh String for a value fixed when the
+     * map was stamped. With nine regions and four players that is a hundred and
+     * forty-four throwaway Strings a second, to answer a question whose answer
+     * never changes.
+     */
+    private final List<String> regionIds = new ArrayList<>();
+
     /** Patrol legs, in the order an author numbered them. */
     private final List<Marker> waypoints = new ArrayList<>();
     /** Optional out-of-sight spawn chambers, paired to the nearest way in. */
@@ -461,9 +473,13 @@ public final class EngineArena {
         current.spawners.addAll(scan.of("spawner"));
         current.bossPoints.addAll(scan.of("boss"));
         current.waypoints.addAll(scan.of("waypoint"));
+        current.buildRoutes();
         current.pens.addAll(scan.of("pen"));
         current.teleports.addAll(scan.of("teleport"));
         current.regions.addAll(scan.of("region"));
+        for (Marker r : current.regions) {
+            current.regionIds.add(r.id());
+        }
         current.barricades = new Barricades(current, current.level, scan.of("barricade"));
         // A [Spawn] carrying team= is that side's spawn rather than the map's.
         current.allSpawns.addAll(scan.of("spawn"));
@@ -1513,17 +1529,18 @@ public final class EngineArena {
             return null;
         }
         String want = id.toLowerCase(java.util.Locale.ROOT);
-        for (Marker r : regions) {
-            if (r.arg("id", r.arg("value", "")).toLowerCase(java.util.Locale.ROOT).equals(want)) {
-                return r.pos();
+        for (int i = 0; i < regions.size(); i++) {
+            if (regionIds.get(i).equals(want)) {
+                return regions.get(i).pos();
             }
         }
         return null;
     }
 
     public String regionAt(BlockPos at) {
-        for (Marker r : regions) {
-            String id = r.arg("id", r.arg("value", "")).toLowerCase(java.util.Locale.ROOT);
+        for (int i = 0; i < regions.size(); i++) {
+            Marker r = regions.get(i);
+            String id = regionIds.get(i);
             if (id.isEmpty()) {
                 continue;
             }
@@ -1547,19 +1564,42 @@ public final class EngineArena {
      * scan happened to find them in, because a structure block's position inside
      * an NBT file is not a thing anybody can see or control.
      */
+    /**
+     * The legs of a named route, in order.
+     *
+     * <p>Built once when the map is scanned rather than assembled per call, and
+     * this one mattered: {@code patrol} asks for its route for every patrolling
+     * mob every five ticks, and the old version lower-cased every waypoint in
+     * the map, allocated a list, and <em>sorted it</em> each time. Ten patrollers
+     * on an eight-waypoint map meant forty sorts a second to produce forty
+     * identical lists.
+     *
+     * <p>Sorted by the {@code order} an author wrote rather than by the order the
+     * scan found them in, because a structure block's position inside an NBT file
+     * is not something anybody can see or control.
+     */
+    private final java.util.Map<String, List<Marker>> routes = new java.util.HashMap<>();
+
     public List<Marker> route(String id) {
-        if (id == null || id.isEmpty() || waypoints.isEmpty()) {
+        if (id == null || id.isEmpty()) {
             return List.of();
         }
-        String want = id.toLowerCase(java.util.Locale.ROOT);
-        List<Marker> legs = new ArrayList<>();
+        return routes.getOrDefault(id.toLowerCase(java.util.Locale.ROOT), List.of());
+    }
+
+    /** Groups the waypoints into their routes. Called once, after the scan. */
+    private void buildRoutes() {
+        routes.clear();
         for (Marker w : waypoints) {
-            if (w.arg("route", w.arg("value", "")).toLowerCase(java.util.Locale.ROOT).equals(want)) {
-                legs.add(w);
+            String id = w.arg("route", w.arg("value", "")).toLowerCase(java.util.Locale.ROOT);
+            if (id.isEmpty()) {
+                continue;
             }
+            routes.computeIfAbsent(id, k -> new ArrayList<>()).add(w);
         }
-        legs.sort(java.util.Comparator.comparingInt(m -> m.intArg("order", 0)));
-        return legs;
+        for (List<Marker> legs : routes.values()) {
+            legs.sort(java.util.Comparator.comparingInt(m -> m.intArg("order", 0)));
+        }
     }
 
     /** The map's barricades, or null if it marked none. */
@@ -1590,9 +1630,9 @@ public final class EngineArena {
     public int power(String regionId, boolean on) {
         Marker region = null;
         String want = regionId == null ? "" : regionId.toLowerCase(java.util.Locale.ROOT);
-        for (Marker r : regions) {
-            if (r.arg("id", r.arg("value", "")).toLowerCase(java.util.Locale.ROOT).equals(want)) {
-                region = r;
+        for (int i = 0; i < regions.size(); i++) {
+            if (regionIds.get(i).equals(want)) {
+                region = regions.get(i);
                 break;
             }
         }
@@ -2178,8 +2218,9 @@ public final class EngineArena {
             java.util.Set<String> was = inRegion.computeIfAbsent(
                     p.getUUID(), id -> new java.util.HashSet<>());
             java.util.Set<String> now = new java.util.HashSet<>();
-            for (Marker r : regions) {
-                String id = r.arg("id", r.arg("value", "")).toLowerCase(java.util.Locale.ROOT);
+            for (int i = 0; i < regions.size(); i++) {
+                Marker r = regions.get(i);
+                String id = regionIds.get(i);
                 if (id.isEmpty()) {
                     continue;
                 }
