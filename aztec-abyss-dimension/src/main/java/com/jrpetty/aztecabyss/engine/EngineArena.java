@@ -639,6 +639,11 @@ public final class EngineArena {
 
     /** Which board this run files under. Set when a published map starts one. */
     private String mapKey = "";
+
+    /** The key this run's results are filed under, for anything reading them back. */
+    public String mapKeyPublic() {
+        return mapKey == null || mapKey.isBlank() ? "engine:" + rules.id : mapKey;
+    }
     /** When the run began, for the tie-break on the board. */
     private long startedTick = 0L;
 

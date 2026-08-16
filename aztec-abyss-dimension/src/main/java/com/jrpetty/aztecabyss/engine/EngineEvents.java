@@ -525,6 +525,11 @@ public final class EngineEvents {
                                     () -> Component.literal(a.director().describe()), false);
                             return 1;
                         }))
+                .then(Commands.literal("records")
+                        .executes(ctx -> records(ctx.getSource(), null))
+                        .then(Commands.argument("map", com.mojang.brigadier.arguments.StringArgumentType.string())
+                                .executes(ctx -> records(ctx.getSource(),
+                                        com.mojang.brigadier.arguments.StringArgumentType.getString(ctx, "map")))))
                 .then(Commands.literal("rules")
                         .executes(ctx -> rules(ctx.getSource(), null))
                         .then(Commands.argument("id", com.mojang.brigadier.arguments.StringArgumentType.string())
@@ -667,6 +672,60 @@ public final class EngineEvents {
      * health and damage multipliers at rounds 1, 10, 25 and 50 tells you instantly
      * whether you have built a fair fight or a wall.
      */
+    /**
+     * {@code /arena records} — what a map remembers about the people who played it.
+     *
+     * <p>The leaderboard has been recorded since runs began and there was no way
+     * to read it that did not involve opening a screen from a specific block in a
+     * specific dimension. A record nobody can look up is a record nobody plays
+     * for, which is most of the point of keeping one.
+     *
+     * <p>With no argument it reports the map being played now, so the common case
+     * - somebody between rounds wondering what the bar is - costs no typing.
+     */
+    private static int records(CommandSourceStack source, String mapKey) {
+        if (source.getServer() == null) {
+            return 0;
+        }
+        EngineArena arena = EngineArena.active();
+        String key = mapKey;
+        if (key == null || key.isBlank()) {
+            if (arena == null) {
+                source.sendSuccess(() -> Component.literal(
+                        "§7No run in progress — name a map: §f/arena records <map>"), false);
+                return 0;
+            }
+            key = arena.mapKeyPublic();
+        }
+        var board = com.jrpetty.aztecabyss.data.Leaderboards.get(source.getServer());
+        boolean group = false;
+        var top = board.top(key, group, 10);
+        if (top.isEmpty()) {
+            var solo = board.top(key, true, 10);
+            top = solo;
+            group = true;
+        }
+        final String shown = key;
+        if (top.isEmpty()) {
+            source.sendSuccess(() -> Component.literal(
+                    "§7Nobody has finished §f" + shown + "§7 yet. §8Be first."), false);
+            return 1;
+        }
+        source.sendSuccess(() -> Component.literal(
+                "§6✦ " + shown + " §8— " + (shown.isEmpty() ? "" : "") + "records"), false);
+        int place = 1;
+        for (var row : top) {
+            final int at = place++;
+            final var r = row;
+            source.sendSuccess(() -> Component.literal(
+                    (at == 1 ? "§e" : at <= 3 ? "§f" : "§7") + at + ". "
+                            + r.name() + " §8— §fround " + r.score()
+                            + " §8in " + (r.seconds() / 60) + "m"
+                            + (r.party() > 1 ? " §8(" + r.party() + " players)" : "")), false);
+        }
+        return 1;
+    }
+
     private static int rules(CommandSourceStack source, String id) {
         if (id == null) {
             var all = RulesetLoader.all();
@@ -898,7 +957,21 @@ public final class EngineEvents {
         if (!packs.isEmpty()) {
             source.sendSuccess(() -> Component.literal("§6— from datapacks —"), false);
             packs.forEach((key, m) -> source.sendSuccess(
-                    () -> Component.literal(m.line() + " §8[" + key + "]"), false));
+                    () -> Component.literal(m.line() + " §8[" + key + "]"
+                            + (m.aheadOfEngine() ? " §c⚠ built for engine "
+                                    + m.version() + ", this is " + MapManifest.ENGINE_VERSION : "")),
+                    false));
+        }
+        // Said once, at the bottom, rather than beside every line: a pack ahead
+        // of this engine still loads and still plays, it just cannot use
+        // everything it was written with. The author is normally the last to
+        // discover that, because it works on their server.
+        boolean ahead = packs.values().stream().anyMatch(MapManifest::aheadOfEngine);
+        if (ahead) {
+            source.sendSuccess(() -> Component.literal(
+                    "§7Maps marked §c⚠§7 expect a newer engine. They load and play;"
+                            + " anything they use that this engine has never heard of"
+                            + " is ignored rather than failing."), false);
         }
         return 1;
     }

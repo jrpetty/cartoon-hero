@@ -34,6 +34,35 @@ import java.util.List;
 public record MapManifest(String id, String title, String author, String blurb,
                           String difficulty, String ruleset, int version) {
 
+    /**
+     * What this engine can express, as one number that goes up.
+     *
+     * <p>A pack written against a later engine loads on an earlier one and
+     * quietly does less: unknown markers are ignored, unknown actions do
+     * nothing, unknown conditions pass. That forgiveness is deliberate and worth
+     * keeping - but it means a map can be half-broken with no symptom, and the
+     * author is the last person to find out, because it works on <em>their</em>
+     * server.
+     *
+     * <p>So a pack may state the engine it was built for. Loading is never
+     * refused over it; the map is simply reported as ahead of this engine, once,
+     * where somebody will see it. Saying "this map expects more than I have" is
+     * the entire feature.
+     *
+     * <p>Bumped when the engine gains vocabulary an author could depend on:
+     * <p>1: markers, rulesets, the first script verbs.
+     * <p>2: branching, functions, arithmetic, selectors, weighted choice.
+     * <p>3: the cancellable events, named timers, {@code set_rule}, zones.
+     * <p>4: fill and move, barricades, power, behaviours, patrols, boss phases,
+     * wave tables, spawn hints, classes, invented items, skills, progression.
+     */
+    public static final int ENGINE_VERSION = 4;
+
+    /** Whether this pack asks for more engine than there is. */
+    public boolean aheadOfEngine() {
+        return version > ENGINE_VERSION;
+    }
+
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
 
     public static MapManifest fresh(String id, String author) {

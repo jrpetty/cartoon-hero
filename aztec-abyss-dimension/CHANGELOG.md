@@ -13,6 +13,35 @@ behaviour that was already there · **docs**
 
 ## Unreleased
 
+### Stage G1 — reading the records, and packs that say what they need
+
+- **feat** **`/arena records [map]`.** The leaderboard has been recorded since
+  runs began, and the only way to read it was a screen opened from a particular
+  block in a particular dimension. A record nobody can look up is a record nobody
+  plays for, which is most of the point of keeping one. With no argument it
+  reports the map being played now, so the common case — somebody between rounds
+  wondering what the bar is — costs no typing.
+
+- **change** **Item 29 was mostly already built, and I am not building it twice.**
+  I started a `Records` SavedData before checking, and `data/Leaderboards` already
+  does per-map keys, top-N, placement and maps-with-records, and is already
+  written to at the end of every run. The new class was deleted unshipped. What
+  was genuinely missing was a way to *read* it, which is the command above.
+
+- **feat** **Engine versioning for map packs.** `MapManifest.ENGINE_VERSION`, now
+  4, and a pack may state the engine it was built for.
+
+  A pack written against a later engine already loads on an earlier one and
+  quietly does less — unknown markers ignored, unknown actions doing nothing,
+  unknown conditions passing. That forgiveness is deliberate and worth keeping.
+  But it means a map can be half-broken with no symptom, and the author is the
+  last person to find out, because it works on *their* server.
+
+  So loading is never refused over a version. `/arena maps` marks such packs and
+  says once, at the bottom, that they load and play but cannot use everything
+  they were written with. Saying "this map expects more than I have" is the whole
+  feature.
+
 ### Fix: two missing imports, and a check that can actually find them
 
 - **fix** **`Ruleset.java` used `JsonElement` and `EntityType` without importing
