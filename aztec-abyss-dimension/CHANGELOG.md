@@ -13,6 +13,51 @@ behaviour that was already there · **docs**
 
 ## Unreleased
 
+### Stage E2 — exact waves, and gates that know what they are for
+
+- **feat** **Wave tables.** A round can be written out instead of rolled for.
+
+  ```json
+  "waves": [
+    { "round": 7, "mobs": [ { "id": "minecraft:husk", "count": 12 },
+                            { "id": "minecraft:vindicator", "count": 1,
+                              "behaviour": "charger" } ] }
+  ]
+  ```
+
+  The weighted table answers "what tends to come out", which is the right
+  question for an endless mode and the wrong one for a designed fight. A boss
+  round meant to be one warden and four healers is not a distribution, it is a
+  list — and rolling for it means the round that matters most is the one the map
+  has least control over.
+
+  A listed round overrides both the roll *and* the count: twelve husks and one
+  breaker is thirteen mobs, not thirteen rolls that average out to it. Numbers
+  still come from the ruleset's own entry for that entity, so writing a boss
+  round does not mean restating every husk's health — a wave says *what* comes,
+  the mob table says what it is worth. The queue is shuffled, so an exact roster
+  is still not an exact *order*. Rounds with no line written roll as before, so
+  an author writes the three that matter and leaves the rest alone.
+
+- **feat** **Spawn hints.** A horde marker can say what kind of way in it is —
+  `hint=pressure`, `hint=flank`, `hint=ambush` — and the Director steers by it.
+
+  The Director has always measured how a run is going and had exactly one lever:
+  how *fast* the horde arrives. Every gate was interchangeable to it, so a squad
+  being taken apart and a squad coasting got the same fight at different speeds.
+
+  - **pressure** — the obvious way in, favoured while the squad is comfortable.
+    That is the fight they are set up to win, and the one that should feel like
+    the map working as intended.
+  - **flank** — behind the line, favoured as intensity climbs. This is what turns
+    "more of them" into "you are holding the wrong corner".
+  - **ambush** — held back until the squad is well on top, so it reads as the map
+    answering them rather than as noise.
+
+  Hints **bias** weights rather than replacing them, and a map that names none
+  behaves exactly as it did. That is the only acceptable way to add a steering
+  wheel to something that already drove.
+
 ### Stage E1 — enemies that do something
 
 - **feat** **Behaviour packs.** A mob entry takes a `behaviour`, and the mob

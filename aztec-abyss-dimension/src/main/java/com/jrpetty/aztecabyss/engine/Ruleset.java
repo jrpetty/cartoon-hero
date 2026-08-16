@@ -140,6 +140,9 @@ public final class Ruleset {
     public final boolean downedSolo;
 
     public final boolean directorEnabled;
+
+    /** Rounds with an exact roster, by round number. Empty means "roll for it". */
+    public final java.util.Map<Integer, java.util.List<WaveEntry>> waves;
     public final float directorTarget;
     public final float directorMinPace;
     public final float directorMaxPace;
@@ -200,6 +203,18 @@ public final class Ruleset {
     public final List<String> warnings;
 
     /** One kind of thing that can turn up in a wave. */
+    /**
+     * One line of an explicit wave: this many of that, exactly.
+     *
+     * <p>The weighted table answers "what tends to come out", which is the right
+     * question for an endless mode and the wrong one for a designed fight. A
+     * boss round that is meant to be one warden and four healers is not a
+     * distribution, it is a list, and rolling for it means the round that
+     * matters is the one the map has least control over.
+     */
+    public record WaveEntry(String entityId, int count, String behaviour) {
+    }
+
     public record MobEntry(String entityId, int weight, int fromRound, String role,
                            double maxHealth, double speed, double attackDamage,
                            String mainHand, String head, String behaviour) {
@@ -247,6 +262,7 @@ public final class Ruleset {
         this.specials = List.copyOf(b.specials);
         this.pools = Map.copyOf(b.pools);
         this.directorEnabled = b.directorEnabled;
+        this.waves = java.util.Map.copyOf(b.waves);
         this.directorTarget = b.directorTarget;
         this.directorMinPace = b.directorMinPace;
         this.directorMaxPace = b.directorMaxPace;
@@ -311,6 +327,7 @@ public final class Ruleset {
         List<SpecialRound> specials = new ArrayList<>();
         Map<String, ItemPool> pools = new LinkedHashMap<>();
         boolean directorEnabled = false;
+        final java.util.Map<Integer, java.util.List<WaveEntry>> waves = new java.util.HashMap<>();
         float directorTarget = 0.55f;
         float directorMinPace = 0.5f;
         float directorMaxPace = 2.0f;
@@ -322,6 +339,43 @@ public final class Ruleset {
     public static Ruleset defaults(String id) {
         Builder b = new Builder();
         b.id = id;
+        // Exact rosters for named rounds. A round listed here does not roll.
+        if (root.has("waves") && root.get("waves").isJsonArray()) {
+            for (JsonElement el : root.getAsJsonArray("waves")) {
+                if (!el.isJsonObject()) {
+                    continue;
+                }
+                JsonObject w = el.getAsJsonObject();
+                int round = intOf(w, "round", 0);
+                if (round <= 0 || !w.has("mobs") || !w.get("mobs").isJsonArray()) {
+                    continue;
+                }
+                java.util.List<WaveEntry> line = new ArrayList<>();
+                int total = 0;
+                for (JsonElement me : w.getAsJsonArray("mobs")) {
+                    if (!me.isJsonObject()) {
+                        continue;
+                    }
+                    JsonObject m = me.getAsJsonObject();
+                    String entity = str(m, "id", "");
+                    if (entity.isEmpty() || EntityType.byString(entity).isEmpty()) {
+                        continue;
+                    }
+                    // Capped in the same breath as it is read, so an exact wave
+                    // cannot ask for more than a rolled one is allowed.
+                    int count = clampInt(intOf(m, "count", 1), 1, MAX_CONCURRENT * 4 - total);
+                    if (count <= 0) {
+                        break;
+                    }
+                    total += count;
+                    line.add(new WaveEntry(entity, count,
+                            str(m, "behaviour", str(m, "behavior", "")).toLowerCase(Locale.ROOT)));
+                }
+                if (!line.isEmpty()) {
+                    b.waves.put(round, java.util.List.copyOf(line));
+                }
+            }
+        }
         return new Ruleset(b);
     }
 

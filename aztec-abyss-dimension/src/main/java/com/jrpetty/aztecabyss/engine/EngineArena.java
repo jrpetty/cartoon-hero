@@ -105,6 +105,15 @@ public final class EngineArena {
 
     private int round = 0;
     private int leftToSpawn = 0;
+
+    /**
+     * This round's exact roster, if the ruleset named one.
+     *
+     * <p>Drained as mobs go out. Empty means the weighted table decides, which
+     * is every round a map did not write a line for - so an author writes the
+     * three rounds that matter and leaves the rest to roll.
+     */
+    private final List<Ruleset.WaveEntry> waveQueue = new ArrayList<>();
     private int breather = 0;
     private boolean running = true;
 
@@ -985,6 +994,22 @@ public final class EngineArena {
     private void beginRound(int n) {
         round = n;
         leftToSpawn = countFor(n);
+        // An exact roster overrides both the roll and the count: a round written
+        // as twelve husks and one breaker is thirteen mobs, not thirteen rolls
+        // that average out to it.
+        waveQueue.clear();
+        List<Ruleset.WaveEntry> exact = rules.waves.get(n);
+        if (exact != null && !exact.isEmpty()) {
+            int total = 0;
+            for (Ruleset.WaveEntry w : exact) {
+                for (int i = 0; i < w.count(); i++) {
+                    waveQueue.add(w);
+                }
+                total += w.count();
+            }
+            java.util.Collections.shuffle(waveQueue, new java.util.Random(rng.nextLong()));
+            leftToSpawn = total;
+        }
         breather = 0;
         lootTaken.clear();
         special = rules.specialFor(n);
@@ -2429,14 +2454,43 @@ public final class EngineArena {
      * weight lets an author say "most of it comes through the front" without
      * needing four rulesets or any code.
      */
+    /**
+     * Which way in the next mob uses.
+     *
+     * <p>Weighted, and now steered. The Director has always measured how a run
+     * is going and had only one lever - how <em>fast</em> the horde arrives -
+     * because every gate was interchangeable to it. A gate that says what kind
+     * of way in it is gives the Director somewhere to send them:
+     *
+     * <pre>
+     *   [Horde]
+     *   hint=flank
+     * </pre>
+     *
+     * <ul>
+     *   <li>{@code pressure} — the obvious way in. Favoured while the squad is
+     *       comfortable, because that is the fight they are set up to win and
+     *       the one that should feel like the map working as intended.</li>
+     *   <li>{@code flank} — behind the line. Favoured as intensity climbs, which
+     *       is what turns "more of them" into "you are holding the wrong
+     *       corner".</li>
+     *   <li>{@code ambush} — the nasty one. Held back until the squad is well on
+     *       top, so it reads as the map answering them rather than as noise.</li>
+     * </ul>
+     *
+     * <p>Hints bias weights rather than replacing them. A map that names none
+     * behaves exactly as it did, which is the only acceptable way to add a
+     * steering wheel to something that already drove.
+     */
     private Marker pickGate(List<Marker> live) {
+        float heat = director == null ? 0.5f : director.intensity();
         int total = 0;
         for (Marker m : live) {
-            total += Math.max(1, m.intArg("weight", 1));
+            total += gateWeight(m, heat);
         }
         int roll = rng.nextInt(Math.max(1, total));
         for (Marker m : live) {
-            roll -= Math.max(1, m.intArg("weight", 1));
+            roll -= gateWeight(m, heat);
             if (roll < 0) {
                 return m;
             }
@@ -2444,12 +2498,32 @@ public final class EngineArena {
         return live.get(0);
     }
 
+    /** A gate's weight, bent by what kind of way in it says it is. */
+    private int gateWeight(Marker gate, float heat) {
+        int base = Math.max(1, gate.intArg("weight", 1));
+        String hint = gate.arg("hint", "").toLowerCase(java.util.Locale.ROOT);
+        if (hint.isEmpty()) {
+            return base;
+        }
+        // heat is 0 (untroubled) to 1 (about to die).
+        double scale = switch (hint) {
+            case "pressure" -> 1.6 - heat;                 // 1.6 calm, 0.6 desperate
+            case "flank" -> 0.6 + heat;                    // 0.6 calm, 1.6 desperate
+            case "ambush" -> heat < 0.35 ? 1.5 : 0.15;     // only while they are winning
+            default -> 1.0;
+        };
+        return Math.max(1, (int) Math.round(base * scale));
+    }
+
     private void spawnOne() {
         List<Marker> live = liveHordes();
         Marker gate = pickGate(live);
         // A gate may name its own mobs, which is what turns four identical ways
         // in into a map where the cellar sends something different from the roof.
-        Ruleset.MobEntry pick = pickMobFor(gate);
+        Ruleset.MobEntry pick = nextFromWave();
+        if (pick == null) {
+            pick = pickMobFor(gate);
+        }
         if (pick == null) {
             leftToSpawn = 0;
             return;
@@ -2508,6 +2582,32 @@ public final class EngineArena {
         }
         alive.add(mob);
         leftToSpawn--;
+    }
+
+    /**
+     * The next mob off an exact roster, or null when there is not one.
+     *
+     * <p>Its numbers come from the ruleset's own entry for that entity where one
+     * exists, so a wave table says <em>what</em> comes and the mob table still
+     * says what it is worth - writing a boss round should not mean restating
+     * every husk's health.
+     */
+    private Ruleset.MobEntry nextFromWave() {
+        if (waveQueue.isEmpty()) {
+            return null;
+        }
+        Ruleset.WaveEntry w = waveQueue.remove(waveQueue.size() - 1);
+        for (Ruleset.MobEntry m : rules.mobs) {
+            if (m.entityId().equalsIgnoreCase(w.entityId())) {
+                // The wave may still override the behaviour for this round only.
+                return w.behaviour().isEmpty() ? m
+                        : new Ruleset.MobEntry(m.entityId(), m.weight(), m.fromRound(), m.role(),
+                                m.maxHealth(), m.speed(), m.attackDamage(),
+                                m.mainHand(), m.head(), w.behaviour());
+            }
+        }
+        return new Ruleset.MobEntry(w.entityId(), 1, 1, "grunt",
+                20.0, 0.25, 3.0, "", "", w.behaviour());
     }
 
     /** Weighted choice among everything unlocked at this round. */
