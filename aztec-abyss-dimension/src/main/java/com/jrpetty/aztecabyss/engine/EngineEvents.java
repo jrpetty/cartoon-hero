@@ -525,6 +525,8 @@ public final class EngineEvents {
                                     () -> Component.literal(a.director().describe()), false);
                             return 1;
                         }))
+                .then(Commands.literal("ready")
+                        .executes(ctx -> ready(ctx.getSource())))
                 .then(Commands.literal("records")
                         .executes(ctx -> records(ctx.getSource(), null))
                         .then(Commands.argument("map", com.mojang.brigadier.arguments.StringArgumentType.string())
@@ -672,6 +674,37 @@ public final class EngineEvents {
      * health and damage multipliers at rounds 1, 10, 25 and 50 tells you instantly
      * whether you have built a fair fight or a wall.
      */
+    /**
+     * {@code /arena ready} — tells the lobby you are done faffing.
+     *
+     * <p>The lobby could count heads and count seconds and nothing else, so a
+     * squad that was assembled and geared still waited out a timer, and a squad
+     * still sorting its kit got dragged in by one impatient person. Both are the
+     * same gap: the only thing the lobby could not ask was the players.
+     *
+     * <p>Readiness only ever makes the wait shorter. The head count and the
+     * timer still start a run on their own, because a lobby that will not begin
+     * until everybody clicks is one that a single idle player can hold hostage.
+     */
+    private static int ready(CommandSourceStack source) {
+        EngineArena arena = EngineArena.active();
+        if (arena == null) {
+            source.sendFailure(Component.literal("Nothing to be ready for."));
+            return 0;
+        }
+        ServerPlayer player;
+        try {
+            player = source.getPlayerOrException();
+        } catch (com.mojang.brigadier.exceptions.CommandSyntaxException e) {
+            return 0;
+        }
+        boolean now = arena.toggleReady(player);
+        source.sendSuccess(() -> Component.literal(now
+                ? "§aReady. §8Waiting on the rest."
+                : "§7Not ready."), false);
+        return 1;
+    }
+
     /**
      * {@code /arena records} — what a map remembers about the people who played it.
      *

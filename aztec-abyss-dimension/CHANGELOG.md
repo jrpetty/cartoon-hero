@@ -13,6 +13,41 @@ behaviour that was already there · **docs**
 
 ## Unreleased
 
+### Stage G2 — ready-up, and death that leaves you in the room
+
+**All thirty capabilities are now implemented.**
+
+- **feat** **`/arena ready`.** The lobby could count heads and count seconds and
+  nothing else, so a squad that was assembled and geared still waited out a
+  timer, and a squad still sorting its kit got dragged in by one impatient
+  person. Both are the same gap: the only thing the lobby could not ask was the
+  players.
+
+  Readiness only ever makes the wait **shorter** — the head count and the timer
+  still start a run on their own, because a lobby that will not begin until
+  everybody clicks is one a single idle player can hold hostage. Everyone
+  present saying yes skips the rest of the wait, but only once there are enough
+  of them to play, or the first person to arrive alone starts the run by agreeing
+  with themselves.
+
+- **feat** **Spectator on death.** Dying ended a player's involvement completely
+  — a dead body's inventory screen, or sent home — so a squad of four became two
+  people playing and two doing something else. That is the worst thing a co-op
+  mode can do, because a run is usually at its most interesting shortly after
+  somebody dies.
+
+  Vanilla spectator rather than a bespoke camera: it already free-flies, already
+  clips through the map, and already lets you left-click a teammate to ride their
+  view — which is a follow-cam and a killcam, for nothing. Building those would
+  have been three systems to reproduce a game mode that has shipped since 2013.
+
+- **fix** **Survival is restored when the run stops.** Spectator is a state this
+  class puts people into, so taking them out of it is this class's job — without
+  it, a run ending would leave somebody unable to touch anything until they
+  logged out. Caught while writing the spectator docs: I had referred to a
+  `restorePlayer` method that does not exist, and no exit path reset the game
+  mode at all.
+
 ### Stage G1 — reading the records, and packs that say what they need
 
 - **feat** **`/arena records [map]`.** The leaderboard has been recorded since

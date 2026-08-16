@@ -606,6 +606,15 @@ public final class EngineArena {
         }
         EnginePowerUps.clearDrops(current.level, current.bounds);
         current.restoreWorld();
+        // Anybody watching goes back to being able to play. Spectator is a state
+        // this class puts people into, so it is this class's job to take them
+        // out of it - a run that ends leaving somebody unable to touch anything
+        // is a bug they would have to log out to fix.
+        for (ServerPlayer p : current.players()) {
+            if (p.gameMode.getGameModeForPlayer() == net.minecraft.world.level.GameType.SPECTATOR) {
+                p.setGameMode(net.minecraft.world.level.GameType.SURVIVAL);
+            }
+        }
         current.bar.removeAllPlayers();
         current.running = false;
         current = null;
@@ -639,6 +648,68 @@ public final class EngineArena {
 
     /** Which board this run files under. Set when a published map starts one. */
     private String mapKey = "";
+
+    /**
+     * Who has said they are ready in the lobby.
+     *
+     * <p>The lobby could count heads and count seconds and nothing else, so a
+     * squad that was assembled and geared still waited out a timer, and a squad
+     * still sorting its kit got dragged in by one. Both are the same failure:
+     * the only thing the lobby could not ask was the players.
+     *
+     * <p>Readiness is deliberately not required. It only ever makes the wait
+     * <em>shorter</em> - the head count and the timer still start a run on their
+     * own - because a lobby that will not begin until everyone clicks is a lobby
+     * one idle player can hold hostage.
+     */
+    private final java.util.Set<UUID> ready = new java.util.HashSet<>();
+
+    /**
+     * Puts somebody who is out into the run rather than out of the room.
+     *
+     * <p>Dying ended a player's involvement completely: they stood in a dead
+     * body's inventory screen or got sent home, and a squad of four became a
+     * squad of two people playing and two people doing something else. That is
+     * the worst thing a co-op mode can do, because the run is usually at its
+     * most interesting shortly after somebody dies.
+     *
+     * <p>Spectator rather than a bespoke camera: it already free-flies, already
+     * clips through the map, and already lets you left-click a teammate to ride
+     * their view - which is a follow-cam and a killcam, for nothing. Building
+     * those would have been three systems to reproduce one game mode that has
+     * shipped since 2013.
+     *
+     * <p>Survival is restored when the run stops, in {@link #stop}, so this can
+     * never follow anybody out of the arena. Spectator is a state this class
+     * puts people into, so taking them out of it is this class's job.
+     */
+    public void spectate(ServerPlayer player) {
+        if (player.gameMode.getGameModeForPlayer() == net.minecraft.world.level.GameType.SPECTATOR) {
+            return;
+        }
+        player.setGameMode(net.minecraft.world.level.GameType.SPECTATOR);
+        player.displayClientMessage(Component.literal(
+                "§7You are watching. §8Left-click somebody to see it from their eyes."), false);
+    }
+
+    /** Toggles somebody's readiness. Returns what it now is. */
+    public boolean toggleReady(ServerPlayer player) {
+        if (!ready.remove(player.getUUID())) {
+            ready.add(player.getUUID());
+            return true;
+        }
+        return false;
+    }
+
+    public int readyCount() {
+        int n = 0;
+        for (ServerPlayer p : players()) {
+            if (ready.contains(p.getUUID())) {
+                n++;
+            }
+        }
+        return n;
+    }
 
     /** The key this run's results are filed under, for anything reading them back. */
     public String mapKeyPublic() {
@@ -712,6 +783,7 @@ public final class EngineArena {
                 continue;
             }
             fallen.add(p.getUUID());
+            spectate(p);
             bar.removePlayer(p);
         }
         present.removeIf(p -> fallen.contains(p.getUUID())
@@ -873,7 +945,17 @@ public final class EngineArena {
                                     ? " §8| starts anyway in " + Math.max(0, rules.lobbyWaitSeconds - waited) + "s"
                                     : "")));
             bar.setProgress(Math.min(1.0F, present.size() / (float) need));
-            if (enough || waitedLongEnough) {
+            // Everybody present having said so skips the rest of the wait, but
+            // only once there are enough of them to play - otherwise the first
+            // person to arrive alone starts the run by agreeing with themselves.
+            int said = readyCount();
+            boolean allSaidYes = enough && said >= present.size();
+            if (said > 0 && !allSaidYes) {
+                bar.setName(Component.literal(
+                        "§eReady §f" + said + "§7/§f" + present.size()
+                                + " §8— " + present.size() + "/" + need + " players"));
+            }
+            if (enough || waitedLongEnough || allSaidYes) {
                 setPhase(PHASE_COUNTDOWN);
             }
             return;
@@ -909,6 +991,7 @@ public final class EngineArena {
      * them.
      */
     private void beginPlay(List<ServerPlayer> present) {
+        ready.clear();
         setPhase(PHASE_ACTIVE);
         // Skills bought in an earlier run are worth nothing if they only take
         // effect at the moment of purchase, which is the first thing a
@@ -2330,6 +2413,7 @@ public final class EngineArena {
         // where player_died never happened.
         Script.fire(this, level, rules.id, "player_died", victim, null, "final");
         fallen.add(victim.getUUID());
+        spectate(victim);
         bar.removePlayer(victim);
         barred.remove(victim.getUUID());
         victim.displayClientMessage(Component.literal(
