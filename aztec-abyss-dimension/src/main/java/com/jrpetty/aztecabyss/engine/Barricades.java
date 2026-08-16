@@ -69,12 +69,30 @@ public final class Barricades {
     /** Ticks a mob has spent gnawing, per marker. */
     private final int[] gnaw;
 
+    /**
+     * The volume checked for biters, and how long a board holds, per marker.
+     *
+     * <p>Both come off a sign and neither can change while a run is going, but
+     * they were being rebuilt on every tick of every barricade that still had a
+     * board on it - two {@link AABB} objects each, and on a map like the Outpost
+     * that is ten openings twenty times a second.
+     */
+    private final AABB[] bite;
+    private final int[] holdTicks;
+
     public Barricades(EngineArena arena, ServerLevel level, List<Marker> found) {
         this.arena = arena;
         this.level = level;
         this.markers.addAll(found);
         this.boards = new int[markers.size()];
         this.gnaw = new int[markers.size()];
+        this.bite = new AABB[markers.size()];
+        this.holdTicks = new int[markers.size()];
+        for (int i = 0; i < markers.size(); i++) {
+            Marker m = markers.get(i);
+            bite[i] = new AABB(m.pos()).inflate(Math.max(1, m.intArg("radius", 3)));
+            holdTicks[i] = Math.max(1, m.intArg("seconds", DEFAULT_SECONDS)) * 20;
+        }
     }
 
     public boolean isEmpty() {
@@ -151,17 +169,16 @@ public final class Barricades {
                 continue;
             }
             Marker m = markers.get(i);
-            double radius = Math.max(1, m.intArg("radius", 3));
-            AABB box = new AABB(m.pos()).inflate(radius);
-            boolean biting = !level.getEntitiesOfClass(Mob.class, box,
-                    e -> e.getPersistentData().getBoolean("aztecabyss_engine_mob") && e.isAlive())
+            // isAlive first: reading a mob's persistent data creates it, and
+            // there is no reason to leave that mark on something already dead.
+            boolean biting = !level.getEntitiesOfClass(Mob.class, bite[i],
+                    e -> e.isAlive() && e.getPersistentData().getBoolean("aztecabyss_engine_mob"))
                     .isEmpty();
             if (!biting) {
                 gnaw[i] = 0;
                 continue;
             }
-            int need = Math.max(1, m.intArg("seconds", DEFAULT_SECONDS)) * 20;
-            if (++gnaw[i] < need) {
+            if (++gnaw[i] < holdTicks[i]) {
                 continue;
             }
             gnaw[i] = 0;

@@ -13,6 +13,39 @@ behaviour that was already there · **docs**
 
 ## Unreleased
 
+### Stage H5 — the last two loops that ran every tick
+
+The engine files H1–H3 had not reached. Both of these are hotter than anything
+fixed so far, because neither is throttled at all.
+
+- **change** **A zone's effect is resolved once, when the map is scanned.**
+  `tickZones` runs on every tick with no throttle, and standing in a zone meant
+  lower-casing the effect name, parsing it into a `ResourceLocation`, building a
+  `ResourceKey` and looking it up in the registry — per player, per zone, twenty
+  times a second — to arrive at the same answer every time. Four players in three
+  zones was around **two hundred and forty registry parses a second**. The new
+  `Machines.ZoneEffect` holds the resolved effect, the amplifier and the squared
+  radius, and a zone whose sign names nothing usable is skipped without touching
+  a player at all.
+
+- **change** **Barricades stop rebuilding their own geometry.** `Barricades.tick`
+  also runs every tick, and each still-boarded opening built two `AABB` objects
+  and re-derived how long a board holds — ten openings on the Outpost, twenty
+  times a second. Both are now worked out in the constructor. The biter check
+  also tests `isAlive()` before reaching into a mob's persistent data, for the
+  same reason as `onEngineDamage` in H3: reading that data creates it, and there
+  is no reason to leave a mark on something already dead.
+
+- **change** `tickZones` has documentation for the first time — it was the only
+  per-tick method in `EngineArena` without any, and the thing worth writing down
+  is *why* it is unthrottled when its neighbour `tickZoneRules` is not.
+
+**Considered and rejected.** The barricade's biter check could iterate the
+arena's own `alive` list instead of scanning entity sections. It would be much
+cheaper and it would be **wrong**: two of the three spawn paths that tag a mob as
+an engine mob never add it to `alive`, so the check would silently miss biters
+from gates and from `[Spawner]` markers. Left as a scan.
+
 ### Stage H4 — twenty-four comments that were describing the wrong thing
 
 Not a line of behaviour in this one. H2 turned up two javadoc blocks in

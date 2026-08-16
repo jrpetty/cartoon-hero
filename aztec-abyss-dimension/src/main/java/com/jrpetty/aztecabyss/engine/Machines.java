@@ -391,23 +391,51 @@ public final class Machines {
         return true;
     }
 
-    /** Effects applied by standing in a zone, refreshed while you are inside it. */
-    public static void applyZone(ServerPlayer player, Marker zone) {
-        String id = zone.arg("effect", "");
-        if (id.isEmpty()) {
+    /**
+     * What a zone marker means, worked out once.
+     *
+     * <p>This used to be worked out per player, per zone, on every tick. Standing
+     * in one meant lower-casing the effect name, parsing it into a
+     * {@link ResourceLocation}, building a {@link ResourceKey} and looking it up
+     * in the registry — twenty times a second, each — to arrive at the same
+     * answer, because a {@link Marker} is a snapshot of a sign taken when the map
+     * was scanned and its arguments cannot change while a run is going. Four
+     * players in three zones was around two hundred and forty parses a second.
+     *
+     * <p>The radius is squared here because the only reader compares it against
+     * a squared distance.
+     *
+     * @param effect null if the sign named no effect, or named one that does not
+     *               exist — in which case the zone simply does nothing, which is
+     *               what it did before
+     */
+    public record ZoneEffect(int radiusSq,
+                             net.minecraft.core.Holder<MobEffect> effect,
+                             int amp) {
+
+        public static ZoneEffect of(Marker zone) {
+            int radius = zone.intArg("radius", 8);
+            int amp = Math.max(0, Math.min(9, zone.intArg("amp", 0)));
+            String id = zone.arg("effect", "");
+            if (id.isEmpty()) {
+                return new ZoneEffect(radius * radius, null, amp);
+            }
+            ResourceLocation rl = ResourceLocation.tryParse(id.toLowerCase(Locale.ROOT));
+            if (rl == null) {
+                return new ZoneEffect(radius * radius, null, amp);
+            }
+            var holder = BuiltInRegistries.MOB_EFFECT.getHolder(
+                    ResourceKey.create(Registries.MOB_EFFECT, rl));
+            return new ZoneEffect(radius * radius, holder.orElse(null), amp);
+        }
+    }
+
+    /** Tops up a zone's effect on somebody stood in it. */
+    public static void applyZone(ServerPlayer player, ZoneEffect zone) {
+        if (zone.effect() == null) {
             return;
         }
-        ResourceLocation rl = ResourceLocation.tryParse(id.toLowerCase(Locale.ROOT));
-        if (rl == null) {
-            return;
-        }
-        var holder = BuiltInRegistries.MOB_EFFECT.getHolder(
-                ResourceKey.create(Registries.MOB_EFFECT, rl));
-        if (holder.isEmpty()) {
-            return;
-        }
-        int amp = Math.max(0, Math.min(9, zone.intArg("amp", 0)));
         // Short and constantly refreshed, so it lapses the moment you step out.
-        player.addEffect(new MobEffectInstance(holder.get(), 60, amp, true, false, false));
+        player.addEffect(new MobEffectInstance(zone.effect(), 60, zone.amp(), true, false, false));
     }
 }

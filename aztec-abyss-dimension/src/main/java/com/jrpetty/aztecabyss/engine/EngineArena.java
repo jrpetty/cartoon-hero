@@ -176,6 +176,8 @@ public final class EngineArena {
      */
     private final java.util.Set<String> openAreas = new java.util.HashSet<>(java.util.Set.of("start", ""));
     private final List<Marker> zones = new ArrayList<>();
+    /** What each zone does, resolved once, positionally matching {@link #zones}. */
+    private final List<Machines.ZoneEffect> zoneEffects = new ArrayList<>();
     private final List<Marker> spawners = new ArrayList<>();
     private final List<Marker> bossPoints = new ArrayList<>();
     /**
@@ -485,6 +487,9 @@ public final class EngineArena {
         current = new EngineArena(level, "Custom Arena", rules,
                 spawnMarker.pos(), scan.of("horde"), box);
         current.zones.addAll(scan.of("zone"));
+        for (Marker z : current.zones) {
+            current.zoneEffects.add(Machines.ZoneEffect.of(z));
+        }
         current.spawners.addAll(scan.of("spawner"));
         current.bossPoints.addAll(scan.of("boss"));
         current.waypoints.addAll(scan.of("waypoint"));
@@ -2477,16 +2482,29 @@ public final class EngineArena {
         return live.isEmpty() ? hordes : live;
     }
 
+    /**
+     * Tops up the effects of every zone somebody is stood in.
+     *
+     * <p>Every tick rather than once a second, and deliberately: the effect is
+     * given a three-second life and refreshed, so the refresh has to be quick
+     * enough that walking in feels immediate. What each zone <em>means</em> is
+     * settled once when the map is scanned - see {@link Machines.ZoneEffect} -
+     * because this is the busiest loop in the run and it was re-parsing a
+     * registry id on every pass to reach an answer that cannot change.
+     */
     private void tickZones(List<ServerPlayer> present) {
         if (zones.isEmpty()) {
             return;
         }
-        for (Marker zone : zones) {
-            int radius = zone.intArg("radius", 8);
-            int r2 = radius * radius;
+        for (int i = 0; i < zones.size(); i++) {
+            Machines.ZoneEffect effect = zoneEffects.get(i);
+            if (effect.effect() == null) {
+                continue;
+            }
+            BlockPos centre = zones.get(i).pos();
             for (ServerPlayer p : present) {
-                if (p.blockPosition().distSqr(zone.pos()) <= r2) {
-                    Machines.applyZone(p, zone);
+                if (p.blockPosition().distSqr(centre) <= effect.radiusSq()) {
+                    Machines.applyZone(p, effect);
                 }
             }
         }
