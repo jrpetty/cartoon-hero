@@ -202,7 +202,7 @@ public final class Ruleset {
     /** One kind of thing that can turn up in a wave. */
     public record MobEntry(String entityId, int weight, int fromRound, String role,
                            double maxHealth, double speed, double attackDamage,
-                           String mainHand, String head) {
+                           String mainHand, String head, String behaviour) {
     }
 
     private Ruleset(Builder b) {
@@ -509,7 +509,9 @@ public final class Ruleset {
                         attrs == null ? 0.25 : clamp(dbl(attrs, "movement_speed", 0.25), 0.01, MAX_SPEED),
                         attrs == null ? 3.0 : clamp(dbl(attrs, "attack_damage", 3.0), 0.0, MAX_DAMAGE),
                         gear == null ? "" : str(gear, "mainhand", ""),
-                        gear == null ? "" : str(gear, "head", "")));
+                        gear == null ? "" : str(gear, "head", ""),
+                        // What it does, as opposed to what it is worth.
+                        str(m, "behaviour", str(m, "behavior", "")).toLowerCase(Locale.ROOT)));
             }
         }
         return new Ruleset(b);

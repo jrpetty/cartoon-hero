@@ -13,6 +13,52 @@ behaviour that was already there · **docs**
 
 ## Unreleased
 
+### Stage E1 — enemies that do something
+
+- **feat** **Behaviour packs.** A mob entry takes a `behaviour`, and the mob
+  acts on it:
+
+  ```json
+  { "id": "minecraft:husk", "weight": 15, "from_round": 6, "behaviour": "charger" }
+  ```
+
+  `charger`, `leaper`, `sniper`, `burrower`, `support`.
+
+  A ruleset could already give a zombie more health, more damage, a helmet and a
+  colour. It could not make one behave differently — and that is the whole
+  difference between two maps and two *games*. Every enemy in every map walked at
+  you in a straight line and hit you; the only variable was how long that took.
+  The existing `role` field is the proof: it sets potion effects and nothing
+  else, so "brute" is a slow zombie and "runner" is a fast one and neither has a
+  tactic.
+
+  What each one is *for*, which is the part that matters:
+
+  - **charger** closes in bursts with a wind-up you can hear and see. Not faster
+    on average — faster *suddenly*, which is a different problem to solve. The
+    warning fires on the wind-up, not the charge, so it arrives before the
+    problem. Phase is derived from the mob's id so a pack does not charge in
+    lockstep.
+  - **leaper** jumps the last few blocks, so cover stops being cover.
+  - **sniper** backs away as you close and hurts you from range. Backing away
+    matters: a ranged enemy that lets you walk up to it is a melee enemy with
+    extra steps. This one has to be chased, which is the only thing that makes a
+    room's shape matter.
+  - **burrower** goes under what it cannot get round and comes up behind you —
+    but only after failing to reach you, and only onto open ground. The answer to
+    a map with one perfect corner, not a mob that teleports onto your head.
+  - **support** never attacks; it mends and hastens everything near it. The only
+    one not trying to hurt you, which is what makes it interesting: it turns a
+    horde from a queue into a question about what to shoot first.
+
+- **change** **Ticked, not `Goal` classes.** Vanilla goal sets differ per entity
+  type, so a goal that works on a zombie can do nothing at all on a spider — and
+  an author naming a behaviour has every right to expect it on whatever they
+  spawned. A tick loop also runs where the rest of the engine runs, can be
+  traced, and cannot leave a half-registered goal on an entity that outlives the
+  run. It is the same shape the maze's day-stalker already uses, which is the
+  evidence it holds up in play.
+
 ### Stage D3 — barricades any map can have
 
 - **feat** **`[Barricade]` markers.** Boards a horde tears off and players nail

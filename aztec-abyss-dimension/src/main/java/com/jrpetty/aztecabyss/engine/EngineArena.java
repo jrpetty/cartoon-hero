@@ -737,6 +737,7 @@ public final class EngineArena {
         if (barricades != null && !barricades.isEmpty()) {
             barricades.tick();
         }
+        MobBrains.tick(level, alive);
         if (level.getGameTime() % 20L == 0L) {
             tickZoneRules(present);
         }
@@ -2491,6 +2492,7 @@ public final class EngineArena {
         setAttr(mob, Attributes.ATTACK_DAMAGE, pick.attackDamage() * damageMul);
         mob.setHealth(mob.getMaxHealth());
         applyRole(mob, pick.role());
+        MobBrains.mark(mob, pick.behaviour());
         equip(mob, pick);
         mob.getPersistentData().putBoolean("aztecabyss_engine_mob", true);
         mob.setPersistenceRequired();
@@ -2513,7 +2515,7 @@ public final class EngineArena {
         if (rules.mobs.isEmpty()) {
             // A ruleset with no mob table still has to produce a game.
             return new Ruleset.MobEntry("minecraft:zombie", 1, 1, "grunt",
-                    20.0, 0.25, 3.0, "", "");
+                    20.0, 0.25, 3.0, "", "", "");
         }
         int total = 0;
         for (Ruleset.MobEntry m : rules.mobs) {
@@ -2595,6 +2597,7 @@ public final class EngineArena {
         setAttr(mob, Attributes.ATTACK_DAMAGE, pick.attackDamage() * damageMul);
         mob.setHealth(mob.getMaxHealth());
         applyRole(mob, pick.role());
+        MobBrains.mark(mob, pick.behaviour());
         equip(mob, pick);
         mob.getPersistentData().putBoolean("aztecabyss_engine_mob", true);
         mob.setPersistenceRequired();
