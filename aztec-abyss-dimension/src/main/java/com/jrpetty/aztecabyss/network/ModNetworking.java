@@ -143,6 +143,24 @@ public final class ModNetworking {
                                 sp, payload.id(), payload.delta());
                     }
                 }));
+        registrar.playToClient(
+                MazeStatePayload.TYPE,
+                MazeStatePayload.STREAM_CODEC,
+                (payload, context) -> context.enqueueWork(
+                        () -> com.jrpetty.aztecabyss.client.ClientMazeState.accept(payload)));
+        registrar.playToClient(
+                MazeHubPayload.TYPE,
+                MazeHubPayload.STREAM_CODEC,
+                (payload, context) -> context.enqueueWork(
+                        () -> com.jrpetty.aztecabyss.client.ClientMazeState.openHub(payload)));
+        registrar.playToServer(
+                RequestMazeHubPayload.TYPE,
+                RequestMazeHubPayload.STREAM_CODEC,
+                (payload, context) -> context.enqueueWork(() -> {
+                    if (context.player() instanceof ServerPlayer sp) {
+                        sendMazeHub(sp);
+                    }
+                }));
         registrar.playToServer(
                 PingPayload.TYPE,
                 PingPayload.STREAM_CODEC,
@@ -378,5 +396,72 @@ public final class ModNetworking {
                 round, kills, headshots, survivalSeconds,
                 RunRecapPayload.pack(previousBest, deaths, revives),
                 RunRecapPayload.packFlags(victory, multiplayer, extracted, ritual)));
+    }
+
+    /**
+     * The maze HUD's feed. Called from the same once-a-second loop that has
+     * always updated the boss bar, so it walks nothing the bar did not.
+     */
+    public static void sendMazeState(ServerPlayer player, net.minecraft.server.level.ServerLevel level) {
+        var server = player.getServer();
+        if (server == null) {
+            return;
+        }
+        var clock = com.jrpetty.aztecabyss.maze.MazeClock.get(level);
+        var jobs = com.jrpetty.aztecabyss.maze.MazeJobs.get(server);
+        var charts = com.jrpetty.aztecabyss.maze.MazeCharts.get(server);
+        var orders = com.jrpetty.aztecabyss.maze.MazeOrders.get(level);
+        java.util.UUID id = player.getUUID();
+        String job = jobs.jobOf(id);
+        PacketDistributor.sendToPlayer(player, new MazeStatePayload(
+                clock.day(),
+                clock.phase(),
+                com.jrpetty.aztecabyss.maze.MazeClock.dayTicks(),
+                com.jrpetty.aztecabyss.maze.MazeClock.nightTicks(),
+                com.jrpetty.aztecabyss.maze.MazeRuntime.doorsOpen(),
+                (int) Math.round(com.jrpetty.aztecabyss.maze.Griever.dayScale(level) * 10.0),
+                job == null ? "" : job,
+                job == null ? 0 : jobs.levelOf(id, job),
+                com.jrpetty.aztecabyss.maze.MazeSting.stings(id),
+                com.jrpetty.aztecabyss.maze.MazeSting.thresholdFor(level, player),
+                com.jrpetty.aztecabyss.maze.MazeSting.changingSeconds(id),
+                com.jrpetty.aztecabyss.maze.MazeJobs.carrying(id),
+                com.jrpetty.aztecabyss.maze.MazeRuns.elapsedSeconds(level, id),
+                jobs.larder(),
+                orders.committedTotal(),
+                com.jrpetty.aztecabyss.maze.MazeOrders.remaining(level),
+                charts.gladePercent(),
+                charts.myPercent(id),
+                com.jrpetty.aztecabyss.maze.MazeRuntime.escapeSecondsLeft(level),
+                com.jrpetty.aztecabyss.maze.MazeRaid.active()));
+    }
+
+    /**
+     * The hub sheet: the full chart plus who is doing what. Only ever sent in
+     * answer to a request, because it is a kilobyte and a half that changes at
+     * walking pace - see {@link MazeHubPayload}.
+     */
+    public static void sendMazeHub(ServerPlayer player) {
+        var server = player.getServer();
+        if (server == null
+                || !player.level().dimension().equals(
+                        com.jrpetty.aztecabyss.AztecAbyssConstants.MAZE_LEVEL_KEY)) {
+            return;
+        }
+        var charts = com.jrpetty.aztecabyss.maze.MazeCharts.get(server);
+        var jobs = com.jrpetty.aztecabyss.maze.MazeJobs.get(server);
+        java.util.List<String> roster = new java.util.ArrayList<>();
+        for (ServerPlayer p : player.serverLevel().players()) {
+            String job = jobs.jobOf(p.getUUID());
+            roster.add(p.getGameProfile().getName()
+                    + "|" + (job == null ? "§8unsworn" : com.jrpetty.aztecabyss.maze.MazeJobs.display(job))
+                    + "|" + (job == null ? 0 : jobs.levelOf(p.getUUID(), job))
+                    + "|" + charts.myPercent(p.getUUID()));
+        }
+        PacketDistributor.sendToPlayer(player, new MazeHubPayload(
+                charts.gladeBytes(),
+                charts.mineBytes(player.getUUID()),
+                charts.markBytes(),
+                roster));
     }
 }

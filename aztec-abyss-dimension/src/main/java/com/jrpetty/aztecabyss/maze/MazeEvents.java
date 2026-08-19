@@ -555,6 +555,11 @@ public final class MazeEvents {
     @SubscribeEvent
     public static void onRegisterCommands(RegisterCommandsEvent event) {
         LiteralArgumentBuilder<CommandSourceStack> root = Commands.literal("maze")
+                // Bare /maze opens the hub - the one screen that holds the rest.
+                // Everything below still answers by name, because a printed
+                // sheet is the only version that works over a shoulder.
+                .executes(ctx -> hub(ctx.getSource()))
+                .then(Commands.literal("hub").executes(ctx -> hub(ctx.getSource())))
                 .then(Commands.literal("enter").executes(ctx -> enter(ctx.getSource())))
                 .then(Commands.literal("leave").executes(ctx -> leave(ctx.getSource())))
                 .then(Commands.literal("status").executes(ctx -> status(ctx.getSource())))
@@ -668,6 +673,18 @@ public final class MazeEvents {
         player.displayClientMessage(Component.literal(
                 "§2§lTHE GLADE§r §7— " + MazeRuntime.status(maze)), false);
         return true;
+    }
+
+
+    /** Bare {@code /maze}: answers with the hub sheet, which opens the screen. */
+    private static int hub(CommandSourceStack src) {
+        ServerPlayer player = src.getPlayer();
+        if (player == null || !isMaze(src.getLevel())) {
+            src.sendFailure(Component.literal("Only in the maze."));
+            return 0;
+        }
+        com.jrpetty.aztecabyss.network.ModNetworking.sendMazeHub(player);
+        return 1;
     }
 
     private static int enter(CommandSourceStack src) {

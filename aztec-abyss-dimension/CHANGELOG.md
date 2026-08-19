@@ -13,6 +13,60 @@ behaviour that was already there · **docs**
 
 ## Unreleased
 
+### The Glade's front door — a HUD, a hub, and the chart drawn at last
+
+The maze's UI grew the way settlements grow lanes: four screens, eleven
+commands, and a boss bar one line long. The facts a player steers by — the door
+clock, the sting tally, what they carry — lived in chat scrollback, which is to
+say they lived in memory. This gives them a fixed place on the screen.
+
+- **feat** **The maze HUD.** A quiet top-left panel, maze dimension only: day
+  and threat, the door clock (green while the day is yours, amber inside the
+  warning window, breathing red in the last thirty seconds), your trade in its
+  colour, sting pips when you are stung and a CHANGING countdown when you are
+  worse, your carry and run clock when you have one, the larder and chart line
+  always. Rows that do not apply do not draw — an unstung player has no sting
+  row, not a zero in one. Centre-screen banners for the three exceptions: THE
+  WAY OUT IS OPEN with its countdown, THE WALL IS UNDER ATTACK, and GET INSIDE
+  when the doors are about to seal *and you are actually outside* — a deadline
+  already beaten is noise. The H toggle (same as the Abyss HUD) hides it; the
+  boss bar stays, because it is the one line a player who asked for less chrome
+  still gets.
+
+- **feat** **`MazeStatePayload`** — the HUD's feed. One packet, whole state,
+  once a second, sent from the same loop that has always updated the boss bar,
+  so the server walks nothing new. The clock crosses as raw phase plus the two
+  lengths so the client can tick the countdown smoothly *between* packets; a
+  countdown that only moves when a packet lands reads as lag, not as a clock.
+
+- **feat** **The Glade hub** — `M`, or bare `/maze`, which never did anything
+  before. Two pages. **Status:** you (trade, stings, chart share, load), the
+  Glade's ledger (larder, order pot, threat, alarms), and the roster of who is
+  sworn to what. **Chart:** the star — the 96×96 grid actually drawn, every
+  cell anybody has walked tinted by the section colour banded into that
+  corridor's real walls, brighter where *you* have personally been, gold where
+  a Builder left a mark, the Glade square and its four doors from the builder's
+  own tables, and you as a breathing blip. The existing screens are reached
+  from here, not rebuilt — Trade sheet and Order slate buttons run the commands
+  that always opened them.
+
+  The chart deliberately never shows the exit. It is what the Gladers *know*,
+  and the way out is the one thing the maze never lets anybody know for long.
+
+- **feat** `/maze hub`, the `M` keybind (rebindable, Controls → Aztec Abyss),
+  and three accessors the packets needed: `MazeSting.changingSeconds`,
+  `MazeRuntime.escapeSecondsLeft`, and `MazeCharts`' three `toByteArray`
+  passthroughs — the wire wants exactly the shape the save file already uses.
+
+- **docs** The H4 orphan-doc check caught its second real mistake during this
+  work: inserting `changingSeconds` above `isChanging` stranded the latter's
+  javadoc. Caught pre-push this time, which is the check doing its job.
+
+**Unverified in play, more than usually.** Everything above compiles and its
+shape is checkable in the jar, but a HUD's real test is standing in the maze at
+dusk — layout collisions, colour reads, whether the banners land at the right
+moments. This needs eyes on a screen, not javap.
+
 ### Stage H6a — the check that should have caught H6
 
 H6 failed to build. `portalAmbience` already had a local called `portal` — the

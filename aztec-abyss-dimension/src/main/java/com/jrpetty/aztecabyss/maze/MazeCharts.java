@@ -183,6 +183,29 @@ public final class MazeCharts extends SavedData {
                 && cellX < MazeData.GRID && cellZ < MazeData.GRID && b.get(index(cellX, cellZ));
     }
 
+    /**
+     * The three grids, in exactly the shape the wire wants them.
+     *
+     * <p>{@code toByteArray} is already how these serialise to disk; the hub
+     * packet reuses it so the client can rebuild the same {@code BitSet} with
+     * {@code BitSet.valueOf} and index it with the same row-major arithmetic.
+     * Nothing is interpreted here - which pixels the bits become is entirely
+     * the screen's business.
+     */
+    public byte[] gladeBytes() {
+        return glade.toByteArray();
+    }
+
+    /** What one player has personally walked. Empty array if they never have. */
+    public byte[] mineBytes(UUID who) {
+        BitSet b = mine.get(who);
+        return b == null ? new byte[0] : b.toByteArray();
+    }
+
+    public byte[] markBytes() {
+        return marks.toByteArray();
+    }
+
     /** How much of the maze the Glade has, ignoring the Glade's own cells. */
     public int gladePercent() {
         return percentOf(glade);

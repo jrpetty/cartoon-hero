@@ -3,6 +3,7 @@
   "key.categories.aztecabyss": "Aztec Abyss",
   "key.aztecabyss.toggle_hud": "Toggle Abyss HUD",
   "key.aztecabyss.ping": "Ping location (Abyss)",
+  "key.aztecabyss.maze_hub": "Open Glade hub (Maze)",
   "subtitles.aztecabyss.round_start": "A round begins",
   "subtitles.aztecabyss.round_clear": "Round cleared",
   "subtitles.aztecabyss.ambient_dread": "The Abyss stirs",

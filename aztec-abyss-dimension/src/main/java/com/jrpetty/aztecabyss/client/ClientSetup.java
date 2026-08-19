@@ -30,6 +30,13 @@ public final class ClientSetup {
             GLFW.GLFW_KEY_B,
             "key.categories.aztecabyss");
 
+    /** Opens the Glade hub while in the maze. Default: M. Rebindable. */
+    public static final KeyMapping MAZE_HUB = new KeyMapping(
+            "key.aztecabyss.maze_hub",
+            InputConstants.Type.KEYSYM,
+            GLFW.GLFW_KEY_M,
+            "key.categories.aztecabyss");
+
     /**
      * Bolts the Griever's skin onto the shared spider renderer.
      *
@@ -58,6 +65,7 @@ public final class ClientSetup {
     public static void registerKeyMappings(RegisterKeyMappingsEvent event) {
         event.register(TOGGLE_HUD);
         event.register(PING);
+        event.register(MAZE_HUB);
     }
 
     @SubscribeEvent

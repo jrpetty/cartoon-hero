@@ -213,6 +213,21 @@ public final class MazeSting {
         return true;
     }
 
+    /**
+     * Seconds left on somebody's change, or -1 if they are not changing.
+     *
+     * <p>For the HUD packet. The countdown was already public in effect - it is
+     * printed at the player every second - it just had no accessor a packet
+     * could read.
+     */
+    public static int changingSeconds(UUID id) {
+        if (!INFECTED.contains(id)) {
+            return -1;
+        }
+        Integer left = COUNTDOWN.get(id);
+        return left == null ? 0 : Math.max(0, left);
+    }
+
     /** True if the venom has taken and the deadline has not yet passed. */
     public static boolean isChanging(UUID id) {
         return INFECTED.contains(id) && COUNTDOWN.containsKey(id);

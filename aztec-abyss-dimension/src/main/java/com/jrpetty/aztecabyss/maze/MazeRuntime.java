@@ -141,6 +141,20 @@ public final class MazeRuntime {
         return MazeClock.get(level).phase();
     }
 
+    /**
+     * Seconds left on the way out, or -1 when it is not open.
+     *
+     * <p>For the HUD packet. The escape clock was a private long read by two
+     * methods in this file; the countdown the whole server is racing deserves
+     * to be visible on the screen of everybody racing it.
+     */
+    public static int escapeSecondsLeft(ServerLevel level) {
+        if (escapeUntil <= 0L) {
+            return -1;
+        }
+        return (int) Math.max(0L, (escapeUntil - level.getGameTime()) / 20L);
+    }
+
     public static boolean doorsOpen() {
         return doorsOpen;
     }
@@ -1274,6 +1288,9 @@ public final class MazeRuntime {
         bar.setColor(isNight(t) ? BossEvent.BossBarColor.RED
                 : doorsOpen ? BossEvent.BossBarColor.GREEN : BossEvent.BossBarColor.YELLOW);
         bar.setProgress(MazeClock.get(level).progress());
+        // The HUD's feed rides the bar's cadence: same second, same loop, no
+        // walking the bar was not already doing.
+        com.jrpetty.aztecabyss.network.ModNetworking.sendMazeState(p, level);
     }
 
     /**
