@@ -20,6 +20,9 @@ import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.neoforge.common.Tags;
 import net.neoforged.neoforge.event.level.BlockDropsEvent;
 
+import java.util.ArrayList;
+import java.util.List;
+
 /**
  * Fortune-style bonus drops from the Mining (ores) and Foraging (logs/leaves)
  * skills. Scales the dropped stack sizes up by a per-level factor. Never applies
@@ -64,11 +67,31 @@ public final class BonusDropEvents {
         // --- Telekinesis: high Mining sends every mined drop to your inventory ---
         int teleLevel = VoxeliaConfig.telekinesisLevel();
         if (teleLevel > 0 && skills.getLevel(Skill.MINING) >= teleLevel) {
+            // These entities haven't spawned yet — the event spawns whatever is left in
+            // the list afterwards. So an absorbed drop must be REMOVED from the list;
+            // discarding it instead leaves the level trying to spawn a removed entity,
+            // which is the "Tried to add entity minecraft:item but it was marked as
+            // removed already" warning that floods the server log while mining.
+            List<ItemEntity> absorbed = new ArrayList<>();
             for (ItemEntity entity : event.getDrops()) {
                 ItemStack stack = entity.getItem();
-                if (stack.isEmpty()) continue;
-                player.getInventory().add(stack); // mutates stack to the leftover
-                if (stack.isEmpty()) entity.discard();
+                if (stack.isEmpty()) {
+                    absorbed.add(entity);
+                    continue;
+                }
+                player.getInventory().add(stack); // mutates stack down to the leftover
+                if (stack.isEmpty()) absorbed.add(entity);
+                else entity.setItem(stack);       // partial: the rest still hits the floor
+            }
+            if (!absorbed.isEmpty()) {
+                try {
+                    event.getDrops().removeAll(absorbed);
+                } catch (UnsupportedOperationException readOnly) {
+                    // Belt and braces: if the list can't be edited, hand back empty
+                    // stacks instead — an empty ItemEntity discards itself on its first
+                    // tick, which is still silent.
+                    for (ItemEntity entity : absorbed) entity.setItem(ItemStack.EMPTY);
+                }
             }
         }
     }

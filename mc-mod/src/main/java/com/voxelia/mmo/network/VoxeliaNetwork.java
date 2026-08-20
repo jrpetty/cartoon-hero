@@ -5,6 +5,7 @@ import com.voxelia.mmo.config.VoxeliaConfig;
 import com.voxelia.mmo.progression.LeaderboardStore;
 import com.voxelia.mmo.progression.PrestigeLogic;
 import com.voxelia.mmo.progression.SkillEffects;
+import com.voxelia.mmo.progression.SkillStats;
 import com.voxelia.mmo.progression.TalentLogic;
 import com.voxelia.mmo.registry.VoxeliaAttachments;
 import com.voxelia.mmo.skill.PlayerPrestige;
@@ -45,6 +46,7 @@ public final class VoxeliaNetwork {
         registrar.playToClient(ProfileStatsPayload.TYPE, ProfileStatsPayload.STREAM_CODEC, ProfileStatsPayload::handle);
         registrar.playToClient(LeaderboardPayload.TYPE, LeaderboardPayload.STREAM_CODEC, LeaderboardPayload::handle);
         registrar.playToClient(MilestonePacket.TYPE, MilestonePacket.STREAM_CODEC, MilestonePacket::handle);
+        registrar.playToClient(PerksSyncPayload.TYPE, PerksSyncPayload.STREAM_CODEC, PerksSyncPayload::handle);
         registrar.playToServer(AbilityPacket.TYPE, AbilityPacket.STREAM_CODEC, AbilityPacket::handle);
         registrar.playToServer(SpendTalentPacket.TYPE, SpendTalentPacket.STREAM_CODEC, SpendTalentPacket::handle);
         registrar.playToServer(PrestigePacket.TYPE, PrestigePacket.STREAM_CODEC, PrestigePacket::handle);
@@ -91,6 +93,20 @@ public final class VoxeliaNetwork {
         PacketDistributor.sendToPlayer(player, new SkillsSyncPayload(skills));
     }
 
+    /**
+     * Sends what every skill is currently granting, so the menus can show real
+     * numbers. Not sent on every XP tick — only when the figures can actually
+     * change: login, level-up, talent spend, prestige, respawn.
+     */
+    public static void syncPerks(ServerPlayer player) {
+        PlayerSkills skills = player.getData(VoxeliaAttachments.PLAYER_SKILLS.get());
+        List<String> lines = new ArrayList<>();
+        for (Skill skill : Skill.values()) {
+            lines.add(SkillStats.describe(player, skill, skills.getLevel(skill)));
+        }
+        PacketDistributor.sendToPlayer(player, new PerksSyncPayload(lines));
+    }
+
     public static void syncTalents(ServerPlayer player) {
         PlayerTalents talents = player.getData(VoxeliaAttachments.PLAYER_TALENTS.get());
         PlayerPrestige prestige = player.getData(VoxeliaAttachments.PLAYER_PRESTIGE.get());
@@ -107,6 +123,7 @@ public final class VoxeliaNetwork {
             SkillEffects.apply(player);
             syncTo(player);
             syncTalents(player);
+            syncPerks(player);
         }
     }
 
@@ -120,6 +137,7 @@ public final class VoxeliaNetwork {
             LeaderboardStore.record(player);
             syncTo(player);
             syncTalents(player);
+            syncPerks(player);
             int n = PrestigeLogic.count(player, skill);
             player.sendSystemMessage(Component.literal("")
                 .append(Component.literal("[Voxelia] ").withStyle(ChatFormatting.GOLD))

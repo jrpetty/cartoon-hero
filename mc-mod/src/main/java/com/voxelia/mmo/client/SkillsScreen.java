@@ -206,6 +206,14 @@ public final class SkillsScreen extends Screen {
             tip.add(Component.literal("Level " + level).withStyle(ChatFormatting.WHITE));
             tip.add(Component.literal("MAX LEVEL").withStyle(ChatFormatting.YELLOW));
         }
+        // What this skill is actually giving you right now — the server's own numbers.
+        List<String> perks = ClientPerks.bullets(skill);
+        if (!perks.isEmpty()) {
+            tip.add(Component.literal("Perks right now").withStyle(ChatFormatting.DARK_GRAY));
+            for (String perk : perks) {
+                tip.add(Component.literal("· " + perk).withStyle(ChatFormatting.AQUA));
+            }
+        }
         if (skill.active()) {
             tip.add(skill == selected
                 ? Component.literal("Ability: " + skill.abilityName() + " — selected").withStyle(ChatFormatting.AQUA)

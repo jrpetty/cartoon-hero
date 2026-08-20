@@ -75,6 +75,7 @@ public final class ProgressionEvents {
             SkillEffects.apply(player);
             VoxeliaNetwork.syncTo(player);
             VoxeliaNetwork.syncTalents(player);
+            VoxeliaNetwork.syncPerks(player);
 
             // First steps: one welcome line until the player has earned any XP.
             if (player.getData(VoxeliaAttachments.PLAYER_SKILLS.get()).totalXp() == 0) {
@@ -96,6 +97,7 @@ public final class ProgressionEvents {
             SkillEffects.apply(player);
             VoxeliaNetwork.syncTo(player);
             VoxeliaNetwork.syncTalents(player);
+            VoxeliaNetwork.syncPerks(player);
             Integer lost = PENDING_DEATH_LOSS.remove(player.getUUID());
             if (lost != null && lost > 0) {
                 player.sendSystemMessage(Component.literal("")

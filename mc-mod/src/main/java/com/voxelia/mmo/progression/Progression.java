@@ -39,6 +39,7 @@ public final class Progression {
     private static void onLevelUp(ServerPlayer player, Skill skill, int level) {
         SkillEffects.apply(player);
         LeaderboardStore.record(player);
+        VoxeliaNetwork.syncPerks(player);
         player.sendSystemMessage(Component.literal("")
             .append(Component.literal("[Voxelia] ").withStyle(ChatFormatting.GOLD))
             .append(Component.literal(skill.display() + " reached level " + level + "!")
