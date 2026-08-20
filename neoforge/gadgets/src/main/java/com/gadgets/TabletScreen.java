@@ -77,9 +77,19 @@ public class TabletScreen extends GadgetScreen {
         refresh = addRenderableWidget(PanelButton.of(Component.literal("Refresh"), b -> {
                     ClientHubReport.asked(ClientHubReport.code());
                     PacketDistributor.sendToServer(new HubReportPayload.Request(ClientHubReport.code()));
-                }, left + 12, top + BUTTON_Y, 106, 18));
+                }, left + 12, top + BUTTON_Y, 66, 18));
 
-        board = addRenderableWidget(PanelButton.of(Component.literal("Open board"), b -> openBoard(), left + 128, top + BUTTON_Y, 106, 18));
+        board = addRenderableWidget(PanelButton.of(Component.literal("Open board"), b -> openBoard(),
+                left + 90, top + BUTTON_Y, 66, 18));
+
+        // Change the passcode — allowed here precisely because being on this
+        // screen means the current one was already proven this session.
+        addRenderableWidget(PanelButton.of(Component.literal("Passcode"), b -> {
+            ClientTabletLock.reset();
+            if (minecraft != null) {
+                minecraft.setScreen(new TabletLockScreen(true));
+            }
+        }, left + 168, top + BUTTON_Y, 66, 18));
     }
 
     /** Write the typed code onto the held tablet, and ask with it in the same breath. */

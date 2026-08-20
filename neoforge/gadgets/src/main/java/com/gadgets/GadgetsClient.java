@@ -44,7 +44,7 @@ public class GadgetsClient {
         ScreenOpener.HUB_MONITOR = be ->
                 Minecraft.getInstance().setScreen(new HubMonitorScreen((CommandHubMonitorBlockEntity) be));
         // Titled from the gauge itself, so a second kind of gauge needs nothing here.
-        ScreenOpener.TABLET = () -> {
+        ScreenOpener.TABLET_MAIN = () -> {
             // Ask as the screen opens, so it is showing something by the time
             // the player has finished looking at it.
             String code = BaseTabletItem.codeOf(Minecraft.getInstance().player.getMainHandItem());
@@ -58,6 +58,24 @@ public class GadgetsClient {
                 ClientHubReport.forget();
             }
             Minecraft.getInstance().setScreen(new TabletScreen());
+        };
+        ScreenOpener.TABLET = () -> {
+            // The lock decides which screen a right-click earns: a fresh tablet
+            // must choose its passcode, a locked one must hear it, and one
+            // already proven this session opens straight to the board.
+            Minecraft mc = Minecraft.getInstance();
+            var held = mc.player.getMainHandItem().getItem() instanceof BaseTabletItem
+                    ? mc.player.getMainHandItem() : mc.player.getOffhandItem();
+            String lock = held.getItem() instanceof BaseTabletItem ? BaseTabletItem.lockOf(held) : "";
+            if (lock.isEmpty()) {
+                ClientTabletLock.reset();
+                mc.setScreen(new TabletLockScreen(true));
+            } else if (ClientTabletLock.proven(lock)) {
+                ScreenOpener.TABLET_MAIN.run();
+            } else {
+                ClientTabletLock.reset();
+                mc.setScreen(new TabletLockScreen(false));
+            }
         };
         ScreenOpener.TRANSFER = be -> Minecraft.getInstance().setScreen(
                 new TransferScreen((TransferNode) be, be instanceof ItemSenderBlockEntity));

@@ -52,6 +52,9 @@ public final class HubReportPayload {
 
         /** Answer from the registry. Never touches the world, so it can never load a chunk. */
         public static void apply(ServerPlayer player, Request p) {
+            if (TabletLockPayload.lockedOut(player)) {
+                return; // a locked tablet answers nobody who hasn't proven its passcode
+            }
             long now = player.serverLevel().getGameTime();
             long last = player.getPersistentData().getLong(ASKED_KEY);
             if (last != 0L && now >= last && now - last < MIN_GAP) {
@@ -89,6 +92,10 @@ public final class HubReportPayload {
         }
 
         public static void apply(ServerPlayer player, Link p) {
+            if (TabletLockPayload.lockedOut(player)) {
+                return; // relinking is as gated as reading — a thief re-aiming
+                        // your tablet at their base is still using your tablet
+            }
             String code = p.code();
             if (!code.isEmpty() && !LinkCode.isCode(code)) {
                 return;

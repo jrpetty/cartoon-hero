@@ -261,6 +261,7 @@ public class Gadgets {
             WirelessNetwork.clear();
             ItemNetwork.clear();
             HubRegistry.clear();
+            TabletAuth.clear();
         });
 
         // The wand has to run before the block's own interaction: hubs, counters,
@@ -304,10 +305,29 @@ public class Gadgets {
                 }));
         registrar.playToClient(HubReportPayload.Reply.TYPE, HubReportPayload.Reply.CODEC, (payload, context) ->
                 context.enqueueWork(() -> ClientHubReport.accept(payload)));
+        registrar.playToServer(TabletLockPayload.SetLock.TYPE, TabletLockPayload.SetLock.CODEC, (payload, context) ->
+                context.enqueueWork(() -> {
+                    if (context.player() instanceof ServerPlayer sp) {
+                        TabletLockPayload.SetLock.apply(sp, payload);
+                    }
+                }));
+        registrar.playToServer(TabletLockPayload.Unlock.TYPE, TabletLockPayload.Unlock.CODEC, (payload, context) ->
+                context.enqueueWork(() -> {
+                    if (context.player() instanceof ServerPlayer sp) {
+                        TabletLockPayload.Unlock.apply(sp, payload);
+                    }
+                }));
+        registrar.playToClient(TabletLockPayload.Result.TYPE, TabletLockPayload.Result.CODEC, (payload, context) ->
+                context.enqueueWork(() -> ClientTabletLock.accept(payload)));
     }
 
     /** Send a tablet's answer back to the player who asked for it. */
     static void sendReply(ServerPlayer player, HubReportPayload.Reply reply) {
         PacketDistributor.sendToPlayer(player, reply);
+    }
+
+    /** Send a passcode verdict back to the player who offered it. */
+    static void sendLockResult(ServerPlayer player, TabletLockPayload.Result result) {
+        PacketDistributor.sendToPlayer(player, result);
     }
 }
