@@ -1,0 +1,21 @@
+{
+  "parent": "voxelia_mmo:root",
+  "display": {
+    "icon": { "id": "minecraft:bow" },
+    "title": { "translate": "advancements.voxelia_mmo.on_target.title" },
+    "description": { "translate": "advancements.voxelia_mmo.on_target.description" },
+    "show_toast": true,
+    "announce_to_chat": true
+  },
+  "criteria": {
+    "shot": {
+      "trigger": "minecraft:player_hurt_entity",
+      "conditions": {
+        "damage": {
+          "type": { "tags": [{ "id": "minecraft:is_projectile", "expected": true }] }
+        }
+      }
+    }
+  },
+  "requirements": [["shot"]]
+}

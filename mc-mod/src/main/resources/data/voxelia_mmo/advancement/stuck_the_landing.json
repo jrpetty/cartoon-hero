@@ -1,0 +1,21 @@
+{
+  "parent": "voxelia_mmo:root",
+  "display": {
+    "icon": { "id": "minecraft:feather" },
+    "title": { "translate": "advancements.voxelia_mmo.stuck_the_landing.title" },
+    "description": { "translate": "advancements.voxelia_mmo.stuck_the_landing.description" },
+    "show_toast": true,
+    "announce_to_chat": true
+  },
+  "criteria": {
+    "fall": {
+      "trigger": "minecraft:entity_hurt_player",
+      "conditions": {
+        "damage": {
+          "type": { "tags": [{ "id": "minecraft:is_fall", "expected": true }] }
+        }
+      }
+    }
+  },
+  "requirements": [["fall"]]
+}

@@ -36,12 +36,29 @@ public final class Progression {
 
     private static void onLevelUp(ServerPlayer player, Skill skill, int level) {
         SkillEffects.apply(player);
+        LeaderboardStore.record(player);
         player.sendSystemMessage(Component.literal("")
             .append(Component.literal("[Voxelia] ").withStyle(ChatFormatting.GOLD))
             .append(Component.literal(skill.display() + " reached level " + level + "!")
                 .withStyle(ChatFormatting.YELLOW)));
         player.level().playSound(null, player.blockPosition(),
             SoundEvents.PLAYER_LEVELUP, SoundSource.PLAYERS, 1.0f, 1.2f);
+
+        // A talent point lands every N levels — say so, or it sits unnoticed.
+        int per = VoxeliaConfig.talentLevelsPerPoint();
+        if (per > 0 && level % per == 0) {
+            player.sendSystemMessage(Component.literal("")
+                .append(Component.literal("[Voxelia] ").withStyle(ChatFormatting.GOLD))
+                .append(Component.literal("Talent point earned in " + skill.display() + "! ")
+                    .withStyle(ChatFormatting.GREEN))
+                .append(Component.literal("Open your skills and pick Menu ▸ Talent Tree to spend it.")
+                    .withStyle(ChatFormatting.GRAY)));
+            player.displayClientMessage(
+                Component.literal("✦ +1 " + skill.display() + " talent point")
+                    .withStyle(ChatFormatting.GREEN), true);
+            player.level().playSound(null, player.blockPosition(),
+                SoundEvents.PLAYER_LEVELUP, SoundSource.PLAYERS, 0.6f, 1.9f);
+        }
 
         // celebratory particles
         if (player.level() instanceof ServerLevel sl) {

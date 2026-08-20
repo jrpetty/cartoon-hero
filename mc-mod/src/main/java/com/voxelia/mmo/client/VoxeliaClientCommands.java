@@ -35,6 +35,7 @@ public final class VoxeliaClientCommands {
             Commands.literal("voxelia")
                 .then(Commands.literal("menu").executes(VoxeliaClientCommands::openMenu))
                 .then(Commands.literal("profile").executes(VoxeliaClientCommands::openProfile))
+                .then(Commands.literal("leaderboards").executes(VoxeliaClientCommands::openLeaderboards))
                 .then(Commands.literal("hud").executes(VoxeliaClientCommands::toggleHud))
                 .then(Commands.literal("sidebar").executes(VoxeliaClientCommands::toggleSidebar))
                 .then(Commands.literal("hudpos")
@@ -51,6 +52,11 @@ public final class VoxeliaClientCommands {
 
     private static int openProfile(CommandContext<CommandSourceStack> ctx) {
         Minecraft.getInstance().execute(() -> Minecraft.getInstance().setScreen(new ProfileScreen()));
+        return 1;
+    }
+
+    private static int openLeaderboards(CommandContext<CommandSourceStack> ctx) {
+        Minecraft.getInstance().execute(() -> Minecraft.getInstance().setScreen(new LeaderboardScreen()));
         return 1;
     }
 

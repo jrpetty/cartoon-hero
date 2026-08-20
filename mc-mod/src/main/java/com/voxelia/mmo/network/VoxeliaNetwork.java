@@ -2,6 +2,7 @@ package com.voxelia.mmo.network;
 
 import com.voxelia.mmo.VoxeliaMMO;
 import com.voxelia.mmo.config.VoxeliaConfig;
+import com.voxelia.mmo.progression.LeaderboardStore;
 import com.voxelia.mmo.progression.PrestigeLogic;
 import com.voxelia.mmo.progression.SkillEffects;
 import com.voxelia.mmo.progression.TalentLogic;
@@ -26,6 +27,9 @@ import net.neoforged.neoforge.network.PacketDistributor;
 import net.neoforged.neoforge.network.event.RegisterPayloadHandlersEvent;
 import net.neoforged.neoforge.network.registration.PayloadRegistrar;
 
+import java.util.ArrayList;
+import java.util.List;
+
 /** Registers payloads (mod event bus) and pushes skill/talent state to clients. */
 @EventBusSubscriber(modid = VoxeliaMMO.MOD_ID, bus = EventBusSubscriber.Bus.MOD)
 public final class VoxeliaNetwork {
@@ -39,10 +43,12 @@ public final class VoxeliaNetwork {
         registrar.playToClient(TalentsSyncPayload.TYPE, TalentsSyncPayload.STREAM_CODEC, TalentsSyncPayload::handle);
         registrar.playToClient(PrestigeCelebrationPacket.TYPE, PrestigeCelebrationPacket.STREAM_CODEC, PrestigeCelebrationPacket::handle);
         registrar.playToClient(ProfileStatsPayload.TYPE, ProfileStatsPayload.STREAM_CODEC, ProfileStatsPayload::handle);
+        registrar.playToClient(LeaderboardPayload.TYPE, LeaderboardPayload.STREAM_CODEC, LeaderboardPayload::handle);
         registrar.playToServer(AbilityPacket.TYPE, AbilityPacket.STREAM_CODEC, AbilityPacket::handle);
         registrar.playToServer(SpendTalentPacket.TYPE, SpendTalentPacket.STREAM_CODEC, SpendTalentPacket::handle);
         registrar.playToServer(PrestigePacket.TYPE, PrestigePacket.STREAM_CODEC, PrestigePacket::handle);
         registrar.playToServer(ProfileRequestPacket.TYPE, ProfileRequestPacket.STREAM_CODEC, ProfileRequestPacket::handle);
+        registrar.playToServer(LeaderboardRequestPacket.TYPE, LeaderboardRequestPacket.STREAM_CODEC, LeaderboardRequestPacket::handle);
     }
 
     /** Send the profile screen the vanilla stats it can't derive client-side (playtime, deaths, mob kills). */
@@ -52,6 +58,31 @@ public final class VoxeliaNetwork {
         int deaths = stats.getValue(Stats.CUSTOM.get(Stats.DEATHS));
         int kills = stats.getValue(Stats.CUSTOM.get(Stats.MOB_KILLS));
         PacketDistributor.sendToPlayer(player, new ProfileStatsPayload(play, deaths, kills));
+    }
+
+    /** Answers a leaderboard request: the top ten for a skill (or the character average). */
+    public static void sendLeaderboard(ServerPlayer player, int skillOrdinal) {
+        Skill[] all = Skill.values();
+        Skill skill = skillOrdinal >= 0 && skillOrdinal < all.length ? all[skillOrdinal] : null;
+
+        List<LeaderboardStore.Row> rows = LeaderboardStore.top(skill, 10, player.getUUID());
+        List<String> names = new ArrayList<>();
+        List<Integer> data = new ArrayList<>();
+        for (LeaderboardStore.Row row : rows) {
+            names.add(row.name());
+            data.add(row.rank());
+            data.add(row.level());
+            data.add(row.prestige());
+            data.add(row.self() ? 1 : 0);
+        }
+
+        List<Integer> meta = new ArrayList<>();
+        meta.add(skill == null ? -1 : skill.ordinal());
+        meta.add(LeaderboardStore.rankOf(player.getUUID(), skill));
+        meta.add(LeaderboardStore.levelFor(player.getUUID(), skill));
+        meta.add(LeaderboardStore.tracked());
+
+        PacketDistributor.sendToPlayer(player, new LeaderboardPayload(names, data, meta));
     }
 
     public static void syncTo(ServerPlayer player) {
@@ -85,6 +116,7 @@ public final class VoxeliaNetwork {
         Skill skill = skills[skillOrdinal];
         if (PrestigeLogic.prestige(player, skill)) {
             SkillEffects.apply(player);
+            LeaderboardStore.record(player);
             syncTo(player);
             syncTalents(player);
             int n = PrestigeLogic.count(player, skill);

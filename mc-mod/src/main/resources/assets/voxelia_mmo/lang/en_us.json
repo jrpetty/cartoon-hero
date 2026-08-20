@@ -10,12 +10,10 @@
   "voxelia_mmo.skill.cooking": "Cooking",
   "voxelia_mmo.skill.alchemy": "Alchemy",
   "voxelia_mmo.skill.archery": "Archery",
-
   "key.categories.voxelia_mmo": "Voxelia MMO",
   "key.voxelia_mmo.menu": "Open Skills Menu",
   "key.voxelia_mmo.ability": "Use Selected Ability",
   "key.voxelia_mmo.cycle": "Cycle Selected Ability",
-
   "advancements.voxelia_mmo.root.title": "Voxelia MMO",
   "advancements.voxelia_mmo.root.description": "Begin your adventure — gather, fight, and level up.",
   "advancements.voxelia_mmo.first_cut.title": "First Cut",
@@ -27,5 +25,17 @@
   "advancements.voxelia_mmo.homestead.title": "Homestead",
   "advancements.voxelia_mmo.homestead.description": "Harvest wheat to train Farming.",
   "advancements.voxelia_mmo.gone_fishing.title": "Gone Fishing",
-  "advancements.voxelia_mmo.gone_fishing.description": "Reel in a catch to train Fishing."
+  "advancements.voxelia_mmo.gone_fishing.description": "Reel in a catch to train Fishing.",
+  "advancements.voxelia_mmo.stuck_the_landing.title": "Stuck the Landing",
+  "advancements.voxelia_mmo.stuck_the_landing.description": "Take a fall to train Acrobatics.",
+  "advancements.voxelia_mmo.spade_work.title": "Spade Work",
+  "advancements.voxelia_mmo.spade_work.description": "Dig up gravel, sand or dirt to train Excavation.",
+  "advancements.voxelia_mmo.taking_it.title": "Taking It",
+  "advancements.voxelia_mmo.taking_it.description": "Take a hit and live to tell it — that trains Defense.",
+  "advancements.voxelia_mmo.home_cooking.title": "Home Cooking",
+  "advancements.voxelia_mmo.home_cooking.description": "Eat a meal to train Cooking.",
+  "advancements.voxelia_mmo.bubble_bubble.title": "Bubble, Bubble",
+  "advancements.voxelia_mmo.bubble_bubble.description": "Brew a potion to train Alchemy.",
+  "advancements.voxelia_mmo.on_target.title": "On Target",
+  "advancements.voxelia_mmo.on_target.description": "Land a shot with a bow or crossbow to train Archery."
 }

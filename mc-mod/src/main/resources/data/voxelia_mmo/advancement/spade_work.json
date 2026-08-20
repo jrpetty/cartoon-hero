@@ -1,0 +1,19 @@
+{
+  "parent": "voxelia_mmo:root",
+  "display": {
+    "icon": { "id": "minecraft:iron_shovel" },
+    "title": { "translate": "advancements.voxelia_mmo.spade_work.title" },
+    "description": { "translate": "advancements.voxelia_mmo.spade_work.description" },
+    "show_toast": true,
+    "announce_to_chat": true
+  },
+  "criteria": {
+    "dig": {
+      "trigger": "minecraft:inventory_changed",
+      "conditions": {
+        "items": [{ "items": ["minecraft:gravel", "minecraft:sand", "minecraft:dirt"] }]
+      }
+    }
+  },
+  "requirements": [["dig"]]
+}

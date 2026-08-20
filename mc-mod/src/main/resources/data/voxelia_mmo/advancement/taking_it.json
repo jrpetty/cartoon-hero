@@ -1,0 +1,14 @@
+{
+  "parent": "voxelia_mmo:root",
+  "display": {
+    "icon": { "id": "minecraft:shield" },
+    "title": { "translate": "advancements.voxelia_mmo.taking_it.title" },
+    "description": { "translate": "advancements.voxelia_mmo.taking_it.description" },
+    "show_toast": true,
+    "announce_to_chat": true
+  },
+  "criteria": {
+    "hurt": { "trigger": "minecraft:entity_hurt_player" }
+  },
+  "requirements": [["hurt"]]
+}

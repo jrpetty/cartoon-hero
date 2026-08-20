@@ -1,0 +1,14 @@
+{
+  "parent": "voxelia_mmo:root",
+  "display": {
+    "icon": { "id": "minecraft:cooked_beef" },
+    "title": { "translate": "advancements.voxelia_mmo.home_cooking.title" },
+    "description": { "translate": "advancements.voxelia_mmo.home_cooking.description" },
+    "show_toast": true,
+    "announce_to_chat": true
+  },
+  "criteria": {
+    "eat": { "trigger": "minecraft:consume_item" }
+  },
+  "requirements": [["eat"]]
+}

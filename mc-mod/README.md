@@ -43,7 +43,8 @@ Fortune never applies with Silk Touch (no dupes). Abilities are deliberately
 | **Prestige** | At level 100 a skill can be **prestiged** (button on the Talent screen — takes **two clicks**, no accidents — or `/voxelia prestige <skill>`): it resets to level 1, its talents refund, and you gain **+2 permanent talent points** for that skill, granted immediately (14/16/18 possible points at Prestige 1/2/3, cap 3). Prestige stars (✦) show on every surface and in your chat title, a full-screen celebration + particles/sound plays, and the server gets one gold announcement line. |
 | **Death penalty** | Dying costs **20% of every skill's XP** (config). Levels genuinely drop — the respawn message tells you what you lost. |
 | **Character level & titles** | Your character level is the average of all skills. Chat shows `[Lv 42 • Master Miner ✦✦] Name`, ranked Novice → Grandmaster. |
-| **Level-up feedback** | Chat line, sound, particles, and a "+XP" flash on the HUD — no full-screen popup. |
+| **Level-up feedback** | Chat line, sound, particles, and a "+XP" flash on the HUD — no full-screen popup. Earning a talent point announces itself in chat and on the action bar, so points don't sit unspent. |
+| **Leaderboards** | The server records everyone who has ever played to `voxelia_leaderboard.json` in the world folder, so boards rank **offline players too**. Read them in-game at Menu ▸ Leaderboards, or with `/voxelia top <skill\|character>`. |
 
 The server is authoritative for everything: XP, talents, prestige, abilities and
 cooldowns are validated server-side; clients only render.
@@ -58,6 +59,7 @@ Menu ▾
   Skills [K]            ← you are here
   Talent Tree      (3)  ← unspent points show as a green pill
   Character Profile
+  Leaderboards
   ───────────────
   Skill Sidebar   On/Off
   Corner HUD      On/Off
@@ -75,6 +77,7 @@ dropdown; ESC again closes the screen.
 | **Character profile** | Menu ▸ Character Profile, or `/voxelia profile` | Best skill, total prestiges, XP earned, playtime, deaths, mob kills |
 | **Corner HUD** | Menu ▸ Corner HUD / HUD Corner (or `/voxelia hud`, `/voxelia hudpos`) | Per-skill levels + XP bars, prestige stars, selected ability with live cooldown |
 | **Sidebar** | Menu ▸ Skill Sidebar (or `/voxelia sidebar`; off by default) | Vanilla-scoreboard-style list of all skill levels + Character line |
+| **Leaderboards** | Menu ▸ Leaderboards, or `/voxelia leaderboards` | Server top ten per skill (or overall), your own rank in the footer |
 
 New players (zero XP) get a one-line pointer to `K` on first login.
 
@@ -88,9 +91,9 @@ New players (zero XP) get a one-line pointer to `K` on first login.
 | `/voxelia talents` | server | Your talent ranks |
 | `/voxelia talent reset` | server | Refund all talent points |
 | `/voxelia prestige <skill>` | server | Prestige a level-100 skill |
-| `/voxelia top <skill>` | server | Leaderboard of online players |
+| `/voxelia top <skill\|character>` | server | Top ten, including offline players |
 | `/voxelia grant <skill> <amount>` | server (op) | Grant XP |
-| `/voxelia menu` / `profile` | client | Open the Skills / Profile screens |
+| `/voxelia menu` / `profile` / `leaderboards` | client | Open the Skills / Profile / Leaderboard screens |
 | `/voxelia hud` / `sidebar` | client | Toggle the HUD / sidebar (also in the Menu dropdown) |
 | `/voxelia hudpos <corner>` | client | Move the HUD (`top_left`/`top_right`/`bottom_left`/`bottom_right`) |
 | `/voxelia rewards` | client | Print what each skill grants |

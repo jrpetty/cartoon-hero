@@ -1,0 +1,14 @@
+{
+  "parent": "voxelia_mmo:root",
+  "display": {
+    "icon": { "id": "minecraft:brewing_stand" },
+    "title": { "translate": "advancements.voxelia_mmo.bubble_bubble.title" },
+    "description": { "translate": "advancements.voxelia_mmo.bubble_bubble.description" },
+    "show_toast": true,
+    "announce_to_chat": true
+  },
+  "criteria": {
+    "brew": { "trigger": "minecraft:brewed_potion" }
+  },
+  "requirements": [["brew"]]
+}

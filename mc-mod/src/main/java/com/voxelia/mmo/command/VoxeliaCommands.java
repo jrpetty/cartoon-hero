@@ -5,6 +5,7 @@ import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.context.CommandContext;
 import com.voxelia.mmo.VoxeliaMMO;
 import com.voxelia.mmo.network.VoxeliaNetwork;
+import com.voxelia.mmo.progression.LeaderboardStore;
 import com.voxelia.mmo.progression.PrestigeLogic;
 import com.voxelia.mmo.progression.Progression;
 import com.voxelia.mmo.progression.SkillEffects;
@@ -240,26 +241,42 @@ public final class VoxeliaCommands {
 
     private static int top(CommandContext<CommandSourceStack> ctx) {
         String skillId = StringArgumentType.getString(ctx, "skill");
-        Skill skill = Skill.byId(skillId);
-        if (skill == null) {
+        Skill skill = "character".equalsIgnoreCase(skillId) ? null : Skill.byId(skillId);
+        if (skill == null && !"character".equalsIgnoreCase(skillId)) {
             ctx.getSource().sendFailure(Component.literal(
-                "Unknown skill '" + skillId + "'. Use: mining, foraging, combat, farming, acrobatics, fishing."));
+                "Unknown skill '" + skillId + "'. Use a skill name, or 'character' for the overall board."));
             return 0;
         }
-        var players = new java.util.ArrayList<>(ctx.getSource().getServer().getPlayerList().getPlayers());
-        players.sort((a, b) -> Integer.compare(
-            b.getData(VoxeliaAttachments.PLAYER_SKILLS.get()).getLevel(skill),
-            a.getData(VoxeliaAttachments.PLAYER_SKILLS.get()).getLevel(skill)));
-        ctx.getSource().sendSuccess(() -> Component.literal(
-            "=== Top " + skill.display() + " ===").withStyle(ChatFormatting.GOLD), false);
-        int shown = Math.min(10, players.size());
-        for (int i = 0; i < shown; i++) {
-            ServerPlayer p = players.get(i);
-            int lvl = p.getData(VoxeliaAttachments.PLAYER_SKILLS.get()).getLevel(skill);
-            int rank = i + 1;
-            ctx.getSource().sendSuccess(() -> Component.literal(
-                rank + ". " + p.getGameProfile().getName() + " — level " + lvl), false);
+        ServerPlayer self = ctx.getSource().getPlayer();
+        java.util.UUID id = self == null ? null : self.getUUID();
+        String heading = skill == null ? "Character" : skill.display();
+
+        // Ranks everyone the server has ever seen, not just who's logged in now.
+        var rows = LeaderboardStore.top(skill, 10, id);
+        if (rows.isEmpty()) {
+            ctx.getSource().sendSuccess(() -> Component.literal("Nobody is ranked yet.")
+                .withStyle(ChatFormatting.GRAY), false);
+            return 1;
         }
+        ctx.getSource().sendSuccess(() -> Component.literal("=== Top " + heading + " ===")
+            .withStyle(ChatFormatting.GOLD), false);
+        for (LeaderboardStore.Row row : rows) {
+            String stars = row.prestige() > 0 ? " " + "✦".repeat(Math.min(row.prestige(), 3)) : "";
+            ctx.getSource().sendSuccess(() -> Component.literal(
+                    "#" + row.rank() + " " + row.name() + " — level " + row.level() + stars)
+                .withStyle(row.self() ? ChatFormatting.AQUA : ChatFormatting.WHITE), false);
+        }
+        if (id != null) {
+            int rank = LeaderboardStore.rankOf(id, skill);
+            if (rank > 10) {
+                ctx.getSource().sendSuccess(() -> Component.literal(
+                        "You: #" + rank + " — level " + LeaderboardStore.levelFor(id, skill))
+                    .withStyle(ChatFormatting.AQUA), false);
+            }
+        }
+        ctx.getSource().sendSuccess(() -> Component.literal("Full boards: skills menu ▸ Menu ▸ Leaderboards")
+            .withStyle(ChatFormatting.DARK_GRAY), false);
         return 1;
     }
+
 }
