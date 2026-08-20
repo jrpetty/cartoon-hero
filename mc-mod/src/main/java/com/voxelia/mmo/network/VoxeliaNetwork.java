@@ -44,6 +44,7 @@ public final class VoxeliaNetwork {
         registrar.playToClient(PrestigeCelebrationPacket.TYPE, PrestigeCelebrationPacket.STREAM_CODEC, PrestigeCelebrationPacket::handle);
         registrar.playToClient(ProfileStatsPayload.TYPE, ProfileStatsPayload.STREAM_CODEC, ProfileStatsPayload::handle);
         registrar.playToClient(LeaderboardPayload.TYPE, LeaderboardPayload.STREAM_CODEC, LeaderboardPayload::handle);
+        registrar.playToClient(MilestonePacket.TYPE, MilestonePacket.STREAM_CODEC, MilestonePacket::handle);
         registrar.playToServer(AbilityPacket.TYPE, AbilityPacket.STREAM_CODEC, AbilityPacket::handle);
         registrar.playToServer(SpendTalentPacket.TYPE, SpendTalentPacket.STREAM_CODEC, SpendTalentPacket::handle);
         registrar.playToServer(PrestigePacket.TYPE, PrestigePacket.STREAM_CODEC, PrestigePacket::handle);

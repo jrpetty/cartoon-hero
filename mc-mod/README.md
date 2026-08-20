@@ -44,6 +44,7 @@ Fortune never applies with Silk Touch (no dupes). Abilities are deliberately
 | **Death penalty** | Dying costs **20% of every skill's XP** (config). Levels genuinely drop — the respawn message tells you what you lost. |
 | **Character level & titles** | Your character level is the average of all skills. Chat shows `[Lv 42 • Master Miner ✦✦] Name`, ranked Novice → Grandmaster. |
 | **Level-up feedback** | Chat line, sound, particles, and a "+XP" flash on the HUD — no full-screen popup. Earning a talent point announces itself in chat and on the action bar, so points don't sit unspent. |
+| **Perk unlocks** | Every level-gated perk announces itself with a slim toast at the top of the screen and a chat line: each skill's **signature ability** (Leap at Acrobatics 15, Volley at Archery 30, and so on) plus the four passives — **Haste** (Mining 25), **Telekinesis** (Mining 100), **Last Stand** (Defense 20) and **Well Fed** (Cooking 20). The toast names the perk and tells you how to use it, and reads the real levels from config. |
 | **Leaderboards** | The server records everyone who has ever played to `voxelia_leaderboard.json` in the world folder, so boards rank **offline players too**. Read them in-game at Menu ▸ Leaderboards, or with `/voxelia top <skill\|character>`. |
 
 The server is authoritative for everything: XP, talents, prestige, abilities and

@@ -1,6 +1,7 @@
 package com.voxelia.mmo.progression;
 
 import com.voxelia.mmo.config.VoxeliaConfig;
+import com.voxelia.mmo.network.MilestonePacket;
 import com.voxelia.mmo.network.VoxeliaNetwork;
 import com.voxelia.mmo.registry.VoxeliaAttachments;
 import com.voxelia.mmo.skill.PlayerSkills;
@@ -12,6 +13,7 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
+import net.neoforged.neoforge.network.PacketDistributor;
 
 /** The single entry point for awarding skill XP and reacting to level-ups. */
 public final class Progression {
@@ -60,10 +62,32 @@ public final class Progression {
                 SoundEvents.PLAYER_LEVELUP, SoundSource.PLAYERS, 0.6f, 1.9f);
         }
 
+        // Level-gated perks used to arrive in silence — announce each one.
+        for (Milestones.Kind kind : Milestones.at(skill, level)) {
+            PacketDistributor.sendToPlayer(player, new MilestonePacket(skill.ordinal(), kind.ordinal(), level));
+            player.sendSystemMessage(Component.literal("")
+                .append(Component.literal("[Voxelia] ").withStyle(ChatFormatting.GOLD))
+                .append(Component.literal(perkName(skill, kind) + " unlocked! ")
+                    .withStyle(ChatFormatting.AQUA))
+                .append(Component.literal("(" + skill.display() + " " + level + ")")
+                    .withStyle(ChatFormatting.GRAY)));
+        }
+
         // celebratory particles
         if (player.level() instanceof ServerLevel sl) {
             sl.sendParticles(ParticleTypes.HAPPY_VILLAGER,
                 player.getX(), player.getY() + 1.0, player.getZ(), 24, 0.5, 0.7, 0.5, 0.05);
         }
+    }
+
+    /** Chat-side name for a perk; the toast builds its own richer wording client-side. */
+    private static String perkName(Skill skill, Milestones.Kind kind) {
+        return switch (kind) {
+            case ABILITY -> skill.abilityName();
+            case HASTE -> "Haste";
+            case TELEKINESIS -> "Telekinesis";
+            case LAST_STAND -> "Last Stand";
+            case WELL_FED -> "Well Fed";
+        };
     }
 }
