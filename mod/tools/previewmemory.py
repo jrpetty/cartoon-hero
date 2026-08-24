@@ -71,81 +71,41 @@ def text(d, x, y, s, fill, size=8, anchor="la"):
 
 
 def draw_back(d, x, y, w, h):
-    """The mod's card back: kraft, a lattice, and a medallion."""
-    rect(d, x, y, w, h, fill=KRAFT_DARK)
-    rect(d, x + 1, y + 1, w - 2, h - 2, fill=KRAFT_BACK)
+    """
+    The mod's card back: kraft, a lattice, and a medallion.
+
+    Built on its own little canvas and pasted, so the diagonal lattice is
+    CLIPPED to the card. Drawn straight onto the page it ran the full width of
+    the image -- every card back was firing gold streaks across the felt, which
+    is subtle at preview scale and glaring at poster scale.
+    """
+    back = Image.new("RGB", (max(1, w * ZOOM), max(1, h * ZOOM)), KRAFT_BACK)
+    bd = ImageDraw.Draw(back)
     step = max(3, w // 5)
     for i in range(-h, w + h, step):
-        d.line([((x + i) * ZOOM, y * ZOOM), ((x + i + h) * ZOOM, (y + h) * ZOOM)],
-               fill=(104, 81, 53), width=max(1, ZOOM // 2))
-    cx, cy = x + w / 2, y + h / 2
+        bd.line([(i * ZOOM, 0), ((i + h) * ZOOM, h * ZOOM)],
+                fill=(104, 81, 53), width=max(1, ZOOM // 2))
+    cx, cy = w / 2, h / 2
     r = min(w, h) * 0.22
-    d.ellipse([(cx - r) * ZOOM, (cy - r) * ZOOM, (cx + r) * ZOOM, (cy + r) * ZOOM],
-              fill=KRAFT, outline=KRAFT_DARK, width=max(1, ZOOM // 2))
-    d.polygon([(cx * ZOOM, (cy - r * 0.55) * ZOOM), ((cx + r * 0.55) * ZOOM, cy * ZOOM),
-               (cx * ZOOM, (cy + r * 0.55) * ZOOM), ((cx - r * 0.55) * ZOOM, cy * ZOOM)],
-              fill=KRAFT_DARK)
-
+    bd.ellipse([(cx - r) * ZOOM, (cy - r) * ZOOM, (cx + r) * ZOOM, (cy + r) * ZOOM],
+               fill=KRAFT, outline=KRAFT_DARK, width=max(1, ZOOM // 2))
+    bd.polygon([(cx * ZOOM, (cy - r * 0.55) * ZOOM), ((cx + r * 0.55) * ZOOM, cy * ZOOM),
+                (cx * ZOOM, (cy + r * 0.55) * ZOOM), ((cx - r * 0.55) * ZOOM, cy * ZOOM)],
+               fill=KRAFT_DARK)
+    bd.rectangle([0, 0, w * ZOOM - 1, h * ZOOM - 1], outline=KRAFT_DARK, width=max(1, ZOOM))
+    d._image.paste(back, (x * ZOOM, y * ZOOM))
 
 
 # --- mob portraits -----------------------------------------------------------
-# Minecraft mob faces ARE 8x8 textures, so each portrait here is an 8x8 pixel
-# grid in that same idiom, drawn where the live 3D mob poses in the real game.
-# '.' is transparent and lets the portrait backdrop show through. These are
-# hand-made renditions of the vanilla faces, not the game's own textures.
+# The face library lives in tools/mobfaces.py so the preview and the poster art
+# draw the SAME creeper. Two copies would drift, and a poster that disagrees
+# with the screenshots beside it is worse than no poster.
 
-def _fish(body, stripe, eye):
-    """Side-on fish, facing right; used by the fish that have no 'face'."""
-    pal = {"o": body, "w": stripe, "k": eye}
-    rows = ["........",
-            "o..ooo..",
-            "ooowwoo.",
-            "ooowwoko",
-            "ooowwoo.",
-            "o..ooo..",
-            "........",
-            "........"]
-    return pal, rows
+import os
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import mobfaces
 
-
-MOB_FACES = {
-    "pig": ({"p": (229, 153, 150), "d": (198, 110, 110), "n": (86, 40, 42),
-             "w": (240, 240, 240), "k": (30, 30, 30)},
-            ["pppppppp", "pppppppp", "wkppppkw", "pppppppp",
-             "pddddddp", "pdnddndp", "pddddddp", "pppppppp"]),
-    "enderman": ({"k": (18, 16, 20), "m": (208, 78, 250), "w": (236, 190, 255)},
-                 ["kkkkkkkk", "kkkkkkkk", "kkkkkkkk", "mwmkkmwm",
-                  "kkkkkkkk", "kkkkkkkk", "kkkkkkkk", "kkkkkkkk"]),
-    "warden": ({"t": (16, 62, 66), "c": (92, 225, 210), "k": (8, 30, 32)},
-               ["tttttttt", "tttttttt", "tcttttct", "tcttttct",
-                "tttttttt", "ttkkkktt", "tttttttt", "tttttttt"]),
-    "panda": ({"w": (235, 235, 235), "k": (44, 44, 44)},
-              ["kwwwwwwk", "wwwwwwww", "wkkwwkkw", "wkkwwkkw",
-               "wwwwwwww", "wwwkkwww", "wwwwwwww", "wwwwwwww"]),
-    "mule": ({"b": (94, 66, 46), "k": (40, 28, 20), "w": (235, 235, 235),
-              "m": (168, 132, 96), "n": (60, 42, 30)},
-             ["bkbbbbkb", "bbbbbbbb", "bwkbbkwb", "bbbbbbbb",
-              "bmmmmmmb", "bmnmmnmb", "bmmmmmmb", "bbbbbbbb"]),
-    "tropical_fish": _fish((235, 122, 42), (245, 245, 245), (20, 20, 20)),
-    "cod": _fish((150, 122, 92), (196, 176, 148), (20, 20, 20)),
-    "fox": ({"o": (219, 122, 44), "k": (35, 30, 26), "w": (242, 238, 230)},
-            ["ko....ok", "oooooooo", "okooooko", "oooooooo",
-             "owwwwwwo", "wwwkkwww", "wwwwwwww", "........"]),
-    "goat": ({"c": (206, 199, 184), "h": (148, 138, 118), "k": (36, 34, 30),
-              "p": (226, 220, 206)},
-             ["hhcccchh", "cccccccc", "ckcccckc", "cccccccc",
-              "cccccccc", "ccppppcc", "ccpkkpcc", "cccccccc"]),
-    "vex": ({"v": (134, 152, 184), "d": (92, 106, 132), "k": (28, 32, 44)},
-            ["vvvvvvvv", "vvvvvvvv", "vkvvvvkv", "vvvvvvvv",
-             "vvddddvv", "vvvvvvvv", "vvvvvvvv", "vvvvvvvv"]),
-    "bogged": ({"g": (108, 140, 74), "s": (170, 180, 142), "k": (38, 44, 32)},
-               ["gggggggg", "ssssssss", "skssssks", "ssssssss",
-                "ssssssss", "sksksksk", "ssssssss", "ssssssss"]),
-    "strider": ({"r": (180, 58, 58), "d": (122, 32, 34), "k": (30, 20, 20),
-                 "e": (222, 218, 214)},
-                ["rrrrrrrr", "ekrrrrke", "rrrrrrrr", "dddddddd",
-                 "rrrrrrrr", "dddddddd", "rrrrrrrr", "rrrrrrrr"]),
-}
+MOB_FACES = mobfaces.FACES
 
 
 def draw_mob_face(c, mob_id, band):
