@@ -13,6 +13,47 @@ behaviour that was already there · **docs**
 
 ## Unreleased
 
+### fix — the maze ran itself on an empty server
+
+Reported from production: the maze dimension appeared to be loaded the whole
+time, the log filled with ModernFix `ENTITY_MOUNT ... would cause deadlock`
+warnings naming Grievers, spiders and chickens, and reboots got slower and
+slower. All three are the same bug.
+
+- **fix** **An empty maze now does nothing at all.** `MazeRuntime.tick` returns
+  immediately when no player is in the dimension — no clock, no spawns, no
+  block writes, no entity sweeps.
+
+  The old guard was one tick away from correct and never got there. It ended the
+  game when the last player left, and ending a game calls `newGame()`, which sets
+  `played` back to `false` — so on the very next tick "empty and never played"
+  read as *carry on*, and the whole simulation ran again on a server nobody was
+  on. Every night it called `MazeNight.fall`, which probes block states right
+  across the 576-block map to find corridors — **loading chunks all over the
+  maze** — and spawned a batch of mobs with `setPersistenceRequired()` so they
+  never despawned. Nothing cleared them. That is the accumulation, the chunk
+  loading, and the slow reboot.
+
+  The warnings are the same story: `fall` calls `finalizeSpawn`, and vanilla
+  rolls **spider jockeys and chicken jockeys** there — mounting emits
+  `ENTITY_MOUNT`, and emitting it during chunk load is exactly what ModernFix
+  warns about. Both the spawns and the chunk loads stop with the guard.
+
+  Also running unattended: the midnight reshape rewriting ~14,000 blocks, the
+  job board rewriting its signs once a second, and a day-stalker Griever spawned
+  every day.
+
+- **fix** **`endGame` sweeps the night away with the Grievers.** Nightlife is
+  spawned persistent so it does not evaporate mid-fight, which means something
+  has to clear it, and the moment an empty maze should be empty is when the last
+  player leaves. Previously it stood in the region files until the next game's
+  dawn — on a quiet server, indefinitely.
+
+**Existing worlds:** the guard stops any further accumulation, and the sweep
+clears what a finished game leaves. A world already carrying thousands of mobs
+from before this fix gets cleaned on the next game's dawn (`MazeNight.lift`),
+or immediately by deleting the maze dimension — it rebuilds itself.
+
 ### The Glade's front door — a HUD, a hub, and the chart drawn at last
 
 The maze's UI grew the way settlements grow lanes: four screens, eleven

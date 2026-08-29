@@ -194,41 +194,18 @@ public final class MazeRuntime {
         }
     }
 
-    /**
-     * Watches for the end of a game.
-     *
-     * <p>A game runs from the first person walking in to the last one leaving,
-     * however they leave. When the maze empties, that is the end of it - there is
-     * no other definition available, and no other one is wanted: everybody got
-     * out or everybody died are the only two ways this ends, and from in here
-     * they look identical.
-     *
-     * @return true if a game just ended, in which case the caller should let the
-     *         next tick start the new one from a clean slate
-     */
-    private static boolean sessionWatch(ServerLevel level, MazeClock clock) {
-        if (!level.players().isEmpty()) {
-            if (clock.markPlayed()) {
-                // Day one's delivery. TheBox.deliver only ever ran from newDay,
-                // and newDay only runs on a rollover - so day zero, the one day
-                // the crate is meant to contain two cures, never got one at all.
-                TheBox.deliver(level, clock.day());
-                MazeNight.lift(level);
-            }
-            return false;
-        }
-        if (!clock.played()) {
-            return false;
-        }
-        endGame(level, clock);
-        return true;
-    }
-
     /** Packs the game away and draws the next one's opening layout. */
     private static void endGame(ServerLevel level, MazeClock clock) {
         for (Mob g : Griever.loaded(level)) {
             g.discard();
         }
+        // The night goes with them. Nightlife is spawned persistent so it does
+        // not evaporate while somebody is fighting it, which means something has
+        // to actually clear it - and "when the last player leaves" is the moment
+        // an empty maze should be empty. Without this a finished game left its
+        // mobs standing in the region files until the next game's dawn swept
+        // them, which on a quiet server is indefinitely.
+        MazeNight.lift(level);
         clearLastStand(level);
         MazeRuns.clearAll();
         MazeSting.clearAll();
@@ -271,13 +248,38 @@ public final class MazeRuntime {
         MazeData.load();
         MazeClock clock = MazeClock.get(level);
 
+        // An empty maze does nothing whatsoever, and this is the guard that
+        // makes that true. Without it the maze ran its whole simulation on a
+        // server nobody was on: the clock advanced, midnight reshaped fourteen
+        // thousand blocks, the job board rewrote its signs every second, and -
+        // the expensive one - every dusk called MazeNight.fall, which probes
+        // block states right across the 576-block map to find corridors and
+        // then spawns a batch of mobs with setPersistenceRequired on them.
+        // Nothing ever cleared those, so an idle maze accumulated mobs and kept
+        // its own dimension's chunks loaded to do it, night after night.
+        //
+        // The old check could not catch this. It ended the game when the last
+        // player left, and ending a game calls newGame(), which sets played
+        // back to false - so on the very next tick "empty and never played"
+        // read as "carry on" and the whole loop ran again. It was only ever one
+        // tick away from idling correctly and never got there.
+        if (level.players().isEmpty()) {
+            if (clock.played()) {
+                endGame(level, clock);
+            }
+            return;
+        }
+        // Day one's delivery. TheBox.deliver only ever ran from newDay, and
+        // newDay only runs on a rollover - so day zero, the one day the crate
+        // is meant to contain two cures, never got one at all.
+        if (clock.markPlayed()) {
+            TheBox.deliver(level, clock.day());
+            MazeNight.lift(level);
+        }
+
         boolean dawn = clock.advance(1);
         boolean midnight = clock.crossedMidnight(1);
         clock.pushSky(level);
-
-        if (sessionWatch(level, clock)) {
-            return;
-        }
 
         // Is what is standing what should be standing? One question covers the
         // midnight reshape, a server restart and the first day of a new game.
