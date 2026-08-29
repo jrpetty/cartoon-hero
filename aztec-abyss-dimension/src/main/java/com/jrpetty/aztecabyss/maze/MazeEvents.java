@@ -62,7 +62,15 @@ public final class MazeEvents {
     public static void onLevelLoad(LevelEvent.Load event) {
         if (event.getLevel() instanceof ServerLevel level && isMaze(level)) {
             MazeRuntime.reset();
-            MazeBuilder.beginIfNeeded(level);
+            // Deliberately does NOT start a build. This fires for every
+            // dimension at server start, so raising the maze here stamped the
+            // whole 576-block map - loading and writing every chunk in it - on
+            // every boot of any world whose maze was not already down, with
+            // nobody on the server. Deleting the maze dimension to clear it up
+            // therefore guaranteed the next reboot did the most expensive
+            // possible thing. sendToMaze already calls beginIfNeeded and queues
+            // whoever asked while it stamps, so the map is raised by somebody
+            // wanting to walk into it, which is the only moment it is needed.
         }
     }
 
@@ -541,6 +549,15 @@ public final class MazeEvents {
             if (!MazeBuilder.isBuilding()) {
                 admitWaiting(level);
             }
+            return;
+        }
+        // Somebody is standing in a maze that was never stamped: they logged out
+        // in it, or the dimension was deleted from under them. Raise it for them
+        // now. Checked once a second and only when the dimension actually has
+        // somebody in it, so an empty maze still builds nothing.
+        if (!level.players().isEmpty() && level.getGameTime() % 20L == 0L
+                && !MazeBuilder.isBuilt(level)) {
+            MazeBuilder.beginIfNeeded(level);
             return;
         }
         // Every tick, not every twentieth. The maze owns its clock now, and a

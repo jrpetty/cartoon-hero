@@ -13,6 +13,30 @@ behaviour that was already there · **docs**
 
 ## Unreleased
 
+### fix — the maze rebuilt itself on every boot
+
+The other half of the report, and the half that actually explains "quite an
+issue when it reboots".
+
+- **fix** **The maze is no longer raised at server start.** `LevelEvent.Load`
+  fires for *every* dimension when the server boots, and the maze's handler
+  called `MazeBuilder.beginIfNeeded` there — so on any world whose maze was not
+  already stamped, every single boot kicked off a full 576-block build, loading
+  and writing every chunk in the map, with nobody on the server.
+
+  The cruel part: **deleting the maze dimension to clear the problem up
+  guaranteed the next reboot did the most expensive thing possible.** That is
+  the exact remedy a server admin reaches for, and it made things worse.
+
+  It was also redundant. `sendToMaze` already calls `beginIfNeeded` and queues
+  whoever asked with a progress message while it stamps, so the map is raised by
+  somebody wanting to walk into it — the only moment it is actually needed.
+
+- **fix** A player standing in a maze that was never stamped — logged out in it,
+  or the dimension deleted under them — now triggers the build. Checked once a
+  second and only when the dimension has somebody in it, so an empty maze still
+  builds nothing.
+
 ### fix — the maze ran itself on an empty server
 
 Reported from production: the maze dimension appeared to be loaded the whole
