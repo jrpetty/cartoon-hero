@@ -168,6 +168,171 @@ public final class Griever {
         return mob;
     }
 
+    // ------------------------------------------------------------------
+    // The Changing
+    // ------------------------------------------------------------------
+
+    /** Marks a Griever that used to be a player. */
+    public static final String RISEN = "AztecRisen";
+
+    /** How long the husk takes to come apart. Two and a half seconds. */
+    private static final int RISE_TICKS = 50;
+
+    /** Risen Grievers still coming up, by entity id, with ticks remaining. */
+    private static final java.util.Map<Integer, Integer> RISING = new java.util.HashMap<>();
+
+    /**
+     * The fourth sting, paid off.
+     *
+     * <p>The Changing used to be a status effect that killed you: a number went
+     * down, you died, and the most quoted thing about this whole setting never
+     * actually happened. What everybody remembers is not that the venom is
+     * lethal - it is that the person it took gets up.
+     *
+     * <p>So they do. The victim's death is untouched: same damage, same record,
+     * same trip out of the dimension, same lockout. Nobody controls what stands
+     * up, because a player who dies and then gets to play the monster has not
+     * lost anything. It wears their name, which is the entire point - the Glade
+     * has to put down somebody they were running with an hour ago, and the name
+     * floating over it is what makes that land.
+     *
+     * <p>It comes up over {@link #RISE_TICKS} rather than appearing, because a
+     * monster that blinks into existence is a spawn and a monster that claws its
+     * way out of the floor is an event. It cannot be hurt and cannot move while
+     * it does, so the drama is never a free hit for either side.
+     */
+    public static void rise(ServerLevel level, ServerPlayer victim) {
+        BlockPos at = victim.blockPosition();
+        Spider mob = EntityType.SPIDER.create(level);
+        if (mob == null) {
+            return;
+        }
+        mob.moveTo(at.getX() + 0.5, at.getY(), at.getZ() + 0.5, victim.getYRot(), 0.0F);
+        mob.finalizeSpawn(level, level.getCurrentDifficultyAt(at), MobSpawnType.EVENT, null);
+        dress(level, mob);
+
+        String who = victim.getGameProfile().getName();
+        mob.getPersistentData().putBoolean(RISEN, true);
+        mob.getPersistentData().putString(KIND, "risen");
+        // Named and visible, unlike every other Griever in the maze. You are
+        // meant to read this one from down the corridor and know what it is.
+        mob.setCustomName(Component.literal("\u00a74\u00a7l" + who.toUpperCase(java.util.Locale.ROOT)));
+        mob.setCustomNameVisible(true);
+        // A shade tougher than the pack it joins - it was a runner, and it kept
+        // whatever the maze had already made of them.
+        AttributeInstance hp = mob.getAttribute(Attributes.MAX_HEALTH);
+        if (hp != null) {
+            hp.setBaseValue(hp.getBaseValue() * 1.25);
+        }
+        mob.setHealth(mob.getMaxHealth());
+
+        // Held under while the husk comes apart.
+        mob.setNoAi(true);
+        mob.setInvulnerable(true);
+        level.addFreshEntity(mob);
+        RISING.put(mob.getId(), RISE_TICKS);
+
+        // The moment itself: the floor gives, not the air.
+        level.playSound(null, at, SoundEvents.WARDEN_EMERGE, SoundSource.HOSTILE, 1.6F, 0.6F);
+        level.playSound(null, at, SoundEvents.SCULK_SHRIEKER_SHRIEK, SoundSource.HOSTILE, 1.8F, 0.7F);
+        level.sendParticles(net.minecraft.core.particles.ParticleTypes.SCULK_SOUL,
+                at.getX() + 0.5, at.getY() + 1.0, at.getZ() + 0.5, 60, 0.5, 1.0, 0.5, 0.06);
+
+        for (ServerPlayer p : level.players()) {
+            p.connection.send(new net.minecraft.network.protocol.game.ClientboundSetTitleTextPacket(
+                    Component.literal("\u00a74\u00a7lTHE CHANGING")));
+            p.connection.send(new net.minecraft.network.protocol.game.ClientboundSetSubtitleTextPacket(
+                    Component.literal("\u00a7f" + who + "\u00a77 is not who they were.")));
+            p.displayClientMessage(Component.literal(
+                    "\u00a74\u00a7l\u2620 \u00a7f" + who + "\u00a74 has turned. \u00a77Put them down."), false);
+        }
+    }
+
+    /**
+     * Drives the husk while it comes up. Called every tick, players present.
+     *
+     * <p>Three beats rather than one long effect: it swells, it cracks, then it
+     * is out. A single continuous particle stream reads as a bug; a sequence
+     * with a rhythm reads as something happening.
+     */
+    public static void tickRisen(ServerLevel level) {
+        if (RISING.isEmpty()) {
+            return;
+        }
+        var it = RISING.entrySet().iterator();
+        while (it.hasNext()) {
+            var e = it.next();
+            net.minecraft.world.entity.Entity ent = level.getEntity(e.getKey());
+            if (!(ent instanceof Mob mob) || !mob.isAlive()) {
+                it.remove();
+                continue;
+            }
+            int left = e.getValue() - 1;
+            double x = mob.getX();
+            double y = mob.getY();
+            double z = mob.getZ();
+            int done = RISE_TICKS - left;
+
+            if (left <= 0) {
+                it.remove();
+                mob.setNoAi(false);
+                mob.setInvulnerable(false);
+                level.playSound(null, mob.blockPosition(), SoundEvents.WARDEN_ROAR,
+                        SoundSource.HOSTILE, 2.0F, 0.45F);
+                level.playSound(null, mob.blockPosition(), SoundEvents.LIGHTNING_BOLT_THUNDER,
+                        SoundSource.HOSTILE, 1.2F, 1.4F);
+                level.sendParticles(net.minecraft.core.particles.ParticleTypes.SCULK_CHARGE_POP,
+                        x, y + 1.0, z, 80, 0.8, 0.8, 0.8, 0.25);
+                level.sendParticles(net.minecraft.core.particles.ParticleTypes.LARGE_SMOKE,
+                        x, y + 0.4, z, 50, 0.9, 0.5, 0.9, 0.05);
+                ServerPlayer near = nearestTo(level, mob);
+                if (near != null) {
+                    mob.setTarget(near);
+                }
+                continue;
+            }
+            e.setValue(left);
+
+            // Beat one: it swells. A ring that widens as the thing under it grows.
+            double t = done / (double) RISE_TICKS;
+            double r = 0.4 + t * 1.6;
+            for (int i = 0; i < 3; i++) {
+                double a = (Math.PI * 2 / 3) * i + done * 0.35;
+                level.sendParticles(net.minecraft.core.particles.ParticleTypes.SOUL_FIRE_FLAME,
+                        x + Math.cos(a) * r, y + 0.1, z + Math.sin(a) * r, 1, 0.0, 0.0, 0.0, 0.0);
+            }
+            if (done % 10 == 0) {
+                level.playSound(null, mob.blockPosition(), SoundEvents.WARDEN_HEARTBEAT,
+                        SoundSource.HOSTILE, 1.4F, 0.5F);
+            }
+            // Beat two: it cracks, halfway up.
+            if (done == RISE_TICKS / 2) {
+                level.playSound(null, mob.blockPosition(), SoundEvents.SCULK_CATALYST_BLOOM,
+                        SoundSource.HOSTILE, 1.5F, 0.6F);
+                level.sendParticles(net.minecraft.core.particles.ParticleTypes.SCULK_SOUL,
+                        x, y + 1.2, z, 40, 0.4, 0.7, 0.4, 0.12);
+            }
+        }
+    }
+
+    /** Clears the rising list. Called when a game ends. */
+    public static void clearRising() {
+        RISING.clear();
+    }
+
+    private static ServerPlayer nearestTo(ServerLevel level, Mob mob) {
+        ServerPlayer best = null;
+        double bestD = Double.MAX_VALUE;
+        for (ServerPlayer p : level.players()) {
+            double d = p.distanceToSqr(mob);
+            if (d < bestD) {
+                bestD = d;
+                best = p;
+            }
+        }
+        return best;
+    }
+
     /** PersistentData key for which kind of Griever this one is. */
     public static final String KIND = "AztecGrieverKind";
 

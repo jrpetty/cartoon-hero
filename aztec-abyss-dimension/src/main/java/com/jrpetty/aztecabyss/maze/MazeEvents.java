@@ -1446,6 +1446,28 @@ public final class MazeEvents {
         }
         MazeRuns.onDeath(player);
         MazeRace.dropOut(level, player.getUUID());
+        // Before the tally is wiped, because the tally is what decides this.
+        // Somebody who reached the fourth sting does not simply die - what the
+        // venom was making of them finishes, and the Glade has to deal with it.
+        // Their own death is untouched either way: same record, same trip out.
+        boolean turned = MazeSting.isInfected(player.getUUID());
+        if (turned) {
+            Griever.rise(level, player);
+        }
+        // Filed before the tallies are cleared, and the outcome distinguishes
+        // the two deaths this maze has: the one where it caught you, and the one
+        // where it made you into the thing that catches the next person.
+        com.jrpetty.aztecabyss.data.RunHistory.get(level.getServer()).record(
+                player.getUUID(),
+                new com.jrpetty.aztecabyss.data.RunHistory.Run(
+                        System.currentTimeMillis(), "maze",
+                        turned ? com.jrpetty.aztecabyss.data.RunHistory.CHANGED
+                               : com.jrpetty.aztecabyss.data.RunHistory.TAKEN,
+                        (int) MazeRuntime.dayNumber(level) + 1,
+                        MazeRuns.elapsedSeconds(level, player.getUUID()),
+                        grieverKills(player.getUUID()), 0,
+                        MazeCharts.get(level.getServer()).myPercent(player.getUUID()),
+                        level.players().size()));
         MazeSting.clear(player.getUUID());
         DIED_IN_MAZE.add(player.getUUID());
         // The walls put you out - all the way out. On a dedicated server the

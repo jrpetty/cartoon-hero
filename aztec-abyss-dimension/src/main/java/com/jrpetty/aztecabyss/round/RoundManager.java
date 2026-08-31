@@ -1395,6 +1395,14 @@ public final class RoundManager {
                 com.jrpetty.aztecabyss.data.Leaderboards.Mode.ROUNDS,
                 player.getUUID(), player.getGameProfile().getName(),
                 round, survivalSeconds, Math.max(1, game.getParticipants().size()));
+        com.jrpetty.aztecabyss.data.RunHistory.get(server).record(player.getUUID(),
+                new com.jrpetty.aztecabyss.data.RunHistory.Run(
+                        System.currentTimeMillis(),
+                        game.getMap().name().toLowerCase(java.util.Locale.ROOT),
+                        com.jrpetty.aztecabyss.data.RunHistory.EXTRACTED,
+                        round, survivalSeconds, killsThisRun, revivesThisRun,
+                        rs.getHeadshotsThisRun(),
+                        Math.max(1, game.getParticipants().size())));
         com.jrpetty.aztecabyss.worldgen.MonumentBuilder.build(abyssLevel);
         ModNetworking.sendRecap(player, round, killsThisRun, revivesThisRun, survivalSeconds, prevBest,
                 false, multiplayer, true, rs.getHeadshotsThisRun(), rs.getTotalDeaths(), ritual);
@@ -1621,6 +1629,15 @@ public final class RoundManager {
                 com.jrpetty.aztecabyss.data.Leaderboards.Mode.ROUNDS,
                 player.getUUID(), player.getGameProfile().getName(),
                 round, survivalSeconds, Math.max(1, game.getParticipants().size()));
+        com.jrpetty.aztecabyss.data.RunHistory.get(server).record(player.getUUID(),
+                new com.jrpetty.aztecabyss.data.RunHistory.Run(
+                        System.currentTimeMillis(),
+                        game.getMap().name().toLowerCase(java.util.Locale.ROOT),
+                        victory ? com.jrpetty.aztecabyss.data.RunHistory.EXTRACTED
+                                : com.jrpetty.aztecabyss.data.RunHistory.FELL,
+                        round, survivalSeconds, killsThisRun, revivesThisRun,
+                        rs.getHeadshotsThisRun(),
+                        Math.max(1, game.getParticipants().size())));
         com.jrpetty.aztecabyss.worldgen.MonumentBuilder.build(abyssLevel);
 
         // Death/victory recap screen data.

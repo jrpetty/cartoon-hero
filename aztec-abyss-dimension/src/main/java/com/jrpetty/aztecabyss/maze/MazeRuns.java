@@ -158,6 +158,19 @@ public final class MazeRuns extends SavedData {
                 player.getUUID(), player.getGameProfile().getName(),
                 (int) MazeRuntime.dayNumber(level) + 1, seconds, party);
 
+        // The same run, kept for the player rather than for the board. Almost
+        // nobody tops a board; everybody wants to know how their own run went.
+        com.jrpetty.aztecabyss.data.RunHistory.get(level.getServer()).record(
+                player.getUUID(),
+                new com.jrpetty.aztecabyss.data.RunHistory.Run(
+                        System.currentTimeMillis(), "maze",
+                        com.jrpetty.aztecabyss.data.RunHistory.ESCAPED,
+                        (int) MazeRuntime.dayNumber(level) + 1, seconds,
+                        MazeEvents.grieverKills(player.getUUID()), 0,
+                        com.jrpetty.aztecabyss.maze.MazeCharts.get(level.getServer())
+                                .myPercent(player.getUUID()),
+                        party));
+
         String time = format(seconds);
         for (ServerPlayer p : level.getServer().getPlayerList().getPlayers()) {
             p.displayClientMessage(Component.literal(

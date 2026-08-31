@@ -13,6 +13,49 @@ behaviour that was already there · **docs**
 
 ## Unreleased
 
+### feat — the Changing pays off, and every run is remembered
+
+- **feat** **The fourth sting no longer just kills you.** Whoever the venom takes
+  gets back up as a Griever wearing their name, and the Glade has to put down
+  somebody they were running with an hour ago. It is the single most quoted thing
+  about this setting and it has never actually happened in the mod until now.
+
+  The victim's side is untouched, deliberately: same damage, same record, same
+  trip out of the dimension, same lockout. Nobody controls what stands up — a
+  player who dies and then gets to play the monster has not lost anything.
+
+  It comes up over two and a half seconds rather than appearing, because a
+  monster that blinks into existence is a spawn and one that claws out of the
+  floor is an event. Three beats: the floor gives (warden emerge, a shriek, a
+  column of soul), the husk swells on a widening ring of soul-fire with a
+  heartbeat under it, it cracks at the halfway mark, then it roars, thunder
+  lands, and it takes its first target. It cannot be hurt or move while it comes
+  up, so the drama is never a free hit for either side. Named and name-visible,
+  unlike every other Griever in the maze — you are meant to read this one from
+  down the corridor and know exactly what it is.
+
+- **feat** **`RunHistory`: what happened, run by run.** The boards answer "who is
+  best", which is a question about other people. Nothing answered "how did I do",
+  which is the one a player actually asks — and the game kept no memory of it at
+  all. Outcome, day or round reached, how long it lasted, kills, how much of the
+  maze you had charted, squad size, and when. Twenty runs per player, newest
+  first: a diary, not an archive.
+
+  Recorded at every ending — escaping the maze, being taken by it, turning, and
+  banking or losing an arena run.
+
+- **feat** **The Records screen has two tabs now**, still one press from the
+  portal where it always was. **Records** is the boards as before. **Your runs**
+  is the history: a summary strip (runs kept, got out, best, kills, and a count
+  of how many times you turned) over one card per run, scrollable. Each card
+  leads with its outcome in the colour of what happened — gold for getting out,
+  red for being taken, and a deeper red for the Changing, which is its own ending
+  and looks like one.
+
+  The history rides in the same packet as the boards, because somebody opening
+  Records at the portal is asking both questions at once and two packets to
+  answer one press is a screen that arrives in pieces.
+
 ### fix — the maze rebuilt itself on every boot
 
 The other half of the report, and the half that actually explains "quite an

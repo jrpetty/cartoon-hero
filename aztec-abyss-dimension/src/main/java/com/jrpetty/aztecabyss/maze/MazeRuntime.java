@@ -206,6 +206,7 @@ public final class MazeRuntime {
         // mobs standing in the region files until the next game's dawn swept
         // them, which on a quiet server is indefinitely.
         MazeNight.lift(level);
+        Griever.clearRising();
         clearLastStand(level);
         MazeRuns.clearAll();
         MazeSting.clearAll();
@@ -280,6 +281,9 @@ public final class MazeRuntime {
         boolean dawn = clock.advance(1);
         boolean midnight = clock.crossedMidnight(1);
         clock.pushSky(level);
+        // Full rate: the Changing is a two-and-a-half second beat and a beat
+        // sampled once a second is not a beat.
+        Griever.tickRisen(level);
 
         // Is what is standing what should be standing? One question covers the
         // midnight reshape, a server restart and the first day of a new game.

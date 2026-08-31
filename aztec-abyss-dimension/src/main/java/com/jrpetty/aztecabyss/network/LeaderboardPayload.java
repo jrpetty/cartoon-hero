@@ -23,8 +23,15 @@ import java.util.List;
  * is the map key with {@code #solo} or {@code #group} on the end. One flat list
  * covers every map and both boards, so opening the screen is one packet however
  * many maps a server has.
+ *
+ * <p>{@code runs} carries the asking player's own history, newest first, packed
+ * as {@code map|outcome|score|seconds|kills|revives|charted|party|when}. It rides
+ * along in the same packet because it is wanted at the same moment: somebody
+ * opening Records at the portal is asking both "what is the record" and "how did
+ * I do last time", and two packets to answer one press is a screen that arrives
+ * in pieces.
  */
-public record LeaderboardPayload(List<String> rows, List<String> labels)
+public record LeaderboardPayload(List<String> rows, List<String> labels, List<String> runs)
         implements CustomPacketPayload {
 
     public static final Type<LeaderboardPayload> TYPE =
@@ -34,6 +41,7 @@ public record LeaderboardPayload(List<String> rows, List<String> labels)
             StreamCodec.composite(
                     ByteBufCodecs.STRING_UTF8.apply(ByteBufCodecs.list()), LeaderboardPayload::rows,
                     ByteBufCodecs.STRING_UTF8.apply(ByteBufCodecs.list()), LeaderboardPayload::labels,
+                    ByteBufCodecs.STRING_UTF8.apply(ByteBufCodecs.list()), LeaderboardPayload::runs,
                     LeaderboardPayload::new);
 
     /** Field {@code index} of a packed row, or empty. */

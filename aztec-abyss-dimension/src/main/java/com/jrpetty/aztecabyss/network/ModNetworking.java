@@ -381,7 +381,16 @@ public final class ModNetworking {
                 }
             }
         }
-        PacketDistributor.sendToPlayer(player, new LeaderboardPayload(rows, labels));
+        // The asker's own history rides along - see LeaderboardPayload.
+        java.util.List<String> runs = new java.util.ArrayList<>();
+        for (com.jrpetty.aztecabyss.data.RunHistory.Run r
+                : com.jrpetty.aztecabyss.data.RunHistory.get(player.getServer())
+                        .forPlayer(player.getUUID())) {
+            runs.add(r.mapKey() + "|" + r.outcome() + "|" + r.score() + "|" + r.seconds()
+                    + "|" + r.kills() + "|" + r.revives() + "|" + r.charted()
+                    + "|" + r.party() + "|" + r.when());
+        }
+        PacketDistributor.sendToPlayer(player, new LeaderboardPayload(rows, labels, runs));
     }
 
     /** Pushes a player's squadmate list for the co-op teammate HUD. */
