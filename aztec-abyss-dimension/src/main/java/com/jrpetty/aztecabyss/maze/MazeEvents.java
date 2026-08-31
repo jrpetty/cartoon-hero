@@ -1481,16 +1481,26 @@ public final class MazeEvents {
             int days = MazeClock.get(level.getServer()).day() + 1;
             int pct = MazeCharts.get(level.getServer()).myPercent(player.getUUID());
             KICK_AT.put(player.getUUID(), level.getGameTime() + 80);
-            KICK_WORDS.put(player.getUUID(), Component.literal(
-                    "§4§lTHE MAZE TOOK YOU\n\n"
-                            + "§7You lasted §f" + days + (days == 1 ? " day" : " days")
-                            + "§7 in the corridors"
-                            + (pct > 0 ? ", and charted §f" + pct + "%§7 of the maze" : "")
-                            + ".\n"
-                            + "§7Your charts fell where you died. §8Someone can still"
-                            + " recover them.\n\n"
-                            + "§8Die and the walls put you out. There is no second try"
-                            + " at a run."));
+            KICK_WORDS.put(player.getUUID(), turned
+                    ? Component.literal(
+                            "§4§lTHE VENOM FINISHED ITS WORK\n\n"
+                                    + "§7You lasted §f" + days + (days == 1 ? " day" : " days")
+                                    + "§7 in the corridors"
+                                    + (pct > 0 ? ", and charted §f" + pct + "%§7 of the maze" : "")
+                                    + ".\n"
+                                    + "§7What stood up wears your name.\n"
+                                    + "§cYour Glade has to put it down.\n\n"
+                                    + "§8Four stings is what turns it. It was always going to be four.")
+                    : Component.literal(
+                            "§4§lTHE MAZE TOOK YOU\n\n"
+                                    + "§7You lasted §f" + days + (days == 1 ? " day" : " days")
+                                    + "§7 in the corridors"
+                                    + (pct > 0 ? ", and charted §f" + pct + "%§7 of the maze" : "")
+                                    + ".\n"
+                                    + "§7Your charts fell where you died. §8Someone can still"
+                                    + " recover them.\n\n"
+                                    + "§8Die and the walls put you out. There is no second try"
+                                    + " at a run."));
         }
     }
 

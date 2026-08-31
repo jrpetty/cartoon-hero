@@ -13,6 +13,52 @@ behaviour that was already there · **docs**
 
 ## Unreleased
 
+### The Changing, scored properly
+
+The first cut froze a full-grown Griever in place for the drama and called it a
+husk. A statue with particles on it is not a transformation — the transformation
+is the size. Rebuilt as a scene:
+
+- **feat** **It grows.** What stands up starts at a third of scale — something
+  small and wrong on the floor where a person just was — and swells to full size
+  across the rise, driven through the scale attribute tick by tick, convulsing as
+  it comes. Stone-brick debris kicks out of the floor the whole way: clawing out,
+  not materialising.
+
+- **feat** **The name is the reveal.** Until the roar the tag over the husk is
+  drawn with §k — the font's scrambling glyphs — static that has not resolved
+  yet. At the roar it snaps to the victim's name.
+
+- **feat** **Scored, with a held breath.** The heartbeat quickens from every
+  twelve ticks to every four, pitch climbing; something structural cracks on the
+  off-beats; at the halfway groan everyone within twenty blocks takes a pulse of
+  Darkness — the warden's own trick, the corridor's light dying around it. Then
+  the last dozen ticks are silent and still. Nothing. The roar lands out of that
+  silence with thunder under it, and the shockwave puts anyone stood over the
+  husk on their heels.
+
+- **feat** **The victim's last ten seconds are a ramp, not a reminder.** Their
+  heartbeat climbs second by second where everyone can hear it, and in the last
+  five their own screen closes in — pulsed Darkness while the world goes out for
+  them specifically. A turned player gets their own parting words on the
+  disconnect screen: what stood up wears your name, and your Glade has to put it
+  down.
+
+- **feat** **A Risen occasionally sounds like who it used to be** — one quiet
+  player-hurt sound roughly every ten seconds. The cheapest line in the feature
+  and the one that will get clipped.
+
+- **fix** **Restart insurance.** The rise lives in a static map, so a server
+  stopping mid-scene reloaded the mob as a no-AI, invulnerable statue that could
+  never be finished or killed. Any Risen found frozen with nobody driving it is
+  released on the spot, checked from the Griever sweep with the list it already
+  holds.
+
+- **fix** The rise no longer calls `finalizeSpawn`, which is where vanilla rolls
+  skeleton jockeys — a passenger on the husk would have turned the worst moment
+  in the maze into a joke. It also no longer inherits a random pack roll: every
+  Risen is the same fixed monster, because it is the same story every time.
+
 ### feat — the Changing pays off, and every run is remembered
 
 - **feat** **The fourth sting no longer just kills you.** Whoever the venom takes

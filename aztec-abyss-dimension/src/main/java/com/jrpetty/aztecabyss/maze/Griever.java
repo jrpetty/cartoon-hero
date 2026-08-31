@@ -175,8 +175,16 @@ public final class Griever {
     /** Marks a Griever that used to be a player. */
     public static final String RISEN = "AztecRisen";
 
-    /** How long the husk takes to come apart. Two and a half seconds. */
-    private static final int RISE_TICKS = 50;
+    /** The rise, in ticks: three and a half seconds, with a held breath in it. */
+    private static final int RISE_TICKS = 70;
+
+    /** Where the crack lands and where the silence starts, inside those ticks. */
+    private static final int CRACK_AT = 30;
+    private static final int SILENCE_AT = 58;
+
+    /** What a Risen grows into. Fixed, not rolled: this one is a story, not a pack roll. */
+    private static final double RISEN_SCALE = 2.6;
+    private static final double BORN_SCALE = 0.35;
 
     /** Risen Grievers still coming up, by entity id, with ticks remaining. */
     private static final java.util.Map<Integer, Integer> RISING = new java.util.HashMap<>();
@@ -192,14 +200,26 @@ public final class Griever {
      * <p>So they do. The victim's death is untouched: same damage, same record,
      * same trip out of the dimension, same lockout. Nobody controls what stands
      * up, because a player who dies and then gets to play the monster has not
-     * lost anything. It wears their name, which is the entire point - the Glade
-     * has to put down somebody they were running with an hour ago, and the name
-     * floating over it is what makes that land.
+     * lost anything.
      *
-     * <p>It comes up over {@link #RISE_TICKS} rather than appearing, because a
-     * monster that blinks into existence is a spawn and a monster that claws its
-     * way out of the floor is an event. It cannot be hurt and cannot move while
-     * it does, so the drama is never a free hit for either side.
+     * <h2>Why the rise is animated with the scale attribute</h2>
+     *
+     * <p>The first version of this froze a full-grown Griever in place for the
+     * length of the drama and called it a husk. A statue with particles on it is
+     * not a transformation - the transformation IS the size. So what stands up
+     * starts at {@link #BORN_SCALE} - something wet and small on the floor where
+     * a person just was - and grows into {@link #RISEN_SCALE} over the rise,
+     * convulsing as it comes. Every beat of that is visible from down the
+     * corridor, which is where your friends are standing.
+     *
+     * <p>Until the final roar its name is drawn with \u00a7k - the vanilla font's
+     * scrambling glyphs - so the tag over the husk reads as static that has not
+     * resolved yet. At the roar it snaps to the victim's name. The reveal is the
+     * point of the whole feature, so it is timed like one.
+     *
+     * <p>Deliberately no {@code finalizeSpawn}: vanilla rolls skeleton jockeys
+     * there, and a passenger on the husk would turn the worst moment in the maze
+     * into a joke. Everything a spawn would set, this sets by hand.
      */
     public static void rise(ServerLevel level, ServerPlayer victim) {
         BlockPos at = victim.blockPosition();
@@ -208,35 +228,38 @@ public final class Griever {
             return;
         }
         mob.moveTo(at.getX() + 0.5, at.getY(), at.getZ() + 0.5, victim.getYRot(), 0.0F);
-        mob.finalizeSpawn(level, level.getCurrentDifficultyAt(at), MobSpawnType.EVENT, null);
         dress(level, mob);
 
         String who = victim.getGameProfile().getName();
         mob.getPersistentData().putBoolean(RISEN, true);
         mob.getPersistentData().putString(KIND, "risen");
-        // Named and visible, unlike every other Griever in the maze. You are
-        // meant to read this one from down the corridor and know what it is.
-        mob.setCustomName(Component.literal("\u00a74\u00a7l" + who.toUpperCase(java.util.Locale.ROOT)));
+        mob.getPersistentData().putString("AztecRisenName", who);
+        // Scrambled until the roar. Same length as the real name, so the tag
+        // does not visibly change width when it resolves.
+        mob.setCustomName(Component.literal("\u00a74\u00a7k" + who.toUpperCase(java.util.Locale.ROOT)));
         mob.setCustomNameVisible(true);
-        // A shade tougher than the pack it joins - it was a runner, and it kept
-        // whatever the maze had already made of them.
+
+        // Fixed stats, not the pack roll dress() made: every Risen is the same
+        // monster, because it is the same story every time.
         AttributeInstance hp = mob.getAttribute(Attributes.MAX_HEALTH);
         if (hp != null) {
-            hp.setBaseValue(hp.getBaseValue() * 1.25);
+            hp.setBaseValue(AbyssConfig.GRIEVER_HEALTH.get() * dayScale(level) * 1.25);
         }
+        setScale(mob, BORN_SCALE);
         mob.setHealth(mob.getMaxHealth());
 
-        // Held under while the husk comes apart.
         mob.setNoAi(true);
         mob.setInvulnerable(true);
         level.addFreshEntity(mob);
         RISING.put(mob.getId(), RISE_TICKS);
 
-        // The moment itself: the floor gives, not the air.
-        level.playSound(null, at, SoundEvents.WARDEN_EMERGE, SoundSource.HOSTILE, 1.6F, 0.6F);
+        // The floor gives. Warden emerge under it, a shriek over it, the soul
+        // pulled DOWN into the husk - the spiral in tickRisen runs inward first.
+        level.playSound(null, at, SoundEvents.WARDEN_EMERGE, SoundSource.HOSTILE, 1.6F, 0.55F);
         level.playSound(null, at, SoundEvents.SCULK_SHRIEKER_SHRIEK, SoundSource.HOSTILE, 1.8F, 0.7F);
         level.sendParticles(net.minecraft.core.particles.ParticleTypes.SCULK_SOUL,
-                at.getX() + 0.5, at.getY() + 1.0, at.getZ() + 0.5, 60, 0.5, 1.0, 0.5, 0.06);
+                at.getX() + 0.5, at.getY() + 1.0, at.getZ() + 0.5, 40, 0.5, 0.9, 0.5, 0.05);
+        floorBurst(level, mob, 18);
 
         for (ServerPlayer p : level.players()) {
             p.connection.send(new net.minecraft.network.protocol.game.ClientboundSetTitleTextPacket(
@@ -249,11 +272,25 @@ public final class Griever {
     }
 
     /**
-     * Drives the husk while it comes up. Called every tick, players present.
+     * Drives the rise. Called every tick, players present.
      *
-     * <p>Three beats rather than one long effect: it swells, it cracks, then it
-     * is out. A single continuous particle stream reads as a bug; a sequence
-     * with a rhythm reads as something happening.
+     * <p>It is scored like a scene, not decorated like a spawn:
+     *
+     * <ol>
+     *   <li><b>Drawing in</b> - the soul spirals inward and down, the floor
+     *       spits debris, a heartbeat underneath, quickening.</li>
+     *   <li><b>The crack</b> - one groan, a burst, and the light around it dies
+     *       for a moment: nearby players take a pulse of Darkness, which is the
+     *       warden's own trick and reads as the corridor holding its breath.</li>
+     *   <li><b>Growth</b> - the husk swells tick by tick, twitching as it
+     *       comes. This is the transformation itself; nothing else on screen
+     *       competes with it.</li>
+     *   <li><b>The held breath</b> - the last dozen ticks are silent and
+     *       still. No particles, no heartbeat. Horror is rhythm, and the rest
+     *       before the roar is what makes the roar.</li>
+     *   <li><b>The roar</b> - thunder, the name resolves, the shockwave shoves
+     *       everyone standing too close, and it picks its first target.</li>
+     * </ol>
      */
     public static void tickRisen(ServerLevel level) {
         if (RISING.isEmpty()) {
@@ -268,49 +305,142 @@ public final class Griever {
                 continue;
             }
             int left = e.getValue() - 1;
+            e.setValue(left);
+            int done = RISE_TICKS - left;
             double x = mob.getX();
             double y = mob.getY();
             double z = mob.getZ();
-            int done = RISE_TICKS - left;
 
             if (left <= 0) {
                 it.remove();
-                mob.setNoAi(false);
-                mob.setInvulnerable(false);
-                level.playSound(null, mob.blockPosition(), SoundEvents.WARDEN_ROAR,
-                        SoundSource.HOSTILE, 2.0F, 0.45F);
-                level.playSound(null, mob.blockPosition(), SoundEvents.LIGHTNING_BOLT_THUNDER,
-                        SoundSource.HOSTILE, 1.2F, 1.4F);
-                level.sendParticles(net.minecraft.core.particles.ParticleTypes.SCULK_CHARGE_POP,
-                        x, y + 1.0, z, 80, 0.8, 0.8, 0.8, 0.25);
-                level.sendParticles(net.minecraft.core.particles.ParticleTypes.LARGE_SMOKE,
-                        x, y + 0.4, z, 50, 0.9, 0.5, 0.9, 0.05);
-                ServerPlayer near = nearestTo(level, mob);
-                if (near != null) {
-                    mob.setTarget(near);
-                }
+                release(level, mob);
                 continue;
             }
-            e.setValue(left);
 
-            // Beat one: it swells. A ring that widens as the thing under it grows.
+            // The size is the story: swell from born to full across the rise,
+            // easing in so the growth is felt mid-scene rather than spent early.
             double t = done / (double) RISE_TICKS;
-            double r = 0.4 + t * 1.6;
-            for (int i = 0; i < 3; i++) {
-                double a = (Math.PI * 2 / 3) * i + done * 0.35;
-                level.sendParticles(net.minecraft.core.particles.ParticleTypes.SOUL_FIRE_FLAME,
-                        x + Math.cos(a) * r, y + 0.1, z + Math.sin(a) * r, 1, 0.0, 0.0, 0.0, 0.0);
+            setScale(mob, BORN_SCALE + Math.pow(t, 1.6) * (RISEN_SCALE - BORN_SCALE));
+
+            if (done >= SILENCE_AT) {
+                // The held breath. Nothing. The next thing anybody hears is it.
+                continue;
             }
-            if (done % 10 == 0) {
-                level.playSound(null, mob.blockPosition(), SoundEvents.WARDEN_HEARTBEAT,
-                        SoundSource.HOSTILE, 1.4F, 0.5F);
-            }
-            // Beat two: it cracks, halfway up.
-            if (done == RISE_TICKS / 2) {
-                level.playSound(null, mob.blockPosition(), SoundEvents.SCULK_CATALYST_BLOOM,
-                        SoundSource.HOSTILE, 1.5F, 0.6F);
+
+            // Convulsing, not idling: the body wrenches a few degrees a tick.
+            float jerk = (float) ((level.random.nextDouble() - 0.5) * 24.0);
+            mob.setYRot(mob.getYRot() + jerk);
+            mob.yBodyRot = mob.getYRot();
+
+            // The soul spirals inward and down - being pulled in, not leaking out.
+            double spiral = 2.2 * (1.0 - t) + 0.3;
+            for (int i = 0; i < 2; i++) {
+                double a = done * 0.55 + i * Math.PI;
                 level.sendParticles(net.minecraft.core.particles.ParticleTypes.SCULK_SOUL,
-                        x, y + 1.2, z, 40, 0.4, 0.7, 0.4, 0.12);
+                        x + Math.cos(a) * spiral, y + 2.2 - t * 1.6, z + Math.sin(a) * spiral,
+                        1, 0.0, 0.0, 0.0, 0.0);
+            }
+            if (done % 5 == 0) {
+                floorBurst(level, mob, 3);
+            }
+
+            // The heartbeat quickens: every 12 ticks at first, every 4 near the
+            // end, pitch climbing with it.
+            int beat = Math.max(4, 13 - done / 6);
+            if (done % beat == 0) {
+                level.playSound(null, mob.blockPosition(), SoundEvents.WARDEN_HEARTBEAT,
+                        SoundSource.HOSTILE, 1.5F, 0.45F + (float) t * 0.5F);
+            }
+            // Something structural giving way, every so often.
+            if (done % 9 == 4) {
+                level.playSound(null, mob.blockPosition(), SoundEvents.TURTLE_EGG_CRACK,
+                        SoundSource.HOSTILE, 1.2F, 0.55F);
+            }
+
+            if (done == CRACK_AT) {
+                level.playSound(null, mob.blockPosition(), SoundEvents.SCULK_CATALYST_BLOOM,
+                        SoundSource.HOSTILE, 1.6F, 0.55F);
+                level.playSound(null, mob.blockPosition(), SoundEvents.RAVAGER_STUNNED,
+                        SoundSource.HOSTILE, 1.2F, 0.6F);
+                level.sendParticles(net.minecraft.core.particles.ParticleTypes.SCULK_SOUL,
+                        x, y + 1.2, z, 50, 0.5, 0.8, 0.5, 0.15);
+                floorBurst(level, mob, 14);
+                // The light around it dies for a moment - the warden's trick.
+                darknessPulse(level, mob, 60);
+            }
+        }
+    }
+
+    /** The roar: the name resolves, the corridor is shoved, and it goes to work. */
+    private static void release(ServerLevel level, Mob mob) {
+        setScale(mob, RISEN_SCALE);
+        mob.setNoAi(false);
+        mob.setInvulnerable(false);
+
+        String who = mob.getPersistentData().getString("AztecRisenName");
+        if (!who.isEmpty()) {
+            mob.setCustomName(Component.literal(
+                    "\u00a74\u00a7l" + who.toUpperCase(java.util.Locale.ROOT)));
+        }
+
+        BlockPos at = mob.blockPosition();
+        level.playSound(null, at, SoundEvents.WARDEN_ROAR, SoundSource.HOSTILE, 2.0F, 0.45F);
+        level.playSound(null, at, SoundEvents.LIGHTNING_BOLT_THUNDER, SoundSource.HOSTILE, 1.2F, 1.4F);
+        level.sendParticles(net.minecraft.core.particles.ParticleTypes.SCULK_CHARGE_POP,
+                mob.getX(), mob.getY() + 1.0, mob.getZ(), 90, 0.9, 0.9, 0.9, 0.3);
+        level.sendParticles(net.minecraft.core.particles.ParticleTypes.LARGE_SMOKE,
+                mob.getX(), mob.getY() + 0.4, mob.getZ(), 50, 1.0, 0.5, 1.0, 0.05);
+        floorBurst(level, mob, 24);
+
+        // The roar has force: anyone stood over the husk is put on their heels.
+        for (ServerPlayer p : level.players()) {
+            double d2 = p.distanceToSqr(mob);
+            if (d2 > 36.0 || d2 < 0.01) {
+                continue;
+            }
+            double dx = p.getX() - mob.getX();
+            double dz = p.getZ() - mob.getZ();
+            double len = Math.max(0.35, Math.sqrt(dx * dx + dz * dz));
+            p.setDeltaMovement(dx / len * 0.7, 0.35, dz / len * 0.7);
+            p.hurtMarked = true;
+        }
+
+        ServerPlayer near = nearestTo(level, mob);
+        if (near != null) {
+            mob.setTarget(near);
+        }
+    }
+
+    /**
+     * Restart insurance. The rise lives in a static map, so a server that stops
+     * mid-scene reloads the mob with no AI, invulnerable, and nobody driving it
+     * - a statue that can never be finished or killed. Any Risen that is frozen
+     * but not being risen gets released on the spot. Called from the Griever
+     * sweep with the list it already has, so it costs nothing extra.
+     */
+    public static void releaseOrphans(ServerLevel level, List<Mob> loaded) {
+        for (Mob g : loaded) {
+            if (g.getPersistentData().getBoolean(RISEN) && g.isNoAi()
+                    && !RISING.containsKey(g.getId())) {
+                release(level, g);
+            }
+        }
+    }
+
+    /**
+     * What a Risen sounds like between fights: a person, faintly, now and then.
+     *
+     * <p>One quiet player-hurt sound roughly every ten seconds per Risen. It is
+     * the cheapest line in this whole feature and it is the one that gets
+     * clipped: the thing hunting you down the corridor occasionally sounds like
+     * who it used to be.
+     */
+    public static void hauntRisen(ServerLevel level, List<Mob> loaded) {
+        for (Mob g : loaded) {
+            if (g.getPersistentData().getBoolean(RISEN) && !g.isNoAi()
+                    && level.random.nextInt(10) == 0) {
+                level.playSound(null, g.blockPosition(), SoundEvents.PLAYER_HURT,
+                        SoundSource.HOSTILE, 0.35F, 0.75F);
             }
         }
     }
@@ -318,6 +448,31 @@ public final class Griever {
     /** Clears the rising list. Called when a game ends. */
     public static void clearRising() {
         RISING.clear();
+    }
+
+    private static void setScale(Mob mob, double value) {
+        AttributeInstance scale = mob.getAttribute(Attributes.SCALE);
+        if (scale != null) {
+            scale.setBaseValue(value);
+        }
+    }
+
+    /** Stone-brick debris kicked out of the floor - clawing, not materialising. */
+    private static void floorBurst(ServerLevel level, Mob mob, int count) {
+        level.sendParticles(new net.minecraft.core.particles.BlockParticleOption(
+                        net.minecraft.core.particles.ParticleTypes.BLOCK,
+                        net.minecraft.world.level.block.Blocks.STONE_BRICKS.defaultBlockState()),
+                mob.getX(), mob.getY() + 0.2, mob.getZ(), count, 0.7, 0.15, 0.7, 0.12);
+    }
+
+    /** A beat of Darkness for everyone close enough to wish they were not. */
+    private static void darknessPulse(ServerLevel level, Mob mob, int ticks) {
+        for (ServerPlayer p : level.players()) {
+            if (p.distanceToSqr(mob) <= 20.0 * 20.0) {
+                p.addEffect(new net.minecraft.world.effect.MobEffectInstance(
+                        net.minecraft.world.effect.MobEffects.DARKNESS, ticks, 0, false, false));
+            }
+        }
     }
 
     private static ServerPlayer nearestTo(ServerLevel level, Mob mob) {

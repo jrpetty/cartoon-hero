@@ -171,11 +171,22 @@ public final class MazeSting {
             COUNTDOWN.put(id, now);
             player.displayClientMessage(Component.literal(
                     "§4§lTHE CHANGING §8— §c" + now + "s"), true);
-            // The last ten seconds get a heartbeat, because a number on the action
-            // bar is easy to stop looking at and a sound is not.
+            // The last ten seconds are a ramp, not a reminder. The heartbeat
+            // climbs in pitch second by second, something structural cracks on
+            // the off-beats, and in the last five the victim's own screen
+            // closes in - Darkness, pulsed, so the world is going out for them
+            // specifically while everyone nearby hears exactly why.
             if (now <= 10) {
-                level.playSound(null, player.blockPosition(), SoundEvents.WARDEN_ANGRY,
-                        SoundSource.PLAYERS, 0.7F, 0.5F);
+                level.playSound(null, player.blockPosition(), SoundEvents.WARDEN_HEARTBEAT,
+                        SoundSource.PLAYERS, 1.2F, 0.45F + (10 - now) * 0.05F);
+                if (now % 2 == 0) {
+                    level.playSound(null, player.blockPosition(), SoundEvents.TURTLE_EGG_CRACK,
+                            SoundSource.PLAYERS, 0.9F, 0.5F);
+                }
+                if (now <= 5) {
+                    player.addEffect(new MobEffectInstance(
+                            MobEffects.DARKNESS, 35, 0, false, false));
+                }
             }
         }
     }

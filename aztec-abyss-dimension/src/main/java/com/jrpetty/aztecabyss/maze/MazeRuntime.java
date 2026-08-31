@@ -1309,6 +1309,10 @@ public final class MazeRuntime {
         // The day-stalker walks the corridors in daylight by design - the dawn
         // sweep that clears the night pack must not clear it with them.
         loaded.removeIf(g -> g.getPersistentData().getBoolean(Griever.STALKER));
+        // Restart insurance for the Changing: a Risen frozen mid-scene with
+        // nobody driving it is released on sight. Costs nothing - this list was
+        // already in hand.
+        Griever.releaseOrphans(level, loaded);
         if (!isNight(t) || !AbyssConfig.GRIEVERS_ENABLED.get()) {
             // Dawn: whatever is left walks back to the corners it came out of,
             // and is cleared once it is there and out of everybody's way.
@@ -1324,6 +1328,7 @@ public final class MazeRuntime {
         }
         // Before anything else: the clearing is not theirs, ever.
         Griever.keepOut(level, loaded);
+        Griever.hauntRisen(level, loaded);
         RandomSource rng = level.random;
         List<ServerPlayer> runners = new ArrayList<>();
         for (ServerPlayer p : level.players()) {
