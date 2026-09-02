@@ -52,8 +52,14 @@ import java.util.Map;
 @PrefixGameTestTemplate(false)
 public final class SmokeTests {
 
-    /** A one-block structure of air: the tests need a template and want no world. */
-    private static final String EMPTY = AztecAbyssConstants.MOD_ID + ":empty";
+    /**
+     * A one-block structure of air: the tests need a template and want no world.
+     *
+     * <p>Bare name, not namespaced: the framework prefixes the holder's
+     * namespace itself, and a namespaced value here became
+     * {@code aztecabyss:aztecabyss:empty} and crashed the first run.
+     */
+    private static final String EMPTY = "empty";
 
     private SmokeTests() {
     }
