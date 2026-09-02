@@ -7,7 +7,6 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
-import net.minecraft.world.effect.MobEffectInstance;
 import net.minecraft.world.effect.MobEffects;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Item;
@@ -84,38 +83,84 @@ public final class MazeInduction {
     }
 
     /**
-     * Nobody moves until they choose.
+     * Where each unchosen player is being kept, by id.
      *
-     * <p>Slowness at maximum stops the walking and negative jump stops the
-     * hopping over it, which between them is the whole of a player's ability to
-     * leave. Refreshed every second at two seconds' duration so it lapses on its
-     * own the instant they choose, with nothing to remember to undo.
+     * <p>Transient on purpose: a restart simply re-anchors on the next tick,
+     * and a player who leaves the dimension is forgotten by the change hook.
+     */
+    private static final java.util.Map<java.util.UUID, net.minecraft.world.phys.Vec3> HELD =
+            new java.util.HashMap<>();
+
+    /** How far a held player may drift before being stood back: a step and a half. */
+    private static final double DRIFT_SQ = 1.5 * 1.5;
+
+    /** Ticks between re-sends of the sheet while unchosen. Insurance, not nagging. */
+    private static final int RESEND_EVERY = 60;
+
+    /**
+     * Somebody has just come up. Anchor them and put the decision in front of
+     * them. Called from the dimension-change hook the moment they arrive, and
+     * from {@link #hold} for anybody the hook never saw (a restart mid-choice).
+     */
+    public static void arrived(ServerLevel level, ServerPlayer p) {
+        if (p.isCreative() || p.isSpectator()
+                || MazeJobs.get(level).jobOf(p.getUUID()) != null) {
+            return;
+        }
+        HELD.put(p.getUUID(), p.position());
+        com.jrpetty.aztecabyss.network.ModNetworking.sendInduction(p);
+    }
+
+    /** They chose, or they left: nothing is holding them any more. */
+    public static void forget(java.util.UUID id) {
+        HELD.remove(id);
+    }
+
+    /**
+     * Nobody moves until they choose - and nothing touches their camera.
+     *
+     * <p>This used to be Slowness at amplifier 250 and Jump Boost at 200,
+     * refreshed every second. Vanilla scales the field of view with movement
+     * speed, so a speed of nothing halved the FOV: the first thing the maze
+     * did to every new player was zoom their camera in and hold it there for
+     * as long as it took them to find a board they could not walk to. And no
+     * screen ever opened - the decision was a chat line and a command.
+     *
+     * <p>Now the hold is the induction screen itself. A screen that cannot be
+     * dismissed until a trade is chosen blocks every movement key by the
+     * ordinary rules of having a screen open, with no effect on speed, jump
+     * or view. The server's part is insurance: re-send the sheet every few
+     * seconds in case the first copy was lost in the dimension change, and
+     * stand anybody who has somehow drifted back on the spot they arrived -
+     * silently, without an effect, so there is nothing to feel.
      */
     private static void hold(ServerLevel level, ServerPlayer p) {
-        p.addEffect(new MobEffectInstance(MobEffects.MOVEMENT_SLOWDOWN, 40, 250, false, false));
-        p.addEffect(new MobEffectInstance(MobEffects.JUMP, 40, 200, false, false));
-        p.setDeltaMovement(net.minecraft.world.phys.Vec3.ZERO);
-
-        p.displayClientMessage(Component.literal(
-                "§e§lCHOOSE A TRADE §8— §7right-click a post on the board by the bell"), true);
-        // The full pitch every five seconds. Once would be missed by anybody
-        // still loading in; every second would be unreadable.
-        if (level.getGameTime() % 100L == 0L) {
-            p.connection.send(new ClientboundSetTitleTextPacket(
-                    Component.literal("§e§lWHAT ARE YOU?")));
-            p.connection.send(new ClientboundSetSubtitleTextPacket(
-                    Component.literal("§7The Box does not let go until you say")));
-            for (String job : MazeJobs.ALL) {
-                p.displayClientMessage(Component.literal(
-                        "  " + MazeJobs.display(job) + " §8/maze job " + job
-                                + "  §7" + MazeJobs.blurb(job).substring(2)), false);
-            }
-            level.playSound(null, p.blockPosition(), SoundEvents.ANVIL_LAND,
-                    SoundSource.BLOCKS, 0.7F, 0.8F);
+        net.minecraft.world.phys.Vec3 anchor = HELD.get(p.getUUID());
+        if (anchor == null) {
+            arrived(level, p);
+            return;
         }
+        // Horizontal only. The arrival point may sit a block above the floor,
+        // and a hold that measured height would catch the landing and stand a
+        // falling player back in the air forever.
+        double dx = p.getX() - anchor.x;
+        double dz = p.getZ() - anchor.z;
+        if (dx * dx + dz * dz > DRIFT_SQ) {
+            p.teleportTo(level, anchor.x, p.getY(), anchor.z, java.util.Set.of(),
+                    p.getYRot(), p.getXRot());
+            p.setDeltaMovement(net.minecraft.world.phys.Vec3.ZERO);
+        }
+        if (level.getGameTime() % RESEND_EVERY == 0L) {
+            com.jrpetty.aztecabyss.network.ModNetworking.sendInduction(p);
+        }
+        p.displayClientMessage(Component.literal(
+                "§e§lCHOOSE A TRADE §8— §7the Box does not let go until you say"), true);
     }
 
     private static void release(ServerPlayer p) {
+        HELD.remove(p.getUUID());
+        // Anybody still carrying the old effect-based hold across an upgrade
+        // is let go of properly; on a fresh world these are no-ops.
         p.removeEffect(MobEffects.MOVEMENT_SLOWDOWN);
         p.removeEffect(MobEffects.JUMP);
     }

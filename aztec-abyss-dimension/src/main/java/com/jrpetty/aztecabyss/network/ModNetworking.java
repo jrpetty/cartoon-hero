@@ -121,6 +121,11 @@ public final class ModNetworking {
                 TradeBoardPayload.STREAM_CODEC,
                 (payload, context) -> context.enqueueWork(
                         () -> ClientAbyssState.openTradeBoard(payload)));
+        registrar.playToClient(
+                MazeInductionPayload.TYPE,
+                MazeInductionPayload.STREAM_CODEC,
+                (payload, context) -> context.enqueueWork(
+                        () -> ClientAbyssState.openInduction(payload)));
         registrar.playToServer(
                 TradeChoicePayload.TYPE,
                 TradeChoicePayload.STREAM_CODEC,
@@ -195,6 +200,39 @@ public final class ModNetworking {
                 com.jrpetty.aztecabyss.maze.MazeJobs.description(job),
                 takers.toString(),
                 current == null ? "" : com.jrpetty.aztecabyss.maze.MazeJobs.display(current)));
+    }
+
+    /**
+     * The induction sheet: all four trades, for somebody who has not chosen.
+     *
+     * <p>Roster lines are built the same way the board's sheet builds them,
+     * because "the Glade already has two Runners and nobody farming" is half
+     * of the decision and the only part the client cannot know.
+     */
+    public static void sendInduction(ServerPlayer player) {
+        if (player.getServer() == null) {
+            return;
+        }
+        var jobs = com.jrpetty.aztecabyss.maze.MazeJobs.get(player.getServer());
+        java.util.List<String> cards = new java.util.ArrayList<>();
+        for (String job : com.jrpetty.aztecabyss.maze.MazeJobs.ALL) {
+            StringBuilder takers = new StringBuilder();
+            for (ServerPlayer p : player.getServer().getPlayerList().getPlayers()) {
+                if (p != player && jobs.is(p.getUUID(), job)) {
+                    if (!takers.isEmpty()) {
+                        takers.append("§8, ");
+                    }
+                    takers.append("§f").append(p.getGameProfile().getName());
+                }
+            }
+            cards.add(job
+                    + "|" + com.jrpetty.aztecabyss.maze.MazeJobs.display(job)
+                    + "|" + com.jrpetty.aztecabyss.maze.MazeJobs.blurb(job)
+                    + "|" + com.jrpetty.aztecabyss.maze.MazeJobs.description(job)
+                    + "|" + takers
+                    + "|" + com.jrpetty.aztecabyss.maze.MazeJobs.perkLine(job, 1));
+        }
+        PacketDistributor.sendToPlayer(player, new MazeInductionPayload(cards));
     }
 
     public static void sendSkills(ServerPlayer player) {

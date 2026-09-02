@@ -13,6 +13,26 @@ behaviour that was already there · **docs**
 
 ## Unreleased
 
+### Coming up into the Glade
+
+- **fix** **The induction screen actually opens.** Arriving in the maze with
+  no trade used to freeze you in the Box while chat told you to right-click a
+  post on a board you could not walk to — a soft-lock with instructions. Now
+  the decision is put in front of you the moment you arrive: four cards, one
+  per trade, with the pitch, the actual kit you would come up with as item
+  icons (hover for names), who already wears it, and what your first rank
+  buys. Pick one to read the long version; press the button to come up as it.
+  Keys 1–4 and Enter work too. Re-sent every few seconds as insurance against a
+  packet lost in the dimension change; a repeat refreshes the roster in place
+  rather than yanking you back to the top.
+- **fix** **No more zoom on arrival.** The old hold was Slowness at amplifier
+  250, and vanilla scales the field of view with movement speed — so a speed
+  of nothing halved your FOV and held it there. The hold is now the screen
+  itself (a screen you cannot dismiss blocks every movement key by the ordinary
+  rules), plus a silent horizontal anchor as belt-and-brace. Nothing touches
+  your camera, your speed or your legs.
+- **change** The `/maze job` chat spam every five seconds is gone with it.
+
 ### The portal picker fits its window
 
 - **fix** **Cards no longer overlap the header or the buttons.** The stack was

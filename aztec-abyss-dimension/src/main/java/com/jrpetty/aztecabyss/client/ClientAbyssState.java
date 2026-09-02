@@ -88,6 +88,24 @@ public final class ClientAbyssState {
                 new com.jrpetty.aztecabyss.client.TradeBoardScreen(payload));
     }
 
+    /**
+     * The induction: all four trades, for a Greenie who may not move yet.
+     *
+     * <p>A repeat while the screen is already up refreshes its roster lines
+     * in place rather than replacing the screen - the server re-sends every
+     * few seconds as insurance, and insurance must not yank somebody mid-read
+     * back to the top of the sheet.
+     */
+    public static void openInduction(com.jrpetty.aztecabyss.network.MazeInductionPayload payload) {
+        if (Minecraft.getInstance().screen
+                instanceof com.jrpetty.aztecabyss.client.MazeInductionScreen open) {
+            open.refresh(payload);
+            return;
+        }
+        Minecraft.getInstance().setScreen(
+                new com.jrpetty.aztecabyss.client.MazeInductionScreen(payload));
+    }
+
     /** The trade sheet, opened fresh each time the server sends one. */
     public static void openSkills(com.jrpetty.aztecabyss.network.SkillTreePayload payload) {
         Minecraft.getInstance().setScreen(

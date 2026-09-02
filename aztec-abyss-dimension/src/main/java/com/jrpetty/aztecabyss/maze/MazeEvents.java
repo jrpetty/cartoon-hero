@@ -1110,6 +1110,10 @@ public final class MazeEvents {
             player.displayClientMessage(Component.literal("§7You already are one."), false);
             return;
         }
+        // Let go of them now, not on the next second's tick: the screen has
+        // already closed, and being stood back on the spot for a step taken
+        // in that second would read as the game disagreeing with itself.
+        MazeInduction.forget(player.getUUID());
         int rank = jobs.levelOf(player.getUUID(), job);
         player.displayClientMessage(Component.literal(
                 "§7You are a " + MazeJobs.display(job) + " §8lv" + rank), false);
@@ -1662,10 +1666,14 @@ public final class MazeEvents {
             MazeRuns.abandon(event.getEntity().getUUID());
             MazeRuntime.onPlayerLeft(event.getEntity().getUUID());
             MazeSting.clear(event.getEntity().getUUID());
+            MazeInduction.forget(event.getEntity().getUUID());
         }
         if (event.getTo().equals(AztecAbyssConstants.MAZE_LEVEL_KEY)
                 && event.getEntity() instanceof ServerPlayer p) {
             MazeAdvancements.grant(p, MazeAdvancements.ROOT);
+            // The decision, in front of them, the moment they arrive - not a
+            // second later when the runtime notices, and never as chat.
+            MazeInduction.arrived(p.serverLevel(), p);
         }
     }
 
