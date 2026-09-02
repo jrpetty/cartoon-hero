@@ -45,6 +45,43 @@ jobs:
           done
           exit 1
 
+      - name: Boot a server and run the smoke tests
+        # The jar has compiled; now something has to actually run it before a
+        # player does. NeoForge's game-test server starts a headless dedicated
+        # server with the mod installed, runs the @GameTest methods in
+        # com.jrpetty.aztecabyss.gametest, and exits non-zero on any failure.
+        # A boot that throws fails the same way. Nothing below this step runs
+        # unless it passes, so a broken build can never become the dist jar.
+        shell: bash
+        run: |
+          set -o pipefail
+          timeout 25m ./gradlew runGameTestServer --no-daemon 2>&1 | tee gametest.log
+
+      - name: Fail on any exception that passed through mod code
+        # The game-test server exits 0 if every test passed, but an exception
+        # logged and swallowed somewhere in a tick is exactly the kind of thing
+        # a live server suffers and a green test misses. Any stack frame of
+        # ours in the boot log is a failure.
+        shell: bash
+        run: |
+          if grep -nE '^\s+at com\.jrpetty\.aztecabyss' gametest.log; then
+            echo "::error::mod code appears in a stack trace during the smoke run"
+            exit 1
+          fi
+          if grep -nE 'ERROR\]?[^\n]*aztecabyss' gametest.log | grep -v 'GameTest' ; then
+            echo "::error::the mod logged at ERROR during the smoke run"
+            exit 1
+          fi
+          echo "smoke run clean"
+
+      - name: Keep the smoke log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gametest-log
+          path: aztec-abyss-dimension/gametest.log
+          if-no-files-found: ignore
+
       - name: Upload jar artifact
         uses: actions/upload-artifact@v4
         with:

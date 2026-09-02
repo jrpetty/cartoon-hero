@@ -13,6 +13,27 @@ behaviour that was already there · **docs**
 
 ## Unreleased
 
+### The build boots a server before it ships
+
+Nothing in this project had ever run before it reached the live server: CI
+compiled the jar and a human read the bytecode, and the first process to load
+the mod was the production server, in front of players. That is where every
+recent error came from, and it stops here.
+
+- **feat** **A headless dedicated server boots the mod in CI**, on every push,
+  before the jar is published. NeoForge's game-test server starts with the mod
+  installed, runs the smoke tests below, and fails the build if any fails - or
+  if the boot itself throws. Any stack frame of the mod's own code in the boot
+  log fails it too, so an exception swallowed in a tick is caught, not shipped.
+  A build that fails never becomes the dist jar.
+- **feat** **Smoke tests** (`gametest/SmokeTests`): both dimensions load; all
+  eight shipped rulesets parse with zero unrecognised keys and zero script
+  warnings, carry a title and blurb, and the free-mode ones actually parse as
+  free (the Key Hunt bug, as a test); the maze's fixed geometry agrees with
+  itself (holes never in the Glade, doors on the rim, every layout's exit
+  exists); every hand-written payload codec round-trips; the map validator
+  reports a missing spawn against real chunks.
+
 ### Nothing of the Abyss follows you out
 
 - **fix** **The round bar no longer haunts the overworld.** Every planned exit

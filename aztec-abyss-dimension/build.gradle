@@ -38,6 +38,15 @@ neoForge {
             programArgument '--nogui'
             systemProperty 'neoforge.enabledGameTestNamespaces', project.mod_id
         }
+        // The smoke run CI uses: boots a headless dedicated server with the mod,
+        // runs every @GameTest under com.jrpetty.aztecabyss.gametest, and exits
+        // non-zero on any failure - or on a boot that throws. No world, no EULA,
+        // no player; the jar is published only if this comes back clean.
+        gameTestServer {
+            type = 'gameTestServer'
+            gameDirectory = project.file('run/gametest')
+            systemProperty 'neoforge.enabledGameTestNamespaces', project.mod_id
+        }
     }
 
     mods {
