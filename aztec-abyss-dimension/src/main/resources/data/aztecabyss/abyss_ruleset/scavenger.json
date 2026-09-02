@@ -1,5 +1,7 @@
 {
   "_comment": "Money is a real item. Scrap takes inventory space, can be thrown to a teammate across the map, and lies on the floor where you died for whoever dares go and get it. Same engine, different game.",
+  "title": "Scavenger",
+  "blurb": "Your money is scrap in your pockets: throw it to a friend, drop it when you die, and it lies where you fell.",
   "rounds": {
     "mode": "endless",
     "base_count": 8,

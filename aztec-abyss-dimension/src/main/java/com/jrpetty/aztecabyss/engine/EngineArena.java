@@ -880,6 +880,19 @@ public final class EngineArena {
         // map is the script, and the script ends it. Everything above this line is
         // still live, because shops, doors, traps, regions and variables were
         // never really about rounds.
+        // The Director listens in both modes. Free maps have no horde for it
+        // to pace, but the measurement - and the intensity condition and the
+        // pressure_high / pressure_low events that read it - mean exactly as
+        // much in a map that builds its own pressure, so the sampling sits
+        // above the free-mode return.
+        if (level.getGameTime() % 20L == 0L) {
+            director.sample(present);
+            String turn = director.pollSwing();
+            if (turn != null) {
+                Script.fire(this, level, rules.id, turn,
+                        present.isEmpty() ? null : present.get(0));
+            }
+        }
         if (rules.free) {
             tickFreeBar(present);
             return;
@@ -891,9 +904,6 @@ public final class EngineArena {
         }
         alive.removeIf(m -> !m.isAlive());
         tickZones(present);
-        if (level.getGameTime() % 20L == 0L) {
-            director.sample(present);
-        }
 
         if (breather > 0) {
             tickExtraction(present);

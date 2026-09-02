@@ -1,5 +1,7 @@
 {
   "_comment": "Endless, with the Director on. Difficulty tracks how the squad is actually doing rather than what round it is, so this stays a fight for good players and a survivable one for the rest.",
+  "title": "No Last Round",
+  "blurb": "Endless, and the Director is watching how you are actually doing \u2014 a fight for the good, survivable for the rest.",
   "rounds": {
     "mode": "endless",
     "base_count": 10,
@@ -40,19 +42,19 @@
     {
       "every": 5,
       "role": "runner",
-      "title": "§cTHEY ARE FAST",
+      "title": "\u00a7cTHEY ARE FAST",
       "subtitle": "Nothing slow this round"
     },
     {
       "every": 10,
       "role": "brute",
-      "title": "§4HEAVY",
+      "title": "\u00a74HEAVY",
       "subtitle": "Nothing here dies quickly"
     },
     {
       "every": 7,
       "no_powerups": true,
-      "title": "§8NO HELP",
+      "title": "\u00a78NO HELP",
       "subtitle": "Nothing is coming for you"
     }
   ],
@@ -123,7 +125,7 @@
       "do": [
         {
           "title": {
-            "main": "§4NO LAST ROUND",
+            "main": "\u00a74NO LAST ROUND",
             "sub": "Leave while you still can"
           }
         }
@@ -139,7 +141,7 @@
       "do": [
         {
           "title": {
-            "main": "§4§lSOMETHING ELSE"
+            "main": "\u00a74\u00a7lSOMETHING ELSE"
           }
         },
         {
@@ -187,7 +189,7 @@
           }
         },
         {
-          "actionbar": "§7The dark pays you to keep going."
+          "actionbar": "\u00a77The dark pays you to keep going."
         }
       ]
     },
@@ -196,7 +198,7 @@
       "do": [
         {
           "title": {
-            "main": "§6BANKED",
+            "main": "\u00a76BANKED",
             "sub": "You chose the moment"
           }
         },

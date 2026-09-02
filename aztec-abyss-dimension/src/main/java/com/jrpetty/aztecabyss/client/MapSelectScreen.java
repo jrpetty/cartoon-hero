@@ -38,7 +38,7 @@ public final class MapSelectScreen extends Screen {
     private int selected;
     /** Kept so a card click can rename it after the selection it acts on. */
     private Button enterButton;
-    /** Published maps, packed as {@code name|title|difficulty|blurb} by the server. */
+    /** Published maps, packed by the server - see {@link com.jrpetty.aztecabyss.network.OpenMapPickerPayload}. */
     private final java.util.List<String> customMaps;
 
     public MapSelectScreen(int currentChoice, int[] bestRounds, java.util.List<String> customMaps) {
@@ -118,26 +118,22 @@ public final class MapSelectScreen extends Screen {
                         })
                 .bounds(this.width / 2 - 110, this.height - 68, 220, 20)
                 .build());
-        // Published maps get a row of their own above the built-in modes. A button
-        // per map rather than a card, because there may be twenty of them and the
-        // three hand-built arenas are the thing this screen is mainly for.
-        int cy = this.height - 116;
-        int shown = Math.min(customMaps.size(), 4);
-        for (int i = 0; i < shown; i++) {
-            String packed = customMaps.get(i);
-            String name = com.jrpetty.aztecabyss.network.OpenMapPickerPayload.field(packed, 0);
-            String title = com.jrpetty.aztecabyss.network.OpenMapPickerPayload.field(packed, 1);
-            String diff = com.jrpetty.aztecabyss.network.OpenMapPickerPayload.field(packed, 2);
-            int w = 220 / Math.max(1, shown);
-            addRenderableWidget(Button.builder(
-                            Component.literal("§d" + title + " §8" + diff), b -> {
-                                PacketDistributor.sendToServer(new MapSelectPayload(
-                                        MapSelectPayload.CUSTOM_BASE + indexOfName(name)));
-                                onClose();
-                            })
-                    .bounds(this.width / 2 - 110 + i * w, cy, w - 2, 20)
-                    .build());
-        }
+        // Published maps used to be a row of up to four cramped buttons here -
+        // title and difficulty crushed into fifty pixels, author and blurb
+        // nowhere, and the fifth map onward simply not offered. They are a
+        // browser now: one door on this screen, and a whole screen of cards
+        // behind it, however many the server has.
+        addRenderableWidget(Button.builder(
+                        Component.literal(customMaps.isEmpty()
+                                ? "§8Player maps §7— none published yet"
+                                : "§dPlayer maps §8— " + customMaps.size() + " on the portal"),
+                        b -> {
+                            if (minecraft != null) {
+                                minecraft.setScreen(new PlayerMapsScreen(customMaps, this));
+                            }
+                        })
+                .bounds(this.width / 2 - 110, this.height - 116, 220, 20)
+                .build());
 
         // Creator is set apart further still - it is the only thing on this screen
         // that is not a fight. Listed rather than left to be discovered, because a
@@ -153,17 +149,6 @@ public final class MapSelectScreen extends Screen {
 
     private Component enterLabel() {
         return Component.literal("Enter — " + ArenaMap.values()[selected].title());
-    }
-
-    /** Where a published map sits in the server's list, which is what it is picked by. */
-    private int indexOfName(String name) {
-        for (int i = 0; i < customMaps.size(); i++) {
-            if (com.jrpetty.aztecabyss.network.OpenMapPickerPayload
-                    .field(customMaps.get(i), 0).equals(name)) {
-                return i;
-            }
-        }
-        return 0;
     }
 
     /** The whole card is the click target, so selection feels like picking a tile. */

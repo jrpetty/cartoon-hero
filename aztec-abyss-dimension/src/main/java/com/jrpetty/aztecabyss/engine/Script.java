@@ -209,7 +209,9 @@ public final class Script {
             "purchase", "powerup_taken", "objective_damaged",
             "block_placed", "item_dropped", "interact_entity", "timer_end",
             // Boards coming off and going back on.
-            "barricade_broken", "barricade_repaired", "boss_phase");
+            "barricade_broken", "barricade_repaired", "boss_phase",
+            // The Director's turns: the run starting to boil, and the calm after.
+            "pressure_high", "pressure_low");
 
     /** Every action the runner understands. */
     private static final java.util.Set<String> ACTIONS = java.util.Set.of(
@@ -235,7 +237,7 @@ public final class Script {
             "round", "area_open", "region", "var", "my_var", "team", "team_var", "seconds", "block",
             "has_item", "killed", "chance", "phase", "subject", "players",
             "saved_var", "my_saved_var", "tag", "not", "timer", "amount",
-            "level", "skill");
+            "level", "skill", "intensity");
 
     public static List<String> warnings(String rulesetId) {
         return WARNINGS.getOrDefault(rulesetId, List.of());
@@ -320,6 +322,121 @@ public final class Script {
     /** How many named functions a ruleset declared, for {@code /arena rules}. */
     public static int functionCount(String rulesetId) {
         return FUNCTIONS.getOrDefault(rulesetId, Map.of()).size();
+    }
+
+    /**
+     * Every region name the ruleset's rules test for, lower-cased.
+     *
+     * <p>For publish-time validation: a rule that says {@code "region": "vault"}
+     * on a map with no region called vault is a rule that can never pass, and
+     * nothing else will ever say so - the region condition treats an unknown
+     * name as an ordinary mismatch, which is correct at runtime and silent at
+     * authoring time. Walks nested {@code if}/{@code one_of}/{@code delay}
+     * blocks too, because a condition three branches down is exactly as silent
+     * as one at the top.
+     */
+    public static java.util.Set<String> regionsReferenced(String rulesetId) {
+        java.util.Set<String> out = new java.util.HashSet<>();
+        walkRuleset(rulesetId, out, new java.util.HashSet<>());
+        return out;
+    }
+
+    /**
+     * Every area name the ruleset's {@code open_area} actions name, lower-cased.
+     * Same purpose as {@link #regionsReferenced}: an {@code open_area} whose
+     * name is on no door and no horde marker opens nothing, silently.
+     */
+    public static java.util.Set<String> areasOpened(String rulesetId) {
+        java.util.Set<String> out = new java.util.HashSet<>();
+        walkRuleset(rulesetId, new java.util.HashSet<>(), out);
+        return out;
+    }
+
+    private static void walkRuleset(String rulesetId,
+                                    java.util.Set<String> regions, java.util.Set<String> areas) {
+        for (List<Rule> rules : BY_RULESET.getOrDefault(rulesetId, Map.of()).values()) {
+            for (Rule r : rules) {
+                collectRegions(r.when(), regions);
+                collectIn(r.actions(), regions, areas, 0);
+            }
+        }
+        for (JsonArray fn : FUNCTIONS.getOrDefault(rulesetId, Map.of()).values()) {
+            collectIn(fn, regions, areas, 0);
+        }
+    }
+
+    private static void collectRegions(JsonObject when, java.util.Set<String> out) {
+        if (when == null) {
+            return;
+        }
+        if (when.has("region")) {
+            String v = str(when, "region", "");
+            if (!v.isEmpty()) {
+                out.add(v.toLowerCase(Locale.ROOT));
+            }
+        }
+        if (when.has("not") && when.get("not").isJsonObject()) {
+            collectRegions(when.getAsJsonObject("not"), out);
+        }
+    }
+
+    private static void collectIn(JsonArray actions, java.util.Set<String> regions,
+                                  java.util.Set<String> areas, int depth) {
+        if (actions == null || depth > MAX_DEPTH) {
+            return;
+        }
+        for (JsonElement el : actions) {
+            if (!el.isJsonObject()) {
+                continue;
+            }
+            JsonObject o = el.getAsJsonObject();
+            for (String k : o.keySet()) {
+                JsonElement b = o.get(k);
+                switch (k.toLowerCase(Locale.ROOT)) {
+                    case "open_area" -> {
+                        String v = asText(b).toLowerCase(Locale.ROOT);
+                        if (!v.isEmpty()) {
+                            areas.add(v);
+                        }
+                    }
+                    case "if" -> {
+                        if (b.isJsonObject()) {
+                            JsonObject io = b.getAsJsonObject();
+                            if (io.has("when") && io.get("when").isJsonObject()) {
+                                collectRegions(io.getAsJsonObject("when"), regions);
+                            }
+                            if (io.has("do") && io.get("do").isJsonArray()) {
+                                collectIn(io.getAsJsonArray("do"), regions, areas, depth + 1);
+                            }
+                            if (io.has("else") && io.get("else").isJsonArray()) {
+                                collectIn(io.getAsJsonArray("else"), regions, areas, depth + 1);
+                            }
+                        }
+                    }
+                    case "delay", "every" -> {
+                        if (b.isJsonObject() && b.getAsJsonObject().has("do")
+                                && b.getAsJsonObject().get("do").isJsonArray()) {
+                            collectIn(b.getAsJsonObject().getAsJsonArray("do"),
+                                    regions, areas, depth + 1);
+                        }
+                    }
+                    case "one_of" -> {
+                        if (b.isJsonArray()) {
+                            for (JsonElement br : b.getAsJsonArray()) {
+                                if (br.isJsonObject() && br.getAsJsonObject().has("do")
+                                        && br.getAsJsonObject().get("do").isJsonArray()) {
+                                    collectIn(br.getAsJsonObject().getAsJsonArray("do"),
+                                            regions, areas, depth + 1);
+                                }
+                            }
+                        }
+                    }
+                    default -> {
+                        // A plain verb carries no conditions and opens nothing.
+                    }
+                }
+            }
+        }
     }
 
     /**
@@ -806,6 +923,24 @@ public final class Script {
                 return false;
             }
             if (t.has("running") && (left > 0) != t.get("running").getAsBoolean()) {
+                return false;
+            }
+        }
+        // How the run is actually going, as the Director measures it: 0 is
+        // untouched, 100 is somebody about to die, smoothed so one bad second
+        // is not a spike. This is the engine's own read of tension handed to
+        // the author - "when": {"intensity": {"at_least": 70}} on a tick rule
+        // is a crescendo scored off pressure that genuinely exists, where a
+        // round-number rule is a guess about when pressure usually happens.
+        // Percent rather than a fraction because every number in this grammar
+        // is an integer, and one exception would be the one everybody trips on.
+        if (when.has("intensity") && when.get("intensity").isJsonObject()) {
+            JsonObject n = when.getAsJsonObject("intensity");
+            int now = Math.round(arena.director().intensity() * 100.0f);
+            if (n.has("at_least") && now < intOf(n, "at_least", 0)) {
+                return false;
+            }
+            if (n.has("at_most") && now > intOf(n, "at_most", Integer.MAX_VALUE)) {
                 return false;
             }
         }
@@ -2423,6 +2558,14 @@ public final class Script {
                         rankOf(arena, viewer, a.toLowerCase(Locale.ROOT)));
             case "rule":
                 return String.valueOf((int) arena.ruleNow(a.toLowerCase(Locale.ROOT)));
+            case "intensity":
+                // The Director's pressure reading, 0-100. Same unit as the
+                // condition, so a bar showing it and a rule reading it agree.
+                return String.valueOf(Math.round(arena.director().intensity() * 100.0f));
+            case "pace":
+                // How hard the Director is leaning, as a percentage of normal:
+                // 100 is neutral, 150 is half again as fast.
+                return String.valueOf(Math.round(arena.director().pace() * 100.0f));
             case "round":
                 return String.valueOf(arena.round());
             case "seconds":

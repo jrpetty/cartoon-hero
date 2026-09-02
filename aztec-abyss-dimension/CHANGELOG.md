@@ -13,6 +13,68 @@ behaviour that was already there · **docs**
 
 ## Unreleased
 
+### The maze learns object permanence
+
+- **feat** **Grievers go home.** One with nobody to hunt used to stand exactly
+  where its last chase ended, forever. Now it walks back to the nearest
+  Griever hole and prowls the mouth — the holes become the geography of the
+  night, and the corridors near one stay frightening at all hours because that
+  is where the unemployed wait.
+- **fix** **No more wall-hack locks.** A forced target (spawn, noise, the
+  Risen's roar) was permanent: a Griever that heard you once would pathfind at
+  you through every wall on the map until one of you died. The lock is now
+  perception — line of sight or noise in earshot keeps it warm, ten quiet
+  unseen seconds break it, and vanilla's own re-acquisition already needs line
+  of sight. Round a corner, go quiet, and you have actually escaped. A dry
+  rasp marks the moment it loses you. Venom now breaks a lock too.
+- **feat** **Solo scaling.** The maze assumed a squad: the cap scaled count
+  per runner, so a lone runner met as many Grievers per head as a crew of five
+  and each took three times as long to kill with nobody to peel it off. Solo
+  Grievers now carry ~60% health and pull their blows, duos ~80%, three-plus
+  is full strength; a small crew's night also fills slower, and a lone
+  defender's raid is two attackers at a three-wide breach instead of three at
+  four. Announced each morning — a hidden handicap reads as an easy game, not
+  a fair one.
+- **feat** **Waypoint torches on the chart.** The hub's chart page now draws
+  every standing soul-torch waypoint as a flickering soul-flame point, block-
+  precise, swept against the world at open so a torch the reshape walled over
+  is not still burning on the sheet.
+
+### The engine: tension, shelves, and honest publishing
+
+- **feat** **The Director is authorable.** Its pressure reading was
+  engine-private. Now `when: {"intensity": {"at_least": 70}}` reads it (0–100),
+  `pressure_high` / `pressure_low` fire once at the turns (70% up / 30% down,
+  with hysteresis so boss music cannot stutter), and `{intensity}` / `{pace}`
+  are placeholders. Works in free mode too — nothing to pace there, but the
+  measurement means just as much. See MAPMAKING.md, "The Director, scriptable".
+- **feat** **Rulesets introduce themselves.** `title` and `blurb` fields; all
+  eight shipped rulesets got an authored sentence each. Shown in `/arena
+  rules` and on the portal's new browser — a menu of games instead of a shelf
+  of file ids.
+- **feat** **Player maps are browsable on the portal.** The picker's cramped
+  row of four buttons became one door to a scrolling shelf of cards — every
+  published map, however many, with title, author, difficulty, the author's
+  pitch, and which game it plays (the ruleset's own title and blurb).
+- **feat** **Publish-time validation now pairs map with ruleset.** The one
+  moment both are in hand catches the mistakes neither side can see alone: a
+  script rule testing a region no `[Region]` on the map is named for, and an
+  `open_area` no door or horde marker carries. A clean scan now says so out
+  loud, so silence is never ambiguous.
+- **feat** **Defend objectives change colour as they die.** The bar fragment
+  was the same white at 600 health and at 12. Green while healthy, amber from
+  three-fifths down, red past three-quarters gone — percentages of whatever
+  `hp=` the author wrote.
+- **fix** **The ruleset linter stopped crying wolf.** Seven root keys the
+  parser genuinely reads — `lobby`, `progression`, `skills`, `items`,
+  `classes`, `waves`, `functions` — were reported as unrecognised, teaching
+  authors to ignore the one warning system the format has.
+- **fix** **keyhunt.json actually plays.** Its `mode: "free"` sat at the root
+  where the parser never looks (free mode lives under `rounds`), and its
+  `respawn: true` was a boolean where an object is read — so The Key Hunt was
+  silently running as a default round-survival with respawns off. Its unread
+  `display` name became the new `title`.
+
 ### The doors grind shut
 
 The Glade doors used to teleport between open and sealed in one tick — the most

@@ -239,11 +239,27 @@ public final class Objective {
         return true;
     }
 
+    /**
+     * The defend readout's colour: the state of the thing at a glance.
+     *
+     * <p>The number was drawn in the same white at 600 health and at 12, so
+     * the one fact a defender needs mid-fight - "is it dying?" - took mental
+     * arithmetic against a maximum the bar never shows. Green is healthy,
+     * amber from three-fifths down is "someone should go", red past
+     * three-quarters gone is "everyone, now". The thresholds are percentages
+     * of whatever {@code hp=} the author wrote, so every defend map gets the
+     * same traffic light whatever its scale.
+     */
+    private String defendColour() {
+        int pct = percent();
+        return pct >= 60 ? "§a" : pct >= 25 ? "§e" : "§c";
+    }
+
     /** A line for the round bar, or empty if there is nothing to say. */
     public String hud() {
         return switch (kind) {
             case DEFEND -> failed ? "§4objective lost"
-                    : " §8| §6◈ §f" + (int) health;
+                    : " §8| " + defendColour() + "◈ " + (int) health;
             case HOLD -> complete ? "§aheld"
                     : " §8| §6◈ §f" + (progress * 100 / Math.max(1, target)) + "%";
             case COLLECT -> complete ? "§adelivered"

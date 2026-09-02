@@ -1,4 +1,6 @@
 {
+  "title": "Capture",
+  "blurb": "Red against blue, three captures wins. Respawns on, friendly fire off, nowhere to hide a flag.",
   "rounds": {
     "mode": "free"
   },

@@ -777,10 +777,18 @@ public final class EngineEvents {
                 return 1;
             }
             source.sendSuccess(() -> Component.literal("§6— " + all.size() + " rulesets —"), false);
-            all.forEach((key, r) -> source.sendSuccess(() -> Component.literal(
-                    "§f" + key + " §8— " + (r.endless ? "endless" : "to round " + r.finalRound)
-                            + ", " + r.mobs.size() + " mob types, "
-                            + Script.ruleCount(key) + " script rules"), false));
+            all.forEach((key, r) -> {
+                source.sendSuccess(() -> Component.literal(
+                        "§6" + r.displayTitle() + " §8(" + key + ") §7— "
+                                + (r.free ? "free" : r.endless ? "endless" : "to round " + r.finalRound)
+                                + ", " + r.mobs.size() + " mob types, "
+                                + Script.ruleCount(key) + " script rules"), false);
+                // The pitch, if the author wrote one. This is what turns the
+                // list from a shelf of files into a menu of games.
+                if (!r.blurb.isEmpty()) {
+                    source.sendSuccess(() -> Component.literal("   §7" + r.blurb), false);
+                }
+            });
             return 1;
         }
         Ruleset r = RulesetLoader.byId(id);
@@ -1204,10 +1212,20 @@ public final class EngineEvents {
                 "§7It is on the portal now. §8Stamped at x=" + origin.getX()), false);
         // Validate after publishing rather than before: the map is already saved
         // and refusing to list it would not un-break anything, but silence would.
+        // With the ruleset in hand, because this is the one moment map and rules
+        // are paired - a script region no marker matches, or an open_area no
+        // door carries, is invisible to either side alone.
         var problems = MapScan.validate(MapScan.scan(abyss, bounds != null ? bounds
                 : new net.minecraft.world.level.levelgen.structure.BoundingBox(
                         origin.getX(), origin.getY(), origin.getZ(),
-                        origin.getX() + sx, origin.getY() + sy, origin.getZ() + sz)));
+                        origin.getX() + sx, origin.getY() + sy, origin.getZ() + sz)),
+                entry.ruleset());
+        if (problems.isEmpty()) {
+            // Said out loud, so a clean bill of health is distinguishable from
+            // the validator not having run.
+            source.sendSuccess(() -> Component.literal(
+                    "§a✔ Scanned clean — spawn, doors, regions and script agree."), false);
+        }
         for (String p : problems) {
             source.sendSuccess(() -> Component.literal(" " + p), false);
         }

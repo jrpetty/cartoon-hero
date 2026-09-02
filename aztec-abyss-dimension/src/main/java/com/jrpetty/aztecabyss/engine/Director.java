@@ -89,6 +89,58 @@ public final class Director {
         downsThisRound++;
     }
 
+    // ------------------------------------------------------------------
+    // The script's window into the pressure
+    // ------------------------------------------------------------------
+
+    /**
+     * Where the run sits on the swing: -1 calm, 0 normal, +1 boiling.
+     *
+     * <p>Starts calm rather than normal because {@link #intensity} starts at
+     * zero - a run's first second is by definition quiet, and an edge event
+     * for the state you began in would fire on a fact nobody caused.
+     */
+    private int swing = -1;
+
+    /**
+     * The moment the pressure crosses a line, as an event name - or null.
+     *
+     * <p>The Director's measurement was engine-private: it measured the run
+     * beautifully and told nobody but the pacing loop. A map that wanted to
+     * score its own crescendo - kill the lights when the squad is drowning,
+     * taunt them when they are coasting, cue the choir for the comeback - had
+     * to rebuild a worse version of this measurement out of health checks.
+     * Now the tension the Director already computes is authorable: the
+     * {@code intensity} condition reads the level, and the two events this
+     * method produces mark the <em>turns</em>.
+     *
+     * <p>Edge-triggered with hysteresis, not level-triggered: {@code
+     * pressure_high} fires once when smoothed intensity climbs through 70%,
+     * and cannot fire again until the run has genuinely calmed to below 55% -
+     * so a squad flickering around the line does not get the boss music
+     * stuttering on and off. {@code pressure_low} is the mirror at 30%/45%.
+     * Polled once a second by the arena, right after {@link #sample}.
+     */
+    public String pollSwing() {
+        if (!enabled) {
+            return null;
+        }
+        if (intensity >= 0.70f && swing != 1) {
+            swing = 1;
+            return "pressure_high";
+        }
+        if (intensity <= 0.30f && swing != -1) {
+            swing = -1;
+            return "pressure_low";
+        }
+        if (swing == 1 && intensity < 0.55f) {
+            swing = 0;
+        } else if (swing == -1 && intensity > 0.45f) {
+            swing = 0;
+        }
+        return null;
+    }
+
     public void onRoundStart() {
         downsThisRound = 0;
     }

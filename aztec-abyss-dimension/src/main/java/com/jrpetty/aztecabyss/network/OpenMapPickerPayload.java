@@ -24,8 +24,11 @@ public record OpenMapPickerPayload(int currentChoice, java.util.List<Integer> be
      * <p>A published map is a file in the world folder, so the client has no way to
      * know one exists - it is not in a registry, not in a datapack the client
      * receives, and not an enum constant. The server is the only side that can
-     * know, so it says. Each entry is {@code name|title|difficulty|blurb}, which is
-     * everything a card needs and nothing more.
+     * know, so it says. Each entry is {@code
+     * name|title|difficulty|blurb|author|rulesetTitle|rulesetBlurb} - the first
+     * four are what a picker button needs, the last three are what the player
+     * maps browser shows: who built it, and what game (by the ruleset's own
+     * title and pitch) these blocks play.
      */
     public static final StreamCodec<RegistryFriendlyByteBuf, OpenMapPickerPayload> STREAM_CODEC =
             StreamCodec.composite(

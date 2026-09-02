@@ -113,7 +113,35 @@ public final class MapScan {
      * @return human-readable problems, worst first; empty means it will play
      */
     public static List<String> validate(Result scan) {
+        return validate(scan, null);
+    }
+
+    /**
+     * The same, knowing which ruleset the map will play - which unlocks the
+     * one class of mistake neither side can see alone: a script rule testing a
+     * region that is not on this map. The rule loads perfectly, the region
+     * condition treats the unknown name as an ordinary mismatch, and the rule
+     * never fires, with no symptom anywhere. Only the moment that pairs the
+     * map with its ruleset - publishing - can catch it.
+     */
+    public static List<String> validate(Result scan, String rulesetId) {
         List<String> problems = new ArrayList<>();
+
+        if (rulesetId != null) {
+            java.util.Set<String> onMap = new java.util.HashSet<>();
+            for (Marker r : scan.of("region")) {
+                if (!r.id().isEmpty()) {
+                    onMap.add(r.id().toLowerCase(Locale.ROOT));
+                }
+            }
+            for (String wanted : Script.regionsReferenced(rulesetId)) {
+                if (!onMap.contains(wanted)) {
+                    problems.add("§eThe ruleset tests region §f" + wanted
+                            + "§e but no §f[Region]§e on this map is called that — "
+                            + "those rules can never fire here.");
+                }
+            }
+        }
 
         if (scan.count("spawn") == 0) {
             problems.add("§cNo §f[Spawn]§c marker — players have nowhere to arrive.");
@@ -148,6 +176,18 @@ public final class MapScan {
             if (!area.equals("start") && !doorAreas.contains(area)) {
                 problems.add("§eArea §f" + area + "§e has horde markers but no §f[Door]§e — "
                         + "it can never be opened.");
+            }
+        }
+        // And the mirror, which only the ruleset knows about: an open_area
+        // naming an area that is on no door and no horde marker opens nothing
+        // at all - usually a typo on one side or the other.
+        if (rulesetId != null) {
+            for (String area : Script.areasOpened(rulesetId)) {
+                if (!doorAreas.contains(area) && !hordeAreas.contains(area)) {
+                    problems.add("§eThe ruleset opens area §f" + area
+                            + "§e but no §f[Door]§e or horde marker on this map names it — "
+                            + "that open_area does nothing here.");
+                }
             }
         }
 

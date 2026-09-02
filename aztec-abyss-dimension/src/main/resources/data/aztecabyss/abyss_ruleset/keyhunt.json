@@ -1,7 +1,13 @@
 {
-  "mode": "free",
-  "display": "The Key Hunt",
-  "respawn": true,
+  "title": "The Key Hunt",
+  "blurb": "Find the keys, open the doors, get out \u2014 and getting out once is remembered forever.",
+  "rounds": {
+    "mode": "free"
+  },
+  "respawn": {
+    "enabled": true,
+    "seconds": 5
+  },
   "script": [
     {
       "on": "player_joined",

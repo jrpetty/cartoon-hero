@@ -41,7 +41,25 @@ public final class Ruleset {
     private static final int MAX_CONCURRENT = 400;
 
     public final String id;
+
+    /**
+     * What this game calls itself, and its one-sentence pitch.
+     *
+     * <p>Eight rulesets shipped and every list of them was ids: {@code
+     * aztecabyss:keyhunt} tells you the file name and nothing about the game
+     * inside it. A menu of titles is a shelf; a menu of titles with one
+     * authored sentence each is a set of offers. Both optional - a ruleset
+     * that says nothing is presented by its id, same as always.
+     */
+    public final String title;
+    public final String blurb;
+
     public final boolean endless;
+
+    /** The name this ruleset is shown by: its title, or failing that its id. */
+    public String displayTitle() {
+        return title.isEmpty() ? id : title;
+    }
 
     /**
      * A run with no rounds and no horde at all.
@@ -289,6 +307,8 @@ public final class Ruleset {
 
     private Ruleset(Builder b) {
         this.id = b.id;
+        this.title = b.title;
+        this.blurb = b.blurb;
         this.endless = b.endless;
         this.free = b.free;
         this.respawnEnabled = b.respawnEnabled;
@@ -360,6 +380,8 @@ public final class Ruleset {
 
     private static final class Builder {
         String id = "default";
+        String title = "";
+        String blurb = "";
         boolean endless = false;
         boolean free = false;
         boolean respawnEnabled = false;
@@ -430,9 +452,18 @@ public final class Ruleset {
         Builder b = new Builder();
         b.id = id;
 
+        // Every key parse() or Script.load() actually reads. This list had
+        // fallen seven keys behind the parser - "lobby", "progression",
+        // "skills", "items", "classes", "waves" and "functions" all worked
+        // perfectly and were reported as unrecognised, which teaches an author
+        // to ignore the one warning system this format has.
         checkKeys(root, "", b.warnings,
                 "rounds", "economy", "mobs", "currencies", "director", "script", "powerups",
-                "downed", "special_rounds", "pools", "respawn", "kit", "border", "spawns");
+                "downed", "special_rounds", "pools", "respawn", "kit", "border", "spawns",
+                "lobby", "progression", "skills", "items", "classes", "waves", "functions",
+                "title", "blurb");
+        b.title = str(root, "title", "");
+        b.blurb = str(root, "blurb", "");
         checkKeys(obj(root, "border"), "border", b.warnings,
                 "from", "to", "seconds", "wait_seconds");
         checkKeys(obj(root, "respawn"), "respawn", b.warnings, "enabled", "seconds");

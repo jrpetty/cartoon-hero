@@ -325,7 +325,12 @@ public final class ModNetworking {
         if (player.getServer() != null) {
             for (com.jrpetty.aztecabyss.engine.PublishedMaps.Entry e
                     : com.jrpetty.aztecabyss.engine.PublishedMaps.ordered(player.getServer())) {
-                custom.add(e.name() + "|" + e.title() + "|" + e.difficulty() + "|" + e.blurb());
+                // The three extra fields feed the player-maps browser: who made
+                // it, and what game it plays - the ruleset's own title and
+                // pitch, resolved here because the client cannot look them up.
+                var rules = com.jrpetty.aztecabyss.engine.RulesetLoader.byId(e.ruleset());
+                custom.add(e.name() + "|" + e.title() + "|" + e.difficulty() + "|" + e.blurb()
+                        + "|" + e.author() + "|" + rules.displayTitle() + "|" + rules.blurb);
             }
         }
         PacketDistributor.sendToPlayer(player, new OpenMapPickerPayload(
@@ -467,10 +472,15 @@ public final class ModNetworking {
                     + "|" + (job == null ? 0 : jobs.levelOf(p.getUUID(), job))
                     + "|" + charts.myPercent(p.getUUID()));
         }
+        // Swept against the world first, so a torch the reshape walled over
+        // last midnight is not still burning on the sheet.
+        var waypoints = com.jrpetty.aztecabyss.maze.MazeWaypoints.get(player.serverLevel());
+        waypoints.refresh(player.serverLevel());
         PacketDistributor.sendToPlayer(player, new MazeHubPayload(
                 charts.gladeBytes(),
                 charts.mineBytes(player.getUUID()),
                 charts.markBytes(),
-                roster));
+                roster,
+                waypoints.packedPosts()));
     }
 }

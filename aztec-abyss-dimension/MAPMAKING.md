@@ -155,6 +155,8 @@ restart**.
 
 ```json
 {
+  "title": "No Last Round",
+  "blurb": "Endless, and the Director is watching how you are actually doing.",
   "rounds": {
     "mode": "endless",
     "base_count": 8,
@@ -174,9 +176,44 @@ restart**.
 Every field has a default, so a four-line ruleset is valid. Every field is
 clamped, so a typo makes a hard map rather than a dead server.
 
+`title` and `blurb` are how your game introduces itself: they show wherever
+rulesets are listed, and on the portal's player-maps browser as "plays *The
+Heist* — three idols, one way out". A ruleset that says nothing is shown by its
+id, same as always.
+
 `/arena rules <id>` prints what a curve actually works out to at rounds 1, 10, 25
 and 50 — and warns about any key it did not recognise, which is how you catch
 `basecount` when you meant `base_count`.
+
+### The Director, scriptable
+
+The Director measures how the run is *actually going* — 0 untouched, 100
+somebody about to die, smoothed — and spends that on pacing. The measurement is
+also yours:
+
+```json
+{ "on": "pressure_high",
+  "do": [ { "sound": "minecraft:music_disc.pigstep" },
+          { "set_time": "midnight" },
+          { "title": { "main": "§4IT SMELLS BLOOD" } } ] },
+{ "on": "pressure_low",
+  "do": [ { "message": "§7…it is watching you breathe." } ] },
+{ "on": "tick", "when": { "intensity": { "at_least": 70 } },
+  "do": [ { "effect": { "id": "minecraft:darkness", "seconds": 3 } } ] }
+```
+
+- `pressure_high` fires **once** when smoothed intensity climbs through 70%,
+  and cannot fire again until the run calms below 55% — so music does not
+  stutter on a squad flickering around the line. `pressure_low` mirrors it at
+  30%/45%.
+- `intensity` in a `when` reads the level, 0–100, with `at_least` / `at_most` —
+  a crescendo scored off tension that genuinely exists, where a round-number
+  rule is a guess about when tension usually happens.
+- `{intensity}` and `{pace}` are placeholders (pace as a percent of normal:
+  150 means half again as fast), so a bar or an `every` line can show either.
+
+All of it works in free mode too — the Director has nothing to pace there, but
+it still listens.
 
 ### Downed, and special rounds
 

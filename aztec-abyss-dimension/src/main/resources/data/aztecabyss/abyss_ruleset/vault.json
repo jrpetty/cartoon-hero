@@ -1,34 +1,138 @@
 {
-  "rounds": { "mode": "free" },
-  "economy": { "enabled": false },
+  "title": "The Vault",
+  "blurb": "Three levers somewhere in the dark, and then the door. A puzzle wearing a horror mask.",
+  "rounds": {
+    "mode": "free"
+  },
+  "economy": {
+    "enabled": false
+  },
   "script": [
-    { "on": "run_start",
-      "do": [ { "title": { "main": "§e§lTHE VAULT", "sub": "Three levers. Then the door." } },
-              { "set_bar": "§e0 of 3 levers" } ] },
-
-    { "on": "use_block", "when": { "block": "minecraft:lever", "region": "lever_a" },
-      "do": [ { "set_var": { "name": "lever_a", "to": 1 } },
-              { "sound": "minecraft:block.beacon.activate" } ] },
-    { "on": "use_block", "when": { "block": "minecraft:lever", "region": "lever_b" },
-      "do": [ { "set_var": { "name": "lever_b", "to": 1 } },
-              { "sound": "minecraft:block.beacon.activate" } ] },
-    { "on": "use_block", "when": { "block": "minecraft:lever", "region": "lever_c" },
-      "do": [ { "set_var": { "name": "lever_c", "to": 1 } },
-              { "sound": "minecraft:block.beacon.activate" } ] },
-
-    { "on": "tick",
-      "when": { "var": { "name": "lever_a", "at_least": 1 } },
-      "do": [ { "set_bar": "§e1 of 3 levers" } ] },
-    { "on": "tick",
-      "when": { "var": { "name": "lever_b", "at_least": 1 } },
-      "do": [ { "set_bar": "§e2 of 3 levers" } ] },
-
-    { "on": "tick",
-      "when": { "var": { "name": "lever_c", "at_least": 1 } },
-      "do": [ { "set_bar": "§aThe vault is open" },
-              { "open_area": "vault" } ] },
-
-    { "on": "region_enter", "when": { "region": "vault" },
-      "do": [ { "win": { "title": "§6§lTHE VAULT IS YOURS" } } ] }
+    {
+      "on": "run_start",
+      "do": [
+        {
+          "title": {
+            "main": "\u00a7e\u00a7lTHE VAULT",
+            "sub": "Three levers. Then the door."
+          }
+        },
+        {
+          "set_bar": "\u00a7e0 of 3 levers"
+        }
+      ]
+    },
+    {
+      "on": "use_block",
+      "when": {
+        "block": "minecraft:lever",
+        "region": "lever_a"
+      },
+      "do": [
+        {
+          "set_var": {
+            "name": "lever_a",
+            "to": 1
+          }
+        },
+        {
+          "sound": "minecraft:block.beacon.activate"
+        }
+      ]
+    },
+    {
+      "on": "use_block",
+      "when": {
+        "block": "minecraft:lever",
+        "region": "lever_b"
+      },
+      "do": [
+        {
+          "set_var": {
+            "name": "lever_b",
+            "to": 1
+          }
+        },
+        {
+          "sound": "minecraft:block.beacon.activate"
+        }
+      ]
+    },
+    {
+      "on": "use_block",
+      "when": {
+        "block": "minecraft:lever",
+        "region": "lever_c"
+      },
+      "do": [
+        {
+          "set_var": {
+            "name": "lever_c",
+            "to": 1
+          }
+        },
+        {
+          "sound": "minecraft:block.beacon.activate"
+        }
+      ]
+    },
+    {
+      "on": "tick",
+      "when": {
+        "var": {
+          "name": "lever_a",
+          "at_least": 1
+        }
+      },
+      "do": [
+        {
+          "set_bar": "\u00a7e1 of 3 levers"
+        }
+      ]
+    },
+    {
+      "on": "tick",
+      "when": {
+        "var": {
+          "name": "lever_b",
+          "at_least": 1
+        }
+      },
+      "do": [
+        {
+          "set_bar": "\u00a7e2 of 3 levers"
+        }
+      ]
+    },
+    {
+      "on": "tick",
+      "when": {
+        "var": {
+          "name": "lever_c",
+          "at_least": 1
+        }
+      },
+      "do": [
+        {
+          "set_bar": "\u00a7aThe vault is open"
+        },
+        {
+          "open_area": "vault"
+        }
+      ]
+    },
+    {
+      "on": "region_enter",
+      "when": {
+        "region": "vault"
+      },
+      "do": [
+        {
+          "win": {
+            "title": "\u00a76\u00a7lTHE VAULT IS YOURS"
+          }
+        }
+      ]
+    }
   ]
 }
