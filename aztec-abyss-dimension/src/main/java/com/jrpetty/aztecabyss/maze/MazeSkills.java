@@ -88,9 +88,9 @@ public final class MazeSkills extends SavedData {
                     "Two more.",
                     "Three more."}),
             new Skill("steady", MazeJobs.MEDJACK, "Steady Hands", new String[]{
-                    "Treat from two blocks further, and buy ten more seconds.",
-                    "Four blocks, twenty seconds.",
-                    "Six blocks, thirty seconds."}),
+                    "Treat from two blocks further, and hold it off another minute.",
+                    "Four blocks, two minutes.",
+                    "Six blocks, three minutes."}),
             new Skill("antivenom", MazeJobs.MEDJACK, "Antivenom", new String[]{
                     "It takes one more sting to turn you.",
                     "Two more.",

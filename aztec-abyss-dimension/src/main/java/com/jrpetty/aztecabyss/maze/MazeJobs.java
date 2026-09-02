@@ -369,8 +369,8 @@ public final class MazeJobs extends SavedData {
                     : "Forged gear: +40% durability, +20% damage. Carpet in the corridors.";
             case MEDJACK -> level >= 4 ? "Curing no longer costs your day."
                     : level >= 3 ? "Right-click a Changing runner: cured outright, once a day."
-                    : level >= 2 ? "Right-click a Changing runner to buy them 45 seconds."
-                    : "Right-click a Changing runner to buy them 30 seconds.";
+                    : level >= 2 ? "Right-click a Changing runner to hold it off seven and a half minutes."
+                    : "Right-click a Changing runner to hold it off five minutes.";
             case TRACKHOE -> level >= 4 ? "Every crop feeds four."
                     : level >= 3 ? "Every crop feeds three."
                     : level >= 2 ? "Every crop feeds two."

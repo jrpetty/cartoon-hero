@@ -218,7 +218,7 @@ public final class MazeSting {
         player.addEffect(new MobEffectInstance(MobEffects.MOVEMENT_SLOWDOWN, ticks, 0, false, true));
         player.addEffect(new MobEffectInstance(MobEffects.WEAKNESS, ticks, 0, false, true));
         player.displayClientMessage(Component.literal(
-                "§a✚ Treated. §7The Changing is held off — §f" + now + "s§7 left."), false);
+                "§a✚ Treated. §7The Changing is held off — §f" + MazeRuns.format(now) + "§7 left."), false);
         level.playSound(null, player.blockPosition(), SoundEvents.BEACON_ACTIVATE,
                 SoundSource.PLAYERS, 0.8F, 1.6F);
         return true;

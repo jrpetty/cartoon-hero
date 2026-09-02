@@ -39,6 +39,12 @@ behaviour that was already there · **docs**
   works for anyone with it in their fingers, and both land in the same place.
   Every "type /maze job" hint in the maze now points at the board instead.
 
+- **change** **A treat holds the Changing off for five minutes.** It bought
+  thirty seconds (forty-five at rank two) on a ninety-second clock - a stay of
+  execution, not a rescue. Now five minutes at rank one, seven and a half at
+  rank two, plus a minute per rank of Steady Hands; rank three still cures
+  outright once a day. Times are shown as minutes and seconds.
+
 ### The portal picker fits its window
 
 - **fix** **Cards no longer overlap the header or the buttons.** The stack was

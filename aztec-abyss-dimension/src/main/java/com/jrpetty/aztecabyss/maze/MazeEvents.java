@@ -1246,7 +1246,11 @@ public final class MazeEvents {
                     "§a✚ You pulled " + subject.getGameProfile().getName() + " back."), false);
             return true;
         }
-        int seconds = (rank >= 2 ? 45 : 30) + steady * 10;
+        // Five minutes, not thirty seconds. A treat that bought half a minute
+        // on a ninety-second clock was a stay of execution; five minutes is a
+        // rescue - long enough to get the runner back inside the doors and to
+        // a rank-three cure, which is the story the job is supposed to tell.
+        int seconds = (rank >= 2 ? 450 : 300) + steady * 60;
         if (!MazeSting.extend(level, subject, seconds)) {
             player.displayClientMessage(Component.literal("§cToo late. It has already taken."), true);
             return false;
@@ -1255,7 +1259,7 @@ public final class MazeEvents {
         MazeDayWork.get(level).add(level, player, MazeJobs.MEDJACK, 3);
         player.displayClientMessage(Component.literal(
                 "§a✚ You bought " + subject.getGameProfile().getName()
-                        + " §f" + seconds + "s§a."), false);
+                        + " §f" + MazeRuns.format(seconds) + "§a."), false);
         return true;
     }
 
