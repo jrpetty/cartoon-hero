@@ -28,9 +28,14 @@ import java.util.List;
  * <p>Each roster row is {@code name|jobDisplay|level|chartPct} - flat strings,
  * for the same reason the skill sheet uses them: the client cannot look any of
  * this up, so the server says it outright.
+ *
+ * <p>The waypoints ride along as packed {@link net.minecraft.core.BlockPos}
+ * longs - the exact shape the torch ledger keeps them in. Block-precise
+ * rather than cell-precise, because a torch is a point you planted, not a
+ * corridor you walked, and the chart draws it at the spot.
  */
 public record MazeHubPayload(byte[] glade, byte[] mine, byte[] marks,
-                             List<String> roster)
+                             List<String> roster, List<Long> waypoints)
         implements CustomPacketPayload {
 
     public static final Type<MazeHubPayload> TYPE =
@@ -42,6 +47,7 @@ public record MazeHubPayload(byte[] glade, byte[] mine, byte[] marks,
                     ByteBufCodecs.BYTE_ARRAY, MazeHubPayload::mine,
                     ByteBufCodecs.BYTE_ARRAY, MazeHubPayload::marks,
                     ByteBufCodecs.STRING_UTF8.apply(ByteBufCodecs.list()), MazeHubPayload::roster,
+                    ByteBufCodecs.VAR_LONG.apply(ByteBufCodecs.list()), MazeHubPayload::waypoints,
                     MazeHubPayload::new);
 
     @Override

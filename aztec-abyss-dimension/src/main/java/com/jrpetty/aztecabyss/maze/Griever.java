@@ -88,11 +88,36 @@ public final class Griever {
      * <p>A flat one-in-three meant the night filled up at the same rate on every
      * day of every game. Later nights fill faster, which is felt long before the
      * cap is reached - the cap is where a night <em>ends up</em>, this is what it
-     * feels like getting there.
+     * feels like getting there. A small crew's night also fills slower - see
+     * {@link #crewScale}.
      */
     public static int spawnChanceFor(ServerLevel level) {
         int day = (int) Math.max(0, MazeRuntime.dayNumber(level));
-        return Math.max(1, 4 - day / 4);
+        int crew = level.players().size();
+        return Math.max(1, 4 - day / 4 + (crew <= 1 ? 2 : crew == 2 ? 1 : 0));
+    }
+
+    /**
+     * How much of the maze's violence this crew is asked to eat.
+     *
+     * <p>The maze as built assumed a squad. Every combat number - sixty base
+     * health, the bull's 1.8x of that - was tuned for focus fire, and the cap
+     * already scales <em>count</em> per runner, so a lone runner met exactly as
+     * many Grievers per head as a crew of five and each one took three times as
+     * long to kill with nobody to peel it off. Solo was not harder, it was a
+     * different, worse game.
+     *
+     * <p>So the individuals soften for a small crew: solo Grievers carry about
+     * three-fifths of the health and pull their blows, a duo's about four-fifths,
+     * and from three players the maze is at full strength. Deliberately never
+     * below sixty percent - a solo run should still be the hardest way to play
+     * this, just no longer a statistical execution. Read at dress time, so a
+     * friend logging in mid-night stiffens the next spawn, not the ones already
+     * out.
+     */
+    public static double crewScale(ServerLevel level) {
+        int crew = level.players().size();
+        return crew <= 1 ? 0.62 : crew == 2 ? 0.8 : 1.0;
     }
 
     /**
@@ -143,6 +168,7 @@ public final class Griever {
         mob.finalizeSpawn(level, level.getCurrentDifficultyAt(spot), MobSpawnType.EVENT, null);
         dress(level, mob);
         mob.setTarget(target);
+        perceived(level, mob);
         level.addFreshEntity(mob);
 
         level.playSound(null, spot, SoundEvents.WARDEN_ROAR, SoundSource.HOSTILE, 1.4F, 0.55F);
@@ -243,7 +269,8 @@ public final class Griever {
         // monster, because it is the same story every time.
         AttributeInstance hp = mob.getAttribute(Attributes.MAX_HEALTH);
         if (hp != null) {
-            hp.setBaseValue(AbyssConfig.GRIEVER_HEALTH.get() * dayScale(level) * 1.25);
+            hp.setBaseValue(AbyssConfig.GRIEVER_HEALTH.get() * dayScale(level) * 1.25
+                    * crewScale(level));
         }
         setScale(mob, BORN_SCALE);
         mob.setHealth(mob.getMaxHealth());
@@ -408,6 +435,7 @@ public final class Griever {
         ServerPlayer near = nearestTo(level, mob);
         if (near != null) {
             mob.setTarget(near);
+            perceived(level, mob);
         }
     }
 
@@ -515,11 +543,16 @@ public final class Griever {
         // rate and stops at a quarter over baseline: a Griever that outruns a
         // sprinting runner by a wide margin is not harder, it is unplayable.
         double hard = dayScale(level);
-        set(mob, Attributes.MAX_HEALTH, AbyssConfig.GRIEVER_HEALTH.get() * hard * healthMul);
+        // The crew multiplier softens health fully and damage by half as much:
+        // a solo kill should come sooner, but a hit that stopped hurting would
+        // unteach the sting count, which is the mechanic that matters.
+        double crew = crewScale(level);
+        set(mob, Attributes.MAX_HEALTH, AbyssConfig.GRIEVER_HEALTH.get() * hard * healthMul * crew);
         set(mob, Attributes.MOVEMENT_SPEED,
                 AbyssConfig.GRIEVER_SPEED.get() * Math.min(1.25, 1.0 + (hard - 1.0) * 0.25)
                         * speedMul);
-        set(mob, Attributes.ATTACK_DAMAGE, AbyssConfig.GRIEVER_DAMAGE.get() * hard * damageMul);
+        set(mob, Attributes.ATTACK_DAMAGE, AbyssConfig.GRIEVER_DAMAGE.get() * hard * damageMul
+                * (0.5 + 0.5 * crew));
         set(mob, Attributes.KNOCKBACK_RESISTANCE, kind.equals("bull") ? 1.0 : 0.7);
         // It must be able to cross the map to reach you; a corridor maze is no
         // place for a mob that loses interest after sixteen blocks.
@@ -699,8 +732,16 @@ public final class Griever {
             if (MazeVenom.blinded(g)) {
                 continue;
             }
-            // Something already has its attention. Noise finds the unoccupied.
+            // Something already has its attention. Noise finds the unoccupied -
+            // but noise from the one it is hunting keeps the trail warm through
+            // whatever walls are between them; see shepherd().
             if (g.getTarget() != null && g.getTarget().isAlive()) {
+                if (g.getTarget() instanceof ServerPlayer tp) {
+                    double radius = noiseRadius(tp);
+                    if (radius > 0.0 && g.distanceToSqr(tp) <= radius * radius) {
+                        perceived(level, g);
+                    }
+                }
                 continue;
             }
             for (ServerPlayer p : runners) {
@@ -712,6 +753,7 @@ public final class Griever {
                     continue;
                 }
                 g.setTarget(p);
+                perceived(level, g);
                 // Told, because a rule nobody can perceive is not a rule. This is
                 // the only feedback that teaches the mechanic, so it is worth the
                 // one line of action bar.
@@ -740,6 +782,103 @@ public final class Griever {
             return 30.0;
         }
         return 9.0;
+    }
+
+    // ------------------------------------------------------------------
+    // Sight, memory, and going home
+    // ------------------------------------------------------------------
+
+    /** When one last saw or heard the thing it is hunting. */
+    private static final String PERCEIVED = "AztecPerceived";
+
+    /** How long it hunts a cold trail: ten seconds, then the lock breaks. */
+    private static final int PERCEPTION_MEMORY = 200;
+
+    /** Close enough to the mouth to count as home. It prowls from here. */
+    private static final double LURK_RANGE_SQ = 7.0 * 7.0;
+
+    /** Stamps "it can perceive its target right now". */
+    private static void perceived(ServerLevel level, Mob g) {
+        g.getPersistentData().putLong(PERCEIVED, level.getGameTime());
+    }
+
+    /**
+     * The pass that gives a Griever object permanence instead of omniscience,
+     * and somewhere to be when it has nobody.
+     *
+     * <p>Two long-standing wrongs, one loop. First: a target, once set, was
+     * forever. The forced {@code setTarget} calls here (spawn, noise, the
+     * roar) bypass vanilla's target goals, and nothing ever invalidated them -
+     * so a Griever that heard you once would pathfind at you through every
+     * wall on the map until one of you died. A monster that cannot be shaken
+     * is not hunting you, it is billing you. Now the lock is perception:
+     * line of sight refreshes it, noise within earshot refreshes it (that is
+     * {@code hear}'s job), and {@link #PERCEPTION_MEMORY} quiet, unseen ticks
+     * break it. Round a corner, go quiet, and you have actually escaped -
+     * which makes the corner worth something. Vanilla's own acquisition
+     * already requires line of sight, so nothing re-locks through the wall.
+     *
+     * <p>Second: a Griever with no target stood exactly where its last chase
+     * ended, forever - the night scattered them randomly across the map and
+     * called it distribution. Now an idle one walks back to the nearest hole
+     * and prowls its mouth. The holes stop being spawn trivia and become the
+     * geography of the night: corridors near one stay dangerous at all hours
+     * because that is where the unemployed wait, and a route that threads
+     * between four of them is a bad route for a reason you can learn.
+     *
+     * <p>Raiders are exempt (breaking into the Glade is their whole job) and
+     * so is anything with no AI (a Risen mid-scene is driven by its own
+     * clock). Venom breaks the lock too: blinding a thing mid-chase now sends
+     * it home, which is the counter-play the venom always implied.
+     */
+    public static void shepherd(ServerLevel level, List<Mob> grievers) {
+        long now = level.getGameTime();
+        for (Mob g : grievers) {
+            if (g.isNoAi() || g.getPersistentData().getBoolean(MazeRaid.TAG)) {
+                continue;
+            }
+            net.minecraft.world.entity.LivingEntity target = g.getTarget();
+            if (target != null && target.isAlive() && !MazeVenom.blinded(g)
+                    && !inGlade(target)) {
+                if (g.getSensing().hasLineOfSight(target)) {
+                    perceived(level, g);
+                    continue;
+                }
+                if (now - g.getPersistentData().getLong(PERCEIVED) <= PERCEPTION_MEMORY) {
+                    continue; // the trail is still warm; it keeps coming
+                }
+            }
+            if (target != null) {
+                g.setTarget(null);
+                if (target.isAlive()) {
+                    // The tell that you shook it: one dry rasp back down the
+                    // corridor, and then the scraping gets quieter, not louder.
+                    level.playSound(null, g.blockPosition(), SoundEvents.SPIDER_AMBIENT,
+                            SoundSource.HOSTILE, 1.1F, 0.4F);
+                }
+            }
+            // Nobody to hunt: back to the nearest hole. Aimed at solid ground
+            // beside the mouth, not the mouth itself - walking into the shaft
+            // would drop it into the chamber under the floor, outside every
+            // sweep that is supposed to find it.
+            BlockPos den = GrieverHoles.nearest(g.blockPosition());
+            if (g.blockPosition().distSqr(den) <= LURK_RANGE_SQ) {
+                continue; // home; vanilla wander prowls the mouth from here
+            }
+            if (g.getNavigation().isDone()) {
+                BlockPos foot = GrieverHoles.mouthSpawn(level, den);
+                if (foot != null) {
+                    g.getNavigation().moveTo(
+                            foot.getX() + 0.5, foot.getY(), foot.getZ() + 0.5, 1.0);
+                }
+            }
+        }
+    }
+
+    /** Whether something is standing on the one ground Grievers never hunt. */
+    private static boolean inGlade(net.minecraft.world.entity.LivingEntity who) {
+        BlockPos at = who.blockPosition();
+        return MazeData.inGlade(at.getX() / MazeData.CELL, at.getZ() / MazeData.CELL);
     }
 
     /**

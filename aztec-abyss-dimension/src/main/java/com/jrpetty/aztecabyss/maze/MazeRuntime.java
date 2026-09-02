@@ -534,6 +534,14 @@ public final class MazeRuntime {
             p.displayClientMessage(Component.literal(
                     "§8Tonight is §c" + String.format("%.1f", Griever.dayScale(level))
                             + "x §8what the first night was."), false);
+            // Said out loud, because a hidden handicap reads as an easy game
+            // rather than a fair one - and because it stops the moment a third
+            // Glader arrives, which is worth knowing before they do.
+            if (Griever.crewScale(level) < 1.0) {
+                p.displayClientMessage(Component.literal(level.players().size() == 1
+                        ? "§8The maze sees one of you. §7It pulls its blows — a little."
+                        : "§8The maze sees two of you. §7It pulls its blows — barely."), false);
+            }
             if (limit > 0) {
                 int left = (int) (limit - day);
                 // The last three days say so loudly. A deadline nobody is
@@ -1361,6 +1369,9 @@ public final class MazeRuntime {
         // What they can hear. Deliberately after targeting and before ambience,
         // so a Griever that heard you is already coming when it makes its noise.
         Griever.hear(level, loaded, runners);
+        // After hear, so a lock the noise just refreshed is not broken in the
+        // same breath: stale hunts end, and the unemployed walk home.
+        Griever.shepherd(level, loaded);
         Griever.ambience(level, loaded, rng);
     }
 

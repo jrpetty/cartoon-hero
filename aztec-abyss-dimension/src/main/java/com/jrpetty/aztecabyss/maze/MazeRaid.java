@@ -77,6 +77,11 @@ public final class MazeRaid {
     private static int secondsToBang;
     private static int bangs;
     private static boolean needRepair;
+    // Sized at start() for the crew that night actually has, then held for the
+    // whole raid: a breach that changed shape when somebody logged in would
+    // orphan the blocks a Builder already placed in it.
+    private static int holeWide;
+    private static int holeHigh;
 
     // ------------------------------------------------------------------
     // The calendar
@@ -206,7 +211,12 @@ public final class MazeRaid {
         face = (Deco.hash(SEED, day, 0xFACE, 1) & 0x7FFFFFFF) % 4;
         alongCell = pickCell(day);
 
-        int count = probe() ? 2 : Math.min(6, 2 + level.players().size());
+        int crew = level.players().size();
+        // A lone defender gets the probe's pack at full-raid stakes: two is a
+        // fight one person can win while also plugging a hole; three is not.
+        int count = probe() || crew <= 1 ? 2 : Math.min(6, 2 + crew);
+        holeWide = probe() ? 2 : crew <= 1 ? 3 : 4;
+        holeHigh = probe() ? 1 : 2;
         int made = 0;
         for (int i = 0; i < count * 4 && made < count; i++) {
             BlockPos spot = outsideSpot(level, day, i);
@@ -406,16 +416,15 @@ public final class MazeRaid {
 
     /**
      * The hole itself, at the foot of the segment: four wide and three high
-     * on a full raid, two by two on the probe - a crack you defend with a
-     * handful of blocks, not a gate.
+     * on a full raid, narrower for a probe or a lone defender - a crack you
+     * defend with a handful of blocks, not a gate. Sized once at
+     * {@link #start} and read from the fields so it cannot change mid-raid.
      */
     private static List<BlockPos> hole() {
         List<BlockPos> out = new ArrayList<>();
-        int wide = probe() ? 2 : 4;
-        int high = probe() ? 1 : 2;
-        int a0 = alongCell * MazeData.CELL + (probe() ? 2 : 1);
-        for (int a = a0; a < a0 + wide; a++) {
-            for (int y = MazeData.WALL_BASE_Y; y <= MazeData.WALL_BASE_Y + high; y++) {
+        int a0 = alongCell * MazeData.CELL + (MazeData.CELL - holeWide) / 2;
+        for (int a = a0; a < a0 + holeWide; a++) {
+            for (int y = MazeData.WALL_BASE_Y; y <= MazeData.WALL_BASE_Y + holeHigh; y++) {
                 out.add(onFace(a, y));
             }
         }

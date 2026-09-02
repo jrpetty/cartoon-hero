@@ -126,6 +126,11 @@ public final class MazeWaypoints extends SavedData {
         return name != null && name.getString().contains("Chart");
     }
 
+    /** The standing torches, as packed {@link BlockPos} longs, for the hub sheet. */
+    public java.util.List<Long> packedPosts() {
+        return new java.util.ArrayList<>(posts);
+    }
+
     public void clearAll() {
         posts.clear();
         setDirty();

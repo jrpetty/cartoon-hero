@@ -81,6 +81,7 @@ public class MazeHubScreen extends Screen {
     private final BitSet mine;
     private final BitSet marks;
     private final List<String[]> roster = new ArrayList<>();
+    private final List<net.minecraft.core.BlockPos> waypoints = new ArrayList<>();
 
     private Tab tab = Tab.STATUS;
     private int age = 0;
@@ -92,6 +93,9 @@ public class MazeHubScreen extends Screen {
         this.marks = BitSet.valueOf(payload.marks());
         for (String row : payload.roster()) {
             roster.add(row.split("\\|", -1));
+        }
+        for (long packed : payload.waypoints()) {
+            waypoints.add(net.minecraft.core.BlockPos.of(packed));
         }
     }
 
@@ -342,6 +346,22 @@ public class MazeHubScreen extends Screen {
             g.fill(x0 - 1, y0 - 1, x0 + px + 1, y0 + px + 1, GREEN);
         }
 
+        // The Chartwrights' torches, burning where they were planted. Each is
+        // a soul-flame cyan point with a cross of dimmer glow, flickering on
+        // its own phase so a row of them ripples instead of blinking as one.
+        // Block-precise: a torch is a spot, not a cell, and at two pixels a
+        // cell the difference between "this junction" and "this corridor" is
+        // visible and worth having.
+        for (var wp : waypoints) {
+            int wx = left + clampPix(wp.getX() * px / MazeData.CELL, side - px);
+            int wy = top + clampPix(wp.getZ() * px / MazeData.CELL, side - px);
+            float flick = 0.72f + 0.28f * (float) Math.sin((age + wp.getX() * 5 + wp.getZ() * 3) / 3.0);
+            int halo = MazeHud.pulse(0xFF2E6E80, flick);
+            g.fill(wx - 1, wy, wx + px + 1, wy + px, halo);
+            g.fill(wx, wy - 1, wx + px, wy + px + 1, halo);
+            g.fill(wx, wy, wx + px, wy + px, MazeHud.pulse(0xFF9FF2FF, flick));
+        }
+
         // You, breathing.
         if (minecraft != null && minecraft.player != null) {
             var at = minecraft.player.blockPosition();
@@ -361,7 +381,7 @@ public class MazeHubScreen extends Screen {
 
         // Legend, and the two percentages the grid is a picture of.
         String legend = "§7bright §fyours §8· §7dim §fknown §8· "
-                + "§6◆ marked §8· §agreen §fdoors";
+                + "§6◆ marked §8· §agreen §fdoors §8· §b✦ torches";
         g.drawCenteredString(this.font, Component.literal(legend),
                 this.width / 2, top + side + 20, TEXT_DIM);
         if (s != null) {
@@ -373,6 +393,11 @@ public class MazeHubScreen extends Screen {
         String hint = "§8The way out is never on the chart. That is the game.";
         g.drawCenteredString(this.font, Component.literal(hint),
                 this.width / 2, top + side + 44, TEXT_FAINT);
+    }
+
+    /** Keeps a block-precise pixel inside the map plate. */
+    private static int clampPix(int v, int max) {
+        return Math.max(0, Math.min(max, v));
     }
 
     @Override
