@@ -33,6 +33,12 @@ behaviour that was already there · **docs**
   your camera, your speed or your legs.
 - **change** The `/maze job` chat spam every five seconds is gone with it.
 
+- **feat** **Treating is a right-click, not a command.** The Med-jack's whole
+  job is being physically there, and it was reached by typing `/maze treat`.
+  Now a Med-jack right-clicks the runner who is Changing; the command still
+  works for anyone with it in their fingers, and both land in the same place.
+  Every "type /maze job" hint in the maze now points at the board instead.
+
 ### The portal picker fits its window
 
 - **fix** **Cards no longer overlap the header or the buttons.** The stack was

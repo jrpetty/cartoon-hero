@@ -986,7 +986,7 @@ public final class MazeEvents {
         ServerLevel level = src.getLevel();
         String job = MazeJobs.get(level).jobOf(player.getUUID());
         if (job == null) {
-            src.sendFailure(Component.literal("Take a trade first. §8/maze job"));
+            src.sendFailure(Component.literal("Take a trade first. §8The board by the bell."));
             return 0;
         }
         MazeDayWork work = MazeDayWork.get(level);
@@ -1065,7 +1065,7 @@ public final class MazeEvents {
             src.sendSuccess(() -> Component.literal("§6— THE JOB BOARD —"), false);
             for (String j : MazeJobs.ALL) {
                 src.sendSuccess(() -> Component.literal(
-                        "  " + MazeJobs.display(j) + " §8/maze job " + j), false);
+                        "  " + MazeJobs.display(j)), false);
                 src.sendSuccess(() -> Component.literal("    " + MazeJobs.blurb(j)), false);
             }
             src.sendSuccess(() -> Component.literal(
@@ -1154,33 +1154,82 @@ public final class MazeEvents {
      */
     private static int treat(CommandSourceStack src) {
         ServerPlayer player = src.getPlayer();
-        ServerLevel level = src.getLevel();
-        if (player == null || src.getServer() == null || !isMaze(level)) {
+        if (player == null || !(src.getLevel() instanceof ServerLevel level) || !isMaze(level)) {
             src.sendFailure(Component.literal("Only inside the maze."));
             return 0;
         }
-        MazeJobs jobs = MazeJobs.get(src.getServer());
+        return treat(player, level, null) ? 1 : 0;
+    }
+
+    /**
+     * A Med-jack right-clicks somebody: the treat, as a thing you do.
+     *
+     * <p>Treating was a typed command - the one ability in the maze whose
+     * entire subject is being physically present, reached by typing. Now it
+     * is reaching them: right-click the runner who is Changing. The command
+     * still works for anybody with it in their fingers; both land in
+     * {@link #treat(ServerPlayer, ServerLevel, ServerPlayer)}.
+     */
+    @SubscribeEvent
+    public static void onInteractPlayer(
+            net.neoforged.neoforge.event.entity.player.PlayerInteractEvent.EntityInteract event) {
+        if (!(event.getEntity() instanceof ServerPlayer medic)
+                || !(medic.level() instanceof ServerLevel level) || !isMaze(level)
+                || !(event.getTarget() instanceof ServerPlayer patient)
+                || event.getHand() != net.minecraft.world.InteractionHand.MAIN_HAND) {
+            return;
+        }
+        if (medic.getServer() == null
+                || !MazeJobs.get(medic.getServer()).is(medic.getUUID(), MazeJobs.MEDJACK)
+                || !MazeSting.isChanging(patient.getUUID())) {
+            return; // not a Med-jack, or nothing to treat: an ordinary click
+        }
+        event.setCanceled(true);
+        treat(medic, level, patient);
+    }
+
+    /**
+     * The treat itself: buy a Changing runner time, or at rank three cure them.
+     *
+     * <p>Range is deliberately short. Treating from across the Glade would make
+     * the job a command rather than a thing you do, and the point of it is that
+     * somebody has to physically get to a runner who is dying on the grass.
+     *
+     * @param preferred the runner that was clicked, or null to take the nearest
+     * @return whether anything was done
+     */
+    private static boolean treat(ServerPlayer player, ServerLevel level, ServerPlayer preferred) {
+        if (player.getServer() == null) {
+            return false;
+        }
+        MazeJobs jobs = MazeJobs.get(player.getServer());
         if (!jobs.is(player.getUUID(), MazeJobs.MEDJACK)) {
-            src.sendFailure(Component.literal("You are not a Med-jack. §8/maze job medjack"));
-            return 0;
+            player.displayClientMessage(Component.literal(
+                    "§cYou are not a Med-jack. §8Sign on at the trade board."), false);
+            return false;
         }
         int steady = MazeSkills.rankOf(level, player.getUUID(), "steady");
         double reach = 5.0 + steady * 2.0;
         ServerPlayer patient = null;
-        double best = Double.MAX_VALUE;
-        for (ServerPlayer other : level.players()) {
-            if (!MazeSting.isChanging(other.getUUID())) {
-                continue;
-            }
-            double d = other.distanceToSqr(player);
-            if (d <= reach * reach && d < best) {
-                best = d;
-                patient = other;
+        if (preferred != null && preferred.distanceToSqr(player) <= reach * reach
+                && MazeSting.isChanging(preferred.getUUID())) {
+            patient = preferred;
+        } else {
+            double best = Double.MAX_VALUE;
+            for (ServerPlayer other : level.players()) {
+                if (!MazeSting.isChanging(other.getUUID())) {
+                    continue;
+                }
+                double d = other.distanceToSqr(player);
+                if (d <= reach * reach && d < best) {
+                    best = d;
+                    patient = other;
+                }
             }
         }
         if (patient == null) {
-            src.sendFailure(Component.literal("Nobody within reach is Changing."));
-            return 0;
+            player.displayClientMessage(Component.literal("§cNobody within reach is Changing."), true);
+            return false;
         }
         int rank = jobs.level(player.getUUID());
         long day = MazeRuntime.dayNumber(level);
@@ -1193,21 +1242,21 @@ public final class MazeEvents {
             // buying somebody a minute is the same work as curing them, and
             // often the braver of the two.
             MazeDayWork.get(level).add(level, player, MazeJobs.MEDJACK, 3);
-            src.sendSuccess(() -> Component.literal(
+            player.displayClientMessage(Component.literal(
                     "§a✚ You pulled " + subject.getGameProfile().getName() + " back."), false);
-            return 1;
+            return true;
         }
         int seconds = (rank >= 2 ? 45 : 30) + steady * 10;
         if (!MazeSting.extend(level, subject, seconds)) {
-            src.sendFailure(Component.literal("Too late. It has already taken."));
-            return 0;
+            player.displayClientMessage(Component.literal("§cToo late. It has already taken."), true);
+            return false;
         }
         jobs.award(player, MazeJobs.MEDJACK, 8);
         MazeDayWork.get(level).add(level, player, MazeJobs.MEDJACK, 3);
-        src.sendSuccess(() -> Component.literal(
+        player.displayClientMessage(Component.literal(
                 "§a✚ You bought " + subject.getGameProfile().getName()
                         + " §f" + seconds + "s§a."), false);
-        return 1;
+        return true;
     }
 
     /**
@@ -1283,7 +1332,7 @@ public final class MazeEvents {
         MazeSkills skills = MazeSkills.get(src.getServer());
         String job = jobs.jobOf(player.getUUID());
         if (job == null) {
-            src.sendFailure(Component.literal("Take a job first. §8/maze job"));
+            src.sendFailure(Component.literal("Take a job first. §8The board by the bell."));
             return 0;
         }
         int spare = skills.available(jobs, player.getUUID(), job);
