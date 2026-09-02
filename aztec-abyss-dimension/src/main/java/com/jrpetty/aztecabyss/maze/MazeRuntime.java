@@ -114,6 +114,7 @@ public final class MazeRuntime {
         appliedLayoutName = null;
         appliedOpen = null;
         doorsOpen = false;
+        doorStep = -1;
         warnedDusk = false;
         reshapeDrama = 0;
         hordeDay = -1;
@@ -284,6 +285,7 @@ public final class MazeRuntime {
         // Full rate: the Changing is a two-and-a-half second beat and a beat
         // sampled once a second is not a beat.
         Griever.tickRisen(level);
+        tickDoorAnim(level);
 
         // Is what is standing what should be standing? One question covers the
         // midnight reshape, a server restart and the first day of a new game.
@@ -296,6 +298,11 @@ public final class MazeRuntime {
             // Fresh caches with the fresh walls: yesterday's map of where things
             // were should be worth nothing.
             MazeChests.reshuffle(level, clock.day());
+            // Doors stamped to match the clock in the same breath, instantly and
+            // silently. This is the convergence point after a boot, a new game or
+            // the midnight reshape - a server that stopped mid-grind must not
+            // wake up with a half-closed door and no driver behind it.
+            stampDoors(level, !clock.isNight());
             if (!first && midnight) {
                 reshapeHeard(level);
             }
@@ -1538,21 +1545,145 @@ public final class MazeRuntime {
         }
     }
 
-    /** Opens or seals the four Glade doors. */
+    /**
+     * The passage columns in the order the slab crosses them: outsides first,
+     * the centre last. The final thing to exist is a one-block slit you can
+     * still dive through, and when the doors open it is also the first.
+     */
+    private static final int[] DOOR_SLIDE_ORDER = {1, 4, 2, 3};
+
+    /** Ticks between grinds. Four moves at this spacing is the five seconds. */
+    private static final int DOOR_MOVE_EVERY = 25;
+
+    /** Next move index while a door is grinding, or -1 when they are at rest. */
+    private static int doorStep = -1;
+    private static long doorMoveAt;
+
+    /**
+     * Starts the doors moving. They used to snap in a single tick, which threw
+     * away the best moment the maze owns: the film's doors GRIND, and everybody
+     * who has seen it remembers somebody diving through the gap. Five seconds,
+     * four grinds, and the gap shrinks around a centre slit - so "can I still
+     * make it" has a real answer the whole way down, and the answer changes.
+     *
+     * <p>{@code doorsOpen} flips here, at the start: the state records which way
+     * the doors are GOING, and the clock already told everyone when. What it
+     * costs a runner is five more seconds of hope; what it costs a Griever at
+     * dawn is the same five seconds of the Glade watching the slit widen.
+     */
     private static void setDoors(ServerLevel level, boolean open) {
         doorsOpen = open;
-        RandomSource rng = RandomSource.create();
+        doorStep = 0;
+        doorMoveAt = level.getGameTime() + DOOR_MOVE_EVERY;
+        for (ServerPlayer p : level.players()) {
+            p.displayClientMessage(Component.literal(open
+                    ? "\u00a7a\u25b2 The doors are grinding open."
+                    : "\u00a74\u25bc The doors are closing. \u00a7c5 seconds."), false);
+        }
+        doorGrindFx(level, false);
+    }
+
+    /** One grind per {@link #DOOR_MOVE_EVERY} ticks until the slab is home. */
+    private static void tickDoorAnim(ServerLevel level) {
+        if (doorStep < 0 || level.getGameTime() < doorMoveAt) {
+            return;
+        }
+        boolean opening = doorsOpen;
+        // Closing walks the order forward; opening walks it backward, so the
+        // slit that vanished last is the slit that appears first.
+        int col = DOOR_SLIDE_ORDER[opening ? 3 - doorStep : doorStep];
+        boolean firstMove = doorStep == 0;
+        boolean lastMove = doorStep == 3;
         for (int i = 0; i < DOOR_CELLS.length; i++) {
-            int cx = DOOR_CELLS[i][0];
-            int cz = DOOR_CELLS[i][1];
+            moveDoorColumn(level, i, col, opening, firstMove, lastMove);
+        }
+        doorGrindFx(level, lastMove);
+        if (lastMove) {
+            doorStep = -1;
+            for (ServerPlayer p : level.players()) {
+                p.displayClientMessage(Component.literal(opening
+                        ? "\u00a7a\u25b2 The doors are open. \u00a77Run."
+                        : "\u00a74\u25bc The doors have sealed."), false);
+            }
+        } else {
+            doorStep++;
+            doorMoveAt += DOOR_MOVE_EVERY;
+        }
+    }
+
+    /**
+     * One column of one door, written or cleared.
+     *
+     * <p>North and south doors pass along z, so their slab crosses in x; east
+     * and west pass along x and cross in z. The two edge rows of a crossing-z
+     * door sit against the wall bands and were never passable, so they ride
+     * with the first closing move and the last opening one - which keeps the
+     * finished slab identical, block for block, to what {@link #stampDoors}
+     * writes. The two must never drift: one of them always finishes what the
+     * other started.
+     */
+    private static void moveDoorColumn(ServerLevel level, int door, int col,
+                                       boolean opening, boolean firstMove, boolean lastMove) {
+        int cx = DOOR_CELLS[door][0];
+        int cz = DOOR_CELLS[door][1];
+        boolean widthX = door % 2 == 0;
+        java.util.List<Integer> lanes = new java.util.ArrayList<>();
+        lanes.add(col);
+        if (!widthX && ((!opening && firstMove) || (opening && lastMove))) {
+            lanes.add(0);
+            lanes.add(5);
+        }
+        for (int lane : lanes) {
+            for (int d = widthX ? 0 : MazeData.CORRIDOR_MIN;
+                    d <= (widthX ? MazeData.CELL - 1 : MazeData.CORRIDOR_MAX); d++) {
+                int x = cx * MazeData.CELL + (widthX ? lane : d);
+                int z = cz * MazeData.CELL + (widthX ? d : lane);
+                for (int y = MazeData.WALL_BASE_Y; y <= MazeData.WALL_TOP_Y; y++) {
+                    boolean band = ((y - MazeData.WALL_BASE_Y) % 4) == 0;
+                    level.setBlock(new BlockPos(x, y, z), opening
+                            ? Blocks.AIR.defaultBlockState()
+                            : (band ? Blocks.CHISELED_DEEPSLATE.defaultBlockState()
+                            : Blocks.POLISHED_DEEPSLATE.defaultBlockState()), 2);
+                }
+            }
+        }
+        // Stone dust off the moving face, low, where the grinding would be.
+        double px = cx * MazeData.CELL + (widthX ? col : 2.5) + 0.5;
+        double pz = cz * MazeData.CELL + (widthX ? 2.5 : col) + 0.5;
+        level.sendParticles(new net.minecraft.core.particles.BlockParticleOption(
+                        net.minecraft.core.particles.ParticleTypes.BLOCK,
+                        Blocks.POLISHED_DEEPSLATE.defaultBlockState()),
+                px, MazeData.WALL_BASE_Y + 1.2, pz, 14, 0.4, 1.0, 0.4, 0.08);
+    }
+
+    /** The grind everyone hears, and the boom when the slab lands. */
+    private static void doorGrindFx(ServerLevel level, boolean boom) {
+        for (int[] cell : DOOR_CELLS) {
+            BlockPos at = new BlockPos(cell[0] * MazeData.CELL + 3,
+                    MazeData.WALL_BASE_Y + 2, cell[1] * MazeData.CELL + 3);
+            level.playSound(null, at, SoundEvents.GRINDSTONE_USE,
+                    SoundSource.BLOCKS, 1.6F, 0.45F);
+            if (boom) {
+                level.playSound(null, at, SoundEvents.ANVIL_LAND,
+                        SoundSource.BLOCKS, 1.1F, 0.5F);
+            }
+        }
+    }
+
+    /**
+     * Every door written whole, this instant, no ceremony. The convergence
+     * write for boots, new games and the reshape - see the caller. Must place
+     * exactly what the four moves of {@link #moveDoorColumn} place together.
+     */
+    private static void stampDoors(ServerLevel level, boolean open) {
+        doorsOpen = open;
+        doorStep = -1;
+        for (int[] cell : DOOR_CELLS) {
             for (int lx = MazeData.CORRIDOR_MIN; lx <= MazeData.CORRIDOR_MAX; lx++) {
                 for (int lz = 0; lz < MazeData.CELL; lz++) {
-                    int x = cx * MazeData.CELL + lx;
-                    int z = cz * MazeData.CELL + lz;
+                    int x = cell[0] * MazeData.CELL + lx;
+                    int z = cell[1] * MazeData.CELL + lz;
                     for (int y = MazeData.WALL_BASE_Y; y <= MazeData.WALL_TOP_Y; y++) {
-                        // Closed, a door is a single great slab of polished stone
-                        // banded in chiselled courses - unmistakably a door, and
-                        // not to be confused with the wall either side of it.
                         boolean band = ((y - MazeData.WALL_BASE_Y) % 4) == 0;
                         level.setBlock(new BlockPos(x, y, z), open
                                 ? Blocks.AIR.defaultBlockState()
@@ -1561,13 +1692,6 @@ public final class MazeRuntime {
                     }
                 }
             }
-        }
-        for (ServerPlayer p : level.players()) {
-            p.displayClientMessage(Component.literal(open
-                    ? "§a▲ The doors are open. §7Run."
-                    : "§4▼ The doors have sealed."), false);
-            level.playSound(null, p.blockPosition(), SoundEvents.PISTON_EXTEND,
-                    SoundSource.BLOCKS, 1.2F, 0.4F);
         }
     }
 

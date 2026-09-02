@@ -13,6 +13,26 @@ behaviour that was already there · **docs**
 
 ## Unreleased
 
+### The doors grind shut
+
+The Glade doors used to teleport between open and sealed in one tick — the most
+dramatic moment in the source material, spent on a block update. Now they take
+five seconds either way:
+
+- **feat** **A closing you can watch — and dive through.** Each door's slab
+  crosses the passage in four moves, twenty-five ticks apart, outer columns
+  first. The last thing to exist is a one-block slit down the centre; someone
+  sprinting for the Glade at dusk has until the fourth grind to make it. Opening
+  runs the same order backwards, so at dawn the slit appears first and widens.
+- **feat** **It sounds like stone.** Every move is a grindstone scrape at each
+  door plus a puff of deepslate dust off the moving column; the final move lands
+  with an anvil boom and "The doors have sealed." / "The doors are open. Run."
+  The closing broadcast warns "§c5 seconds" the moment it starts.
+- **change** Boot, new-game and reshape convergence stamp the doors instantly
+  and silently to whatever state the clock says — the animation only plays for
+  a real transition, never as a correction. A restart mid-grind resolves to the
+  finished state.
+
 ### The Changing, scored properly
 
 The first cut froze a full-grown Griever in place for the drama and called it a
