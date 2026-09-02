@@ -59,33 +59,86 @@ public final class MapSelectScreen extends Screen {
      * map can be described in as many lines as it needs.
      */
     private int cardHeight(ArenaMap map) {
-        int lines = this.font.split(Component.literal(map.blurb()), CARD_W - 20).size();
-        return CARD_HEAD + lines * LINE_H + CARD_FOOT;
+        return cardHeight(map, fit());
     }
 
     /**
      * How much of the bottom of the screen the mode buttons own.
      *
-     * <p>Three stacked buttons plus a margin. The card stack is centred in what is
+     * <p>Four stacked buttons plus a margin. The card stack is centred in what is
      * left rather than in the whole screen, because centring on the screen while
      * the buttons grew downward is how the bottom card ends up underneath the
      * Maze button on a short window.
      */
     private static final int BUTTON_BAND = 124;
 
-    /** Top edge of card {@code index}, stacking the variable heights above it. */
-    private int cardY(int index) {
+    /** Where the card stack may begin: just under the two header lines. */
+    private static final int TOP = 54;
+
+    /** A shelved map folded to one line: title left, COMING SOON right. */
+    private static final int STRIP_H = 22;
+
+    /**
+     * How the cards have to give to fit the window.
+     *
+     * <p>The stack was centred in the space between header and buttons by an
+     * offset that went <em>negative</em> when the stack was taller than the
+     * space - so at the most common GUI scale the top card's title sat on the
+     * header's subtitle and the bottom card's record row sat under the first
+     * button. Three full cards need about 240 pixels; a 1080p window at GUI
+     * scale 3 has about 190 to give them.
+     *
+     * <p>Instead of overflowing, the layout yields in order of what is worth
+     * least: 0 - everything as written; 1 - the shelved map folds to a
+     * one-line strip (a teaser does not need a blurb) and the gaps tighten;
+     * 2 - every card drops its blurb and keeps title, tag and record. Chosen
+     * fresh each frame from the live height, so resizing the window can never
+     * leave the wrong shape behind.
+     */
+    private int fit() {
+        int avail = this.height - BUTTON_BAND - TOP;
+        for (int mode = 0; mode < 2; mode++) {
+            if (stackHeight(mode) <= avail) {
+                return mode;
+            }
+        }
+        return 2;
+    }
+
+    private static int gap(int mode) {
+        return mode == 0 ? GAP : 4;
+    }
+
+    private int cardHeight(ArenaMap map, int mode) {
+        if (map.comingSoon() && mode >= 1) {
+            return STRIP_H;
+        }
+        if (mode >= 2) {
+            return CARD_HEAD + CARD_FOOT;
+        }
+        int lines = this.font.split(Component.literal(map.blurb()), CARD_W - 20).size();
+        return CARD_HEAD + lines * LINE_H + CARD_FOOT;
+    }
+
+    private int stackHeight(int mode) {
         ArenaMap[] maps = ArenaMap.values();
         int total = 0;
         for (ArenaMap m : maps) {
-            total += cardHeight(m) + GAP;
+            total += cardHeight(m, mode);
         }
-        // Centred between the header and the button band, not on the screen.
-        int top = 52;
-        int bottom = this.height - BUTTON_BAND;
-        int y = top + (bottom - top - (total - GAP)) / 2;
+        return total + gap(mode) * Math.max(0, maps.length - 1);
+    }
+
+    /** Top edge of card {@code index}, stacking the variable heights above it. */
+    private int cardY(int index) {
+        ArenaMap[] maps = ArenaMap.values();
+        int mode = fit();
+        int avail = this.height - BUTTON_BAND - TOP;
+        // Centred in the room there is, and never above TOP: an offset that
+        // could go negative is exactly the bug this replaces.
+        int y = TOP + Math.max(0, (avail - stackHeight(mode)) / 2);
         for (int i = 0; i < index; i++) {
-            y += cardHeight(maps[i]) + GAP;
+            y += cardHeight(maps[i], mode) + gap(mode);
         }
         return y;
     }
@@ -125,7 +178,7 @@ public final class MapSelectScreen extends Screen {
         // behind it, however many the server has.
         addRenderableWidget(Button.builder(
                         Component.literal(customMaps.isEmpty()
-                                ? "§8Player maps §7— none published yet"
+                                ? "§7Player maps §8— none published yet"
                                 : "§dPlayer maps §8— " + customMaps.size() + " on the portal"),
                         b -> {
                             if (minecraft != null) {
@@ -226,22 +279,25 @@ public final class MapSelectScreen extends Screen {
         ArenaMap[] maps = ArenaMap.values();
         int left = cx - CARD_W / 2;
 
+        int mode = fit();
         for (int i = 0; i < maps.length; i++) {
             ArenaMap map = maps[i];
             int y = cardY(i);
-            int cardH = cardHeight(map);
+            int cardH = cardHeight(map, mode);
             boolean shelved = map.comingSoon();
+            boolean strip = shelved && mode >= 1;
             boolean isSelected = i == selected && !shelved;
             boolean hovered = !shelved
                     && mouseX >= left && mouseX <= left + CARD_W && mouseY >= y && mouseY <= y + cardH;
 
-            // Opaque card bodies. These were 0x99-0xCC alpha, which let the ground
-            // through and made every card a slightly different muddy grey
-            // depending on what was behind it. A card is a surface, not a tint.
+            // Opaque card bodies, and visibly lighter than the ground: at
+            // 0xFF121212 on a 0xFF0B0A10 gradient the card and the backdrop
+            // were seven shades apart, which on most monitors is no card at
+            // all - just text floating in the dark with a faint line under it.
             g.fill(left, y, left + CARD_W, y + cardH,
-                    isSelected ? 0xFF241C12 : hovered ? 0xFF1C1C1C : 0xFF121212);
+                    isSelected ? 0xFF2A2117 : hovered ? 0xFF22212C : 0xFF19181F);
             int accent = map.difficultyColor();
-            int edge = isSelected ? accent : hovered ? 0xFF9A8A5A : shelved ? 0xFF2E2E2E : 0xFF4A4A4A;
+            int edge = isSelected ? accent : hovered ? 0xFF9A8A5A : shelved ? 0xFF34323E : 0xFF56536A;
             g.fill(left, y, left + CARD_W, y + 1, edge);
             g.fill(left, y + cardH - 1, left + CARD_W, y + cardH, edge);
             g.fill(left, y, left + 1, y + cardH, edge);
@@ -254,22 +310,32 @@ public final class MapSelectScreen extends Screen {
             // designed around that shadow; without it small text on a dark ground
             // goes thin and shimmers, which is most of why this screen was hard to
             // read. It was passing false everywhere.
+            // In strip mode the title and tag sit on one 22-pixel line, so both
+            // move up a notch; everything else on the card is skipped.
+            int titleY = strip ? y + 7 : y + 8;
             g.drawString(this.font, Component.literal(map.title()).withStyle(s -> s.withBold(true)),
-                    left + 10, y + 8, shelved ? 0xFF6A6A6A : isSelected ? 0xFFFFF0C8 : 0xFFF2F2F2, true);
+                    left + 10, titleY, shelved ? 0xFF6A6A6A : isSelected ? 0xFFFFF0C8 : 0xFFF2F2F2, true);
 
             String tag = shelved ? "COMING SOON" : map.difficulty();
             int tagColour = shelved ? 0xFFFFD24A : map.difficultyColor();
             int tagW = this.font.width(tag) + 8;
             int tagX = left + CARD_W - tagW - 8;
-            g.fill(tagX, y + 6, tagX + tagW, y + 18, 0xFF000000);
-            g.fill(tagX, y + 6, tagX + tagW, y + 7, tagColour);
-            g.drawString(this.font, Component.literal(tag), tagX + 4, y + 9, tagColour, true);
+            int tagY = strip ? y + 5 : y + 6;
+            g.fill(tagX, tagY, tagX + tagW, tagY + 12, 0xFF000000);
+            g.fill(tagX, tagY, tagX + tagW, tagY + 1, tagColour);
+            g.drawString(this.font, Component.literal(tag), tagX + 4, tagY + 3, tagColour, true);
 
-            int by = y + CARD_HEAD;
-            for (net.minecraft.util.FormattedCharSequence line
-                    : this.font.split(Component.literal(map.blurb()), CARD_W - 20)) {
-                g.drawString(this.font, line, left + 10, by, shelved ? 0xFF555555 : 0xFFC8C4BA, true);
-                by += LINE_H;
+            if (strip) {
+                continue;
+            }
+
+            if (mode < 2) {
+                int by = y + CARD_HEAD;
+                for (net.minecraft.util.FormattedCharSequence line
+                        : this.font.split(Component.literal(map.blurb()), CARD_W - 20)) {
+                    g.drawString(this.font, line, left + 10, by, shelved ? 0xFF555555 : 0xFFC8C4BA, true);
+                    by += LINE_H;
+                }
             }
 
             int best = (i < bestRounds.length) ? bestRounds[i] : 0;

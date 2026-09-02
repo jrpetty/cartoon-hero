@@ -13,6 +13,20 @@ behaviour that was already there · **docs**
 
 ## Unreleased
 
+### The portal picker fits its window
+
+- **fix** **Cards no longer overlap the header or the buttons.** The stack was
+  centred by an offset that went negative when three full cards (about 240px)
+  met a 1080p window at GUI scale 3 (about 190px to give) — so the Temple's
+  title sat on the subtitle and the Outpost's record row sat under the first
+  button. The layout now yields instead of overflowing: the shelved map folds
+  to a one-line strip and the gaps tighten; if that is still too tall, every
+  card keeps title, tag and record and drops its blurb. Decided per frame from
+  the live height, so resizing cannot leave the wrong shape behind.
+- **change** Card bodies are visibly lighter than the backdrop (they were seven
+  shades apart, which on most monitors is no card at all), and the empty
+  "Player maps" button is readable rather than grey on grey.
+
 ### The maze learns object permanence
 
 - **feat** **Grievers go home.** One with nobody to hunt used to stand exactly
