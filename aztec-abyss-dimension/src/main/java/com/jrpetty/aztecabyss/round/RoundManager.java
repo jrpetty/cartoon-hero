@@ -2598,6 +2598,23 @@ public final class RoundManager {
         }
     }
 
+    /**
+     * Somebody left the dimension by a route the run did not arrange.
+     *
+     * <p>Every planned exit - extraction, death, victory, being sent home -
+     * tears the round bar down and tells the client the run is over. A player
+     * who leaves any other way (a portal, a teleport, an operator) kept both:
+     * a boss bar reading "Round 7 | 340 pts" pinned to the top of the
+     * overworld, driven by a run they were no longer in. This is the catch-all
+     * off the dimension-change event; it clears the screen and nothing else,
+     * so a participant who walks back in is re-barred by the entry path.
+     */
+    public static void onLeftDimension(ServerPlayer player) {
+        cleanupBar(player);
+        LAST_BAR_TITLE.remove(player.getUUID());
+        ModNetworking.sendState(player, false, 0);
+    }
+
     private static void cleanupBar(ServerPlayer player) {
         ServerBossEvent bar = BOSS_BARS.remove(player.getUUID());
         if (bar != null) {

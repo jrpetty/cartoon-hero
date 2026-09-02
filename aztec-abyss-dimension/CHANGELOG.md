@@ -13,6 +13,18 @@ behaviour that was already there · **docs**
 
 ## Unreleased
 
+### Nothing of the Abyss follows you out
+
+- **fix** **The round bar no longer haunts the overworld.** Every planned exit
+  tore it down; any other route out of the dimension (a portal, a teleport, an
+  operator) left "The Aztec Abyss — Round 7 | 340 pts" pinned to the top of
+  the screen, driven by a run you were no longer in. Leaving the dimension by
+  any route now clears the round bar, the Heart bar, the engine's bar and the
+  in-run HUD state. Walking back in re-creates them.
+- **change** **The re-entry countdown is gone from the overworld HUD.** It sat
+  in the top-right corner for up to twenty hours. The portal already says the
+  same thing when you touch it, which is the only moment it matters.
+
 ### Coming up into the Glade
 
 - **fix** **The induction screen actually opens.** Arriving in the maze with

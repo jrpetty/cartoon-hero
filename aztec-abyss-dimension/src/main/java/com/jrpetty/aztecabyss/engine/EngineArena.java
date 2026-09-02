@@ -443,6 +443,18 @@ public final class EngineArena {
         this.startedTick = level.getGameTime();
     }
 
+    /**
+     * A player left the dimension mid-run by some route the engine did not
+     * arrange. Their seat in the run is handled by the tick (present drops
+     * anybody in another dimension); this only takes the run's bar off their
+     * screen, which the tick never did.
+     */
+    public static void onLeftDimension(ServerPlayer player) {
+        if (current != null) {
+            current.bar.removePlayer(player);
+        }
+    }
+
     public static EngineArena active() {
         return current;
     }

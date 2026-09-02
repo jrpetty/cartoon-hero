@@ -402,6 +402,12 @@ public final class AbyssEventHandler {
         if (event.getEntity() instanceof ServerPlayer player
                 && event.getFrom().equals(AztecAbyssConstants.ABYSS_LEVEL_KEY)) {
             com.jrpetty.aztecabyss.round.AbyssAbility.strip(player);
+            // And nothing of the Abyss stays on their screen: the round bar,
+            // the Heart bar, the engine's bar, the in-run HUD state. Every
+            // planned exit already does this; this is the route for exits
+            // nobody planned.
+            RoundManager.onLeftDimension(player);
+            com.jrpetty.aztecabyss.engine.EngineArena.onLeftDimension(player);
         }
     }
 

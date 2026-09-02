@@ -183,28 +183,6 @@ public final class AbyssClientEffects {
         }
     }
 
-    /** Top-right countdown to when the Abyss reopens for a player on a death lockout. */
-    private static void drawCooldownTimer(net.minecraft.client.gui.GuiGraphics g, Minecraft mc) {
-        long ms = ClientAbyssState.cooldownRemainingMillis();
-        if (ms <= 0L) {
-            return;
-        }
-        long totalSec = ms / 1000L;
-        long h = totalSec / 3600L;
-        long m = (totalSec / 60L) % 60L;
-        long s = totalSec % 60L;
-        String time = (h > 0 ? h + "h " : "") + m + "m " + s + "s";
-        net.minecraft.network.chat.Component label =
-                net.minecraft.network.chat.Component.literal("§5⟡ Abyss reopens in §d" + time);
-        net.minecraft.client.gui.Font font = mc.font;
-        int screenW = g.guiWidth();
-        int tw = font.width(label);
-        int x = screenW - tw - 6;
-        int y = 6;
-        g.fill(x - 4, y - 2, screenW - 2, y + font.lineHeight + 2, 0x88000000);
-        g.drawString(font, label, x, y, 0xFFFFFF, true);
-    }
-
     /**
      * One compact bar for the state of every way in: how much of the boarding is
      * still up, and how many are standing wide open. Aggregate on purpose - with
@@ -330,8 +308,10 @@ public final class AbyssClientEffects {
         if (mc.player == null) {
             return;
         }
-        // The re-entry cooldown counts down wherever the player is waiting.
-        drawCooldownTimer(event.getGuiGraphics(), mc);
+        // Nothing of this mod's is drawn outside its own dimension. The
+        // re-entry countdown used to sit in the overworld's top-right corner
+        // for up to twenty hours; the portal already says the same thing
+        // when you touch it, which is the only moment it matters.
         if (!active()) {
             return;
         }
