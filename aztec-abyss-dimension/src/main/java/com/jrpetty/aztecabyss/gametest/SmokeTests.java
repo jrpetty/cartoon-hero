@@ -64,19 +64,37 @@ public final class SmokeTests {
     private SmokeTests() {
     }
 
-    /** Both custom dimensions parsed and were created. */
+    /**
+     * The dimensions are defined and their types registered.
+     *
+     * <p>The game-test server cannot host them: vanilla builds its test world
+     * from the flat preset with an empty level-stem registry on purpose, so a
+     * datapack dimension never becomes a level there and asking
+     * {@code getLevel} would fail on every mod ever written. What the boot
+     * <em>does</em> do is load every dimension and dimension-type JSON into the
+     * registries, fatally if one is malformed - so a broken file already fails
+     * the run. This checks the rest: that each dimension file the mod ships is
+     * present and names a dimension type that actually registered.
+     */
     @GameTest(template = EMPTY)
-    public static void dimensionsExist(GameTestHelper helper) {
+    public static void dimensionsAreDefined(GameTestHelper helper) {
         var server = helper.getLevel().getServer();
-        if (server.getLevel(AztecAbyssConstants.ABYSS_LEVEL_KEY) == null) {
-            helper.fail("The Abyss dimension did not load - check data/aztecabyss/dimension");
-            return;
+        var types = server.registryAccess().registryOrThrow(
+                net.minecraft.core.registries.Registries.DIMENSION_TYPE);
+        List<String> problems = new ArrayList<>();
+        for (String name : new String[]{"abyss", "maze", "workshop"}) {
+            var id = net.minecraft.resources.ResourceLocation.fromNamespaceAndPath(
+                    AztecAbyssConstants.MOD_ID, name);
+            if (!types.containsKey(id)) {
+                problems.add("dimension type " + id + " did not register - check data/aztecabyss/dimension_type/" + name + ".json");
+            }
+            var file = net.minecraft.resources.ResourceLocation.fromNamespaceAndPath(
+                    AztecAbyssConstants.MOD_ID, "dimension/" + name + ".json");
+            if (server.getResourceManager().getResource(file).isEmpty()) {
+                problems.add("dimension file " + file + " is missing from the jar");
+            }
         }
-        if (server.getLevel(AztecAbyssConstants.MAZE_LEVEL_KEY) == null) {
-            helper.fail("The maze dimension did not load - check data/aztecabyss/dimension");
-            return;
-        }
-        helper.succeed();
+        finish(helper, problems);
     }
 
     /**
