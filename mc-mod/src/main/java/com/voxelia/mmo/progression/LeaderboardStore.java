@@ -5,7 +5,6 @@ import com.google.gson.GsonBuilder;
 import com.google.gson.reflect.TypeToken;
 import com.voxelia.mmo.VoxeliaMMO;
 import com.voxelia.mmo.registry.VoxeliaAttachments;
-import com.voxelia.mmo.skill.PlayerPrestige;
 import com.voxelia.mmo.skill.PlayerSkills;
 import com.voxelia.mmo.skill.Skill;
 import com.voxelia.mmo.skill.SkillCurve;
@@ -50,12 +49,11 @@ public final class LeaderboardStore {
     public static final class Entry {
         public String name = "";
         public Map<String, Integer> xp = new HashMap<>();
-        public Map<String, Integer> prestige = new HashMap<>();
         public long lastSeen;
     }
 
     /** A ranked row, ready for the screen or the command. */
-    public record Row(int rank, String name, int level, int prestige, boolean self) {}
+    public record Row(int rank, String name, int level, boolean self) {}
 
     private static final Map<String, Entry> ENTRIES = new HashMap<>();
     private static Path file;
@@ -90,12 +88,10 @@ public final class LeaderboardStore {
     /** Snapshots a player's current skills. Cheap — the write is throttled. */
     public static void record(ServerPlayer player) {
         PlayerSkills skills = player.getData(VoxeliaAttachments.PLAYER_SKILLS.get());
-        PlayerPrestige prestige = player.getData(VoxeliaAttachments.PLAYER_PRESTIGE.get());
 
         Entry entry = new Entry();
         entry.name = player.getGameProfile().getName();
         for (Skill s : Skill.values()) entry.xp.put(s.id(), skills.getXp(s));
-        entry.prestige = new HashMap<>(prestige.counts());
         entry.lastSeen = System.currentTimeMillis();
 
         ENTRIES.put(player.getUUID().toString(), entry);
@@ -118,7 +114,7 @@ public final class LeaderboardStore {
         for (int i = 0; i < sorted.size() && rows.size() < limit; i++) {
             Map.Entry<String, Entry> e = sorted.get(i);
             rows.add(new Row(i + 1, e.getValue().name, levelOf(e.getValue(), skill),
-                prestigeOf(e.getValue(), skill), e.getKey().equals(viewerId)));
+                e.getKey().equals(viewerId)));
         }
         return rows;
     }
@@ -156,14 +152,6 @@ public final class LeaderboardStore {
         long total = 0;
         for (Skill s : Skill.values()) total += e.xp.getOrDefault(s.id(), 0);
         return (int) Math.min(Integer.MAX_VALUE, total);
-    }
-
-    private static int prestigeOf(Entry e, Skill skill) {
-        if (e.prestige == null) return 0;
-        if (skill != null) return e.prestige.getOrDefault(skill.id(), 0);
-        int total = 0;
-        for (Integer v : e.prestige.values()) total += v == null ? 0 : v;
-        return total;
     }
 
     // ── persistence ─────────────────────────────────────────────────────────

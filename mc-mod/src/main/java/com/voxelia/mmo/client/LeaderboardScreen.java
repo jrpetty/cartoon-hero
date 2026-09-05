@@ -1,6 +1,7 @@
 package com.voxelia.mmo.client;
 
 import com.voxelia.mmo.skill.Skill;
+import com.voxelia.mmo.skill.SkillCurve;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.screens.Screen;
@@ -123,18 +124,13 @@ public final class LeaderboardScreen extends Screen {
             };
             g.drawString(this.font, rank, rx + 2, cy, rankColor);
 
-            String stars = row.prestige() > 0 ? " " + "✦".repeat(Math.min(row.prestige(), 3)) : "";
             String lvl = "Lv " + row.level();
             int nameX = rx + 22;
-            int nameW = RIGHT_W - 22 - this.font.width(lvl) - this.font.width(stars) - 8;
+            int nameW = RIGHT_W - 22 - this.font.width(lvl) - 8;
             g.drawString(this.font, VoxeliaUi.trim(this.font, row.name(), nameW), nameX, cy,
                 row.self() ? 0xFFFFFFFF : VoxeliaUi.TEXT);
-            if (!stars.isEmpty()) {
-                g.drawString(this.font, stars, nameX + Math.min(nameW, this.font.width(row.name())), cy,
-                    VoxeliaUi.GOLD);
-            }
             g.drawString(this.font, lvl, rx + RIGHT_W - this.font.width(lvl), cy,
-                row.level() >= 100 ? VoxeliaUi.GOOD : 0xFFFFFFFF);
+                row.level() >= SkillCurve.MAX_LEVEL ? VoxeliaUi.GOOD : 0xFFFFFFFF);
         }
 
         // ── Footer: where you sit ───────────────────────────────────────────

@@ -4,6 +4,7 @@ import com.voxelia.mmo.config.VoxeliaConfig;
 import com.voxelia.mmo.registry.VoxeliaAttachments;
 import com.voxelia.mmo.skill.PlayerTalents;
 import com.voxelia.mmo.skill.Skill;
+import com.voxelia.mmo.skill.SkillCurve;
 import com.voxelia.mmo.skill.Talent;
 import net.minecraft.server.level.ServerPlayer;
 
@@ -15,13 +16,23 @@ public final class TalentLogic {
         return p.getData(VoxeliaAttachments.PLAYER_TALENTS.get()).getRank(talent);
     }
 
-    /** Points earned (1 per N skill levels, plus prestige bonus) minus points already spent. */
+    /**
+     * Skill levels per talent point, derived so that a skill at {@link SkillCurve#MAX_LEVEL}
+     * has earned exactly enough points to max every one of its talents — no more, no less.
+     * With 5 talents × 5 ranks and a 500 cap, that's one point every 20 levels.
+     */
+    public static int levelsPerPoint() {
+        int talentsPerSkill = Math.max(1, Talent.values().length / Skill.values().length);
+        int capacity = Math.max(1, talentsPerSkill * VoxeliaConfig.talentMaxRank());
+        return Math.max(1, SkillCurve.MAX_LEVEL / capacity);
+    }
+
+    /** Points earned so far minus points already spent. */
     public static int pointsAvailable(ServerPlayer p, Skill skill) {
         int level = p.getData(VoxeliaAttachments.PLAYER_SKILLS.get()).getLevel(skill);
-        int earned = level / VoxeliaConfig.talentLevelsPerPoint();
-        int prestige = PrestigeLogic.bonusPoints(p, skill); // extra points from prestiging, given at once
+        int earned = level / levelsPerPoint();
         int spent = p.getData(VoxeliaAttachments.PLAYER_TALENTS.get()).spentIn(skill);
-        return earned + prestige - spent;
+        return earned - spent;
     }
 
     /** Try to spend one point into a talent. Returns true on success. */

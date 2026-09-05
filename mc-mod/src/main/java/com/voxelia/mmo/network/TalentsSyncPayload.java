@@ -13,9 +13,8 @@ import net.neoforged.neoforge.network.handling.IPayloadContext;
 
 import java.util.Map;
 
-/** Server -> client: the player's talent ranks + prestige counts (+ rules) for the talent GUI. */
-public record TalentsSyncPayload(Map<String, Integer> ranks, int maxRank, int levelsPerPoint,
-                                 Map<String, Integer> prestige, int pointsPerPrestige, int prestigeMax)
+/** Server -> client: the player's talent ranks plus the two rules the talent GUI needs. */
+public record TalentsSyncPayload(Map<String, Integer> ranks, int maxRank, int levelsPerPoint)
         implements CustomPacketPayload {
 
     public static final Type<TalentsSyncPayload> TYPE =
@@ -29,16 +28,12 @@ public record TalentsSyncPayload(Map<String, Integer> ranks, int maxRank, int le
             MAP_CODEC, TalentsSyncPayload::ranks,
             ByteBufCodecs.VAR_INT, TalentsSyncPayload::maxRank,
             ByteBufCodecs.VAR_INT, TalentsSyncPayload::levelsPerPoint,
-            MAP_CODEC, TalentsSyncPayload::prestige,
-            ByteBufCodecs.VAR_INT, TalentsSyncPayload::pointsPerPrestige,
-            ByteBufCodecs.VAR_INT, TalentsSyncPayload::prestigeMax,
             TalentsSyncPayload::new);
 
     @Override
     public Type<? extends CustomPacketPayload> type() { return TYPE; }
 
     public static void handle(TalentsSyncPayload payload, IPayloadContext context) {
-        context.enqueueWork(() -> ClientTalents.update(payload.ranks(), payload.maxRank(),
-            payload.levelsPerPoint(), payload.prestige(), payload.pointsPerPrestige(), payload.prestigeMax()));
+        context.enqueueWork(() -> ClientTalents.update(payload.ranks(), payload.maxRank(), payload.levelsPerPoint()));
     }
 }

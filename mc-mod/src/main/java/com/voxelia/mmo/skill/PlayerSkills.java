@@ -40,7 +40,7 @@ public final class PlayerSkills {
         xp.merge(s, Math.max(0, amount), Integer::sum);
     }
 
-    /** Wipe a single skill's XP back to 0 (level 1) — used when prestiging it. */
+    /** Wipe a single skill's XP back to 0 (level 1). */
     public void resetSkill(Skill s) {
         xp.put(s, 0);
     }

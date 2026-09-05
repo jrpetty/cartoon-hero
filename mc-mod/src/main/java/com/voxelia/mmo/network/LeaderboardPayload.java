@@ -14,8 +14,8 @@ import net.neoforged.neoforge.network.handling.IPayloadContext;
 import java.util.List;
 
 /**
- * Server -> client: one page of standings. {@code rows} carries four ints per
- * entry (rank, level, prestige, 1 if it's you) alongside {@code names}, and
+ * Server -> client: one page of standings. {@code rows} carries three ints per
+ * entry (rank, level, 1 if it's you) alongside {@code names}, and
  * {@code meta} is [skillOrdinal, yourRank, yourLevel, playersTracked] — which
  * keeps the whole thing to three stream components.
  */
@@ -38,7 +38,7 @@ public record LeaderboardPayload(List<String> names, List<Integer> rows, List<In
             LeaderboardPayload::new);
 
     /** Ints per row in {@link #rows}. */
-    public static final int STRIDE = 4;
+    public static final int STRIDE = 3;
     public static final int M_SKILL = 0;
     public static final int M_YOUR_RANK = 1;
     public static final int M_YOUR_LEVEL = 2;

@@ -11,7 +11,7 @@ import net.minecraft.client.gui.LayeredDraw;
 
 /**
  * A vanilla-scoreboard-style sidebar (right edge, vertically centred) listing
- * every skill's level with prestige stars, capped by a Character line. Toggled
+ * every skill's level, capped by a Character line. Toggled
  * with /voxelia sidebar, the sidebar keybind, or the client config. Independent
  * of the corner HUD so players can run either, both, or neither.
  */
@@ -43,9 +43,7 @@ public final class SkillSidebarOverlay implements LayeredDraw.Layer {
             int xp = ClientSkillData.xp(s);
             int lvl = ClientSkillData.level(s);
             totalLvl += lvl;
-            int pres = ClientTalents.prestige(s);
-            String star = pres > 0 ? " " + "✦".repeat(Math.min(pres, 3)) : "";
-            names[i] = s.display() + star;
+            names[i] = s.display();
             vals[i] = SkillCurve.xpToNext(xp) > 0 ? String.valueOf(lvl) : "MAX";
             contentW = Math.max(contentW, font.width(names[i]) + GAP + font.width(vals[i]));
         }

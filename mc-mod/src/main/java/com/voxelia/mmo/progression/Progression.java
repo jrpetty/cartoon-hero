@@ -48,7 +48,7 @@ public final class Progression {
             SoundEvents.PLAYER_LEVELUP, SoundSource.PLAYERS, 1.0f, 1.2f);
 
         // A talent point lands every N levels — say so, or it sits unnoticed.
-        int per = VoxeliaConfig.talentLevelsPerPoint();
+        int per = TalentLogic.levelsPerPoint();
         if (per > 0 && level % per == 0) {
             player.sendSystemMessage(Component.literal("")
                 .append(Component.literal("[Voxelia] ").withStyle(ChatFormatting.GOLD))

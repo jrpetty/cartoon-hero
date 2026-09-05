@@ -13,7 +13,7 @@ public final class ClientLeaderboard {
     private ClientLeaderboard() {}
 
     /** One row as the screen draws it. */
-    public record Row(int rank, String name, int level, int prestige, boolean self) {}
+    public record Row(int rank, String name, int level, boolean self) {}
 
     private static List<Row> rows = List.of();
     private static List<Integer> meta = List.of();
@@ -27,8 +27,7 @@ public final class ClientLeaderboard {
         for (int i = 0; i < names.size(); i++) {
             int base = i * LeaderboardPayload.STRIDE;
             if (base + LeaderboardPayload.STRIDE > data.size()) break;
-            out.add(new Row(data.get(base), names.get(i), data.get(base + 1),
-                data.get(base + 2), data.get(base + 3) == 1));
+            out.add(new Row(data.get(base), names.get(i), data.get(base + 1), data.get(base + 2) == 1));
         }
         rows = out;
         meta = payload.meta();

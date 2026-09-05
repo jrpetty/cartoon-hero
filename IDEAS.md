@@ -5,39 +5,13 @@ committed to a timeline — it's a backlog to pull from later.
 
 ---
 
-## ✅ SHIPPED: Prestige / Ascension
+## ❌ REMOVED: Prestige / Ascension
 
-Built and live: per-skill prestige at level 100 (resets the skill + its talents,
-grants +2 permanent talent points per prestige, capped at 3), with prestige stars
-on every surface, a two-click confirm button, a full-screen celebration +
-particles/sound, and a server-wide announcement. Original design notes kept
-below for reference.
-
-**Goal:** give the mod a real endgame. Right now a skill caps at level 100 and
-then XP is wasted; Prestige turns "max level" into a milestone, not a dead end.
-
-**How it works (draft):**
-- When a skill reaches level 100, the player can **ascend** it (a command
-  `/voxelia prestige <skill>` and/or a button on the skills screen).
-- Ascending **resets that skill to level 1** (XP back to 0) but grants a
-  **permanent, stacking bonus** to that skill's power — e.g. +5% to its
-  signature effect per ascension.
-- Track an **ascension count per skill** (new `PlayerPrestige` data attachment,
-  persisted + copied on death). Cap it (e.g. max 5 ascensions/skill) so it's not
-  infinite.
-- Show **prestige stars** next to the skill (menus, HUD) and in the chat title
-  (e.g. `[✦✦ Master Miner]`). Cosmetic prestige identity.
-- The ascension bonus feeds the same `TalentLogic`/`SkillEffects` multiplier path
-  the talents use, so it stacks cleanly with existing systems.
-- Config: `prestigeEnabled`, `prestigeBonusPerRank` (0.05), `prestigeMaxRank` (5),
-  `prestigeRequiresMaxLevel` (true).
-
-**Why it's good:** long-term goal, reuses existing multiplier plumbing, adds a
-visible flex (stars), low risk. Pairs with the 20% death penalty for stakes.
-
-**Open questions:** does ascending also refund/clear that skill's talent points?
-Should there be a global "Character Prestige" for ascending all 11? Cosmetic-only
-vs. real power creep — tune the bonus so it's meaningful but not broken.
+Shipped in 1.0.0, then pulled: per-skill prestige at level 100 (reset + permanent
+bonus talent points) was replaced by a straight **1 → 500** climb where a maxed
+skill earns exactly enough talent points (one per 20 levels) to fill its whole
+tree. No prestige loop, no stars. The original design notes are gone with it —
+if an endgame loop ever comes back, design it fresh against the 500 cap.
 
 ---
 
@@ -46,7 +20,7 @@ vs. real power creep — tune the bonus so it's meaningful but not broken.
 ### Endgame & progression
 - **Specializations** — at level 50 a skill forks into a subclass you pick
   (Mining → Prospector vs Tunneler), each with unique perks. Build identity.
-- **Paragon levels** — infinite tiny levels past 100 so XP is never wasted.
+- **Paragon levels** — infinite tiny levels past 500 so XP is never wasted.
 - **Capstone challenges** — a one-time challenge per skill unlocks a signature perk.
 
 ### Combat & danger

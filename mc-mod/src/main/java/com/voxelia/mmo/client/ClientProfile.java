@@ -3,7 +3,7 @@ package com.voxelia.mmo.client;
 /**
  * Client-side cache of the server-only stats shown on the profile screen
  * (playtime, deaths, mob kills), fed by ProfileStatsPayload. Everything else on
- * the profile — best skill, prestiges, XP earned — is derived from data the
+ * the profile — best skill, talents spent, XP earned — is derived from data the
  * client already has (ClientSkillData / ClientTalents).
  */
 public final class ClientProfile {

@@ -3,8 +3,8 @@ package com.voxelia.mmo.event;
 import com.voxelia.mmo.VoxeliaMMO;
 import com.voxelia.mmo.config.VoxeliaConfig;
 import com.voxelia.mmo.registry.VoxeliaAttachments;
-import com.voxelia.mmo.skill.PlayerPrestige;
 import com.voxelia.mmo.skill.PlayerSkills;
+import com.voxelia.mmo.skill.SkillCurve;
 import net.minecraft.ChatFormatting;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.MinecraftServer;
@@ -29,11 +29,8 @@ public final class ChatTitleEvents {
         int level = skills.characterLevel();
         String title = rank(level) + " " + skills.highest().noun();
 
-        int stars = player.getData(VoxeliaAttachments.PLAYER_PRESTIGE.get()).total();
-        String prestigeStars = stars > 0 ? " " + "✦".repeat(Math.min(stars, 5)) : "";
-
         Component formatted = Component.literal("")
-            .append(Component.literal("[Lv " + level + " • " + title + prestigeStars + "] ").withStyle(ChatFormatting.GOLD))
+            .append(Component.literal("[Lv " + level + " • " + title + "] ").withStyle(ChatFormatting.GOLD))
             .append(Component.literal(player.getGameProfile().getName()).withStyle(ChatFormatting.WHITE))
             .append(Component.literal(": ").withStyle(ChatFormatting.GRAY))
             .append(event.getMessage());
@@ -43,11 +40,13 @@ public final class ChatTitleEvents {
     }
 
     private static String rank(int level) {
-        if (level >= 100) return "Grandmaster";
-        if (level >= 75) return "Master";
-        if (level >= 50) return "Expert";
-        if (level >= 25) return "Adept";
-        if (level >= 10) return "Apprentice";
+        // Bands scale with the cap so the ladder still spans the whole 1–500 climb.
+        int max = SkillCurve.MAX_LEVEL;
+        if (level >= max) return "Grandmaster";
+        if (level >= max * 3 / 4) return "Master";
+        if (level >= max / 2) return "Expert";
+        if (level >= max / 4) return "Adept";
+        if (level >= max / 10) return "Apprentice";
         return "Novice";
     }
 }

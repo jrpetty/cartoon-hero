@@ -1,5 +1,6 @@
 package com.voxelia.mmo.config;
 
+import com.voxelia.mmo.skill.SkillCurve;
 import net.neoforged.neoforge.common.ModConfigSpec;
 
 /**
@@ -45,10 +46,6 @@ public final class VoxeliaConfig {
     private static final ModConfigSpec.DoubleValue MASTERY_LOOT_PER_TIER;
     private static final ModConfigSpec.BooleanValue SHOW_CHAT_TITLE;
     private static final ModConfigSpec.IntValue TALENT_MAX_RANK;
-    private static final ModConfigSpec.IntValue TALENT_LEVELS_PER_POINT;
-    private static final ModConfigSpec.BooleanValue PRESTIGE_ENABLED;
-    private static final ModConfigSpec.IntValue PRESTIGE_MAX;
-    private static final ModConfigSpec.IntValue PRESTIGE_POINTS;
 
     // active abilities (original six)
     private static final ModConfigSpec.IntValue FRENZY_LEVEL;
@@ -77,56 +74,57 @@ public final class VoxeliaConfig {
     static {
         ModConfigSpec.Builder b = new ModConfigSpec.Builder();
 
-        b.comment("XP and per-level reward tuning (max level 100).").push("rewards");
+        b.comment("XP and per-level reward tuning (max level " + SkillCurve.MAX_LEVEL + "). "
+            + "Per-level rates are tuned so a level-500 skill lands where the old level-100 cap did.").push("rewards");
         XP_MULTIPLIER = b.comment("Global multiplier applied to all skill XP gains.")
             .defineInRange("xpMultiplier", 1.0, 0.0, 1000.0);
         COMBAT_DAMAGE = b.comment("Combat: bonus attack damage per level.")
-            .defineInRange("combatDamagePerLevel", 0.1, 0.0, 100.0);
+            .defineInRange("combatDamagePerLevel", 0.02, 0.0, 100.0);
         FARMING_HEALTH = b.comment("Farming: bonus max health (HP) per level.")
-            .defineInRange("farmingHealthPerLevel", 0.2, 0.0, 100.0);
+            .defineInRange("farmingHealthPerLevel", 0.04, 0.0, 100.0);
         MINING_SPEED = b.comment("Mining: block-break-speed bonus per level (fraction).")
-            .defineInRange("miningSpeedPerLevel", 0.005, 0.0, 10.0);
+            .defineInRange("miningSpeedPerLevel", 0.001, 0.0, 10.0);
         FORAGING_SPEED = b.comment("Foraging: block-break-speed bonus per level (fraction).")
-            .defineInRange("foragingSpeedPerLevel", 0.005, 0.0, 10.0);
+            .defineInRange("foragingSpeedPerLevel", 0.001, 0.0, 10.0);
         EXCAV_SPEED = b.comment("Excavation: block-break-speed bonus per level (fraction).")
-            .defineInRange("excavationSpeedPerLevel", 0.005, 0.0, 10.0);
+            .defineInRange("excavationSpeedPerLevel", 0.001, 0.0, 10.0);
         MINING_FORTUNE = b.comment("Mining: Fortune factor per level on ores (no Silk Touch).")
-            .defineInRange("miningFortunePerLevel", 0.01, 0.0, 10.0);
+            .defineInRange("miningFortunePerLevel", 0.002, 0.0, 10.0);
         FORAGING_FORTUNE = b.comment("Foraging: Fortune factor per level on logs/leaves (no Silk Touch).")
-            .defineInRange("foragingFortunePerLevel", 0.01, 0.0, 10.0);
+            .defineInRange("foragingFortunePerLevel", 0.002, 0.0, 10.0);
         EXCAV_FORTUNE = b.comment("Excavation: Fortune factor per level on shovel blocks (no Silk Touch).")
-            .defineInRange("excavationFortunePerLevel", 0.01, 0.0, 10.0);
-        ACRO_JUMP = b.comment("Acrobatics: bonus jump strength per level (0.0006 => about +14% jump strength at level 100, base 0.42).")
-            .defineInRange("acrobaticsJumpPerLevel", 0.0006, 0.0, 0.02);
+            .defineInRange("excavationFortunePerLevel", 0.002, 0.0, 10.0);
+        ACRO_JUMP = b.comment("Acrobatics: bonus jump strength per level (0.00012 => about +14% jump strength at level 500, base 0.42).")
+            .defineInRange("acrobaticsJumpPerLevel", 0.00012, 0.0, 0.02);
         FISHING_LUCK_MAX = b.comment("Fishing: max bonus luck (while fishing) at max level.")
             .defineInRange("fishingLuckMax", 4.0, 0.0, 100.0);
         DEF_ARMOR = b.comment("Defense: bonus armor per level.")
-            .defineInRange("defenseArmorPerLevel", 0.12, 0.0, 100.0);
+            .defineInRange("defenseArmorPerLevel", 0.024, 0.0, 100.0);
         DEF_TOUGH = b.comment("Defense: bonus armor toughness per level.")
-            .defineInRange("defenseToughnessPerLevel", 0.08, 0.0, 100.0);
+            .defineInRange("defenseToughnessPerLevel", 0.016, 0.0, 100.0);
         DEF_KB = b.comment("Defense: bonus knockback resistance per level.")
-            .defineInRange("defenseKnockbackResistPerLevel", 0.003, 0.0, 0.01);
-        ALCH_DURATION = b.comment("Alchemy: beneficial-effect duration extension per level on finishing a potion (0.005 => +50% at 100).")
-            .defineInRange("alchemyDurationPerLevel", 0.005, 0.0, 1.0);
-        ARCHERY_POWER = b.comment("Archery: Power Shot bonus damage per level on fully-drawn (critical) arrows (0.06 => +6 at 100).")
-            .defineInRange("archeryPowerShotPerLevel", 0.06, 0.0, 10.0);
+            .defineInRange("defenseKnockbackResistPerLevel", 0.0006, 0.0, 0.01);
+        ALCH_DURATION = b.comment("Alchemy: beneficial-effect duration extension per level on finishing a potion (0.001 => +50% at 500).")
+            .defineInRange("alchemyDurationPerLevel", 0.001, 0.0, 1.0);
+        ARCHERY_POWER = b.comment("Archery: Power Shot bonus damage per level on fully-drawn (critical) arrows (0.012 => +6 at 500).")
+            .defineInRange("archeryPowerShotPerLevel", 0.012, 0.0, 10.0);
         b.pop();
 
         b.comment("Milestone & conditional perks.").push("perks");
         COMBAT_LIFESTEAL = b.comment("Combat: health healed on a kill, per level.")
-            .defineInRange("combatLifeStealPerLevel", 0.05, 0.0, 10.0);
+            .defineInRange("combatLifeStealPerLevel", 0.01, 0.0, 10.0);
         ACRO_FALL_REDUCTION = b.comment("Acrobatics: fall damage reduced per level.")
-            .defineInRange("acrobaticsFallReductionPerLevel", 0.009, 0.0, 0.01);
+            .defineInRange("acrobaticsFallReductionPerLevel", 0.0018, 0.0, 0.01);
         FISHING_TREASURE_MAX = b.comment("Fishing: max treasure-bonus chance per catch at max level.")
             .defineInRange("fishingTreasureChanceMax", 0.5, 0.0, 1.0);
         MINING_HASTE_LEVEL = b.comment("Mining: level at which holding a pickaxe grants Haste (0 disables).")
-            .defineInRange("miningHasteLevel", 25, 0, 100);
+            .defineInRange("miningHasteLevel", 25, 0, SkillCurve.MAX_LEVEL);
         TELEKINESIS_LEVEL = b.comment("Mining: level at which mined drops go to your inventory (0 disables).")
-            .defineInRange("telekinesisLevel", 100, 0, 100);
+            .defineInRange("telekinesisLevel", 100, 0, SkillCurve.MAX_LEVEL);
         LAST_STAND_LEVEL = b.comment("Defense: level that unlocks Last Stand — Resistance while below 35% health (0 disables).")
-            .defineInRange("lastStandLevel", 20, 0, 100);
+            .defineInRange("lastStandLevel", 20, 0, SkillCurve.MAX_LEVEL);
         COOKING_FEAST_LEVEL = b.comment("Cooking: level that unlocks Well Fed — a short regeneration after eating (0 disables).")
-            .defineInRange("cookingWellFedLevel", 20, 0, 100);
+            .defineInRange("cookingWellFedLevel", 20, 0, SkillCurve.MAX_LEVEL);
         DEATH_XP_LOSS = b.comment("Fraction of EVERY skill's XP lost on death (0.0 = keep everything, 0.2 = lose 20%, can drop levels).")
             .defineInRange("deathXpLossPercent", 0.20, 0.0, 1.0);
         b.pop();
@@ -149,45 +147,33 @@ public final class VoxeliaConfig {
 
         b.comment("Talent tree — each skill has its own talents; spend points earned from that skill's levels. "
             + "Per-rank magnitudes are defined per talent in code (see the Talent enum).").push("talents");
-        TALENT_LEVELS_PER_POINT = b.comment("Skill levels needed per talent point (8 = 1 point every 8 levels).")
-            .defineInRange("levelsPerPoint", 8, 1, 1000);
         TALENT_MAX_RANK = b.comment("Maximum rank per talent.")
             .defineInRange("maxRank", 5, 1, 100);
         b.pop();
 
-        b.comment("Prestige — at max level a skill can be prestiged: it resets to level 1 (and its "
-            + "talents), and grants permanent extra talent points in that skill, given at once.").push("prestige");
-        PRESTIGE_ENABLED = b.comment("Whether skills can be prestiged at max level.")
-            .define("enabled", true);
-        PRESTIGE_MAX = b.comment("Maximum number of times a single skill can be prestiged.")
-            .defineInRange("maxPrestige", 3, 0, 100);
-        PRESTIGE_POINTS = b.comment("Extra talent points granted per prestige in that skill.")
-            .defineInRange("pointsPerPrestige", 2, 0, 100);
-        b.pop();
-
         b.comment("Active keybind abilities (cooldown-balanced). The newer skills' 'ultimates' are "
             + "powerful but sit on long cooldowns.").push("abilities");
-        FRENZY_LEVEL = b.comment("Combat: Frenzy unlock level (0 disables).").defineInRange("frenzyLevel", 20, 0, 100);
+        FRENZY_LEVEL = b.comment("Combat: Frenzy unlock level (0 disables).").defineInRange("frenzyLevel", 20, 0, SkillCurve.MAX_LEVEL);
         FRENZY_COOLDOWN = b.comment("Frenzy cooldown (seconds).").defineInRange("frenzyCooldownSeconds", 50, 1, 3600);
-        LEAP_LEVEL = b.comment("Acrobatics: Leap unlock level (0 disables).").defineInRange("leapLevel", 15, 0, 100);
+        LEAP_LEVEL = b.comment("Acrobatics: Leap unlock level (0 disables).").defineInRange("leapLevel", 15, 0, SkillCurve.MAX_LEVEL);
         LEAP_COOLDOWN = b.comment("Leap cooldown (seconds).").defineInRange("leapCooldownSeconds", 6, 1, 3600);
-        FOCUS_LEVEL = b.comment("Mining: Miner's Focus unlock level (0 disables).").defineInRange("minersFocusLevel", 20, 0, 100);
+        FOCUS_LEVEL = b.comment("Mining: Miner's Focus unlock level (0 disables).").defineInRange("minersFocusLevel", 20, 0, SkillCurve.MAX_LEVEL);
         FOCUS_COOLDOWN = b.comment("Miner's Focus cooldown (seconds).").defineInRange("minersFocusCooldownSeconds", 60, 1, 3600);
-        OVERGROWTH_LEVEL = b.comment("Foraging: Overgrowth unlock level (0 disables).").defineInRange("overgrowthLevel", 25, 0, 100);
+        OVERGROWTH_LEVEL = b.comment("Foraging: Overgrowth unlock level (0 disables).").defineInRange("overgrowthLevel", 25, 0, SkillCurve.MAX_LEVEL);
         OVERGROWTH_COOLDOWN = b.comment("Overgrowth cooldown (seconds).").defineInRange("overgrowthCooldownSeconds", 45, 1, 3600);
-        MEAL_LEVEL = b.comment("Farming: Hearty Meal unlock level (0 disables).").defineInRange("heartyMealLevel", 20, 0, 100);
+        MEAL_LEVEL = b.comment("Farming: Hearty Meal unlock level (0 disables).").defineInRange("heartyMealLevel", 20, 0, SkillCurve.MAX_LEVEL);
         MEAL_COOLDOWN = b.comment("Hearty Meal cooldown (seconds).").defineInRange("heartyMealCooldownSeconds", 60, 1, 3600);
-        MAELSTROM_LEVEL = b.comment("Fishing: Maelstrom unlock level (0 disables).").defineInRange("maelstromLevel", 15, 0, 100);
+        MAELSTROM_LEVEL = b.comment("Fishing: Maelstrom unlock level (0 disables).").defineInRange("maelstromLevel", 15, 0, SkillCurve.MAX_LEVEL);
         MAELSTROM_COOLDOWN = b.comment("Maelstrom cooldown (seconds).").defineInRange("maelstromCooldownSeconds", 90, 1, 3600);
-        EXCAVATE_LEVEL = b.comment("Excavation: Excavate (mass-dig) unlock level (0 disables).").defineInRange("excavateLevel", 30, 0, 100);
+        EXCAVATE_LEVEL = b.comment("Excavation: Excavate (mass-dig) unlock level (0 disables).").defineInRange("excavateLevel", 30, 0, SkillCurve.MAX_LEVEL);
         EXCAVATE_COOLDOWN = b.comment("Excavate cooldown (seconds).").defineInRange("excavateCooldownSeconds", 180, 1, 3600);
-        BULWARK_LEVEL = b.comment("Defense: Bulwark (deflect) unlock level (0 disables).").defineInRange("bulwarkLevel", 30, 0, 100);
+        BULWARK_LEVEL = b.comment("Defense: Bulwark (deflect) unlock level (0 disables).").defineInRange("bulwarkLevel", 30, 0, SkillCurve.MAX_LEVEL);
         BULWARK_COOLDOWN = b.comment("Bulwark cooldown (seconds) — a powerful 5s deflect, so a long cooldown.").defineInRange("bulwarkCooldownSeconds", 300, 1, 3600);
-        FEAST_LEVEL = b.comment("Cooking: Feast (full heal) unlock level (0 disables).").defineInRange("feastLevel", 30, 0, 100);
+        FEAST_LEVEL = b.comment("Cooking: Feast (full heal) unlock level (0 disables).").defineInRange("feastLevel", 30, 0, SkillCurve.MAX_LEVEL);
         FEAST_COOLDOWN = b.comment("Feast cooldown (seconds) — a full heal, so a long 10-minute cooldown.").defineInRange("feastCooldownSeconds", 600, 1, 3600);
-        PANACEA_LEVEL = b.comment("Alchemy: Panacea (cleanse + ward) unlock level (0 disables).").defineInRange("panaceaLevel", 30, 0, 100);
+        PANACEA_LEVEL = b.comment("Alchemy: Panacea (cleanse + ward) unlock level (0 disables).").defineInRange("panaceaLevel", 30, 0, SkillCurve.MAX_LEVEL);
         PANACEA_COOLDOWN = b.comment("Panacea cooldown (seconds).").defineInRange("panaceaCooldownSeconds", 180, 1, 3600);
-        VOLLEY_LEVEL = b.comment("Archery: Volley (arrow fan) unlock level (0 disables).").defineInRange("volleyLevel", 30, 0, 100);
+        VOLLEY_LEVEL = b.comment("Archery: Volley (arrow fan) unlock level (0 disables).").defineInRange("volleyLevel", 30, 0, SkillCurve.MAX_LEVEL);
         VOLLEY_COOLDOWN = b.comment("Volley cooldown (seconds).").defineInRange("volleyCooldownSeconds", 150, 1, 3600);
         b.pop();
 
@@ -225,10 +211,6 @@ public final class VoxeliaConfig {
     public static double masteryLootChancePerTier(){ return MASTERY_LOOT_PER_TIER.get(); }
     public static boolean showChatTitle()      { return SHOW_CHAT_TITLE.get(); }
     public static int talentMaxRank()          { return TALENT_MAX_RANK.get(); }
-    public static int talentLevelsPerPoint()   { return TALENT_LEVELS_PER_POINT.get(); }
-    public static boolean prestigeEnabled()    { return PRESTIGE_ENABLED.get(); }
-    public static int prestigeMax()            { return PRESTIGE_MAX.get(); }
-    public static int prestigePointsPerPrestige(){ return PRESTIGE_POINTS.get(); }
 
     public static int frenzyLevel()            { return FRENZY_LEVEL.get(); }
     public static int frenzyCooldownSeconds()  { return FRENZY_COOLDOWN.get(); }

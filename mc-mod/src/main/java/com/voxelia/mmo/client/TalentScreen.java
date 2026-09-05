@@ -1,6 +1,5 @@
 package com.voxelia.mmo.client;
 
-import com.voxelia.mmo.network.PrestigePacket;
 import com.voxelia.mmo.network.SpendTalentPacket;
 import com.voxelia.mmo.skill.Skill;
 import com.voxelia.mmo.skill.SkillCurve;
@@ -44,11 +43,6 @@ public final class TalentScreen extends Screen {
     private final List<SkillRow> skillRows = new ArrayList<>();
     private final List<Card> cards = new ArrayList<>();
     private final ScreenMenu menu = new ScreenMenu();
-    private int[] prestigeBtn = new int[4];
-    private boolean prestigeReady = false;
-    // Prestige takes two clicks: the first arms the button, the second confirms.
-    private boolean prestigeArmed = false;
-    private long armedAt;
     // 100ms hover crossfades + instant spend feedback state.
     private final float[] cardHoverA = new float[Talent.values().length];
     private final float[] rowHoverA = new float[Skill.values().length];
@@ -111,18 +105,7 @@ public final class TalentScreen extends Screen {
             g.fill(lx, ry, lx + 3, ry + SKILL_ROW_H - 1, color);
             g.drawString(this.font, s.display(), lx + 7, ry + 3, sel ? 0xFFFFFFFF : color);
 
-            // Stars shrink to "✦N" (and hide as a last resort) rather than colliding with the pill.
             int pts = ClientTalents.available(s);
-            int pillL = pts > 0 ? lx + SKILL_W - 3 - (this.font.width(String.valueOf(pts)) + 8) : lx + SKILL_W - 3;
-            int pres = ClientTalents.prestige(s);
-            if (pres > 0) {
-                int sx = lx + 8 + this.font.width(s.display());
-                String stars = "✦".repeat(Math.min(pres, 3));
-                if (sx + this.font.width(stars) > pillL - 2) stars = pres > 1 ? "✦" + pres : "✦";
-                if (sx + this.font.width(stars) <= pillL - 2) {
-                    g.drawString(this.font, stars, sx, ry + 3, VoxeliaUi.GOLD);
-                }
-            }
             if (pts > 0) VoxeliaUi.pill(g, this.font, lx + SKILL_W - 3, ry + 2, String.valueOf(pts), 0x6EE86E, true);
             SkillRow row = new SkillRow(lx, ry, lx + SKILL_W, ry + SKILL_ROW_H, s);
             skillRows.add(row);
@@ -223,60 +206,23 @@ public final class TalentScreen extends Screen {
             if (over) hoveredCard = card;
         }
 
-        // Footer: normally a hint; a Prestige button once the selected skill is maxed.
+        // Footer: the path to the next point, or a hint once there's nothing left to earn.
         int footY = y + h - FOOTER_H;
         VoxeliaUi.footer(g, x, footY, PANEL_W, FOOTER_H);
-        int prestige = ClientTalents.prestige(selectedSkill);
-        boolean atMax = ClientSkillData.level(selectedSkill) >= SkillCurve.MAX_LEVEL;
-        prestigeReady = atMax && prestige < ClientTalents.prestigeMax();
-        if (prestigeArmed && Util.getMillis() - armedAt > 4000) prestigeArmed = false; // armed fuse ran out
-        if (!prestigeReady) prestigeArmed = false;
-        boolean overPrestige = false;
-        if (prestigeReady) {
-            String label = prestigeArmed
-                ? "CLICK AGAIN — RESET " + selectedSkill.display().toUpperCase(Locale.ROOT) + " TO LV 1"
-                : "✦ PRESTIGE " + selectedSkill.display() + " ✦";
-            int lw = this.font.width(label) + 14;
-            int bx = x + (PANEL_W - lw) / 2;
-            int by = footY + 1;
-            overPrestige = !menu.isOpen()
-                && mouseX >= bx && mouseX < bx + lw && mouseY >= by && mouseY < by + 12;
-            int base = prestigeArmed
-                ? VoxeliaUi.lerp(0xFF8A2E2E, 0xFFC24444, 0.5f + 0.5f * (float) Math.sin(Util.getMillis() / 120.0))
-                : 0xFF7A34A8;
-            g.fill(bx, by, bx + lw, by + 12, overPrestige ? VoxeliaUi.brighten(base, 34) : base);
-            if (!prestigeArmed) { // breathing gold frame: the established "invites a click" language
-                int ga = 0x50 + (int) (0x50 * VoxeliaUi.pulse());
-                int gc = (ga << 24) | 0xFFCE54;
-                g.fill(bx - 1, by - 1, bx + lw + 1, by, gc);
-                g.fill(bx - 1, by + 12, bx + lw + 1, by + 13, gc);
-                g.fill(bx - 1, by, bx, by + 12, gc);
-                g.fill(bx + lw, by, bx + lw + 1, by + 12, gc);
-            }
-            g.fill(bx, by, bx + lw, by + 1, 0x60FFFFFF);
-            if (prestigeArmed) { // draining fuse: how long until the button disarms itself
-                float left = 1f - (Util.getMillis() - armedAt) / 4000f;
-                g.fill(bx + 1, by + 11, bx + 1 + (int) ((lw - 2) * left), by + 12, 0xB0FFFFFF);
-            }
-            g.drawCenteredString(this.font, label, x + PANEL_W / 2, by + 2, 0xFFFFFFFF);
-            prestigeBtn = new int[]{bx, by, bx + lw, by + 12};
+        int lvl = ClientSkillData.level(selectedSkill);
+        if (spent >= capped) {
+            g.drawCenteredString(this.font, "✦ " + selectedSkill.display() + " fully upgraded ✦",
+                x + PANEL_W / 2, footY + 3, VoxeliaUi.GOLD);
+        } else if (available == 0 && lvl < SkillCurve.MAX_LEVEL) {
+            // when there's nothing to spend, show the path to the next point
+            int next = (lvl / ClientTalents.levelsPerPoint() + 1) * ClientTalents.levelsPerPoint();
+            int togo = next - lvl;
+            g.drawCenteredString(this.font, "Next " + selectedSkill.display() + " point at Lv " + next
+                    + " — " + togo + (togo == 1 ? " level" : " levels") + " to go",
+                x + PANEL_W / 2, footY + 3, VoxeliaUi.MUTED);
         } else {
-            prestigeBtn = new int[]{0, 0, 0, 0};
-            if (atMax && prestige > 0) {
-                g.drawCenteredString(this.font, "✦ " + selectedSkill.display() + " fully prestiged (" + prestige + ")",
-                    x + PANEL_W / 2, footY + 3, VoxeliaUi.GOLD);
-            } else if (available == 0 && ClientSkillData.level(selectedSkill) < SkillCurve.MAX_LEVEL) {
-                // when there's nothing to spend, show the path to the next point
-                int lvl = ClientSkillData.level(selectedSkill);
-                int next = (lvl / ClientTalents.levelsPerPoint() + 1) * ClientTalents.levelsPerPoint();
-                int togo = next - lvl;
-                g.drawCenteredString(this.font, "Next " + selectedSkill.display() + " point at Lv " + next
-                        + " — " + togo + (togo == 1 ? " level" : " levels") + " to go",
-                    x + PANEL_W / 2, footY + 3, VoxeliaUi.MUTED);
-            } else {
-                g.drawCenteredString(this.font, "Pick a skill, click a talent to spend  •  /voxelia talent reset to refund",
-                    x + PANEL_W / 2, footY + 3, VoxeliaUi.MUTED);
-            }
+            g.drawCenteredString(this.font, "Pick a skill, click a talent to spend  •  /voxelia talent reset to refund",
+                x + PANEL_W / 2, footY + 3, VoxeliaUi.MUTED);
         }
 
         menu.renderDropdown(g, this.font, ScreenMenu.Page.TALENTS, mouseX, mouseY);
@@ -285,19 +231,7 @@ public final class TalentScreen extends Screen {
 
         if (menu.isOpen()) return; // the dropdown owns the pointer while it's down
         if (hoveredCard != null) renderCardTooltip(g, hoveredCard.talent, max, mouseX, mouseY);
-        else if (overPrestige) {
-            int perPrestige = ClientTalents.pointsPerPrestige();
-            g.renderComponentTooltip(this.font, List.of(
-                Component.literal("Prestige " + selectedSkill.display()).withStyle(ChatFormatting.LIGHT_PURPLE),
-                Component.literal("Resets it to level 1 and refunds its talents,").withStyle(ChatFormatting.GRAY),
-                Component.literal("but grants " + perPrestige + " permanent extra talent point"
-                    + (perPrestige == 1 ? "" : "s") + ".").withStyle(ChatFormatting.GRAY),
-                Component.literal("Prestige " + prestige + " → " + (prestige + 1)).withStyle(ChatFormatting.WHITE),
-                prestigeArmed
-                    ? Component.literal("Click again to confirm.").withStyle(ChatFormatting.RED)
-                    : Component.literal("Takes two clicks — no accidents.").withStyle(ChatFormatting.DARK_GRAY)),
-                mouseX, mouseY);
-        } else if (hoveredSkill != null && hoveredSkill.skill != selectedSkill) {
+        else if (hoveredSkill != null && hoveredSkill.skill != selectedSkill) {
             g.renderComponentTooltip(this.font, List.of(
                 Component.literal(hoveredSkill.skill.display()).withStyle(ChatFormatting.GOLD),
                 Component.literal(ClientTalents.available(hoveredSkill.skill) + " point(s) to spend")
@@ -340,35 +274,16 @@ public final class TalentScreen extends Screen {
                     int next = (lvl / ClientTalents.levelsPerPoint() + 1) * ClientTalents.levelsPerPoint();
                     tip.add(Component.literal("Next point at " + t.skill().display() + " Lv " + next
                         + " (" + (next - lvl) + " to go)").withStyle(ChatFormatting.RED));
-                } else {
-                    tip.add(Component.literal("Prestige " + t.skill().display() + " for more points")
-                        .withStyle(ChatFormatting.RED));
                 }
             }
         }
         g.renderComponentTooltip(this.font, tip, mouseX, mouseY);
     }
 
-    private static boolean in(int[] r, double mx, double my) {
-        return mx >= r[0] && mx < r[2] && my >= r[1] && my < r[3];
-    }
-
     @Override
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
         if (button == 0) {
-            boolean onPrestigeBtn = prestigeReady && in(prestigeBtn, mouseX, mouseY);
-            if (!onPrestigeBtn) prestigeArmed = false; // clicking anywhere else disarms
             if (menu.mouseClicked(mouseX, mouseY, ScreenMenu.Page.TALENTS)) return true;
-            if (onPrestigeBtn) {
-                if (prestigeArmed) {
-                    PacketDistributor.sendToServer(new PrestigePacket(selectedSkill.ordinal()));
-                    prestigeArmed = false;
-                } else {
-                    prestigeArmed = true;
-                    armedAt = Util.getMillis();
-                }
-                return true;
-            }
             for (SkillRow r : skillRows) {
                 if (mouseX >= r.x1 && mouseX < r.x2 && mouseY >= r.y1 && mouseY < r.y2) {
                     selectedSkill = r.skill;

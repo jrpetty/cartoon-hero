@@ -3,6 +3,7 @@ package com.voxelia.mmo.client;
 import com.voxelia.mmo.network.ProfileRequestPacket;
 import com.voxelia.mmo.skill.Skill;
 import com.voxelia.mmo.skill.SkillCurve;
+import com.voxelia.mmo.skill.Talent;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.screens.Screen;
@@ -14,7 +15,7 @@ import java.util.Locale;
 
 /**
  * Character sheet (Menu ▸ Character Profile): headline identity plus the stats that make a run feel like
- * a career — best skill, total prestiges, XP earned, playtime, deaths, mob kills.
+ * a career — best skill, talent points spent, XP earned, playtime, deaths, mob kills.
  * Playtime/deaths/kills arrive from the server (requested on open); everything
  * else is derived from the client caches.
  */
@@ -46,17 +47,16 @@ public final class ProfileScreen extends Screen {
         // Derived headline stats.
         int totalLvl = 0;
         Skill best = all[0];
-        int prestiges = 0;
+        int talentsSpent = 0, talentsTotal = 0;
         long xpEarned = 0;
         float progress = 0f;
-        int maxXp = SkillCurve.xpForLevel(SkillCurve.MAX_LEVEL);
         for (Skill s : all) {
             int lvl = ClientSkillData.level(s);
             totalLvl += lvl;
             if (lvl > ClientSkillData.level(best)) best = s;
-            int pres = ClientTalents.prestige(s);
-            prestiges += pres;
-            xpEarned += (long) pres * maxXp + ClientSkillData.xp(s);
+            talentsSpent += ClientTalents.spentIn(s);
+            talentsTotal += Talent.forSkill(s).size() * ClientTalents.maxRank();
+            xpEarned += ClientSkillData.xp(s);
             int sp = SkillCurve.xpToNext(ClientSkillData.xp(s));
             progress += sp > 0 ? (float) SkillCurve.xpIntoLevel(ClientSkillData.xp(s)) / sp : 1f;
         }
@@ -78,8 +78,7 @@ public final class ProfileScreen extends Screen {
         String name = Minecraft.getInstance().player != null
             ? Minecraft.getInstance().player.getGameProfile().getName() : "Adventurer";
         g.drawString(this.font, name, x + PAD, hy, VoxeliaUi.GOLD);
-        String stars = prestiges > 0 ? "  " + "✦".repeat(Math.min(prestiges, 5)) : "";
-        g.drawString(this.font, "Character Lv " + charLevel + " · " + best.noun() + stars,
+        g.drawString(this.font, "Character Lv " + charLevel + " · " + best.noun(),
             x + PAD, hy + 12, VoxeliaUi.MUTED);
         VoxeliaUi.bar(g, x + PAD, hy + 22, PANEL_W - 2 * PAD, 3, progress / all.length, 0xFFCE54, false);
 
@@ -91,8 +90,8 @@ public final class ProfileScreen extends Screen {
         boolean loaded = ClientProfile.hasData();
         String bestVal = best.display() + "  Lv " + ClientSkillData.level(best);
         row(g, x, ry, "Best skill", bestVal, 0xFF000000 | best.color());
-        row(g, x, ry + ROW_H, "Total prestiges",
-            prestiges + (prestiges > 0 ? "  " + "✦".repeat(Math.min(prestiges, 5)) : ""), VoxeliaUi.GOLD);
+        row(g, x, ry + ROW_H, "Talents spent", talentsSpent + " / " + talentsTotal,
+            talentsSpent >= talentsTotal ? VoxeliaUi.GOLD : VoxeliaUi.TEXT);
         row(g, x, ry + ROW_H * 2, "XP earned", String.format(Locale.ROOT, "%,d", xpEarned), VoxeliaUi.TEXT);
         row(g, x, ry + ROW_H * 3, "Playtime", loaded ? playtime(ClientProfile.playTimeTicks()) : "…", VoxeliaUi.TEXT);
         row(g, x, ry + ROW_H * 4, "Deaths", loaded ? String.valueOf(ClientProfile.deaths()) : "…",
@@ -102,7 +101,7 @@ public final class ProfileScreen extends Screen {
         // Footer hint with a real, clickable Talents link.
         VoxeliaUi.footer(g, x, y + h - FOOTER_H, PANEL_W, FOOTER_H);
         int fy = y + h - FOOTER_H + 3;
-        int fx = seg(g, x + PAD, fy, "Prestige a maxed skill on the ", VoxeliaUi.MUTED);
+        int fx = seg(g, x + PAD, fy, "Spend your talent points on the ", VoxeliaUi.MUTED);
         String link = "Talent Tree";
         int linkX2 = fx + this.font.width(link);
         talentLink = new int[]{fx, fy - 2, linkX2, fy + 11};

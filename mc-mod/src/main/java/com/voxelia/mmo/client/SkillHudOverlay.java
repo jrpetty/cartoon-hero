@@ -95,11 +95,6 @@ public final class SkillHudOverlay implements LayeredDraw.Layer {
             graphics.fill(x - 2, y, x, y + 8, color); // identity tick
             if (i == sel && skill.active()) graphics.fill(x - 4, y, x - 2, y + 8, VoxeliaUi.LINK);
             graphics.drawString(mc.font, skill.display(), x + 2, y, VoxeliaUi.TEXT);
-            int pres = ClientTalents.prestige(skill);
-            if (pres > 0) { // gold prestige stars, matching the sidebar and talent list
-                graphics.drawString(mc.font, "✦".repeat(Math.min(pres, 3)),
-                    x + 4 + mc.font.width(skill.display()), y, VoxeliaUi.GOLD);
-            }
 
             String val = span > 0 ? String.valueOf(level) : "MAX";
             int valX = x + BLOCK_W - 6 - mc.font.width(val);

@@ -43,7 +43,7 @@ public final class PlayerTalents {
 
     public void clear() { ranks.clear(); }
 
-    /** Clear only the ranks belonging to one skill's talents (used when prestiging it). */
+    /** Clear only the ranks belonging to one skill's talents. */
     public void clearSkill(Skill skill) {
         for (Talent t : Talent.forSkill(skill)) ranks.remove(t.id());
     }

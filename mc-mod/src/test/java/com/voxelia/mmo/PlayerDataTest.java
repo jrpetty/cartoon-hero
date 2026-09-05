@@ -1,6 +1,5 @@
 package com.voxelia.mmo;
 
-import com.voxelia.mmo.skill.PlayerPrestige;
 import com.voxelia.mmo.skill.PlayerSkills;
 import com.voxelia.mmo.skill.PlayerTalents;
 import com.voxelia.mmo.skill.Skill;
@@ -79,30 +78,37 @@ class PlayerDataTest {
     }
 
     @Test
-    void prestigeResetsOnlyThatSkillAndItsTalents() {
-        PlayerPrestige pp = new PlayerPrestige();
-        assertEquals(0, pp.get(Skill.COMBAT));
-        pp.set(Skill.COMBAT, 2);
-        pp.set(Skill.MINING, 1);
-        assertEquals(2, pp.get(Skill.COMBAT));
-        assertEquals(3, pp.total());
+    void levelCapIsFiveHundredAndResetsAreScoped() {
+        assertEquals(500, SkillCurve.MAX_LEVEL, "the cap is level 500 — no prestige loop");
 
-        // Prestiging a skill sends it back to level 1 but leaves other skills alone.
+        // Resetting a skill sends it back to level 1 but leaves other skills alone.
         PlayerSkills ps = new PlayerSkills();
         ps.addXp(Skill.COMBAT, SkillCurve.xpForLevel(SkillCurve.MAX_LEVEL));
         ps.addXp(Skill.MINING, 500);
         assertEquals(SkillCurve.MAX_LEVEL, ps.getLevel(Skill.COMBAT));
         ps.resetSkill(Skill.COMBAT);
         assertEquals(0, ps.getXp(Skill.COMBAT));
-        assertEquals(1, ps.getLevel(Skill.COMBAT), "prestige drops the skill to level 1");
+        assertEquals(1, ps.getLevel(Skill.COMBAT), "reset drops the skill to level 1");
         assertEquals(500, ps.getXp(Skill.MINING), "other skills are untouched");
 
-        // Only the prestiged skill's talents are refunded.
+        // Only the reset skill's talents are cleared.
         PlayerTalents pt = new PlayerTalents();
         pt.setRank(Talent.COMBAT_BRUTALITY, 3);
         pt.setRank(Talent.MINING_EFFICIENCY, 2);
         pt.clearSkill(Skill.COMBAT);
-        assertEquals(0, pt.spentIn(Skill.COMBAT), "prestiged skill's talents cleared");
+        assertEquals(0, pt.spentIn(Skill.COMBAT), "reset skill's talents cleared");
         assertEquals(2, pt.spentIn(Skill.MINING), "other skills' talents kept");
+    }
+
+    @Test
+    void aMaxedSkillEarnsExactlyAFullTalentTree() {
+        // 5 talents x 5 ranks = 25 points; 500 / 25 = one point every 20 levels.
+        int talentsPerSkill = Talent.values().length / Skill.values().length;
+        int capacity = talentsPerSkill * 5;
+        int levelsPerPoint = SkillCurve.MAX_LEVEL / capacity;
+        assertEquals(20, levelsPerPoint);
+        assertEquals(capacity, SkillCurve.MAX_LEVEL / levelsPerPoint,
+            "level " + SkillCurve.MAX_LEVEL + " must fill the tree exactly");
+        assertEquals(0, (SkillCurve.MAX_LEVEL / levelsPerPoint) - capacity, "no leftover points");
     }
 }
