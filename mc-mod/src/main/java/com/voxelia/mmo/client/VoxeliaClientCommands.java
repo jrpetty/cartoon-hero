@@ -6,6 +6,7 @@ import com.voxelia.mmo.VoxeliaMMO;
 import com.voxelia.mmo.config.VoxeliaClientConfig;
 import com.voxelia.mmo.config.VoxeliaClientConfig.Anchor;
 import com.voxelia.mmo.config.VoxeliaConfig;
+import com.voxelia.mmo.skill.SkillCurve;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.Minecraft;
 import net.minecraft.commands.CommandSourceStack;
