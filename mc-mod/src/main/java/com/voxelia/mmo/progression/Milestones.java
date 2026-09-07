@@ -8,7 +8,7 @@ import java.util.List;
 
 /**
  * The level-gated perks — every one of which used to unlock in silence. A skill's
- * signature ability arrives somewhere between level 15 and 30, and four passives
+ * signature ability arrives at level 75, and four passives
  * (Haste, Telekinesis, Last Stand, Well Fed) land on their own thresholds.
  *
  * <p>Levels are read from config on each call, so a server that retunes them gets

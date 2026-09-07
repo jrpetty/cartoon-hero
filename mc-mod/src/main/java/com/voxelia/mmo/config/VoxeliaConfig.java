@@ -153,27 +153,27 @@ public final class VoxeliaConfig {
 
         b.comment("Active keybind abilities (cooldown-balanced). The newer skills' 'ultimates' are "
             + "powerful but sit on long cooldowns.").push("abilities");
-        FRENZY_LEVEL = b.comment("Combat: Frenzy unlock level (0 disables).").defineInRange("frenzyLevel", 20, 0, SkillCurve.MAX_LEVEL);
+        FRENZY_LEVEL = b.comment("Combat: Frenzy unlock level (0 disables).").defineInRange("frenzyLevel", 75, 0, SkillCurve.MAX_LEVEL);
         FRENZY_COOLDOWN = b.comment("Frenzy cooldown (seconds).").defineInRange("frenzyCooldownSeconds", 50, 1, 3600);
-        LEAP_LEVEL = b.comment("Acrobatics: Leap unlock level (0 disables).").defineInRange("leapLevel", 15, 0, SkillCurve.MAX_LEVEL);
+        LEAP_LEVEL = b.comment("Acrobatics: Leap unlock level (0 disables).").defineInRange("leapLevel", 75, 0, SkillCurve.MAX_LEVEL);
         LEAP_COOLDOWN = b.comment("Leap cooldown (seconds).").defineInRange("leapCooldownSeconds", 6, 1, 3600);
-        FOCUS_LEVEL = b.comment("Mining: Miner's Focus unlock level (0 disables).").defineInRange("minersFocusLevel", 20, 0, SkillCurve.MAX_LEVEL);
+        FOCUS_LEVEL = b.comment("Mining: Miner's Focus unlock level (0 disables).").defineInRange("minersFocusLevel", 75, 0, SkillCurve.MAX_LEVEL);
         FOCUS_COOLDOWN = b.comment("Miner's Focus cooldown (seconds).").defineInRange("minersFocusCooldownSeconds", 60, 1, 3600);
-        OVERGROWTH_LEVEL = b.comment("Foraging: Overgrowth unlock level (0 disables).").defineInRange("overgrowthLevel", 25, 0, SkillCurve.MAX_LEVEL);
+        OVERGROWTH_LEVEL = b.comment("Foraging: Overgrowth unlock level (0 disables).").defineInRange("overgrowthLevel", 75, 0, SkillCurve.MAX_LEVEL);
         OVERGROWTH_COOLDOWN = b.comment("Overgrowth cooldown (seconds).").defineInRange("overgrowthCooldownSeconds", 45, 1, 3600);
-        MEAL_LEVEL = b.comment("Farming: Hearty Meal unlock level (0 disables).").defineInRange("heartyMealLevel", 20, 0, SkillCurve.MAX_LEVEL);
+        MEAL_LEVEL = b.comment("Farming: Hearty Meal unlock level (0 disables).").defineInRange("heartyMealLevel", 75, 0, SkillCurve.MAX_LEVEL);
         MEAL_COOLDOWN = b.comment("Hearty Meal cooldown (seconds).").defineInRange("heartyMealCooldownSeconds", 60, 1, 3600);
-        MAELSTROM_LEVEL = b.comment("Fishing: Maelstrom unlock level (0 disables).").defineInRange("maelstromLevel", 15, 0, SkillCurve.MAX_LEVEL);
+        MAELSTROM_LEVEL = b.comment("Fishing: Maelstrom unlock level (0 disables).").defineInRange("maelstromLevel", 75, 0, SkillCurve.MAX_LEVEL);
         MAELSTROM_COOLDOWN = b.comment("Maelstrom cooldown (seconds).").defineInRange("maelstromCooldownSeconds", 90, 1, 3600);
-        EXCAVATE_LEVEL = b.comment("Excavation: Excavate (mass-dig) unlock level (0 disables).").defineInRange("excavateLevel", 30, 0, SkillCurve.MAX_LEVEL);
+        EXCAVATE_LEVEL = b.comment("Excavation: Excavate (mass-dig) unlock level (0 disables).").defineInRange("excavateLevel", 75, 0, SkillCurve.MAX_LEVEL);
         EXCAVATE_COOLDOWN = b.comment("Excavate cooldown (seconds).").defineInRange("excavateCooldownSeconds", 180, 1, 3600);
-        BULWARK_LEVEL = b.comment("Defense: Bulwark (deflect) unlock level (0 disables).").defineInRange("bulwarkLevel", 30, 0, SkillCurve.MAX_LEVEL);
+        BULWARK_LEVEL = b.comment("Defense: Bulwark (deflect) unlock level (0 disables).").defineInRange("bulwarkLevel", 75, 0, SkillCurve.MAX_LEVEL);
         BULWARK_COOLDOWN = b.comment("Bulwark cooldown (seconds) — a powerful 5s deflect, so a long cooldown.").defineInRange("bulwarkCooldownSeconds", 300, 1, 3600);
-        FEAST_LEVEL = b.comment("Cooking: Feast (full heal) unlock level (0 disables).").defineInRange("feastLevel", 30, 0, SkillCurve.MAX_LEVEL);
+        FEAST_LEVEL = b.comment("Cooking: Feast (full heal) unlock level (0 disables).").defineInRange("feastLevel", 75, 0, SkillCurve.MAX_LEVEL);
         FEAST_COOLDOWN = b.comment("Feast cooldown (seconds) — a full heal, so a long 10-minute cooldown.").defineInRange("feastCooldownSeconds", 600, 1, 3600);
-        PANACEA_LEVEL = b.comment("Alchemy: Panacea (cleanse + ward) unlock level (0 disables).").defineInRange("panaceaLevel", 30, 0, SkillCurve.MAX_LEVEL);
+        PANACEA_LEVEL = b.comment("Alchemy: Panacea (cleanse + ward) unlock level (0 disables).").defineInRange("panaceaLevel", 75, 0, SkillCurve.MAX_LEVEL);
         PANACEA_COOLDOWN = b.comment("Panacea cooldown (seconds).").defineInRange("panaceaCooldownSeconds", 180, 1, 3600);
-        VOLLEY_LEVEL = b.comment("Archery: Volley (arrow fan) unlock level (0 disables).").defineInRange("volleyLevel", 30, 0, SkillCurve.MAX_LEVEL);
+        VOLLEY_LEVEL = b.comment("Archery: Volley (arrow fan) unlock level (0 disables).").defineInRange("volleyLevel", 75, 0, SkillCurve.MAX_LEVEL);
         VOLLEY_COOLDOWN = b.comment("Volley cooldown (seconds).").defineInRange("volleyCooldownSeconds", 150, 1, 3600);
         b.pop();
 
