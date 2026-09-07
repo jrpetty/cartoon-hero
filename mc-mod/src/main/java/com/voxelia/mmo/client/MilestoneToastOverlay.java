@@ -1,6 +1,5 @@
 package com.voxelia.mmo.client;
 
-import com.voxelia.mmo.progression.Milestones;
 import com.voxelia.mmo.skill.Skill;
 import net.minecraft.client.DeltaTracker;
 import net.minecraft.client.Minecraft;

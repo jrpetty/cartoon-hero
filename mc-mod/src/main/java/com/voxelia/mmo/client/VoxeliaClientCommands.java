@@ -95,7 +95,7 @@ public final class VoxeliaClientCommands {
 
     private static int rewards(CommandContext<CommandSourceStack> ctx) {
         CommandSourceStack src = ctx.getSource();
-        src.sendSuccess(() -> Component.literal("=== Voxelia level rewards (per level, max 100) ===")
+        src.sendSuccess(() -> Component.literal("=== Voxelia level rewards (per level, max " + SkillCurve.MAX_LEVEL + ") ===")
             .withStyle(ChatFormatting.GOLD), false);
         line(src, "Combat",     "+" + VoxeliaConfig.combatDamagePerLevel() + " attack damage");
         line(src, "Farming",    "+" + VoxeliaConfig.farmingHealthPerLevel() + " max health");
