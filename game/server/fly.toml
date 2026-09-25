@@ -1,0 +1,34 @@
+# Fly.io. `fly launch --no-deploy` once to claim a name, then `fly deploy`.
+#
+# Fly terminates TLS for you, which is the reason to prefer it here: the game is
+# usually opened over https://, and a page on https:// may only open wss://.
+# That single rule is what makes "just run the server" insufficient, and what a
+# TLS-terminating host solves for free.
+app = "banner-and-blade-relay"
+primary_region = "lhr"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[http_service]
+  internal_port = 8787
+  force_https = true
+  auto_stop_machines = "suspend"
+  auto_start_machines = true
+  # Zero is deliberate: a suspended machine wakes on the first connection in
+  # about a second, and a relay with nobody in it should cost nothing.
+  min_machines_running = 0
+
+  [http_service.http_options.response]
+    pristine = true          # don't let the proxy touch the Upgrade handshake
+
+  [[http_service.checks]]
+    grace_period = "5s"
+    interval = "30s"
+    method = "GET"
+    path = "/healthz"
+    timeout = "3s"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "256mb"           # it relays JSON; it does not simulate anything

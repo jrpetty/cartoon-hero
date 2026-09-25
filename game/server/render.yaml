@@ -1,0 +1,14 @@
+# Render. Point a new Blueprint at this repo; it terminates TLS, so players
+# connect with wss:// and no reverse proxy of your own is needed.
+services:
+  - type: web
+    name: banner-and-blade-relay
+    runtime: docker
+    dockerfilePath: ./server/Dockerfile
+    dockerContext: ./server
+    healthCheckPath: /healthz
+    plan: free
+    envVars:
+      # Render injects PORT itself; listed so it is obvious the server reads it.
+      - key: NODE_ENV
+        value: production

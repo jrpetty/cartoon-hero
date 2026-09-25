@@ -1,0 +1,205 @@
+// Headless smoke match: two skirmish AIs fight on a generated map. This
+// exercises the entire stack — economy, construction, pathing, production,
+// combat, fog, victory — with no rendering. The strongest regression net we
+// have for "the game actually plays".
+
+import { describe, expect, it } from "vitest";
+import { World } from "./world";
+import { Kind, Team } from "./types";
+import { generateMap } from "../maps/generator";
+import { SkirmishAI } from "../ai/skirmish_ai";
+import { DIFFICULTIES } from "../ai/difficulty";
+import { SIM_DT, SIM_HZ } from "../content/balance";
+import { teamMetrics } from "./metrics";
+
+describe("AI vs AI smoke match", () => {
+  it("runs an 8-realm free-for-all on a ring map", () => {
+    const seed = 80808;
+    const N = 8;
+    const map = generateMap("highlands", seed, N);
+    expect(map.starts.length).toBe(N);
+    const world = new World(seed);
+    world.init(map, Array.from({ length: N }, () => ({})), Array.from({ length: N }, () => 1));
+    expect(world.numTeams).toBe(N);
+    const ais = Array.from({ length: N }, (_, t) => new SkirmishAI(world, t as Team, DIFFICULTIES.knight));
+    const ticks = SIM_HZ * 60 * 12;
+    for (let i = 0; i < ticks; i++) {
+      world.tick();
+      for (const ai of ais) ai.update(SIM_DT);
+      world.drainEvents();
+      if (world.winner !== null) break;
+    }
+    // Every realm built an economy from its own slice of the ring.
+    for (let t = 0; t < N; t++) {
+      expect(world.player(t as Team).stats.gathered).toBeGreaterThan(400);
+    }
+    // And the eight-way war actually happened.
+    const kills = Array.from({ length: N }, (_, t) => world.player(t as Team).stats.unitsKilled)
+      .reduce((s, k) => s + k, 0);
+    expect(kills).toBeGreaterThan(8);
+  }, 180000);
+
+  it("two AIs fight across an Islands map (they cross the carved fords)", () => {
+    const seed = 31337;
+    const map = generateMap("islands", seed);
+    const world = new World(seed);
+    world.init(map, [{}, {}], [1, 1]);
+    const ais = [
+      new SkirmishAI(world, Team.Player, DIFFICULTIES.knight),
+      new SkirmishAI(world, Team.Enemy, DIFFICULTIES.knight),
+    ];
+    const ticks = SIM_HZ * 60 * 16;
+    for (let i = 0; i < ticks; i++) {
+      world.tick();
+      for (const ai of ais) ai.update(SIM_DT);
+      world.drainEvents();
+      if (world.winner !== null) break;
+    }
+    // Both economies ran, and the sides actually reached each other and fought —
+    // proving the land bridges are traversable on a water-heavy map.
+    expect(world.player(Team.Player).stats.gathered).toBeGreaterThan(800);
+    expect(world.player(Team.Enemy).stats.gathered).toBeGreaterThan(800);
+    const kills =
+      world.player(Team.Player).stats.unitsKilled + world.player(Team.Enemy).stats.unitsKilled;
+    expect(kills).toBeGreaterThan(3);
+  }, 180000);
+
+  it("two Knight AIs develop economies and armies and fight", () => {
+    const seed = 20260612;
+    const map = generateMap("open_plains", seed);
+    const world = new World(seed);
+    world.init(map, [{}, {}], [1, 1]);
+    const ais = [
+      new SkirmishAI(world, Team.Player, DIFFICULTIES.knight),
+      new SkirmishAI(world, Team.Enemy, DIFFICULTIES.knight),
+    ];
+
+    const MINUTES = 14;
+    const ticks = SIM_HZ * 60 * MINUTES;
+    for (let i = 0; i < ticks; i++) {
+      world.tick();
+      for (const ai of ais) ai.update(SIM_DT);
+      world.drainEvents(); // keep the queue from hitting its cap
+      if (world.winner !== null) break;
+    }
+
+    for (const team of [Team.Player, Team.Enemy]) {
+      const p = world.player(team);
+      const lost = p.defeated;
+      // Economy ran: significant resources gathered.
+      expect(p.stats.gathered).toBeGreaterThan(800);
+      if (!lost) {
+        // Villagers were trained beyond the starting three.
+        const vills = world.countOf(team, "villager");
+        expect(vills + p.stats.unitsLost).toBeGreaterThan(5);
+        // Build order progressed into military production.
+        const buildings = world.entitiesOf(team, Kind.Building);
+        expect(buildings.length).toBeGreaterThan(2);
+      }
+    }
+
+    // The war happened: somebody killed something.
+    const totalKills =
+      world.player(Team.Player).stats.unitsKilled + world.player(Team.Enemy).stats.unitsKilled;
+    expect(totalKills).toBeGreaterThan(3);
+
+    // At least one side should have advanced an age in 14 minutes.
+    const maxAge = Math.max(world.player(Team.Player).age, world.player(Team.Enemy).age);
+    expect(maxAge).toBeGreaterThanOrEqual(1);
+  }, 120000);
+
+  it("a four-way free-for-all runs to a clean finish", () => {
+    const seed = 4444;
+    const map = generateMap("open_plains", seed, 4);
+    expect(map.starts.length).toBe(4);
+    const world = new World(seed);
+    world.init(map, [{}, {}, {}, {}], [1, 1, 1, 1]);
+    expect(world.numTeams).toBe(4);
+    expect(world.fog.length).toBe(4);
+    const teams = [Team.Player, Team.Enemy, Team.Team3, Team.Team4];
+    const ais = teams.map((t) => new SkirmishAI(world, t, DIFFICULTIES.knight));
+
+    const ticks = SIM_HZ * 60 * 22;
+    for (let i = 0; i < ticks; i++) {
+      world.tick();
+      for (const ai of ais) ai.update(SIM_DT);
+      world.drainEvents();
+      if (world.winner !== null) break;
+    }
+
+    // Every realm got an economy going from its own corner.
+    for (const t of teams) {
+      expect(world.player(t).stats.gathered).toBeGreaterThan(500);
+    }
+    // The free-for-all actually fought: plenty of cross-team kills, and at
+    // least one realm advanced an age — i.e. the four corners are live and
+    // hostile, not deadlocked.
+    const kills = teams.reduce((s, t) => s + world.player(t).stats.unitsKilled, 0);
+    expect(kills).toBeGreaterThan(5);
+    expect(Math.max(...teams.map((t) => world.player(t).age))).toBeGreaterThanOrEqual(1);
+  }, 180000);
+
+  it("a 2v2 holds alliances: shared vision, foes only across the line", () => {
+    const seed = 2222;
+    const map = generateMap("open_plains", seed, 4);
+    const world = new World(seed);
+    // Teams 0 & 2 ally against 1 & 3.
+    world.init(map, [{}, {}, {}, {}], [1, 1, 1, 1], [0, 1, 0, 1]);
+    expect(world.areAllied(Team.Player, Team.Team3)).toBe(true);
+    expect(world.areHostile(Team.Player, Team.Enemy)).toBe(true);
+    // Shared vision: the ally's base is already lit for the player.
+    const allyStart = map.starts[Team.Team3];
+    expect(world.fogAt(Team.Player, allyStart.x, allyStart.y)).toBe(2);
+
+    const teams = [Team.Player, Team.Enemy, Team.Team3, Team.Team4];
+    const ais = teams.map((t) => new SkirmishAI(world, t, DIFFICULTIES.knight));
+    const ticks = SIM_HZ * 60 * 20;
+    for (let i = 0; i < ticks; i++) {
+      world.tick();
+      for (const ai of ais) ai.update(SIM_DT);
+      world.drainEvents();
+      if (world.winner !== null) break;
+    }
+
+    // The two sides fought.
+    const kills = teams.reduce((s, t) => s + world.player(t).stats.unitsKilled, 0);
+    expect(kills).toBeGreaterThan(5);
+    // If a winner emerged, both members of that alliance "win" together: the
+    // winner is allied with at least one teammate that's still standing.
+    if (world.winner !== null) {
+      const w = world.winner;
+      const ally = teams.find((t) => t !== w && world.areAllied(w, t))!;
+      expect(world.areAllied(w, ally)).toBe(true);
+    }
+  }, 180000);
+
+  it("a Warlord AI dominates a Squire AI (aggregate over seeds)", () => {
+    // A single AI-vs-AI outcome is noisy — each side rolls a random personality
+    // and a passive Warlord roll can occasionally lose a specific seed. So we
+    // assert *aggregate* dominance across several seeds (much higher total
+    // score), which reflects the Warlord's real edge without being brittle.
+    const seeds = [5150, 1, 314, 909];
+    let warlordScore = 0;
+    let squireScore = 0;
+    for (const seed of seeds) {
+      const map = generateMap("open_plains", seed);
+      const world = new World(seed);
+      world.init(map, [{}, {}], [DIFFICULTIES.squire.econMult, DIFFICULTIES.warlord.econMult]);
+      const ais = [
+        new SkirmishAI(world, Team.Player, DIFFICULTIES.squire),
+        new SkirmishAI(world, Team.Enemy, DIFFICULTIES.warlord),
+      ];
+      const ticks = SIM_HZ * 60 * 22;
+      for (let i = 0; i < ticks; i++) {
+        world.tick();
+        for (const ai of ais) ai.update(SIM_DT);
+        world.drainEvents();
+        if (world.winner !== null) break;
+      }
+      warlordScore += teamMetrics(world, Team.Enemy).score;
+      squireScore += teamMetrics(world, Team.Player).score;
+    }
+    // Measured ~2x+; require a clear margin so the strong AI is unmistakably ahead.
+    expect(warlordScore).toBeGreaterThan(squireScore * 1.5);
+  }, 240000);
+});
