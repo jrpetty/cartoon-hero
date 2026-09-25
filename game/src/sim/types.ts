@@ -187,6 +187,13 @@ export interface Entity {
   rallyTimer: number; // seconds of ally-applied attack boost remaining (War Cry)
   /** For a Trade Cart: the Market at the other end of its route. */
   tradeHomeId: EntityId;
+  /**
+   * Bitmask of teams that can currently see this unit, for concealment in
+   * woods. All bits set means "in the open", which is the normal case and the
+   * default — concealment is the exception, and it is cheaper to mark the few
+   * hidden units than to recompute visibility for everyone.
+   */
+  spottedBy: number;
   guardTimer: number; // seconds of ally-applied armour remaining (Shield Wall)
   heroLevel: number; // hero units only: 0..5, raises stats
   heroKills: number; // hero units only: kills credited toward the next level

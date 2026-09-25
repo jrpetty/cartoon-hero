@@ -770,6 +770,65 @@ forces `spawns` to come above the resource lines and the second pass says out
 loud what it cleared. The gap closed from 2.7× to 1.8×, which is inside the
 normal early spread measured on fair generated maps (370–660 at the same mark).
 
+## What the game actually looked like
+
+Assessed by rendering real frames to PNG and looking at them, rather than by
+reading the source. Three things were wrong, and the first was by far the worst.
+
+**The fog frontier was a staircase.** Fog is one value per nav cell and only
+ever takes three of them, so upscaling it straight to the screen ramps between
+cell *centres* — and every diagonal frontier, which is most of them, arrived as
+hard blocky steps across the whole map. A separable box blur over the mask
+before it is upscaled costs two passes across ~16k cells at 8Hz and turns that
+edge into the falloff a scouted horizon should have. The "explored but not
+visible" tint also came down from a flat 110 of near-black to 88, tinted very
+slightly blue, because the old one crushed remembered woodland and buildings
+into a single colourless smudge.
+
+**The ground was a blur at the zoom you play at.** The terrain cache is baked at
+half resolution — right for a wide view, and magnified over three times when you
+lean in, so every tuft baked into it becomes a smear. Rather than bake a bigger
+texture (the cache already has to stay under Safari's canvas limit on the
+largest maps), `drawGroundDetail` draws crisp marks live for the cells actually
+on screen: grass in three tones, stone chips, pebbles, reeds, snow sparkle.
+
+**High ground looked like a shadow.** The cache paints hills as a darker circle
+per cell, which from above is indistinguishable from shade — and here high
+ground is worth 20% range, so it is the one landform a player most needs to pick
+out. Lighting the crest where the hill ends and shadowing the foot where it
+drops away gives the mass an edge that reads as height. Woodland got the same
+treatment from the other direction: crowns are drawn *lighter* than the forest
+floor, since dark-on-dark was why the first attempt was invisible even though it
+was measurably drawing (4,907 pixels of it).
+
+Detail is not free, and it was measured rather than assumed. The first version
+issued a draw call per blade — **+58% render time at zoom 1.0**, and *worse*
+zoomed out than in, because a wider view holds more cells, which is exactly
+backwards from where detail is wanted. Batching everything into one path per
+tone made it worse still (+190%): one enormous path costs more to rasterise
+than many small ones. The version that shipped uses cheap primitives and fewer
+of them (+29%), starts at zoom 0.85 where the blur actually shows, caps out
+rather than drawing thousands of cells, and is skipped entirely whenever the
+adaptive LOD is already shedding detail — so it can never be the thing that
+makes a weak machine stutter.
+
+## Woods you can hide in
+
+Forest cost speed and sight but hid nobody, so the terrain this file calls the
+*soft* barrier was purely a tax and never an opportunity. A unit standing in
+woodland is now invisible to any hostile side with nothing within four tiles,
+which makes a treeline somewhere to wait and gives scouting a job beyond lifting
+fog. Attacking gives you away — an ambush that stays invisible while it kills
+you is not an ambush, it is a bug.
+
+Concealment reaches target acquisition as well as the renderer: without that a
+longbowman would shoot a hidden unit from two hundred units away and the whole
+thing would be decoration on the minimap. And the AI reads `visibleTo` rather
+than raw fog in the four places it scans for units — intel, target priority,
+focus fire and picking villagers to raid — because counting an ambush it cannot
+see is the same "only one side understands it" trap that bridges and trade carts
+both fell into.
+
 ## Bigger / later
 - **Naval** — water is currently only an impassable wall, and the Islands
   preset (55% water) is a maze rather than a naval map. Dock, transport,

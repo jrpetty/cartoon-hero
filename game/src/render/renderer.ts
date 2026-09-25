@@ -5,7 +5,8 @@ import { World, FOG_UNSEEN, FOG_VISIBLE } from "../sim/world";
 import { BuildState, Entity, Kind, Team } from "../sim/types";
 import { Camera } from "../engine/camera";
 import { Particles } from "../engine/particles";
-import { buildTerrainCache, terrainCacheScale } from "./terrain";
+import { buildTerrainCache, drawGroundDetail, terrainCacheScale } from "./terrain";
+import { FOG_BLUR_RADIUS, blurMask } from "./fogblur";
 import {
   drawBuilding,
   drawHealthBar,
@@ -56,6 +57,16 @@ export interface CommandMarker {
   kind: "move" | "attack" | "rally";
 }
 
+/**
+ * How dark ground you have scouted but cannot currently see is drawn.
+ *
+ * Was a flat 110 of near-black, which crushed remembered woodland and buildings
+ * into a colourless grey mush — everything under it read as the same smudge.
+ * Lighter, and tinted very slightly blue, so memory reads as dusk rather than
+ * dirt and a treeline is still recognisably a treeline.
+ */
+const FOG_SEEN_ALPHA = 88;
+
 export interface GhostPlacement {
   type: string;
   x: number;
@@ -78,6 +89,9 @@ export class Renderer {
   private fogCanvas: HTMLCanvasElement | null = null;
   private fogCtx: CanvasRenderingContext2D | null = null;
   private fogDirtyTimer = 0;
+  /** Scratch buffers for the fog blur, kept so it allocates nothing per frame. */
+  private fogBlurA: Float32Array | null = null;
+  private fogBlurB: Float32Array | null = null;
   shakeX = 0;
   shakeY = 0;
   private shakeAmp = 0;
@@ -298,6 +312,19 @@ export class Renderer {
           cx0, cy0, cx1 - cx0, cy1 - cy0,
         );
       }
+    }
+
+    // Crisp close-up detail over the blitted cache, which is baked at half
+    // resolution and turns to mush the moment you lean in.
+    //
+    // Skipped whenever detail is already being shed — "Reduce effects", or the
+    // adaptive LOD having decided frames are slipping. Ground detail is the
+    // most expendable thing on screen and the only part of the frame whose cost
+    // scales with how much *map* is visible, so it is the right first thing to
+    // drop and it should never be what makes a weak machine stutter.
+    if (!this.aggressiveLod) {
+      this.guard(ctx, "grounddetail", worldTf, () =>
+        drawGroundDetail(ctx, world.map, vx0, vy0, vx1, vy1, cam.zoom, time));
     }
 
     // Ground decals (corpses, arrows, scorch) sit on the terrain, under units.
@@ -566,14 +593,35 @@ export class Renderer {
       this.fogDirtyTimer -= dt;
       if (this.fogDirtyTimer <= 0 && this.fogCtx && this.fogCanvas) {
         this.fogDirtyTimer = 0.12;
-        const img = this.fogCtx.createImageData(world.fogCols, world.fogRows);
         const fog = world.fog[viewTeam];
-        for (let i = 0; i < fog.length; i++) {
+        const cols = world.fogCols;
+        const rows = world.fogRows;
+        // Blur the mask before it is upscaled.
+        //
+        // The fog is one value per nav cell and only ever takes three of them,
+        // so bilinear-upscaling it straight to the screen ramps between cell
+        // *centres* and leaves a visible staircase along every diagonal
+        // frontier — which is most of them. A separable box blur over the grid
+        // costs a couple of passes across ~16k cells at 8Hz and turns that edge
+        // into the soft falloff a scouted horizon should have.
+        const n = cols * rows;
+        if (!this.fogBlurA || this.fogBlurA.length !== n) {
+          this.fogBlurA = new Float32Array(n);
+          this.fogBlurB = new Float32Array(n);
+        }
+        const a = this.fogBlurA!;
+        const b = this.fogBlurB!;
+        for (let i = 0; i < n; i++) {
+          a[i] = fog[i] === FOG_UNSEEN ? 255 : fog[i] === FOG_VISIBLE ? 0 : FOG_SEEN_ALPHA;
+        }
+        blurMask(a, b, cols, rows, FOG_BLUR_RADIUS);
+        const img = this.fogCtx.createImageData(cols, rows);
+        for (let i = 0; i < n; i++) {
           const o = i * 4;
-          img.data[o] = 8;
-          img.data[o + 1] = 7;
-          img.data[o + 2] = 4;
-          img.data[o + 3] = fog[i] === FOG_UNSEEN ? 255 : fog[i] === FOG_VISIBLE ? 0 : 110;
+          img.data[o] = 10;
+          img.data[o + 1] = 9;
+          img.data[o + 2] = 14;
+          img.data[o + 3] = a[i];
         }
         this.fogCtx.putImageData(img, 0, 0);
       }

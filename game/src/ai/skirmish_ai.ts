@@ -438,7 +438,11 @@ export class SkirmishAI {
     const now: SeenComposition = { infantry: 0, archer: 0, cavalry: 0, siege: 0 };
     for (const e of this.world.entities) {
       if (!e.alive || !this.isHostile(e.team) || e.kind !== Kind.Unit) continue;
-      if (this.world.fogAt(this.team, e.x, e.y) !== FOG_VISIBLE) continue;
+      // visibleTo, not fogAt: a unit hidden in a wood is not intelligence.
+      // Reading the raw fog here would let the AI count an ambush it cannot
+      // actually see, which is the "only one side understands it" trap this
+      // project keeps falling into.
+      if (!this.world.visibleTo(this.team, e)) continue;
       const def = UNITS[e.type];
       if (!def) continue;
       if (def.armorClass === "cavalry") now.cavalry++;
@@ -1415,7 +1419,7 @@ export class SkirmishAI {
     for (const e of this.world.entities) {
       if (!e.alive || e.team === this.team || !this.isHostile(e.team)) continue;
       if (e.kind !== Kind.Unit && e.kind !== Kind.Building) continue;
-      if (this.world.fogAt(this.team, e.x, e.y) === 0) continue; // unseen
+      if (!this.world.visibleTo(this.team, e)) continue; // unseen, or hiding
       let pri: number;
       if (e.kind === Kind.Unit) pri = e.type === "villager" ? 130 : e.type === "monk" ? 90 : 55;
       else pri = e.type === "town_center" ? 100 : PRODUCTION.has(e.type) ? 70 : 35;
@@ -1453,7 +1457,7 @@ export class SkirmishAI {
       if (!e.alive || e.kind !== Kind.Unit || !this.isHostile(e.team) || e.type === "villager") continue;
       const d = dist(cx, cy, e.x, e.y);
       if (d > 260) continue; // only what we're actually fighting
-      if (this.world.fogAt(this.team, e.x, e.y) === 0) continue;
+      if (!this.world.visibleTo(this.team, e)) continue;
       const wounded = (1 - e.hp / Math.max(1, e.maxHp)) * 45; // finish low-HP targets
       const score = armyTargetPriority(e.type) + wounded - d * 0.05;
       if (score > bestScore) { bestScore = score; best = e; }
@@ -1695,7 +1699,7 @@ export class SkirmishAI {
     // Prefer a visible enemy villager; otherwise sweep their base eco.
     const vills = this.world.entities.filter(
       (e) => e.alive && e.kind === Kind.Unit && this.isHostile(e.team) && e.type === "villager" &&
-        this.world.fogAt(this.team, e.x, e.y) === FOG_VISIBLE,
+        this.world.visibleTo(this.team, e),
     );
     const base = this.base();
     if (vills.length > 0 && base) {

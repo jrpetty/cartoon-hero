@@ -87,3 +87,13 @@ export const TRADE_GOLD_EXPONENT = 1.3;
  * a mistake early doesn't shadow the rest of the game.
  */
 export const MARKET_RECOVERY = 0.994;
+
+/**
+ * How close you must be to pick a unit out of woodland, in world units.
+ *
+ * Forest already costs speed and sight; this is what makes it somewhere to
+ * *hide* rather than merely somewhere slow. Four tiles is close enough that
+ * walking a scout along a treeline finds an ambush, and far enough that a wood
+ * between two bases is genuinely dangerous ground to march past.
+ */
+export const CONCEAL_RANGE = 132;

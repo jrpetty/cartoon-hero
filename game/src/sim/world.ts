@@ -31,6 +31,7 @@ import {
   FARM_FOOD,
   TRADE_GOLD_PER_TILE,
   TRADE_GOLD_EXPONENT,
+  CONCEAL_RANGE,
   MARKET_RECOVERY,
   POP_CAP_HARD,
   PROJECTILE_SPEED,
@@ -247,7 +248,7 @@ export function makeEntity(): Entity {
     garrison: [], gateOpen: false, gateForce: 0, farmWorker: -1,
     projTargetId: -1, projDamage: 0, projSpeed: 0, projSourceTeam: Team.Neutral,
     projArmorClassBonusFrom: "", projElapsed: 0, projDuration: 0, projFromX: 0, projFromY: 0,
-    abilityCooldown: 0, abilityActive: 0, slowTimer: 0, rallyTimer: 0, tradeHomeId: -1, guardTimer: 0, heroLevel: 0, heroKills: 0,
+    abilityCooldown: 0, abilityActive: 0, slowTimer: 0, rallyTimer: 0, tradeHomeId: -1, spottedBy: ~0, guardTimer: 0, heroLevel: 0, heroKills: 0,
     veterancy: 0, vetKills: 0, projSourceId: -1,
     animPhase: 0, hitFlash: 0, lastDamageTime: -999, lastAttackerId: -1, selected: false,
     variantRarity: 0, tier: 0,
@@ -442,6 +443,7 @@ export class World {
       }
     }
     this.recomputeVision();
+    this.recomputeConcealment();
   }
 
   player(team: Team): PlayerState {
@@ -1505,7 +1507,7 @@ export class World {
       }
     }
 
-    if (this.tickCount % 5 === 0) this.recomputeVision();
+    if (this.tickCount % 5 === 0) { this.recomputeVision(); this.recomputeConcealment(); }
     if (this.tickCount % SIM_HZ === 0) this.samplePlayerPeaks();
     if (this.mode !== "conquest") this.tickGameMode();
     if (this.tickCount % 20 === 0) this.checkVictory();
@@ -2208,6 +2210,10 @@ export class World {
       if (!n.alive || n.hp <= 0) continue;
       if (!this.areHostile(e.team, n.team)) continue;
       if (n.kind !== Kind.Unit && n.kind !== Kind.Building) continue;
+      // You cannot pick a fight with something you cannot see. Without this a
+      // longbowman would shoot a unit hidden in a wood from two hundred units
+      // away, and the concealment would be decoration on the minimap.
+      if (n.kind === Kind.Unit && (n.spottedBy & (1 << e.team)) === 0) continue;
       // Prefer units over buildings slightly.
       const d = dist2(e.x, e.y, n.x, n.y) * (n.kind === Kind.Building ? 1.8 : 1);
       if (d < bestD) {
@@ -2766,8 +2772,50 @@ export class World {
   }
 
   /** Is this entity visible to `team` right now? */
+  /**
+   * Who can pick each unit out of the woods.
+   *
+   * Forest already cost speed and sight, but hid nobody — so the one terrain
+   * described as the *soft* barrier was purely a tax, never an opportunity.
+   * A unit standing in woodland is now invisible to a team with nothing close
+   * by, which makes a treeline somewhere to wait rather than somewhere to
+   * avoid, and gives scouting a job beyond lifting fog.
+   *
+   * Only units, and only those actually in forest: a building in a wood is far
+   * too big to lose, and marking the handful of hidden units is much cheaper
+   * than recomputing visibility for an entire army. Attacking gives you away,
+   * because an ambush that stays invisible while it kills you is not an ambush,
+   * it is a bug.
+   */
+  private recomputeConcealment() {
+    const ALL = ~0;
+    for (const e of this.entities) {
+      if (!e.alive || e.kind !== Kind.Unit) continue;
+      // attackCooldown is non-zero exactly while a unit is recovering from a
+      // swing or a shot, so it is already the "has just attacked" signal.
+      if (this.terrainAt(e.x, e.y) !== Terrain.Forest || e.attackCooldown > 0) {
+        e.spottedBy = ALL;
+        continue;
+      }
+      // Hidden from everyone except its own side, its allies, and any hostile
+      // team with eyes close enough to see through the trees.
+      let mask = 0;
+      for (let t = 0; t < this.numTeams; t++) {
+        if (!this.areHostile(e.team, t as Team)) { mask |= 1 << t; continue; }
+      }
+      for (const n of this.spatial.query(e.x, e.y, CONCEAL_RANGE) as Entity[]) {
+        if (!n.alive || n.team === e.team) continue;
+        if (n.kind !== Kind.Unit && n.kind !== Kind.Building) continue;
+        if (dist2(n.x, n.y, e.x, e.y) > CONCEAL_RANGE * CONCEAL_RANGE) continue;
+        mask |= 1 << n.team;
+      }
+      e.spottedBy = mask;
+    }
+  }
+
   visibleTo(team: Team, e: Entity): boolean {
     if (this.revealAll || e.team === team) return true;
+    if (e.kind === Kind.Unit && (e.spottedBy & (1 << team)) === 0) return false;
     const f = this.fogAt(team, e.x, e.y);
     if (f === FOG_VISIBLE) return true;
     // Explored buildings remain visible as "last known" — renderer handles ghosting.

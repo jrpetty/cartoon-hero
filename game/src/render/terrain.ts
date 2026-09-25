@@ -331,3 +331,190 @@ export function buildMinimapBase(map: MapData, size: number): HTMLCanvasElement 
   }
   return canvas;
 }
+
+// --------------------------------------------------------- ground detail --
+
+/** Cheap deterministic hash per cell, so detail never shimmers between frames. */
+function cellHash(cx: number, cy: number, n: number): number {
+  let v = (cx * 374761393 + cy * 668265263 + n * 2246822519) | 0;
+  v = Math.imul(v ^ (v >>> 13), 1274126177);
+  return ((v ^ (v >>> 16)) >>> 0) / 4294967296;
+}
+
+/**
+ * Crisp ground detail, drawn live in world space over the blitted cache.
+ *
+ * The terrain cache is baked at half resolution, which is right for the zoom
+ * you fight at but turns to soft green mush the moment you lean in — at 1.6×
+ * the cache is magnified over three times and every tuft and pebble baked into
+ * it is a smear. Rather than bake a bigger texture (the cache already has to
+ * stay under Safari's canvas limit on the largest maps), the close-up detail is
+ * drawn fresh each frame for the handful of cells actually on screen.
+ *
+ * It fades in with zoom so nothing pops, and is skipped entirely when zoomed
+ * out — where it would be sub-pixel noise costing thousands of draws a frame.
+ */
+export function drawGroundDetail(
+  ctx: CanvasRenderingContext2D,
+  map: MapData,
+  vx0: number, vy0: number, vx1: number, vy1: number,
+  zoom: number,
+  time: number,
+) {
+  // Detail exists to rescue the close-up view: the cache is baked at half
+  // resolution, so it only turns to mush once you lean in past about 0.85.
+  // Below that the marks would be sub-pixel noise costing real time — and the
+  // cost is *worse* zoomed out, because a wider view holds more cells, which is
+  // exactly backwards from where the detail is wanted.
+  const strength = Math.min(1, (zoom - 0.85) / 0.45);
+  if (strength <= 0.02) return;
+
+  const c0x = Math.max(0, Math.floor(vx0 / TILE));
+  const c0y = Math.max(0, Math.floor(vy0 / TILE));
+  const c1x = Math.min(map.cols - 1, Math.ceil(vx1 / TILE));
+  const c1y = Math.min(map.rows - 1, Math.ceil(vy1 / TILE));
+  if (c1x < c0x || c1y < c0y) return;
+  if ((c1x - c0x + 1) * (c1y - c0y + 1) > 3000) return;
+
+  const at = (cx: number, cy: number) => {
+    if (cx < 0 || cy < 0 || cx >= map.cols || cy >= map.rows) return -1;
+    return map.terrain[cy * map.cols + cx];
+  };
+
+  ctx.save();
+  ctx.globalAlpha = strength;
+  ctx.lineCap = "round";
+  ctx.lineWidth = 1.3;
+
+  const GRASS_TONES = [PAL.grassShade, PAL.grassDark, "#84bd57"];
+
+  for (let cy = c0y; cy <= c1y; cy++) {
+    for (let cx = c0x; cx <= c1x; cx++) {
+      const t = map.terrain[cy * map.cols + cx];
+      const ox = cx * TILE;
+      const oy = cy * TILE;
+
+      switch (t) {
+        case Terrain.Hill: {
+          // Relief, not a dark blob. The cache paints high ground as a darker
+          // circle per cell, which from above is indistinguishable from a
+          // shadow — and here high ground is worth 20% range, so it is the one
+          // landform a player most needs to pick out. Lighting the crest and
+          // shadowing the foot gives the mass an edge that reads as height.
+          // Two flat bands per side rather than a gradient: a gradient has to
+          // be allocated per cell, which costs more than the softness is worth.
+          if (at(cx, cy - 1) !== Terrain.Hill) {
+            ctx.fillStyle = "rgba(214,235,170,0.20)";
+            ctx.fillRect(ox, oy, TILE, 4);
+            ctx.fillStyle = "rgba(214,235,170,0.13)";
+            ctx.fillRect(ox, oy + 4, TILE, 5);
+          }
+          if (at(cx, cy + 1) !== Terrain.Hill) {
+            ctx.fillStyle = "rgba(29,43,20,0.26)";
+            ctx.fillRect(ox, oy + TILE - 5, TILE, 5);
+            ctx.fillStyle = "rgba(29,43,20,0.15)";
+            ctx.fillRect(ox, oy + TILE - 11, TILE, 6);
+          }
+          // Dry upland tufts — straight, short, and fewer than on meadow.
+          ctx.strokeStyle = "rgba(147,173,99,0.6)";
+          ctx.beginPath();
+          for (let i = 0; i < 3; i++) {
+            const px = ox + cellHash(cx, cy, i) * TILE;
+            const py = oy + cellHash(cx, cy, i + 7) * TILE;
+            ctx.moveTo(px, py);
+            ctx.lineTo(px + 1, py - 3.5);
+          }
+          ctx.stroke();
+          break;
+        }
+        case Terrain.Grass:
+        case Terrain.GrassDark: {
+          // One path per cell, three tones interleaved: enough variation to
+          // read as meadow without a stroke call per blade.
+          const sway = Math.sin(time * 0.7 + cx * 0.4 + cy * 0.3) * 1.1;
+          for (let tone = 0; tone < 3; tone++) {
+            ctx.strokeStyle = withAlpha(GRASS_TONES[tone], 0.72);
+            ctx.beginPath();
+            for (let i = tone; i < 4; i += 3) {
+              const px = ox + cellHash(cx, cy, i) * TILE;
+              const py = oy + cellHash(cx, cy, i + 7) * TILE;
+              const hgt = 3 + cellHash(cx, cy, i + 13) * 3.5;
+              ctx.moveTo(px, py);
+              ctx.lineTo(px + sway, py - hgt);
+            }
+            ctx.stroke();
+          }
+          break;
+        }
+        case Terrain.Forest: {
+          // Crowns are *lighter* than the forest floor the cache paints. Dark
+          // on dark was why the first attempt at this was invisible even though
+          // it was drawing: a wood from above is lit tops over shadowed gaps,
+          // not a uniform dark disc.
+          for (let i = 0; i < 3; i++) {
+            const px = ox + 7 + cellHash(cx, cy, i) * (TILE - 14);
+            const py = oy + 7 + cellHash(cx, cy, i + 3) * (TILE - 14);
+            const r = 6.5 + cellHash(cx, cy, i + 11) * 3;
+            ctx.fillStyle = "rgba(22,36,15,0.72)";
+            ctx.beginPath(); ctx.arc(px + 1, py + 2.5, r, 0, Math.PI * 2); ctx.fill();
+            ctx.fillStyle = withAlpha(shade(PAL.foliage3, cellHash(cx, cy, i + 5) * 0.2 - 0.04), 0.96);
+            ctx.beginPath(); ctx.arc(px, py - 1, r * 0.86, 0, Math.PI * 2); ctx.fill();
+            ctx.fillStyle = "rgba(143,199,106,0.4)";
+            ctx.beginPath(); ctx.arc(px - r * 0.32, py - r * 0.45, r * 0.3, 0, Math.PI * 2); ctx.fill();
+          }
+          break;
+        }
+        case Terrain.Rock: {
+          ctx.fillStyle = "rgba(181,175,163,0.5)";
+          ctx.beginPath();
+          for (let i = 0; i < 3; i++) {
+            const px = ox + 4 + cellHash(cx, cy, i) * (TILE - 8);
+            const py = oy + 4 + cellHash(cx, cy, i + 7) * (TILE - 8);
+            const r = 2 + cellHash(cx, cy, i + 13) * 3;
+            ctx.moveTo(px - r, py + r * 0.6);
+            ctx.lineTo(px - r * 0.3, py - r);
+            ctx.lineTo(px + r, py + r * 0.2);
+            ctx.closePath();
+          }
+          ctx.fill();
+          break;
+        }
+        case Terrain.Dirt:
+        case Terrain.Sand:
+        case Terrain.Snow: {
+          ctx.fillStyle = t === Terrain.Snow ? "rgba(255,255,255,0.45)"
+            : t === Terrain.Sand ? "rgba(181,175,163,0.4)" : "rgba(148,119,77,0.45)";
+          ctx.beginPath();
+          for (let i = 0; i < 2; i++) {
+            const px = ox + cellHash(cx, cy, i) * TILE;
+            const py = oy + cellHash(cx, cy, i + 7) * TILE;
+            const r = 0.9 + cellHash(cx, cy, i + 13) * 1.3;
+            ctx.moveTo(px + r, py);
+            ctx.arc(px, py, r, 0, Math.PI * 2);
+          }
+          ctx.fill();
+          break;
+        }
+        case Terrain.Marsh: {
+          const sway = Math.sin(time * 1.1 + cx * 0.5) * 2;
+          ctx.strokeStyle = "rgba(109,122,74,0.55)";
+          ctx.lineWidth = 1;
+          ctx.beginPath();
+          for (let i = 0; i < 3; i++) {
+            const px = ox + cellHash(cx, cy, i) * TILE;
+            const py = oy + cellHash(cx, cy, i + 7) * TILE;
+            const hgt = 5 + cellHash(cx, cy, i + 13) * 4;
+            ctx.moveTo(px, py);
+            ctx.lineTo(px + sway, py - hgt);
+          }
+          ctx.stroke();
+          ctx.lineWidth = 1.3;
+          break;
+        }
+        default:
+          break; // water and shallows have their own glints
+      }
+    }
+  }
+  ctx.restore();
+}
