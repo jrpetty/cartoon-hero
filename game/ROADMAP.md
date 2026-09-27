@@ -800,6 +800,8 @@ drops away gives the mass an edge that reads as height. Woodland got the same
 treatment from the other direction: crowns are drawn *lighter* than the forest
 floor, since dark-on-dark was why the first attempt was invisible even though it
 was measurably drawing (4,907 pixels of it).
+(The per-frame crest/foot bands have since been replaced by a baked hillshade —
+see "Water, relief, night and building sites" below.)
 
 Detail is not free, and it was measured rather than assumed. The first version
 issued a draw call per blade — **+58% render time at zoom 1.0**, and *worse*
@@ -828,6 +830,69 @@ than raw fog in the four places it scans for units — intel, target priority,
 focus fire and picking villagers to raid — because counting an ambush it cannot
 see is the same "only one side understands it" trap that bridges and trade carts
 both fell into.
+
+## Water, relief, night and building sites
+
+Second rendering pass, again judged from rendered frames.
+
+**Water was a two-tone square per cell**, so every river was a staircase of
+blue blocks, and **hills were a disc per cell** — the tile grid the rest of the
+painter works to hide. Both are now painted per pixel, once, at map load
+(`paintReliefAndWater` in `render/terrain.ts`), from smooth fields: a rounded
+waterline with depth shading and a foam edge, sand that fades inland, and a
+cartographic hillshade lit from the north-west.
+
+- **The waterline must agree with the sim.** Water is impassable, so a picture
+  that rounds a coast into dry land is lying. The shoreline field is a blur
+  *pinned* at every cell centre (water ≥ 0.6, land ≤ 0.4); bilinear
+  interpolation passes through the centres, so the coast can be as round as the
+  blur likes while a lone pond, a one-cell channel and a one-cell island all
+  survive. `relief.test.ts` checks every cell centre on a test map against the
+  terrain grid; removing the pin fails it with 28 wrong cells.
+- **Shade per cell, interpolate per pixel.** Taking the slope per pixel from a
+  bilinear height field looks equivalent and isn't — its gradient jumps at
+  every cell boundary and the first version drew hills as stacks of flat
+  facets. Lit flanks mix toward warm light rather than scaling up (scaling made
+  grass neon).
+- **Grass was planted in the rivers.** Ground dressing scatters up to a cell
+  from where it's seeded, which put tufts in the water along every bank; they
+  now check the painted waterline. Found by the staircase test, which saw the
+  coast "jump" 24px where a tuft broke the run of water.
+- **Cost.** The bake went from ~60ms to ~210ms on a normal map (napi software
+  canvas; ~700ms on the 8-player Islands map), a one-off at match start. About
+  two thirds of that is napi's slow software `putImageData`; the per-pixel loop
+  itself is ~200ms on the largest map. The pass never reads the canvas back —
+  it accumulates everything as paint laid over the ground into one overlay —
+  because a readback was half the cost and, in a browser, can move the canvas
+  off the GPU for the rest of the match.
+
+**Night was a flat navy rectangle** drawn on top of the lit windows and
+watchfires meant to sell it, so they came out as dim as the grass. Night is now
+a darkness layer with holes cut at the lights (`render/nightlight.ts`) at a
+quarter of screen resolution — lived-in buildings, watchfires (widest),
+anything burning, and a faint lantern on *your own* units only (a light on
+enemy units would make night easier to scout). Remembered enemy buildings in
+fog don't glow. Lights only cut in once it's actually night — at dusk the sky
+is orange, and a window shouldn't punch a hole in a sunset.
+
+**Building sites were a blank brown square**, identical for a house and a
+castle and unchanged until the building popped into being. A foundation now
+shows a faint ghost of the finished building over a staked-out plot with
+materials waiting; under construction, the real building rises course by course
+behind scaffolding that climbs just ahead of it, and the timber pile runs down.
+
+## Fullscreen
+
+A fullscreen toggle on the main menu, in the in-match top bar and in the pause
+menu, and on `Alt+Enter` (rebindable; `Esc` also leaves). F11 was avoided
+because browsers already own it and their fullscreen isn't the page's.
+Browsers only grant fullscreen *synchronously inside a user gesture* (Safari
+strictly), and this UI is immediate-mode — a button's click is noticed on the
+next frame, which is too late. So buttons register a gesture zone while drawn,
+and the DOM click handler toggles fullscreen directly when a click lands in
+one. Where fullscreen isn't allowed (an iframe without permission, iPhone
+Safari) the button is disabled with a tooltip saying why, rather than doing
+nothing.
 
 ## Bigger / later
 - **Naval** — water is currently only an impassable wall, and the Islands

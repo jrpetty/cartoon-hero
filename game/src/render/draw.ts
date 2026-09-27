@@ -11,6 +11,7 @@ import { TILE } from "../content/balance";
 import { isNight } from "../content/daynight";
 import { ABILITIES } from "../content/abilities";
 import { spriteFor } from "./sprites";
+import { LIT_BUILDINGS } from "./nightlight";
 
 type Ctx = CanvasRenderingContext2D;
 
@@ -44,11 +45,6 @@ function tcol(team: number): TeamCol {
   return gColorResolver ? gColorResolver(team) : teamColor(team);
 }
 
-// Buildings whose windows light up at night.
-const WINDOW_GLOW = new Set([
-  "town_center", "house", "mill", "barracks", "archery_range", "stable",
-  "blacksmith", "market", "castle", "watch_tower",
-]);
 
 function shadow(ctx: Ctx, x: number, y: number, rx: number, ry: number, alpha = 0.25) {
   ctx.fillStyle = `rgba(20, 24, 12, ${alpha})`;
@@ -166,42 +162,40 @@ export function drawBuilding(ctx: Ctx, e: Entity, time: number, selectedTeamView
   const half = e.radius;
   const tc = tcol(e.team);
 
-  // Foundation / construction states.
   if (e.buildState !== BuildState.Done) {
-    // dirt pad
-    ctx.fillStyle = PAL.dirt;
-    ctx.fillRect(e.x - half, e.y - half, half * 2, half * 2);
-    ctx.strokeStyle = PAL.woodDark;
-    ctx.lineWidth = 2;
-    ctx.strokeRect(e.x - half + 2, e.y - half + 2, half * 2 - 4, half * 2 - 4);
-    // corner posts
-    ctx.fillStyle = PAL.wood;
-    for (const [px, py] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) {
-      ctx.fillRect(e.x + px * (half - 5) - 2, e.y + py * (half - 5) - 5, 4, 8);
-    }
-    if (e.buildState === BuildState.UnderConstruction) {
-      // scaffold rises with progress
-      const h = e.buildProgress * half * 1.2;
-      ctx.fillStyle = withAlpha(PAL.woodLight, 0.8);
-      ctx.fillRect(e.x - half * 0.7, e.y - h * 0.6, half * 1.4, h * 0.6);
-      ctx.strokeStyle = PAL.woodDark;
-      for (let i = 0; i < 3; i++) {
-        const sx = e.x - half * 0.7 + (half * 1.4 * i) / 2;
-        ctx.beginPath();
-        ctx.moveTo(sx, e.y);
-        ctx.lineTo(sx, e.y - h * 0.6);
-        ctx.stroke();
-      }
-      // progress arc
-      ctx.strokeStyle = PAL.uiGood;
-      ctx.lineWidth = 3;
-      ctx.beginPath();
-      ctx.arc(e.x, e.y, half + 6, -Math.PI / 2, -Math.PI / 2 + e.buildProgress * Math.PI * 2);
-      ctx.stroke();
-    }
+    drawConstruction(ctx, e, half, tc, time);
     return;
   }
 
+  drawBuildingArt(ctx, e, half, tc, time);
+
+  // After dark, lived-in buildings show warm lit windows. The pool of light
+  // around them belongs to the night layer (nightlight.ts), which is what lets
+  // it show through the darkness instead of being painted underneath it.
+  if (isNight(gDayPhase) && LIT_BUILDINGS.has(e.type)) {
+    const flick = 0.8 + Math.sin(time * 6 + e.id * 1.7) * 0.12;
+    ctx.fillStyle = withAlpha("#ffd98a", 0.9 * flick);
+    const wn = e.radius > 40 ? 3 : 2;
+    for (let i = 0; i < wn; i++) {
+      const wx = e.x + ((i + 0.5) / wn - 0.5) * half * 1.1;
+      ctx.fillRect(wx - 1.5, e.y + half * 0.18, 3, 4);
+    }
+  }
+
+  // Damage smoke handled by game-side particles; here add scorched look.
+  const dmg = 1 - e.hp / e.maxHp;
+  if (dmg > 0.4) {
+    ctx.fillStyle = withAlpha("#1a140c", Math.min(0.45, (dmg - 0.4) * 0.9));
+    ctx.fillRect(e.x - half, e.y - half, half * 2, half * 2);
+  }
+  if (e.hitFlash > 0) {
+    ctx.fillStyle = withAlpha("#ffffff", e.hitFlash * 0.35);
+    ctx.fillRect(e.x - half, e.y - half, half * 2, half * 2);
+  }
+}
+
+/** The finished building — also what a construction site rises into. */
+function drawBuildingArt(ctx: Ctx, e: Entity, half: number, tc: TeamCol, time: number) {
   shadow(ctx, e.x + half * 0.12, e.y + half * 0.55, half * 1.05, half * 0.45, 0.3);
 
   const bsprite = spriteFor(e.type);
@@ -236,35 +230,117 @@ export function drawBuilding(ctx: Ctx, e: Entity, time: number, selectedTeamView
       ctx.fillRect(e.x - half, e.y - half, half * 2, half * 2);
     }
   }
+}
 
-  // After dark, lived-in buildings show warm lit windows and a soft hearth
-  // glow — sells the night and makes towns feel alive.
-  if (isNight(gDayPhase) && WINDOW_GLOW.has(e.type)) {
-    const flick = 0.8 + Math.sin(time * 6 + e.id * 1.7) * 0.12;
-    const g = ctx.createRadialGradient(e.x, e.y, 1, e.x, e.y, half * 1.7);
-    g.addColorStop(0, withAlpha("#ffbe5a", 0.1 * flick));
-    g.addColorStop(1, withAlpha("#ffbe5a", 0));
-    ctx.fillStyle = g;
+// Buildings that lie flat on the ground: nothing to scaffold, so they fade in.
+const FLAT_BUILDINGS = new Set(["farm", "bridge"]);
+// Buildings whose art stands well above their footprint.
+const TALL_BUILDINGS = new Set(["watch_tower", "castle", "mill", "town_center"]);
+
+/**
+ * A building site. It used to be a brown square with four posts — the same for
+ * a house as for a castle, and unchanged from the moment it was placed until
+ * it popped into being. Now the site shows what it will become: a faint
+ * outline of the finished building over a staked-out pad, and once work starts
+ * the real building rising out of the ground behind scaffolding, course by
+ * course, with the scaffold climbing just ahead of it.
+ */
+function drawConstruction(ctx: Ctx, e: Entity, half: number, tc: TeamCol, time: number) {
+  const started = e.buildState === BuildState.UnderConstruction;
+  const p = started ? Math.max(0, Math.min(1, e.buildProgress)) : 0;
+  const flat = FLAT_BUILDINGS.has(e.type);
+
+  // Trampled pad, a little inset and rounded so it reads as worked ground.
+  ctx.fillStyle = withAlpha(PAL.dirt, 0.85);
+  ctx.beginPath();
+  ctx.roundRect(e.x - half + 1, e.y - half + 1, half * 2 - 2, half * 2 - 2, Math.min(6, half * 0.3));
+  ctx.fill();
+
+  // What it will be: a ghost of the finished building...
+  const saved = ctx.globalAlpha;
+  ctx.globalAlpha = saved * (flat ? 0.25 + 0.75 * p : 0.2);
+  drawBuildingArt(ctx, e, half, tc, time);
+  ctx.globalAlpha = saved;
+
+  // ...and, for anything with walls, the part already built, rising from the
+  // ground up.
+  const top = e.y - half * (TALL_BUILDINGS.has(e.type) ? 2.0 : 1.4);
+  const bottom = e.y + half * 1.05;
+  const line = bottom - (bottom - top) * p;
+  if (!flat && p > 0) {
+    ctx.save();
     ctx.beginPath();
-    ctx.arc(e.x, e.y, half * 1.7, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.fillStyle = withAlpha("#ffd98a", 0.9 * flick);
-    const wn = e.radius > 40 ? 3 : 2;
-    for (let i = 0; i < wn; i++) {
-      const wx = e.x + ((i + 0.5) / wn - 0.5) * half * 1.1;
-      ctx.fillRect(wx - 1.5, e.y + half * 0.18, 3, 4);
+    ctx.rect(e.x - half * 1.8, line, half * 3.6, bottom - line + 2);
+    ctx.clip();
+    drawBuildingArt(ctx, e, half, tc, time);
+    ctx.restore();
+  }
+
+  // Survey stakes and string around the plot.
+  const k = half - 3;
+  ctx.strokeStyle = withAlpha("#efe3c4", 0.7);
+  ctx.lineWidth = 0.8;
+  ctx.strokeRect(e.x - k, e.y - k, k * 2, k * 2);
+  ctx.fillStyle = PAL.woodDark;
+  for (const [sx, sy] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) {
+    ctx.fillRect(e.x + sx * k - 1.5, e.y + sy * k - 4, 3, 6);
+  }
+
+  // Scaffolding, climbing just ahead of the walls. Poles and ledgers only —
+  // bracing across the whole face turned every site into a net.
+  if (!flat && started && p < 1) {
+    const y1 = Math.max(top, line - 7);
+    const bays = half > 40 ? 3 : 2;
+    const x0 = e.x - half * 0.98, x1 = e.x + half * 0.98;
+    ctx.strokeStyle = withAlpha(PAL.woodLight, 0.9);
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    for (let i = 0; i <= bays; i++) {
+      const x = x0 + ((x1 - x0) * i) / bays;
+      ctx.moveTo(x, bottom);
+      ctx.lineTo(x, y1);
+    }
+    ctx.stroke();
+    ctx.strokeStyle = withAlpha(PAL.woodLight, 0.65);
+    ctx.lineWidth = 1.1;
+    ctx.beginPath();
+    for (let y = bottom - 11; y > y1 + 2; y -= 11) {
+      ctx.moveTo(x0 - 2, y);
+      ctx.lineTo(x1 + 2, y);
+    }
+    // The working platform at the top, where the builders are.
+    ctx.moveTo(x0 - 3, y1 + 1);
+    ctx.lineTo(x1 + 3, y1 + 1);
+    ctx.stroke();
+    // A single brace in the end bays keeps it from reading as a grid.
+    ctx.strokeStyle = withAlpha(PAL.woodDark, 0.6);
+    ctx.lineWidth = 1;
+    const bw = (x1 - x0) / bays;
+    ctx.beginPath();
+    ctx.moveTo(x0, bottom); ctx.lineTo(x0 + bw, y1 + 1);
+    ctx.moveTo(x1, bottom); ctx.lineTo(x1 - bw, y1 + 1);
+    ctx.stroke();
+  }
+
+  // Materials waiting on site, used up as the work goes on.
+  const left = 1 - p;
+  if (left > 0.05 && half >= 14) {
+    const mx = e.x + half * 0.55, my = e.y + half * 0.62;
+    const logs = Math.max(1, Math.round(3 * left));
+    for (let i = 0; i < logs; i++) {
+      ctx.fillStyle = i % 2 ? PAL.wood : shade(PAL.wood, 0.08);
+      ctx.fillRect(mx - 7 + (i % 2) * 2, my - i * 3, 12, 3);
+      ctx.fillStyle = PAL.woodLight;
+      ctx.fillRect(mx + 4 + (i % 2) * 2, my - i * 3, 2, 3);
     }
   }
 
-  // Damage smoke handled by game-side particles; here add scorched look.
-  const dmg = 1 - e.hp / e.maxHp;
-  if (dmg > 0.4) {
-    ctx.fillStyle = withAlpha("#1a140c", Math.min(0.45, (dmg - 0.4) * 0.9));
-    ctx.fillRect(e.x - half, e.y - half, half * 2, half * 2);
-  }
-  if (e.hitFlash > 0) {
-    ctx.fillStyle = withAlpha("#ffffff", e.hitFlash * 0.35);
-    ctx.fillRect(e.x - half, e.y - half, half * 2, half * 2);
+  if (started) {
+    ctx.strokeStyle = PAL.uiGood;
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.arc(e.x, e.y, half + 6, -Math.PI / 2, -Math.PI / 2 + p * Math.PI * 2);
+    ctx.stroke();
   }
 }
 

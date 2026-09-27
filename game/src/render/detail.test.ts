@@ -107,38 +107,3 @@ describe("Ground detail earns its place", () => {
     }
   });
 });
-
-describe("Hills read as height", () => {
-  it("lights the crest and shadows the foot", () => {
-    // High ground is worth 20% range here, so it is the one landform a player
-    // most needs to pick out — and the cache paints it as a darker circle,
-    // which from above is indistinguishable from a shadow.
-    const cols = 12;
-    const map = generateMap("open_plains", 3, 2);
-    const terrain = new Uint8Array(cols * cols).fill(Terrain.Grass);
-    // A single band of hill across the middle, so it has a top and a bottom.
-    for (let cx = 0; cx < cols; cx++) {
-      for (let cy = 5; cy <= 7; cy++) terrain[cy * cols + cx] = Terrain.Hill;
-    }
-    const m = { ...map, cols, rows: cols, terrain };
-    const px = cols * TILE;
-    const canvas = createCanvas(px, px) as unknown as Shot;
-    const ctx = canvas.getContext("2d");
-    ctx.fillStyle = "#4a4a4a";
-    ctx.fillRect(0, 0, px, px);
-    drawGroundDetail(ctx, m, 0, 0, px, px, 1.5, 0);
-    const d = ctx.getImageData(0, 0, px, px).data;
-    const bright = (x: number, y: number) => {
-      const o = (y * px + x) * 4;
-      return (d[o] + d[o + 1] + d[o + 2]) / 3;
-    };
-    // Sample a column clear of the tufts: the crest row against the foot row.
-    let crest = 0, foot = 0;
-    for (let x = 0; x < px; x++) {
-      crest += bright(x, 5 * TILE + 1);
-      foot += bright(x, 8 * TILE - 2);
-    }
-    expect(crest / px, "the crest is not lit").toBeGreaterThan(74);
-    expect(foot / px, "the foot is not shadowed").toBeLessThan(74);
-  });
-});

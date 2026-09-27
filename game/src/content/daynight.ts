@@ -41,6 +41,21 @@ export function visionMult(phase: number): number {
   ]);
 }
 
+/**
+ * How far into the night it is, 0 (day) to 1 (full dark). Drives how strongly
+ * lights cut through the darkness — at dusk the sky is orange, not dark, and a
+ * lit window shouldn't punch a hole in a sunset.
+ */
+export function nightAmount(phase: number): number {
+  return keyLerp(phase, [
+    [0.0, 0],
+    [0.46, 0],
+    [0.6, 1],
+    [0.9, 1],
+    [1.0, 0],
+  ]);
+}
+
 /** Short label for the HUD. */
 export function dayLabel(phase: number): string {
   if (phase < 0.05 || phase >= 0.96) return "Dawn";

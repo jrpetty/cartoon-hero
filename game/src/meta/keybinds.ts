@@ -27,7 +27,7 @@ export type ActionId =
   | "cameraLastEvent" | "cameraTownCentre"
   | "panUp" | "panDown" | "panLeft" | "panRight"
   // Interface
-  | "scoreboard" | "productionPanel" | "perfOverlay" | "chat" | "menu"
+  | "scoreboard" | "productionPanel" | "perfOverlay" | "chat" | "menu" | "fullscreen"
   // Game
   | "pause" | "speedUp" | "speedDown";
 
@@ -76,6 +76,10 @@ export const ACTIONS: ActionDef[] = [
   { id: "scoreboard", label: "Scoreboard", group: "Interface", def: "Tab" },
   { id: "productionPanel", label: "Production overview", group: "Interface", def: "V" },
   { id: "perfOverlay", label: "Performance overlay", group: "Interface", def: "F10", hint: "Frame time, tick time, entity count" },
+  // Alt+Enter rather than F11: F11 is the browser's own fullscreen, which hides
+  // the browser chrome but is not *element* fullscreen and cannot be reliably
+  // intercepted. Alt+Enter is the long-standing PC game convention.
+  { id: "fullscreen", label: "Toggle fullscreen", group: "Interface", def: "Alt+Enter", hint: "Esc also leaves fullscreen" },
   { id: "chat", label: "Chat (multiplayer)", group: "Interface", def: "Enter" },
   { id: "menu", label: "Menu / cancel", group: "Interface", def: "Escape" },
   // ---- game ----

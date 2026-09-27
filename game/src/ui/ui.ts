@@ -36,6 +36,13 @@ export class UI {
   scale = 1;
   private scaleStack: number[] = [];
   private scrollStack: number[] = [];
+  /**
+   * Rects, in canvas pixels, that must act inside the DOM event rather than a
+   * frame later. Rebuilt every frame by whatever is drawn; read by the click
+   * handler between frames, so it always reflects what the player was looking
+   * at when they clicked. See engine/fullscreen.ts for why this exists.
+   */
+  gestureZones: { id: string; x: number; y: number; w: number; h: number }[] = [];
 
   /**
    * Draw the next block of UI at `s`× size. Widgets lay out in a *smaller*
@@ -125,6 +132,33 @@ export class UI {
     this.scale = 1;
     this.scaleStack.length = 0;
     this.scrollStack.length = 0;
+    this.gestureZones.length = 0;
+  }
+
+  /**
+   * Record that this layout rect should act on the raw click. Converted to
+   * canvas pixels through the live transform, so it stays exact under the UI
+   * scale slider and inside a scrolled panel without either knowing about it.
+   */
+  registerGestureZone(id: string, x: number, y: number, w: number, h: number) {
+    const m = this.ctx.getTransform();
+    const x0 = m.a * x + m.c * y + m.e;
+    const y0 = m.b * x + m.d * y + m.f;
+    const x1 = m.a * (x + w) + m.c * (y + h) + m.e;
+    const y1 = m.b * (x + w) + m.d * (y + h) + m.f;
+    this.gestureZones.push({
+      id, x: Math.min(x0, x1), y: Math.min(y0, y1), w: Math.abs(x1 - x0), h: Math.abs(y1 - y0),
+    });
+  }
+
+  /** Which gesture zone, if any, a raw canvas-space click landed in. */
+  gestureAt(x: number, y: number): string | null {
+    // Last drawn wins, matching what is on top.
+    for (let i = this.gestureZones.length - 1; i >= 0; i--) {
+      const z = this.gestureZones[i];
+      if (x >= z.x && x <= z.x + z.w && y >= z.y && y <= z.y + z.h) return z.id;
+    }
+    return null;
   }
 
   hit(x: number, y: number, w: number, h: number): boolean {

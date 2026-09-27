@@ -21,7 +21,8 @@ import { PAL, teamColor, withAlpha } from "./palette";
 import { BUILDINGS } from "../content/buildings";
 import { snapBuilding } from "../engine/gridsnap";
 import { TILE } from "../content/balance";
-import { skyTint } from "../content/daynight";
+import { nightAmount, skyTint } from "../content/daynight";
+import { Light, NightLayer, lightFor } from "./nightlight";
 import { Terrain } from "../maps/generator";
 import type { MapData } from "../maps/generator";
 
@@ -101,6 +102,8 @@ export class Renderer {
   aggressiveLod = false; // "Reduce effects" → simplify units sooner
   private waterCells: number[] = []; // [x0,y0,x1,y1,...] water cell centres
   private vignette: HTMLCanvasElement | null = null;
+  private nightLayer = new NightLayer();
+  private lights: Light[] = [];
 
   constructor(public canvas: HTMLCanvasElement) {
     this.ctx = canvas.getContext("2d")!;
@@ -464,6 +467,13 @@ export class Renderer {
       ctx.fill();
     }
 
+    // Lights are gathered while the entities are at their drawn (interpolated)
+    // positions, so a lantern never trails the unit carrying it.
+    const lights = this.lights;
+    lights.length = 0;
+    const lighting = nightAmount(this.dayPhase) > 0.01;
+    const lanterns = lighting && !this.aggressiveLod && !world.revealAll;
+
     // Per-entity isolation so one bad draw never wipes the rest of the frame —
     // but inline (no closure/string alloc, which was the real cost we removed).
     for (const e of drawables) {
@@ -485,6 +495,11 @@ export class Renderer {
         if (!this.warned.has("entity")) { this.warned.add("entity"); console.error("render guard [entity]:", err); }
       }
       if (ghosted) ctx.globalAlpha = 1;
+      // A remembered enemy building is a memory, not a light source.
+      if (lighting && !ghosted && e.kind !== Kind.Resource && e.kind !== Kind.Projectile) {
+        const li = lightFor(e, time, lanterns && e.team === viewTeam);
+        if (li) lights.push(li);
+      }
     }
 
     // Health bars for hovered, selected or recently-damaged entities. Zoomed
@@ -646,11 +661,19 @@ export class Renderer {
 
     ctx.restore();
 
-    // Day/night sky tint over the whole battlefield (screen space, under HUD).
-    const [tr, tg, tb, ta] = skyTint(this.dayPhase);
-    if (ta > 0.003) {
-      ctx.fillStyle = `rgba(${tr | 0}, ${tg | 0}, ${tb | 0}, ${ta})`;
-      ctx.fillRect(0, 0, W, H);
+    // Day/night sky over the whole battlefield (screen space, under HUD). By
+    // day it is a plain tint; at night the lights gathered above cut through it.
+    const tint = skyTint(this.dayPhase);
+    if (tint[3] > 0.003) {
+      const night = nightAmount(this.dayPhase);
+      if (night > 0.01 && this.lights.length) {
+        const ox = W / 2 + this.shakeX, oy = H / 2 + this.shakeY;
+        this.guard(ctx, "night", null, () => this.nightLayer.draw(ctx, W, H, tint, night, this.lights, cam.zoom,
+          (x, y) => [(x - cam.x) * cam.zoom + ox, (y - cam.y) * cam.zoom + oy]));
+      } else {
+        ctx.fillStyle = `rgba(${tint[0] | 0}, ${tint[1] | 0}, ${tint[2] | 0}, ${tint[3]})`;
+        ctx.fillRect(0, 0, W, H);
+      }
     }
 
     // Cinematic vignette — cached per canvas size, a single blit per frame.

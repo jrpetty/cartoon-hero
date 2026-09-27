@@ -11,6 +11,7 @@ import { MapData, Terrain } from "../maps/generator";
 import { TILE } from "../content/balance";
 import { PAL, shade, withAlpha } from "./palette";
 import { RNG } from "../engine/rng";
+import { blurMask } from "./fogblur";
 
 export const TERRAIN_SCALE = 0.5;
 
@@ -115,27 +116,32 @@ export function buildTerrainCache(map: MapData): HTMLCanvasElement {
   // High ground gets a lit crown and a shaded skirt, which is the cheapest way
   // to say "this is raised" on a flat top-down map.
   paintBiome(Terrain.Hill, (cx, cy) => shade("#6d8a4c", groundShade(cx, cy) * 0.12));
-  for (let cy = 0; cy < map.rows; cy++) {
-    for (let cx = 0; cx < map.cols; cx++) {
-      if (at(cx, cy) !== Terrain.Hill) continue;
-      const mx = cx * t + t / 2, my = cy * t + t / 2;
-      // A brighter cap where the hill is highest (away from its edge).
-      const edge = at(cx - 1, cy) !== Terrain.Hill || at(cx + 1, cy) !== Terrain.Hill
-        || at(cx, cy - 1) !== Terrain.Hill || at(cx, cy + 1) !== Terrain.Hill;
-      ctx.globalAlpha = edge ? 0.5 : 0.32;
-      ctx.fillStyle = edge ? "rgba(20,28,14,0.55)" : "#8fae66";
-      ctx.beginPath();
-      ctx.arc(mx, my, t * (edge ? 0.62 : 0.5), 0, Math.PI * 2);
-      ctx.fill();
-      ctx.globalAlpha = 1;
-    }
-  }
+  // Relief and water are painted per pixel from smooth fields — see
+  // paintReliefAndWater below. It used to be a circle per hill cell and a
+  // square per water cell, which is exactly the tile grid those were meant to
+  // hide: hills read as a quilt of discs and every river as a staircase.
+  const wetAt = paintReliefAndWater(ctx, canvas, map, t);
+
   // Mountains: a shaded mass with a lit north face, drawn per cell so a ridge
   // reads as one range instead of a row of identical lumps.
   for (let cy = 0; cy < map.rows; cy++) {
     for (let cx = 0; cx < map.cols; cx++) {
       if (at(cx, cy) !== Terrain.Rock) continue;
-      const mx = cx * t + t / 2, my = cy * t + t / 2;
+      // Not every cell gets a peak, and no two peaks are the same size or sit
+      // on the same spot in their cell. One identical cone per cell on a
+      // regular grid read as wallpaper, not a mountain range — and the
+      // hillshading underneath now carries the mass, so the peaks only have
+      // to punctuate it.
+      const interiorRock = at(cx - 1, cy) === Terrain.Rock && at(cx + 1, cy) === Terrain.Rock
+        && at(cx, cy - 1) === Terrain.Rock && at(cx, cy + 1) === Terrain.Rock;
+      if (interiorRock && rng.bool(0.35)) continue;
+      const k = rng.range(0.72, 1.18);
+      const mx = cx * t + t / 2 + rng.range(-t * 0.28, t * 0.28);
+      const my = cy * t + t / 2 + rng.range(-t * 0.22, t * 0.22);
+      ctx.save();
+      ctx.translate(mx, my);
+      ctx.scale(k, k);
+      ctx.translate(-mx, -my);
       ctx.fillStyle = "rgba(10,10,12,0.5)";
       ctx.beginPath(); ctx.ellipse(mx, my + t * 0.3, t * 0.72, t * 0.42, 0, 0, Math.PI * 2); ctx.fill();
       const g = ctx.createLinearGradient(mx, my - t * 0.7, mx, my + t * 0.6);
@@ -156,68 +162,24 @@ export function buildTerrainCache(map: MapData): HTMLCanvasElement {
       ctx.lineTo(mx - t * 0.16, my - t * 0.42);
       ctx.lineTo(mx + t * 0.24, my - t * 0.4);
       ctx.closePath(); ctx.fill();
+      ctx.restore();
     }
   }
 
-  // --- 3. Shoreline: warm sand rim on land cells that touch water ---------
-  for (let cy = 0; cy < map.rows; cy++) {
-    for (let cx = 0; cx < map.cols; cx++) {
-      if (isWater(cx, cy)) continue;
-      if (!(isWater(cx - 1, cy) || isWater(cx + 1, cy) || isWater(cx, cy - 1) || isWater(cx, cy + 1))) continue;
-      ctx.globalAlpha = 0.75;
-      ctx.fillStyle = shade(PAL.sand, rng.range(-0.06, 0.06));
-      const mx = cx * t + t / 2;
-      const my = cy * t + t / 2;
-      ctx.beginPath();
-      ctx.arc(mx, my, t * 0.58, 0, Math.PI * 2);
-      ctx.arc(mx + rng.range(-t * 0.4, t * 0.4), my + rng.range(-t * 0.4, t * 0.4), t * 0.4, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.globalAlpha = 1;
-    }
-  }
-
-  // --- 4. Water with depth bands + cached wave strokes --------------------
-  paintBiome(Terrain.Water, () => PAL.water);
+  // --- 3/4. Shore and water are painted per pixel above. Only the static
+  // wave strokes remain here; the live glints animate on top at runtime.
   for (let cy = 0; cy < map.rows; cy++) {
     for (let cx = 0; cx < map.cols; cx++) {
       if (!isWater(cx, cy)) continue;
-      // Distance-to-shore approximation: ring-1 = shallows, ring-2+ = deep.
-      let nearLand = false;
-      let nearLand2 = false;
-      for (let dy = -1; dy <= 1 && !nearLand; dy++) {
-        for (let dx = -1; dx <= 1; dx++) {
-          if (!isWater(cx + dx, cy + dy)) { nearLand = true; break; }
-        }
-      }
-      if (!nearLand) {
-        outer: for (let dy = -2; dy <= 2; dy++) {
-          for (let dx = -2; dx <= 2; dx++) {
-            if (!isWater(cx + dx, cy + dy)) { nearLand2 = true; break outer; }
-          }
-        }
-      }
-      if (nearLand) {
-        ctx.globalAlpha = 0.55;
-        ctx.fillStyle = PAL.waterEdge;
-      } else if (nearLand2) {
-        ctx.globalAlpha = 0.3;
-        ctx.fillStyle = PAL.waterDeep;
-      } else {
-        ctx.globalAlpha = 0.65;
-        ctx.fillStyle = PAL.waterDeep;
-      }
-      ctx.fillRect(cx * t, cy * t, t + 1, t + 1);
-      ctx.globalAlpha = 1;
-      // Occasional static wave stroke (the live glints animate on top).
-      if (rng.bool(0.16)) {
-        ctx.strokeStyle = withAlpha("#dff2ff", 0.22);
-        ctx.lineWidth = 1;
-        const wx = cx * t + rng.range(t * 0.2, t * 0.8);
-        const wy = cy * t + rng.range(t * 0.2, t * 0.8);
-        ctx.beginPath();
-        ctx.arc(wx, wy, rng.range(2, 4), Math.PI * 0.15, Math.PI * 0.85);
-        ctx.stroke();
-      }
+      const deep = isWater(cx - 1, cy) && isWater(cx + 1, cy) && isWater(cx, cy - 1) && isWater(cx, cy + 1);
+      if (!deep || !rng.bool(0.2)) continue;
+      ctx.strokeStyle = withAlpha("#dff2ff", 0.2);
+      ctx.lineWidth = 1;
+      const wx = cx * t + rng.range(t * 0.2, t * 0.8);
+      const wy = cy * t + rng.range(t * 0.2, t * 0.8);
+      ctx.beginPath();
+      ctx.arc(wx, wy, rng.range(2, 4), Math.PI * 0.15, Math.PI * 0.85);
+      ctx.stroke();
     }
   }
 
@@ -252,6 +214,7 @@ export function buildTerrainCache(map: MapData): HTMLCanvasElement {
       for (let k = 0; k < n; k++) {
         const px = baseX + rng.range(-t * 0.8, t * 0.8);
         const py = baseY + rng.range(-t * 0.8, t * 0.8);
+        if (wetAt(px, py)) continue;
         ctx.fillStyle = shade(rng.bool(0.3) ? PAL.stone : PAL.dirtDark, rng.range(-0.12, 0.12));
         ctx.beginPath();
         ctx.ellipse(px, py, rng.range(0.9, 2.1), rng.range(0.7, 1.5), rng.range(0, 3), 0, Math.PI * 2);
@@ -268,6 +231,7 @@ export function buildTerrainCache(map: MapData): HTMLCanvasElement {
       for (let k = 0; k < n; k++) {
         const px = baseX + rng.range(-t * 0.7, t * 0.7);
         const py = baseY + rng.range(-t * 0.7, t * 0.7);
+        if (wetAt(px, py)) continue;
         ctx.fillStyle = bloom;
         for (let p2 = 0; p2 < 4; p2++) {
           const a = (p2 / 4) * Math.PI * 2 + rng.range(0, 0.6);
@@ -286,6 +250,9 @@ export function buildTerrainCache(map: MapData): HTMLCanvasElement {
       for (let k = 0; k < n; k++) {
         const px = baseX + rng.range(-t * 0.9, t * 0.9);
         const py = baseY + rng.range(-t * 0.9, t * 0.9);
+        // Clusters scatter up to a cell from where they were seeded, which
+        // used to plant grass in the shallows of every river.
+        if (wetAt(px, py)) continue;
         ctx.strokeStyle = shade(rng.bool() ? PAL.grassShade : PAL.grassDark, rng.range(-0.06, 0.14));
         ctx.lineWidth = 1;
         const h = rng.range(2.2, 5);
@@ -332,6 +299,263 @@ export function buildMinimapBase(map: MapData, size: number): HTMLCanvasElement 
   return canvas;
 }
 
+// ------------------------------------------------------ relief and water --
+
+const hexRgb = (h: string): [number, number, number] => [
+  parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16),
+];
+
+const smoothstep = (a: number, b: number, x: number) => {
+  const t = Math.max(0, Math.min(1, (x - a) / (b - a)));
+  return t * t * (3 - 2 * t);
+};
+
+/**
+ * Bilinear sample of a per-cell field at cell-space (u, v), where a cell's
+ * centre sits at (cx + 0.5, cy + 0.5). Clamped at the map edge.
+ */
+function sampleField(f: Float32Array, cols: number, rows: number, u: number, v: number): number {
+  const x = Math.max(0, Math.min(cols - 1.001, u - 0.5));
+  const y = Math.max(0, Math.min(rows - 1.001, v - 0.5));
+  const x0 = x | 0, y0 = y | 0;
+  const fx = x - x0, fy = y - y0;
+  const i = y0 * cols + x0;
+  const a = f[i], b = f[i + 1], c = f[i + cols], d = f[i + cols + 1];
+  return (a * (1 - fx) + b * fx) * (1 - fy) + (c * (1 - fx) + d * fx) * fy;
+}
+
+/**
+ * Water, shoreline and hillshading, painted per pixel from smooth fields.
+ *
+ * Runs once when the map loads, so it can afford to be thorough — nothing here
+ * costs anything per frame. It replaces a square per water cell and a circle
+ * per hill cell, which between them drew the tile grid the rest of the painter
+ * works hard to hide: every river a staircase of two-tone blue blocks, every
+ * hill a quilt of discs.
+ *
+ * **The outline of the water has to agree with the sim.** Water is impassable,
+ * so a picture that shows land where the pathfinder sees water is a lie with
+ * consequences. A plain blur would round the coast beautifully and also erase
+ * any channel one cell wide or any single-cell pond. The outline therefore comes
+ * from bilinear interpolation of the *raw* cells — marching-squares style, which
+ * keeps every water cell and a one-cell channel exactly one cell wide, but turns
+ * a staircase into a straight diagonal — nudged by a light blur for roundness.
+ * The heavier blur is used only for things that cannot change topology: how
+ * deep the water looks and how the ground is lit.
+ *
+ * **Hills are lit, not tinted.** High ground becomes a height field, blurred so
+ * it rolls, and each pixel is shaded by how its slope faces a light from the
+ * north-west. That is the standard cartographic hillshade, and it is what makes
+ * a ridge read as a ridge instead of a patch of darker grass.
+ */
+function paintReliefAndWater(
+  ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement, map: MapData, t: number,
+): (px: number, py: number) => boolean {
+  const cols = map.cols, rows = map.rows, n = cols * rows;
+  const raw = new Float32Array(n);   // 1 = water
+  const elev = new Float32Array(n);  // height: hills, then mountains higher
+  const shallow = new Uint8Array(n);
+  for (let i = 0; i < n; i++) {
+    const ter = map.terrain[i];
+    if (ter === Terrain.Water) raw[i] = 1;
+    if (ter === Terrain.Shallow) shallow[i] = 1;
+    elev[i] = ter === Terrain.Hill ? 1 : ter === Terrain.Rock ? 1.7 : 0;
+  }
+  const scratch = new Float32Array(n);
+  // The shoreline: a smooth field, pinned so every cell centre keeps the side
+  // of 0.5 the sim puts it on. Bilinear interpolation passes exactly through
+  // the cell centres, so the pinned field can round a coast as much as the blur
+  // likes without ever drying a water cell or flooding a land one — a lone
+  // pond stays a pond, a one-cell channel stays open, a one-cell island stays
+  // an island. Pinning to 0.6 / 0.4 rather than 0.5 keeps them visible.
+  const shore = raw.slice();
+  blurMask(shore, scratch, cols, rows, 1); blurMask(shore, scratch, cols, rows, 1);
+  // How far sand reaches inland comes from the same blur taken one step
+  // further and left unpinned, so a beach rounds off instead of following the
+  // waterline into every corner — a sandbar's grassy middle used to come out
+  // as a star.
+  const beach = shore.slice(); blurMask(beach, scratch, cols, rows, 1);
+  for (let i = 0; i < n; i++) shore[i] = raw[i] ? Math.max(shore[i], 0.6) : Math.min(shore[i], 0.4);
+  const depth = raw.slice(); blurMask(depth, scratch, cols, rows, 2); blurMask(depth, scratch, cols, rows, 2);
+  const height = elev.slice(); blurMask(height, scratch, cols, rows, 1); blurMask(height, scratch, cols, rows, 1);
+
+  // Light from the north-west and a little above: the convention every map
+  // reader expects, and the one that makes hills read as raised, not sunken.
+  //
+  // The shade is worked out once per *cell*, from central differences of the
+  // height field, and only then interpolated across the pixels. Taking the
+  // slope per pixel from a bilinear height field looks equivalent and isn't:
+  // bilinear height has a slope that jumps at every cell boundary, and the
+  // first version of this painted each hill as a stack of flat facets — the
+  // tile grid again, just in shading instead of colour.
+  const Lx = -0.55, Ly = -0.68, Lz = 0.48;
+  const Ln = Math.hypot(Lx, Ly, Lz);
+  const lx = Lx / Ln, ly = Ly / Ln, lz = Lz / Ln;
+  const RELIEF = 1.6; // how steep a hill's flank reads
+  const lit = new Float32Array(n);
+  for (let cy = 0; cy < rows; cy++) {
+    for (let cx = 0; cx < cols; cx++) {
+      const i = cy * cols + cx;
+      const l = height[cy * cols + Math.max(0, cx - 1)], rr = height[cy * cols + Math.min(cols - 1, cx + 1)];
+      const u = height[Math.max(0, cy - 1) * cols + cx], dd = height[Math.min(rows - 1, cy + 1) * cols + cx];
+      const nx = -(rr - l) * 0.5 * RELIEF, ny = -(dd - u) * 0.5 * RELIEF;
+      lit[i] = (nx * lx + ny * ly + lz) / Math.hypot(nx, ny, 1) - lz;
+    }
+  }
+
+  // Cells worth touching at all: near water, or anywhere the light changes. On
+  // a typical map that is a small fraction of the canvas, and skipping the rest
+  // is most of what keeps this fast on the largest maps. A pixel's value is
+  // interpolated from its own cell and the ring around it, so a cell counts if
+  // anything in that ring does — gating on the cell alone left a hard edge
+  // wherever a hill's shadow reached one cell further than its height did.
+  const RELIEF_NEAR = 1, SHORE_NEAR = 2;
+  const busy = new Uint8Array(n);
+  for (let cy = 0; cy < rows; cy++) {
+    for (let cx = 0; cx < cols; cx++) {
+      let m = 0;
+      for (let dy = -1; dy <= 1; dy++) {
+        for (let dx = -1; dx <= 1; dx++) {
+          const nx = cx + dx, ny = cy + dy;
+          if (nx < 0 || ny < 0 || nx >= cols || ny >= rows) continue;
+          const j = ny * cols + nx;
+          if (height[j] > 0.001 || lit[j] !== 0) m |= RELIEF_NEAR;
+          if (shore[j] > 0.001 || beach[j] > 0.001) m |= SHORE_NEAR;
+        }
+      }
+      busy[cy * cols + cx] = m;
+    }
+  }
+
+  // The pass never reads the canvas back. Everything it does to a pixel —
+  // shade, sunlight, sand, water — is expressed as layers of paint laid *over*
+  // whatever is there, accumulated per pixel into one overlay that is then
+  // drawn on in a single blit. That matters twice over: reading back a canvas
+  // this size was half the cost of the whole bake, and in a browser a readback
+  // can quietly move the canvas off the GPU, which would make every frame's
+  // terrain blit slower for the rest of the match.
+  const W = canvas.width, H = canvas.height;
+  const overlay = document.createElement("canvas");
+  overlay.width = W;
+  overlay.height = H;
+  const octx = overlay.getContext("2d")!;
+  const img = octx.createImageData(W, H);
+  const d = img.data;
+  const [er, eg, eb] = hexRgb(PAL.waterEdge);
+  const [wr, wg, wb] = hexRgb(PAL.water);
+  const [dr, dg, db] = hexRgb(PAL.waterDeep);
+  const [sr, sg, sb] = hexRgb(PAL.sand);
+
+  // Every field is sampled at the same point, so the bilinear weights are
+  // worked out once per pixel and shared — and since a pixel's column fixes its
+  // horizontal weight and its row the vertical one, those come from two small
+  // tables.
+  const X0 = new Int32Array(W), FX = new Float32Array(W);
+  for (let px = 0; px < W; px++) {
+    const x = Math.max(0, Math.min(cols - 1.001, (px + 0.5) / t - 0.5));
+    X0[px] = x | 0; FX[px] = x - (x | 0);
+  }
+  const YI = new Int32Array(H), FY = new Float32Array(H);
+  for (let py = 0; py < H; py++) {
+    const y = Math.max(0, Math.min(rows - 1.001, (py + 0.5) / t - 0.5));
+    YI[py] = (y | 0) * cols; FY[py] = y - (y | 0);
+  }
+
+  for (let cy = 0; cy < rows; cy++) {
+    for (let cx = 0; cx < cols; cx++) {
+      const m = busy[cy * cols + cx];
+      if (!m) continue;
+      const relief = (m & RELIEF_NEAR) !== 0, near = (m & SHORE_NEAR) !== 0;
+      const px0 = Math.floor(cx * t), px1 = Math.min(W, Math.floor((cx + 1) * t));
+      const py0 = Math.floor(cy * t), py1 = Math.min(H, Math.floor((cy + 1) * t));
+      const ownShallow = shallow[cy * cols + cx] === 1;
+      for (let py = py0; py < py1; py++) {
+        const fy = FY[py], row = YI[py];
+        for (let px = px0; px < px1; px++) {
+          const i = row + X0[px], fx = FX[px];
+          const w00 = (1 - fx) * (1 - fy), w10 = fx * (1 - fy), w01 = (1 - fx) * fy, w11 = fx * fy;
+          const i01 = i + cols;
+          const o = (py * W + px) * 4;
+
+          // --- water and shore ---
+          const c = near ? shore[i] * w00 + shore[i + 1] * w10 + shore[i01] * w01 + shore[i01 + 1] * w11 : 0;
+          if (c >= 0.5) {
+            const dp = depth[i] * w00 + depth[i + 1] * w10 + depth[i01] * w01 + depth[i01 + 1] * w11;
+            const deep = smoothstep(0.45, 0.95, dp);
+            // edge -> body -> deep, so a lake has a lit rim and a dark heart.
+            let wr2: number, wg2: number, wb2: number;
+            if (deep < 0.5) {
+              const k = deep / 0.5;
+              wr2 = er + (wr - er) * k; wg2 = eg + (wg - eg) * k; wb2 = eb + (wb - eb) * k;
+            } else {
+              const k = (deep - 0.5) / 0.5;
+              wr2 = wr + (dr - wr) * k; wg2 = wg + (dg - wg) * k; wb2 = wb + (db - wb) * k;
+            }
+            // A thin line of foam where water meets land.
+            const foam = 1 - smoothstep(0.5, 0.58, c);
+            d[o] = wr2 + (232 - wr2) * foam * 0.55;
+            d[o + 1] = wg2 + (244 - wg2) * foam * 0.55;
+            d[o + 2] = wb2 + (246 - wb2) * foam * 0.55;
+            d[o + 3] = 255;
+            continue;
+          }
+
+          // Paint laid over the ground, accumulated: the result is
+          // ground * keep + (ar, ag, ab).
+          let keep = 1, ar = 0, ag = 0, ab = 0;
+
+          // --- hillshade ---
+          if (relief) {
+            const s = lit[i] * w00 + lit[i + 1] * w10 + lit[i01] * w01 + lit[i01 + 1] * w11;
+            if (s > 0.001) {
+              // A sunlit flank mixes toward warm light rather than being
+              // scaled up: multiplying grass by 1.3 makes it neon, not bright.
+              const a = Math.min(0.4, s * 0.8);
+              ar = ar * (1 - a) + 250 * a; ag = ag * (1 - a) + 236 * a; ab = ab * (1 - a) + 188 * a; keep *= 1 - a;
+            } else if (s < -0.001) {
+              // Shade darkens and cools, as it does outdoors — a pure
+              // brightness change reads as dirt, not slope.
+              const a = Math.min(0.8, -s * 1.1);
+              ar = ar * (1 - a) + 16 * a; ag = ag * (1 - a) + 26 * a; ab = ab * (1 - a) + 44 * a; keep *= 1 - a;
+            }
+            const hc = height[i] * w00 + height[i + 1] * w10 + height[i01] * w01 + height[i01 + 1] * w11;
+            if (hc > 0.002) {
+              // Tops a touch drier and lighter, so the crest of a range stands out.
+              const a = Math.min(1, hc) * 0.05;
+              ar = ar * (1 - a) + 235 * a; ag = ag * (1 - a) + 230 * a; ab = ab * (1 - a) + 190 * a; keep *= 1 - a;
+            }
+          }
+
+          // Sand, strongest right at the waterline, fading inland over about a
+          // cell, and darker where it's wet in the last stretch.
+          if (near && !ownShallow) {
+            const bc = beach[i] * w00 + beach[i + 1] * w10 + beach[i01] * w01 + beach[i01 + 1] * w11;
+            const a = Math.max(smoothstep(0.3, 0.5, c), smoothstep(0.1, 0.4, bc)) * 0.88;
+            if (a > 0) {
+              ar = ar * (1 - a) + sr * a; ag = ag * (1 - a) + sg * a; ab = ab * (1 - a) + sb * a; keep *= 1 - a;
+              const wet = smoothstep(0.4, 0.5, c) * 0.18;
+              if (wet > 0) { ar *= 1 - wet; ag *= 1 - wet; ab *= 1 - wet; keep *= 1 - wet; }
+            }
+          }
+
+          const alpha = 1 - keep;
+          if (alpha <= 0.002) continue;
+          d[o] = ar / alpha;
+          d[o + 1] = ag / alpha;
+          d[o + 2] = ab / alpha;
+          d[o + 3] = alpha * 255;
+        }
+      }
+    }
+  }
+  octx.putImageData(img, 0, 0);
+  ctx.drawImage(overlay, 0, 0);
+  // Where the painted water is, for anything dressed on afterwards. A little
+  // inside the waterline, so a tuft can stand on the wet sand but not in the
+  // river.
+  return (px, py) => sampleField(shore, cols, rows, px / t, py / t) >= 0.46;
+}
+
 // --------------------------------------------------------- ground detail --
 
 /** Cheap deterministic hash per cell, so detail never shimmers between frames. */
@@ -376,11 +600,6 @@ export function drawGroundDetail(
   if (c1x < c0x || c1y < c0y) return;
   if ((c1x - c0x + 1) * (c1y - c0y + 1) > 3000) return;
 
-  const at = (cx: number, cy: number) => {
-    if (cx < 0 || cy < 0 || cx >= map.cols || cy >= map.rows) return -1;
-    return map.terrain[cy * map.cols + cx];
-  };
-
   ctx.save();
   ctx.globalAlpha = strength;
   ctx.lineCap = "round";
@@ -396,25 +615,9 @@ export function drawGroundDetail(
 
       switch (t) {
         case Terrain.Hill: {
-          // Relief, not a dark blob. The cache paints high ground as a darker
-          // circle per cell, which from above is indistinguishable from a
-          // shadow — and here high ground is worth 20% range, so it is the one
-          // landform a player most needs to pick out. Lighting the crest and
-          // shadowing the foot gives the mass an edge that reads as height.
-          // Two flat bands per side rather than a gradient: a gradient has to
-          // be allocated per cell, which costs more than the softness is worth.
-          if (at(cx, cy - 1) !== Terrain.Hill) {
-            ctx.fillStyle = "rgba(214,235,170,0.20)";
-            ctx.fillRect(ox, oy, TILE, 4);
-            ctx.fillStyle = "rgba(214,235,170,0.13)";
-            ctx.fillRect(ox, oy + 4, TILE, 5);
-          }
-          if (at(cx, cy + 1) !== Terrain.Hill) {
-            ctx.fillStyle = "rgba(29,43,20,0.26)";
-            ctx.fillRect(ox, oy + TILE - 5, TILE, 5);
-            ctx.fillStyle = "rgba(29,43,20,0.15)";
-            ctx.fillRect(ox, oy + TILE - 11, TILE, 6);
-          }
+          // The relief itself is baked into the cache as hillshading; this
+          // only adds the dry upland grass on top. (Lit and shadowed bands per
+          // cell used to live here too, and drew the tile grid right back in.)
           // Dry upland tufts — straight, short, and fewer than on meadow.
           ctx.strokeStyle = "rgba(147,173,99,0.6)";
           ctx.beginPath();

@@ -48,6 +48,11 @@ export class SettingsScreen {
    * Tab would close the screen instead of binding them. Returns true when the
    * key was swallowed.
    */
+  /** True while an action is waiting for its new chord. */
+  isListening(): boolean {
+    return this.listening !== null;
+  }
+
   captureKey(key: string, mods: { ctrl: boolean; shift: boolean; alt: boolean }): boolean {
     if (!this.listening) return false;
     if (key === "Escape") { this.listening = null; return true; } // cancel

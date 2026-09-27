@@ -23,6 +23,8 @@ import { SkirmishAI } from "./ai/skirmish_ai";
 import { DIFFICULTIES } from "./ai/difficulty";
 import { Camera } from "./engine/camera";
 import { wallLinePoints as computeWallLine, blockPoints } from "./engine/wallline";
+import { toggleFullscreen } from "./engine/fullscreen";
+import { FULLSCREEN_ZONE, fullscreenButton } from "./ui/fullscreen_button";
 import { WarbandRun } from "./sim/warband";
 import { WarbandScreen } from "./ui/warband_screen";
 import { Input } from "./engine/input";
@@ -58,7 +60,7 @@ import { drawScoreboard } from "./ui/scoreboard";
 import { drawProductionPanel } from "./ui/production_panel";
 import { Weather } from "./render/weather";
 import { drawChat, ChatLine } from "./ui/chat";
-import { KeybindResolver, chordOf, chordFor } from "./meta/keybinds";
+import { KeybindResolver, chordFor, chordLabel, chordOf } from "./meta/keybinds";
 import { EditorScreen } from "./ui/editor_screen";
 import {
   CustomMap, deserialiseMap, findCustomMap, saveCustomMap, serialiseMap, toMapData,
@@ -187,6 +189,10 @@ class App {
     window.addEventListener("resize", () => this.resize());
     window.addEventListener("orientationchange", () => setTimeout(() => this.resize(), 80));
     window.visualViewport?.addEventListener("resize", () => this.resize()); // mobile toolbar show/hide
+    // Entering or leaving fullscreen changes the viewport; most browsers also
+    // fire resize, but not reliably on every platform, so listen to the source.
+    document.addEventListener("fullscreenchange", () => this.resize());
+    document.addEventListener("webkitfullscreenchange", () => this.resize());
     this.wireInput();
     this.applySettings();
     // Load any Meshy-baked sprites (no-op if none generated yet); procedural art
@@ -223,6 +229,12 @@ class App {
   wireInput() {
     this.input.onLeftClick = (x, y) => {
       audio.resume();
+      // Fullscreen has to be requested *here*, inside the click — by the time
+      // the next frame interprets frameClick the gesture is over and Safari
+      // refuses. The button drew its rect last frame; if the click is on it,
+      // act now. The frame still sees the click land on the button, which is
+      // what stops it falling through to the world underneath.
+      if (ui.gestureAt(x, y) === FULLSCREEN_ZONE) toggleFullscreen();
       this.frameClick = { x, y };
     };
     this.input.onLeftDouble = (x, y) => {
@@ -258,6 +270,17 @@ class App {
   }
 
   handleKey(key: string) {
+    // Fullscreen works on every screen, so it is checked before any screen
+    // gets the key — except a rebind in progress, which owns every chord.
+    // This runs synchronously inside the keydown event, which is what lets
+    // the browser honour the request.
+    if (!(this.state === "settings" && this.settingsScreen.isListening())) {
+      const fsChord = chordOf(key, { ctrl: this.input.ctrl, shift: this.input.shift, alt: this.input.alt });
+      if (fsChord && this.keybinds.resolve(this.settings.keybinds, fsChord) === "fullscreen") {
+        toggleFullscreen();
+        return;
+      }
+    }
     // Warband Tactics has one typed field (the ground seed); give it first
     // refusal on every key while that screen is up.
     if (this.state === "warband") { this.warbandScreen.handleKey(key); return; }
@@ -820,6 +843,11 @@ class App {
     // Everything else: a drag is just a click that wandered. Place one, where
     // the button came up.
     return [{ x: wx1, y: wy1 }];
+  }
+
+  /** The fullscreen hotkey as the player has it bound, for tooltips. */
+  fullscreenKeyLabel(): string {
+    return chordLabel(chordFor(this.settings.keybinds, "fullscreen"));
   }
 
   /** Funnel every player action through here: queued for lockstep in a net game,
@@ -1430,6 +1458,7 @@ class App {
       ui.pushScale(uis);
       if (this.state === "menu") {
         const action = this.menu.draw(W, H, this.time, this.profile);
+        fullscreenButton(W - 186, 16, 170, 36, { size: 14, hotkey: this.fullscreenKeyLabel() });
         if (action === "skirmish") {
           this.state = "setup";
           audio.play("ui");
@@ -1858,6 +1887,10 @@ class App {
     const UW = W / uis, UH = H / uis;
     ui.pushScale(uis);
     this.hud.draw(UW, UH, world, this.camera, this.me, this.selectedEntities(), dt, this.controller, this.attackMoveArmed, this.spectating, this.placing);
+    // Beside the HUD's Menu button. Drawn here rather than in the HUD because
+    // it needs the player's current binding for its tooltip, and the HUD
+    // deliberately knows nothing about settings.
+    fullscreenButton(UW - 108, 5, 30, 24, { compact: true, size: 13, hotkey: this.fullscreenKeyLabel() });
     if (this.spectating) this.drawSpectatorHud(UW, UH, world);
     if (world.mode !== "conquest") this.drawModeStatus(UW, UH, world);
     this.drawControlGroups(UW, UH);
@@ -1878,7 +1911,7 @@ class App {
       const ctx = this.renderer.ctx;
       ctx.fillStyle = "rgba(8, 6, 3, 0.6)";
       ctx.fillRect(0, 0, UW, UH);
-      ui.panel(UW / 2 - 150, UH / 2 - 130, 300, 322, { light: true });
+      ui.panel(UW / 2 - 150, UH / 2 - 130, 300, 374, { light: true });
       ui.text("Paused", UW / 2, UH / 2 - 100, { align: "center", size: 22, bold: true, color: PAL.uiAccent });
       if (ui.button("Resume", UW / 2 - 110, UH / 2 - 64, 220, 44, { accent: true, size: 16 })) {
         this.ingameMenu = false;
@@ -1895,7 +1928,8 @@ class App {
       })) {
         this.saveMatch();
       }
-      if (ui.button("Concede & Quit", UW / 2 - 110, UH / 2 + 92, 220, 44, { danger: true, size: 15 })) {
+      fullscreenButton(UW / 2 - 110, UH / 2 + 92, 220, 44, { size: 15, hotkey: this.fullscreenKeyLabel() });
+      if (ui.button("Concede & Quit", UW / 2 - 110, UH / 2 + 144, 220, 44, { danger: true, size: 15 })) {
         this.finishMatch(false);
       }
     }
