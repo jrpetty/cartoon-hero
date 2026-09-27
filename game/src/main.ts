@@ -44,6 +44,7 @@ import {
   SetupScreen,
   setMouseDown,
   SkirmishConfig,
+  type GraphSeries,
 } from "./ui/screens";
 import { Profile } from "./meta/profile";
 import { computeRewards, MatchRewards } from "./meta/progression";
@@ -131,7 +132,7 @@ class App {
   private matchHistory: { t: number; m: TeamMetrics[] }[] = [];
   private nextSampleT = 0;
   /** Aggregated (your alliance vs enemies) series, built at match end. */
-  endGraph: { ts: number[]; mine: Record<string, number[]>; foe: Record<string, number[]> } | null = null;
+  endGraph: GraphSeries = null;
   /** The team this client controls/views. 0 for single-player & the net host;
    *  the net joiner sets it to their team. (Was the old PLAYER constant.) */
   me: Team = Team.Player;
@@ -2104,7 +2105,14 @@ class App {
         mine[k] = this.matchHistory.map((s) => s.m.reduce((a, tm) => a + (world.areAllied(this.me, tm.team) ? tm[k] : 0), 0));
         foeS[k] = this.matchHistory.map((s) => s.m.reduce((a, tm) => a + (world.areHostile(this.me, tm.team) ? tm[k] : 0), 0));
       }
-      this.endGraph = { ts: this.matchHistory.map((s) => s.t), mine, foe: foeS };
+      // And a line per realm, so a free-for-all isn't drawn as you against
+      // the sum of everyone else.
+      const players = Array.from({ length: world.numTeams }, (_, t) => {
+        const values: Record<string, number[]> = {};
+        for (const k of keys) values[k] = this.matchHistory.map((s) => s.m[t]?.[k] ?? 0);
+        return { team: t, you: t === this.me, horde: t === world.hordeTeam, values };
+      });
+      this.endGraph = { ts: this.matchHistory.map((s) => s.t), mine, foe: foeS, players };
     } else {
       this.endGraph = null;
     }

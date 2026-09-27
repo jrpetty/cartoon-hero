@@ -121,11 +121,35 @@ export interface SideReport {
   builtByType: Record<string, number>;
 }
 
+/**
+ * One realm's own ledger. The side totals above are right for a duel and wrong
+ * for anything bigger: in a four-way free-for-all they add three opponents who
+ * were fighting *each other* into one "Opponent", and in a 2v2 they hide
+ * whether you or your ally carried the game.
+ */
+export interface PlayerReport extends SideReport {
+  team: Team;
+  /** Alliance id: realms sharing one fought together. */
+  group: number;
+  relation: "you" | "ally" | "enemy";
+  /** Survival's wave-spawner — it has no economy to report. */
+  horde: boolean;
+  won: boolean;
+  defeated: boolean;
+  /** Match seconds at which it was knocked out, or -1. */
+  defeatedAt: number;
+}
+
 export interface MatchReport {
   you: SideReport;
   foe: SideReport;
   durationSec: number;
   mapName: string;
+  /**
+   * Every realm on its own. Optional because reports saved to the match
+   * history before it existed don't carry it; those still open, as a duel.
+   */
+  players?: PlayerReport[];
 }
 
 export const emptyMatchReport = (): MatchReport => ({
@@ -188,10 +212,25 @@ function accumulate(side: SideReport, world: World, team: Team) {
 export function matchReport(world: World, me: Team, mapName: string): MatchReport {
   const you = emptySide();
   const foe = emptySide();
+  const players: PlayerReport[] = [];
+  const winner = world.winner;
   for (let t = 0; t < world.numTeams; t++) {
     const team = t as Team;
     if (world.areAllied(me, team)) accumulate(you, world, team);
     else if (world.areHostile(me, team)) accumulate(foe, world, team);
+    const p = world.player(team);
+    const own = emptySide();
+    accumulate(own, world, team);
+    players.push({
+      ...own,
+      team,
+      group: world.alliances[t] ?? t,
+      relation: team === me ? "you" : world.areAllied(me, team) ? "ally" : "enemy",
+      horde: t === world.hordeTeam,
+      won: winner !== null && winner !== Team.Neutral && world.areAllied(winner, team),
+      defeated: p.defeated,
+      defeatedAt: p.defeatedAt ?? -1,
+    });
   }
-  return { you, foe, durationSec: world.time, mapName };
+  return { you, foe, durationSec: world.time, mapName, players };
 }

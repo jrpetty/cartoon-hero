@@ -83,6 +83,8 @@ export interface PlayerState {
    */
   marketPressure: { wood: number; food: number };
   defeated: boolean;
+  /** Match time (seconds) at which this realm was knocked out; -1 while standing. */
+  defeatedAt: number;
   /** Hero (Champion) lifecycle: none = never trained, alive, or respawning. */
   heroState: "none" | "alive" | "respawning";
   heroRespawnTimer: number; // seconds until the Champion rises again
@@ -377,6 +379,7 @@ export class World {
         autoReseed: true,
         marketPressure: { wood: 0, food: 0 },
         defeated: false,
+        defeatedAt: -1,
         heroState: "none",
         heroRespawnTimer: 0,
         heroLevel: 0,
@@ -2906,6 +2909,14 @@ export class World {
     return out;
   }
 
+  /** Knock a realm out, remembering when — the match report says who fell first. */
+  private markDefeated(t: number) {
+    const p = this.players[t];
+    if (p.defeated) return;
+    p.defeated = true;
+    p.defeatedAt = this.time;
+  }
+
   private checkVictory() {
     if (this.winner !== null) return;
     if (this.mode === "survival") return this.checkVictorySurvival();
@@ -2925,7 +2936,7 @@ export class World {
     const alive: Team[] = [];
     const aliveAlliances = new Set<number>();
     for (let t = 0; t < this.numTeams; t++) {
-      if (buildings[t] === 0 && villagers[t] === 0) this.players[t].defeated = true;
+      if (buildings[t] === 0 && villagers[t] === 0) this.markDefeated(t);
       else if (!this.players[t].defeated) {
         alive.push(t as Team);
         aliveAlliances.add(this.alliances[t]);
@@ -2942,7 +2953,7 @@ export class World {
       if (t === this.hordeTeam) continue;
       const hasBase = this.entities.some((e) => e.alive && e.team === t &&
         (e.kind === Kind.Building || (e.kind === Kind.Unit && UNITS[e.type]?.canBuild)));
-      if (hasBase) playersStanding = true; else this.players[t].defeated = true;
+      if (hasBase) playersStanding = true; else this.markDefeated(t);
     }
     if (!playersStanding) { this.winner = this.hordeTeam as Team; return; } // players wiped out
     const hordeLeft = this.entities.some((e) => e.alive && e.team === this.hordeTeam && e.kind === Kind.Unit);
@@ -2969,7 +2980,7 @@ export class World {
     const aliveAlliances: number[] = [];
     for (let t = 0; t < this.numTeams; t++) {
       const kings = allianceKings.get(this.alliances[t]) ?? 0;
-      if (kings === 0) this.players[t].defeated = true;
+      if (kings === 0) this.markDefeated(t);
       else if (!aliveAlliances.includes(this.alliances[t])) aliveAlliances.push(this.alliances[t]);
     }
     if (aliveAlliances.length <= 1) {

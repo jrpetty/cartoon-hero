@@ -15,7 +15,7 @@ import { DIFFICULTIES, DIFFICULTY_IDS } from "../ai/difficulty";
 import { COMMANDERS, COMMANDER_IDS, commanderPerks } from "../content/commanders";
 import { BOONS, BOONS_BY_ID, BOON_CATEGORIES, BoonCategory, BOON_IDS } from "../content/boons";
 import { rollBoonCache, boonKey, BOON_CACHE_COST, BoonRoll } from "../meta/boon_cache";
-import { PAL, shade, withAlpha } from "../render/palette";
+import { PAL, shade, teamColor, withAlpha } from "../render/palette";
 import { ui } from "./ui";
 import { RNG, randomSeed } from "../engine/rng";
 import { audio } from "../engine/audio";
@@ -23,7 +23,7 @@ import { Particles } from "../engine/particles";
 import { MatchReport } from "../sim/metrics";
 import { CustomMap, listCustomMaps, mapSupports } from "../maps/custom";
 import { drawMapThumbnail } from "./map_thumb";
-import { REPORT_TABS, ReportTab, drawReportTab, reportSubtitle } from "./match_report";
+import { REPORT_TABS, ReportTab, drawReportKey, drawReportTab, reportSubtitle } from "./match_report";
 
 export interface SkirmishConfig {
   presetId: string;
@@ -1159,7 +1159,18 @@ function drawChestArt(cx: number, cy: number, scale: number, tier: number) {
 
 // -------------------------------------------------------------- post-match --
 
-type GraphSeries = { ts: number[]; mine: Record<string, number[]>; foe: Record<string, number[]> } | null;
+/**
+ * Time series for the progression chart. `players` carries a line per realm;
+ * `mine` / `foe` (alliance totals) are the fallback when it is absent.
+ */
+const num0 = (n: number) => Math.round(n).toLocaleString("en-GB");
+
+export type GraphSeries = {
+  ts: number[];
+  mine: Record<string, number[]>;
+  foe: Record<string, number[]>;
+  players?: { team: number; you: boolean; horde?: boolean; values: Record<string, number[]> }[];
+} | null;
 
 export class PostMatchScreen {
   private xpAnim = 0;
@@ -1171,11 +1182,16 @@ export class PostMatchScreen {
     this.reportTab = "overview";
   }
 
-  /** A two-line time-series chart (your alliance vs enemies). */
-  private drawChart(x: number, y: number, w: number, h: number, ts: number[], mine: number[], foe: number[]) {
+  /**
+   * A time-series chart: a line per realm in its own colour, yours drawn
+   * heaviest and last so it is never buried. It used to draw exactly two lines,
+   * "your alliance" and "everyone else", which in a free-for-all summed three
+   * rivals into one line that meant nothing.
+   */
+  private drawChart(x: number, y: number, w: number, h: number, ts: number[], lines: { vals: number[]; color: string; you: boolean }[]) {
     const ctx = ui.ctx;
     const n = ts.length;
-    const max = Math.max(1, ...mine, ...foe);
+    const max = Math.max(1, ...lines.flatMap((l) => l.vals));
     // Frame + gridlines.
     ctx.strokeStyle = withAlpha("#ffffff", 0.08);
     ctx.lineWidth = 1;
@@ -1183,25 +1199,27 @@ export class PostMatchScreen {
       const gy = y + (h * g) / 4;
       ctx.beginPath(); ctx.moveTo(x, gy); ctx.lineTo(x + w, gy); ctx.stroke();
     }
-    const plot = (vals: number[], color: string) => {
+    const plot = (vals: number[], color: string, width: number) => {
       ctx.strokeStyle = color;
-      ctx.lineWidth = 2;
+      ctx.lineWidth = width;
+      ctx.lineJoin = "round";
       ctx.beginPath();
       for (let i = 0; i < n; i++) {
         const px = x + (n <= 1 ? 0 : (i / (n - 1)) * w);
-        const py = y + h - (vals[i] / max) * h;
+        const py = y + h - ((vals[i] ?? 0) / max) * h;
         if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
       }
       ctx.stroke();
     };
-    plot(foe, PAL.teams[1].main);
-    plot(mine, PAL.teams[0].main);
+    for (const l of lines) if (!l.you) plot(l.vals, withAlpha(l.color, 0.9), 2);
+    for (const l of lines) if (l.you) { plot(l.vals, "rgba(0,0,0,0.55)", 5.5); plot(l.vals, l.color, 3.2); }
     ctx.lineWidth = 1;
     // Y-axis max + time axis labels.
-    ui.text(String(Math.round(max)), x + 4, y + 12, { size: 10, color: "#9a917b" });
+    ui.text(num0(max), x + 4, y + 12, { size: 11.5, color: "#b3a98f" });
     const endMin = Math.floor((ts[n - 1] ?? 0) / 60);
     const endSec = Math.floor((ts[n - 1] ?? 0) % 60);
-    ui.text(`${endMin}:${endSec.toString().padStart(2, "0")}`, x + w - 4, y + h - 4, { size: 10, align: "right", color: "#9a917b" });
+    ui.text("0:00", x, y + h + 13, { size: 11.5, color: "#b3a98f" });
+    ui.text(`${endMin}:${endSec.toString().padStart(2, "0")}`, x + w, y + h + 13, { size: 11.5, align: "right", color: "#b3a98f" });
   }
 
   draw(
@@ -1251,10 +1269,7 @@ export class PostMatchScreen {
       tx += 114;
     }
     // Whose colour is whose, once, rather than on every row.
-    ctx.fillStyle = "#7fb0e8"; ctx.fillRect(x0 + leftW - 150, top + 22, 10, 10);
-    ui.text("You", x0 + leftW - 136, top + 28, { size: 11, color: "#cabfa4" });
-    ctx.fillStyle = "#e0786a"; ctx.fillRect(x0 + leftW - 92, top + 22, 10, 10);
-    ui.text("Opponent", x0 + leftW - 78, top + 28, { size: 11, color: "#cabfa4" });
+    drawReportKey(x0 + leftW - 20, top + 28, report);
     drawReportTab(this.reportTab, x0 + 24, top + 66, leftW - 48, panelH - 82, report);
 
     // ---- spoils ----
@@ -1326,8 +1341,45 @@ export class PostMatchScreen {
           }
           gx += 80;
         }
-        this.drawChart(x1 + 34, gy + 46, right - 52, gh - 62,
-          graph.ts, graph.mine[this.graphMetric], graph.foe[this.graphMetric]);
+        const m = this.graphMetric;
+        const lines = graph.players?.length
+          ? graph.players.map((p) => ({
+              vals: p.values[m] ?? [],
+              color: p.horde ? "#8d8779" : teamColor(p.team).main,
+              you: p.you,
+              name: p.horde ? "Horde" : teamColor(p.team).name,
+            }))
+          : [
+              { vals: graph.foe[m], color: "#e0786a", you: false, name: "Opponents" },
+              { vals: graph.mine[m], color: "#7fb0e8", you: true, name: "You" },
+            ];
+        // Legend under the chart, wrapping: up to sixteen realms have to fit.
+        ctx.font = `12px "Trebuchet MS", sans-serif`;
+        const chipW = (l: { name: string; you: boolean }) => 18 + ctx.measureText(l.name + (l.you ? " (you)" : "")).width + 12;
+        const legendRows: typeof lines[] = [[]];
+        let rowW = 0;
+        const legendW = right - 36;
+        for (const l of lines) {
+          const cw = chipW(l);
+          if (rowW + cw > legendW && legendRows[legendRows.length - 1].length) { legendRows.push([]); rowW = 0; }
+          legendRows[legendRows.length - 1].push(l);
+          rowW += cw;
+        }
+        const legendH = legendRows.length * 18 + 4;
+        this.drawChart(x1 + 34, gy + 48, right - 58, gh - 84 - legendH, graph.ts, lines);
+        let ly2 = gy + gh - legendH - 4;
+        for (const row of legendRows) {
+          let lx = x1 + 18;
+          for (const l of row) {
+            ctx.fillStyle = l.color;
+            ctx.fillRect(lx, ly2 - 5, 12, l.you ? 4 : 3);
+            const label = l.name + (l.you ? " (you)" : "");
+            ui.text(label, lx + 17, ly2, { size: 12, bold: l.you, color: l.you ? "#ffe9b0" : "#cfc4a8" });
+            ctx.font = `12px "Trebuchet MS", sans-serif`;
+            lx += chipW(l);
+          }
+          ly2 += 18;
+        }
       }
     }
 

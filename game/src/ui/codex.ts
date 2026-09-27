@@ -16,7 +16,7 @@ import { drawMenuBackground } from "./screens";
 
 import type { Profile } from "../meta/profile";
 import { MatchRecord, listHistory, summariseHistory } from "../meta/history";
-import { REPORT_TABS, ReportTab, drawReportTab } from "./match_report";
+import { REPORT_TABS, ReportTab, drawReportKey, drawReportTab } from "./match_report";
 import { ACHIEVEMENTS, challengesForWeek, weekIndex } from "../meta/achievements";
 
 type Tab = "units" | "buildings" | "tech" | "records";
@@ -221,10 +221,7 @@ export class CodexScreen {
       if (ui.button("‹ Back to records", x0 + colW - 170, top + 62, 150, 26, { size: 12 })) {
         this.openReport = null;
       }
-      ctx.fillStyle = "#7fb0e8"; ctx.fillRect(x0 + colW - 320, top + 30, 10, 10);
-      ui.text("You", x0 + colW - 306, top + 36, { size: 11, color: "#cabfa4" });
-      ctx.fillStyle = "#e0786a"; ctx.fillRect(x0 + colW - 250, top + 30, 10, 10);
-      ui.text("Opponent", x0 + colW - 236, top + 36, { size: 11, color: "#cabfa4" });
+      drawReportKey(x0 + colW - 20, top + 36, r.report!);
       drawReportTab(this.reportTab, x0 + 26, top + 108, colW - 52, H - top - 210, r.report!);
       return;
     }

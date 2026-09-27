@@ -894,6 +894,39 @@ one. Where fullscreen isn't allowed (an iframe without permission, iPhone
 Safari) the button is disabled with a tooltip saying why, rather than doing
 nothing.
 
+## The match report, for more than two
+
+The end-of-match report folded every game into "your alliance against theirs".
+Right for a duel, wrong for everything else: a four-way free-for-all came out
+as "1v3" with three rivals — who spent the game fighting *each other* — summed
+into one "Opponent", and a 2v2 couldn't say whether you or your ally carried
+it. The graph did the same with two lines.
+
+- `MatchReport.players` now carries each realm's own ledger, relation to you,
+  alliance, whether it won, and **when it was knocked out** (`defeatedAt`, new
+  on `PlayerState`, set by the one place that marks a realm defeated). The
+  alliance totals stay, because the match history's trend numbers are built
+  from them, and reports saved before this still open — as a duel.
+- A duel keeps the contest bars. Anything bigger is a **standings table**: a
+  row per realm, grouped into team bands in a team game with team totals when
+  there's room, ranked in a free-for-all. Order is winners, then the still
+  standing by score, then the fallen *last-to-fall first* — outlasting someone
+  is what finishing ahead of them means, whatever the scores say. Under every
+  number a bar shows it against the column's best in the realm's own colour,
+  and the best in each column is gold (lowest, for losses, damage taken and
+  idle time), so "who was best at what" reads without reading numbers.
+- Armies is chips per realm — "12 Man-at-Arms · 9 Archer", villagers last and
+  muted — rather than a unit × realm grid that would be eight columns of dots.
+- The progression chart draws a line per realm in its colour, yours heaviest
+  and on top, with a wrapping legend.
+- Type: nothing a player has to read is under 11.5px now; the old column
+  headers were 9.5px in a grey barely off the background.
+- **It has to fit.** `match_report.test.ts` draws every tab for 4-player FFA,
+  2v2, 8-player FFA, 4v4 and 8v8 (sixteen realms) into the report's real rect
+  at 1600×900 and 1280×760 and checks every realm's name is drawn inside it.
+  The first version failed it twice — Armies and Overview both ran off the
+  bottom in an 8v8 — so past ten realms rows close up to a single line.
+
 ## Bigger / later
 - **Naval** — water is currently only an impassable wall, and the Islands
   preset (55% water) is a maze rather than a naval map. Dock, transport,
