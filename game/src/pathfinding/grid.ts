@@ -161,4 +161,20 @@ export class NavGrid {
     }
     return [wx, wy];
   }
+
+  /**
+   * The nearest open cell to (cx, cy) that is in component `region`, searched
+   * in the same ring order as `nearestOpenWorld`, or null within `maxRadius`.
+   */
+  nearestOpenCellInRegion(cx: number, cy: number, region: number, maxRadius = 12): [number, number] | null {
+    for (let r = 1; r <= maxRadius; r++) {
+      for (let dy = -r; dy <= r; dy++) {
+        for (let dx = -r; dx <= r; dx++) {
+          if (Math.abs(dx) !== r && Math.abs(dy) !== r) continue;
+          if (this.regionAt(cx + dx, cy + dy) === region) return [cx + dx, cy + dy];
+        }
+      }
+    }
+    return null;
+  }
 }

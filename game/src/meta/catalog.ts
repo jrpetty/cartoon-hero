@@ -34,6 +34,20 @@ const MYTHIC_TITLE: Record<string, string> = {
   catapult: "Old Thunder",
   ram: "The Gatebreaker",
   monk: "Brother Lumen",
+  // Oath units.
+  sworn_blade: "Kael the Oathsworn",
+  lancer: "Dame Ysolde of the Long Ride",
+  ranger: "Wren of the Hollow Wood",
+  halberdier: "Old Ironhook",
+  great_bombard: "The Thunder of Karst",
+  royal_guard: "Captain Aurel",
+  // Faction units.
+  yeoman: "Hob Longarm",
+  legionary: "Centurion Varro",
+  samurai: "Kenshiro the Unbowed",
+  horse_archer: "Temur the Swift",
+  pulse_trooper: "Warden-Seven",
+  skimmer: "Vex the Streak",
 };
 
 function variantName(unitId: string, unitName: string, rarity: number, salt: number): string {

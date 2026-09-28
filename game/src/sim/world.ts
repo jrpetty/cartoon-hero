@@ -17,7 +17,7 @@ import {
   Stance,
   Team,
 } from "./types";
-import { UNITS, UnitDef } from "../content/units";
+import { CHARGE_RUN, UNITS, UnitDef } from "../content/units";
 import { BUILDINGS, BuildingDef } from "../content/buildings";
 import { AGES, MAX_AGE, UPGRADES } from "../content/tech";
 import { dayPhase, visionMult } from "../content/daynight";
@@ -57,6 +57,8 @@ import { dist, dist2 } from "../engine/math";
 import type { MapData } from "../maps/generator";
 import { COMMANDERS, CommanderPower } from "../content/commanders";
 import { BoonEffect, emptyBoonEffect, aggregateBoons } from "../content/boons";
+import { MEND_AFTER_SEC, OATHS, OathRules, TITHE_MAX_MARKETS, applyOaths, emptyOathRules } from "../content/oaths";
+import { DEFAULT_FACTION, FACTIONS, FactionId, factionForUnit, factionOf } from "../content/factions";
 import { TERRAIN_SPEED, TERRAIN_SIGHT, TERRAIN_BUILDABLE, Terrain } from "../maps/terrain_kinds";
 import { snapBuilding } from "../engine/gridsnap";
 
@@ -85,6 +87,14 @@ export interface PlayerState {
   defeated: boolean;
   /** Match time (seconds) at which this realm was knocked out; -1 while standing. */
   defeatedAt: number;
+  /** Who this realm is (content/factions.ts): its look, bonuses and units. */
+  faction: FactionId;
+  /** Oaths sworn, one per age advanced past the Hearth (content/oaths.ts). */
+  oaths: string[];
+  /** The Oath the age advance in progress will swear, if any. */
+  pendingOath: string | null;
+  /** What the sworn Oaths change that boons don't. */
+  oath: OathRules;
   /** Hero (Champion) lifecycle: none = never trained, alive, or respawning. */
   heroState: "none" | "alive" | "respawning";
   heroRespawnTimer: number; // seconds until the Champion rises again
@@ -169,7 +179,7 @@ const HERO_RESPAWN_SEC = 65;
 export interface WorldEvent {
   kind:
     | "sword" | "bow" | "arrowHit" | "siege" | "death" | "collapse"
-    | "build" | "complete" | "underattack" | "age" | "deposit" | "spawn" | "hit" | "ability" | "callout"
+    | "build" | "complete" | "underattack" | "age" | "oath" | "charge" | "deposit" | "spawn" | "hit" | "ability" | "callout"
     | "leap" // an arena Infiltrator opening the fight behind the enemy line
     | "exhaust"; // a resource node worked dry — currently only a spent farm
   x: number;
@@ -252,7 +262,7 @@ export function makeEntity(): Entity {
     projArmorClassBonusFrom: "", projElapsed: 0, projDuration: 0, projFromX: 0, projFromY: 0,
     abilityCooldown: 0, abilityActive: 0, slowTimer: 0, rallyTimer: 0, tradeHomeId: -1, spottedBy: ~0, guardTimer: 0, heroLevel: 0, heroKills: 0,
     veterancy: 0, vetKills: 0, projSourceId: -1,
-    animPhase: 0, hitFlash: 0, lastDamageTime: -999, lastAttackerId: -1, selected: false,
+    animPhase: 0, hitFlash: 0, chargeRun: 0, lastDamageTime: -999, lastAttackerId: -1, selected: false,
     variantRarity: 0, tier: 0,
   };
 }
@@ -325,7 +335,7 @@ export class World {
   hillY = 0;
   hillR = 0;
 
-  init(map: MapData, loadouts: Record<string, number>[], econMults: number[], alliances?: number[], commanders?: string[], nomad = false, boonLoadouts?: { id: string; rarity: number; age: number }[][], mode: GameMode = "conquest") {
+  init(map: MapData, loadouts: Record<string, number>[], econMults: number[], alliances?: number[], commanders?: string[], nomad = false, boonLoadouts?: { id: string; rarity: number; age: number }[][], mode: GameMode = "conquest", factions?: string[]) {
     this.nomad = nomad;
     this.mode = mode;
     this.map = map;
@@ -380,6 +390,10 @@ export class World {
         marketPressure: { wood: 0, food: 0 },
         defeated: false,
         defeatedAt: -1,
+        faction: (factions?.[t] && FACTIONS[factions[t] as FactionId] ? factions[t] : DEFAULT_FACTION) as FactionId,
+        oaths: [],
+        pendingOath: null,
+        oath: emptyOathRules(),
         heroState: "none",
         heroRespawnTimer: 0,
         heroLevel: 0,
@@ -403,6 +417,10 @@ export class World {
         },
       });
       this.fog.push(new Uint8Array(this.fogCols * this.fogRows));
+      // The faction's bonuses are in force from the first tick, so the
+      // starting Town Centre and villagers are already its own.
+      const np = this.players[this.players.length - 1];
+      np.oath = applyOaths(np.oaths, np.boon, undefined, factionOf(np.faction));
     }
 
     // Resources.
@@ -498,7 +516,9 @@ export class World {
   /** Effective stats for a unit owned by `team`, applying rarity + age/tech. */
   private applyUnitStats(e: Entity, def: UnitDef, team: Team) {
     const p = this.players[team];
-    const rarity = p?.loadout[def.id] ?? 0;
+    // Rarity is by role as well as by unit: your unboxed Man-at-Arms makes the
+    // Legion's Legionary just as rare. Whichever is higher counts.
+    const rarity = Math.max(p?.loadout[def.id] ?? 0, def.role ? p?.loadout[def.role] ?? 0 : 0);
     e.variantRarity = rarity;
     const bn = p?.boon ?? emptyBoonEffect();
     // Commander bonuses apply to soldiers (not villagers).
@@ -521,16 +541,27 @@ export class World {
         if (up?.kind === "hp" && (up.appliesTo.includes(def.armorClass) || (up.appliesToUnits?.includes(def.id) ?? false))) hpFlat += up.amount;
       }
     }
-    e.maxHp = Math.round(def.hp * (RARITY_HP_MULT[rarity] ?? 1) * hpMult) + hpFlat;
+    // Oath rules by class: cavalry and siege toughness, infantry armour.
+    const ok = p?.oath;
+    let oathHp = 1, oathAtk = 1, oathArmor = 0;
+    if (ok) {
+      if (def.armorClass === ArmorClass.Cavalry) oathHp *= ok.cavHpMult;
+      if (def.armorClass === ArmorClass.Siege) { oathHp *= ok.siegeHpMult; oathAtk *= ok.siegeAtkMult; }
+      if (def.armorClass === ArmorClass.Infantry) { oathArmor += ok.infantryArmor; oathHp *= ok.infantryHpMult; }
+      if (def.canGather) oathHp *= ok.villagerHpMult;
+      else oathHp *= ok.soldierHpMult;
+    }
+    e.maxHp = Math.round(def.hp * (RARITY_HP_MULT[rarity] ?? 1) * hpMult * oathHp) + hpFlat;
     e.hp = e.maxHp;
-    e.attack = Math.round(def.attack * (RARITY_ATK_MULT[rarity] ?? 1) * atkBoon);
-    e.armor = def.armor + (RARITY_ARMOR_BONUS[rarity] ?? 0) + armorPlus;
+    e.attack = Math.round(def.attack * (RARITY_ATK_MULT[rarity] ?? 1) * atkBoon * oathAtk);
+    e.armor = def.armor + (RARITY_ARMOR_BONUS[rarity] ?? 0) + armorPlus + oathArmor;
     // Pierce armor mirrors melee armor unless the unit defines a different value
     // (e.g. the Horseman: 0 melee / 2 pierce). The delta rides on top of bonuses.
     e.pierceArmor = e.armor + (def.pierceArmor !== undefined ? def.pierceArmor - def.armor : 0);
     e.range = def.range + (def.armorClass === ArmorClass.Archer ? bn.archerRangeBonus : 0);
     e.attackInterval = def.attackInterval;
-    e.speed = def.speed * (RARITY_SPEED_MULT[rarity] ?? 1) * spdBoon;
+    e.speed = def.speed * (RARITY_SPEED_MULT[rarity] ?? 1) * spdBoon *
+      (def.armorClass === ArmorClass.Infantry && ok ? ok.infantrySpeedMult : 1);
     e.visionRange = def.visionRange * bn.visionMult * (1 + this.teamUpgradeSum(team, "vision"));
     e.radius = def.radius;
     e.armorClass = def.armorClass;
@@ -542,8 +573,26 @@ export class World {
   recomputeBoons(team: Team) {
     const p = this.players[team];
     if (!p) return;
+    const beforeBld = p.boon.buildingHpMult, beforeWall = p.boon.wallHpMult, beforeCd = p.boon.towerCdMult;
     p.boon = aggregateBoons(p.boonPlan.filter((b) => b.age <= p.age));
+    // Sworn Oaths fold in on top: some of what they do is a boon-shaped
+    // modifier, the rest is rules of their own.
+    p.oath = applyOaths(p.oaths, p.boon, COMMANDERS[p.commander]?.oath, factionOf(p.faction));
     this.refreshTeamUnits(team);
+    // A tougher-buildings Oath should toughen the town that swore it, not only
+    // what it builds next.
+    if (p.boon.buildingHpMult !== beforeBld || p.boon.wallHpMult !== beforeWall || p.boon.towerCdMult !== beforeCd) {
+      for (const e of this.entities) {
+        if (!e.alive || e.team !== team || e.kind !== Kind.Building) continue;
+        const def = BUILDINGS[e.type];
+        if (!def) continue;
+        if (def.attack > 0) e.attackInterval = def.attackInterval * p.boon.towerCdMult;
+        const mult = WALL_TYPES.has(e.type) ? p.boon.wallHpMult : p.boon.buildingHpMult;
+        const frac = e.maxHp > 0 ? e.hp / e.maxHp : 1;
+        e.maxHp = Math.round(def.hp * mult);
+        e.hp = Math.max(1, e.maxHp * frac);
+      }
+    }
   }
 
   /** Re-derive every unit's stats for a team (after a boon/HP-upgrade unlock),
@@ -615,7 +664,7 @@ export class World {
     // food node as well as a building, and stocking it at completion left a
     // state — Done, but empty — that reads as a field worked dry the instant
     // anyone touches it.
-    if (type === "farm") e.amount = FARM_FOOD;
+    if (type === "farm") e.amount = Math.round(FARM_FOOD * (this.players[team]?.oath.farmFoodMult ?? 1));
     if (completed) {
       e.hp = maxHp;
       e.buildState = BuildState.Done;
@@ -654,10 +703,12 @@ export class World {
 
   private onBuildingCompleted(e: Entity, def: BuildingDef, silent = false) {
     const p = this.players[e.team];
+    // A faction's houses can hold more (the Khanate's yurts).
+    const pop = def.popProvided + (def.id === "house" && p ? p.oath.housePopBonus : 0);
     if (p) {
-      p.popCap = Math.min(POP_CAP_HARD, p.popCap + def.popProvided);
+      p.popCap = Math.min(POP_CAP_HARD, p.popCap + pop);
     }
-    e.popProvided = def.popProvided;
+    e.popProvided = pop;
     // Decking only carries traffic once the bridge is actually finished — a
     // half-built crossing is a construction site standing in a river.
     if (def.onlyOnShallows) this.stampBridge(e, true);
@@ -965,7 +1016,7 @@ export class World {
     const def = UNITS[k.type];
     if (!def || def.canGather || def.hero || def.attack <= 0) return;
     k.vetKills++;
-    const vetMult = this.players[k.team]?.vetMult ?? 1;
+    const vetMult = (this.players[k.team]?.vetMult ?? 1) * (this.players[k.team]?.oath.vetMult ?? 1);
     const need = (rank: number) => Math.max(1, Math.round(VET_THRESHOLDS[rank] / vetMult));
     while (k.veterancy < VET_THRESHOLDS.length && k.vetKills >= need(k.veterancy)) {
       k.veterancy++;
@@ -1073,6 +1124,20 @@ export class World {
   }
 
   /** Validate placement + pay cost + spawn foundation. Returns entity or null. */
+  /** What a building costs this realm: boons, then its faction's prices. */
+  private buildingCost(p: PlayerState, type: string): { food: number; wood: number; gold: number } {
+    const def = BUILDINGS[type];
+    const m = (WALL_TYPES.has(type) ? p.boon.wallCostMult : p.boon.buildCostMult) * (p.oath.buildingCostMult[type] ?? 1);
+    return this.scaledCost(def.cost, m);
+  }
+
+  /** The cost a team would pay to place a building — for the build menu. */
+  buildingCostFor(team: Team, type: string): { food: number; wood: number; gold: number } {
+    const p = this.players[team];
+    if (!p || !BUILDINGS[type]) return { food: 0, wood: 0, gold: 0 };
+    return this.buildingCost(p, type);
+  }
+
   placeBuilding(team: Team, type: string, wx: number, wy: number): Entity | null {
     const def = BUILDINGS[type];
     const p = this.players[team];
@@ -1080,7 +1145,7 @@ export class World {
     if (p.age < def.age) return null;
     if (def.requires && !this.hasBuilding(team, def.requires)) return null;
     // Master Masons (buildings) / Bulwark (walls) make construction cheaper.
-    const cost = this.scaledCost(def.cost, WALL_TYPES.has(type) ? p.boon.wallCostMult : p.boon.buildCostMult);
+    const cost = this.buildingCost(p, type);
     if (!this.canAfford(p.resources, cost)) return null;
     const tiles = def.tiles;
     const sx = snapBuilding(wx, tiles);
@@ -1220,17 +1285,71 @@ export class World {
     if (b.buildState !== BuildState.Done) return false;
     if (!BUILDINGS[b.type].trains.includes(unitType)) return false;
     if (p.age < def.age) return false;
+    // A signature unit belongs to the realms that swore its Oath, and a
+    // faction's own units to that faction — which trains them *instead of*
+    // the shared units they replace.
+    if (def.oath && !p.oaths.includes(def.oath)) return false;
+    if (!this.canFieldType(p, unitType)) return false;
     // One Champion per realm: only trainable when none is fielded or pending.
     if (def.hero && (p.heroState !== "none" || b.productionQueue.includes("u:hero"))) return false;
     if (b.productionQueue.length >= 8) return false;
     if (p.popUsed + def.pop > p.popCap) return false;
-    const cost = this.scaledCost(def.cost, p.boon.unitCostMult); // Quartermaster
+    const cost = this.unitCost(p, def);
     if (!this.canAfford(p.resources, cost)) return false;
     this.pay(p.resources, cost, team, "units");
     p.stats.trainedByType[unitType] = (p.stats.trainedByType[unitType] ?? 0) + 1;
     b.productionQueue.push(`u:${unitType}`);
-    if (b.productionQueue.length === 1) b.productionTime = def.buildTime * p.boon.trainSpeedMult;
+    if (b.productionQueue.length === 1) b.productionTime = def.buildTime * this.trainMult(p, def);
     return true;
+  }
+
+  /** What a unit costs this realm: boons, then its faction's prices. */
+  private unitCost(p: PlayerState, def: UnitDef): { food: number; wood: number; gold: number } {
+    let m = p.boon.unitCostMult; // Quartermaster
+    if (!def.canGather) m *= p.oath.soldierCostMult;
+    if (def.armorClass === ArmorClass.Cavalry) m *= p.oath.cavCostMult;
+    m *= p.oath.unitCostMult[def.id] ?? 1;
+    return this.scaledCost(def.cost, m);
+  }
+
+  /** The cost a team would pay for a unit — for the command card and the AI. */
+  unitCostFor(team: Team, type: string): { food: number; wood: number; gold: number } {
+    const p = this.players[team];
+    const def = UNITS[type];
+    if (!p || !def) return { food: 0, wood: 0, gold: 0 };
+    return this.unitCost(p, def);
+  }
+
+  /** Whether this realm's faction fields a unit type at all. */
+  canFieldType(p: PlayerState, type: string): boolean {
+    const f = factionOf(p.faction);
+    if (f.replaces[type]) return false;
+    const own = factionForUnit(type);
+    return !own || own.id === f.id;
+  }
+
+  /** Training-time multiplier for a unit: boons, faction, then Oaths. */
+  private trainMult(p: PlayerState, def: UnitDef): number {
+    let m = p.boon.trainSpeedMult;
+    const o = p.oath;
+    if (def.canGather) {
+      m *= o.villagerTrainMult;
+    } else {
+      m *= o.soldierTrainMult;
+      if (def.armorClass === ArmorClass.Infantry) m *= o.infantryTrainMult;
+      else if (def.armorClass === ArmorClass.Cavalry) m *= o.cavTrainMult;
+      else if (def.armorClass === ArmorClass.Siege) m *= o.siegeTrainMult;
+    }
+    if (def.oath) m *= o.signatureTrainMult;
+    return m;
+  }
+
+  /** What a technology costs this realm (factions price the Blacksmith). */
+  techCostFor(team: Team, techId: string): { food: number; wood: number; gold: number } {
+    const up = UPGRADES[techId];
+    const p = this.players[team];
+    if (!up || !p) return { food: 0, wood: 0, gold: 0 };
+    return up.researchedAt === "blacksmith" ? this.scaledCost(up.cost, p.oath.techCostMult) : up.cost;
   }
 
   /** Champion availability for the command card. */
@@ -1247,10 +1366,14 @@ export class World {
     const b = this.byId.get(buildingId);
     const p = this.players[team];
     if (!b || !b.alive || !p || b.team !== team || b.buildState !== BuildState.Done) return false;
-    if (techId === "age") {
+    if (techId === "age" || techId.startsWith("age:")) {
       const next = p.age + 1;
       if (next > MAX_AGE || b.type !== "town_center") return false;
       const age = AGES[next];
+      // "age:<oath>" swears that Oath as the realm advances. It has to be one
+      // offered by the age being reached. A bare "age" advances unsworn.
+      const oathId = techId.startsWith("age:") ? techId.slice(4) : null;
+      if (oathId !== null && OATHS[oathId]?.age !== next) return false;
       if (!this.ageRequirementMet(team, next)) return false;
       if (!this.canAfford(p.resources, age.cost)) return false;
       // Only one age advance in flight per realm — checking just this building's
@@ -1259,6 +1382,7 @@ export class World {
         e.alive && e.team === team && e.kind === Kind.Building && e.productionQueue.includes("a:age"));
       if (alreadyAging) return false;
       this.pay(p.resources, age.cost, team, "tech");
+      p.pendingOath = oathId;
       b.productionQueue.push("a:age");
       if (b.productionQueue.length === 1) b.productionTime = age.advanceTime;
       return true;
@@ -1267,8 +1391,9 @@ export class World {
     if (!up || p.upgrades.has(techId) || p.age < up.age) return false;
     if (b.type !== up.researchedAt) return false;
     if (b.productionQueue.includes(`t:${techId}`)) return false;
-    if (!this.canAfford(p.resources, up.cost)) return false;
-    this.pay(p.resources, up.cost, team, "tech");
+    const upCost = this.techCostFor(team, techId);
+    if (!this.canAfford(p.resources, upCost)) return false;
+    this.pay(p.resources, upCost, team, "tech");
     b.productionQueue.push(`t:${techId}`);
     if (b.productionQueue.length === 1) b.productionTime = up.time;
     return true;
@@ -1405,7 +1530,7 @@ export class World {
    * what guarantees a round trip can never make money at any point on the curve.
    */
   marketQuote(team: Team, kind: "wood" | "food"): { sell: number; buy: number } {
-    const base = 75 + this.teamUpgradeSum(team, "trade");
+    const base = 75 + this.teamUpgradeSum(team, "trade") + (this.players[team]?.oath.tradeRateBonus ?? 0);
     const price = this.marketPrice(team, kind);
     return {
       sell: Math.round(base * price),
@@ -1465,10 +1590,34 @@ export class World {
       }
     }
 
+    // Oath of the Coin: every Market pays a tithe, up to a few of them. Once a
+    // second, for the same reason as above.
+    if (this.tickCount % SIM_HZ === 0) {
+      for (const p of this.players) {
+        if (!p || p.oath.tithePerMarket <= 0 || p.defeated) continue;
+        let markets = 0;
+        for (const e of this.entities) {
+          if (e.alive && e.team === p.team && e.type === "market" && e.buildState === BuildState.Done) markets++;
+        }
+        const gold = p.oath.tithePerMarket * Math.min(TITHE_MAX_MARKETS, markets);
+        if (gold > 0) {
+          p.resources.gold += gold;
+          p.stats.gathered += gold;
+          p.stats.gatheredBy.gold += gold;
+        }
+      }
+    }
+
     // Snapshot positions so the renderer can interpolate between ticks (smooth
     // 60fps motion over the 20Hz sim). Done before anything moves this tick.
     for (const e of this.entities) {
       if (!e.alive) continue;
+      // A charger's run-up: distance covered last tick, bled away while it
+      // stands, so a Lancer that has been idling isn't still "charging".
+      if (e.kind === Kind.Unit && UNITS[e.type]?.charge) {
+        const moved = Math.hypot(e.x - e.prevX, e.y - e.prevY);
+        e.chargeRun = moved > 0.5 ? Math.min(CHARGE_RUN * 2, e.chargeRun + moved) : Math.max(0, e.chargeRun - 80 * SIM_DT);
+      }
       e.prevX = e.x;
       e.prevY = e.y;
     }
@@ -1792,7 +1941,17 @@ export class World {
           this.fireProjectile(e, target, def);
           this.emit(def.id === "catapult" ? "siege" : "bow", e.x, e.y, e.team);
         } else {
-          this.dealDamage(e.team, target, this.effectiveAttack(e, def, target), def.id, e.id);
+          let dmg = this.effectiveAttack(e, def, target);
+          if (def.charge) {
+            // The couched lance: a blow at the end of a run lands with the
+            // weight of the horse behind it.
+            if (e.chargeRun >= CHARGE_RUN) {
+              dmg *= def.charge;
+              this.emit("charge", target.x, target.y, e.team, def.id);
+            }
+            e.chargeRun = 0;
+          }
+          this.dealDamage(e.team, target, dmg, def.id, e.id);
           this.emit("sword", target.x, target.y, e.team);
         }
       }
@@ -1836,8 +1995,13 @@ export class World {
     farm.farmWorker = -1;
     this.grid.stampFootprint(x, y, def.tiles, false);
     this.emit("exhaust", x, y, farm.team, "farm");
-    if (p && p.autoReseed && this.canAfford(p.resources, def.cost)) {
+    // Plough-sworn fields replant without the wood: the refund lands before
+    // the placement charges it, so the books balance to nothing.
+    const free = !!p?.oath.freeReseed;
+    if (p && p.autoReseed && (free || this.canAfford(p.resources, def.cost))) {
+      if (free) { p.resources.food += def.cost.food; p.resources.wood += def.cost.wood; p.resources.gold += def.cost.gold; }
       const fresh = this.placeBuilding(farm.team, "farm", x, y);
+      if (!fresh && free) { p.resources.food -= def.cost.food; p.resources.wood -= def.cost.wood; p.resources.gold -= def.cost.gold; }
       if (fresh) {
         this.issueBuildRepair([worker.id], fresh.id);
         return;
@@ -1950,6 +2114,8 @@ export class World {
         }
         econ *= gp.gatherMultC; // commander passive
         if (kind === ResourceKind.Food) econ *= gp.boon.foodGatherMult; // Bountiful Fields
+        if (kind === ResourceKind.Gold) econ *= gp.oath.goldGatherMult; // Oath of the Coin
+        if (kind === ResourceKind.Wood) econ *= gp.oath.woodGatherMult; // the Jarls
       }
       // Rally banner boosts gathering for villagers standing in its radius.
       const banner = this.bannerAt(e.team, e.x, e.y);
@@ -2057,7 +2223,7 @@ export class World {
       const legs = dist(home.x, home.y, dest.x, dest.y);
       const bonus = 1 + this.teamUpgradeSum(e.team, "trade") / 100; // Caravan
       const tiles = legs / TILE;
-      const gold = Math.max(1, Math.round(TRADE_GOLD_PER_TILE * Math.pow(tiles, TRADE_GOLD_EXPONENT) * bonus));
+      const gold = Math.max(1, Math.round(TRADE_GOLD_PER_TILE * Math.pow(tiles, TRADE_GOLD_EXPONENT) * bonus * p.oath.tradeMult));
       p.resources.gold += gold;
       p.stats.gathered += gold;
       p.stats.gatheredBy.gold += gold;
@@ -2128,7 +2294,8 @@ export class World {
     if (b.buildState !== BuildState.Done) {
       const pp = this.players[e.team];
       const mult = (pp?.econMult ?? 1) * (pp?.buildMult ?? 1) // commander build speed
-        * (1 + this.teamUpgradeSum(b.team, "build")); // Treadmill Crane
+        * (1 + this.teamUpgradeSum(b.team, "build")) // Treadmill Crane
+        * (pp?.oath.buildSpeedMult ?? 1); // the Legion's engineers
       b.buildProgress += (SIM_DT / bdef.buildTime) * mult;
       b.hp = Math.min(b.maxHp, b.hp + (b.maxHp * 0.92 * SIM_DT * mult) / bdef.buildTime);
       b.buildState = BuildState.UnderConstruction;
@@ -2141,7 +2308,9 @@ export class World {
         this.finishOrder(e);
       }
     } else {
-      b.hp = Math.min(b.maxHp, b.hp + REPAIR_RATE * SIM_DT);
+      // Repairs go at the same pace as building (the Hearth's masons).
+      const rp = this.players[e.team];
+      b.hp = Math.min(b.maxHp, b.hp + REPAIR_RATE * SIM_DT * (rp?.oath.buildSpeedMult ?? 1));
       if (b.hp >= b.maxHp) this.finishOrder(e);
     }
   }
@@ -2265,6 +2434,12 @@ export class World {
   private tickBuilding(e: Entity) {
     if (e.buildState !== BuildState.Done) return;
     const def = BUILDINGS[e.type];
+    const owner = this.players[e.team];
+
+    // Oath of the Hearth: a building left alone mends itself.
+    if (owner && owner.oath.buildingRegen > 0 && e.hp < e.maxHp && this.time - e.lastDamageTime >= MEND_AFTER_SEC) {
+      e.hp = Math.min(e.maxHp, e.hp + owner.oath.buildingRegen * SIM_DT);
+    }
 
     // Gates: open for the owner when safe, bar shut when the enemy is near.
     if (e.type === "gate" && this.tickCount % 5 === e.id % 5) {
@@ -2281,7 +2456,8 @@ export class World {
         this.completeProduction(e, item);
         if (e.productionQueue.length > 0) {
           const next = e.productionQueue[0];
-          const trainMult = next.startsWith("u:") ? (p?.boon.trainSpeedMult ?? 1) : 1; // Quartermaster
+          const nd = next.startsWith("u:") ? UNITS[next.slice(2)] : undefined;
+          const trainMult = nd && p ? this.trainMult(p, nd) : 1; // Quartermaster, Oath of the Sword
           e.productionTime = this.itemTime(next, p?.age ?? 0) * trainMult;
         }
       }
@@ -2351,7 +2527,7 @@ export class World {
       if (p.popUsed + def.pop > p.popCap) {
         // No room: refund exactly what was charged (the boon-scaled cost, not the
         // full sticker price — otherwise cost-reduction boons mint resources).
-        const paid = this.scaledCost(def.cost, p.boon.unitCostMult);
+        const paid = this.unitCost(p, def);
         p.resources.food += paid.food;
         p.resources.wood += paid.wood;
         p.resources.gold += paid.gold;
@@ -2377,8 +2553,12 @@ export class World {
       this.emit("complete", b.x, b.y, b.team, item);
     } else if (item === "a:age") {
       p.age = Math.min(MAX_AGE, p.age + 1);
-      this.recomputeBoons(b.team); // unlock this age's boon and buff the army
+      const sworn = p.pendingOath;
+      p.pendingOath = null;
+      if (sworn && OATHS[sworn]?.age === p.age && !p.oaths.includes(sworn)) p.oaths.push(sworn);
+      this.recomputeBoons(b.team); // unlock this age's boon and Oath, and buff the army
       this.emit("age", b.x, b.y, b.team, String(p.age));
+      if (sworn) this.emit("oath", b.x, b.y, b.team, sworn);
     }
   }
 
@@ -2510,11 +2690,15 @@ export class World {
 
   /** Seconds between shots, shortened by Volley while active. */
   private effectiveInterval(e: Entity): number {
+    let iv = e.attackInterval;
+    // The Shogunate's swordsmanship: melee soldiers strike faster.
+    const def = UNITS[e.type];
+    if (e.kind === Kind.Unit && def && !def.ranged && !def.canGather) iv *= this.players[e.team]?.oath.meleeRateMult ?? 1;
     if (e.abilityActive > 0) {
       const ab = ABILITIES[e.type];
-      if (ab?.atkIntervalMult) return e.attackInterval * ab.atkIntervalMult;
+      if (ab?.atkIntervalMult) return iv * ab.atkIntervalMult;
     }
-    return e.attackInterval;
+    return iv;
   }
 
   private effectiveAttack(e: Entity, def: UnitDef, target: Entity): number {
@@ -2578,6 +2762,11 @@ export class World {
     if (attacker && attacker.boon.raiderMult > 1 && (target.kind === Kind.Building || target.type === "villager")) {
       raw *= attacker.boon.raiderMult;
     }
+    // The Jarls' axes: infantry that burn what they reach.
+    if (attacker && target.kind === Kind.Building && attacker.oath.infantryBuildingDmgMult !== 1 &&
+        UNITS[sourceType]?.armorClass === ArmorClass.Infantry) {
+      raw *= attacker.oath.infantryBuildingDmgMult;
+    }
     // Armour subtracts flat, which is fine at the handful of points a unit
     // carries in a normal match — but Warband relics, synergies and augments
     // stack it far past any attack value in the game, and a flat subtraction
@@ -2639,7 +2828,7 @@ export class World {
       // The Champion falls — but rises again at the Town Center after a while.
       if (def?.hero && owner) {
         owner.heroState = "respawning";
-        owner.heroRespawnTimer = HERO_RESPAWN_SEC;
+        owner.heroRespawnTimer = HERO_RESPAWN_SEC * owner.oath.heroRespawnMult;
         owner.heroLevel = e.heroLevel;
       }
       this.emit("death", e.x, e.y, e.team, e.type);
@@ -2796,7 +2985,9 @@ export class World {
       if (!e.alive || e.kind !== Kind.Unit) continue;
       // attackCooldown is non-zero exactly while a unit is recovering from a
       // swing or a shot, so it is already the "has just attacked" signal.
-      if (this.terrainAt(e.x, e.y) !== Terrain.Forest || e.attackCooldown > 0) {
+      // A Ranger keeps its cover while it shoots — that is the Oath of the Bow.
+      const shotGivesAway = e.attackCooldown > 0 && !UNITS[e.type]?.stalker;
+      if (this.terrainAt(e.x, e.y) !== Terrain.Forest || shotGivesAway) {
         e.spottedBy = ALL;
         continue;
       }

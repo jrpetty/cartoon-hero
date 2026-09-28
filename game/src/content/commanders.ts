@@ -37,11 +37,18 @@ export interface CommanderDef {
   color: string;
   bonus: CommanderBonus;
   power?: CommanderPower;
+  /**
+   * The Oath this commander favours. Swearing it makes the Oath's effects
+   * stronger (content/oaths.ts, AFFINITY) — the link between the commander you
+   * bring into a match and the realm you become in it.
+   */
+  oath?: string;
 }
 
 export const COMMANDERS: Record<string, CommanderDef> = {
   steward: {
     id: "steward",
+    oath: "plough",
     name: "Aldric",
     title: "The Steward",
     desc: "A master of the early game. Begins each match with two extra villagers already at work.",
@@ -50,6 +57,7 @@ export const COMMANDERS: Record<string, CommanderDef> = {
   },
   quartermaster: {
     id: "quartermaster",
+    oath: "bow",
     name: "Mirelle",
     title: "The Quartermaster",
     desc: "Nothing is wasted under her ledger. Every villager gathers 15% faster, all game.",
@@ -58,6 +66,7 @@ export const COMMANDERS: Record<string, CommanderDef> = {
   },
   architect: {
     id: "architect",
+    oath: "hearth",
     name: "Doryan",
     title: "The Architect",
     desc: "Raises walls and halls in a blink — your villagers build and repair twice as fast.",
@@ -66,6 +75,7 @@ export const COMMANDERS: Record<string, CommanderDef> = {
   },
   marshal: {
     id: "marshal",
+    oath: "shield",
     name: "Sir Garron",
     title: "The Marshal",
     desc: "Drills a hardier host. Every soldier you field has +8% health and +1 armor.",
@@ -74,6 +84,7 @@ export const COMMANDERS: Record<string, CommanderDef> = {
   },
   magnate: {
     id: "magnate",
+    oath: "coin",
     name: "Cassia",
     title: "The Magnate",
     desc: "Old coin opens every door. Start with a tidy stockpile of food, wood and gold.",
@@ -82,6 +93,7 @@ export const COMMANDERS: Record<string, CommanderDef> = {
   },
   drillmaster: {
     id: "drillmaster",
+    oath: "sword",
     name: "Vasco",
     title: "The Drillmaster",
     desc: "Forges veterans from recruits — your units earn veterancy 40% faster from kills.",
@@ -90,6 +102,7 @@ export const COMMANDERS: Record<string, CommanderDef> = {
   },
   warden: {
     id: "warden",
+    oath: "engine",
     name: "Brenna",
     title: "The Warden",
     desc: "Plans for a siege from the first dawn. Begin with +10 population headroom and +1 unit armor.",
@@ -98,6 +111,7 @@ export const COMMANDERS: Record<string, CommanderDef> = {
   },
   banneret: {
     id: "banneret",
+    oath: "lance",
     name: "Lady Yorath",
     title: "The Banneret",
     desc: "Plants a rallying standard: villagers near it gather 15% faster and soldiers are bolstered and mended.",
@@ -118,6 +132,7 @@ export const COMMANDERS: Record<string, CommanderDef> = {
   },
   warpriest: {
     id: "warpriest",
+    oath: "crown",
     name: "Father Edmun",
     title: "The Warpriest",
     desc: "Raises a holy standard that knits wounds fast — strong battlefield healing where it stands.",

@@ -203,6 +203,8 @@ export interface Entity {
   // Visual helpers (render only; safe to derive)
   animPhase: number;
   hitFlash: number;
+  /** World units run since the last blow — a charging unit's run-up. */
+  chargeRun: number;
   lastDamageTime: number;
   lastAttackerId: EntityId; // who last hit us (for retaliation / anti-kite)
   selected: boolean;

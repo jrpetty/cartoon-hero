@@ -15,6 +15,7 @@ import {
   drawSelectionRing,
   drawUnit,
   setDrawDayPhase,
+  setFactionResolver,
   setTeamColorResolver,
 } from "./draw";
 import { PAL, teamColor, withAlpha } from "./palette";
@@ -257,6 +258,8 @@ export class Renderer {
     const W = canvas.width;
     const H = canvas.height;
     setDrawDayPhase(this.dayPhase);
+    // Each team is drawn in its faction's style.
+    setFactionResolver((team) => (team < world.numTeams ? world.player(team as Team).faction : undefined));
     // Spectators see absolute per-realm colours (every side distinct); players
     // see units coloured by relation to themselves (you/ally/enemy).
     if (world.revealAll) {

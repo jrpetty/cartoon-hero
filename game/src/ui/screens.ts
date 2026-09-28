@@ -24,6 +24,11 @@ import { MatchReport } from "../sim/metrics";
 import { CustomMap, listCustomMaps, mapSupports } from "../maps/custom";
 import { drawMapThumbnail } from "./map_thumb";
 import { REPORT_TABS, ReportTab, drawReportKey, drawReportTab, reportSubtitle } from "./match_report";
+import { FACTIONS, FACTION_IDS, DEFAULT_FACTION, factionOf } from "../content/factions";
+import { drawBuilding, drawUnit, setFactionResolver } from "../render/draw";
+import { makeEntity } from "../sim/world";
+import { BUILDINGS } from "../content/buildings";
+import { Kind, Team } from "../sim/types";
 
 export interface SkirmishConfig {
   presetId: string;
@@ -34,6 +39,9 @@ export interface SkirmishConfig {
   players: number; // 2 = 1v1, 4 = FFA or 2v2
   allied: boolean; // true = 2v2 teams (you + ally vs two foes)
   commander: string; // selected commander id
+  /** Your faction, and each bot's by team index ("" = a seeded random pick). */
+  faction: string;
+  aiFactions: string[];
   nomad: boolean; // no starting Town Center; villagers scattered on the map
   mode: GameMode; // conquest / survival / koth / regicide
 }
@@ -252,6 +260,8 @@ export class SetupScreen {
     players: 2,
     allied: false,
     commander: "",
+    faction: "",
+    aiFactions: [],
     nomad: false,
     mode: "conquest",
   };
@@ -429,6 +439,9 @@ export class SetupScreen {
     }
     y += 80;
 
+    // Faction — who your realm is.
+    y = this.drawFactionPanel(x0, y, colW, profile);
+
     // Commander selector (cycle through the ones you own).
     if (!profile.ownsCommander(this.config.commander)) {
       this.config.commander = profile.data.commander || profile.data.commanders[0] || "";
@@ -442,6 +455,8 @@ export class SetupScreen {
       const next = owned[(i + dir + owned.length) % owned.length];
       this.config.commander = next;
       profile.selectCommander(next);
+      // Remember the pairing, so this faction comes back with this commander.
+      profile.pairCommander(this.config.faction || DEFAULT_FACTION, next);
       audio.play("ui");
     };
     if (owned.length > 1) {
@@ -498,6 +513,98 @@ export class SetupScreen {
       ui.text("scroll for more", x0 + 146, by2 + 26, { size: 11, color: "#8f8770" });
     }
     return action;
+  }
+
+  private previews: Record<string, { tc: ReturnType<typeof makeEntity>; unit: ReturnType<typeof makeEntity> }> = {};
+
+  /**
+   * Six cards, each with the faction's own Town Centre and signature soldier
+   * drawn live in its style — the look is the first thing a faction is — then
+   * what it is good at, what it pays for it, and when it is strongest.
+   */
+  private drawFactionPanel(x0: number, y: number, colW: number, profile: Profile): number {
+    if (!this.config.faction) this.config.faction = profile.data.faction && FACTIONS[profile.data.faction as keyof typeof FACTIONS] ? profile.data.faction : DEFAULT_FACTION;
+    const f = factionOf(this.config.faction);
+    const cardGap = 10;
+    const cardW = Math.floor((colW - 32 - cardGap * (FACTION_IDS.length - 1)) / FACTION_IDS.length);
+    const cardH = 132;
+    const panelH = 60 + cardH + 150;
+    ui.panel(x0, y, colW, panelH);
+    ui.text("Faction", x0 + 16, y + 24, { size: 16, bold: true, color: PAL.uiAccent });
+    ui.text("Who your realm is: its look, its bonuses, its own soldiers. Every faction swears the same Oaths as it rises.", x0 + 100, y + 25, { size: 12, color: "#bdb49a" });
+    const ctx = ui.ctx;
+    const CURVE = { early: "Strong early", mid: "Peaks mid-game", late: "Strong late", steady: "Steady" } as const;
+    FACTION_IDS.forEach((id, i) => {
+      const d = FACTIONS[id];
+      const cx = x0 + 16 + i * (cardW + cardGap);
+      const cy = y + 44;
+      const sel = this.config.faction === id;
+      if (ui.button("", cx, cy, cardW, cardH, { accent: sel, tooltip: [d.name, d.era, d.tagline] })) {
+        this.config.faction = id;
+        profile.selectFaction(id);
+        this.config.commander = profile.data.commander;
+        audio.play("ui");
+      }
+      if (sel) {
+        ctx.strokeStyle = d.color; ctx.lineWidth = 2.5;
+        ctx.beginPath(); ctx.roundRect(cx + 1, cy + 1, cardW - 2, cardH - 2, 6); ctx.stroke();
+      }
+      // The Town Centre and a soldier, drawn in the faction's own style.
+      const pv = this.previews[id] ?? (this.previews[id] = { tc: makeEntity(), unit: makeEntity() });
+      const tcDef = BUILDINGS.town_center;
+      Object.assign(pv.tc, { kind: Kind.Building, type: "town_center", team: Team.Player, x: 0, y: 0, radius: (tcDef.tiles * 32) / 2, hp: tcDef.hp, maxHp: tcDef.hp, buildState: 0, buildProgress: 1 });
+      const soldier = Object.values(d.replaces)[0] ?? d.extra[0] ?? "militia";
+      const ud = UNITS[soldier];
+      Object.assign(pv.unit, { kind: Kind.Unit, type: soldier, team: Team.Player, x: 0, y: 0, radius: ud.radius, facing: -0.5, hp: ud.hp, maxHp: ud.hp, animPhase: 0.3, attackInterval: ud.attackInterval });
+      setFactionResolver(() => id);
+      ctx.save();
+      ctx.beginPath(); ctx.rect(cx + 3, cy + 3, cardW - 6, 86); ctx.clip();
+      ctx.translate(cx + cardW * 0.44, cy + 62);
+      ctx.scale(0.72, 0.72);
+      try { drawBuilding(ctx, pv.tc, 0, Team.Player); } catch { /* a preview never breaks the menu */ }
+      ctx.restore();
+      ctx.save();
+      ctx.translate(cx + cardW * 0.8, cy + 78);
+      ctx.scale(1.7, 1.7);
+      try { drawUnit(ctx, pv.unit, 0, 0); } catch { /* ditto */ }
+      ctx.restore();
+      setFactionResolver(null);
+      ui.text(d.name.replace(/^The /, ""), cx + cardW / 2, cy + 104, { align: "center", size: 13.5, bold: true, color: sel ? "#ffe9b0" : PAL.uiParchment });
+      ui.text(CURVE[d.curve], cx + cardW / 2, cy + 121, { align: "center", size: 10.5, color: sel ? d.color : "#9b927c" });
+    });
+
+    // The chosen faction, in full.
+    let dy = y + 44 + cardH + 22;
+    ui.text(`${f.name} — ${f.era}`, x0 + 16, dy, { size: 15, bold: true, color: f.color });
+    ui.text(`“${f.tagline}”`, x0 + 16, dy + 20, { size: 12.5, color: "#d8cdb4", font: "Georgia, serif" });
+    dy += 44;
+    const half = (colW - 48) / 2;
+    f.strengths.forEach((line, i) => {
+      ui.text(`+  ${line}`, x0 + 16, dy + i * 18, { size: 12.5, color: "#9fe0a0" });
+    });
+    f.weaknesses.forEach((line, i) => {
+      ui.text(`–  ${line}`, x0 + 32 + half, dy + i * 18, { size: 12.5, color: "#e8a898" });
+    });
+
+    // Opponents' factions: one chip per bot, cycling Random and each faction.
+    const bots = Math.max(0, this.config.players - 1);
+    const oy = y + panelH - 30;
+    ui.text("Opponents", x0 + 32 + half, oy + 5, { size: 12, bold: true, color: PAL.uiAccent });
+    const chipW = Math.max(52, Math.min(96, (half - 90) / Math.max(1, bots) - 4));
+    for (let t = 1; t <= bots; t++) {
+      const cx = x0 + 32 + half + 80 + (t - 1) * (chipW + 4);
+      if (cx + chipW > x0 + colW - 12) break;
+      const cur = this.config.aiFactions[t] ?? "";
+      const label = cur ? FACTIONS[cur as keyof typeof FACTIONS].name.replace(/^The /, "") : "Random";
+      if (ui.button(label, cx, oy - 8, chipW, 24, { accent: !!cur, size: 10.5, tooltip: [`Bot ${t + 1}'s faction`, "Click to cycle. Random is picked from the match seed."] })) {
+        const order = ["", ...FACTION_IDS];
+        const next = order[(order.indexOf(cur) + 1) % order.length];
+        while (this.config.aiFactions.length <= t) this.config.aiFactions.push("");
+        this.config.aiFactions[t] = next;
+        audio.play("ui");
+      }
+    }
+    return y + panelH + 16;
   }
 
   /** One chip per opponent bot; click to cycle just that bot's personality. */
@@ -958,7 +1065,7 @@ export class ArmoryScreen {
     ui.text("Battle Plan — equip one Offensive, Defensive & Supportive boon, then set which age each unlocks (they stack as you advance).", x0 + 16, y, { size: 13, color: "#d8cdb4" });
     y += 22;
 
-    const AGE_LABEL = ["Age I (start)", "Age II", "Age III"];
+    const AGE_LABEL = ["Hearth Age (start)", "Banner Age", "Crown Age"];
     const cw = (colW - 24) / 3;
     BOON_CATEGORIES.forEach((cat, ci) => {
       const cx = x0 + ci * (cw + 12);

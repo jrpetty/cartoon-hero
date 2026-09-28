@@ -34,6 +34,9 @@ export interface ProfileData {
   achievements: string[];
   /** `week:challengeId` for weekly challenges already paid out. */
   challengesDone: string[];
+  /** The faction last played, and the commander last led with each. */
+  faction?: string;
+  factionCommanders?: Record<string, string>;
 }
 
 function defaultProfile(): ProfileData {
@@ -202,6 +205,25 @@ export class Profile {
       if (r >= 0) out.push({ id, rarity: r, age: this.boonAgeFor(cat) });
     }
     return out;
+  }
+
+  // --- Factions -------------------------------------------------------------
+  /**
+   * Choose the faction to play. Each faction remembers the commander you last
+   * led it with, so switching back brings your pairing back with it.
+   */
+  selectFaction(id: string) {
+    this.data.faction = id;
+    const cmdr = this.data.factionCommanders?.[id];
+    if (cmdr && this.ownsCommander(cmdr)) this.data.commander = cmdr;
+    this.save();
+  }
+
+  /** Remember `commander` as the one this faction is led by. */
+  pairCommander(faction: string, commander: string) {
+    if (!this.data.factionCommanders) this.data.factionCommanders = {};
+    this.data.factionCommanders[faction] = commander;
+    this.save();
   }
 
   // --- Commanders -----------------------------------------------------------

@@ -138,6 +138,10 @@ export interface PlayerReport extends SideReport {
   defeated: boolean;
   /** Match seconds at which it was knocked out, or -1. */
   defeatedAt: number;
+  /** The Oaths it swore, in order — who it became. Absent on older reports. */
+  oaths?: string[];
+  /** Its faction. Absent on older reports. */
+  faction?: string;
 }
 
 export interface MatchReport {
@@ -230,6 +234,8 @@ export function matchReport(world: World, me: Team, mapName: string): MatchRepor
       won: winner !== null && winner !== Team.Neutral && world.areAllied(winner, team),
       defeated: p.defeated,
       defeatedAt: p.defeatedAt ?? -1,
+      oaths: [...(p.oaths ?? [])],
+      faction: p.faction,
     });
   }
   return { you, foe, durationSec: world.time, mapName, players };

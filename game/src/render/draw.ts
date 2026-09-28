@@ -4,7 +4,7 @@
 
 import { BuildState, Entity, Kind, Team } from "../sim/types";
 import { BUILDINGS } from "../content/buildings";
-import { UNITS } from "../content/units";
+import { CHARGE_RUN, UNITS } from "../content/units";
 import { PAL, shade, teamColor, withAlpha } from "./palette";
 import { rarityByIndex } from "../meta/rarity";
 import { TILE } from "../content/balance";
@@ -12,6 +12,15 @@ import { isNight } from "../content/daynight";
 import { ABILITIES } from "../content/abilities";
 import { spriteFor } from "./sprites";
 import { LIT_BUILDINGS } from "./nightlight";
+import { FACTIONS, FactionLook, factionOf } from "../content/factions";
+import {
+  factionBanner, factionCap, factionDoor, factionHelm, factionRoof, factionShield,
+  factionStone, factionTimber, factionWindow,
+} from "./faction_art";
+import {
+  FigureInfo, factionBlade, factionBody, factionBow, factionFace, factionHorse, factionMount,
+  factionRider, factionSpearHead, factionTack,
+} from "./faction_figures";
 
 type Ctx = CanvasRenderingContext2D;
 
@@ -44,6 +53,34 @@ export function setTeamColorResolver(fn: ((team: number) => TeamCol) | null) {
 function tcol(team: number): TeamCol {
   return gColorResolver ? gColorResolver(team) : teamColor(team);
 }
+
+// Which faction each team is, pushed by the renderer each frame. Drawing an
+// entity sets `gLook` to its owner's look, and the shared building and soldier
+// parts below redraw themselves in that style (render/faction_art.ts). The
+// Kingdom's look is the original art, untouched.
+const KINGDOM_LOOK = FACTIONS.kingdom.look;
+let gFactionResolver: ((team: number) => string | undefined) | null = null;
+export function setFactionResolver(fn: ((team: number) => string | undefined) | null) {
+  gFactionResolver = fn;
+}
+let gLook: FactionLook = KINGDOM_LOOK;
+let gTC: TeamCol = teamColor(0);
+let gType = "";
+let gSeed = 0;
+let gTime = 0;
+/** What `body` learned about the figure, for `head` to dress it to match. */
+let gFigure: FigureInfo = { heavy: false, soldier: true, step: 0, seed: 0 };
+/** Units that keep their own headgear whatever their faction. */
+const OWN_HEADGEAR = new Set(["monk", "king", "hero"]);
+function useLook(team: number, type: string, seed = 0, time = 0) {
+  const id = gFactionResolver?.(team);
+  gLook = id ? factionOf(id).look : KINGDOM_LOOK;
+  gTC = tcol(team);
+  gType = type;
+  gSeed = seed;
+  gTime = time;
+}
+const styled = () => gLook !== KINGDOM_LOOK;
 
 
 function shadow(ctx: Ctx, x: number, y: number, rx: number, ry: number, alpha = 0.25) {
@@ -161,6 +198,7 @@ export function drawBuilding(ctx: Ctx, e: Entity, time: number, selectedTeamView
   const def = BUILDINGS[e.type];
   const half = e.radius;
   const tc = tcol(e.team);
+  useLook(e.team, e.type);
 
   if (e.buildState !== BuildState.Done) {
     drawConstruction(ctx, e, half, tc, time);
@@ -345,6 +383,10 @@ function drawConstruction(ctx: Ctx, e: Entity, half: number, tc: TeamCol, time: 
 }
 
 function roofGable(ctx: Ctx, x: number, y: number, w: number, h: number, color: string) {
+  if (styled()) {
+    factionRoof(ctx, gLook, x, y + h / 2, w / 2 + 2, y - h / 2, { main: color, light: shade(color, 0.3), dark: shade(color, -0.3) });
+    return;
+  }
   ctx.fillStyle = color;
   ctx.beginPath();
   ctx.moveTo(x - w / 2 - 2, y + h / 2);
@@ -363,6 +405,7 @@ function roofGable(ctx: Ctx, x: number, y: number, w: number, h: number, color: 
 }
 
 function banner(ctx: Ctx, x: number, y: number, tc: { main: string; dark: string }, time: number, id: number) {
+  if (styled()) { factionBanner(ctx, gLook, x, y, gTC, time, id); return; }
   ctx.strokeStyle = PAL.woodDark;
   ctx.lineWidth = 1.5;
   ctx.beginPath();
@@ -383,6 +426,8 @@ function banner(ctx: Ctx, x: number, y: number, tc: { main: string; dark: string
 // ---- shared shaded-building parts (world space) ----------------------------
 // A stone wall block: vertical gradient, mortar courses, soft outline.
 function stoneBlock(ctx: Ctx, x: number, y: number, w: number, h: number, tone = PAL.stone) {
+  // Every faction's masonry is its own — dark forge stone included.
+  if (styled()) { factionStone(ctx, gLook, x, y, w, h); return; }
   ctx.fillStyle = grad(ctx, x, y, x, y + h, shade(tone, 0.18), shade(tone, -0.18));
   ctx.beginPath();
   ctx.roundRect(x, y, w, h, 3);
@@ -400,6 +445,7 @@ function stoneBlock(ctx: Ctx, x: number, y: number, w: number, h: number, tone =
 
 // A timber-framed plaster wall (warm), with corner posts.
 function woodBlock(ctx: Ctx, x: number, y: number, w: number, h: number) {
+  if (styled()) { factionTimber(ctx, gLook, x, y, w, h); return; }
   ctx.fillStyle = grad(ctx, x, y, x, y + h, "#d8c8a8", "#b49a72");
   ctx.beginPath();
   ctx.roundRect(x, y, w, h, 3);
@@ -412,13 +458,15 @@ function woodBlock(ctx: Ctx, x: number, y: number, w: number, h: number) {
 }
 
 function cornerPosts(ctx: Ctx, x: number, y: number, w: number, h: number) {
-  ctx.fillStyle = PAL.woodDark;
+  if (styled() && (gLook.roof === "yurt" || gLook.roof === "dome" || gLook.roof === "tile")) return;
+  ctx.fillStyle = styled() ? gLook.frame : PAL.woodDark;
   ctx.fillRect(x, y, 4, h);
   ctx.fillRect(x + w - 4, y, 4, h);
 }
 
 // A hipped tiled roof in FULL team colour, shaded with tile rows + ridge.
 function hipRoof(ctx: Ctx, cx: number, eaveY: number, halfW: number, peakY: number, tc: any) {
+  if (styled()) { factionRoof(ctx, gLook, cx, eaveY, halfW, peakY, tc); return; }
   const slate = tc.main;
   ctx.fillStyle = grad(ctx, cx, peakY, cx, eaveY, shade(slate, 0.24), shade(slate, -0.2));
   ctx.beginPath();
@@ -449,6 +497,7 @@ function hipRoof(ctx: Ctx, cx: number, eaveY: number, halfW: number, peakY: numb
 
 // An arched timber door.
 function archDoor(ctx: Ctx, cx: number, baseY: number, w: number, h: number) {
+  if (styled()) { factionDoor(ctx, gLook, cx, baseY, w, h); return; }
   ctx.fillStyle = grad(ctx, cx, baseY - h, cx, baseY, PAL.wood, PAL.woodDark);
   ctx.beginPath();
   ctx.moveTo(cx - w / 2, baseY);
@@ -468,6 +517,7 @@ function archDoor(ctx: Ctx, cx: number, baseY: number, w: number, h: number) {
 
 // A small window with a warm-lit pane.
 function litWindow(ctx: Ctx, cx: number, cy: number, s: number) {
+  if (styled()) { factionWindow(ctx, gLook, cx, cy, s); return; }
   ctx.fillStyle = "rgba(20,16,10,0.65)";
   ctx.fillRect(cx - s, cy - s, s * 2, s * 2);
   ctx.fillStyle = "#ffd98a";
@@ -482,6 +532,7 @@ function litWindow(ctx: Ctx, cx: number, cy: number, s: number) {
 
 // A conical team-colour roof for round towers.
 function coneRoof(ctx: Ctx, cx: number, baseY: number, halfW: number, peakY: number, tc: any) {
+  if (styled()) { factionCap(ctx, gLook, cx, baseY, halfW, peakY, tc); return; }
   const c = tc.main;
   ctx.fillStyle = grad(ctx, cx, peakY, cx, baseY, shade(c, 0.24), shade(c, -0.2));
   ctx.beginPath();
@@ -556,6 +607,10 @@ function drawMill(ctx: Ctx, e: Entity, half: number, tc: any, time: number) {
 function drawLumberCamp(ctx: Ctx, e: Entity, half: number) {
   // timber lean-to (a utility shed — no team roof)
   woodBlock(ctx, e.x - half * 0.9, e.y - half * 0.25, half * 0.95, half * 1.0);
+  if (styled()) {
+    // A small roof in the faction's form over the shed.
+    hipRoof(ctx, e.x - half * 0.42, e.y - half * 0.2, half * 0.62, e.y - half * 0.62, { main: shade(gTC.main, -0.15), light: gTC.light, dark: gTC.dark });
+  } else {
   ctx.fillStyle = grad(ctx, e.x, e.y - half * 0.55, e.x, e.y - half * 0.15, shade(PAL.thatch, 0.1), PAL.thatchDark);
   ctx.beginPath();
   ctx.moveTo(e.x - half * 0.95, e.y - half * 0.15);
@@ -565,6 +620,7 @@ function drawLumberCamp(ctx: Ctx, e: Entity, half: number) {
   ctx.closePath();
   ctx.fill();
   softOutline(ctx, 1.4);
+  }
   // log pile
   ctx.fillStyle = PAL.trunk;
   for (let i = 0; i < 3; i++) {
@@ -802,6 +858,20 @@ function drawMarket(ctx: Ctx, e: Entity, half: number, tc: any) {
 }
 
 function drawPalisade(ctx: Ctx, e: Entity, half: number) {
+  if (styled() && gLook.roof === "dome") {
+    // A barrier fence: pylons with a beam strung between them.
+    for (const px of [-1, 1]) {
+      ctx.fillStyle = grad(ctx, e.x + px * half * 0.8, e.y - half, e.x + px * half * 0.8, e.y + half, "#f0f4f8", "#9aa2ae");
+      ctx.fillRect(e.x + px * half * 0.8 - 2.5, e.y - half * 0.85, 5, half * 1.4);
+    }
+    ctx.save();
+    ctx.shadowColor = gLook.accent; ctx.shadowBlur = 5;
+    ctx.fillStyle = withAlpha(gLook.accent, 0.75);
+    ctx.fillRect(e.x - half * 0.8, e.y - half * 0.45, half * 1.6, 2);
+    ctx.fillRect(e.x - half * 0.8, e.y + half * 0.05, half * 1.6, 2);
+    ctx.restore();
+    return;
+  }
   // A run of sharpened logs lashed together.
   ctx.fillStyle = PAL.woodDark;
   ctx.fillRect(e.x - half, e.y - 2, half * 2, 5);
@@ -824,14 +894,20 @@ function drawPalisade(ctx: Ctx, e: Entity, half: number) {
 
 function drawStoneWall(ctx: Ctx, e: Entity, half: number) {
   const g = ctx.createLinearGradient(e.x, e.y - half, e.x, e.y + half);
-  g.addColorStop(0, PAL.stoneLight);
-  g.addColorStop(1, PAL.stoneDark);
+  const base = styled() ? gLook.stone : PAL.stone;
+  g.addColorStop(0, styled() ? shade(base, 0.18) : PAL.stoneLight);
+  g.addColorStop(1, styled() ? shade(base, -0.25) : PAL.stoneDark);
   ctx.fillStyle = g;
   ctx.fillRect(e.x - half, e.y - half * 0.7, half * 2, half * 1.5);
   // crenellations
-  ctx.fillStyle = PAL.stoneDark;
+  ctx.fillStyle = styled() ? shade(base, -0.3) : PAL.stoneDark;
   for (let i = 0; i < 3; i++) {
     ctx.fillRect(e.x - half + i * (half * 0.72), e.y - half * 0.95, half * 0.5, half * 0.3);
+  }
+  // The Ascendancy's walls carry a lit strip.
+  if (styled() && gLook.roof === "dome") {
+    ctx.fillStyle = withAlpha(gLook.accent, 0.8);
+    ctx.fillRect(e.x - half, e.y - half * 0.2, half * 2, 1.6);
   }
   // mortar lines
   ctx.strokeStyle = withAlpha(PAL.stoneDark, 0.6);
@@ -846,7 +922,7 @@ function drawStoneWall(ctx: Ctx, e: Entity, half: number) {
 
 function drawGate(ctx: Ctx, e: Entity, half: number, tc: any) {
   // stone posts
-  ctx.fillStyle = PAL.stoneDark;
+  ctx.fillStyle = styled() ? shade(gLook.stone, -0.25) : PAL.stoneDark;
   ctx.fillRect(e.x - half, e.y - half, half * 0.5, half * 2);
   ctx.fillRect(e.x + half * 0.5, e.y - half, half * 0.5, half * 2);
   ctx.fillStyle = PAL.stone;
@@ -927,6 +1003,14 @@ function drawWatchfire(ctx: Ctx, e: Entity, half: number, time: number) {
 }
 
 function drawTower(ctx: Ctx, e: Entity, half: number, tc: any) {
+  if (styled()) {
+    // The faction's own masonry, its own cap.
+    stoneBlock(ctx, e.x - half * 0.72, e.y - half * 1.05, half * 1.44, half * 1.85);
+    ctx.fillStyle = "#241c12";
+    ctx.fillRect(e.x - 1.5, e.y - half * 0.4, 3, half * 0.5);
+    coneRoof(ctx, e.x, e.y - half * 1.0, half * 0.92, e.y - half * 1.8, tc);
+    return;
+  }
   // tall cylinder reads via horizontal gradient (rounded shading)
   const g = ctx.createLinearGradient(e.x - half, e.y, e.x + half, e.y);
   g.addColorStop(0, PAL.stoneLight);
@@ -970,7 +1054,8 @@ function drawCastle(ctx: Ctx, e: Entity, half: number, tc: any, time: number) {
   for (const [px, py] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) {
     const cx = e.x + px * half * 0.72;
     const cy = e.y + py * half * 0.72;
-    ctx.fillStyle = grad(ctx, cx - half * 0.32, cy, cx + half * 0.32, cy, PAL.stoneLight, PAL.stoneDark);
+    const st = styled() ? gLook.stone : PAL.stone;
+    ctx.fillStyle = grad(ctx, cx - half * 0.32, cy, cx + half * 0.32, cy, shade(st, 0.18), shade(st, -0.25));
     ctx.beginPath();
     ctx.arc(cx, cy, half * 0.32, 0, Math.PI * 2);
     ctx.fill();
@@ -1031,6 +1116,7 @@ function drawSiegeWorkshop(ctx: Ctx, e: Entity, half: number) {
 
 export function drawUnit(ctx: Ctx, e: Entity, time: number, lod = 0) {
   const tc = tcol(e.team);
+  useLook(e.team, e.type, e.id, time);
   // Level-of-detail blob: a single filled body (+ a flag dot for the champion).
   // Used when zoomed out / in big crowds, where the full art is sub-pixel.
   if (lod > 0) {
@@ -1157,6 +1243,18 @@ export function drawUnit(ctx: Ctx, e: Entity, time: number, lod = 0) {
     case "hero": drawHero(ctx, e, tc, lunge, time); break;
     case "king": drawKing(ctx, e, tc, lunge, time); break;
     case "monk": drawMonk(ctx, e, tc, time); break;
+    case "sworn_blade": drawSwornBlade(ctx, e, tc, lunge); break;
+    case "lancer": drawLancer(ctx, e, tc, moving, lunge); break;
+    case "ranger": drawRanger(ctx, e, tc, atkFrac); break;
+    case "halberdier": drawHalberdier(ctx, e, tc, lunge); break;
+    case "great_bombard": drawGreatBombard(ctx, e, atkFrac); break;
+    case "royal_guard": drawRoyalGuard(ctx, e, tc, lunge, time); break;
+    case "yeoman": drawLongbow(ctx, e, tc, atkFrac); break;
+    case "legionary": drawLegionary(ctx, e, tc, lunge); break;
+    case "samurai": drawSamurai(ctx, e, tc, lunge); break;
+    case "horse_archer": drawHorseArcher(ctx, e, tc, moving, atkFrac); break;
+    case "pulse_trooper": drawPulseTrooper(ctx, e, tc, atkFrac, time); break;
+    case "skimmer": drawSkimmer(ctx, e, tc, moving, lunge, time); break;
     default: {
       ctx.fillStyle = tc.main;
       ctx.beginPath();
@@ -1253,6 +1351,10 @@ interface BodyOpts {
 /** Striding legs + a layered, shaded torso (surcoat + belt + rim light). */
 function body(ctx: Ctx, e: Entity, cloth: string, clothDark: string, opts: BodyOpts = {}) {
   const r = e.radius;
+  const def = UNITS[gType];
+  gFigure = { heavy: !!(opts.chestPlate || opts.pauldrons), soldier: !def?.canGather && !OWN_HEADGEAR.has(gType), step: gait(e), seed: e.id };
+  // Every other faction draws the whole figure its own way.
+  if (styled() && !OWN_HEADGEAR.has(gType) && factionBody(ctx, gLook, r, cloth, clothDark, gFigure, gTC)) return;
   drawLegs(ctx, r, gait(e), opts.legCol ?? clothDark);
   // surcoat
   ctx.fillStyle = grad(ctx, 0, -r * 0.55, 0, r * 0.45, shade(cloth, 0.16), clothDark);
@@ -1264,8 +1366,10 @@ function body(ctx: Ctx, e: Entity, cloth: string, clothDark: string, opts: BodyO
   ctx.closePath();
   ctx.fill();
   softOutline(ctx, 1.8);
+  const plate = styled() ? gLook.armour : PAL.steel;
+  const plateDark = styled() ? shade(gLook.armour, -0.3) : PAL.steelDark;
   if (opts.chestPlate) {
-    ctx.fillStyle = grad(ctx, 0, -r * 0.4, 0, r * 0.3, PAL.steel, PAL.steelDark);
+    ctx.fillStyle = grad(ctx, 0, -r * 0.4, 0, r * 0.3, plate, plateDark);
     ctx.beginPath();
     ctx.arc(0, -r * 0.02, r * 0.42, 0, Math.PI * 2);
     ctx.fill();
@@ -1292,7 +1396,7 @@ function body(ctx: Ctx, e: Entity, cloth: string, clothDark: string, opts: BodyO
   // steel pauldrons
   if (opts.pauldrons) {
     for (const sx of [-1, 1]) {
-      ctx.fillStyle = grad(ctx, sx * r * 0.5, -r * 0.5, sx * r * 0.5, -r * 0.2, PAL.steel, PAL.steelDark);
+      ctx.fillStyle = grad(ctx, sx * r * 0.5, -r * 0.5, sx * r * 0.5, -r * 0.2, plate, plateDark);
       ctx.beginPath();
       ctx.ellipse(sx * r * 0.46, -r * 0.32, r * 0.2, r * 0.15, sx * 0.4, 0, Math.PI * 2);
       ctx.fill();
@@ -1324,6 +1428,14 @@ function head(ctx: Ctx, r: number, opts: HeadOpts = {}) {
     ctx.beginPath();
     ctx.arc(0, hy - r * 0.04, r * 0.3, Math.PI * 1.02, Math.PI * 1.98);
     ctx.fill();
+  }
+  if (styled() && !OWN_HEADGEAR.has(gType)) {
+    factionFace(ctx, gLook, 0, hy, r * 0.3, gFigure);
+    // Heavy troops of the Shogunate and Khanate wear the war helm, their
+    // lighter troops the hat — whatever the unit's own art asked for.
+    const kind = gFigure.soldier && gFigure.heavy && helm !== "bare" ? "full" : helm;
+    factionHelm(ctx, gLook, 0, hy, r * 0.3, kind, gTC);
+    return;
   }
   if (helm === "cap" || helm === "open" || helm === "full") {
     ctx.fillStyle = grad(ctx, 0, hy - r * 0.3, 0, hy + r * 0.1, shade(tone, 0.16), shade(tone, -0.16));
@@ -1388,6 +1500,7 @@ function swungDir(e: Entity, arc: number): [number, number, number] {
 
 /** Draw a shaded blade from the body out along (dx,dy). */
 function blade(ctx: Ctx, r: number, dx: number, dy: number, len: number, hiltCol: string, len0 = 0.3) {
+  if (styled() && factionBlade(ctx, gLook, r, dx, dy, len, len0)) return;
   const x0 = dx * r * len0;
   const y0 = dy * r * len0;
   // crossguard
@@ -1417,6 +1530,7 @@ function blade(ctx: Ctx, r: number, dx: number, dy: number, len: number, hiltCol
 function roundShield(ctx: Ctx, r: number, fx: number, fy: number, tc: any) {
   const sx = -fy * r * 0.7;
   const sy = fx * r * 0.7;
+  if (styled()) { factionShield(ctx, gLook, sx, sy, r, tc); return; }
   ctx.fillStyle = grad(ctx, sx, sy - r * 0.4, sx, sy + r * 0.4, PAL.steel, PAL.steelDark);
   ctx.beginPath();
   ctx.ellipse(sx, sy, r * 0.38, r * 0.46, 0, 0, Math.PI * 2);
@@ -1494,6 +1608,7 @@ function drawSpearman(ctx: Ctx, e: Entity, tc: any, lunge: number) {
   ctx.fillStyle = PAL.steel;
   const tipX = fx * r * reach;
   const tipY = fy * r * reach;
+  if (styled() && factionSpearHead(ctx, gLook, tipX, tipY, fx, fy, r)) return;
   ctx.beginPath();
   ctx.moveTo(tipX + fx * 4, tipY + fy * 4);
   ctx.lineTo(tipX - fy * 2.4, tipY + fx * 2.4);
@@ -1572,6 +1687,7 @@ function drawLongbow(ctx: Ctx, e: Entity, tc: any, atkFrac: number) {
   head(ctx, r, { helm: "cap", tone: "#4a5c3a" });
   const [fx, fy] = weaponAngleParts(e.facing);
   const draw = Math.max(0, 1 - atkFrac); // full draw just before loosing
+  if (styled() && factionBow(ctx, gLook, r, fx, fy, e.facing, draw, true)) return;
   const bx = fx * r * 0.55 - fy * r * 0.2;
   const by = fy * r * 0.55 + fx * r * 0.2;
   ctx.strokeStyle = PAL.woodLight;
@@ -1720,6 +1836,7 @@ function drawArcher(ctx: Ctx, e: Entity, tc: any, atkFrac: number) {
   const [fx, fy] = weaponAngleParts(e.facing);
   // bow: arc perpendicular to facing; draws back as attack readies
   const draw = atkFrac > 0.7 ? (atkFrac - 0.7) / 0.3 : 0;
+  if (styled() && factionBow(ctx, gLook, r, fx, fy, e.facing, draw, false)) return;
   ctx.strokeStyle = PAL.woodDark;
   ctx.lineWidth = 1.8;
   ctx.beginPath();
@@ -1770,11 +1887,18 @@ interface HorseOpts {
 /** A shaded horse oriented along facing, with galloping legs, mane and tail. */
 function horse(ctx: Ctx, e: Entity, moving: boolean, opts: HorseOpts) {
   const r = e.radius;
-  const sx = opts.scaleX ?? 1.2;
+  let sx = opts.scaleX ?? 1.2;
   const sy = opts.scaleY ?? 0.56;
+  if (styled()) {
+    const h = factionHorse(gLook, opts.coat, sx);
+    opts = { ...opts, coat: h.coat };
+    sx = h.sx;
+  }
   const gallop = moving ? Math.sin(e.animPhase * (opts.gallopHz ?? 11)) * 1.3 : 0;
   ctx.save();
   ctx.rotate(e.facing);
+  // The Ascendancy ride sleds, not horses.
+  if (styled() && factionMount(ctx, gLook, r, sx, gTime + e.id, gTC, moving)) { ctx.restore(); return; }
   // legs (behind the body)
   ctx.strokeStyle = shade(opts.coat, -0.32);
   ctx.lineCap = "round";
@@ -1813,8 +1937,10 @@ function horse(ctx: Ctx, e: Entity, moving: boolean, opts: HorseOpts) {
   ctx.moveTo(r * sx * 0.5, -r * 0.3);
   ctx.lineTo(r * sx * 0.95, -r * 0.22);
   ctx.stroke();
-  // caparison
-  if (opts.caparison) {
+  // caparison — or the faction's own horse furniture
+  if (styled()) {
+    factionTack(ctx, gLook, r, sx, sy, gTC);
+  } else if (opts.caparison) {
     ctx.fillStyle = withAlpha(opts.caparison, opts.capAlpha ?? 0.85);
     ctx.beginPath();
     ctx.ellipse(-r * 0.12, 0, r * sx * 0.62, r * sy * 0.95, 0, 0, Math.PI * 2);
@@ -1826,6 +1952,7 @@ function horse(ctx: Ctx, e: Entity, moving: boolean, opts: HorseOpts) {
 interface RiderOpts { coat: string; coatDark: string; helm?: HelmKind; tone?: string; plume?: string; }
 /** A mounted rider's torso + head, sitting just back of the saddle. */
 function rider(ctx: Ctx, r: number, opts: RiderOpts) {
+  if (styled()) factionRider(ctx, gLook, r, gTC, gSeed, true);
   ctx.fillStyle = grad(ctx, 0, -r * 0.72, 0, -r * 0.1, shade(opts.coat, 0.15), opts.coatDark);
   ctx.beginPath();
   ctx.ellipse(-r * 0.08, -r * 0.4, r * 0.34, r * 0.44, 0, 0, Math.PI * 2);
@@ -1836,6 +1963,15 @@ function rider(ctx: Ctx, r: number, opts: RiderOpts) {
   ctx.arc(-r * 0.08, -r * 0.68, r * 0.22, 0, Math.PI * 2);
   ctx.fill();
   softOutline(ctx, 1);
+  if (styled()) {
+    factionRider(ctx, gLook, r, gTC, gSeed, false);
+    // Re-draw the face over the torso detail, then dress it.
+    ctx.fillStyle = PAL.skin;
+    ctx.beginPath(); ctx.arc(-r * 0.08, -r * 0.68, r * 0.22, 0, Math.PI * 2); ctx.fill();
+    factionFace(ctx, gLook, -r * 0.08, -r * 0.68, r * 0.22, { heavy: true, soldier: true, step: 0, seed: gSeed });
+    factionHelm(ctx, gLook, -r * 0.08, -r * 0.68, r * 0.22, opts.helm === "bare" ? "bare" : "full", gTC);
+    return;
+  }
   if (opts.helm && opts.helm !== "bare") {
     ctx.fillStyle = grad(ctx, 0, -r * 0.92, 0, -r * 0.5, shade(opts.tone ?? PAL.steel, 0.15), shade(opts.tone ?? PAL.steel, -0.15));
     ctx.beginPath();
@@ -1926,6 +2062,7 @@ function drawCrossbow(ctx: Ctx, e: Entity, tc: any, atkFrac: number) {
   body(ctx, e, tc.main, tc.dark);
   head(ctx, r, { helm: "open", tone: PAL.steelDark }); // kettle helm
   const [fx, fy] = weaponAngleParts(e.facing);
+  if (styled() && gLook.helm === "visor" && factionBow(ctx, gLook, r, fx, fy, e.facing, atkFrac > 0.85 ? 1 : 0, true)) return;
   const px = -fy;
   const py = fx;
   // horizontal stock pointed forward
@@ -2176,6 +2313,364 @@ function drawTwohand(ctx: Ctx, e: Entity, tc: any, lunge: number) {
 
 // Pikeman: a far longer haft than the Spearman, a small team pennant flying at
 // the grip, and a slim leaf-blade — the reach is the read.
+// --------------------------------------------------------- faction units --
+// Drawn through the shared parts, so each wears its faction's helmet, armour
+// and shield automatically; what is here is the weapon and the silhouette.
+
+/** The Legion: scutum up, short sword low and forward. */
+function drawLegionary(ctx: Ctx, e: Entity, tc: any, lunge: number) {
+  const r = e.radius;
+  const [fx, fy] = weaponAngleParts(e.facing);
+  roundShield(ctx, r, fx, fy, tc);
+  body(ctx, e, tc.main, tc.dark, { chestPlate: true });
+  head(ctx, r, { helm: "full" });
+  const [dx, dy] = swungDir(e, 0.6); // a thrust, not a swing
+  blade(ctx, r, dx, dy, 1.25 + lunge * 0.5, shade(tc.dark, -0.1));
+}
+
+/** The Shogunate: lacquered armour and a long, slightly curved blade. */
+function drawSamurai(ctx: Ctx, e: Entity, tc: any, lunge: number) {
+  const r = e.radius;
+  body(ctx, e, tc.main, tc.dark, { pauldrons: true, chestPlate: true });
+  head(ctx, r, { helm: "full" });
+  const [dx, dy, s] = swungDir(e, 1.6);
+  const len = 2.1 + lunge * 0.8 + s * 0.2;
+  const x0 = dx * r * 0.25, y0 = dy * r * 0.25;
+  const x1 = dx * r * len, y1 = dy * r * len;
+  // Curved edge: bend the line a touch off the swing.
+  const mx = (x0 + x1) / 2 - dy * r * 0.14, my = (y0 + y1) / 2 + dx * r * 0.14;
+  ctx.lineCap = "round";
+  ctx.strokeStyle = "#1c1410"; // tsuka
+  ctx.lineWidth = r * 0.13;
+  ctx.beginPath(); ctx.moveTo(-dx * r * 0.15, -dy * r * 0.15); ctx.lineTo(x0, y0); ctx.stroke();
+  ctx.fillStyle = "#c8a040"; // tsuba
+  ctx.beginPath(); ctx.arc(x0, y0, r * 0.1, 0, Math.PI * 2); ctx.fill();
+  ctx.strokeStyle = "#e8eef4";
+  ctx.lineWidth = r * 0.085;
+  ctx.beginPath(); ctx.moveTo(x0, y0); ctx.quadraticCurveTo(mx, my, x1, y1); ctx.stroke();
+}
+
+/** The Khanate: a shaggy steppe pony, a rider drawing a recurve bow. */
+function drawHorseArcher(ctx: Ctx, e: Entity, tc: any, moving: boolean, atkFrac: number) {
+  const r = e.radius;
+  const [fx, fy] = weaponAngleParts(e.facing);
+  horse(ctx, e, moving, { coat: "#6a4a30", scaleX: 1.1, scaleY: 0.56, caparison: tc.main, capAlpha: 0.55, gallopHz: 12 });
+  rider(ctx, r, { coat: tc.main, coatDark: tc.dark, helm: "open" });
+  // Recurve bow held out to the side it shoots across.
+  const draw = atkFrac > 0.7 ? (atkFrac - 0.7) / 0.3 : 0;
+  const bx = -r * 0.08 + fx * r * 0.45, by = -r * 0.45 + fy * r * 0.45;
+  const px = -fy, py = fx;
+  ctx.strokeStyle = "#5a3a1c";
+  ctx.lineWidth = 1.8;
+  ctx.beginPath();
+  ctx.moveTo(bx - px * r * 0.55, by - py * r * 0.55);
+  ctx.quadraticCurveTo(bx + fx * r * 0.35, by + fy * r * 0.35, bx + px * r * 0.55, by + py * r * 0.55);
+  ctx.stroke();
+  ctx.strokeStyle = "#ddd6c2";
+  ctx.lineWidth = 0.8;
+  ctx.beginPath();
+  ctx.moveTo(bx - px * r * 0.55, by - py * r * 0.55);
+  ctx.lineTo(bx - fx * r * 0.35 * draw, by - fy * r * 0.35 * draw);
+  ctx.lineTo(bx + px * r * 0.55, by + py * r * 0.55);
+  ctx.stroke();
+}
+
+/** The Ascendancy: a white hardsuit and a long energy rifle. */
+function drawPulseTrooper(ctx: Ctx, e: Entity, tc: any, atkFrac: number, time: number) {
+  const r = e.radius;
+  const [fx, fy] = weaponAngleParts(e.facing);
+  body(ctx, e, tc.main, tc.dark, { chestPlate: true, pauldrons: true });
+  head(ctx, r, { helm: "full" });
+  const len = r * 1.9;
+  const sx = fx * r * 0.1 - fy * r * 0.18, sy = fy * r * 0.1 + fx * r * 0.18;
+  ctx.lineCap = "round";
+  ctx.strokeStyle = "#3a4250";
+  ctx.lineWidth = r * 0.22;
+  ctx.beginPath(); ctx.moveTo(sx - fx * r * 0.3, sy - fy * r * 0.3); ctx.lineTo(sx + fx * len, sy + fy * len); ctx.stroke();
+  ctx.strokeStyle = "#dfe4ea";
+  ctx.lineWidth = r * 0.1;
+  ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo(sx + fx * len * 0.7, sy + fy * len * 0.7); ctx.stroke();
+  const glow = 0.55 + Math.sin(time * 6 + e.id) * 0.2;
+  ctx.save();
+  ctx.shadowColor = "#3ad8e8";
+  ctx.shadowBlur = 5;
+  ctx.strokeStyle = withAlpha("#8af0ff", glow);
+  ctx.lineWidth = r * 0.06;
+  ctx.beginPath(); ctx.moveTo(sx + fx * len * 0.3, sy + fy * len * 0.3); ctx.lineTo(sx + fx * len, sy + fy * len); ctx.stroke();
+  // The shot: a hard flash at the muzzle.
+  if (atkFrac > 0.85) {
+    const k = (atkFrac - 0.85) / 0.15;
+    ctx.fillStyle = withAlpha("#bff8ff", k);
+    ctx.shadowBlur = 12;
+    ctx.beginPath(); ctx.arc(sx + fx * (len + 3), sy + fy * (len + 3), r * 0.35 * k, 0, Math.PI * 2); ctx.fill();
+  }
+  ctx.restore();
+}
+
+/** The Ascendancy: a hover-sled — no horse, a hull riding on light. */
+function drawSkimmer(ctx: Ctx, e: Entity, tc: any, moving: boolean, lunge: number, time: number) {
+  const r = e.radius;
+  const [fx, fy] = weaponAngleParts(e.facing);
+  const bob = Math.sin(time * 4 + e.id) * 1.2;
+  // Underglow on the ground.
+  ctx.save();
+  ctx.fillStyle = withAlpha("#3ad8e8", moving ? 0.3 : 0.2);
+  ctx.beginPath(); ctx.ellipse(0, r * 0.35, r * 1.2, r * 0.45, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+  ctx.save();
+  ctx.translate(0, -r * 0.1 + bob);
+  ctx.rotate(e.facing);
+  // Hull.
+  ctx.fillStyle = grad(ctx, 0, -r * 0.5, 0, r * 0.5, "#ffffff", "#aab2be");
+  ctx.beginPath();
+  ctx.moveTo(r * 1.35, 0);
+  ctx.quadraticCurveTo(r * 0.6, -r * 0.55, -r * 1.0, -r * 0.45);
+  ctx.lineTo(-r * 1.15, 0);
+  ctx.lineTo(-r * 1.0, r * 0.45);
+  ctx.quadraticCurveTo(r * 0.6, r * 0.55, r * 1.35, 0);
+  ctx.closePath(); ctx.fill(); softOutline(ctx, 1.2);
+  ctx.fillStyle = tc.main; // team stripe down the spine
+  ctx.fillRect(-r * 0.9, -r * 0.08, r * 1.8, r * 0.16);
+  ctx.fillStyle = "#3ad8e8"; // thrusters
+  for (const sy of [-0.3, 0.3]) { ctx.beginPath(); ctx.arc(-r * 1.08, sy * r, r * 0.12, 0, Math.PI * 2); ctx.fill(); }
+  ctx.restore();
+  ctx.save();
+  ctx.translate(0, bob);
+  rider(ctx, r * 0.9, { coat: tc.main, coatDark: tc.dark, helm: "full" });
+  ctx.restore();
+  // A lance of light, couched forward.
+  const reach = 1.8 + lunge;
+  ctx.save();
+  ctx.shadowColor = "#3ad8e8"; ctx.shadowBlur = 5;
+  ctx.strokeStyle = "#bff8ff";
+  ctx.lineWidth = r * 0.08;
+  ctx.lineCap = "round";
+  ctx.beginPath(); ctx.moveTo(fx * r * 0.3, -r * 0.35 + fy * r * 0.3 + bob); ctx.lineTo(fx * r * reach, -r * 0.2 + fy * r * reach + bob); ctx.stroke();
+  ctx.restore();
+}
+
+// ------------------------------------------------------------ oath units --
+// Each Oath's signature unit wears its Oath's colour somewhere prominent, so a
+// realm's choice reads on the battlefield, not only in a menu.
+
+/** Oath of the Sword: bare-headed, a red oath-band, a blade in each hand. */
+function drawSwornBlade(ctx: Ctx, e: Entity, tc: any, lunge: number) {
+  const r = e.radius;
+  const [fx, fy] = weaponAngleParts(e.facing);
+  body(ctx, e, tc.main, tc.dark, { sash: "#d8574a" });
+  head(ctx, r, { helm: "bare", hair: "#3a2a1c" });
+  // The oath-band tied round the brow, tails flying behind.
+  ctx.strokeStyle = "#d8574a";
+  ctx.lineWidth = r * 0.14;
+  ctx.beginPath();
+  ctx.arc(0, -r * 0.8, r * 0.3, Math.PI * 1.05, Math.PI * 1.95);
+  ctx.stroke();
+  ctx.lineWidth = r * 0.09;
+  ctx.beginPath();
+  ctx.moveTo(-fx * r * 0.2, -r * 0.8 - fy * r * 0.2);
+  ctx.lineTo(-fx * r * 0.62, -r * 0.62 - fy * r * 0.62);
+  ctx.stroke();
+  // Off-hand short blade held low, main blade sweeping.
+  blade(ctx, r * 0.72, -fy * 0.7 + fx * 0.5, fx * 0.7 + fy * 0.5, 1.4, shade(tc.dark, -0.1));
+  const [dx, dy] = swungDir(e, 1.2);
+  blade(ctx, r, dx, dy, 1.8 + lunge * 0.5, "#8a2a22");
+}
+
+/** Oath of the Lance: barded horse, pennoned lance that drops for the charge. */
+function drawLancer(ctx: Ctx, e: Entity, tc: any, moving: boolean, lunge: number) {
+  const r = e.radius;
+  const [fx, fy] = weaponAngleParts(e.facing);
+  const charged = e.chargeRun >= CHARGE_RUN;
+  horse(ctx, e, moving, { coat: "#3e2e22", scaleX: 1.3, scaleY: 0.64, caparison: tc.main, capAlpha: 0.95, gallopHz: 13 });
+  // Barding: a steel chanfron on the horse's head.
+  ctx.fillStyle = PAL.steel;
+  ctx.beginPath();
+  ctx.ellipse(fx * r * 1.15, fy * r * 1.15 - r * 0.05, r * 0.2, r * 0.13, e.facing, 0, Math.PI * 2);
+  ctx.fill();
+  rider(ctx, r, { coat: tc.main, coatDark: tc.dark, helm: "full", tone: PAL.steel, plume: "#e0a040" });
+  // The lance: long, and couched low and forward once the run-up is in.
+  const sx = -r * 0.08 + fx * r * 0.2;
+  const sy = -r * (charged ? 0.25 : 0.45) + fy * r * 0.2;
+  const reach = (charged ? 2.9 : 2.4) + lunge;
+  ctx.strokeStyle = grad(ctx, sx, sy, fx * r * reach, fy * r * reach, "#e8d4a8", PAL.woodDark);
+  ctx.lineCap = "round";
+  ctx.lineWidth = r * 0.13;
+  ctx.beginPath();
+  ctx.moveTo(sx - fx * r * 0.6, sy - fy * r * 0.6);
+  ctx.lineTo(fx * r * reach, fy * r * reach);
+  ctx.stroke();
+  // Vamplate (hand guard) and head.
+  ctx.fillStyle = PAL.steelDark;
+  ctx.beginPath();
+  ctx.arc(sx + fx * r * 0.25, sy + fy * r * 0.25, r * 0.16, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = PAL.steel;
+  ctx.beginPath();
+  ctx.moveTo(fx * r * (reach + 0.3), fy * r * (reach + 0.3));
+  ctx.lineTo(fx * r * reach - fy * r * 0.14, fy * r * reach + fx * r * 0.14);
+  ctx.lineTo(fx * r * reach + fy * r * 0.14, fy * r * reach - fx * r * 0.14);
+  ctx.closePath();
+  ctx.fill();
+  // Pennant in the Oath's gold, streaming back.
+  const px = fx * r * (reach - 0.5), py = fy * r * (reach - 0.5);
+  ctx.fillStyle = "#e0a040";
+  ctx.beginPath();
+  ctx.moveTo(px, py);
+  ctx.lineTo(px - fx * r * 0.6 + fy * r * 0.3, py - fy * r * 0.6 - fx * r * 0.3);
+  ctx.lineTo(px - fx * r * 0.35, py - fy * r * 0.35);
+  ctx.closePath();
+  ctx.fill();
+}
+
+/** Oath of the Bow: hooded in woodland green, a tall yew bow, a leaf cloak. */
+function drawRanger(ctx: Ctx, e: Entity, tc: any, atkFrac: number) {
+  const r = e.radius;
+  const [fx, fy] = weaponAngleParts(e.facing);
+  // Cloak behind the body, ragged like leaves.
+  ctx.fillStyle = "#3f5a34";
+  ctx.beginPath();
+  ctx.moveTo(-r * 0.55, -r * 0.55);
+  for (let i = 0; i <= 5; i++) {
+    const t = i / 5;
+    ctx.lineTo(-r * 0.62 + t * r * 1.24, r * (0.45 + (i % 2) * 0.16));
+  }
+  ctx.lineTo(r * 0.55, -r * 0.55);
+  ctx.closePath();
+  ctx.fill();
+  body(ctx, e, "#4c6b3c", "#2f4426", { sash: tc.main });
+  head(ctx, r, { helm: "hood", tone: "#3f5a34" });
+  const draw = atkFrac > 0.7 ? (atkFrac - 0.7) / 0.3 : 0;
+  ctx.strokeStyle = "#5a3f22";
+  ctx.lineWidth = 2.2;
+  ctx.beginPath();
+  ctx.arc(fx * r * 0.6, fy * r * 0.6, r * 1.1, e.facing - 1.3, e.facing + 1.3);
+  ctx.stroke();
+  ctx.strokeStyle = "#e4dcc6";
+  ctx.lineWidth = 0.8;
+  const ax = fx * r * 0.6 + Math.cos(e.facing - 1.3) * r * 1.1;
+  const ay = fy * r * 0.6 + Math.sin(e.facing - 1.3) * r * 1.1;
+  const bx = fx * r * 0.6 + Math.cos(e.facing + 1.3) * r * 1.1;
+  const by = fy * r * 0.6 + Math.sin(e.facing + 1.3) * r * 1.1;
+  ctx.beginPath();
+  ctx.moveTo(ax, ay);
+  ctx.lineTo(fx * r * (0.6 - draw * 0.9), fy * r * (0.6 - draw * 0.9));
+  ctx.lineTo(bx, by);
+  ctx.stroke();
+  // Green-fletched arrows in the quiver.
+  ctx.fillStyle = "#6fbf5a";
+  for (const k of [-1, 1]) ctx.fillRect(-fy * r * 0.7 - 1 + k * 1.6, fx * r * 0.7 - 4, 1.6, 4);
+}
+
+/** Oath of the Shield: plate and a halberd — axe, spike and hook on one haft. */
+function drawHalberdier(ctx: Ctx, e: Entity, tc: any, lunge: number) {
+  const r = e.radius;
+  body(ctx, e, tc.main, tc.dark, { chestPlate: true, sash: "#9aa7b8" });
+  head(ctx, r, { helm: "full", tone: PAL.steelDark, plume: "#9aa7b8" });
+  const [fx, fy] = weaponAngleParts(e.facing);
+  const reach = 2.7 + lunge * 0.6 + strikeT(e) * 0.4;
+  ctx.strokeStyle = grad(ctx, -fx * r, -fy * r, fx * r * reach, fy * r * reach, PAL.woodLight, PAL.woodDark);
+  ctx.lineCap = "round";
+  ctx.lineWidth = r * 0.11;
+  ctx.beginPath();
+  ctx.moveTo(-fx * r * 0.9, -fy * r * 0.9);
+  ctx.lineTo(fx * r * reach, fy * r * reach);
+  ctx.stroke();
+  const hx = fx * r * (reach - 0.35), hy = fy * r * (reach - 0.35);
+  // Axe blade on one side, the hook on the other, the spike on top.
+  ctx.fillStyle = PAL.steel;
+  ctx.beginPath();
+  ctx.moveTo(hx + fx * r * 0.28, hy + fy * r * 0.28);
+  ctx.quadraticCurveTo(hx - fy * r * 0.75, hy + fx * r * 0.75, hx - fx * r * 0.3 - fy * r * 0.35, hy - fy * r * 0.3 + fx * r * 0.35);
+  ctx.lineTo(hx - fx * r * 0.2, hy - fy * r * 0.2);
+  ctx.closePath();
+  ctx.fill();
+  softOutline(ctx, 0.8);
+  ctx.beginPath();
+  ctx.moveTo(hx, hy);
+  ctx.lineTo(hx + fy * r * 0.34 - fx * r * 0.12, hy - fx * r * 0.34 - fy * r * 0.12);
+  ctx.lineTo(hx + fy * r * 0.12, hy - fx * r * 0.12);
+  ctx.closePath();
+  ctx.fill();
+  ctx.beginPath();
+  ctx.moveTo(fx * r * (reach + 0.45), fy * r * (reach + 0.45));
+  ctx.lineTo(fx * r * reach - fy * r * 0.1, fy * r * reach + fx * r * 0.1);
+  ctx.lineTo(fx * r * reach + fy * r * 0.1, fy * r * reach - fx * r * 0.1);
+  ctx.closePath();
+  ctx.fill();
+}
+
+/** Oath of the Engine: a bronze monster on a sledge, banded in brass. */
+function drawGreatBombard(ctx: Ctx, e: Entity, atkFrac: number) {
+  const r = e.radius;
+  const [fx, fy] = weaponAngleParts(e.facing);
+  const recoil = atkFrac > 0.85 ? (atkFrac - 0.85) / 0.15 : 0;
+  // Timber sledge, no wheels — it is dragged.
+  ctx.fillStyle = grad(ctx, 0, -r * 0.3, 0, r * 0.6, PAL.woodLight, PAL.woodDark);
+  ctx.save();
+  ctx.rotate(e.facing);
+  ctx.beginPath();
+  ctx.roundRect(-r * 1.0, -r * 0.5, r * 2.0, r * 1.0, r * 0.2);
+  ctx.fill();
+  softOutline(ctx, 1);
+  ctx.restore();
+  const bx = -fx * r * 0.45 * recoil;
+  const by = -fy * r * 0.45 * recoil - r * 0.2;
+  ctx.fillStyle = grad(ctx, bx, by - r * 0.45, bx, by + r * 0.45, "#b08a4a", "#5a3f1c");
+  ctx.beginPath();
+  ctx.ellipse(bx + fx * r * 0.35, by + fy * r * 0.35, r * 1.05, r * 0.46, e.facing, 0, Math.PI * 2);
+  ctx.fill();
+  softOutline(ctx, 1.2);
+  ctx.fillStyle = "#e0c070";
+  for (const t of [-0.35, 0.15, 0.7]) {
+    ctx.beginPath();
+    ctx.ellipse(bx + fx * r * t, by + fy * r * t, r * 0.12, r * 0.5, e.facing, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  // The muzzle: a dark mouth you can see from across the field.
+  ctx.fillStyle = "#1e1a14";
+  ctx.beginPath();
+  ctx.ellipse(bx + fx * r * 1.35, by + fy * r * 1.35, r * 0.18, r * 0.3, e.facing, 0, Math.PI * 2);
+  ctx.fill();
+  if (recoil > 0.1) {
+    ctx.save();
+    ctx.shadowColor = "#ffb03a";
+    ctx.shadowBlur = r * 3.5;
+    ctx.fillStyle = "#ffd88a";
+    ctx.beginPath();
+    ctx.arc(bx + fx * r * 1.7, by + fy * r * 1.7, r * 0.55 * recoil, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+}
+
+/** Oath of the Crown: gilded plate, a royal plume, a gold-hilted greatsword. */
+function drawRoyalGuard(ctx: Ctx, e: Entity, tc: any, lunge: number, time: number) {
+  const r = e.radius;
+  // A short cape in the Oath's purple.
+  ctx.fillStyle = "#6e3f8a";
+  ctx.beginPath();
+  ctx.moveTo(-r * 0.5, -r * 0.5);
+  ctx.quadraticCurveTo(0, r * (0.75 + Math.sin(time * 3 + e.id) * 0.04), r * 0.5, -r * 0.5);
+  ctx.closePath();
+  ctx.fill();
+  body(ctx, e, tc.main, tc.dark, { pauldrons: true, chestPlate: true });
+  // A gold crown device on the breastplate.
+  ctx.fillStyle = "#e8c860";
+  ctx.beginPath();
+  ctx.moveTo(-r * 0.18, -r * 0.2);
+  ctx.lineTo(-r * 0.18, -r * 0.36);
+  ctx.lineTo(-r * 0.09, -r * 0.27);
+  ctx.lineTo(0, -r * 0.4);
+  ctx.lineTo(r * 0.09, -r * 0.27);
+  ctx.lineTo(r * 0.18, -r * 0.36);
+  ctx.lineTo(r * 0.18, -r * 0.2);
+  ctx.closePath();
+  ctx.fill();
+  head(ctx, r, { helm: "full", tone: "#d7b456", plume: "#c890e8" });
+  const [dx, dy, sw] = swungDir(e, 1.3);
+  blade(ctx, r, dx, dy, 2.1 + lunge + sw * 0.2, "#d7b456", -0.45);
+}
+
 function drawPikeman(ctx: Ctx, e: Entity, tc: any, lunge: number) {
   const r = e.radius;
   body(ctx, e, tc.main, tc.dark);
@@ -2202,6 +2697,7 @@ function drawPikeman(ctx: Ctx, e: Entity, tc: any, lunge: number) {
   // long leaf head
   const tipX = fx * r * reach;
   const tipY = fy * r * reach;
+  if (styled() && factionSpearHead(ctx, gLook, tipX, tipY, fx, fy, r * 1.15)) return;
   ctx.fillStyle = PAL.steel;
   ctx.beginPath();
   ctx.moveTo(tipX + fx * r * 0.5, tipY + fy * r * 0.5);

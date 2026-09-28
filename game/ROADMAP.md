@@ -18,9 +18,8 @@ at the top of each section.
 - **Up to 8 players**, ring maps, FFA / even teams, spectator mode.
 
 ## Deferred (agreed, not yet)
-- **Rename the ages** to **Hearth → Banner → Crown** (drop the AoE feel).
-  Liked, but on hold — get the 3 ages feeling great first.
-- **4th age** (…→ Crown → Empire): not yet — more content to fill.
+- (The age rename and the 4th age are done — see "Four ages, Oaths and
+  Factions" below.)
 
 ## Units
 - Done: villager, man-at-arms, spearman, archer, skirmisher, **horseman**
@@ -926,6 +925,76 @@ it. The graph did the same with two lines.
   at 1600×900 and 1280×760 and checks every realm's name is drawn inside it.
   The first version failed it twice — Armies and Overview both ran off the
   bottom in an 8v8 — so past ten realms rows close up to a single line.
+
+## Four ages, Oaths and Factions
+
+**Ages.** Hearth → Banner → Crown → **Empire**. Empire costs 900 food + 600
+gold, needs a Castle *or* a Siege Workshop, and holds the gunpowder and great
+siege units (Hand Cannoneer, Bombard, Trebuchet moved up from Crown) plus the
+last tier of smithing and economy (Blast Furnace, Plate Mail, Bracer, Ring
+Archer Armor, Crop Rotation, Two-Man Saw, Shaft Mining). Age names live in one
+place (`AGES[i].short`, `ageShort`) — they had been hard-coded in five UIs.
+The "Imperial Ambition" achievement asked for age index 3 when there were
+three ages numbered 0–2; it was unwinnable until now. Saves are format 2: a
+save replays orders against the current rules, and the rules changed.
+
+**Oaths** (`content/oaths.ts`) — the in-match identity layer. Every advance
+past the Hearth swears one of three: Banner *how will you grow* (Plough /
+Sword / Hearth), Crown *what will your army be* (Lance / Bow / Shield), Empire
+*what will you be remembered for* (Coin / Engine / Crown). Each is a passive
+bonus plus a signature: a unit only its sworn train (Sworn Blade, Lancer with a
+triple-damage charge, Ranger that stays hidden in woods while shooting,
+Halberdier, Great Bombard, Royal Guard) or a rule (free replanting, mending
+buildings, a Market tithe). Sworn via `research(tc, "age:<oath>")`, so saves,
+replays and lockstep needed nothing new. Oaths are public — everyone is told,
+the scoreboard shows them — and the picker is a three-card screen showing each
+Oath's real numbers, its unit drawn live, and the rarity you own of that unit.
+
+**Commander affinity.** Nine commanders, nine Oaths: each commander favours
+one, and swearing it is 50% stronger with its signature unit training 25%
+faster. That ties the commander you bring to the realm you become.
+
+**Factions** (`content/factions.ts`) — who you are, chosen before the match.
+Kingdom (late: cheaper smithing and castles, Longbowmen), Legion (mid: faster
+building, tougher infantry, Legionaries and Shieldbearers; cavalry costs more),
+Jarls (early: fast infantry that burn buildings, Berserkers from Banner;
+castles and smithing cost more), Shogunate (late: faster melee, tough
+villagers, Samurai; soldiers train slower), Khanate (early: fast cavalry, cheap
+stables and ranges, bigger yurts, Horse Archers and Cataphracts; flimsy
+buildings, dear walls), Ascendancy (late: an off-world expedition — villagers
+carry more, buildings self-repair, Pulse Troopers and Skimmers; soldiers cost
+15% more). Nothing magical; the Ascendancy's glow is engineering. No new
+resources — factions change how things look and play, not what is gathered.
+
+- **They look like themselves.** `render/faction_art.ts` restyles the shared
+  building parts (walls, roofs, caps, doors, windows, standards) and
+  `render/faction_figures.ts` redraws the whole soldier — back gear, legs,
+  body, face, weapon, bow, mount. Terracotta and capes; stave halls, beards and
+  axes; curved eaves, back-banners and hakama; felt yurts, robes and quivers;
+  white domes, hardsuits, rifles and hover-sleds. The first pass only changed
+  helmets and read as a colour swap. Team colour stays on something big —
+  roof, cape, flag, robe, band — and `factions.test.ts` checks every faction's
+  Town Centre still shows it (the first Ascendancy dome failed: 0 pixels).
+- **The meta systems carry across.** Rarity is by *role* too: a unit's
+  `role` names the shared unit it stands in for, and the higher of the two
+  rarities applies — an unboxed Very Rare Man-at-Arms makes the Legionary Very
+  Rare. Commanders, boons and rarity all apply to faction and Oath units, and
+  every new unit is in the War Chests with a named top-rarity variant. Each
+  faction remembers the commander last led with it.
+- **Balance** is measured by AI round-robin — see below.
+
+**The AI in the late game.** Measured first: in nine AI-vs-AI duels, *no* AI
+reached the third age in thirty minutes; most sat in the second with a
+thousand gold banked and no food. Three causes, none about Oaths: food
+villagers walked to the nearest berry bush *anywhere* before a farm; several
+were sent to one farm that only one can work; and a Town Centre hemmed in by
+its own buildings could leave its nearest open cell sealed off, so every
+food-carrier heading home was "provably unreachable" and stood still for the
+rest of the match (one AI gathered zero food for twelve minutes). Fixed in the
+AI (`foodNode`, farm count, saving once an age has been *ready* for 90s, buying
+food at the Market) and in A* (`findPath` retargets a blocked goal to a
+reachable open cell when the nearest one isn't — only then, so every path that
+already worked is unchanged). Same nine seeds afterwards: three reach Empire.
 
 ## Bigger / later
 - **Naval** — water is currently only an impassable wall, and the Islands

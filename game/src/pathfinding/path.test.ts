@@ -159,3 +159,42 @@ describe("A* reachability shortcut", () => {
     expect(ms, `${ms.toFixed(0)}ms for ${N} unreachable requests`).toBeLessThan(150);
   });
 });
+
+describe("Walking to a building hemmed in by others", () => {
+  // A 3x3 "Town Centre" at cells 10-12, with a house and a camp built tight
+  // against its top edge so that the two cells directly above it are sealed
+  // in. Those two are the nearest open cells to the centre in ring order, so
+  // aiming at the building used to aim at the sealed gap — and every trip
+  // there was "provably unreachable". Villagers stood still holding their load
+  // for the rest of the match.
+  function hemmed(): NavGrid {
+    const g = makeGrid();
+    for (let y = 10; y <= 12; y++) for (let x = 10; x <= 12; x++) g.setBlocked(x, y, true); // TC
+    for (const [x, y] of [[9, 9], [9, 8], [10, 8], [11, 8], [12, 8], [13, 8], [13, 9]]) g.setBlocked(x, y, true);
+    return g;
+  }
+  const centre = (c: number) => (c + 0.5) * TILE;
+
+  it("really does leave a sealed gap nearest the centre", () => {
+    const g = hemmed();
+    const [ox, oy] = g.nearestOpenWorld(centre(11), centre(11));
+    const cx = g.worldToCellX(ox), cy = g.worldToCellY(oy);
+    expect(g.provablyUnreachable(cx, cy, 11, 20), "the fixture isn't testing the sealed-gap case").toBe(true);
+  });
+
+  it("still finds a way to the building from outside", () => {
+    const g = hemmed();
+    const path = findPath(g, centre(11), centre(20), centre(11), centre(11));
+    expect(path, "a villager south of the Town Centre could not walk to it").not.toBeNull();
+  });
+
+  it("leaves paths that already worked exactly as they were", () => {
+    const g = makeGrid();
+    for (let y = 10; y <= 12; y++) for (let x = 10; x <= 12; x++) g.setBlocked(x, y, true);
+    const path = findPath(g, centre(11), centre(20), centre(11), centre(11))!;
+    // The open ring's first cell in search order is the one aimed for, as ever.
+    const [ox, oy] = g.nearestOpenWorld(centre(11), centre(11));
+    const end = [path[path.length - 4], path[path.length - 3]];
+    expect(Math.hypot(end[0] - ox, end[1] - oy)).toBeLessThan(TILE * 1.5);
+  });
+});

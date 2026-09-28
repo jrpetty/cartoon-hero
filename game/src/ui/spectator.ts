@@ -9,8 +9,10 @@ import { World } from "../sim/world";
 import { Entity, Kind, Team } from "../sim/types";
 import { UNITS } from "../content/units";
 import { COMMANDERS } from "../content/commanders";
+import { ageShort } from "../content/tech";
+import { oathChips } from "../content/oaths";
+import { factionOf } from "../content/factions";
 
-const AGE_NAMES = ["Dark", "Feudal", "Castle"];
 
 /** Absolute per-realm colour (matches the in-world spectator colouring). */
 function teamColor(t: number): string {
@@ -100,11 +102,19 @@ export function drawSpectatorPanels(
     ui.text(teamLabel(t as Team) + (dead ? "  ☠" : ""), cx + 32, cy + 17, {
       size: 14, bold: true, color: dead ? "#8a8070" : col,
     });
-    ui.text(dead ? "DEFEATED" : AGE_NAMES[p.age] ?? "—", cx + cardW - 12, cy + 17, {
+    ui.text(dead ? "DEFEATED" : ageShort(p.age), cx + cardW - 12, cy + 17, {
       align: "right", size: 12, bold: true, color: dead ? PAL.uiBad : PAL.uiAccent,
     });
     const cmdr = COMMANDERS[p.commander]?.name;
-    if (cmdr) ui.text(cmdr, cx + 32, cy + 33, { size: 11, color: "#9c9379" });
+    const fac = factionOf(p.faction).name.replace(/^The /, "");
+    ui.text(cmdr ? `${fac} · ${cmdr}` : fac, cx + 32, cy + 33, { size: 11, color: "#9c9379" });
+    // Sworn Oaths, right-aligned under the age, in their colours.
+    let ox = cx + cardW - 12;
+    for (const chip of oathChips(p.oaths).reverse()) {
+      ui.text(chip.label, ox, cy + 33, { align: "right", size: 11, bold: true, color: chip.color });
+      ctx.font = `bold 11px "Trebuchet MS", sans-serif`;
+      ox -= ctx.measureText(chip.label).width + 7;
+    }
 
     // Population row.
     ui.text(`⚔ ${g.army}`, cx + 14, cy + 52, { size: 13, color: dim, bold: true });

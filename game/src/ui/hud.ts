@@ -14,6 +14,8 @@ import { dayLabel, dayPhase, isNight } from "../content/daynight";
 import { rarityByIndex } from "../meta/rarity";
 import { ui } from "./ui";
 import { buildMinimapBase } from "../render/terrain";
+import { OathPicker } from "./oath_picker";
+import { OATHS, oathChips } from "../content/oaths";
 import type { MapData } from "../maps/generator";
 
 export interface Alert {
@@ -84,6 +86,8 @@ export class HUD {
   pings: { x: number; y: number; age: number }[] = [];
   buildMenuOpen = false;
   buildCategory: string | null = null;
+  /** Advancing an age opens this, to choose the Oath the realm swears. */
+  readonly oathPicker = new OathPicker();
 
   prepare(map: MapData) {
     this.minimapBase = buildMinimapBase(map, MINIMAP_SIZE);
@@ -91,6 +95,7 @@ export class HUD {
     this.pings = [];
     this.buildMenuOpen = false;
     this.buildCategory = null;
+    this.oathPicker.close();
   }
 
   addAlert(text: string, x?: number, y?: number) {
@@ -142,6 +147,28 @@ export class HUD {
       });
       x += 110;
       ui.text(AGES[p.age].name, x, 17, { size: 14, color: PAL.uiAccent, bold: true });
+      // The Oaths sworn so far, as coloured chips beside the age: this realm's
+      // identity, at a glance.
+      ctx.font = `bold 14px "Trebuchet MS", sans-serif`;
+      let ox = x + ctx.measureText(AGES[p.age].name).width + 12;
+      const chips = oathChips(p.oaths);
+      ctx.font = `bold 11.5px "Trebuchet MS", sans-serif`;
+      const full = chips.reduce((a, c) => a + ctx.measureText(c.label).width + 19, 0);
+      // The clock sits in the middle of the bar; on a narrow window the chips
+      // shrink to lettered badges rather than run into it.
+      const roomy = ox + full < W / 2 - 46;
+      for (const chip of chips) {
+        ctx.font = `bold 11.5px "Trebuchet MS", sans-serif`;
+        const label = roomy ? chip.label : chip.label[0];
+        const cw = roomy ? ctx.measureText(label).width + 14 : 18;
+        ctx.fillStyle = withAlpha(chip.color, 0.3);
+        ctx.beginPath(); ctx.roundRect(ox, 8, cw, 18, roomy ? 4 : 9); ctx.fill();
+        ctx.strokeStyle = withAlpha(chip.color, 0.85);
+        ctx.lineWidth = 1;
+        ctx.stroke();
+        ui.text(label, ox + cw / 2, 17.5, { align: "center", size: 11.5, bold: true, color: "#f4ead2" });
+        ox += cw + 5;
+      }
     }
 
     const mins = Math.floor(world.time / 60);
@@ -415,7 +442,8 @@ export class HUD {
           if (!def) continue;
           const lockedAge = p.age < def.age;
           const lockedReq = def.requires && !world.hasBuilding(team, def.requires);
-          const cantAfford = !world.canAfford(p.resources, def.cost);
+          const bcost = world.buildingCostFor(team, def.id);
+          const cantAfford = !world.canAfford(p.resources, bcost);
           place(
             def.name.split(" ")[0],
             () => {
@@ -427,7 +455,7 @@ export class HUD {
               disabled: lockedAge || !!lockedReq || cantAfford,
               tooltip: [
                 def.name,
-                this.cost(def.cost),
+                this.cost(bcost),
                 ...(lockedAge ? [`Requires ${AGES[def.age].name}`] : []),
                 ...(lockedReq ? [`Requires ${BUILDINGS[def.requires!].name}`] : []),
                 def.desc,
@@ -500,6 +528,13 @@ export class HUD {
       const prodSiblings = own.filter((e) => e.kind === Kind.Building && e.type === building.type && e.buildState === BuildState.Done);
       for (const unitId of def.trains) {
         const u = UNITS[unitId];
+        // Another Oath's signature unit isn't this realm's to train, and a
+        // button for it would only be clutter.
+        if (u.oath && !p.oaths.includes(u.oath)) continue;
+        // Likewise another faction's units, and the shared units this
+        // faction trains its own in place of.
+        if (!world.canFieldType(p, unitId)) continue;
+        const ucost = world.unitCostFor(team, unitId);
         const lockedAge = p.age < u.age;
         const heroState = u.hero ? world.heroStatus(team) : null;
         const heroLocked = !!heroState && !heroState.trainable;
@@ -508,10 +543,11 @@ export class HUD {
           () => ctrl.trainUnit(building, unitId),
           {
             accent: !!u.hero && !heroLocked,
-            disabled: lockedAge || heroLocked || !world.canAfford(p.resources, u.cost) || p.popUsed + u.pop > p.popCap,
+            disabled: lockedAge || heroLocked || !world.canAfford(p.resources, ucost) || p.popUsed + u.pop > p.popCap,
             tooltip: [
               u.name + (u.hero ? " ★" : ""),
-              this.cost(u.cost) + `  (${u.pop} pop)`,
+              ...(u.oath ? [`Signature of the ${OATHS[u.oath]?.name ?? "Oath"}`] : []),
+              this.cost(ucost) + `  (${u.pop} pop)`,
               ...(lockedAge ? [`Requires ${AGES[u.age].name}`] : []),
               ...(prodSiblings.length > 1 ? [`Queues in all ${prodSiblings.length} selected ${def.name}s`] : []),
               ...(heroState && heroState.label ? [heroState.label] : []),
@@ -524,22 +560,25 @@ export class HUD {
       if (building.type === "town_center" && p.age < MAX_AGE) {
         const next = AGES[p.age + 1];
         const prog = world.ageRequirementProgress(team, p.age + 1);
-        const reqOk = prog.have >= prog.need;
         const reqNames = next.requiresAny.map((id) => BUILDINGS[id]?.name ?? id).join(", ");
+        // Opens the Oath picker rather than researching outright: every
+        // advance is also the choice of which Oath the realm swears. The
+        // picker says what is missing, so the button only needs to be off
+        // while an advance is already under way.
+        const aging = own.some((e) => e.kind === Kind.Building && e.productionQueue.includes("a:age"));
         place(
-          `${next.name.split(" ")[0]} Age`,
-          () => ctrl.research(building, "age"),
+          `${next.short} Age`,
+          () => this.oathPicker.open(building),
           {
             accent: true,
-            disabled: !reqOk || !world.canAfford(p.resources, next.cost) ||
-              building.productionQueue.includes("a:age"),
+            disabled: aging,
             tooltip: [
-              `Advance to ${next.name}`,
+              `Advance to the ${next.name} — and swear an Oath`,
               this.cost(next.cost),
               ...(next.requiresCount > 0
                 ? [`Build any ${next.requiresCount} (${prog.have}/${prog.need}): ${reqNames}`]
                 : []),
-              "Unlocks new units, buildings and +attack/+armor for your army.",
+              "Choose one of three Oaths: a lasting bonus, and for some a unit only you can train.",
             ],
           },
         );
@@ -550,8 +589,8 @@ export class HUD {
         const up = UPGRADES[upId];
         if (up.researchedAt !== building.type || p.upgrades.has(upId)) continue;
         place(up.name.split(" ")[0].slice(0, 7), () => ctrl.research(building, upId), {
-          disabled: p.age < up.age || !world.canAfford(p.resources, up.cost),
-          tooltip: [up.name, this.cost(up.cost), up.desc],
+          disabled: p.age < up.age || !world.canAfford(p.resources, world.techCostFor(team, upId)),
+          tooltip: [up.name, this.cost(world.techCostFor(team, upId)), up.desc],
         });
       }
       if (building.type === "market") {

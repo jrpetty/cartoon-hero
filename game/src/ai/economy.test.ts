@@ -144,7 +144,7 @@ describe("The AI can fix a lopsided bank", () => {
     expect(p.resources.wood, "the surplus was never traded").toBeLessThan(woodBefore);
   }, 300000);
 
-  it("puts farms down when it is short of food, without waiting for Castle Age", () => {
+  it("puts farms down when it is short of food, without waiting for Crown Age", () => {
     // Reaching the age that used to unlock farming *needs* the food farming
     // provides, which is the other half of the same deadlock.
     const r = playMatch(5, 12);
@@ -152,8 +152,8 @@ describe("The AI can fix a lopsided bank", () => {
       (e) => e.alive && e.kind === Kind.Building && e.type === "farm",
     );
     expect(farms.length, "no farms in twelve minutes").toBeGreaterThan(0);
-    const anyFeudal = [Team.Player, Team.Enemy].some((t) => r.world.player(t).age <= 1);
-    expect(anyFeudal, "this seed no longer exercises the pre-Castle case").toBe(true);
+    const anyBanner = [Team.Player, Team.Enemy].some((t) => r.world.player(t).age <= 1);
+    expect(anyBanner, "this seed no longer exercises the pre-Crown case").toBe(true);
   }, 600000);
 });
 

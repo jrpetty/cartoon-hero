@@ -13,10 +13,10 @@ function makeWorld(): World {
 }
 
 describe("Horseman", () => {
-  it("exists as a Feudal-age melee cavalry trained at the stable", () => {
+  it("exists as a Banner-age melee cavalry trained at the stable", () => {
     const h = UNITS.horseman;
     expect(h).toBeTruthy();
-    expect(h.age).toBe(1); // Feudal — available with the Stable
+    expect(h.age).toBe(1); // Banner — available with the Stable
     expect(h.ranged).toBe(false); // melee cavalry
     expect(h.range).toBe(0);
     expect(h.attack).toBe(9);
@@ -24,7 +24,7 @@ describe("Horseman", () => {
     expect(BUILDINGS.stable.trains).toContain("horseman");
     expect(h.bonus.siege).toBeGreaterThan(0); // anti-siege
     expect(h.bonus.archer).toBeGreaterThan(0); // runs down archers
-    // Stable now unlocks in Feudal; the Knight stays Castle.
+    // Stable now unlocks in Banner; the Knight stays Crown.
     expect(BUILDINGS.stable.age).toBe(1);
     expect(UNITS.knight.age).toBe(2);
   });

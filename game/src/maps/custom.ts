@@ -293,7 +293,7 @@ export function validateMap(m: CustomMap): MapIssue[] {
   const counts = { tree: 0, gold_mine: 0, berries: 0 };
   for (const r of m.resources) counts[r.type]++;
   if (!counts.tree) err("There is no wood anywhere on the map.");
-  if (!counts.gold_mine) warn("There is no gold on the map — nothing past the Feudal Age can be trained.");
+  if (!counts.gold_mine) warn("There is no gold on the map — nothing past the Banner Age can be trained.");
   if (!counts.berries) warn("There is no food on the map besides farms.");
 
   if (m.nomad !== "forced") {

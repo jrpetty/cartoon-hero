@@ -121,9 +121,22 @@ export function findPath(
   }
   // If the goal cell is blocked, retarget to the nearest open cell.
   if (grid.isBlocked(tcx, tcy)) {
+    const gx = tcx, gy = tcy;
     const [owx, owy] = grid.nearestOpenWorld(tx, ty);
     tcx = grid.worldToCellX(owx);
     tcy = grid.worldToCellY(owy);
+    // ...but one we can actually get to. The nearest open cell to a building
+    // can be a gap sealed in by its neighbours — a Town Centre with a House
+    // and a camp built tight against it leaves exactly that — and aiming a
+    // villager at it made every trip home "provably unreachable": the villager
+    // stood still holding its load for the rest of the match. Measured as an
+    // AI that gathered no food at all for twelve minutes. Only when the usual
+    // choice is unreachable do we look further, so every path that already
+    // worked is unchanged.
+    if (grid.provablyUnreachable(scx, scy, tcx, tcy)) {
+      const alt = grid.nearestOpenCellInRegion(gx, gy, grid.regionAt(scx, scy));
+      if (alt) { tcx = alt[0]; tcy = alt[1]; }
+    }
   }
   if (scx === tcx && scy === tcy) return [tx, ty];
   // Nothing to search for if the two ends are in different pockets of the map.

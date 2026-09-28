@@ -72,7 +72,9 @@ export const ACHIEVEMENTS: Achievement[] = [
   {
     id: "imperial",
     name: "Imperial Ambition",
-    desc: "Win having reached the final age.",
+    // Unwinnable until the Empire Age existed: it asked for age index 3 when
+    // there were only three ages, numbered 0 to 2.
+    desc: "Win having reached the Empire Age.",
     valor: 120,
     test: (m) => m.won && m.age >= 3,
   },

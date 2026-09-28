@@ -8,6 +8,8 @@ import { UNITS } from "../content/units";
 import { ABILITIES } from "../content/abilities";
 import { BUILDINGS } from "../content/buildings";
 import { UPGRADES, AGES } from "../content/tech";
+import { oathsForAge } from "../content/oaths";
+import { factionOf } from "../content/factions";
 import { TILE, POP_CAP_HARD } from "../content/balance";
 import { DifficultyDef } from "./difficulty";
 import { RNG } from "../engine/rng";
@@ -28,6 +30,11 @@ type AIStyle = "rush" | "boom" | "turtle" | "balanced";
 const AGE_SAVE_MAX_SEC = 60;
 /** …and how long it then grows before it is allowed to try banking again. */
 const AGE_SAVE_COOLDOWN = 45;
+/**
+ * How long the next age can sit ready — requirements built, villagers enough —
+ * before the AI starts saving for it even though the bank isn't close.
+ */
+const AGE_READY_WAIT_SEC = 90;
 
 // Every AI brain in a match registers here (keyed by World, GC-safe). Teammates
 // read each other's scouted composition so intel is pooled across the alliance —
@@ -74,6 +81,8 @@ export class SkirmishAI {
   private savingForAge = false;
   private saveStartedAt = 0;
   private saveGaveUpAt = -999;
+  /** When the next age first became ready (requirements and villagers), or -1. */
+  private ageReadySince = -1;
   /**
    * Whether this AI reads the ground it is fighting on. Public and mutable for
    * one reason: it is the only way to measure whether terrain awareness is
@@ -164,7 +173,9 @@ export class SkirmishAI {
     // full-pop army is affordable (otherwise they plateau ~60). Gated to max age
     // so early-age progression thresholds stay stable.
     const p = this.world.player(this.team);
-    const grow = this.diff.maxAge >= 2 && p.age >= this.diff.maxAge ? 16 + this.gameTime / 60 : 0;
+    // (Crown, not the top age: Empire is a late destination, and waiting for it
+    // to start growing would starve the army that has to get there.)
+    const grow = this.diff.maxAge >= 2 && p.age >= 2 ? 16 + this.gameTime / 60 : 0;
     return Math.round(Math.min(base + grow, base * 2.2));
   }
   private get turtles(): boolean {
@@ -384,7 +395,18 @@ export class SkirmishAI {
         vills >= Math.floor(this.villagerGoal * 0.6)) {
       return AGES[2].cost;
     }
+    if (this.empireReady(p, vills)) return AGES[3].cost;
     return null;
+  }
+
+  /**
+   * Ready to go for the Empire Age: the building that qualifies, a grown
+   * economy, and enough match behind us that the army has had its Crown-age
+   * fights. Going up any earlier spends 1500 resources an army needs more.
+   */
+  private empireReady(p: ReturnType<World["player"]>, vills: number): boolean {
+    return p.age === 2 && this.diff.maxAge >= 3 && this.world.ageRequirementMet(this.team, 3) &&
+      vills >= Math.floor(this.villagerGoal * 0.7) && this.gameTime >= 11 * 60;
   }
 
   /** Try to place a building somewhere in a ring around (cx, cy). */
@@ -407,6 +429,34 @@ export class SkirmishAI {
       .sort((u, v) => dist(u.x, u.y, b.x, b.y) - dist(v.x, v.y, b.x, b.y));
     const picked = villagers.slice(0, count);
     if (picked.length) this.world.issueBuildRepair(picked.map((v) => v.id), b.id);
+  }
+
+  /**
+   * Where a villager sent for food should go. The nearest berries *anywhere*
+   * used to win outright, farms only once the last bush on the map was gone —
+   * so food-gatherers walked across the map (and into the enemy) while fields
+   * by the base stood empty, and a Banner-age AI made 130 food a minute from
+   * twenty villagers. Close berries still beat a farm; far ones don't. And a
+   * farm only one villager can work is only offered to one.
+   */
+  private foodNode(v: Entity, claimed: Set<number>): Entity | null {
+    let farm: Entity | null = null, fd = Infinity;
+    let berry: Entity | null = null, bd = Infinity;
+    for (const e of this.world.entities) {
+      if (!e.alive) continue;
+      if (e.kind === Kind.Building && e.type === "farm" && e.team === this.team &&
+          e.buildState === BuildState.Done && e.amount > 0 && !claimed.has(e.id)) {
+        const w = e.farmWorker >= 0 ? this.world.byId.get(e.farmWorker) : undefined;
+        if (w && w.alive && w.id !== v.id) continue; // someone is working it
+        const d = dist(v.x, v.y, e.x, e.y);
+        if (d < fd) { fd = d; farm = e; }
+      } else if (e.kind === Kind.Resource && e.type === "berries" && e.amount > 0) {
+        const d = dist(v.x, v.y, e.x, e.y);
+        if (d < bd) { bd = d; berry = e; }
+      }
+    }
+    if (berry && (bd < TILE * 12 || !farm)) return berry;
+    return farm ?? berry;
   }
 
   private nearestResource(type: string, x: number, y: number): Entity | null {
@@ -485,14 +535,21 @@ export class SkirmishAI {
     // pauses villager production *and* caps the army at four; if the age-up is
     // not actually within reach, the economy stops growing, the cost never
     // becomes affordable, and the AI saves forever. Measured on highlands seed
-    // 5: still Feudal at twelve minutes with eleven villagers, an army of seven,
-    // 1680 wood and 315 food, having banked toward Castle since minute four.
+    // 5: still Banner at twelve minutes with eleven villagers, an army of seven,
+    // 1680 wood and 315 food, having banked toward Crown since minute four.
     //
     // So: only hold back when most of the cost is already in hand, and never for
     // more than a minute at a stretch. Falling out of it re-opens production for
     // long enough to actually earn the difference.
+    //
+    // "Close" alone left the AI in the Banner Age for whole matches: food was
+    // spent the moment it arrived, so the bank never got to 55% of the Crown
+    // cost and saving never began — measured at 30 minutes in Banner with a
+    // thousand unspent gold. Having been *ready* for a while also counts now.
     const gate = this.ageUpCost(p);
     const affordable = gate !== null && this.world.canAfford(p.resources, gate);
+    if (gate === null) this.ageReadySince = -1;
+    else if (this.ageReadySince < 0) this.ageReadySince = this.gameTime;
     if (gate === null || affordable) {
       this.savingForAge = false;
       this.saveGaveUpAt = -999;
@@ -500,7 +557,7 @@ export class SkirmishAI {
       const need = gate.food + gate.wood + gate.gold;
       const have = Math.min(p.resources.food, gate.food) + Math.min(p.resources.wood, gate.wood)
         + Math.min(p.resources.gold, gate.gold);
-      const close = need > 0 && have / need >= 0.55;
+      const close = need > 0 && (have / need >= 0.55 || this.gameTime - this.ageReadySince > AGE_READY_WAIT_SEC);
       const cooling = this.gameTime - this.saveGaveUpAt < AGE_SAVE_COOLDOWN;
       if (!this.savingForAge) {
         if (close && !cooling) { this.savingForAge = true; this.saveStartedAt = this.gameTime; }
@@ -518,7 +575,7 @@ export class SkirmishAI {
     //    the full age cost, stalling in an age forever.)
     if (gate !== null && !this.savingForAge) {
       const tc0 = this.myBuildings("town_center")[0];
-      if (tc0) this.world.research(this.team, tc0.id, "age");
+      if (tc0) this.world.research(this.team, tc0.id, this.ageTech());
     }
 
     // 1. Keep villager production rolling (paused while saving for an age).
@@ -675,6 +732,31 @@ export class SkirmishAI {
     }
   }
 
+  /**
+   * The age's standard split, bent by what is actually in the bank: a pile of
+   * something means fewer hands on it, a shortage means more — and whatever
+   * the next age costs gets a pull of its own. Fixed shares were how an AI
+   * sat on a thousand gold with no food for ten minutes.
+   */
+  private bankAwareTargets(p: ReturnType<World["player"]>): Record<ResourceKind, number> {
+    const base = this.gatherTargets(p.age);
+    const gate = this.ageUpCost(p);
+    const out = { ...base };
+    let sum = 0;
+    for (const k of [ResourceKind.Food, ResourceKind.Wood, ResourceKind.Gold] as ResourceKind[]) {
+      const bank = p.resources[k as "food" | "wood" | "gold"];
+      let m = bank > 900 ? 0.45 : bank > 600 ? 0.7 : bank < 120 ? 1.3 : 1;
+      if (gate) {
+        const want = gate[k as "food" | "wood" | "gold"];
+        if (want > 0 && bank < want) m *= 1.35;
+      }
+      out[k] = base[k] * m;
+      sum += out[k];
+    }
+    for (const k of Object.keys(out) as ResourceKind[]) out[k] /= sum;
+    return out;
+  }
+
   private gatherTargets(age: number): Record<ResourceKind, number> {
     if (age === 0) return { food: 0.5, wood: 0.4, gold: 0.1 } as Record<ResourceKind, number>;
     if (age === 1) return { food: 0.42, wood: 0.33, gold: 0.25 } as Record<ResourceKind, number>;
@@ -712,7 +794,7 @@ export class SkirmishAI {
         working++;
       }
     }
-    const targets = this.gatherTargets(p.age);
+    const targets = this.bankAwareTargets(p);
     const wantKind = (): ResourceKind => {
       const total = working + 1;
       const deficits: [ResourceKind, number][] = (
@@ -748,13 +830,16 @@ export class SkirmishAI {
       }
     }
 
+    const claimed = new Set<number>();
     for (const v of toAssign) {
       const kind = wantKind();
       let node: Entity | null = null;
-      for (const nt of NODE_FOR[kind]) {
+      if (kind === ResourceKind.Food) node = this.foodNode(v, claimed);
+      else for (const nt of NODE_FOR[kind]) {
         node = this.nearestResource(nt, v.x, v.y);
         if (node) break;
       }
+      if (node && node.type === "farm") claimed.add(node.id);
       if (node) {
         this.world.issueGather([v.id], node.id);
         counts[kind]++;
@@ -864,6 +949,17 @@ export class SkirmishAI {
         if (r.gold > 200) this.world.marketTrade(this.team, "buy_wood");
       }
     }
+    // Saving for an age and short of food, with gold to spare: buy it. Gold is
+    // what piles up when an AI's army is idle, and food is what every age
+    // advance needs most of.
+    const gate = this.ageUpCost(p);
+    if (gate && this.gameTime - this.lastTradeTime > 8 && r.food < gate.food &&
+        r.gold > gate.gold + 260) {
+      this.lastTradeTime = this.gameTime;
+      this.world.marketTrade(this.team, "buy_food");
+      return;
+    }
+
     // Gold is the one thing the Market cannot make from nothing, so a fat bank
     // of both raw materials and no gold is worth converting outright.
     if (this.gameTime - this.lastTradeTime > 12 && r.gold < 180 && r.wood > 700) {
@@ -904,8 +1000,8 @@ export class SkirmishAI {
     const lowBerries = berryFood < 700;
     // Food pressure: plenty of wood and no food is the signature of an economy
     // that has run out of things to eat and has nowhere to put the villagers.
-    // Waiting for the berries to be provably gone, or for Castle Age, is too
-    // late — reaching Castle Age *needs* the food.
+    // Waiting for the berries to be provably gone, or for Crown Age, is too
+    // late — reaching Crown Age *needs* the food.
     const foodStarved = p.resources.food < 220 && p.resources.wood > 400;
 
     // A mill anchors a compact farm economy — build it once the eco is rolling
@@ -918,12 +1014,14 @@ export class SkirmishAI {
 
     // Farm transition: farms are the only food that doesn't run out for good, so
     // the AI must move onto them for the late game. Ramp toward ~one farm per 3
-    // villagers once the berries thin out or we hit Castle Age — building a
+    // villagers once the berries thin out or we hit Crown Age — building a
     // couple at a time so the transition actually keeps up with a growing
     // population. Individual fields do wear out now, but auto-reseed puts them
     // back for the wood, so this only has to cover *growth*, not replacement.
     const transitioning = lowBerries || foodStarved || p.age >= 2;
-    const farmTarget = transitioning ? Math.min(24, Math.max(3, Math.ceil(villagerCount / 3))) : 0;
+    // Enough fields for the share of villagers the economy puts on food — one
+    // per three villagers left food-gatherers queueing for fields.
+    const farmTarget = transitioning ? Math.min(28, Math.max(3, Math.ceil(villagerCount * 0.45))) : 0;
     const mill = this.myBuildings("mill")[0];
     const cx = mill ? mill.x : base.x;
     const cy = mill ? mill.y : base.y;
@@ -937,12 +1035,12 @@ export class SkirmishAI {
   private buildOrder(p: ReturnType<World["player"]>, base: Entity, villagerCount: number) {
     const have = (t: string) => this.myBuildings(t, false).length > 0;
 
-    // Dark Age: barracks once the eco can carry it.
+    // Hearth Age: barracks once the eco can carry it.
     if (!have("barracks") && villagerCount >= 6 && p.resources.wood >= 170) {
       const b = this.placeNear("barracks", base.x, base.y, 4, 9);
       if (b) this.assignBuilder(b);
     }
-    // Second Feudal qualifier (advancing now needs any 2 of a set) — a Mill is a
+    // Second Banner qualifier (advancing now needs any 2 of a set) — a Mill is a
     // cheap, always-useful drop-off that satisfies it.
     if (p.age === 0 && have("barracks") && !have("mill") &&
         !this.world.ageRequirementMet(this.team, 1) && p.resources.wood >= 110) {
@@ -950,11 +1048,11 @@ export class SkirmishAI {
       if (b) this.assignBuilder(b);
     }
 
-    // Advance to Feudal.
+    // Advance to Banner.
     if (p.age === 0 && this.diff.maxAge >= 1 && this.world.ageRequirementMet(this.team, 1) &&
         villagerCount >= Math.floor(this.villagerGoal * 0.55)) {
       const tc = this.myBuildings("town_center")[0];
-      if (tc) this.world.research(this.team, tc.id, "age");
+      if (tc) this.world.research(this.team, tc.id, this.ageTech());
     }
 
     if (p.age >= 1) {
@@ -966,7 +1064,7 @@ export class SkirmishAI {
         const b = this.placeNear("blacksmith", base.x, base.y, 3, 8);
         if (b) this.assignBuilder(b);
       }
-      // Stable is a Feudal building now — gets cavalry (Horsemen/Raiders) going.
+      // Stable is a Banner building now — gets cavalry (Horsemen/Raiders) going.
       if (!have("stable") && p.resources.wood >= 185) {
         const b = this.placeNear("stable", base.x, base.y, 4, 9);
         if (b) this.assignBuilder(b);
@@ -982,11 +1080,11 @@ export class SkirmishAI {
       }
     }
 
-    // Advance to Castle (needs any 2 Feudal buildings — we build several).
+    // Advance to Crown (needs any 2 Banner buildings — we build several).
     if (p.age === 1 && this.diff.maxAge >= 2 && this.world.ageRequirementMet(this.team, 2) &&
         villagerCount >= Math.floor(this.villagerGoal * 0.6)) {
       const tc = this.myBuildings("town_center")[0];
-      if (tc) this.world.research(this.team, tc.id, "age");
+      if (tc) this.world.research(this.team, tc.id, this.ageTech());
     }
 
     if (p.age >= 2) {
@@ -994,6 +1092,12 @@ export class SkirmishAI {
         const b = this.placeNear("siege_workshop", base.x, base.y, 4, 9);
         if (b) this.assignBuilder(b);
       }
+    }
+
+    // Advance to Empire (a Siege Workshop or a Castle qualifies).
+    if (this.empireReady(p, villagerCount)) {
+      const tc = this.myBuildings("town_center")[0];
+      if (tc) this.world.research(this.team, tc.id, this.ageTech());
     }
 
     // Extra military production so a big economy can actually spend into a
@@ -1041,7 +1145,7 @@ export class SkirmishAI {
     return best;
   }
 
-  /** A harassing AI keeps a couple of Raiders for eco raids (they're a Feudal
+  /** A harassing AI keeps a couple of Raiders for eco raids (they're a Banner
    *  unit it would otherwise rush past). */
   private ensureRaiders() {
     if ((!this.diff.harasses && this.style !== "rush") || this.savingForAge) return;
@@ -1159,8 +1263,119 @@ export class SkirmishAI {
     if (fighters.length >= 2 || hero) this.world.useAbility(fighters.map((f) => f.id));
   }
 
+  /**
+   * The research id for advancing: every advance swears an Oath, so the AI
+   * chooses one the way a player would — from its plan (its style) and from
+   * what it has scouted of the enemy. The choice is cached per age so the
+   * same decision is made however many times this is asked.
+   */
+  private oathChoice: Record<number, string> = {};
+  private ageTech(): string {
+    const next = this.world.player(this.team).age + 1;
+    if (!oathsForAge(next).length) return "age";
+    if (!this.oathChoice[next]) this.oathChoice[next] = this.chooseOath(next);
+    return `age:${this.oathChoice[next]}`;
+  }
+
+  private chooseOath(age: number): string {
+    const options = oathsForAge(age).map((o) => o.id);
+    const s = this.seen;
+    const total = s.infantry + s.archer + s.cavalry + s.siege;
+    const share = (n: number) => (total >= 4 ? n / total : 0);
+    const st = this.style;
+    const score: Record<string, number> = {};
+    for (const id of options) score[id] = 1;
+    const bump = (id: string, v: number) => { if (id in score) score[id] += v; };
+    if (age === 1) {
+      // How to grow: a boomer farms, a rusher drills, a turtle digs in.
+      bump("plough", st === "boom" ? 1.2 : st === "balanced" ? 0.5 : 0);
+      bump("sword", st === "rush" ? 1.2 : st === "balanced" ? 0.35 : 0);
+      bump("hearth", st === "turtle" ? 1.2 : 0);
+      bump("hearth", Math.min(0.8, this.seenWalls * 0.05) + share(s.cavalry) * 0.4);
+    } else if (age === 2) {
+      // What the army should be: an answer to the army it has seen.
+      bump("shield", share(s.cavalry) * 2.2 + share(s.siege) * 0.8 + (st === "turtle" ? 0.6 : 0));
+      bump("bow", share(s.infantry) * 2.0 + (st === "boom" ? 0.4 : 0));
+      bump("lance", share(s.archer) * 2.0 + share(s.siege) * 0.6 + (st === "rush" ? 0.6 : 0));
+    } else if (age === 3) {
+      // What to be remembered for: breaking walls, wealth, or the realm itself.
+      bump("engine", Math.min(1.6, this.seenWalls / 5) + (st === "rush" ? 0.6 : 0));
+      bump("coin", (st === "boom" ? 0.9 : 0) + Math.min(0.6, this.myUnits("trade_cart").length * 0.15));
+      bump("crown", (st === "turtle" ? 0.8 : 0) + (st === "balanced" ? 0.45 : 0));
+    }
+    // A little seeded variety, so a lobby of identical AIs doesn't swear alike.
+    for (const id of options) score[id] += this.rng.range(0, 0.35);
+    return options.reduce((a, b) => (score[b] > score[a] ? b : a));
+  }
+
+  /**
+   * Swap in the signature unit of each Oath sworn: it takes over most of the
+   * role it shares with a stock unit (the Lancer most of the Knight's, the
+   * Halberdier the pikes'). Applied after countering, so a counter that asks
+   * for pikes gets halberds from a Shield-sworn realm.
+   */
+  private withOathUnits(comp: Record<string, number>): Record<string, number> {
+    const p = this.world.player(this.team);
+    const out = { ...comp };
+    const shift = (from: string, to: string, frac: number, floor = 0) => {
+      const v = out[from] ?? 0;
+      out[from] = v * (1 - frac);
+      out[to] = (out[to] ?? 0) + v * frac + floor;
+    };
+    for (const id of p.oaths) {
+      if (id === "sword" && p.age >= 1) shift("militia", "sworn_blade", 0.7, 0.08);
+      if (id === "lance") shift("knight", "lancer", 0.65, 0.06);
+      if (id === "bow") { shift("crossbow", "ranger", 0.5, 0.05); shift("archer", "ranger", 0.5); }
+      if (id === "shield") { shift("pikeman", "halberdier", 1, 0.06); shift("spearman", "halberdier", 0.8); }
+      if (id === "engine") {
+        shift("trebuchet", "great_bombard", 0.6, 0.04);
+        if (this.seenWalls >= 4) out.great_bombard = (out.great_bombard ?? 0) + 0.06;
+      }
+      if (id === "crown") shift("twohand", "royal_guard", 0.7, 0.08);
+    }
+    return out;
+  }
+
   /** Composition weights, optionally countering what we've seen. */
   private composition(): Record<string, number> {
+    return this.withFactionUnits(this.withOathUnits(this.baseComposition()));
+  }
+
+  /**
+   * Field the faction's own units: a replacement takes all of the role it
+   * replaces (the shared unit can't be trained at all), and an extra takes a
+   * share of the role it plays best. Applied after the Oath swaps, so a Legion
+   * that swore the Sword splits its swordsmen between the two.
+   */
+  private withFactionUnits(comp: Record<string, number>): Record<string, number> {
+    const p = this.world.player(this.team);
+    const f = factionOf(p.faction);
+    const out = { ...comp };
+    for (const [base, own] of Object.entries(f.replaces)) {
+      if (!out[base]) continue;
+      out[own] = (out[own] ?? 0) + out[base];
+      delete out[base];
+    }
+    const share = (from: string[], to: string, frac: number, age: number) => {
+      if (p.age < age) return;
+      for (const k of from) {
+        const v = out[k] ?? 0;
+        if (!v) continue;
+        out[k] = v * (1 - frac);
+        out[to] = (out[to] ?? 0) + v * frac;
+      }
+    };
+    for (const extra of f.extra) {
+      if (extra === "yeoman") share(["crossbow", "archer"], "yeoman", 0.5, 2);
+      else if (extra === "shieldbearer") share(["militia", "legionary", "spearman"], "shieldbearer", 0.25, 1);
+      else if (extra === "berserker") share(["militia", "twohand", "sworn_blade"], "berserker", 0.45, 1);
+      else if (extra === "horse_archer") share(["archer", "skirmisher", "javelin"], "horse_archer", 0.55, 1);
+      else if (extra === "cataphract") share(["knight", "lancer"], "cataphract", 0.45, 2);
+    }
+    return out;
+  }
+
+  private baseComposition(): Record<string, number> {
     const p = this.world.player(this.team);
     const base: Record<string, number> = {};
     if (p.age === 0) {
@@ -1174,16 +1389,29 @@ export class SkirmishAI {
       base.horseman = 0.1; // fast melee cavalry
       base.javelin = 0.07; // anti-cavalry ranged
       base.raider = 0.1; // eco harass
-    } else {
-      base.knight = 0.26;
-      base.crossbow = 0.18;
-      base.handcannon = 0.08; // gunpowder line
-      base.twohand = 0.12; // heavy infantry top end
-      base.pikeman = 0.08; // anti-cavalry
-      base.catapult = 0.08;
-      base.ram = 0.05;
-      base.trebuchet = 0.03;
+    } else if (p.age === 2) {
+      base.knight = 0.28;
+      base.crossbow = 0.22;
+      base.twohand = 0.13; // heavy infantry top end
+      base.pikeman = 0.09; // anti-cavalry
+      base.catapult = 0.1;
+      base.ram = 0.06;
       base.horseman = 0.05; // anti-siege melee cav
+      if (this.seenWalls >= 4 && this.myBuildings("siege_workshop").length > 0) {
+        base.ram += 0.14;
+        base.catapult += 0.12;
+      }
+    } else {
+      // Empire: gunpowder and the great engines join the Crown line.
+      base.knight = 0.24;
+      base.crossbow = 0.14;
+      base.handcannon = 0.1; // gunpowder line
+      base.twohand = 0.12;
+      base.pikeman = 0.08;
+      base.catapult = 0.06;
+      base.ram = 0.05;
+      base.trebuchet = 0.05;
+      base.horseman = 0.05;
       // The enemy is walling up — bring the wall-breakers.
       if (this.seenWalls >= 4 && this.myBuildings("siege_workshop").length > 0) {
         base.ram += 0.14;
@@ -1208,13 +1436,13 @@ export class SkirmishAI {
     const counter: Record<string, number> = {};
     const add = (k: string, v: number) => (counter[k] = (counter[k] ?? 0) + v);
     add("archer", (s.infantry / total) * 0.5);
-    add("handcannon", (s.infantry / total) * 0.4); // gunpowder shreds infantry (Castle)
+    add("handcannon", (s.infantry / total) * 0.4); // gunpowder shreds infantry (Empire)
     add("skirmisher", (s.archer / total) * 0.4);
     add("javelin", (s.archer / total) * 0.2);
     add("knight", (s.archer / total) * 0.3 + (s.siege / total) * 0.4);
     add("horseman", (s.siege / total) * 0.4); // melee anti-siege cav
     add("spearman", (s.cavalry / total) * 0.45);
-    add("pikeman", (s.cavalry / total) * 0.55); // best anti-cav (Castle)
+    add("pikeman", (s.cavalry / total) * 0.55); // best anti-cav (Crown)
     add("militia", (s.archer / total) * 0.2 + (s.siege / total) * 0.2);
     const out: Record<string, number> = {};
     for (const k of new Set([...Object.keys(base), ...Object.keys(counter)])) {
@@ -1225,7 +1453,7 @@ export class SkirmishAI {
 
   private trainArmy() {
     // Hold army production too while banking for an age — get to the next tier
-    // first; a Dark-Age army just feeds a Feudal one. (Keep a token defence.)
+    // first; a Hearth-Age army just feeds a Banner one. (Keep a token defence.)
     if (this.savingForAge && this.armyUnits().length >= 4) return;
     const p = this.world.player(this.team);
     const comp = this.composition();
@@ -1241,7 +1469,7 @@ export class SkirmishAI {
     // Greedy: train the unit type with the biggest deficit that we can afford.
     const deficits = Object.entries(comp)
       .map(([type, w]) => [type, w * want - (countByType[type] ?? 0)] as [string, number])
-      .filter(([type, d]) => d > 0.5 && UNITS[type] && p.age >= UNITS[type].age)
+      .filter(([type, d]) => d > 0.5 && UNITS[type] && p.age >= UNITS[type].age && this.world.canFieldType(p, type))
       .sort((a, b) => b[1] - a[1]);
 
     for (const [type] of deficits) {

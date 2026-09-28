@@ -92,9 +92,12 @@ describe("AI vs AI smoke match", () => {
         // Villagers were trained beyond the starting three.
         const vills = world.countOf(team, "villager");
         expect(vills + p.stats.unitsLost).toBeGreaterThan(5);
-        // Build order progressed into military production.
-        const buildings = world.entitiesOf(team, Kind.Building);
-        expect(buildings.length).toBeGreaterThan(2);
+        // Build order progressed into military production. Counted as built
+        // rather than standing: a side can be nearly razed at 14 minutes
+        // without being out, and that is the war happening, not the economy
+        // failing.
+        const built = Object.values(p.stats.builtByType).reduce((n, v) => n + v, 0);
+        expect(built).toBeGreaterThan(2);
       }
     }
 

@@ -36,6 +36,9 @@ import { PAL, withAlpha } from "./render/palette";
 import { HUD, MatchController, MINIMAP_SIZE } from "./ui/hud";
 import { drawSpectatorPanels, teamLabel } from "./ui/spectator";
 import { ui } from "./ui/ui";
+import { AGES } from "./content/tech";
+import { OATHS } from "./content/oaths";
+import { DEFAULT_FACTION, FACTIONS, FACTION_IDS } from "./content/factions";
 import { CodexScreen } from "./ui/codex";
 import {
   ArmoryScreen,
@@ -304,6 +307,7 @@ class App {
     if (digit && !this.ingameMenu && !this.spectating) { this.controlGroupKey(parseInt(digit[1], 10)); return; }
 
     if (action === "menu") {
+      if (this.hud.oathPicker.isOpen) { this.hud.oathPicker.close(); return; }
       if (this.spectating) this.exitToMenu();
       else if (this.placing) this.placing = null;
       else if (this.powerArmed) this.powerArmed = false;
@@ -527,7 +531,12 @@ class App {
       commanders.push(COMMANDER_IDS[setupRng.int(0, COMMANDER_IDS.length - 1)]);
       boonLoadouts.push([]);
     }
-    world.init(map, loadouts, econMults, alliances, commanders, config.nomad, boonLoadouts, mode);
+    // Resolved once and written back, so a save (which stores this config)
+    // rebuilds exactly these factions even if the profile's pick changes.
+    const factions = this.factionsFor(config, numPlayers, true);
+    config.faction = factions[0];
+    config.aiFactions = factions.map((f, t) => (t === 0 ? "" : f));
+    world.init(map, loadouts, econMults, alliances, commanders, config.nomad, boonLoadouts, mode, factions);
     this.world = world;
     this.ais = [];
     for (let t = 1; t < numPlayers; t++) {
@@ -726,7 +735,8 @@ class App {
       econMults.push(t === hordeTeam ? 1 : diffFor(t).econMult);
       commanders.push(COMMANDER_IDS[Math.floor(Math.random() * COMMANDER_IDS.length)]);
     }
-    world.init(map, loadouts, econMults, alliances, commanders, config.nomad, undefined, mode);
+    world.init(map, loadouts, econMults, alliances, commanders, config.nomad, undefined, mode,
+      this.factionsFor(config, commanders.length, false));
     world.revealAll = true; // spectators see the entire battlefield
     this.world = world;
     this.ais = [];
@@ -1383,10 +1393,24 @@ class App {
             this.hud.addAlert(`🗣 Ally: ${ev.data}`, ev.x, ev.y);
           }
           break;
+        case "oath": {
+          // Oaths are public: everyone hears what a realm swears, so its
+          // identity is something to answer rather than a surprise.
+          const o = OATHS[ev.data ?? ""];
+          if (!o) break;
+          if (ev.team === this.me) {
+            const u = o.unit ? UNITS[o.unit] : undefined;
+            this.hud.addAlert(`You swore the ${o.name}${u ? ` — ${u.name}s can now be trained` : ""}`);
+          } else {
+            // No map ping: the event sits on their Town Centre, and the
+            // announcement mustn't double as a free scout of it.
+            this.hud.addAlert(`${this.teamLabel(ev.team)} swore the ${o.name}`);
+          }
+          break;
+        }
         case "age": {
-          const ageNames = ["Dark Age", "Feudal Age", "Castle Age"];
           const who = ev.team === this.me ? "You have" : "The enemy has";
-          this.hud.addAlert(`${who} advanced to the ${ageNames[parseInt(ev.data ?? "0", 10)]}!`);
+          this.hud.addAlert(`${who} advanced to the ${AGES[parseInt(ev.data ?? "0", 10)]?.name ?? "next age"}!`);
           if (ev.team === this.me) sfx("levelup", "age", 1);
           break;
         }
@@ -1887,6 +1911,10 @@ class App {
     const uis = this.uiScale();
     const UW = W / uis, UH = H / uis;
     ui.pushScale(uis);
+    // The Oath picker is modal: while it is up, nothing under it takes a click.
+    const oathModal = this.hud.oathPicker.isOpen;
+    const frameClicked = ui.clicked;
+    if (oathModal) ui.clicked = false;
     this.hud.draw(UW, UH, world, this.camera, this.me, this.selectedEntities(), dt, this.controller, this.attackMoveArmed, this.spectating, this.placing);
     // Beside the HUD's Menu button. Drawn here rather than in the HUD because
     // it needs the player's current binding for its tooltip, and the HUD
@@ -1905,6 +1933,12 @@ class App {
     }
     if (this.showScoreboard) drawScoreboard(UW, UH, world, this.me);
     if (this.net) drawChat(UW, UH, this.chatLog, this.chatOpen ? this.chatDraft : null, this.time, UH - MINIMAP_SIZE - 70);
+    if (this.hud.oathPicker.isOpen && !this.spectating) {
+      // Only a click from a frame where it was already open counts — the click
+      // that opened it must not also choose an Oath.
+      ui.clicked = oathModal ? frameClicked : false;
+      this.hud.oathPicker.draw(UW, UH, world, this.me, this.time, (b, techId) => this.controller.research(b, techId));
+    }
     ui.flushTooltip(UW, UH);
 
     // ---- in-game menu overlay ----
@@ -1939,7 +1973,7 @@ class App {
     // ---- route unconsumed pointer input to the world ----
     // Spectators can still left-click/drag to select-and-inspect units, but
     // issue no commands.
-    if (!this.ingameMenu) {
+    if (!this.ingameMenu && !oathModal && !this.hud.oathPicker.isOpen) {
       if (this.frameDragEnd && !ui.pointerConsumed) {
         if (!this.spectating && this.placing) this.paintWallLine(this.frameDragEnd);
         else this.worldDragSelect(this.frameDragEnd);
@@ -2088,6 +2122,24 @@ class App {
     };
     this.editorReturn = true;
     this.startMatch({ ...this.setup.config });
+  }
+
+  /**
+   * Each realm's faction: yours as picked, each bot's as set on the setup
+   * screen or else drawn from the match seed. Its own random stream, so the
+   * picks don't disturb anything else the seed decides — and so a save, which
+   * is the config plus the orders, rebuilds the same match.
+   */
+  private factionsFor(config: SkirmishConfig, n: number, humanFirst: boolean): string[] {
+    const rng = new RNG((config.seed ^ 0xfac7105) >>> 0);
+    const valid = (id: string | undefined) => !!id && id in FACTIONS;
+    const out: string[] = [];
+    for (let t = 0; t < n; t++) {
+      const roll = FACTION_IDS[rng.int(0, FACTION_IDS.length - 1)];
+      if (t === 0 && humanFirst) out.push(valid(config.faction) ? config.faction : (this.profile.data.faction && valid(this.profile.data.faction) ? this.profile.data.faction : DEFAULT_FACTION));
+      else out.push(valid(config.aiFactions?.[t]) ? config.aiFactions[t] : roll);
+    }
+    return out;
   }
 
   finishMatch(won: boolean) {

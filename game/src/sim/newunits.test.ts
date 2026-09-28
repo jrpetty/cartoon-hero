@@ -4,7 +4,7 @@ import { BUILDINGS } from "../content/buildings";
 import { ArmorClass } from "./types";
 
 describe("New units", () => {
-  it("Javelin Thrower: Feudal archery unit, more damage / less range than the archer", () => {
+  it("Javelin Thrower: Banner archery unit, more damage / less range than the archer", () => {
     const j = UNITS.javelin;
     expect(j.age).toBe(1);
     expect(j.trainedAt).toBe("archery_range");
@@ -14,9 +14,9 @@ describe("New units", () => {
     expect(j.bonus[ArmorClass.Cavalry]).toBeGreaterThan(0);
   });
 
-  it("Hand Cannoneer: Castle gunpowder — long range, slow, high damage", () => {
+  it("Hand Cannoneer: Empire gunpowder — long range, slow, high damage", () => {
     const h = UNITS.handcannon;
-    expect(h.age).toBe(2);
+    expect(h.age).toBe(3); // gunpowder waits for the Empire Age
     expect(h.trainedAt).toBe("archery_range");
     expect(BUILDINGS.archery_range.trains).toContain("handcannon");
     expect(h.range).toBeGreaterThan(UNITS.archer.range); // longer range
@@ -24,7 +24,7 @@ describe("New units", () => {
     expect(h.attackInterval).toBeGreaterThan(UNITS.archer.attackInterval); // slow reload
   });
 
-  it("Raider: fast, fragile Feudal cavalry that butchers villagers", () => {
+  it("Raider: fast, fragile Banner cavalry that butchers villagers", () => {
     const r = UNITS.raider;
     expect(r.age).toBe(1);
     expect(r.trainedAt).toBe("stable");

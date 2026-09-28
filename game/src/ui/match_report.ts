@@ -18,6 +18,9 @@ import { PAL, teamColor, withAlpha } from "../render/palette";
 import { MatchReport, PlayerReport, SideReport } from "../sim/metrics";
 import { UNITS } from "../content/units";
 import { BUILDINGS } from "../content/buildings";
+import { ageShort } from "../content/tech";
+import { OATHS } from "../content/oaths";
+import { FACTIONS } from "../content/factions";
 
 export type ReportTab = "overview" | "economy" | "military" | "units";
 export const REPORT_TABS: { id: ReportTab; label: string }[] = [
@@ -51,7 +54,6 @@ const secs = (n: number) => (n >= 120 ? `${Math.floor(n / 60)}m ${Math.round(n %
 const idleShare = (idle: number, standing: number) =>
   standing > 0 ? `${Math.round((idle / standing) * 100)}%` : "—";
 const mmss = (s: number) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
-const AGES = ["Dark", "Feudal", "Castle", "Imperial"];
 const ordinal = (n: number) => {
   const t = n % 100;
   if (t >= 11 && t <= 13) return `${n}th`;
@@ -263,8 +265,13 @@ function drawDuelTab(tab: ReportTab, x: number, y: number, w: number, h: number,
   const foeP = duel?.find((p) => p.relation !== "you");
   youCol = youP ? barColour(youP) : YOU;
   foeCol = foeP ? barColour(foeP) : FOE;
-  const youName = youP ? `${playerName(youP)} (you)` : "You";
-  const foeName = foeP ? playerName(foeP) : "Opponent";
+  const withOaths = (name: string, p?: PlayerReport) => {
+    const os = oathsOf(p).map((o) => o.short);
+    return os.length ? `${name} · ${os.join(", ")}` : name;
+  };
+  const facOf = (p?: PlayerReport) => (p?.faction ? ` · ${FACTIONS[p.faction as keyof typeof FACTIONS]?.name.replace(/^The /, "") ?? ""}` : "");
+  const youName = youP ? `${playerName(youP)} (you)${facOf(youP)}` : "You";
+  const foeName = foeP ? `${playerName(foeP)}${facOf(foeP)}` : "Opponent";
   // Rows breathe when there is room and close up when there isn't: ten of
   // them plus the spending bars have to fit a 680px-tall window too.
   const rowH = Math.max(32, Math.min(42, Math.floor((h - 110) / 11)));
@@ -286,8 +293,8 @@ function drawDuelTab(tab: ReportTab, x: number, y: number, w: number, h: number,
     compareRow(x, ry, w, "Technologies", you.upgrades, foe.upgrades); ry += rowH + 6;
     heading(x, ry, w, "WHERE IT WENT");
     ry += 24;
-    spendBar(x, ry, half, you, youName, youCol);
-    spendBar(x + half + colGap, ry, half, foe, foeName, foeCol);
+    spendBar(x, ry, half, you, withOaths(youName, youP), youCol);
+    spendBar(x + half + colGap, ry, half, foe, withOaths(foeName, foeP), foeCol);
     return;
   }
 
@@ -338,7 +345,7 @@ function drawDuelTab(tab: ReportTab, x: number, y: number, w: number, h: number,
     compareRow(x, ry, w, "Buildings lost", you.buildingsLost, foe.buildingsLost, { higherIsBetter: false }); ry += rowH;
     compareRow(x, ry, w, "Peak army size", you.peakArmy, foe.peakArmy); ry += rowH;
     compareRow(x, ry, w, "Technologies", you.upgrades, foe.upgrades); ry += rowH;
-    compareRow(x, ry, w, "Age reached", you.age + 1, foe.age + 1, { format: (n) => AGES[Math.min(3, n - 1)] ?? String(n) });
+    compareRow(x, ry, w, "Age reached", you.age + 1, foe.age + 1, { format: (n) => ageShort(n - 1) });
     return;
   }
 
@@ -367,6 +374,9 @@ function builtLine(x: number, y: number, w: number, a: Record<string, number>, b
     bx += tw + 22;
   }
 }
+
+/** A realm's sworn Oaths, resolved; reports from before Oaths have none. */
+const oathsOf = (p?: PlayerReport) => (p?.oaths ?? []).map((id) => OATHS[id]).filter(Boolean);
 
 const kd = (s: SideReport) => (s.unitsLost === 0 ? s.unitsKilled : s.unitsKilled / s.unitsLost);
 
@@ -496,12 +506,24 @@ function standingsTable(
       ctx.font = `bold ${nameSize}px "Trebuchet MS", sans-serif`;
       let tx = nx + ctx.measureText(playerName(p)).width + 8;
       tx += relationTag(tx, nameY, p);
-      const status = p.won ? "Victor" : p.defeated ? (p.defeatedAt >= 0 ? `Out at ${mmss(p.defeatedAt)}` : "Defeated") : "Still standing";
+      const fac = p.faction ? FACTIONS[p.faction as keyof typeof FACTIONS]?.name.replace(/^The /, "") : "";
+      const ending = p.won ? "Victor" : p.defeated ? (p.defeatedAt >= 0 ? `Out at ${mmss(p.defeatedAt)}` : "Defeated") : "Still standing";
+      const status = fac ? `${fac} · ${ending}` : ending;
       const statusCol = p.won ? BEST : p.defeated ? LOST : MUTED;
       if (compact) {
         if (tx < x + nameW - 40) ui.text(status, tx, nameY, { size: 11, color: statusCol });
       } else {
         ui.text(status, nx, mid + 10, { size: 12, color: statusCol });
+        // Then the Oaths it swore — who the realm became.
+        ctx.font = `12px "Trebuchet MS", sans-serif`;
+        let ox = nx + ctx.measureText(status).width + 10;
+        for (const o of oathsOf(p)) {
+          ctx.font = `bold 11.5px "Trebuchet MS", sans-serif`;
+          const ow = ctx.measureText(o.short).width;
+          if (ox + ow > x + nameW - 6) break;
+          ui.text(o.short, ox, mid + 10, { size: 11.5, bold: true, color: o.color });
+          ox += ow + 7;
+        }
       }
 
       // The numbers.
@@ -619,7 +641,7 @@ function drawStandingsTab(tab: ReportTab, x: number, y: number, w: number, h: nu
         { label: "Gathered", value: (p) => p.gathered, drop: 2, minW: 88 },
         { label: "Razed", value: (p) => p.buildingsRazed, drop: 5 },
         { label: "Peak army", value: (p) => p.peakArmy, drop: 6, minW: 86 },
-        { label: "Age", value: (p) => p.age, format: (n) => AGES[n] ?? "—", drop: 4, noTotal: true, noBar: true },
+        { label: "Age", value: (p) => p.age, format: (n) => ageShort(n), drop: 4, noTotal: true, noBar: true },
       ], { footnote: BEST_NOTE });
       // Where each realm's resources went, if there is room for it: a share,
       // not a size, so a small economy that spent everything on its army reads

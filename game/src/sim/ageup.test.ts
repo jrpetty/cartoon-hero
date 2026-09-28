@@ -26,7 +26,7 @@ function build(w: World, type: string): void {
 }
 
 describe("Open build order (any-2-of-N age-up)", () => {
-  it("Feudal needs any 2 of a set, not a single fixed building", () => {
+  it("Banner needs any 2 of a set, not a single fixed building", () => {
     expect(AGES[1].requiresCount).toBe(2);
     expect(AGES[1].requiresAny.length).toBeGreaterThanOrEqual(3);
     const w = makeWorld();
@@ -38,7 +38,7 @@ describe("Open build order (any-2-of-N age-up)", () => {
     expect(w.ageRequirementMet(Team.Player, 1)).toBe(true); // 2/2
   });
 
-  it("a pure-economy path can reach Feudal without a Barracks", () => {
+  it("a pure-economy path can reach Banner without a Barracks", () => {
     const w = makeWorld();
     build(w, "mill");
     build(w, "lumber_camp");

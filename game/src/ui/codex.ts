@@ -9,7 +9,7 @@ import { AGES, UPGRADES } from "../content/tech";
 import { TILE } from "../content/balance";
 import { BuildState, Entity, Kind, Team } from "../sim/types";
 import { makeEntity } from "../sim/world";
-import { drawUnit, drawBuilding } from "../render/draw";
+import { drawUnit, drawBuilding, setFactionResolver } from "../render/draw";
 import { PAL, shade, withAlpha } from "../render/palette";
 import { ui } from "./ui";
 import { drawMenuBackground } from "./screens";
@@ -18,6 +18,8 @@ import type { Profile } from "../meta/profile";
 import { MatchRecord, listHistory, summariseHistory } from "../meta/history";
 import { REPORT_TABS, ReportTab, drawReportKey, drawReportTab } from "./match_report";
 import { ACHIEVEMENTS, challengesForWeek, weekIndex } from "../meta/achievements";
+import { OATHS, oathsForAge } from "../content/oaths";
+import { FACTIONS, FACTION_IDS, factionForUnit } from "../content/factions";
 
 type Tab = "units" | "buildings" | "tech" | "records";
 
@@ -67,6 +69,7 @@ function wrap(text: string, x: number, y: number, maxW: number, size: number, co
 export class CodexScreen {
   private tab: Tab = "units";
   private selUnit = "militia";
+  private unitScroll = 0;
   private selBuilding = "town_center";
   /** Display-only entities for live art, keyed by def id. */
   private models = new Map<string, Entity>();
@@ -117,8 +120,15 @@ export class CodexScreen {
     ctx.translate(cx, cy);
     ctx.scale(scale, scale);
     ctx.translate(-cx, -cy);
-    if (kind === Kind.Unit) drawUnit(ctx, e, time);
-    else drawBuilding(ctx, e, time, Team.Player);
+    // A faction's own unit is shown as its people draw it.
+    const fac = kind === Kind.Unit ? factionForUnit(id) : undefined;
+    if (fac) setFactionResolver(() => fac.id);
+    try {
+      if (kind === Kind.Unit) drawUnit(ctx, e, time);
+      else drawBuilding(ctx, e, time, Team.Player);
+    } finally {
+      if (fac) setFactionResolver(null);
+    }
     ctx.restore();
   }
 
@@ -320,19 +330,31 @@ export class CodexScreen {
     const ids = Object.keys(UNITS);
     const listW = 330;
     const x0 = Math.max(20, W / 2 - 470);
-    ui.panel(x0, top, listW, H - top - 84);
+    const listH = H - top - 84;
+    ui.panel(x0, top, listW, listH);
+    // Thirty-nine units don't fit a screen: the list scrolls.
+    const contentH = 12 + ids.length * 38;
+    const maxScroll = Math.max(0, contentH - listH + 12);
+    if (ui.wheel && ui.mx > x0 && ui.mx < x0 + listW && ui.my > top && ui.my < top + listH) {
+      this.unitScroll = Math.max(0, Math.min(maxScroll, this.unitScroll + ui.wheel * 0.6));
+    }
+    this.unitScroll = Math.min(this.unitScroll, maxScroll);
+    ui.pushScroll(this.unitScroll, { x: x0, y: top + 4, w: listW, h: listH - 8 });
     let ly = top + 12;
     for (const id of ids) {
       const def = UNITS[id];
       const sel = this.selUnit === id;
       if (ui.button("", x0 + 10, ly, listW - 20, 34, { accent: sel })) this.selUnit = id;
       ui.text(def.name, x0 + 22, ly + 17, { size: 14, bold: true, color: sel ? "#ffe9b0" : PAL.uiParchment });
-      ui.text(
-        `${CLASS_LABEL[def.armorClass] ?? def.armorClass} · ${AGES[def.age].name.split(" ")[0]}`,
-        x0 + listW - 22, ly + 17, { size: 11, align: "right", color: "#bdb49a" },
-      );
+      // Where it comes from: its age, or the Oath or faction that owns it.
+      const fac = factionForUnit(id);
+      const src = def.oath ? OATHS[def.oath]?.short ?? "Oath" : fac ? fac.name.replace(/^The /, "") : AGES[def.age].short;
+      const srcCol = def.oath ? OATHS[def.oath]?.color ?? "#bdb49a" : fac ? fac.color : "#bdb49a";
+      ui.text(`${CLASS_LABEL[def.armorClass] ?? def.armorClass} · ${src}`, x0 + listW - 22, ly + 17, { size: 11, align: "right", color: srcCol });
       ly += 38;
     }
+    ui.popScroll();
+    ui.scrollbar(x0 + listW - 8, top + 6, listH - 12, this.unitScroll, contentH);
 
     // Detail panel.
     const dx = x0 + listW + 16;
@@ -344,7 +366,7 @@ export class CodexScreen {
 
     ui.text(def.name, dx + 180, top + 38, { size: 22, bold: true, color: PAL.uiAccent, font: "Georgia, serif" });
     ui.text(
-      `${CLASS_LABEL[def.armorClass] ?? def.armorClass} — ${AGES[def.age].name}  ·  ${fmtCost(def.cost)}  ·  ${def.pop} pop`,
+      `${CLASS_LABEL[def.armorClass] ?? def.armorClass} — ${AGES[def.age].name}${def.oath ? ` · ${OATHS[def.oath]?.name ?? ""}` : ""}  ·  ${fmtCost(def.cost)}  ·  ${def.pop} pop`,
       dx + 180, top + 60, { size: 13, color: "#d8cdb4" },
     );
     let yy = wrap(def.desc, dx + 180, top + 84, dw - 200, 13, "#bdb49a");
@@ -468,33 +490,60 @@ export class CodexScreen {
   }
 
   // ------------------------------------------------------------------- tech --
+  private techScroll = 0;
+  private techContentH = 0;
+
   private drawTech(W: number, H: number, top: number) {
     const x0 = Math.max(20, W / 2 - 470);
     const fullW = Math.min(940, W - x0 - 20);
+    const viewH = Math.max(160, H - top - 84);
+    // Four ages, nine Oaths and the full research list are more than a screen:
+    // scroll, measured from last frame like the setup screen.
+    const maxScroll = Math.max(0, this.techContentH - viewH);
+    if (ui.wheel && ui.my > top && ui.my < top + viewH) {
+      this.techScroll = Math.max(0, Math.min(maxScroll, this.techScroll + ui.wheel * 0.6));
+    }
+    this.techScroll = Math.min(this.techScroll, maxScroll);
+    ui.pushScroll(this.techScroll, { x: 0, y: top, w: W, h: viewH });
 
-    // Ages timeline.
-    const aw = (fullW - 24 * 2) / 3;
-    for (let i = 0; i < AGES.length; i++) {
+    // Ages timeline — however many ages there are.
+    const n = AGES.length;
+    const gap = 20;
+    const aw = (fullW - gap * (n - 1)) / n;
+    const ageH = 232;
+    for (let i = 0; i < n; i++) {
       const age = AGES[i];
-      const ax = x0 + i * (aw + 24);
-      ui.panel(ax, top, aw, 196, { light: true });
-      ui.text(age.name, ax + 16, top + 26, { size: 17, bold: true, color: PAL.uiAccent, font: "Georgia, serif" });
-      ui.text(
+      const ax = x0 + i * (aw + gap);
+      ui.panel(ax, top, aw, ageH, { light: true });
+      ui.text(age.name, ax + 14, top + 26, { size: 17, bold: true, color: PAL.uiAccent, font: "Georgia, serif" });
+      let ty = wrap(
         i === 0 ? "Where every realm begins." : `${fmtCost(age.cost)} · ${age.advanceTime}s at the Town Center`,
-        ax + 16, top + 48, { size: 12, color: "#bdb49a" },
+        ax + 14, top + 48, aw - 28, 12, "#bdb49a",
       );
       if (age.requiresCount > 0) {
         const names = age.requiresAny.map((id) => BUILDINGS[id]?.name ?? id).join(", ");
-        ui.text(`Requires: any ${age.requiresCount} of — ${names}`, ax + 16, top + 66, { size: 12, color: "#d8cdb4" });
+        ty = wrap(`Requires any ${age.requiresCount} of: ${names}`, ax + 14, ty + 4, aw - 28, 11.5, "#d8cdb4");
       }
-      const unlockU = Object.values(UNITS).filter((u) => u.age === i).map((u) => u.name);
+      // Oath units are unlocked by the Oath, not the age — they're listed there.
+      const unlockU = Object.values(UNITS).filter((u) => u.age === i && !u.oath).map((u) => u.name);
       const unlockB = Object.values(BUILDINGS).filter((b) => b.age === i).map((b) => b.name);
-      let uy = top + 92;
-      ui.text("Unlocks", ax + 16, uy, { size: 12, bold: true, color: PAL.uiGood });
-      uy = wrap([...unlockU, ...unlockB].join(", ") || "—", ax + 16, uy + 18, aw - 32, 11, "#d8cdb4");
-      // chevron to the next age (drawn, so it renders everywhere)
-      if (i < AGES.length - 1) {
-        const cx = ax + aw + 12;
+      ui.text("Unlocks", ax + 14, ty + 12, { size: 12, bold: true, color: PAL.uiGood });
+      ty = wrap([...unlockU, ...unlockB].join(", ") || "—", ax + 14, ty + 30, aw - 28, 11, "#d8cdb4");
+      const oaths = oathsForAge(i);
+      if (oaths.length) {
+        ui.text("Swear one Oath", ax + 14, ty + 12, { size: 12, bold: true, color: "#ffe9b0" });
+        let ox = ax + 14;
+        let oy = ty + 30;
+        for (const o of oaths) {
+          ui.ctx.font = `bold 12px "Trebuchet MS", sans-serif`;
+          const w = ui.ctx.measureText(o.short).width;
+          if (ox + w > ax + aw - 14) { ox = ax + 14; oy += 17; }
+          ui.text(o.short, ox, oy, { size: 12, bold: true, color: o.color });
+          ox += w + 12;
+        }
+      }
+      if (i < n - 1) {
+        const cx = ax + aw + gap / 2;
         const cy = top + 98;
         ui.ctx.strokeStyle = PAL.uiAccent;
         ui.ctx.lineWidth = 3;
@@ -506,23 +555,75 @@ export class CodexScreen {
       }
     }
 
-    // Upgrades, grouped by age.
-    const uy0 = top + 216;
-    ui.panel(x0, uy0, fullW, H - uy0 - 84);
-    ui.text("Blacksmith Research", x0 + 16, uy0 + 24, { size: 16, bold: true, color: PAL.uiAccent, font: "Georgia, serif" });
-    const ups = Object.values(UPGRADES);
+    // The Oaths — this game's answer to civilisations.
+    let y = top + ageH + 20;
+    const oathCols = 3;
+    const ow = (fullW - (oathCols - 1) * 14) / oathCols;
+    const oathList = Object.values(OATHS);
+    ui.text("Oaths", x0, y + 12, { size: 18, bold: true, color: PAL.uiAccent, font: "Georgia, serif" });
+    y = wrap(
+      "Every age you advance to, your realm swears one of three Oaths. It is how a realm gets its identity — chosen during the match, with the map in view and the enemy scouted, instead of a civilisation picked before it. Everyone is told what you swear.",
+      x0, y + 34, fullW, 12.5, "#d8cdb4",
+    ) + 8;
+    const cardH = 150;
+    oathList.forEach((o, k) => {
+      const ox = x0 + (k % oathCols) * (ow + 14);
+      const oy = y + Math.floor(k / oathCols) * (cardH + 12);
+      ui.panel(ox, oy, ow, cardH, { light: true });
+      ui.ctx.fillStyle = o.color;
+      ui.ctx.fillRect(ox + 3, oy + 3, ow - 6, 4);
+      ui.text(o.name, ox + 12, oy + 22, { size: 14, bold: true, color: "#ffe9b0" });
+      ui.text(`${AGES[o.age]?.name ?? ""} · “${o.motto}”`, ox + 12, oy + 40, { size: 11, color: "#bdb49a" });
+      let ly = oy + 60;
+      for (const line of o.lines(1)) ly = wrap(`• ${line}`, ox + 12, ly, ow - 24, 11.5, "#e7ddc4") + 3;
+    });
+    y += Math.ceil(oathList.length / oathCols) * (cardH + 12) + 12;
+
+    // Factions — who a realm is, before the Oaths make it anything else.
+    ui.text("Factions", x0, y + 12, { size: 18, bold: true, color: PAL.uiAccent, font: "Georgia, serif" });
+    y = wrap(
+      "Chosen before the match: a people with its own look, a few bonuses with a price attached, and one or two soldiers of its own. Each is strongest at a different point in a match; none is simply better.",
+      x0, y + 34, fullW, 12.5, "#d8cdb4",
+    ) + 8;
+    const facCardH = 176;
+    FACTION_IDS.forEach((id, k) => {
+      const f = FACTIONS[id];
+      const fx = x0 + (k % oathCols) * (ow + 14);
+      const fy = y + Math.floor(k / oathCols) * (facCardH + 12);
+      ui.panel(fx, fy, ow, facCardH, { light: true });
+      ui.ctx.fillStyle = f.color;
+      ui.ctx.fillRect(fx + 3, fy + 3, ow - 6, 4);
+      ui.text(f.name, fx + 12, fy + 22, { size: 14, bold: true, color: "#ffe9b0" });
+      const curve = { early: "Strong early", mid: "Peaks mid-game", late: "Strong late", steady: "Steady" }[f.curve];
+      ui.text(`${f.era} · ${curve}`, fx + 12, fy + 40, { size: 11, color: f.color });
+      let ly = fy + 60;
+      for (const line of f.strengths) ly = wrap(`+ ${line}`, fx + 12, ly, ow - 24, 11.5, "#b8e0b0") + 2;
+      for (const line of f.weaknesses) ly = wrap(`– ${line}`, fx + 12, ly, ow - 24, 11.5, "#e8b0a4") + 2;
+    });
+    y += Math.ceil(FACTION_IDS.length / oathCols) * (facCardH + 12) + 12;
+
+    // Research, grouped by age.
+    const ups = Object.values(UPGRADES).slice().sort((a, b) => a.age - b.age);
     const cols = 3;
     const uw = (fullW - 32 - (cols - 1) * 14) / cols;
+    const rows = Math.ceil(ups.length / cols);
+    const panelH = 44 + rows * 78 + 8;
+    ui.panel(x0, y, fullW, panelH);
+    ui.text("Research", x0 + 16, y + 24, { size: 16, bold: true, color: PAL.uiAccent, font: "Georgia, serif" });
     ups.forEach((up, i) => {
       const ux = x0 + 16 + (i % cols) * (uw + 14);
-      const uyy = uy0 + 44 + Math.floor(i / cols) * 78;
+      const uyy = y + 44 + Math.floor(i / cols) * 78;
       ui.panel(ux, uyy, uw, 70, { light: true });
       ui.text(up.name, ux + 12, uyy + 18, { size: 13, bold: true });
       ui.text(
-        `${AGES[up.age].name.split(" ")[0]} · ${fmtCost(up.cost)} · ${up.time}s`,
+        `${AGES[up.age].short} · ${fmtCost(up.cost)} · ${up.time}s`,
         ux + 12, uyy + 36, { size: 11, color: "#bdb49a" },
       );
       wrap(up.desc, ux + 12, uyy + 54, uw - 24, 11, "#d8cdb4");
     });
+    y += panelH;
+    ui.popScroll();
+    this.techContentH = y - top + 12;
+    ui.scrollbar(x0 + fullW + 6, top, viewH, this.techScroll, this.techContentH);
   }
 }

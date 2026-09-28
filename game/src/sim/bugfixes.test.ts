@@ -31,7 +31,7 @@ describe("Bugfix: age advance can't be double-charged", () => {
     const w = mk(2);
     const p = w.player(Team.Player);
     p.resources.food = 9999; p.resources.wood = 9999; p.resources.gold = 9999;
-    // Meet the Feudal requirement (2 of the listed buildings) and add a 2nd TC.
+    // Meet the Banner requirement (2 of the listed buildings) and add a 2nd TC.
     w.spawnBuilding(Team.Player, "barracks", 700, 900, true);
     w.spawnBuilding(Team.Player, "mill", 760, 900, true);
     const tc1 = w.entitiesOf(Team.Player, Kind.Building).find((e) => e.type === "town_center")!;
@@ -47,7 +47,7 @@ describe("Bugfix: age advance can't be double-charged", () => {
 describe("Bugfix: queued age-up uses the real advance time", () => {
   it("itemTime('a:age', age) returns the next age's advance time", () => {
     const w = mk(3);
-    expect(w.itemTime("a:age", 0)).toBe(AGES[1].advanceTime); // → Feudal
+    expect(w.itemTime("a:age", 0)).toBe(AGES[1].advanceTime); // → Banner
     expect(w.itemTime("a:age", 1)).toBe(AGES[2].advanceTime); // → Castle (was hardcoded 30)
   });
 });

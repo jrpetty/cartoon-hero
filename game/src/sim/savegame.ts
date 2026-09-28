@@ -23,7 +23,13 @@ import { applyCommand, worldChecksum } from "./commands";
 import type { World } from "./world";
 import { SIM_DT } from "../content/balance";
 
-export const SAVE_FORMAT_VERSION = 1;
+/**
+ * Bumped whenever the rules change under a saved command log — a save replays
+ * its orders against the current rules, so a different rulebook plays out a
+ * different match. 2: the Empire Age and Oaths (units changed age, and every
+ * age-up swears an Oath).
+ */
+export const SAVE_FORMAT_VERSION = 2;
 const STORAGE_KEY = "banner_and_blade_saves_v1";
 /** How many saves we keep. Enough for a few games in flight, bounded for storage. */
 export const SAVE_LIMIT = 6;
