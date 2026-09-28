@@ -1,0 +1,818 @@
+// In-match HUD: top resource bar, minimap, selection panel, command card,
+// alerts. Talks back to the match controller through the MatchController
+// interface — the HUD never mutates the world directly.
+
+import { World, FOG_UNSEEN, VET_RANKS, VET_THRESHOLDS } from "../sim/world";
+import { BuildState, Entity, Kind, Stance, Team } from "../sim/types";
+import { Camera } from "../engine/camera";
+import { UNITS } from "../content/units";
+import { ABILITIES } from "../content/abilities";
+import { BUILDINGS } from "../content/buildings";
+import { AGES, MAX_AGE, UPGRADES } from "../content/tech";
+import { PAL, teamColor, withAlpha } from "../render/palette";
+import { dayLabel, dayPhase, isNight } from "../content/daynight";
+import { rarityByIndex } from "../meta/rarity";
+import { ui } from "./ui";
+import { buildMinimapBase } from "../render/terrain";
+import { OathPicker } from "./oath_picker";
+import { OATHS, oathChips } from "../content/oaths";
+import type { MapData } from "../maps/generator";
+
+export interface Alert {
+  text: string;
+  time: number; // seconds remaining
+  x?: number;
+  y?: number; // world position for minimap ping
+}
+
+export interface MatchController {
+  trainUnit(building: Entity, type: string): void;
+  research(building: Entity, techId: string): void;
+  startPlacement(type: string): void;
+  ungarrison(building: Entity): void;
+  toggleGate(building: Entity): void;
+  setAutoReseed(on: boolean): void;
+  trade(action: "sell_wood" | "sell_food" | "buy_wood" | "buy_food"): void;
+  stopSelection(): void;
+  holdSelection(): void;
+  setStance(stance: Stance): void;
+  setAttackMoveMode(): void;
+  garrisonSelection(): void;
+  useAbility(): void;
+  minimapNavigate(wx: number, wy: number): void;
+  minimapCommand(wx: number, wy: number): void;
+  minimapPing(wx: number, wy: number): void;
+  openMenu(): void;
+  /** Take an item out of a building's production queue (refunded). */
+  cancelProduction(building: Entity, index: number): void;
+  /** Look at a place (an alert that was clicked). */
+  jumpTo(x: number, y: number): void;
+  /** Keep only this type in the selection — or, with shift, drop it. */
+  narrowSelection(type: string, remove: boolean): void;
+}
+
+interface BuildCategory {
+  id: string;
+  label: string;
+  hint: string;
+  buildings: string[];
+}
+
+const BUILD_CATEGORIES: BuildCategory[] = [
+  {
+    id: "economy",
+    label: "Economy",
+    hint: "Houses, drop-off camps, farms, bridges, market and expansion Town Centers.",
+    buildings: ["house", "mill", "lumber_camp", "mining_camp", "farm", "bridge", "market", "town_center"],
+  },
+  {
+    id: "military",
+    label: "Military",
+    hint: "Production and upgrade buildings for your army.",
+    buildings: ["barracks", "archery_range", "stable", "siege_workshop", "blacksmith"],
+  },
+  {
+    id: "defense",
+    label: "Defense",
+    hint: "Walls, gates, towers, watchfires and the mighty Castle.",
+    buildings: ["palisade", "stone_wall", "gate", "watchfire", "watch_tower", "castle"],
+  },
+];
+
+export const MINIMAP_SIZE = 196;
+const CARD_W = 4;
+const CARD_H = 3;
+const BTN = 56;
+const GAP = 6;
+const PING_LIFE = 2.4; // seconds a minimap ping lingers
+
+export class HUD {
+  private minimapBase: HTMLCanvasElement | null = null;
+  alerts: Alert[] = [];
+  pings: { x: number; y: number; age: number }[] = [];
+  buildMenuOpen = false;
+  buildCategory: string | null = null;
+  /** Advancing an age opens this, to choose the Oath the realm swears. */
+  readonly oathPicker = new OathPicker();
+
+  prepare(map: MapData) {
+    this.minimapBase = buildMinimapBase(map, MINIMAP_SIZE);
+    this.alerts = [];
+    this.pings = [];
+    this.buildMenuOpen = false;
+    this.buildCategory = null;
+    this.oathPicker.close();
+  }
+
+  /** Dragging across the minimap moves the camera; main skips box-select for it. */
+  minimapDragging = false;
+  minimapDragEnded = false;
+  private prevLeftHeld = false;
+
+  addAlert(text: string, x?: number, y?: number) {
+    // The same message again refreshes the one already showing, rather than
+    // stacking copies of it down the screen.
+    const same = this.alerts.find((a) => a.text === text);
+    if (same) { same.time = 5; same.x = x; same.y = y; return; }
+    this.alerts.unshift({ text, time: 5, x, y });
+    if (this.alerts.length > 4) this.alerts.pop();
+  }
+
+  /** "⚠ Need 40 more wood" — the reason a button is greyed out, if it's money. */
+  private shortfall(res: { food: number; wood: number; gold: number }, cost: { food: number; wood: number; gold: number }): string[] {
+    const need = (["food", "wood", "gold"] as const).filter((k) => res[k] < cost[k]).map((k) => `${Math.ceil(cost[k] - res[k])} more ${k}`);
+    return need.length ? [`⚠ Need ${need.join(" and ")}`] : [];
+  }
+
+  /** Shift state from the App, for shift-click on selection chips. */
+  shiftHeld = false;
+
+  /** Is this screen point over the HUD (top bar, minimap, selection panel, command card)? */
+  overHud(W: number, H: number, mx: number, my: number): boolean {
+    const cardW = CARD_W * (BTN + GAP) + GAP + 8, cardH = CARD_H * (BTN + GAP) + GAP + 8;
+    if (my < 36) return true;
+    if (mx < MINIMAP_SIZE + 20 && my > H - MINIMAP_SIZE - 20) return true;
+    if (mx > W - cardW - 14 && my > H - cardH - 14) return true;
+    return my > H - 116 && mx > MINIMAP_SIZE + 20 && mx < W - cardW - 14;
+  }
+
+  addPing(x: number, y: number) {
+    this.pings.push({ x, y, age: 0 });
+    if (this.pings.length > 8) this.pings.shift();
+  }
+
+  draw(
+    W: number,
+    H: number,
+    world: World,
+    cam: Camera,
+    team: Team,
+    selection: Entity[],
+    dt: number,
+    ctrl: MatchController,
+    attackMoveArmed: boolean,
+    spectating = false,
+    placingType: string | null = null,
+  ) {
+    const ctx = ui.ctx;
+    const p = world.player(team);
+
+    // ---------------------------------------------------------- top bar --
+    ui.panel(0, 0, W, 34);
+    if (!spectating) {
+      const res = p.resources;
+      const items: [string, string, number][] = [
+        ["🍖", "#e89a5a", Math.floor(res.food)],
+        ["🪵", "#b08a52", Math.floor(res.wood)],
+        ["🪙", PAL.goldVein, Math.floor(res.gold)],
+      ];
+      let x = 14;
+      for (const [icon, color, val] of items) {
+        ui.text(icon, x, 17, { size: 15 });
+        ui.text(String(val), x + 22, 17, { size: 14, color, bold: true });
+        x += 92;
+      }
+      const popBlocked = p.popUsed >= p.popCap;
+      ui.text(`Pop ${p.popUsed}/${p.popCap}`, x, 17, {
+        size: 14,
+        color: popBlocked ? PAL.uiBad : PAL.uiParchment,
+        bold: popBlocked,
+      });
+      x += 110;
+      ui.text(AGES[p.age].name, x, 17, { size: 14, color: PAL.uiAccent, bold: true });
+      // The Oaths sworn so far, as coloured chips beside the age: this realm's
+      // identity, at a glance.
+      ctx.font = `bold 14px "Trebuchet MS", sans-serif`;
+      let ox = x + ctx.measureText(AGES[p.age].name).width + 12;
+      const chips = oathChips(p.oaths);
+      ctx.font = `bold 11.5px "Trebuchet MS", sans-serif`;
+      const full = chips.reduce((a, c) => a + ctx.measureText(c.label).width + 19, 0);
+      // The clock sits in the middle of the bar; on a narrow window the chips
+      // shrink to lettered badges rather than run into it.
+      const roomy = ox + full < W / 2 - 46;
+      for (const chip of chips) {
+        ctx.font = `bold 11.5px "Trebuchet MS", sans-serif`;
+        const label = roomy ? chip.label : chip.label[0];
+        const cw = roomy ? ctx.measureText(label).width + 14 : 18;
+        ctx.fillStyle = withAlpha(chip.color, 0.3);
+        ctx.beginPath(); ctx.roundRect(ox, 8, cw, 18, roomy ? 4 : 9); ctx.fill();
+        ctx.strokeStyle = withAlpha(chip.color, 0.85);
+        ctx.lineWidth = 1;
+        ctx.stroke();
+        ui.text(label, ox + cw / 2, 17.5, { align: "center", size: 11.5, bold: true, color: "#f4ead2" });
+        ox += cw + 5;
+      }
+    }
+
+    const mins = Math.floor(world.time / 60);
+    const secs = Math.floor(world.time % 60);
+    ui.text(`${mins}:${secs.toString().padStart(2, "0")}`, W / 2, 17, { align: "center", size: 14 });
+
+    // Day/night dial + label.
+    const phase = dayPhase(world.time);
+    const night = isNight(phase);
+    const dialX = W / 2 + 52;
+    if (night) {
+      ctx.fillStyle = "#cdd6ea";
+      ctx.beginPath();
+      ctx.arc(dialX, 17, 7, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = PAL.uiPanel;
+      ctx.beginPath();
+      ctx.arc(dialX + 3, 15, 6, 0, Math.PI * 2);
+      ctx.fill();
+    } else {
+      const warm = phase < 0.08 || phase >= 0.4;
+      ctx.fillStyle = warm ? "#ffcf6a" : "#ffe9b0";
+      ctx.beginPath();
+      ctx.arc(dialX, 17, 6, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = withAlpha("#ffd98a", 0.7);
+      ctx.lineWidth = 1.5;
+      for (let i = 0; i < 8; i++) {
+        const a = (i / 8) * Math.PI * 2;
+        ctx.beginPath();
+        ctx.moveTo(dialX + Math.cos(a) * 8, 17 + Math.sin(a) * 8);
+        ctx.lineTo(dialX + Math.cos(a) * 10.5, 17 + Math.sin(a) * 10.5);
+        ctx.stroke();
+      }
+    }
+    ui.text(dayLabel(phase), dialX + 16, 17, {
+      size: 12,
+      color: night ? "#9fb0d6" : "#e8c98a",
+      bold: night,
+    });
+
+    // Casters have the caster bar (and Esc / Leave) instead.
+    if (!spectating && ui.button("Menu", W - 74, 5, 64, 24, { size: 13 })) ctrl.openMenu();
+
+    if (attackMoveArmed) {
+      ui.text("⚔ ATTACK-MOVE: click a target location", W / 2, 52, {
+        align: "center", size: 15, color: "#f2a05d", bold: true,
+      });
+    }
+    // Placement mode is otherwise invisible except for the ghost under the
+    // cursor, and walls now *stay* armed between runs — which is only an
+    // improvement if you can tell it has happened and how to stop.
+    if (placingType) {
+      const wall = placingType === "palisade" || placingType === "stone_wall";
+      ui.text(
+        wall
+          ? `🧱 ${BUILDINGS[placingType].name.toUpperCase()}: drag to lay a run — keep going, right-click when done`
+          : `🔨 ${BUILDINGS[placingType].name.toUpperCase()}: click to place — right-click to cancel`,
+        W / 2, attackMoveArmed ? 72 : 52,
+        { align: "center", size: 14, color: "#8fd0ff", bold: true },
+      );
+    }
+
+    // ------------------------------------------------------------ alerts --
+    let ay = 76;
+    for (const a of this.alerts) {
+      a.time -= dt;
+      if (a.time <= 0) continue;
+      const alpha = Math.min(1, a.time);
+      ctx.globalAlpha = alpha;
+      // An alert that happened somewhere is a link there: click to look.
+      const where = a.x !== undefined && a.y !== undefined;
+      ctx.font = "bold 15px 'Trebuchet MS', sans-serif";
+      const tw = ctx.measureText(a.text).width;
+      const hov = where && ui.hit(W / 2 - tw / 2 - 8, ay - 15, tw + 16, 21);
+      if (hov) {
+        ctx.fillStyle = "rgba(0,0,0,0.35)";
+        ctx.beginPath(); ctx.roundRect(W / 2 - tw / 2 - 8, ay - 15, tw + 16, 21, 5); ctx.fill();
+        ui.pointerConsumed = true;
+        if (ui.clicked) { ctrl.jumpTo(a.x!, a.y!); a.time = Math.min(a.time, 0.6); }
+      }
+      ui.text(a.text + (hov ? "  ↗" : ""), W / 2, ay, { align: "center", size: 15, color: hov ? "#ffe9b0" : "#f2c45d", bold: true });
+      ctx.globalAlpha = 1;
+      ay += 22;
+    }
+    this.alerts = this.alerts.filter((a) => a.time > 0);
+    for (const ping of this.pings) ping.age += dt;
+    this.pings = this.pings.filter((ping) => ping.age < PING_LIFE);
+
+    // ----------------------------------------------------------- minimap --
+    const mmX = 10;
+    const mmY = H - MINIMAP_SIZE - 10;
+    ui.panel(mmX - 4, mmY - 4, MINIMAP_SIZE + 8, MINIMAP_SIZE + 8);
+    if (this.minimapBase) ctx.drawImage(this.minimapBase, mmX, mmY);
+
+    const sx = MINIMAP_SIZE / world.worldW;
+    const sy = MINIMAP_SIZE / world.worldH;
+
+    // Fog shading on minimap.
+    const fog = world.fog[team];
+    const cellW = MINIMAP_SIZE / world.fogCols;
+    const cellH = MINIMAP_SIZE / world.fogRows;
+    ctx.fillStyle = "rgba(8,7,4,0.85)";
+    for (let cy = 0; cy < world.fogRows; cy += 2) {
+      for (let cx = 0; cx < world.fogCols; cx += 2) {
+        if (fog[cy * world.fogCols + cx] === FOG_UNSEEN) {
+          ctx.fillRect(mmX + cx * cellW, mmY + cy * cellH, cellW * 2, cellH * 2);
+        }
+      }
+    }
+
+    // In team games, colour the map by relation to you, not raw team.
+    const diplo = world.hasTeamAlliances();
+    const diploMain = (t: Team): string => {
+      const rel = world.relationTo(team, t);
+      if (rel === "self") return PAL.diplomacy.self.main;
+      if (rel === "ally") return PAL.diplomacy.ally.main;
+      return PAL.diplomacy.enemies[world.enemyIndexOf(team, t) % PAL.diplomacy.enemies.length].main;
+    };
+
+    // Entities as dots.
+    for (const e of world.entities) {
+      if (!e.alive) continue;
+      if (e.kind === Kind.Projectile) continue;
+      if (!world.visibleTo(team, e)) continue;
+      let color: string;
+      if (e.kind === Kind.Resource) {
+        color = e.type === "tree" ? "#2f5b28" : e.type === "gold_mine" ? PAL.goldVein : "#b13a4a";
+      } else {
+        color = diplo ? diploMain(e.team) : teamColor(e.team).main;
+      }
+      const s = e.kind === Kind.Building ? 3 : 1.6;
+      ctx.fillStyle = color;
+      ctx.fillRect(mmX + e.x * sx - s / 2, mmY + e.y * sy - s / 2, s, s);
+    }
+
+    // Alert pings.
+    for (const a of this.alerts) {
+      if (a.x === undefined || a.y === undefined) continue;
+      const pulse = (a.time * 3) % 1;
+      ctx.strokeStyle = withAlpha("#f25d4a", 1 - pulse);
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(mmX + a.x * sx, mmY + a.y! * sy, 4 + pulse * 8, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+
+    // Viewport rectangle.
+    const vw = (cam.viewW / cam.zoom) * sx;
+    const vh = (cam.viewH / cam.zoom) * sy;
+    ctx.strokeStyle = "rgba(243, 233, 210, 0.9)";
+    ctx.lineWidth = 1;
+    ctx.strokeRect(mmX + cam.x * sx - vw / 2, mmY + cam.y * sy - vh / 2, vw, vh);
+
+    // Diplomacy legend (team games only): You / Ally / Enemy swatches.
+    if (diplo) {
+      const legend: [string, string][] = [
+        ["You", PAL.diplomacy.self.main],
+        ["Ally", PAL.diplomacy.ally.main],
+        ["Enemy", PAL.diplomacy.enemies[0].main],
+      ];
+      const lw = 58;
+      const lh = 12 + legend.length * 14;
+      const lx = mmX + 4;
+      const ly = mmY + 4;
+      ctx.fillStyle = "rgba(12,9,5,0.72)";
+      ctx.fillRect(lx, ly, lw, lh);
+      ctx.strokeStyle = withAlpha(PAL.uiAccent, 0.3);
+      ctx.lineWidth = 1;
+      ctx.strokeRect(lx, ly, lw, lh);
+      for (let i = 0; i < legend.length; i++) {
+        const [label, col] = legend[i];
+        const ry = ly + 8 + i * 14;
+        ctx.fillStyle = col;
+        ctx.fillRect(lx + 7, ry + 2, 9, 9);
+        ui.text(label, lx + 22, ry + 7, { size: 11, color: "#e7ddc4" });
+      }
+    }
+
+    // Player pings: expanding cyan rings, both on the minimap and (briefly) in
+    // the world. Friendly signals — "look here", "rally here".
+    for (const ping of this.pings) {
+      const t = ping.age / PING_LIFE;
+      const pulse = (ping.age * 2.2) % 1;
+      ctx.strokeStyle = withAlpha("#79e0ff", (1 - t) * (1 - pulse));
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(mmX + ping.x * sx, mmY + ping.y * sy, 3 + pulse * 9, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+
+    // Minimap interaction. Press and drag to sweep the camera across it.
+    const inMinimap = ui.hit(mmX, mmY, MINIMAP_SIZE, MINIMAP_SIZE);
+    if (ui.leftHeld && !this.prevLeftHeld && inMinimap && !ui.alt) this.minimapDragging = true;
+    this.minimapDragEnded = this.minimapDragging && !ui.leftHeld;
+    if (!ui.leftHeld) this.minimapDragging = false;
+    this.prevLeftHeld = ui.leftHeld;
+    if (this.minimapDragging) {
+      ui.pointerConsumed = true;
+      const wx = Math.max(0, Math.min(world.worldW, (ui.mx - mmX) / sx));
+      const wy = Math.max(0, Math.min(world.worldH, (ui.my - mmY) / sy));
+      ctrl.minimapNavigate(wx, wy);
+    }
+    if (inMinimap) {
+      ui.pointerConsumed = true;
+      const wx = (ui.mx - mmX) / sx;
+      const wy = (ui.my - mmY) / sy;
+      if (ui.clicked) {
+        if (ui.alt) ctrl.minimapPing(wx, wy);
+        else ctrl.minimapNavigate(wx, wy);
+      }
+      if (ui.rightClicked) ctrl.minimapCommand(wx, wy);
+    }
+
+    // ----------------------------------------------------- command card --
+    const cardW = CARD_W * (BTN + GAP) + GAP + 8;
+    const cardH = CARD_H * (BTN + GAP) + GAP + 8;
+    const cardX = W - cardW - 10;
+    const cardY = H - cardH - 10;
+    if (!spectating) {
+      ui.panel(cardX, cardY, cardW, cardH);
+      this.drawCommandCard(cardX + 8, cardY + 8, world, team, selection, ctrl);
+    }
+
+    // -------------------------------------------------- selection panel --
+    // Works while spectating too (inspect any unit) — kept clear of the right-
+    // hand realm cards, which take one or two columns there.
+    const selX = mmX + MINIMAP_SIZE + 18;
+    const specCols = world.numTeams > 4 ? 2 : 1;
+    const rightEdge = spectating ? W - specCols * 262 : cardX;
+    const selW = rightEdge - selX - 12;
+    if (selection.length > 0 && selW > 200) {
+      const selH = 104;
+      const selY = H - selH - 10;
+      ui.panel(selX, selY, selW, selH);
+      this.drawSelectionPanel(selX + 10, selY + 8, selW - 20, world, selection, team, ctrl);
+    }
+  }
+
+  private cost(c: { food: number; wood: number; gold: number }): string {
+    const parts: string[] = [];
+    if (c.food) parts.push(`${c.food}f`);
+    if (c.wood) parts.push(`${c.wood}w`);
+    if (c.gold) parts.push(`${c.gold}g`);
+    return parts.join(" ") || "free";
+  }
+
+  private drawCommandCard(
+    x0: number,
+    y0: number,
+    world: World,
+    team: Team,
+    selection: Entity[],
+    ctrl: MatchController,
+  ) {
+    const p = world.player(team);
+    const own = selection.filter((e) => e.team === team);
+    const btnAt = (i: number): [number, number] => [
+      x0 + (i % CARD_W) * (BTN + GAP),
+      y0 + Math.floor(i / CARD_W) * (BTN + GAP),
+    ];
+    let slot = 0;
+    const place = (
+      label: string,
+      onClick: () => void,
+      opts: Parameters<UIType["button"]>[5] = {},
+    ) => {
+      const [bx, by] = btnAt(slot++);
+      if (ui.button(label, bx, by, BTN, BTN, { ...opts, size: opts.size ?? 11 })) onClick();
+    };
+    type UIType = typeof ui;
+
+    const villagers = own.filter((e) => e.kind === Kind.Unit && UNITS[e.type]?.canBuild);
+    const combatUnits = own.filter((e) => e.kind === Kind.Unit);
+    const building = own.find((e) => e.kind === Kind.Building);
+
+    if (villagers.length > 0 && (this.buildMenuOpen || own.every((e) => e.type === "villager"))) {
+      if (this.buildMenuOpen) {
+        if (!this.buildCategory) {
+          // Pick a build category.
+          for (const cat of BUILD_CATEGORIES) {
+            place(cat.label, () => (this.buildCategory = cat.id), {
+              accent: true,
+              size: 13,
+              tooltip: [cat.label, cat.hint],
+            });
+          }
+          place("Close", () => (this.buildMenuOpen = false), { danger: true });
+          return;
+        }
+        const cat = BUILD_CATEGORIES.find((c) => c.id === this.buildCategory)!;
+        for (const id of cat.buildings) {
+          const def = BUILDINGS[id];
+          if (!def) continue;
+          const lockedAge = p.age < def.age;
+          const lockedReq = def.requires && !world.hasBuilding(team, def.requires);
+          const bcost = world.buildingCostFor(team, def.id);
+          const cantAfford = !world.canAfford(p.resources, bcost);
+          place(
+            def.name.split(" ")[0],
+            () => {
+              ctrl.startPlacement(id);
+              this.buildMenuOpen = false;
+              this.buildCategory = null;
+            },
+            {
+              disabled: lockedAge || !!lockedReq || cantAfford,
+              tooltip: [
+                def.name,
+                this.cost(bcost),
+                ...(lockedAge ? [`Requires ${AGES[def.age].name}`] : []),
+                ...(lockedReq ? [`Requires ${BUILDINGS[def.requires!].name}`] : []),
+                ...this.shortfall(p.resources, bcost),
+                def.desc,
+              ],
+            },
+          );
+        }
+        place("Back", () => (this.buildCategory = null), { danger: true });
+        return;
+      }
+      place("Build", () => {
+        this.buildMenuOpen = true;
+        this.buildCategory = null;
+      }, { accent: true, tooltip: ["Open the construction menu (B)"] });
+    }
+
+    if (combatUnits.length > 0) {
+      place("Stop", () => ctrl.stopSelection(), { tooltip: ["Stop (S)"] });
+      place("Atk Move", () => ctrl.setAttackMoveMode(), {
+        accent: true,
+        tooltip: ["Attack-move (A)", "March and engage anything hostile on the way."],
+      });
+      place("Garrison", () => ctrl.garrisonSelection(), {
+        tooltip: ["Garrison (G)", "Tuck units into the nearest building for cover + extra arrows."],
+      });
+      // Combat stance — highlight the selection's prevailing posture (cycle with Y).
+      const counts = [0, 0, 0, 0, 0];
+      for (const u of combatUnits) counts[u.stance]++;
+      const cur = counts.indexOf(Math.max(...counts));
+      const stances: [string, Stance, string][] = [
+        ["Aggr", Stance.Aggressive, "Aggressive — chase down any enemy in sight, then seek the next."],
+        ["Def", Stance.Defensive, "Defensive — engage nearby threats, then return to post."],
+        ["Stand", Stance.StandGround, "Stand Ground — fire on anything in range, never move to chase."],
+        ["No Atk", Stance.Passive, "Passive — hold fire; only fight when you order it."],
+        ["Skirm", Stance.Skirmish, "Skirmish — ranged units give ground while reloading, then plant and shoot. Beats slow infantry; cavalry still runs them down."],
+      ];
+      for (const [lbl, st, tip] of stances) {
+        place(lbl, () => ctrl.setStance(st), { accent: cur === st, size: 10, tooltip: [`${lbl} stance (Y to cycle)`, tip] });
+      }
+      // Signature ability for whichever ability-carrying type is selected.
+      const abilityUnit = combatUnits.find((e) => ABILITIES[e.type]);
+      if (abilityUnit) {
+        const ab = ABILITIES[abilityUnit.type];
+        const ready = combatUnits.filter((e) => ABILITIES[e.type]?.id === ab.id && e.abilityCooldown <= 0);
+        const minCd = Math.min(
+          ...combatUnits
+            .filter((e) => ABILITIES[e.type]?.id === ab.id)
+            .map((e) => e.abilityCooldown),
+        );
+        place(ab.name.split(" ")[0], () => ctrl.useAbility(), {
+          accent: ready.length > 0,
+          disabled: ready.length === 0,
+          badge: ready.length === 0 && minCd > 0 ? String(Math.ceil(minCd)) : "",
+          tooltip: [
+            `${ab.name} (Q)`,
+            ab.desc,
+            ready.length > 0
+              ? `${ready.length} ready`
+              : `On cooldown — ${Math.ceil(minCd)}s`,
+          ],
+        });
+      }
+      return;
+    }
+
+    if (building && building.buildState === BuildState.Done) {
+      const def = BUILDINGS[building.type];
+      // When several production buildings of the same type are selected, training
+      // queues into all of them — so show the combined queued count per unit.
+      const prodSiblings = own.filter((e) => e.kind === Kind.Building && e.type === building.type && e.buildState === BuildState.Done);
+      for (const unitId of def.trains) {
+        const u = UNITS[unitId];
+        // Another Oath's signature unit isn't this realm's to train, and a
+        // button for it would only be clutter.
+        if (u.oath && !p.oaths.includes(u.oath)) continue;
+        // Likewise another faction's units, and the shared units this
+        // faction trains its own in place of.
+        if (!world.canFieldType(p, unitId)) continue;
+        const ucost = world.unitCostFor(team, unitId);
+        const lockedAge = p.age < u.age;
+        const heroState = u.hero ? world.heroStatus(team) : null;
+        const heroLocked = !!heroState && !heroState.trainable;
+        place(
+          u.name.split(" ")[0].slice(0, 7),
+          () => ctrl.trainUnit(building, unitId),
+          {
+            accent: !!u.hero && !heroLocked,
+            disabled: lockedAge || heroLocked || !world.canAfford(p.resources, ucost) || p.popUsed + u.pop > p.popCap,
+            tooltip: [
+              u.name + (u.hero ? " ★" : ""),
+              ...(u.oath ? [`Signature of the ${OATHS[u.oath]?.name ?? "Oath"}`] : []),
+              this.cost(ucost) + `  (${u.pop} pop)`,
+              ...(lockedAge ? [`Requires ${AGES[u.age].name}`] : []),
+              ...this.shortfall(p.resources, ucost),
+              ...(p.popUsed + u.pop > p.popCap ? [`⚠ Population capped (${p.popUsed}/${p.popCap}) — build a House`] : []),
+              ...(prodSiblings.length > 1 ? [`Queues in all ${prodSiblings.length} selected ${def.name}s`] : []),
+              ...(heroState && heroState.label ? [heroState.label] : []),
+              u.desc,
+            ],
+            badge: String(prodSiblings.reduce((n, b) => n + b.productionQueue.filter((q) => q === `u:${unitId}`).length, 0) || ""),
+          },
+        );
+      }
+      if (building.type === "town_center" && p.age < MAX_AGE) {
+        const next = AGES[p.age + 1];
+        const prog = world.ageRequirementProgress(team, p.age + 1);
+        const reqNames = next.requiresAny.map((id) => BUILDINGS[id]?.name ?? id).join(", ");
+        // Opens the Oath picker rather than researching outright: every
+        // advance is also the choice of which Oath the realm swears. The
+        // picker says what is missing, so the button only needs to be off
+        // while an advance is already under way.
+        const aging = own.some((e) => e.kind === Kind.Building && e.productionQueue.includes("a:age"));
+        place(
+          `${next.short} Age`,
+          () => this.oathPicker.open(building),
+          {
+            accent: true,
+            disabled: aging,
+            tooltip: [
+              `Advance to the ${next.name} — and swear an Oath`,
+              this.cost(next.cost),
+              ...(next.requiresCount > 0
+                ? [`Build any ${next.requiresCount} (${prog.have}/${prog.need}): ${reqNames}`]
+                : []),
+              "Choose one of three Oaths: a lasting bonus, and for some a unit only you can train.",
+            ],
+          },
+        );
+      }
+      // Research housed in this building (Blacksmith combat techs, eco techs at
+      // the Mill / Lumber Camp / Mining Camp, etc.).
+      for (const upId of Object.keys(UPGRADES)) {
+        const up = UPGRADES[upId];
+        if (up.researchedAt !== building.type || p.upgrades.has(upId)) continue;
+        place(up.name.split(" ")[0].slice(0, 7), () => ctrl.research(building, upId), {
+          disabled: p.age < up.age || !world.canAfford(p.resources, world.techCostFor(team, upId)),
+          tooltip: [up.name, this.cost(world.techCostFor(team, upId)),
+            ...(p.age < up.age ? [`Requires ${AGES[up.age].name}`] : []),
+            ...this.shortfall(p.resources, world.techCostFor(team, upId)), up.desc],
+        });
+      }
+      if (building.type === "market") {
+        // Live quotes, because the whole point of a moving price is being able
+        // to see it move. A rate below par means the market is glutted.
+        const wq = world.marketQuote(team, "wood");
+        const fq = world.marketQuote(team, "food");
+        const trend = (v: number) => (v > 1.02 ? " ▲" : v < 0.98 ? " ▼" : "");
+        const wp = world.marketPrice(team, "wood");
+        const fp = world.marketPrice(team, "food");
+        place(`Sell 🪵${trend(wp)}`, () => ctrl.trade("sell_wood"), {
+          size: 10,
+          tooltip: [`Sell 100 wood → ${wq.sell} gold`, "Every sale pushes the price down; it drifts back over a few minutes."],
+        });
+        place(`Sell 🍖${trend(fp)}`, () => ctrl.trade("sell_food"), {
+          size: 10,
+          tooltip: [`Sell 100 food → ${fq.sell} gold`, "Every sale pushes the price down; it drifts back over a few minutes."],
+        });
+        place(`Buy 🪵${trend(wp)}`, () => ctrl.trade("buy_wood"), {
+          size: 10,
+          tooltip: [`Buy 100 wood ← ${wq.buy} gold`, "Every purchase pushes the price up."],
+        });
+        place(`Buy 🍖${trend(fp)}`, () => ctrl.trade("buy_food"), {
+          size: 10,
+          tooltip: [`Buy 100 food ← ${fq.buy} gold`, "Every purchase pushes the price up."],
+        });
+      }
+      if (building.type === "gate") {
+        place(building.gateOpen ? "Close Gate" : "Open Gate", () => ctrl.toggleGate(building), {
+          accent: true,
+          tooltip: [
+            building.gateOpen ? "Bar the gate shut" : "Swing the gate open",
+            "Otherwise it opens for your troops and shuts when foes draw near.",
+          ],
+        });
+      }
+      // Auto-reseed lives on the farm and the Mill because those are the two
+      // things you have selected when you are thinking about food at all.
+      if (building.type === "farm" || building.type === "mill") {
+        place(p.autoReseed ? "Reseed ✓" : "Reseed ✗", () => ctrl.setAutoReseed(!p.autoReseed), {
+          accent: p.autoReseed,
+          size: 10,
+          tooltip: [
+            "Auto-reseed farms",
+            p.autoReseed
+              ? "A spent field is re-sown on the same ground whenever the wood is there."
+              : "Spent fields are left bare and the farmer goes to find other work.",
+            `Each re-sowing costs ${this.cost(BUILDINGS.farm.cost)}.`,
+          ],
+        });
+      }
+      if (building.garrison.length > 0) {
+        place(`Eject ${building.garrison.length}`, () => ctrl.ungarrison(building), {
+          tooltip: ["Ungarrison all units (G)"],
+        });
+      }
+    }
+  }
+
+  private drawSelectionPanel(
+    x: number,
+    y: number,
+    w: number,
+    world: World,
+    selection: Entity[],
+    team: Team,
+    ctrl: MatchController,
+  ) {
+    const ctx = ui.ctx;
+    if (selection.length === 1) {
+      const e = selection[0];
+      const def = e.kind === Kind.Unit ? UNITS[e.type] : null;
+      const bdef = e.kind === Kind.Building ? BUILDINGS[e.type] : null;
+      const name = def?.name ?? bdef?.name ?? e.type;
+      const rarity = e.kind === Kind.Unit && e.team === team ? rarityByIndex(e.variantRarity) : null;
+      ui.text(name, x, y + 10, { size: 16, bold: true, color: PAL.uiAccent });
+      if (rarity && rarity.index > 0) {
+        ui.text(rarity.name, x + ctx.measureText(name).width + 26, y + 10, { size: 12, color: rarity.color, bold: true });
+      }
+      ui.bar(x, y + 26, Math.min(w, 220), 8, e.hp / e.maxHp, e.hp / e.maxHp > 0.4 ? PAL.uiGood : PAL.uiBad);
+      ui.text(`${Math.ceil(e.hp)} / ${e.maxHp}`, x + Math.min(w, 220) + 10, y + 30, { size: 12 });
+      let line = "";
+      if (def) {
+        line = `⚔ ${e.attack}   🛡 ${e.armor}   ${def.ranged ? `🎯 ${e.range}` : "melee"}   👟 ${Math.round(e.speed)}`;
+      } else if (bdef) {
+        if (e.buildState !== BuildState.Done) {
+          line = `Under construction — ${Math.round(e.buildProgress * 100)}%`;
+        } else if (bdef.attack > 0) {
+          line = `⚔ ${bdef.attack}   🎯 ${bdef.range}   Garrison ${e.garrison.length}/${bdef.garrisonCap}`;
+        } else if (e.garrison.length > 0) {
+          line = `Garrison ${e.garrison.length}/${bdef.garrisonCap}`;
+        }
+      }
+      if (line) ui.text(line, x, y + 50, { size: 13 });
+
+      // Veterancy. The chevrons over a unit's head say it has *a* rank; they
+      // can't say which, how it was earned, or how close the next one is — and
+      // a rank that silently added HP and attack was doing real work nobody
+      // could see. Rank ladder ends at Legendary, where there is nothing left
+      // to count toward.
+      if (def && e.veterancy > 0 && !def.hero) {
+        const rank = VET_RANKS[e.veterancy] ?? "";
+        const col = e.veterancy >= 3 ? "#ffe07a" : e.veterancy >= 2 ? "#ffd24a" : "#e8c98a";
+        let vet = `${"⌃".repeat(e.veterancy)} ${rank}  ·  ${e.vetKills} kill${e.vetKills === 1 ? "" : "s"}`;
+        const next = VET_THRESHOLDS[e.veterancy];
+        if (next !== undefined) {
+          const vetMult = world.player(e.team)?.vetMult ?? 1;
+          vet += `  ·  next at ${Math.max(1, Math.round(next / vetMult))}`;
+        }
+        ui.text(vet, x, y + 68, { size: 12, color: col, bold: true });
+      }
+
+      // Production queue.
+      if (e.kind === Kind.Building && e.productionQueue.length > 0) {
+        // The whole queue, one chip per item; click one to cancel it (refunded).
+        const nameOf = (item: string) => item.startsWith("u:")
+          ? UNITS[item.slice(2)]?.name ?? item
+          : item === "a:age" ? "Advancing Age" : UPGRADES[item.slice(2)]?.name ?? item;
+        const own = e.team === team;
+        const item0 = e.productionQueue[0];
+        const total = world.itemTime(item0);
+        const qw = 62, qh = 22, maxN = Math.max(1, Math.floor((w + 4) / (qw + 4)));
+        e.productionQueue.slice(0, maxN).forEach((item, i) => {
+          const qx = x + i * (qw + 4), qy = y + 60;
+          const short = nameOf(item).replace(/^Advancing /, "").split(" ")[0].slice(0, 8);
+          if (own && ui.button(short, qx, qy, qw, qh, { size: 10.5, accent: i === 0, tooltip: [nameOf(item), i === 0 ? "In progress" : `Queued (${i + 1})`, "Click to cancel — the cost is refunded."] })) {
+            ctrl.cancelProduction(e, i);
+          } else if (!own) ui.text(short, qx + 4, qy + 15, { size: 10.5, color: "#bdb49a" });
+          if (i === 0) ui.bar(qx + 3, qy + qh - 5, qw - 6, 3, 1 - e.productionTime / total, "#ffe9b0", "rgba(0,0,0,0.4)");
+        });
+        if (e.productionQueue.length > maxN) ui.text(`+${e.productionQueue.length - maxN}`, x + maxN * (qw + 4), y + 76, { size: 12, color: "#bdb49a" });
+      }
+    } else {
+      // Multi-select: count chips by type.
+      const counts = new Map<string, number>();
+      for (const e of selection) counts.set(e.type, (counts.get(e.type) ?? 0) + 1);
+      ui.text(`${selection.length} selected`, x, y + 10, { size: 15, bold: true, color: PAL.uiAccent });
+      let cx = x;
+      let cy = y + 34;
+      for (const [type, n] of counts) {
+        const name = UNITS[type]?.name ?? BUILDINGS[type]?.name ?? type;
+        const label = `${name} ×${n}`;
+        ctx.font = "13px 'Trebuchet MS', sans-serif";
+        const cw = ctx.measureText(label).width + 18;
+        if (cx + cw > x + w) {
+          cx = x;
+          cy += 26;
+        }
+        const hov = counts.size > 1 && ui.hit(cx, cy - 11, cw, 22);
+        ctx.fillStyle = hov ? "rgba(255,233,176,0.18)" : "rgba(255,255,255,0.07)";
+        ctx.beginPath();
+        ctx.roundRect(cx, cy - 11, cw, 22, 11);
+        ctx.fill();
+        ui.text(label, cx + 9, cy, { size: 13, color: hov ? "#ffe9b0" : undefined });
+        if (hov) {
+          ui.pointerConsumed = true;
+          ui.tooltip([name, "Click: select only these", "Shift+click: drop these from the selection"]);
+          if (ui.clicked) ctrl.narrowSelection(type, this.shiftHeld);
+        }
+        cx += cw + 8;
+      }
+    }
+  }
+}

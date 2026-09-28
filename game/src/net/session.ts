@@ -1,0 +1,100 @@
+// Glues the deterministic Lockstep driver to a Transport (WebRTC peer or
+// server-relayed WebSocket) and adds periodic checksum exchange so a desync is
+// caught loudly instead of players silently drifting into different games.
+// Works for any number of teams (2 up to MAX_TEAMS, e.g. 8v8).
+
+import { World } from "../sim/world";
+import { Team } from "../sim/types";
+import { worldChecksum } from "../sim/commands";
+import { Lockstep } from "./lockstep";
+import { Transport } from "./transport";
+
+export class NetSession {
+  lock: Lockstep | null = null;
+  desynced = false;
+  private localSums = new Map<number, number>();
+  private remoteSums = new Map<number, Map<Team, number>>();
+  private readonly sumEvery = 40; // compare state every ~2s of sim time
+
+  constructor(public transport: Transport, public localTeam: Team, public teams: Team[], public observer = false) {}
+
+  /** App-level message hooks (chat & map pings) — set by the match shell. */
+  onChat?: (msg: { name?: string; text?: string; team?: number }) => void;
+  onPing?: (msg: { x?: number; y?: number; team?: number }) => void;
+  /** A ranked match was rated by the server: how far ratings moved, and which alliance won. */
+  onRated?: (msg: { delta?: number; winner?: number }) => void;
+  /** A message from the server's operator to everyone. */
+  onAnnounce?: (text: string) => void;
+
+  /** Seconds this client's simulation trails the live match (a caster's delay). */
+  behindSeconds(simHz: number): number {
+    return this.lock ? Math.max(0, (this.lock.readyThrough() - this.lock.currentTick) / simHz) : 0;
+  }
+
+  /** Build the lockstep driver over a freshly-inited world and wire the wire. */
+  attach(world: World, inputDelay = 5) {
+    this.lock = new Lockstep(world, this.localTeam, this.teams, inputDelay,
+      (turn) => this.transport.send({ t: "turn", turn }));
+    this.transport.onData = (raw) => {
+      const m = raw as { t?: string; turn?: never; tick?: number; sum?: number; team?: number; name?: string; text?: string; x?: number; y?: number };
+      if (m.t === "turn" && m.turn) this.lock?.receiveTurn(m.turn);
+      else if (m.t === "sum" && typeof m.tick === "number" && typeof m.sum === "number" && typeof m.team === "number")
+        this.compare(m.tick, m.team as Team, m.sum);
+      else if (m.t === "drop" && typeof m.team === "number") this.lock?.dropTeam(m.team as Team);
+      else if (m.t === "chat") this.onChat?.(m as { name?: string; text?: string; team?: number });
+      else if (m.t === "ping") this.onPing?.(m as { x?: number; y?: number; team?: number });
+      else if (m.t === "rated") this.onRated?.(m as { delta?: number; winner?: number });
+      else if (m.t === "announce" && typeof (m as { text?: unknown }).text === "string") this.onAnnounce?.((m as { text: string }).text);
+    };
+  }
+
+  /** A team's player left mid-match — keep simulating without them. */
+  dropTeam(team: Team) { this.lock?.dropTeam(team); }
+
+  /** Author + send the local team's turn for one tick. Driven at the real-time
+   *  sim rate, independent of stepping, so a stalled peer still receives our
+   *  input (otherwise everyone would deadlock waiting on each other). */
+  authorTick() { if (!this.observer) this.lock?.authorTurn(); }
+
+  /** How far the local author cursor is ahead of the simulated tick — used to
+   *  cap how far we run ahead of a lagging peer. */
+  get authorLead(): number {
+    return this.lock ? this.lock.nextAuthorTick + this.lock.inputDelay - this.lock.currentTick : 0;
+  }
+
+  /** Step the sim as far as the received remote input allows (bounded), emitting
+   *  a checksum periodically for desync detection. Returns ticks simulated. */
+  stepReady(maxSteps: number, holdBackTicks = 0): number {
+    const lock = this.lock;
+    if (!lock) return 0;
+    let n = 0;
+    // A caster on a broadcast delay stays `holdBackTicks` behind the live match.
+    while (n < maxSteps && (holdBackTicks <= 0 || lock.currentTick <= lock.readyThrough() - holdBackTicks) && lock.step()) {
+      const t = lock.currentTick;
+      if (t % this.sumEvery === 0) {
+        const sum = worldChecksum(lock.world);
+        this.localSums.set(t, sum);
+        // Observers verify silently; players publish their checksum.
+        if (!this.observer) this.transport.send({ t: "sum", tick: t, sum, team: this.localTeam });
+        this.compare(t);
+      }
+      n++;
+    }
+    return n;
+  }
+
+  // Remote checksums keyed by tick AND author team: with 3+ players several peers
+  // report a sum for the same tick, so a single shared slot would let a matching
+  // peer mask another peer's divergence.
+  private compare(tick: number, team?: Team, remote?: number) {
+    if (team !== undefined && remote !== undefined) {
+      let m = this.remoteSums.get(tick);
+      if (!m) { m = new Map(); this.remoteSums.set(tick, m); }
+      m.set(team, remote);
+    }
+    const l = this.localSums.get(tick);
+    const m = this.remoteSums.get(tick);
+    if (l === undefined || !m) return;
+    for (const v of m.values()) if (v !== l) { this.desynced = true; return; }
+  }
+}
