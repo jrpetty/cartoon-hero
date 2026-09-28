@@ -1,5 +1,12 @@
 import { describe, expect, it, beforeAll, afterAll } from "vitest";
 import { startServer } from "../../server/server.mjs";
+// Node built-ins; the project has no @types/node.
+// @ts-ignore
+import { mkdtempSync } from "fs";
+// @ts-ignore
+import { tmpdir } from "os";
+// @ts-ignore
+import { join } from "path";
 import { NetLobby, NetStart, normalizeWsUrl } from "./net_lobby";
 
 // --- A minimal DOM, just enough to run NetLobby headlessly -------------------
@@ -54,7 +61,11 @@ describe("normalizeWsUrl — forgiving server address entry", () => {
 describe("Multiplayer menu — full click-through against a live server", () => {
   let srv: { port: number; close: () => Promise<void> };
   let body: FakeEl;
-  beforeAll(async () => { body = installDom(); srv = await startServer(0, "127.0.0.1"); });
+  beforeAll(async () => {
+    body = installDom();
+    const dir = mkdtempSync(join(tmpdir(), "bb-lobby-"));
+    srv = await startServer(0, "127.0.0.1", { gameHtml: false, mapsFile: join(dir, "maps.json"), playersFile: join(dir, "players.json") });
+  });
   afterAll(async () => { await srv.close(); });
 
   const overlay = () => body.children[body.children.length - 1];
@@ -109,6 +120,49 @@ describe("Multiplayer menu — full click-through against a live server", () => 
     s.transport.close();
     other.close();
     await flush();
+  });
+
+  it("Play Online on the website: hub → create a room → a friend joins → chat", async () => {
+    // Served from the site itself, the game connects to it with nothing typed.
+    (globalThis as unknown as { location: unknown }).location = { protocol: "http:", host: `127.0.0.1:${srv.port}` };
+    try {
+      let started: NetStart | null = null;
+      const lobby = new NetLobby();
+      lobby.open((s) => { started = s; }, { name: "Aldric", factions: ["legion"], faction: "legion" });
+      button("Play Online")!.onclick!();
+      await flush(80);
+      expect(panelHtml()).toContain("online");
+      // The create form: room name first, then the password.
+      const [, roomName] = inputs();
+      roomName.value = "Lads Night";
+      button("Create")!.onclick!();
+      await flush(80);
+      expect(panelHtml()).toContain("Lads Night");
+
+      // A friend finds it in the list and joins.
+      const friend = new WebSocket(`ws://127.0.0.1:${srv.port}`);
+      await new Promise((r) => (friend.onopen = r));
+      friend.send(JSON.stringify({ t: "hub", name: "Brenna", v: 2 }));
+      friend.send(JSON.stringify({ t: "join", room: "Lads Night", name: "Brenna", v: 2 }));
+      friend.send(JSON.stringify({ t: "chat", text: "evening all" }));
+      await flush(80);
+      expect(panelHtml()).toContain("2 players");
+      const log = overlay().querySelector("mp-chatlog")!;
+      expect(log.innerHTML).toContain("evening all");
+      // Only owned factions can be picked.
+      const locked = walk(overlay()).find((e) => e.tag === "button" && e.textContent.includes("🔒 Khanate"));
+      expect(locked?.disabled).toBe(true);
+
+      button("Start Match")!.onclick!();
+      await flush(80);
+      expect(started).not.toBeNull();
+      expect((started as unknown as NetStart).online).toContain("127.0.0.1");
+      (started as unknown as NetStart).transport.close();
+      friend.close();
+      await flush();
+    } finally {
+      delete (globalThis as unknown as { location?: unknown }).location;
+    }
   });
 
   it("Home → Quick 1v1 shows the no-server Host/Join options", () => {

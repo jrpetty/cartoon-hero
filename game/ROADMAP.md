@@ -1066,10 +1066,61 @@ on the whole window (so drags can end off the canvas), so clicking anything
 on a DOM overlay also clicked the canvas button drawn beneath it. A click now
 has to start on the canvas (`input.test.ts`), and the lobby refuses to stack.
 
+## Factions are owned
+
+A new player's first stop (after claiming a commander) is the **Factions
+book**: pick one faction, free. Every other costs **1500 renown** — the same
+currency War Chests take — and is bought from the book. Locked factions show
+a lock and the price on the Skirmish screen (clicking one opens its page), and
+only owned factions can be chosen in online lobbies. AI opponents still use
+all six. A save replays with the faction it was played with.
+
+The book (`ui/faction_book.ts`) is the encyclopedia: for each faction a
+diorama of its town and soldiers, difficulty (forgiving → punishing), its
+power early / mid / late, how it plays, bonuses and their price, who it
+suits, its own soldiers drawn with their numbers, how to win with it, and
+what gives it trouble — the guide text lives with the faction
+(`FactionDef.guide`) and was checked against the real numbers (the first
+draft claimed Longbowmen out-range everything; the Longbow unit doesn't).
+
+## Online: one website
+
+The game and the server are one deployable thing now. `server.mjs` serves
+the single-file build at `/`, and the game, when it was loaded from a
+website, connects back to that same address — `wss://` under `https://` for
+free, nothing to type. `Dockerfile` (two stages: build the game, then Node
+plus two files), `fly.toml`, and `render.yaml` at the repo root.
+
+**The hub** (protocol 2): live room list pushed to everyone browsing it,
+create (name, password, size 2–16) and join rooms, watch open ones, quick
+match (1v1, 2v2, 4-FFA — seats whoever is waiting, picks a built-in field,
+counts down, starts), per-room chat (rate-limited), host kick, and return to
+the hub after a match. **Ranked**: quick matches are rated by Elo when every
+remaining player's report of the winner agrees; disagreement rates nothing;
+a quitter loses. Identity is a random per-browser id plus a name — no
+accounts. **Hardening**: per-connection token-bucket rate limit, 1 MB frame
+cap, heartbeat that frees dead seats within ~45 s, cleaned names, protocol
+version check that asks an old page to reload, per-instance state (tests
+run several servers side by side).
+
+Verified the way a player would: the Docker runtime image serving the build,
+two separate Chromium profiles opening the site, each picking a free faction,
+queueing for a 1v1, being matched, counting down and playing into the match
+in lockstep with no page errors (`/healthz` reported one game, two players).
+The image's build stage couldn't run here (no package registry inside the
+sandbox's containers) — it's the ordinary `npm ci && npm run build:single`.
+
+**Not yet**: server-side accounts (renown, unlocks and War Chests live in the
+browser and aren't verified — fine while online play is all-Common, needed
+before anything bought affects ranked play); reconnecting to a match in
+progress (lockstep would need the order log replayed to the returning
+client); more than one server instance.
+
 ## Bigger / later
 - **Naval** — water is currently only an impassable wall, and the Islands
   preset (55% water) is a maze rather than a naval map. Dock, transport,
   war galley + AI. The largest genuinely-missing pillar.
 - **Battlemage** and **Trade Cart** remain the open content items.
-- **Online commanders and rarities** — network matches are still fair-play
-  (all Common, no commanders or boons). Factions now travel; the rest could.
+- **Accounts** — server-side profiles, so renown, unlocks and collections
+  follow a player between devices and can be trusted in ranked play.
+- **Reconnect** to a match in progress.

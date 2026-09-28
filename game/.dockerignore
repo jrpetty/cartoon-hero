@@ -1,0 +1,8 @@
+node_modules
+dist
+shots
+server/community-maps.json
+server/players.json
+server/public
+*.local
+.DS_Store

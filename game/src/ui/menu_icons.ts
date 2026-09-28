@@ -299,3 +299,37 @@ export function iconResume(ctx: Ctx, x: number, y: number, s: number) {
   ctx.fillRect(-24 * u, 29 * u, 48 * u, 7 * u);
   ctx.restore();
 }
+
+/** Three standards in different colours, crossed: the Factions book. */
+export function iconFactions(ctx: Ctx, x: number, y: number, s: number) {
+  const u = s / 100;
+  ctx.save();
+  ctx.translate(x, y + 6 * u);
+  const cols = ["#5b8fe0", "#d8a83a", "#d8574a"];
+  [-0.35, 0, 0.35].forEach((a, i) => {
+    ctx.save();
+    ctx.rotate(a);
+    ctx.beginPath();
+    ctx.rect(-2.5 * u, -46 * u, 5 * u, 80 * u);
+    ctx.fillStyle = "#6a4a2a";
+    ctx.fill();
+    stroke(ctx, 2 * u);
+    ctx.beginPath();
+    ctx.moveTo(2.5 * u, -44 * u);
+    ctx.lineTo(26 * u, -40 * u);
+    ctx.lineTo(18 * u, -30 * u);
+    ctx.lineTo(26 * u, -20 * u);
+    ctx.lineTo(2.5 * u, -18 * u);
+    ctx.closePath();
+    ctx.fillStyle = cols[i];
+    ctx.fill();
+    stroke(ctx, 2 * u);
+    ctx.restore();
+  });
+  ctx.beginPath();
+  ctx.arc(0, 30 * u, 7 * u, 0, Math.PI * 2);
+  ctx.fillStyle = GOLD;
+  ctx.fill();
+  stroke(ctx, 2 * u);
+  ctx.restore();
+}

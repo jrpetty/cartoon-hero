@@ -1,7 +1,7 @@
 // Out-of-match screens: main menu, skirmish setup, armory (chests, collection,
 // loadout), chest-opening reveal, and the post-match report.
 
-import { Profile } from "../meta/profile";
+import { FACTION_PRICE, Profile } from "../meta/profile";
 import { CHESTS, ChestDef, rollChest, RollResult } from "../meta/chests";
 import { RARITIES, rarityByIndex } from "../meta/rarity";
 import { CATALOG, COLLECTIBLE_UNIT_IDS, variantKey, VARIANT_BY_KEY } from "../meta/catalog";
@@ -23,7 +23,7 @@ import { Particles } from "../engine/particles";
 import { MatchReport } from "../sim/metrics";
 import { CustomMap, listCustomMaps, mapPool } from "../maps/custom";
 import { drawMapThumbnail } from "./map_thumb";
-import { iconArmory, iconCodex, iconMap, iconMultiplayer, iconResume, iconSettings, iconSkirmish, iconWarband } from "./menu_icons";
+import { iconArmory, iconFactions, iconCodex, iconMap, iconMultiplayer, iconResume, iconSettings, iconSkirmish, iconWarband } from "./menu_icons";
 import { REPORT_TABS, ReportTab, drawReportKey, drawReportTab, reportSubtitle } from "./match_report";
 import { TEAM_COLORS, blockTeams, coopTeams, formatLabel, freeForAll, resizeTeams, teamsValid } from "./teams";
 import { FACTIONS, FACTION_IDS, DEFAULT_FACTION, factionOf } from "../content/factions";
@@ -173,7 +173,7 @@ export class MenuScreen {
   /** A save the player picked from the continue strip, consumed by the app. */
   pickedSave: SaveGame | null = null;
 
-  draw(W: number, H: number, time: number, profile: Profile): "skirmish" | "multiplayer" | "warband" | "armory" | "codex" | "settings" | "editor" | "resume" | null {
+  draw(W: number, H: number, time: number, profile: Profile): "skirmish" | "multiplayer" | "warband" | "armory" | "codex" | "settings" | "editor" | "resume" | "factions" | null {
     drawMenuBackground(W, H, time);
     const ctx = ui.ctx;
 
@@ -204,8 +204,11 @@ export class MenuScreen {
       return null;
     }
 
-    type MenuAction = "skirmish" | "multiplayer" | "warband" | "armory" | "codex" | "settings" | "editor" | "resume";
+    type MenuAction = "skirmish" | "multiplayer" | "warband" | "armory" | "codex" | "settings" | "editor" | "resume" | "factions";
     let action: MenuAction | null = null;
+    // First launch, once the commander is claimed: choose the free faction
+    // before anything else. The book won't let you leave without one.
+    if (profile.needsFirstFaction) return "factions";
 
     // ---- title ----
     const narrow = W < 980;
@@ -263,17 +266,18 @@ export class MenuScreen {
       ly += 112 + gap;
 
       // Your realm: the faction and commander you will take into Skirmish.
-      const fac = factionOf(profile.data.faction);
+      const fac = factionOf(profile.playableFaction());
       const cmdr = COMMANDERS[profile.data.commander];
-      if (ui.button("", x0, ly, leftW, 124, { tooltip: ["Your realm", "Choose your faction and commander on the Skirmish screen."] })) action = "skirmish";
+      if (ui.button("", x0, ly, leftW, 124, { tooltip: ["Your realm", `${profile.ownedFactions().length} of ${FACTION_IDS.length} factions owned`, "Open the Factions book — read about each, and unlock more."] })) action = "factions";
       ctx.fillStyle = fac.color;
       ctx.fillRect(x0 + 1, ly + 10, 4, 104);
       ui.text("YOUR REALM", x0 + 18, ly + 22, { size: 10.5, bold: true, color: "#a89f88" });
       ui.text(fac.name, x0 + 18, ly + 48, { size: 21, bold: true, color: fac.color, font: "Georgia, serif" });
       ui.text(fac.era, x0 + 18, ly + 67, { size: 12, color: "#d8cdb4" });
       ui.text(cmdr ? `Led by ${cmdr.name}, ${cmdr.title}` : "No commander", x0 + 18, ly + 90, { size: 12, color: cmdr?.color ?? "#a89f88" });
-      ui.text(`Strongest ${fac.curve === "early" ? "early" : fac.curve === "mid" ? "mid-game" : fac.curve === "late" ? "late" : "throughout"}`, x0 + 18, ly + 110, { size: 11, color: "#8f8770" });
-      this.drawRealmSoldier(x0 + leftW - 46, ly + 96, time, profile.data.faction);
+      ui.text(`${profile.ownedFactions().length}/${FACTION_IDS.length} owned · `, x0 + 18, ly + 110, { size: 11, color: "#8f8770" });
+      ui.text(`Strongest ${fac.curve === "early" ? "early" : fac.curve === "mid" ? "mid-game" : fac.curve === "late" ? "late" : "throughout"}`, x0 + 92, ly + 110, { size: 11, color: "#8f8770" });
+      this.drawRealmSoldier(x0 + leftW - 46, ly + 96, time, profile.playableFaction());
       ly += 124 + gap;
 
       // Continue: the latest save, and the others as chips.
@@ -330,8 +334,9 @@ export class MenuScreen {
       (cx, cy, sz) => iconWarband(ctx, cx, cy, sz))) action = "warband";
     ty += midH + gap;
     const smH = narrow ? 80 : 96;
-    const qw = (rw2 - gap * 3) / 4;
+    const qw = (rw2 - gap * 4) / 5;
     const small: [MenuAction, string, string, (cx: number, cy: number, sz: number) => void][] = [
+      ["factions", "Factions", `${profile.ownedFactions().length}/${FACTION_IDS.length} owned · read about each, unlock more`, (cx, cy, sz) => iconFactions(ctx, cx, cy, sz)],
       ["armory", "Armory", `${profile.data.renown} ✦ · War Chests & boons`, (cx, cy, sz) => iconArmory(ctx, cx, cy, sz)],
       ["editor", "Map Editor", "Make a map, publish it", (cx, cy, sz) => iconMap(ctx, cx, cy, sz)],
       ["codex", "Codex", "Units, ages, factions", (cx, cy, sz) => iconCodex(ctx, cx, cy, sz)],
@@ -430,7 +435,7 @@ export class SetupScreen {
    * realm under it). One scroll region, and an action bar pinned at the
    * bottom so "To Battle!" is always in reach.
    */
-  draw(W: number, H: number, time: number, profile: Profile): "start" | "spectate" | "back" | null {
+  draw(W: number, H: number, time: number, profile: Profile): "start" | "spectate" | "back" | "factions" | null {
     drawMenuBackground(W, H, time);
     const ctx = ui.ctx;
     ctx.fillStyle = "rgba(10, 8, 4, 0.35)";
@@ -483,7 +488,8 @@ export class SetupScreen {
     ctx.fillStyle = withAlpha(PAL.uiAccent, 0.3);
     ctx.fillRect(0, fy, W, 1);
     const by2 = fy + 16;
-    let action: "start" | "spectate" | "back" | null = null;
+    let action: "start" | "spectate" | "back" | "factions" | null = this.openBook ? "factions" : null;
+    this.openBook = false;
     if (ui.button("⟵  Back", x0, by2, 130, 44, { size: 15 })) action = "back";
     const valid = teamsValid(this.config.teams);
     if (!valid) ui.text("Everyone is on one team — split them into at least two sides.", W / 2, by2 + 22, { align: "center", size: 13, color: PAL.uiBad });
@@ -759,8 +765,13 @@ export class SetupScreen {
    * and signature soldier drawn live in its style, then what it is good at,
    * what it pays for it, and your commander.
    */
+  /** The faction a locked card asked about, for the Factions book to open on. */
+  bookFocus = "";
+  private openBook = false;
+
   private drawFactionPanel(x0: number, y: number, colW: number, profile: Profile): number {
-    if (!this.config.faction) this.config.faction = profile.data.faction && FACTIONS[profile.data.faction as keyof typeof FACTIONS] ? profile.data.faction : DEFAULT_FACTION;
+    // Only a faction you own can be yours.
+    if (!this.config.faction || !profile.ownsFaction(this.config.faction)) this.config.faction = profile.playableFaction() ?? DEFAULT_FACTION;
     if (!profile.ownsCommander(this.config.commander)) {
       this.config.commander = profile.data.commander || profile.data.commanders[0] || "";
     }
@@ -778,10 +789,16 @@ export class SetupScreen {
       const cx = x0 + 18 + i * (cardW + cardGap);
       const cy = y + 46;
       const sel = this.config.faction === id;
-      if (ui.button("", cx, cy, cardW, cardH, { accent: sel, tooltip: [d.name, d.era, d.tagline] })) {
-        this.config.faction = id;
-        profile.selectFaction(id);
-        this.config.commander = profile.data.commander;
+      const locked = !profile.ownsFaction(id);
+      if (ui.button("", cx, cy, cardW, cardH, { accent: sel, tooltip: locked
+        ? [d.name, `Locked — ${FACTION_PRICE} ✦ renown to unlock`, "Click to read about it in the Factions book."]
+        : [d.name, d.era, d.tagline] })) {
+        if (locked) { this.bookFocus = id; this.openBook = true; }
+        else {
+          this.config.faction = id;
+          profile.selectFaction(id);
+          this.config.commander = profile.data.commander;
+        }
         audio.play("ui");
       }
       if (sel) {
@@ -808,8 +825,19 @@ export class SetupScreen {
       try { drawUnit(ctx, pv.unit, 0, 0); } catch { /* ditto */ }
       ctx.restore();
       setFactionResolver(null);
-      ui.text(d.name.replace(/^The /, ""), cx + cardW / 2, cy + 98, { align: "center", size: 13, bold: true, color: sel ? "#ffe9b0" : PAL.uiParchment });
-      ui.text(CURVE[d.curve], cx + cardW / 2, cy + 114, { align: "center", size: 10.5, color: sel ? d.color : "#9b927c" });
+      if (locked) {
+        // Dimmed behind a lock, with the price.
+        ctx.fillStyle = "rgba(12,9,5,0.62)";
+        ctx.beginPath(); ctx.roundRect(cx + 2, cy + 2, cardW - 4, cardH - 4, 6); ctx.fill();
+        const lx = cx + cardW / 2, ly = cy + 40;
+        ctx.strokeStyle = "#e8c060"; ctx.lineWidth = 3;
+        ctx.beginPath(); ctx.arc(lx, ly - 6, 8, Math.PI, 0); ctx.stroke();
+        ctx.fillStyle = "#e8c060";
+        ctx.beginPath(); ctx.roundRect(lx - 12, ly - 6, 24, 18, 3); ctx.fill();
+        ui.text(`${FACTION_PRICE} ✦`, lx, ly + 34, { align: "center", size: 12, bold: true, color: "#e8c060" });
+      }
+      ui.text(d.name.replace(/^The /, ""), cx + cardW / 2, cy + 98, { align: "center", size: 13, bold: true, color: locked ? "#8f8770" : sel ? "#ffe9b0" : PAL.uiParchment });
+      ui.text(locked ? "Locked" : CURVE[d.curve], cx + cardW / 2, cy + 114, { align: "center", size: 10.5, color: locked ? "#8f8770" : sel ? d.color : "#9b927c" });
     });
 
     let dy = y + 46 + cardH + 22;

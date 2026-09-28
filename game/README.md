@@ -19,6 +19,19 @@ npm run dev      # then open the printed URL (default http://localhost:5173)
 
 Production build: `npm run build` (output in `dist/`), preview with `npm run preview`.
 
+## Put it online
+
+The game and its multiplayer server deploy together as one website — one
+container, one address; players open it and play, online play included:
+
+```bash
+docker build -t banner-and-blade . && docker run -p 8787:8787 -v bb-data:/data banner-and-blade
+# or: fly deploy   (fly.toml)   ·   Render Blueprint (render.yaml at the repo root)
+```
+
+See [server/README.md](server/README.md) for hosting, the online hub, quick
+match, ranked play and operating it.
+
 ## Play it
 
 **Goal:** raze every enemy building before they raze yours.

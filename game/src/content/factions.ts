@@ -60,6 +60,23 @@ export interface FactionDef {
   extra: string[];
   look: FactionLook;
   apply: (boon: BoonEffect, rules: OathRules) => void;
+  /** For the Factions book: how it plays, who it suits, and how to win with it. */
+  guide: FactionGuide;
+}
+
+export interface FactionGuide {
+  /** 1 forgiving, 2 needs a plan, 3 punishing if misplayed. */
+  difficulty: 1 | 2 | 3;
+  /** Relative strength early / mid / late, 1–5. */
+  power: [number, number, number];
+  /** A paragraph on how the faction actually plays. */
+  playstyle: string;
+  /** "Pick this if you…" lines. */
+  suits: string[];
+  /** Concrete advice. */
+  tips: string[];
+  /** What gives it trouble. */
+  struggles: string;
 }
 
 export const FACTIONS: Record<FactionId, FactionDef> = {
@@ -73,6 +90,13 @@ export const FACTIONS: Record<FactionId, FactionDef> = {
     look: {
       stone: "#a8a49a", plaster: "#d8c8a8", frame: "#6e4c2a", roof: "hip", roofMaterial: null,
       banner: "pennant", helm: "kingdom", armour: "#c7cdd4", shield: "round", accent: "#e0c060", light: "#ffd98a",
+    },
+    guide: {
+      difficulty: 1, power: [2, 3, 5],
+      playstyle: "The most forgiving realm to learn on. Nothing about the Kingdom is flashy in the first ten minutes — it builds, walls up and researches — but cheap Blacksmith upgrades mean every soldier it fields in the Crown and Empire ages hits harder and lasts longer than anyone else's, and cheap castles let it hold ground it takes. Longbowmen shoot farther than any crossbow or Pulse Trooper.",
+      suits: ["You want to learn the game without being punished for it", "You like walls, castles and a strong late army", "You prefer winning big fights over raiding"],
+      tips: ["Get to the Crown Age — your bonuses are worth most there", "Spend the Blacksmith discount: every upgrade, every age", "A castle at a choke point is cheap for you and very expensive for them", "Longbowmen behind knights or spearmen win most open fights"],
+      struggles: "Early aggression — the Jarls and the Khanate hit before your bonuses matter. Wall and hold the first ten minutes.",
     },
     apply: (_b, r) => {
       r.techCostMult *= 0.75;
@@ -92,6 +116,13 @@ export const FACTIONS: Record<FactionId, FactionDef> = {
       stone: "#e2d6bc", plaster: "#efe5cf", frame: "#9a7a52", roof: "tile", roofMaterial: "#c2643a",
       banner: "vexillum", helm: "galea", armour: "#c89a52", shield: "scutum", accent: "#e8c060", light: "#ffd98a",
     },
+    guide: {
+      difficulty: 2, power: [3, 5, 3],
+      playstyle: "An engineer's army. The Legion builds faster than anyone, so its economy and its forward bases come online early, and its Legionaries replace the Man-at-Arms with a heavier soldier that shrugs off arrows. It is at its best in the middle of the match, pushing a wall of shields forward and building towers and barracks right behind it.",
+      suits: ["You like a solid infantry line that just walks forward", "You like building forward — towers, barracks, walls near the enemy", "You want a strong mid-game rather than an all-in rush"],
+      tips: ["Legionaries beat archer-heavy armies: take fights into their arrows", "Build a forward barracks — you put it up faster than they can react", "Shieldbearers screen your line while it advances", "Avoid mass cavalry: it costs you 15% more"],
+      struggles: "Fast cavalry that refuses to fight your line and raids behind it, and very late armies with full upgrades.",
+    },
     apply: (_b, r) => {
       r.buildSpeedMult *= 1.1;
       r.cavCostMult *= 1.15;
@@ -107,6 +138,13 @@ export const FACTIONS: Record<FactionId, FactionDef> = {
     look: {
       stone: "#7d7466", plaster: "#8a6a48", frame: "#3e2c1c", roof: "shingle", roofMaterial: "#5a4a32",
       banner: "raven", helm: "nasal", armour: "#8f96a0", shield: "painted", accent: "#c8a060", light: "#ffc070",
+    },
+    guide: {
+      difficulty: 2, power: [5, 3, 2],
+      playstyle: "Raiders. The Jarls' infantry run faster and tear buildings down a quarter faster than anyone else's, their woodcutters are quicker, and Berserkers arrive as soon as the Banner Age. The whole faction is built to hit early and keep hitting — burn houses, kill villagers, make the enemy fight on your schedule. Let the game run long and your smithing and castles cost more than theirs.",
+      suits: ["You like to attack first and never stop", "You enjoy raiding, burning and hit-and-run", "You would rather end the game early than out-tech anyone"],
+      tips: ["Take Berserkers the moment the Banner Age lands and go", "Target houses and the Town Centre's farms — your infantry burns them fast", "Keep raiding in two places at once; fast feet make that possible", "If the enemy walls up, switch to rams rather than waiting"],
+      struggles: "Walls and towers, and any opponent who survives to the Crown Age with an economy intact.",
     },
     apply: (_b, r) => {
       r.infantrySpeedMult *= 1.12;
@@ -127,6 +165,13 @@ export const FACTIONS: Record<FactionId, FactionDef> = {
       stone: "#4a4642", plaster: "#efe8da", frame: "#2a2420", roof: "pagoda", roofMaterial: "#3e4046",
       banner: "nobori", helm: "kabuto", armour: "#3a2a2a", shield: "none", accent: "#c8403a", light: "#ffe0a0",
     },
+    guide: {
+      difficulty: 3, power: [2, 4, 4],
+      playstyle: "Fewer soldiers, better ones. Every Shogunate soldier has more HP and every melee soldier strikes faster, the villagers are a quarter tougher, and Samurai replace the Two-Handed Swordsman as the finest duellists in the game. The price is time: soldiers train slower, so every loss hurts and the army has to be used well rather than thrown away.",
+      suits: ["You like controlling small, elite armies carefully", "You win by good engagements rather than bigger numbers", "You want villagers that survive early raids"],
+      tips: ["Never trade evenly — pick fights where your quality decides it", "Pull units back when they are hurt; replacing them is slow", "Samurai win most infantry duels: send them at the enemy's foot soldiers", "Your villagers survive raids that would kill others' — keep them working longer"],
+      struggles: "Being out-numbered by cheap mass armies, and long wars of attrition where train time decides it.",
+    },
     apply: (b, r) => {
       r.meleeRateMult *= 0.88;
       r.villagerHpMult *= 1.25;
@@ -145,6 +190,13 @@ export const FACTIONS: Record<FactionId, FactionDef> = {
     look: {
       stone: "#b8a888", plaster: "#eadfc4", frame: "#7a5a36", roof: "yurt", roofMaterial: "#e6dcc6",
       banner: "tug", helm: "steppe", armour: "#8a6a44", shield: "buckler", accent: "#d8b050", light: "#ffcf80",
+    },
+    guide: {
+      difficulty: 3, power: [5, 4, 2],
+      playstyle: "The whole realm rides. Khanate cavalry are the fastest in the game, Stables and Archery Ranges are cheap, and Horse Archers arrive as early as the Banner Age with Cataphracts later. It wins by movement — raiding where the enemy isn't, and refusing fights it doesn't want. Its buildings are flimsy and walls expensive, so it has to attack rather than hold.",
+      suits: ["You like fast units and hit-and-run", "You are happy to micro-manage a moving army", "You would rather be everywhere than defend one place"],
+      tips: ["Horse Archers kite infantry forever — never let them catch you", "Raid villagers, not buildings", "Yurts house 13: fewer houses means more for the army", "Don't turtle — your buildings are 20% weaker; defend by counter-attacking"],
+      struggles: "Spearmen, pikemen and walls, and anyone who forces a stand-up fight at a choke point.",
     },
     apply: (b, r) => {
       b.cavSpeedMult *= 1.12;
@@ -165,6 +217,13 @@ export const FACTIONS: Record<FactionId, FactionDef> = {
     look: {
       stone: "#c8ccd4", plaster: "#e8ecf0", frame: "#5a6270", roof: "dome", roofMaterial: "#dfe4ea",
       banner: "holo", helm: "visor", armour: "#dfe4ea", shield: "energy", accent: "#3ad8e8", light: "#8ae8ff",
+    },
+    guide: {
+      difficulty: 2, power: [2, 3, 5],
+      playstyle: "Stranded star-farers with better tools and fewer hands. Villagers carry 40% more, so the economy grows with fewer workers, and buildings repair themselves when left alone. Pulse Troopers replace the Crossbowman and Skimmers replace the Horseman — both better than what they stand in for. Everything military costs 15% more, so the Ascendancy plays a patient, efficient game and wins late.",
+      suits: ["You like a strong economy and a patient build-up", "You want high-tech units that out-class what they face", "You like the game going long"],
+      tips: ["Fewer villagers carrying more — spend the saving on getting to the next age", "Once a raid is beaten off, leave the damage — your buildings mend themselves", "Pulse Troopers out-class the Crossbowmen they replace — make them your ranged core", "Skimmers are your scouts and raiders early"],
+      struggles: "Early rushes — soldiers cost more and there are fewer of them at the start.",
     },
     apply: (b, r) => {
       b.villCarryMult *= 1.4;

@@ -41,6 +41,7 @@ import { OATHS } from "./content/oaths";
 import { DEFAULT_FACTION, FACTIONS, FACTION_IDS } from "./content/factions";
 import { alliancesFor, resizeTeams } from "./ui/teams";
 import { CodexScreen } from "./ui/codex";
+import { FactionBook } from "./ui/faction_book";
 import {
   ArmoryScreen,
   MenuScreen,
@@ -71,7 +72,7 @@ import {
   CustomMap, deserialiseMap, findCustomMap, saveCustomMap, serialiseMap, toMapData, mapPool, rollRandomMap,
 } from "./maps/custom";
 
-type AppState = "menu" | "setup" | "armory" | "match" | "postmatch" | "codex" | "settings" | "warband" | "editor";
+type AppState = "menu" | "setup" | "armory" | "match" | "postmatch" | "codex" | "settings" | "warband" | "editor" | "factions";
 
 // Buildings you can drag-paint into a continuous run.
 // Dragged out as one gap-free run. A wall is never one segment, which is why
@@ -98,6 +99,9 @@ class App {
   postmatch = new PostMatchScreen();
   editorScreen = new EditorScreen();
   codexScreen = new CodexScreen();
+  factionBook = new FactionBook();
+  /** Where the Factions book returns to. */
+  private factionsReturn: AppState = "menu";
   settingsScreen = new SettingsScreen();
   warbandScreen = new WarbandScreen();
   warband: WarbandRun | null = null;
@@ -143,6 +147,11 @@ class App {
   net: NetSession | null = null; // active lockstep session in multiplayer
   private netAccumulator = 0;
   private netDesyncAlerted = false;
+  /** This online match is ranked: report the winner to the server. */
+  private netRanked = false;
+  private resultSent = false;
+  /** The hub an online match came from; the lobby reopens there after it. */
+  private netHub = "";
   private lobby = new NetLobby();
   paused = false;
   gameSpeed = 1; // 0.5 / 1 / 2 / 3
@@ -632,6 +641,7 @@ class App {
         return false;
       }
       m.id = setup.presetId; // keep the id the save was taken against
+      m.published = undefined; // keep whether the library had it published
       saveCustomMap(m);
     }
     this.loadingSave = true;
@@ -693,6 +703,13 @@ class App {
     this.net.attach(world, 5);
     this.net.onChat = (m) => { if (m.text) this.addChatLine(m.name || teamLabel((m.team ?? 0) as Team), m.text, (m.team ?? 0) as Team); };
     this.net.onPing = (m) => this.remotePing(m.x ?? 0, m.y ?? 0, (m.team ?? 0) as Team);
+    this.net.onRated = (m) => {
+      const won = m.winner !== undefined && world.alliances[this.me] === m.winner;
+      this.hud.addAlert(`⚖ Ranked result recorded — rating ${won ? "+" : "−"}${m.delta ?? 0}`);
+    };
+    this.netRanked = !!start.ranked;
+    this.netHub = start.online ?? "";
+    this.resultSent = false;
     transport.onClose = () => this.hud.addAlert("⚠ Connection lost.");
     this.renderer.prepare(map);
     this.mapName = map.name;
@@ -1509,7 +1526,7 @@ class App {
           this.loadMatch(save);
         } else if (action === "multiplayer") {
           audio.play("ui");
-          this.lobby.open((start) => this.startNetMatch(start));
+          this.lobby.open((start) => this.startNetMatch(start), this.lobbyOptions());
         } else if (action === "warband") {
           this.warband = new WarbandRun();
           this.state = "warband";
@@ -1520,6 +1537,8 @@ class App {
         } else if (action === "codex") {
           this.state = "codex";
           audio.play("ui");
+        } else if (action === "factions") {
+          this.openFactions("menu", this.profile.playableFaction());
         } else if (action === "editor") {
           this.state = "editor";
           this.editorScreen.author = this.profile.data.name;
@@ -1545,6 +1564,12 @@ class App {
         const a = this.editorScreen.draw(W, H, this.time, this.input.leftDown);
         if (a?.kind === "back") { this.state = "menu"; audio.play("ui"); }
         else if (a?.kind === "test") this.testCustomMap(a.map);
+      } else if (this.state === "factions") {
+        if (this.factionBook.draw(W, H, this.time, this.profile, dt) === "back") {
+          this.state = this.factionsReturn;
+          if (this.state === "setup") this.setup.config.faction = this.profile.playableFaction() ?? DEFAULT_FACTION;
+          audio.play("ui");
+        }
       } else if (this.state === "codex") {
         if (this.codexScreen.draw(W, H, this.time, this.profile) === "back") {
           this.state = "menu";
@@ -1553,6 +1578,7 @@ class App {
       } else if (this.state === "setup") {
         const action = this.setup.draw(W, H, this.time, this.profile);
         if (action === "back") this.state = "menu";
+        else if (action === "factions") this.openFactions("setup", this.setup.bookFocus);
         else if (action === "start") this.startMatch({ ...this.setup.config });
         else if (action === "spectate") this.startSpectate({ ...this.setup.config });
       } else if (this.state === "armory") {
@@ -1574,6 +1600,12 @@ class App {
           this.state = this.editorReturn ? "editor" : "menu";
           this.editorReturn = false;
           audio.play("ui");
+          // An online match goes back to the server's hub, not just the menu.
+          if (this.netHub) {
+            const hub = this.netHub;
+            this.netHub = "";
+            this.lobby.reopenHub((start) => this.startNetMatch(start), hub, this.lobbyOptions());
+          }
         }
       }
       ui.flushTooltip(W, H);
@@ -2026,6 +2058,12 @@ class App {
       // The match ends for the human when a winner is decided, or the moment
       // their own realm is wiped out (the AIs may fight on, but the human is out).
       const playerOut = world.player(this.me).defeated;
+      // Every client simulates the same match, so each reports the same
+      // winner; the server rates it when the reports agree.
+      if (this.net && world.winner !== null && !this.resultSent) {
+        this.resultSent = true;
+        try { this.net.transport.send({ t: "result", winner: world.winner }); } catch { /* the match still ends */ }
+      }
       if ((world.winner !== null || playerOut) && this.matchOverTimer < 0) {
         this.matchOverTimer = 1.8;
         // Win if your alliance is the last standing (and you're still in it).
@@ -2108,6 +2146,12 @@ class App {
     this.endNet();
     this.me = Team.Player;
     this.state = "menu";
+    // Watching an online match: back to that server's hub.
+    if (this.netHub) {
+      const hub = this.netHub;
+      this.netHub = "";
+      this.lobby.reopenHub((start) => this.startNetMatch(start), hub, this.lobbyOptions());
+    }
   }
 
   /**
@@ -2129,6 +2173,19 @@ class App {
       this.hud.addAlert("That custom map is missing — falling back to a generated one.");
     }
     return generateMap(presetId, seed, players, nomad, alliances);
+  }
+
+  /** What the lobby needs to know about this player. */
+  private lobbyOptions() {
+    return { name: this.profile.data.name, factions: this.profile.ownedFactions(), faction: this.profile.playableFaction() };
+  }
+
+  /** Open the Factions book on a faction, remembering where to come back to. */
+  private openFactions(from: AppState, focus?: string) {
+    this.factionsReturn = from;
+    this.factionBook.focus(focus);
+    this.state = "factions";
+    audio.play("ui");
   }
 
   /** Play the map currently open in the editor, and come back to it after. */
@@ -2158,7 +2215,8 @@ class App {
     const out: string[] = [];
     for (let t = 0; t < n; t++) {
       const roll = FACTION_IDS[rng.int(0, FACTION_IDS.length - 1)];
-      if (t === 0 && humanFirst) out.push(valid(config.faction) ? config.faction : (this.profile.data.faction && valid(this.profile.data.faction) ? this.profile.data.faction : DEFAULT_FACTION));
+      // Yours has to be one you own (a save replays as it was played).
+      if (t === 0 && humanFirst) out.push(valid(config.faction) && (this.loadingSave || this.profile.ownsFaction(config.faction)) ? config.faction : (this.profile.playableFaction() ?? DEFAULT_FACTION));
       else out.push(valid(config.aiFactions?.[t]) ? config.aiFactions[t] : roll);
     }
     return out;

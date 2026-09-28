@@ -8,6 +8,10 @@ import { COMMANDER_IDS } from "../content/commanders";
 import { BOONS_BY_ID, BoonCategory, BOON_CATEGORIES, BOON_IDS } from "../content/boons";
 import { boonKey } from "./boon_cache";
 import type { AwardState, EarnedAward } from "./achievements";
+import { FACTIONS, FACTION_IDS } from "../content/factions";
+
+/** What each faction after the free first one costs, in renown (the War Chest currency). */
+export const FACTION_PRICE = 1500;
 
 /** Default age order for the battle plan (which category unlocks at which age). */
 const DEFAULT_BOON_ORDER: BoonCategory[] = ["offensive", "defensive", "supportive"];
@@ -37,6 +41,11 @@ export interface ProfileData {
   /** The faction last played, and the commander last led with each. */
   faction?: string;
   factionCommanders?: Record<string, string>;
+  /**
+   * Factions this player owns. Empty until the first-launch choice: one is
+   * free, every other costs FACTION_PRICE renown.
+   */
+  unlockedFactions?: string[];
 }
 
 function defaultProfile(): ProfileData {
@@ -133,6 +142,7 @@ export class Profile {
       this.data.boonOrder = [...DEFAULT_BOON_ORDER];
       changed = true;
     }
+    if (!Array.isArray(this.data.unlockedFactions)) { this.data.unlockedFactions = []; changed = true; }
     if (changed) this.save();
   }
 
@@ -212,7 +222,49 @@ export class Profile {
    * Choose the faction to play. Each faction remembers the commander you last
    * led it with, so switching back brings your pairing back with it.
    */
+  /** Owned factions, in the book's order. */
+  ownedFactions(): string[] {
+    const own = this.data.unlockedFactions ?? [];
+    return FACTION_IDS.filter((id) => own.includes(id));
+  }
+
+  ownsFaction(id: string): boolean {
+    return (this.data.unlockedFactions ?? []).includes(id);
+  }
+
+  /** True until the player has picked their free first faction. */
+  get needsFirstFaction(): boolean {
+    return !(this.data.unlockedFactions ?? []).length;
+  }
+
+  /** The free first pick. Only works once; after that factions are bought. */
+  chooseFirstFaction(id: string): boolean {
+    if (!this.needsFirstFaction || !(id in FACTIONS)) return false;
+    this.data.unlockedFactions = [id];
+    this.data.faction = id;
+    this.save();
+    return true;
+  }
+
+  /** Buy a faction for FACTION_PRICE renown. False if owned, unknown or unaffordable. */
+  unlockFaction(id: string): boolean {
+    if (!(id in FACTIONS) || this.ownsFaction(id) || this.needsFirstFaction) return false;
+    if (this.data.renown < FACTION_PRICE) return false;
+    this.data.renown -= FACTION_PRICE;
+    this.data.unlockedFactions = [...(this.data.unlockedFactions ?? []), id];
+    this.save();
+    return true;
+  }
+
+  /** The faction to play: the chosen one if owned, else the first owned. */
+  playableFaction(): string | undefined {
+    const f = this.data.faction;
+    if (f && this.ownsFaction(f)) return f;
+    return this.ownedFactions()[0];
+  }
+
   selectFaction(id: string) {
+    if (!this.needsFirstFaction && !this.ownsFaction(id)) return; // locked
     this.data.faction = id;
     const cmdr = this.data.factionCommanders?.[id];
     if (cmdr && this.ownsCommander(cmdr)) this.data.commander = cmdr;

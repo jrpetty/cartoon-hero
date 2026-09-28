@@ -1,6 +1,13 @@
 import { describe, expect, it, afterAll, beforeAll } from "vitest";
 // The relay is plain Node; we drive it here with Node 22's built-in WebSocket.
 import { startServer } from "../../server/server.mjs";
+// Node built-ins; the project has no @types/node.
+// @ts-ignore
+import { mkdtempSync } from "fs";
+// @ts-ignore
+import { tmpdir } from "os";
+// @ts-ignore
+import { join } from "path";
 import { World } from "../sim/world";
 import { Team, Kind } from "../sim/types";
 import { generateMap } from "../maps/generator";
@@ -57,7 +64,10 @@ function makeClient(url: string, name: string, observer = false, room = "test"):
 
 describe("Relay server end-to-end", () => {
   let srv: { port: number; close: () => Promise<void> };
-  beforeAll(async () => { srv = await startServer(0, "127.0.0.1"); });
+  beforeAll(async () => {
+    const dir = mkdtempSync(join(tmpdir(), "bb-relay-"));
+    srv = await startServer(0, "127.0.0.1", { gameHtml: false, mapsFile: join(dir, "maps.json"), playersFile: join(dir, "players.json") });
+  });
   afterAll(async () => { await srv.close(); });
 
   it("relays a 2v2 lockstep match keeping all four clients in sync", async () => {
@@ -267,11 +277,23 @@ describe("Ready to be hosted", () => {
     }
   });
 
-  it("still serves a human-readable status at the root", async () => {
-    const s = await startServer(0, "127.0.0.1");
+  it("serves a human-readable status at the root when there's no game build", async () => {
+    const s = await startServer(0, "127.0.0.1", { gameHtml: false });
     try {
       const res = await fetch(`http://127.0.0.1:${s.port}/`);
       expect(await res.text()).toContain("relay up");
+    } finally {
+      await s.close();
+    }
+  });
+
+  it("serves the game itself at the root when there is one", async () => {
+    // The website and the server are one thing: open the site, play.
+    const s = await startServer(0, "127.0.0.1", { gameHtml: "index.html" });
+    try {
+      const res = await fetch(`http://127.0.0.1:${s.port}/`);
+      expect(res.headers.get("content-type")).toContain("text/html");
+      expect(await res.text()).toContain("<html");
     } finally {
       await s.close();
     }

@@ -1,148 +1,142 @@
-# Banner & Blade — multiplayer relay server
+# Banner & Blade — the website and its multiplayer server
 
-A tiny, **zero-dependency** WebSocket relay for networked matches (2–16 players,
-up to **8 vs 8**). It only forwards each player's lockstep turns to the others —
-it never simulates the game — so it's lightweight and easy to host anywhere your
-players can reach, including a box on your **VPN**.
+`server.mjs` is the whole online side of the game in one **zero-dependency**
+Node file (Node 18+, nothing to install). It:
 
-## Run it
+- **serves the game** at `/` — the single-file build — so players just open
+  the site;
+- runs the **online hub** — a live room list, quick match, custom rooms, a
+  lobby per room, a ranked ladder;
+- **relays matches**. Games run in deterministic lockstep, so the server never
+  simulates anything; it forwards each player's orders and checksums. That's
+  why one small machine holds many matches, up to 8 v 8 each.
 
-Requires Node 18+ (uses only built-in modules — nothing to install).
+## Put it on the internet
 
-```bash
-node server/server.mjs            # listens on 0.0.0.0:8787
-node server/server.mjs 9000       # custom port
-```
+The repository builds into one container: the game plus the server, on one
+port (`Dockerfile` in `game/`).
 
-You'll see:
-
-```
-Banner & Blade relay listening on ws://0.0.0.0:8787  (up to 16 players/room)
-```
-
-Sanity-check it's up from a browser: open `http://<host>:8787/` — it returns a
-short status line (room/player counts).
-
-## Hosting over a VPN
-
-1. Join your VPN on the machine that will run the server (Tailscale, WireGuard,
-   ZeroTier, Hamachi, etc.).
-2. Find that machine's **VPN IP** (e.g. Tailscale `100.x.y.z`, WireGuard
-   `10.0.0.5`).
-3. Start the server: `node server/server.mjs`.
-4. Make sure every player is on the same VPN, then in the game choose
-   **Multiplayer → Join a Server** and enter:
-
-   ```
-   ws://<VPN-IP>:8787
-   ```
-
-   Everyone uses the **same room name** (default `main`). One player is the host
-   (marked ⭐) — they pick sides and press **Start Match**.
-
-Notes:
-- Use `ws://` (not `wss://`). The VPN provides the encryption/trust boundary;
-  the relay speaks plain WebSocket. If you expose it on the public internet
-  instead, put it behind a TLS-terminating reverse proxy and use `wss://`.
-- If a player can't connect, check the VPN IP, that the port isn't firewalled,
-  and that the server is actually listening (the `http://…` status check above).
-- If someone disconnects mid-match, the rest keep playing — that team's units
-  simply go idle.
-
-## Teams, maps and the community pool
-
-The host sets the teams in the lobby — free-for-all, or 2, 3 or 4 teams laid
-out in join order (with eight players and two teams, players 1–4 against 5–8)
-— and can move anyone; players can join any team or start a new one. The host
-also picks the battlefield: a built-in one, one of their own published maps,
-or one from this server's **community pool**.
-
-Players can publish the maps they've made to the server from the lobby's map
-picker. The pool is saved to `community-maps.json` next to `server.mjs` (set
-`MAPS_FILE=/path/to/file.json` to keep it elsewhere, e.g. on a mounted volume
-on a managed host), and listed as JSON at `http://<host>:8787/maps`.
-
-## Room passwords
-
-Rooms can be locked. The **first** player to enter a room sets its password (the
-"Password" field on the Join-a-Server screen); everyone else must enter the same
-one or they're rejected with "Wrong room password." Leave it blank for an open
-room. The password lives only in memory and resets once the room empties, so it's
-a lightweight gate for friends — not account security.
-
-## Hosting on the public internet
-
-The server already binds `0.0.0.0`, so to let friends connect over the internet
-(no VPN) you just need to make your machine reachable. Easiest → most robust:
-
-1. **A tunnel (no router setup, works behind CGNAT).** Run a tool like
-   **playit.gg**, **ngrok** (`ngrok tcp 8787`) or **Cloudflare Tunnel**; it gives
-   you a public address that forwards to your local `:8787`. Friends use
-   `ws://<that-address>`.
-2. **Port forwarding.** Give your PC a static LAN IP, forward external TCP **8787**
-   → that IP:8787 on your router, allow Node through the firewall, and share
-   `ws://<your-public-ip>:8787`. Verify from outside with
-   `http://<public-ip>:8787/`. (Won't work if your ISP uses CGNAT — use a tunnel.)
-3. **A cheap VPS.** Run the server on a $4–6/mo box for an always-on public IP.
-
-Notes:
-- Open the **game from the local HTML file** so the browser allows plain `ws://`.
-  A page served over `https://` can only use `wss://` (put a TLS reverse proxy /
-  Caddy in front, or use a tunnel that provides `wss://`).
-- Always set a room password when exposing the server publicly.
-
-## Deploying it somewhere permanent
-
-Everything the code can do is done: the server reads `PORT` and `HOST` from the
-environment, answers `/healthz` with JSON, and shuts down cleanly on `SIGTERM`
-so a deploy doesn't hang waiting to be killed. What is left is choosing a host,
-which is a decision about money and location rather than about code.
-
-There is one rule that decides everything else:
-
-> **A page served over `https://` may only open `wss://`.** Browsers block a
-> plain `ws://` connection from a secure page, and there is no flag or code
-> change that gets around it.
-
-So if the game is opened from `https://` — anything hosted, including GitHub
-Pages — the relay needs TLS. You do not want to be managing certificates for
-this, so pick a host that terminates TLS for you.
-
-| | good for | TLS | cost |
-|---|---|---|---|
-| **Fly.io** (`fly.toml` here) | the default | yes, free | free tier; sleeps to zero when empty |
-| **Render** (`render.yaml` here) | click-to-deploy from the repo | yes, free | free tier; cold starts |
-| **Any VPS + Caddy** | you already have a box | yes, two lines of Caddyfile | ~$4/mo |
-| **A tunnel** (Cloudflare, ngrok) | trying it out this evening | yes, given by the tunnel | free |
-| **Your own machine, `ws://`** | a LAN or a VPN | not needed | free |
+### Fly.io (recommended)
 
 ```bash
-# Fly — one command after `fly launch --no-deploy`
-cd server && fly deploy
-
-# Docker, anywhere
-docker build -t bb-relay server && docker run -p 8787:8787 bb-relay
-
-# Nothing at all
-npm run serve
+cd game
+fly launch --no-deploy --copy-config     # claim an app name once
+fly volumes create bb_data --size 1      # ratings + community maps survive deploys
+fly deploy
 ```
 
-Then in the game: **Multiplayer → Join a Server**, and enter `wss://<host>` (or
-`ws://<host>:8787` on a LAN or VPN). Set a room password if it is reachable from
-the public internet.
+Open `https://<app>.fly.dev` and play. Fly terminates TLS, so the page is
+`https://` and online play uses `wss://` to the same address automatically.
+Point your own domain at it with `fly certs add play.yourdomain.com`.
 
-If you are putting it behind your own reverse proxy, the only thing that needs
-care is that WebSocket upgrades pass through untouched. Caddy does it by
-default:
+### Render
+
+`render.yaml` at the repository root is a Blueprint: **New → Blueprint →**
+this repo. It uses the Starter plan with a 1 GB disk — the free plan sleeps,
+and a sleeping site drops live matches.
+
+### Any server with Docker
+
+```bash
+cd game
+docker build -t banner-and-blade .
+docker run -d --restart unless-stopped -p 8787:8787 -v bb-data:/data banner-and-blade
+```
+
+Put HTTPS in front with Caddy (it gets the certificate itself and passes
+WebSockets through untouched):
 
 ```
-relay.example.com {
+play.yourdomain.com {
     reverse_proxy localhost:8787
 }
 ```
 
-## Capacity & topology
+### Without Docker
 
-One connection per client (star topology), so 8v8 is 16 sockets, not a 240-link
-mesh. The relay is stateless beyond room membership; restart it any time between
-matches. Multiple independent matches can run at once using different room names.
+```bash
+cd game
+npm ci && npm run build:single      # builds dist/banner-and-blade.html
+node server/server.mjs              # serves it on :8787
+```
+
+> A page served over `https://` may only open `wss://` — which is why the site
+> and the server are the same address: the game connects back to whatever
+> served it, and TLS in front covers both.
+
+## What players see
+
+1. **Open the site.** First visit: claim a commander, then choose a free
+   faction (the Factions book explains each). The rest cost 1500 renown.
+2. **Multiplayer → Play Online.** No address to type — the game connects to
+   the site it came from. Pick a name (kept by the browser).
+3. **The hub** shows how many people are online, your rating, the open rooms
+   (🔒 for passworded ones, "In battle" for running ones), quick match, a
+   create-room form, and the top of the ladder.
+4. **Quick match** (1 v 1, 2 v 2, 4-player free-for-all): the server waits for
+   enough players, makes a room, seats them in teams, picks a built-in
+   battlefield, counts down four seconds and starts. These games are
+   **ranked**.
+5. **Custom rooms**: the creator is the host ⭐ and sets the layout
+   (free-for-all, or 2/3/4 teams in join order — eight players and two teams
+   is players 1–4 against 5–8), moves or removes players, and picks the
+   battlefield: built-in, one of their own published maps, or one from this
+   server's community pool. Players choose a team and a faction (only ones
+   they own), chat, ready up. Up to 16 players; others can join to watch.
+6. **After the match** the game returns to the hub.
+
+## Ranked results and the ladder
+
+Every client simulates the same match, so each knows who won. When a ranked
+match ends, each client reports the winner; once everyone still connected
+has, the server applies Elo (K = 32, team average) if the reports agree —
+and rates nothing if they don't. A player who quits counts as having lost:
+the ones who stayed report the result. Ratings are at `/leaderboard`.
+
+A player's identity is a random id kept in their browser, plus a name. There
+are no passwords and no accounts: clearing browser data starts afresh. Renown,
+unlocked factions and War Chests are kept in the browser too — the server does
+not verify them. Online matches are all-Common, without commanders or boons,
+so nothing bought or unboxed decides a ranked game; factions are a choice of
+play style, not power.
+
+## Community maps
+
+Players publish maps they've made from the lobby's battlefield picker. They
+are saved in `MAPS_FILE`, deduplicated by content, capped at 500, and listed
+at `/maps`. The host's chosen map travels with the match start, so nobody
+else needs a copy.
+
+## Operating it
+
+| | |
+|---|---|
+| `GET /` | the game |
+| `GET /healthz` | `{ ok, rooms, games, players, online, protocol, game, uptime }` — point your host's health check here |
+| `GET /rooms` · `/maps` · `/leaderboard` | JSON |
+| `PORT`, `HOST` | where to listen (managed hosts set `PORT`) |
+| `GAME_HTML` | the game page (default: `server/public/index.html`, then `dist/`) |
+| `MAPS_FILE`, `PLAYERS_FILE` | where community maps and ratings are kept (`/data/…` in the container) |
+
+- **One instance.** Rooms and matches live in memory; scale the machine up,
+  not out. The relay does no simulation, so a small VM carries a lot.
+- **Deploys end running matches.** Deploy when it's quiet. `SIGTERM` closes
+  cleanly. A page from before a protocol change is asked to reload.
+- **Abuse limits**: messages are rate-limited per connection (clients that
+  flood are dropped), chat is capped at five lines per five seconds and 240
+  characters, names and room names are cleaned and length-limited, frames
+  over 1 MB close the connection, and anything that isn't a map code is
+  refused by the pool.
+- **Dead connections** (a closed laptop, dropped Wi-Fi) are detected by
+  heartbeat within ~45 s and their seat freed; in a match, their units stop.
+- **Passwords** on rooms are a gate for friends, not security.
+
+## Private play: LAN, VPN, tunnel
+
+The same server works without a website. Run `node server/server.mjs` on a
+machine everyone can reach (LAN, Tailscale/WireGuard/ZeroTier, or a tunnel
+such as ngrok or Cloudflare Tunnel) and, in the game, use **Multiplayer →
+Play Online** (it asks for the address when the game was opened from a
+file) or **Join a Server by address** to go straight into a named room. Use
+`ws://<address>:8787` on a LAN or VPN; `wss://` through anything with TLS.
+There is also **Quick 1v1 (no server)**: two players swap codes over any chat.

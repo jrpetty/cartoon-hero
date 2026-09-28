@@ -44,6 +44,9 @@ describe("Choosing a faction", () => {
   it("offers all six and remembers the choice", () => {
     const s = new SetupScreen();
     const profile = new Profile();
+    profile.chooseFirstFaction("kingdom");
+    profile.data.renown = 5000;
+    profile.unlockFaction("khanate");
     frame(s, profile);
     // Scroll to the bottom so the faction panel is in view (it clamps).
     (s as unknown as { scroll: number }).scroll = 1e6;
@@ -57,8 +60,25 @@ describe("Choosing a faction", () => {
     expect(profile.data.faction).toBe("khanate");
   });
 
+  it("won't let you pick a faction you haven't unlocked", () => {
+    const s = new SetupScreen();
+    const profile = new Profile();
+    profile.chooseFirstFaction("legion");
+    frame(s, profile);
+    (s as unknown as { scroll: number }).scroll = 1e6;
+    frame(s, profile);
+    const cards = frame(s, profile);
+    const k = cards.khanate;
+    frame(s, profile, { x: k.x + k.w / 2, y: k.y + k.h / 2 });
+    expect(s.config.faction).toBe("legion");
+    expect(s.bookFocus, "a locked card opens the Factions book on it").toBe("khanate");
+  });
+
   it("brings each faction's commander back with it", () => {
     const profile = new Profile();
+    profile.chooseFirstFaction("norse");
+    profile.data.renown = 5000;
+    profile.unlockFaction("legion");
     profile.data.commanders = ["steward", "marshal"];
     profile.selectFaction("legion");
     profile.selectCommander("marshal");
