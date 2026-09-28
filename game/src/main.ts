@@ -150,6 +150,7 @@ class App {
   /** This online match is ranked: report the winner to the server. */
   private netRanked = false;
   private resultSent = false;
+  private netFactions: string[] = [];
   /** The hub an online match came from; the lobby reopens there after it. */
   private netHub = "";
   private lobby = new NetLobby();
@@ -694,6 +695,9 @@ class App {
       return f && f in FACTIONS ? f : roll;
     });
     world.init(map, loadouts, econMults, alliances, commanders, false, undefined, "conquest", factions);
+    // Tell the server which factions were really played ("Random" resolved), for its stats.
+    this.netFactions = factions;
+    try { transport.send({ t: "factions", list: factions }); } catch { /* stats only */ }
     if (start.observer) world.revealAll = true; // casters see the whole board
     this.world = world;
     this.ais = [];
@@ -703,6 +707,7 @@ class App {
     this.net.attach(world, 5);
     this.net.onChat = (m) => { if (m.text) this.addChatLine(m.name || teamLabel((m.team ?? 0) as Team), m.text, (m.team ?? 0) as Team); };
     this.net.onPing = (m) => this.remotePing(m.x ?? 0, m.y ?? 0, (m.team ?? 0) as Team);
+    this.net.onAnnounce = (text) => this.hud.addAlert(`📣 ${text}`);
     this.net.onRated = (m) => {
       const won = m.winner !== undefined && world.alliances[this.me] === m.winner;
       this.hud.addAlert(`⚖ Ranked result recorded — rating ${won ? "+" : "−"}${m.delta ?? 0}`);
@@ -1792,6 +1797,7 @@ class App {
         if (this.net.desynced && !this.netDesyncAlerted) {
           this.netDesyncAlerted = true;
           this.hud.addAlert("⚠ Connection desynced — the match is out of sync.");
+          try { this.net.transport.send({ t: "desync", tick: world.tick }); } catch { /* stats only */ }
         }
       }
     } else if (!this.ingameMenu && !this.paused && world.winner === null) {
@@ -2062,7 +2068,7 @@ class App {
       // winner; the server rates it when the reports agree.
       if (this.net && world.winner !== null && !this.resultSent) {
         this.resultSent = true;
-        try { this.net.transport.send({ t: "result", winner: world.winner }); } catch { /* the match still ends */ }
+        try { this.net.transport.send({ t: "result", winner: world.winner, time: Math.round(world.time), factions: this.netFactions }); } catch { /* the match still ends */ }
       }
       if ((world.winner !== null || playerOut) && this.matchOverTimer < 0) {
         this.matchOverTimer = 1.8;

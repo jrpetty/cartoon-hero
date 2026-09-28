@@ -17,19 +17,24 @@ RUN npm run build:single
 
 FROM node:22-alpine
 WORKDIR /app
-COPY server/server.mjs ./server.mjs
+COPY server/server.mjs server/admin.html ./
 COPY --from=build /src/dist/banner-and-blade.html ./public/index.html
 
-# Community maps and player ratings live in /data — mount a volume there or
-# they reset on every deploy. Managed hosts inject PORT.
+# Community maps, player ratings and the match history live in /data — mount
+# a volume there or they reset on every deploy. Managed hosts inject PORT.
+# The admin dashboard (/admin) needs ADMIN_TOKEN — set it as a secret.
 ENV PORT=8787 NODE_ENV=production \
     GAME_HTML=/app/public/index.html \
     MAPS_FILE=/data/community-maps.json \
-    PLAYERS_FILE=/data/players.json
+    PLAYERS_FILE=/data/players.json \
+    MATCHES_FILE=/data/matches.jsonl \
+    SAMPLES_FILE=/data/samples.jsonl \
+    RUN_AS=1000:1000
+# The server starts as root only to take ownership of /data (Fly mounts
+# volumes owned by root), then drops to the unprivileged `node` user (RUN_AS).
 RUN mkdir -p /data && chown node:node /data
 VOLUME /data
 EXPOSE 8787
-USER node
 
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s \
   CMD node -e "fetch('http://127.0.0.1:'+(process.env.PORT||8787)+'/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"

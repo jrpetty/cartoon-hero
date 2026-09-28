@@ -479,7 +479,7 @@ export class NetLobby {
         break;
       case "left":
         this.view = "hub";
-        this.statusLine = m.why === "kicked" ? "The host removed you from that room." : "";
+        this.statusLine = m.why === "kicked" ? "The host removed you from that room." : m.why === "closed" ? "That room was closed by the server." : "";
         this.renderHub();
         break;
       case "countdown":
@@ -496,6 +496,10 @@ export class NetLobby {
         this.chat.push({ name: m.name ?? "?", text: m.text ?? "" });
         if (this.chat.length > 60) this.chat.shift();
         if (this.view === "room") this.renderChatLog();
+        break;
+      case "announce":
+        this.statusLine = `📣 ${m.text ?? ""}`;
+        if (this.view === "hub") this.renderHub(); else if (this.view === "room" || this.view === "picker") this.render();
         break;
       case "maps": this.community = m.maps ?? []; if (this.picking) this.render(); break;
       case "published": this.statusLine = `Published "${m.map?.name}" to this server.`; this.render(); break;

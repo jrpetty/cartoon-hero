@@ -22,6 +22,7 @@ import crypto from "crypto";
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
+import zlib from "zlib";
 
 const MAX_PLAYERS = 16; // 8v8
 const MAX_TEAMS = 8;
@@ -126,13 +127,61 @@ function jsonStore(file) {
     if (Array.isArray(arr)) for (const v of arr) if (v && typeof v.id === "string") map.set(v.id, v);
   } catch { /* nothing saved yet */ }
   let timer = null;
-  const flush = () => { timer = null; try { fs.writeFileSync(file, JSON.stringify([...map.values()])); } catch { /* memory only */ } };
+  // Write to a temporary file and rename it over the real one, so a crash or
+  // a deploy mid-write can never leave half a file behind.
+  const flush = () => {
+    timer = null;
+    try {
+      fs.mkdirSync(path.dirname(file), { recursive: true });
+      const tmp = `${file}.${process.pid}.tmp`;
+      fs.writeFileSync(tmp, JSON.stringify([...map.values()]));
+      fs.renameSync(tmp, file);
+    } catch (e) { warnOnce(`can't write ${file} (${e.code || e.message}) — keeping it in memory`); }
+  };
   return {
     map,
-    save() { if (!timer) timer = setTimeout(flush, 250); },
+    save() { if (!timer) timer = setTimeout(flush, 1000); },
     flush() { if (timer) { clearTimeout(timer); flush(); } },
   };
 }
+
+/**
+ * An append-only log of JSON lines (the match history). Everything is also
+ * kept in memory — the newest `cap` records — for the admin dashboard.
+ */
+function jsonLog(file, cap = 100000) {
+  const items = [];
+  try {
+    for (const line of fs.readFileSync(file, "utf8").split("\n")) {
+      if (!line.trim()) continue;
+      try { items.push(JSON.parse(line)); } catch { /* a torn last line */ }
+    }
+  } catch { /* nothing yet */ }
+  if (items.length > cap) items.splice(0, items.length - cap);
+  let pending = "";
+  let timer = null;
+  const flush = () => {
+    timer = null;
+    if (!pending) return;
+    const chunk = pending;
+    pending = "";
+    try { fs.mkdirSync(path.dirname(file), { recursive: true }); fs.appendFileSync(file, chunk); }
+    catch (e) { warnOnce(`can't write ${file} (${e.code || e.message}) — keeping it in memory`); }
+  };
+  return {
+    items,
+    add(rec) {
+      items.push(rec);
+      if (items.length > cap) items.shift();
+      pending += JSON.stringify(rec) + "\n";
+      if (!timer) timer = setTimeout(flush, 1000);
+    },
+    flush() { if (timer) clearTimeout(timer); flush(); },
+  };
+}
+
+const warned = new Set();
+function warnOnce(msg) { if (warned.has(msg)) return; warned.add(msg); if (!process.env.VITEST) console.warn(msg); }
 
 // --- One server instance ----------------------------------------------------
 //
@@ -148,6 +197,46 @@ function createHub(opts) {
   const conns = new Set();
   const queues = Object.fromEntries(Object.keys(QUEUES).map((k) => [k, []]));
   let quickCount = 0;
+  // The match history sits beside the other data unless told otherwise.
+  const matchesPath = opts.matchesFile || process.env.MATCHES_FILE || path.join(opts.mapsFile ? path.dirname(opts.mapsFile) : here, "matches.jsonl");
+  const matchLog = jsonLog(matchesPath);
+  let matchSeq = matchLog.items.length ? Math.max(0, ...matchLog.items.slice(-200).map((m) => m.n || 0)) : 0;
+
+  // Live counters for the admin dashboard: since this process started.
+  const counters = {
+    bootAt: Date.now(), connections: 0, peakOnline: 0, peakAt: 0, messages: 0, bytesIn: 0, relayed: 0,
+    chats: 0, rateLimited: 0, heartbeatDrops: 0, errors: 0, desyncs: 0, roomsCreated: 0, quickMatched: 0,
+    kicks: 0, published: 0, lastError: "",
+  };
+  // One sample a minute, a month of them: who was online, what was running.
+  // Kept on disk beside the match log, so the chart survives a deploy.
+  const sampleLog = jsonLog(opts.samplesFile || process.env.SAMPLES_FILE || path.join(path.dirname(matchesPath), "samples.jsonl"), 30 * 24 * 60);
+  const samples = sampleLog.items;
+  let lastSample = { messages: 0, bytesIn: 0, relayed: 0 };
+  function sample() {
+    const inGames = [...rooms.values()].filter((r) => r.started).reduce((n, r) => n + playersOf(r).length, 0);
+    sampleLog.add({
+      t: Date.now(), online: conns.size, games: [...rooms.values()].filter((r) => r.started).length, inGames,
+      rooms: rooms.size, queued: Object.values(queues).reduce((n, q) => n + q.length, 0),
+      msgs: counters.messages - lastSample.messages, bytes: counters.bytesIn - lastSample.bytesIn, relayed: counters.relayed - lastSample.relayed,
+    });
+    lastSample = { messages: counters.messages, bytesIn: counters.bytesIn, relayed: counters.relayed };
+  }
+  // Event-loop lag: how late a 500 ms timer fires. The number that says the
+  // machine is too small before players notice.
+  let lag = 0, lagMax = 0, lagAt = Date.now();
+  const lagTimer = setInterval(() => {
+    const now = Date.now();
+    lag = Math.max(0, now - lagAt - 500);
+    lagMax = Math.max(lagMax * 0.98, lag);
+    lagAt = now;
+  }, 500);
+  lagTimer.unref?.();
+  const sampler = setInterval(sample, opts.sampleMs ?? 60000);
+  sampler.unref?.();
+  // A first point straight away, so a fresh deploy's chart isn't empty.
+  const firstSample = setTimeout(sample, Math.min(5000, opts.sampleMs ?? 5000));
+  firstSample.unref?.();
 
   // ---- community maps ----
   function poolMeta(m) { const { code, ...meta } = m; void code; return meta; }
@@ -182,7 +271,7 @@ function createHub(opts) {
   function playerRec(pid, name) {
     if (!pid) return null;
     let p = players.map.get(pid);
-    if (!p) { p = { id: pid, name: name || "Player", rating: START_RATING, wins: 0, losses: 0, games: 0, seen: Date.now() }; players.map.set(pid, p); }
+    if (!p) { p = { id: pid, name: name || "Player", rating: START_RATING, wins: 0, losses: 0, games: 0, seen: Date.now(), first: Date.now(), played: 0 }; players.map.set(pid, p); }
     if (name) p.name = name;
     p.seen = Date.now();
     players.save();
@@ -302,6 +391,20 @@ function createHub(opts) {
       r.teamPids[team] = c.conn.pid || "";
     });
     r.teamAlliance = alliances;
+    r.reports = new Map();
+    r.times = [];
+    r.resolved = false;
+    r.match = {
+      id: crypto.randomBytes(6).toString("hex"), n: ++matchSeq, room: r.name,
+      kind: r.quick ? `quick-${r.quick}` : "custom", ranked: r.ranked,
+      map: { id: r.map.id, name: r.map.name, custom: !!r.map.code, author: r.map.author || "" },
+      players: ordered.length, format: formatOf(r),
+      teams: ordered.map((c, team) => ({ alliance: alliances[team], faction: c.faction || "", chose: !!c.faction, name: c.name, pid: c.conn.pid || "" })),
+      observers: r.clients.length - ordered.length,
+      startedAt: Date.now(), endedAt: 0, realSec: 0, gameSec: 0, winner: null, outcome: "", quitters: 0, desync: false,
+    };
+    for (const c of ordered) { const rec = c.conn.rec; if (rec) { rec.played = (rec.played || 0) + 1; } }
+    players.save();
     const seed = (Math.random() * 1e9) | 0;
     broadcast(r, { t: "start", seed, numTeams: ordered.length, alliances, slotTeams, factions, map: r.map, ranked: r.ranked });
     log(`[room ${r.name}] started: ${ordered.length} players on ${r.map.name}${r.ranked ? " (ranked)" : ""}`);
@@ -313,23 +416,49 @@ function createHub(opts) {
   // Every client simulates the same match, so every client knows who won.
   // Each reports it; once everyone still connected has, the most-reported
   // alliance wins. Disagreement (someone lying) means no result at all.
-  function report(r, conn, winnerTeam) {
-    if (!r.started || !r.ranked || r.resolved || !conn.client || conn.client.observer) return;
-    const alliance = r.teamAlliance[int(winnerTeam, 0, 63, -1)];
+  function report(r, conn, m) {
+    if (!r.started || r.resolved || !conn.client || conn.client.observer) return;
+    const alliance = r.teamAlliance[int(m.winner, 0, 63, -1)];
     if (alliance === undefined) return;
     r.reports.set(conn.client.slot, alliance);
+    const t = Number(m.time);
+    if (Number.isFinite(t) && t > 0 && t < 24 * 3600) r.times.push(t);
+    noteFactions(r, m.factions);
     maybeResolve(r);
   }
-  function maybeResolve(r) {
-    if (r.resolved || !r.ranked || !r.started) return;
+  /** The factions the match actually used ("Random" resolved), as a client saw them. */
+  function noteFactions(r, list) {
+    if (!r.match || r.match.factionsKnown || !Array.isArray(list) || list.length !== r.match.teams.length) return;
+    if (!list.every((f) => FACTIONS.includes(f))) return;
+    list.forEach((f, i) => { r.match.teams[i].faction = f; });
+    r.match.factionsKnown = true;
+  }
+  /** Close the match's record: won, disputed or abandoned. */
+  function recordMatch(r, outcome, winner) {
+    const m = r.match;
+    if (!m || m.endedAt) return;
+    m.endedAt = Date.now();
+    m.realSec = Math.round((m.endedAt - m.startedAt) / 1000);
+    m.gameSec = r.times.length ? Math.round(Math.max(...r.times)) : m.realSec;
+    m.outcome = outcome;
+    m.winner = winner ?? null;
+    const rec = { ...m, teams: m.teams.map((t) => ({ ...t, pid: t.pid ? crypto.createHash("sha256").update(t.pid).digest("hex").slice(0, 12) : "" })) };
+    matchLog.add(rec);
+  }
+  function maybeResolve(r, final = false) {
+    if (r.resolved || !r.started) return;
     const live = playersOf(r).map((c) => c.slot);
-    if (!r.reports.size || live.some((s) => !r.reports.has(s))) return;
+    // Wait for everyone still here — unless nobody is.
+    if (!final && (!r.reports.size || live.some((s) => !r.reports.has(s)))) return;
+    r.resolved = true;
+    if (!r.reports.size) { recordMatch(r, "abandoned"); return; }
     const tally = new Map();
     for (const a of r.reports.values()) tally.set(a, (tally.get(a) || 0) + 1);
-    const ranked = [...tally.entries()].sort((a, b) => b[1] - a[1]);
-    r.resolved = true;
-    if (ranked.length > 1 && ranked[0][1] === ranked[1][1]) { log(`[room ${r.name}] result disputed — not rated`); return; }
-    const winner = ranked[0][0];
+    const top = [...tally.entries()].sort((a, b) => b[1] - a[1]);
+    if (top.length > 1 && top[0][1] === top[1][1]) { recordMatch(r, "disputed"); log(`[room ${r.name}] result disputed — not rated`); return; }
+    const winner = top[0][0];
+    recordMatch(r, "won", winner);
+    if (!r.ranked) return;
     const win = [], lose = [];
     r.teamAlliance.forEach((a, team) => {
       const p = players.map.get(r.teamPids[team]);
@@ -364,6 +493,7 @@ function createHub(opts) {
     if (!r) {
       if (rooms.size >= MAX_ROOMS) return conn.send({ t: "error", msg: "The server is full — try again shortly." });
       r = newRoom(name, { pass, max: int(o.max, 2, MAX_PLAYERS, MAX_PLAYERS), layout: o.layout, map: o.map, ranked: o.ranked, quick: o.quick });
+      if (o.quick) counters.quickMatched++; else counters.roomsCreated++;
     }
     if (conn.room) leaveRoom(conn);
     unqueue(conn);
@@ -390,7 +520,8 @@ function createHub(opts) {
     if (r.started) {
       const team = r.slotTeams.get(me.slot);
       if (team !== undefined) broadcast(r, { t: "drop", team }); // keep the sim alive
-      maybeResolve(r);
+      if (!me.observer && !r.resolved && r.match) r.match.quitters++;
+      maybeResolve(r, playersOf(r).length === 0);
     } else {
       // A quick-match room someone walks out of before it starts is off.
       if (r.quick && r.countdown) {
@@ -399,7 +530,11 @@ function createHub(opts) {
       }
       broadcast(r, lobbyState(r));
     }
-    if (r.clients.length === 0) { if (r.countdown) clearTimeout(r.countdown); rooms.delete(r.name); }
+    if (r.clients.length === 0) {
+      if (r.countdown) clearTimeout(r.countdown);
+      if (r.started && !r.resolved) maybeResolve(r, true);
+      rooms.delete(r.name);
+    }
     if (why) conn.send({ t: "left", why });
     hubChanged();
   }
@@ -455,6 +590,8 @@ function createHub(opts) {
       send: (obj) => { try { socket.write(encode(JSON.stringify(obj))); } catch { /* */ } },
     };
     conns.add(conn);
+    counters.connections++;
+    if (conns.size > counters.peakOnline) { counters.peakOnline = conns.size; counters.peakAt = Date.now(); }
     const send = conn.send;
     const r = () => conn.room;
     const me = () => conn.client;
@@ -479,7 +616,9 @@ function createHub(opts) {
       const now = Date.now();
       conn.tokens = Math.min(RATE_BURST, conn.tokens + ((now - conn.lastRefill) / 1000) * RATE_PER_SEC);
       conn.lastRefill = now;
-      if (conn.tokens < 1) { if (++conn.strikes > RATE_BURST) onClose(); return; }
+      counters.messages++;
+      counters.bytesIn += text.length;
+      if (conn.tokens < 1) { counters.rateLimited++; if (++conn.strikes > RATE_BURST) onClose(); return; }
       conn.tokens -= 1;
       let m;
       try { m = JSON.parse(text); } catch { return; }
@@ -569,27 +708,31 @@ function createHub(opts) {
         case "kick": {
           if (!me() || r().started || !isHost()) break;
           const target = r().clients.find((c) => c.slot === m.slot && c !== me());
-          if (target) { leaveRoom(target.conn, "kicked"); target.conn.inHub = true; }
+          if (target) { leaveRoom(target.conn, "kicked"); target.conn.inHub = true; counters.kicks++; }
           break;
         }
         case "ready": if (me() && !r().started) { me().ready = !!m.ready; broadcast(r(), lobbyState(r())); } break;
         case "start": if (me() && isHost() && !r().quick) startMatch(r()); break;
         case "turn":
-        case "sum": if (r() && r().started) broadcast(r(), m, socket); break; // relay to others
+        case "sum": if (r() && r().started) { broadcast(r(), m, socket); counters.relayed += r().clients.length - 1; } break; // relay to others
         case "chat": {
           if (!r() || !me()) break;
           // At most five lines in five seconds, each a sentence or two.
           conn.chatAt = conn.chatAt.filter((t) => now - t < 5000);
           if (conn.chatAt.length >= 5) break;
           conn.chatAt.push(now);
+          counters.chats++;
           broadcast(r(), { t: "chat", slot: me().slot, name: me().name, team: m.team, text: clip(m.text, 240) }, socket);
           break;
         }
         case "ping": if (r() && me()) broadcast(r(), { t: "ping", x: Number(m.x) || 0, y: Number(m.y) || 0, team: m.team, slot: me().slot }, socket); break;
-        case "result": if (r()) report(r(), conn, m.winner); break;
+        case "result": if (r()) report(r(), conn, m); break;
+        case "factions": if (r() && r().started && me() && !me().observer) noteFactions(r(), m.list); break;
+        case "desync": if (r() && r().match && !r().match.desync) { r().match.desync = true; counters.desyncs++; } break;
         // The community map pool: publish, list, fetch one.
         case "publish": {
           const entry = publishMap(m.map);
+          if (entry) counters.published++;
           send(entry ? { t: "published", map: poolMeta(entry) } : { t: "error", msg: "That doesn't look like a map code." });
           if (entry) send({ t: "maps", maps: poolList() });
           break;
@@ -618,7 +761,11 @@ function createHub(opts) {
     conn.close = onClose;
 
     const parse = frameParser(onText, onClose, (payload) => { conn.lastSeen = Date.now(); try { socket.write(encode(payload.toString("binary"), 0xA)); } catch { /* */ } });
-    socket.on("data", (c) => { conn.lastSeen = Date.now(); try { parse(c); } catch { onClose(); } });
+    socket.on("data", (c) => {
+      conn.lastSeen = Date.now();
+      try { parse(c); }
+      catch (e) { counters.errors++; counters.lastError = String(e?.message || e); onClose(); }
+    });
     socket.on("close", onClose);
     socket.on("error", onClose);
   }
@@ -631,12 +778,225 @@ function createHub(opts) {
     const ping = encode("", 0x9);
     for (const c of [...conns]) {
       try {
-        if (now - c.lastSeen > (opts.idleMs ?? IDLE_MS)) { c.close(); continue; }
+        if (now - c.lastSeen > (opts.idleMs ?? IDLE_MS)) { counters.heartbeatDrops++; c.close(); continue; }
         c.socket.write(ping);
-      } catch (e) { console.error("heartbeat:", e); }
+      } catch (e) { counters.errors++; counters.lastError = String(e?.message || e); }
     }
   }, opts.pingMs ?? PING_MS);
   beat.unref?.();
+
+  // ---- analytics for the admin dashboard ----
+  const median = (xs) => { if (!xs.length) return 0; const a = [...xs].sort((x, y) => x - y); const m = a.length >> 1; return a.length % 2 ? a[m] : (a[m - 1] + a[m]) / 2; };
+  const mean = (xs) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : 0);
+  const pct = (a, b) => (b ? Math.round((a / b) * 1000) / 10 : 0);
+  const LENGTH_BUCKETS = [[0, 5], [5, 10], [10, 15], [15, 20], [20, 30], [30, 45], [45, 60], [60, Infinity]];
+
+  /** At most `n` points for a chart: bucket and keep each bucket's peak. */
+  function thin(xs, n) {
+    if (xs.length <= n) return xs;
+    const step = xs.length / n, out = [];
+    for (let i = 0; i < n; i++) {
+      const b = xs.slice(Math.floor(i * step), Math.floor((i + 1) * step));
+      out.push(b.reduce((m, x) => (x.online > m.online ? x : m), b[0]));
+    }
+    return out;
+  }
+
+  function analytics(rangeMs) {
+    const now = Date.now();
+    const from = rangeMs ? now - rangeMs : 0;
+    const all = matchLog.items.filter((m) => m.startedAt >= from);
+    const done = all.filter((m) => m.outcome === "won");
+    const minutes = (m) => m.gameSec / 60;
+
+    // Overview.
+    const lengths = done.map(minutes);
+    const overview = {
+      matches: all.length, completed: done.length,
+      abandoned: all.filter((m) => m.outcome === "abandoned").length,
+      disputed: all.filter((m) => m.outcome === "disputed").length,
+      ranked: all.filter((m) => m.ranked).length, quick: all.filter((m) => m.kind.startsWith("quick")).length,
+      custom: all.filter((m) => m.kind === "custom").length,
+      playerSlots: all.reduce((n, m) => n + m.players, 0),
+      avgPlayers: Math.round(mean(all.map((m) => m.players)) * 10) / 10,
+      avgMinutes: Math.round(mean(lengths) * 10) / 10, medianMinutes: Math.round(median(lengths) * 10) / 10,
+      longestMinutes: Math.round(Math.max(0, ...lengths) * 10) / 10,
+      quitRate: pct(all.filter((m) => m.quitters > 0).length, all.length),
+      desyncRate: pct(all.filter((m) => m.desync).length, all.length),
+      completionRate: pct(done.length, all.length),
+    };
+
+    // Factions: how often picked, how often they win, how long their games run.
+    const fac = Object.fromEntries(FACTIONS.map((f) => [f, { faction: f, picks: 0, chosen: 0, wins: 0, games: 0, minutes: [], winMinutes: [], duelWins: 0, duels: 0 }]));
+    let slotsKnown = 0;
+    for (const m of all) for (const t of m.teams) if (fac[t.faction]) { fac[t.faction].picks++; slotsKnown++; if (t.chose) fac[t.faction].chosen++; }
+    for (const m of done) {
+      for (const t of m.teams) {
+        const f = fac[t.faction];
+        if (!f) continue;
+        f.games++;
+        f.minutes.push(minutes(m));
+        if (t.alliance === m.winner) { f.wins++; f.winMinutes.push(minutes(m)); }
+      }
+    }
+    // 1 v 1 head-to-head: the cleanest read of balance.
+    const matchup = Object.fromEntries(FACTIONS.map((a) => [a, Object.fromEntries(FACTIONS.map((b) => [b, { wins: 0, games: 0 }]))]));
+    for (const m of done) {
+      if (m.players !== 2 || m.teams.length !== 2) continue;
+      const [x, y] = m.teams;
+      if (!fac[x.faction] || !fac[y.faction] || x.alliance === y.alliance) continue;
+      fac[x.faction].duels++; fac[y.faction].duels++;
+      matchup[x.faction][y.faction].games++; matchup[y.faction][x.faction].games++;
+      if (m.winner === x.alliance) { matchup[x.faction][y.faction].wins++; fac[x.faction].duelWins++; }
+      else if (m.winner === y.alliance) { matchup[y.faction][x.faction].wins++; fac[y.faction].duelWins++; }
+    }
+    const factions = Object.values(fac).map((f) => ({
+      faction: f.faction, picks: f.picks, pickRate: pct(f.picks, slotsKnown), chosenRate: pct(f.chosen, f.picks),
+      games: f.games, wins: f.wins, winRate: pct(f.wins, f.games),
+      duels: f.duels, duelWinRate: pct(f.duelWins, f.duels),
+      avgMinutes: Math.round(mean(f.minutes) * 10) / 10, avgWinMinutes: Math.round(mean(f.winMinutes) * 10) / 10,
+    })).sort((a, b) => b.picks - a.picks);
+
+    // Maps.
+    const mapAgg = new Map();
+    for (const m of all) {
+      const k = m.map.id;
+      const a = mapAgg.get(k) || { id: k, name: m.map.name, custom: m.map.custom, author: m.map.author, plays: 0, completed: 0, minutes: [], players: [] };
+      a.plays++; a.players.push(m.players);
+      if (m.outcome === "won") { a.completed++; a.minutes.push(minutes(m)); }
+      mapAgg.set(k, a);
+    }
+    const mapsOut = [...mapAgg.values()].map((a) => ({
+      id: a.id, name: a.name, custom: a.custom, author: a.author, plays: a.plays, share: pct(a.plays, all.length),
+      completed: a.completed, avgMinutes: Math.round(mean(a.minutes) * 10) / 10, avgPlayers: Math.round(mean(a.players) * 10) / 10,
+    })).sort((a, b) => b.plays - a.plays);
+
+    // Game length: a histogram overall and by kind of match.
+    const hist = (ls) => LENGTH_BUCKETS.map(([lo, hi]) => ({ label: hi === Infinity ? `${lo}+` : `${lo}–${hi}`, count: ls.filter((x) => x >= lo && x < hi).length }));
+    const kinds = [...new Set(all.map((m) => m.kind))];
+    const lengthsOut = {
+      histogram: hist(lengths),
+      byKind: kinds.map((k) => { const ls = done.filter((m) => m.kind === k).map(minutes); return { kind: k, games: all.filter((m) => m.kind === k).length, avgMinutes: Math.round(mean(ls) * 10) / 10, medianMinutes: Math.round(median(ls) * 10) / 10 }; })
+        .sort((a, b) => b.games - a.games),
+      byPlayers: [...new Set(done.map((m) => m.players))].sort((a, b) => a - b).map((n) => { const ls = done.filter((m) => m.players === n).map(minutes); return { players: n, games: ls.length, avgMinutes: Math.round(mean(ls) * 10) / 10 }; }),
+    };
+
+    // Formats (1 v 1, 2 v 2, 4-player FFA…).
+    const fmt = new Map();
+    for (const m of all) fmt.set(m.format || "?", (fmt.get(m.format || "?") || 0) + 1);
+    const formats = [...fmt.entries()].map(([format, count]) => ({ format, count, share: pct(count, all.length) })).sort((a, b) => b.count - a.count);
+
+    // Activity: matches per hour (48 h) and per day (30 d), and when people play.
+    const HOUR = 3600e3, DAY = 24 * HOUR;
+    const perHour = Array.from({ length: 48 }, (_, i) => ({ t: Math.floor(now / HOUR) * HOUR - (47 - i) * HOUR, matches: 0, players: 0 }));
+    const perDay = Array.from({ length: 30 }, (_, i) => ({ t: Math.floor(now / DAY) * DAY - (29 - i) * DAY, matches: 0, players: 0, unique: new Set() }));
+    const hourOfDay = Array.from({ length: 24 }, (_, h) => ({ hour: h, matches: 0 }));
+    for (const m of matchLog.items) {
+      const h = Math.floor(m.startedAt / HOUR) * HOUR, d = Math.floor(m.startedAt / DAY) * DAY;
+      const ph = perHour.find((x) => x.t === h); if (ph) { ph.matches++; ph.players += m.players; }
+      const pd = perDay.find((x) => x.t === d); if (pd) { pd.matches++; pd.players += m.players; for (const t of m.teams) if (t.pid) pd.unique.add(t.pid); }
+      if (m.startedAt >= from) hourOfDay[new Date(m.startedAt).getUTCHours()].matches++;
+    }
+
+    // Players.
+    const ps = [...players.map.values()];
+    const ratings = ps.filter((p) => p.games > 0).map((p) => p.rating);
+    const rb = [[0, 800], [800, 900], [900, 1000], [1000, 1100], [1100, 1200], [1200, 1300], [1300, 1400], [1400, Infinity]];
+    const playersOut = {
+      total: ps.length,
+      active24h: ps.filter((p) => now - (p.seen || 0) < DAY).length,
+      active7d: ps.filter((p) => now - (p.seen || 0) < 7 * DAY).length,
+      active30d: ps.filter((p) => now - (p.seen || 0) < 30 * DAY).length,
+      new24h: ps.filter((p) => now - (p.first || p.seen || 0) < DAY).length,
+      new7d: ps.filter((p) => now - (p.first || p.seen || 0) < 7 * DAY).length,
+      returning7d: ps.filter((p) => now - (p.seen || 0) < 7 * DAY && now - (p.first || 0) > 7 * DAY).length,
+      rated: ratings.length,
+      avgRating: Math.round(mean(ratings)),
+      ratingHistogram: rb.map(([lo, hi]) => ({ label: hi === Infinity ? `${lo}+` : `${lo}–${hi}`, count: ratings.filter((r) => r >= lo && r < hi).length })),
+      avgMatchesPerPlayer: Math.round(mean(ps.map((p) => p.played || 0)) * 10) / 10,
+      top: leaderboard(25),
+      mostActive: [...ps].sort((a, b) => (b.played || 0) - (a.played || 0)).slice(0, 10).map((p) => ({ name: p.name, played: p.played || 0, rating: Math.round(p.rating), lastSeen: p.seen })),
+    };
+
+    return {
+      generatedAt: now, range: rangeMs || 0, overview, factions, matchup, maps: mapsOut, lengths: lengthsOut, formats,
+      activity: {
+        perHour, perDay: perDay.map(({ unique, ...d }) => ({ ...d, unique: unique.size })), hourOfDay,
+        samples: thin(samples.filter((x) => x.t >= now - (rangeMs || 30 * DAY)), 720),
+      },
+      players: playersOut,
+      community: { maps: maps.map.size, newest: poolList().slice(0, 10) },
+    };
+  }
+
+  /** Right now: who is here, what is running, and how the machine is coping. */
+  function live() {
+    const mem = process.memoryUsage();
+    const now = Date.now();
+    const roomsOut = [...rooms.values()].map((r) => ({
+      name: r.name, players: playersOf(r).length, observers: r.clients.length - playersOf(r).length, max: r.max,
+      map: r.map.name, format: formatOf(r), started: r.started, ranked: r.ranked, quick: r.quick || "", locked: !!r.pass,
+      host: host(r)?.name ?? "", age: Math.round((now - r.created) / 1000),
+      elapsed: r.started && r.match ? Math.round((now - r.match.startedAt) / 1000) : 0,
+      factions: r.match ? r.match.teams.map((t) => t.faction) : playersOf(r).map((c) => c.faction),
+      names: playersOf(r).map((c) => c.name),
+    })).sort((a, b) => Number(b.started) - Number(a.started) || b.players - a.players);
+    const inGames = roomsOut.filter((r) => r.started).reduce((n, r) => n + r.players, 0);
+    const inLobbies = roomsOut.filter((r) => !r.started).reduce((n, r) => n + r.players + r.observers, 0);
+    const watching = roomsOut.filter((r) => r.started).reduce((n, r) => n + r.observers, 0);
+    const queued = Object.fromEntries(Object.entries(queues).map(([k, q]) => [k, q.length]));
+    const last = samples[samples.length - 1];
+    return {
+      now, online: conns.size, inGames, inLobbies, watching,
+      browsing: [...conns].filter((c) => !c.room && !c.queue).length,
+      queued, games: roomsOut.filter((r) => r.started).length, lobbies: roomsOut.filter((r) => !r.started).length,
+      rooms: roomsOut,
+      server: {
+        uptime: Math.round(process.uptime()), bootAt: counters.bootAt, node: process.version, pid: process.pid,
+        rssMB: Math.round(mem.rss / 1048576), heapMB: Math.round(mem.heapUsed / 1048576),
+        lagMs: Math.round(lag), lagMaxMs: Math.round(lagMax), protocol: PROTOCOL,
+        msgsPerMin: last?.msgs ?? 0, kbPerMin: Math.round((last?.bytes ?? 0) / 1024),
+        storage: {
+          matchesFile: matchesPath,
+          matchesInMemory: matchLog.items.length,
+          players: players.map.size, communityMaps: maps.map.size,
+        },
+      },
+      counters: { ...counters, sinceBootSec: Math.round((now - counters.bootAt) / 1000) },
+    };
+  }
+
+  const recentMatches = (n = 100) => matchLog.items.slice(-n).sort((a, b) => b.startedAt - a.startedAt).map((m) => ({ ...m, teams: m.teams.map(({ pid, ...t }) => t) }));
+
+  function matchesCsv() {
+    const head = ["n", "id", "startedAt", "endedAt", "kind", "ranked", "map", "customMap", "players", "format", "outcome", "winnerAlliance", "gameMinutes", "realMinutes", "quitters", "desync", "factions", "winningFactions"];
+    const q = (v) => { const s2 = String(v ?? ""); return /[",\n]/.test(s2) ? `"${s2.replace(/"/g, '""')}"` : s2; };
+    const lines = [head.join(",")];
+    for (const m of matchLog.items) {
+      lines.push([m.n, m.id, new Date(m.startedAt).toISOString(), m.endedAt ? new Date(m.endedAt).toISOString() : "", m.kind, m.ranked, m.map.name, m.map.custom,
+        m.players, m.format, m.outcome, m.winner ?? "", (m.gameSec / 60).toFixed(1), (m.realSec / 60).toFixed(1), m.quitters, m.desync,
+        m.teams.map((t) => t.faction || "?").join(" "), m.teams.filter((t) => t.alliance === m.winner).map((t) => t.faction || "?").join(" ")].map(q).join(","));
+    }
+    return lines.join("\n") + "\n";
+  }
+
+  /** Admin: a message to everyone connected, in the hub and in matches. */
+  function announce(text) {
+    const msg = clip(text, 300);
+    if (!msg) return 0;
+    const frame = encode(JSON.stringify({ t: "announce", text: msg }));
+    for (const c of conns) { try { c.socket.write(frame); } catch { /* */ } }
+    return conns.size;
+  }
+  /** Admin: close a room — everyone in it goes back to the hub. */
+  function closeRoom(name) {
+    const r = rooms.get(name);
+    if (!r) return false;
+    for (const c of [...r.clients]) { leaveRoom(c.conn, "closed"); c.conn.inHub = true; }
+    rooms.delete(name);
+    hubChanged();
+    return true;
+  }
 
   function stats() {
     let inRooms = 0; for (const r of rooms.values()) inRooms += r.clients.length;
@@ -644,11 +1004,13 @@ function createHub(opts) {
     return { rooms: rooms.size, games, players: inRooms, online: conns.size };
   }
   function shutdown() {
-    clearInterval(beat);
-    maps.flush(); players.flush();
+    clearInterval(beat); clearInterval(sampler); clearInterval(lagTimer); clearTimeout(firstSample);
+    // Matches still running are recorded as cut off by the restart.
+    for (const r of rooms.values()) if (r.started && !r.resolved) { r.resolved = true; recordMatch(r, "abandoned"); }
+    maps.flush(); players.flush(); matchLog.flush(); sampleLog.flush();
     for (const c of [...conns]) c.close();
   }
-  return { handleConn, stats, roomList, poolList, leaderboard, shutdown };
+  return { handleConn, stats, roomList, poolList, leaderboard, shutdown, analytics, live, recentMatches, matchesCsv, announce, closeRoom, sample };
 }
 
 function log(msg) { if (process.env.NODE_ENV !== "test" && !process.env.VITEST) console.log(msg); }
@@ -671,8 +1033,77 @@ export function startServer(port = 8787, bindHost = "0.0.0.0", opts = {}) {
     res.writeHead(code, { "content-type": "application/json", "access-control-allow-origin": "*", "cache-control": "no-store" });
     res.end(JSON.stringify(body));
   };
+  // ---- the admin dashboard ----
+  // Off unless ADMIN_TOKEN is set (on Fly: `fly secrets set ADMIN_TOKEN=…`).
+  // Every API call carries it as a Bearer token; wrong guesses are limited per
+  // address so it can't be brute-forced.
+  const adminToken = opts.adminToken ?? process.env.ADMIN_TOKEN ?? "";
+  const adminHash = adminToken ? crypto.createHash("sha256").update(adminToken).digest() : null;
+  const failures = new Map(); // ip -> { n, since }
+  const clientIp = (req) => String(req.headers["fly-client-ip"] || String(req.headers["x-forwarded-for"] || "").split(",")[0] || req.socket.remoteAddress || "").trim();
+  function authorised(req) {
+    if (!adminHash) return "disabled";
+    const ip = clientIp(req);
+    const f = failures.get(ip);
+    if (f && Date.now() - f.since < 10 * 60e3 && f.n >= 10) return "locked";
+    const got = String(req.headers.authorization || "").replace(/^Bearer\s+/i, "");
+    const ok = crypto.timingSafeEqual(crypto.createHash("sha256").update(got).digest(), adminHash);
+    if (ok) { failures.delete(ip); return "ok"; }
+    const cur = f && Date.now() - f.since < 10 * 60e3 ? f : { n: 0, since: Date.now() };
+    cur.n++;
+    failures.set(ip, cur);
+    return "denied";
+  }
+  const readBody = (req) => new Promise((resolve) => {
+    let body = "";
+    req.on("data", (c) => { body += c; if (body.length > 10000) req.destroy(); });
+    req.on("end", () => { try { resolve(JSON.parse(body || "{}")); } catch { resolve({}); } });
+    req.on("error", () => resolve({}));
+  });
+  const RANGES = { "24h": 24 * 3600e3, "7d": 7 * 24 * 3600e3, "30d": 30 * 24 * 3600e3, "all": 0 };
+  const adminPage = path.join(here, "admin.html");
+
+  async function adminApi(req, res, url) {
+    const auth = authorised(req);
+    if (auth === "disabled") return json(res, 503, { error: "The admin dashboard is off. Set ADMIN_TOKEN (on Fly: fly secrets set ADMIN_TOKEN=<a long random string>) and restart." });
+    if (auth === "locked") return json(res, 429, { error: "Too many wrong tokens from this address — wait ten minutes." });
+    if (auth !== "ok") return json(res, 401, { error: "Wrong admin token." });
+    const q = new URL(req.url || "/", "http://x").searchParams;
+    if (url === "/admin/api/live") return json(res, 200, hub.live());
+    if (url === "/admin/api/stats") return json(res, 200, hub.analytics(RANGES[q.get("range") || "7d"] ?? RANGES["7d"]));
+    if (url === "/admin/api/matches") return json(res, 200, hub.recentMatches(Math.max(1, Math.min(1000, Number(q.get("n")) || 100))));
+    if (url === "/admin/api/matches.csv") {
+      res.writeHead(200, { "content-type": "text/csv; charset=utf-8", "content-disposition": "attachment; filename=\"banner-and-blade-matches.csv\"", "cache-control": "no-store" });
+      res.end(hub.matchesCsv());
+      return;
+    }
+    if (req.method === "POST" && url === "/admin/api/announce") {
+      const body = await readBody(req);
+      return json(res, 200, { sent: hub.announce(body.text) });
+    }
+    if (req.method === "POST" && url === "/admin/api/close-room") {
+      const body = await readBody(req);
+      return json(res, 200, { closed: hub.closeRoom(String(body.name || "")) });
+    }
+    return json(res, 404, { error: "Unknown admin call." });
+  }
+
   const server = http.createServer((req, res) => {
     const url = (req.url || "/").split("?")[0];
+    if (url === "/admin" || url === "/admin/") {
+      try {
+        res.writeHead(200, {
+          "content-type": "text/html; charset=utf-8", "cache-control": "no-store", "x-content-type-options": "nosniff",
+          "x-frame-options": "DENY", "referrer-policy": "no-referrer",
+        });
+        res.end(fs.readFileSync(adminPage));
+      } catch { res.writeHead(500, { "content-type": "text/plain" }); res.end("admin.html is missing next to server.mjs\n"); }
+      return;
+    }
+    if (url.startsWith("/admin/api/")) {
+      adminApi(req, res, url).catch(() => { if (!res.headersSent) json(res, 500, { error: "Admin call failed." }); });
+      return;
+    }
     if (url === "/healthz") return json(res, 200, { ok: true, ...hub.stats(), protocol: PROTOCOL, game: !!gameFile, uptime: process.uptime() });
     if (url === "/maps") return json(res, 200, hub.poolList());
     if (url === "/rooms") return json(res, 200, hub.roomList());
@@ -681,14 +1112,23 @@ export function startServer(port = 8787, bindHost = "0.0.0.0", opts = {}) {
       try {
         // Read once, re-read when the file changes (a redeploy of the build).
         const mtime = fs.statSync(gameFile).mtimeMs;
-        if (!gameCache || gameCache.mtime !== mtime) gameCache = { mtime, body: fs.readFileSync(gameFile) };
-        res.writeHead(200, {
-          "content-type": "text/html; charset=utf-8",
-          "cache-control": "no-cache",
-          "x-content-type-options": "nosniff",
-          "referrer-policy": "no-referrer",
-        });
-        res.end(gameCache.body);
+        if (!gameCache || gameCache.mtime !== mtime) {
+          const body = fs.readFileSync(gameFile);
+          gameCache = {
+            mtime, body, gz: zlib.gzipSync(body, { level: 9 }),
+            etag: `"${crypto.createHash("sha1").update(body).digest("hex").slice(0, 16)}"`,
+          };
+        }
+        // Revalidated every visit (no-cache), so a deploy is picked up at once,
+        // but an unchanged page is a 304 and never re-sent.
+        const headers = {
+          "content-type": "text/html; charset=utf-8", "cache-control": "no-cache", etag: gameCache.etag,
+          "x-content-type-options": "nosniff", "referrer-policy": "no-referrer", vary: "accept-encoding",
+        };
+        if (req.headers["if-none-match"] === gameCache.etag) { res.writeHead(304, headers); res.end(); return; }
+        const gzip = /\bgzip\b/.test(String(req.headers["accept-encoding"] || ""));
+        res.writeHead(200, gzip ? { ...headers, "content-encoding": "gzip" } : headers);
+        res.end(gzip ? gameCache.gz : gameCache.body);
       } catch {
         res.writeHead(500, { "content-type": "text/plain" });
         res.end("The game build could not be read.\n");
@@ -736,7 +1176,30 @@ export function startServer(port = 8787, bindHost = "0.0.0.0", opts = {}) {
 // how every managed host tells a process where to listen — a server that only
 // reads argv binds 8787, the platform routes to whatever it assigned, and the
 // deploy looks healthy while being unreachable.
+/**
+ * Started as root with RUN_AS=uid:gid (the container does this): take
+ * ownership of the data files — a freshly mounted Fly volume belongs to root —
+ * then give up root for good before listening to anyone.
+ */
+function dropPrivileges() {
+  const spec = process.env.RUN_AS;
+  if (!spec || typeof process.getuid !== "function" || process.getuid() !== 0) return;
+  const [uid, gid] = spec.split(":").map(Number);
+  if (!Number.isInteger(uid) || !Number.isInteger(gid)) return;
+  const dirs = new Set([process.env.MAPS_FILE, process.env.PLAYERS_FILE, process.env.MATCHES_FILE].filter(Boolean).map((f) => path.dirname(f)));
+  for (const d of dirs) {
+    try {
+      fs.mkdirSync(d, { recursive: true });
+      fs.chownSync(d, uid, gid);
+      for (const f of fs.readdirSync(d)) { try { fs.chownSync(path.join(d, f), uid, gid); } catch { /* */ } }
+    } catch (e) { console.warn(`couldn't prepare ${d}: ${e.message}`); }
+  }
+  process.setgid(gid);
+  process.setuid(uid);
+}
+
 if (import.meta.url === `file://${process.argv[1]}`) {
+  dropPrivileges();
   const port = Number(process.env.PORT) || Number(process.argv[2]) || 8787;
   const host = process.env.HOST || "0.0.0.0";
   startServer(port, host).then(({ server, close }) => {

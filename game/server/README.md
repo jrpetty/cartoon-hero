@@ -18,16 +18,29 @@ port (`Dockerfile` in `game/`).
 
 ### Fly.io (recommended)
 
+One-time setup, from the `game/` folder:
+
 ```bash
-cd game
-fly launch --no-deploy --copy-config     # claim an app name once
-fly volumes create bb_data --size 1      # ratings + community maps survive deploys
+fly launch --no-deploy --copy-config          # pick an app name; keep the existing fly.toml
+fly volumes create bb_data --size 1           # stats, ratings, match history, community maps
+fly secrets set ADMIN_TOKEN=$(openssl rand -hex 24)   # turns on /admin — keep this value
 fly deploy
 ```
 
-Open `https://<app>.fly.dev` and play. Fly terminates TLS, so the page is
-`https://` and online play uses `wss://` to the same address automatically.
-Point your own domain at it with `fly certs add play.yourdomain.com`.
+Then:
+
+- the game: `https://<app>.fly.dev`
+- your dashboard: `https://<app>.fly.dev/admin` (paste the ADMIN_TOKEN)
+- health: `https://<app>.fly.dev/healthz`
+
+Every later update is just `fly deploy`. Your own domain:
+`fly certs add play.yourdomain.com` and point the DNS record it gives you.
+Fly terminates TLS, so the page is `https://` and online play is `wss://` to
+the same address with nothing to configure.
+
+Useful: `fly logs` (live server log), `fly status`, `fly ssh console` (a
+shell on the machine; data is in `/data`), `fly volumes snapshots list
+bb_data` (Fly snapshots the volume daily).
 
 ### Render
 
@@ -107,29 +120,86 @@ are saved in `MAPS_FILE`, deduplicated by content, capped at 500, and listed
 at `/maps`. The host's chosen map travels with the match start, so nobody
 else needs a copy.
 
+## The admin dashboard — `/admin`
+
+Set `ADMIN_TOKEN` (a long random string) and open `/admin`. Without it the
+dashboard is off. Wrong guesses are limited to ten per address per ten
+minutes. Everything refreshes by itself: "Right now" every 3 seconds, the
+rest every 15. Pick 24 hours, 7 days, 30 days or all time at the top.
+
+**Right now**: players online (and the peak), in matches, in lobbies, just
+browsing, waiting in each quick-match queue; live games; connections since
+start; uptime; event-loop lag and memory (lag creeping above ~50 ms means the
+machine is too small).
+
+**For the chosen period**:
+- matches, how many finished / were abandoned / disputed, ranked vs custom;
+- average, median and longest game; players per match;
+- active players (today, 7 and 30 days), new and returning players;
+- quit rate (matches someone left early) and desync rate (should be 0);
+- a chart of players online and games running (one sample a minute, kept on
+  disk, so it survives deploys), matches per day with unique players, matches
+  per hour for the last two days, and which hours (UTC) people play;
+- **factions**: picks and share, how often chosen vs taken at Random, games,
+  wins, win rate, **1 v 1 win rate**, average game length and average length of
+  its wins — plus a **match-up grid**: each faction's 1 v 1 win rate against
+  each other faction, with game counts;
+- **maps**: plays, share, finished games, average length, average players;
+  custom maps with their author;
+- **game length**: a histogram, and averages by kind (quick 1v1, 2v2, FFA,
+  custom) and by player count; formats played (1 v 1, 2 v 2, 3 v 3…);
+- **players**: total, rated, average rating, the rating spread, the
+  leaderboard, the most active players;
+- **rooms right now**, with a **Close** button;
+- **recent matches**: kind, map, format, every side with its factions and
+  names (winners in bold), result, length, quitters;
+- **server health**: messages and traffic per minute, turns relayed, chat
+  lines, kicks, maps published, rate-limited messages, dead connections
+  dropped, errors (with the last one), storage;
+- **announce**: send a message to everyone online — it shows in the hub and
+  as an alert inside running matches ("restarting in 5 minutes");
+- **Export CSV**: every match ever recorded, for a spreadsheet.
+
+How the numbers are gathered: each match is recorded when it starts (room,
+kind, map, sides, each player's faction). Clients report the factions
+actually in play (so "Random" resolves to the real one), the winner and the
+game-clock length when it ends; the server keeps the winner only when the
+reports agree. A match everyone leaves before a winner is "abandoned"; a
+server restart records running matches as abandoned too. Player ids are
+hashed before they are written to the match history and never shown.
+
 ## Operating it
 
 | | |
 |---|---|
-| `GET /` | the game |
-| `GET /healthz` | `{ ok, rooms, games, players, online, protocol, game, uptime }` — point your host's health check here |
-| `GET /rooms` · `/maps` · `/leaderboard` | JSON |
+| `GET /` | the game (gzip, ETag — an unchanged page is a 304) |
+| `GET /admin` | the dashboard (needs `ADMIN_TOKEN`) |
+| `GET /healthz` | `{ ok, rooms, games, players, online, protocol, game, uptime }` — Fly's health check |
+| `GET /rooms` · `/maps` · `/leaderboard` | public JSON |
+| `/admin/api/live` · `stats?range=24h\|7d\|30d\|all` · `matches?n=` · `matches.csv` · `POST announce` · `POST close-room` | admin JSON, `Authorization: Bearer <ADMIN_TOKEN>` |
 | `PORT`, `HOST` | where to listen (managed hosts set `PORT`) |
+| `ADMIN_TOKEN` | turns on the dashboard |
 | `GAME_HTML` | the game page (default: `server/public/index.html`, then `dist/`) |
-| `MAPS_FILE`, `PLAYERS_FILE` | where community maps and ratings are kept (`/data/…` in the container) |
+| `MAPS_FILE`, `PLAYERS_FILE`, `MATCHES_FILE`, `SAMPLES_FILE` | data files (all in `/data` in the container) |
+| `RUN_AS=uid:gid` | start as root, take ownership of the data files, then drop to this user (the container uses the `node` user) |
 
-- **One instance.** Rooms and matches live in memory; scale the machine up,
-  not out. The relay does no simulation, so a small VM carries a lot.
-- **Deploys end running matches.** Deploy when it's quiet. `SIGTERM` closes
-  cleanly. A page from before a protocol change is asked to reload.
-- **Abuse limits**: messages are rate-limited per connection (clients that
-  flood are dropped), chat is capped at five lines per five seconds and 240
-  characters, names and room names are cleaned and length-limited, frames
-  over 1 MB close the connection, and anything that isn't a map code is
-  refused by the pool.
-- **Dead connections** (a closed laptop, dropped Wi-Fi) are detected by
-  heartbeat within ~45 s and their seat freed; in a match, their units stop.
-- **Passwords** on rooms are a gate for friends, not security.
+- **Measured**: 400 simulated players in 150 simultaneous matches, each
+  sending 20 turns a second, on one process: event-loop lag peaked at 10 ms,
+  84 MB of memory, no errors, every match recorded. The 512 MB machine in
+  `fly.toml` has plenty of room; scale the machine up, not out — rooms and
+  matches live in memory on one instance.
+- **Data is safe across deploys and crashes**: files are written to a
+  temporary name and renamed into place; the match history and activity
+  samples are append-only; on `SIGTERM` everything is flushed first.
+- **Deploys end running matches.** Announce first, deploy when it's quiet.
+  A page from before a protocol change is asked to reload.
+- **Abuse limits**: per-connection message rate limit (floods are
+  disconnected), chat capped at five lines per five seconds and 240
+  characters, names and room names cleaned and length-limited, frames over
+  1 MB close the connection, the map pool refuses anything that isn't a map.
+- **Dead connections** (a closed laptop, dropped Wi-Fi) are found by
+  heartbeat within ~45 s and their seat freed.
+- **Room passwords** are a gate for friends, not security.
 
 ## Private play: LAN, VPN, tunnel
 

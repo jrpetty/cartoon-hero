@@ -1116,6 +1116,31 @@ before anything bought affects ranked play); reconnecting to a match in
 progress (lockstep would need the order log replayed to the returning
 client); more than one server instance.
 
+## The admin dashboard and a production server
+
+Every online match is recorded (`MATCHES_FILE`, append-only JSON lines):
+kind, map, format, sides with names and factions — "Random" resolved by the
+clients' own report — winner (only when reports agree), game-clock and
+wall-clock length, quitters, desyncs. A per-minute activity sample is kept
+too (`SAMPLES_FILE`). `/admin` (token: `ADMIN_TOKEN`, ten wrong guesses per
+address per ten minutes) turns it into the operator's view: live counts,
+faction pick and win rates, a 1 v 1 match-up grid, maps, game lengths,
+formats, activity by day / hour / hour-of-day, players and ratings, rooms
+with a close button, recent matches, server health, announcements, CSV
+export. `src/net/admin.test.ts` checks the numbers against matches played
+through a real server.
+
+Production: the game page is gzipped (712 KB → 233 KB) with an ETag; data is
+written atomically; the server starts as root only to take ownership of the
+Fly volume and then drops to `node` (Node's own setuid — no extra packages);
+`fly.toml` has an always-on machine, a volume, SIGTERM with a 10 s grace, and
+the health check. Verified: the full two-stage image built here (through a
+mirror of the official Node images — Docker Hub was rate-limiting this
+sandbox), run with a root-owned volume, served the game, two Chromium
+players played a quick match through it, the match appeared in the admin
+API with both factions, and the container stopped cleanly with its data on
+disk. A 400-player load test peaked at 10 ms event-loop lag and 84 MB.
+
 ## Bigger / later
 - **Naval** — water is currently only an impassable wall, and the Islands
   preset (55% water) is a maze rather than a naval map. Dock, transport,

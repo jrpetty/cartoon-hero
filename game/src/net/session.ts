@@ -23,6 +23,8 @@ export class NetSession {
   onPing?: (msg: { x?: number; y?: number; team?: number }) => void;
   /** A ranked match was rated by the server: how far ratings moved, and which alliance won. */
   onRated?: (msg: { delta?: number; winner?: number }) => void;
+  /** A message from the server's operator to everyone. */
+  onAnnounce?: (text: string) => void;
 
   /** Build the lockstep driver over a freshly-inited world and wire the wire. */
   attach(world: World, inputDelay = 5) {
@@ -37,6 +39,7 @@ export class NetSession {
       else if (m.t === "chat") this.onChat?.(m as { name?: string; text?: string; team?: number });
       else if (m.t === "ping") this.onPing?.(m as { x?: number; y?: number; team?: number });
       else if (m.t === "rated") this.onRated?.(m as { delta?: number; winner?: number });
+      else if (m.t === "announce" && typeof (m as { text?: unknown }).text === "string") this.onAnnounce?.((m as { text: string }).text);
     };
   }
 

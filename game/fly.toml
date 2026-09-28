@@ -1,13 +1,23 @@
 # Fly.io — the whole site (game + multiplayer) as one app.
 #
 #   fly launch --no-deploy --copy-config      # claim a name once
-#   fly volumes create bb_data --size 1       # ratings and community maps
+#   fly volumes create bb_data --size 1       # ratings, match history, community maps
+#   fly secrets set ADMIN_TOKEN=<long random string>   # turns on /admin
 #   fly deploy
 #
 # Fly terminates TLS, so the site is https:// and the game's same-origin
 # WebSocket is wss:// automatically — players just open the address.
 app = "banner-and-blade"
 primary_region = "lhr"
+
+# Containers are stopped with SIGTERM; the server records running matches,
+# writes its data and exits within a few seconds.
+kill_signal = "SIGTERM"
+kill_timeout = 10
+
+[deploy]
+  # One machine holding one volume: replace it in place.
+  strategy = "immediate"
 
 [build]
   dockerfile = "Dockerfile"
