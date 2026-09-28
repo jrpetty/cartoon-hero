@@ -49,6 +49,19 @@ Notes:
 - If someone disconnects mid-match, the rest keep playing — that team's units
   simply go idle.
 
+## Teams, maps and the community pool
+
+The host sets the teams in the lobby — free-for-all, or 2, 3 or 4 teams laid
+out in join order (with eight players and two teams, players 1–4 against 5–8)
+— and can move anyone; players can join any team or start a new one. The host
+also picks the battlefield: a built-in one, one of their own published maps,
+or one from this server's **community pool**.
+
+Players can publish the maps they've made to the server from the lobby's map
+picker. The pool is saved to `community-maps.json` next to `server.mjs` (set
+`MAPS_FILE=/path/to/file.json` to keep it elsewhere, e.g. on a mounted volume
+on a managed host), and listed as JSON at `http://<host>:8787/maps`.
+
 ## Room passwords
 
 Rooms can be locked. The **first** player to enter a room sets its password (the

@@ -52,6 +52,15 @@ export interface CustomMap {
   startResources: { food: number; wood: number; gold: number };
   /** Epoch millis of the last save, for sorting the library. */
   updated: number;
+  /**
+   * When the author published it to the map pool, or 0 for a draft. Published
+   * maps are what the Skirmish list, the Random roll and online lobbies offer;
+   * a draft lives in the editor until it is ready. Kept in the library entry,
+   * not the map code — importing someone's map gives you a draft of your own.
+   */
+  published?: number;
+  /** Who made it, carried in the code so a shared map keeps its credit. */
+  author?: string;
 }
 
 /**
@@ -165,6 +174,7 @@ export function serialiseMap(m: CustomMap): string {
     sp: m.spawns.map((s) => [Math.floor(s.x / TILE), Math.floor(s.y / TILE)]),
     md: m.modes, mn: m.minPlayers, mx: m.maxPlayers, nm: m.nomad,
     sr: m.startResources,
+    ...(m.author ? { au: m.author } : {}),
   };
   return `BBMAP1:${b64encode(JSON.stringify(payload))}`;
 }
@@ -210,6 +220,8 @@ export function deserialiseMap(code: string): CustomMap | null {
         gold: Math.max(0, Number(p.sr?.gold) || START_RESOURCES.gold),
       },
       updated: Date.now(),
+      published: 0,
+      ...(p.au ? { author: String(p.au).slice(0, 24) } : {}),
     };
   } catch {
     return null;
@@ -479,18 +491,49 @@ function randomStarts(m: CustomMap, seed: number, players: number): { x: number;
 
 const STORE_KEY = "bb_custom_maps";
 
+// A library entry is `id|meta|code`, meta being `m<published>.<updated>` in
+// base 36. Entries from before publishing existed are `id|code`: those maps
+// were already in the Skirmish list, so they come back published rather than
+// quietly vanishing from it.
+function entryOf(m: CustomMap): string {
+  return `${m.id}|m${(m.published ?? 0).toString(36)}.${m.updated.toString(36)}|${serialiseMap(m)}`;
+}
+
+function parseEntry(entry: string): CustomMap | null {
+  const a = entry.indexOf("|");
+  if (a < 0) return null;
+  const id = entry.slice(0, a);
+  let rest = entry.slice(a + 1);
+  let published = Date.now(), updated = 0;
+  if (!rest.startsWith("BBMAP")) {
+    const b = rest.indexOf("|");
+    if (b < 0) return null;
+    const meta = /^m([0-9a-z]+)\.([0-9a-z]+)$/.exec(rest.slice(0, b));
+    rest = rest.slice(b + 1);
+    published = meta ? parseInt(meta[1], 36) : 0;
+    updated = meta ? parseInt(meta[2], 36) : 0;
+  }
+  const m = deserialiseMap(rest);
+  if (!m) return null;
+  m.id = id || m.id;
+  m.published = published;
+  if (updated) m.updated = updated;
+  return m;
+}
+
+function writeAll(all: CustomMap[]): void {
+  localStorage.setItem(STORE_KEY, JSON.stringify(all.slice(0, 40).map(entryOf)));
+}
+
 /** Every saved map, newest first. Bad entries are skipped, never thrown. */
 export function listCustomMaps(): CustomMap[] {
   try {
     const raw = localStorage.getItem(STORE_KEY);
     if (!raw) return [];
-    const arr = JSON.parse(raw) as string[];
     const out: CustomMap[] = [];
-    for (const entry of arr) {
-      const m = deserialiseMap(entry.slice(entry.indexOf("|") + 1));
-      if (!m) continue;
-      m.id = entry.slice(0, entry.indexOf("|")) || m.id;
-      out.push(m);
+    for (const entry of JSON.parse(raw) as string[]) {
+      const m = parseEntry(entry);
+      if (m) out.push(m);
     }
     return out.sort((a, b) => b.updated - a.updated);
   } catch {
@@ -501,19 +544,65 @@ export function listCustomMaps(): CustomMap[] {
 export function saveCustomMap(m: CustomMap): void {
   try {
     m.updated = Date.now();
-    const all = listCustomMaps().filter((x) => x.id !== m.id);
-    all.unshift(m);
-    localStorage.setItem(STORE_KEY, JSON.stringify(all.slice(0, 40).map((x) => `${x.id}|${serialiseMap(x)}`)));
+    // Saving never changes whether a map is published: keep what the library has.
+    const all = listCustomMaps();
+    const prev = all.find((x) => x.id === m.id);
+    if (m.published === undefined) m.published = prev?.published ?? 0;
+    writeAll([m, ...all.filter((x) => x.id !== m.id)]);
   } catch { /* storage full or unavailable — the export string still works */ }
 }
 
 export function deleteCustomMap(id: string): void {
   try {
-    const all = listCustomMaps().filter((x) => x.id !== id);
-    localStorage.setItem(STORE_KEY, JSON.stringify(all.map((x) => `${x.id}|${serialiseMap(x)}`)));
+    writeAll(listCustomMaps().filter((x) => x.id !== id));
   } catch { /* */ }
 }
 
 export function findCustomMap(id: string): CustomMap | null {
   return listCustomMaps().find((m) => m.id === id) ?? null;
+}
+
+// ------------------------------------------------------------ the map pool --
+//
+// Making a map and offering it to the game are two steps. A map is a draft
+// while its author works on it (the editor can still test it); publishing puts
+// it in the pool beside the built-in battlefields — on the Skirmish list, in
+// the Random roll, and in the host's choices for an online match. Only a map
+// with no errors can be published: the pool is what other people get handed.
+
+/** Put a map in the pool. Returns the errors that stop it, or [] on success. */
+export function publishCustomMap(m: CustomMap, author?: string): MapIssue[] {
+  const errors = validateMap(m).filter((i) => i.level === "error");
+  if (errors.length) return errors;
+  if (author && !m.author) m.author = author.slice(0, 24);
+  m.published = Date.now();
+  saveCustomMap(m);
+  return [];
+}
+
+/** Take a map back out of the pool; it stays in the library as a draft. */
+export function unpublishCustomMap(m: CustomMap): void {
+  m.published = 0;
+  saveCustomMap(m);
+}
+
+export const isPublished = (m: CustomMap) => !!m.published;
+
+/** The published maps that can host this match. */
+export function mapPool(mode: GameMode, players: number): CustomMap[] {
+  return listCustomMaps().filter((m) => isPublished(m) && mapSupports(m, mode, players));
+}
+
+/**
+ * What "Random" lands on. Every built-in battlefield and every published map
+ * that fits gets one chance each, drawn from the seed. A built-in result stays
+ * "random" — the generator rolls which preset from the same seed, exactly as it
+ * always has, so old saves replay the same field — and a published map comes
+ * back as its own id.
+ */
+export function rollRandomMap(seed: number, pool: readonly { id: string }[], presets: number): string {
+  if (!pool.length) return "random";
+  const rng = new RNG((seed ^ 0x9a9b00c) >>> 0);
+  const i = rng.int(0, presets + pool.length - 1);
+  return i < presets ? "random" : pool[i - presets].id;
 }

@@ -13,6 +13,9 @@ export type Teams = number[];
 
 export const MAX_TEAMS = 8;
 
+/** Team colours for rosters and lobbies: index 0 is "on your own". */
+export const TEAM_COLORS = ["#9a917b", "#5b8fe0", "#d8574a", "#4ab86a", "#e0a83a", "#9a6ae0", "#3ac8c0", "#e08a4a", "#e06a9a"];
+
 /** Every seat on its own. */
 export function freeForAll(players: number): Teams {
   return Array.from({ length: players }, () => 0);

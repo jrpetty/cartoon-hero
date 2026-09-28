@@ -21,10 +21,11 @@ import { RNG, randomSeed } from "../engine/rng";
 import { audio } from "../engine/audio";
 import { Particles } from "../engine/particles";
 import { MatchReport } from "../sim/metrics";
-import { CustomMap, listCustomMaps, mapSupports } from "../maps/custom";
+import { CustomMap, listCustomMaps, mapPool } from "../maps/custom";
 import { drawMapThumbnail } from "./map_thumb";
+import { iconArmory, iconCodex, iconMap, iconMultiplayer, iconResume, iconSettings, iconSkirmish, iconWarband } from "./menu_icons";
 import { REPORT_TABS, ReportTab, drawReportKey, drawReportTab, reportSubtitle } from "./match_report";
-import { blockTeams, coopTeams, formatLabel, freeForAll, resizeTeams, teamsValid } from "./teams";
+import { TEAM_COLORS, blockTeams, coopTeams, formatLabel, freeForAll, resizeTeams, teamsValid } from "./teams";
 import { FACTIONS, FACTION_IDS, DEFAULT_FACTION, factionOf } from "../content/factions";
 import { drawBuilding, drawUnit, setFactionResolver } from "../render/draw";
 import { makeEntity } from "../sim/world";
@@ -65,6 +66,28 @@ export function drawMenuBackground(W: number, H: number, time: number) {
   ctx.fillStyle = sky;
   ctx.fillRect(0, 0, W, H);
 
+  // The first stars, fading out toward the glow.
+  for (let i = 0; i < 70; i++) {
+    const sx = ((i * 7919) % 1000) / 1000 * W;
+    const sy = ((i * 104729) % 1000) / 1000 * H * 0.45;
+    const tw = 0.35 + 0.35 * Math.sin(time * 1.3 + i * 2.1);
+    ctx.fillStyle = withAlpha("#fff4dc", tw * (1 - sy / (H * 0.45)));
+    ctx.fillRect(sx, sy, i % 5 === 0 ? 2 : 1.2, i % 5 === 0 ? 2 : 1.2);
+  }
+  // Long thin clouds catching the last light, drifting.
+  for (let i = 0; i < 4; i++) {
+    const cyy = H * (0.3 + i * 0.07);
+    const cxx = ((i * 0.37 + time * 0.004 * (i + 1)) % 1.4 - 0.2) * W;
+    const cg = ctx.createLinearGradient(cxx - 220, 0, cxx + 220, 0);
+    cg.addColorStop(0, "rgba(255,190,150,0)");
+    cg.addColorStop(0.5, `rgba(255,190,150,${0.16 - i * 0.02})`);
+    cg.addColorStop(1, "rgba(255,190,150,0)");
+    ctx.fillStyle = cg;
+    ctx.beginPath();
+    ctx.ellipse(cxx, cyy, 220 + i * 40, 7 + i * 2, 0, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
   // sun
   ctx.fillStyle = withAlpha("#ffd9a0", 0.9);
   ctx.beginPath();
@@ -86,6 +109,18 @@ export function drawMenuBackground(W: number, H: number, time: number) {
   ctx.lineTo(0, H);
   ctx.fill();
 
+  // nearer hills with a ragged treeline
+  ctx.fillStyle = "#3a2e40";
+  ctx.beginPath();
+  ctx.moveTo(0, H * 0.84);
+  for (let x = 0; x <= W; x += 14) {
+    const hy = H * 0.84 - Math.sin(x * 0.006 + 0.7) * 22 - Math.sin(x * 0.021) * 6;
+    ctx.lineTo(x, hy - ((x * 37) % 11 > 6 ? 8 + ((x * 13) % 7) : 0));
+  }
+  ctx.lineTo(W, H);
+  ctx.lineTo(0, H);
+  ctx.fill();
+
   // castle silhouette
   ctx.fillStyle = "#241c2c";
   const cx = W * 0.2;
@@ -97,6 +132,11 @@ export function drawMenuBackground(W: number, H: number, time: number) {
   }
   ctx.fillRect(cx - 14, base - 220, 28, 220);
   for (let i = 0; i < 2; i++) ctx.fillRect(cx - 14 + i * 19, base - 234, 9, 16);
+  // lit windows
+  ctx.fillStyle = withAlpha("#ffc870", 0.75 + 0.2 * Math.sin(time * 3.1));
+  for (const [wx, wy] of [[-60, -80], [-30, -80], [30, -80], [60, -80], [-90, -130], [90, -130], [0, -170]]) {
+    ctx.fillRect(cx + wx - 3, base + wy, 6, 10);
+  }
   // banner waving from the keep
   const wave = Math.sin(time * 2.2) * 5;
   ctx.fillStyle = "#b8483e";
@@ -118,6 +158,13 @@ export function drawMenuBackground(W: number, H: number, time: number) {
   ctx.lineTo(W, H);
   ctx.lineTo(0, H);
   ctx.fill();
+
+  // A soft vignette pulls the eye to the middle.
+  const vg = ctx.createRadialGradient(W / 2, H * 0.45, Math.min(W, H) * 0.3, W / 2, H * 0.45, Math.max(W, H) * 0.75);
+  vg.addColorStop(0, "rgba(0,0,0,0)");
+  vg.addColorStop(1, "rgba(10,6,14,0.45)");
+  ctx.fillStyle = vg;
+  ctx.fillRect(0, 0, W, H);
 }
 
 // ------------------------------------------------------------------- menu --
@@ -157,91 +204,184 @@ export class MenuScreen {
       return null;
     }
 
-    // Title with drop shadow.
+    type MenuAction = "skirmish" | "multiplayer" | "warband" | "armory" | "codex" | "settings" | "editor" | "resume";
+    let action: MenuAction | null = null;
+
+    // ---- title ----
+    const narrow = W < 980;
+    const titleY = Math.max(66, Math.min(H * 0.14, 124));
+    const tsize = narrow ? 46 : 64;
     ctx.save();
     ctx.textAlign = "center";
-    ctx.font = "bold 64px Georgia, 'Times New Roman', serif";
+    ctx.font = `bold ${tsize}px Georgia, 'Times New Roman', serif`;
     ctx.fillStyle = "rgba(0,0,0,0.5)";
-    ctx.fillText("Banner & Blade", W / 2 + 3, H * 0.24 + 3);
-    const grad = ctx.createLinearGradient(0, H * 0.24 - 40, 0, H * 0.24 + 20);
-    grad.addColorStop(0, "#ffe9b0");
+    ctx.fillText("Banner & Blade", W / 2 + 3, titleY + 3);
+    const grad = ctx.createLinearGradient(0, titleY - tsize * 0.65, 0, titleY + 10);
+    grad.addColorStop(0, "#fff2c8");
+    grad.addColorStop(0.55, "#ffd98a");
     grad.addColorStop(1, "#c8923a");
     ctx.fillStyle = grad;
-    ctx.fillText("Banner & Blade", W / 2, H * 0.24);
-    ctx.font = "italic 18px Georgia, serif";
+    ctx.fillText("Banner & Blade", W / 2, titleY);
+    // A thin gold rule with a diamond, under the title.
+    const rw = Math.min(360, W * 0.3);
+    const ry = titleY + 18;
+    const rule = ctx.createLinearGradient(W / 2 - rw, 0, W / 2 + rw, 0);
+    rule.addColorStop(0, "rgba(232,192,96,0)"); rule.addColorStop(0.5, "rgba(232,192,96,0.9)"); rule.addColorStop(1, "rgba(232,192,96,0)");
+    ctx.fillStyle = rule;
+    ctx.fillRect(W / 2 - rw, ry, rw * 2, 1.5);
+    ctx.beginPath(); ctx.moveTo(W / 2, ry - 5); ctx.lineTo(W / 2 + 5, ry + 0.75); ctx.lineTo(W / 2, ry + 6.5); ctx.lineTo(W / 2 - 5, ry + 0.75); ctx.closePath();
+    ctx.fillStyle = "#e8c060"; ctx.fill();
+    ctx.font = "italic 16px Georgia, serif";
     ctx.fillStyle = withAlpha("#f3e9d2", 0.85);
-    ctx.fillText("Raise your banner. Sharpen your blade. Take the field.", W / 2, H * 0.24 + 42);
+    ctx.fillText("Raise your banner. Sharpen your blade. Take the field.", W / 2, ry + 26);
     ctx.restore();
 
-    // Profile chip.
-    const info = profile.levelInfo();
-    ui.panel(W / 2 - 180, H * 0.36, 360, 64, { light: true });
-    ui.text(`${profile.data.name} — Level ${info.level}`, W / 2, H * 0.36 + 18, {
-      align: "center", size: 15, bold: true, color: PAL.uiAccent,
-    });
-    ui.bar(W / 2 - 150, H * 0.36 + 36, 300, 9, info.into / info.need, PAL.uiAccent);
-    ui.text(`${info.into}/${info.need} XP`, W / 2, H * 0.36 + 54, { align: "center", size: 11, color: "#bdb49a" });
-
-    let action: "skirmish" | "multiplayer" | "warband" | "armory" | "codex" | "settings" | "editor" | "resume" | null = null;
-    const bw = 280;
-    const bx = W / 2 - bw / 2;
-    let by = H * 0.36 + 92;
-    if (ui.button("⚔  Skirmish", bx, by, bw, 52, { accent: true, size: 19 })) action = "skirmish";
-    by += 60;
-    // Saves sit directly under Skirmish and only when there are any: an empty
-    // "Load Game" that opens an empty list is a worse greeting than no button.
+    // ---- layout: your realm on the left, where to go on the right ----
+    const outer = Math.min(W - (narrow ? 32 : 64), 1120);
+    const x0 = Math.round(W / 2 - outer / 2);
+    // Sit the block a little below the title when there is room to spare.
+    const blockH = 380;
+    const top = Math.round(ry + 46 + Math.max(0, (H - (ry + 46) - blockH - 90) * 0.3));
+    const gap = 14;
+    const leftW = narrow ? 0 : 320;
+    const rx = narrow ? x0 : x0 + leftW + 20;
+    const rw2 = narrow ? outer : outer - leftW - 20;
     const saves = listSaves();
-    if (saves.length) {
-      const latest = saves[0];
-      const mm = Math.floor(latest.summary.elapsed / 60);
-      const ss = String(Math.floor(latest.summary.elapsed % 60)).padStart(2, "0");
-      if (ui.button(`↩  Resume — ${latest.summary.mapName} (${mm}:${ss})`, bx, by, bw, 40, {
-        size: 14,
-        tooltip: [
-          "Continue your last save",
-          `${latest.summary.mode} · ${latest.summary.players} players · ${latest.summary.difficulty}`,
-          "Loading replays the match from its opening order, so it takes a moment.",
-        ],
-      })) {
-        this.pickedSave = latest;
-        action = "resume";
-      }
-      by += 46;
-      // The rest, if there are any, as a compact strip rather than a screen.
-      if (saves.length > 1) {
-        const cw = (bw - (saves.length - 2) * 4) / (saves.length - 1);
-        saves.slice(1).forEach((sv, i) => {
-          const sm = Math.floor(sv.summary.elapsed / 60);
-          if (ui.button(`${sv.summary.mapName.slice(0, 8)} ${sm}m`, bx + i * (cw + 4), by, cw, 26, {
-            size: 10.5,
-            tooltip: [sv.label, `${sv.summary.mode} · ${sv.summary.players} players`],
-          })) {
-            this.pickedSave = sv;
-            action = "resume";
-          }
-        });
-        by += 34;
+    const info = profile.levelInfo();
+    const stats = profile.data.stats;
+
+    if (!narrow) {
+      let ly = top;
+      // Profile.
+      ui.panel(x0, ly, leftW, 112);
+      ui.text(profile.data.name, x0 + 18, ly + 30, { size: 20, bold: true, color: "#ffe9b0", font: "Georgia, serif" });
+      ui.text(`Level ${info.level}`, x0 + leftW - 18, ly + 29, { align: "right", size: 13, bold: true, color: PAL.uiAccent });
+      ui.bar(x0 + 18, ly + 44, leftW - 36, 8, info.into / info.need, PAL.uiAccent);
+      ui.text(`${info.into} / ${info.need} XP`, x0 + 18, ly + 68, { size: 11.5, color: "#bdb49a" });
+      ui.text(`${profile.data.renown} ✦ renown`, x0 + leftW - 18, ly + 68, { align: "right", size: 11.5, bold: true, color: "#e8c060" });
+      ui.text(`${stats.played} battles · ${stats.wins} victories · best streak ${stats.bestStreak}`, x0 + 18, ly + 94, { size: 11.5, color: "#a89f88" });
+      ly += 112 + gap;
+
+      // Your realm: the faction and commander you will take into Skirmish.
+      const fac = factionOf(profile.data.faction);
+      const cmdr = COMMANDERS[profile.data.commander];
+      if (ui.button("", x0, ly, leftW, 124, { tooltip: ["Your realm", "Choose your faction and commander on the Skirmish screen."] })) action = "skirmish";
+      ctx.fillStyle = fac.color;
+      ctx.fillRect(x0 + 1, ly + 10, 4, 104);
+      ui.text("YOUR REALM", x0 + 18, ly + 22, { size: 10.5, bold: true, color: "#a89f88" });
+      ui.text(fac.name, x0 + 18, ly + 48, { size: 21, bold: true, color: fac.color, font: "Georgia, serif" });
+      ui.text(fac.era, x0 + 18, ly + 67, { size: 12, color: "#d8cdb4" });
+      ui.text(cmdr ? `Led by ${cmdr.name}, ${cmdr.title}` : "No commander", x0 + 18, ly + 90, { size: 12, color: cmdr?.color ?? "#a89f88" });
+      ui.text(`Strongest ${fac.curve === "early" ? "early" : fac.curve === "mid" ? "mid-game" : fac.curve === "late" ? "late" : "throughout"}`, x0 + 18, ly + 110, { size: 11, color: "#8f8770" });
+      this.drawRealmSoldier(x0 + leftW - 46, ly + 96, time, profile.data.faction);
+      ly += 124 + gap;
+
+      // Continue: the latest save, and the others as chips.
+      if (saves.length) {
+        const latest = saves[0];
+        const mm = Math.floor(latest.summary.elapsed / 60);
+        const ss = String(Math.floor(latest.summary.elapsed % 60)).padStart(2, "0");
+        if (ui.button("", x0, ly, leftW, 70, {
+          tooltip: ["Continue your last save", `${latest.summary.mode} · ${latest.summary.players} players · ${latest.summary.difficulty}`,
+            "Loading replays the match from its opening order, so it takes a moment."],
+        })) { this.pickedSave = latest; action = "resume"; }
+        iconResume(ctx, x0 + 34, ly + 35, 44);
+        ui.text("Continue", x0 + 64, ly + 28, { size: 16, bold: true, color: "#ffe9b0" });
+        ui.text(`${latest.summary.mapName} · ${mm}:${ss}`, x0 + 64, ly + 48, { size: 12, color: "#bdb49a" });
+        ly += 70 + 6;
+        if (saves.length > 1) {
+          const n = Math.min(3, saves.length - 1);
+          const cw = (leftW - (n - 1) * 4) / n;
+          saves.slice(1, 1 + n).forEach((sv, i) => {
+            const sm = Math.floor(sv.summary.elapsed / 60);
+            if (ui.button(`${sv.summary.mapName.slice(0, 10)} · ${sm}m`, x0 + i * (cw + 4), ly, cw, 26, {
+              size: 10.5, tooltip: [sv.label, `${sv.summary.mode} · ${sv.summary.players} players`],
+            })) { this.pickedSave = sv; action = "resume"; }
+          });
+        }
       }
     }
-    if (ui.button("🔗  Multiplayer", bx, by, bw, 46, { size: 16, tooltip: ["Play online — up to 8 vs 8", "Join a hosted server, or quick 1v1 with no server."] })) action = "multiplayer";
-    by += 56;
-    if (ui.button("🎲  Warband Tactics", bx, by, bw, 46, { size: 16, tooltip: ["Auto-battler", "Draft a warband, merge star-ups, fight for the last spot standing."] })) action = "warband";
-    by += 56;
-    if (ui.button(`🗝  Armory   (${profile.data.renown} ✦)`, bx, by, bw, 48, { size: 16 })) action = "armory";
-    by += 56;
-    if (ui.button("🗺  Map Editor", bx, by, bw, 44, { size: 15, tooltip: ["Map Editor", "Paint a battlefield, seat the players, decide what it is for."] })) action = "editor";
-    by += 52;
-    if (ui.button("📖  Codex", bx, by, bw / 2 - 6, 44, { size: 14 })) action = "codex";
-    if (ui.button("⚙  Settings", bx + bw / 2 + 6, by, bw / 2 - 6, 44, { size: 14 })) action = "settings";
-    by += 54;
 
-    const stats = profile.data.stats;
-    ui.text(
-      `Battles ${stats.played}   Victories ${stats.wins}   Best streak ${stats.bestStreak}`,
-      W / 2, H - 24,
-      { align: "center", size: 13, color: withAlpha("#f3e9d2", 0.7) },
-    );
+    // ---- tiles ----
+    let ty = top;
+    if (narrow) {
+      // One compact line for the profile, then the tiles.
+      ui.panel(x0, ty, outer, 46);
+      ui.text(`${profile.data.name} · Level ${info.level}`, x0 + 14, ty + 28, { size: 14, bold: true, color: "#ffe9b0" });
+      ui.bar(x0 + outer * 0.5, ty + 20, outer * 0.5 - 14, 7, info.into / info.need, PAL.uiAccent);
+      ty += 46 + gap;
+      if (saves.length) {
+        const latest = saves[0];
+        if (ui.button(`Continue — ${latest.summary.mapName}`, x0, ty, outer, 38, { size: 14 })) { this.pickedSave = latest; action = "resume"; }
+        ty += 38 + gap;
+      }
+    }
+    const pool = listCustomMaps().filter((m) => m.published).length;
+    const bigH = narrow ? 104 : 150;
+    if (this.tile(rx, ty, rw2, bigH, "Skirmish", "Battle the AI — two to eight realms, any teams, any battlefield.",
+      pool ? `${PRESETS.length} battlefields + ${pool} published map${pool === 1 ? "" : "s"}` : `${PRESETS.length} battlefields · ${FACTION_IDS.length} factions · 4 ages`,
+      (cx, cy, sz) => iconSkirmish(ctx, cx, cy, sz, "#b8483e"), { accent: true, big: true })) action = "skirmish";
+    ty += bigH + gap;
+    const midH = narrow ? 88 : 108;
+    const hw = (rw2 - gap) / 2;
+    if (this.tile(rx, ty, hw, midH, "Multiplayer", "Online, up to 8 v 8 — or a quick 1 v 1.", "",
+      (cx, cy, sz) => iconMultiplayer(ctx, cx, cy, sz, time))) action = "multiplayer";
+    if (this.tile(rx + hw + gap, ty, hw, midH, "Warband Tactics", "Draft, merge and outlast.", "",
+      (cx, cy, sz) => iconWarband(ctx, cx, cy, sz))) action = "warband";
+    ty += midH + gap;
+    const smH = narrow ? 80 : 96;
+    const qw = (rw2 - gap * 3) / 4;
+    const small: [MenuAction, string, string, (cx: number, cy: number, sz: number) => void][] = [
+      ["armory", "Armory", `${profile.data.renown} ✦ · War Chests & boons`, (cx, cy, sz) => iconArmory(ctx, cx, cy, sz)],
+      ["editor", "Map Editor", "Make a map, publish it", (cx, cy, sz) => iconMap(ctx, cx, cy, sz)],
+      ["codex", "Codex", "Units, ages, factions", (cx, cy, sz) => iconCodex(ctx, cx, cy, sz)],
+      ["settings", "Settings", "Sound, display, keys", (cx, cy, sz) => iconSettings(ctx, cx, cy, sz)],
+    ];
+    small.forEach(([id, label, sub, icon], i) => {
+      const x = rx + i * (qw + gap);
+      if (ui.button("", x, ty, qw, smH, { tooltip: [label, sub] })) action = id;
+      icon(x + qw / 2, ty + smH * 0.38, Math.min(smH * 0.5, 50));
+      ui.text(label, x + qw / 2, ty + smH - 16, { align: "center", size: narrow ? 12.5 : 14, bold: true, color: PAL.uiParchment });
+    });
+
+    ui.text("Banner & Blade", W - 16, H - 14, { align: "right", size: 10.5, color: withAlpha("#f3e9d2", 0.35) });
     return action;
+  }
+
+  /** A menu tile: a drawn icon on the left, a title and a line or two. */
+  private tile(x: number, y: number, w: number, h: number, title: string, sub: string, foot: string,
+    icon: (cx: number, cy: number, size: number) => void, o: { accent?: boolean; big?: boolean } = {}): boolean {
+    const clicked = ui.button("", x, y, w, h, { accent: o.accent, tooltip: [title, sub] });
+    const isz = Math.min(h * (o.big ? 0.62 : 0.58), o.big ? 96 : 60);
+    const pad = o.big ? 26 : 16;
+    icon(x + pad + isz / 2, y + h / 2, isz);
+    const tx = x + pad * 2 + isz;
+    const tsize = o.big ? (h > 120 ? 30 : 24) : 17;
+    const lines = foot ? 3 : 2;
+    const block = tsize + 8 + (lines - 1) * 18;
+    let cy = y + h / 2 - block / 2 + tsize * 0.8;
+    ui.text(title, tx, cy, { size: tsize, bold: true, color: o.accent ? "#fff0cc" : "#ffe9b0", font: "Georgia, serif" });
+    cy += Math.round(tsize * 0.35) + 16;
+    wrapText(sub, tx, cy, w - (tx - x) - 14, o.big ? 13.5 : 12, "#d8cdb4");
+    if (foot) ui.text(foot, tx, cy + 22, { size: 11.5, bold: true, color: "#e8c060" });
+    return clicked;
+  }
+
+  /** The soldier of your faction standing beside the realm card. */
+  private drawRealmSoldier(x: number, y: number, time: number, faction: string | undefined) {
+    const e = makeEntity();
+    const f = factionOf(faction);
+    const soldier = f.replaces.militia ?? (f.extra[0] && UNITS[f.extra[0]]?.trainedAt === "barracks" ? f.extra[0] : "militia");
+    Object.assign(e, { kind: Kind.Unit, type: soldier, team: 0, x, y, radius: 10, hp: 1, maxHp: 1, facing: Math.PI, seed: 7 });
+    setFactionResolver(() => f.id);
+    const ctx = ui.ctx;
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.scale(2.2, 2.2);
+    ctx.translate(-x, -y);
+    try { drawUnit(ctx, e, time, 0 as Team); } catch { /* a preview is never worth a crash */ }
+    ctx.restore();
+    setFactionResolver(null);
   }
 }
 
@@ -393,12 +533,14 @@ export class SetupScreen {
 
   private drawBattleColumn(x: number, y: number, w: number): number {
     const ctx = ui.ctx;
-    // Battlefield: a two-across grid of map cards. Your own maps sit alongside
-    // the presets, filtered to the ones that allow this match.
-    const custom = listCustomMaps().filter((m) => mapSupports(m, this.config.mode, this.config.players));
+    // Battlefield: a two-across grid of map cards. Published maps sit alongside
+    // the presets, filtered to the ones that allow this match; drafts stay in
+    // the editor until their author publishes them.
+    const custom = mapPool(this.config.mode, this.config.players);
+    const drafts = listCustomMaps().filter((m) => !m.published).length;
     const cards = [
       ...PRESETS.map((pp) => ({ id: pp.id, name: pp.name, desc: pp.desc, map: null as CustomMap | null })),
-      { id: "random", name: "Random", desc: "A different preset every match, rolled from the seed.", map: null as CustomMap | null },
+      { id: "random", name: "Random", desc: custom.length ? `Any battlefield here, published maps included — rolled from the seed.` : "A different preset every match, rolled from the seed.", map: null as CustomMap | null },
       ...custom.map((m) => ({
         id: m.id, name: m.name,
         desc: m.desc?.trim() || `${m.cols}×${m.rows} · ${m.minPlayers}–${m.maxPlayers} players${m.nomad === "forced" ? " · always nomad" : ""}`,
@@ -412,9 +554,13 @@ export class SetupScreen {
     const cardH = 70;
     const cgap = 10;
     const rows = Math.ceil(cards.length / perRow);
-    const panelH = 52 + rows * (cardH + cgap);
+    const panelH = 52 + rows * (cardH + cgap) + (drafts ? 22 : 0);
     ui.panel(x, y, w, panelH);
     this.heading(x + 18, y + 24, w - 36, "Battlefield");
+    if (drafts) {
+      ui.text(`${drafts} draft map${drafts === 1 ? "" : "s"} in the Map Editor — publish ${drafts === 1 ? "it" : "them"} to play here.`,
+        x + 18, y + panelH - 16, { size: 11.5, color: "#a89f88" });
+    }
     const cardW = (w - 36 - (perRow - 1) * cgap) / perRow;
     cards.forEach((c, i) => {
       const cx = x + 18 + (i % perRow) * (cardW + cgap);
@@ -425,7 +571,7 @@ export class SetupScreen {
       if (c.map) drawMapThumbnail(ctx, cx + 8, cy + 8, thumb, c.map, { spawns: true, resources: true });
       const tx = cx + 12 + (thumb ? thumb + 6 : 0);
       ui.text(c.name, tx, cy + 18, { size: 14.5, bold: true, color: sel ? "#ffe9b0" : PAL.uiParchment });
-      if (c.map) ui.text("YOURS", cx + cardW - 10, cy + 18, { align: "right", size: 9.5, bold: true, color: "#7fb0e8" });
+      if (c.map) ui.text(c.map.author ? `BY ${c.map.author.slice(0, 12).toUpperCase()}` : "PUBLISHED", cx + cardW - 10, cy + 18, { align: "right", size: 9.5, bold: true, color: "#7fb0e8" });
       wrapText(c.desc, tx, cy + 38, cardW - (tx - cx) - 10, 11.5, "#b8ad92");
     });
     y += panelH + 16;
@@ -521,7 +667,7 @@ export class SetupScreen {
       ui.text(label, cx2, hy, { size: 10.5, bold: true, color: "#9b927c" });
     }
 
-    const teamColors = ["#9a917b", "#5b8fe0", "#d8574a", "#4ab86a", "#e0a83a", "#9a6ae0", "#3ac8c0", "#e08a4a", "#e06a9a"];
+    const teamColors = TEAM_COLORS;
     for (let t = 0; t < n; t++) {
       const ry = y + 110 + t * (rowH + 6);
       const me = t === 0;

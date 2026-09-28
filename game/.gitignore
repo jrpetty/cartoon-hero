@@ -6,3 +6,4 @@ dist
 # generated preview artifacts
 shots/
 scripts/*.bundle.mjs
+server/community-maps.json

@@ -76,3 +76,27 @@ describe("touch input", () => {
     }
   });
 });
+
+describe("mouse clicks", () => {
+  const m = (x: number, y: number) => ({ button: 0, clientX: x, clientY: y, shiftKey: false, ctrlKey: false, metaKey: false, preventDefault() {} });
+
+  it("a press and release on the canvas is a click", () => {
+    const i = new Input(fakeEl() as any);
+    let click: number[] | null = null;
+    i.onLeftClick = (x, y) => { click = [x, y]; };
+    (i as any).handleDown(m(40, 50));
+    (i as any).handleUp(m(40, 50));
+    expect(click).toEqual([40, 50]);
+  });
+
+  it("a release that began off the canvas is not", () => {
+    // Clicking a DOM overlay (the multiplayer lobby) delivers only the window's
+    // mouseup: it used to click the menu button drawn under the overlay too,
+    // which opened the lobby a second time on top of itself.
+    const i = new Input(fakeEl() as any);
+    let clicked = false;
+    i.onLeftClick = () => { clicked = true; };
+    (i as any).handleUp(m(40, 50));
+    expect(clicked).toBe(false);
+  });
+});

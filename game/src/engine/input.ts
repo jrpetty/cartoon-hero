@@ -127,6 +127,11 @@ export class Input {
 
   private handleUp = (e: MouseEvent) => {
     if (e.button === 0) {
+      // Up is heard on the whole window (so a drag can end off the canvas),
+      // but a click only counts if the press began on the canvas — otherwise
+      // clicking a DOM overlay such as the multiplayer lobby also clicks
+      // whatever menu button is drawn underneath it.
+      if (!this.leftDown) return;
       this.leftDown = false;
       if (this.drag.active) {
         this.onDragEnd?.({ ...this.drag });

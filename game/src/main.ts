@@ -17,7 +17,7 @@ import {
 /** Seconds as m:ss — a match clock reads as a duration, not a number. */
 const mmss = (s: number) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
 import { dayPhase } from "./content/daynight";
-import { generateMap } from "./maps/generator";
+import { PRESETS, generateMap } from "./maps/generator";
 import { randomSeed } from "./engine/rng";
 import { SkirmishAI } from "./ai/skirmish_ai";
 import { DIFFICULTIES } from "./ai/difficulty";
@@ -68,7 +68,7 @@ import { drawChat, ChatLine } from "./ui/chat";
 import { KeybindResolver, chordFor, chordLabel, chordOf } from "./meta/keybinds";
 import { EditorScreen } from "./ui/editor_screen";
 import {
-  CustomMap, deserialiseMap, findCustomMap, saveCustomMap, serialiseMap, toMapData,
+  CustomMap, deserialiseMap, findCustomMap, saveCustomMap, serialiseMap, toMapData, mapPool, rollRandomMap,
 } from "./maps/custom";
 
 type AppState = "menu" | "setup" | "armory" | "match" | "postmatch" | "codex" | "settings" | "warband" | "editor";
@@ -666,12 +666,24 @@ class App {
    *  drives it under lockstep. */
   startNetMatch(start: NetStart) {
     const { transport, localTeam, teams, alliances, seed, numTeams } = start;
-    const map = generateMap("open_plains", seed, numTeams, false);
+    // The host's battlefield: a published map travels as its code, so every
+    // client builds it identically even if nobody else has it saved.
+    const custom = start.map?.code ? deserialiseMap(start.map.code) : null;
+    const map = custom
+      ? toMapData(custom, seed, numTeams, false)
+      : generateMap(PRESETS.some((p) => p.id === start.map?.id) || start.map?.id === "random" ? start.map!.id : "open_plains", seed, numTeams, false, alliances);
     const world = new World(seed);
     const loadouts = teams.map(() => this.profile.matchLoadout(true));
     const econMults = teams.map(() => 1);
     const commanders = teams.map(() => "");
-    world.init(map, loadouts, econMults, alliances, commanders, false, undefined, "conquest");
+    // Each realm's chosen faction; anyone who didn't choose gets one from the seed.
+    const rng = new RNG((seed ^ 0xfac7105) >>> 0);
+    const factions = teams.map((_, t) => {
+      const roll = FACTION_IDS[rng.int(0, FACTION_IDS.length - 1)];
+      const f = start.factions?.[t];
+      return f && f in FACTIONS ? f : roll;
+    });
+    world.init(map, loadouts, econMults, alliances, commanders, false, undefined, "conquest", factions);
     if (start.observer) world.revealAll = true; // casters see the whole board
     this.world = world;
     this.ais = [];
@@ -1510,6 +1522,7 @@ class App {
           audio.play("ui");
         } else if (action === "editor") {
           this.state = "editor";
+          this.editorScreen.author = this.profile.data.name;
           audio.play("ui");
         } else if (action === "settings") {
           this.openSettings("menu");
@@ -2104,6 +2117,12 @@ class App {
    * custom map is never a second-class citizen with its own code path.
    */
   private resolveMap(presetId: string, seed: number, players: number, nomad: boolean, alliances?: number[]) {
+    // Random draws from the whole pool, published maps included. The result
+    // is written back into the config so a save records the field it was on.
+    if (presetId === "random" && this.config) {
+      presetId = rollRandomMap(seed, mapPool(this.config.mode ?? "conquest", this.config.mode === "survival" ? players - 1 : players), PRESETS.length);
+      this.config.presetId = presetId;
+    }
     if (presetId.startsWith("custom_")) {
       const m = findCustomMap(presetId);
       if (m) return toMapData(m, seed, players, nomad);

@@ -996,11 +996,80 @@ food at the Market) and in A* (`findPath` retargets a blocked goal to a
 reachable open cell when the nearest one isn't — only then, so every path that
 already worked is unchanged). Same nine seeds afterwards: three reach Empire.
 
+**Balance, measured.** Faction round-robin, AI vs AI, every pairing both
+seatings on Open Plains, Highlands and Riverlands (90 games, 25-minute cap,
+a draw counts half): Legion 58%, Ascendancy 57%, Jarls 48%, Kingdom 47%,
+Khanate 47%, Shogunate 43%. Everything inside 40–60%, and the curves show
+where intended: the Jarls and Khanate win *early* when they win (13 and 12
+minutes on average), the Kingdom and Shogunate late (18–19). Tuning that got
+there: the Legion lost an infantry-HP bonus and its build speed went 1.2 →
+1.1 (it was at 70–80%); the Shogunate gained 8% soldier HP; Kingdom knights
+10% cheaper; Jarl smithing 10% dearer. Banner Oaths, same method: Sword 59%,
+Plough 47%, Hearth 44%. New units in equal-budget arena duels: 17–65%.
+Most AI games still run to the cap — AI-vs-AI measures shape, not a finish.
+
+## Teams, set up on purpose
+
+Teams used to be one "Even Teams" switch that split seats by parity — 1, 3, 5,
+7 against 2, 4, 6, 8 — so who fought beside whom looked random. Now every seat
+has a team (1–8) or none (`ui/teams.ts`), with presets that fill in organised
+blocks: two teams of 8 is seats 1–4 against 5–8, three teams is 3/3/2, four is
+pairs, co-op is you and N allies against the rest. Any seat can then be moved
+by hand; the header reads "4 v 4" or "3 v 3 v 2". A layout with one side
+can't be started. The Skirmish screen is two columns now (battlefield and
+options; roster and your realm) with a pinned action bar.
+
+**Online, the same.** The relay (`server/server.mjs`) keeps a team per
+player instead of Side A/B: the host picks a layout (free-for-all, 2/3/4
+teams — blocks in join order) and can move anyone; players can join any team
+or start a new one. The start message carries alliances from teams (solo
+players get their own), each player's faction (online matches were
+all-Kingdom), and the host's battlefield. Older clients' `side` still works.
+`net/lobby_teams.test.ts` drives it with real sockets.
+
+## The map pool — publishing your maps
+
+A map is a **draft** until its author **publishes** it (editor top bar, or
+from the library list). Publishing needs a map with no errors; it puts the
+map in the pool beside the built-in battlefields — on the Skirmish list, in
+the **Random** roll, and in the host's choices online. Drafts stay in the
+editor (Test map still works on them). Maps saved before publishing existed
+come back published, since they were already on the Skirmish list; an
+imported map arrives as a draft. The published flag lives in the library
+entry, not the share code; the author's name travels in the code (`au`).
+
+Random stays replay-safe: each built-in battlefield and each fitting
+published map gets one chance from the seed; a built-in result is still
+"random" (the generator rolls it exactly as before), a published map comes
+back as its id and is written into the config, so a save records it.
+
+**Online, a community pool.** Players can publish their maps to the server
+they play on; it keeps them in `community-maps.json` beside it (or
+`MAPS_FILE`), deduplicated by content, capped at 500, also at `GET /maps`.
+The host picks from built-in, their own published maps, or the server's pool;
+the map's code travels in the start message, so nobody else needs a copy —
+and anyone can "Keep a copy" of a community map into their own pool.
+
+## The menus
+
+The main menu keeps the dusk, the castle and the gold title and loses the
+column of emoji buttons: a profile card, a **Your realm** card (faction,
+era, commander, and one of its soldiers drawn live), a Continue card, one big
+Skirmish tile and illustrated tiles for everything else — icons drawn in the
+game's own style (`ui/menu_icons.ts`) rather than emoji that render
+differently everywhere. Panels and buttons got depth (shadow, gradient, gold
+inset line). The lobby overlay was restyled to match.
+
+**A bug found by looking.** Driving the built game in Chromium with four
+clients: one click on Multiplayer opened the lobby *twice*. Mouse-up is heard
+on the whole window (so drags can end off the canvas), so clicking anything
+on a DOM overlay also clicked the canvas button drawn beneath it. A click now
+has to start on the canvas (`input.test.ts`), and the lobby refuses to stack.
+
 ## Bigger / later
 - **Naval** — water is currently only an impassable wall, and the Islands
   preset (55% water) is a maze rather than a naval map. Dock, transport,
   war galley + AI. The largest genuinely-missing pillar.
 - **Battlemage** and **Trade Cart** remain the open content items.
-- **Multiplayer (PvP)** — the whole net stack (lockstep, WebRTC, WS, lobby,
-  session) is written and unused. Needs a signalling server to host, so it
-  can't live in the single-file build. Not now.
+- **Online commanders and rarities** — network matches are still fair-play
+  (all Common, no commanders or boons). Factions now travel; the rest could.

@@ -27,6 +27,7 @@ import {
 import {
   CustomMap, MAP_SIZES, MAX_SEATS, MapIssue, NOMAD_RULES, NomadRule, customFromGenerated,
   deleteCustomMap, deserialiseMap, hasErrors, listCustomMaps, newCustomMap, saveCustomMap,
+  publishCustomMap, unpublishCustomMap,
   serialiseMap, validateMap,
 } from "../maps/custom";
 import { PRESETS } from "../maps/generator";
@@ -74,6 +75,8 @@ export type EditorAction = { kind: "back" } | { kind: "test"; map: CustomMap } |
 interface Snapshot { terrain: Uint8Array; resources: CustomMap["resources"]; spawns: CustomMap["spawns"] }
 
 export class EditorScreen {
+  /** Credited on maps this player publishes (their profile name). */
+  author = "";
   /** null = the library; otherwise the map being edited. */
   private map: CustomMap | null = null;
   private tool: Tool = "terrain";
@@ -609,10 +612,23 @@ export class EditorScreen {
       ctx.beginPath(); ctx.roundRect(x0 + 10, ry, colW - 20, rowH - 6, 5); ctx.fill();
       this.thumbnail(ctx, x0 + 18, ry + 5, 38, m);
       ui.text(m.name, x0 + 66, ry + 20, { size: 14, bold: true, color: "#f2e8d0" });
+      ctx.font = "bold 14px system-ui, sans-serif";
+      const tagX = x0 + 66 + ctx.measureText(m.name).width + 10;
+      ui.text(m.published ? "IN THE POOL" : "DRAFT", tagX, ry + 19,
+        { size: 9.5, bold: true, color: m.published ? "#8fd07a" : "#a89f88" });
       const modeText = m.modes.length ? m.modes.map((x) => MODES.find((y2) => y2.id === x)?.label ?? x).join(", ") : "any mode";
       const sizeLabel = MAP_SIZES.find((z) => z.cols === m.cols)?.label ?? `${m.cols}×${m.rows}`;
       ui.text(`${sizeLabel} (${m.cols}×${m.rows}) · ${biomeById(m.biome).name} · ${modeText} · ${m.minPlayers}–${m.maxPlayers} players${m.nomad === "forced" ? " · nomad" : ""}`,
         x0 + 66, ry + 38, { size: 11, color: "#9a917b" });
+      const errs = !m.published && this.hasErrorsCached(m);
+      if (ui.button(m.published ? "Unpublish" : "Publish", x0 + colW - 336, ry + 12, 90, 26, {
+        size: 12, accent: !m.published && !errs, disabled: errs,
+        tooltip: errs ? ["Cannot publish", "Open it and fix the errors first."]
+          : m.published ? ["Take out of the pool", "It stays here as a draft."] : ["Publish", "Put it in the map pool: Skirmish, Random and online lobbies."],
+      })) {
+        if (m.published) { unpublishCustomMap(m); this.say(`"${m.name}" is a draft again`); }
+        else { publishCustomMap(m, this.author); this.say(`Published "${m.name}"`); }
+      }
       if (ui.button("Edit", x0 + colW - 240, ry + 12, 68, 26, { size: 12 })) this.open(m);
       if (ui.button("Copy code", x0 + colW - 166, ry + 12, 84, 26, { size: 12,
         tooltip: ["Export", "Puts the map's share code in the box above so you can copy it."] })) {
@@ -630,6 +646,16 @@ export class EditorScreen {
     if (ui.button("‹  Back", x0, H - 66, 140, 44, { size: 15 })) return { kind: "back" };
     if (this.statusT > 0) ui.text(this.status, x0 + 160, H - 44, { size: 12.5, color: "#ffd24a" });
     return null;
+  }
+
+  // Validation walks the whole map; the library asks every frame for every row.
+  private errCache = new Map<string, { at: number; errs: boolean }>();
+  private hasErrorsCached(m: CustomMap): boolean {
+    const hit = this.errCache.get(m.id);
+    if (hit && hit.at === m.updated) return hit.errs;
+    const errs = hasErrors(validateMap(m));
+    this.errCache.set(m.id, { at: m.updated, errs });
+    return errs;
   }
 
   private open(m: CustomMap) {
@@ -688,7 +714,23 @@ export class EditorScreen {
       tooltip: ["Level the land", "Flattens every cell back to this biome's base ground.", "Resources and spawns are kept."] })) this.levelAll();
 
     const errs = hasErrors(this.issues);
-    if (ui.button("Save", W - 300, 8, 78, 28, { size: 12.5, accent: true })) {
+    // Publishing is the second step after saving: it puts the map in the pool
+    // beside the built-in battlefields, for Skirmish, Random and online games.
+    const pub = !!m.published;
+    if (ui.button(pub ? "✓ In the pool" : "Publish", W - 426, 8, 118, 28, {
+      size: 12.5, accent: !pub && !errs, disabled: !pub && errs,
+      tooltip: pub
+        ? ["Published", "This map is in the map pool: on the Skirmish list, in the Random roll, and offered to online lobbies.", "Click to take it back out (it stays here as a draft)."]
+        : errs ? ["Cannot publish", "Fix the errors listed on the right first — the pool is what other players get handed."]
+        : ["Publish to the map pool", "Save it and put it on the Skirmish list, in the Random roll, and in online lobbies."],
+    })) {
+      if (pub) { unpublishCustomMap(m); this.say(`"${m.name}" taken out of the pool — it's a draft again`); }
+      else {
+        const why = publishCustomMap(m, this.author);
+        this.say(why.length ? `Can't publish: ${why[0].text}` : `Published "${m.name}" — it's in the map pool now`);
+      }
+    }
+    if (ui.button("Save", W - 300, 8, 78, 28, { size: 12.5, accent: pub })) {
       saveCustomMap(m); this.say(`Saved "${m.name}"`);
     }
     if (ui.button("Test map", W - 216, 8, 92, 28, {
