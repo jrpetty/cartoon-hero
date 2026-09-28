@@ -17,14 +17,25 @@ import { dist } from "../engine/math";
 import { FOG_VISIBLE } from "../sim/world";
 import { bestGroundNear, bestTowerSite, flankPoint, fordCrossing, isHighGround, stagingPoint } from "./terrain_sense";
 
-interface SeenComposition {
+export interface SeenComposition {
   infantry: number;
   archer: number;
   cavalry: number;
   siege: number;
 }
 
-type AIStyle = "rush" | "boom" | "turtle" | "balanced";
+export type AIStyle = "rush" | "boom" | "turtle" | "balanced";
+
+/**
+ * What a Nemesis rival has learned about the player (meta/rival.ts): the
+ * approach that beats how they play, the army it expects to face before it
+ * has seen a single soldier, and whether to wall up before the first attack.
+ */
+export interface RivalAdaptation {
+  style?: AIStyle;
+  expect?: Partial<SeenComposition>;
+  walls?: boolean;
+}
 
 /** How long the AI will hold production back to bank an age-up before giving up. */
 const AGE_SAVE_MAX_SEC = 60;
@@ -102,6 +113,9 @@ export class SkirmishAI {
   private roster: SkirmishAI[];
   /** Personality — biases army timing, eco focus and turtling. */
   private style: AIStyle = "balanced";
+  /** A rival's memory of the player's army — a floor under what it has scouted. */
+  private expected: SeenComposition | null = null;
+  private rivalWalls = false;
 
   constructor(
     private world: World,
@@ -128,6 +142,13 @@ export class SkirmishAI {
     if (!roster) { roster = []; AI_ROSTER.set(world, roster); }
     roster.push(this);
     this.roster = roster;
+  }
+
+  /** Play as a rival who has fought this player before (see RivalAdaptation). */
+  adapt(a: RivalAdaptation) {
+    if (a.style) { this.style = a.style; this.lastWaveTime = -this.cadence * 0.4; }
+    if (a.expect) this.expected = { infantry: 0, archer: 0, cavalry: 0, siege: 0, ...a.expect };
+    if (a.walls) this.rivalWalls = true;
   }
 
   /** Living allied AI brains (excluding self) for intel pooling. */
@@ -680,7 +701,7 @@ export class SkirmishAI {
    * without sealing the AI's own resource lines.
    */
   private buildDefenses(base: Entity) {
-    if ((!this.diff.buildsWalls && !this.turtles) || this.wallsPlanned) return;
+    if ((!this.diff.buildsWalls && !this.turtles && !this.rivalWalls) || this.wallsPlanned) return;
     const p = this.world.player(this.team);
     if (p.age < 1 || p.resources.wood < 160) return;
     if (this.myUnits("villager").length < 16) return;
@@ -1419,11 +1440,13 @@ export class SkirmishAI {
         base.catapult += 0.08;
       }
     }
-    if (!this.diff.counters) return base;
+    if (!this.diff.counters && !this.expected) return base;
 
     // Pool scouted intel across the alliance: counter the strongest read of the
     // enemy army that any teammate has, not just what we personally can see.
+    // A rival also counters what it remembers, before it has seen anything.
     const s: SeenComposition = { ...this.seen };
+    if (this.expected) for (const k of ["infantry", "archer", "cavalry", "siege"] as const) s[k] = Math.max(s[k], this.expected[k]);
     for (const ally of this.alliedAIs()) {
       s.infantry = Math.max(s.infantry, ally.seen.infantry);
       s.archer = Math.max(s.archer, ally.seen.archer);

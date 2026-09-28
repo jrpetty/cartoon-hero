@@ -1286,6 +1286,30 @@ The career's Playstyle page has the same for the whole record ("Your games,
 honestly"): economy, TC idle, trades, how you do when rushed, early losses,
 long games, research, Crown Age timing.
 
+## Nemesis — a rival who remembers you
+
+Borrowed from action RPGs (Shadow of Mordor's Nemesis system), not from
+other RTSs: one named rival warlord, with a rank, a faction, scars and a
+memory, on its own menu tile. It learns a layer each time you meet — after
+one battle your army (it brings the counter before it has scouted a
+soldier), after two your timing (an early attacker finds it walled up and
+turtling; a slow builder gets rushed; a mid-game player gets out-built),
+after three how you win (your playstyle title). Everything it knows is read
+from the career record, so the playstyle analysis *is* its brain.
+
+Lose to it and it climbs a rank (Captain → Tyrant; Knight → Conqueror
+strength) and earns a name for how it beat you (the Swift, the Burner, the
+Patient, the Butcher). Beat it and it flees with a scar and a grudge against
+the unit class that did most of the killing — next time it brings their
+answer. Three defeats end it (+250 renown on top of 60 × rank), and one of
+its captains rises to replace it, keeping the grudge; the fallen are listed.
+It taunts you in chat at the start of the battle with what it remembers, and
+the result banner says what became of it. The adaptation goes into the match
+config, so saves and replays rebuild the same rival. `SkirmishAI.adapt()` is
+the hook: a style, an expected army (a floor under its scouting) and walls.
+Tests: `meta/rival.test.ts` (learning order, rank/epithet, scars, the heir,
+counters it brings, an adapted AI plays a full economy).
+
 ## Bigger / later
 - **Naval** — water is currently only an impassable wall, and the Islands
   preset (55% water) is a maze rather than a naval map. Dock, transport,

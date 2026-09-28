@@ -43,6 +43,8 @@ import { alliancesFor, resizeTeams } from "./ui/teams";
 import { CodexScreen } from "./ui/codex";
 import { FactionBook } from "./ui/faction_book";
 import { CareerScreen } from "./ui/career_screen";
+import { RivalScreen } from "./ui/rival_screen";
+import { RANK_DIFFICULTY, adaptationFor, loadRival, memoryOf, settleRival, taunt } from "./meta/rival";
 import { Caster } from "./ui/caster";
 import { NetReplaySetup, ReplayRecord, byTick, parseReplayFile, replayFile, replayId, saveReplay } from "./sim/replay";
 import { downloadText } from "./ui/files";
@@ -65,7 +67,7 @@ import { SettingsScreen } from "./ui/settings_screen";
 import { setColorblindTeams } from "./render/palette";
 import { TeamMetrics, snapshotMetrics, matchReport, MatchReport, emptyMatchReport } from "./sim/metrics";
 import { recordMatch, summarise } from "./meta/history";
-import { careerMatch, recordCareer } from "./meta/career";
+import { careerLog, careerMatch, recordCareer } from "./meta/career";
 import { EarnedAward, evaluateAwards } from "./meta/achievements";
 import { drawScoreboard } from "./ui/scoreboard";
 import { drawProductionPanel } from "./ui/production_panel";
@@ -86,7 +88,7 @@ const CURSORS = {
   build: svgCursor(`<svg xmlns='http://www.w3.org/2000/svg' width='28' height='28'><path d='M6 22 L16 12' stroke='#2a1a0c' stroke-width='5' stroke-linecap='round'/><path d='M6 22 L16 12' stroke='#b88a52' stroke-width='3' stroke-linecap='round'/><rect x='13' y='3' width='12' height='8' rx='1.5' transform='rotate(45 19 7)' fill='#9aa4b0' stroke='#2a1a0c' stroke-width='2'/></svg>`, 20, 5, "pointer"),
 };
 
-type AppState = "menu" | "setup" | "armory" | "match" | "postmatch" | "codex" | "settings" | "warband" | "editor" | "factions" | "career";
+type AppState = "menu" | "setup" | "armory" | "match" | "postmatch" | "codex" | "settings" | "warband" | "editor" | "factions" | "career" | "nemesis";
 
 // Buildings you can drag-paint into a continuous run.
 // Dragged out as one gap-free run. A wall is never one segment, which is why
@@ -115,6 +117,7 @@ class App {
   codexScreen = new CodexScreen();
   factionBook = new FactionBook();
   careerScreen = new CareerScreen();
+  rivalScreen = new RivalScreen();
   /** The caster view, used whenever this client is watching rather than playing. */
   caster = new Caster();
   /** Display names per team for the caster (online names, or realm + AI level). */
@@ -549,6 +552,27 @@ class App {
 
   // ------------------------------------------------------------- match setup --
 
+  /**
+   * A 1 v 1 against your Nemesis, on a random battlefield, at the strength of
+   * its rank, playing what it has learned about you. Everything it needs goes
+   * into the config, so a save or a replay rebuilds the same rival.
+   */
+  startRivalMatch() {
+    const mine = this.profile.playableFaction() ?? DEFAULT_FACTION;
+    const r = loadRival(mine).current;
+    const mem = memoryOf(r, careerLog());
+    const seed = (Math.random() * 0x7fffffff) | 0;
+    const maps = PRESETS.filter((p) => !["islands", "survival_arena"].includes(p.id));
+    const diff = RANK_DIFFICULTY[r.rank] ?? "knight";
+    this.startMatch({
+      presetId: maps[seed % maps.length].id, seed, difficulty: diff, aiDifficulties: ["", diff], fairMode: false,
+      players: 2, teams: [0, 0], commander: "", faction: mine, aiFactions: ["", r.faction], nomad: false, mode: "conquest",
+      rival: { name: r.name, epithet: r.epithet, rank: r.rank, adaptation: adaptationFor(r, mem) },
+    });
+    // It speaks first — the proof that it remembers.
+    this.addChatLine(`${r.name} ${r.epithet}`, taunt(r, mem), 1 as Team);
+  }
+
   startMatch(config: SkirmishConfig) {
     this.config = config;
     // Each bot can run a different personality; fall back to the default.
@@ -600,10 +624,15 @@ class App {
     this.ais = [];
     for (let t = 1; t < numPlayers; t++) {
       if (t === hordeTeam) continue; // the horde has no brain — the sim spawns its waves
-      this.ais.push(new SkirmishAI(world, t as Team, diffFor(t)));
+      const ai = new SkirmishAI(world, t as Team, diffFor(t));
+      // Your Nemesis plays what it has learned about you.
+      if (config.rival && t === 1) ai.adapt(config.rival.adaptation);
+      this.ais.push(ai);
     }
     this.playerNames = Array.from({ length: numPlayers }, (_, t) =>
-      t === 0 ? this.profile.data.name : t === hordeTeam ? "The Horde" : `${PAL.teams[t % PAL.teams.length].name} · ${diffFor(t).name}`);
+      t === 0 ? this.profile.data.name : t === hordeTeam ? "The Horde"
+        : config.rival && t === 1 ? `${config.rival.name} ${config.rival.epithet}`
+        : `${PAL.teams[t % PAL.teams.length].name} · ${diffFor(t).name}`);
     this.replay = null;
     this.renderer.prepare(map);
     this.mapName = map.name;
@@ -629,7 +658,7 @@ class App {
     this.endNet();
     this.me = Team.Player;
     this.state = "match";
-    this.hud.addAlert(`${map.name} — vs ${diff.name}. Your villagers await orders!`);
+    this.hud.addAlert(config.rival ? `${map.name} — your Nemesis, ${config.rival.name} ${config.rival.epithet}, awaits.` : `${map.name} — vs ${diff.name}. Your villagers await orders!`);
     audio.play("complete");
   }
 
@@ -1646,6 +1675,10 @@ class App {
         } else if (action === "career") {
           this.state = "career";
           audio.play("ui");
+        } else if (action === "nemesis") {
+          this.rivalScreen.open(this.profile.playableFaction() ?? "");
+          this.state = "nemesis";
+          audio.play("ui");
         } else if (action === "factions") {
           this.openFactions("menu", this.profile.playableFaction());
         } else if (action === "editor") {
@@ -1673,6 +1706,10 @@ class App {
         const a = this.editorScreen.draw(W, H, this.time, this.input.leftDown);
         if (a?.kind === "back") { this.state = "menu"; audio.play("ui"); }
         else if (a?.kind === "test") this.testCustomMap(a.map);
+      } else if (this.state === "nemesis") {
+        const a = this.rivalScreen.draw(W, H, this.time, this.profile.playableFaction() ?? "");
+        if (a === "back") { this.state = "menu"; audio.play("ui"); }
+        else if (a === "fight") { audio.play("ui"); this.startRivalMatch(); }
       } else if (this.state === "career") {
         const a = this.careerScreen.draw(W, H, this.time, this.profile);
         if (a === "back") {
@@ -2135,7 +2172,7 @@ class App {
       }
     }
     if (this.showScoreboard) drawScoreboard(UW, UH, world, this.me);
-    if (this.net) drawChat(UW, UH, this.chatLog, this.chatOpen ? this.chatDraft : null, this.time, UH - MINIMAP_SIZE - 70);
+    if (this.net || this.chatLog.length) drawChat(UW, UH, this.chatLog, this.net && this.chatOpen ? this.chatDraft : null, this.time, UH - MINIMAP_SIZE - 70);
     if (this.hud.oathPicker.isOpen && !this.spectating) {
       // Only a click from a frame where it was already open counts — the click
       // that opened it must not also choose an Oath.
@@ -2704,6 +2741,14 @@ class App {
       difficulty: this.config?.difficulty ?? "knight",
       commander: this.config?.commander || this.profile.data.commander,
     }));
+    // A Nemesis match: the rival learns, rises, scars or falls.
+    this.postmatch.rivalLines = [];
+    if (this.config?.rival && !online && !this.replay) {
+      const st = loadRival(this.profile.playableFaction() ?? "");
+      const out = settleRival(st, careerMatch(this.endReport, { at: Date.now(), won, kind: "skirmish", mode: "conquest", difficulty: this.config.difficulty, commander: "" }), this.profile.playableFaction() ?? "");
+      if (out.renown) this.profile.addRenown(out.renown);
+      this.postmatch.rivalLines = out.lines;
+    }
     this.matchAwards = this.profile.claimAwards(evaluateAwards(record, this.profile.awardState()));
     this.profile.save();
     this.postmatch.reset();

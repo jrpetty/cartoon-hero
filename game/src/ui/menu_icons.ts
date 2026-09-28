@@ -367,3 +367,47 @@ export function iconCareer(ctx: Ctx, x: number, y: number, s: number) {
   }
   ctx.restore();
 }
+
+/** Nemesis: a horned war-helm with a red eye-slit — the rival who remembers. */
+export function iconNemesis(ctx: Ctx, x: number, y: number, s: number) {
+  const r = s * 0.34;
+  ctx.save();
+  ctx.translate(x, y + s * 0.04);
+  // Horns.
+  for (const d of [-1, 1]) {
+    ctx.beginPath();
+    ctx.moveTo(d * r * 0.7, -r * 0.35);
+    ctx.quadraticCurveTo(d * r * 1.55, -r * 0.55, d * r * 1.35, -r * 1.35);
+    ctx.quadraticCurveTo(d * r * 1.15, -r * 0.8, d * r * 0.55, -r * 0.7);
+    ctx.closePath();
+    ctx.fillStyle = "#e7dcc0";
+    ctx.fill();
+    stroke(ctx, s * 0.03);
+  }
+  // The helm.
+  ctx.beginPath();
+  ctx.moveTo(-r, r * 0.9);
+  ctx.lineTo(-r, -r * 0.2);
+  ctx.quadraticCurveTo(-r, -r * 1.05, 0, -r * 1.05);
+  ctx.quadraticCurveTo(r, -r * 1.05, r, -r * 0.2);
+  ctx.lineTo(r, r * 0.9);
+  ctx.lineTo(r * 0.25, r * 1.1);
+  ctx.lineTo(-r * 0.25, r * 1.1);
+  ctx.closePath();
+  ctx.fillStyle = "#6e6a70";
+  ctx.fill();
+  stroke(ctx, s * 0.035);
+  // Eye slit, glowing.
+  ctx.fillStyle = "#1a0d0b";
+  ctx.fillRect(-r * 0.72, -r * 0.12, r * 1.44, r * 0.26);
+  ctx.fillStyle = "#ff5a3c";
+  ctx.shadowColor = "#ff5a3c";
+  ctx.shadowBlur = s * 0.12;
+  ctx.fillRect(-r * 0.5, -r * 0.05, r * 0.3, r * 0.12);
+  ctx.fillRect(r * 0.2, -r * 0.05, r * 0.3, r * 0.12);
+  ctx.shadowBlur = 0;
+  // Nose guard.
+  ctx.fillStyle = "#8a868c";
+  ctx.fillRect(-r * 0.08, -r * 0.12, r * 0.16, r * 0.8);
+  ctx.restore();
+}

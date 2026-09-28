@@ -23,7 +23,8 @@ import { Particles } from "../engine/particles";
 import { MatchReport } from "../sim/metrics";
 import { CustomMap, listCustomMaps, mapPool } from "../maps/custom";
 import { drawMapThumbnail } from "./map_thumb";
-import { iconArmory, iconCareer, iconFactions, iconCodex, iconMap, iconMultiplayer, iconResume, iconSettings, iconSkirmish, iconWarband } from "./menu_icons";
+import { iconArmory, iconCareer, iconFactions, iconCodex, iconMap, iconMultiplayer, iconResume, iconSettings, iconSkirmish, iconWarband, iconNemesis } from "./menu_icons";
+import { loadRival } from "../meta/rival";
 import { REPORT_TABS, ReportTab, drawReportKey, drawReportTab, reportSubtitle } from "./match_report";
 import { TEAM_COLORS, blockTeams, coopTeams, formatLabel, freeForAll, resizeTeams, teamsValid } from "./teams";
 import { FACTIONS, FACTION_IDS, DEFAULT_FACTION, factionOf } from "../content/factions";
@@ -55,6 +56,8 @@ export interface SkirmishConfig {
    *  save or replay rebuilds exactly the match that was played. */
   humanLoadout?: Record<string, number>;
   humanBoons?: { id: string; rarity: number; age: number }[];
+  /** A Nemesis match: who the rival is and what it learned (meta/rival.ts). */
+  rival?: { name: string; epithet: string; rank: number; adaptation: import("../ai/skirmish_ai").RivalAdaptation };
 }
 
 // ------------------------------------------------------------- background --
@@ -177,7 +180,7 @@ export class MenuScreen {
   /** A save the player picked from the continue strip, consumed by the app. */
   pickedSave: SaveGame | null = null;
 
-  draw(W: number, H: number, time: number, profile: Profile): "skirmish" | "multiplayer" | "warband" | "armory" | "codex" | "settings" | "editor" | "resume" | "factions" | "career" | null {
+  draw(W: number, H: number, time: number, profile: Profile): "skirmish" | "multiplayer" | "warband" | "armory" | "codex" | "settings" | "editor" | "resume" | "factions" | "career" | "nemesis" | null {
     drawMenuBackground(W, H, time);
     const ctx = ui.ctx;
 
@@ -208,7 +211,7 @@ export class MenuScreen {
       return null;
     }
 
-    type MenuAction = "skirmish" | "multiplayer" | "warband" | "armory" | "codex" | "settings" | "editor" | "resume" | "factions" | "career";
+    type MenuAction = "skirmish" | "multiplayer" | "warband" | "armory" | "codex" | "settings" | "editor" | "resume" | "factions" | "career" | "nemesis";
     let action: MenuAction | null = null;
     // First launch, once the commander is claimed: choose the free faction
     // before anything else. The book won't let you leave without one.
@@ -331,10 +334,13 @@ export class MenuScreen {
       (cx, cy, sz) => iconSkirmish(ctx, cx, cy, sz, "#b8483e"), { accent: true, big: true })) action = "skirmish";
     ty += bigH + gap;
     const midH = narrow ? 88 : 108;
-    const hw = (rw2 - gap) / 2;
-    if (this.tile(rx, ty, hw, midH, "Multiplayer", "Online, up to 8 v 8 — or a quick 1 v 1.", "",
+    const hw = (rw2 - gap * 2) / 3;
+    if (this.tile(rx, ty, hw, midH, "Multiplayer", "Online, up to 8 v 8.", "",
       (cx, cy, sz) => iconMultiplayer(ctx, cx, cy, sz, time))) action = "multiplayer";
-    if (this.tile(rx + hw + gap, ty, hw, midH, "Warband Tactics", "Draft, merge and outlast.", "",
+    const rival = loadRival(profile.playableFaction() ?? "").current;
+    if (this.tile(rx + hw + gap, ty, hw, midH, "Nemesis", `${rival.name} ${rival.epithet}`, `Rank ${rival.rank} · remembers you`,
+      (cx, cy, sz) => iconNemesis(ctx, cx, cy, sz))) action = "nemesis";
+    if (this.tile(rx + (hw + gap) * 2, ty, hw, midH, "Warband Tactics", "Draft, merge and outlast.", "",
       (cx, cy, sz) => iconWarband(ctx, cx, cy, sz))) action = "warband";
     ty += midH + gap;
     const smH = narrow ? 80 : 96;
@@ -1530,6 +1536,8 @@ export type GraphSeries = {
 
 export class PostMatchScreen {
   private xpAnim = 0;
+  /** What happened with your Nemesis this match, if it was one. */
+  rivalLines: string[] = [];
   private graphMetric: "score" | "military" | "economy" = "score";
   private reportTab: ReportTab = "overview";
 
@@ -1610,19 +1618,31 @@ export class PostMatchScreen {
     const x0 = pad;
     const leftW = Math.max(420, W - pad * 2 - right - gap);
     const x1 = x0 + leftW + gap;
-    const top = 116;
+    // A Nemesis match says what became of the rival, right under the result.
+    const rivalH = this.rivalLines.length ? 30 : 0;
+    const top = 116 + rivalH;
     const bottom = H - 84;
     const panelH = bottom - top;
+    if (rivalH) {
+      const text = this.rivalLines.join("  ");
+      ctx.font = "bold 13px 'Trebuchet MS', sans-serif";
+      const tw = Math.min(W - 48, ctx.measureText(text).width + 40);
+      ctx.fillStyle = "rgba(200,72,62,0.18)";
+      ctx.beginPath(); ctx.roundRect(W / 2 - tw / 2, 106, tw, 28, 14); ctx.fill();
+      ui.text(text, W / 2, 125, { align: "center", size: 13, bold: true, color: "#ffc9b8" });
+    }
 
     // ---- the report ----
     ui.panel(x0, top, leftW, panelH, { light: true });
     let tx = x0 + 18;
+    // Five tabs and the colour key share one row; narrow windows shrink the tabs.
+    const tabW = Math.max(78, Math.min(108, Math.floor((leftW - 200) / REPORT_TABS.length) - 6));
     for (const t of REPORT_TABS) {
-      if (ui.button(t.label, tx, top + 14, 108, 28, { accent: this.reportTab === t.id, size: 12.5 })) {
+      if (ui.button(t.label, tx, top + 14, tabW, 28, { accent: this.reportTab === t.id, size: 12.5 })) {
         this.reportTab = t.id;
         audio.play("ui");
       }
-      tx += 114;
+      tx += tabW + 6;
     }
     // Whose colour is whose, once, rather than on every row.
     drawReportKey(x0 + leftW - 20, top + 28, report);
