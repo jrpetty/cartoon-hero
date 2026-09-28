@@ -119,6 +119,10 @@ export interface SideReport {
   lostByType: Record<string, number>;
   killedByType: Record<string, number>;
   builtByType: Record<string, number>;
+  /** By your unit type: enemies it killed, damage it dealt, buildings it razed. */
+  killsByUnit: Record<string, number>;
+  damageByUnit: Record<string, number>;
+  razedByUnit: Record<string, number>;
 }
 
 /**
@@ -169,6 +173,7 @@ const emptySide = (): SideReport => ({
   damageDealt: 0, damageTaken: 0, peakArmy: 0, peakVillagers: 0, idleVillagerTime: 0,
   idleTcTime: 0, idleProductionTime: 0, tcSeconds: 0, productionSeconds: 0,
   age: 0, upgrades: 0, trainedByType: {}, lostByType: {}, killedByType: {}, builtByType: {},
+  killsByUnit: {}, damageByUnit: {}, razedByUnit: {},
 });
 
 const addInto = (dst: Record<string, number>, src: Record<string, number>) => {
@@ -209,6 +214,9 @@ function accumulate(side: SideReport, world: World, team: Team) {
   addInto(side.lostByType, s.lostByType);
   addInto(side.killedByType, s.killedByType);
   addInto(side.builtByType, s.builtByType);
+  addInto(side.killsByUnit, s.killsByUnit ?? {});
+  addInto(side.damageByUnit, s.damageByUnit ?? {});
+  addInto(side.razedByUnit, s.razedByUnit ?? {});
 }
 
 /**

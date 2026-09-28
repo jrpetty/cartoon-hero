@@ -23,8 +23,22 @@ import { Profile } from "../meta/profile";
 import { ReplayRecord, deleteReplay, listReplays } from "../sim/replay";
 import {
   Career, CareerFilter, CareerMatch, Tally, avgSecs, avgWinSecs, bestBy, careerFor, favourite, favouriteUnitOf,
-  kd, topUnit, winRate, worstBy,
+  kd, mostEffectiveUnit, topUnit, unitKd, winRate, worstBy,
 } from "../meta/career";
+
+/** Word-wrap a short line into at most two lines (the second ends in … if cut). */
+function wrapLines(text: string, x: number, y: number, maxW: number, size: number, color: string) {
+  const ctx = ui.ctx;
+  ctx.font = `${size}px 'Trebuchet MS', sans-serif`;
+  const lines: string[] = [];
+  let line = "";
+  for (const word of text.split(" ")) {
+    const test = line ? `${line} ${word}` : word;
+    if (ctx.measureText(test).width > maxW && line) { lines.push(line); line = word; } else line = test;
+  }
+  if (line) lines.push(line);
+  lines.slice(0, 2).forEach((l, i) => ui.text(i === 1 && lines.length > 2 ? `${l}…` : l, x, y + i * (size + 3), { size, color }));
+}
 
 type Tab = "overview" | "factions" | "maps" | "units" | "matches" | "replays";
 const TABS: [Tab, string][] = [["overview", "Overview"], ["factions", "Factions"], ["maps", "Maps & modes"], ["units", "Units"], ["matches", "Matches"], ["replays", "Replays"]];
@@ -162,15 +176,27 @@ export class CareerScreen {
     ui.ctx.beginPath(); ui.ctx.arc(x, y, r, 0, Math.PI * 2); ui.ctx.fill();
   }
 
-  private unitArt(id: string, x: number, y: number, s: number, time: number, faction?: string) {
+  /**
+   * A unit portrait fitted inside a box: scaled so the whole figure (horse,
+   * lance and all) fits, standing on the box's bottom edge, and clipped to it
+   * so nothing can spill onto the card around it.
+   */
+  private unitArt(id: string, box: { x: number; y: number; w: number; h: number }, time: number, faction?: string) {
     const def = UNITS[id];
     if (!def) return;
+    // A figure reaches ~3 radii up from its feet and ~1.6 either side; a
+    // lance or bow a little past that.
+    const s = Math.min(3, (box.h * 0.92) / (def.radius * 3.2), (box.w * 0.92) / (def.radius * 3.6));
+    const x = box.x + box.w / 2, y = box.y + box.h - def.radius * 0.7 * s - 2;
     const e = makeEntity();
     Object.assign(e, { kind: Kind.Unit, type: id, team: Team.Player, x, y, radius: def.radius, hp: def.hp, maxHp: def.hp, facing: -0.5, attackInterval: def.attackInterval, animPhase: time * 0.3, seed: 5 });
     const f = faction ?? factionForUnit(id)?.id;
     if (f) setFactionResolver(() => f);
     const ctx = ui.ctx;
     ctx.save();
+    ctx.beginPath();
+    ctx.rect(box.x, box.y, box.w, box.h);
+    ctx.clip();
     ctx.translate(x, y); ctx.scale(s, s); ctx.translate(-x, -y);
     try { drawUnit(ctx, e, time * 0.3); } catch { /* a portrait is never worth a crash */ }
     ctx.restore();
@@ -206,10 +232,10 @@ export class CareerScreen {
     const favF = favourite(c.byFaction), favM = favourite(c.byMap), favU = topUnit(c, "trained"), favC = favourite(c.byCommander), favO = favourite(c.byOath);
     const favs: [string, string, string, string, (cx: number, cy: number) => void][] = [
       ["Faction", facName(favF), favF ? `${c.byFaction[favF].played} games · ${pct(winRate(c.byFaction[favF]))} won` : "", facColor(favF),
-        (cx, cy) => { if (favF) this.unitArt(FACTIONS[favF as keyof typeof FACTIONS].replaces.militia ?? FACTIONS[favF as keyof typeof FACTIONS].extra[0] ?? "militia", cx, cy, 2.2, time, favF); }],
+        (bx, by) => { if (favF) this.unitArt(FACTIONS[favF as keyof typeof FACTIONS].replaces.militia ?? FACTIONS[favF as keyof typeof FACTIONS].extra[0] ?? "militia", { x: bx, y: by, w: 64, h: 80 }, time, favF); }],
       ["Map", favM || "—", favM ? `${c.byMap[favM].played} games · ${pct(winRate(c.byMap[favM]))} won` : "", TEXT, () => {}],
       ["Unit", unitName(favU), favU ? `${num(c.units[favU].trained)} trained · ${num(c.units[favU].lost)} lost` : "", TEXT,
-        (cx, cy) => { if (favU) this.unitArt(favU, cx, cy, 2.2, time); }],
+        (bx, by) => { if (favU) this.unitArt(favU, { x: bx, y: by, w: 64, h: 80 }, time); }],
       ["Commander", cmdName(favC), favC ? `${c.byCommander[favC].played} games · ${pct(winRate(c.byCommander[favC]))} won` : "skirmish only", COMMANDERS[favC]?.color ?? TEXT, () => {}],
       ["Oath", favO ? oathName(favO) : "—", favO ? `sworn in ${c.byOath[favO].played} games · ${pct(winRate(c.byOath[favO]))} won` : "reach the Banner Age", TEXT, () => {}],
     ];
@@ -220,7 +246,7 @@ export class CareerScreen {
       ui.text(label.toUpperCase(), fx + 14, fy + 22, { size: 10.5, bold: true, color: DIM });
       ui.text(value, fx + 14, fy + 50, { size: 17, bold: true, color, font: "Georgia, serif" });
       ui.text(sub, fx + 14, fy + 72, { size: 11, color: FAINT });
-      art(fx + fw - 34, fy + 66);
+      art(fx + fw - 72, fy + 8);
     });
     y += Math.ceil(favs.length / fcols) * 106 + 8;
 
@@ -362,7 +388,7 @@ export class CareerScreen {
       const t = c.byFaction[id];
       const f = FACTIONS[id];
       const col = t ? TEXT : FAINT;
-      this.unitArt(f.replaces.militia ?? f.extra[0] ?? "militia", x + 30, ry + 24, 1.4, time, id);
+      this.unitArt(f.replaces.militia ?? f.extra[0] ?? "militia", { x: x + 8, y: ry, w: 44, h: 32 }, time, id);
       ui.text(f.name, C.name, ry + 21, { size: 14, bold: true, color: t ? f.color : FAINT });
       ui.text(t ? String(t.played) : "0", C.played, ry + 21, { align: "right", size: 13, color: col });
       ui.text(t ? `${t.won}–${t.played - t.won}` : "—", C.wl, ry + 21, { size: 13, color: col });
@@ -430,39 +456,48 @@ export class CareerScreen {
 
   // ---------------------------------------------------------------- units --
   private units(c: Career, x: number, y: number, w: number, time: number): number {
-    const ids = Object.keys(c.units).filter((u) => UNITS[u]).sort((p, q) => c.units[q].trained - c.units[p].trained || c.units[q].killed - c.units[p].killed);
-    const killedMost = topUnit(c, "killed", false), lostMost = topUnit(c, "lost");
-    const gap = 12, tw = (w - gap * 2) / 3;
+    const ids = Object.keys(c.units).filter((u) => UNITS[u]).sort((p, q) => c.units[q].trained - c.units[p].trained || (c.units[q].kills ?? 0) - (c.units[p].kills ?? 0));
+    const gap = 12, cols = w >= 1100 ? 4 : 2, tw = (w - gap * (cols - 1)) / cols;
+    const best = mostEffectiveUnit(c);
     const tops: [string, string, string, string][] = [
-      ["Trained most", topUnit(c, "trained"), "trained", "Your go-to soldier."],
-      ["Enemy you kill most", killedMost, "killed", "What you spend most of your time cutting down."],
-      ["You lose most", lostMost, "lost", "Where your army bleeds."],
+      ["Trained most", topUnit(c, "trained"), (() => { const v = c.units[topUnit(c, "trained")]; return v ? `${num(v.trained)} trained` : ""; })(), "Your go-to soldier."],
+      ["Deadliest", topUnit(c, "kills"), (() => { const v = c.units[topUnit(c, "kills")]; return v ? `${num(v.kills)} kills · ${num(v.damage)} damage` : ""; })(), "More enemies fall to it than to anything else you field."],
+      ["Best trader", best, best ? `${unitKd(c.units[best]).toFixed(2)} kills per loss` : "", "Highest K/D of any unit you've trained 10+ of."],
+      ["You lose most", topUnit(c, "lost"), (() => { const v = c.units[topUnit(c, "lost")]; return v ? `${num(v.lost)} lost` : ""; })(), "Where your army bleeds."],
     ];
-    tops.forEach(([label, id, field, sub], i) => {
-      const tx = x + i * (tw + gap);
-      ui.panel(tx, y, tw, 110);
-      ui.text(label.toUpperCase(), tx + 14, y + 22, { size: 10.5, bold: true, color: DIM });
-      ui.text(unitName(id), tx + 14, y + 52, { size: 19, bold: true, color: "#fff0cc", font: "Georgia, serif" });
-      ui.text(id ? `${num(c.units[id][field as "trained"])} ${field}` : "—", tx + 14, y + 74, { size: 12.5, color: GOLD });
-      ui.text(sub, tx + 14, y + 94, { size: 11, color: FAINT });
-      if (id) this.unitArt(id, tx + tw - 44, y + 78, 2.6, time);
+    tops.forEach(([label, id, value, sub], i) => {
+      const tx = x + (i % cols) * (tw + gap), ty = y + Math.floor(i / cols) * 130;
+      ui.panel(tx, ty, tw, 120);
+      ui.text(label.toUpperCase(), tx + 14, ty + 22, { size: 10.5, bold: true, color: DIM });
+      ui.text(id ? unitName(id) : "—", tx + 14, ty + 50, { size: 18, bold: true, color: "#fff0cc", font: "Georgia, serif" });
+      ui.text(value || "not enough games yet", tx + 14, ty + 72, { size: 12, color: value ? GOLD : FAINT });
+      wrapLines(sub, tx + 14, ty + 92, tw - 120, 10.5, FAINT);
+      if (id) this.unitArt(id, { x: tx + tw - 100, y: ty + 8, w: 92, h: 104 }, time);
     });
-    y += 124;
-    y = this.heading(x, y, w, "Every unit", "yours trained and lost · the enemy's of that type you killed");
-    const maxT = Math.max(1, ...ids.map((u) => c.units[u].trained)), maxK = Math.max(1, ...ids.map((u) => c.units[u].killed));
-    const C = { name: x + 64, tr: x + w * 0.3, lost: x + w * 0.55, kill: x + w * 0.72, ratio: x + w - 16 };
-    let ry = this.table(x, y, w, [["Unit", C.name], ["Trained", C.tr], ["Lost", C.lost], ["Killed of this type", C.kill], ["Survival", C.ratio, "right"]], Math.max(1, ids.length));
+    y += Math.ceil(tops.length / cols) * 130 + 4;
+
+    y = this.heading(x, y, w, "Every unit", "K/D = enemies it killed per one of yours lost");
+    const maxT = Math.max(1, ...ids.map((u) => c.units[u].trained));
+    const C = { name: x + 64, tr: x + w * 0.24, lost: x + w * 0.4, kills: x + w * 0.48, kd: x + w * 0.56, dmg: x + w * 0.65, razed: x + w * 0.73, win: x + w * 0.8, killed: x + w - 16 };
+    let ry = this.table(x, y, w, [["Unit", C.name], ["Trained", C.tr], ["Lost", C.lost, "right"], ["Kills", C.kills, "right"], ["K/D", C.kd, "right"], ["Damage", C.dmg, "right"], ["Razed", C.razed, "right"], ["Win % when used", C.win], ["Enemy of type killed", C.killed, "right"]], Math.max(1, ids.length));
     if (!ids.length) ui.text("No units yet.", C.name, ry + 21, { size: 13, color: FAINT });
     for (const u of ids) {
       const v = c.units[u];
-      this.unitArt(u, x + 32, ry + 26, 1.35, time);
+      const vill = u === "villager";
+      this.unitArt(u, { x: x + 8, y: ry, w: 48, h: 32 }, time);
       ui.text(unitName(u), C.name, ry + 21, { size: 13.5, bold: true, color: TEXT });
-      ui.bar(C.tr, ry + 14, w * 0.16, 8, v.trained / maxT, GOLD);
-      ui.text(num(v.trained), C.tr + w * 0.16 + 8, ry + 21, { size: 12.5, color: TEXT });
-      ui.text(num(v.lost), C.lost, ry + 21, { size: 12.5, color: v.lost ? BAD : FAINT });
-      ui.bar(C.kill, ry + 14, w * 0.14, 8, v.killed / maxK, GOOD);
-      ui.text(num(v.killed), C.kill + w * 0.14 + 8, ry + 21, { size: 12.5, color: TEXT });
-      ui.text(v.trained ? pct(Math.max(0, 1 - v.lost / v.trained)) : "—", C.ratio, ry + 21, { align: "right", size: 12.5, color: DIM });
+      ui.bar(C.tr, ry + 14, w * 0.1, 8, v.trained / maxT, GOLD);
+      ui.text(num(v.trained), C.tr + w * 0.1 + 8, ry + 21, { size: 12.5, color: TEXT });
+      ui.text(num(v.lost), C.lost, ry + 21, { align: "right", size: 12.5, color: v.lost ? BAD : FAINT });
+      ui.text(num(v.kills ?? 0), C.kills, ry + 21, { align: "right", size: 12.5, color: v.kills ? GOOD : FAINT });
+      const k = unitKd(v);
+      const noKd = vill || !(v.kills || v.lost);
+      ui.text(noKd ? "—" : k.toFixed(2), C.kd, ry + 21, { align: "right", size: 12.5, bold: true, color: noKd ? FAINT : k >= 1.2 ? GOOD : k < 0.8 ? BAD : GOLD });
+      ui.text(v.damage ? num(v.damage) : "—", C.dmg, ry + 21, { align: "right", size: 12.5, color: DIM });
+      ui.text(v.razed ? num(v.razed) : "—", C.razed, ry + 21, { align: "right", size: 12.5, color: DIM });
+      if (v.games) this.rateBar(C.win, ry + 19, w * 0.1, v.wins / v.games, v.games);
+      else ui.text("—", C.win, ry + 21, { size: 12.5, color: FAINT });
+      ui.text(num(v.killed), C.killed, ry + 21, { align: "right", size: 12.5, color: DIM });
       ry += 34;
     }
     y = ry + 20;

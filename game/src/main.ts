@@ -76,6 +76,15 @@ import {
   CustomMap, deserialiseMap, findCustomMap, saveCustomMap, serialiseMap, toMapData, mapPool, rollRandomMap,
 } from "./maps/custom";
 
+/** Small drawn cursors (SVG), each with a fallback. */
+const svgCursor = (svg: string, x: number, y: number, fallback: string) =>
+  `url("data:image/svg+xml;utf8,${encodeURIComponent(svg)}") ${x} ${y}, ${fallback}`;
+const CURSORS = {
+  attack: svgCursor(`<svg xmlns='http://www.w3.org/2000/svg' width='28' height='28'><g stroke='#1a0d08' stroke-width='3' stroke-linecap='round'><path d='M4 4 L20 20 M20 14 L14 20'/></g><g stroke='#ff6a55' stroke-width='2' stroke-linecap='round'><path d='M4 4 L20 20 M20 14 L14 20'/></g><circle cx='4' cy='4' r='2' fill='#ffd2c8'/></svg>`, 3, 3, "crosshair"),
+  gather: svgCursor(`<svg xmlns='http://www.w3.org/2000/svg' width='28' height='28'><path d='M5 23 L17 11' stroke='#2a1a0c' stroke-width='5' stroke-linecap='round'/><path d='M5 23 L17 11' stroke='#b88a52' stroke-width='3' stroke-linecap='round'/><path d='M10 6 Q18 4 24 12' fill='none' stroke='#2a1a0c' stroke-width='5' stroke-linecap='round'/><path d='M10 6 Q18 4 24 12' fill='none' stroke='#d8dde2' stroke-width='3' stroke-linecap='round'/></svg>`, 22, 10, "pointer"),
+  build: svgCursor(`<svg xmlns='http://www.w3.org/2000/svg' width='28' height='28'><path d='M6 22 L16 12' stroke='#2a1a0c' stroke-width='5' stroke-linecap='round'/><path d='M6 22 L16 12' stroke='#b88a52' stroke-width='3' stroke-linecap='round'/><rect x='13' y='3' width='12' height='8' rx='1.5' transform='rotate(45 19 7)' fill='#9aa4b0' stroke='#2a1a0c' stroke-width='2'/></svg>`, 20, 5, "pointer"),
+};
+
 type AppState = "menu" | "setup" | "armory" | "match" | "postmatch" | "codex" | "settings" | "warband" | "editor" | "factions" | "career";
 
 // Buildings you can drag-paint into a continuous run.
@@ -338,6 +347,7 @@ class App {
       if (this.hud.oathPicker.isOpen) { this.hud.oathPicker.close(); return; }
       if (this.spectating) this.exitToMenu();
       else if (this.placing) this.placing = null;
+      else if (this.hud.buildMenuOpen) { this.hud.buildMenuOpen = false; this.hud.buildCategory = null; }
       else if (this.powerArmed) this.powerArmed = false;
       else if (this.attackMoveArmed) this.attackMoveArmed = false;
       else this.ingameMenu = !this.ingameMenu;
@@ -367,7 +377,10 @@ class App {
       case "stop": this.dispatch({ t: "stop", team: this.me, ids: this.playerSelection().map((e) => e.id) }); break;
       case "hold": this.dispatch({ t: "hold", team: this.me, ids: this.playerSelection().map((e) => e.id) }); break;
       case "ability": this.controller.useAbility(); break;
-      case "buildMenu": this.hud.buildMenuOpen = true; this.hud.buildCategory = null; break;
+      case "buildMenu":
+        if (!this.playerSelection().some((e) => UNITS[e.type]?.canBuild)) { this.hud.addAlert("Select a villager to build."); break; }
+        this.hud.buildMenuOpen = true; this.hud.buildCategory = null;
+        break;
       case "garrison": this.garrisonSelected(); break;
       case "cycleStance": this.cycleStance(); break;
       case "commanderPower": this.armCommanderPower(); break;
@@ -908,6 +921,16 @@ class App {
     minimapNavigate: (wx, wy) => this.camera.centerOn(wx, wy),
     minimapCommand: (wx, wy) => this.issueContextCommand(wx, wy, null),
     minimapPing: (wx, wy) => this.dropPing(wx, wy),
+    cancelProduction: (b, index) => {
+      this.dispatch({ t: "cancel", team: this.me, buildingId: b.id, index });
+      audio.play("ui");
+    },
+    jumpTo: (x, y) => { this.camera.centerOn(x, y); audio.play("ui"); },
+    narrowSelection: (type, remove) => {
+      const keep = this.selectedEntities().filter((e) => (remove ? e.type !== type : e.type === type));
+      if (keep.length) this.select(keep.map((e) => e.id));
+      audio.play("select");
+    },
     openMenu: () => {
       this.ingameMenu = true;
     },
@@ -963,15 +986,26 @@ class App {
       this.camera.screenToWorldX(box.x1), this.camera.screenToWorldY(box.y1),
     );
     const villagers = this.playerSelection().filter((e) => UNITS[e.type]?.canBuild);
-    let any = false;
-    pts.forEach((pt, i) => {
-      if (!this.world!.canPlace(this.me, this.placing!, pt.x, pt.y)) return;
-      const v = villagers[i % Math.max(1, villagers.length)];
+    const world = this.world;
+    const cost = world.buildingCostFor(this.me, this.placing);
+    let budget = { ...world.player(this.me).resources };
+    let placed = 0, lastProblem = "";
+    pts.forEach((pt) => {
+      const problem = world.placementProblem(this.me, this.placing!, pt.x, pt.y, true)
+        ?? (world.canAfford(budget, cost) ? null : "Out of resources");
+      if (problem) { lastProblem = problem; return; }
+      const v = villagers[placed % Math.max(1, villagers.length)];
       this.dispatch({ t: "place", team: this.me, building: this.placing!, x: pt.x, y: pt.y, builders: v ? [v.id] : [] });
-      any = true;
+      budget = { food: budget.food - cost.food, wood: budget.wood - cost.wood, gold: budget.gold - cost.gold };
+      placed++;
     });
-    if (any) audio.play("build");
-    else this.hud.addAlert("Cannot build there.");
+    if (placed) {
+      audio.play("build");
+      if (placed < pts.length) this.hud.addAlert(`Placed ${placed} of ${pts.length} — ${lastProblem.toLowerCase()}.`);
+    } else {
+      this.hud.addAlert(`Can't build there — ${lastProblem.toLowerCase() || "nothing fits"}.`);
+      audio.play("tick");
+    }
     // Walls stay armed. Laying a wall means laying several runs — around a
     // corner, along a ridge, across a gap — and having to reopen Build →
     // Defense → Palisade between every one of them was the whole reason this
@@ -1127,6 +1161,8 @@ class App {
       ctx.textAlign = "center";
       ctx.fillText(label, x + w / 2, y + h / 2 + 4);
       if (hover && this.frameClick && !ui.pointerConsumed) { ui.pointerConsumed = true; onClick(); }
+      // A right-click or a drag that ends on a chip is for the chip, not the map under it.
+      if (hover) ui.pointerConsumed = true;
     };
 
     // Pause + speed, right of the day/night clock.
@@ -1234,12 +1270,19 @@ class App {
 
     if (this.placing) {
       const villagers = this.playerSelection().filter((e) => UNITS[e.type]?.canBuild);
-      if (this.world.canPlace(this.me, this.placing, wx, wy)) {
+      // The same checks the sim will make, so a click never looks like it
+      // worked when it didn't — and when it can't, say why.
+      const problem = this.world.placementProblem(this.me, this.placing, wx, wy);
+      if (!problem) {
         this.dispatch({ t: "place", team: this.me, building: this.placing, x: wx, y: wy, builders: villagers.map((v) => v.id) });
         audio.play("build");
-        if (!this.input.shift) this.placing = null;
+        this.flashBuilders(villagers, wx, wy);
+        if (!villagers.length) this.hud.addAlert("Placed — no villager selected, so it waits for a builder.", wx, wy);
+        // Walls stay armed either way (click or drag); other buildings with Shift.
+        if (!this.input.shift && !LINE_BUILDABLE.has(this.placing)) this.placing = null;
       } else {
-        this.hud.addAlert("Cannot build there.");
+        this.hud.addAlert(`Can't build there — ${problem.charAt(0).toLowerCase()}${problem.slice(1)}.`, wx, wy);
+        audio.play("tick");
       }
       return;
     }
@@ -1453,6 +1496,13 @@ class App {
             const name = BUILDINGS[ev.data ?? ""]?.name;
             if (name) this.hud.addAlert(`${name} completed.`, ev.x, ev.y);
             this.lastEvent = { x: ev.x, y: ev.y };
+          }
+          break;
+        case "popcap":
+          if (ev.team === this.me && !this.spectating && this.time - this.popcapAlertAt > 6) {
+            this.popcapAlertAt = this.time;
+            this.hud.addAlert(`Population limit — a ${UNITS[ev.data ?? ""]?.name ?? "unit"} couldn't join (refunded). Build a House.`, ev.x, ev.y);
+            sfx("alert", "alert", 3);
           }
           break;
         case "underattack":
@@ -1938,22 +1988,52 @@ class App {
         const l = Math.hypot(dx, dy) || 1;
         this.camera.pan((dx / l) * camSpeed * dt, (dy / l) * camSpeed * dt);
       }
+      // Hold the middle button and drag to grab the map.
+      if (this.input.middleDown && this.middleLast) {
+        this.camera.pan(-(this.input.mx - this.middleLast.x) / this.camera.zoom, -(this.input.my - this.middleLast.y) / this.camera.zoom);
+      }
+      this.middleLast = this.input.middleDown ? { x: this.input.mx, y: this.input.my } : null;
     }
 
     // ---- markers age ----
     for (const m of this.markers) m.age += dt;
     this.markers = this.markers.filter((m) => m.age < 0.7);
+    for (const l of this.builderLines) l.age += dt;
+    this.builderLines = this.builderLines.filter((l) => l.age < 1.6);
+    this.renderer.builderLines = this.builderLines;
 
     // ---- ghost placement validity ----
     let ghost: GhostPlacement | null = null;
     let suppressDragBox = false;
-    if (this.placing) {
+    this.placementInfo = null;
+    // Over the HUD, the cursor is for the HUD: no ghost, no panel.
+    if (this.placing && !this.hud.overHud(this.canvas.width / this.uiScale(), this.canvas.height / this.uiScale(), this.input.mx / this.uiScale(), this.input.my / this.uiScale())) {
       const wx = this.camera.screenToWorldX(this.input.mx);
       const wy = this.camera.screenToWorldY(this.input.my);
       const def = BUILDINGS[this.placing];
       const p = world.player(this.me);
-      const valid = world.canPlace(this.me, this.placing, wx, wy) && world.canAfford(p.resources, def.cost);
-      ghost = { type: this.placing, x: wx, y: wy, valid };
+      // The sim's own checks and its real (discounted) price — the preview and
+      // the placement can't disagree.
+      const cost = world.buildingCostFor(this.me, this.placing);
+      const problem = world.placementProblem(this.me, this.placing, wx, wy);
+      ghost = { type: this.placing, x: wx, y: wy, valid: !problem, team: this.me };
+      const builders = this.playerSelection().filter((e) => UNITS[e.type]?.canBuild);
+      ghost.builders = builders.slice(0, 12).map((b) => ({ x: b.x, y: b.y }));
+      // Drop-off buildings: which resources would this one serve?
+      let coverage = "";
+      const kinds = def.dropoffKinds.filter(() => this.placing !== "town_center");
+      if (kinds.length) {
+        const R = 8 * TILE;
+        const nodeKind: Record<string, string> = { tree: "wood", gold_mine: "gold", berries: "food", farm: "food" };
+        const nodes = world.entities.filter((e) => e.alive && (e.kind === Kind.Resource || e.type === "farm") && kinds.includes(nodeKind[e.type] ?? "")
+          && Math.hypot(e.x - wx, e.y - wy) < R && (e.kind !== Kind.Resource || world.fogAt(this.me, e.x, e.y) !== 0));
+        ghost.coverage = { radius: R, nodes: nodes.map((n) => ({ x: n.x, y: n.y, r: n.radius })) };
+        const label: Record<string, [string, string]> = { tree: ["tree", "trees"], gold_mine: ["gold mine", "gold mines"], berries: ["berry bush", "berry bushes"], farm: ["farm", "farms"] };
+        const counts = new Map<string, number>();
+        for (const n of nodes) counts.set(n.type, (counts.get(n.type) ?? 0) + 1);
+        coverage = counts.size ? [...counts.entries()].map(([t, n]) => `${n} ${label[t]?.[n === 1 ? 0 : 1] ?? t}`).join(", ") + " in reach" : `No ${kinds.join("/")} within reach`;
+      }
+      this.placementInfo = { type: this.placing, cost, problem, builders: builders.length, coverage, short: !world.canAfford(p.resources, cost) };
       // Drag-painting: preview the whole snapped run instead of a selection box.
       if (this.input.drag.active) {
         const d = this.input.drag;
@@ -1966,40 +2046,31 @@ class App {
         // ground does, so a twelve-house drag shows you where the wood stops.
         let budget = { ...p.resources };
         ghost.line = pts.map((pt) => {
-          const ok = world.canPlace(this.me, this.placing!, pt.x, pt.y)
-            && world.canAfford(budget, def.cost);
-          if (ok) {
-            budget = {
-              food: budget.food - def.cost.food,
-              wood: budget.wood - def.cost.wood,
-              gold: budget.gold - def.cost.gold,
-            };
-          }
+          const ok = !world.placementProblem(this.me, this.placing!, pt.x, pt.y, true) && world.canAfford(budget, cost);
+          if (ok) budget = { food: budget.food - cost.food, wood: budget.wood - cost.wood, gold: budget.gold - cost.gold };
           return { x: pt.x, y: pt.y, valid: ok };
         });
         // What you are about to spend, before you spend it. Counting only the
         // placements that will actually land, since the greyed-out tail costs
         // nothing and reporting it would be a lie.
         const n = ghost.line.filter((pt) => pt.valid).length;
-        if (n > 0) {
-          const parts: string[] = [];
-          if (def.cost.wood) parts.push(`${def.cost.wood * n} wood`);
-          if (def.cost.gold) parts.push(`${def.cost.gold * n} gold`);
-          if (def.cost.food) parts.push(`${def.cost.food * n} food`);
-          const unit = n === 1 ? "" : "s";
-          ghost.label = `${n} ${LINE_BUILDABLE.has(this.placing) ? `segment${unit}` : `building${unit}`}${parts.length ? `  ·  ${parts.join(", ")}` : ""}`;
-        } else {
-          ghost.label = "can't build there";
-        }
+        const parts: string[] = [];
+        if (cost.wood) parts.push(`${cost.wood * n} wood`);
+        if (cost.gold) parts.push(`${cost.gold * n} gold`);
+        if (cost.food) parts.push(`${cost.food * n} food`);
+        const unit = n === 1 ? "" : "s";
+        this.placementInfo.drag = n > 0
+          ? `${n} ${LINE_BUILDABLE.has(this.placing) ? `segment${unit}` : `building${unit}`}${parts.length ? `  ·  ${parts.join(", ")}` : ""}${n < pts.length ? `  (${pts.length - n} won't fit)` : ""}`
+          : "Nothing fits there";
         suppressDragBox = true;
       }
     }
 
     // ---- render world ----
     const selected = this.playerSelection();
-    const rallyFrom = selected.find(
+    const rallyFrom = selected.filter(
       (e) => e.kind === Kind.Building && BUILDINGS[e.type]?.trains.length && e.rallyX >= 0,
-    ) ?? null;
+    );
     // Pop a health bar above whatever the cursor is over (no click needed).
     let hoveredId = -1;
     if (!this.placing && this.input.mx >= 0 && this.input.my >= 0) {
@@ -2013,9 +2084,10 @@ class App {
     const alpha = (!this.net && (this.ingameMenu || this.paused)) ? 1 : Math.min(1, acc / SIM_DT);
     this.renderer.render(
       world, this.camera, this.particles, dt, this.time, this.me,
-      this.markers, ghost, suppressDragBox ? { active: false, x0: 0, y0: 0, x1: 0, y1: 0 } : this.input.drag, rallyFrom,
+      this.markers, ghost, suppressDragBox || this.hud.minimapDragging ? { active: false, x0: 0, y0: 0, x1: 0, y1: 0 } : this.input.drag, rallyFrom,
       hoveredId, alpha,
     );
+    this.renderHovered = hoveredId;
 
     // ---- weather overlay (cosmetic, screen-space, over world & under HUD) ----
     if (this.settings.weather) {
@@ -2041,6 +2113,7 @@ class App {
     // deliberately knows nothing about settings.
     if (!this.spectating) fullscreenButton(UW - 108, 5, 30, 24, { compact: true, size: 13, hotkey: this.fullscreenKeyLabel() });
     if (this.spectating) this.drawCaster(UW, UH, world);
+    if (this.placing && !this.spectating && !this.ingameMenu) this.drawPlacementPanel(UW, UH);
     if (world.mode !== "conquest") this.drawModeStatus(UW, UH, world);
     this.drawControlGroups(UW, UH);
     if (!this.spectating) this.drawQoLBar(UW, UH); // the caster view has its own controls
@@ -2090,11 +2163,14 @@ class App {
     }
     ui.popScale();
 
+    this.updateCursor(world, this.renderHovered);
+    this.hud.shiftHeld = this.input.shift;
+
     // ---- route unconsumed pointer input to the world ----
     // Spectators can still left-click/drag to select-and-inspect units, but
     // issue no commands.
     if (!this.ingameMenu && !oathModal && !this.hud.oathPicker.isOpen) {
-      if (this.frameDragEnd && !ui.pointerConsumed) {
+      if (this.frameDragEnd && !ui.pointerConsumed && !this.hud.minimapDragEnded) {
         if (!this.spectating && this.placing) this.paintWallLine(this.frameDragEnd);
         else this.worldDragSelect(this.frameDragEnd);
       }
@@ -2248,6 +2324,80 @@ class App {
     const due = rp.byTick.get(world.tickCount);
     if (due) for (const c of due) applyCommand(world, c);
     return false;
+  }
+
+  /** What the cursor panel says while placing a building. */
+  private placementInfo: { type: string; cost: { food: number; wood: number; gold: number }; problem: string | null; builders: number; coverage: string; short: boolean; drag?: string } | null = null;
+
+  /** A brief line from each assigned builder to the site, so you see who's going. */
+  private flashBuilders(builders: Entity[], x: number, y: number) {
+    for (const b of builders.slice(0, 12)) this.builderLines.push({ x0: b.x, y0: b.y, x1: x, y1: y, age: 0 });
+  }
+  builderLines: { x0: number; y0: number; x1: number; y1: number; age: number }[] = [];
+  private middleLast: { x: number; y: number } | null = null;
+  private renderHovered = -1;
+  private cursorNow = "";
+  private popcapAlertAt = -99;
+
+  /**
+   * The pointer says what a right-click would do: attack over an enemy,
+   * gather over a resource, build/repair over your own unfinished or damaged
+   * building, place while placing.
+   */
+  private updateCursor(world: World, hoveredId: number) {
+    let c = "default";
+    if (this.state === "match" && !this.spectating && !this.ingameMenu && !ui.pointerConsumed) {
+      const sel = this.playerSelection();
+      const he = hoveredId >= 0 ? world.byId.get(hoveredId) : undefined;
+      const units = sel.filter((e) => e.kind === Kind.Unit);
+      const vills = units.filter((e) => UNITS[e.type]?.canBuild);
+      if (this.placing) c = "crosshair";
+      else if (this.attackMoveArmed) c = CURSORS.attack;
+      else if (he && units.length) {
+        if (he.team !== this.me && he.kind !== Kind.Resource && world.areHostile(this.me, he.team)) c = CURSORS.attack;
+        else if (vills.length && (he.kind === Kind.Resource || he.type === "farm")) c = CURSORS.gather;
+        else if (vills.length && he.team === this.me && he.kind === Kind.Building && (he.buildState !== BuildState.Done || he.hp < he.maxHp)) c = CURSORS.build;
+        else if (he.team === this.me && he.kind === Kind.Building && (BUILDINGS[he.type]?.garrisonCap ?? 0) > 0) c = "pointer";
+      }
+    }
+    if (c !== this.cursorNow) {
+      this.cursorNow = c;
+      try { this.canvas.style.cursor = c; } catch { /* headless */ }
+    }
+  }
+
+  /** The panel beside the cursor while placing: name, real cost, why not, what it serves. */
+  private drawPlacementPanel(W: number, H: number) {
+    const info = this.placementInfo;
+    if (!info || !this.world) return;
+    const def = BUILDINGS[info.type];
+    const res = this.world.player(this.me).resources;
+    const rows: { text: string; color: string; bold?: boolean; size?: number }[] = [];
+    const costParts = (["food", "wood", "gold"] as const).filter((k) => info.cost[k]).map((k) => `${info.cost[k]} ${k}`);
+    rows.push({ text: `${def?.name ?? info.type}${costParts.length ? `  ·  ${costParts.join(", ")}` : ""}`, color: info.short ? PAL.uiBad : "#ffe9b0", bold: true, size: 13.5 });
+    if (info.drag) rows.push({ text: info.drag, color: "#e2d6ba" });
+    else if (info.problem) rows.push({ text: info.problem, color: PAL.uiBad, bold: true });
+    else if (info.short) {
+      const need = (["food", "wood", "gold"] as const).filter((k) => res[k] < info.cost[k]).map((k) => `${Math.ceil(info.cost[k] - res[k])} more ${k}`);
+      rows.push({ text: `Need ${need.join(" and ")}`, color: PAL.uiBad, bold: true });
+    }
+    if (info.coverage) rows.push({ text: info.coverage, color: info.coverage.startsWith("No ") ? "#e0a070" : "#9fd08a" });
+    if (!info.builders) rows.push({ text: "No villager selected — it will wait for a builder", color: "#e0a070" });
+    else rows.push({ text: `${info.builders} villager${info.builders === 1 ? "" : "s"} will build it`, color: "#a89f88" });
+    rows.push({ text: LINE_BUILDABLE.has(info.type) ? "Drag to lay a line · right-click to stop" : BLOCK_BUILDABLE.has(info.type) ? "Drag for a block · Shift: keep placing · right-click: cancel" : "Shift: keep placing · right-click: cancel", color: "#8f8770", size: 11 });
+    const ctx = this.renderer.ctx;
+    ctx.font = "bold 13px 'Trebuchet MS', sans-serif";
+    const w = Math.max(...rows.map((r) => { ctx.font = `${r.bold ? "bold " : ""}${r.size ?? 12}px 'Trebuchet MS', sans-serif`; return ctx.measureText(r.text).width; })) + 20;
+    const h = rows.length * 18 + 10;
+    let x = this.input.mx + 22, y = this.input.my + 18;
+    if (x + w > W - 8) x = this.input.mx - w - 16;
+    if (y + h > H - 8) y = this.input.my - h - 12;
+    ctx.fillStyle = "rgba(12,9,5,0.86)";
+    ctx.beginPath(); ctx.roundRect(x, y, w, h, 6); ctx.fill();
+    ctx.strokeStyle = info.problem ? withAlpha(PAL.uiBad, 0.6) : withAlpha(PAL.uiAccent, 0.4);
+    ctx.lineWidth = 1;
+    ctx.stroke();
+    rows.forEach((r, i) => ui.text(r.text, x + 10, y + 20 + i * 18, { size: r.size ?? 12, bold: r.bold, color: r.color }));
   }
 
   /** Where a replay is jumping to, run a slice at a time so the screen never freezes. */

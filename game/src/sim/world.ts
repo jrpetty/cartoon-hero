@@ -126,6 +126,11 @@ export interface PlayerState {
     trainedByType: Record<string, number>;
     lostByType: Record<string, number>;
     killedByType: Record<string, number>;
+    /** By the attacker's unit type: enemy units it killed, damage it dealt,
+     *  buildings it brought down. One counter per hit — for stats only. */
+    killsByUnit: Record<string, number>;
+    damageByUnit: Record<string, number>;
+    razedByUnit: Record<string, number>;
     /** Buildings put up, by type. */
     builtByType: Record<string, number>;
     /** Damage dealt and taken, for the fights that never showed up as kills. */
@@ -183,7 +188,8 @@ export interface WorldEvent {
     | "sword" | "bow" | "arrowHit" | "siege" | "death" | "collapse"
     | "build" | "complete" | "underattack" | "age" | "oath" | "charge" | "deposit" | "spawn" | "hit" | "ability" | "callout"
     | "leap" // an arena Infiltrator opening the fight behind the enemy line
-    | "exhaust"; // a resource node worked dry — currently only a spent farm
+    | "exhaust" // a resource node worked dry — currently only a spent farm
+    | "popcap"; // a unit finished with no room for it (refunded)
   x: number;
   y: number;
   team: Team;
@@ -414,6 +420,7 @@ export class World {
           gatheredBy: { food: 0, wood: 0, gold: 0 },
           spentOn: { units: 0, buildings: 0, tech: 0 },
           trainedByType: {}, lostByType: {}, killedByType: {}, builtByType: {},
+          killsByUnit: {}, damageByUnit: {}, razedByUnit: {},
           damageDealt: 0, damageTaken: 0,
           peakArmy: 0, peakVillagers: 0, idleVillagerTime: 0, resourcesSpent: 0,
           idleTcTime: 0, idleProductionTime: 0, tcSeconds: 0, productionSeconds: 0,
@@ -1141,20 +1148,29 @@ export class World {
     return this.buildingCost(p, type);
   }
 
-  placeBuilding(team: Team, type: string, wx: number, wy: number): Entity | null {
+  /**
+   * Why a building can't go here, in words a player can act on — or null if it
+   * can. The one source of truth for placement: `placeBuilding` refuses exactly
+   * when this has a reason, so the ghost never shows green for a spot the sim
+   * will then reject.
+   */
+  placementProblem(team: Team, type: string, wx: number, wy: number, ignoreCost = false): string | null {
     const def = BUILDINGS[type];
     const p = this.players[team];
-    if (!def || !p) return null;
-    if (p.age < def.age) return null;
-    if (def.requires && !this.hasBuilding(team, def.requires)) return null;
+    if (!def || !p) return "Unknown building";
+    if (p.age < def.age) return `Needs the ${AGES[def.age]?.name ?? "next age"}`;
+    if (def.requires && !this.hasBuilding(team, def.requires)) return `Needs a ${BUILDINGS[def.requires]?.name ?? def.requires} first`;
     // Master Masons (buildings) / Bulwark (walls) make construction cheaper.
     const cost = this.buildingCost(p, type);
-    if (!this.canAfford(p.resources, cost)) return null;
+    if (!ignoreCost && !this.canAfford(p.resources, cost)) {
+      const short = (["food", "wood", "gold"] as const).filter((k) => p.resources[k] < cost[k]).map((k) => `${Math.ceil(cost[k] - p.resources[k])} more ${k}`);
+      return `Need ${short.join(" and ")}`;
+    }
     const tiles = def.tiles;
     const sx = snapBuilding(wx, tiles);
     const sy = snapBuilding(wy, tiles);
-    if (!this.grid.footprintClear(sx, sy, tiles)) return null;
-    if (!this.groundBuildable(sx, sy, tiles, type)) return null;
+    if (!this.groundBuildable(sx, sy, tiles, type)) return "Can't build on this ground";
+    if (!this.grid.footprintClear(sx, sy, tiles)) return "Blocked — trees, rocks or a building in the way";
     const overlaps = (ent: Entity) =>
       Math.abs(ent.x - sx) < (tiles * TILE) / 2 + ent.radius &&
       Math.abs(ent.y - sy) < (tiles * TILE) / 2 + ent.radius;
@@ -1165,17 +1181,22 @@ export class World {
     if (!BUILDING_WALKABLE.has(type)) {
       const near = this.spatial.query(sx, sy, tiles * TILE * 0.75) as Entity[];
       for (const n of near) {
-        if (n.alive && (n as Entity).kind === Kind.Unit && overlaps(n as Entity)) return null;
+        if (n.alive && (n as Entity).kind === Kind.Unit && overlaps(n as Entity)) return "Units are standing there";
       }
     }
     // No building on top of a walkable building (farm) — those don't stamp the
     // grid, so footprintClear can't catch them. Scanned directly since the
     // spatial index may not include a farm placed this same tick.
     for (const ent of this.entities) {
-      if (ent.alive && ent.kind === Kind.Building && BUILDING_WALKABLE.has(ent.type) && overlaps(ent)) {
-        return null;
-      }
+      if (ent.alive && ent.kind === Kind.Building && BUILDING_WALKABLE.has(ent.type) && overlaps(ent)) return "Overlaps a farm";
     }
+    return null;
+  }
+
+  placeBuilding(team: Team, type: string, wx: number, wy: number): Entity | null {
+    if (this.placementProblem(team, type, wx, wy) !== null) return null;
+    const p = this.players[team];
+    const cost = this.buildingCost(p, type);
     this.pay(p.resources, cost, team, "buildings");
     p.stats.builtByType[type] = (p.stats.builtByType[type] ?? 0) + 1;
     // Pass the RAW click coords — spawnBuilding snaps once. Passing the already
@@ -1399,6 +1420,31 @@ export class World {
     this.pay(p.resources, upCost, team, "tech");
     b.productionQueue.push(`t:${techId}`);
     if (b.productionQueue.length === 1) b.productionTime = up.time;
+    return true;
+  }
+
+  /**
+   * Take an item out of a building's queue and give back what it cost. The
+   * item in progress can be cancelled too; the next one then starts fresh.
+   */
+  cancelProduction(team: Team, buildingId: EntityId, index: number): boolean {
+    const b = this.byId.get(buildingId);
+    const p = this.players[team];
+    if (!b || !b.alive || !p || b.team !== team || index < 0 || index >= b.productionQueue.length) return false;
+    const item = b.productionQueue[index];
+    let refund = { food: 0, wood: 0, gold: 0 };
+    if (item.startsWith("u:")) { const d = UNITS[item.slice(2)]; if (d) refund = this.unitCost(p, d); }
+    else if (item.startsWith("t:")) refund = this.techCostFor(team, item.slice(2));
+    else if (item === "a:age") { refund = { ...(AGES[p.age + 1]?.cost ?? refund) }; p.pendingOath = null; }
+    b.productionQueue.splice(index, 1);
+    p.resources.food += refund.food;
+    p.resources.wood += refund.wood;
+    p.resources.gold += refund.gold;
+    if (index === 0 && b.productionQueue.length > 0) {
+      const next = b.productionQueue[0];
+      const nd = next.startsWith("u:") ? UNITS[next.slice(2)] : undefined;
+      b.productionTime = this.itemTime(next, p.age) * (nd ? this.trainMult(p, nd) : 1);
+    } else if (b.productionQueue.length === 0) b.productionTime = 0;
     return true;
   }
 
@@ -2534,6 +2580,7 @@ export class World {
         p.resources.food += paid.food;
         p.resources.wood += paid.wood;
         p.resources.gold += paid.gold;
+        this.emit("popcap", b.x, b.y, b.team, type);
         return;
       }
       const [sx, sy] = this.grid.nearestOpenWorld(b.x, b.y + b.radius + 20);
@@ -2783,7 +2830,10 @@ export class World {
     // who was winning the fights.
     {
       const dealt = this.players[fromTeam]?.stats;
-      if (dealt && fromTeam !== target.team) dealt.damageDealt += dmg;
+      if (dealt && fromTeam !== target.team) {
+        dealt.damageDealt += dmg;
+        if (sourceType) dealt.damageByUnit[sourceType] = (dealt.damageByUnit[sourceType] ?? 0) + dmg;
+      }
       const took = this.players[target.team]?.stats;
       if (took) took.damageTaken += dmg;
     }
@@ -2808,11 +2858,11 @@ export class World {
 
     if (target.hp <= 0) {
       this.creditVeterancy(fromId);
-      this.kill(target, fromTeam);
+      this.kill(target, fromTeam, sourceType);
     }
   }
 
-  private kill(e: Entity, byTeam: Team) {
+  private kill(e: Entity, byTeam: Team, byType = "") {
     e.alive = false;
     e.hp = 0;
     const killer = this.players[byTeam];
@@ -2827,6 +2877,7 @@ export class World {
       if (killer) {
         killer.stats.unitsKilled++;
         killer.stats.killedByType[e.type] = (killer.stats.killedByType[e.type] ?? 0) + 1;
+        if (byType && e.team !== byTeam) killer.stats.killsByUnit[byType] = (killer.stats.killsByUnit[byType] ?? 0) + 1;
       }
       this.creditHeroKill(byTeam, e.x, e.y);
       // The Champion falls — but rises again at the Town Center after a while.
@@ -2847,7 +2898,10 @@ export class World {
         owner.popCap = Math.max(0, owner.popCap - e.popProvided);
         owner.stats.buildingsLost++;
       }
-      if (killer) killer.stats.buildingsRazed++;
+      if (killer) {
+        killer.stats.buildingsRazed++;
+        if (byType && e.team !== byTeam) killer.stats.razedByUnit[byType] = (killer.stats.razedByUnit[byType] ?? 0) + 1;
+      }
       // Garrisoned units die with the building.
       for (const id of e.garrison) {
         const g = this.byId.get(id);

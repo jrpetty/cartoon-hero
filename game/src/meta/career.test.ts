@@ -2,13 +2,13 @@ import { describe, expect, it, beforeEach } from "vitest";
 import { createCanvas } from "@napi-rs/canvas";
 (globalThis as unknown as { document: unknown }).document = { createElement: () => createCanvas(1, 1) };
 import {
-  CareerMatch, LOG_LIMIT, absorb, avgWinSecs, bestBy, careerFor, careerLog, careerMatch, careerTotals, emptyCareer,
+  CareerMatch, LOG_LIMIT, absorb, mostEffectiveUnit, unitKd, avgWinSecs, bestBy, careerFor, careerLog, careerMatch, careerTotals, emptyCareer,
   favourite, favouriteUnitOf, fold, kd, recordCareer, topUnit, winRate, worstBy,
 } from "./career";
 import { World } from "../sim/world";
 import { generateMap } from "../maps/generator";
 import { matchReport } from "../sim/metrics";
-import { Team } from "../sim/types";
+import { Kind, Team } from "../sim/types";
 import { ui } from "../ui/ui";
 import { CareerScreen } from "../ui/career_screen";
 import { Profile } from "./profile";
@@ -103,10 +103,40 @@ describe("A career, from matches", () => {
 
   it("keeps units trained, lost and killed", () => {
     const c = fold([m(), m()]);
-    expect(c.units.legionary).toEqual({ trained: 40, killed: 0, lost: 30 });
+    expect(c.units.legionary).toMatchObject({ trained: 40, killed: 0, lost: 30, games: 2, wins: 2 });
     expect(c.units.militia.killed).toBe(60);
     expect(topUnit(c, "killed", false)).toBe("militia");
     expect(kd(c.all)).toBe(2);
+  });
+});
+
+describe("Per-unit stats", () => {
+  it("credit kills, damage and razes to the unit that made them, and rank K/D", () => {
+    const c = fold([
+      m({ trained: { knight: 20, archer: 30 }, lost: { knight: 5, archer: 20 }, unitKills: { knight: 40, archer: 12 }, unitDamage: { knight: 9000, archer: 4000 }, unitRazed: { knight: 3 } }),
+      m({ won: false, trained: { knight: 10 }, lost: { knight: 5 }, unitKills: { knight: 10 } }),
+    ]);
+    expect(c.units.knight).toMatchObject({ trained: 30, lost: 10, kills: 50, damage: 9000, razed: 3, games: 2, wins: 1 });
+    expect(unitKd(c.units.knight)).toBe(5);
+    expect(unitKd(c.units.archer)).toBeCloseTo(0.6);
+    expect(mostEffectiveUnit(c)).toBe("knight");
+    expect(topUnit(c, "kills")).toBe("knight");
+  });
+
+  it("are counted by the simulation in a real fight", () => {
+    const w = new World(9);
+    w.init(generateMap("open_plains", 9), [{}, {}], [1, 1], undefined, ["", ""], false, undefined, "conquest");
+    const x = w.map.starts[0].x + 300, y = w.map.starts[0].y;
+    for (let i = 0; i < 6; i++) w.spawnUnit(Team.Player, "knight", x, y + i * 12);
+    for (let i = 0; i < 4; i++) w.spawnUnit(1 as Team, "militia", x + 60, y + i * 12);
+    const ids = w.entitiesOf(Team.Player, Kind.Unit).filter((e) => e.type === "knight").map((e) => e.id);
+    w.issueMove(ids, x + 60, y + 20, false, true);
+    for (let i = 0; i < 20 * 40; i++) w.tick();
+    const s = w.player(Team.Player).stats;
+    expect(s.killsByUnit.knight ?? 0).toBeGreaterThanOrEqual(3);
+    expect(s.damageByUnit.knight ?? 0).toBeGreaterThan(100);
+    const cm = careerMatch(matchReport(w, Team.Player, "Test"), { at: 1, won: true, kind: "skirmish", mode: "conquest", difficulty: "knight", commander: "" });
+    expect(cm.unitKills?.knight).toBe(s.killsByUnit.knight);
   });
 });
 

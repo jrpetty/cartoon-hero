@@ -43,6 +43,12 @@ export interface MatchController {
   minimapCommand(wx: number, wy: number): void;
   minimapPing(wx: number, wy: number): void;
   openMenu(): void;
+  /** Take an item out of a building's production queue (refunded). */
+  cancelProduction(building: Entity, index: number): void;
+  /** Look at a place (an alert that was clicked). */
+  jumpTo(x: number, y: number): void;
+  /** Keep only this type in the selection — or, with shift, drop it. */
+  narrowSelection(type: string, remove: boolean): void;
 }
 
 interface BuildCategory {
@@ -98,9 +104,36 @@ export class HUD {
     this.oathPicker.close();
   }
 
+  /** Dragging across the minimap moves the camera; main skips box-select for it. */
+  minimapDragging = false;
+  minimapDragEnded = false;
+  private prevLeftHeld = false;
+
   addAlert(text: string, x?: number, y?: number) {
+    // The same message again refreshes the one already showing, rather than
+    // stacking copies of it down the screen.
+    const same = this.alerts.find((a) => a.text === text);
+    if (same) { same.time = 5; same.x = x; same.y = y; return; }
     this.alerts.unshift({ text, time: 5, x, y });
     if (this.alerts.length > 4) this.alerts.pop();
+  }
+
+  /** "⚠ Need 40 more wood" — the reason a button is greyed out, if it's money. */
+  private shortfall(res: { food: number; wood: number; gold: number }, cost: { food: number; wood: number; gold: number }): string[] {
+    const need = (["food", "wood", "gold"] as const).filter((k) => res[k] < cost[k]).map((k) => `${Math.ceil(cost[k] - res[k])} more ${k}`);
+    return need.length ? [`⚠ Need ${need.join(" and ")}`] : [];
+  }
+
+  /** Shift state from the App, for shift-click on selection chips. */
+  shiftHeld = false;
+
+  /** Is this screen point over the HUD (top bar, minimap, selection panel, command card)? */
+  overHud(W: number, H: number, mx: number, my: number): boolean {
+    const cardW = CARD_W * (BTN + GAP) + GAP + 8, cardH = CARD_H * (BTN + GAP) + GAP + 8;
+    if (my < 36) return true;
+    if (mx < MINIMAP_SIZE + 20 && my > H - MINIMAP_SIZE - 20) return true;
+    if (mx > W - cardW - 14 && my > H - cardH - 14) return true;
+    return my > H - 116 && mx > MINIMAP_SIZE + 20 && mx < W - cardW - 14;
   }
 
   addPing(x: number, y: number) {
@@ -239,7 +272,18 @@ export class HUD {
       if (a.time <= 0) continue;
       const alpha = Math.min(1, a.time);
       ctx.globalAlpha = alpha;
-      ui.text(a.text, W / 2, ay, { align: "center", size: 15, color: "#f2c45d", bold: true });
+      // An alert that happened somewhere is a link there: click to look.
+      const where = a.x !== undefined && a.y !== undefined;
+      ctx.font = "bold 15px 'Trebuchet MS', sans-serif";
+      const tw = ctx.measureText(a.text).width;
+      const hov = where && ui.hit(W / 2 - tw / 2 - 8, ay - 15, tw + 16, 21);
+      if (hov) {
+        ctx.fillStyle = "rgba(0,0,0,0.35)";
+        ctx.beginPath(); ctx.roundRect(W / 2 - tw / 2 - 8, ay - 15, tw + 16, 21, 5); ctx.fill();
+        ui.pointerConsumed = true;
+        if (ui.clicked) { ctrl.jumpTo(a.x!, a.y!); a.time = Math.min(a.time, 0.6); }
+      }
+      ui.text(a.text + (hov ? "  ↗" : ""), W / 2, ay, { align: "center", size: 15, color: hov ? "#ffe9b0" : "#f2c45d", bold: true });
       ctx.globalAlpha = 1;
       ay += 22;
     }
@@ -349,8 +393,19 @@ export class HUD {
       ctx.stroke();
     }
 
-    // Minimap interaction.
-    if (ui.hit(mmX, mmY, MINIMAP_SIZE, MINIMAP_SIZE)) {
+    // Minimap interaction. Press and drag to sweep the camera across it.
+    const inMinimap = ui.hit(mmX, mmY, MINIMAP_SIZE, MINIMAP_SIZE);
+    if (ui.leftHeld && !this.prevLeftHeld && inMinimap && !ui.alt) this.minimapDragging = true;
+    this.minimapDragEnded = this.minimapDragging && !ui.leftHeld;
+    if (!ui.leftHeld) this.minimapDragging = false;
+    this.prevLeftHeld = ui.leftHeld;
+    if (this.minimapDragging) {
+      ui.pointerConsumed = true;
+      const wx = Math.max(0, Math.min(world.worldW, (ui.mx - mmX) / sx));
+      const wy = Math.max(0, Math.min(world.worldH, (ui.my - mmY) / sy));
+      ctrl.minimapNavigate(wx, wy);
+    }
+    if (inMinimap) {
       ui.pointerConsumed = true;
       const wx = (ui.mx - mmX) / sx;
       const wy = (ui.my - mmY) / sy;
@@ -382,7 +437,7 @@ export class HUD {
       const selH = 104;
       const selY = H - selH - 10;
       ui.panel(selX, selY, selW, selH);
-      this.drawSelectionPanel(selX + 10, selY + 8, selW - 20, world, selection, team);
+      this.drawSelectionPanel(selX + 10, selY + 8, selW - 20, world, selection, team, ctrl);
     }
   }
 
@@ -459,6 +514,7 @@ export class HUD {
                 this.cost(bcost),
                 ...(lockedAge ? [`Requires ${AGES[def.age].name}`] : []),
                 ...(lockedReq ? [`Requires ${BUILDINGS[def.requires!].name}`] : []),
+                ...this.shortfall(p.resources, bcost),
                 def.desc,
               ],
             },
@@ -550,6 +606,8 @@ export class HUD {
               ...(u.oath ? [`Signature of the ${OATHS[u.oath]?.name ?? "Oath"}`] : []),
               this.cost(ucost) + `  (${u.pop} pop)`,
               ...(lockedAge ? [`Requires ${AGES[u.age].name}`] : []),
+              ...this.shortfall(p.resources, ucost),
+              ...(p.popUsed + u.pop > p.popCap ? [`⚠ Population capped (${p.popUsed}/${p.popCap}) — build a House`] : []),
               ...(prodSiblings.length > 1 ? [`Queues in all ${prodSiblings.length} selected ${def.name}s`] : []),
               ...(heroState && heroState.label ? [heroState.label] : []),
               u.desc,
@@ -591,7 +649,9 @@ export class HUD {
         if (up.researchedAt !== building.type || p.upgrades.has(upId)) continue;
         place(up.name.split(" ")[0].slice(0, 7), () => ctrl.research(building, upId), {
           disabled: p.age < up.age || !world.canAfford(p.resources, world.techCostFor(team, upId)),
-          tooltip: [up.name, this.cost(world.techCostFor(team, upId)), up.desc],
+          tooltip: [up.name, this.cost(world.techCostFor(team, upId)),
+            ...(p.age < up.age ? [`Requires ${AGES[up.age].name}`] : []),
+            ...this.shortfall(p.resources, world.techCostFor(team, upId)), up.desc],
         });
       }
       if (building.type === "market") {
@@ -658,6 +718,7 @@ export class HUD {
     world: World,
     selection: Entity[],
     team: Team,
+    ctrl: MatchController,
   ) {
     const ctx = ui.ctx;
     if (selection.length === 1) {
@@ -705,15 +766,23 @@ export class HUD {
 
       // Production queue.
       if (e.kind === Kind.Building && e.productionQueue.length > 0) {
-        const item = e.productionQueue[0];
-        const total = world.itemTime(item);
-        const label = item.startsWith("u:")
-          ? UNITS[item.slice(2)].name
-          : item === "a:age"
-            ? "Advancing Age"
-            : UPGRADES[item.slice(2)]?.name ?? item;
-        ui.text(`${label}  (+${e.productionQueue.length - 1} queued)`, x, y + 70, { size: 12, color: "#bdb49a" });
-        ui.bar(x, y + 82, Math.min(w, 220), 6, 1 - e.productionTime / total, PAL.uiAccent);
+        // The whole queue, one chip per item; click one to cancel it (refunded).
+        const nameOf = (item: string) => item.startsWith("u:")
+          ? UNITS[item.slice(2)]?.name ?? item
+          : item === "a:age" ? "Advancing Age" : UPGRADES[item.slice(2)]?.name ?? item;
+        const own = e.team === team;
+        const item0 = e.productionQueue[0];
+        const total = world.itemTime(item0);
+        const qw = 62, qh = 22, maxN = Math.max(1, Math.floor((w + 4) / (qw + 4)));
+        e.productionQueue.slice(0, maxN).forEach((item, i) => {
+          const qx = x + i * (qw + 4), qy = y + 60;
+          const short = nameOf(item).replace(/^Advancing /, "").split(" ")[0].slice(0, 8);
+          if (own && ui.button(short, qx, qy, qw, qh, { size: 10.5, accent: i === 0, tooltip: [nameOf(item), i === 0 ? "In progress" : `Queued (${i + 1})`, "Click to cancel — the cost is refunded."] })) {
+            ctrl.cancelProduction(e, i);
+          } else if (!own) ui.text(short, qx + 4, qy + 15, { size: 10.5, color: "#bdb49a" });
+          if (i === 0) ui.bar(qx + 3, qy + qh - 5, qw - 6, 3, 1 - e.productionTime / total, "#ffe9b0", "rgba(0,0,0,0.4)");
+        });
+        if (e.productionQueue.length > maxN) ui.text(`+${e.productionQueue.length - maxN}`, x + maxN * (qw + 4), y + 76, { size: 12, color: "#bdb49a" });
       }
     } else {
       // Multi-select: count chips by type.
@@ -731,11 +800,17 @@ export class HUD {
           cx = x;
           cy += 26;
         }
-        ctx.fillStyle = "rgba(255,255,255,0.07)";
+        const hov = counts.size > 1 && ui.hit(cx, cy - 11, cw, 22);
+        ctx.fillStyle = hov ? "rgba(255,233,176,0.18)" : "rgba(255,255,255,0.07)";
         ctx.beginPath();
         ctx.roundRect(cx, cy - 11, cw, 22, 11);
         ctx.fill();
-        ui.text(label, cx + 9, cy, { size: 13 });
+        ui.text(label, cx + 9, cy, { size: 13, color: hov ? "#ffe9b0" : undefined });
+        if (hov) {
+          ui.pointerConsumed = true;
+          ui.tooltip([name, "Click: select only these", "Shift+click: drop these from the selection"]);
+          if (ui.clicked) ctrl.narrowSelection(type, this.shiftHeld);
+        }
         cx += cw + 8;
       }
     }

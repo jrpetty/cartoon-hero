@@ -1,7 +1,7 @@
 // Frame rendering: terrain blit, y-sorted entities (fog-filtered), particles,
 // fog-of-war overlay, command markers, placement ghost and drag box.
 
-import { World, FOG_UNSEEN, FOG_VISIBLE } from "../sim/world";
+import { World, FOG_UNSEEN, FOG_VISIBLE, makeEntity } from "../sim/world";
 import { BuildState, Entity, Kind, Team } from "../sim/types";
 import { Camera } from "../engine/camera";
 import { Particles } from "../engine/particles";
@@ -81,6 +81,12 @@ export interface GhostPlacement {
    * have to build a wall to find out how long it is or what it costs.
    */
   label?: string;
+  /** Whose building it would be (for drawing its art in their colours). */
+  team?: number;
+  /** Where the villagers who'd build it are standing. */
+  builders?: { x: number; y: number }[];
+  /** A drop-off building: the resources within reach, and how far that is. */
+  coverage?: { radius: number; nodes: { x: number; y: number; r: number }[] };
 }
 
 export class Renderer {
@@ -151,6 +157,86 @@ export class Renderer {
         console.error(`render guard [${key}]:`, err);
       }
     }
+  }
+
+  /** Lines from builders to a site just placed, fading out (set by the App). */
+  builderLines: { x0: number; y0: number; x1: number; y1: number; age: number }[] = [];
+  private ghostEntity: Entity | null = null;
+
+  /**
+   * The placement preview: the building itself, see-through, on a tile grid,
+   * outlined green or red; the resources a drop-off building would serve; and
+   * a line from each villager who'd build it.
+   */
+  private drawGhost(ctx: CanvasRenderingContext2D, ghost: GhostPlacement | null, world: World, time: number) {
+    for (const l of this.builderLines) {
+      const a = Math.max(0, 1 - l.age / 1.6);
+      ctx.strokeStyle = withAlpha("#9fe08a", 0.7 * a);
+      ctx.lineWidth = 2;
+      ctx.setLineDash([6, 6]);
+      ctx.beginPath(); ctx.moveTo(l.x0, l.y0); ctx.lineTo(l.x1, l.y1); ctx.stroke();
+    }
+    ctx.setLineDash([]);
+    if (!ghost) return;
+    const def = BUILDINGS[ghost.type];
+    if (!def) return;
+    const tiles = def.tiles;
+    const half = (tiles * TILE) / 2;
+    const sx = snapBuilding(ghost.x, tiles), sy = snapBuilding(ghost.y, tiles);
+    const good = "#7df27d", bad = "#f25d4a";
+
+    // Coverage ring and highlighted resources.
+    if (ghost.coverage) {
+      const c = ghost.coverage;
+      ctx.strokeStyle = withAlpha("#ffe9b0", 0.35);
+      ctx.lineWidth = 2;
+      ctx.setLineDash([10, 8]);
+      ctx.beginPath(); ctx.arc(sx, sy, c.radius, 0, Math.PI * 2); ctx.stroke();
+      ctx.setLineDash([]);
+      for (const n of c.nodes) {
+        ctx.strokeStyle = withAlpha("#ffe36a", 0.85);
+        ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.arc(n.x, n.y, Math.max(8, n.r + 3), 0, Math.PI * 2); ctx.stroke();
+      }
+    }
+    // Builders walking over.
+    for (const b of ghost.builders ?? []) {
+      ctx.strokeStyle = withAlpha(ghost.valid ? good : bad, 0.45);
+      ctx.lineWidth = 1.5;
+      ctx.setLineDash([4, 6]);
+      ctx.beginPath(); ctx.moveTo(b.x, b.y); ctx.lineTo(sx, sy); ctx.stroke();
+    }
+    ctx.setLineDash([]);
+
+    const cell = (x: number, y: number, valid: boolean, fill: boolean) => {
+      const cx = snapBuilding(x, tiles), cy = snapBuilding(y, tiles);
+      if (fill) {
+        ctx.fillStyle = valid ? withAlpha(good, 0.22) : withAlpha(bad, 0.3);
+        ctx.fillRect(cx - half, cy - half, half * 2, half * 2);
+      }
+      ctx.strokeStyle = valid ? good : bad;
+      ctx.lineWidth = 2;
+      ctx.strokeRect(cx - half, cy - half, half * 2, half * 2);
+    };
+    if (ghost.line && ghost.line.length > 0) {
+      for (const pt of ghost.line) cell(pt.x, pt.y, pt.valid, true);
+      return;
+    }
+    // A faint tile grid around the footprint, for lining things up.
+    const R = half + TILE * 3;
+    ctx.strokeStyle = "rgba(255,255,255,0.09)";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    for (let gx = Math.round((sx - R) / TILE) * TILE; gx <= sx + R; gx += TILE) { ctx.moveTo(gx, sy - R); ctx.lineTo(gx, sy + R); }
+    for (let gy = Math.round((sy - R) / TILE) * TILE; gy <= sy + R; gy += TILE) { ctx.moveTo(sx - R, gy); ctx.lineTo(sx + R, gy); }
+    ctx.stroke();
+    // The building itself, see-through.
+    const e = this.ghostEntity ?? (this.ghostEntity = makeEntity());
+    Object.assign(e, { kind: Kind.Building, type: ghost.type, team: ghost.team ?? 0, x: sx, y: sy, radius: half, hp: 1, maxHp: 1, buildState: BuildState.Done, buildProgress: 1, productionQueue: [] });
+    ctx.save();
+    ctx.globalAlpha = ghost.valid ? 0.55 : 0.35;
+    try { drawBuilding(ctx, e, time, (ghost.team ?? 0) as Team); } finally { ctx.restore(); }
+    cell(ghost.x, ghost.y, ghost.valid, !ghost.valid);
   }
 
   private drawDecals(ctx: CanvasRenderingContext2D, dt: number, vx0: number, vy0: number, vx1: number, vy1: number) {
@@ -250,7 +336,7 @@ export class Renderer {
     markers: CommandMarker[],
     ghost: GhostPlacement | null,
     dragBox: { active: boolean; x0: number; y0: number; x1: number; y1: number },
-    rallyFrom: Entity | null,
+    rallyFrom: Entity | Entity[] | null,
     hoveredId = -1,
     alpha = 1, // 0..1 interpolation between the last two sim ticks
   ) {
@@ -455,18 +541,20 @@ export class Renderer {
     }
 
     // Rally line from a selected production building.
-    if (rallyFrom && rallyFrom.rallyX >= 0) {
+    // Every selected production building's rally, not just the first.
+    for (const rf of Array.isArray(rallyFrom) ? rallyFrom : rallyFrom ? [rallyFrom] : []) {
+      if (rf.rallyX < 0) continue;
       ctx.strokeStyle = withAlpha("#7df27d", 0.5);
       ctx.lineWidth = 1.5;
       ctx.setLineDash([6, 6]);
       ctx.beginPath();
-      ctx.moveTo(rallyFrom.x, rallyFrom.y);
-      ctx.lineTo(rallyFrom.rallyX, rallyFrom.rallyY);
+      ctx.moveTo(rf.x, rf.y);
+      ctx.lineTo(rf.rallyX, rf.rallyY);
       ctx.stroke();
       ctx.setLineDash([]);
       ctx.fillStyle = withAlpha("#7df27d", 0.8);
       ctx.beginPath();
-      ctx.arc(rallyFrom.rallyX, rallyFrom.rallyY, 5, 0, Math.PI * 2);
+      ctx.arc(rf.rallyX, rf.rallyY, 5, 0, Math.PI * 2);
       ctx.fill();
     }
 
@@ -566,46 +654,6 @@ export class Renderer {
       ctx.stroke();
     }
 
-    // Building placement ghost.
-    if (ghost) {
-      const def = BUILDINGS[ghost.type];
-      if (def) {
-        const tiles = def.tiles;
-        const half = (tiles * TILE) / 2;
-        const cell = (x: number, y: number, valid: boolean) => {
-          const sx = snapBuilding(x, tiles);
-          const sy = snapBuilding(y, tiles);
-          ctx.fillStyle = valid ? withAlpha("#7df27d", 0.3) : withAlpha("#f25d4a", 0.35);
-          ctx.fillRect(sx - half, sy - half, half * 2, half * 2);
-          ctx.strokeStyle = valid ? "#7df27d" : "#f25d4a";
-          ctx.lineWidth = 2;
-          ctx.strokeRect(sx - half, sy - half, half * 2, half * 2);
-        };
-        if (ghost.line && ghost.line.length > 0) {
-          for (const pt of ghost.line) cell(pt.x, pt.y, pt.valid);
-        } else {
-          cell(ghost.x, ghost.y, ghost.valid);
-        }
-        if (ghost.label) {
-          // Drawn in world space with the rest of the ghost, so it sits by the
-          // cursor at any zoom. Dark plate behind it — a wall run crosses grass,
-          // stone and water, and white text on grass is unreadable.
-          const lx = ghost.x + 18;
-          const ly = ghost.y - 14;
-          ctx.font = "600 13px 'Trebuchet MS', sans-serif";
-          const tw = ctx.measureText(ghost.label).width;
-          ctx.fillStyle = "rgba(10,8,4,0.78)";
-          ctx.beginPath();
-          ctx.roundRect(lx - 6, ly - 12, tw + 12, 19, 4);
-          ctx.fill();
-          ctx.fillStyle = "#ffe9b0";
-          ctx.textAlign = "left";
-          ctx.textBaseline = "alphabetic";
-          ctx.fillText(ghost.label, lx, ly + 2);
-        }
-      }
-    }
-
     // Fog of war overlay (skipped entirely for spectators — they see all).
     if (!world.revealAll) this.guard(ctx, "fog", worldTf, () => {
       this.fogDirtyTimer -= dt;
@@ -661,6 +709,10 @@ export class Renderer {
         }
       }
     });
+
+    // Building placement: drawn over the fog, so a site in the dark is as
+    // readable as one in the open.
+    if (ghost || this.builderLines.length) this.guard(ctx, "ghost", worldTf, () => this.drawGhost(ctx, ghost, world, time));
 
     ctx.restore();
 

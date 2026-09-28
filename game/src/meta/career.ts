@@ -66,6 +66,26 @@ export interface CareerMatch {
   killed: Record<string, number>;
   lost: Record<string, number>;
   built: Record<string, number>;
+  /** By your unit type: enemies it killed, damage it dealt, buildings it razed. Absent on older records. */
+  unitKills?: Record<string, number>;
+  unitDamage?: Record<string, number>;
+  unitRazed?: Record<string, number>;
+}
+
+/** One unit type across a career. */
+export interface UnitTally {
+  trained: number;
+  /** Your units of this type that died. */
+  lost: number;
+  /** Enemy units of this type you killed (whatever did it). */
+  killed: number;
+  /** Enemy units this type killed. */
+  kills: number;
+  damage: number;
+  razed: number;
+  /** Matches you trained at least one. */
+  games: number;
+  wins: number;
 }
 
 /** Played / won and the numbers that go with them, for any slice. */
@@ -100,7 +120,7 @@ export interface Career {
   vsFaction: Record<string, Tally>;
   /** With each ally faction beside you. */
   withFaction: Record<string, Tally>;
-  units: Record<string, { trained: number; killed: number; lost: number }>;
+  units: Record<string, UnitTally>;
   buildings: Record<string, number>;
   resources: { food: number; wood: number; gold: number };
   damageDealt: number;
@@ -166,10 +186,22 @@ export function absorb(c: Career, m: CareerMatch): Career {
   for (const o of new Set(m.oaths)) addTo(slot(c.byOath, o), m);
   for (const f of new Set(m.foes)) addTo(slot(c.vsFaction, f), m);
   for (const f of new Set(m.allies)) addTo(slot(c.withFaction, f), m);
-  const unit = (u: string) => (c.units[u] ??= { trained: 0, killed: 0, lost: 0 });
-  for (const [u, n] of Object.entries(m.trained)) unit(u).trained += n;
+  const unit = (u: string) => {
+    const t = (c.units[u] ??= { trained: 0, killed: 0, lost: 0, kills: 0, damage: 0, razed: 0, games: 0, wins: 0 });
+    // Older saved totals predate the per-unit fields.
+    t.kills ??= 0; t.damage ??= 0; t.razed ??= 0; t.games ??= 0; t.wins ??= 0;
+    return t;
+  };
+  for (const [u, n] of Object.entries(m.trained)) {
+    const t = unit(u);
+    t.trained += n;
+    if (n > 0) { t.games++; if (m.won) t.wins++; }
+  }
   for (const [u, n] of Object.entries(m.killed)) unit(u).killed += n;
   for (const [u, n] of Object.entries(m.lost)) unit(u).lost += n;
+  for (const [u, n] of Object.entries(m.unitKills ?? {})) unit(u).kills += n;
+  for (const [u, n] of Object.entries(m.unitDamage ?? {})) unit(u).damage += n;
+  for (const [u, n] of Object.entries(m.unitRazed ?? {})) unit(u).razed += n;
   for (const [b, n] of Object.entries(m.built)) c.buildings[b] = (c.buildings[b] ?? 0) + n;
   c.resources.food += m.gatheredBy.food;
   c.resources.wood += m.gatheredBy.wood;
@@ -228,11 +260,28 @@ export function favouriteUnitOf(t: Tally | undefined): string {
 }
 
 /** The unit with the most of `field` across the career. */
-export function topUnit(c: Career, field: "trained" | "killed" | "lost", skipVillager = true): string {
+export function topUnit(c: Career, field: "trained" | "killed" | "lost" | "kills" | "damage" | "razed", skipVillager = true): string {
   let best = "", n = 0;
   for (const [u, v] of Object.entries(c.units)) {
     if (skipVillager && u === "villager") continue;
-    if (v[field] > n) { best = u; n = v[field]; }
+    if ((v[field] ?? 0) > n) { best = u; n = v[field] ?? 0; }
+  }
+  return best;
+}
+
+/** Kills per unit lost for a unit type (kills if it never died). */
+export const unitKd = (v: UnitTally | undefined) => (!v ? 0 : v.lost ? (v.kills ?? 0) / v.lost : v.kills ?? 0);
+
+/**
+ * The unit that trades best: highest K/D among the ones trained enough to
+ * count (villagers excluded — they're not meant to fight).
+ */
+export function mostEffectiveUnit(c: Career, minTrained = 10): string {
+  let best = "", r = -1;
+  for (const [u, v] of Object.entries(c.units)) {
+    if (u === "villager" || v.trained < minTrained || !(v.kills ?? 0)) continue;
+    const k = unitKd(v);
+    if (k > r) { best = u; r = k; }
   }
   return best;
 }
@@ -306,6 +355,9 @@ export function careerMatch(report: MatchReport, meta: {
     killed: { ...side.killedByType },
     lost: { ...side.lostByType },
     built: { ...side.builtByType },
+    unitKills: { ...(side.killsByUnit ?? {}) },
+    unitDamage: Object.fromEntries(Object.entries(side.damageByUnit ?? {}).map(([k, v]) => [k, Math.round(v)])),
+    unitRazed: { ...(side.razedByUnit ?? {}) },
   };
 }
 

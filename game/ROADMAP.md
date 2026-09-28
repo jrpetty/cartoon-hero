@@ -1205,6 +1205,44 @@ everyone; only later ticks stop waiting for them. Tested with a delayed
 caster through a mid-match disconnect, and in the browser: 48 s after the
 start, a 30 s caster read 0:18. Online starts now carry player names.
 
+## Per-unit stats, placement, and the small things
+
+**Per-unit stats.** The sim now credits each kill, each point of damage and
+each razed building to the *attacking unit's type* (`stats.killsByUnit /
+damageByUnit / razedByUnit`), carried through the match report into the
+Career: per unit, trained / lost / kills / K:D / damage / razed / win rate in
+games you used it, plus "deadliest", "best trader" (highest K:D, 10+
+trained) and "you lose most". Cost, measured A/B on the same seeded 4-AI
+match for 8 game-minutes: 0.873 vs 0.877 ms per tick — noise; identical
+kills and damage. Career portraits are now fitted and clipped to their box
+(mounted units spilled out of the cards).
+
+**Placement.** `World.placementProblem` is the single source of truth — the
+same checks `placeBuilding` makes, returning a reason ("Needs the Crown
+Age", "Need 27 more wood", "Blocked — trees, rocks or a building in the
+way", "Units are standing there", "Overlaps a farm"); a test places 400
+buildings and checks the preview and the sim never disagree. The ghost is
+the real building art, translucent, on a tile grid, drawn above the fog; a
+cursor panel shows the name, the *real* (discounted) cost, the reason it
+won't fit, how many villagers will build it (or that none is selected), and
+for Lumber Camps, Mining Camps and Mills the resources within reach (ringed
+on the map). Walls stay armed on a click as well as a drag; wall/house drags
+check a running budget and report "Placed 6 of 9 — out of resources"; dotted
+lines briefly show who's walking to a new site. Hidden over the HUD.
+
+**Interface.** Production queues show every item — click one to cancel it,
+refunded (new `cancel` command, lockstep-safe; age advances too, dropping
+their Oath). Greyed buttons say why ("⚠ Need 40 more wood", "Population
+capped — build a House"). A unit finishing at the pop cap now says so
+instead of vanishing silently. Alerts that happened somewhere are links —
+click to jump — and a repeated alert refreshes instead of stacking. In a
+mixed selection, click a type chip to keep only those, Shift+click to drop
+them. Drag across the minimap to sweep the camera; middle-mouse drag grabs
+the map. The cursor shows what a right-click would do (attack, gather,
+build/repair). Every selected building's rally line is drawn. Escape closes
+the build menu; B with no villager says so; right-clicks and drags that end
+on the corner chips no longer fall through to the map.
+
 ## Bigger / later
 - **Naval** — water is currently only an impassable wall, and the Islands
   preset (55% water) is a maze rather than a naval map. Dock, transport,

@@ -20,6 +20,7 @@ export type Command =
   | { t: "ability"; team: Team; ids: EntityId[] }
   | { t: "place"; team: Team; building: string; x: number; y: number; builders: EntityId[] }
   | { t: "train"; team: Team; buildingId: EntityId; unit: string }
+  | { t: "cancel"; team: Team; buildingId: EntityId; index: number }
   | { t: "rally"; team: Team; buildingId: EntityId; x: number; y: number }
   | { t: "garrison"; team: Team; ids: EntityId[]; buildingId: EntityId }
   | { t: "ungarrison"; team: Team; buildingId: EntityId }
@@ -72,6 +73,7 @@ export function applyCommand(world: World, c: Command): void {
       break;
     }
     case "train": if (ownsBuilding(world, c.team, c.buildingId)) world.trainUnit(c.team, c.buildingId, c.unit); break;
+    case "cancel": if (ownsBuilding(world, c.team, c.buildingId)) world.cancelProduction(c.team, c.buildingId, c.index); break;
     case "rally": if (ownsBuilding(world, c.team, c.buildingId)) world.setRally(c.buildingId, c.x, c.y); break;
     case "garrison": world.garrison(owned(world, c.team, c.ids), c.buildingId); break;
     case "ungarrison": if (ownsBuilding(world, c.team, c.buildingId)) world.ungarrison(c.buildingId); break;
