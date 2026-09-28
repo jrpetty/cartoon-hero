@@ -75,6 +75,65 @@ describe("Farming", () => {
     expect([onF, onSpare]).toEqual([1, 1]);
   });
 
+  it("the villager who was sent to build it keeps it, even if a helper finishes it", () => {
+    const w = setup();
+    const f = farmNear(w, 0, false);
+    const spare = farmNear(w, 1);
+    const [helper, builder] = villagers(w);
+    w.issueBuildRepair([builder.id], f.id);
+    run(w, 3);
+    w.issueBuildRepair([helper.id], f.id);
+    run(w, 60);
+    expect(farming(builder, f), "the builder lost its farm").toBe(true);
+    expect(farming(helper, spare), "the helper should take the free farm").toBe(true);
+  });
+
+  it("a villager sent to farm an unfinished farm helps build it rather than standing idle", () => {
+    const w = setup();
+    const f = farmNear(w, 0, false);
+    const [v] = villagers(w);
+    w.issueGather([v.id], f.id);
+    run(w, 60);
+    expect(f.buildState).toBe(BuildState.Done);
+    expect(farming(v, f), `order ${v.order.kind}`).toBe(true);
+  });
+
+  it("a farm queued after another job is farmed once it's built", () => {
+    const w = setup();
+    const f = farmNear(w, 0, false);
+    const g = farmNear(w, 1, false);
+    const [v] = villagers(w);
+    w.issueBuildRepair([v.id], g.id);
+    w.issueBuildRepair([v.id], f.id, true);
+    run(w, 120);
+    expect(farming(v, f), "farms the last farm it built").toBe(true);
+  });
+
+  it("a builder taken off the job gives up the farm", () => {
+    const w = setup();
+    const f = farmNear(w, 0, false);
+    const [a, b] = villagers(w);
+    w.issueBuildRepair([a.id], f.id);
+    run(w, 3);
+    w.issueMove([a.id], a.x - 200, a.y);
+    w.issueBuildRepair([b.id], f.id);
+    run(w, 60);
+    expect(farming(b, f)).toBe(true);
+    expect(farming(a, f)).toBe(false);
+  });
+
+  it("the farmer is never bumped by others sent to its farm", () => {
+    const w = setup();
+    const f = farmNear(w, 0, false);
+    const vs = villagers(w);
+    w.issueBuildRepair([vs[0].id], f.id);
+    run(w, 60);
+    w.issueGather([vs[1].id, vs[2].id], f.id);
+    run(w, 60);
+    expect(farming(vs[0], f)).toBe(true);
+    expect(vs.slice(1, 3).some((v) => farming(v, f))).toBe(false);
+  });
+
   it("a villager bumped from a taken farm doesn't wander across the map", () => {
     const w = setup();
     const f = farmNear(w, 0);

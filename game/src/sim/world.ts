@@ -884,6 +884,16 @@ export class World {
       if (!e || !e.alive || !UNITS[e.type]?.canBuild) continue;
       this.resolveOrderQueue(e, { kind, tx: b.x, ty: b.y, target: buildingId }, queue);
     }
+    // A new farm belongs to the first villager sent to build it, from the
+    // moment it's ordered: helpers who finish it first don't take it, and it
+    // stays theirs until they're given something else to do.
+    if (b.type === "farm" && kind === OrderKind.Build) {
+      const owner = this.byId.get(b.farmWorker);
+      if (!owner || !owner.alive || !this.worksFarm(owner, b)) {
+        const first = ids.map((id) => this.byId.get(id)).find((e) => e && e.alive && e.team === b.team && UNITS[e.type]?.canBuild);
+        if (first) b.farmWorker = first.id;
+      }
+    }
   }
 
   issueStop(ids: EntityId[]) {
@@ -2087,6 +2097,8 @@ export class World {
   private worksFarm(v: Entity, farm: Entity): boolean {
     if (v.order.target === farm.id) return true;
     if (v.order.kind === OrderKind.Return && (v.order.queue ?? []).some((o) => o.target === farm.id)) return true;
+    // Queued to build it (shift-placed after another job): still theirs.
+    if (farm.buildState !== BuildState.Done && (v.order.queue ?? []).some((o) => o.target === farm.id && o.kind === OrderKind.Build)) return true;
     return false;
   }
 
@@ -2202,7 +2214,13 @@ export class World {
     }
     const isFarm = node.kind === Kind.Building && node.type === "farm";
     if (isFarm && node.buildState !== BuildState.Done) {
-      this.finishOrder(e);
+      // Sent to farm a field that isn't finished: help raise it, then farm it
+      // (or, if its builder keeps it, take the nearest free one).
+      if (UNITS[e.type]?.canBuild && node.team === e.team) {
+        e.order = { kind: OrderKind.Build, tx: node.x, ty: node.y, target: node.id, queue: e.order.queue };
+      } else {
+        this.finishOrder(e);
+      }
       return;
     }
     // One farmer per farm: if another villager already works this farm, this one

@@ -1251,7 +1251,7 @@ sends its builder to the wood, gold or berries beside it. A replanted field is
 worked again by the same farmer. A villager bumped off a taken farm goes to
 the nearest *free* farm or nearby berries — never a gold mine across the map —
 and a field that runs out with nothing to replant finds the nearest work.
-Clicking anywhere on a farm's square counts (it used to need the centre).
+A farm belongs to the villager sent to build it from the moment it's ordered — a helper who finishes it first doesn't take it, a villager shift-queued to build it keeps it, and others sent to it go to a free farm instead; it's only given up when that villager is ordered elsewhere. A villager sent to farm an unfinished farm helps build it instead of going idle. Clicking anywhere on a farm's square counts (it used to need the centre).
 Unworked farms pulse on the map. Idle villagers no longer go looking for a
 fight: a crew that finished a bridge used to spend minutes hacking at the
 enemy's bridge (it stalled one AI economy — found by the scripted-map test).
