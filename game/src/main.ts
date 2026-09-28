@@ -42,6 +42,7 @@ import { DEFAULT_FACTION, FACTIONS, FACTION_IDS } from "./content/factions";
 import { alliancesFor, resizeTeams } from "./ui/teams";
 import { CodexScreen } from "./ui/codex";
 import { FactionBook } from "./ui/faction_book";
+import { CareerScreen } from "./ui/career_screen";
 import {
   ArmoryScreen,
   MenuScreen,
@@ -61,6 +62,7 @@ import { SettingsScreen } from "./ui/settings_screen";
 import { setColorblindTeams } from "./render/palette";
 import { TeamMetrics, snapshotMetrics, matchReport, MatchReport, emptyMatchReport } from "./sim/metrics";
 import { recordMatch, summarise } from "./meta/history";
+import { careerMatch, recordCareer } from "./meta/career";
 import { EarnedAward, evaluateAwards } from "./meta/achievements";
 import { drawScoreboard } from "./ui/scoreboard";
 import { drawProductionPanel } from "./ui/production_panel";
@@ -72,7 +74,7 @@ import {
   CustomMap, deserialiseMap, findCustomMap, saveCustomMap, serialiseMap, toMapData, mapPool, rollRandomMap,
 } from "./maps/custom";
 
-type AppState = "menu" | "setup" | "armory" | "match" | "postmatch" | "codex" | "settings" | "warband" | "editor" | "factions";
+type AppState = "menu" | "setup" | "armory" | "match" | "postmatch" | "codex" | "settings" | "warband" | "editor" | "factions" | "career";
 
 // Buildings you can drag-paint into a continuous run.
 // Dragged out as one gap-free run. A wall is never one segment, which is why
@@ -100,6 +102,7 @@ class App {
   editorScreen = new EditorScreen();
   codexScreen = new CodexScreen();
   factionBook = new FactionBook();
+  careerScreen = new CareerScreen();
   /** Where the Factions book returns to. */
   private factionsReturn: AppState = "menu";
   settingsScreen = new SettingsScreen();
@@ -1542,6 +1545,9 @@ class App {
         } else if (action === "codex") {
           this.state = "codex";
           audio.play("ui");
+        } else if (action === "career") {
+          this.state = "career";
+          audio.play("ui");
         } else if (action === "factions") {
           this.openFactions("menu", this.profile.playableFaction());
         } else if (action === "editor") {
@@ -1569,6 +1575,11 @@ class App {
         const a = this.editorScreen.draw(W, H, this.time, this.input.leftDown);
         if (a?.kind === "back") { this.state = "menu"; audio.play("ui"); }
         else if (a?.kind === "test") this.testCustomMap(a.map);
+      } else if (this.state === "career") {
+        if (this.careerScreen.draw(W, H, this.time, this.profile) === "back") {
+          this.state = "menu";
+          audio.play("ui");
+        }
       } else if (this.state === "factions") {
         if (this.factionBook.draw(W, H, this.time, this.profile, dt) === "back") {
           this.state = this.factionsReturn;
@@ -2281,6 +2292,17 @@ class App {
       at: Date.now(),
     });
     recordMatch(record);
+    // The career: every match, skirmish or online, for the player's own stats.
+    const online = !!this.net;
+    recordCareer(careerMatch(this.endReport, {
+      at: Date.now(),
+      won,
+      kind: online ? "online" : "skirmish",
+      ranked: online && this.netRanked,
+      mode: online ? "conquest" : this.config?.mode ?? "conquest",
+      difficulty: this.config?.difficulty ?? "knight",
+      commander: this.config?.commander || this.profile.data.commander,
+    }));
     this.matchAwards = this.profile.claimAwards(evaluateAwards(record, this.profile.awardState()));
     this.profile.save();
     this.postmatch.reset();

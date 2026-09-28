@@ -87,6 +87,8 @@ export interface PlayerState {
   defeated: boolean;
   /** Match time (seconds) at which this realm was knocked out; -1 while standing. */
   defeatedAt: number;
+  /** Match time (seconds) each age was reached; index 0 is the start. For stats only. */
+  ageTimes: number[];
   /** Who this realm is (content/factions.ts): its look, bonuses and units. */
   faction: FactionId;
   /** Oaths sworn, one per age advanced past the Hearth (content/oaths.ts). */
@@ -390,6 +392,7 @@ export class World {
         marketPressure: { wood: 0, food: 0 },
         defeated: false,
         defeatedAt: -1,
+        ageTimes: [0],
         faction: (factions?.[t] && FACTIONS[factions[t] as FactionId] ? factions[t] : DEFAULT_FACTION) as FactionId,
         oaths: [],
         pendingOath: null,
@@ -2553,6 +2556,7 @@ export class World {
       this.emit("complete", b.x, b.y, b.team, item);
     } else if (item === "a:age") {
       p.age = Math.min(MAX_AGE, p.age + 1);
+      p.ageTimes[p.age] = this.time;
       const sworn = p.pendingOath;
       p.pendingOath = null;
       if (sworn && OATHS[sworn]?.age === p.age && !p.oaths.includes(sworn)) p.oaths.push(sworn);

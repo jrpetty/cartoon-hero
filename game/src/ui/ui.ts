@@ -316,6 +316,11 @@ export class UI {
     }
   }
 
+  /** Queue a tooltip for whatever is under the pointer (call when hovering). */
+  tooltip(text: string[]) {
+    if (text.length) this.hoveredTooltip = { text, x: this.mx, y: this.my };
+  }
+
   /** Draw the queued tooltip last so it sits above everything. */
   flushTooltip(canvasW: number, canvasH: number) {
     if (!this.hoveredTooltip) return;

@@ -333,3 +333,37 @@ export function iconFactions(ctx: Ctx, x: number, y: number, s: number) {
   stroke(ctx, 2 * u);
   ctx.restore();
 }
+
+/** A laurel-edged scroll with a rising bar chart on it: the Career screen. */
+export function iconCareer(ctx: Ctx, x: number, y: number, s: number) {
+  const u = s / 100;
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.beginPath();
+  ctx.roundRect(-34 * u, -34 * u, 68 * u, 64 * u, 6 * u);
+  ctx.fillStyle = "#efe2c4";
+  ctx.fill();
+  stroke(ctx, 2.5 * u);
+  const bars = [14, 24, 20, 36];
+  const cols = ["#b8a888", "#b8a888", "#b8a888", GOLD];
+  bars.forEach((h, i) => {
+    ctx.beginPath();
+    ctx.rect((-24 + i * 13) * u, (22 - h) * u, 9 * u, h * u);
+    ctx.fillStyle = cols[i];
+    ctx.fill();
+    stroke(ctx, 1.6 * u);
+  });
+  // A little laurel at the corner: two leaves.
+  ctx.fillStyle = "#7aa860";
+  for (const a of [-0.6, 0.6]) {
+    ctx.save();
+    ctx.translate(26 * u, -26 * u);
+    ctx.rotate(a);
+    ctx.beginPath();
+    ctx.ellipse(0, -8 * u, 4 * u, 9 * u, 0, 0, Math.PI * 2);
+    ctx.fill();
+    stroke(ctx, 1.5 * u);
+    ctx.restore();
+  }
+  ctx.restore();
+}

@@ -23,7 +23,7 @@ import { Particles } from "../engine/particles";
 import { MatchReport } from "../sim/metrics";
 import { CustomMap, listCustomMaps, mapPool } from "../maps/custom";
 import { drawMapThumbnail } from "./map_thumb";
-import { iconArmory, iconFactions, iconCodex, iconMap, iconMultiplayer, iconResume, iconSettings, iconSkirmish, iconWarband } from "./menu_icons";
+import { iconArmory, iconCareer, iconFactions, iconCodex, iconMap, iconMultiplayer, iconResume, iconSettings, iconSkirmish, iconWarband } from "./menu_icons";
 import { REPORT_TABS, ReportTab, drawReportKey, drawReportTab, reportSubtitle } from "./match_report";
 import { TEAM_COLORS, blockTeams, coopTeams, formatLabel, freeForAll, resizeTeams, teamsValid } from "./teams";
 import { FACTIONS, FACTION_IDS, DEFAULT_FACTION, factionOf } from "../content/factions";
@@ -173,7 +173,7 @@ export class MenuScreen {
   /** A save the player picked from the continue strip, consumed by the app. */
   pickedSave: SaveGame | null = null;
 
-  draw(W: number, H: number, time: number, profile: Profile): "skirmish" | "multiplayer" | "warband" | "armory" | "codex" | "settings" | "editor" | "resume" | "factions" | null {
+  draw(W: number, H: number, time: number, profile: Profile): "skirmish" | "multiplayer" | "warband" | "armory" | "codex" | "settings" | "editor" | "resume" | "factions" | "career" | null {
     drawMenuBackground(W, H, time);
     const ctx = ui.ctx;
 
@@ -204,7 +204,7 @@ export class MenuScreen {
       return null;
     }
 
-    type MenuAction = "skirmish" | "multiplayer" | "warband" | "armory" | "codex" | "settings" | "editor" | "resume" | "factions";
+    type MenuAction = "skirmish" | "multiplayer" | "warband" | "armory" | "codex" | "settings" | "editor" | "resume" | "factions" | "career";
     let action: MenuAction | null = null;
     // First launch, once the commander is claimed: choose the free faction
     // before anything else. The book won't let you leave without one.
@@ -255,8 +255,8 @@ export class MenuScreen {
 
     if (!narrow) {
       let ly = top;
-      // Profile.
-      ui.panel(x0, ly, leftW, 112);
+      // Profile — click it for your Career.
+      if (ui.button("", x0, ly, leftW, 112, { tooltip: ["Your career", "Win rates, favourite faction, map and unit, average win time — every game, skirmish and online."] })) action = "career";
       ui.text(profile.data.name, x0 + 18, ly + 30, { size: 20, bold: true, color: "#ffe9b0", font: "Georgia, serif" });
       ui.text(`Level ${info.level}`, x0 + leftW - 18, ly + 29, { align: "right", size: 13, bold: true, color: PAL.uiAccent });
       ui.bar(x0 + 18, ly + 44, leftW - 36, 8, info.into / info.need, PAL.uiAccent);
@@ -334,8 +334,9 @@ export class MenuScreen {
       (cx, cy, sz) => iconWarband(ctx, cx, cy, sz))) action = "warband";
     ty += midH + gap;
     const smH = narrow ? 80 : 96;
-    const qw = (rw2 - gap * 4) / 5;
+    const qw = (rw2 - gap * 5) / 6;
     const small: [MenuAction, string, string, (cx: number, cy: number, sz: number) => void][] = [
+      ["career", "Career", `${stats.played} battles · your stats, skirmish and online`, (cx, cy, sz) => iconCareer(ctx, cx, cy, sz)],
       ["factions", "Factions", `${profile.ownedFactions().length}/${FACTION_IDS.length} owned · read about each, unlock more`, (cx, cy, sz) => iconFactions(ctx, cx, cy, sz)],
       ["armory", "Armory", `${profile.data.renown} ✦ · War Chests & boons`, (cx, cy, sz) => iconArmory(ctx, cx, cy, sz)],
       ["editor", "Map Editor", "Make a map, publish it", (cx, cy, sz) => iconMap(ctx, cx, cy, sz)],

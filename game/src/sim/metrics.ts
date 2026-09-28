@@ -142,6 +142,8 @@ export interface PlayerReport extends SideReport {
   oaths?: string[];
   /** Its faction. Absent on older reports. */
   faction?: string;
+  /** Seconds into the match each age was reached (index 0 = start). Absent on older reports. */
+  ageTimes?: number[];
 }
 
 export interface MatchReport {
@@ -236,6 +238,7 @@ export function matchReport(world: World, me: Team, mapName: string): MatchRepor
       defeatedAt: p.defeatedAt ?? -1,
       oaths: [...(p.oaths ?? [])],
       faction: p.faction,
+      ageTimes: [...(p.ageTimes ?? [0])],
     });
   }
   return { you, foe, durationSec: world.time, mapName, players };

@@ -1141,6 +1141,31 @@ players played a quick match through it, the match appeared in the admin
 API with both factions, and the container stopped cleanly with its data on
 disk. A 400-player load test peaked at 10 ms event-loop lag and 84 MB.
 
+## Career — the player's own stats
+
+`meta/career.ts` + `ui/career_screen.ts`. Every finished match — skirmish or
+online, ranked or not — is kept from the player's side: faction, commander,
+Oaths, map, format, allies' and enemies' factions, length, when each age was
+reached (new: `PlayerState.ageTimes`, reported in `PlayerReport.ageTimes`),
+resources, kills and losses, damage, peak army, idle time, and units trained,
+lost and killed by type. Two stores: lifetime totals updated match by match
+(exact forever) and a log of the last 400 matches (for the skirmish / online /
+ranked filters and the match list). Storage-full degrades to fewer logged
+matches, never lost totals.
+
+The screen (menu tile "Career", or click the profile card): Overview —
+record, win rate and streaks, time played, average game, **average win time**
+and fastest win, K:L, favourite faction / map / unit / commander / Oath, best
+and weakest faction and map, easiest opponent and nemesis, recent form with a
+rolling win-rate line, per-game averages, share reaching each age and how
+long it takes, skirmish vs online vs ranked, and against each AI. Factions —
+per faction W–L, win rate, average game, average win, fastest win, K:L and
+favourite unit with it; your record against each enemy faction and beside
+each ally. Maps & modes — the same by map, format, mode, commander and Oath.
+Units — trained most, enemy killed most, lost most, and every unit's trained
+/ lost / killed-of-its-type with survival rate. Matches — the list, with a
+tooltip per game.
+
 ## Bigger / later
 - **Naval** — water is currently only an impassable wall, and the Islands
   preset (55% water) is a maze rather than a naval map. Dock, transport,
