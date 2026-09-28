@@ -164,14 +164,14 @@ export const OATHS: Record<string, OathDef> = {
     motto: "Strike before they are ready.", color: "#d8574a",
     lines: (s) => [
       `Infantry train ${pc(0.3, s)} faster and march ${pc(0.06, s)} faster`,
-      `Infantry hit ${pc(0.15, s)} harder`,
+      `Infantry hit ${pc(0.12, s)} harder`,
       "Unlocks the Sworn Blade at the Barracks",
     ],
     unit: "sworn_blade",
     apply: (b, r, s) => {
       r.infantryTrainMult = down(r.infantryTrainMult, 0.3, s);
       r.infantrySpeedMult = up(r.infantrySpeedMult, 0.06, s);
-      b.atkMultInfantry = up(b.atkMultInfantry, 0.15, s);
+      b.atkMultInfantry = up(b.atkMultInfantry, 0.12, s);
     },
   },
   hearth: {
@@ -179,7 +179,7 @@ export const OATHS: Record<string, OathDef> = {
     motto: "What is ours stays ours.", color: "#6aa5d8",
     lines: (s) => [
       `Buildings have ${pc(0.3, s)} more HP and mend when left unharmed`,
-      `Villagers build and repair ${pc(0.25, s)} faster`,
+      `Villagers build and repair ${pc(0.25, s)} faster, and have ${pc(0.2, s)} more HP`,
       `Towers and Town Centres shoot ${pc(0.3, s)} faster; walls cost ${pc(0.35, s)} less`,
     ],
     signature: { title: "Mending Stones", text: "Buildings heal after 10 seconds unhurt" },
@@ -188,6 +188,7 @@ export const OATHS: Record<string, OathDef> = {
       b.wallHpMult = up(b.wallHpMult, 0.3, s);
       r.buildingRegen += 4 * s;
       r.buildSpeedMult = up(r.buildSpeedMult, 0.25, s);
+      r.villagerHpMult = up(r.villagerHpMult, 0.2, s);
       b.towerCdMult = down(b.towerCdMult, 0.3, s);
       b.wallCostMult = down(b.wallCostMult, 0.35, s);
     },

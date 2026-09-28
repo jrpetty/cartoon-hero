@@ -39,6 +39,7 @@ import { ui } from "./ui/ui";
 import { AGES } from "./content/tech";
 import { OATHS } from "./content/oaths";
 import { DEFAULT_FACTION, FACTIONS, FACTION_IDS } from "./content/factions";
+import { alliancesFor, resizeTeams } from "./ui/teams";
 import { CodexScreen } from "./ui/codex";
 import {
   ArmoryScreen,
@@ -512,7 +513,8 @@ class App {
     // Alliances: survival = all players vs the horde; even-teams = two sides; else FFA.
     let alliances: number[] | undefined;
     if (mode === "survival") alliances = Array.from({ length: numPlayers }, (_, t) => (t === hordeTeam ? 1 : 0));
-    else if (config.allied) alliances = Array.from({ length: numPlayers }, (_, t) => t % 2);
+    // Teams as chosen on the roster, seat by seat (ui/teams.ts).
+    else if (config.teams?.some((t) => t > 0)) alliances = alliancesFor(resizeTeams(config.teams, numPlayers));
     const map = this.resolveMap(config.presetId, config.seed, numPlayers, config.nomad, alliances);
     const world = new World(config.seed);
     // Team 0 is the human; the rest are AI (allies or opponents), plus the horde.
@@ -724,7 +726,8 @@ class App {
     const hordeTeam = mode === "survival" ? side : -1;
     let alliances: number[] | undefined;
     if (mode === "survival") alliances = Array.from({ length: numPlayers }, (_, t) => (t === hordeTeam ? 1 : 0));
-    else if (config.allied) alliances = Array.from({ length: numPlayers }, (_, t) => t % 2);
+    // Teams as chosen on the roster, seat by seat (ui/teams.ts).
+    else if (config.teams?.some((t) => t > 0)) alliances = alliancesFor(resizeTeams(config.teams, numPlayers));
     const map = this.resolveMap(config.presetId, config.seed, numPlayers, config.nomad, alliances);
     const world = new World(config.seed);
     const loadouts: Record<string, number>[] = [];

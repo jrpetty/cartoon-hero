@@ -24,6 +24,7 @@ import { MatchReport } from "../sim/metrics";
 import { CustomMap, listCustomMaps, mapSupports } from "../maps/custom";
 import { drawMapThumbnail } from "./map_thumb";
 import { REPORT_TABS, ReportTab, drawReportKey, drawReportTab, reportSubtitle } from "./match_report";
+import { blockTeams, coopTeams, formatLabel, freeForAll, resizeTeams, teamsValid } from "./teams";
 import { FACTIONS, FACTION_IDS, DEFAULT_FACTION, factionOf } from "../content/factions";
 import { drawBuilding, drawUnit, setFactionResolver } from "../render/draw";
 import { makeEntity } from "../sim/world";
@@ -37,7 +38,12 @@ export interface SkirmishConfig {
   aiDifficulties: string[]; // per-bot personality by team index (1..players-1)
   fairMode: boolean;
   players: number; // 2 = 1v1, 4 = FFA or 2v2
-  allied: boolean; // true = 2v2 teams (you + ally vs two foes)
+  /**
+   * Each seat's team, seat 0 being you: 0 fights alone, seats sharing 1..8
+   * are allies (ui/teams.ts). Replaces the old "allied" switch, which split
+   * seats by parity.
+   */
+  teams: number[];
   commander: string; // selected commander id
   /** Your faction, and each bot's by team index ("" = a seeded random pick). */
   faction: string;
@@ -258,7 +264,7 @@ export class SetupScreen {
     aiDifficulties: [],
     fairMode: false,
     players: 2,
-    allied: false,
+    teams: [0, 0],
     commander: "",
     faction: "",
     aiFactions: [],
@@ -269,275 +275,362 @@ export class SetupScreen {
   /** How far the setup panels are scrolled, and how tall they were last frame. */
   private scroll = 0;
   private contentH = 0;
+  /**
+   * Which team preset the roster follows, so adding or removing a seat keeps
+   * the shape ("2 teams" stays two teams). Editing a seat by hand makes it
+   * "custom", and resizing then leaves the teams alone.
+   */
+  private teamPreset: "ffa" | 2 | 3 | 4 | "coop" | "custom" = "ffa";
+  private previews: Record<string, { tc: ReturnType<typeof makeEntity>; unit: ReturnType<typeof makeEntity> }> = {};
 
+  /**
+   * The Skirmish setup, in two organised columns: the battle on the left
+   * (where, how, and the options), the people in it on the right (a roster
+   * with a row per seat — colour, faction, difficulty, team — and your own
+   * realm under it). One scroll region, and an action bar pinned at the
+   * bottom so "To Battle!" is always in reach.
+   */
   draw(W: number, H: number, time: number, profile: Profile): "start" | "spectate" | "back" | null {
     drawMenuBackground(W, H, time);
-    ui.text("Skirmish Setup", W / 2, 64, {
-      align: "center", size: 34, bold: true, color: "#ffe9b0", font: "Georgia, serif",
+    const ctx = ui.ctx;
+    ctx.fillStyle = "rgba(10, 8, 4, 0.35)";
+    ctx.fillRect(0, 0, W, H);
+    this.syncTeams();
+
+    const FOOTER = 76;
+    const top = 104;
+    const viewH = Math.max(120, H - top - FOOTER);
+    const wide = W >= 1180;
+    const outer = Math.min(W - 64, 1440);
+    const x0 = Math.round(W / 2 - outer / 2);
+    const gap = 20;
+    const leftW = wide ? Math.round(outer * 0.42) : outer;
+    const rightW = wide ? outer - leftW - gap : outer;
+    const rx = wide ? x0 + leftW + gap : x0;
+
+    // Header: title on the left, the match at a glance on the right.
+    ui.text("Skirmish", x0, 56, { size: 36, bold: true, color: "#ffe9b0", font: "Georgia, serif" });
+    ui.text("Set the field, choose your sides, take the field.", x0 + 2, 84, { size: 13, color: "#c9bea3" });
+    const preset = PRESETS.find((pp) => pp.id === this.config.presetId);
+    const mapName = preset?.name ?? (this.config.presetId === "random" ? "Random battlefield" : listCustomMaps().find((m) => m.id === this.config.presetId)?.name ?? "");
+    ui.text(`${mapName}  ·  ${formatLabel(this.config.teams)}  ·  ${this.modeName()}`, x0 + outer, 60, {
+      align: "right", size: 15, bold: true, color: "#e2c889",
     });
 
-    const colW = Math.min(880, W - 80);
-    const x0 = W / 2 - colW / 2;
-
-    // The action bar is pinned to the bottom of the screen and everything above
-    // it scrolls. This screen lays its panels out by accumulating `y` downward,
-    // so its height depends on how many battlefield cards there are — seven
-    // presets plus Random already reach the bottom of a 1080p window, and a
-    // single custom map adds a row and pushes "To Battle!" off the screen
-    // entirely, with no way to reach it.
-    const FOOTER = 76;
-    const top = 100;
-    const viewH = Math.max(120, H - top - FOOTER);
-    // Content height is what the *last* frame measured. Immediate mode does not
-    // know it in advance, and a frame of lag on a clamp nobody can perceive is a
-    // better trade than laying the whole screen out twice.
     const maxScroll = Math.max(0, this.contentH - viewH);
     if (ui.wheel && ui.my > top && ui.my < top + viewH) {
       this.scroll = Math.max(0, Math.min(maxScroll, this.scroll + ui.wheel * 0.6));
     }
     this.scroll = Math.min(this.scroll, maxScroll);
     ui.pushScroll(this.scroll, { x: 0, y: top, w: W, h: viewH });
-    let y = 110;
+    const y0 = top + 6;
 
-    // Map presets — laid out in a grid that wraps every 3 cards. A "Random"
-    // card (rolled fresh from the seed each match) is appended after the set.
-    // Your own maps sit alongside the presets, filtered to the ones that
-    // actually allow this match — a 1v1-only map has no business offering
-    // itself for a four-player free-for-all.
-    const custom = listCustomMaps().filter((m) => mapSupports(m, this.config.mode, this.config.players));
-    const cards = [
-      ...PRESETS.map((p) => ({ id: p.id, name: p.name, desc: p.desc, custom: false, map: null as CustomMap | null })),
-      { id: "random", name: "🎲 Random", desc: "A surprise battlefield — a different preset every match.", custom: false, map: null as CustomMap | null },
-      ...custom.map((m) => ({
-        id: m.id,
-        name: m.name,
-        // The author's own line first, if they wrote one — that is the whole
-        // point of the field. The dimensions are a fallback, not a headline.
-        desc: m.desc?.trim()
-          || `${m.cols}×${m.rows} · ${m.minPlayers}–${m.maxPlayers} players${m.nomad === "forced" ? " · always nomad" : ""}`,
-        custom: true,
-        map: m,
-      })),
-    ];
-    // A map that no longer qualifies must not stay selected behind the scenes.
-    if (this.config.presetId.startsWith("custom_") && !custom.some((m) => m.id === this.config.presetId)) {
-      this.config.presetId = "open_plains";
-    }
-    const perRow = 3;
-    const cardH = 96;
-    const rowGap = 12;
-    const rows = Math.ceil(cards.length / perRow);
-    const panelH = 38 + rows * (cardH + rowGap);
-    ui.panel(x0, y, colW, panelH);
-    ui.text("Battlefield", x0 + 16, y + 22, { size: 16, bold: true, color: PAL.uiAccent });
-    const cardW = (colW - 32 - (perRow - 1) * 12) / perRow;
-    for (let i = 0; i < cards.length; i++) {
-      const p = cards[i];
-      const cx = x0 + 16 + (i % perRow) * (cardW + 12);
-      const cy = y + 38 + Math.floor(i / perRow) * (cardH + rowGap);
-      const sel = this.config.presetId === p.id;
-      if (ui.button("", cx, cy, cardW, cardH, { accent: sel })) {
-        this.config.presetId = p.id;
-        audio.play("ui");
-      }
-      // A custom map earns a preview: a name and a cell count cannot say where
-      // the seats are or how much of it is water, and that is most of what
-      // decides whether you want to play it.
-      const thumb = p.map ? cardH - 24 : 0;
-      if (p.map) {
-        drawMapThumbnail(ui.ctx, cx + 12, cy + 12, thumb, p.map, { spawns: true, resources: true });
-      }
-      const tx = cx + 12 + (thumb ? thumb + 10 : 0);
-      const tw = cardW - 24 - (thumb ? thumb + 10 : 0);
-      ui.text(p.name, tx, cy + 20, { size: 15, bold: true, color: sel ? "#ffe9b0" : PAL.uiParchment });
-      if (p.custom) {
-        ui.text("YOURS", cx + cardW - 12, cy + 20, { align: "right", size: 9, bold: true, color: "#7fb0e8" });
-      }
-      wrapText(p.desc, tx, cy + 42, tw, 13, "#bdb49a");
-      if (p.map) {
-        ui.text(`${p.map.cols}×${p.map.rows} · ${p.map.minPlayers}–${p.map.maxPlayers} players${p.map.nomad === "forced" ? " · nomad" : ""}`,
-          tx, cy + cardH - 12, { size: 10, color: "#8f8770" });
-      }
-    }
-    y += panelH + 12;
-
-    // Seed + AI personality row (with per-bot overrides).
-    ui.panel(x0, y, colW, 132);
-    ui.text("Seed", x0 + 16, y + 22, { size: 16, bold: true, color: PAL.uiAccent });
-    ui.text(String(this.config.seed), x0 + 16, y + 50, { size: 14, color: "#bdb49a" });
-    if (ui.button("🎲 New Seed", x0 + 16, y + 60, 110, 20, { size: 11 })) {
-      this.config.seed = randomSeed();
-      audio.play("ui");
-    }
-
-    ui.text("AI Personality", x0 + 210, y + 22, { size: 16, bold: true, color: PAL.uiAccent });
-    ui.text("sets all bots", x0 + 330, y + 22, { size: 11, color: "#8a8278" });
-    const gapD = 10;
-    const dw = (colW - 226 - 16 - 36 - gapD * (DIFFICULTY_IDS.length - 1)) / DIFFICULTY_IDS.length;
-    for (let i = 0; i < DIFFICULTY_IDS.length; i++) {
-      const d = DIFFICULTIES[DIFFICULTY_IDS[i]];
-      const sel = this.config.difficulty === d.id;
-      if (
-        ui.button(d.name, x0 + 210 + i * (dw + gapD), y + 38, dw, 34, {
-          accent: sel,
-          tooltip: [d.name, d.desc],
-        })
-      ) {
-        this.config.difficulty = d.id;
-        this.config.aiDifficulties = []; // re-apply this personality to every bot
-        audio.play("ui");
-      }
-    }
-    // Per-bot overrides — a chip per opponent; click to cycle its personality.
-    this.drawBotChips(x0 + 16, y + 96, colW - 32);
-    y += 144;
-
-    // Players (2–8) + team format.
-    ui.panel(x0, y, colW, 96);
-    ui.text("Players", x0 + 16, y + 26, { size: 16, bold: true, color: PAL.uiAccent });
-    const counts = [2, 3, 4, 5, 6, 7, 8];
-    const bw = 40;
-    for (let i = 0; i < counts.length; i++) {
-      const c = counts[i];
-      const sel = this.config.players === c;
-      if (ui.button(String(c), x0 + 120 + i * (bw + 8), y + 12, bw, 30, { accent: sel })) {
-        this.config.players = c;
-        if (c < 4) this.config.allied = false; // teams need at least 4
-        audio.play("ui");
-      }
-    }
-    ui.text("Format", x0 + 16, y + 66, { size: 16, bold: true, color: PAL.uiAccent });
-    const teamsOK = this.config.players >= 4;
-    const teamHalf = this.config.players / 2;
-    const teamLabel = `Even Teams (${Math.ceil(teamHalf)}v${Math.floor(teamHalf)})`;
-    if (ui.button("Free-for-All", x0 + 120, y + 54, 160, 30, {
-      accent: !this.config.allied,
-      tooltip: ["Free-for-All", "Every realm for itself — last one standing wins."],
-    })) { this.config.allied = false; audio.play("ui"); }
-    if (ui.button(teamsOK ? teamLabel : "Even Teams (4+)", x0 + 290, y + 54, 200, 30, {
-      accent: this.config.allied,
-      disabled: !teamsOK,
-      tooltip: ["Even Teams", "Split into two allied sides with shared vision. Needs 4+ players."],
-    })) { this.config.allied = true; audio.play("ui"); }
-    y += 112;
-
-    // Game mode.
-    ui.panel(x0, y, colW, 64);
-    ui.text("Mode", x0 + 16, y + 24, { size: 16, bold: true, color: PAL.uiAccent });
-    const modes: [GameMode, string, string][] = [
-      ["conquest", "Conquest", "Destroy every enemy. The classic skirmish."],
-      ["survival", "Survival", "Co-op: you + AI allies hold out against escalating waves."],
-      ["koth", "King of the Hill", "Hold the centre for 5 cumulative minutes to win."],
-      ["regicide", "Regicide", "Each side has a King — slay theirs, protect yours."],
-    ];
-    const mwid = (colW - 150 - 16 - 36) / 4;
-    for (let i = 0; i < modes.length; i++) {
-      const [id, label, hint] = modes[i];
-      if (ui.button(label.length > 11 ? "KotH" : label, x0 + 150 + i * (mwid + 12), y + 16, mwid, 32, {
-        accent: this.config.mode === id, size: 12, tooltip: [label, hint],
-      })) { this.config.mode = id; audio.play("ui"); }
-    }
-    y += 80;
-
-    // Faction — who your realm is.
-    y = this.drawFactionPanel(x0, y, colW, profile);
-
-    // Commander selector (cycle through the ones you own).
-    if (!profile.ownsCommander(this.config.commander)) {
-      this.config.commander = profile.data.commander || profile.data.commanders[0] || "";
-    }
-    ui.panel(x0, y, colW, 86);
-    ui.text("Commander", x0 + 16, y + 24, { size: 16, bold: true, color: PAL.uiAccent });
-    const owned = COMMANDER_IDS.filter((id) => profile.ownsCommander(id));
-    const cur = COMMANDERS[this.config.commander];
-    const cycle = (dir: number) => {
-      const i = owned.indexOf(this.config.commander);
-      const next = owned[(i + dir + owned.length) % owned.length];
-      this.config.commander = next;
-      profile.selectCommander(next);
-      // Remember the pairing, so this faction comes back with this commander.
-      profile.pairCommander(this.config.faction || DEFAULT_FACTION, next);
-      audio.play("ui");
-    };
-    if (owned.length > 1) {
-      if (ui.button("‹", x0 + 150, y + 14, 28, 28, {})) cycle(-1);
-      if (ui.button("›", x0 + colW - 44, y + 14, 28, 28, {})) cycle(1);
-    }
-    if (cur) {
-      ui.text(`${cur.name} — ${cur.title}`, x0 + 190, y + 26, { size: 15, bold: true, color: cur.color });
-      ui.text(commanderPerks(cur).join("   •   "), x0 + 190, y + 48, { size: 12, color: "#d8cdb4" });
-      ui.text(`${owned.length}/${COMMANDER_IDS.length} unlocked — recruit more in the Armory`, x0 + 190, y + 68, { size: 11, color: "#9b927c" });
-    }
-    y += 102;
-
-    // Fair mode + Nomad — two toggles sharing a row.
-    ui.panel(x0, y, colW, 64);
-    const half = colW / 2;
-    const fm = this.config.fairMode;
-    if (ui.button(fm ? "✓" : " ", x0 + 16, y + 16, 32, 32, { accent: fm })) {
-      this.config.fairMode = !fm;
-      audio.play("ui");
-    }
-    ui.text("Ranked (all-Common, +25% rewards)", x0 + 56, y + 26, { size: 13, bold: true });
-    ui.text(fm ? "Variants benched." : "Equipped variants take the field.", x0 + 56, y + 46, { size: 11, color: "#bdb49a" });
-
-    const nm = this.config.nomad;
-    if (ui.button(nm ? "✓" : " ", x0 + half + 16, y + 16, 32, 32, { accent: nm })) {
-      this.config.nomad = !nm;
-      audio.play("ui");
-    }
-    ui.text("Nomad start", x0 + half + 56, y + 26, { size: 13, bold: true });
-    ui.text("No Town Center — settle where you land.", x0 + half + 56, y + 46, { size: 11, color: "#bdb49a" });
-    y += 80;
-
-    this.contentH = y - top + 12;
+    const leftEnd = this.drawBattleColumn(x0, y0, leftW);
+    let rightTop = wide ? y0 : leftEnd + 16;
+    rightTop = this.drawRoster(rx, rightTop, rightW, profile);
+    const rightEnd = this.drawFactionPanel(rx, rightTop + 16, rightW, profile);
+    this.contentH = Math.max(leftEnd, rightEnd) - top + 16;
     ui.popScroll();
-    ui.scrollbar(x0 + colW + 10, top, viewH, this.scroll, this.contentH);
+    ui.scrollbar(x0 + outer + 8, top, viewH, this.scroll, this.contentH);
 
     // ---- pinned action bar ----
-    // Outside the scrolled block on purpose: whatever is on the screen, the way
-    // out of it and the way into the match are always in the same place and
-    // always clickable.
-    const ctx = ui.ctx;
     const fy = H - FOOTER;
-    ctx.fillStyle = "rgba(10, 8, 4, 0.86)";
+    const fg = ctx.createLinearGradient(0, fy, 0, H);
+    fg.addColorStop(0, "rgba(14, 10, 6, 0.9)");
+    fg.addColorStop(1, "rgba(8, 6, 3, 0.96)");
+    ctx.fillStyle = fg;
     ctx.fillRect(0, fy, W, FOOTER);
-    ctx.fillStyle = withAlpha(PAL.uiAccent, 0.25);
+    ctx.fillStyle = withAlpha(PAL.uiAccent, 0.3);
     ctx.fillRect(0, fy, W, 1);
     const by2 = fy + 16;
     let action: "start" | "spectate" | "back" | null = null;
-    if (ui.button("⟵ Back", x0, by2, 130, 44, { size: 15 })) action = "back";
-    if (ui.button("👁 Watch", x0 + colW - 360, by2, 130, 44, { size: 15, tooltip: ["Spectate an AI vs AI battle", "All sides are AI — sit back and watch."] })) action = "spectate";
-    if (ui.button("⚔  To Battle!", x0 + colW - 220, by2, 220, 44, { accent: true, size: 18 })) action = "start";
-    if (this.contentH > viewH) {
-      ui.text("scroll for more", x0 + 146, by2 + 26, { size: 11, color: "#8f8770" });
-    }
+    if (ui.button("⟵  Back", x0, by2, 130, 44, { size: 15 })) action = "back";
+    const valid = teamsValid(this.config.teams);
+    if (!valid) ui.text("Everyone is on one team — split them into at least two sides.", W / 2, by2 + 22, { align: "center", size: 13, color: PAL.uiBad });
+    else if (this.contentH > viewH) ui.text("scroll for more", x0 + 146, by2 + 22, { size: 11, color: "#8f8770" });
+    if (ui.button("👁  Watch", x0 + outer - 360, by2, 130, 44, { size: 15, disabled: !valid, tooltip: ["Spectate an AI vs AI battle", "Every seat is played by the AI — sit back and watch."] })) action = "spectate";
+    if (ui.button("⚔  To Battle!", x0 + outer - 220, by2, 220, 44, { accent: true, size: 18, disabled: !valid })) action = "start";
     return action;
   }
 
-  private previews: Record<string, { tc: ReturnType<typeof makeEntity>; unit: ReturnType<typeof makeEntity> }> = {};
+  private modeName(): string {
+    return { conquest: "Conquest", survival: "Survival", koth: "King of the Hill", regicide: "Regicide" }[this.config.mode] ?? "Conquest";
+  }
+
+  /** Keep the per-seat arrays in step with the player count and mode. */
+  private syncTeams() {
+    const n = this.config.players;
+    if (!this.config.teams || this.config.teams.length !== n) {
+      this.config.teams = this.teamPreset === "custom" ? resizeTeams(this.config.teams ?? [], n) : this.presetTeams(n);
+    }
+    // Survival is everyone together against the waves.
+    if (this.config.mode === "survival") this.config.teams = Array.from({ length: n }, () => 1);
+  }
+
+  private presetTeams(n: number): number[] {
+    const p = this.teamPreset;
+    if (p === "ffa" || p === "custom") return freeForAll(n);
+    if (p === "coop") return coopTeams(n, Math.max(0, Math.floor(n / 2) - 1));
+    return blockTeams(n, p);
+  }
+
+  /** A section heading with a gold rule, used down both columns. */
+  private heading(x: number, y: number, w: number, text: string, sub?: string) {
+    const ctx = ui.ctx;
+    ui.text(text, x, y, { size: 17, bold: true, color: PAL.uiAccent, font: "Georgia, serif" });
+    ctx.font = `bold 17px Georgia, serif`;
+    const tw = ctx.measureText(text).width;
+    if (sub) {
+      ui.text(sub, x + tw + 12, y + 1, { size: 12, color: "#9b927c" });
+      ctx.font = `12px 'Trebuchet MS', sans-serif`;
+    }
+    ctx.strokeStyle = withAlpha(PAL.uiAccent, 0.22);
+    ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(x, y + 14); ctx.lineTo(x + w, y + 14); ctx.stroke();
+  }
+
+  // ------------------------------------------------------------ the battle --
+
+  private drawBattleColumn(x: number, y: number, w: number): number {
+    const ctx = ui.ctx;
+    // Battlefield: a two-across grid of map cards. Your own maps sit alongside
+    // the presets, filtered to the ones that allow this match.
+    const custom = listCustomMaps().filter((m) => mapSupports(m, this.config.mode, this.config.players));
+    const cards = [
+      ...PRESETS.map((pp) => ({ id: pp.id, name: pp.name, desc: pp.desc, map: null as CustomMap | null })),
+      { id: "random", name: "Random", desc: "A different preset every match, rolled from the seed.", map: null as CustomMap | null },
+      ...custom.map((m) => ({
+        id: m.id, name: m.name,
+        desc: m.desc?.trim() || `${m.cols}×${m.rows} · ${m.minPlayers}–${m.maxPlayers} players${m.nomad === "forced" ? " · always nomad" : ""}`,
+        map: m,
+      })),
+    ];
+    if (this.config.presetId.startsWith("custom_") && !custom.some((m) => m.id === this.config.presetId)) {
+      this.config.presetId = "open_plains";
+    }
+    const perRow = w >= 420 ? 2 : 1;
+    const cardH = 70;
+    const cgap = 10;
+    const rows = Math.ceil(cards.length / perRow);
+    const panelH = 52 + rows * (cardH + cgap);
+    ui.panel(x, y, w, panelH);
+    this.heading(x + 18, y + 24, w - 36, "Battlefield");
+    const cardW = (w - 36 - (perRow - 1) * cgap) / perRow;
+    cards.forEach((c, i) => {
+      const cx = x + 18 + (i % perRow) * (cardW + cgap);
+      const cy = y + 46 + Math.floor(i / perRow) * (cardH + cgap);
+      const sel = this.config.presetId === c.id;
+      if (ui.button("", cx, cy, cardW, cardH, { accent: sel, tooltip: [c.name, c.desc] })) { this.config.presetId = c.id; audio.play("ui"); }
+      const thumb = c.map ? cardH - 16 : 0;
+      if (c.map) drawMapThumbnail(ctx, cx + 8, cy + 8, thumb, c.map, { spawns: true, resources: true });
+      const tx = cx + 12 + (thumb ? thumb + 6 : 0);
+      ui.text(c.name, tx, cy + 18, { size: 14.5, bold: true, color: sel ? "#ffe9b0" : PAL.uiParchment });
+      if (c.map) ui.text("YOURS", cx + cardW - 10, cy + 18, { align: "right", size: 9.5, bold: true, color: "#7fb0e8" });
+      wrapText(c.desc, tx, cy + 38, cardW - (tx - cx) - 10, 11.5, "#b8ad92");
+    });
+    y += panelH + 16;
+
+    // Mode.
+    ui.panel(x, y, w, 96);
+    this.heading(x + 18, y + 24, w - 36, "Mode");
+    const modes: [GameMode, string, string][] = [
+      ["conquest", "Conquest", "Destroy every enemy. The classic skirmish."],
+      ["survival", "Survival", "Co-op: every seat together against escalating waves."],
+      ["koth", "King of the Hill", "Hold the centre for 5 cumulative minutes to win."],
+      ["regicide", "Regicide", "Each side has a King — slay theirs, protect yours."],
+    ];
+    const mw = (w - 36 - 3 * 8) / 4;
+    modes.forEach(([id, label, hint], i) => {
+      if (ui.button(mw < 110 && label.length > 10 ? "KotH" : label, x + 18 + i * (mw + 8), y + 46, mw, 34, {
+        accent: this.config.mode === id, size: 13, tooltip: [label, hint],
+      })) { this.config.mode = id; audio.play("ui"); }
+    });
+    y += 96 + 16;
+
+    // Options: seed, AI default, ranked, nomad.
+    const optH = 214;
+    ui.panel(x, y, w, optH);
+    this.heading(x + 18, y + 24, w - 36, "Options");
+    ui.text("Seed", x + 18, y + 58, { size: 13, bold: true, color: "#d8cdb4" });
+    ui.text(String(this.config.seed), x + 110, y + 58, { size: 13.5, color: "#e9dcc0" });
+    if (ui.button("New seed", x + w - 18 - 110, y + 45, 110, 26, { size: 12 })) { this.config.seed = randomSeed(); audio.play("ui"); }
+    ui.text("Every AI", x + 18, y + 96, { size: 13, bold: true, color: "#d8cdb4" });
+    const dw = (w - 36 - 92 - (DIFFICULTY_IDS.length - 1) * 6) / DIFFICULTY_IDS.length;
+    DIFFICULTY_IDS.forEach((id, i) => {
+      const d = DIFFICULTIES[id];
+      if (ui.button(d.name, x + 110 + i * (dw + 6), y + 82, dw, 28, { accent: this.config.difficulty === id, size: 12, tooltip: [d.name, d.desc, "Sets every AI seat; change one seat in the roster."] })) {
+        this.config.difficulty = id;
+        this.config.aiDifficulties = [];
+        audio.play("ui");
+      }
+    });
+    const toggle = (ty: number, on: boolean, title: string, sub: string, flip: () => void) => {
+      if (ui.button(on ? "✓" : "", x + 18, ty, 28, 28, { accent: on, size: 15 })) { flip(); audio.play("ui"); }
+      ui.text(title, x + 58, ty + 9, { size: 13.5, bold: true, color: PAL.uiParchment });
+      ui.text(sub, x + 58, ty + 25, { size: 11.5, color: "#a89f88" });
+    };
+    toggle(y + 124, this.config.fairMode, "Ranked", "All units Common, +25% rewards — your unboxed variants sit out.", () => (this.config.fairMode = !this.config.fairMode));
+    toggle(y + 166, this.config.nomad, "Nomad start", "No Town Centre — settle wherever you land.", () => (this.config.nomad = !this.config.nomad));
+    return y + optH;
+  }
+
+  // ------------------------------------------------------------- the roster --
 
   /**
-   * Six cards, each with the faction's own Town Centre and signature soldier
-   * drawn live in its style — the look is the first thing a faction is — then
-   * what it is good at, what it pays for it, and when it is strongest.
+   * One row per seat: its colour, who plays it, their faction, their skill,
+   * and their team — every team picked here rather than implied. Presets fill
+   * the teams in organised blocks; any seat can then be moved.
+   */
+  private drawRoster(x: number, y: number, w: number, profile: Profile): number {
+    const ctx = ui.ctx;
+    const n = this.config.players;
+    const survival = this.config.mode === "survival";
+    const rowH = 46;
+    const panelH = 124 + n * (rowH + 6) + 8;
+    ui.panel(x, y, w, panelH);
+    this.heading(x + 18, y + 24, w - 36, "Players", formatLabel(this.config.teams));
+
+    // Seat count.
+    const cx = x + w - 18;
+    if (ui.button("+", cx - 30, y + 10, 30, 28, { size: 16, disabled: n >= 8, tooltip: ["Add a seat"] })) { this.config.players = n + 1; audio.play("ui"); }
+    ui.text(`${n}`, cx - 48, y + 24, { align: "center", size: 16, bold: true, color: "#ffe9b0" });
+    if (ui.button("–", cx - 96, y + 10, 30, 28, { size: 16, disabled: n <= 2, tooltip: ["Remove a seat"] })) { this.config.players = n - 1; audio.play("ui"); }
+
+    // Team presets.
+    const presets: [typeof this.teamPreset, string, string][] = [
+      ["ffa", "Free-for-all", "Every seat for itself."],
+      [2, "2 teams", "Seats split into two blocks: 1–4 against 5–8, and so on."],
+      [3, "3 teams", "Three blocks, as even as the seats allow."],
+      [4, "4 teams", "Four blocks — two-a-side four ways with 8 seats."],
+      ["coop", "Co-op vs AI", "You and the first half of the seats against the rest."],
+    ];
+    const pw = (w - 36 - (presets.length - 1) * 6) / presets.length;
+    presets.forEach(([id, label, hint], i) => {
+      const can = !survival && (typeof id !== "number" || id <= n) && !(id === "coop" && n < 3);
+      if (ui.button(label, x + 18 + i * (pw + 6), y + 46, pw, 28, { accent: this.teamPreset === id, size: 12, disabled: !can, tooltip: [label, hint] })) {
+        this.teamPreset = id;
+        this.config.teams = this.presetTeams(n);
+        audio.play("ui");
+      }
+    });
+
+    // Column heads.
+    const cols = { seat: x + 18, name: x + 50, faction: x + w * 0.36, skill: x + w * 0.53, team: x + w * 0.68 };
+    const hy = y + 96;
+    for (const [label, cx2] of [["PLAYER", cols.name], ["FACTION", cols.faction], ["SKILL", cols.skill], ["TEAM", cols.team]] as const) {
+      ui.text(label, cx2, hy, { size: 10.5, bold: true, color: "#9b927c" });
+    }
+
+    const teamColors = ["#9a917b", "#5b8fe0", "#d8574a", "#4ab86a", "#e0a83a", "#9a6ae0", "#3ac8c0", "#e08a4a", "#e06a9a"];
+    for (let t = 0; t < n; t++) {
+      const ry = y + 110 + t * (rowH + 6);
+      const me = t === 0;
+      // Row ground; yours picked out, and a stripe in its team's colour so the
+      // sides read at a glance down the list.
+      ctx.fillStyle = me ? withAlpha(PAL.uiAccent, 0.14) : t % 2 ? "rgba(255,255,255,0.035)" : "rgba(255,255,255,0.015)";
+      ctx.beginPath(); ctx.roundRect(x + 12, ry, w - 24, rowH, 6); ctx.fill();
+      if (this.config.teams[t] > 0) {
+        ctx.fillStyle = teamColors[this.config.teams[t]];
+        ctx.beginPath(); ctx.roundRect(x + 12, ry, 4, rowH, [6, 0, 0, 6]); ctx.fill();
+      }
+      // Seat colour.
+      const col = teamColor(t);
+      ctx.fillStyle = col.main;
+      ctx.beginPath(); ctx.roundRect(cols.seat, ry + 11, 22, 24, 5); ctx.fill();
+      ui.text(String(t + 1), cols.seat + 11, ry + 23.5, { align: "center", size: 12, bold: true, color: "#fff" });
+      // Who.
+      if (me) {
+        const cmdr = COMMANDERS[this.config.commander || profile.data.commander];
+        ui.text("You", cols.name, ry + 16, { size: 14, bold: true, color: "#ffe9b0" });
+        ui.text(cmdr ? `${cmdr.name}, ${cmdr.title}` : "Your realm", cols.name, ry + 33, { size: 11, color: "#a89f88" });
+      } else {
+        ui.text(`AI ${t + 1}`, cols.name, ry + 16, { size: 14, bold: true, color: PAL.uiParchment });
+        ui.text(col.name, cols.name, ry + 33, { size: 11, color: withAlpha(col.light, 0.9) });
+      }
+      // Faction: yours is chosen in the panel below; a bot's cycles here.
+      const fw = cols.skill - cols.faction - 10;
+      if (me) {
+        const f = factionOf(this.config.faction || profile.data.faction);
+        ui.text(f.name.replace(/^The /, ""), cols.faction + 6, ry + rowH / 2, { size: 13, bold: true, color: f.color });
+      } else {
+        const cur = this.config.aiFactions[t] ?? "";
+        const f = cur ? FACTIONS[cur as keyof typeof FACTIONS] : null;
+        if (ui.button(f ? f.name.replace(/^The /, "") : "Random", cols.faction, ry + 9, fw, 28, {
+          size: 12, accent: !!f, tooltip: [`Seat ${t + 1}'s faction`, "Click to cycle. Random is drawn from the match seed."],
+        })) {
+          const order = ["", ...FACTION_IDS];
+          while (this.config.aiFactions.length <= t) this.config.aiFactions.push("");
+          this.config.aiFactions[t] = order[(order.indexOf(cur) + 1) % order.length];
+          audio.play("ui");
+        }
+      }
+      // Skill: a bot's personality.
+      const sw = cols.team - cols.skill - 10;
+      if (!me) {
+        const did = this.config.aiDifficulties[t] ?? this.config.difficulty;
+        const d = DIFFICULTIES[did];
+        if (ui.button(d.name, cols.skill, ry + 9, sw, 28, { size: 12, accent: did !== this.config.difficulty, tooltip: [`Seat ${t + 1}: ${d.name}`, d.desc, "Click to cycle."] })) {
+          const next = DIFFICULTY_IDS[(DIFFICULTY_IDS.indexOf(did) + 1) % DIFFICULTY_IDS.length];
+          while (this.config.aiDifficulties.length <= t) this.config.aiDifficulties.push(this.config.difficulty);
+          this.config.aiDifficulties[t] = next;
+          audio.play("ui");
+        }
+      } else {
+        ui.text("—", cols.skill + sw / 2, ry + rowH / 2, { align: "center", size: 13, color: "#6f6a5c" });
+      }
+      // Team: "–" alone, or 1..k with allies. Four to start with, and one more
+      // than the highest in use — so up to as many teams as there are seats,
+      // without nine buttons on every row.
+      const used = Math.max(0, ...this.config.teams);
+      const tmax = Math.min(n, Math.max(4, used + 1), 8);
+      const tw = Math.max(20, Math.min(30, (x + w - 20 - cols.team) / (tmax + 1) - 3));
+      for (let k = 0; k <= tmax; k++) {
+        const bx = cols.team + k * (tw + 3);
+        const on = this.config.teams[t] === k;
+        const tcol = teamColors[k];
+        if (ui.button(k === 0 ? "–" : String(k), bx, ry + 10, tw, 26, {
+          size: 12, accent: on, disabled: survival,
+          tooltip: k === 0 ? ["Alone", "This seat fights for itself."] : [`Team ${k}`, "Seats on the same team are allies — shared vision, no friendly fire."],
+        })) {
+          this.config.teams[t] = k;
+          this.teamPreset = "custom";
+          audio.play("ui");
+        }
+        if (on && k > 0) {
+          ctx.fillStyle = tcol;
+          ctx.fillRect(bx + 3, ry + 32, tw - 6, 3);
+        }
+      }
+    }
+    if (survival) {
+      ui.text("Survival: every seat stands together against the waves.", x + 18, y + panelH - 10, { size: 11.5, color: "#a89f88" });
+    }
+    return y + panelH;
+  }
+
+  /**
+   * Your realm: six faction cards, each with the faction's own Town Centre
+   * and signature soldier drawn live in its style, then what it is good at,
+   * what it pays for it, and your commander.
    */
   private drawFactionPanel(x0: number, y: number, colW: number, profile: Profile): number {
     if (!this.config.faction) this.config.faction = profile.data.faction && FACTIONS[profile.data.faction as keyof typeof FACTIONS] ? profile.data.faction : DEFAULT_FACTION;
+    if (!profile.ownsCommander(this.config.commander)) {
+      this.config.commander = profile.data.commander || profile.data.commanders[0] || "";
+    }
     const f = factionOf(this.config.faction);
-    const cardGap = 10;
-    const cardW = Math.floor((colW - 32 - cardGap * (FACTION_IDS.length - 1)) / FACTION_IDS.length);
-    const cardH = 132;
-    const panelH = 60 + cardH + 150;
+    const cardGap = 8;
+    const cardW = Math.floor((colW - 36 - cardGap * (FACTION_IDS.length - 1)) / FACTION_IDS.length);
+    const cardH = 124;
+    const panelH = 58 + cardH + 176;
     ui.panel(x0, y, colW, panelH);
-    ui.text("Faction", x0 + 16, y + 24, { size: 16, bold: true, color: PAL.uiAccent });
-    ui.text("Who your realm is: its look, its bonuses, its own soldiers. Every faction swears the same Oaths as it rises.", x0 + 100, y + 25, { size: 12, color: "#bdb49a" });
+    this.heading(x0 + 18, y + 24, colW - 36, "Your realm", "faction and commander");
     const ctx = ui.ctx;
     const CURVE = { early: "Strong early", mid: "Peaks mid-game", late: "Strong late", steady: "Steady" } as const;
     FACTION_IDS.forEach((id, i) => {
       const d = FACTIONS[id];
-      const cx = x0 + 16 + i * (cardW + cardGap);
-      const cy = y + 44;
+      const cx = x0 + 18 + i * (cardW + cardGap);
+      const cy = y + 46;
       const sel = this.config.faction === id;
       if (ui.button("", cx, cy, cardW, cardH, { accent: sel, tooltip: [d.name, d.era, d.tagline] })) {
         this.config.faction = id;
@@ -549,7 +642,6 @@ export class SetupScreen {
         ctx.strokeStyle = d.color; ctx.lineWidth = 2.5;
         ctx.beginPath(); ctx.roundRect(cx + 1, cy + 1, cardW - 2, cardH - 2, 6); ctx.stroke();
       }
-      // The Town Centre and a soldier, drawn in the faction's own style.
       const pv = this.previews[id] ?? (this.previews[id] = { tc: makeEntity(), unit: makeEntity() });
       const tcDef = BUILDINGS.town_center;
       Object.assign(pv.tc, { kind: Kind.Building, type: "town_center", team: Team.Player, x: 0, y: 0, radius: (tcDef.tiles * 32) / 2, hp: tcDef.hp, maxHp: tcDef.hp, buildState: 0, buildProgress: 1 });
@@ -558,78 +650,56 @@ export class SetupScreen {
       Object.assign(pv.unit, { kind: Kind.Unit, type: soldier, team: Team.Player, x: 0, y: 0, radius: ud.radius, facing: -0.5, hp: ud.hp, maxHp: ud.hp, animPhase: 0.3, attackInterval: ud.attackInterval });
       setFactionResolver(() => id);
       ctx.save();
-      ctx.beginPath(); ctx.rect(cx + 3, cy + 3, cardW - 6, 86); ctx.clip();
-      ctx.translate(cx + cardW * 0.44, cy + 62);
-      ctx.scale(0.72, 0.72);
+      ctx.beginPath(); ctx.rect(cx + 3, cy + 3, cardW - 6, 80); ctx.clip();
+      ctx.translate(cx + cardW * 0.44, cy + 58);
+      const sc = Math.min(0.72, cardW / 150);
+      ctx.scale(sc, sc);
       try { drawBuilding(ctx, pv.tc, 0, Team.Player); } catch { /* a preview never breaks the menu */ }
       ctx.restore();
       ctx.save();
-      ctx.translate(cx + cardW * 0.8, cy + 78);
-      ctx.scale(1.7, 1.7);
+      ctx.translate(cx + cardW * 0.8, cy + 72);
+      ctx.scale(1.6, 1.6);
       try { drawUnit(ctx, pv.unit, 0, 0); } catch { /* ditto */ }
       ctx.restore();
       setFactionResolver(null);
-      ui.text(d.name.replace(/^The /, ""), cx + cardW / 2, cy + 104, { align: "center", size: 13.5, bold: true, color: sel ? "#ffe9b0" : PAL.uiParchment });
-      ui.text(CURVE[d.curve], cx + cardW / 2, cy + 121, { align: "center", size: 10.5, color: sel ? d.color : "#9b927c" });
+      ui.text(d.name.replace(/^The /, ""), cx + cardW / 2, cy + 98, { align: "center", size: 13, bold: true, color: sel ? "#ffe9b0" : PAL.uiParchment });
+      ui.text(CURVE[d.curve], cx + cardW / 2, cy + 114, { align: "center", size: 10.5, color: sel ? d.color : "#9b927c" });
     });
 
-    // The chosen faction, in full.
-    let dy = y + 44 + cardH + 22;
-    ui.text(`${f.name} — ${f.era}`, x0 + 16, dy, { size: 15, bold: true, color: f.color });
-    ui.text(`“${f.tagline}”`, x0 + 16, dy + 20, { size: 12.5, color: "#d8cdb4", font: "Georgia, serif" });
+    let dy = y + 46 + cardH + 22;
+    ui.text(`${f.name} — ${f.era}`, x0 + 18, dy, { size: 15, bold: true, color: f.color });
+    ui.text(`“${f.tagline}”`, x0 + 18, dy + 20, { size: 12.5, color: "#d8cdb4", font: "Georgia, serif" });
     dy += 44;
     const half = (colW - 48) / 2;
-    f.strengths.forEach((line, i) => {
-      ui.text(`+  ${line}`, x0 + 16, dy + i * 18, { size: 12.5, color: "#9fe0a0" });
-    });
-    f.weaknesses.forEach((line, i) => {
-      ui.text(`–  ${line}`, x0 + 32 + half, dy + i * 18, { size: 12.5, color: "#e8a898" });
-    });
+    f.strengths.forEach((line, i) => ui.text(`+  ${line}`, x0 + 18, dy + i * 18, { size: 12.5, color: "#9fe0a0" }));
+    f.weaknesses.forEach((line, i) => ui.text(`–  ${line}`, x0 + 32 + half, dy + i * 18, { size: 12.5, color: "#e8a898" }));
 
-    // Opponents' factions: one chip per bot, cycling Random and each faction.
-    const bots = Math.max(0, this.config.players - 1);
-    const oy = y + panelH - 30;
-    ui.text("Opponents", x0 + 32 + half, oy + 5, { size: 12, bold: true, color: PAL.uiAccent });
-    const chipW = Math.max(52, Math.min(96, (half - 90) / Math.max(1, bots) - 4));
-    for (let t = 1; t <= bots; t++) {
-      const cx = x0 + 32 + half + 80 + (t - 1) * (chipW + 4);
-      if (cx + chipW > x0 + colW - 12) break;
-      const cur = this.config.aiFactions[t] ?? "";
-      const label = cur ? FACTIONS[cur as keyof typeof FACTIONS].name.replace(/^The /, "") : "Random";
-      if (ui.button(label, cx, oy - 8, chipW, 24, { accent: !!cur, size: 10.5, tooltip: [`Bot ${t + 1}'s faction`, "Click to cycle. Random is picked from the match seed."] })) {
-        const order = ["", ...FACTION_IDS];
-        const next = order[(order.indexOf(cur) + 1) % order.length];
-        while (this.config.aiFactions.length <= t) this.config.aiFactions.push("");
-        this.config.aiFactions[t] = next;
-        audio.play("ui");
-      }
+    // Commander, cycling through the ones you own; remembered per faction.
+    const cy2 = y + panelH - 42;
+    const owned = COMMANDER_IDS.filter((id) => profile.ownsCommander(id));
+    const cur = COMMANDERS[this.config.commander];
+    ctx.strokeStyle = withAlpha(PAL.uiAccent, 0.18);
+    ctx.beginPath(); ctx.moveTo(x0 + 18, cy2 - 12); ctx.lineTo(x0 + colW - 18, cy2 - 12); ctx.stroke();
+    ui.text("Commander", x0 + 18, cy2 + 14, { size: 13, bold: true, color: PAL.uiAccent });
+    const cycle = (dir: number) => {
+      const i = owned.indexOf(this.config.commander);
+      const next = owned[(i + dir + owned.length) % owned.length];
+      this.config.commander = next;
+      profile.selectCommander(next);
+      profile.pairCommander(this.config.faction || DEFAULT_FACTION, next);
+      audio.play("ui");
+    };
+    if (owned.length > 1) {
+      if (ui.button("‹", x0 + 104, cy2, 28, 28, {})) cycle(-1);
+      if (ui.button("›", x0 + colW - 46, cy2, 28, 28, {})) cycle(1);
     }
-    return y + panelH + 16;
-  }
-
-  /** One chip per opponent bot; click to cycle just that bot's personality. */
-  private drawBotChips(x: number, y: number, w: number) {
-    const bots = Math.max(0, this.config.players - 1);
-    ui.text("Per-bot", x, y + 5, { size: 12, bold: true, color: PAL.uiAccent });
-    if (bots <= 0) return;
-    const cur = (t: number) => this.config.aiDifficulties[t] ?? this.config.difficulty;
-    const startX = x + 62;
-    const chipW = Math.min(150, Math.max(78, (w - 62) / bots - 6));
-    for (let t = 1; t <= bots; t++) {
-      const cx = startX + (t - 1) * (chipW + 6);
-      if (cx + chipW > x + w) break; // overflow guard for big lobbies
-      const d = DIFFICULTIES[cur(t)];
-      const overridden = this.config.aiDifficulties[t] != null && this.config.aiDifficulties[t] !== this.config.difficulty;
-      if (ui.button(`${t + 1}· ${d.name}`, cx, y - 4, chipW, 26, {
-        accent: overridden, size: 11, tooltip: [`Bot ${t + 1}: ${d.name}`, "Click to cycle this bot's personality.", d.desc],
-      })) {
-        const i = DIFFICULTY_IDS.indexOf(cur(t));
-        const next = DIFFICULTY_IDS[(i + 1) % DIFFICULTY_IDS.length];
-        while (this.config.aiDifficulties.length <= t) this.config.aiDifficulties.push(this.config.difficulty);
-        this.config.aiDifficulties[t] = next;
-        audio.play("ui");
-      }
+    if (cur) {
+      ui.text(`${cur.name} — ${cur.title}`, x0 + 142, cy2 + 8, { size: 14, bold: true, color: cur.color });
+      const perks = commanderPerks(cur).join("  •  ");
+      const oath = cur.oath ? `  •  Favours the Oath of the ${cur.oath[0].toUpperCase()}${cur.oath.slice(1)}` : "";
+      ui.text(perks + oath, x0 + 142, cy2 + 26, { size: 11.5, color: "#c9bea3" });
     }
+    return y + panelH;
   }
 }
 

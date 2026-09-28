@@ -27,6 +27,7 @@ beforeAll(() => {
 });
 
 const FOOTER = 76;
+const TOP = 104;
 
 function harness(W: number, H: number) {
   const canvas = createCanvas(W, H);
@@ -40,8 +41,9 @@ function harness(W: number, H: number) {
     });
     return s.draw(W, H, 1, profile);
   };
-  const colW = Math.min(880, W - 80);
-  const x0 = W / 2 - colW / 2;
+  // The screen's outer frame: two columns inside it, the action bar under it.
+  const colW = Math.min(W - 64, 1440);
+  const x0 = Math.round(W / 2 - colW / 2);
   return { s, frame, colW, x0, footerY: H - FOOTER + 16 };
 }
 
@@ -61,11 +63,15 @@ describe("The setup screen's actions are always reachable", () => {
     // If this ever stops overflowing the pinned bar is untested by the cases
     // above, and the screen could silently go back to relying on there being
     // room.
-    const h = harness(1920, 1010);
-    h.frame();
-    const inner = h.s as unknown as { contentH: number };
-    expect(inner.contentH, "the setup content now fits, so nothing above is proving anything")
-      .toBeGreaterThan(1010 - 100 - FOOTER);
+    // Two columns fit a tall window now, so check the short ones the cases
+    // above run at.
+    for (const [W, H] of [[1920, 700], [1280, 620], [1024, 560]] as const) {
+      const h = harness(W, H);
+      h.frame();
+      const inner = h.s as unknown as { contentH: number };
+      expect(inner.contentH, `the setup content fits ${W}x${H}, so nothing above is proving anything`)
+        .toBeGreaterThan(H - TOP - FOOTER);
+    }
   });
 });
 
@@ -98,7 +104,7 @@ describe("Scrolling the setup panels", () => {
     h.frame();
     const inner = h.s as unknown as { scroll: number; contentH: number };
     for (let i = 0; i < 20; i++) h.frame({ mx: 900, my: 300, wheel: 400 });
-    const viewH = 700 - 100 - FOOTER;
+    const viewH = 700 - TOP - FOOTER;
     expect(inner.scroll).toBeLessThanOrEqual(Math.max(0, inner.contentH - viewH) + 1);
     for (let i = 0; i < 40; i++) h.frame({ mx: 900, my: 300, wheel: -400 });
     expect(inner.scroll).toBe(0);

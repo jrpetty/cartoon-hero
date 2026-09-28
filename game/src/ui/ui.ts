@@ -170,17 +170,31 @@ export class UI {
     if (this.hit(x, y, w, h)) this.pointerConsumed = true;
   }
 
+  /**
+   * A framed panel. Same parchment-and-gold as ever, with some depth: a soft
+   * shadow under it, a gradient that is a shade lighter at the top, a dark
+   * outer rim, and the gold line inset from it like a picture frame.
+   */
   panel(x: number, y: number, w: number, h: number, opts: { light?: boolean } = {}) {
     const { ctx } = this;
-    ctx.fillStyle = opts.light ? PAL.uiPanelLight : PAL.uiPanel;
-    ctx.beginPath();
-    ctx.roundRect(x, y, w, h, 6);
-    ctx.fill();
-    ctx.strokeStyle = withAlpha(PAL.uiAccent, 0.55);
+    const r = 9;
+    // Drop shadow: an offset dark shape rather than a blur, which is costly.
+    ctx.fillStyle = "rgba(0,0,0,0.28)";
+    ctx.beginPath(); ctx.roundRect(x + 2, y + 4, w, h, r); ctx.fill();
+    const g = ctx.createLinearGradient(0, y, 0, y + h);
+    if (opts.light) { g.addColorStop(0, "rgba(64,51,32,0.96)"); g.addColorStop(1, "rgba(40,31,19,0.96)"); }
+    else { g.addColorStop(0, "rgba(36,28,17,0.94)"); g.addColorStop(1, "rgba(20,15,9,0.94)"); }
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.roundRect(x, y, w, h, r); ctx.fill();
+    ctx.strokeStyle = "rgba(0,0,0,0.55)";
     ctx.lineWidth = 1.5;
-    ctx.beginPath();
-    ctx.roundRect(x + 1, y + 1, w - 2, h - 2, 5);
-    ctx.stroke();
+    ctx.beginPath(); ctx.roundRect(x + 0.75, y + 0.75, w - 1.5, h - 1.5, r); ctx.stroke();
+    ctx.strokeStyle = withAlpha(PAL.uiAccent, 0.5);
+    ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.roundRect(x + 3.5, y + 3.5, w - 7, h - 7, r - 3); ctx.stroke();
+    // A faint light along the top edge.
+    ctx.strokeStyle = "rgba(255,236,190,0.08)";
+    ctx.beginPath(); ctx.moveTo(x + r, y + 5); ctx.lineTo(x + w - r, y + 5); ctx.stroke();
     this.blockPointer(x, y, w, h);
   }
 
@@ -219,26 +233,48 @@ export class UI {
     const hover = over && !opts.disabled;
     if (over) this.pointerConsumed = true;
 
-    const base = opts.danger ? "#5a2320" : opts.accent ? "#5a4520" : "#3a3226";
-    const fill = opts.disabled ? "#2a251d" : hover ? shade(base, 0.18) : base;
-    ctx.fillStyle = fill;
+    // Gold-on-dark as ever, drawn with some depth: a gradient body lighter at
+    // the top, a highlight along the upper edge, a gold rim that brightens on
+    // hover, and a press that sinks it a pixel.
+    const pressed = hover && this.leftHeld;
+    const base = opts.danger ? "#5e2622" : opts.accent ? "#6a5024" : "#3c3427";
+    const top = opts.disabled ? "#2c271f" : shade(base, hover ? 0.3 : 0.14);
+    const bot = opts.disabled ? "#221e18" : shade(base, hover ? 0.02 : -0.12);
+    const oy = pressed ? 1 : 0;
+    const rad = Math.min(7, h / 2.6);
+    ctx.fillStyle = "rgba(0,0,0,0.3)";
+    ctx.beginPath(); ctx.roundRect(x, y + 2, w, h, rad); ctx.fill();
+    const g = ctx.createLinearGradient(0, y + oy, 0, y + oy + h);
+    g.addColorStop(0, pressed ? bot : top);
+    g.addColorStop(1, pressed ? top : bot);
+    ctx.fillStyle = g;
     ctx.beginPath();
-    ctx.roundRect(x, y, w, h, 5);
+    ctx.roundRect(x, y + oy, w, h, rad);
     ctx.fill();
+    if (!opts.disabled && !pressed) {
+      ctx.strokeStyle = "rgba(255,240,205,0.13)";
+      ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(x + rad, y + 1.5); ctx.lineTo(x + w - rad, y + 1.5); ctx.stroke();
+    }
     ctx.strokeStyle = opts.disabled
-      ? withAlpha("#888070", 0.3)
+      ? withAlpha("#888070", 0.28)
       : hover
-        ? PAL.uiAccent
-        : withAlpha(PAL.uiAccent, 0.5);
-    ctx.lineWidth = hover ? 2 : 1.2;
+        ? (opts.danger ? "#e0786a" : "#e2b24e")
+        : withAlpha(PAL.uiAccent, opts.accent ? 0.85 : 0.5);
+    ctx.lineWidth = hover || opts.accent ? 1.6 : 1.1;
     ctx.beginPath();
-    ctx.roundRect(x + 1, y + 1, w - 2, h - 2, 4);
+    ctx.roundRect(x + 0.8, y + oy + 0.8, w - 1.6, h - 1.6, rad - 0.5);
     ctx.stroke();
 
-    this.text(label, x + w / 2, y + h / 2 + 1, {
+    // A soft shadow under the label keeps it readable on any fill.
+    const lsize = opts.size ?? 14;
+    if (!opts.disabled) {
+      this.text(label, x + w / 2, y + h / 2 + 2 + oy, { align: "center", size: lsize, color: "rgba(0,0,0,0.45)", bold: true });
+    }
+    this.text(label, x + w / 2, y + h / 2 + 1 + oy, {
       align: "center",
-      size: opts.size ?? 14,
-      color: opts.disabled ? "#7a7264" : PAL.uiParchment,
+      size: lsize,
+      color: opts.disabled ? "#7a7264" : opts.accent ? "#fff0cc" : PAL.uiParchment,
       bold: true,
     });
 
