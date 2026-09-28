@@ -47,6 +47,8 @@ export interface CasterRequest {
   togglePause?: boolean;
   focus?: { x: number; y: number };
   exit?: boolean;
+  /** Save the replay being watched as a file. */
+  download?: boolean;
 }
 
 export interface CasterContext {
@@ -460,6 +462,10 @@ export class Caster {
         if (ui.button(`${s}×`, x, y, 36, 24, { size: 10.5, accent: c.speed === s && !c.paused, tooltip: ["Speed", "+ / −"] })) req.speed = s;
         x += 40;
       }
+    }
+    if (c.replay) {
+      if (ui.button("⬇ Save replay file", x + 8, y, 130, 24, { size: 11, tooltip: ["Download this replay", "A small file anyone with the game can open and watch — share it, or keep it."] })) req.download = true;
+      x += 138;
     }
     if (ui.button("Leave", x + 8, y, 60, 24, { size: 11, danger: true, tooltip: ["Stop watching", "Esc. The match is kept as a replay."] })) req.exit = true;
   }

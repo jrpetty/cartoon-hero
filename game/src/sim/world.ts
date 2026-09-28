@@ -131,6 +131,11 @@ export interface PlayerState {
     killsByUnit: Record<string, number>;
     damageByUnit: Record<string, number>;
     razedByUnit: Record<string, number>;
+    /** Match seconds of this realm's first hit on an enemy, first kill, first
+     *  razed building (-1 = not yet) — how early it went looking for a fight. */
+    firstHitAt: number;
+    firstKillAt: number;
+    firstRazeAt: number;
     /** Buildings put up, by type. */
     builtByType: Record<string, number>;
     /** Damage dealt and taken, for the fights that never showed up as kills. */
@@ -421,6 +426,7 @@ export class World {
           spentOn: { units: 0, buildings: 0, tech: 0 },
           trainedByType: {}, lostByType: {}, killedByType: {}, builtByType: {},
           killsByUnit: {}, damageByUnit: {}, razedByUnit: {},
+          firstHitAt: -1, firstKillAt: -1, firstRazeAt: -1,
           damageDealt: 0, damageTaken: 0,
           peakArmy: 0, peakVillagers: 0, idleVillagerTime: 0, resourcesSpent: 0,
           idleTcTime: 0, idleProductionTime: 0, tcSeconds: 0, productionSeconds: 0,
@@ -2832,6 +2838,7 @@ export class World {
       const dealt = this.players[fromTeam]?.stats;
       if (dealt && fromTeam !== target.team) {
         dealt.damageDealt += dmg;
+        if (dealt.firstHitAt < 0 && target.team < this.numTeams && !this.areAllied(fromTeam, target.team)) dealt.firstHitAt = this.time;
         if (sourceType) dealt.damageByUnit[sourceType] = (dealt.damageByUnit[sourceType] ?? 0) + dmg;
       }
       const took = this.players[target.team]?.stats;
@@ -2878,6 +2885,7 @@ export class World {
         killer.stats.unitsKilled++;
         killer.stats.killedByType[e.type] = (killer.stats.killedByType[e.type] ?? 0) + 1;
         if (byType && e.team !== byTeam) killer.stats.killsByUnit[byType] = (killer.stats.killsByUnit[byType] ?? 0) + 1;
+        if (killer.stats.firstKillAt < 0 && e.team !== byTeam && e.team < this.numTeams) killer.stats.firstKillAt = this.time;
       }
       this.creditHeroKill(byTeam, e.x, e.y);
       // The Champion falls — but rises again at the Town Center after a while.
@@ -2900,6 +2908,7 @@ export class World {
       }
       if (killer) {
         killer.stats.buildingsRazed++;
+        if (killer.stats.firstRazeAt < 0 && e.team !== byTeam) killer.stats.firstRazeAt = this.time;
         if (byType && e.team !== byTeam) killer.stats.razedByUnit[byType] = (killer.stats.razedByUnit[byType] ?? 0) + 1;
       }
       // Garrisoned units die with the building.

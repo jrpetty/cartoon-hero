@@ -44,7 +44,8 @@ import { CodexScreen } from "./ui/codex";
 import { FactionBook } from "./ui/faction_book";
 import { CareerScreen } from "./ui/career_screen";
 import { Caster } from "./ui/caster";
-import { NetReplaySetup, ReplayRecord, byTick, replayId, saveReplay } from "./sim/replay";
+import { NetReplaySetup, ReplayRecord, byTick, parseReplayFile, replayFile, replayId, saveReplay } from "./sim/replay";
+import { downloadText } from "./ui/files";
 import {
   ArmoryScreen,
   MenuScreen,
@@ -231,6 +232,15 @@ class App {
     // Entering or leaving fullscreen changes the viewport; most browsers also
     // fire resize, but not reliably on every platform, so listen to the source.
     document.addEventListener("fullscreenchange", () => this.resize());
+    // Drop a replay file anywhere on the game to watch it.
+    window.addEventListener("dragover", (e) => { if (e.dataTransfer?.types?.includes("Files")) e.preventDefault(); });
+    window.addEventListener("drop", (e) => {
+      const f = e.dataTransfer?.files?.[0];
+      if (!f) return;
+      e.preventDefault();
+      if (this.state === "match" && !this.replay) { this.hud.addAlert("Finish or leave this match to open a replay."); return; }
+      void f.text().then((text) => this.openReplayText(f.name, text));
+    });
     document.addEventListener("webkitfullscreenchange", () => this.resize());
     this.wireInput();
     this.applySettings();
@@ -1103,7 +1113,7 @@ class App {
   setSpeed(v: number) {
     this.gameSpeed = v;
     this.paused = false;
-    this.hud.addAlert(`Speed ${v}×`);
+    if (!this.spectating) this.hud.addAlert(`Speed ${v}×`); // the caster bar shows it
   }
 
   cycleSpeed(dir: number) {
@@ -2298,6 +2308,10 @@ class App {
       offline: !this.net,
     });
     if (req.exit) { this.exitToMenu(); return; }
+    if (req.download && this.replay) {
+      const f = replayFile(this.replay.rec);
+      this.hud.addAlert(downloadText(f.name, f.text) ? `⬇ Saved ${f.name}` : "Your browser blocked the download.");
+    }
     if (req.focus) { this.camera.centerOn(req.focus.x, req.focus.y); this.caster.manual(world); audio.play("ui"); }
     if (req.speed !== undefined && !this.net) this.setSpeed(req.speed);
     if (req.togglePause && !this.net) { this.paused = !this.paused; if (this.replay?.ended && !this.paused) this.paused = true; }
@@ -2434,6 +2448,21 @@ class App {
     }
   }
 
+  /** A replay file's text (dropped, or opened): keep it and play it. */
+  openReplayText(name: string, text: string) {
+    const res = parseReplayFile(text);
+    if (!res.ok) {
+      this.state = "career";
+      this.careerScreen.showReplays();
+      this.careerScreen.setNotice(`${name}: ${res.error}`, true);
+      return;
+    }
+    saveReplay(res.replay);
+    this.careerScreen.setNotice(res.warning ?? `Opened ${name}.`, !!res.warning);
+    this.startReplay(res.replay);
+    if (res.warning) this.hud.addAlert(`⚠ ${res.warning}`);
+  }
+
   /** Watch a recorded match with the caster view. */
   startReplay(rec: ReplayRecord, quiet = false) {
     const setup = rec.setup as SkirmishConfig | undefined;
@@ -2507,7 +2536,7 @@ class App {
     if (setup?.presetId?.startsWith("custom_")) { const m = findCustomMap(setup.presetId); if (m) mapCode = serialiseMap(m); }
     const commands = kind === "online" ? [...(this.net?.lock?.record ?? [])].map(({ t, c }) => ({ t, c })) : kind === "watch" ? [] : this.cmdLog.entries.slice();
     saveReplay({
-      version: 1, id: replayId(), savedAt: Date.now(), kind,
+      version: 1, id: replayId(), savedAt: Date.now(), kind, sim: SAVE_FORMAT_VERSION,
       setup: kind === "online" ? undefined : setup, mapCode, net: kind === "online" ? this.netSetup ?? undefined : undefined,
       names: [...this.playerNames], pov: this.spectating ? -1 : this.me, commands, endTick: world.tickCount,
       summary: {

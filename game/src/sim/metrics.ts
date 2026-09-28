@@ -123,6 +123,10 @@ export interface SideReport {
   killsByUnit: Record<string, number>;
   damageByUnit: Record<string, number>;
   razedByUnit: Record<string, number>;
+  /** Earliest first hit / kill / raze across the side, seconds (-1 = never). */
+  firstHitAt: number;
+  firstKillAt: number;
+  firstRazeAt: number;
 }
 
 /**
@@ -174,6 +178,7 @@ const emptySide = (): SideReport => ({
   idleTcTime: 0, idleProductionTime: 0, tcSeconds: 0, productionSeconds: 0,
   age: 0, upgrades: 0, trainedByType: {}, lostByType: {}, killedByType: {}, builtByType: {},
   killsByUnit: {}, damageByUnit: {}, razedByUnit: {},
+  firstHitAt: -1, firstKillAt: -1, firstRazeAt: -1,
 });
 
 const addInto = (dst: Record<string, number>, src: Record<string, number>) => {
@@ -217,6 +222,10 @@ function accumulate(side: SideReport, world: World, team: Team) {
   addInto(side.killsByUnit, s.killsByUnit ?? {});
   addInto(side.damageByUnit, s.damageByUnit ?? {});
   addInto(side.razedByUnit, s.razedByUnit ?? {});
+  const earliest = (a: number, b: number | undefined) => (b === undefined || b < 0 ? a : a < 0 ? b : Math.min(a, b));
+  side.firstHitAt = earliest(side.firstHitAt, s.firstHitAt);
+  side.firstKillAt = earliest(side.firstKillAt, s.firstKillAt);
+  side.firstRazeAt = earliest(side.firstRazeAt, s.firstRazeAt);
 }
 
 /**

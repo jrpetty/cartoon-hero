@@ -20,11 +20,33 @@ import { OATHS } from "../content/oaths";
 import { AGES } from "../content/tech";
 import { DIFFICULTIES } from "../ai/difficulty";
 import { Profile } from "../meta/profile";
-import { ReplayRecord, deleteReplay, listReplays } from "../sim/replay";
+import { REPLAY_FILE_EXT, ReplayRecord, deleteReplay, listReplays, parseReplayFile, replayFile, saveReplay } from "../sim/replay";
+import { downloadText, pickTextFile } from "./files";
+import { ARCHETYPES, MATCH_STYLES, MIN_GAMES, PlaystyleProfile, analyse, matchStyle, ramp } from "../meta/playstyle";
 import {
   Career, CareerFilter, CareerMatch, Tally, avgSecs, avgWinSecs, bestBy, careerFor, favourite, favouriteUnitOf,
   kd, mostEffectiveUnit, topUnit, unitKd, winRate, worstBy,
 } from "../meta/career";
+
+/**
+ * Draw text so it fits `maxW`: shrink it (down to 75% of its size), and only if
+ * that isn't enough, cut it with an ellipsis. Nothing on this screen should run
+ * into the next column or out of its card.
+ */
+export function fitText(text: string, x: number, y: number, maxW: number, o: { size?: number; bold?: boolean; color?: string; align?: CanvasTextAlign; font?: string } = {}) {
+  const ctx = ui.ctx;
+  let size = o.size ?? 12;
+  const min = size * 0.75;
+  const family = o.font ?? "'Trebuchet MS', sans-serif";
+  const measure = (t: string, sz: number) => { ctx.font = `${o.bold ? "bold " : ""}${sz}px ${family}`; return ctx.measureText(t).width; };
+  while (size > min && measure(text, size) > maxW) size -= 0.5;
+  let t = text;
+  if (measure(t, size) > maxW) {
+    while (t.length > 1 && measure(t + "…", size) > maxW) t = t.slice(0, -1);
+    t = t.trimEnd() + "…";
+  }
+  ui.text(t, x, y, { ...o, size });
+}
 
 /** Word-wrap a short line into at most two lines (the second ends in … if cut). */
 function wrapLines(text: string, x: number, y: number, maxW: number, size: number, color: string) {
@@ -40,8 +62,8 @@ function wrapLines(text: string, x: number, y: number, maxW: number, size: numbe
   lines.slice(0, 2).forEach((l, i) => ui.text(i === 1 && lines.length > 2 ? `${l}…` : l, x, y + i * (size + 3), { size, color }));
 }
 
-type Tab = "overview" | "factions" | "maps" | "units" | "matches" | "replays";
-const TABS: [Tab, string][] = [["overview", "Overview"], ["factions", "Factions"], ["maps", "Maps & modes"], ["units", "Units"], ["matches", "Matches"], ["replays", "Replays"]];
+type Tab = "overview" | "style" | "factions" | "maps" | "units" | "matches" | "replays";
+const TABS: [Tab, string][] = [["overview", "Overview"], ["style", "Playstyle"], ["factions", "Factions"], ["maps", "Maps & modes"], ["units", "Units"], ["matches", "Matches"], ["replays", "Replays"]];
 const FILTERS: [CareerFilter, string][] = [["all", "All time"], ["skirmish", "Skirmish"], ["online", "Online"], ["ranked", "Ranked"]];
 
 const GOOD = "#8fd07a", BAD = "#e0786a", DIM = "#a89f88", FAINT = "#6f6a5c", TEXT = "#e9dcc0", GOLD = "#e8c060";
@@ -69,6 +91,16 @@ export class CareerScreen {
   private scroll = 0;
   private contentH = 0;
   private cache: { key: string; at: number; data: ReturnType<typeof careerFor> } | null = null;
+
+  private styleCache: { key: string; at: number; p: PlaystyleProfile } | null = null;
+  /** The playstyle read for the current filter (recomputed with the data). */
+  private style(): PlaystyleProfile {
+    const d = this.data();
+    if (!this.styleCache || this.styleCache.key !== this.filter || this.styleCache.at !== this.cache!.at) {
+      this.styleCache = { key: this.filter, at: this.cache!.at, p: analyse(d.matches) };
+    }
+    return this.styleCache.p;
+  }
 
   /** Re-read storage at most twice a second (it's parsed JSON). */
   private data() {
@@ -112,7 +144,8 @@ export class CareerScreen {
     // Tabs.
     const ty = 90;
     TABS.forEach(([id, label], i) => {
-      if (ui.button(label, x0 + i * 140, ty, 132, 32, { accent: this.tab === id, size: 13.5 })) {
+      const tw = Math.min(132, (outer - 8 * (TABS.length - 1)) / TABS.length);
+      if (ui.button(label, x0 + i * (tw + 8), ty, tw, 32, { accent: this.tab === id, size: 13.5 })) {
         if (this.tab !== id) { this.tab = id; this.scroll = 0; audio.play("ui"); }
       }
     });
@@ -128,6 +161,7 @@ export class CareerScreen {
     if (this.tab === "replays") end = this.replays(x0, top, outer);
     else if (!c.all.played) end = this.empty(x0, top, outer);
     else if (this.tab === "overview") end = this.overview(c, matches, x0, top, outer, time, profile);
+    else if (this.tab === "style") end = this.playstyle(this.style(), x0, top, outer, time);
     else if (this.tab === "factions") end = this.factions(c, x0, top, outer, time);
     else if (this.tab === "maps") end = this.maps(c, x0, top, outer);
     else if (this.tab === "units") end = this.units(c, x0, top, outer, time);
@@ -227,6 +261,18 @@ export class CareerScreen {
     tiles.forEach(([l, v, s, col], i) => this.tile(x + (i % cols) * (tw + gap), y + Math.floor(i / cols) * 96, tw, 86, l, v, s, col));
     y += Math.ceil(tiles.length / cols) * 96 + 8;
 
+    // Your style, in one line — the Playstyle tab has the why.
+    {
+      const sp = this.style();
+      ui.panel(x, y, w, 64);
+      ui.text("YOUR STYLE", x + 16, y + 22, { size: 10.5, bold: true, color: DIM });
+      fitText(sp.title, x + 16, y + 48, w * 0.36, { size: 20, bold: true, color: sp.primary ? GOLD : TEXT, font: "Georgia, serif" });
+      fitText(sp.primary ? sp.primary.archetype.short : sp.enough ? "You adapt to the game in front of you." : `Play ${MIN_GAMES - sp.games} more game${MIN_GAMES - sp.games === 1 ? "" : "s"} to find out.`, x + w * 0.4, y + 30, w * 0.42, { size: 13, color: TEXT });
+      fitText(sp.traits.slice(0, 3).map((t) => t.name).join(" · "), x + w * 0.4, y + 50, w * 0.42, { size: 11.5, color: DIM });
+      if (ui.button("Why? →", x + w - 116, y + 16, 100, 32, { size: 13, accent: true })) { this.tab = "style"; this.scroll = 0; audio.play("ui"); }
+      y += 76;
+    }
+
     // Favourites.
     y = this.heading(x, y, w, "Your favourites", "most played");
     const favF = favourite(c.byFaction), favM = favourite(c.byMap), favU = topUnit(c, "trained"), favC = favourite(c.byCommander), favO = favourite(c.byOath);
@@ -244,8 +290,8 @@ export class CareerScreen {
       const fx = x + (i % fcols) * (fw + gap), fy = y + Math.floor(i / fcols) * 106;
       ui.panel(fx, fy, fw, 96);
       ui.text(label.toUpperCase(), fx + 14, fy + 22, { size: 10.5, bold: true, color: DIM });
-      ui.text(value, fx + 14, fy + 50, { size: 17, bold: true, color, font: "Georgia, serif" });
-      ui.text(sub, fx + 14, fy + 72, { size: 11, color: FAINT });
+      fitText(value, fx + 14, fy + 50, fw - 90, { size: 17, bold: true, color, font: "Georgia, serif" });
+      fitText(sub, fx + 14, fy + 72, fw - 90, { size: 11, color: FAINT });
       art(fx + fw - 72, fy + 8);
     });
     y += Math.ceil(favs.length / fcols) * 106 + 8;
@@ -375,7 +421,14 @@ export class CareerScreen {
   // ------------------------------------------------------------- factions --
   private table(x: number, y: number, w: number, head: [string, number, CanvasTextAlign?][], rows: number) {
     ui.panel(x, y, w, 48 + rows * 34);
-    for (const [label, cx, align] of head) ui.text(label.toUpperCase(), cx, y + 22, { size: 10.5, bold: true, color: DIM, align: align ?? "left" });
+    // Each header gets the room up to its neighbour (whichever side it grows
+    // towards), so long headers shrink instead of running together.
+    const pos = head.map(([, cx]) => cx).sort((a, b) => a - b);
+    for (const [label, cx, align] of head) {
+      const i = pos.indexOf(cx);
+      const room = align === "right" ? cx - (i > 0 ? pos[i - 1] : x) - 10 : (i < pos.length - 1 ? pos[i + 1] : x + w) - cx - 10;
+      fitText(label.toUpperCase(), cx, y + 22, Math.max(24, room), { size: 10.5, bold: true, color: DIM, align: align ?? "left" });
+    }
     return y + 40;
   }
 
@@ -469,8 +522,8 @@ export class CareerScreen {
       const tx = x + (i % cols) * (tw + gap), ty = y + Math.floor(i / cols) * 130;
       ui.panel(tx, ty, tw, 120);
       ui.text(label.toUpperCase(), tx + 14, ty + 22, { size: 10.5, bold: true, color: DIM });
-      ui.text(id ? unitName(id) : "—", tx + 14, ty + 50, { size: 18, bold: true, color: "#fff0cc", font: "Georgia, serif" });
-      ui.text(value || "not enough games yet", tx + 14, ty + 72, { size: 12, color: value ? GOLD : FAINT });
+      fitText(id ? unitName(id) : "—", tx + 14, ty + 50, tw - 124, { size: 18, bold: true, color: "#fff0cc", font: "Georgia, serif" });
+      fitText(value || "not enough games yet", tx + 14, ty + 72, tw - 124, { size: 12, color: value ? GOLD : FAINT });
       wrapLines(sub, tx + 14, ty + 92, tw - 120, 10.5, FAINT);
       if (id) this.unitArt(id, { x: tx + tw - 100, y: ty + 8, w: 92, h: 104 }, time);
     });
@@ -485,7 +538,7 @@ export class CareerScreen {
       const v = c.units[u];
       const vill = u === "villager";
       this.unitArt(u, { x: x + 8, y: ry, w: 48, h: 32 }, time);
-      ui.text(unitName(u), C.name, ry + 21, { size: 13.5, bold: true, color: TEXT });
+      fitText(unitName(u), C.name, ry + 21, C.tr - C.name - 10, { size: 13.5, bold: true, color: TEXT });
       ui.bar(C.tr, ry + 14, w * 0.1, 8, v.trained / maxT, GOLD);
       ui.text(num(v.trained), C.tr + w * 0.1 + 8, ry + 21, { size: 12.5, color: TEXT });
       ui.text(num(v.lost), C.lost, ry + 21, { align: "right", size: 12.5, color: v.lost ? BAD : FAINT });
@@ -516,10 +569,284 @@ export class CareerScreen {
     return y;
   }
 
+  // ------------------------------------------------------------- playstyle --
+  private block(text: string, x: number, y: number, maxW: number, size: number, color: string, bold = false): number {
+    const ctx = ui.ctx;
+    ctx.font = `${bold ? "bold " : ""}${size}px 'Trebuchet MS', sans-serif`;
+    let line = "", yy = y;
+    for (const word of text.split(" ")) {
+      const test = line ? `${line} ${word}` : word;
+      if (ctx.measureText(test).width > maxW && line) { ui.text(line, x, yy, { size, color, bold }); line = word; yy += size + 5; }
+      else line = test;
+    }
+    if (line) { ui.text(line, x, yy, { size, color, bold }); yy += size + 5; }
+    return yy - y;
+  }
+
+  /** A drawn emblem per style (emoji render differently everywhere). */
+  private medallion(id: string, cx: number, cy: number, r: number, color: string) {
+    const ctx = ui.ctx;
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.strokeStyle = color; ctx.fillStyle = color; ctx.lineWidth = Math.max(2, r * 0.09); ctx.lineCap = "round"; ctx.lineJoin = "round";
+    ctx.beginPath(); ctx.arc(0, 0, r, 0, Math.PI * 2); ctx.globalAlpha = 0.14; ctx.fill(); ctx.globalAlpha = 1; ctx.stroke();
+    const u = r / 10;
+    ctx.beginPath();
+    switch (id) {
+      case "rush": // crossed swords
+        ctx.moveTo(-6 * u, -6 * u); ctx.lineTo(6 * u, 6 * u); ctx.moveTo(6 * u, -6 * u); ctx.lineTo(-6 * u, 6 * u);
+        ctx.moveTo(-6.5 * u, 3 * u); ctx.lineTo(-3 * u, 6.5 * u); ctx.moveTo(6.5 * u, 3 * u); ctx.lineTo(3 * u, 6.5 * u); ctx.stroke(); break;
+      case "turtle": // a tower
+        ctx.rect(-4 * u, -3 * u, 8 * u, 9 * u); ctx.moveTo(-5 * u, -3 * u); ctx.lineTo(-5 * u, -6 * u); ctx.lineTo(-2.5 * u, -6 * u); ctx.lineTo(-2.5 * u, -4.5 * u);
+        ctx.lineTo(0, -4.5 * u); ctx.lineTo(0, -6 * u); ctx.lineTo(2.5 * u, -6 * u); ctx.lineTo(2.5 * u, -4.5 * u); ctx.lineTo(5 * u, -4.5 * u); ctx.lineTo(5 * u, -3 * u); ctx.stroke(); break;
+      case "late": // hourglass
+        ctx.moveTo(-4 * u, -6 * u); ctx.lineTo(4 * u, -6 * u); ctx.lineTo(-4 * u, 6 * u); ctx.lineTo(4 * u, 6 * u); ctx.closePath(); ctx.stroke(); break;
+      case "boom": // a wheat sheaf
+        for (const a of [-0.35, 0, 0.35]) { ctx.save(); ctx.rotate(a); ctx.moveTo(0, 6 * u); ctx.lineTo(0, -5 * u); ctx.restore(); }
+        ctx.stroke(); ctx.beginPath(); ctx.ellipse(0, -5 * u, 1.6 * u, 2.6 * u, 0, 0, Math.PI * 2); ctx.fill(); break;
+      case "demolition": // a flame
+        ctx.moveTo(0, 6 * u); ctx.bezierCurveTo(-6 * u, 4 * u, -4 * u, -2 * u, 0, -7 * u); ctx.bezierCurveTo(1 * u, -2 * u, 5 * u, -1 * u, 4 * u, 3 * u); ctx.bezierCurveTo(3.5 * u, 5 * u, 2 * u, 6 * u, 0, 6 * u); ctx.stroke(); break;
+      case "raid": // a horseshoe
+        ctx.arc(0, -1 * u, 5 * u, Math.PI * 0.85, Math.PI * 2.15); ctx.moveTo(-4.3 * u, 2 * u); ctx.lineTo(-4.3 * u, 6 * u); ctx.moveTo(4.3 * u, 2 * u); ctx.lineTo(4.3 * u, 6 * u); ctx.stroke(); break;
+      case "tech": // a scroll
+        ctx.rect(-5 * u, -4 * u, 10 * u, 8 * u); ctx.moveTo(-3 * u, -1.5 * u); ctx.lineTo(3 * u, -1.5 * u); ctx.moveTo(-3 * u, 1.5 * u); ctx.lineTo(2 * u, 1.5 * u); ctx.stroke(); break;
+      case "brawler": // a shield
+        ctx.moveTo(0, -6 * u); ctx.lineTo(5 * u, -4 * u); ctx.lineTo(4 * u, 2 * u); ctx.lineTo(0, 6 * u); ctx.lineTo(-4 * u, 2 * u); ctx.lineTo(-5 * u, -4 * u); ctx.closePath(); ctx.stroke(); break;
+      case "all": // scales
+        ctx.moveTo(0, -6 * u); ctx.lineTo(0, 6 * u); ctx.moveTo(-6 * u, -3 * u); ctx.lineTo(6 * u, -3 * u); ctx.moveTo(-3 * u, 6 * u); ctx.lineTo(3 * u, 6 * u);
+        ctx.moveTo(-6 * u, -3 * u); ctx.lineTo(-7.5 * u, 1.5 * u); ctx.lineTo(-4.5 * u, 1.5 * u); ctx.closePath(); ctx.moveTo(6 * u, -3 * u); ctx.lineTo(4.5 * u, 1.5 * u); ctx.lineTo(7.5 * u, 1.5 * u); ctx.closePath(); ctx.stroke(); break;
+      default: // a question
+        ctx.arc(0, -2 * u, 3.5 * u, Math.PI, Math.PI * 2.4); ctx.lineTo(0, 3 * u); ctx.moveTo(0, 5.5 * u); ctx.lineTo(0, 5.6 * u); ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  private playstyle(p: PlaystyleProfile, x: number, y: number, w: number, time: number): number {
+    const ctx = ui.ctx;
+    const f = p.features;
+    const gap = 12;
+    // ---- the headline ----
+    const heroH = 200;
+    ui.panel(x, y, w, heroH);
+    const primary = p.primary?.archetype;
+    const emX = x + w - 110, emY = y + heroH / 2;
+    ctx.fillStyle = "rgba(232,192,96,0.12)";
+    ctx.beginPath(); ctx.arc(emX, emY, 70, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = withAlpha(GOLD, 0.6); ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(emX, emY, 70, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * (p.primary?.score ?? 0)); ctx.stroke();
+    this.medallion(primary?.id ?? (p.enough ? "all" : "none"), emX, emY, 44, GOLD);
+    ui.text(p.primary ? `${Math.round(p.primary.score * 100)}% match` : "", emX, emY + 62, { align: "center", size: 11, color: DIM });
+    ui.text("YOUR STYLE", x + 20, y + 26, { size: 11, bold: true, color: DIM });
+    fitText(p.title, x + 20, y + 62, w - 260, { size: 32, bold: true, color: p.primary ? GOLD : "#ffe9b0", font: "Georgia, serif" });
+    const conf = { none: "not enough games yet", low: "early read", medium: "solid read", high: "confident read" }[p.confidence];
+    ui.text(`Based on ${p.games} game${p.games === 1 ? "" : "s"} · ${conf}${this.filter !== "all" ? ` · ${this.filter} only` : ""}`, x + 20, y + 90, { size: 12, color: FAINT });
+    this.block(p.description, x + 20, y + 116, w - 260, 13.5, TEXT);
+    y += heroH + gap;
+    if (!p.enough) return y;
+
+    // ---- traits ----
+    if (p.traits.length) {
+      y = this.heading(x, y, w, "Traits", "what else stands out");
+      let cx = x, cy = y;
+      for (const t of p.traits) {
+        ctx.font = "bold 12.5px 'Trebuchet MS', sans-serif";
+        const cw = ctx.measureText(t.name).width + 26;
+        if (cx + cw > x + w) { cx = x; cy += 34; }
+        const hov = ui.hit(cx, cy, cw, 28);
+        ctx.fillStyle = hov ? "rgba(232,192,96,0.28)" : "rgba(232,192,96,0.14)";
+        ctx.beginPath(); ctx.roundRect(cx, cy, cw, 28, 14); ctx.fill();
+        ui.text(t.name, cx + 13, cy + 19, { size: 12.5, bold: true, color: GOLD });
+        if (hov) ui.tooltip([t.name, t.detail]);
+        cx += cw + 8;
+      }
+      y = cy + 42;
+    }
+
+    // ---- the evidence ----
+    if (primary) {
+      y = this.heading(x, y, w, `Why you're a ${primary.name}`, "the numbers behind it");
+      const ev = primary.evidence(f);
+      const ew = (w - gap * (ev.length - 1)) / ev.length;
+      ev.forEach((e, i) => {
+        const ex = x + i * (ew + gap);
+        ui.panel(ex, y, ew, 78);
+        fitText(e.label, ex + 14, y + 24, ew - 28, { size: 12, color: DIM });
+        ui.text(e.value, ex + 14, y + 52, { size: 22, bold: true, color: "#fff0cc", font: "Georgia, serif" });
+        ui.bar(ex + ew * 0.45, y + 44, ew * 0.55 - 14, 8, e.weight, e.weight >= 0.7 ? GOOD : e.weight >= 0.35 ? GOLD : FAINT);
+      });
+      y += 90;
+      const cw = (w - gap * 2) / 3;
+      const col = (i: number, title: string, lines: string[], color: string) => {
+        const cx = x + i * (cw + gap);
+        let yy = y + 26;
+        ui.text(title, cx + 14, yy, { size: 11, bold: true, color });
+        yy += 20;
+        for (const l of lines) yy += this.block(`• ${l}`, cx + 14, yy, cw - 28, 12.5, TEXT) + 2;
+        return yy - y;
+      };
+      const measureH = Math.max(90, 50 + Math.max(primary.strengths.length, primary.risks.length) * 36);
+      for (let i = 0; i < 3; i++) ui.panel(x + i * (cw + gap), y, cw, measureH);
+      col(0, "STRENGTHS", primary.strengths, GOOD);
+      col(1, "WATCH OUT FOR", primary.risks, BAD);
+      col(2, "TO GET BETTER AT IT", [primary.tip], GOLD);
+      y += measureH + gap;
+    }
+
+    // ---- how you win ----
+    y = this.heading(x, y, w, "How you win", `${f.wins} wins · average ${mmss(f.avgWinSec)}`);
+    const half = (w - gap) / 2;
+    ui.panel(x, y, half, 170);
+    const buckets: [string, number][] = [["< 15 min", f.winsBefore15], ["15–30", f.wins15to30], ["30–40", f.wins30to40], ["40+ min", f.winsAfter40]];
+    const bw = (half - 60) / 4;
+    buckets.forEach(([label, v], i) => {
+      const bx = x + 30 + i * bw, bh = 100 * v;
+      ctx.fillStyle = i === 0 ? "#e0786a" : i === 3 ? "#5b8fe0" : GOLD;
+      ctx.fillRect(bx + 8, y + 130 - bh, bw - 16, bh);
+      ui.text(pct(v), bx + bw / 2, y + 124 - bh, { align: "center", size: 12, bold: true, color: TEXT });
+      ui.text(label, bx + bw / 2, y + 150, { align: "center", size: 11, color: DIM });
+    });
+    ui.text("WHEN YOUR WINS COME", x + 16, y + 20, { size: 10.5, bold: true, color: DIM });
+    // What your wins have that your losses don't.
+    ui.panel(x + half + gap, y, half, 170);
+    ui.text("WHAT YOUR WINS HAVE THAT YOUR LOSSES DON'T", x + half + gap + 16, y + 20, { size: 10.5, bold: true, color: DIM });
+    let ky = y + 44;
+    if (!p.winKeys.length) this.block("Needs at least three wins and three losses to compare.", x + half + gap + 16, ky, half - 32, 12.5, FAINT);
+    for (const k of p.winKeys) {
+      ui.text(k.change > 0 ? "▲" : "▼", x + half + gap + 16, ky, { size: 12, color: k.change > 0 ? GOOD : "#7fb0e8" });
+      ky += this.block(k.sentence, x + half + gap + 34, ky, half - 52, 12.5, TEXT) + 4;
+    }
+    y += 182;
+    const facts: [string, string][] = [
+      ["Median first attack", mmss(f.medianFirstHit)], ["Attack before 7:00", pct(f.rushRate)],
+      ["Losses inside 15 min", pct(f.earlyLossShare)], ["Win rate in 30+ min games", f.lateShare ? pct(f.lateWinRate) : "—"],
+    ];
+    const fw2 = (w - gap * 3) / 4;
+    facts.forEach(([k, v], i) => {
+      const fx = x + i * (fw2 + gap);
+      ui.panel(fx, y, fw2, 56);
+      fitText(k, fx + 14, y + 22, fw2 - 28, { size: 11.5, color: DIM });
+      ui.text(v, fx + 14, y + 44, { size: 16, bold: true, color: "#fff0cc" });
+    });
+    y += 68;
+
+    // ---- your army ----
+    y = this.heading(x, y, w, "Your army", "what you train, and what you spend on");
+    ui.panel(x, y, w, 118);
+    const classes: [keyof typeof f.classShare, string, string][] = [["infantry", "Infantry", "#c8a060"], ["archer", "Archers", "#8fd07a"], ["cavalry", "Cavalry", "#7fb0e8"], ["siege", "Siege", "#e0786a"], ["support", "Support", "#c8b8e8"]];
+    let sx = x + 16;
+    const barW = w - 32;
+    for (const [k, , color] of classes) { const v = f.classShare[k]; if (!v) continue; ctx.fillStyle = color; ctx.fillRect(sx, y + 18, barW * v, 18); sx += barW * v; }
+    let lx = x + 16;
+    for (const [k, label, color] of classes) {
+      const v = f.classShare[k]; if (!v) continue;
+      ctx.fillStyle = color; ctx.fillRect(lx, y + 46, 10, 10);
+      const t = `${label} ${pct(v)}`;
+      ui.text(t, lx + 14, y + 55, { size: 12, color: TEXT });
+      ctx.font = "12px 'Trebuchet MS', sans-serif";
+      lx += ctx.measureText(t).width + 30;
+    }
+    fitText(`Top unit: ${f.topUnit ? unitName(f.topUnit) : "—"} (${pct(f.topUnitShare)} of your soldiers)  ·  variety: ${f.diversity.toFixed(1)} unit types' worth`, x + 16, y + 80, w - 32, { size: 12.5, color: DIM });
+    fitText(`Spending: ${pct(f.spendUnits)} army · ${pct(f.spendBuildings)} buildings · ${pct(f.spendTech)} technology`, x + 16, y + 102, w - 32, { size: 12.5, color: DIM });
+    y += 130;
+
+    // ---- you vs them ----
+    y = this.heading(x, y, w, "You vs your opponents", "per game, against the average enemy you faced");
+    const rows: [string, number, string][] = [
+      ["Income", f.gatherRatio, `${Math.round(f.gatherPerMin)} a minute`],
+      ["Peak villagers", f.villagerRatio, `${Math.round(f.peakVillagers)}`],
+      ["Buildings razed", f.razedRatio, f.razedPerGame.toFixed(1)],
+      ["Villagers killed", f.raidRatio, f.raidPerGame.toFixed(1)],
+      ["Defence built", f.defenseRatio, f.defensesPerGame.toFixed(1)],
+      ["Research", f.upgradeRatio, f.upgradesPerGame.toFixed(1)],
+      ["Kills per loss", f.foeKd > 0 ? f.kd / f.foeKd : 1, `${f.kd.toFixed(2)} (them ${f.foeKd.toFixed(2)})`],
+    ];
+    ui.panel(x, y, w, rows.length * 30 + 20);
+    rows.forEach(([label, r, you], i) => {
+      const ry = y + 26 + i * 30;
+      fitText(label, x + 16, ry, 150, { size: 13, color: TEXT, bold: true });
+      const mid = x + w * 0.45, span = w * 0.22;
+      ctx.fillStyle = "rgba(255,255,255,0.08)"; ctx.fillRect(mid - span, ry - 10, span * 2, 10);
+      ctx.fillStyle = "rgba(255,255,255,0.35)"; ctx.fillRect(mid, ry - 13, 1, 16);
+      const lg = Math.max(-1, Math.min(1, Math.log2(Math.max(0.01, r)) / 1.5));
+      ctx.fillStyle = lg >= 0 ? GOOD : BAD;
+      ctx.fillRect(lg >= 0 ? mid : mid + lg * span, ry - 10, Math.abs(lg) * span, 10);
+      ui.text(`${r.toFixed(2)}×`, mid + span + 12, ry, { size: 12.5, bold: true, color: r >= 1.1 ? GOOD : r <= 0.9 ? BAD : GOLD });
+      fitText(`you: ${you}`, x + w * 0.76, ry, w * 0.24 - 16, { size: 12, color: DIM });
+    });
+    y += rows.length * 30 + 32;
+
+    // ---- game by game ----
+    y = this.heading(x, y, w, "Game by game", "each match's own style — hover for the rule");
+    ui.panel(x, y, w, p.matchMix.length * 30 + 20);
+    p.matchMix.forEach((mm, i) => {
+      const ry = y + 26 + i * 30;
+      const st = MATCH_STYLES[mm.style];
+      ui.text(st.name, x + 16, ry, { size: 13, bold: true, color: st.color });
+      ui.bar(x + 140, ry - 9, w * 0.4, 10, mm.share, st.color);
+      ui.text(`${pct(mm.share)} of games`, x + 150 + w * 0.4, ry, { size: 12, color: TEXT });
+      ui.text(`won ${mm.wins} of ${mm.games} (${pct(mm.wins / Math.max(1, mm.games))})`, x + w - 16, ry, { align: "right", size: 12, color: mm.wins / Math.max(1, mm.games) >= 0.55 ? GOOD : mm.wins / Math.max(1, mm.games) <= 0.45 ? BAD : DIM });
+      if (ui.hit(x, ry - 16, w, 26)) ui.tooltip([st.name, st.rule]);
+    });
+    y += p.matchMix.length * 30 + 32;
+    if (p.byFaction.length) {
+      y = this.heading(x, y, w, "By faction", "how you most often play each one");
+      ui.panel(x, y, w, p.byFaction.length * 30 + 20);
+      p.byFaction.forEach((b, i) => {
+        const ry = y + 26 + i * 30;
+        this.dot(x + 22, ry - 4, facColor(b.faction));
+        fitText(facName(b.faction), x + 34, ry, 200, { size: 13, bold: true, color: TEXT });
+        const st = MATCH_STYLES[b.style];
+        ui.text(`${st.name} in ${pct(b.share)} of ${b.games} games`, x + 260, ry, { size: 12.5, color: st.color });
+        ui.text(`${pct(b.winRate)} won`, x + w - 16, ry, { align: "right", size: 12.5, color: b.winRate >= 0.55 ? GOOD : b.winRate <= 0.45 ? BAD : DIM });
+      });
+      y += p.byFaction.length * 30 + 32;
+    }
+
+    // ---- every style ----
+    y = this.heading(x, y, w, "Every style", "how closely you match each one (35% or more counts)");
+    for (const sc of p.scores) {
+      const a = sc.archetype;
+      const rowH = 64;
+      ui.panel(x, y, w, rowH);
+      this.medallion(a.id, x + 30, y + rowH / 2, 18, sc === p.primary ? GOLD : DIM);
+      fitText(a.name, x + 60, y + 26, 190, { size: 15, bold: true, color: sc === p.primary ? GOLD : TEXT });
+      ui.bar(x + 60, y + 38, 170, 7, sc.score, sc.score >= 0.35 ? GOLD : FAINT);
+      ui.text(`${Math.round(sc.score * 100)}%`, x + 238, y + 45, { size: 11.5, bold: true, color: sc.score >= 0.35 ? GOLD : FAINT });
+      fitText(a.short, x + 290, y + 26, w - 306, { size: 13, color: TEXT });
+      fitText(a.criteria, x + 290, y + 46, w - 306, { size: 11.5, color: DIM });
+      y += rowH + 6;
+    }
+    void time; void ramp;
+    return y + 6;
+  }
+
   // -------------------------------------------------------------- replays --
+  private notice = "";
+  private noticeBad = false;
+  setNotice(msg: string, bad: boolean) { this.notice = msg; this.noticeBad = bad; }
+
+  /** Open a replay file from the player's computer; it's kept, then played. */
+  openReplayFile() {
+    void pickTextFile(`${REPLAY_FILE_EXT},.json,application/json`).then((f) => {
+      if (!f) return;
+      const res = parseReplayFile(f.text);
+      if (!res.ok) { this.notice = res.error; this.noticeBad = true; return; }
+      saveReplay(res.replay);
+      this.notice = res.warning ?? `Opened ${f.name}.`;
+      this.noticeBad = !!res.warning;
+      this.watch = res.replay;
+    });
+  }
+
   private replays(x: number, y: number, w: number): number {
     const list = listReplays();
     y = this.heading(x, y, w, "Replays", `your last ${list.length} match${list.length === 1 ? "" : "es"} — watch any of them with the full caster view`);
+    // Opening one from a file (or dropping it onto the game).
+    ui.panel(x, y, w, 58);
+    if (ui.button("📂  Open a replay file…", x + 14, y + 11, 220, 36, { accent: true, size: 14, tooltip: ["Open a replay file", `A ${REPLAY_FILE_EXT} file downloaded from this game — yours, a friend's, a tournament's.`, "You can also drag the file onto the game."] })) this.openReplayFile();
+    fitText(this.notice || `Download any replay below to keep it or share it — anyone with the game can open it and watch it with the caster view. Or drag a ${REPLAY_FILE_EXT} file onto the game.`,
+      x + 250, y + 34, w - 266, { size: 12.5, color: this.notice ? (this.noticeBad ? BAD : GOOD) : DIM });
+    y += 70;
     if (!list.length) {
       ui.panel(x, y, w, 90);
       ui.text("No replays yet — every match you play or watch is recorded here automatically.", x + w / 2, y + 50, { align: "center", size: 13.5, color: DIM });
@@ -528,15 +855,21 @@ export class CareerScreen {
     for (const r of list) {
       ui.panel(x, y, w, 64);
       const d = new Date(r.savedAt);
-      ui.text(r.summary.map, x + 16, y + 26, { size: 15, bold: true, color: "#ffe9b0" });
-      const kind = r.kind === "online" ? "Online" : r.kind === "watch" ? "AI game you watched" : "Skirmish";
-      ui.text(`${kind} · ${r.summary.players} players · ${mmss(r.summary.durationSec)} · ${d.toLocaleDateString()} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`, x + 16, y + 46, { size: 12, color: DIM });
+      fitText(r.summary.map, x + 16, y + 26, 300, { size: 15, bold: true, color: "#ffe9b0" });
+      if (r.imported) ui.text("FROM FILE", x + 16 + Math.min(300, (ui.ctx.measureText(r.summary.map).width || 0) + 10), y + 25, { size: 9.5, bold: true, color: "#7fb0e8" });
+      const kind = r.kind === "online" ? "Online" : r.kind === "watch" ? "AI game watched" : "Skirmish";
+      fitText(`${kind} · ${r.summary.players} players · ${mmss(r.summary.durationSec)} · ${d.toLocaleDateString()} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`, x + 16, y + 46, 330, { size: 12, color: DIM });
       r.summary.factions.forEach((f, i) => this.dot(x + 360 + i * 16, y + 22, facColor(f)));
-      ui.text(r.names.filter(Boolean).slice(0, 4).join(" · "), x + 360, y + 46, { size: 11.5, color: FAINT });
-      ui.text(r.summary.result, x + w - 250, y + 36, { align: "right", size: 13, bold: true, color: r.summary.result === "Unfinished" ? DIM : GOLD });
-      if (ui.button("▶ Watch", x + w - 230, y + 14, 110, 36, { accent: true, size: 14, tooltip: ["Watch this match", "With the caster view: any player's vision, graphs, the feed, and a timeline you can scrub."] })) this.watch = r;
+      fitText(r.names.filter(Boolean).slice(0, 4).join(" · "), x + 360, y + 46, w - 360 - 470, { size: 11.5, color: FAINT });
+      fitText(r.summary.result, x + w - 350, y + 36, 110, { align: "right", size: 13, bold: true, color: r.summary.result === "Unfinished" ? DIM : GOLD });
+      if (ui.button("▶ Watch", x + w - 330, y + 14, 100, 36, { accent: true, size: 14, tooltip: ["Watch this match", "With the caster view: any player's vision, graphs, the feed, and a timeline you can scrub."] })) this.watch = r;
+      if (ui.button("⬇ Download", x + w - 222, y + 14, 106, 36, { size: 13, tooltip: ["Download the replay", `Saves a ${REPLAY_FILE_EXT} file — a few kilobytes. Anyone with the game can open it and watch.`] })) {
+        const file = replayFile(r);
+        this.notice = downloadText(file.name, file.text) ? `Downloaded ${file.name}` : "Your browser blocked the download.";
+        this.noticeBad = false;
+      }
       const armed = this.confirmDelete === r.id;
-      if (ui.button(armed ? "Sure?" : "Delete", x + w - 110, y + 14, 94, 36, { size: 13, danger: armed })) {
+      if (ui.button(armed ? "Sure?" : "Delete", x + w - 108, y + 14, 94, 36, { size: 13, danger: armed })) {
         if (armed) { deleteReplay(r.id); this.confirmDelete = ""; } else this.confirmDelete = r.id;
       }
       y += 72;
@@ -570,7 +903,7 @@ export class CareerScreen {
       ui.text(AGES[m.age]?.short ?? String(m.age), C.age, ry + 21, { align: "right", size: 12.5, color: DIM });
       if (ui.hit(x, ry, w, 34)) {
         const fav = Object.entries(m.trained).filter(([u]) => u !== "villager").sort((p, q) => q[1] - p[1])[0];
-        ui.tooltip([`${m.won ? "Victory" : "Defeat"} on ${m.map}`,
+        ui.tooltip([`${m.won ? "Victory" : "Defeat"} on ${m.map} — ${MATCH_STYLES[matchStyle(m)].name}`,
           `${facName(m.faction)}${m.commander ? ` led by ${cmdName(m.commander)}` : ""}${m.oaths.length ? ` · Oaths: ${m.oaths.map(oathName).join(", ")}` : ""}`,
           `Against: ${m.foes.map(facName).join(", ") || "—"}${m.allies.length ? ` · with ${m.allies.map(facName).join(", ")}` : ""}`,
           `Gathered ${num(m.gathered)} · peak army ${m.peakArmy} · razed ${m.razed}`,

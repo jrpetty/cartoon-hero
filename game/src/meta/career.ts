@@ -70,7 +70,26 @@ export interface CareerMatch {
   unitKills?: Record<string, number>;
   unitDamage?: Record<string, number>;
   unitRazed?: Record<string, number>;
+  /** Seconds to your side's first hit on an enemy, first kill, first razed building (-1 never). Absent on older records. */
+  firstHitAt?: number;
+  firstKillAt?: number;
+  firstRazeAt?: number;
+  /** What you spent it on. */
+  spentOn?: { units: number; buildings: number; tech: number };
+  /**
+   * The average enemy realm in this match — what "more than usual" is measured
+   * against: the people you actually played, not a made-up norm.
+   */
+  foe?: { gathered: number; razed: number; kills: number; losses: number; peakArmy: number; peakVillagers: number; villagerKills: number; upgrades: number; defenses: number; age: number };
 }
+
+/**
+ * How much defence a realm built, in "tower equivalents": a wall run is many
+ * cheap segments, so segments count a quarter each; a castle counts four.
+ */
+export const DEFENSE_WEIGHT: Record<string, number> = { palisade: 0.25, stone_wall: 0.25, gate: 1, watch_tower: 2, watchfire: 1, castle: 4 };
+export const defensesBuilt = (built: Record<string, number>) =>
+  Math.round(Object.entries(DEFENSE_WEIGHT).reduce((n, [b, w]) => n + (built[b] ?? 0) * w, 0) * 10) / 10;
 
 /** One unit type across a career. */
 export interface UnitTally {
@@ -309,6 +328,17 @@ function formatOf(players: PlayerReport[]): string {
   return sizes.join(" v ");
 }
 
+/** The average enemy realm, from their per-realm reports. */
+function foeAverage(foes: PlayerReport[]): CareerMatch["foe"] {
+  if (!foes.length) return undefined;
+  const avg = (f: (p: PlayerReport) => number) => Math.round((foes.reduce((a, p) => a + f(p), 0) / foes.length) * 10) / 10;
+  return {
+    gathered: avg((p) => p.gathered), razed: avg((p) => p.buildingsRazed), kills: avg((p) => p.unitsKilled), losses: avg((p) => p.unitsLost),
+    peakArmy: avg((p) => p.peakArmy), peakVillagers: avg((p) => p.peakVillagers), villagerKills: avg((p) => p.killedByType.villager ?? 0),
+    upgrades: avg((p) => p.upgrades), defenses: avg((p) => defensesBuilt(p.builtByType)), age: avg((p) => p.age),
+  };
+}
+
 /** Your side of a finished match, from its end-of-match report. */
 export function careerMatch(report: MatchReport, meta: {
   at: number; won: boolean; kind: MatchKind; ranked?: boolean; mode: string; difficulty: string; commander: string;
@@ -358,6 +388,11 @@ export function careerMatch(report: MatchReport, meta: {
     unitKills: { ...(side.killsByUnit ?? {}) },
     unitDamage: Object.fromEntries(Object.entries(side.damageByUnit ?? {}).map(([k, v]) => [k, Math.round(v)])),
     unitRazed: { ...(side.razedByUnit ?? {}) },
+    firstHitAt: Math.round(side.firstHitAt ?? -1),
+    firstKillAt: Math.round(side.firstKillAt ?? -1),
+    firstRazeAt: Math.round(side.firstRazeAt ?? -1),
+    spentOn: { units: Math.round(side.spentOn.units), buildings: Math.round(side.spentOn.buildings), tech: Math.round(side.spentOn.tech) },
+    foe: foeAverage(players.filter((p) => p.relation === "enemy" && !p.horde)),
   };
 }
 
