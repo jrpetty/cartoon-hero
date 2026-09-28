@@ -406,7 +406,7 @@ function createHub(opts) {
     for (const c of ordered) { const rec = c.conn.rec; if (rec) { rec.played = (rec.played || 0) + 1; } }
     players.save();
     const seed = (Math.random() * 1e9) | 0;
-    broadcast(r, { t: "start", seed, numTeams: ordered.length, alliances, slotTeams, factions, map: r.map, ranked: r.ranked });
+    broadcast(r, { t: "start", seed, numTeams: ordered.length, alliances, slotTeams, factions, names: ordered.map((c) => c.name), map: r.map, ranked: r.ranked });
     log(`[room ${r.name}] started: ${ordered.length} players on ${r.map.name}${r.ranked ? " (ranked)" : ""}`);
     hubChanged();
     return true;

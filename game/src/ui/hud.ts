@@ -210,7 +210,8 @@ export class HUD {
       bold: night,
     });
 
-    if (ui.button("Menu", W - 74, 5, 64, 24, { size: 13 })) ctrl.openMenu();
+    // Casters have the caster bar (and Esc / Leave) instead.
+    if (!spectating && ui.button("Menu", W - 74, 5, 64, 24, { size: 13 })) ctrl.openMenu();
 
     if (attackMoveArmed) {
       ui.text("⚔ ATTACK-MOVE: click a target location", W / 2, 52, {

@@ -30,6 +30,10 @@ export interface NetStart {
   ranked?: boolean;
   /** The hub this match came from, to go back to afterwards. */
   online?: string;
+  /** Player names in team order, for the caster view. */
+  names?: string[];
+  /** An observer's broadcast delay, in seconds. */
+  delaySec?: number;
 }
 
 /** What the game tells the lobby about the player. */
@@ -407,6 +411,8 @@ export class NetLobby {
 
   private observing = false;
   private room = "main";
+  /** A caster's broadcast delay (seconds): the stream trails the match so it can't be used to cheat. */
+  private delaySec = 0;
 
   private connectServer(url: string, name: string, room: string, pass: string, observer: boolean, status: (m: string) => void) {
     this.fromHub = false;
@@ -440,7 +446,7 @@ export class NetLobby {
       seed?: number; numTeams?: number; alliances?: number[]; slotTeams?: { slot: number; team: number }[]; room?: string;
       map?: LobbyMap & { code?: string }; maps?: PoolMap[]; factions?: string[]; id?: string; name?: string; author?: string;
       rooms?: RoomSummary[]; online?: number; me?: PlayerSummary | null; mode?: string; waiting?: number; need?: number;
-      top?: PlayerSummary[]; text?: string; ms?: number; why?: string; ranked?: boolean; quick?: string; locked?: boolean; max?: number; observer?: boolean };
+      top?: PlayerSummary[]; text?: string; ms?: number; why?: string; ranked?: boolean; quick?: string; locked?: boolean; max?: number; observer?: boolean; names?: string[] };
     switch (m.t) {
       case "rooms":
         this.rooms = m.rooms ?? [];
@@ -514,7 +520,7 @@ export class NetLobby {
       case "start": {
         const teams = Array.from({ length: m.numTeams! }, (_, i) => i as Team);
         const mine = m.slotTeams!.find((st) => st.slot === this.slot);
-        const common = { transport: ws, teams, alliances: m.alliances!, seed: m.seed!, numTeams: m.numTeams!, factions: m.factions, map: m.map, ranked: !!m.ranked, online: this.fromHub ? this.serverUrl : undefined };
+        const common = { transport: ws, teams, alliances: m.alliances!, seed: m.seed!, numTeams: m.numTeams!, factions: m.factions, map: m.map, ranked: !!m.ranked, online: this.fromHub ? this.serverUrl : undefined, names: m.names, delaySec: this.observing ? this.delaySec : 0 };
         this.countdownAt = 0;
         // Not assigned a team → we joined to observe.
         if (!mine) this.finish({ ...common, localTeam: Team.Player, observer: true });
@@ -626,6 +632,19 @@ export class NetLobby {
       }
     }
     p.append(grid);
+
+    // Casting: how far behind the live match to watch.
+    if (this.observing) {
+      p.append(this.heading("Caster delay"));
+      const dr = this.div("");
+      for (const [sec, label] of [[0, "Live"], [30, "30 s"], [60, "1 min"], [120, "2 min"], [300, "5 min"]] as const) {
+        const c = this.chip(label, this.delaySec === sec);
+        c.onclick = () => { this.delaySec = sec; this.render(); };
+        dr.append(c);
+      }
+      dr.append(this.div("font-size:12px;color:#8f8770;margin-top:4px", "Streaming a match? A delay stops anyone watching your stream from seeing their opponent's army. You still get the full caster view."));
+      p.append(dr);
+    }
 
     // Your realm.
     if (!this.observing) {

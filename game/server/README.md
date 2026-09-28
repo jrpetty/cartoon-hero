@@ -97,6 +97,13 @@ node server/server.mjs              # serves it on :8787
    server's community pool. Players choose a team and a faction (only ones
    they own), chat, ready up. Up to 16 players; others can join to watch.
 6. **After the match** the game returns to the hub.
+7. **Casting**: "Watch" on an open room joins it as an observer. In the lobby
+   the caster picks a broadcast delay (live, 30 s, 1, 2 or 5 minutes) and
+   gets the full caster view once the match starts — player bar, army and
+   economy comparisons, production, vision per player, an auto-director
+   camera, an event feed, graphs and a clean feed for streaming. The delay
+   runs on the caster's machine; the server just relays turns as usual.
+   Every match is also kept as a replay on each player's device.
 
 ## Ranked results and the ladder
 

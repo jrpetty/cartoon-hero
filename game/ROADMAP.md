@@ -1166,6 +1166,45 @@ Units — trained most, enemy killed most, lost most, and every unit's trained
 / lost / killed-of-its-type with survival rate. Matches — the list, with a
 tooltip per game.
 
+## Caster mode and replays
+
+Every way of watching — an AI game from the Skirmish screen ("Watch"), an
+online room joined with "Watch", or a replay — now uses one caster view
+(`ui/caster.ts`), built from what the big competitive RTS observer tools
+have: a player bar (colour, name, faction, age, Oaths, resources,
+population, army value) with the clock and LIVE / DELAY / REPLAY in the
+middle; tug-of-war bars for army, economy and kills by side; a bottom panel
+with Overview, Army, Economy, Production (every building's current item with
+progress) and Tech & Oaths (Q W E R T / Tab); vision switching (1–8 one
+player's fog, 0 everything); an auto-director that cuts to the hottest fight
+(deaths and collapses decaying over a few seconds), follows it, tours the
+bases when it's quiet and waits ten seconds whenever the caster moves the
+camera; an event feed (first blood, battles, ages, Oaths, fallen Town
+Centers and castles, eliminations, the winner) that jumps the camera when
+clicked; fight markers on the minimap; army-value and score graphs (G); a
+clean feed for streaming (H); speed up to 16× offline; a help card (?).
+
+**Replays.** Every match is recorded when it ends — a skirmish (its setup,
+now including the human's rarities and boons, plus the human's orders; the
+AIs replay themselves), an AI game you watched (setup only), an online match
+(every order the lockstep applied, from everyone). Twelve are kept; Career →
+Replays watches one with the caster view and a timeline: pause, 0.5–16×, and
+click to jump (backwards re-runs from the start, a slice per frame so the
+screen never freezes). Verified: a replay reproduces the live game's numbers
+exactly at the same moment; `caster_sync.test.ts` rebuilds an online match
+from its record to the same checksum.
+
+**Broadcast delay.** An online caster picks Live, 30 s, 1, 2 or 5 minutes in
+the lobby, and simulates that far behind the players (`stepReady` holds back
+against `Lockstep.readyThrough()`), so a stream can't be used to scout.
+That needed one lockstep fix: a player who drops used to have *all* their
+buffered turns ignored from the moment the drop arrived, so a caster
+receiving the drop minutes "early" would have skipped orders the players had
+applied. Now a dropped player's turns that arrived still count, for
+everyone; only later ticks stop waiting for them. Tested with a delayed
+caster through a mid-match disconnect, and in the browser: 48 s after the
+start, a 30 s caster read 0:18. Online starts now carry player names.
+
 ## Bigger / later
 - **Naval** — water is currently only an impassable wall, and the Islands
   preset (55% water) is a maze rather than a naval map. Dock, transport,

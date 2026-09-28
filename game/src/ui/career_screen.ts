@@ -20,13 +20,14 @@ import { OATHS } from "../content/oaths";
 import { AGES } from "../content/tech";
 import { DIFFICULTIES } from "../ai/difficulty";
 import { Profile } from "../meta/profile";
+import { ReplayRecord, deleteReplay, listReplays } from "../sim/replay";
 import {
   Career, CareerFilter, CareerMatch, Tally, avgSecs, avgWinSecs, bestBy, careerFor, favourite, favouriteUnitOf,
   kd, topUnit, winRate, worstBy,
 } from "../meta/career";
 
-type Tab = "overview" | "factions" | "maps" | "units" | "matches";
-const TABS: [Tab, string][] = [["overview", "Overview"], ["factions", "Factions"], ["maps", "Maps & modes"], ["units", "Units"], ["matches", "Matches"]];
+type Tab = "overview" | "factions" | "maps" | "units" | "matches" | "replays";
+const TABS: [Tab, string][] = [["overview", "Overview"], ["factions", "Factions"], ["maps", "Maps & modes"], ["units", "Units"], ["matches", "Matches"], ["replays", "Replays"]];
 const FILTERS: [CareerFilter, string][] = [["all", "All time"], ["skirmish", "Skirmish"], ["online", "Online"], ["ranked", "Ranked"]];
 
 const GOOD = "#8fd07a", BAD = "#e0786a", DIM = "#a89f88", FAINT = "#6f6a5c", TEXT = "#e9dcc0", GOLD = "#e8c060";
@@ -64,7 +65,13 @@ export class CareerScreen {
     return this.cache.data;
   }
 
-  draw(W: number, H: number, time: number, profile: Profile): "back" | null {
+  /** Open straight on the replay list (coming back from watching one). */
+  showReplays() { this.tab = "replays"; this.scroll = 0; }
+
+  private watch: ReplayRecord | null = null;
+  private confirmDelete = "";
+
+  draw(W: number, H: number, time: number, profile: Profile): "back" | { watch: ReplayRecord } | null {
     const ctx = ui.ctx;
     const bg = ctx.createLinearGradient(0, 0, 0, H);
     bg.addColorStop(0, "#221a10");
@@ -91,7 +98,7 @@ export class CareerScreen {
     // Tabs.
     const ty = 90;
     TABS.forEach(([id, label], i) => {
-      if (ui.button(label, x0 + i * 150, ty, 142, 32, { accent: this.tab === id, size: 13.5 })) {
+      if (ui.button(label, x0 + i * 140, ty, 132, 32, { accent: this.tab === id, size: 13.5 })) {
         if (this.tab !== id) { this.tab = id; this.scroll = 0; audio.play("ui"); }
       }
     });
@@ -104,7 +111,8 @@ export class CareerScreen {
     this.scroll = Math.min(this.scroll, maxScroll);
     ui.pushScroll(this.scroll, { x: 0, y: top, w: W, h: viewH });
     let end = top;
-    if (!c.all.played) end = this.empty(x0, top, outer);
+    if (this.tab === "replays") end = this.replays(x0, top, outer);
+    else if (!c.all.played) end = this.empty(x0, top, outer);
     else if (this.tab === "overview") end = this.overview(c, matches, x0, top, outer, time, profile);
     else if (this.tab === "factions") end = this.factions(c, x0, top, outer, time);
     else if (this.tab === "maps") end = this.maps(c, x0, top, outer);
@@ -121,6 +129,7 @@ export class CareerScreen {
     ctx.fillStyle = withAlpha(PAL.uiAccent, 0.3);
     ctx.fillRect(0, fy, W, 1);
     if (ui.button("⟵  Back", x0, fy + 12, 130, 40, { size: 15 })) return "back";
+    if (this.watch) { const w = this.watch; this.watch = null; return { watch: w }; }
     ui.text("Skirmish and online games both count. Kept on this device.", x0 + outer, fy + 37, { align: "right", size: 11.5, color: FAINT });
     return null;
   }
@@ -468,6 +477,34 @@ export class CareerScreen {
         ui.text(num(n), bx + bw - 12, by + 22, { align: "right", size: 12.5, bold: true, color: GOLD });
       });
       y += Math.ceil(blds.length / 4) * 40 + 12;
+    }
+    return y;
+  }
+
+  // -------------------------------------------------------------- replays --
+  private replays(x: number, y: number, w: number): number {
+    const list = listReplays();
+    y = this.heading(x, y, w, "Replays", `your last ${list.length} match${list.length === 1 ? "" : "es"} — watch any of them with the full caster view`);
+    if (!list.length) {
+      ui.panel(x, y, w, 90);
+      ui.text("No replays yet — every match you play or watch is recorded here automatically.", x + w / 2, y + 50, { align: "center", size: 13.5, color: DIM });
+      return y + 100;
+    }
+    for (const r of list) {
+      ui.panel(x, y, w, 64);
+      const d = new Date(r.savedAt);
+      ui.text(r.summary.map, x + 16, y + 26, { size: 15, bold: true, color: "#ffe9b0" });
+      const kind = r.kind === "online" ? "Online" : r.kind === "watch" ? "AI game you watched" : "Skirmish";
+      ui.text(`${kind} · ${r.summary.players} players · ${mmss(r.summary.durationSec)} · ${d.toLocaleDateString()} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`, x + 16, y + 46, { size: 12, color: DIM });
+      r.summary.factions.forEach((f, i) => this.dot(x + 360 + i * 16, y + 22, facColor(f)));
+      ui.text(r.names.filter(Boolean).slice(0, 4).join(" · "), x + 360, y + 46, { size: 11.5, color: FAINT });
+      ui.text(r.summary.result, x + w - 250, y + 36, { align: "right", size: 13, bold: true, color: r.summary.result === "Unfinished" ? DIM : GOLD });
+      if (ui.button("▶ Watch", x + w - 230, y + 14, 110, 36, { accent: true, size: 14, tooltip: ["Watch this match", "With the caster view: any player's vision, graphs, the feed, and a timeline you can scrub."] })) this.watch = r;
+      const armed = this.confirmDelete === r.id;
+      if (ui.button(armed ? "Sure?" : "Delete", x + w - 110, y + 14, 94, 36, { size: 13, danger: armed })) {
+        if (armed) { deleteReplay(r.id); this.confirmDelete = ""; } else this.confirmDelete = r.id;
+      }
+      y += 72;
     }
     return y;
   }

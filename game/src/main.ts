@@ -8,7 +8,7 @@ import { UNITS } from "./content/units";
 import { ABILITIES } from "./content/abilities";
 import { BUILDINGS } from "./content/buildings";
 import { COMMANDERS, COMMANDER_IDS } from "./content/commanders";
-import { SIM_DT, TILE } from "./content/balance";
+import { SIM_DT, SIM_HZ, TILE } from "./content/balance";
 import { RNG } from "./engine/rng";
 import {
   CommandLog, SAVE_FORMAT_VERSION, SaveGame, deleteSave, listSaves, replayTo, writeSave,
@@ -43,6 +43,8 @@ import { alliancesFor, resizeTeams } from "./ui/teams";
 import { CodexScreen } from "./ui/codex";
 import { FactionBook } from "./ui/faction_book";
 import { CareerScreen } from "./ui/career_screen";
+import { Caster } from "./ui/caster";
+import { NetReplaySetup, ReplayRecord, byTick, replayId, saveReplay } from "./sim/replay";
 import {
   ArmoryScreen,
   MenuScreen,
@@ -103,6 +105,16 @@ class App {
   codexScreen = new CodexScreen();
   factionBook = new FactionBook();
   careerScreen = new CareerScreen();
+  /** The caster view, used whenever this client is watching rather than playing. */
+  caster = new Caster();
+  /** Display names per team for the caster (online names, or realm + AI level). */
+  private playerNames: string[] = [];
+  /** A replay being played back: orders by tick, where it ends, and what it was. */
+  private replay: { rec: ReplayRecord; byTick: Map<number, Command[]>; endTick: number; ended: boolean } | null = null;
+  /** How an online match was set up, kept for its replay. */
+  private netSetup: NetReplaySetup | null = null;
+  /** Broadcast delay for an online caster, in ticks. */
+  private casterDelayTicks = 0;
   /** Where the Factions book returns to. */
   private factionsReturn: AppState = "menu";
   settingsScreen = new SettingsScreen();
@@ -309,6 +321,8 @@ class App {
     if (this.state !== "match" || !this.world) return;
     // Chat capture takes precedence over every game hotkey while typing.
     if (this.chatOpen) { this.handleChatKey(key); return; }
+    // The caster's keys come first while watching (digits pick a player's vision).
+    if (this.spectating && !this.ingameMenu && this.caster.key(key, this.world)) return;
 
     const chord = chordOf(key, { ctrl: this.input.ctrl, shift: this.input.shift, alt: this.input.alt });
     if (!chord) return; // a bare modifier
@@ -531,10 +545,17 @@ class App {
     const map = this.resolveMap(config.presetId, config.seed, numPlayers, config.nomad, alliances);
     const world = new World(config.seed);
     // Team 0 is the human; the rest are AI (allies or opponents), plus the horde.
-    const loadouts = [this.profile.matchLoadout(config.fairMode)];
+    // The human's unit rarities and boons are part of the match: written into
+    // the config, so a save or a replay rebuilds exactly what was played even
+    // after the collection changes.
+    const replaying = this.loadingSave && !!config.humanLoadout;
+    const loadouts = [replaying ? { ...config.humanLoadout! } : this.profile.matchLoadout(config.fairMode)];
     const econMults = [1];
     const commanders = [config.commander || this.profile.data.commander];
-    const boonLoadouts: { id: string; rarity: number; age: number }[][] = [config.fairMode ? [] : this.profile.equippedBoonPlan()];
+    const boonLoadouts: { id: string; rarity: number; age: number }[][] = [replaying ? [...(config.humanBoons ?? [])] : config.fairMode ? [] : this.profile.equippedBoonPlan()];
+    config.humanLoadout = { ...loadouts[0] };
+    config.humanBoons = [...boonLoadouts[0]];
+    config.commander = commanders[0];
     const setupRng = new RNG(config.seed ^ 0x5eed);
     for (let t = 1; t < numPlayers; t++) {
       loadouts.push(this.profile.matchLoadout(true));
@@ -558,6 +579,9 @@ class App {
       if (t === hordeTeam) continue; // the horde has no brain — the sim spawns its waves
       this.ais.push(new SkirmishAI(world, t as Team, diffFor(t)));
     }
+    this.playerNames = Array.from({ length: numPlayers }, (_, t) =>
+      t === 0 ? this.profile.data.name : t === hordeTeam ? "The Horde" : `${PAL.teams[t % PAL.teams.length].name} · ${diffFor(t).name}`);
+    this.replay = null;
     this.renderer.prepare(map);
     this.mapName = map.name;
     this.weather.configure(map.seed, map.name);
@@ -708,6 +732,14 @@ class App {
     this.me = localTeam;
     this.spectating = !!start.observer; // no commands, full vision, caster HUD
     this.net.attach(world, 5);
+    // Every order the lockstep applies is kept: that is the match's replay.
+    if (this.net.lock) this.net.lock.record = [];
+    this.netSetup = { seed, numTeams, alliances: [...alliances], factions: [...factions], map: { id: start.map?.id ?? "open_plains", name: map.name, ...(start.map?.code ? { code: start.map.code } : {}) } };
+    this.playerNames = teams.map((_, t) => start.names?.[t] || PAL.teams[t % PAL.teams.length].name);
+    this.casterDelayTicks = start.observer ? Math.round((start.delaySec ?? 0) * SIM_HZ) : 0;
+    this.caster.reset();
+    this.caster.delaySec = start.observer ? start.delaySec ?? 0 : 0;
+    this.replay = null;
     this.net.onChat = (m) => { if (m.text) this.addChatLine(m.name || teamLabel((m.team ?? 0) as Team), m.text, (m.team ?? 0) as Team); };
     this.net.onPing = (m) => this.remotePing(m.x ?? 0, m.y ?? 0, (m.team ?? 0) as Team);
     this.net.onAnnounce = (text) => this.hud.addAlert(`📣 ${text}`);
@@ -770,13 +802,16 @@ class App {
     const loadouts: Record<string, number>[] = [];
     const econMults: number[] = [];
     const commanders: string[] = [];
+    const spectateRng = new RNG(config.seed ^ 0x5eed);
     for (let t = 0; t < numPlayers; t++) {
       loadouts.push(this.profile.matchLoadout(true)); // fair, all-Common loadouts
       econMults.push(t === hordeTeam ? 1 : diffFor(t).econMult);
-      commanders.push(COMMANDER_IDS[Math.floor(Math.random() * COMMANDER_IDS.length)]);
+      // Seeded, so a watched game can be replayed exactly.
+      commanders.push(COMMANDER_IDS[spectateRng.int(0, COMMANDER_IDS.length - 1)]);
     }
-    world.init(map, loadouts, econMults, alliances, commanders, config.nomad, undefined, mode,
-      this.factionsFor(config, commanders.length, false));
+    const factions = this.factionsFor(config, commanders.length, false);
+    config.aiFactions = factions;
+    world.init(map, loadouts, econMults, alliances, commanders, config.nomad, undefined, mode, factions);
     world.revealAll = true; // spectators see the entire battlefield
     this.world = world;
     this.ais = [];
@@ -807,7 +842,9 @@ class App {
     this.endNet();
     this.me = Team.Player;
     this.state = "match";
-    this.hud.addAlert(`👁 Spectating — ${map.name}, ${numPlayers} AI combatants. Sit back.`);
+    this.playerNames = Array.from({ length: numPlayers }, (_, t) => t === hordeTeam ? "The Horde" : `${PAL.teams[t % PAL.teams.length].name} · ${diffFor(t).name}`);
+    this.caster.reset();
+    this.hud.addAlert(`👁 Casting — ${map.name}, ${numPlayers} AI realms. Press ? for caster keys.`);
     audio.play("complete");
   }
 
@@ -1036,7 +1073,8 @@ class App {
   }
 
   cycleSpeed(dir: number) {
-    const speeds = [0.5, 1, 2, 3];
+    // Replays and AI games can run far faster than a game you're playing.
+    const speeds = this.spectating && !this.net ? [0.5, 1, 2, 4, 8, 16] : [0.5, 1, 2, 3];
     if (this.paused) { this.paused = false; return; }
     const i = Math.max(0, Math.min(speeds.length - 1, speeds.indexOf(this.gameSpeed) + dir));
     this.setSpeed(speeds[i]);
@@ -1410,7 +1448,7 @@ class App {
           sfx("build", "build", 0.4);
           break;
         case "complete":
-          if (ev.team === this.me) {
+          if (ev.team === this.me && !this.spectating) {
             sfx("complete", "complete", 0.5);
             const name = BUILDINGS[ev.data ?? ""]?.name;
             if (name) this.hud.addAlert(`${name} completed.`, ev.x, ev.y);
@@ -1418,7 +1456,7 @@ class App {
           }
           break;
         case "underattack":
-          if (ev.team === this.me) {
+          if (ev.team === this.me && !this.spectating) {
             sfx("alert", "alert", 4);
             this.hud.addAlert("⚠ Your forces are under attack!", ev.x, ev.y);
             // Space jumps here, which is what makes an "under attack" warning
@@ -1429,7 +1467,7 @@ class App {
         case "callout":
           // Surface an allied AI's voice line (not our own) so team games feel
           // like a coordinated front rather than silent co-op.
-          if (ev.team !== this.me && this.world?.areAllied(this.me, ev.team) && ev.data) {
+          if (!this.spectating && ev.team !== this.me && this.world?.areAllied(this.me, ev.team) && ev.data) {
             this.hud.addAlert(`🗣 Ally: ${ev.data}`, ev.x, ev.y);
           }
           break;
@@ -1576,9 +1614,13 @@ class App {
         if (a?.kind === "back") { this.state = "menu"; audio.play("ui"); }
         else if (a?.kind === "test") this.testCustomMap(a.map);
       } else if (this.state === "career") {
-        if (this.careerScreen.draw(W, H, this.time, this.profile) === "back") {
+        const a = this.careerScreen.draw(W, H, this.time, this.profile);
+        if (a === "back") {
           this.state = "menu";
           audio.play("ui");
+        } else if (a && "watch" in a) {
+          audio.play("ui");
+          this.startReplay(a.watch);
         }
       } else if (this.state === "factions") {
         if (this.factionBook.draw(W, H, this.time, this.profile, dt) === "back") {
@@ -1793,8 +1835,9 @@ class App {
       // remote input allows. AIs don't run (both teams are human).
       if (world.winner === null) {
         if (this.net.observer) {
-          // Observers don't author input — just simulate as relayed turns arrive.
-          this.net.stepReady(20);
+          // Observers don't author input — just simulate as relayed turns
+          // arrive, staying the broadcast delay behind the live match.
+          this.net.stepReady(20, this.casterDelayTicks);
         } else {
           this.netAccumulator += dt;
           const ahead = this.net.lock!.inputDelay + 12;
@@ -1811,11 +1854,14 @@ class App {
           try { this.net.transport.send({ t: "desync", tick: world.tick }); } catch { /* stats only */ }
         }
       }
-    } else if (!this.ingameMenu && !this.paused && world.winner === null) {
+    } else if (this.replaySeek !== null) {
+      this.advanceSeek();
+    } else if (!this.ingameMenu && !this.paused && (world.winner === null || this.replay)) {
       this.accumulator += dt * this.gameSpeed;
       let steps = 0;
       const maxSteps = 5 + Math.ceil(this.gameSpeed) * 2; // allow catch-up at high speed
       while (this.accumulator >= SIM_DT && steps < maxSteps) {
+        if (this.replay && this.replayStep(world)) { this.accumulator = 0; break; }
         const t0 = performance.now();
         world.tick();
         for (const ai of this.ais) ai.update(SIM_DT);
@@ -1828,8 +1874,17 @@ class App {
       }
       if (steps === maxSteps) this.accumulator = 0; // drop time if we can't keep up
     }
-    this.handleEvents(world.drainEvents());
+    const events = world.drainEvents();
+    if (this.spectating) this.caster.onEvents(world, events, this.playerNames);
+    this.handleEvents(events);
     this.sampleHistory(world);
+    if (this.spectating) {
+      // Vision: everything, or exactly one player's fog of war.
+      const v = this.caster.vision;
+      world.revealAll = v < 0 || v >= world.numTeams;
+      this.me = (v >= 0 && v < world.numTeams ? v : 0) as Team;
+      if (!this.ingameMenu) this.caster.direct(world, this.camera, dt);
+    }
     this.particles.update(dt);
     // Combat heat fades over a few seconds; it drives the music's intensity.
     this.combatHeat *= Math.pow(0.5, dt / 3);
@@ -1980,15 +2035,15 @@ class App {
     const oathModal = this.hud.oathPicker.isOpen;
     const frameClicked = ui.clicked;
     if (oathModal) ui.clicked = false;
-    this.hud.draw(UW, UH, world, this.camera, this.me, this.selectedEntities(), dt, this.controller, this.attackMoveArmed, this.spectating, this.placing);
+    if (!(this.spectating && this.caster.clean)) this.hud.draw(UW, UH, world, this.camera, this.me, this.selectedEntities(), dt, this.controller, this.attackMoveArmed, this.spectating, this.placing);
     // Beside the HUD's Menu button. Drawn here rather than in the HUD because
     // it needs the player's current binding for its tooltip, and the HUD
     // deliberately knows nothing about settings.
-    fullscreenButton(UW - 108, 5, 30, 24, { compact: true, size: 13, hotkey: this.fullscreenKeyLabel() });
-    if (this.spectating) this.drawSpectatorHud(UW, UH, world);
+    if (!this.spectating) fullscreenButton(UW - 108, 5, 30, 24, { compact: true, size: 13, hotkey: this.fullscreenKeyLabel() });
+    if (this.spectating) this.drawCaster(UW, UH, world);
     if (world.mode !== "conquest") this.drawModeStatus(UW, UH, world);
     this.drawControlGroups(UW, UH);
-    this.drawQoLBar(UW, UH);
+    if (!this.spectating) this.drawQoLBar(UW, UH); // the caster view has its own controls
     if (this.showProduction && !this.spectating) {
       const jump = drawProductionPanel(UW, UH, world, this.me);
       if (jump != null) {
@@ -2061,9 +2116,10 @@ class App {
 
     // ---- victory / defeat ----
     if (this.spectating) {
-      // No stake in the fight — just announce the victor and bow out to the menu.
-      if (world.winner !== null && this.matchOverTimer < 0) {
-        this.matchOverTimer = 3.0;
+      // No stake in the fight — just announce the victor and bow out to the
+      // menu. A replay stays open: the caster may want to scrub back.
+      if (world.winner !== null && this.matchOverTimer < 0 && !this.replay) {
+        this.matchOverTimer = 8.0;
         this.hud.addAlert(`🏆 ${this.teamLabel(world.winner)} wins the battle!`);
         audio.play("levelup");
       }
@@ -2152,8 +2208,172 @@ class App {
     }
   }
 
+  // ------------------------------------------------------------ caster --
+  private drawCaster(W: number, H: number, world: World) {
+    const req = this.caster.draw(W, H, {
+      world,
+      names: this.playerNames,
+      history: this.matchHistory,
+      speed: this.gameSpeed,
+      paused: this.paused,
+      source: this.replay ? "replay" : this.net && this.casterDelayTicks > 0 ? "delay" : "live",
+      delaySec: this.net ? this.net.behindSeconds(SIM_HZ) : 0,
+      replay: this.replay ? { tick: world.tickCount, endTick: this.replay.endTick } : undefined,
+      offline: !this.net,
+    });
+    if (req.exit) { this.exitToMenu(); return; }
+    if (req.focus) { this.camera.centerOn(req.focus.x, req.focus.y); this.caster.manual(world); audio.play("ui"); }
+    if (req.speed !== undefined && !this.net) this.setSpeed(req.speed);
+    if (req.togglePause && !this.net) { this.paused = !this.paused; if (this.replay?.ended && !this.paused) this.paused = true; }
+    if (req.seekTo !== undefined && this.replay) this.seekReplay(req.seekTo);
+    if (this.replaySeek !== null) {
+      const pct = this.replay ? Math.round((world.tickCount / Math.max(1, this.replaySeek)) * 100) : 0;
+      ui.panel(W / 2 - 150, H / 2 - 30, 300, 60);
+      ui.text(`Jumping to ${Math.floor(this.replaySeek / SIM_HZ / 60)}:${String(Math.floor((this.replaySeek / SIM_HZ) % 60)).padStart(2, "0")}… ${pct}%`, W / 2, H / 2 + 5, { align: "center", size: 15, bold: true, color: "#ffe9b0" });
+    }
+  }
+
+  /** A replay's orders for this tick, applied before it runs. True once it has ended. */
+  private replayStep(world: World): boolean {
+    const rp = this.replay!;
+    if (this.replaySeek !== null) return true;
+    if (world.tickCount >= rp.endTick) {
+      if (!rp.ended) {
+        rp.ended = true;
+        this.paused = true;
+        this.hud.addAlert("⏹ End of the recording — scrub the timeline to watch again, or Esc to leave.");
+      }
+      return true;
+    }
+    const due = rp.byTick.get(world.tickCount);
+    if (due) for (const c of due) applyCommand(world, c);
+    return false;
+  }
+
+  /** Where a replay is jumping to, run a slice at a time so the screen never freezes. */
+  private replaySeek: number | null = null;
+
+  private seekReplay(tick: number) {
+    const rp = this.replay;
+    if (!rp || !this.world) return;
+    const target = Math.max(0, Math.min(tick, rp.endTick));
+    // The sim only runs forwards: going back means starting again.
+    if (target < this.world.tickCount) this.startReplay(rp.rec, true);
+    this.replaySeek = target;
+    this.paused = false;
+  }
+
+  /** Run part of a pending seek; called once per frame. */
+  private advanceSeek() {
+    const world = this.world;
+    const rp = this.replay;
+    if (!world || !rp || this.replaySeek === null) return;
+    const t0 = performance.now();
+    while (world.tickCount < this.replaySeek && performance.now() - t0 < 28) {
+      const due = rp.byTick.get(world.tickCount);
+      if (due) for (const c of due) applyCommand(world, c);
+      world.tick();
+      for (const ai of this.ais) ai.update(SIM_DT);
+      if (world.tickCount % (SIM_HZ * 4) === 0) this.sampleHistory(world);
+    }
+    world.drainEvents(); // a jump's worth of events would be noise
+    if (world.tickCount >= this.replaySeek) {
+      this.replaySeek = null;
+      this.accumulator = 0;
+      rp.ended = false;
+    }
+  }
+
+  /** Watch a recorded match with the caster view. */
+  startReplay(rec: ReplayRecord, quiet = false) {
+    const setup = rec.setup as SkirmishConfig | undefined;
+    if (rec.mapCode && setup?.presetId?.startsWith("custom_")) {
+      const m = deserialiseMap(rec.mapCode);
+      if (m) { m.id = setup.presetId; m.published = undefined; saveCustomMap(m); }
+    }
+    this.loadingSave = true;
+    try {
+      if (rec.kind === "online" && rec.net) this.buildReplayNetWorld(rec.net);
+      else if (rec.kind === "watch" && setup) this.startSpectate({ ...setup });
+      else if (setup) this.startMatch({ ...setup });
+    } finally {
+      this.loadingSave = false;
+    }
+    const world = this.world;
+    if (!world) return;
+    this.spectating = true;
+    world.revealAll = true;
+    this.replay = { rec, byTick: byTick(rec.commands), endTick: rec.endTick, ended: false };
+    this.replaySeek = null;
+    this.playerNames = [...rec.names];
+    if (!quiet) {
+      this.caster.reset();
+      this.gameSpeed = 1;
+      this.camera.zoom = 0.85;
+      this.camera.centerOn(world.worldW / 2, world.worldH / 2);
+      this.hud.alerts = [];
+      this.hud.addAlert(`▶ Replay — ${rec.summary.map}, ${rec.summary.players} players. Press ? for caster keys.`);
+    }
+    this.paused = false;
+  }
+
+  /** Rebuild an online match's opening exactly as startNetMatch did, without a network. */
+  private buildReplayNetWorld(net: NetReplaySetup) {
+    const custom = net.map.code ? deserialiseMap(net.map.code) : null;
+    const map = custom
+      ? toMapData(custom, net.seed, net.numTeams, false)
+      : generateMap(PRESETS.some((p) => p.id === net.map.id) || net.map.id === "random" ? net.map.id : "open_plains", net.seed, net.numTeams, false, net.alliances);
+    const world = new World(net.seed);
+    const teams = Array.from({ length: net.numTeams }, (_, i) => i);
+    world.init(map, teams.map(() => this.profile.matchLoadout(true)), teams.map(() => 1), net.alliances, teams.map(() => ""), false, undefined, "conquest", net.factions);
+    this.endNet();
+    this.world = world;
+    this.ais = [];
+    this.renderer.prepare(map);
+    this.mapName = map.name;
+    this.weather.configure(map.seed, map.name);
+    this.renderer.clearFx();
+    this.hud.prepare(map);
+    this.particles.clear();
+    this.selection = [];
+    this.markers = [];
+    this.placing = null;
+    this.ingameMenu = false;
+    this.matchOverTimer = -1;
+    this.camera.setWorld(map.worldW, map.worldH);
+    this.accumulator = 0;
+    this.resetMatchTelemetry();
+    this.me = Team.Player;
+    this.state = "match";
+  }
+
+  /** Keep this match as a replay (called as it ends). */
+  private recordReplay(world: World, kind: ReplayRecord["kind"]) {
+    if (this.replay || world.tickCount < SIM_HZ * 10) return; // a replay of a replay, or a false start
+    const players = Array.from({ length: world.numTeams }, (_, t) => t).filter((t) => t !== world.hordeTeam);
+    const winner = world.winner !== null && world.winner !== Team.Neutral ? world.winner : null;
+    const setup = this.config ? { ...this.config } : undefined;
+    let mapCode: string | undefined;
+    if (setup?.presetId?.startsWith("custom_")) { const m = findCustomMap(setup.presetId); if (m) mapCode = serialiseMap(m); }
+    const commands = kind === "online" ? [...(this.net?.lock?.record ?? [])].map(({ t, c }) => ({ t, c })) : kind === "watch" ? [] : this.cmdLog.entries.slice();
+    saveReplay({
+      version: 1, id: replayId(), savedAt: Date.now(), kind,
+      setup: kind === "online" ? undefined : setup, mapCode, net: kind === "online" ? this.netSetup ?? undefined : undefined,
+      names: [...this.playerNames], pov: this.spectating ? -1 : this.me, commands, endTick: world.tickCount,
+      summary: {
+        map: this.mapName || "Battlefield", players: players.length, durationSec: Math.round(world.time),
+        result: winner === null ? "Unfinished" : `${this.playerNames[winner] || PAL.teams[winner].name} won`,
+        factions: players.map((t) => world.player(t as Team).faction),
+      },
+    });
+  }
+
   /** Tear down the current match and return to the main menu (spectator exit). */
   private exitToMenu() {
+    if (this.world && this.spectating && !this.replay) this.recordReplay(this.world, this.net ? "online" : "watch");
+    const wasReplay = !!this.replay;
+    this.replay = null;
+    this.replaySeek = null;
     if (this.world) this.world.revealAll = false;
     this.world = null;
     this.ais = [];
@@ -2162,7 +2382,8 @@ class App {
     this.matchOverTimer = -1;
     this.endNet();
     this.me = Team.Player;
-    this.state = "menu";
+    this.state = wasReplay ? "career" : "menu";
+    if (wasReplay) this.careerScreen.showReplays();
     // Watching an online match: back to that server's hub.
     if (this.netHub) {
       const hub = this.netHub;
@@ -2294,6 +2515,7 @@ class App {
     recordMatch(record);
     // The career: every match, skirmish or online, for the player's own stats.
     const online = !!this.net;
+    this.recordReplay(world, online ? "online" : "skirmish");
     recordCareer(careerMatch(this.endReport, {
       at: Date.now(),
       won,

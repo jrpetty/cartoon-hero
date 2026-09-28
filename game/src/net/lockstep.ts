@@ -24,9 +24,18 @@ export class Lockstep {
   private buffer = new Map<number, Map<Team, Command[]>>();
   private pending: Command[] = [];
   nextAuthorTick = 0;
-  /** Teams whose player has left: their turns are treated as empty forever, so
-   *  the rest of the lobby keeps simulating in sync instead of deadlocking. */
+  /** Teams whose player has left: past the last turn they sent, their turns
+   *  are treated as empty, so the rest of the lobby keeps simulating in sync
+   *  instead of deadlocking. Turns they *did* send still apply — the relay
+   *  delivers them to everyone before the drop, so every client (and a caster
+   *  watching on a delay) applies exactly the same ones. */
   private dropped = new Set<Team>();
+  private dropAfter = new Map<Team, number>();
+  /** The highest tick each team's turn has arrived for. */
+  private latest = new Map<Team, number>();
+  /** Every command applied, with its tick, in the order applied — the match's
+   *  replay. Off unless asked for. */
+  record: { t: number; c: Command }[] | null = null;
 
   constructor(
     public world: World,
@@ -50,6 +59,26 @@ export class Lockstep {
   }
   private submit(tick: number, team: Team, cmds: Command[]) {
     this.slot(tick).set(team, cmds);
+    if (tick > (this.latest.get(team) ?? -1)) this.latest.set(team, tick);
+  }
+
+  /** Is this team's turn needed before `tick` can run? */
+  private gates(team: Team, tick: number): boolean {
+    return !this.dropped.has(team) || tick <= (this.dropAfter.get(team) ?? -1);
+  }
+
+  /**
+   * The last tick every still-playing team has sent its turn for — how far the
+   * match could be simulated right now. A caster on a broadcast delay stays a
+   * fixed number of ticks behind this.
+   */
+  readyThrough(): number {
+    let t = Infinity;
+    for (const tm of this.teams) {
+      if (this.dropped.has(tm)) continue;
+      t = Math.min(t, this.latest.get(tm) ?? -1);
+    }
+    return t === Infinity ? Math.max(-1, ...this.dropAfter.values()) : t;
   }
 
   /** Queue a local action; it executes on currentTick + inputDelay. */
@@ -77,14 +106,16 @@ export class Lockstep {
 
   /** Mark a team as departed; its turns no longer gate progress. */
   dropTeam(team: Team) {
+    if (this.dropped.has(team)) return;
     this.dropped.add(team);
+    this.dropAfter.set(team, this.latest.get(team) ?? -1);
   }
 
   /** True when every still-present player's commands for the current tick are in. */
   canStep(): boolean {
     const m = this.buffer.get(this.currentTick);
     for (const tm of this.teams) {
-      if (this.dropped.has(tm)) continue;
+      if (!this.gates(tm, this.currentTick)) continue;
       if (!m || !m.has(tm)) return false;
     }
     return true;
@@ -97,10 +128,12 @@ export class Lockstep {
     const tagged: { cmd: Command; seq: number }[] = [];
     let seq = 0;
     for (const tm of this.teams) {
-      if (this.dropped.has(tm)) continue;
       for (const c of m.get(tm) ?? []) tagged.push({ cmd: c, seq: seq++ });
     }
-    for (const cmd of sortCommands(tagged)) applyCommand(this.world, cmd);
+    for (const cmd of sortCommands(tagged)) {
+      applyCommand(this.world, cmd);
+      this.record?.push({ t: this.currentTick, c: cmd });
+    }
     this.world.tick();
     this.buffer.delete(this.currentTick);
     this.currentTick++;

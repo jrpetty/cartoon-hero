@@ -26,6 +26,11 @@ export class NetSession {
   /** A message from the server's operator to everyone. */
   onAnnounce?: (text: string) => void;
 
+  /** Seconds this client's simulation trails the live match (a caster's delay). */
+  behindSeconds(simHz: number): number {
+    return this.lock ? Math.max(0, (this.lock.readyThrough() - this.lock.currentTick) / simHz) : 0;
+  }
+
   /** Build the lockstep driver over a freshly-inited world and wire the wire. */
   attach(world: World, inputDelay = 5) {
     this.lock = new Lockstep(world, this.localTeam, this.teams, inputDelay,
@@ -59,11 +64,12 @@ export class NetSession {
 
   /** Step the sim as far as the received remote input allows (bounded), emitting
    *  a checksum periodically for desync detection. Returns ticks simulated. */
-  stepReady(maxSteps: number): number {
+  stepReady(maxSteps: number, holdBackTicks = 0): number {
     const lock = this.lock;
     if (!lock) return 0;
     let n = 0;
-    while (n < maxSteps && lock.step()) {
+    // A caster on a broadcast delay stays `holdBackTicks` behind the live match.
+    while (n < maxSteps && (holdBackTicks <= 0 || lock.currentTick <= lock.readyThrough() - holdBackTicks) && lock.step()) {
       const t = lock.currentTick;
       if (t % this.sumEvery === 0) {
         const sum = worldChecksum(lock.world);

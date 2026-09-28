@@ -51,6 +51,10 @@ export interface SkirmishConfig {
   aiFactions: string[];
   nomad: boolean; // no starting Town Center; villagers scattered on the map
   mode: GameMode; // conquest / survival / koth / regicide
+  /** Filled in at match start: the human's unit rarities and boon plan, so a
+   *  save or replay rebuilds exactly the match that was played. */
+  humanLoadout?: Record<string, number>;
+  humanBoons?: { id: string; rarity: number; age: number }[];
 }
 
 // ------------------------------------------------------------- background --
