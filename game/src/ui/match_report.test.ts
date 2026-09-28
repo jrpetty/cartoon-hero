@@ -136,7 +136,8 @@ describe("The report screen shows everyone, and fits", () => {
       expect(isStandings(r)).toBe(true);
       const names = r.players!.map(playerName);
       for (const rect of RECTS) {
-        for (const tab of REPORT_TABS) {
+        // Feedback is sentences about you, not a table of every realm.
+        for (const tab of REPORT_TABS.filter((t) => t.id !== "feedback")) {
           begin();
           const texts = drawn(() => drawReportTab(tab.id, rect.x, rect.y, rect.w, rect.h, r));
           for (const n of names) {
@@ -165,6 +166,33 @@ describe("The report screen shows everyone, and fits", () => {
     for (const tab of REPORT_TABS) {
       begin();
       expect(() => drawReportTab(tab.id, 48, 182, 780, 478, r)).not.toThrow();
+    }
+  });
+});
+
+describe("The feedback tab", () => {
+  it("says what went well and what cost you, inside the panel", async () => {
+    const { matchFeedback } = await import("../meta/feedback");
+    const r = emptyMatchReport();
+    r.durationSec = 1200;
+    Object.assign(r.you, { teams: [0], gathered: 20000, unitsKilled: 40, unitsLost: 10, tcSeconds: 1200, idleTcTime: 60, buildingsRazed: 4, firstAttackAt: 300, killsAttacking: 12, killsByUnit: { archer: 30 } });
+    Object.assign(r.foe, { teams: [1], gathered: 10000, unitsKilled: 10, unitsLost: 40, killsDefending: 4, lostByType: { villager: 10 } });
+    const fb = matchFeedback(r);
+    expect(fb.good.join(" ")).toMatch(/out-gathered/);
+    expect(fb.good.join(" ")).toMatch(/early attack at 5:00 paid off/);
+    expect(fb.bad).toEqual([]);
+    const bad = emptyMatchReport();
+    bad.durationSec = 1200;
+    Object.assign(bad.you, { teams: [0], gathered: 8000, unitsKilled: 5, unitsLost: 30, tcSeconds: 1200, idleTcTime: 600, lostByType: { villager: 12 }, buildingsLost: 5 });
+    Object.assign(bad.foe, { teams: [1], gathered: 16000, unitsKilled: 30, unitsLost: 5, firstAttackAt: 360, killsAttacking: 15 });
+    const fb2 = matchFeedback(bad);
+    expect(fb2.bad.length).toBeGreaterThanOrEqual(3);
+    expect(fb2.bad.join(" ")).toMatch(/Their attack at 6:00 hurt/);
+    for (const rect of [{ w: 780, h: 478 }, { w: 420, h: 400 }]) {
+      begin();
+      const texts = drawn(() => drawReportTab("feedback", 20, 20, rect.w, rect.h, bad));
+      expect(texts.length).toBeGreaterThan(4);
+      for (const t of texts) expect(t.y).toBeLessThanOrEqual(20 + rect.h);
     }
   });
 });

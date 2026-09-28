@@ -1243,6 +1243,49 @@ build/repair). Every selected building's rally line is drawn. Escape closes
 the build menu; B with no villager says so; right-clicks and drags that end
 on the corner chips no longer fall through to the map.
 
+## Farms that just work, stats you can trust, a style in your own words
+
+**Farms.** Whoever builds a farm now farms it (the first to finish claims it,
+co-builders take the nearest free one); a Lumber Camp, Mining Camp or Mill
+sends its builder to the wood, gold or berries beside it. A replanted field is
+worked again by the same farmer. A villager bumped off a taken farm goes to
+the nearest *free* farm or nearby berries — never a gold mine across the map —
+and a field that runs out with nothing to replant finds the nearest work.
+Clicking anywhere on a farm's square counts (it used to need the centre).
+Unworked farms pulse on the map. Idle villagers no longer go looking for a
+fight: a crew that finished a bridge used to spend minutes hacking at the
+enemy's bridge (it stalled one AI economy — found by the scripted-map test).
+
+**Attack vs defence.** The map is split into territory (4×4-tile cells owned
+by the nearest building in reach — TC 18 tiles, castle 14, others 9, rebuilt
+every 2 s), and every blow is classed by whose ground it landed on: *attack*
+(theirs), *defend* (yours) or *field*. Recorded per realm: first attack /
+defence / field hit, damage and kills in each, and the "opener" — damage by
+unit type away from home in the first 10 minutes. "Rush" now means your first
+**attack on their base** landed before 7:00; beating off their rush at home no
+longer counts. Old records fall back to "first hit". Proven in
+`attack_defend.test.ts` (at their TC = attack for you, defence for them; at
+yours = defence; mid-map = field; kills split the same way; razes and kills
+credited to the right unit; hit times dated correctly).
+
+**Styles built from words.** The rush title comes from what actually fought
+early: the dominant unit ("Man-at-Arms Rush"), else the class ("Archer Rush",
+"Cavalry Rush"), else "Mixed Rush". New archetype *Early Pressure, Late
+Finish* for players who attack early but win long ("Archer Harass, Late
+Closer"). A keyword row sums the player up — tempo (Early attacker /
+Mid-game / Slow starter), opener, army, game length, and what stands out
+(Demolition, Villager hunter, Fortifier, Strong economy, Tech-heavy,
+Efficient fighter).
+
+**Feedback.** After every match a *Feedback* tab lists what went well and
+what cost you, each a comparison with the realm(s) you played: income, idle
+Town Center and villagers, unspent bank, kills per loss, villagers lost and
+killed, whether you held their early attack and whether yours paid off,
+buildings razed/lost, Banner Age timing, research, the unit that carried it.
+The career's Playstyle page has the same for the whole record ("Your games,
+honestly"): economy, TC idle, trades, how you do when rushed, early losses,
+long games, research, Crown Age timing.
+
 ## Bigger / later
 - **Naval** — water is currently only an impassable wall, and the Islands
   preset (55% water) is a maze rather than a naval map. Dock, transport,

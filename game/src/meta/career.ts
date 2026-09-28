@@ -74,13 +74,25 @@ export interface CareerMatch {
   firstHitAt?: number;
   firstKillAt?: number;
   firstRazeAt?: number;
+  /**
+   * Attacking vs defending, by where the blow landed: on the enemy's ground,
+   * on yours, or in between. firstAttackAt is what "rushed" means. Absent on older records.
+   */
+  firstAttackAt?: number;
+  firstDefendAt?: number;
+  damageAttacking?: number;
+  damageDefending?: number;
+  killsAttacking?: number;
+  killsDefending?: number;
+  /** Damage by unit type away from home in the first 10 minutes — what you opened with. */
+  opener?: Record<string, number>;
   /** What you spent it on. */
   spentOn?: { units: number; buildings: number; tech: number };
   /**
    * The average enemy realm in this match — what "more than usual" is measured
    * against: the people you actually played, not a made-up norm.
    */
-  foe?: { gathered: number; razed: number; kills: number; losses: number; peakArmy: number; peakVillagers: number; villagerKills: number; upgrades: number; defenses: number; age: number };
+  foe?: { gathered: number; razed: number; kills: number; losses: number; peakArmy: number; peakVillagers: number; villagerKills: number; upgrades: number; defenses: number; age: number; firstAttackAt?: number };
 }
 
 /**
@@ -336,6 +348,8 @@ function foeAverage(foes: PlayerReport[]): CareerMatch["foe"] {
     gathered: avg((p) => p.gathered), razed: avg((p) => p.buildingsRazed), kills: avg((p) => p.unitsKilled), losses: avg((p) => p.unitsLost),
     peakArmy: avg((p) => p.peakArmy), peakVillagers: avg((p) => p.peakVillagers), villagerKills: avg((p) => p.killedByType.villager ?? 0),
     upgrades: avg((p) => p.upgrades), defenses: avg((p) => defensesBuilt(p.builtByType)), age: avg((p) => p.age),
+    // Earliest enemy attack on you (-1 = none): the rush you had to hold.
+    firstAttackAt: Math.round(foes.map((p) => p.firstAttackAt ?? -1).filter((t) => t >= 0).sort((a, b) => a - b)[0] ?? -1),
   };
 }
 
@@ -391,6 +405,13 @@ export function careerMatch(report: MatchReport, meta: {
     firstHitAt: Math.round(side.firstHitAt ?? -1),
     firstKillAt: Math.round(side.firstKillAt ?? -1),
     firstRazeAt: Math.round(side.firstRazeAt ?? -1),
+    firstAttackAt: Math.round(side.firstAttackAt ?? -1),
+    firstDefendAt: Math.round(side.firstDefendAt ?? -1),
+    damageAttacking: Math.round(side.damageAttacking ?? 0),
+    damageDefending: Math.round(side.damageDefending ?? 0),
+    killsAttacking: side.killsAttacking ?? 0,
+    killsDefending: side.killsDefending ?? 0,
+    opener: Object.fromEntries(Object.entries(side.openerByUnit ?? {}).map(([k, v]) => [k, Math.round(v)])),
     spentOn: { units: Math.round(side.spentOn.units), buildings: Math.round(side.spentOn.buildings), tech: Math.round(side.spentOn.tech) },
     foe: foeAverage(players.filter((p) => p.relation === "enemy" && !p.horde)),
   };

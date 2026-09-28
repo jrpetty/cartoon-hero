@@ -56,6 +56,32 @@ function military(m: CareerMatch): Record<string, number> {
   for (const [u, n] of Object.entries(m.trained)) if (unitClass(u)) out[u] = n;
   return out;
 }
+/**
+ * When you first attacked: the first blow on the enemy's own ground. Records
+ * from before attack and defence were told apart only have "first hit on an
+ * enemy anywhere", which also counts beating off their attack at home.
+ */
+export const attackAt = (m: CareerMatch) => m.firstAttackAt ?? m.firstHitAt ?? -1;
+const CLASS_WORD: Record<UnitClass, string> = { infantry: "Infantry", archer: "Archer", cavalry: "Cavalry", siege: "Siege", support: "Monk" };
+/**
+ * What your early attacks are made of, as one word: the unit if one dominates
+ * (Man-at-Arms), else the class (Archer, Cavalry), else "Mixed". Read from the
+ * damage each unit type did away from home in the first ten minutes, so it is
+ * what actually fought, not what sat at home.
+ */
+export function openerWord(opener: Record<string, number>): { word: string; unit: string; share: number } {
+  const mil = Object.entries(opener).filter(([u]) => unitClass(u));
+  const total = mil.reduce((a, [, v]) => a + v, 0);
+  if (total <= 0) return { word: "", unit: "", share: 0 };
+  mil.sort((a, b) => b[1] - a[1]);
+  const [unit, top] = mil[0];
+  if (top / total >= 0.5) return { word: unitName(unit), unit, share: top / total };
+  const cls: Partial<Record<UnitClass, number>> = {};
+  for (const [u, v] of mil) { const c = unitClass(u)!; cls[c] = (cls[c] ?? 0) + v; }
+  const [c, cv] = (Object.entries(cls) as [UnitClass, number][]).sort((a, b) => b[1] - a[1])[0];
+  if (cv / total >= 0.55) return { word: CLASS_WORD[c], unit: "", share: cv / total };
+  return { word: "Mixed", unit: "", share: top / total };
+}
 const sum = (r: Record<string, number>) => Object.values(r).reduce((a, b) => a + b, 0);
 const villagerKills = (m: CareerMatch) => m.killed.villager ?? 0;
 const gatherPerMin = (m: CareerMatch) => (m.durationSec > 0 ? m.gathered / (m.durationSec / 60) : 0);
@@ -79,7 +105,7 @@ export const MATCH_STYLES: Record<MatchStyle, { name: string; color: string; rul
 export function matchStyles(m: CareerMatch): MatchStyle[] {
   const out: MatchStyle[] = [];
   const foe = m.foe;
-  const hit = m.firstHitAt ?? -1;
+  const hit = attackAt(m);
   if (hit >= 0 && hit <= 420) out.push("rush");
   const vk = villagerKills(m);
   if (vk >= 8 && vk >= (foe?.villagerKills ?? 0) * 1.5) out.push("raid");
@@ -109,9 +135,17 @@ export interface StyleFeatures {
   /** Games with a first attack before 7:00, of games that recorded it. */
   rushRate: number;
   medianFirstHit: number;
-  /** The unit you open with in fast wins. */
+  /** What your early attacks are made of ("Man-at-Arms", "Archer", "Mixed"). */
   rushUnit: string;
   rushUnitShare: number;
+  openerWord: string;
+  /** Wins that went past 30 minutes, as a share of wins. */
+  lateWins: number;
+  /** Average share of the match your Town Center sat idle. */
+  tcIdle: number;
+  /** Of games where the enemy attacked before 8:00, the share you won. */
+  heldRushRate: number;
+  rushedGames: number;
   classShare: Record<UnitClass, number>;
   topUnit: string;
   topUnitShare: number;
@@ -158,11 +192,20 @@ export function features(ms: CareerMatch[]): StyleFeatures {
   const losses = ms.filter((m) => !m.won);
   const winSecs = wins.map((m) => m.durationSec);
   const share = (xs: CareerMatch[], f: (m: CareerMatch) => boolean) => (xs.length ? xs.filter(f).length / xs.length : 0);
-  const withHit = ms.filter((m) => m.firstHitAt !== undefined);
-  // The unit behind fast wins.
-  const fastWinUnits: Record<string, number> = {};
-  for (const m of wins.filter((w) => w.durationSec <= 900)) for (const [u, k] of Object.entries(military(m))) fastWinUnits[u] = (fastWinUnits[u] ?? 0) + k;
-  const rushUnit = Object.entries(fastWinUnits).sort((a, b) => b[1] - a[1])[0]?.[0] ?? "";
+  const withHit = ms.filter((m) => m.firstAttackAt !== undefined || m.firstHitAt !== undefined);
+  // What the early attacks were made of: the damage each unit did away from
+  // home in the first ten minutes of games where you attacked early. Older
+  // records without that fall back to what was trained in fast wins.
+  const opener: Record<string, number> = {};
+  for (const m of ms) {
+    const a = attackAt(m);
+    if (a < 0 || a > 600) continue;
+    if (m.opener) { const t = sum(m.opener) || 1; for (const [u, d] of Object.entries(m.opener)) opener[u] = (opener[u] ?? 0) + d / t; }
+    else if (m.won && m.durationSec <= 900) { const mil = military(m), t = sum(mil) || 1; for (const [u, k] of Object.entries(mil)) opener[u] = (opener[u] ?? 0) + k / t; }
+  }
+  const op = openerWord(opener);
+  const rushUnit = op.unit;
+  const rushed = ms.filter((m) => m.foe?.firstAttackAt !== undefined && m.foe.firstAttackAt >= 0 && m.foe.firstAttackAt <= 480);
   // Army make-up.
   const allMil: Record<string, number> = {};
   for (const m of ms) for (const [u, k] of Object.entries(military(m))) allMil[u] = (allMil[u] ?? 0) + k;
@@ -202,10 +245,15 @@ export function features(ms: CareerMatch[]): StyleFeatures {
     wins30to40: share(wins, (m) => m.durationSec >= 1800 && m.durationSec < 2400),
     winsAfter40: share(wins, (m) => m.durationSec >= 2400),
     avgWinSec: mean(winSecs),
-    rushRate: share(withHit, (m) => (m.firstHitAt ?? -1) >= 0 && (m.firstHitAt ?? -1) <= 420),
-    medianFirstHit: median(withHit.map((m) => ((m.firstHitAt ?? -1) >= 0 ? m.firstHitAt! : m.durationSec))),
+    rushRate: share(withHit, (m) => attackAt(m) >= 0 && attackAt(m) <= 420),
+    medianFirstHit: median(withHit.map((m) => (attackAt(m) >= 0 ? attackAt(m) : m.durationSec))),
     rushUnit,
-    rushUnitShare: rushUnit ? fastWinUnits[rushUnit] / Math.max(1, sum(fastWinUnits)) : 0,
+    rushUnitShare: op.share,
+    openerWord: op.word,
+    lateWins: share(wins, (m) => m.durationSec >= 1800),
+    tcIdle: mean(ms.map((m) => m.tcIdleShare)),
+    heldRushRate: share(rushed, (m) => m.won),
+    rushedGames: rushed.length,
     classShare,
     topUnit: topUnitEntry?.[0] ?? "",
     topUnitShare: topUnitEntry ? topUnitEntry[1] / milTotal : 0,
@@ -276,8 +324,8 @@ export const ARCHETYPES: Archetype[] = [
     short: "Hits first and ends it early.",
     criteria: "Attacks before 7:00 in most games, and wins a large share of games inside 15 minutes.",
     score: (f) => 0.5 * ramp(f.rushRate, 0.25, 0.65) + 0.5 * ramp(f.winsBefore15, 0.25, 0.65),
-    title: (f) => (f.rushUnit && f.rushUnitShare >= 0.4 ? `${unitName(f.rushUnit)} Rush` : "Rusher"),
-    describe: (f) => `You go straight for the throat. Your first attack lands before 7:00 in ${pct(f.rushRate)} of your games (median first hit ${mmss(f.medianFirstHit)}), and ${pct(f.winsBefore15)} of your wins are over inside 15 minutes.${f.rushUnit ? ` Your opener of choice is the ${unitName(f.rushUnit)} — ${pct(f.rushUnitShare)} of the soldiers in your fast wins.` : ""} You win by denying your opponent the time to build anything worth defending.`,
+    title: (f) => (f.openerWord ? `${f.openerWord} Rush` : "Rusher"),
+    describe: (f) => `You go straight for the throat. Your first attack on their base lands before 7:00 in ${pct(f.rushRate)} of your games (median ${mmss(f.medianFirstHit)}), and ${pct(f.winsBefore15)} of your wins are over inside 15 minutes.${f.openerWord ? ` You open with ${f.openerWord === "Mixed" ? "a mixed force" : f.rushUnit ? `the ${f.openerWord} — ${pct(f.rushUnitShare)} of your early damage` : `${f.openerWord.toLowerCase()} units — ${pct(f.rushUnitShare)} of your early damage`}.` : ""} You win by denying your opponent the time to build anything worth defending.`,
     evidence: (f) => [
       ev("Games you attack before 7:00", pct(f.rushRate), ramp(f.rushRate, 0.25, 0.65)),
       ev("Wins inside 15 minutes", pct(f.winsBefore15), ramp(f.winsBefore15, 0.25, 0.65)),
@@ -286,6 +334,22 @@ export const ARCHETYPES: Archetype[] = [
     strengths: ["Punishes greedy economies", "Short games — more of them per evening"],
     risks: ["If the first push is held, you're behind in economy", "Walls and towers blunt it"],
     tip: "Scout before you commit: a walled opponent wants a different opener (rams, or a boom of your own).",
+  },
+  {
+    id: "pressure", name: "Early Pressure, Late Finish", emblem: "⏳",
+    short: "Hits early to slow them down, then wins the long game.",
+    criteria: "Attacks before 7:00 in most games, but the games — and the wins — run past 30 minutes.",
+    score: (f) => 0.45 * ramp(f.rushRate, 0.25, 0.65) + 0.55 * ramp(Math.max(f.lateShare, f.lateWins), 0.25, 0.6),
+    title: (f) => (f.openerWord ? `${f.openerWord} Harass, Late Closer` : "Early Pressure, Late Finisher"),
+    describe: (f) => `You attack early but you don't need the rush to end it. Your first attack on their base lands before 7:00 in ${pct(f.rushRate)} of your games${f.openerWord ? `, usually with ${f.openerWord === "Mixed" ? "a mixed force" : f.openerWord.toLowerCase() + (f.rushUnit ? "s" : " units")}` : ""}, yet ${pct(f.lateWins)} of your wins come after 30 minutes. The early hits cost them villagers and time; you cash that in with the stronger late army.`,
+    evidence: (f) => [
+      ev("Games you attack before 7:00", pct(f.rushRate), ramp(f.rushRate, 0.25, 0.65)),
+      ev("Wins after 30 minutes", pct(f.lateWins), ramp(f.lateWins, 0.25, 0.6)),
+      ev("Games past 35 minutes", pct(f.lateShare), ramp(f.lateShare, 0.25, 0.6)),
+    ],
+    strengths: ["Keeps the enemy off balance all game", "Doesn't fold if the first attack is held"],
+    risks: ["Early losses that don't trade", "Over-investing in the harass and falling behind in eco"],
+    tip: "Harass with as little as does the job — the late game is where you win, so every unit you don't lose early is one more at 30:00.",
   },
   {
     id: "turtle", name: "Turtle", emblem: "🏰",
@@ -441,6 +505,11 @@ export interface PlaystyleProfile {
   matchMix: { style: MatchStyle; share: number; wins: number; games: number }[];
   /** What's different about the games you win. */
   winKeys: WinKey[];
+  /** Short words that sum up how you play, built from your numbers. */
+  keywords: string[];
+  /** What you do well, and what's costing you games. */
+  good: string[];
+  bad: string[];
   /** Per faction: the style you most often play it with. */
   byFaction: { faction: string; games: number; style: MatchStyle; share: number; winRate: number }[];
 }
@@ -485,7 +554,7 @@ export function analyse(ms: CareerMatch[]): PlaystyleProfile {
       { label: "Income per minute", f: gatherPerMin, fmt: (x) => Math.round(x).toString(), higher: "more income a minute", lower: "less income a minute" },
       { label: "Peak army", f: (m) => m.peakArmy, fmt: (x) => Math.round(x).toString(), higher: "a bigger army at its peak", lower: "a smaller army at its peak" },
       { label: "Technologies", f: (m) => m.upgrades, fmt: (x) => x.toFixed(1), higher: "more research", lower: "less research" },
-      { label: "First attack", f: (m) => ((m.firstHitAt ?? -1) >= 0 ? m.firstHitAt! : null), fmt: mmss, higher: "a later first attack", lower: "an earlier first attack" },
+      { label: "First attack", f: (m) => (attackAt(m) >= 0 ? attackAt(m) : null), fmt: mmss, higher: "a later first attack", lower: "an earlier first attack" },
       { label: "Crown Age at", f: (m) => (typeof m.ageTimes[2] === "number" && m.ageTimes[2] > 0 ? m.ageTimes[2] : null), fmt: mmss, higher: "a later Crown Age", lower: "an earlier Crown Age" },
       { label: "Buildings razed", f: (m) => m.razed, fmt: (x) => x.toFixed(1), higher: "more buildings razed", lower: "fewer buildings razed" },
       { label: "Defence built", f: (m) => defensesBuilt(m.built), fmt: (x) => x.toFixed(1), higher: "more defences built", lower: "fewer defences built" },
@@ -521,5 +590,56 @@ export function analyse(ms: CareerMatch[]): PlaystyleProfile {
     confidence: f.games < MIN_GAMES ? "none" : f.games < 10 ? "low" : f.games < 25 ? "medium" : "high",
     primary, title, description, secondary: second, scores, traits: enough ? traitsOf(f) : [], features: f,
     matchMix, winKeys: winKeys.slice(0, 4), byFaction,
+    keywords: enough ? keywordsOf(f) : [], ...(enough ? careerFeedback(f) : { good: [], bad: [] }),
   };
+}
+
+// ---------------------------------------------------------------- keywords --
+/**
+ * The words the style is built from. Tempo (when you attack), make-up (what
+ * with), length (when your games end) and the things you stand out at — so
+ * "Early attacker · Archer · Long games" is possible, not only the stock titles.
+ */
+export function keywordsOf(f: StyleFeatures): string[] {
+  const k: string[] = [];
+  if (f.rushRate >= 0.5) k.push("Early attacker");
+  else if (f.medianFirstHit >= 900) k.push("Slow starter");
+  else k.push("Mid-game attacker");
+  if (f.openerWord && f.rushRate >= 0.25) k.push(`${f.openerWord} opener`);
+  const c = f.classShare;
+  const top = (Object.entries(c) as [UnitClass, number][]).sort((a, b) => b[1] - a[1])[0];
+  if (top && top[1] >= 0.45) k.push(`${CLASS_WORD[top[0]]} army`);
+  else if (f.diversity >= 3.5) k.push("Combined arms");
+  if (f.winsBefore15 >= 0.5) k.push("Short games");
+  else if (f.lateWins >= 0.5 || f.lateShare >= 0.4) k.push("Long games");
+  if (f.razedRatio >= 1.4 && f.razedPerGame >= 3) k.push("Demolition");
+  if (f.raidRatio >= 1.4 && f.raidPerGame >= 4) k.push("Villager hunter");
+  if (f.defenseRatio >= 1.4 && f.defensesPerGame >= 3) k.push("Fortifier");
+  if (f.gatherRatio >= 1.15) k.push("Strong economy");
+  if (f.upgradeRatio >= 1.3) k.push("Tech-heavy");
+  if (f.kd >= 1.5) k.push("Efficient fighter");
+  return k;
+}
+
+// ---------------------------------------------------------------- feedback --
+/** What the record says you do well, and what's losing you games. */
+export function careerFeedback(f: StyleFeatures): { good: string[]; bad: string[] } {
+  const good: string[] = [], bad: string[] = [];
+  if (f.gatherRatio >= 1.1) good.push(`Your economy out-gathers your opponents by ${pct(f.gatherRatio - 1)}.`);
+  else if (f.gatherRatio <= 0.9) bad.push(`You gather ${pct(1 - f.gatherRatio)} less than your opponents — more villagers, fewer idle ones.`);
+  if (f.tcIdle <= 0.12) good.push(`Your Town Center is almost never idle (${pct(f.tcIdle)}).`);
+  else if (f.tcIdle >= 0.3) bad.push(`Your Town Center sits idle ${pct(f.tcIdle)} of the time — keep villagers queued.`);
+  if (f.kd >= 1.3) good.push(`You trade well: ${f.kd.toFixed(2)} kills per loss.`);
+  else if (f.kd <= 0.8 && f.games >= 5) bad.push(`You lose more units than you kill (${f.kd.toFixed(2)} per loss) — fight near your towers or with the counter unit.`);
+  if (f.rushedGames >= 3) {
+    if (f.heldRushRate >= 0.6) good.push(`You hold early attacks: ${pct(f.heldRushRate)} wins when rushed.`);
+    else if (f.heldRushRate <= 0.35) bad.push(`Early attacks beat you — ${pct(f.heldRushRate)} wins in ${f.rushedGames} games where you were rushed.`);
+  }
+  if (f.earlyLossShare >= 0.5 && f.games - f.wins >= 3) bad.push(`${pct(f.earlyLossShare)} of your losses are over inside 15 minutes.`);
+  if (f.lateShare >= 0.2 && f.lateWinRate >= 0.6) good.push(`You close long games: ${pct(f.lateWinRate)} wins past 30 minutes.`);
+  else if (f.lateShare >= 0.2 && f.lateWinRate <= 0.35) bad.push(`Long games slip away — ${pct(f.lateWinRate)} wins past 30 minutes.`);
+  if (f.upgradeRatio >= 1.25) good.push(`You out-research your opponents (${f.upgradeRatio.toFixed(1)}×).`);
+  else if (f.upgradeRatio <= 0.75) bad.push(`You research less than your opponents (${f.upgradeRatio.toFixed(1)}×) — blacksmith upgrades win even fights.`);
+  if (f.crownRate >= 0.3 && f.crownAvgSec > 0 && f.crownAvgSec >= 1260) bad.push(`You reach the Crown Age late (${mmss(f.crownAvgSec)} on average).`);
+  return { good: good.slice(0, 4), bad: bad.slice(0, 4) };
 }

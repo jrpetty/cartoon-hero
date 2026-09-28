@@ -79,7 +79,7 @@ describe("Post-match graph renders", () => {
     }
     // Every report tab, at two window sizes — the report is the tallest thing
     // on the screen and the one most likely to overflow a short window.
-    for (const tab of ["overview", "economy", "military", "units"] as const) {
+    for (const tab of ["overview", "feedback", "economy", "military", "units"] as const) {
       (screen as unknown as { reportTab: string }).reportTab = tab;
       for (const [w, h] of [[1280, 760], [1600, 900], [1100, 680]] as const) {
         ui.begin(ctx, { mx: 0, my: 0, clicked: false, rightClicked: false, alt: false });

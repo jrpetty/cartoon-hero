@@ -21,10 +21,12 @@ import { BUILDINGS } from "../content/buildings";
 import { ageShort } from "../content/tech";
 import { OATHS } from "../content/oaths";
 import { FACTIONS } from "../content/factions";
+import { matchFeedback } from "../meta/feedback";
 
-export type ReportTab = "overview" | "economy" | "military" | "units";
+export type ReportTab = "overview" | "feedback" | "economy" | "military" | "units";
 export const REPORT_TABS: { id: ReportTab; label: string }[] = [
   { id: "overview", label: "Overview" },
+  { id: "feedback", label: "Feedback" },
   { id: "economy", label: "Economy" },
   { id: "military", label: "Military" },
   { id: "units", label: "Armies" },
@@ -813,7 +815,8 @@ function armiesTab(x: number, y: number, w: number, h: number, ps: PlayerReport[
 export function drawReportTab(
   tab: ReportTab, x: number, y: number, w: number, h: number, r: MatchReport,
 ) {
-  if (isStandings(r)) drawStandingsTab(tab, x, y, w, h, r.players!);
+  if (tab === "feedback") drawFeedbackTab(x, y, w, h, r);
+  else if (isStandings(r)) drawStandingsTab(tab, x, y, w, h, r.players!);
   else drawDuelTab(tab, x, y, w, h, r);
 }
 
@@ -864,4 +867,45 @@ export function matchFormat(r: MatchReport): string {
 /** The line under the title: how long, on what, and who was in it. */
 export function reportSubtitle(r: MatchReport): string {
   return `${r.mapName}  ·  ${matchFormat(r)}  ·  ${mmss(r.durationSec)}`;
+}
+
+/**
+ * What went well and what cost you, in sentences. Two columns when there's
+ * room, stacked when there isn't; every line wraps inside its column.
+ */
+function drawFeedbackTab(x: number, y: number, w: number, h: number, r: MatchReport) {
+  const fb = matchFeedback(r);
+  const two = w >= 620;
+  const colW = two ? (w - 32) / 2 : w;
+  const col = (cx: number, cy: number, title: string, colour: string, mark: string, lines: string[], empty: string) => {
+    heading(cx, cy, colW, title);
+    let ly = cy + 30;
+    if (!lines.length) { ui.text(empty, cx, ly, { size: 12.5, color: MUTED }); return ly + 24; }
+    for (const line of lines) {
+      ui.text(mark, cx, ly, { size: 14, bold: true, color: colour });
+      const rows = wrap(line, colW - 26, 13);
+      rows.forEach((row, i) => ui.text(row, cx + 22, ly + i * 18, { size: 13, color: INK }));
+      ly += rows.length * 18 + 12;
+    }
+    return ly;
+  };
+  const endL = col(x, y, "WENT WELL", "#8fd07a", "+", fb.good, "Nothing stood out in your favour this time.");
+  if (two) col(x + colW + 32, y, "COST YOU", LOST, "−", fb.bad, "No clear mistakes — well played.");
+  else col(x, endL + 10, "COST YOU", LOST, "−", fb.bad, "No clear mistakes — well played.");
+  void h;
+}
+
+function wrap(text: string, width: number, size: number): string[] {
+  const ctx = ui.ctx;
+  ctx.save();
+  ctx.font = `${size}px "Trebuchet MS", sans-serif`;
+  const out: string[] = [];
+  let line = "";
+  for (const word of text.split(" ")) {
+    const next = line ? `${line} ${word}` : word;
+    if (ctx.measureText(next).width > width && line) { out.push(line); line = word; } else line = next;
+  }
+  if (line) out.push(line);
+  ctx.restore();
+  return out;
 }

@@ -136,6 +136,22 @@ export interface PlayerState {
     firstHitAt: number;
     firstKillAt: number;
     firstRazeAt: number;
+    /**
+     * Where the fighting happened. A hit counts as ATTACKING when it lands on
+     * the enemy's ground (nearer their buildings than anyone's), DEFENDING when
+     * it lands on yours, and FIELD in no-man's land. So fighting off a rush in
+     * your own base is defending, not "attacking early".
+     */
+    firstAttackAt: number;
+    firstDefendAt: number;
+    firstFieldAt: number;
+    damageAttacking: number;
+    damageDefending: number;
+    damageField: number;
+    killsAttacking: number;
+    killsDefending: number;
+    /** Damage by your unit type dealt away from home in the first 10 minutes — your opener. */
+    openerByUnit: Record<string, number>;
     /** Buildings put up, by type. */
     builtByType: Record<string, number>;
     /** Damage dealt and taken, for the fights that never showed up as kills. */
@@ -427,6 +443,8 @@ export class World {
           trainedByType: {}, lostByType: {}, killedByType: {}, builtByType: {},
           killsByUnit: {}, damageByUnit: {}, razedByUnit: {},
           firstHitAt: -1, firstKillAt: -1, firstRazeAt: -1,
+          firstAttackAt: -1, firstDefendAt: -1, firstFieldAt: -1,
+          damageAttacking: 0, damageDefending: 0, damageField: 0, killsAttacking: 0, killsDefending: 0, openerByUnit: {},
           damageDealt: 0, damageTaken: 0,
           peakArmy: 0, peakVillagers: 0, idleVillagerTime: 0, resourcesSpent: 0,
           idleTcTime: 0, idleProductionTime: 0, tcSeconds: 0, productionSeconds: 0,
@@ -1628,9 +1646,51 @@ export class World {
 
   // ----------------------------------------------------------------- tick --
 
+  // ---- territory: whose ground is this? --------------------------------
+  //
+  // A coarse map (4×4-tile cells) of which realm owns each patch: the realm
+  // with the nearest building within reach (a Town Center reaches further).
+  // Rebuilt every two seconds; stats read it to tell attacking from defending.
+  private territory: Int8Array | null = null;
+  private territoryCols = 0;
+  private static readonly TERR_CELL = 4; // tiles
+  private rebuildTerritory() {
+    const cell = World.TERR_CELL * TILE;
+    const cols = Math.ceil(this.worldW / cell), rows = Math.ceil(this.worldH / cell);
+    if (!this.territory || this.territory.length !== cols * rows) this.territory = new Int8Array(cols * rows);
+    this.territoryCols = cols;
+    const owner = this.territory;
+    owner.fill(-1);
+    const best = new Float32Array(cols * rows).fill(Infinity);
+    for (const b of this.entities) {
+      if (!b.alive || b.kind !== Kind.Building || b.team < 0 || b.team >= this.numTeams) continue;
+      const reach = (b.type === "town_center" ? 18 : b.type === "castle" ? 14 : 9) * TILE;
+      const c0 = Math.max(0, Math.floor((b.x - reach) / cell)), c1 = Math.min(cols - 1, Math.floor((b.x + reach) / cell));
+      const r0 = Math.max(0, Math.floor((b.y - reach) / cell)), r1 = Math.min(rows - 1, Math.floor((b.y + reach) / cell));
+      for (let r = r0; r <= r1; r++) for (let c = c0; c <= c1; c++) {
+        const d = Math.hypot((c + 0.5) * cell - b.x, (r + 0.5) * cell - b.y);
+        if (d > reach) continue;
+        const i = r * cols + c;
+        if (d < best[i]) { best[i] = d; owner[i] = b.team; }
+      }
+    }
+  }
+
+  /** Where a hit by `team` at (x, y) lands: on the enemy's ground, its own, or neither. */
+  zoneOf(team: Team, x: number, y: number): "attack" | "defend" | "field" {
+    if (!this.territory) this.rebuildTerritory();
+    const cell = World.TERR_CELL * TILE;
+    const c = Math.floor(x / cell), r = Math.floor(y / cell);
+    if (c < 0 || r < 0 || c >= this.territoryCols) return "field";
+    const o = this.territory![r * this.territoryCols + c];
+    if (o === undefined || o < 0) return "field";
+    return this.areAllied(team, o as Team) ? "defend" : "attack";
+  }
+
   tick() {
     this.tickCount++;
     this.time += SIM_DT;
+    if (this.tickCount % (SIM_HZ * 2) === 1) this.rebuildTerritory();
 
     // Market prices creep back toward par. Once a second is plenty — the drift
     // is measured in minutes and doing it every tick would be 20x the work for
@@ -2062,10 +2122,39 @@ export class World {
         return;
       }
     }
-    this.reassignFarmer(worker, farm);
+    this.reassignFarmer(worker, farm, true);
   }
 
-  private reassignFarmer(e: Entity, fromFarm: Entity) {
+  /**
+   * A villager just finished a building and has nothing queued: put it to the
+   * obvious work. A farm is farmed by whoever built it (the first to finish
+   * claims it; other builders take the nearest free farm). A Lumber Camp,
+   * Mining Camp or Mill sends its builder to the nearest wood, gold or berries.
+   */
+  private afterBuilt(e: Entity, b: Entity) {
+    if (e.order.kind !== OrderKind.Idle || !UNITS[e.type]?.canGather) return;
+    if (b.type === "farm") {
+      const owner = this.byId.get(b.farmWorker);
+      if (!owner || !owner.alive || owner.id === e.id || !this.worksFarm(owner, b)) {
+        b.farmWorker = e.id;
+        e.order = { kind: OrderKind.Gather, tx: b.x, ty: b.y, target: b.id };
+        e.path = null;
+      } else {
+        this.reassignFarmer(e, b);
+      }
+      return;
+    }
+    const nodeFor: Record<string, string> = { lumber_camp: "tree", mining_camp: "gold_mine", mill: "berries" };
+    const want = nodeFor[b.type];
+    if (!want) return;
+    const node = this.findNearbyResource(b.x, b.y, want, 8 * TILE);
+    if (node) {
+      e.order = { kind: OrderKind.Gather, tx: node.x, ty: node.y, target: node.id };
+      e.path = null;
+    }
+  }
+
+  private reassignFarmer(e: Entity, fromFarm: Entity, fieldGone = false) {
     let bestFarm: Entity | null = null;
     let bestFd = Infinity;
     for (const f of this.entities) {
@@ -2082,14 +2171,13 @@ export class World {
       e.path = null;
       return;
     }
-    // No free farm — fall back to the nearest natural resource.
-    let bestR: Entity | null = null;
-    let bestRd = Infinity;
-    for (const r of this.entities) {
-      if (!r.alive || r.kind !== Kind.Resource || r.amount <= 0) continue;
-      const d = dist2(e.x, e.y, r.x, r.y);
-      if (d < bestRd) { bestRd = d; bestR = r; }
-    }
+    // No free farm — gather food nearby (berries) if there is any; otherwise
+    // wait by the farm. It used to take the nearest resource of *any* kind,
+    // which could be a gold mine across the map: a farmer should stay a farmer.
+    // A field that ran out with nothing to replant it is different: the farmer
+    // has no farm to go back to, so any work close by beats standing in the dirt.
+    const bestR = this.findNearbyResource(fromFarm.x, fromFarm.y, "berries", 12 * TILE) ??
+      (fieldGone ? this.nearestAnyResource(fromFarm.x, fromFarm.y, 12 * TILE) : null);
     if (bestR) {
       e.order = { kind: OrderKind.Gather, tx: bestR.x, ty: bestR.y, target: bestR.id };
       e.path = null;
@@ -2361,12 +2449,17 @@ export class World {
         b.hp = b.maxHp;
         this.onBuildingCompleted(b, bdef);
         this.finishOrder(e);
+        this.afterBuilt(e, b);
       }
     } else {
       // Repairs go at the same pace as building (the Hearth's masons).
       const rp = this.players[e.team];
+      const wasBuilding = e.order.kind === OrderKind.Build; // a helper arriving as it finished
       b.hp = Math.min(b.maxHp, b.hp + REPAIR_RATE * SIM_DT * (rp?.oath.buildSpeedMult ?? 1));
-      if (b.hp >= b.maxHp) this.finishOrder(e);
+      if (b.hp >= b.maxHp) {
+        this.finishOrder(e);
+        if (wasBuilding) this.afterBuilt(e, b);
+      }
     }
   }
 
@@ -2392,7 +2485,10 @@ export class World {
     // chase and no retaliation pursuit.
     const standGround = holdOrder || e.stance === Stance.StandGround;
     let enemy = standGround ? null : this.retaliationTarget(e);
-    if (!enemy) {
+    // An idle villager hits back when struck, but doesn't go looking for a
+    // fight: one that finished a bridge used to wander off and spend the next
+    // minutes hacking at the enemy's bridge instead of working.
+    if (!enemy && !UNITS[e.type]?.canGather) {
       const scanRange = standGround ? Math.max(e.range + 20, 60) : e.visionRange * 0.85;
       enemy = this.findEnemyInRange(e, scanRange);
     }
@@ -2447,6 +2543,15 @@ export class World {
         bestD = d;
         best = n;
       }
+    }
+    return best;
+  }
+
+  private nearestAnyResource(x: number, y: number, radius: number): Entity | null {
+    let best: Entity | null = null, bd = radius * radius;
+    for (const t of ["tree", "gold_mine", "stone_mine"]) {
+      const r = this.findNearbyResource(x, y, t, radius);
+      if (r) { const d = dist2(x, y, r.x, r.y); if (d < bd) { bd = d; best = r; } }
     }
     return best;
   }
@@ -2838,7 +2943,14 @@ export class World {
       const dealt = this.players[fromTeam]?.stats;
       if (dealt && fromTeam !== target.team) {
         dealt.damageDealt += dmg;
-        if (dealt.firstHitAt < 0 && target.team < this.numTeams && !this.areAllied(fromTeam, target.team)) dealt.firstHitAt = this.time;
+        if (target.team < this.numTeams && !this.areAllied(fromTeam, target.team)) {
+          if (dealt.firstHitAt < 0) dealt.firstHitAt = this.time;
+          const zone = this.zoneOf(fromTeam, target.x, target.y);
+          if (zone === "attack") { dealt.damageAttacking += dmg; if (dealt.firstAttackAt < 0) dealt.firstAttackAt = this.time; }
+          else if (zone === "defend") { dealt.damageDefending += dmg; if (dealt.firstDefendAt < 0) dealt.firstDefendAt = this.time; }
+          else { dealt.damageField += dmg; if (dealt.firstFieldAt < 0) dealt.firstFieldAt = this.time; }
+          if (zone !== "defend" && this.time <= 600 && sourceType) dealt.openerByUnit[sourceType] = (dealt.openerByUnit[sourceType] ?? 0) + dmg;
+        }
         if (sourceType) dealt.damageByUnit[sourceType] = (dealt.damageByUnit[sourceType] ?? 0) + dmg;
       }
       const took = this.players[target.team]?.stats;
@@ -2886,6 +2998,11 @@ export class World {
         killer.stats.killedByType[e.type] = (killer.stats.killedByType[e.type] ?? 0) + 1;
         if (byType && e.team !== byTeam) killer.stats.killsByUnit[byType] = (killer.stats.killsByUnit[byType] ?? 0) + 1;
         if (killer.stats.firstKillAt < 0 && e.team !== byTeam && e.team < this.numTeams) killer.stats.firstKillAt = this.time;
+        if (e.team !== byTeam && e.team < this.numTeams) {
+          const zone = this.zoneOf(byTeam, e.x, e.y);
+          if (zone === "attack") killer.stats.killsAttacking++;
+          else if (zone === "defend") killer.stats.killsDefending++;
+        }
       }
       this.creditHeroKill(byTeam, e.x, e.y);
       // The Champion falls — but rises again at the Town Center after a while.
@@ -3255,8 +3372,14 @@ export class World {
    * Uses a slightly generous pick radius so a berry/tree tucked against a
    * drop-off building is still selectable for gathering instead of the building.
    */
+  /** Is someone actually working this farm (walking to it, farming it, or carrying its food)? */
+  farmWorked(farm: Entity): boolean {
+    const owner = this.byId.get(farm.farmWorker);
+    return !!owner && owner.alive && this.worksFarm(owner, farm);
+  }
+
   resourceAt(wx: number, wy: number, team?: Team): Entity | null {
-    const near = this.spatial.query(wx, wy, 44) as Entity[];
+    const near = this.spatial.query(wx, wy, 72) as Entity[];
     let best: Entity | null = null;
     let bestD = Infinity;
     for (const e of near) {
@@ -3268,9 +3391,12 @@ export class World {
       } else if (!isFarm) {
         continue;
       }
-      const r = Math.max(e.radius + 10, 16);
       const d = dist2(wx, wy, e.x, e.y);
-      if (d < r * r && d < bestD) {
+      // A farm is a square field: anywhere on it counts, corners included.
+      const hit = isFarm
+        ? Math.abs(wx - e.x) <= e.radius + 4 && Math.abs(wy - e.y) <= e.radius + 4
+        : d < Math.max(e.radius + 10, 16) ** 2;
+      if (hit && d < bestD) {
         bestD = d;
         best = e;
       }

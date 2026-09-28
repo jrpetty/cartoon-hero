@@ -120,3 +120,39 @@ describe("Traits and the reasons behind them", () => {
     expect(() => analyse(old)).not.toThrow();
   });
 });
+
+describe("Style built from keywords", () => {
+  it("a rusher who opens with archers is an Archer Rush, not Man-at-Arms", () => {
+    const p = analyse(many(12, { firstAttackAt: 300, firstHitAt: 300, durationSec: 700, opener: { archer: 900, militia: 80 }, trained: { villager: 22, militia: 20, archer: 12 } }));
+    expect(p.primary?.archetype.id).toBe("rush");
+    expect(p.title).toBe("Archer Rush");
+    expect(p.keywords).toContain("Early attacker");
+    expect(p.keywords).toContain("Archer opener");
+  });
+
+  it("a mixed opener says so", () => {
+    const p = analyse(many(12, { firstAttackAt: 300, durationSec: 700, opener: { archer: 300, militia: 300, horseman: 300 } }));
+    expect(p.title).toBe("Mixed Rush");
+  });
+
+  it("attacks early but wins long: early pressure, late finish", () => {
+    const p = analyse(many(12, { firstAttackAt: 330, durationSec: 2600, opener: { horseman: 700 }, age: 3 }));
+    expect(p.primary?.archetype.id).toBe("pressure");
+    expect(p.title).toMatch(/Late Closer|Late Finisher/);
+    expect(p.keywords).toEqual(expect.arrayContaining(["Early attacker", "Long games"]));
+  });
+
+  it("defending at home early is not a rush", () => {
+    // Old fields say "hit something at 4:00"; the new ones say it was at home.
+    const p = analyse(many(12, { firstHitAt: 240, firstAttackAt: 1100, firstDefendAt: 240, durationSec: 1700 }));
+    expect(p.features.rushRate).toBe(0);
+    expect(matchStyles(m({ firstHitAt: 240, firstAttackAt: -1 }))).not.toContain("rush");
+  });
+
+  it("gives good and bad feedback from the record", () => {
+    const p = analyse(many(12, { tcIdleShare: 0.4, gathered: 15000, kills: 20, losses: 50 }));
+    expect(p.good.join(" ")).toMatch(/out-gathers/);
+    expect(p.bad.join(" ")).toMatch(/Town Center/);
+    expect(p.bad.join(" ")).toMatch(/lose more units/);
+  });
+});

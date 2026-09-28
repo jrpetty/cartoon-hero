@@ -127,6 +127,17 @@ export interface SideReport {
   firstHitAt: number;
   firstKillAt: number;
   firstRazeAt: number;
+  /** First hit on the enemy's ground / in your own / in no-man's land (-1 never). */
+  firstAttackAt: number;
+  firstDefendAt: number;
+  firstFieldAt: number;
+  damageAttacking: number;
+  damageDefending: number;
+  damageField: number;
+  killsAttacking: number;
+  killsDefending: number;
+  /** Damage by unit type dealt away from home in the first 10 minutes. */
+  openerByUnit: Record<string, number>;
 }
 
 /**
@@ -179,6 +190,7 @@ const emptySide = (): SideReport => ({
   age: 0, upgrades: 0, trainedByType: {}, lostByType: {}, killedByType: {}, builtByType: {},
   killsByUnit: {}, damageByUnit: {}, razedByUnit: {},
   firstHitAt: -1, firstKillAt: -1, firstRazeAt: -1,
+  firstAttackAt: -1, firstDefendAt: -1, firstFieldAt: -1, damageAttacking: 0, damageDefending: 0, damageField: 0, killsAttacking: 0, killsDefending: 0, openerByUnit: {},
 });
 
 const addInto = (dst: Record<string, number>, src: Record<string, number>) => {
@@ -226,6 +238,15 @@ function accumulate(side: SideReport, world: World, team: Team) {
   side.firstHitAt = earliest(side.firstHitAt, s.firstHitAt);
   side.firstKillAt = earliest(side.firstKillAt, s.firstKillAt);
   side.firstRazeAt = earliest(side.firstRazeAt, s.firstRazeAt);
+  side.firstAttackAt = earliest(side.firstAttackAt, s.firstAttackAt);
+  side.firstDefendAt = earliest(side.firstDefendAt, s.firstDefendAt);
+  side.firstFieldAt = earliest(side.firstFieldAt, s.firstFieldAt);
+  side.damageAttacking += s.damageAttacking ?? 0;
+  side.damageDefending += s.damageDefending ?? 0;
+  side.damageField += s.damageField ?? 0;
+  side.killsAttacking += s.killsAttacking ?? 0;
+  side.killsDefending += s.killsDefending ?? 0;
+  addInto(side.openerByUnit, s.openerByUnit ?? {});
 }
 
 /**

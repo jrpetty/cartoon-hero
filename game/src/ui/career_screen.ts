@@ -583,6 +583,19 @@ export class CareerScreen {
     return yy - y;
   }
 
+  /** The height `block` would draw, without drawing. */
+  private blockHeight(text: string, maxW: number, size: number): number {
+    const ctx = ui.ctx;
+    ctx.font = `${size}px 'Trebuchet MS', sans-serif`;
+    let line = "", rows = 0;
+    for (const word of text.split(" ")) {
+      const test = line ? `${line} ${word}` : word;
+      if (ctx.measureText(test).width > maxW && line) { rows++; line = word; } else line = test;
+    }
+    if (line) rows++;
+    return rows * (size + 5);
+  }
+
   /** A drawn emblem per style (emoji render differently everywhere). */
   private medallion(id: string, cx: number, cy: number, r: number, color: string) {
     const ctx = ui.ctx;
@@ -596,6 +609,9 @@ export class CareerScreen {
       case "rush": // crossed swords
         ctx.moveTo(-6 * u, -6 * u); ctx.lineTo(6 * u, 6 * u); ctx.moveTo(6 * u, -6 * u); ctx.lineTo(-6 * u, 6 * u);
         ctx.moveTo(-6.5 * u, 3 * u); ctx.lineTo(-3 * u, 6.5 * u); ctx.moveTo(6.5 * u, 3 * u); ctx.lineTo(3 * u, 6.5 * u); ctx.stroke(); break;
+      case "pressure": // a sword, then an hourglass: hit early, finish late
+        ctx.moveTo(-7 * u, 2 * u); ctx.lineTo(0, -5 * u); ctx.moveTo(-6 * u, -2 * u); ctx.lineTo(-3 * u, 1 * u);
+        ctx.moveTo(1.5 * u, 0); ctx.lineTo(6.5 * u, 0); ctx.lineTo(1.5 * u, 7 * u); ctx.lineTo(6.5 * u, 7 * u); ctx.closePath(); ctx.stroke(); break;
       case "turtle": // a tower
         ctx.rect(-4 * u, -3 * u, 8 * u, 9 * u); ctx.moveTo(-5 * u, -3 * u); ctx.lineTo(-5 * u, -6 * u); ctx.lineTo(-2.5 * u, -6 * u); ctx.lineTo(-2.5 * u, -4.5 * u);
         ctx.lineTo(0, -4.5 * u); ctx.lineTo(0, -6 * u); ctx.lineTo(2.5 * u, -6 * u); ctx.lineTo(2.5 * u, -4.5 * u); ctx.lineTo(5 * u, -4.5 * u); ctx.lineTo(5 * u, -3 * u); ctx.stroke(); break;
@@ -644,6 +660,45 @@ export class CareerScreen {
     y += heroH + gap;
     if (!p.enough) return y;
 
+    // ---- keywords: the style in words, built from the numbers ----
+    if (p.keywords.length) {
+      y = this.heading(x, y, w, "In a few words", "tempo · army · game length · what you stand out at");
+      let cx = x, cy = y;
+      for (const k of p.keywords) {
+        ctx.font = "bold 13px 'Trebuchet MS', sans-serif";
+        const cw = ctx.measureText(k).width + 28;
+        if (cx + cw > x + w) { cx = x; cy += 36; }
+        ctx.fillStyle = "rgba(127,176,232,0.16)";
+        ctx.beginPath(); ctx.roundRect(cx, cy, cw, 30, 15); ctx.fill();
+        ctx.strokeStyle = "rgba(127,176,232,0.45)"; ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.roundRect(cx + 0.5, cy + 0.5, cw - 1, 29, 15); ctx.stroke();
+        ui.text(k, cx + 14, cy + 20, { size: 13, bold: true, color: "#cfe2ff" });
+        cx += cw + 8;
+      }
+      y = cy + 44;
+    }
+
+    // ---- the verdict: what you do well, what's costing you ----
+    if (p.good.length || p.bad.length) {
+      y = this.heading(x, y, w, "Your games, honestly", "compared with the opponents you've faced");
+      const hw = (w - gap) / 2;
+      const measure = (lines: string[]) => lines.reduce((a, l) => a + this.blockHeight(l, hw - 52, 13) + 8, 0);
+      const ph = Math.max(80, 40 + Math.max(measure(p.good), measure(p.bad)));
+      const side = (sx: number, title: string, lines: string[], color: string, mark: string, empty: string) => {
+        ui.panel(sx, y, hw, ph);
+        ui.text(title, sx + 16, y + 22, { size: 11, bold: true, color });
+        let ly = y + 44;
+        if (!lines.length) this.block(empty, sx + 16, ly, hw - 32, 12.5, FAINT);
+        for (const l of lines) {
+          ui.text(mark, sx + 16, ly + 1, { size: 14, bold: true, color });
+          ly += this.block(l, sx + 34, ly, hw - 52, 13, TEXT) + 8;
+        }
+      };
+      side(x, "WHAT YOU DO WELL", p.good, GOOD, "+", "Nothing stands out yet.");
+      side(x + hw + gap, "WHAT'S COSTING YOU", p.bad, BAD, "−", "No weak spot shows in your numbers.");
+      y += ph + gap;
+    }
+
     // ---- traits ----
     if (p.traits.length) {
       y = this.heading(x, y, w, "Traits", "what else stands out");
@@ -664,7 +719,7 @@ export class CareerScreen {
 
     // ---- the evidence ----
     if (primary) {
-      y = this.heading(x, y, w, `Why you're a ${primary.name}`, "the numbers behind it");
+      y = this.heading(x, y, w, `Why you're ${/^[AEIOU]/.test(primary.name) ? "an" : "a"} ${primary.name}`, "the numbers behind it");
       const ev = primary.evidence(f);
       const ew = (w - gap * (ev.length - 1)) / ev.length;
       ev.forEach((e, i) => {

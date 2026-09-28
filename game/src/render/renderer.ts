@@ -539,6 +539,19 @@ export class Renderer {
     for (const e of drawables) {
       if (e.selected) drawSelectionRing(ctx, e, e.team === viewTeam);
     }
+    // Your finished farms with nobody working them: a small pulsing marker, so
+    // an idle field is as easy to spot as an idle villager.
+    if (!world.revealAll) {
+      const pulse = 0.55 + 0.45 * Math.sin(time * 3);
+      for (const e of drawables) {
+        if (e.type !== "farm" || e.team !== viewTeam || e.buildState !== BuildState.Done || world.farmWorked(e)) continue;
+        ctx.fillStyle = `rgba(255, 200, 90, ${0.75 * pulse})`;
+        ctx.strokeStyle = "rgba(40, 24, 8, 0.8)";
+        ctx.lineWidth = 1.5;
+        ctx.beginPath(); ctx.arc(e.x, e.y - 4, 5, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(e.x - 6, e.y + 8); ctx.quadraticCurveTo(e.x, e.y - 1, e.x + 6, e.y + 8); ctx.fill(); ctx.stroke();
+      }
+    }
 
     // Rally line from a selected production building.
     // Every selected production building's rally, not just the first.
