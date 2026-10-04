@@ -7,7 +7,9 @@ import net.minecraft.Util;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.client.resources.sounds.SimpleSoundInstance;
 import net.minecraft.network.chat.Component;
+import net.minecraft.sounds.SoundEvents;
 import org.lwjgl.glfw.GLFW;
 
 import java.util.ArrayList;
@@ -16,19 +18,20 @@ import java.util.Locale;
 
 /**
  * Skills panel (K) — the mod's hub screen: a 2-column card grid, one card per skill
- * plus a gold Character card, with animated XP bars and rich hover tooltips.
- * Active-ability cards are clickable to select that ability, and the Menu button in
- * the title bar reaches everything else (talents, profile, display toggles).
- * Compact enough (~215px tall) to fit a 240px-tall scaled GUI.
+ * plus a gold Character card. Each card carries the skill's item icon, its level and
+ * an animated XP bar; abilities that aren't unlocked yet wear a padlock. Clicking an
+ * unlocked card selects its ability, and the Menu button reaches everything else.
  */
 public final class SkillsScreen extends Screen {
     private static final int PAD = 6;
     private static final int CARD_W = 154;
-    private static final int CARD_H = 26;
+    private static final int CARD_H = 28;
     private static final int GAP = 4;
     private static final int PANEL_W = PAD + CARD_W + 4 + CARD_W + PAD;
     private static final int TITLE_H = 17;
     private static final int FOOTER_H = 14;
+    private static final int ICON_X = 6;
+    private static final int TEXT_X = 27;
 
     private record Card(int x1, int y1, int x2, int y2, Skill skill) {}
     private final List<Card> cards = new ArrayList<>();
@@ -37,6 +40,9 @@ public final class SkillsScreen extends Screen {
     // 100ms hover crossfades: one slot per skill card + one for the Character card.
     private final float[] hoverA = new float[Skill.values().length + 1];
     private long lastFrameMs = Util.getMillis();
+    // Red "can't do that" blink on a locked card that was clicked.
+    private Skill denied;
+    private long deniedMs;
 
     public SkillsScreen() {
         super(Component.literal("Voxelia Skills"));
@@ -56,7 +62,7 @@ public final class SkillsScreen extends Screen {
         Skill[] all = Skill.values();
         int rows = (all.length + 2) / 2; // skills + the character card
         int h = TITLE_H + GAP + rows * CARD_H + (rows - 1) * GAP + GAP + FOOTER_H;
-        int x = (this.width - PANEL_W) / 2;
+        int x = (this.width - PANEL_W) / 2 - menu.panelShift(this.font, PANEL_W, this.width);
         int y = (this.height - h) / 2;
 
         VoxeliaUi.panel(g, x, y, PANEL_W, h);
@@ -66,6 +72,7 @@ public final class SkillsScreen extends Screen {
         menu.renderButton(g, this.font, x, y, PANEL_W, mouseX, mouseY, totalPts > 0);
 
         Skill selected = ClientAbilities.selectedSkill();
+        boolean anyUnlocked = ClientAbilities.anyUnlocked();
         Card hovered = null;
         for (int i = 0; i < all.length; i++) {
             Skill skill = all[i];
@@ -73,49 +80,46 @@ public final class SkillsScreen extends Screen {
             int cy = y + TITLE_H + GAP + (i / 2) * (CARD_H + GAP);
             boolean over = !menu.isOpen()
                 && mouseX >= cx && mouseX < cx + CARD_W && mouseY >= cy && mouseY < cy + CARD_H;
-            boolean sel = skill == selected;
+            boolean unlocked = ClientAbilities.unlocked(skill);
+            boolean sel = skill == selected && unlocked;
             int color = 0xFF000000 | skill.color();
             hoverA[i] = Math.max(0f, Math.min(1f, hoverA[i] + (over ? hdt : -hdt)));
             float a = hoverA[i];
 
-            // Lacquered card body: top-lit gradient that lifts as the hover fades in.
-            int bodyA = 0xC8 + (int) (0x20 * a);
-            int topC = (bodyA << 24) | (VoxeliaUi.lerp(0xFF1E2B3A, 0xFF263850, a) & 0xFFFFFF);
-            int botC = (bodyA << 24) | (VoxeliaUi.lerp(0xFF131C27, 0xFF1A2536, a) & 0xFFFFFF);
-            g.fillGradient(cx, cy, cx + CARD_W, cy + CARD_H, topC, botC);
-            g.fill(cx, cy + CARD_H - 1, cx + CARD_W, cy + CARD_H, 0x40000000); // bottom seat
-            g.fillGradient(cx, cy, cx + 3, cy + CARD_H,
-                VoxeliaUi.brighten(color, 30), VoxeliaUi.lerp(color, 0xFF0A0F14, 0.35f));
+            cardBody(g, cx, cy, color, a, 0xFF1E2B3A, 0xFF263850, 0xFF131C27, 0xFF1A2536);
             if (sel) {
-                g.fill(cx, cy, cx + CARD_W, cy + 1, VoxeliaUi.LINK);
-                g.fill(cx, cy + CARD_H - 1, cx + CARD_W, cy + CARD_H, VoxeliaUi.LINK);
-                g.fill(cx, cy, cx + 1, cy + CARD_H, VoxeliaUi.LINK);
-                g.fill(cx + CARD_W - 1, cy, cx + CARD_W, cy + CARD_H, VoxeliaUi.LINK);
+                outline(g, cx, cy, VoxeliaUi.LINK);
+            } else if (skill == denied && now - deniedMs < 320) {
+                outline(g, cx, cy, VoxeliaUi.WARN);
             } else if (a > 0.02f) {
                 int ha = (((int) (0x60 * a)) << 24) | 0xFFFFFF;
                 g.fill(cx, cy, cx + CARD_W, cy + 1, ha);
                 g.fill(cx, cy + CARD_H - 1, cx + CARD_W, cy + CARD_H, ha);
             }
 
+            // Item icon in a seated well; locked abilities grey it and pin a padlock on.
+            int ix = cx + ICON_X, iy = cy + (CARD_H - 16) / 2;
+            g.fill(ix - 2, iy - 2, ix + 18, iy + 18, 0x40000000);
+            g.fill(ix - 2, iy - 2, ix + 18, iy - 1, 0x30000000);
+            VoxeliaUi.icon(g, SkillIcons.of(skill), ix, iy, 16);
+            if (!unlocked) VoxeliaUi.lockedBadge(g, ix, iy, 16);
+
             int xp = ClientSkillData.xp(skill);
             int level = SkillCurve.levelForXp(xp);
             int into = SkillCurve.xpIntoLevel(xp);
             int span = SkillCurve.xpToNext(xp);
 
-            g.drawString(this.font, skill.display(), cx + 7, cy + 4, color);
+            g.drawString(this.font, skill.display(), cx + TEXT_X, cy + 5, color);
             String lv = "Lv " + level;
-            g.drawString(this.font, lv, cx + CARD_W - 6 - this.font.width(lv), cy + 4,
-                span > 0 ? 0xFFFFFFFF : VoxeliaUi.GOOD);
+            int lvX = cx + CARD_W - 6 - this.font.width(lv);
+            g.drawString(this.font, lv, lvX, cy + 5, span > 0 ? 0xFFFFFFFF : VoxeliaUi.GOOD);
             int pts = ClientTalents.available(skill);
             if (pts > 0) { // unspent talent points, in the Talent screen's green pill language
-                VoxeliaUi.pill(g, this.font, cx + CARD_W - 6 - this.font.width(lv) - 4, cy + 2,
-                    String.valueOf(pts), 0x6EE86E, true);
-            }
-            if (skill.active()) { // small cyan corner dot: "this one is clickable"
-                g.fill(cx + CARD_W - 5, cy + 2, cx + CARD_W - 2, cy + 5, sel ? VoxeliaUi.GOLD : VoxeliaUi.LINK);
+                VoxeliaUi.pill(g, this.font, lvX - 4, cy + 3, String.valueOf(pts), 0x6EE86E, true);
             }
             float frac = span > 0 ? (float) into / span : 1f;
-            VoxeliaUi.bar(g, cx + 7, cy + 17, CARD_W - 13, 4, frac, span > 0 ? skill.color() : 0x7CFC00, true);
+            VoxeliaUi.bar(g, cx + TEXT_X, cy + 18, CARD_W - TEXT_X - 6, 4, frac,
+                span > 0 ? skill.color() : 0x7CFC00, true);
 
             Card card = new Card(cx, cy, cx + CARD_W, cy + CARD_H, skill);
             cards.add(card);
@@ -131,13 +135,7 @@ public final class SkillsScreen extends Screen {
         hoverA[ci] = Math.max(0f, Math.min(1f, hoverA[ci] + (overChar ? hdt : -hdt)));
         float ca = hoverA[ci];
         charCard = new int[]{ccx, ccy, ccx + CARD_W, ccy + CARD_H};
-        int cBodyA = 0xC8 + (int) (0x20 * ca);
-        int cTop = (cBodyA << 24) | (VoxeliaUi.lerp(0xFF2C2A1E, 0xFF383426, ca) & 0xFFFFFF);
-        int cBot = (cBodyA << 24) | (VoxeliaUi.lerp(0xFF181610, 0xFF201C12, ca) & 0xFFFFFF);
-        g.fillGradient(ccx, ccy, ccx + CARD_W, ccy + CARD_H, cTop, cBot);
-        g.fill(ccx, ccy + CARD_H - 1, ccx + CARD_W, ccy + CARD_H, 0x40000000);
-        g.fillGradient(ccx, ccy, ccx + 3, ccy + CARD_H,
-            VoxeliaUi.brighten(0xFFFFCE54, 30), VoxeliaUi.lerp(0xFFFFCE54, 0xFF0A0F14, 0.35f));
+        cardBody(g, ccx, ccy, VoxeliaUi.GOLD, ca, 0xFF2C2A1E, 0xFF383426, 0xFF181610, 0xFF201C12);
         if (ca > 0.02f) {
             int ga = (((int) (0x80 * ca)) << 24) | 0xFFCE54;
             g.fill(ccx, ccy, ccx + CARD_W, ccy + 1, ga);
@@ -151,26 +149,41 @@ public final class SkillsScreen extends Screen {
             progress += sp > 0 ? (float) SkillCurve.xpIntoLevel(ClientSkillData.xp(s)) / sp : 1f;
         }
         int charLevel = Math.max(1, Math.round(total / (float) all.length));
-        g.drawString(this.font, "Character", ccx + 7, ccy + 4, VoxeliaUi.GOLD);
+        int cix = ccx + ICON_X, ciy = ccy + (CARD_H - 16) / 2;
+        g.fill(cix - 2, ciy - 2, cix + 18, ciy + 18, 0x40000000);
+        VoxeliaUi.icon(g, SkillIcons.character(), cix, ciy, 16);
+        g.drawString(this.font, "Character", ccx + TEXT_X, ccy + 5, VoxeliaUi.GOLD);
         String clv = "Lv " + charLevel;
-        g.drawString(this.font, clv, ccx + CARD_W - 6 - this.font.width(clv), ccy + 4, 0xFFFFFFFF);
-        g.fill(ccx + CARD_W - 5, ccy + 2, ccx + CARD_W - 2, ccy + 5, VoxeliaUi.GOLD);
-        VoxeliaUi.bar(g, ccx + 7, ccy + 17, CARD_W - 13, 4, progress / all.length, 0xFFCE54, true);
+        g.drawString(this.font, clv, ccx + CARD_W - 6 - this.font.width(clv), ccy + 5, 0xFFFFFFFF);
+        VoxeliaUi.bar(g, ccx + TEXT_X, ccy + 18, CARD_W - TEXT_X - 6, 4, progress / all.length, 0xFFCE54, true);
 
-        // Footer: key hints with the keys in cyan, then the selected ability (trimmed to fit).
+        // Footer: how to use the selected ability, or — before any unlock — what's closest.
         VoxeliaUi.footer(g, x, y + h - FOOTER_H, PANEL_W, FOOTER_H);
         int fy = y + h - FOOTER_H + 3;
         int fx = x + PAD;
-        fx = seg(g, fx, fy, "Use ", VoxeliaUi.MUTED);
-        fx = seg(g, fx, fy, "[" + VoxeliaUi.trim(this.font, keyName(VoxeliaKeys.USE_ABILITY), 40) + "]", VoxeliaUi.LINK);
-        fx = seg(g, fx, fy, "  Cycle ", VoxeliaUi.MUTED);
-        fx = seg(g, fx, fy, "[" + VoxeliaUi.trim(this.font, keyName(VoxeliaKeys.CYCLE_ABILITY), 40) + "]", VoxeliaUi.LINK);
-        fx = seg(g, fx, fy, "  ▶ ", VoxeliaUi.MUTED);
-        seg(g, fx, fy, VoxeliaUi.trim(this.font, selected.abilityName(), x + PANEL_W - PAD - fx), VoxeliaUi.LINK);
+        if (anyUnlocked) {
+            fx = seg(g, fx, fy, "Use ", VoxeliaUi.MUTED);
+            fx = seg(g, fx, fy, "[" + VoxeliaUi.trim(this.font, keyName(VoxeliaKeys.USE_ABILITY), 40) + "]", VoxeliaUi.LINK);
+            fx = seg(g, fx, fy, "  Cycle ", VoxeliaUi.MUTED);
+            fx = seg(g, fx, fy, "[" + VoxeliaUi.trim(this.font, keyName(VoxeliaKeys.CYCLE_ABILITY), 40) + "]", VoxeliaUi.LINK);
+            fx = seg(g, fx, fy, "  ▶ ", VoxeliaUi.MUTED);
+            seg(g, fx, fy, VoxeliaUi.trim(this.font, selected.abilityName(), x + PANEL_W - PAD - fx), VoxeliaUi.LINK);
+        } else {
+            Skill next = ClientAbilities.nextToUnlock();
+            if (next != null) {
+                int at = ClientAbilities.unlockLevel(next);
+                int togo = at - ClientSkillData.level(next);
+                fx = seg(g, fx, fy, "First ability: ", VoxeliaUi.MUTED);
+                fx = seg(g, fx, fy, next.abilityName(), 0xFF000000 | next.color());
+                seg(g, fx, fy, VoxeliaUi.trim(this.font, " at " + next.display() + " " + at + " — "
+                    + togo + (togo == 1 ? " level" : " levels") + " to go", x + PANEL_W - PAD - fx), VoxeliaUi.MUTED);
+            }
+        }
 
         menu.renderDropdown(g, this.font, ScreenMenu.Page.SKILLS, mouseX, mouseY);
         g.pose().popPose();
         super.render(g, mouseX, mouseY, partialTick);
+        g.flush(); // finish the panel before any tooltip, or its text bleeds through
 
         if (menu.isOpen()) return; // the dropdown owns the pointer while it's down
         if (hovered != null) {
@@ -178,15 +191,38 @@ public final class SkillsScreen extends Screen {
         } else if (overChar) {
             Skill top = all[0];
             for (Skill s : all) if (ClientSkillData.level(s) > ClientSkillData.level(top)) top = s;
+            int unlockedCount = 0;
+            for (Skill s : all) if (s.active() && ClientAbilities.unlocked(s)) unlockedCount++;
             List<Component> tip = new ArrayList<>();
             tip.add(Component.literal("Character Lv " + charLevel + " ✦ " + top.noun())
                 .withStyle(ChatFormatting.GOLD));
             tip.add(Component.literal(total + " total skill levels").withStyle(ChatFormatting.WHITE));
             tip.add(Component.literal("Highest: " + top.display() + " Lv " + ClientSkillData.level(top))
                 .withStyle(ChatFormatting.GRAY));
+            tip.add(Component.literal("Abilities unlocked: " + unlockedCount + " / " + all.length)
+                .withStyle(ChatFormatting.GRAY));
             tip.add(Component.literal("Click for your full profile").withStyle(ChatFormatting.GREEN));
             g.renderComponentTooltip(this.font, tip, mouseX, mouseY);
         }
+    }
+
+    /** Lacquered card body: top-lit gradient that lifts with hover, a seat line and the accent stripe. */
+    private static void cardBody(GuiGraphics g, int cx, int cy, int accent, float a,
+                                 int top, int topHover, int bottom, int bottomHover) {
+        int bodyA = 0xC8 + (int) (0x20 * a);
+        int topC = (bodyA << 24) | (VoxeliaUi.lerp(top, topHover, a) & 0xFFFFFF);
+        int botC = (bodyA << 24) | (VoxeliaUi.lerp(bottom, bottomHover, a) & 0xFFFFFF);
+        g.fillGradient(cx, cy, cx + CARD_W, cy + CARD_H, topC, botC);
+        g.fill(cx, cy + CARD_H - 1, cx + CARD_W, cy + CARD_H, 0x40000000);
+        g.fillGradient(cx, cy, cx + 3, cy + CARD_H,
+            VoxeliaUi.brighten(accent, 30), VoxeliaUi.lerp(accent, 0xFF0A0F14, 0.35f));
+    }
+
+    private static void outline(GuiGraphics g, int cx, int cy, int color) {
+        g.fill(cx, cy, cx + CARD_W, cy + 1, color);
+        g.fill(cx, cy + CARD_H - 1, cx + CARD_W, cy + CARD_H, color);
+        g.fill(cx, cy, cx + 1, cy + CARD_H, color);
+        g.fill(cx + CARD_W - 1, cy, cx + CARD_W, cy + CARD_H, color);
     }
 
     private void renderSkillTooltip(GuiGraphics g, Skill skill, Skill selected, int mouseX, int mouseY) {
@@ -215,16 +251,29 @@ public final class SkillsScreen extends Screen {
             }
         }
         if (skill.active()) {
-            tip.add(skill == selected
-                ? Component.literal("Ability: " + skill.abilityName() + " — selected").withStyle(ChatFormatting.AQUA)
-                : Component.literal("Ability: " + skill.abilityName() + " — click to select").withStyle(ChatFormatting.GREEN));
-        } else {
-            tip.add(Component.literal("Passive: " + skill.abilityName()).withStyle(ChatFormatting.GRAY));
+            int at = ClientAbilities.unlockLevel(skill);
+            if (at <= 0) {
+                tip.add(Component.literal("Ability: " + skill.abilityName() + " — disabled on this server")
+                    .withStyle(ChatFormatting.DARK_GRAY));
+            } else if (!ClientAbilities.unlocked(skill)) {
+                int togo = at - level;
+                tip.add(Component.literal("Ability: " + skill.abilityName() + " — unlocks at Lv " + at
+                    + " (" + togo + " to go)").withStyle(ChatFormatting.RED));
+            } else if (skill == selected) {
+                tip.add(Component.literal("Ability: " + skill.abilityName() + " — selected").withStyle(ChatFormatting.AQUA));
+            } else {
+                tip.add(Component.literal("Ability: " + skill.abilityName() + " — click to select").withStyle(ChatFormatting.GREEN));
+            }
         }
         int pts = ClientTalents.available(skill);
         if (pts > 0) {
             tip.add(Component.literal(pts + " talent point" + (pts == 1 ? "" : "s")
                 + " unspent — Menu ▸ Talent Tree").withStyle(ChatFormatting.GREEN));
+        } else if (level < SkillCurve.MAX_LEVEL) {
+            int per = ClientTalents.levelsPerPoint();
+            int next = (level / per + 1) * per;
+            tip.add(Component.literal("Next talent point at Lv " + next + " (" + (next - level) + " to go)")
+                .withStyle(ChatFormatting.DARK_GRAY));
         }
         g.renderComponentTooltip(this.font, tip, mouseX, mouseY);
     }
@@ -252,7 +301,12 @@ public final class SkillsScreen extends Screen {
             }
             for (Card c : cards) {
                 if (mouseX >= c.x1 && mouseX < c.x2 && mouseY >= c.y1 && mouseY < c.y2) {
-                    if (c.skill.active()) ClientAbilities.select(c.skill);
+                    if (c.skill.active() && !ClientAbilities.select(c.skill)) {
+                        denied = c.skill; // locked: blink red, tooltip already says when it opens
+                        deniedMs = Util.getMillis();
+                        Minecraft.getInstance().getSoundManager()
+                            .play(SimpleSoundInstance.forUI(SoundEvents.NOTE_BLOCK_BASS.value(), 0.7f));
+                    }
                     return true;
                 }
             }

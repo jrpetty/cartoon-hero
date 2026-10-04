@@ -17,11 +17,13 @@ import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.neoforge.event.brewing.PlayerBrewedPotionEvent;
 import net.neoforged.neoforge.event.entity.living.LivingEntityUseItemEvent;
+import net.neoforged.neoforge.event.entity.player.PlayerEvent;
 
 import java.util.ArrayList;
 
 /**
- * Cooking (passive): trains from eating; "Well Fed" grants a short regeneration.
+ * Cooking (passive): trains from eating and from cooking food in a furnace or smoker;
+ * "Well Fed" grants a short regeneration.
  * Alchemy (passive): trains from brewing; "Lingering" extends your beneficial
  * effect durations whenever you finish drinking a potion.
  */
@@ -36,7 +38,7 @@ public final class ConsumeBrewEvents {
 
         // Cooking — eating food
         if (stack.has(DataComponents.FOOD)) {
-            Progression.grant(player, Skill.COOKING, 8);
+            Progression.grant(player, Skill.COOKING, 20);
             int cooking = player.getData(VoxeliaAttachments.PLAYER_SKILLS.get()).getLevel(Skill.COOKING);
             int wellFed = VoxeliaConfig.cookingWellFedLevel();
             if (wellFed > 0 && cooking >= wellFed) {
@@ -49,7 +51,7 @@ public final class ConsumeBrewEvents {
 
         // Alchemy — drinking a potion
         if (stack.getItem() instanceof PotionItem) {
-            Progression.grant(player, Skill.ALCHEMY, 6);
+            Progression.grant(player, Skill.ALCHEMY, 20);
             int alchemy = player.getData(VoxeliaAttachments.PLAYER_SKILLS.get()).getLevel(Skill.ALCHEMY);
             double factor = 1.0 + alchemy * VoxeliaConfig.alchemyDurationPerLevel()
                 * TalentLogic.signatureBonus(player, Skill.ALCHEMY);
@@ -68,7 +70,19 @@ public final class ConsumeBrewEvents {
     @SubscribeEvent
     public static void onBrew(PlayerBrewedPotionEvent event) {
         if (event.getEntity() instanceof ServerPlayer player) {
-            Progression.grant(player, Skill.ALCHEMY, 12);
+            Progression.grant(player, Skill.ALCHEMY, 45);
         }
+    }
+
+    /**
+     * Cooking also trains at the furnace and smoker — taking cooked food out pays per
+     * item. Eating alone is capped by your hunger bar; this is the pace you control.
+     */
+    @SubscribeEvent
+    public static void onSmelted(PlayerEvent.ItemSmeltedEvent event) {
+        if (!(event.getEntity() instanceof ServerPlayer player)) return;
+        ItemStack cooked = event.getSmelting();
+        if (cooked.isEmpty() || !cooked.has(DataComponents.FOOD)) return;
+        Progression.grant(player, Skill.COOKING, 4 * Math.min(64, cooked.getCount()));
     }
 }

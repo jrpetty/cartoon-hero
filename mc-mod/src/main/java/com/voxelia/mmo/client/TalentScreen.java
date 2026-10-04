@@ -75,7 +75,7 @@ public final class TalentScreen extends Screen {
         int rightH = 14 + maxCards * CARD_H + (maxCards - 1) * CARD_GAP;
         int contentH = Math.max(listH, rightH);
         int h = TITLE_H + 4 + contentH + 4 + FOOTER_H;
-        int x = (this.width - PANEL_W) / 2;
+        int x = (this.width - PANEL_W) / 2 - menu.panelShift(this.font, PANEL_W, this.width);
         int y = (this.height - h) / 2;
 
         VoxeliaUi.panel(g, x, y, PANEL_W, h);
@@ -103,7 +103,8 @@ public final class TalentScreen extends Screen {
                 g.fill(lx, ry, lx + SKILL_W, ry + SKILL_ROW_H - 1, (((int) (0x14 * rowHoverA[i])) << 24) | 0xFFFFFF);
             }
             g.fill(lx, ry, lx + 3, ry + SKILL_ROW_H - 1, color);
-            g.drawString(this.font, s.display(), lx + 7, ry + 3, sel ? 0xFFFFFFFF : color);
+            VoxeliaUi.icon(g, SkillIcons.of(s), lx + 6, ry + 1, 12);
+            g.drawString(this.font, s.display(), lx + 21, ry + 3, sel ? 0xFFFFFFFF : color);
 
             int pts = ClientTalents.available(s);
             if (pts > 0) VoxeliaUi.pill(g, this.font, lx + SKILL_W - 3, ry + 2, String.valueOf(pts), 0x6EE86E, true);
@@ -123,8 +124,9 @@ public final class TalentScreen extends Screen {
         List<Talent> talents = Talent.forSkill(selectedSkill);
 
         // Header: skill name (left) + a points pill and ranks-spent count (right).
+        VoxeliaUi.icon(g, SkillIcons.of(selectedSkill), rx, contentTop - 3, 12);
         g.drawString(this.font, selectedSkill.display().toUpperCase(Locale.ROOT),
-            rx, contentTop, 0xFF000000 | selectedSkill.color());
+            rx + 15, contentTop, 0xFF000000 | selectedSkill.color());
         int spent = 0, capped = talents.size() * max;
         for (Talent t : talents) spent += ClientTalents.rank(t);
         String spentLabel = spent + "/" + capped;
@@ -228,6 +230,7 @@ public final class TalentScreen extends Screen {
         menu.renderDropdown(g, this.font, ScreenMenu.Page.TALENTS, mouseX, mouseY);
         g.pose().popPose();
         super.render(g, mouseX, mouseY, partialTick);
+        g.flush(); // finish the panel before any tooltip, or its text bleeds through
 
         if (menu.isOpen()) return; // the dropdown owns the pointer while it's down
         if (hoveredCard != null) renderCardTooltip(g, hoveredCard.talent, max, mouseX, mouseY);

@@ -28,6 +28,7 @@ public final class SkillSidebarOverlay implements LayeredDraw.Layer {
     public void render(GuiGraphics g, DeltaTracker delta) {
         Minecraft mc = Minecraft.getInstance();
         if (mc.player == null || mc.options.hideGui || !VoxeliaClientConfig.showSidebar()) return;
+        if (VoxeliaUi.voxeliaScreenOpen()) return;
         if (!ClientSkillData.hasData()) return;
 
         Font font = mc.font;

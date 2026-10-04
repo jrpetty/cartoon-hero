@@ -2,8 +2,11 @@ package com.voxelia.mmo.client;
 
 import net.minecraft.Util;
 import net.minecraft.client.KeyMapping;
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.world.item.ItemStack;
 
 /**
  * Shared "lacquered slate" chrome for every Voxelia surface (K screen, N screen, HUD)
@@ -65,6 +68,16 @@ public final class VoxeliaUi {
         return new int[]{x1, barY, x1 + tw, barY + 16};
     }
 
+    /**
+     * True while one of the mod's own screens is open. The corner HUD and sidebar step
+     * aside then — the screen shows the same numbers, and three copies just clutter.
+     */
+    public static boolean voxeliaScreenOpen() {
+        Screen s = Minecraft.getInstance().screen;
+        return s instanceof SkillsScreen || s instanceof TalentScreen
+            || s instanceof ProfileScreen || s instanceof LeaderboardScreen;
+    }
+
     /** Muted footer strip. */
     public static void footer(GuiGraphics g, int x, int y, int w, int h) {
         g.fill(x, y, x + w, y + h, 0x40000000);
@@ -110,12 +123,71 @@ public final class VoxeliaUi {
             g.fill(x, y + 1, x + 1, y + 10, col);
             g.fill(xRight - 1, y + 1, xRight, y + 10, col);
             g.fill(x + 1, y, xRight - 1, y + 1, 0x50FFFFFF);
-            g.drawString(font, text, x + 4, y + 2, 0xFF14181C);
+            g.drawString(font, text, x + 4, y + 2, 0xFF14181C, false); // dark-on-colour: a shadow just smears it
         } else {
             g.fill(x + 1, y, xRight - 1, y + 11, 0x30FFFFFF);
             g.drawString(font, text, x + 4, y + 2, col);
         }
         return x;
+    }
+
+    /**
+     * Draws an item icon with its top-left at (x, y), {@code size} pixels square
+     * (16 is native; smaller sizes scale the model down).
+     */
+    public static void icon(GuiGraphics g, ItemStack stack, int x, int y, int size) {
+        if (size == 16) {
+            g.renderItem(stack, x, y);
+            return;
+        }
+        g.pose().pushPose();
+        g.pose().translate(x, y, 0);
+        float k = size / 16f;
+        g.pose().scale(k, k, 1f);
+        g.renderItem(stack, 0, 0);
+        g.pose().popPose();
+    }
+
+    /**
+     * Greys out an icon and pins a small padlock to its bottom-right corner — the
+     * shared "not unlocked yet" mark. Drawn above the item's depth so it shows on top.
+     */
+    public static void lockedBadge(GuiGraphics g, int x, int y, int size) {
+        g.pose().pushPose();
+        g.pose().translate(0, 0, 250);
+        g.fill(x, y, x + size, y + size, 0x9A0B1118);
+        lock(g, x + size - 5, y + size - 6, 0xFFC8D0D8);
+        g.pose().popPose();
+    }
+
+    /** A 7x8 pixel padlock with a dark outline, top-left at (x, y). */
+    public static void lock(GuiGraphics g, int x, int y, int color) {
+        int o = 0xFF0B1118;
+        g.fill(x, y + 2, x + 7, y + 8, o);           // outline
+        g.fill(x + 1, y, x + 6, y + 3, o);
+        g.fill(x + 1, y + 3, x + 6, y + 7, color);   // body
+        g.fill(x + 2, y + 1, x + 3, y + 3, color);   // shackle
+        g.fill(x + 4, y + 1, x + 5, y + 3, color);
+        g.fill(x + 2, y + 1, x + 5, y + 2, color);
+        g.fill(x + 3, y + 4, x + 4, y + 6, o);       // keyhole
+    }
+
+    /** Gold / silver / bronze rank medal (11px tall) with the rank number; returns its width. */
+    public static int medal(GuiGraphics g, Font font, int x, int y, int rank) {
+        int rgb = switch (rank) {
+            case 1 -> 0xFFCE54;
+            case 2 -> 0xC8D6E0;
+            default -> 0xD09A62;
+        };
+        String n = String.valueOf(rank);
+        int w = Math.max(11, font.width(n) + 6);
+        int base = 0xFF000000 | rgb;
+        g.fill(x + 1, y, x + w - 1, y + 11, base);
+        g.fill(x, y + 1, x + w, y + 10, base);
+        g.fill(x + 1, y, x + w - 1, y + 1, brighten(base, 50));
+        g.fill(x + 1, y + 10, x + w - 1, y + 11, darken(base));
+        g.drawString(font, n, x + (w - font.width(n)) / 2 + 1, y + 2, 0xFF1A1408, false);
+        return w;
     }
 
     /** Ellipsis-trims {@code s} so it fits in {@code maxW} pixels. */

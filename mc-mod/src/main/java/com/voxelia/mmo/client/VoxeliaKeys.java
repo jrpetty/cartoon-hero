@@ -3,6 +3,7 @@ package com.voxelia.mmo.client;
 import com.mojang.blaze3d.platform.InputConstants;
 import com.voxelia.mmo.VoxeliaMMO;
 import com.voxelia.mmo.network.AbilityPacket;
+import com.voxelia.mmo.skill.Skill;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
@@ -55,14 +56,18 @@ public final class VoxeliaKeys {
             ClientAbilities.clientTick();
             Player player = Minecraft.getInstance().player;
             if (player == null) return;
+            ClientAbilities.ensureUsable();
 
             if (Minecraft.getInstance().screen == null) {
                 while (OPEN_MENU.consumeClick()) Minecraft.getInstance().setScreen(new SkillsScreen());
             }
             while (CYCLE_ABILITY.consumeClick()) {
                 ClientAbilities.cycle(1);
-                player.displayClientMessage(Component.literal("Ability: " + ClientAbilities.selectedSkill().abilityName())
-                    .withStyle(ChatFormatting.AQUA), true);
+                Skill sel = ClientAbilities.selectedSkill();
+                player.displayClientMessage(ClientAbilities.unlocked(sel)
+                    ? Component.literal("Ability: " + sel.abilityName()).withStyle(ChatFormatting.AQUA)
+                    : Component.literal(sel.abilityName() + " unlocks at " + sel.display() + " "
+                        + ClientAbilities.unlockLevel(sel)).withStyle(ChatFormatting.GRAY), true);
             }
             while (USE_ABILITY.consumeClick()) {
                 PacketDistributor.sendToServer(new AbilityPacket(ClientAbilities.selected()));

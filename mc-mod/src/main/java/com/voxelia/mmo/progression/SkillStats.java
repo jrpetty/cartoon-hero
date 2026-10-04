@@ -42,7 +42,7 @@ public final class SkillStats {
             case FISHING -> String.format(Locale.ROOT, "+%.1f luck, %.0f%% treasure (while fishing)",
                 VoxeliaConfig.fishingLuckMax() * (level - 1) / (double) (SkillCurve.MAX_LEVEL - 1) * m,
                 Math.min(VoxeliaConfig.fishingTreasureChanceMax(),
-                    level / 200.0 * TalentLogic.treasureBonus(player, skill)) * 100);
+                    level / (2.0 * SkillCurve.MAX_LEVEL) * TalentLogic.treasureBonus(player, skill)) * 100);
             case EXCAVATION -> String.format(Locale.ROOT, "+%.1f%% dig speed, +%.0f%% Fortune on shovel blocks",
                 VoxeliaConfig.excavationSpeedPerLevel() * lm1 * 100 * m,
                 VoxeliaConfig.excavationFortunePerLevel() * level * 100 * fort);

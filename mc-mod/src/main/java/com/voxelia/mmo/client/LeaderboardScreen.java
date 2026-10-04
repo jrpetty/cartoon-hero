@@ -56,7 +56,7 @@ public final class LeaderboardScreen extends Screen {
         Skill[] all = Skill.values();
         int listH = (all.length + 1) * ROW_H; // skills + the Character row
         int h = TITLE_H + 4 + listH + 4 + FOOTER_H;
-        int x = (this.width - PANEL_W) / 2;
+        int x = (this.width - PANEL_W) / 2 - menu.panelShift(this.font, PANEL_W, this.width);
         int y = (this.height - h) / 2;
 
         VoxeliaUi.panel(g, x, y, PANEL_W, h);
@@ -83,8 +83,9 @@ public final class LeaderboardScreen extends Screen {
                 g.fill(lx, ry, lx + LIST_W, ry + ROW_H - 1, (((int) (0x14 * rowHoverA[i])) << 24) | 0xFFFFFF);
             }
             g.fill(lx, ry, lx + 3, ry + ROW_H - 1, color);
+            VoxeliaUi.icon(g, s != null ? SkillIcons.of(s) : SkillIcons.character(), lx + 6, ry + 1, 12);
             g.drawString(this.font, s != null ? s.display() : "Character",
-                lx + 7, ry + 3, sel ? 0xFFFFFFFF : color);
+                lx + 21, ry + 3, sel ? 0xFFFFFFFF : color);
             skillRows.add(new SkillRow(lx, ry, lx + LIST_W, ry + ROW_H, s));
         }
 
@@ -95,7 +96,8 @@ public final class LeaderboardScreen extends Screen {
         int rx = x + PAD + LIST_W + GAP;
         Skill shown = ClientLeaderboard.skill();
         String heading = (shown != null ? shown.display() : "Character").toUpperCase(Locale.ROOT);
-        g.drawString(this.font, heading, rx, contentTop,
+        VoxeliaUi.icon(g, shown != null ? SkillIcons.of(shown) : SkillIcons.character(), rx, contentTop - 3, 12);
+        g.drawString(this.font, heading, rx + 15, contentTop,
             shown != null ? 0xFF000000 | shown.color() : VoxeliaUi.GOLD);
         String tracked = ClientLeaderboard.tracked() + " tracked";
         g.drawString(this.font, tracked, rx + RIGHT_W - this.font.width(tracked), contentTop, VoxeliaUi.MUTED);
@@ -110,19 +112,20 @@ public final class LeaderboardScreen extends Screen {
             ClientLeaderboard.Row row = rows.get(i);
             int cy = ry + i * ENTRY_H;
             if (i % 2 == 1) g.fill(rx, cy - 2, rx + RIGHT_W, cy + 10, 0x0DFFFFFF);
+            if (row.rank() == 1) { // the leader's row glows faintly gold
+                g.fillGradient(rx, cy - 2, rx + RIGHT_W, cy + 10, 0x30FFCE54, 0x10FFCE54);
+            }
             if (row.self()) { // your own line, marked and lit
                 g.fill(rx, cy - 2, rx + RIGHT_W, cy + 10, 0x2089C7FF);
                 g.fill(rx, cy - 2, rx + 1, cy + 10, VoxeliaUi.LINK);
             }
 
-            String rank = "#" + row.rank();
-            int rankColor = switch (row.rank()) {
-                case 1 -> VoxeliaUi.GOLD;
-                case 2 -> 0xFFC8D6E0;
-                case 3 -> 0xFFC8A064;
-                default -> VoxeliaUi.DISABLED;
-            };
-            g.drawString(this.font, rank, rx + 2, cy, rankColor);
+            if (row.rank() <= 3) { // podium places get medals
+                VoxeliaUi.medal(g, this.font, rx + 3, cy - 2, row.rank());
+            } else {
+                String rank = "#" + row.rank();
+                g.drawString(this.font, rank, rx + 3 + (11 - this.font.width(rank)) / 2, cy, VoxeliaUi.DISABLED);
+            }
 
             String lvl = "Lv " + row.level();
             int nameX = rx + 22;
@@ -146,6 +149,7 @@ public final class LeaderboardScreen extends Screen {
         menu.renderDropdown(g, this.font, ScreenMenu.Page.LEADERBOARD, mouseX, mouseY);
         g.pose().popPose();
         super.render(g, mouseX, mouseY, partialTick);
+        g.flush(); // finish the panel before any tooltip, or its text bleeds through
     }
 
     @Override

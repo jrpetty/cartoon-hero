@@ -58,6 +58,30 @@ public final class Milestones {
         return out;
     }
 
+    /**
+     * Every gate the client needs to draw locked/unlocked states: each skill's ability
+     * level (by ordinal), then each passive's level in {@link Kind} order. Common config
+     * isn't synced to clients, so the server sends its own values.
+     */
+    public static List<Integer> unlockTable() {
+        List<Integer> out = new ArrayList<>();
+        for (Skill s : Skill.values()) out.add(abilityLevel(s));
+        for (Kind k : Kind.values()) {
+            if (k != Kind.ABILITY) out.add(levelOf(passiveSkill(k), k));
+        }
+        return out;
+    }
+
+    /** The skill a passive perk belongs to. */
+    public static Skill passiveSkill(Kind kind) {
+        return switch (kind) {
+            case HASTE, TELEKINESIS -> Skill.MINING;
+            case LAST_STAND -> Skill.DEFENSE;
+            case WELL_FED -> Skill.COOKING;
+            case ABILITY -> throw new IllegalArgumentException("abilities belong to every skill");
+        };
+    }
+
     /** The level a passive perk unlocks at, for "unlocks at Lv N" hints. */
     public static int levelOf(Skill skill, Kind kind) {
         return switch (kind) {

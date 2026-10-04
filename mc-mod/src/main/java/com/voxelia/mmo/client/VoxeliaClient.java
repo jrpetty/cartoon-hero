@@ -23,8 +23,8 @@ public final class VoxeliaClient {
             VanillaGuiLayers.HOTBAR,
             ResourceLocation.fromNamespaceAndPath(VoxeliaMMO.MOD_ID, "skill_sidebar"),
             SkillSidebarOverlay.INSTANCE);
-        event.registerAbove(
-            VanillaGuiLayers.HOTBAR,
+        // Toasts go on top of everything so no panel (ours or another mod's) can cover one.
+        event.registerAboveAll(
             ResourceLocation.fromNamespaceAndPath(VoxeliaMMO.MOD_ID, "milestone_toasts"),
             MilestoneToastOverlay.INSTANCE);
     }

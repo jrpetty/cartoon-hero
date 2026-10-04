@@ -48,8 +48,9 @@ public final class AbilityEvents {
         int acro = player.getData(VoxeliaAttachments.PLAYER_SKILLS.get()).getLevel(Skill.ACROBATICS);
 
         // Fall damage trains Acrobatics (always, on the full amount) and is softened by Featherfall.
+        // Falls are slow, risky XP, so each one pays well — the 500 cap has to be reachable.
         if (source.is(DamageTypes.FALL)) {
-            Progression.grant(player, Skill.ACROBATICS, Math.max(2, (int) Math.ceil(event.getAmount() * 2.0)));
+            Progression.grant(player, Skill.ACROBATICS, Math.max(5, (int) Math.ceil(event.getAmount() * 6.0)));
             double reduction = Math.min(0.95, acro * VoxeliaConfig.acrobaticsFallReductionPerLevel()
                 * TalentLogic.fallBonus(player, Skill.ACROBATICS));
             if (reduction > 0) event.setAmount((float) (event.getAmount() * (1.0 - reduction)));
@@ -75,13 +76,14 @@ public final class AbilityEvents {
     @SubscribeEvent
     public static void onFished(ItemFishedEvent event) {
         if (!(event.getEntity() instanceof ServerPlayer player)) return;
-        Progression.grant(player, Skill.FISHING, 10);
+        // A catch every few seconds at best: the bobber sets the pace, so each catch pays more.
+        Progression.grant(player, Skill.FISHING, 40);
 
         int level = player.getData(VoxeliaAttachments.PLAYER_SKILLS.get()).getLevel(Skill.FISHING);
         double chance = Math.min(VoxeliaConfig.fishingTreasureChanceMax(),
-            level / 200.0 * TalentLogic.treasureBonus(player, Skill.FISHING));
+            level / (2.0 * SkillCurve.MAX_LEVEL) * TalentLogic.treasureBonus(player, Skill.FISHING));
         if (chance > 0 && player.getRandom().nextDouble() < chance) {
-            Progression.grant(player, Skill.FISHING, 15); // treasure: bonus XP
+            Progression.grant(player, Skill.FISHING, 60); // treasure: bonus XP
             player.giveExperiencePoints(8);
             player.displayClientMessage(
                 Component.literal("Treasure catch!").withStyle(ChatFormatting.GOLD), true);

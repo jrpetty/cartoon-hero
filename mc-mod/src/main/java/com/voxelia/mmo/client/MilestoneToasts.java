@@ -33,6 +33,21 @@ public final class MilestoneToasts {
         ACTIVE.add(new Toast(skills[skillOrdinal], kinds[kindOrdinal], level, start));
     }
 
+    private static long heldSince = -1;
+
+    /** Freezes every toast's clock — called while a Voxelia screen covers them. */
+    public static void hold() {
+        if (heldSince < 0) heldSince = Util.getMillis();
+    }
+
+    /** Resumes after {@link #hold()}, so a toast you couldn't see still gets its full run. */
+    public static void release() {
+        if (heldSince < 0) return;
+        long paused = Util.getMillis() - heldSince;
+        heldSince = -1;
+        ACTIVE.replaceAll(t -> new Toast(t.skill(), t.kind(), t.level(), t.start() + paused));
+    }
+
     /** Live toasts, oldest first, expired ones dropped. */
     public static List<Toast> active() {
         long now = Util.getMillis();

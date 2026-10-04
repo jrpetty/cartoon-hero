@@ -3,6 +3,7 @@ package com.voxelia.mmo.client;
 import com.voxelia.mmo.config.VoxeliaClientConfig;
 import com.voxelia.mmo.config.VoxeliaClientConfig.Anchor;
 import com.voxelia.mmo.skill.Skill;
+import net.minecraft.Util;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
@@ -37,6 +38,9 @@ public final class ScreenMenu {
     private int panelW;
     private final List<Item> items = new ArrayList<>();
     private final List<int[]> rows = new ArrayList<>();
+    // Eased leftward slide of the host panel, so an open dropdown fits beside it.
+    private float shift;
+    private long lastShiftMs = Util.getMillis();
 
     public boolean isOpen() {
         return open;
@@ -47,6 +51,31 @@ public final class ScreenMenu {
         boolean was = open;
         open = false;
         return was;
+    }
+
+    /**
+     * How far (in GUI px) the host screen should slide its panel left this frame so the
+     * open dropdown sits beside it instead of over it. Hosts subtract this from their
+     * centred x before laying anything out; it eases in and out over ~150ms. When the
+     * screen is too narrow for panel + dropdown side by side, it stays 0 and the
+     * dropdown falls back to overlaying the panel's edge.
+     */
+    public int panelShift(Font font, int panelW, int screenW) {
+        int target = 0;
+        if (open) {
+            int w = dropdownWidth(font);
+            int panelX = (screenW - panelW) / 2;
+            int spaceRight = screenW - (panelX + panelW) - 6 - 3;
+            if (w > spaceRight && panelW + 6 + w <= screenW - 6) {
+                target = Math.min(w - spaceRight, panelX - 3);
+            }
+        }
+        long now = Util.getMillis();
+        float k = Math.min(1f, (now - lastShiftMs) / 60f);
+        lastShiftMs = now;
+        shift += (target - shift) * k;
+        if (Math.abs(target - shift) < 0.5f) shift = target;
+        return Math.round(shift);
     }
 
     /**
@@ -100,25 +129,10 @@ public final class ScreenMenu {
         popup = null;
         if (!open) return;
 
-        int unspent = 0;
-        for (Skill s : Skill.values()) unspent += ClientTalents.available(s);
-
         Item[] order = Item.values();
-        String[] labels = {
-            "Skills" + VoxeliaUi.keyTag(font, VoxeliaKeys.OPEN_MENU), "Talent Tree", "Character Profile",
-            "Leaderboards", "Skill Sidebar", "Corner HUD", "HUD Corner",
-        };
-        String[] values = {
-            "", unspent > 0 ? String.valueOf(unspent) : "", "", "",
-            VoxeliaClientConfig.showSidebar() ? "On" : "Off",
-            VoxeliaClientConfig.showHud() ? "On" : "Off",
-            cornerName(VoxeliaClientConfig.anchor()),
-        };
-
-        int w = 112;
-        for (int i = 0; i < order.length; i++) {
-            w = Math.max(w, font.width(labels[i]) + 16 + font.width(values[i]) + 14);
-        }
+        String[] labels = labels(font);
+        String[] values = rowValues();
+        int w = dropdownWidth(font);
         int h = order.length * ROW_H + SEP_H + 6;
 
         // Open alongside the panel, never over its content. Prefer the right; fall
@@ -180,6 +194,34 @@ public final class ScreenMenu {
             ry += ROW_H;
         }
         g.pose().popPose();
+    }
+
+    private static String[] labels(Font font) {
+        return new String[]{
+            "Skills" + VoxeliaUi.keyTag(font, VoxeliaKeys.OPEN_MENU), "Talent Tree", "Character Profile",
+            "Leaderboards", "Skill Sidebar", "Corner HUD", "HUD Corner",
+        };
+    }
+
+    private static String[] rowValues() {
+        int unspent = 0;
+        for (Skill s : Skill.values()) unspent += ClientTalents.available(s);
+        return new String[]{
+            "", unspent > 0 ? String.valueOf(unspent) : "", "", "",
+            VoxeliaClientConfig.showSidebar() ? "On" : "Off",
+            VoxeliaClientConfig.showHud() ? "On" : "Off",
+            cornerName(VoxeliaClientConfig.anchor()),
+        };
+    }
+
+    private static int dropdownWidth(Font font) {
+        String[] labels = labels(font);
+        String[] values = rowValues();
+        int w = 112;
+        for (int i = 0; i < labels.length; i++) {
+            w = Math.max(w, font.width(labels[i]) + 16 + font.width(values[i]) + 14);
+        }
+        return w;
     }
 
     /** Handles the button and every dropdown row. Returns true when the click was consumed. */

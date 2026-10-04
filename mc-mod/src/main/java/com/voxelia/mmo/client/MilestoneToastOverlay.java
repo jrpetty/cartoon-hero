@@ -12,8 +12,8 @@ import java.util.List;
 /**
  * "Perk unlocked" toasts, in the mod's own chrome rather than a vanilla one:
  * a slim lacquered card at the top of the screen with the skill's accent stripe,
- * what you just earned, and how to use it. Sits top-centre, clear of the corner
- * HUD and the sidebar wherever the player has put them.
+ * what you just earned, and how to use it. Sits top-centre, sliding sideways when
+ * that would put it under the corner HUD.
  */
 public final class MilestoneToastOverlay implements LayeredDraw.Layer {
     public static final MilestoneToastOverlay INSTANCE = new MilestoneToastOverlay();
@@ -27,6 +27,11 @@ public final class MilestoneToastOverlay implements LayeredDraw.Layer {
     public void render(GuiGraphics g, DeltaTracker delta) {
         Minecraft mc = Minecraft.getInstance();
         if (mc.player == null || mc.options.hideGui) return;
+        if (VoxeliaUi.voxeliaScreenOpen()) { // a panel would hide it: pause until it closes
+            MilestoneToasts.hold();
+            return;
+        }
+        MilestoneToasts.release();
 
         List<MilestoneToasts.Toast> toasts = MilestoneToasts.active();
         if (toasts.isEmpty()) return;
@@ -40,9 +45,9 @@ public final class MilestoneToastOverlay implements LayeredDraw.Layer {
 
             String title = title(toast);
             String blurb = blurb(font, toast);
-            int w = Math.max(font.width(title), font.width(blurb)) + 22;
-            int x = (screenW - w) / 2;
+            int w = Math.max(font.width(title), font.width(blurb)) + 41;
             int y = TOP + row * (H + GAP) + (int) ((1f - a) * -6f); // drifts down as it fades in
+            int x = clearOfHud(g, (screenW - w) / 2, y, w);
             row++;
 
             int alpha = (int) (255 * a);
@@ -57,9 +62,27 @@ public final class MilestoneToastOverlay implements LayeredDraw.Layer {
                 argb(a, VoxeliaUi.brighten(accent, 40) & 0xFFFFFF),
                 argb(a, VoxeliaUi.lerp(accent, 0xFF0A0F14, 0.4f) & 0xFFFFFF));
 
-            g.drawString(font, title, x + 9, y + 5, (alpha << 24) | (VoxeliaUi.GOLD & 0xFFFFFF));
-            g.drawString(font, blurb, x + 9, y + 15, (alpha << 24) | (VoxeliaUi.MUTED & 0xFFFFFF));
+            if (a > 0.6f) { // items can't fade, so the icon arrives once the card is mostly in
+                g.fill(x + 7, y + 4, x + 25, y + 22, argb(a * 0.25f, 0x000000));
+                VoxeliaUi.icon(g, SkillIcons.of(toast.skill()), x + 8, y + 5, 16);
+            }
+            g.drawString(font, title, x + 30, y + 5, (alpha << 24) | (VoxeliaUi.GOLD & 0xFFFFFF));
+            g.drawString(font, blurb, x + 30, y + 15, (alpha << 24) | (VoxeliaUi.MUTED & 0xFFFFFF));
         }
+    }
+
+    /**
+     * Centred by default; if that would run under the corner HUD, slides sideways just
+     * far enough to clear it (and never off-screen).
+     */
+    private static int clearOfHud(GuiGraphics g, int x, int y, int w) {
+        int[] hud = SkillHudOverlay.bounds(g.guiWidth(), g.guiHeight());
+        if (hud == null || y + H < hud[1] || y > hud[3]) return x;
+        if (x < hud[2] + 4 && x + w > hud[0] - 4) {
+            boolean hudOnLeft = hud[0] < g.guiWidth() / 2;
+            x = hudOnLeft ? hud[2] + 6 : hud[0] - 6 - w;
+        }
+        return Math.max(3, Math.min(g.guiWidth() - 3 - w, x));
     }
 
     private static int argb(float alpha, int rgb) {

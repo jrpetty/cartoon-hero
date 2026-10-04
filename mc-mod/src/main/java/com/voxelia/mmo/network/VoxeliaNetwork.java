@@ -3,6 +3,7 @@ package com.voxelia.mmo.network;
 import com.voxelia.mmo.VoxeliaMMO;
 import com.voxelia.mmo.config.VoxeliaConfig;
 import com.voxelia.mmo.progression.LeaderboardStore;
+import com.voxelia.mmo.progression.Milestones;
 import com.voxelia.mmo.progression.SkillEffects;
 import com.voxelia.mmo.progression.SkillStats;
 import com.voxelia.mmo.progression.TalentLogic;
@@ -29,7 +30,7 @@ public final class VoxeliaNetwork {
 
     @SubscribeEvent
     public static void register(RegisterPayloadHandlersEvent event) {
-        PayloadRegistrar registrar = event.registrar("1");
+        PayloadRegistrar registrar = event.registrar("2");
         registrar.playToClient(SkillsSyncPayload.TYPE, SkillsSyncPayload.STREAM_CODEC, SkillsSyncPayload::handle);
         registrar.playToClient(AbilityCooldownPacket.TYPE, AbilityCooldownPacket.STREAM_CODEC, AbilityCooldownPacket::handle);
         registrar.playToClient(TalentsSyncPayload.TYPE, TalentsSyncPayload.STREAM_CODEC, TalentsSyncPayload::handle);
@@ -92,7 +93,7 @@ public final class VoxeliaNetwork {
         for (Skill skill : Skill.values()) {
             lines.add(SkillStats.describe(player, skill, skills.getLevel(skill)));
         }
-        PacketDistributor.sendToPlayer(player, new PerksSyncPayload(lines));
+        PacketDistributor.sendToPlayer(player, new PerksSyncPayload(lines, Milestones.unlockTable()));
     }
 
     public static void syncTalents(ServerPlayer player) {

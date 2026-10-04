@@ -32,10 +32,28 @@ public final class SkillHudOverlay implements LayeredDraw.Layer {
 
     private SkillHudOverlay() {}
 
+    /**
+     * Where the corner HUD's panel currently sits as {x1, y1, x2, y2} in GUI pixels, or
+     * null when it isn't drawn — so other overlays (the perk toast) can stay clear of it.
+     */
+    public static int[] bounds(int guiW, int guiH) {
+        Minecraft mc = Minecraft.getInstance();
+        if (mc.player == null || mc.options.hideGui || !VoxeliaClientConfig.showHud()
+            || !ClientSkillData.hasData() || VoxeliaUi.voxeliaScreenOpen()) return null;
+        int blockH = 12 + Skill.values().length * LINE_H + 20;
+        Anchor anchor = VoxeliaClientConfig.anchor();
+        boolean left = anchor == Anchor.TOP_LEFT || anchor == Anchor.BOTTOM_LEFT;
+        boolean top = anchor == Anchor.TOP_LEFT || anchor == Anchor.TOP_RIGHT;
+        int x = left ? VoxeliaClientConfig.offsetX() : guiW - VoxeliaClientConfig.offsetX() - BLOCK_W;
+        int y = top ? VoxeliaClientConfig.offsetY() : guiH - VoxeliaClientConfig.offsetY() - blockH;
+        return new int[]{x - 5, y - 5, x + BLOCK_W + 1, y + blockH + 1};
+    }
+
     @Override
     public void render(GuiGraphics graphics, DeltaTracker delta) {
         Minecraft mc = Minecraft.getInstance();
         if (mc.player == null || mc.options.hideGui || !VoxeliaClientConfig.showHud()) return;
+        if (VoxeliaUi.voxeliaScreenOpen()) return;
         if (!ClientSkillData.hasData()) {
             seeded = false; // re-seed on the next world/character (no ghost flashes)
             return;
@@ -117,10 +135,24 @@ public final class SkillHudOverlay implements LayeredDraw.Layer {
         }
 
         // Selected ability: skill-color swatch, name + key, readiness pulse or countdown.
+        Skill selSkill = ClientAbilities.selectedSkill();
+        if (!ClientAbilities.unlocked(selSkill)) {
+            // Nothing usable yet: show the closest unlock and how far along you are.
+            Skill next = ClientAbilities.nextToUnlock();
+            if (next == null) next = selSkill;
+            int at = Math.max(1, ClientAbilities.unlockLevel(next));
+            int lvl = ClientSkillData.level(next);
+            VoxeliaUi.lock(graphics, x, y, 0xFF8893A0);
+            String locked = VoxeliaUi.trim(mc.font, next.abilityName(), BLOCK_W - 52);
+            graphics.drawString(mc.font, locked, x + 10, y + 1, 0xFF8893A0);
+            String at2 = "Lv " + lvl + "/" + at;
+            graphics.drawString(mc.font, at2, x + BLOCK_W - 6 - mc.font.width(at2), y + 1, VoxeliaUi.MUTED);
+            VoxeliaUi.bar(graphics, x + 2, y + 12, BLOCK_W - 8, 2, Math.min(1f, lvl / (float) at), next.color(), false);
+            return;
+        }
         long remTicks = ClientAbilities.cooldownRemainingTicks(sel);
         boolean ready = remTicks <= 0;
         String key = VoxeliaKeys.USE_ABILITY.getTranslatedKeyMessage().getString();
-        Skill selSkill = ClientAbilities.selectedSkill();
         graphics.fill(x, y + 3, x + 3, y + 6, 0xFF000000 | selSkill.color());
         String label = selSkill.abilityName() + " [" + key + "]";
         int labelColor;
