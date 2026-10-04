@@ -407,7 +407,7 @@ public class RequisitionScreen extends AbyssScreen {
         // answered the way the rest of the game answers it.
         if (hovered >= 0 && hovered < list.size()
                 && mouseX >= px + 2 && mouseX <= px + 22) {
-            g.renderTooltip(this.font, icon(list.get(hovered)), mouseX, mouseY);
+            itemTooltip(icon(list.get(hovered)));
         }
 
         // --- the footer line ----------------------------------------------

@@ -7,6 +7,7 @@ import net.minecraft.client.gui.components.Renderable;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 import net.minecraft.util.Mth;
+import net.minecraft.world.item.ItemStack;
 
 /**
  * The base every screen in the mod draws on, and the order it draws in.
@@ -58,6 +59,9 @@ public abstract class AbyssScreen extends Screen {
 
     /** How much smaller than the GUI scale this screen is drawn; 1 for not at all. */
     private float fit = 1.0f;
+
+    /** An item whose tooltip is due at the pointer this frame. */
+    private ItemStack itemTooltip = ItemStack.EMPTY;
 
     protected AbyssScreen(Component title) {
         super(title);
@@ -130,6 +134,18 @@ public abstract class AbyssScreen extends Screen {
         }
         renderOverlay(g, mx, my, partialTick);
         g.pose().popPose();
+        // After the fit is undone, at the real pointer: vanilla places a tooltip
+        // against the GUI's real size, so one drawn inside the fit would be
+        // pushed away from the cursor near the bottom and right edges.
+        if (!itemTooltip.isEmpty()) {
+            g.renderTooltip(this.font, itemTooltip, mouseX, mouseY);
+            itemTooltip = ItemStack.EMPTY;
+        }
+    }
+
+    /** Shows an item's own tooltip at the pointer, this frame. */
+    protected void itemTooltip(ItemStack stack) {
+        itemTooltip = stack;
     }
 
     // ------------------------------------------------------------------

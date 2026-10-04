@@ -292,7 +292,7 @@ public final class MazeInductionScreen extends AbyssScreen {
     @Override
     protected void renderOverlay(GuiGraphics g, int mouseX, int mouseY, float partialTick) {
         if (!hoveredStack.isEmpty()) {
-            g.renderTooltip(this.font, hoveredStack, mouseX, mouseY);
+            itemTooltip(hoveredStack);
         }
     }
 

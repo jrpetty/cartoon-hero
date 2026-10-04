@@ -155,6 +155,10 @@ written.
 - **feat** The tour photographs every one of those screens at scale 4 while it
   is open, and clicks a real tab at that scale - through the mouse handling,
   not by calling the button - to prove the clicks land where they are drawn.
+- **fix** Item tooltips on the induction and the requisition slate are drawn
+  at the pointer, at the GUI's own scale. Drawn inside a fitted screen they
+  were placed against the wrong screen size and drifted away from the cursor
+  near the bottom and right edges.
 - **change** Player Maps prints the game a map plays - the ruleset's name and
   its whole pitch - under its own heading. It shared one line with the name
   and was cut off at the card's edge, usually on a dash.
