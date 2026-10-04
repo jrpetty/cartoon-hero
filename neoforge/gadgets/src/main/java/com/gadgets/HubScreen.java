@@ -39,9 +39,9 @@ public class HubScreen extends GadgetScreen {
     private static final int ROW_ALT = 0xFF1B2028;
     private static final int CLOSE_W = 16;
     /** Column origins: reading, then the six-minute sparkline before the ✕. */
-    private static final int READ_X = 140;
-    private static final int SPARK_X = 236;
-    private static final int SPARK_W = 54;
+    private static final int READ_X = 148;
+    private static final int SPARK_X = 242;
+    private static final int SPARK_W = 48;
     private static final String[] SORT_LABELS = {"Link order", "Alerts first", "A–Z"};
 
     private final CommandHubBlockEntity be;
