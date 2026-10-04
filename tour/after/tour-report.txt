@@ -1,0 +1,110 @@
+PASS  create-world  (60 ticks)
+PASS  settle  (120 ticks)
+SHOT  01_picker
+PASS  picker  (40 ticks)
+PASS  picker-close  (10 ticks)
+PASS  temple-choose  (20 ticks)
+PASS  temple-portal-confirm  (30 ticks)
+SHOT  10_temple_arrival
+PASS  temple-enter  (160 ticks)
+SHOT  11_temple_round
+PASS  temple-round  (220 ticks)
+PASS  temple-clear [tour kills the wave]  (68 ticks)
+SHOT  12_temple_between_rounds
+PASS  temple-glyph  (80 ticks)
+SHOT  13_temple_recap
+PASS  temple-extract  (54 ticks)
+PASS  recap-close  (40 ticks)
+PASS  bridge-choose  (20 ticks)
+PASS  bridge-portal-confirm  (30 ticks)
+SHOT  20_bridge_arrival
+PASS  bridge-enter  (160 ticks)
+SHOT  21_bridge_round
+PASS  bridge-round  (369 ticks)
+SHOT  22_bridge_death_recap
+PASS  bridge-death [tour dies on purpose]  (40 ticks)
+PASS  recap-close-2  (60 ticks)
+PASS  clear-lockout [tour lifts its own cooldown]  (20 ticks)
+SHOT  23_records
+PASS  records  (40 ticks)
+SHOT  24_records_your_runs
+PASS  records-runs  (30 ticks)
+PASS  records-close  (10 ticks)
+SHOT  30_maze_induction
+PASS  maze-enter  (1234 ticks)
+SHOT  31_maze_induction_runner
+PASS  maze-pick-runner  (30 ticks)
+SHOT  32_glade_day
+PASS  maze-come-up  (140 ticks)
+SHOT  33_hub_status
+PASS  hub  (40 ticks)
+SHOT  34_hub_chart
+PASS  hub-chart  (30 ticks)
+PASS  hub-close  (14 ticks)
+SHOT  35_trade_board
+PASS  trade-board  (30 ticks)
+SHOT  36_skills
+PASS  skills  (30 ticks)
+SHOT  37_orders
+PASS  orders  (30 ticks)
+PASS  orders-close  (12 ticks)
+SHOT  42_maze_aerial
+PASS  maze-aerial [tour flies]  (420 ticks)
+SHOT  43_maze_corridor
+PASS  maze-corridor  (120 ticks)
+PASS  maze-ground  (60 ticks)
+PASS  door-pose [tour fast-forwards to dusk]  (20 ticks)
+SHOT  38_doors_closing
+PASS  doors-closing  (95 ticks)
+SHOT  39_doors_sealed
+PASS  doors-sealed  (110 ticks)
+SHOT  40_night_griever
+PASS  night-out  (50 ticks)
+SHOT  44_griever_closeup
+PASS  griever-closeup [tour sees in the dark]  (80 ticks)
+PASS  griever-clear  (20 ticks)
+SHOT  41_maze_victory
+PASS  maze-escape  (60 ticks)
+PASS  victory-close  (60 ticks)
+SHOT  50_creator
+PASS  creator  (160 ticks)
+SHOT  53_creator_gate
+PASS  creator-gate  (30 ticks)
+PASS  creator-build [tour builds a small arena]  (60 ticks)
+SHOT  54_creator_console
+PASS  creator-console  (30 ticks)
+SHOT  55_creator_check
+PASS  creator-check  (40 ticks)
+SHOT  56_creator_playtest
+PASS  creator-playtest  (140 ticks)
+PASS  creator-console-again  (20 ticks)
+PASS  creator-stop-test  (20 ticks)
+PASS  creator-publish-page  (20 ticks)
+PASS  creator-save  (20 ticks)
+PASS  creator-details  (40 ticks)
+SHOT  57_creator_publish
+PASS  creator-publish  (40 ticks)
+PASS  creator-leave  (40 ticks)
+SHOT  51_picker_after_runs
+PASS  picker-after  (40 ticks)
+SHOT  52_player_maps
+PASS  player-maps  (30 ticks)
+SHOT  58_published_run
+PASS  play-published  (160 ticks)
+PASS  published-home [tour ends the run]  (40 ticks)
+PASS  scale-4  (20 ticks)
+SHOT  90_s4_picker
+PASS  s4-picker  (30 ticks)
+SHOT  91_s4_player_maps
+PASS  s4-player-maps  (20 ticks)
+SHOT  92_s4_records
+PASS  s4-records  (30 ticks)
+SHOT  93_s4_skills
+PASS  s4-skills  (30 ticks)
+SHOT  94_s4_recap
+PASS  s4-recap  (30 ticks)
+SHOT  95_s4_creator_gate
+PASS  s4-gate  (30 ticks)
+PASS  scale-3  (20 ticks)
+PASS  end  (20 ticks)
+[TOUR] RESULT: 69 passed, 0 failed
