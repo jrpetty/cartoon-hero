@@ -156,7 +156,7 @@ public final class VoxeliaUi {
         g.pose().pushPose();
         g.pose().translate(0, 0, 250);
         g.fill(x, y, x + size, y + size, 0x9A0B1118);
-        lock(g, x + size - 5, y + size - 6, 0xFFC8D0D8);
+        lock(g, x + size - 6, y + size - 8, 0xFFC8D0D8); // tucked inside the icon so it never hits text
         g.pose().popPose();
     }
 
@@ -188,6 +188,16 @@ public final class VoxeliaUi {
         g.fill(x + 1, y + 10, x + w - 1, y + 11, darken(base));
         g.drawString(font, n, x + (w - font.width(n)) / 2 + 1, y + 2, 0xFF1A1408, false);
         return w;
+    }
+
+    /**
+     * A skill's colour lifted enough to read as text on the dark slate — a few
+     * accents (Archery's brown, Defense's slate) are too dim used raw.
+     */
+    public static int readable(int rgb) {
+        int c = 0xFF000000 | rgb;
+        int luma = (((c >> 16) & 0xFF) * 3 + ((c >> 8) & 0xFF) * 6 + (c & 0xFF)) / 10;
+        return luma < 140 ? lerp(c, 0xFFFFFFFF, 0.35f) : c;
     }
 
     /** Ellipsis-trims {@code s} so it fits in {@code maxW} pixels. */

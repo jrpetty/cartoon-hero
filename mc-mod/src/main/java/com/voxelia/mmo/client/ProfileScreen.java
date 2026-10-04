@@ -113,7 +113,7 @@ public final class ProfileScreen extends Screen {
         int c1 = x + PAD, c2 = x + PAD + colW + 10;
         g.fill(x + 5, sy + STAT_H - 2, x + PANEL_W - 5, sy + 2 * STAT_H - 2, 0x0DFFFFFF);
         boolean loaded = ClientProfile.hasData();
-        stat(g, c1, sy, colW, "Best skill", best.display() + " " + ClientSkillData.level(best), 0xFF000000 | best.color());
+        stat(g, c1, sy, colW, "Best skill", best.display() + " " + ClientSkillData.level(best), VoxeliaUi.readable(best.color()));
         stat(g, c2, sy, colW, "XP earned", String.format(Locale.ROOT, "%,d", xpEarned), VoxeliaUi.TEXT);
         stat(g, c1, sy + STAT_H, colW, "Talents spent", talentsSpent + " / " + talentsTotal,
             talentsSpent >= talentsTotal ? VoxeliaUi.GOLD : VoxeliaUi.TEXT);
@@ -243,7 +243,7 @@ public final class ProfileScreen extends Screen {
             seg(g, cx, y, "Everything unlocked", VoxeliaUi.GOLD);
             return;
         }
-        cx = seg(g, cx, y, what, 0xFF000000 | skill.color());
+        cx = seg(g, cx, y, what, VoxeliaUi.readable(skill.color()));
         seg(g, cx, y, "  ·  " + skill.display() + " " + at + "  ·  " + gap + " to go", VoxeliaUi.TEXT);
     }
 
@@ -263,7 +263,7 @@ public final class ProfileScreen extends Screen {
             seg(g, cx, y, "Every talent point earned", VoxeliaUi.GOLD);
             return;
         }
-        cx = seg(g, cx, y, best.display() + " Lv " + bestAt, 0xFF000000 | best.color());
+        cx = seg(g, cx, y, best.display() + " Lv " + bestAt, VoxeliaUi.readable(best.color()));
         seg(g, cx, y, "  ·  " + gap + " to go", VoxeliaUi.TEXT);
     }
 

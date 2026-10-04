@@ -121,15 +121,15 @@ public final class LeaderboardScreen extends Screen {
             }
 
             if (row.rank() <= 3) { // podium places get medals
-                VoxeliaUi.medal(g, this.font, rx + 3, cy - 2, row.rank());
+                VoxeliaUi.medal(g, this.font, rx + 6, cy - 2, row.rank());
             } else {
                 String rank = "#" + row.rank();
-                g.drawString(this.font, rank, rx + 3 + (11 - this.font.width(rank)) / 2, cy, VoxeliaUi.DISABLED);
+                g.drawString(this.font, rank, rx + 3 + (18 - this.font.width(rank)) / 2, cy, VoxeliaUi.DISABLED);
             }
 
             String lvl = "Lv " + row.level();
-            int nameX = rx + 22;
-            int nameW = RIGHT_W - 22 - this.font.width(lvl) - 8;
+            int nameX = rx + 25; // after an 18px rank column, so "#10" never touches the name
+            int nameW = RIGHT_W - 25 - this.font.width(lvl) - 8;
             g.drawString(this.font, VoxeliaUi.trim(this.font, row.name(), nameW), nameX, cy,
                 row.self() ? 0xFFFFFFFF : VoxeliaUi.TEXT);
             g.drawString(this.font, lvl, rx + RIGHT_W - this.font.width(lvl), cy,
