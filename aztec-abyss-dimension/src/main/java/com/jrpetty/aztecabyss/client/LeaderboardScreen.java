@@ -79,7 +79,7 @@ public class LeaderboardScreen extends AbyssScreen {
     }
 
     @Override
-    protected void init() {
+    protected void initWidgets() {
         int cx = this.width / 2;
         Button records = Button.builder(Component.literal("Records"), b -> {
             historyTab = false;
@@ -331,12 +331,12 @@ public class LeaderboardScreen extends AbyssScreen {
     }
 
     @Override
-    public boolean mouseScrolled(double mx, double my, double dx, double dy) {
+    protected boolean scrolledAt(double mx, double my, double dx, double dy) {
         if (historyTab) {
             scroll = Math.max(0, scroll - (int) Math.signum(dy));
             return true;
         }
-        return super.mouseScrolled(mx, my, dx, dy);
+        return super.scrolledAt(mx, my, dx, dy);
     }
 
     /**

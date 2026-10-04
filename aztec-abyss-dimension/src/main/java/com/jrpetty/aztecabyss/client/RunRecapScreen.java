@@ -50,7 +50,7 @@ public final class RunRecapScreen extends AbyssScreen {
     }
 
     @Override
-    protected void init() {
+    protected void initWidgets() {
         leave = Button.builder(leaveLabel(), b -> onClose())
                 .bounds(this.width / 2 - 100, this.height - 32, 200, 20)
                 .build();

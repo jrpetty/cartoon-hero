@@ -159,7 +159,12 @@ public final class CreatorConsoleScreen extends AbyssScreen {
     }
 
     @Override
-    protected void init() {
+    protected boolean keepDesignLayout() {
+        return true;
+    }
+
+    @Override
+    protected void initWidgets() {
         int cx = this.width / 2;
         tabButton(cx - 138, "Build", Tab.BUILD);
         tabButton(cx - 45, "Publish", Tab.PUBLISH);
@@ -352,7 +357,7 @@ public final class CreatorConsoleScreen extends AbyssScreen {
     // ------------------------------------------------------------------
 
     @Override
-    public boolean mouseClicked(double mouseX, double mouseY, int button) {
+    protected boolean clickedAt(double mouseX, double mouseY, int button) {
         if (tab == Tab.PUBLISH) {
             int x = left();
             int colLW = Math.min(190, contentW() / 2 - 6);
@@ -369,17 +374,17 @@ public final class CreatorConsoleScreen extends AbyssScreen {
                 }
             }
         }
-        return super.mouseClicked(mouseX, mouseY, button);
+        return super.clickedAt(mouseX, mouseY, button);
     }
 
     @Override
-    public boolean mouseScrolled(double mouseX, double mouseY, double dx, double dy) {
+    protected boolean scrolledAt(double mouseX, double mouseY, double dx, double dy) {
         if (tab == Tab.PUBLISH) {
             int fit = Math.max(1, (listBottom() - listTop()) / ROW_H);
             listScroll = Math.max(0, Math.min(Math.max(0, maps().size() - fit), listScroll - (int) Math.signum(dy)));
             return true;
         }
-        return super.mouseScrolled(mouseX, mouseY, dx, dy);
+        return super.scrolledAt(mouseX, mouseY, dx, dy);
     }
 
     private int listTop() {

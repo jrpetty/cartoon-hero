@@ -75,7 +75,12 @@ public class MazeVictoryScreen extends AbyssScreen {
     }
 
     @Override
-    protected void init() {
+    protected boolean keepDesignLayout() {
+        return true;
+    }
+
+    @Override
+    protected void initWidgets() {
         addRenderableWidget(Button.builder(Component.literal("Walk away"), b -> onClose())
                 .bounds(panelX() + (PANEL_W - 120) / 2, panelBottom() + 8, 120, 20).build());
     }

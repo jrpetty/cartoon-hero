@@ -182,7 +182,12 @@ public class RequisitionScreen extends AbyssScreen {
     // ------------------------------------------------------------------
 
     @Override
-    protected void init() {
+    protected boolean keepDesignLayout() {
+        return true;
+    }
+
+    @Override
+    protected void initWidgets() {
         int x = left();
         int top = panelTop();
 

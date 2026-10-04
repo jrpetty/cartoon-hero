@@ -55,7 +55,7 @@ public final class PlayerMapsScreen extends AbyssScreen {
     }
 
     @Override
-    protected void init() {
+    protected void initWidgets() {
         addRenderableWidget(Button.builder(Component.literal("Back"), b -> onClose())
                 .bounds(this.width / 2 - 50, this.height - 28, 100, 20).build());
     }
@@ -114,13 +114,13 @@ public final class PlayerMapsScreen extends AbyssScreen {
     }
 
     @Override
-    public boolean mouseScrolled(double mouseX, double mouseY, double dx, double dy) {
+    protected boolean scrolledAt(double mouseX, double mouseY, double dx, double dy) {
         scroll = Math.max(0, Math.min(maxScroll(), scroll - dy * 24));
         return true;
     }
 
     @Override
-    public boolean mouseClicked(double mouseX, double mouseY, int button) {
+    protected boolean clickedAt(double mouseX, double mouseY, int button) {
         int left = this.width / 2 - cardW() / 2;
         if (mouseY >= viewTop() && mouseY <= viewBottom()
                 && mouseX >= left && mouseX <= left + cardW()) {
@@ -136,7 +136,7 @@ public final class PlayerMapsScreen extends AbyssScreen {
                 }
             }
         }
-        return super.mouseClicked(mouseX, mouseY, button);
+        return super.clickedAt(mouseX, mouseY, button);
     }
 
     @Override

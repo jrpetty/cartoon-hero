@@ -113,7 +113,12 @@ public class SkillTreeScreen extends AbyssScreen {
     // ------------------------------------------------------------------
 
     @Override
-    protected void init() {
+    protected boolean keepDesignLayout() {
+        return true;
+    }
+
+    @Override
+    protected void initWidgets() {
         int total = rows.size() * CARD_W + Math.max(0, rows.size() - 1) * CARD_GAP;
         int left = (this.width - total) / 2;
         int cardTop = this.height / 2 - 96;

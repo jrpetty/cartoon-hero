@@ -71,7 +71,12 @@ public class TradeBoardScreen extends AbyssScreen {
     }
 
     @Override
-    protected void init() {
+    protected boolean keepDesignLayout() {
+        return true;
+    }
+
+    @Override
+    protected void initWidgets() {
         // The description, wrapped to the panel, paragraph breaks kept.
         body = new ArrayList<>();
         for (String para : sheet.body().split("\n\n")) {

@@ -101,7 +101,12 @@ public class MazeHubScreen extends AbyssScreen {
     // ------------------------------------------------------------------
 
     @Override
-    protected void init() {
+    protected boolean keepDesignLayout() {
+        return true;
+    }
+
+    @Override
+    protected void initWidgets() {
         int cx = this.width / 2;
 
         // Tabs, drawn as the two halves of one pill.

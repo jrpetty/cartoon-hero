@@ -169,7 +169,12 @@ public final class MazeInductionScreen extends AbyssScreen {
     // ------------------------------------------------------------------
 
     @Override
-    protected void init() {
+    protected boolean keepDesignLayout() {
+        return true;
+    }
+
+    @Override
+    protected void initWidgets() {
         confirm = Button.builder(confirmLabel(), b -> choose())
                 .bounds(this.width / 2 - 110, this.height - 30, 220, 20).build();
         confirm.active = selected >= 0;
@@ -206,7 +211,7 @@ public final class MazeInductionScreen extends AbyssScreen {
     }
 
     @Override
-    public boolean mouseClicked(double mouseX, double mouseY, int button) {
+    protected boolean clickedAt(double mouseX, double mouseY, int button) {
         int top = cardsTop();
         int h = cardH();
         for (int i = 0; i < cards.size(); i++) {
@@ -216,7 +221,7 @@ public final class MazeInductionScreen extends AbyssScreen {
                 return true;
             }
         }
-        return super.mouseClicked(mouseX, mouseY, button);
+        return super.clickedAt(mouseX, mouseY, button);
     }
 
     @Override

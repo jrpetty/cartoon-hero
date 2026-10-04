@@ -41,7 +41,7 @@ public final class CreatorPasswordScreen extends AbyssScreen {
     }
 
     @Override
-    protected void init() {
+    protected void initWidgets() {
         int cx = this.width / 2;
         int y = panelTop() + 58;
         word = new EditBox(this.font, cx - 100, y, 200, 20, Component.literal("Password"));

@@ -115,7 +115,7 @@ public final class MapSelectScreen extends AbyssScreen {
     // ------------------------------------------------------------------
 
     @Override
-    protected void init() {
+    protected void initWidgets() {
         ArenaMap[] maps = ArenaMap.values();
         int left = rowLeft();
         int w = cardW();

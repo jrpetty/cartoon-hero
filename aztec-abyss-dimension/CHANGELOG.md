@@ -144,9 +144,17 @@ written.
 - **fix** Animations on screens ran by frame count - twice as fast at 120 FPS.
   They run by time now.
 - **fix** **Every screen fits at GUI scale 4** - what "Auto" picks on a 1080p
-  monitor. The order slate's last rows, the victory sheet and the console's
-  marker grid ran off the bottom; the slate's rows now size themselves to the
-  space there is, and the tour photographs the main screens at that scale too.
+  monitor, so what most players have. The trade sheet's four columns hung off
+  both sides of the screen, the induction's cards ran under their own button,
+  and the order slate, the victory sheet and the console were cramped. The
+  Glade's screens and the Creator Console now keep the layout they were
+  designed for and draw at the largest whole GUI scale that gives it room -
+  scale 3 inside scale 4 at 1080p - so every font pixel is still a whole
+  number of screen pixels and the text stays sharp. Clicks are converted to
+  match. The portal's own screens lay themselves out at any size.
+- **feat** The tour photographs every one of those screens at scale 4 while it
+  is open, and clicks a real tab at that scale - through the mouse handling,
+  not by calling the button - to prove the clicks land where they are drawn.
 - **change** Player Maps prints the game a map plays - the ruleset's name and
   its whole pitch - under its own heading. It shared one line with the name
   and was cut off at the card's edge, usually on a dash.

@@ -274,6 +274,10 @@ public final class ClientTour {
                 .hold(100).shot("30_maze_induction");
         step("maze-pick-runner").act(mc -> key(org.lwjgl.glfw.GLFW.GLFW_KEY_1))
                 .hold(30).shot("31_maze_induction_runner");
+        // The Glade's screens at GUI scale 4 - "Auto" on a 1080p monitor - while
+        // each is open: they keep their layout by drawing at scale 3 inside it.
+        step("induction-s4").act(mc -> guiScale(mc, 4)).hold(20).shot("96_s4_induction");
+        step("induction-s3").act(mc -> guiScale(mc, 3)).hold(10);
         step("maze-come-up").act(mc -> key(org.lwjgl.glfw.GLFW.GLFW_KEY_ENTER))
                 .until(() -> Minecraft.getInstance().screen == null, 200)
                 .hold(140).shot("32_glade_day");
@@ -281,16 +285,24 @@ public final class ClientTour {
                         new com.jrpetty.aztecabyss.network.RequestMazeHubPayload()))
                 .until(() -> screenIs("MazeHubScreen"), 200).hold(40).shot("33_hub_status");
         step("hub-chart").act(mc -> press("Chart")).hold(30).shot("34_hub_chart");
+        step("hub-s4").act(mc -> guiScale(mc, 4)).hold(20).shot("97_s4_hub_chart");
+        step("hub-s4-click [a real click, through the fitted layout]").act(mc -> clickAt("Status"))
+                .until(() -> buttonActive("Chart"), 60).hold(20).shot("97b_s4_hub_status");
+        step("hub-s3").act(mc -> guiScale(mc, 3)).hold(10);
         step("hub-close").act(mc -> mc.setScreen(null)).hold(10);
         step("trade-board").act(mc -> server("trade-board",
                         sp -> com.jrpetty.aztecabyss.network.ModNetworking.sendTradeBoard(sp, "builder")))
                 .until(() -> screenIs("TradeBoardScreen"), 200).hold(30).shot("35_trade_board");
+        step("trade-board-s4").act(mc -> guiScale(mc, 4)).hold(20).shot("98_s4_trade_board");
+        step("trade-board-s3").act(mc -> guiScale(mc, 3)).hold(10);
         step("skills").act(mc -> server("skills",
                         com.jrpetty.aztecabyss.network.ModNetworking::sendSkills))
                 .until(() -> screenIs("SkillTreeScreen"), 200).hold(30).shot("36_skills");
         step("orders").act(mc -> server("orders",
                         com.jrpetty.aztecabyss.network.ModNetworking::sendOrders))
                 .until(() -> screenIs("RequisitionScreen"), 200).hold(30).shot("37_orders");
+        step("orders-s4").act(mc -> guiScale(mc, 4)).hold(20).shot("99_s4_orders");
+        step("orders-s3").act(mc -> guiScale(mc, 3)).hold(10);
         step("orders-close").act(mc -> mc.setScreen(null)).hold(10);
 
         // ---- What the maze looks like, from above and from inside ---------------
@@ -398,6 +410,8 @@ public final class ClientTour {
                             java.util.Set.of(), sp.getYRot(), 0.0F);
                 }))
                 .until(() -> screenIs("MazeVictoryScreen"), 800).hold(60).shot("41_maze_victory");
+        step("victory-s4").act(mc -> guiScale(mc, 4)).hold(20).shot("9a_s4_victory");
+        step("victory-s3").act(mc -> guiScale(mc, 3)).hold(10);
         step("victory-close").act(mc -> mc.setScreen(null)).hold(60);
 
         // ---- Creator: build, check, test, save, publish, play, come home --------------
@@ -442,6 +456,10 @@ public final class ClientTour {
                         && com.jrpetty.aztecabyss.engine.PublishedMaps.byName(
                                 Minecraft.getInstance().getSingleplayerServer(), "tour_arena") != null, 600)
                 .hold(40).shot("57_creator_publish");
+        step("console-s4").act(mc -> guiScale(mc, 4)).hold(20).shot("9b_s4_console_publish");
+        step("console-s4-markers [a real click]").act(mc -> clickAt("Markers"))
+                .until(() -> buttonActive("Publish"), 60).hold(20).shot("9c_s4_console_markers");
+        step("console-s3").act(mc -> guiScale(mc, 3)).hold(10);
         step("creator-leave").act(mc -> press("Leave the Workshop"))
                 .until(() -> inDimension(Level.OVERWORLD), 600).hold(40);
 
@@ -455,7 +473,7 @@ public final class ClientTour {
                                 com.jrpetty.aztecabyss.network.MapSelectPayload.CUSTOM_BASE)))
                 .until(() -> inDimension(AztecAbyssConstants.ABYSS_LEVEL_KEY)
                         && com.jrpetty.aztecabyss.engine.EngineArena.isRunning(), 1200)
-                .hold(160).shot("58_published_run");
+                .hold(100).shot("58_published_run");
         step("published-home [tour ends the run]").act(mc -> server("end-run",
                         sp -> com.jrpetty.aztecabyss.engine.EngineArena.stop(true)))
                 .until(() -> inDimension(Level.OVERWORLD), 600).hold(40);
@@ -720,6 +738,54 @@ public final class ClientTour {
         }
         throw new IllegalStateException("no button containing \"" + label + "\" on "
                 + s.getClass().getSimpleName());
+    }
+
+    /**
+     * Clicks a button the way the mouse does: at its centre, in the GUI's own
+     * coordinates, through the screen's own mouse handling. {@link #press}
+     * calls the button directly, which proves the button works but not that a
+     * click lands on it - and a screen drawn smaller than the GUI scale has to
+     * convert every click before it can tell what was under it.
+     */
+    private static void clickAt(String label) {
+        Screen s = Minecraft.getInstance().screen;
+        if (s == null) {
+            throw new IllegalStateException("no screen open to click \"" + label + "\" on");
+        }
+        float fit = s instanceof com.jrpetty.aztecabyss.client.AbyssScreen a ? a.fit() : 1.0f;
+        for (GuiEventListener child : s.children()) {
+            if (child instanceof AbstractButton b && b.active
+                    && b.getMessage().getString().toLowerCase().contains(label.toLowerCase())) {
+                double x = (b.getX() + b.getWidth() / 2.0) * fit;
+                double y = (b.getY() + b.getHeight() / 2.0) * fit;
+                s.mouseClicked(x, y, 0);
+                s.mouseReleased(x, y, 0);
+                return;
+            }
+        }
+        throw new IllegalStateException("no button containing \"" + label + "\" on "
+                + s.getClass().getSimpleName());
+    }
+
+    /** Whether the first button whose label contains the text can be pressed. */
+    private static boolean buttonActive(String label) {
+        Screen s = Minecraft.getInstance().screen;
+        if (s == null) {
+            return false;
+        }
+        for (GuiEventListener child : s.children()) {
+            if (child instanceof AbstractButton b
+                    && b.getMessage().getString().toLowerCase().contains(label.toLowerCase())) {
+                return b.active;
+            }
+        }
+        return false;
+    }
+
+    /** Sets the GUI scale and lays out whatever is open again, as the options screen does. */
+    private static void guiScale(Minecraft mc, int scale) {
+        mc.options.guiScale().set(scale);
+        mc.resizeDisplay();
     }
 
     /** Types into the n-th text box on the open screen. */
