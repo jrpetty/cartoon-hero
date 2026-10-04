@@ -324,6 +324,13 @@ public final class PublishedMaps {
             return;
         }
         BlockPos origin = entry.origin();
+        // Remember where they came from, as the portal does for the arenas, so
+        // the end of the run can put them back there.
+        if (!player.level().dimension().equals(com.jrpetty.aztecabyss.AztecAbyssConstants.ABYSS_LEVEL_KEY)) {
+            var rs = player.getData(com.jrpetty.aztecabyss.registry.ModAttachments.RUN_STATE);
+            rs.setHome(player.blockPosition(), player.level().dimension());
+            player.setData(com.jrpetty.aztecabyss.registry.ModAttachments.RUN_STATE, rs);
+        }
         player.teleportTo(abyss, origin.getX() + entry.sizeX() / 2.0,
                 origin.getY() + 2, origin.getZ() + entry.sizeZ() / 2.0,
                 java.util.Set.of(), 0.0F, 0.0F);

@@ -43,6 +43,28 @@ public final class MazeEvents {
         return level instanceof ServerLevel sl && sl.dimension().equals(AztecAbyssConstants.MAZE_LEVEL_KEY);
     }
 
+    /**
+     * Keeps everybody in the queue told how far along the build is.
+     *
+     * <p>The first trip into a fresh world raises the whole maze, which takes
+     * a while. The queue used to say so once, in chat, and then nothing until
+     * the teleport - long enough on a slow server to look exactly like the
+     * game had forgotten you. The count now ticks over above the hotbar.
+     */
+    private static void showRaising(ServerLevel level) {
+        if (WAITING.isEmpty() || level.getServer() == null) {
+            return;
+        }
+        Component line = Component.literal("§7The maze is being raised — §e"
+                + MazeBuilder.progressPercent() + "%§7. You go in the moment it is ready.");
+        for (java.util.UUID id : WAITING) {
+            ServerPlayer p = level.getServer().getPlayerList().getPlayer(id);
+            if (p != null) {
+                p.displayClientMessage(line, true);
+            }
+        }
+    }
+
     /** Sends in everyone who was queued while the build was running. */
     private static void admitWaiting(ServerLevel level) {
         if (WAITING.isEmpty() || level.getServer() == null) {
@@ -548,6 +570,8 @@ public final class MazeEvents {
             MazeBuilder.tick(level);
             if (!MazeBuilder.isBuilding()) {
                 admitWaiting(level);
+            } else if (level.getGameTime() % 20L == 0L) {
+                showRaising(level);
             }
             return;
         }

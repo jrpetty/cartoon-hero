@@ -36,6 +36,7 @@ public final class MapSelectScreen extends AbyssScreen {
     private static final int CARD_HEAD = 26;
     private static final int CARD_FOOT = 22;
     private static final int TILE_H = 34;
+    /** The highest the cards may start: just under the masthead's subtitle. */
     private static final int TOP = 60;
 
     private final int[] bestRounds;
@@ -73,6 +74,17 @@ public final class MapSelectScreen extends AbyssScreen {
     }
 
     /**
+     * Where the cards start: the cards and the tiles under them are centred,
+     * together, in the room between the masthead and the buttons - never above
+     * {@link #TOP}. Pinned to the top they left a third of a tall window empty
+     * under them.
+     */
+    private int cardsY() {
+        int block = cardH() + 10 + TILE_H;
+        return TOP + Math.max(0, (buttonsY() - 10 - TOP - block) / 2);
+    }
+
+    /**
      * How many lines of pitch a card may show. As many as the longest pitch
      * needs, unless the window is too short - then the pitch gives way before
      * the tiles or the buttons do, because those are the things you act on.
@@ -91,7 +103,7 @@ public final class MapSelectScreen extends AbyssScreen {
     }
 
     private int tilesY() {
-        return TOP + cardH() + 10;
+        return cardsY() + cardH() + 10;
     }
 
     private List<FormattedCharSequence> wrap(ArenaMap map) {
@@ -111,7 +123,7 @@ public final class MapSelectScreen extends AbyssScreen {
         for (int i = 0; i < maps.length; i++) {
             final int index = i;
             ArenaMap map = maps[i];
-            addRenderableWidget(new TileButton(left + i * (w + GAP), TOP, w, h,
+            addRenderableWidget(new TileButton(left + i * (w + GAP), cardsY(), w, h,
                     Component.literal(map.title()),
                     (g, tile, hot) -> paintCard(g, tile, map, index, hot),
                     () -> select(index)));
@@ -125,7 +137,7 @@ public final class MapSelectScreen extends AbyssScreen {
                 : customMaps.size() + (customMaps.size() == 1 ? " map" : " maps") + " on the portal";
         addRenderableWidget(new TileButton(left, ty, tileW, TILE_H, Component.literal("The Maze"),
                 (g, tile, hot) -> paintTile(g, tile, hot, new ItemStack(Items.FILLED_MAP),
-                        "The Maze", "A different game entirely", UiKit.PURPLE),
+                        "The Maze", "A different game", UiKit.PURPLE),
                 () -> {
                     PacketDistributor.sendToServer(new MapSelectPayload(MapSelectPayload.MAZE));
                     onClose();

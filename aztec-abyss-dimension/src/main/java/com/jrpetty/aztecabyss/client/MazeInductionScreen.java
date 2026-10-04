@@ -332,8 +332,7 @@ public final class MazeInductionScreen extends AbyssScreen {
         ty += ((kit.size() + per - 1) / per) * ICON + 6;
 
         // Who already wears it - half of the decision.
-        String roster = c[4].isEmpty() ? "nobody yet — the Glade needs one"
-                : "with " + UiKit.strip(c[4]);
+        String roster = c[4].isEmpty() ? "nobody yet" : "with " + UiKit.strip(c[4]);
         g.drawString(this.font, this.font.plainSubstrByWidth(roster, w - PAD * 2), x + PAD, ty, TEXT_FAINT, true);
         ty += LINE_H + 4;
 

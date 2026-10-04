@@ -119,10 +119,10 @@ public final class AbyssConfig {
         GRIEVER_DAMAGE = b.comment("Griever attack damage.")
                 .defineInRange("grieverAttackDamage", 12.0, 0.0, 100.0);
         CREATOR_PASSWORD = b.comment(
-                        "Password for Map Creator. Anyone who types it with /creator <password> is",
-                        "remembered and can enter from then on; operators never need it. Change it",
-                        "here and everyone who already knew the old one keeps their access until you",
-                        "run /creator lock <player>.")
+                        "Password for Map Creator. Anyone who enters it in the box the portal's",
+                        "Map Creator tile opens is remembered and can enter from then on; operators",
+                        "never need it. Change it here and everyone who already knew the old one",
+                        "keeps their access until you run /creator lock <player>.")
                 .define("creatorPassword", "Techbuyer123");
         MAZE_DEATH_LOCKOUT_SECONDS = b.comment("Seconds you are locked out of the maze after dying in it. 0 lets you walk straight back in.")
                 .defineInRange("mazeDeathLockoutSeconds", 60, 0, 3600);

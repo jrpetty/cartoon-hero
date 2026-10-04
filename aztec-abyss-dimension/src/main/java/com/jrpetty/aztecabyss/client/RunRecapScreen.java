@@ -84,7 +84,10 @@ public final class RunRecapScreen extends AbyssScreen {
                 : "THE AZTEC ABYSS";
         String eyebrow = where + " · " + (data.multiplayer() ? "CO-OP RUN" : "SOLO RUN");
         String title = data.victory() ? "THE ABYSS IS SILENT" : data.extracted() ? "YOU ESCAPED" : "YOU FELL";
-        int y = UiKit.masthead(g, this.font, eyebrow, title, cx, 10, accent);
+        // The sheet is about 150 high; centred in the room above the button
+        // rather than pinned to the top of a tall window.
+        int y = UiKit.masthead(g, this.font, eyebrow, title, cx,
+                Math.max(10, (this.height - 40 - 152) / 2), accent);
         UiKit.fret(g, cx, y + 1, 130, accent);
 
         // The headline: the round, big, because it is the number the run is.

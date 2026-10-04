@@ -142,8 +142,15 @@ public final class AztecAbyssConstants {
             new BlockPos(-MOB_GATE_DISTANCE, ARENA_FLOOR_Y + 1, 0), // west
     };
 
-    /** Facing the arrival portal so players look toward the temple when they step through. */
-    public static final net.minecraft.core.Direction ABYSS_ARRIVAL_FACING = net.minecraft.core.Direction.SOUTH;
+    /**
+     * Which way players face when they step through: north, at the pyramid.
+     *
+     * <p>This said SOUTH while its comment, and the portal frame's, both said
+     * the temple - which is north of the arrival. So every run began staring
+     * at the south gate nine blocks away, with the pyramid behind you and the
+     * first of the horde coming out of the arch you were looking at.
+     */
+    public static final net.minecraft.core.Direction ABYSS_ARRIVAL_FACING = net.minecraft.core.Direction.NORTH;
 
     // ------------------------------------------------------------------
     // Zombies mode tuning

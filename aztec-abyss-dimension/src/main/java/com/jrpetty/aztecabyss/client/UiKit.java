@@ -148,7 +148,10 @@ public final class UiKit {
     public static void meter(GuiGraphics g, int x, int y, int w, int h, float fraction, int colour) {
         float f = Math.max(0.0f, Math.min(1.0f, fraction));
         int fill = Math.round(w * f);
-        g.fill(x, y, x + w, y + h, 0xFF0A0910);
+        // The track is drawn, not implied: an empty bar has to read as an empty
+        // bar, and a near-black track on a near-black panel read as nothing.
+        g.fill(x, y, x + w, y + h, 0xFF2A2838);
+        g.fill(x, y + h - 1, x + w, y + h, 0xFF1C1A27);
         if (fill > 0) {
             g.fill(x, y, x + fill, y + h, colour);
             g.fill(x, y, x + fill, y + 1, lerp(colour, 0xFFFFFFFF, 0.35f));

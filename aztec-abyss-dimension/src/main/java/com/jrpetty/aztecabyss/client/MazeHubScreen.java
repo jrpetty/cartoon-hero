@@ -211,8 +211,8 @@ public class MazeHubScreen extends AbyssScreen {
             g.drawString(this.font, "unstung", leftX + 10, y, TEXT_DIM, true);
         }
         y += 13;
-        g.drawString(this.font, "chart  §f" + s.myPct() + "%§7 yours · §f"
-                + s.gladePct() + "%§7 known", leftX + 10, y, TEXT_DIM, true);
+        g.drawString(this.font, "chart  §f" + s.myPct() + "%§7 · glade §f"
+                + s.gladePct() + "%", leftX + 10, y, TEXT_DIM, true);
         y += 13;
         if (s.carrying() > 0 || s.runSeconds() >= 0) {
             String line = (s.carrying() > 0 ? "▲" + s.carrying() + " carried" : "")

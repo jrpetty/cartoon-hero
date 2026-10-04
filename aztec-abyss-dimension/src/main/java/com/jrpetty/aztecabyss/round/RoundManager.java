@@ -229,6 +229,7 @@ public final class RoundManager {
             if (now % 200L == 0L) {
                 repatriateStuckMobs(level, present, waveMobs);
             }
+            reconcileHeadcount(waveMobs);
         }
         if (game.getMap().objective() != null) {
             tickObjective(level, present);
@@ -264,6 +265,44 @@ public final class RoundManager {
             default -> {
             }
         }
+    }
+
+    /** Consecutive checks on which fewer wave mobs existed than the count said. */
+    private static int headcountMisses = 0;
+
+    /**
+     * Keeps the round's alive-count honest.
+     *
+     * <p>A round ends when everything spawned is dead, and "dead" is counted
+     * off death events. A mob that leaves the world any other way - removed by
+     * another mod, refused on join, lost with an unloaded chunk - never sends
+     * one, and the round then waits for ever on a mob that does not exist.
+     * Every two seconds the count is checked against the mobs actually there;
+     * three misses in a row and the count is corrected, the missing ones
+     * written off as gone. Boss rounds are left alone: they end on the boss.
+     */
+    private static void reconcileHeadcount(List<Mob> waveMobs) {
+        if (game.getPhase() != AbyssGame.Phase.IN_ROUND || game.isBossRound()) {
+            headcountMisses = 0;
+            return;
+        }
+        int actual = 0;
+        for (Mob m : waveMobs) {
+            if (m.isAlive() && !m.getPersistentData().getBoolean("aztecabyss_boss")) {
+                actual++;
+            }
+        }
+        int counted = game.getAliveZombies();
+        if (actual >= counted) {
+            headcountMisses = 0;
+            return;
+        }
+        if (++headcountMisses < 3) {
+            return;
+        }
+        headcountMisses = 0;
+        game.setKillsThisRound(game.getKillsThisRound() + (counted - actual));
+        game.setAliveZombies(actual);
     }
 
     private static void startRound(ServerLevel level, int round) {
@@ -350,16 +389,23 @@ public final class RoundManager {
 
         for (int i = 0; i < spawnThisTick; i++) {
             boolean brute = game.getRound() % 5 == 0 && (game.getSpawnedThisRound() % 8 == 7);
-            spawnWaveMob(level, present, game.getRound(), brute);
             game.setSpawnedThisRound(game.getSpawnedThisRound() + 1);
-            game.setAliveZombies(game.getAliveZombies() + 1);
+            if (spawnWaveMob(level, present, game.getRound(), brute)) {
+                game.setAliveZombies(game.getAliveZombies() + 1);
+            } else {
+                // A mob that never made it into the world is one nobody can
+                // kill. It used to be counted alive anyway, which held the round
+                // open for ever; it is written off as gone instead.
+                game.setKillsThisRound(game.getKillsThisRound() + 1);
+            }
         }
     }
 
-    private static void spawnWaveMob(ServerLevel level, List<ServerPlayer> present, int round, boolean brute) {
+    /** @return whether the mob actually joined the world */
+    private static boolean spawnWaveMob(ServerLevel level, List<ServerPlayer> present, int round, boolean brute) {
         // Every wave mob pours out of one of the active map's horde gates.
         BlockPos[] gates = game.getMap().gates();
-        BlockPos gate = gates[RNG.nextInt(gates.length)];
+        BlockPos gate = gates[pickGate(gates, present)];
         boolean spreadAlongX = gate.getZ() != 0 || gates.length == 1;
         int jitter = RNG.nextInt(5) - 2;
         BlockPos pos = spreadAlongX ? gate.offset(jitter, 0, 0) : gate.offset(0, 0, jitter);
@@ -369,7 +415,7 @@ public final class RoundManager {
         WaveMobs.Spawn choice = WaveMobs.pick(RNG, round);
         Mob mob = choice.type().create(level);
         if (mob == null) {
-            return;
+            return false;
         }
         mob.moveTo(pos.getX() + 0.5, pos.getY(), pos.getZ() + 0.5, RNG.nextFloat() * 360.0F, 0.0F);
         mob.finalizeSpawn(level, level.getCurrentDifficultyAt(pos), MobSpawnType.EVENT, null);
@@ -391,7 +437,45 @@ public final class RoundManager {
                 mob.setTarget(target);
             }
         }
-        level.addFreshEntity(mob);
+        return level.addFreshEntity(mob);
+    }
+
+    /** How far a gate has to be from everybody before it may open on them. */
+    private static final double GATE_CLEARANCE = 24.0;
+
+    /**
+     * Which gate the next mob comes out of: any gate nobody is standing near.
+     *
+     * <p>It used to be any gate at all. On the Temple the arrival point is nine
+     * blocks from the south gate, so a fresh squad met round one face to face
+     * with the first mobs out of it - before anyone had turned round. A gate
+     * with a player inside its clearance is skipped while another will do;
+     * with every gate crowded (one gate, or a squad spread all over) the
+     * farthest one is used, so a wave is never held back by where people stand.
+     */
+    private static int pickGate(BlockPos[] gates, List<ServerPlayer> present) {
+        if (gates.length <= 1 || present.isEmpty()) {
+            return gates.length <= 1 ? 0 : RNG.nextInt(gates.length);
+        }
+        int[] clear = new int[gates.length];
+        int count = 0;
+        int farthest = 0;
+        double farthestSq = -1.0;
+        for (int i = 0; i < gates.length; i++) {
+            double nearestSq = Double.MAX_VALUE;
+            for (ServerPlayer p : present) {
+                nearestSq = Math.min(nearestSq, p.distanceToSqr(
+                        gates[i].getX() + 0.5, gates[i].getY(), gates[i].getZ() + 0.5));
+            }
+            if (nearestSq >= GATE_CLEARANCE * GATE_CLEARANCE) {
+                clear[count++] = i;
+            }
+            if (nearestSq > farthestSq) {
+                farthestSq = nearestSq;
+                farthest = i;
+            }
+        }
+        return count > 0 ? clear[RNG.nextInt(count)] : farthest;
     }
 
     // ------------------------------------------------------------------
@@ -806,7 +890,9 @@ public final class RoundManager {
 
         String name = finale ? "THE DEVOURER" : "THE OBSIDIAN WARLORD";
         String flavor = finale ? "§cThe Warden claws its way out of the dark..."
-                               : "§cA hulking brute charges from the temple steps...";
+                : game.getMap() == com.jrpetty.aztecabyss.worldgen.ArenaMap.BRIDGE
+                        ? "§cSomething huge comes thundering down the bridge..."
+                        : "§cA hulking brute charges from the temple steps...";
         for (ServerPlayer p : present) {
             title(p, "§4§l⚔ " + name, flavor);
             bossSound(level, p.blockPosition(),
@@ -873,8 +959,9 @@ public final class RoundManager {
             int cap = AbyssConfig.MAX_CONCURRENT_ALIVE.get();
             int summon = Math.min((enraged ? 5 : 3) + present.size(), Math.max(0, cap - game.getAliveZombies()));
             for (int i = 0; i < summon; i++) {
-                spawnWaveMob(level, present, game.getRound(), false);
-                game.setAliveZombies(game.getAliveZombies() + 1);
+                if (spawnWaveMob(level, present, game.getRound(), false)) {
+                    game.setAliveZombies(game.getAliveZombies() + 1);
+                }
             }
         }
 
@@ -1040,7 +1127,7 @@ public final class RoundManager {
     /** Called from the wave-mob death handler with the killer (if a participant). */
     public static void onWaveZombieKilled(ServerLevel level, ServerPlayer killer) {
         game.setKillsThisRound(game.getKillsThisRound() + 1);
-        game.setAliveZombies(game.getAliveZombies() - 1);
+        game.setAliveZombies(Math.max(0, game.getAliveZombies() - 1));
         if (killer == null) {
             return;
         }
@@ -1072,8 +1159,16 @@ public final class RoundManager {
             title(p, "§a§lROUND " + game.getRound() + " CLEARED", "§7Next wave incoming...");
             level.playSound(null, p.blockPosition(), ModSounds.ROUND_CLEAR.get(), SoundSource.PLAYERS, 1.0F, 1.0F);
             if (canExtract) {
+                // Measured from where each player actually stands. It used to
+                // say "to the south" to everybody, which was true for nobody on
+                // the far side of the arena and false on the Bridge.
+                BlockPos glyph = game.getMap().extraction();
+                int dist = (int) Math.sqrt(p.blockPosition().distSqr(glyph));
+                String where = dist <= 6 ? "right beside you"
+                        : dist + " blocks " + compass(p.blockPosition(), glyph) + " of you";
                 p.displayClientMessage(Component.literal(
-                        "§b⟡ An extraction glyph flares to the south. §7Stand on it to leave with your spoils — or brave the next wave."), false);
+                        "§b⟡ An extraction glyph flares §f" + where
+                                + "§b. §7Stand on it to leave with your spoils — or brave the next wave."), false);
             }
         }
     }
@@ -1509,6 +1604,23 @@ public final class RoundManager {
     // ------------------------------------------------------------------
     // Helpers
     // ------------------------------------------------------------------
+
+    /**
+     * Sends a player back to wherever their last trip in began - the portal
+     * they came through, or the world spawn when nothing was recorded. The same
+     * return every arena run already makes, for anything else that takes a
+     * player into the Abyss and has to bring them out.
+     */
+    public static void returnHome(ServerPlayer player) {
+        MinecraftServer server = player.getServer();
+        if (server == null) {
+            return;
+        }
+        RunState rs = player.getData(ModAttachments.RUN_STATE);
+        ServerLevel homeLevel = resolveHome(server, rs);
+        BlockPos returnPos = rs.getHomePortalPos() != null ? rs.getHomePortalPos() : homeLevel.getSharedSpawnPos();
+        player.changeDimension(AbyssTeleporter.toFixedHome(homeLevel, returnPos));
+    }
 
     private static ServerLevel resolveHome(MinecraftServer server, RunState rs) {
         if (rs.getHomeDimension() != null) {

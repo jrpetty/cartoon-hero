@@ -13,6 +13,72 @@ behaviour that was already there · **docs**
 
 ## Unreleased
 
+### The Map Creator, without a single command
+
+Every authoring tool was an `/arena` command, and every one of them is
+operator-only - so the password that let a player into the Workshop let them
+build and nothing else. They could not check a map, test it, save it or put it
+on the portal. They could not even leave: the Workshop had no exit, and the
+commands that would have taken them out were the ones they were not allowed to
+run.
+
+- **feat** **The Creator Console.** Right-click the air with the Map Wand. Three
+  pages: *Build* (what the wand has marked out, Check the map, a ruleset
+  picker, Play-test / Stop the test), *Publish* (save the marked-out area under
+  a name, set its title, pitch, difficulty and rules, publish it, update it,
+  take it off the portal) and *Markers* (every marker the engine reads, one
+  click to put its sign in your hand, with what each is for). It runs the same
+  code the commands run, gated on being in the Workshop and being let in -
+  not on being an operator.
+- **feat** **A password box** instead of `/creator <password>`: the portal's
+  Map Creator tile opens it when the Creator is locked, the word is shown as
+  dots while you type it, and a wrong guess says so. One guess a second.
+- **fix** **The Workshop has a way out**: a signed lodestone in front of the
+  arrival pad, and the console's *Leave the Workshop*. Where you were, the
+  game mode you were in and everything you carried are put away on the way in
+  and given back on the way out - nothing made in creative follows you into a
+  survival world. (Somebody already inside from before this change has nothing
+  put away; they go to the world spawn in the default game mode and keep what
+  they hold.)
+- **fix** **Playing a published map no longer strands you in the Abyss.** The
+  run ended and left everybody standing at the map's slot, thousands of blocks
+  from anything, with no way back short of dying. The portal now remembers
+  where you came from, and the end of the run sends you there.
+- **change** The welcome lines and the wand's lore describe the console and
+  the exit stone instead of listing commands.
+
+### The arenas, start to finish
+
+- **fix** **Temple arrivals face the pyramid.** The arrival facing said SOUTH
+  while its own comment, and the portal frame's, said "toward the temple" - so
+  every run began staring at the south gate nine blocks away, with the first of
+  the horde coming out of the arch you were looking at.
+- **change** **The horde comes out of a gate nobody is standing near.** A gate
+  with a player within 24 blocks is skipped while another will do; with every
+  gate crowded the farthest is used, so a wave is never held back by where
+  people stand. The Temple's south gate stops spawning into a fresh squad's
+  faces.
+- **fix** **A round could never end.** A wave mob that failed to spawn was still
+  counted alive, and a mob that left the world without dying - removed by
+  another mod, refused on join, lost with an unloaded chunk - was waited for
+  for ever. Failed spawns are written off, and every two seconds the round's
+  alive-count is checked against the mobs actually there; three misses in a
+  row and it is corrected.
+- **feat** **The Bridge fort has a back door.** Players arrive behind the fort,
+  and the only way in was round the outside to the gateway facing the bridge.
+  An iron postern with a button on each side now opens from the arrival
+  straight into the courtyard. Zombies cannot open or path through an iron
+  door, so the bridge is still the only way in for them. Existing worlds get
+  the door cut on their next run.
+- **fix** On the Bridge, the round-ten boss "charged from the temple steps".
+  It comes thundering down the bridge now.
+- **fix** The extraction glyph was announced as "to the south" to everybody.
+  It now says how far and which way it is from where each player stands.
+- **change** The Abyss is lit like the Nether (ambient light 0.1, was 0): the
+  arena geometry reads at a glance, and the fog and red haze keep the mood.
+- **change** The first trip into a fresh maze shows the build's progress above
+  the hotbar every second instead of one chat line and then silence.
+
 ### Every screen can finally be seen
 
 Since 1.20.2, vanilla's screen render paints the background itself. Every

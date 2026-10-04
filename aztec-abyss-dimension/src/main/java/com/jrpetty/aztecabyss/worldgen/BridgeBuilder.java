@@ -65,6 +65,12 @@ public final class BridgeBuilder {
      */
     public static final BlockPos HEART = new BlockPos(CENTER_X, DECK_Y + 3, ISLAND_CENTER_Z + 4);
 
+    /**
+     * The fort's back door, in line with the arrival frame: where the lower
+     * half of its iron door stands.
+     */
+    private static final BlockPos POSTERN = new BlockPos(CENTER_X, DECK_Y + 1, ISLAND_CENTER_Z + 8);
+
     /** Sentinel: if this is already the fort's beacon block, the map is built. */
     private static final BlockPos SENTINEL = new BlockPos(CENTER_X, DECK_Y + 1, ISLAND_CENTER_Z);
 
@@ -84,6 +90,10 @@ public final class BridgeBuilder {
                     }
                 }
             }
+            // Built before the fort had a back door? Cut one.
+            if (!level.getBlockState(POSTERN).is(Blocks.IRON_DOOR)) {
+                buildPostern(level);
+            }
             return;
         }
         Random rng = new Random(SEED);
@@ -91,6 +101,7 @@ public final class BridgeBuilder {
         buildBridge(level, rng);
         buildGate(level);
         buildFort(level, rng);
+        buildPostern(level);
         buildArrivalFrame(level);
         placeChests(level, rng);
         buildEasterEgg(level);
@@ -411,6 +422,57 @@ public final class BridgeBuilder {
             for (int dx = 5; dx <= 7; dx++) {
                 level.setBlock(new BlockPos(CENTER_X + dx, DECK_Y + 1 + i, cz - halfZ + 2 + i), step, 2);
             }
+        }
+    }
+
+    /**
+     * The postern: an iron door in the fort's back wall, with a button either
+     * side of it.
+     *
+     * <p>Players arrive on the island behind the fort, and the fort used to
+     * have one way in - the gateway on the far side, facing the bridge. So the
+     * first thing every run asked of you was to walk out round the back of the
+     * fort, along the cliff edge, to find the door, with your back to nothing
+     * and the courtyard you were meant to be defending on the other side of a
+     * wall. Now the arrival looks straight at a door into it.
+     *
+     * <p>Iron, so it changes nothing about the fight. The horde cannot open an
+     * iron door and will not path through a closed one, so the bridge is still
+     * the single way in for them; the buttons are the only way it opens.
+     */
+    private static void buildPostern(ServerLevel level) {
+        BlockPos lower = POSTERN;
+        BlockState door = Blocks.IRON_DOOR.defaultBlockState()
+                .setValue(net.minecraft.world.level.block.DoorBlock.FACING, Direction.SOUTH)
+                .setValue(net.minecraft.world.level.block.DoorBlock.HINGE,
+                        net.minecraft.world.level.block.state.properties.DoorHingeSide.LEFT)
+                .setValue(net.minecraft.world.level.block.DoorBlock.OPEN, false)
+                .setValue(net.minecraft.world.level.block.DoorBlock.POWERED, false);
+        level.setBlock(lower, door.setValue(net.minecraft.world.level.block.DoorBlock.HALF,
+                net.minecraft.world.level.block.state.properties.DoubleBlockHalf.LOWER), 2);
+        level.setBlock(lower.above(), door.setValue(net.minecraft.world.level.block.DoorBlock.HALF,
+                net.minecraft.world.level.block.state.properties.DoubleBlockHalf.UPPER), 2);
+        // A lintel over it, so it reads as a door and not a gap in the stone.
+        level.setBlock(lower.above(2), Blocks.CHISELED_DEEPSLATE.defaultBlockState(), 2);
+
+        // The wall beside the door carries the signal; a button on each face of
+        // it opens the door from either side.
+        BlockPos jamb = lower.west().above();
+        level.setBlock(jamb, Blocks.POLISHED_DEEPSLATE.defaultBlockState(), 2);
+        level.setBlock(jamb.south(), Blocks.POLISHED_BLACKSTONE_BUTTON.defaultBlockState()
+                .setValue(net.minecraft.world.level.block.ButtonBlock.FACING, Direction.SOUTH)
+                .setValue(net.minecraft.world.level.block.ButtonBlock.FACE,
+                        net.minecraft.world.level.block.state.properties.AttachFace.WALL), 2);
+        level.setBlock(jamb.north(), Blocks.POLISHED_BLACKSTONE_BUTTON.defaultBlockState()
+                .setValue(net.minecraft.world.level.block.ButtonBlock.FACING, Direction.NORTH)
+                .setValue(net.minecraft.world.level.block.ButtonBlock.FACE,
+                        net.minecraft.world.level.block.state.properties.AttachFace.WALL), 2);
+        // Soul lanterns either side outside, standing on the island, so the
+        // door is the first thing the eye finds coming through the portal.
+        for (int dx : new int[]{-2, 2}) {
+            BlockPos post = lower.south().offset(dx, 0, 0);
+            level.setBlock(post, Blocks.POLISHED_DEEPSLATE_WALL.defaultBlockState(), 2);
+            level.setBlock(post.above(), Blocks.SOUL_LANTERN.defaultBlockState(), 2);
         }
     }
 

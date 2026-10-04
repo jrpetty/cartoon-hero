@@ -664,8 +664,22 @@ public final class EngineArena {
             }
         }
         current.bar.removeAllPlayers();
+        // A published map is somewhere the portal sent you, so the end of the
+        // run sends you back. It used to leave everybody standing in the Abyss
+        // at the map's slot, two thousand blocks from anything, with no way
+        // home short of dying. Workshop tests are left where they are: the
+        // author is mid-build and the console is in their hand.
+        boolean portalMap = current.mapKey != null && current.mapKey.startsWith("custom:")
+                && current.level.dimension().equals(com.jrpetty.aztecabyss.AztecAbyssConstants.ABYSS_LEVEL_KEY);
+        java.util.List<ServerPlayer> leaving = portalMap ? current.players() : java.util.List.of();
         current.running = false;
         current = null;
+        for (ServerPlayer p : leaving) {
+            if (p.isAlive() && p.level().dimension().equals(com.jrpetty.aztecabyss.AztecAbyssConstants.ABYSS_LEVEL_KEY)) {
+                p.displayClientMessage(Component.literal("§7Back through the portal."), false);
+                com.jrpetty.aztecabyss.round.RoundManager.returnHome(p);
+            }
+        }
     }
 
     /**

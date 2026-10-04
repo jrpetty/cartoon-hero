@@ -119,6 +119,25 @@ public final class ClientAbyssState {
         mc.setScreen(new com.jrpetty.aztecabyss.client.RequisitionScreen(payload, tab));
     }
 
+    /** The Map Creator's password box. */
+    public static void openCreatorGate(com.jrpetty.aztecabyss.network.CreatorGatePayload payload) {
+        Minecraft.getInstance().setScreen(new CreatorPasswordScreen(payload.failed()));
+    }
+
+    /**
+     * The Creator Console. A fresh copy while it is open refreshes it in place,
+     * keeping the page, the selected map and anything half-typed - every button
+     * on it is answered by one of these.
+     */
+    public static void openCreatorConsole(com.jrpetty.aztecabyss.network.CreatorConsolePayload payload) {
+        Minecraft mc = Minecraft.getInstance();
+        if (mc.screen instanceof CreatorConsoleScreen open) {
+            open.accept(payload);
+            return;
+        }
+        mc.setScreen(new CreatorConsoleScreen(payload));
+    }
+
     /** The records screen, opened over whatever asked for it. */
     public static void openLeaderboards(com.jrpetty.aztecabyss.network.LeaderboardPayload payload) {
         Minecraft mc = Minecraft.getInstance();

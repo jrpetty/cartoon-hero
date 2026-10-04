@@ -1428,11 +1428,70 @@ public final class EngineEvents {
     @SubscribeEvent
     public static void onWandRight(PlayerInteractEvent.RightClickBlock event) {
         if (event.getEntity() instanceof ServerPlayer player
-                && BuildTools.isWand(player.getMainHandItem())) {
+                && BuildTools.isWand(player.getMainHandItem())
+                && !isExitStone(player, event.getPos())) {
             BuildTools.setCorner(player, event.getPos(), false);
             event.setCanceled(true);
             event.setCancellationResult(net.minecraft.world.InteractionResult.SUCCESS);
         }
+    }
+
+    /**
+     * Right-click the air with the wand, in the Workshop: the Creator Console.
+     *
+     * <p>The wand already owned both clicks on a block. The click on nothing
+     * was free, and it is the one gesture an author makes without thinking
+     * while standing back to look at what they have built - which is exactly
+     * when they want to check it, test it or save it.
+     */
+    @SubscribeEvent
+    public static void onWandUse(PlayerInteractEvent.RightClickItem event) {
+        if (event.getEntity() instanceof ServerPlayer player
+                && BuildTools.isWand(event.getItemStack())
+                && MapCreator.inWorkshop(player)) {
+            CreatorConsole.open(player);
+            event.setCanceled(true);
+            event.setCancellationResult(net.minecraft.world.InteractionResult.SUCCESS);
+        }
+    }
+
+    /** The Workshop's way out: right-click the lodestone by the pad. */
+    @SubscribeEvent
+    public static void onExitStone(PlayerInteractEvent.RightClickBlock event) {
+        if (event.getEntity() instanceof ServerPlayer player && isExitStone(player, event.getPos())) {
+            MapCreator.leave(player);
+            event.setCanceled(true);
+            event.setCancellationResult(net.minecraft.world.InteractionResult.SUCCESS);
+        }
+    }
+
+    private static boolean isExitStone(ServerPlayer player, net.minecraft.core.BlockPos pos) {
+        return pos.equals(MapCreator.EXIT) && MapCreator.inWorkshop(player)
+                && player.level().getBlockState(pos).is(net.minecraft.world.level.block.Blocks.LODESTONE);
+    }
+
+    @SubscribeEvent
+    public static void onAuthorLoggedOut(net.neoforged.neoforge.event.entity.player.PlayerEvent.PlayerLoggedOutEvent event) {
+        CreatorConsole.forget(event.getEntity().getUUID());
+    }
+
+    // ------------------------------------------------------------------
+    // The Creator Console's way in to the code the commands run
+    // ------------------------------------------------------------------
+
+    /** {@code /arena create}, for the console. */
+    static boolean consoleCreate(ServerPlayer player, String name) {
+        return create(player.createCommandSourceStack(), name) > 0;
+    }
+
+    /** {@code /arena publish}, for the console. */
+    static boolean consolePublish(ServerPlayer player, String name) {
+        return publish(player.createCommandSourceStack(), name) > 0;
+    }
+
+    /** {@code /arena test}, for the console. */
+    static boolean consoleTest(ServerPlayer player, String rulesetId) {
+        return test(player.createCommandSourceStack(), rulesetId) > 0;
     }
 
     /** Drives the engine's own round loop. */

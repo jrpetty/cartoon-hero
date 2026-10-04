@@ -24,8 +24,8 @@ public final class AbyssTeleporter {
     /** Drops the player at the arrival point of whichever arena they picked. */
     public static DimensionTransition toAbyssArrival(ServerLevel abyss, com.jrpetty.aztecabyss.worldgen.ArenaMap map) {
         BlockPos p = map.arrival();
-        // Temple arrivals look south toward the pyramid; on the bridge you face
-        // north down the span at whatever is coming.
+        // Temple arrivals look north at the pyramid; on the bridge you face
+        // north too, over the fort and down the span at whatever is coming.
         float yaw = map == com.jrpetty.aztecabyss.worldgen.ArenaMap.BRIDGE
                 ? net.minecraft.core.Direction.NORTH.toYRot()
                 : AztecAbyssConstants.ABYSS_ARRIVAL_FACING.toYRot();

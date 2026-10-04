@@ -55,7 +55,7 @@ public final class BuildTools {
         stack.set(DataComponents.LORE, new ItemLore(List.of(
                 Component.literal("§7Left-click a block — first corner"),
                 Component.literal("§7Right-click a block — second corner"),
-                Component.literal("§8/arena create <name> to build it"))));
+                Component.literal("§7Right-click the air — the Creator Console"))));
         return stack;
     }
 

@@ -62,6 +62,12 @@ public final class ModNetworking {
                         // Creator is a mode, not a hunt - nothing is recorded as a
                         // choice, because there is no portal trip to record it for.
                         if (payload.mapId() == MapSelectPayload.CREATOR) {
+                            // Locked: the door, not a chat line telling you to type
+                            // the password after a command.
+                            if (!com.jrpetty.aztecabyss.engine.MapCreator.mayEnter(sp)) {
+                                PacketDistributor.sendToPlayer(sp, new CreatorGatePayload(false));
+                                return;
+                            }
                             String error = com.jrpetty.aztecabyss.engine.MapCreator.enter(sp, true);
                             if (error != null) {
                                 sp.displayClientMessage(net.minecraft.network.chat.Component.literal(
@@ -131,6 +137,33 @@ public final class ModNetworking {
                 RequisitionPayload.STREAM_CODEC,
                 (payload, context) -> context.enqueueWork(
                         () -> ClientAbyssState.openRequisition(payload)));
+        registrar.playToClient(
+                CreatorGatePayload.TYPE,
+                CreatorGatePayload.STREAM_CODEC,
+                (payload, context) -> context.enqueueWork(
+                        () -> ClientAbyssState.openCreatorGate(payload)));
+        registrar.playToServer(
+                CreatorUnlockPayload.TYPE,
+                CreatorUnlockPayload.STREAM_CODEC,
+                (payload, context) -> context.enqueueWork(() -> {
+                    if (context.player() instanceof ServerPlayer sp) {
+                        com.jrpetty.aztecabyss.engine.MapCreator.tryUnlock(sp, payload.attempt());
+                    }
+                }));
+        registrar.playToClient(
+                CreatorConsolePayload.TYPE,
+                CreatorConsolePayload.STREAM_CODEC,
+                (payload, context) -> context.enqueueWork(
+                        () -> ClientAbyssState.openCreatorConsole(payload)));
+        registrar.playToServer(
+                CreatorActionPayload.TYPE,
+                CreatorActionPayload.STREAM_CODEC,
+                (payload, context) -> context.enqueueWork(() -> {
+                    if (context.player() instanceof ServerPlayer sp) {
+                        com.jrpetty.aztecabyss.engine.CreatorConsole.onAction(
+                                sp, payload.action(), payload.a(), payload.b());
+                    }
+                }));
         registrar.playToServer(
                 MazeHubActionPayload.TYPE,
                 MazeHubActionPayload.STREAM_CODEC,

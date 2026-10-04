@@ -303,7 +303,7 @@ public final class ClientTour {
                         double z = com.jrpetty.aztecabyss.maze.MazeData.SPAWN_Z + 70.5;
                         look(sp, c, com.jrpetty.aztecabyss.maze.MazeData.FLOOR_Y + 58, z, 180.0F, 38.0F);
                     });
-                }).hold(260).shot("42_maze_aerial");
+                }).hold(420).shot("42_maze_aerial");
         step("maze-corridor").act(mc -> server("corridor", sp -> {
                     ServerLevel maze = sp.serverLevel();
                     int[] door = com.jrpetty.aztecabyss.maze.MazeBuilder.DOOR_CELLS[0];
@@ -391,7 +391,7 @@ public final class ClientTour {
                 .until(() -> screenIs("MazeVictoryScreen"), 800).hold(60).shot("41_maze_victory");
         step("victory-close").act(mc -> mc.setScreen(null)).hold(60);
 
-        // ---- Creator -------------------------------------------------------------
+        // ---- Creator: build, check, test, save, publish, play, come home --------------
         step("creator").act(mc -> server("creator", sp -> {
                     String err = com.jrpetty.aztecabyss.engine.MapCreator.enter(sp, true);
                     if (err != null) {
@@ -400,11 +400,101 @@ public final class ClientTour {
                 }))
                 .until(() -> inDimension(AztecAbyssConstants.WORKSHOP_LEVEL_KEY), 600)
                 .hold(160).shot("50_creator");
+        step("creator-gate").act(mc -> mc.setScreen(new com.jrpetty.aztecabyss.client.CreatorPasswordScreen(false)))
+                .until(() -> screenIs("CreatorPasswordScreen"), 100).hold(30).shot("53_creator_gate");
+        step("creator-build [tour builds a small arena]").act(mc -> {
+                    mc.setScreen(null);
+                    server("build", ClientTour::buildTourArena);
+                }).hold(60);
+        step("creator-console").act(mc -> server("console", com.jrpetty.aztecabyss.engine.CreatorConsole::open))
+                .until(() -> screenIs("CreatorConsoleScreen"), 200).hold(30).shot("54_creator_console");
+        step("creator-check").act(mc -> press("Check the map")).hold(40).shot("55_creator_check");
+        step("creator-playtest").act(mc -> press("Play-test"))
+                .until(() -> com.jrpetty.aztecabyss.engine.EngineArena.isRunning()
+                        && Minecraft.getInstance().screen == null, 600)
+                .hold(140).shot("56_creator_playtest");
+        step("creator-console-again").act(mc -> server("console", com.jrpetty.aztecabyss.engine.CreatorConsole::open))
+                .until(() -> screenIs("CreatorConsoleScreen"), 200).hold(20);
+        step("creator-stop-test").act(mc -> press("Stop the test"))
+                .until(() -> !com.jrpetty.aztecabyss.engine.EngineArena.isRunning(), 400).hold(20);
+        step("creator-publish-page").act(mc -> press("Publish")).hold(20);
+        step("creator-save").act(mc -> {
+                    type(0, "tour_arena");
+                    press("Save");
+                })
+                .until(() -> textBoxes() >= 3, 400).hold(20);
+        step("creator-details").act(mc -> {
+                    type(1, "The Tour Yard");
+                    type(2, "A small walled yard, built and published by the tour to prove the whole path.");
+                    press("Save title");
+                }).hold(40);
+        step("creator-publish").act(mc -> press("Publish"))
+                .until(() -> Minecraft.getInstance().getSingleplayerServer() != null
+                        && com.jrpetty.aztecabyss.engine.PublishedMaps.byName(
+                                Minecraft.getInstance().getSingleplayerServer(), "tour_arena") != null, 600)
+                .hold(40).shot("57_creator_publish");
+        step("creator-leave").act(mc -> press("Leave the Workshop"))
+                .until(() -> inDimension(Level.OVERWORLD), 600).hold(40);
+
         step("picker-after").act(mc -> server("picker-after",
                         com.jrpetty.aztecabyss.network.ModNetworking::sendOpenMapPicker))
                 .until(() -> screenIs("MapSelectScreen"), 200).hold(40).shot("51_picker_after_runs");
-        step("player-maps").act(mc -> press("Player maps")).hold(30).shot("52_player_maps");
+        step("player-maps").act(mc -> press("Player maps"))
+                .until(() -> screenIs("PlayerMapsScreen"), 100).hold(30).shot("52_player_maps");
+        step("play-published").act(mc -> net.neoforged.neoforge.network.PacketDistributor.sendToServer(
+                        new com.jrpetty.aztecabyss.network.MapSelectPayload(
+                                com.jrpetty.aztecabyss.network.MapSelectPayload.CUSTOM_BASE)))
+                .until(() -> inDimension(AztecAbyssConstants.ABYSS_LEVEL_KEY)
+                        && com.jrpetty.aztecabyss.engine.EngineArena.isRunning(), 1200)
+                .hold(160).shot("58_published_run");
+        step("published-home [tour ends the run]").act(mc -> server("end-run",
+                        sp -> com.jrpetty.aztecabyss.engine.EngineArena.stop(true)))
+                .until(() -> inDimension(Level.OVERWORLD), 600).hold(40);
         step("end").act(mc -> mc.setScreen(null)).hold(20);
+    }
+
+    /**
+     * A small arena for the Creator steps: a paved yard, a low wall, and the
+     * three markers a map needs to play - somewhere to arrive, somewhere the
+     * horde comes from, and a way out - then the wand's two corners round it.
+     */
+    private static void buildTourArena(ServerPlayer sp) {
+        ServerLevel shop = sp.serverLevel();
+        int x0 = 8;
+        int z0 = 8;
+        int x1 = 24;
+        int z1 = 24;
+        int y = 4;
+        for (int x = x0; x <= x1; x++) {
+            for (int z = z0; z <= z1; z++) {
+                boolean edge = x == x0 || x == x1 || z == z0 || z == z1;
+                shop.setBlock(new BlockPos(x, y, z), (edge
+                        ? net.minecraft.world.level.block.Blocks.CHISELED_STONE_BRICKS
+                        : net.minecraft.world.level.block.Blocks.POLISHED_ANDESITE).defaultBlockState(), 3);
+                if (edge) {
+                    shop.setBlock(new BlockPos(x, y + 1, z),
+                            net.minecraft.world.level.block.Blocks.STONE_BRICK_WALL.defaultBlockState(), 3);
+                }
+            }
+        }
+        for (int[] c : new int[][]{{x0, z0}, {x0, z1}, {x1, z0}, {x1, z1}}) {
+            shop.setBlock(new BlockPos(c[0], y + 2, c[1]),
+                    net.minecraft.world.level.block.Blocks.LANTERN.defaultBlockState(), 3);
+        }
+        markerSign(shop, new BlockPos(16, y + 1, 20), "[spawn]", "");
+        markerSign(shop, new BlockPos(16, y + 1, 11), "[horde]", "area=start");
+        markerSign(shop, new BlockPos(21, y + 1, 21), "[extract]", "");
+        com.jrpetty.aztecabyss.engine.BuildTools.setCorner(sp, new BlockPos(x0, y, z0), true);
+        com.jrpetty.aztecabyss.engine.BuildTools.setCorner(sp, new BlockPos(x1, y + 4, z1), false);
+        look(sp, 16.5, y + 1, z1 + 9.5, 180.0F, 24.0F);
+    }
+
+    private static void markerSign(ServerLevel level, BlockPos pos, String head, String second) {
+        level.setBlock(pos, net.minecraft.world.level.block.Blocks.OAK_SIGN.defaultBlockState(), 3);
+        if (level.getBlockEntity(pos) instanceof net.minecraft.world.level.block.entity.SignBlockEntity be) {
+            be.updateText(t -> t.setMessage(0, net.minecraft.network.chat.Component.literal(head))
+                    .setMessage(1, net.minecraft.network.chat.Component.literal(second)), true);
+        }
     }
 
     // ------------------------------------------------------------------
@@ -590,6 +680,36 @@ public final class ClientTour {
         }
         throw new IllegalStateException("no button containing \"" + label + "\" on "
                 + s.getClass().getSimpleName());
+    }
+
+    /** Types into the n-th text box on the open screen. */
+    private static void type(int index, String value) {
+        Screen s = Minecraft.getInstance().screen;
+        if (s == null) {
+            throw new IllegalStateException("no screen open to type into");
+        }
+        int i = 0;
+        for (GuiEventListener child : s.children()) {
+            if (child instanceof net.minecraft.client.gui.components.EditBox box && i++ == index) {
+                box.setValue(value);
+                return;
+            }
+        }
+        throw new IllegalStateException("no text box " + index + " on " + s.getClass().getSimpleName());
+    }
+
+    /** How many text boxes the open screen has. */
+    private static int textBoxes() {
+        Screen s = Minecraft.getInstance().screen;
+        int n = 0;
+        if (s != null) {
+            for (GuiEventListener child : s.children()) {
+                if (child instanceof net.minecraft.client.gui.components.EditBox) {
+                    n++;
+                }
+            }
+        }
+        return n;
     }
 
     private static void key(int glfwKey) {
