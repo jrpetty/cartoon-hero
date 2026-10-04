@@ -2,6 +2,8 @@ package dev.structint.world;
 
 import dev.structint.Config;
 import dev.structint.StructuralIntegrityMod;
+import dev.structint.core.CellRole;
+import dev.structint.core.LongHashSet;
 import dev.structint.core.PackedPos;
 import dev.structint.core.StructuralEngine;
 import net.minecraft.core.BlockPos;
@@ -13,8 +15,11 @@ import net.minecraft.world.entity.item.FallingBlockEntity;
 import net.minecraft.world.level.block.SoundType;
 import net.minecraft.world.level.block.state.BlockState;
 
+import java.util.ArrayList;
 import java.util.IdentityHashMap;
+import java.util.List;
 import java.util.Map;
+import java.util.PrimitiveIterator;
 
 /**
  * Orchestrates the whole runtime: receives block-edit notifications, schedules local stability
@@ -93,30 +98,118 @@ public final class StructuralManager {
 
     private static void processChanges(ServerLevel level, LevelStructuralState st) {
         int budget = Config.CHANGE_BUDGET_PER_TICK.get();
-        // One engine for the whole change phase: the world is not mutated here (collapses run
-        // afterwards), so its per-pass role/state cache is valid and shared across origins.
-        StructuralEngine engine = newEngine(level);
-        while (budget-- > 0 && st.hasChanges()) {
+        // One grid + engine for the whole change phase: the world is not mutated here (collapses
+        // run afterwards), so its per-pass role/state cache is valid and shared across origins.
+        LevelGridAccess grid = new LevelGridAccess(level);
+        StructuralEngine engine = newEngine(grid);
+        // For the same reason, a cluster's answer cannot change within this phase. A burst of
+        // edits (an explosion, a sweep of snow changes) often queues many origins inside one
+        // structure; once that structure has been solved, every later origin in it is skipped.
+        List<LongHashSet> solved = new ArrayList<>();
+        List<LongHashSet> oversized = new ArrayList<>();
+        long readyAt = level.getGameTime() + Config.COLLAPSE_WARN_DELAY_TICKS.get();
+
+        while (budget > 0 && st.hasChanges()) {
             long origin = st.pollChange();
+            if (alreadyAnswered(grid, origin, solved, oversized)) {
+                continue; // identical result already applied this tick — costs no budget
+            }
+            budget--;
+
             StructuralEngine.Evaluation ev = engine.evaluate(origin);
             if (ev.overBudget) {
                 StructuralIntegrityMod.LOGGER.debug(
                         "structint: structure near {} exceeds maxRegionNodes ({}); treated as stable",
                         PackedPos.toString(origin), Config.MAX_REGION_NODES.get());
+                if (hasSingleSeed(grid, origin)) {
+                    // The flood covered one structure, so that structure itself is oversized
+                    // and any later flood reaching it will trip the budget too. (A flood that
+                    // joined several structures proves nothing about each one alone.)
+                    oversized.add(ev.visited);
+                }
+                continue;
             }
-            long readyAt = level.getGameTime() + Config.COLLAPSE_WARN_DELAY_TICKS.get();
-            for (long pos : ev.unsupported) {
+            if (ev.visited.isEmpty()) {
+                continue; // nothing structural here
+            }
+            solved.add(ev.visited);
+
+            for (PrimitiveIterator.OfLong it = ev.unsupported.longIterator(); it.hasNext(); ) {
+                long pos = it.nextLong();
                 if (st.enqueueCollapse(pos, readyAt)) {
                     // Newly doomed: creak now, fall after the warning window.
                     warn(level, pos);
                 }
             }
             // A block the player has since propped back up: cancel its pending collapse.
-            for (long pos : ev.stable) {
-                st.cancelCollapse(pos);
+            for (PrimitiveIterator.OfLong it = ev.stable.longIterator(); it.hasNext(); ) {
+                st.cancelCollapse(it.nextLong());
             }
         }
     }
+
+    /**
+     * Whether evaluating {@code origin} now would just repeat a cluster already handled this
+     * phase. A flood from {@code origin} covers exactly the clusters containing its structural
+     * seed cells (itself if structural, otherwise its structural neighbours), so:
+     * <ul>
+     *   <li>if any seed lies in a structure already found oversized on its own, the flood
+     *       would trip the same budget and change nothing;</li>
+     *   <li>if every seed lies in a cluster already solved, the solve would reproduce the
+     *       answer already applied.</li>
+     * </ul>
+     */
+    private static boolean alreadyAnswered(LevelGridAccess grid, long origin,
+                                           List<LongHashSet> solved, List<LongHashSet> oversized) {
+        if (solved.isEmpty() && oversized.isEmpty()) {
+            return false;
+        }
+        if (grid.roleAt(origin) == CellRole.STRUCTURAL) {
+            return inAny(oversized, origin) || inAny(solved, origin);
+        }
+        boolean allSolved = true;
+        for (int d = 0; d < 6; d++) {
+            long seed = PackedPos.offset(origin, FACE_X[d], FACE_Y[d], FACE_Z[d]);
+            if (grid.roleAt(seed) != CellRole.STRUCTURAL) {
+                continue;
+            }
+            if (inAny(oversized, seed)) {
+                return true;
+            }
+            if (allSolved && !inAny(solved, seed)) {
+                allSolved = false;
+            }
+        }
+        return allSolved; // also true with no structural seeds: the flood would be empty
+    }
+
+    /** Whether a flood from {@code origin} starts from exactly one structural cell. */
+    private static boolean hasSingleSeed(LevelGridAccess grid, long origin) {
+        if (grid.roleAt(origin) == CellRole.STRUCTURAL) {
+            return true;
+        }
+        int seeds = 0;
+        for (int d = 0; d < 6; d++) {
+            if (grid.roleAt(PackedPos.offset(origin, FACE_X[d], FACE_Y[d], FACE_Z[d]))
+                    == CellRole.STRUCTURAL) {
+                seeds++;
+            }
+        }
+        return seeds == 1;
+    }
+
+    private static boolean inAny(List<LongHashSet> clusters, long pos) {
+        for (int i = 0, n = clusters.size(); i < n; i++) {
+            if (clusters.get(i).contains(pos)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static final int[] FACE_X = {1, -1, 0, 0, 0, 0};
+    private static final int[] FACE_Y = {0, 0, 0, 0, 1, -1};
+    private static final int[] FACE_Z = {0, 0, 1, -1, 0, 0};
 
     private static void processCollapses(ServerLevel level, LevelStructuralState st) {
         if (!Config.ENABLE_COLLAPSE.get()) {
@@ -231,9 +324,9 @@ public final class StructuralManager {
         state(level).enqueueChange(pos.asLong());
     }
 
-    private static StructuralEngine newEngine(ServerLevel level) {
+    private static StructuralEngine newEngine(LevelGridAccess grid) {
         return new StructuralEngine(
-                new LevelGridAccess(level),
+                grid,
                 Config.SUPPORT_CAP.get(),
                 Config.MAX_REGION_NODES.get());
     }

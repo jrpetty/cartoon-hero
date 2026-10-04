@@ -309,9 +309,11 @@ Remaining boundaries (documented, lower-impact, want in-world testing before cha
   it reads as natural terrain (stable). Fine for map-makers; a `/fill` build won't obey the rules.
 - **`onlyPlayerPlaced=false`** is an expert/experimental mode — with every block structural it can
   tear down natural overhangs and cave ceilings. Leave it `true` (the default) for normal play.
-- **Performance.** Work is bounded by `maxRegionNodes` and the per-tick budgets; the solver still
-  uses boxed `long` keys (clusters are capped, so this is minor). A very large connected build can
-  exceed `maxRegionNodes` and is then treated as stable (logged at debug).
+- **Performance.** Work is bounded by `maxRegionNodes` and the per-tick budgets. The solver runs
+  on primitive position tables with a bucket queue (no per-block allocation), the flood gathers
+  the solver's anchor seeds as it goes, and a burst of edits inside one structure is solved once
+  per tick rather than once per edit. A very large connected build can exceed `maxRegionNodes`
+  and is then treated as stable (logged at debug).
 - Weight/load accumulation is intentionally absent — span is the single, predictable knob.
 
 ## 10. Roadmap — candidate features

@@ -1,10 +1,6 @@
 package dev.structint.core;
 
-import java.util.ArrayDeque;
-import java.util.Collections;
-import java.util.Deque;
-import java.util.HashSet;
-import java.util.Set;
+import java.util.PrimitiveIterator;
 
 /**
  * Ties the two halves of the local-check together: bound a region around a change, then
@@ -23,6 +19,10 @@ public final class StructuralEngine {
     private final SupportSolver solver;
     private final int maxRegionNodes;
     private boolean lastFloodOverBudget;
+    /** Anchors bordering the last flooded region, gathered during the flood for the solver. */
+    private LongHashSet lastFloodAnchors = new LongHashSet(0);
+    /** Every structural cell the last flood reached — the partial cluster when it went over budget. */
+    private LongHashSet lastFloodVisited = new LongHashSet(0);
 
     public StructuralEngine(GridAccess grid, int cap, int maxRegionNodes) {
         this.grid = grid;
@@ -37,14 +37,23 @@ public final class StructuralEngine {
 
     /** Result of a full local evaluation: the doomed and the safe blocks of one cluster. */
     public static final class Evaluation {
-        public final Set<Long> unsupported;
-        public final Set<Long> stable;
+        public final LongHashSet unsupported;
+        public final LongHashSet stable;
         public final boolean overBudget;
+        /**
+         * The structural cells this evaluation covered: the whole cluster normally, or the part
+         * of an oversized cluster seen before the budget tripped. Any later origin whose flood
+         * would start inside these cells is guaranteed the same answer while the world is
+         * unchanged, which lets callers skip re-evaluating it.
+         */
+        public final LongHashSet visited;
 
-        Evaluation(Set<Long> unsupported, Set<Long> stable, boolean overBudget) {
+        Evaluation(LongHashSet unsupported, LongHashSet stable, boolean overBudget,
+                   LongHashSet visited) {
             this.unsupported = unsupported;
             this.stable = stable;
             this.overBudget = overBudget;
+            this.visited = visited;
         }
     }
 
@@ -54,18 +63,23 @@ public final class StructuralEngine {
      * cancel any previously-queued collapse a player has since propped back up.
      */
     public Evaluation evaluate(long origin) {
-        Set<Long> region = floodRegion(origin);
+        LongHashSet region = floodRegion(origin);
         if (region.isEmpty()) {
-            return new Evaluation(Collections.emptySet(), Collections.emptySet(), lastFloodOverBudget);
+            return new Evaluation(new LongHashSet(0), new LongHashSet(0), lastFloodOverBudget,
+                    lastFloodVisited);
         }
-        Set<Long> stable = solver.solve(region);
-        Set<Long> unsupported = new HashSet<>();
-        for (long pos : region) {
-            if (!stable.contains(pos)) {
+        LongIntHashMap reach = solver.reaches(region, lastFloodAnchors);
+        LongHashSet stable = new LongHashSet(region.size());
+        LongHashSet unsupported = new LongHashSet();
+        for (PrimitiveIterator.OfLong it = region.longIterator(); it.hasNext(); ) {
+            long pos = it.nextLong();
+            if (reach.get(pos, SupportSolver.UNREACHED) >= 0) {
+                stable.add(pos);
+            } else {
                 unsupported.add(pos);
             }
         }
-        return new Evaluation(unsupported, stable, false);
+        return new Evaluation(unsupported, stable, false, region);
     }
 
     /**
@@ -77,43 +91,55 @@ public final class StructuralEngine {
      * @return packed positions of the structural cluster, capped at {@code maxRegionNodes}.
      *         An empty set means there is nothing structural to worry about here.
      */
-    public Set<Long> floodRegion(long origin) {
+    public LongHashSet floodRegion(long origin) {
         lastFloodOverBudget = false;
-        Set<Long> region = new HashSet<>();
-        Deque<Long> queue = new ArrayDeque<>();
+        LongHashSet region = new LongHashSet(256);
+        LongHashSet anchors = new LongHashSet(64);
+        lastFloodAnchors = anchors;
+        lastFloodVisited = region;
+        LongStack work = new LongStack(256);
 
         // Seed with origin if it is structural, otherwise with its structural neighbours
         // (covers the "block was just broken, check what it was holding up" case).
         if (grid.roleAt(origin) == CellRole.STRUCTURAL) {
-            queue.add(origin);
             region.add(origin);
+            work.push(origin);
         } else {
-            for (long n : sixNeighbours(origin)) {
+            for (int d = 0; d < 6; d++) {
+                long n = PackedPos.offset(origin, SupportSolver.DX[d], SupportSolver.DY[d], SupportSolver.DZ[d]);
                 if (grid.roleAt(n) == CellRole.STRUCTURAL && region.add(n)) {
-                    queue.add(n);
+                    work.push(n);
                 }
             }
         }
 
-        while (!queue.isEmpty()) {
-            long pos = queue.poll();
-            for (long n : sixNeighbours(pos)) {
+        // Visiting order does not matter: the result is the whole connected cluster, and the
+        // budget trips exactly when that cluster is larger than maxRegionNodes.
+        while (!work.isEmpty()) {
+            long pos = work.pop();
+            for (int d = 0; d < 6; d++) {
+                long n = PackedPos.offset(pos, SupportSolver.DX[d], SupportSolver.DY[d], SupportSolver.DZ[d]);
                 if (region.contains(n)) {
                     continue;
                 }
-                if (grid.roleAt(n) == CellRole.STRUCTURAL) {
-                    if (region.size() >= maxRegionNodes) {
-                        // Budget hit: this structure is larger than we will analyse in one
-                        // pass. Bail out and report "nothing unstable" rather than risk a
-                        // false mass-collapse from an artificially truncated region. The
-                        // caller treats an over-budget flood as a no-op (fail-safe) and can
-                        // surface it via lastFloodOverBudget().
-                        lastFloodOverBudget = true;
-                        return Collections.emptySet();
+                CellRole role = grid.roleAt(n);
+                if (role != CellRole.STRUCTURAL) {
+                    if (role == CellRole.ANCHOR) {
+                        anchors.add(n); // a support source for the solve, found for free
                     }
-                    region.add(n);
-                    queue.add(n);
+                    continue;
                 }
+                if (region.size() >= maxRegionNodes) {
+                    // Budget hit: this structure is larger than we will analyse in one
+                    // pass. Bail out and report "nothing unstable" rather than risk a
+                    // false mass-collapse from an artificially truncated region. The
+                    // caller treats an over-budget flood as a no-op (fail-safe) and can
+                    // surface it via lastFloodOverBudget().
+                    lastFloodOverBudget = true;
+                    return new LongHashSet(0);
+                }
+                region.add(n);
+                work.push(n);
             }
         }
         return region;
@@ -124,19 +150,8 @@ public final class StructuralEngine {
      * now unsupported and should collapse. The result is always a subset of a single local
      * cluster &mdash; never a world-wide sweep.
      */
-    public Set<Long> findUnsupported(long origin) {
-        Set<Long> region = floodRegion(origin);
-        if (region.isEmpty()) {
-            return Collections.emptySet();
-        }
-        Set<Long> stable = solver.solve(region);
-        Set<Long> unsupported = new HashSet<>();
-        for (long pos : region) {
-            if (!stable.contains(pos)) {
-                unsupported.add(pos);
-            }
-        }
-        return unsupported;
+    public LongHashSet findUnsupported(long origin) {
+        return evaluate(origin).unsupported;
     }
 
     /** Whether a single structural block currently has a valid load path. */
@@ -144,21 +159,10 @@ public final class StructuralEngine {
         if (grid.roleAt(pos) != CellRole.STRUCTURAL) {
             return true; // anchors and empty cells are never "unsupported"
         }
-        Set<Long> region = floodRegion(pos);
+        LongHashSet region = floodRegion(pos);
         if (region.isEmpty()) {
             return true; // over-budget structures are treated as stable
         }
-        return solver.solve(region).contains(pos);
-    }
-
-    private static long[] sixNeighbours(long pos) {
-        return new long[]{
-                PackedPos.offset(pos, 1, 0, 0),
-                PackedPos.offset(pos, -1, 0, 0),
-                PackedPos.offset(pos, 0, 0, 1),
-                PackedPos.offset(pos, 0, 0, -1),
-                PackedPos.offset(pos, 0, 1, 0),
-                PackedPos.offset(pos, 0, -1, 0),
-        };
+        return solver.reaches(region, lastFloodAnchors).get(pos, SupportSolver.UNREACHED) >= 0;
     }
 }

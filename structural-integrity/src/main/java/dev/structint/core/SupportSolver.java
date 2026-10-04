@@ -1,9 +1,6 @@
 package dev.structint.core;
 
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.Map;
-import java.util.PriorityQueue;
+import java.util.PrimitiveIterator;
 import java.util.Set;
 
 /**
@@ -56,7 +53,9 @@ import java.util.Set;
  *
  * <p>Implementation is a max-reach Dijkstra: anchors seed the priority queue at {@code cap},
  * and we always finalise the highest-reach frontier node first. Because both edge types are
- * non-increasing in the source reach, the first time a node is popped its reach is final.
+ * non-increasing in the source reach, the first time a node is popped its reach is final. The
+ * queue is a bucket per reach value and positions live in primitive tables, so a solve does no
+ * per-node allocation.
  */
 public final class SupportSolver {
 
@@ -86,87 +85,130 @@ public final class SupportSolver {
      *         {@code region} but absent from the result is unsupported and should collapse.
      */
     public Set<Long> solve(Set<Long> region) {
-        // best[p] = highest proven remaining reach at p. Absent => not yet reached.
-        Map<Long, Integer> best = new HashMap<>(region.size() * 2);
-        PriorityQueue<long[]> frontier =
-                new PriorityQueue<>((a, b) -> Integer.compare((int) b[1], (int) a[1]));
-
-        // Seed: every anchor face-adjacent to a region cell is an infinite-reach source.
-        for (long pos : region) {
-            for (long n : neighbours(pos)) {
-                if (best.containsKey(n)) {
-                    continue;
-                }
-                if (grid.roleAt(n) == CellRole.ANCHOR) {
-                    best.put(n, cap);
-                    frontier.add(new long[]{n, cap});
-                }
-            }
-        }
-
-        // Max-reach Dijkstra.
-        while (!frontier.isEmpty()) {
-            long[] top = frontier.poll();
-            long pos = top[0];
-            int reach = (int) top[1];
-
-            Integer known = best.get(pos);
-            if (known == null || reach < known) {
-                continue; // stale queue entry, already finalised at a higher reach
-            }
-
-            // Vertical edge: the block resting directly on top of this one INHERITS this
-            // block's remaining reach (no reset). Ground pillars carry CAP upward; a cantilever
-            // tip carries 0, so stepping up off it grants no fresh span.
-            long up = PackedPos.offset(pos, 0, 1, 0);
-            if (grid.roleAt(up) == CellRole.STRUCTURAL) {
-                relax(up, reach, best, frontier);
-            }
-
-            // Horizontal edges: cantilever outward, paying one block of span per step.
-            // candidate = min(reach, neighbour span) - 1, so span S reaches exactly S blocks.
-            if (reach > 0) {
-                for (int[] d : HORIZONTAL) {
-                    long h = PackedPos.offset(pos, d[0], 0, d[1]);
-                    if (grid.roleAt(h) == CellRole.STRUCTURAL) {
-                        int candidate = Math.min(reach, grid.maxSpanAt(h)) - 1;
-                        if (candidate >= 0) {
-                            relax(h, candidate, best, frontier);
-                        }
-                    }
-                }
-            }
-        }
-
-        // Anything in the region that the support flood reached is stable.
-        Set<Long> stable = new HashSet<>();
-        for (long pos : region) {
-            Integer r = best.get(pos);
-            if (r != null && r >= 0) {
+        LongHashSet cells = asLongSet(region);
+        LongIntHashMap reach = reaches(cells);
+        LongHashSet stable = new LongHashSet(cells.size());
+        for (PrimitiveIterator.OfLong it = cells.longIterator(); it.hasNext(); ) {
+            long pos = it.nextLong();
+            if (reach.get(pos, UNREACHED) >= 0) {
                 stable.add(pos);
             }
         }
         return stable;
     }
 
-    private void relax(long pos, int candidate, Map<Long, Integer> best, PriorityQueue<long[]> frontier) {
-        Integer current = best.get(pos);
-        if (current == null || candidate > current) {
-            best.put(pos, candidate);
-            frontier.add(new long[]{pos, candidate});
+    /** Sentinel for "no load path reached this position". Real reaches are always {@code >= 0}. */
+    static final int UNREACHED = -1;
+
+    /**
+     * Runs the max-reach search over {@code region} and returns the best proven reach of every
+     * position it reached. A region cell is stable exactly when it has an entry here.
+     *
+     * <p>Reach is a small bounded integer ({@code 0..cap}) and every edge is non-increasing, so
+     * the priority queue is a bucket per reach value walked from {@code cap} down: pushes and
+     * pops are O(1), nothing is allocated per entry, and the visiting order — highest reach
+     * first — is exactly the Dijkstra order the correctness argument above relies on.
+     */
+    LongIntHashMap reaches(LongHashSet region) {
+        return reaches(region, adjacentAnchors(region));
+    }
+
+    /**
+     * As {@link #reaches(LongHashSet)}, with the bordering anchors already known — the flood
+     * inspects every neighbour of every region cell anyway, so it collects them for free.
+     */
+    LongIntHashMap reaches(LongHashSet region, LongHashSet anchors) {
+        LongIntHashMap best = new LongIntHashMap(region.size() + anchors.size());
+        LongStack[] buckets = new LongStack[cap + 1];
+
+        // Seed: every anchor face-adjacent to the region is an infinite-reach source.
+        for (PrimitiveIterator.OfLong it = anchors.longIterator(); it.hasNext(); ) {
+            long anchor = it.nextLong();
+            best.put(anchor, cap);
+            push(buckets, cap, anchor);
+        }
+
+        // Max-reach Dijkstra over the buckets, highest reach first. Edges never raise reach,
+        // so once a bucket is drained nothing can be pushed back into it or above it.
+        for (int reach = cap; reach >= 0; reach--) {
+            LongStack bucket = buckets[reach];
+            if (bucket == null) {
+                continue;
+            }
+            while (!bucket.isEmpty()) {
+                long pos = bucket.pop();
+                if (best.get(pos, UNREACHED) > reach) {
+                    continue; // stale entry: already finalised at a higher reach
+                }
+
+                // Vertical edge: the block resting directly on top of this one INHERITS this
+                // block's remaining reach (no reset). Ground pillars carry CAP upward; a
+                // cantilever tip carries 0, so stepping up off it grants no fresh span.
+                long up = PackedPos.offset(pos, 0, 1, 0);
+                if (grid.roleAt(up) == CellRole.STRUCTURAL) {
+                    relax(up, reach, best, buckets);
+                }
+
+                // Horizontal edges: cantilever outward, paying one block of span per step.
+                // candidate = min(reach, neighbour span) - 1, so span S reaches exactly S blocks.
+                if (reach > 0) {
+                    for (int d = 0; d < 4; d++) {
+                        long h = PackedPos.offset(pos, DX[d], 0, DZ[d]);
+                        if (grid.roleAt(h) == CellRole.STRUCTURAL) {
+                            int candidate = Math.min(reach, grid.maxSpanAt(h)) - 1;
+                            if (candidate >= 0) {
+                                relax(h, candidate, best, buckets);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        return best;
+    }
+
+    private static void relax(long pos, int candidate, LongIntHashMap best, LongStack[] buckets) {
+        if (best.raise(pos, candidate)) {
+            push(buckets, candidate, pos);
         }
     }
 
-    private static final int[][] HORIZONTAL = {{1, 0}, {-1, 0}, {0, 1}, {0, -1}};
-
-    private static long[] neighbours(long pos) {
-        return new long[]{
-                PackedPos.offset(pos, 1, 0, 0),
-                PackedPos.offset(pos, -1, 0, 0),
-                PackedPos.offset(pos, 0, 0, 1),
-                PackedPos.offset(pos, 0, 0, -1),
-                PackedPos.offset(pos, 0, 1, 0),
-                PackedPos.offset(pos, 0, -1, 0),
-        };
+    /** The anchors face-adjacent to any cell of {@code region}: the search's support sources. */
+    private LongHashSet adjacentAnchors(LongHashSet region) {
+        LongHashSet anchors = new LongHashSet();
+        for (PrimitiveIterator.OfLong it = region.longIterator(); it.hasNext(); ) {
+            long pos = it.nextLong();
+            for (int d = 0; d < 6; d++) {
+                long n = PackedPos.offset(pos, DX[d], DY[d], DZ[d]);
+                if (!anchors.contains(n) && grid.roleAt(n) == CellRole.ANCHOR) {
+                    anchors.add(n);
+                }
+            }
+        }
+        return anchors;
     }
+
+    private static void push(LongStack[] buckets, int reach, long pos) {
+        LongStack bucket = buckets[reach];
+        if (bucket == null) {
+            bucket = buckets[reach] = new LongStack(64);
+        }
+        bucket.push(pos);
+    }
+
+    static LongHashSet asLongSet(Set<Long> region) {
+        if (region instanceof LongHashSet longs) {
+            return longs;
+        }
+        LongHashSet copy = new LongHashSet(region.size());
+        for (long pos : region) {
+            copy.add(pos);
+        }
+        return copy;
+    }
+
+    /** Face offsets: the four horizontals first (the solver uses only those), then up, down. */
+    static final int[] DX = {1, -1, 0, 0, 0, 0};
+    static final int[] DY = {0, 0, 0, 0, 1, -1};
+    static final int[] DZ = {0, 0, 1, -1, 0, 0};
 }
