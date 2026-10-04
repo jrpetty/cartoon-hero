@@ -183,16 +183,4 @@ public class CounterScreen extends GadgetScreen {
     private static String trim(String s, int max) {
         return s.length() > max ? s.substring(0, max - 1) + "…" : s;
     }
-
-    /** Shortens a line to a pixel width rather than a character count. */
-    private String fit(String s, int width) {
-        if (font.width(s) <= width) {
-            return s;
-        }
-        String out = s;
-        while (!out.isEmpty() && font.width(out + "…") > width) {
-            out = out.substring(0, out.length() - 1);
-        }
-        return out + "…";
-    }
 }

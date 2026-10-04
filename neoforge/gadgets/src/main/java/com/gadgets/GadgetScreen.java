@@ -78,7 +78,25 @@ public abstract class GadgetScreen extends Screen {
         rivet(gfx, left + panelW - 6, top + 4);
         rivet(gfx, left + 4, top + panelH - 6);
         rivet(gfx, left + panelW - 6, top + panelH - 6);
-        gfx.drawCenteredString(font, title, left + panelW / 2, top + 3, AMBER);
+        gfx.drawCenteredString(font, headerTitle(), left + panelW / 2, top + 3, AMBER);
+    }
+
+    /** What the header plate says. A screen whose title can change while it is
+     *  open — a hub being renamed — overrides this rather than the title. */
+    protected Component headerTitle() {
+        return title;
+    }
+
+    /** Shortens text to a pixel width with an ellipsis, rather than a character count. */
+    protected String fit(String s, int width) {
+        if (font.width(s) <= width) {
+            return s;
+        }
+        String out = s;
+        while (!out.isEmpty() && font.width(out + "…") > width) {
+            out = out.substring(0, out.length() - 1);
+        }
+        return out + "…";
     }
 
     /** A corner screw: two lit pixels and one in shadow. */

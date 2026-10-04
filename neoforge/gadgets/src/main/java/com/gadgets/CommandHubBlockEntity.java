@@ -38,6 +38,10 @@ import org.jetbrains.annotations.Nullable;
  */
 public class CommandHubBlockEntity extends BlockEntity {
     public static final int MAX_NODES = 32;
+    /** History window per node, and how many refreshes (seconds) between points:
+     *  24 points, one every 15 s — the last six minutes. */
+    public static final int HIST = 24;
+    public static final int SAMPLE_EVERY = 15;
     private static final int INTERVAL = 20;
 
     public static final int TYPE_COUNTER = 0;
@@ -70,6 +74,22 @@ public class CommandHubBlockEntity extends BlockEntity {
         public long d = 0; // counter: stalled    · monitor: types  · gauge: percent
         /** Alarm state at the last check, so the log only records the edges. */
         public boolean wasAlarmed = false;
+        /**
+         * Recent readings, oldest first, one every {@link #SAMPLE_EVERY} refreshes.
+         * A reading says what is true now; the history says which way it is
+         * going — which is the difference between "75%" and "75% and emptying".
+         */
+        public int[] hist = new int[0];
+
+        /** Append a reading, dropping the oldest once the window is full. */
+        void push(long value) {
+            int v = (int) Math.max(Integer.MIN_VALUE, Math.min(Integer.MAX_VALUE, value));
+            int keep = Math.min(hist.length, HIST - 1);
+            int[] next = new int[keep + 1];
+            System.arraycopy(hist, hist.length - keep, next, 0, keep);
+            next[keep] = v;
+            hist = next;
+        }
 
         /** True when this node is in a state the hub's alarm output should count. */
         public boolean alarmed() {
@@ -88,6 +108,7 @@ public class CommandHubBlockEntity extends BlockEntity {
             n.putLong("C", c);
             n.putLong("D2", d);
             n.putBoolean("W", wasAlarmed);
+            n.putIntArray("H", hist);
             return n;
         }
 
@@ -103,6 +124,8 @@ public class CommandHubBlockEntity extends BlockEntity {
             node.c = n.getLong("C");
             node.d = n.getLong("D2");
             node.wasAlarmed = n.getBoolean("W");
+            int[] h = n.getIntArray("H");
+            node.hist = h.length > HIST ? java.util.Arrays.copyOfRange(h, h.length - HIST, h.length) : h;
             return node;
         }
     }
@@ -152,6 +175,12 @@ public class CommandHubBlockEntity extends BlockEntity {
 
     /** This hub's own eight-digit code, minted once and typed into a tablet. */
     private String code = "";
+    /** What the player calls this hub; empty means "use its coordinates". */
+    private String customName = "";
+    /** Refreshes since the last history sample, and samples taken in total —
+     *  the second feeds the fingerprint so a new point reaches the screen. */
+    private int sampleClock;
+    private int samplesTaken;
     private final List<Node> nodes = new ArrayList<>();
     /** Newest first, so the interesting end is the one you read. */
     private final List<Event> events = new ArrayList<>();
@@ -294,6 +323,18 @@ public class CommandHubBlockEntity extends BlockEntity {
                     }
                 }
             }
+            // One point per node every SAMPLE_EVERY refreshes. Offline nodes get
+            // none: a gap is honest, a repeated stale value would draw a flat
+            // line that looks like a reading.
+            if (++be.sampleClock >= SAMPLE_EVERY) {
+                be.sampleClock = 0;
+                be.samplesTaken++;
+                for (Node n : be.nodes) {
+                    if (n.online) {
+                        n.push(n.a);
+                    }
+                }
+            }
         }
 
         // Reconciled even with an empty board: unlinking the last alarmed gadget
@@ -352,8 +393,21 @@ public class CommandHubBlockEntity extends BlockEntity {
         return code;
     }
 
+    public String getCustomName() {
+        return customName;
+    }
+
+    public void setCustomName(String name) {
+        customName = name == null ? "" : name.strip();
+        setChanged();
+        sync();
+    }
+
     /** What a tablet calls this hub: its position, since a hub has no name field. */
-    private String hubName() {
+    public String hubName() {
+        if (!customName.isBlank()) {
+            return customName;
+        }
         return "Hub " + worldPosition.getX() + ", " + worldPosition.getY() + ", " + worldPosition.getZ();
     }
 
@@ -379,6 +433,8 @@ public class CommandHubBlockEntity extends BlockEntity {
             h = h * 31 + n.d;
         }
         h = h * 31 + events.size();
+        h = h * 31 + samplesTaken;
+        h = h * 31 + customName.hashCode();
         if (!events.isEmpty()) {
             h = h * 31 + events.get(0).dayTime();
         }
@@ -466,6 +522,7 @@ public class CommandHubBlockEntity extends BlockEntity {
     protected void saveAdditional(CompoundTag tag, HolderLookup.Provider registries) {
         super.saveAdditional(tag, registries);
         tag.putString("Code", code);
+        tag.putString("Name", customName);
         tag.put("Nodes", buildList());
         ListTag log = new ListTag();
         for (Event e : events) {
@@ -478,6 +535,7 @@ public class CommandHubBlockEntity extends BlockEntity {
     protected void loadAdditional(CompoundTag tag, HolderLookup.Provider registries) {
         super.loadAdditional(tag, registries);
         code = tag.getString("Code");
+        customName = tag.getString("Name");
         nodes.clear();
         ListTag list = tag.getList("Nodes", Tag.TAG_COMPOUND);
         for (int i = 0; i < Math.min(list.size(), MAX_NODES); i++) {

@@ -38,6 +38,10 @@ public class HubScreen extends GadgetScreen {
     private static final int TABLE_BG = 0xFF161A20;
     private static final int ROW_ALT = 0xFF1B2028;
     private static final int CLOSE_W = 16;
+    /** Column origins: reading, then the six-minute sparkline before the ✕. */
+    private static final int READ_X = 140;
+    private static final int SPARK_X = 236;
+    private static final int SPARK_W = 54;
     private static final String[] SORT_LABELS = {"Link order", "Alerts first", "A–Z"};
 
     private final CommandHubBlockEntity be;
@@ -55,6 +59,10 @@ public class HubScreen extends GadgetScreen {
 
     /** Ticks left on the "Copied" flash after clicking the hub's code. */
     private int copied = 0;
+
+    /** The header doubles as the hub's name: click it, type, Enter. */
+    private EditBox nameBox;
+    private boolean renaming = false;
 
     private EditBox filterBox;
     private Button sortButton;
@@ -156,7 +164,7 @@ public class HubScreen extends GadgetScreen {
 
         // Every widget here is independent of the board's contents, so none of
         // them go stale when it re-syncs. Row controls are hit-tested instead.
-        filterBox = new EditBox(font, left + 12, top + CONTROLS_TOP, 150, 14, Component.literal("Filter"));
+        filterBox = new EditBox(font, left + 12, top + CONTROLS_TOP, 140, 14, Component.literal("Filter"));
         filterBox.setMaxLength(32);
         filterBox.setHint(Component.literal("filter by name…"));
         filterBox.setValue(filter);
@@ -169,17 +177,26 @@ public class HubScreen extends GadgetScreen {
         sortButton = addRenderableWidget(PanelButton.of(Component.literal("Sort: " + SORT_LABELS[sortMode]), b -> {
             sortMode = (sortMode + 1) % SORT_LABELS.length;
             page = 0;
-        }, left + panelW - 118, top + CONTROLS_TOP, 106, 14));
+        }, left + panelW - 114, top + CONTROLS_TOP, 102, 14));
 
         viewButton = addRenderableWidget(PanelButton.of(Component.literal("Log"), b -> {
             showLog = !showLog;
             armed = false;
-        }, left + 166, top + CONTROLS_TOP, 44, 14));
+        }, left + 158, top + CONTROLS_TOP, 42, 14));
 
         prevButton = addRenderableWidget(PanelButton.of(Component.literal("◀"), b ->
                 setPage(Math.max(0, page() - 1)), left + 12, top + panelH - 24, 20, 14));
         nextButton = addRenderableWidget(PanelButton.of(Component.literal("▶"), b ->
                 setPage(Math.min(maxPage(), page() + 1)), left + 36, top + panelH - 24, 20, 14));
+
+        if (!readOnly()) {
+            nameBox = new EditBox(font, left + panelW / 2 - 65, top + 1, 130, 13, Component.literal("Hub name"));
+            nameBox.setMaxLength(24);
+            nameBox.setHint(Component.literal("name this hub"));
+            nameBox.setValue(be.getCustomName());
+            nameBox.visible = renaming;
+            addRenderableWidget(nameBox);
+        }
 
         // Doubles as the log's clear button, since the two views never share a
         // moment: whichever is showing is the one this acts on.
@@ -207,8 +224,73 @@ public class HubScreen extends GadgetScreen {
         return mouseX >= x && mouseX < x + CLOSE_W && mouseY >= y && mouseY < y + CLOSE_W;
     }
 
+    /** The header text's box — clicking it renames the hub. */
+    private boolean overTitle(double mouseX, double mouseY) {
+        if (readOnly() || renaming) {
+            return false;
+        }
+        int w = font.width(headerTitle()) + 12;
+        int x0 = left + (panelW - w) / 2;
+        return mouseX >= x0 - 3 && mouseX < x0 + w + 3 && mouseY >= top + 1 && mouseY < top + 14;
+    }
+
+    private void startRename() {
+        renaming = true;
+        nameBox.setValue(be.getCustomName());
+        nameBox.visible = true;
+        setFocused(nameBox);
+        nameBox.setFocused(true);
+    }
+
+    private void finishRename(boolean keep) {
+        if (keep && !nameBox.getValue().strip().equals(be.getCustomName())) {
+            sendText(be.getBlockPos(), "set_name", nameBox.getValue().strip());
+        }
+        renaming = false;
+        nameBox.visible = false;
+        nameBox.setFocused(false);
+        setFocused(null);
+    }
+
+    @Override
+    public boolean keyPressed(int key, int scan, int modifiers) {
+        if (renaming) {
+            if (key == 257 || key == 335) {
+                finishRename(true);
+                return true;
+            }
+            if (key == 256) {
+                finishRename(false); // Escape backs out of the rename, not the screen
+                return true;
+            }
+        }
+        return super.keyPressed(key, scan, modifiers);
+    }
+
+    @Override
+    protected Component headerTitle() {
+        if (renaming) {
+            return Component.empty();
+        }
+        if (readOnly()) {
+            return Component.literal(fit("Remote — " + provenance, panelW - 24));
+        }
+        // The name shares the header with the code on the right, so it gets
+        // the room either side of centre that the code leaves free.
+        int codeW = LinkCode.isCode(be.getCode()) ? font.width(codeText()) + 14 : 0;
+        String name = be.getCustomName().isBlank() ? "Command Hub" : be.getCustomName();
+        return Component.literal(fit(name, panelW - 2 * codeW - 24));
+    }
+
     @Override
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
+        if (renaming && button == 0 && !nameBox.isMouseOver(mouseX, mouseY)) {
+            finishRename(true); // clicking away keeps what was typed
+        }
+        if (button == 0 && overTitle(mouseX, mouseY)) {
+            startRename();
+            return true;
+        }
         if (button == 0 && overCode(mouseX, mouseY) && minecraft != null) {
             // Eight digits read off a screen and typed into a tablet is exactly
             // the sort of thing that gets one digit wrong.
@@ -283,7 +365,20 @@ public class HubScreen extends GadgetScreen {
     @Override
     public void render(GuiGraphics gfx, int mouseX, int mouseY, float delta) {
         renderPanel(gfx, mouseX, mouseY, delta);
+        if (overTitle(mouseX, mouseY)) {
+            // A pencil and a lit underline: the header is a control, say so.
+            int w = font.width(headerTitle());
+            int x0 = left + (panelW - w) / 2;
+            gfx.fill(x0, top + 12, x0 + w, top + 13, AMBER);
+            gfx.drawString(font, "✎", x0 + w + 3, top + 3, AMBER, false);
+        }
         renderCode(gfx, mouseX, mouseY);
+        if (overTitle(mouseX, mouseY)) {
+            gfx.renderComponentTooltip(font, List.<Component>of(
+                    Component.literal("Click to rename this hub").withStyle(ChatFormatting.GOLD),
+                    Component.literal("Tablets show the name too").withStyle(ChatFormatting.GRAY)
+            ), mouseX, mouseY);
+        }
     }
 
     private void renderPanel(GuiGraphics gfx, int mouseX, int mouseY, float delta) {
@@ -333,7 +428,8 @@ public class HubScreen extends GadgetScreen {
         }
 
         gfx.drawString(font, "GADGET", x, top + HEADER_TOP, DIM, false);
-        gfx.drawString(font, "READING", left + 150, top + HEADER_TOP, DIM, false);
+        gfx.drawString(font, "READING", left + READ_X, top + HEADER_TOP, DIM, false);
+        gfx.drawString(font, "LAST 6 MIN", left + SPARK_X, top + HEADER_TOP, DIM, false);
 
         if (rows.isEmpty()) {
             gfx.drawString(font, "No gadget matches \"" + filter.trim() + "\".", x, top + ROW_TOP, GRAY, false);
@@ -354,30 +450,66 @@ public class HubScreen extends GadgetScreen {
             String name = n.label.isBlank() ? "(unnamed " + kind + ")" : n.label;
             boolean alarmed = n.alarmed();
 
+            // Severity stripe down the left edge, and a lit band under the cursor:
+            // what needs you is findable by shape before it is read.
+            if (alarmed || !n.online) {
+                gfx.fill(left + 8, y - 4, left + 10, y + 18, alarmed ? RED : 0xFF4A505C);
+            }
+            if (mouseY >= y - 4 && mouseY < y + 18 && mouseX >= left + 8 && mouseX < left + panelW - 8) {
+                gfx.fill(left + 10, y - 4, left + panelW - 8, y + 18, 0x14FFC864);
+            }
+
             int dot = !n.online ? GRAY : alarmed ? RED : GREEN;
             gfx.drawString(font, "●", x, y, dot, false);
-            gfx.drawString(font, trim(name, 20), x + 12, y, n.online ? AMBER : GRAY, false);
-            gfx.drawString(font, kind + " · " + p.getX() + "," + p.getY() + "," + p.getZ(),
+            gfx.drawString(font, fit(name, READ_X - 28), x + 12, y, n.online ? AMBER : GRAY, false);
+            // Spaced, because "-8,276,564" reads as one eight-digit number.
+            gfx.drawString(font, fit(kind + " · " + p.getX() + ", " + p.getY() + ", " + p.getZ(), READ_X - 28),
                     x + 12, y + 9, GRAY, false);
 
+            int rx = left + READ_X;
+            int room = SPARK_X - READ_X - 6;
             if (!n.online) {
-                gfx.drawString(font, "offline (unloaded)", left + 150, y, GRAY, false);
+                gfx.drawString(font, "offline", rx, y, GRAY, false);
+                gfx.drawString(font, "chunk unloaded", rx, y + 9, 0xFF5C6472, false);
             } else if (n.type == CommandHubBlockEntity.TYPE_COUNTER) {
-                gfx.drawString(font, ItemCounterBlockEntity.compact(n.a) + "/m", left + 150, y, alarmed ? RED : AMBER, false);
-                gfx.drawString(font, alarmed ? "STALLED — no items" : ItemCounterBlockEntity.compact(n.b)
-                                + "/h · " + ItemCounterBlockEntity.compact(n.c) + " tot", left + 150, y + 9,
-                        alarmed ? RED : GRAY, false);
+                String rate = ItemCounterBlockEntity.compact(n.a) + "/m";
+                gfx.drawString(font, rate, rx, y, alarmed ? RED : AMBER, false);
+                int change = Trend.changePercent(n.hist);
+                if (!alarmed && Math.abs(change) >= 20) {
+                    // Only a real swing earns an arrow; jitter is not news.
+                    gfx.drawString(font, (change > 0 ? "▲ +" : "▼ ") + change + "%",
+                            rx + font.width(rate) + 5, y, change > 0 ? GREEN : DIM, false);
+                }
+                gfx.drawString(font, fit(alarmed ? "STALLED — no items" : ItemCounterBlockEntity.compact(n.b)
+                                + "/h · " + ItemCounterBlockEntity.compact(n.c) + " tot", room),
+                        rx, y + 9, alarmed ? RED : GRAY, false);
             } else if (n.type == CommandHubBlockEntity.TYPE_MONITOR) {
-                gfx.drawString(font, ItemCounterBlockEntity.fmt(n.a), left + 150, y, alarmed ? RED : GREEN, false);
-                gfx.drawString(font, alarmed ? "LOW  < " + n.b : n.d + " types",
-                        left + 150, y + 9, alarmed ? RED : GRAY, false);
+                gfx.drawString(font, fit(ItemCounterBlockEntity.fmt(n.a), room), rx, y, alarmed ? RED : GREEN, false);
+                String eta = n.a > n.b ? Trend.etaTo(n.hist, n.b) : "";
+                String detail = alarmed ? "LOW  < " + n.b
+                        : !eta.isEmpty() ? "low in " + eta
+                        : n.d + " types";
+                gfx.drawString(font, fit(detail, room), rx, y + 9,
+                        alarmed ? RED : !eta.isEmpty() ? DIM : GRAY, false);
             } else {
-                // Fluid and energy both read as a fill percentage.
-                gfx.drawString(font, n.d + "%", left + 150, y, alarmed ? RED : GREEN, false);
-                gfx.drawString(font, ItemCounterBlockEntity.compact(n.a) + " / "
-                                + ItemCounterBlockEntity.compact(n.b),
-                        left + 150, y + 9, alarmed ? RED : GRAY, false);
+                // Fluid reads as a fill percentage, and — given a few points of
+                // history — how long until it is full or dry.
+                gfx.drawString(font, n.d + "%", rx, y, alarmed ? RED : GREEN, false);
+                String toEmpty = Trend.etaTo(n.hist, 0);
+                String toFull = Trend.etaTo(n.hist, n.b);
+                String detail = !toEmpty.isEmpty() ? "dry in " + toEmpty
+                        : !toFull.isEmpty() ? "full in " + toFull
+                        : ItemCounterBlockEntity.compact(n.a) + " / " + ItemCounterBlockEntity.compact(n.b);
+                gfx.drawString(font, fit(detail, room), rx, y + 9,
+                        alarmed ? RED : !toEmpty.isEmpty() ? DIM : GRAY, false);
             }
+
+            int sparkColour = !n.online ? GRAY : alarmed ? RED
+                    : n.type == CommandHubBlockEntity.TYPE_COUNTER ? AMBER : GREEN;
+            long floor = 0;
+            long ceiling = n.type == CommandHubBlockEntity.TYPE_FLUID ? n.b : -1;
+            long mark = n.type == CommandHubBlockEntity.TYPE_MONITOR ? n.b : -1;
+            Spark.draw(gfx, left + SPARK_X, y - 2, SPARK_W, 17, n.hist, floor, ceiling, mark, sparkColour);
 
             // Drawn where mouseClicked hit-tests, from the same row list.
             if (readOnly()) {

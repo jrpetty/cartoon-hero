@@ -129,6 +129,8 @@ public record GadgetConfigPayload(BlockPos pos, String key, int value, String te
                     gauge.setCustomName(name);
                 } else if (be instanceof TransferNode node) {
                     node.setCustomName(name);
+                } else if (be instanceof CommandHubBlockEntity hub) {
+                    hub.setCustomName(name);
                 }
             }
             case "hub_clear" -> {

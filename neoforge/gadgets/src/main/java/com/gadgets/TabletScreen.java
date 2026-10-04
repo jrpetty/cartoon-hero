@@ -49,13 +49,15 @@ public class TabletScreen extends GadgetScreen {
     // --- the last report, read once per reply rather than once per frame ---
 
     /** One gadget worth flagging, and what is wrong with it. */
-    private record Alert(String label, String issue) {
+    private record Alert(String label, String issue, boolean warning) {
     }
 
     private CompoundTag summarised;
     private int linked;
     private long rate;
     private final List<Alert> alerts = new ArrayList<>();
+    /** Not wrong yet, but heading there inside half an hour — forecast from history. */
+    private final List<Alert> warnings = new ArrayList<>();
 
     public TabletScreen() {
         super(Component.literal("Base Tablet"), W, BUTTON_Y + 30);
@@ -162,6 +164,7 @@ public class TabletScreen extends GadgetScreen {
         }
         summarised = tag;
         alerts.clear();
+        warnings.clear();
         rate = 0;
         var list = tag.getList("Nodes", 10);
         linked = list.size();
@@ -170,17 +173,27 @@ public class TabletScreen extends GadgetScreen {
             if (n.type == CommandHubBlockEntity.TYPE_COUNTER && n.online) {
                 rate += n.a;
             }
+            String kind = CommandHubBlockEntity.kindOf(n.type);
+            String label = n.label.isBlank() ? "(unnamed " + kind + ")" : n.label;
             if (!n.alarmed()) {
+                // The tablet's best trick: tell you before the alarm does, while
+                // there is still time to fix it from wherever you are.
+                if (n.online && n.type != CommandHubBlockEntity.TYPE_COUNTER) {
+                    long target = n.type == CommandHubBlockEntity.TYPE_MONITOR ? n.b : 0;
+                    double seconds = Trend.secondsTo(n.hist, target);
+                    if (seconds > 0 && seconds <= 30 * 60) {
+                        warnings.add(new Alert(label, "low in " + Trend.duration(seconds), true));
+                    }
+                }
                 continue;
             }
-            String kind = CommandHubBlockEntity.kindOf(n.type);
             String issue = switch (n.type) {
                 case CommandHubBlockEntity.TYPE_COUNTER -> "STALLED";
                 case CommandHubBlockEntity.TYPE_MONITOR -> "LOW · " + ItemCounterBlockEntity.compact(n.a)
                         + " < " + ItemCounterBlockEntity.compact(n.b);
                 default -> "LOW · " + n.d + "%";
             };
-            alerts.add(new Alert(n.label.isBlank() ? "(unnamed " + kind + ")" : n.label, issue));
+            alerts.add(new Alert(label, issue, false));
         }
     }
 
@@ -238,7 +251,9 @@ public class TabletScreen extends GadgetScreen {
         tile(gfx, 2, "ALERTS", String.valueOf(alerts.size()), alerts.isEmpty() ? GREEN : RED);
 
         // What is actually wrong, if anything — the reason to have looked.
-        if (alerts.isEmpty()) {
+        List<Alert> rows = new ArrayList<>(alerts);
+        rows.addAll(warnings);
+        if (rows.isEmpty()) {
             gfx.drawString(font, "NOTHING NEEDS YOU", x, top + LIST_Y, DIM, false);
             gfx.drawString(font, linked == 0
                             ? "No gadgets linked to this hub yet."
@@ -250,20 +265,21 @@ public class TabletScreen extends GadgetScreen {
             return;
         }
 
-        gfx.drawString(font, "NEEDS ATTENTION", x, top + LIST_Y, DIM, false);
-        int shown = Math.min(alerts.size(), LIST_ROWS);
+        gfx.drawString(font, alerts.isEmpty() ? "COMING UP" : "NEEDS ATTENTION", x, top + LIST_Y, DIM, false);
+        int shown = Math.min(rows.size(), LIST_ROWS);
         for (int i = 0; i < shown; i++) {
-            Alert a = alerts.get(i);
+            Alert a = rows.get(i);
             int y = top + LIST_Y + 13 + i * LIST_ROW;
             if (i % 2 == 0) {
                 gfx.fill(left + 8, y - 2, left + W - 8, y + 9, TILE_BG);
             }
-            gfx.drawString(font, "●", x, y, RED, false);
+            int tone = a.warning() ? AMBER : RED;
+            gfx.drawString(font, a.warning() ? "◔" : "●", x, y, tone, false);
             gfx.drawString(font, trim(a.label(), 18), x + 11, y, AMBER, false);
-            gfx.drawString(font, a.issue(), left + W - 12 - font.width(a.issue()), y, RED, false);
+            gfx.drawString(font, a.issue(), left + W - 12 - font.width(a.issue()), y, tone, false);
         }
-        if (alerts.size() > shown) {
-            String more = "+" + (alerts.size() - shown) + " more on the board";
+        if (rows.size() > shown) {
+            String more = "+" + (rows.size() - shown) + " more on the board";
             gfx.drawString(font, more, x, top + LIST_Y + 15 + shown * LIST_ROW, GRAY, false);
         }
     }
