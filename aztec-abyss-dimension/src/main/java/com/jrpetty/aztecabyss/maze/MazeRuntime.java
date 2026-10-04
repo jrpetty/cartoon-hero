@@ -338,11 +338,13 @@ public final class MazeRuntime {
                         // is said to everybody rather than only to whoever has
                         // not personally clicked anything.
                         p.displayClientMessage(Component.literal(
-                                "§e✦ The Glade has filed nothing. §7Nothing comes up at dawn. §8/maze order"), false);
+                                "§e✦ The Glade has filed nothing. §7Nothing comes up at dawn. "
+                                        + "§fThe Slate is by the Box."), false);
                     } else if (orders.slate(p.getUUID()).isEmpty()) {
                         p.displayClientMessage(Component.literal(
-                                "§7Others have ordered; you have not. §8"
-                                        + MazeOrders.remaining(level) + " left in the pot. /maze order"), false);
+                                "§7Others have ordered; you have not. §f"
+                                        + MazeOrders.remaining(level) + "§7 left in the pot — the Slate is by the Box."),
+                                false);
                     }
                 }
                 level.playSound(null, p.blockPosition(), SoundEvents.ANVIL_LAND, SoundSource.BLOCKS, 1.0F, 0.5F);
@@ -1277,8 +1279,12 @@ public final class MazeRuntime {
                 "§c§lDie and the walls put you out. §8There is no second try at a run."), false);
         p.displayClientMessage(Component.literal(
                 "§7A Griever sting is survivable — §cfour§7 is not. Serum clears the tally."), false);
-        p.displayClientMessage(Component.literal(
-                "§8/maze status · /maze leaderboard"), false);
+        // The way in to everything else, by the key the player actually has
+        // bound - rendered on their side, so a rebind is reflected here.
+        p.displayClientMessage(Component.literal("§7Press §f[")
+                .append(Component.keybind("key.aztecabyss.maze_hub").withStyle(ChatFormatting.WHITE))
+                .append(Component.literal("§f]§7 for the Glade's table: you, the chart, your trade, the slate.")),
+                false);
     }
 
     /** The status bar: day, layout, doors, and your own clock if one is running. */
@@ -1295,15 +1301,18 @@ public final class MazeRuntime {
         int left = clock.secondsLeftInPhase();
         // The countdown is the whole reason for the bar. Knowing the doors seal
         // in four minutes is a decision; knowing it is "day" is not.
+        // The bar is the one line left for somebody who has turned the HUD
+        // off, so it carries what a run is steered by and nothing else - not
+        // the layout's internal name, which no player ever needed to read.
+        String clockText = (left / 60) + ":" + String.format("%02d", left % 60);
         String title = "§fDay §e" + (clock.day() + 1)
-                + " §8| §f" + (layout == null ? "?" : layout.name())
-                + " §8| " + (doorsOpen
-                        ? "§aDOORS OPEN §7" + (left / 60) + "m" + (left % 60) + "s"
-                        : "§4SEALED §7" + (left / 60) + "m" + (left % 60) + "s")
-                + " §8| §c☠" + String.format("%.1f", Griever.dayScale(level)) + "x"
+                + " §7· " + (doorsOpen
+                        ? "§aDoors seal in §f" + clockText
+                        : "§cSealed §7· dawn in §f" + clockText)
+                + " §7· §c☠ " + String.format("%.1f", Griever.dayScale(level)) + "×"
                 + (MazeJobs.carrying(p.getUUID()) > 0
-                        ? " §8| §e▲" + MazeJobs.carrying(p.getUUID()) : "")
-                + (run >= 0 ? " §8| §b" + MazeRuns.format(run) : "")
+                        ? " §7· §e▲" + MazeJobs.carrying(p.getUUID()) : "")
+                + (run >= 0 ? " §7· §b" + MazeRuns.format(run) : "")
                 + MazeSting.hudFragment(level, p);
         bar.setName(Component.literal(title));
         bar.setColor(isNight(t) ? BossEvent.BossBarColor.RED

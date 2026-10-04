@@ -38,11 +38,18 @@ public record RunRecapPayload(int round, int kills, int headshots, int survivalS
                     ByteBufCodecs.VAR_INT, RunRecapPayload::flags,
                     RunRecapPayload::new);
 
-    public static int packFlags(boolean victory, boolean multiplayer, boolean extracted, boolean ritual) {
+    /**
+     * The four outcome bits, plus the arena the run was on in bits 8-15 -
+     * stored as ordinal + 1, so zero still means "not said" and a recap from
+     * an older server reads as an unnamed run rather than as the Temple.
+     */
+    public static int packFlags(boolean victory, boolean multiplayer, boolean extracted, boolean ritual,
+                                int mapOrdinal) {
         return (victory ? FLAG_VICTORY : 0)
                 | (multiplayer ? FLAG_MULTIPLAYER : 0)
                 | (extracted ? FLAG_EXTRACTED : 0)
-                | (ritual ? FLAG_RITUAL : 0);
+                | (ritual ? FLAG_RITUAL : 0)
+                | (((mapOrdinal + 1) & 0xFF) << 8);
     }
 
     /** Squeezes three small counters into one int to stay inside the codec's 6-field ceiling. */
@@ -76,6 +83,11 @@ public record RunRecapPayload(int round, int kills, int headshots, int survivalS
 
     public boolean ritualComplete() {
         return (flags & FLAG_RITUAL) != 0;
+    }
+
+    /** The arena's ordinal, or -1 when the server did not say. */
+    public int mapOrdinal() {
+        return ((flags >> 8) & 0xFF) - 1;
     }
 
     @Override

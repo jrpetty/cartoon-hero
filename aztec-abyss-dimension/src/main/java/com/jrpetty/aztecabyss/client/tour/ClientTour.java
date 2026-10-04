@@ -4,7 +4,7 @@ import com.jrpetty.aztecabyss.AztecAbyssConstants;
 import com.mojang.logging.LogUtils;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.Screenshot;
-import net.minecraft.client.gui.components.Button;
+import net.minecraft.client.gui.components.AbstractButton;
 import net.minecraft.client.gui.components.events.GuiEventListener;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.gui.screens.TitleScreen;
@@ -142,6 +142,9 @@ public final class ClientTour {
     private static boolean entered;
     private static int ticksInStep;
     private static int framesInStep;
+    /** Frame and tick counts when this step's condition first held, or -1. */
+    private static int framesAtDone = -1;
+    private static int ticksAtDone = -1;
     private static long startedAt;
     private static boolean finished;
     private static long tickCount;
@@ -201,8 +204,11 @@ public final class ClientTour {
                 .every(20, mc -> killWave())
                 .until(() -> roundCleared, 4800).hold(40);
         step("temple-glyph").act(mc -> server("glyph", sp -> {
+                    // Standing on the floor six blocks south of the glyph, not
+                    // in it: the glyph is the floor block itself, and the first
+                    // tour put its camera inside the stone.
                     var g = com.jrpetty.aztecabyss.round.RoundManager.game().getMap().extraction();
-                    look(sp, g.getX() + 0.5, g.getY(), g.getZ() + 6.5, 180.0F, 30.0F);
+                    look(sp, g.getX() + 0.5, g.getY() + 1, g.getZ() + 6.5, 180.0F, 28.0F);
                 }))
                 .hold(80).shot("12_temple_between_rounds");
         step("temple-extract").act(mc -> server("extract", sp -> {
@@ -287,6 +293,38 @@ public final class ClientTour {
                 .until(() -> screenIs("RequisitionScreen"), 200).hold(30).shot("37_orders");
         step("orders-close").act(mc -> mc.setScreen(null)).hold(10);
 
+        // ---- What the maze looks like, from above and from inside ---------------
+        step("maze-aerial [tour flies]").act(mc -> {
+                    mc.options.hideGui = true;
+                    mc.options.renderDistance().set(12);
+                    server("aerial", sp -> {
+                        sp.setGameMode(GameType.SPECTATOR);
+                        double c = com.jrpetty.aztecabyss.maze.MazeData.SPAWN_X + 0.5;
+                        double z = com.jrpetty.aztecabyss.maze.MazeData.SPAWN_Z + 70.5;
+                        look(sp, c, com.jrpetty.aztecabyss.maze.MazeData.FLOOR_Y + 58, z, 180.0F, 38.0F);
+                    });
+                }).hold(260).shot("42_maze_aerial");
+        step("maze-corridor").act(mc -> server("corridor", sp -> {
+                    ServerLevel maze = sp.serverLevel();
+                    int[] door = com.jrpetty.aztecabyss.maze.MazeBuilder.DOOR_CELLS[0];
+                    BlockPos out = openFloor(maze, door[0], door[1] - 1);
+                    if (out == null) {
+                        throw new IllegalStateException("no open corridor outside the north door");
+                    }
+                    look(sp, out.getX() + 0.5, out.getY() + 0.6, out.getZ() + 0.5, 180.0F, -4.0F);
+                })).hold(120).shot("43_maze_corridor");
+        step("maze-ground").act(mc -> {
+                    mc.options.hideGui = false;
+                    mc.options.renderDistance().set(6);
+                    server("ground", sp -> {
+                        sp.setGameMode(GameType.SURVIVAL);
+                        int[] door = com.jrpetty.aztecabyss.maze.MazeBuilder.DOOR_CELLS[0];
+                        double x = door[0] * com.jrpetty.aztecabyss.maze.MazeData.CELL + 3.0;
+                        double z = (door[1] + 1) * com.jrpetty.aztecabyss.maze.MazeData.CELL + 16.0;
+                        look(sp, x, com.jrpetty.aztecabyss.maze.MazeData.FLOOR_Y + 1, z, 180.0F, 0.0F);
+                    });
+                }).hold(60);
+
         step("door-pose [tour fast-forwards to dusk]").act(mc -> server("dusk", sp -> {
                     ServerLevel maze = sp.serverLevel();
                     // Inside the Glade, sixteen blocks south of the north door, looking up at it.
@@ -316,6 +354,29 @@ public final class ClientTour {
                         com.jrpetty.aztecabyss.maze.Griever.raiderAt(maze, ahead);
                     }
                 })).hold(120).shot("40_night_griever");
+        step("griever-closeup [tour sees in the dark]").act(mc -> server("closeup", sp -> {
+                    ServerLevel maze = sp.serverLevel();
+                    sp.addEffect(new MobEffectInstance(MobEffects.NIGHT_VISION, 400, 0, false, false, false));
+                    BlockPos at = sp.blockPosition();
+                    // Four blocks ahead, held still and facing the camera, so
+                    // the picture is of the thing and not of a blur.
+                    var g = com.jrpetty.aztecabyss.maze.Griever.raiderAt(maze, at.north(5));
+                    if (g == null) {
+                        throw new IllegalStateException("no Griever to photograph");
+                    }
+                    g.setNoAi(true);
+                    g.setInvulnerable(true);
+                    g.setYRot(0.0F);
+                    g.setYHeadRot(0.0F);
+                    g.setYBodyRot(0.0F);
+                    sp.teleportTo(maze, sp.getX(), sp.getY(), sp.getZ(), java.util.Set.of(), 180.0F, 18.0F);
+                })).hold(80).shot("44_griever_closeup");
+        step("griever-clear").act(mc -> server("clear-grievers", sp -> {
+                    sp.removeEffect(MobEffects.NIGHT_VISION);
+                    for (var m : com.jrpetty.aztecabyss.maze.Griever.loaded(sp.serverLevel())) {
+                        m.discard();
+                    }
+                })).hold(20);
         step("maze-escape").act(mc -> server("escape", sp -> {
                     ServerLevel maze = sp.serverLevel();
                     var layout = com.jrpetty.aztecabyss.maze.MazeRuntime.todaysLayout(maze);
@@ -393,6 +454,8 @@ public final class ClientTour {
             entered = true;
             ticksInStep = 0;
             framesInStep = 0;
+            framesAtDone = -1;
+            ticksAtDone = -1;
             LOG.info("[TOUR] -> {}", s.name);
             if (s.act != null) {
                 try {
@@ -418,7 +481,15 @@ public final class ClientTour {
         } catch (Throwable t) {
             done = false;
         }
-        if (done && ticksInStep >= s.minTicks && framesInStep >= 3) {
+        if (done && framesAtDone < 0) {
+            framesAtDone = framesInStep;
+            ticksAtDone = ticksInStep;
+        }
+        // A picture taken the tick a screen opens is a picture of the frame
+        // before it - which is how the first tour photographed two loading
+        // screens. The condition has to have held for several drawn frames.
+        boolean settled = done && framesInStep - framesAtDone >= 10 && ticksInStep - ticksAtDone >= 5;
+        if (settled && ticksInStep >= s.minTicks) {
             if (s.shot != null) {
                 shoot(mc, s.shot);
             }
@@ -511,7 +582,7 @@ public final class ClientTour {
             throw new IllegalStateException("no screen open to press \"" + label + "\" on");
         }
         for (GuiEventListener child : s.children()) {
-            if (child instanceof Button b && b.active
+            if (child instanceof AbstractButton b && b.active
                     && b.getMessage().getString().toLowerCase().contains(label.toLowerCase())) {
                 b.onPress();
                 return;

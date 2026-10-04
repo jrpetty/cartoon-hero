@@ -12,6 +12,11 @@ import net.minecraft.world.phys.AABB;
  *
  * Rewards, rounds, bosses and scoring are identical across maps; only the
  * battlefield changes.
+ *
+ * <p>Ordinals are stored: a player's chosen map and the per-map best rounds are
+ * kept by index. New maps go on the end, and a removed map's index must never
+ * be reused - which is why the third arena's removal left this list at two
+ * rather than renumbering anything.
  */
 public enum ArenaMap {
 
@@ -41,24 +46,7 @@ public enum ArenaMap {
             new net.minecraft.core.Direction[]{net.minecraft.core.Direction.NORTH},
             BridgeBuilder.EXTRACTION,
             BridgeBuilder.CENTER_X, BridgeBuilder.CENTER_Z,
-            220.0),
-
-    /**
-     * A derelict two-storey house torn open at the walls: start sealed in one
-     * room, dig out the rubble to open the rest, and hold more ways in than you
-     * can cover in exchange for everything worth having.
-     */
-    OUTPOST(
-            "The Outpost",
-            "Endless. A bombed-out house, pitch dark — twelve open breaches across three floors, and no final round. Extract while you still can.",
-            "ENDLESS",
-            0xFFC03080,
-            OutpostBuilder.ARRIVAL,
-            OutpostBuilder.GATES,
-            OutpostBuilder.GATE_FACINGS,
-            OutpostBuilder.EXTRACTION,
-            OutpostBuilder.CENTER_X, OutpostBuilder.CENTER_Z,
-            80.0);
+            220.0);
 
     private final String title;
     private final String blurb;
@@ -89,23 +77,30 @@ public enum ArenaMap {
     }
 
     /**
-     * Which maps are shelved.
+     * A stored map choice, made safe.
      *
-     * <p>The Outpost is being rethought rather than shipped half-liked. It stays
-     * on the picker as a teaser card, but it cannot be selected, and a choice
-     * stored before it was shelved quietly falls back to the Temple instead of
-     * dropping somebody into a map that is not ready.
+     * <p>One choke point covers every reader - the portal, the round manager, the
+     * picker - so an index from a map that no longer exists (a player who last
+     * chose the retired third arena has a 2 saved on them) quietly becomes the
+     * Temple instead of an exception.
      */
-    public boolean comingSoon() {
-        return this == OUTPOST;
-    }
-
     public static ArenaMap byId(int id) {
         ArenaMap[] all = values();
-        ArenaMap map = (id >= 0 && id < all.length) ? all[id] : TEMPLE;
-        // One choke point covers every reader: the portal, the round manager,
-        // and any stored choice from before the map was shelved.
-        return map.comingSoon() ? TEMPLE : map;
+        return id >= 0 && id < all.length ? all[id] : TEMPLE;
+    }
+
+    /**
+     * A map from its leaderboard key ("temple", "bridge"), or null. The retired
+     * third arena's records are still on disk under "outpost"; readers skip any
+     * key this returns null for.
+     */
+    public static ArenaMap byKey(String key) {
+        for (ArenaMap m : values()) {
+            if (m.name().equalsIgnoreCase(key)) {
+                return m;
+            }
+        }
+        return null;
     }
 
     public String title() {
@@ -138,53 +133,6 @@ public enum ArenaMap {
         return gateFacings;
     }
 
-    /** What to call a way in on this map - the Outpost has breaches, not gates. */
-    public String gateNoun() {
-        return this == OUTPOST ? "BREACH" : "GATE";
-    }
-
-    /** Short label for a gate, for HUD gauges and callouts. */
-    public String gateLabel(int i) {
-        if (this == OUTPOST) {
-            return i >= 0 && i < OutpostBuilder.GATE_LABELS.length ? OutpostBuilder.GATE_LABELS[i] : "?";
-        }
-        String[] compass = {"NORTH", "SOUTH", "EAST", "WEST"};
-        return i >= 0 && i < compass.length ? compass[i] : "?";
-    }
-
-    /**
-     * Which sealed-off area of the map a gate opens into. Areas that have not
-     * been dug out never spawn anything, so rubble genuinely holds the horde
-     * back rather than just holding you back.
-     */
-    public int gateArea(int i) {
-        return this == OUTPOST && i >= 0 && i < OutpostBuilder.GATE_AREAS.length
-                ? OutpostBuilder.GATE_AREAS[i] : 0;
-    }
-
-    /** How many separately-sealed areas this map has. */
-    public int areaCount() {
-        return this == OUTPOST ? 4 : 1;
-    }
-
-    /**
-     * Whether this map runs forever. Endless maps have no final round and no
-     * victory screen - the only way to bank a run is to walk out on the
-     * extraction glyph while you still can, which makes every extra round a bet
-     * you are choosing to take.
-     */
-    public boolean isEndless() {
-        return this == OUTPOST;
-    }
-
-    /**
-     * A flat difficulty lift applied on top of the usual per-round scaling.
-     * The Outpost is meant to be the one you lose on.
-     */
-    public double difficultyMultiplier() {
-        return this == OUTPOST ? 1.15 : 1.0;
-    }
-
     public BlockPos extraction() {
         return extraction;
     }
@@ -210,42 +158,25 @@ public enum ArenaMap {
     }
 
     /**
-     * Whether the horde materialises in a sealed chamber behind each way in.
-     *
-     * <p>Kept separate from {@link #hasBarricades()} on purpose. The two used to
-     * be the same question, and when the boards went the pens would have gone
-     * with them - dropping the whole horde straight into the room instead of
-     * behind the breaches, with no walk-up and nowhere for the sound to come
-     * from. The pens are the better half of that mechanic and they outlive the
-     * boards.
+     * The place a map's announcements are measured from - "a supply cache lands
+     * to the east of ___". The temple on one map, the fort on the other. Both
+     * announcements used to measure from the world origin and name the temple,
+     * so on the Bridge - two thousand blocks east of the origin - every cache
+     * landed "to the east of the temple", on a map with no temple in it.
      */
-    public boolean hasPens() {
-        return this == OUTPOST;
+    public BlockPos landmark() {
+        return this == BRIDGE
+                ? new BlockPos(BridgeBuilder.CENTER_X, BridgeBuilder.DECK_Y, BridgeBuilder.ISLAND_CENTER_Z)
+                : AztecAbyssConstants.TEMPLE_CENTER;
     }
 
-    public boolean hasBarricades() {
-        // Nothing does any more. The Outpost's windows became open breaches: you
-        // walk through them, and so does everything else, which makes the map a
-        // question of where you stand rather than what you have nailed shut.
-        return false;
-    }
-
-    /**
-     * Whether this map runs its own closed economy: no gear in, points earned
-     * inside, nothing but materials out.
-     *
-     * <p>Outpost only. The arenas are a test of the gear you already own, which
-     * is the opposite proposition, and mixing the two would make both worse.
-     */
-    public boolean hasEconomy() {
-        return this == OUTPOST;
+    /** What that landmark is called, for those same announcements. */
+    public String landmarkName() {
+        return this == BRIDGE ? "the fort" : "the temple";
     }
 
     /** The volume wave mobs are tracked and swept within for this map. */
     public AABB bounds() {
-        if (this == OUTPOST) {
-            return OutpostBuilder.bounds();
-        }
         if (this == BRIDGE) {
             return new AABB(
                     BridgeBuilder.CENTER_X - 60, BridgeBuilder.DECK_Y - 10, BridgeBuilder.NORTH_END - 20,

@@ -208,7 +208,7 @@ public final class TheBox {
                             + orders.heads() + " of you"
                             + (rolled > 0 ? ", §6" + rolled + "§8 carried from bounties" : "")), false);
             p.displayClientMessage(Component.literal(
-                    "§7Earn more by working your trade today. §8/maze work  /maze order"), false);
+                    "§7Earn more by working your trade today. §fFile at the Slate by the Box."), false);
         }
         level.playSound(null, new BlockPos(MazeData.SPAWN_X, MazeData.FLOOR_Y + 2, MazeData.SPAWN_Z),
                 SoundEvents.ANVIL_LAND, SoundSource.BLOCKS, 1.4F, 0.6F);

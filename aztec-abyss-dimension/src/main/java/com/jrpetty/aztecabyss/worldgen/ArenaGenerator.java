@@ -45,8 +45,7 @@ public final class ArenaGenerator {
             // arch pens nothing, you just walk around it. Retro-fit the gatehouses
             // rather than making players delete the dimension to get the feature.
             BlockPos probe = AztecAbyssConstants.MOB_GATES[0]
-                    .relative(com.jrpetty.aztecabyss.round.Barricade.outward(ArenaMap.TEMPLE, 0),
-                            com.jrpetty.aztecabyss.round.Barricade.POCKET_DEPTH);
+                    .relative(HordeGates.outward(ArenaMap.TEMPLE, 0), HordeGates.POCKET_DEPTH);
             if (!level.getBlockState(probe.above()).is(Blocks.POLISHED_BLACKSTONE_BRICKS)) {
                 buildMobGates(level);
             }
@@ -58,7 +57,6 @@ public final class ArenaGenerator {
                 buildPerimeterWall(level);
                 buildMobGates(level);
             }
-            buildOutpostIfNeeded(level);
             return; // already built
         }
 
@@ -74,28 +72,7 @@ public final class ArenaGenerator {
         placeLootChests(level);
         placeArrivalPortal(level);
         buildMobGates(level);
-        buildOutpostIfNeeded(level);
         MonumentBuilder.build(level);
-    }
-
-    /**
-     * Clears the Outpost's sentinel so the next check restamps it from scratch.
-     *
-     * <p>The map is only ever built once per world, which means a change to its
-     * geometry - a bigger footprint, breaches instead of windows - is invisible
-     * on any world that has already stood one up. Dropping the sentinel is how
-     * you take the new one without deleting the dimension.
-     */
-    public static void forceOutpostRebuild(ServerLevel level) {
-        level.setBlock(OutpostBuilder.EXTRACTION.below(), Blocks.AIR.defaultBlockState(), 2);
-        OutpostBuilder.build(level);
-    }
-
-    private static void buildOutpostIfNeeded(ServerLevel level) {
-        if (level.getBlockState(OutpostBuilder.EXTRACTION.below()).is(Blocks.GILDED_BLACKSTONE)) {
-            return;
-        }
-        OutpostBuilder.build(level);
     }
 
     /**
@@ -180,9 +157,9 @@ public final class ArenaGenerator {
      */
     private static void buildGatehouse(ServerLevel level, BlockPos gate, int gateIndex) {
         boolean onZAxis = gate.getX() == 0;
-        Direction out = com.jrpetty.aztecabyss.round.Barricade.outward(ArenaMap.TEMPLE, gateIndex);
-        int half = com.jrpetty.aztecabyss.round.Barricade.POCKET_HALF_WIDTH;
-        int depth = com.jrpetty.aztecabyss.round.Barricade.POCKET_DEPTH;
+        Direction out = HordeGates.outward(ArenaMap.TEMPLE, gateIndex);
+        int half = HordeGates.POCKET_HALF_WIDTH;
+        int depth = HordeGates.POCKET_DEPTH;
         int gy = gate.getY();
 
         BlockState shell = Blocks.POLISHED_BLACKSTONE_BRICKS.defaultBlockState();

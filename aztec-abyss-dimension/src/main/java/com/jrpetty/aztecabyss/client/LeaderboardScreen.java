@@ -9,6 +9,7 @@ import net.minecraft.network.chat.Component;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 
 /**
@@ -27,17 +28,16 @@ import java.util.Map;
  *
  * <p>Records answers "who is best", which is about other people. <b>Your runs</b>
  * answers "how did I do", which is the question somebody standing at the portal
- * is actually asking - and the one the game had no answer to at all. Almost
- * nobody tops a board; nearly every run is a defeat, and the interesting part of
- * a defeat is the detail. Which day it got you. How much you had charted when it
- * did. Whether you were the one who turned.
+ * is actually asking. Almost nobody tops a board; nearly every run is a defeat,
+ * and the interesting part of a defeat is the detail. Which day it got you. How
+ * much you had charted when it did. Whether you were the one who turned.
  *
  * <p>So the history is not a list of scores. Each run is a card with its outcome
  * written in the colour of what happened - gold for getting out, red for being
  * taken, and a deeper red for the Changing, which is its own ending and deserves
  * to look like one.
  */
-public class LeaderboardScreen extends Screen {
+public class LeaderboardScreen extends AbyssScreen {
 
     private final Screen parent;
     /** Map key to display name, in the order the server sent them. */
@@ -52,15 +52,9 @@ public class LeaderboardScreen extends Screen {
     private boolean historyTab = false;
     private int scroll = 0;
 
-    // One ink set, shared with every other screen in the mod.
-    private static final int GOLD = 0xFFFFD24A;
-    private static final int TEXT = 0xFFE4E1EE;
-    private static final int DIM = 0xFF8A8698;
-    private static final int FAINT = 0xFF56526A;
-    private static final int CARD = 0xFF14131C;
-    private static final int EDGE = 0xFF2A2836;
-    private static final int RED = 0xFFE0554F;
-    private static final int DEEP_RED = 0xFF9B2F2A;
+    private static final int CONTENT_TOP = 72;
+    private static final int ROW_H = 11;
+    private static final int CARD_H = 28;
 
     public LeaderboardScreen(Screen parent, LeaderboardPayload payload) {
         super(Component.literal("Records"));
@@ -76,6 +70,14 @@ public class LeaderboardScreen extends Screen {
         runs.addAll(payload.runs());
     }
 
+    private int contentW() {
+        return Math.min(360, this.width - 24);
+    }
+
+    private int backY() {
+        return this.height - 28;
+    }
+
     @Override
     protected void init() {
         int cx = this.width / 2;
@@ -83,7 +85,7 @@ public class LeaderboardScreen extends Screen {
             historyTab = false;
             scroll = 0;
             rebuild();
-        }).bounds(cx - 152, 44, 150, 20).build();
+        }).bounds(cx - 112, 46, 110, 20).build();
         records.active = historyTab;
         addRenderableWidget(records);
 
@@ -91,23 +93,24 @@ public class LeaderboardScreen extends Screen {
             historyTab = true;
             scroll = 0;
             rebuild();
-        }).bounds(cx + 2, 44, 150, 20).build();
+        }).bounds(cx + 2, 46, 110, 20).build();
         mine.active = !historyTab;
         addRenderableWidget(mine);
 
         addRenderableWidget(Button.builder(Component.literal("Back"), b -> onClose())
-                .bounds(cx - 60, this.height - 28, 120, 20).build());
+                .bounds(cx - 50, backY(), 100, 20).build());
         if (!historyTab && mapKeys.size() > 1) {
-            addRenderableWidget(Button.builder(Component.literal("<"), b -> {
+            int half = contentW() / 2;
+            addRenderableWidget(Button.builder(Component.literal("◀"), b -> {
                         page = Math.floorMod(page - 1, mapKeys.size());
                         rebuild();
                     })
-                    .bounds(cx - 150, this.height - 28, 40, 20).build());
-            addRenderableWidget(Button.builder(Component.literal(">"), b -> {
+                    .bounds(cx - half, CONTENT_TOP, 20, 20).build());
+            addRenderableWidget(Button.builder(Component.literal("▶"), b -> {
                         page = Math.floorMod(page + 1, mapKeys.size());
                         rebuild();
                     })
-                    .bounds(cx + 110, this.height - 28, 40, 20).build());
+                    .bounds(cx + half - 20, CONTENT_TOP, 20, 20).build());
         }
     }
 
@@ -122,67 +125,110 @@ public class LeaderboardScreen extends Screen {
     }
 
     @Override
-    public void renderBackground(GuiGraphics g, int mouseX, int mouseY, float partialTick) {
-        g.fillGradient(0, 0, this.width, this.height, 0xFF0B0A10, 0xFF060508);
-    }
-
-    /** Same reason as the picker: no blur pass under type. */
-    @Override
-    protected void renderBlurredBackground(float partialTick) {
-        // Intentionally empty.
-    }
-
-    @Override
-    public void render(GuiGraphics g, int mouseX, int mouseY, float partialTick) {
-        this.renderBackground(g, mouseX, mouseY, partialTick);
+    protected void renderContent(GuiGraphics g, int mouseX, int mouseY, float partialTick) {
         int cx = this.width / 2;
-
-        g.drawCenteredString(this.font,
-                Component.literal("RECORDS").withStyle(s -> s.withBold(true)), cx, 18, GOLD);
-        g.fill(cx - 152, 36, cx + 152, 37, EDGE);
-
+        UiKit.masthead(g, this.font, "THE ABYSS PORTAL", "RECORDS", cx, 8, UiKit.GOLD);
         if (historyTab) {
             renderHistory(g, cx);
         } else {
             renderBoards(g, cx);
         }
-        super.render(g, mouseX, mouseY, partialTick);
     }
+
+    // ------------------------------------------------------------------
+    // Records
+    // ------------------------------------------------------------------
 
     private void renderBoards(GuiGraphics g, int cx) {
         if (mapKeys.isEmpty()) {
-            g.drawCenteredString(this.font, Component.literal(
-                    "Nothing set yet. Finish a run and you are the record."), cx, 90, DIM);
+            g.drawCenteredString(this.font, "Nothing set yet. Finish a run and you are the record.",
+                    cx, CONTENT_TOP + 30, UiKit.TEXT_DIM);
             return;
         }
         String key = mapKeys.get(Math.min(page, mapKeys.size() - 1));
-        g.drawCenteredString(this.font, Component.literal(maps.getOrDefault(key, key)),
-                cx, 74, TEXT);
+        g.drawCenteredString(this.font, Component.literal(label(key)).withStyle(s -> s.withBold(true)),
+                cx, CONTENT_TOP + 3, UiKit.TEXT);
         if (mapKeys.size() > 1) {
-            g.drawCenteredString(this.font, Component.literal(
-                    (page + 1) + " / " + mapKeys.size()), cx, this.height - 42, DIM);
+            g.drawCenteredString(this.font, (page + 1) + " of " + mapKeys.size(),
+                    cx, CONTENT_TOP + 13, UiKit.TEXT_FAINT);
         }
-        column(g, cx - 175, key + "#solo", "SOLO");
-        column(g, cx + 15, key + "#group", "GROUP");
+
+        int top = CONTENT_TOP + 28;
+        int colW = (contentW() - 10) / 2;
+        int left = cx - contentW() / 2;
+        int rows = Math.max(1, Math.min(10, (backY() - 8 - top - 24) / ROW_H));
+        column(g, left, top, colW, rows, key + "#solo", "SOLO");
+        column(g, left + colW + 10, top, colW, rows, key + "#group", "GROUP");
     }
 
+    /** One board. Ten places is as many as anybody reads. */
+    private void column(GuiGraphics g, int x, int y, int w, int rows, String boardKey, String heading) {
+        int h = 22 + rows * ROW_H + 6;
+        UiKit.panel(g, x, y, w, h);
+        g.drawString(this.font, Component.literal(heading).withStyle(s -> s.withBold(true)),
+                x + 8, y + 7, UiKit.GOLD, true);
+        UiKit.rule(g, x + 8, x + w - 8, y + 18, UiKit.EDGE_HOT);
+
+        List<String> list = boards.getOrDefault(boardKey, List.of());
+        if (list.isEmpty()) {
+            g.drawString(this.font, "nobody yet — be the first", x + 8, y + 26, UiKit.TEXT_FAINT, true);
+            return;
+        }
+        int ry = y + 24;
+        for (int i = 0; i < Math.min(rows, list.size()); i++) {
+            String row = list.get(i);
+            String place = LeaderboardPayload.field(row, 1);
+            String name = LeaderboardPayload.field(row, 2);
+            String score = LeaderboardPayload.field(row, 3);
+            String party = LeaderboardPayload.field(row, 5);
+
+            // Gold, silver, bronze, then plain. The top three are the only ones
+            // anybody is trying for, so they should be visible at a glance.
+            int colour = switch (i) {
+                case 0 -> UiKit.GOLD;
+                case 1 -> 0xFFD6D6E0;
+                case 2 -> 0xFFD08A4A;
+                default -> UiKit.TEXT_DIM;
+            };
+            if (i < 3) {
+                g.fill(x + 3, ry - 1, x + 5, ry + 8, colour);
+            }
+            g.drawString(this.font, place + ".", x + 8, ry, colour, true);
+            boolean squad = !party.isEmpty() && !party.equals("1");
+            String tail = squad ? " ×" + party : "";
+            int scoreW = this.font.width(score + tail);
+            g.drawString(this.font, this.font.plainSubstrByWidth(name, w - 34 - scoreW - 8),
+                    x + 26, ry, colour, true);
+            g.drawString(this.font, score, x + w - 8 - scoreW, ry, colour, true);
+            if (squad) {
+                g.drawString(this.font, tail, x + w - 8 - this.font.width(tail), ry, UiKit.TEXT_FAINT, true);
+            }
+            ry += ROW_H;
+        }
+    }
+
+    // ------------------------------------------------------------------
+    // Your runs
+    // ------------------------------------------------------------------
+
     /**
-     * The player's own runs, newest first.
-     *
-     * <p>A summary strip, then one card per run. The card leads with the outcome
-     * because that is the thing being remembered - not the score.
+     * The player's own runs, newest first: a summary strip, then one card per
+     * run. The card leads with the outcome because that is the thing being
+     * remembered - not the score.
      */
     private void renderHistory(GuiGraphics g, int cx) {
+        int w = contentW();
+        int left = cx - w / 2;
         if (runs.isEmpty()) {
-            g.drawCenteredString(this.font, Component.literal(
-                    "No runs yet."), cx, 88, DIM);
-            g.drawCenteredString(this.font, Component.literal(
-                    "\u00a78Step through the portal and this fills up."), cx, 102, FAINT);
+            UiKit.panel(g, left, CONTENT_TOP + 6, w, 44, UiKit.PANEL_DEEP, UiKit.EDGE);
+            g.drawCenteredString(this.font, "No runs yet.", cx, CONTENT_TOP + 16, UiKit.TEXT);
+            g.drawCenteredString(this.font, "Step through the portal and this fills up.",
+                    cx, CONTENT_TOP + 30, UiKit.TEXT_DIM);
             return;
         }
 
-        // Summary: what the kept runs add up to.
         int out = 0;
+        int bestRound = 0;
         int bestDay = 0;
         int kills = 0;
         int changed = 0;
@@ -194,41 +240,48 @@ public class LeaderboardScreen extends Screen {
             if (o.equals("changed")) {
                 changed++;
             }
-            bestDay = Math.max(bestDay, num(r, 2));
+            if (LeaderboardPayload.field(r, 0).equals("maze")) {
+                bestDay = Math.max(bestDay, num(r, 2));
+            } else {
+                bestRound = Math.max(bestRound, num(r, 2));
+            }
             kills += num(r, 4);
         }
-        int sx = cx - 178;
-        stat(g, sx, 76, String.valueOf(runs.size()), "runs kept");
-        stat(g, sx + 90, 76, String.valueOf(out), "got out");
-        stat(g, sx + 180, 76, String.valueOf(bestDay), "best");
-        stat(g, sx + 270, 76, String.valueOf(kills), "kills");
-        if (changed > 0) {
-            g.drawString(this.font, Component.literal(
-                            "\u00a74\u2620 turned " + changed + (changed == 1 ? " time" : " times")),
-                    sx, 104, DEEP_RED, false);
-        }
-        g.fill(cx - 178, 116, cx + 178, 117, EDGE);
 
-        int top = 124;
-        int rowH = 30;
-        int fit = Math.max(1, (this.height - top - 40) / rowH);
+        // The summary strip: what the kept runs add up to.
+        UiKit.panel(g, left, CONTENT_TOP, w, 30, UiKit.PANEL_DEEP, UiKit.EDGE);
+        int cells = 4;
+        int cellW = w / cells;
+        stat(g, left, cellW, 0, String.valueOf(runs.size()), "runs kept", UiKit.TEXT);
+        stat(g, left, cellW, 1, String.valueOf(out), "got out", UiKit.GOLD);
+        stat(g, left, cellW, 2, bestRound > 0 ? "Round " + bestRound : bestDay > 0 ? "Day " + bestDay : "—",
+                "best", UiKit.CYAN);
+        stat(g, left, cellW, 3, String.valueOf(kills), "kills", UiKit.GREEN);
+        if (changed > 0) {
+            String turned = "☠ turned " + changed + (changed == 1 ? " time" : " times");
+            g.drawString(this.font, turned, left + w - 6 - this.font.width(turned), CONTENT_TOP + 33,
+                    UiKit.DEEP_RED, true);
+        }
+
+        int top = CONTENT_TOP + 44;
+        int fit = Math.max(1, (backY() - 8 - top) / (CARD_H + 3));
         int max = Math.max(0, runs.size() - fit);
         scroll = Math.max(0, Math.min(scroll, max));
-
         for (int i = 0; i < fit && i + scroll < runs.size(); i++) {
-            card(g, cx - 178, top + i * rowH, 356, runs.get(i + scroll));
+            card(g, left, top + i * (CARD_H + 3), w, runs.get(i + scroll));
         }
         if (max > 0) {
-            g.drawCenteredString(this.font, Component.literal(
-                            "\u00a78" + (scroll + 1) + "\u2013" + Math.min(runs.size(), scroll + fit)
-                                    + " of " + runs.size() + "  \u00b7  scroll"),
-                    cx, this.height - 42, FAINT);
+            String more = (scroll + 1) + "–" + Math.min(runs.size(), scroll + fit)
+                    + " of " + runs.size() + " · scroll for more";
+            g.drawString(this.font, more, left + w - this.font.width(more), backY() + 6, UiKit.TEXT_FAINT, true);
         }
     }
 
-    private void stat(GuiGraphics g, int x, int y, String value, String label) {
-        g.drawString(this.font, Component.literal(value), x, y, TEXT, false);
-        g.drawString(this.font, Component.literal("\u00a78" + label), x, y + 10, FAINT, false);
+    private void stat(GuiGraphics g, int left, int cellW, int index, String value, String label, int colour) {
+        int cx = left + cellW * index + cellW / 2;
+        g.drawCenteredString(this.font, Component.literal(value).withStyle(s -> s.withBold(true)),
+                cx, CONTENT_TOP + 5, colour);
+        g.drawCenteredString(this.font, label, cx, CONTENT_TOP + 17, UiKit.TEXT_FAINT);
     }
 
     /** One run, as a card. */
@@ -243,9 +296,9 @@ public class LeaderboardScreen extends Screen {
 
         boolean maze = map.equals("maze");
         int accent = switch (outcome) {
-            case "escaped", "extracted" -> GOLD;
-            case "changed" -> DEEP_RED;
-            default -> RED;
+            case "escaped", "extracted" -> UiKit.GOLD;
+            case "changed" -> UiKit.DEEP_RED;
+            default -> UiKit.RED;
         };
         String verdict = switch (outcome) {
             case "escaped" -> "GOT OUT";
@@ -255,30 +308,26 @@ public class LeaderboardScreen extends Screen {
             default -> "FELL";
         };
 
-        g.fill(x, y, x + w, y + 27, CARD);
-        g.fill(x, y, x + 3, y + 27, accent);
+        UiKit.panel(g, x, y, w, CARD_H);
+        g.fill(x + 1, y + 1, x + 4, y + CARD_H - 1, accent);
 
-        g.drawString(this.font, Component.literal(verdict), x + 10, y + 5, accent, false);
-        g.drawString(this.font, Component.literal(
-                        "\u00a77" + maps.getOrDefault(map, map)), x + 10, y + 16, DIM, false);
+        int c1 = x + 10;
+        int c2 = x + Math.max(96, w * 30 / 100);
+        int c3 = x + Math.max(170, w * 52 / 100);
+        int c4 = x + w - 8;
+        g.drawString(this.font, Component.literal(verdict).withStyle(s -> s.withBold(true)), c1, y + 5, accent, true);
+        g.drawString(this.font, this.font.plainSubstrByWidth(label(map), c2 - c1 - 6), c1, y + 16,
+                UiKit.TEXT_FAINT, true);
 
-        String left = maze ? "day " + score : "round " + score;
-        g.drawString(this.font, Component.literal(left), x + 108, y + 5, TEXT, false);
-        g.drawString(this.font, Component.literal("\u00a78" + mmss(seconds)),
-                x + 108, y + 16, FAINT, false);
+        g.drawString(this.font, maze ? "day " + score : "round " + score, c2, y + 5, UiKit.TEXT, true);
+        g.drawString(this.font, mmss(seconds), c2, y + 16, UiKit.TEXT_FAINT, true);
 
-        g.drawString(this.font, Component.literal("\u00a7f" + kills + " \u00a78kills"),
-                x + 190, y + 5, DIM, false);
+        g.drawString(this.font, kills + " kills", c3, y + 5, UiKit.TEXT_DIM, true);
         if (maze) {
-            g.drawString(this.font, Component.literal("\u00a7b" + charted + "% \u00a78charted"),
-                    x + 190, y + 16, DIM, false);
+            g.drawString(this.font, charted + "% charted", c3, y + 16, UiKit.CYAN, true);
         }
-        if (party > 1) {
-            g.drawString(this.font, Component.literal("\u00a78squad of " + party),
-                    x + 280, y + 5, FAINT, false);
-        } else {
-            g.drawString(this.font, Component.literal("\u00a78solo"), x + 280, y + 5, FAINT, false);
-        }
+        String who = party > 1 ? "squad of " + party : "solo";
+        g.drawString(this.font, who, c4 - this.font.width(who), y + 5, UiKit.TEXT_FAINT, true);
     }
 
     @Override
@@ -288,6 +337,23 @@ public class LeaderboardScreen extends Screen {
             return true;
         }
         return super.mouseScrolled(mx, my, dx, dy);
+    }
+
+    /**
+     * A map's name, from the server's labels when it sent one. A run on a map
+     * that has since left the portal still gets a readable name rather than
+     * its storage key.
+     */
+    private String label(String key) {
+        String named = maps.get(key);
+        if (named != null) {
+            return named;
+        }
+        String bare = key.startsWith("custom:") ? key.substring(7) : key;
+        if (bare.isEmpty()) {
+            return key;
+        }
+        return "The " + bare.substring(0, 1).toUpperCase(Locale.ROOT) + bare.substring(1);
     }
 
     private static int num(String packed, int index) {
@@ -300,42 +366,5 @@ public class LeaderboardScreen extends Screen {
 
     private static String mmss(int seconds) {
         return (seconds / 60) + "m " + (seconds % 60) + "s";
-    }
-
-    /** One board. Ten places is as many as anybody reads. */
-    private void column(GuiGraphics g, int left, String boardKey, String heading) {
-        g.drawString(this.font, Component.literal(heading).withStyle(s -> s.withBold(true)),
-                left, 58, 0xFFFFD24A, true);
-        g.fill(left, 70, left + 160, 71, 0xFF3A3A3A);
-
-        List<String> rows = boards.getOrDefault(boardKey, List.of());
-        if (rows.isEmpty()) {
-            g.drawString(this.font, Component.literal("— nobody yet —"), left, 80, 0xFF8A8A8A, true);
-            return;
-        }
-        int y = 80;
-        for (int i = 0; i < Math.min(10, rows.size()); i++) {
-            String row = rows.get(i);
-            String place = LeaderboardPayload.field(row, 1);
-            String name = LeaderboardPayload.field(row, 2);
-            String score = LeaderboardPayload.field(row, 3);
-            String party = LeaderboardPayload.field(row, 5);
-
-            // Gold, silver, bronze, then plain. The top three are the only ones
-            // anybody is trying for, so they should be visible at a glance.
-            int colour = switch (i) {
-                case 0 -> 0xFFFFD24A;
-                case 1 -> 0xFFCCCCCC;
-                case 2 -> 0xFFC08040;
-                default -> 0xFFD4D4D4;
-            };
-            g.drawString(this.font, Component.literal(place + "."), left, y, colour, true);
-            g.drawString(this.font, Component.literal(name), left + 20, y, colour, true);
-            g.drawString(this.font, Component.literal(score), left + 108, y, colour, true);
-            if (!party.isEmpty() && !party.equals("1")) {
-                g.drawString(this.font, Component.literal("§8×" + party), left + 150, y, 0xFF8A8A8A, true);
-            }
-            y += 11;
-        }
     }
 }

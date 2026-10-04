@@ -5,7 +5,6 @@ import com.jrpetty.aztecabyss.network.MazeInductionPayload;
 import com.jrpetty.aztecabyss.network.TradeChoicePayload;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
-import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 import net.minecraft.util.FormattedCharSequence;
 import net.minecraft.world.item.ItemStack;
@@ -36,18 +35,16 @@ import java.util.List;
  * packet lost in the dimension change; {@link #refresh} takes those in place,
  * so the roster lines stay live and nobody mid-read is thrown back to the top.
  */
-public final class MazeInductionScreen extends Screen {
+public final class MazeInductionScreen extends AbyssScreen {
 
     // The mod's ink palette.
-    private static final int BG_TOP = 0xFF0B0A10;
-    private static final int BG_BOTTOM = 0xFF060508;
-    private static final int CARD_FILL = 0xFF16151E;
-    private static final int CARD_HOVER = 0xFF1F1E2A;
-    private static final int CARD_EDGE = 0xFF3A384A;
-    private static final int TEXT = 0xFFD8D5E4;
-    private static final int TEXT_DIM = 0xFF8C88A2;
-    private static final int TEXT_FAINT = 0xFF4A4760;
-    private static final int GOLD = 0xFFFFC94A;
+    private static final int CARD_FILL = UiKit.PANEL;
+    private static final int CARD_HOVER = UiKit.PANEL_HOT;
+    private static final int CARD_EDGE = UiKit.EDGE;
+    private static final int TEXT = UiKit.TEXT;
+    private static final int TEXT_DIM = UiKit.TEXT_DIM;
+    private static final int TEXT_FAINT = UiKit.TEXT_FAINT;
+    private static final int GOLD = UiKit.GOLD;
 
     private static final int GAP = 8;
     private static final int PAD = 8;
@@ -62,7 +59,6 @@ public final class MazeInductionScreen extends Screen {
     private int selected = -1;
     private boolean chosen;
     private Button confirm;
-    private int age;
     /** The kit icon under the mouse this frame, for its tooltip. */
     private ItemStack hoveredStack = ItemStack.EMPTY;
 
@@ -150,7 +146,7 @@ public final class MazeInductionScreen extends Screen {
     }
 
     private List<FormattedCharSequence> perkLines(int i) {
-        return this.font.split(Component.literal("§8lv1 §7" + cards.get(i)[5]), cardW() - PAD * 2);
+        return this.font.split(Component.literal("§7lv1 §f" + cards.get(i)[5]), cardW() - PAD * 2);
     }
 
     /** Every card is as tall as the tallest, so the row reads as a row. */
@@ -252,41 +248,22 @@ public final class MazeInductionScreen extends Screen {
         }
     }
 
-    @Override
-    public boolean isPauseScreen() {
-        return false;
-    }
-
     // ------------------------------------------------------------------
     // Render
     // ------------------------------------------------------------------
 
     @Override
-    public void renderBackground(GuiGraphics g, int mouseX, int mouseY, float partialTick) {
-        g.fillGradient(0, 0, this.width, this.height, BG_TOP, BG_BOTTOM);
-    }
-
-    /** No blur under type. Same call every screen in this mod makes. */
-    @Override
-    protected void renderBlurredBackground(float partialTick) {
-        // Intentionally empty.
+    protected int glow() {
+        return UiKit.MAZE_GLOW;
     }
 
     @Override
-    public void render(GuiGraphics g, int mouseX, int mouseY, float partialTick) {
-        age++;
-        this.renderBackground(g, mouseX, mouseY, partialTick);
+    protected void renderContent(GuiGraphics g, int mouseX, int mouseY, float partialTick) {
         hoveredStack = ItemStack.EMPTY;
         int cx = this.width / 2;
 
-        g.drawCenteredString(this.font, Component.literal("§8THE BOX"), cx, 12, TEXT_FAINT);
-        g.pose().pushPose();
-        g.pose().translate(cx, 22, 0);
-        g.pose().scale(2.0f, 2.0f, 1.0f);
-        g.drawCenteredString(this.font, Component.literal("WHAT ARE YOU?"), 0, 0, GOLD);
-        g.pose().popPose();
-        g.drawCenteredString(this.font,
-                Component.literal("§7The Box does not let go until you say."), cx, 44, TEXT_DIM);
+        UiKit.masthead(g, this.font, "THE BOX", "WHAT ARE YOU?", cx, 10, GOLD);
+        g.drawCenteredString(this.font, "The Box does not let go until you say.", cx, 44, TEXT_DIM);
 
         int top = cardsTop();
         int w = cardW();
@@ -302,11 +279,13 @@ public final class MazeInductionScreen extends Screen {
             renderDetail(g, detailTop, detailBottom);
         }
 
-        g.drawCenteredString(this.font, Component.literal(
-                        "§8Change your mind later at the board by the bell. The kit is once per game."),
+        g.drawCenteredString(this.font,
+                "Change your mind later at the board by the bell. The kit is once per game.",
                 cx, this.height - 41, TEXT_FAINT);
+    }
 
-        super.render(g, mouseX, mouseY, partialTick);
+    @Override
+    protected void renderOverlay(GuiGraphics g, int mouseX, int mouseY, float partialTick) {
         if (!hoveredStack.isEmpty()) {
             g.renderTooltip(this.font, hoveredStack, mouseX, mouseY);
         }
@@ -318,24 +297,21 @@ public final class MazeInductionScreen extends Screen {
         boolean isSelected = i == selected;
         boolean hovered = mouseX >= x && mouseX < x + w && mouseY >= y && mouseY < y + h;
 
-        g.fill(x, y, x + w, y + h, hovered || isSelected ? CARD_HOVER : CARD_FILL);
         int edge = isSelected ? accent : hovered ? MazeHud.pulse(accent, 0.55f) : CARD_EDGE;
-        g.fill(x, y, x + w, y + 1, edge);
-        g.fill(x, y + h - 1, x + w, y + h, edge);
-        g.fill(x, y, x + 1, y + h, edge);
-        g.fill(x + w - 1, y, x + w, y + h, edge);
+        UiKit.panel(g, x, y, w, h, isSelected ? UiKit.lerp(CARD_FILL, accent, 0.08f)
+                : hovered ? CARD_HOVER : CARD_FILL, edge);
         // The trade's colour as a bar across the top; the lit card breathes.
-        int bar = isSelected ? MazeHud.pulse(accent, 0.8f + 0.2f * (float) Math.sin(age / 6.0)) : accent;
+        int bar = isSelected ? MazeHud.pulse(accent, 0.8f + 0.2f * (float) Math.sin(age() / 6.0)) : accent;
         g.fill(x + 1, y + 1, x + w - 1, y + 4, bar);
 
         // Title, with its number so the keyboard hint is on the card itself.
-        g.drawString(this.font, Component.literal("§8" + (i + 1) + " "), x + PAD, y + 10, TEXT_FAINT, true);
+        g.drawString(this.font, (i + 1) + " ", x + PAD, y + 10, TEXT_FAINT, true);
         g.drawString(this.font, Component.literal(strip(c[1])).withStyle(s -> s.withBold(true)),
                 x + PAD + 10, y + 10, accent, true);
 
         int ty = y + 24;
         for (FormattedCharSequence line : blurbLines(i)) {
-            g.drawString(this.font, line, x + PAD, ty, TEXT_DIM, false);
+            g.drawString(this.font, line, x + PAD, ty, TEXT_DIM, true);
             ty += LINE_H;
         }
         ty += 6;
@@ -356,14 +332,13 @@ public final class MazeInductionScreen extends Screen {
         ty += ((kit.size() + per - 1) / per) * ICON + 6;
 
         // Who already wears it - half of the decision.
-        String roster = c[4].isEmpty() ? "§8nobody yet — the Glade needs one"
-                : "§8with " + c[4];
-        g.drawString(this.font, Component.literal(
-                this.font.plainSubstrByWidth(roster, w - PAD * 2)), x + PAD, ty, TEXT_FAINT, false);
+        String roster = c[4].isEmpty() ? "nobody yet — the Glade needs one"
+                : "with " + UiKit.strip(c[4]);
+        g.drawString(this.font, this.font.plainSubstrByWidth(roster, w - PAD * 2), x + PAD, ty, TEXT_FAINT, true);
         ty += LINE_H + 4;
 
         for (FormattedCharSequence line : perkLines(i)) {
-            g.drawString(this.font, line, x + PAD, ty, TEXT_DIM, false);
+            g.drawString(this.font, line, x + PAD, ty, TEXT_DIM, true);
             ty += LINE_H;
         }
     }
@@ -371,15 +346,10 @@ public final class MazeInductionScreen extends Screen {
     private void renderDetail(GuiGraphics g, int top, int bottom) {
         int left = rowLeft();
         int w = cardW() * cards.size() + GAP * (cards.size() - 1);
-        g.fill(left, top, left + w, bottom, CARD_FILL);
-        g.fill(left, top, left + w, top + 1, CARD_EDGE);
-        g.fill(left, bottom - 1, left + w, bottom, CARD_EDGE);
-        g.fill(left, top, left + 1, bottom, CARD_EDGE);
-        g.fill(left + w - 1, top, left + w, bottom, CARD_EDGE);
+        UiKit.panel(g, left, top, w, bottom - top, UiKit.PANEL_DEEP, CARD_EDGE);
 
         if (selected < 0) {
-            g.drawCenteredString(this.font, Component.literal(
-                            "§8Pick a trade to read what the days look like."),
+            g.drawCenteredString(this.font, "Pick a trade to read what the days look like.",
                     this.width / 2, top + (bottom - top) / 2 - 4, TEXT_FAINT);
             return;
         }
@@ -393,7 +363,7 @@ public final class MazeInductionScreen extends Screen {
                 if (y + LINE_H > max) {
                     return;
                 }
-                g.drawString(this.font, line, left + 14, y, TEXT, false);
+                g.drawString(this.font, line, left + 14, y, TEXT, true);
                 y += LINE_H;
             }
             y += 4;
@@ -401,6 +371,6 @@ public final class MazeInductionScreen extends Screen {
     }
 
     private static String strip(String s) {
-        return s == null ? "" : s.replaceAll("§.", "");
+        return UiKit.strip(s);
     }
 }

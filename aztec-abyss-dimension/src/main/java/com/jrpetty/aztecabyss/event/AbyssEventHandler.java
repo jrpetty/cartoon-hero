@@ -144,7 +144,6 @@ public final class AbyssEventHandler {
             }
             ServerPlayer killer = event.getSource().getEntity() instanceof ServerPlayer sp ? sp : null;
             RoundManager.onWaveZombieKilled(level, killer);
-            RoundManager.rollPowerUp(level, mob);
             return;
         }
 
@@ -195,10 +194,6 @@ public final class AbyssEventHandler {
             RunState rs = shooter.getData(ModAttachments.RUN_STATE);
             rs.addHeadshot();
             shooter.setData(ModAttachments.RUN_STATE, rs);
-            if (RoundManager.game().getMap().hasEconomy()) {
-                com.jrpetty.aztecabyss.round.OutpostEconomy.award(
-                        shooter, com.jrpetty.aztecabyss.round.OutpostEconomy.POINTS_HEADSHOT);
-            }
             level.playSound(null, shooter.blockPosition(),
                     net.minecraft.sounds.SoundEvents.PLAYER_ATTACK_CRIT, net.minecraft.sounds.SoundSource.PLAYERS, 0.6F, 1.8F);
         }
@@ -217,48 +212,7 @@ public final class AbyssEventHandler {
         if (event.getSource().getEntity() instanceof ServerPlayer attacker
                 && RoundManager.game().isParticipant(attacker.getUUID())) {
             RoundManager.provokeMob(mob, attacker, level.getGameTime());
-            RoundManager.onWaveMobHurt(attacker);
-
-            // Outpost perks that change what a swing is worth.
-            net.minecraft.world.item.ItemStack held = attacker.getMainHandItem();
-            float mult = 1.0F;
-            if (com.jrpetty.aztecabyss.round.OutpostShop.hasPerk(held,
-                    com.jrpetty.aztecabyss.round.OutpostShop.Perk.BREAKERS_BANE)
-                    && mob.getPersistentData().getInt("aztecabyss_role") != 0) {
-                mult *= 2.0F;
-            }
-            if (com.jrpetty.aztecabyss.round.OutpostShop.hasPerk(held,
-                    com.jrpetty.aztecabyss.round.OutpostShop.Perk.RAMPART)
-                    && nearAWindow(attacker)) {
-                mult *= 1.25F;
-            }
-            // Last Stand: worth most in the exact situation it is named for, and
-            // worth nothing while you are comfortable.
-            if (com.jrpetty.aztecabyss.round.OutpostShop.hasPerk(held,
-                    com.jrpetty.aztecabyss.round.OutpostShop.Perk.LAST_STAND)
-                    && attacker.getHealth() < attacker.getMaxHealth() / 3.0F) {
-                mult *= 1.4F;
-            }
-            mult *= com.jrpetty.aztecabyss.round.Draughts.damageMultiplier(attacker.getUUID());
-            if (mult > 1.0F) {
-                event.setAmount(event.getAmount() * mult);
-            }
-            // Insta-Kill trumps everything: anything in the wave dies to one hit.
-            if (RoundManager.instaKillActive(level)) {
-                event.setAmount(Math.max(event.getAmount(), mob.getMaxHealth() * 2.0F));
-            }
         }
-    }
-
-    /** Within reach of any window on the active map - what Rampart pays out on. */
-    private boolean nearAWindow(ServerPlayer player) {
-        com.jrpetty.aztecabyss.worldgen.ArenaMap map = RoundManager.game().getMap();
-        for (net.minecraft.core.BlockPos g : map.gates()) {
-            if (player.blockPosition().distSqr(g) <= 36) {
-                return true;
-            }
-        }
-        return false;
     }
 
     @SubscribeEvent
@@ -294,84 +248,6 @@ public final class AbyssEventHandler {
         if (RoundManager.repairObjective(level, player) && !player.getAbilities().instabuild) {
             held.shrink(1);
         }
-        event.setCanceled(true);
-        event.setCancellationResult(net.minecraft.world.InteractionResult.SUCCESS);
-    }
-
-    /**
-     * Right-clicking a boarded gate nails another board back on.
-     *
-     * <p>Free, and deliberately so: the price is the second and a quarter you
-     * spend facing the wrong way with the arena at your back, which is the same
-     * price the genre has always charged. Handled ahead of the block-break rules
-     * because the gate frame is otherwise inert scenery.
-     *
-     * <p>Doubles as the rubble-digging handler on maps with sealed-off rooms.
-     */
-    @SubscribeEvent
-    public void onRepairBarricade(net.neoforged.neoforge.event.entity.player.PlayerInteractEvent.RightClickBlock event) {
-        if (!(event.getLevel() instanceof ServerLevel level) || !inAbyss(level)) {
-            return;
-        }
-        if (!(event.getEntity() instanceof ServerPlayer player)) {
-            return;
-        }
-        com.jrpetty.aztecabyss.worldgen.ArenaMap map = RoundManager.game().getMap();
-        // Gated on the economy as well as the boards. Everything below - the wall
-        // buys, the Box, the Draughts, the Crucible - lives in this handler, so
-        // checking only for barricades would take the whole shop out with them
-        // the moment a map stopped having boards.
-        if (!map.hasEconomy() && !map.hasBarricades()) {
-            return;
-        }
-        // Shop fronts and the Crucible come before the boards: both sit on walls
-        // a window could otherwise claim.
-        if (map.hasEconomy()) {
-            int shop = com.jrpetty.aztecabyss.worldgen.OutpostBuilder.shopIndexNear(event.getPos());
-            if (shop >= 0 && shop < com.jrpetty.aztecabyss.round.OutpostShop.CATALOGUE.length) {
-                com.jrpetty.aztecabyss.round.OutpostShop.buy(level, player,
-                        com.jrpetty.aztecabyss.round.OutpostShop.CATALOGUE[shop]);
-                event.setCanceled(true);
-                event.setCancellationResult(net.minecraft.world.InteractionResult.SUCCESS);
-                return;
-            }
-            if (com.jrpetty.aztecabyss.round.MysteryBox.isBox(event.getPos())) {
-                com.jrpetty.aztecabyss.round.MysteryBox.open(level, player,
-                        net.minecraft.util.RandomSource.create());
-                event.setCanceled(true);
-                event.setCancellationResult(net.minecraft.world.InteractionResult.SUCCESS);
-                return;
-            }
-            int draught = com.jrpetty.aztecabyss.worldgen.OutpostBuilder.draughtIndexNear(event.getPos());
-            if (draught >= 0) {
-                com.jrpetty.aztecabyss.round.Draughts.buy(level, player,
-                        com.jrpetty.aztecabyss.round.Draughts.Draught.values()[draught]);
-                event.setCanceled(true);
-                event.setCancellationResult(net.minecraft.world.InteractionResult.SUCCESS);
-                return;
-            }
-            if (com.jrpetty.aztecabyss.worldgen.OutpostBuilder.isCrucible(event.getPos())) {
-                com.jrpetty.aztecabyss.round.OutpostShop.useCrucible(level, player);
-                event.setCanceled(true);
-                event.setCancellationResult(net.minecraft.world.InteractionResult.SUCCESS);
-                return;
-            }
-        }
-        // Rubble first: a pile sits in a doorway, well clear of any window.
-        if (map == com.jrpetty.aztecabyss.worldgen.ArenaMap.OUTPOST) {
-            int area = com.jrpetty.aztecabyss.worldgen.OutpostBuilder.debrisAreaNear(event.getPos());
-            if (area >= 0 && !RoundManager.isAreaOpen(area)) {
-                RoundManager.digDebris(level, player, area);
-                event.setCanceled(true);
-                event.setCancellationResult(net.minecraft.world.InteractionResult.SUCCESS);
-                return;
-            }
-        }
-        int gate = com.jrpetty.aztecabyss.round.Barricade.gateIndexNear(map, event.getPos());
-        if (gate < 0) {
-            return;
-        }
-        RoundManager.repairBarricade(level, player, gate);
         event.setCanceled(true);
         event.setCancellationResult(net.minecraft.world.InteractionResult.SUCCESS);
     }
@@ -415,6 +291,8 @@ public final class AbyssEventHandler {
     public void onPlayerLoggedIn(PlayerEvent.PlayerLoggedInEvent event) {
         if (event.getEntity() instanceof ServerPlayer player) {
             RoundManager.resolveOwedRewardOnLogin(player);
+            // Anything the retired Outpost was still holding goes back to its owner.
+            com.jrpetty.aztecabyss.round.LegacyVault.returnHeldGear(player);
             // Restore the on-screen re-entry countdown if a lockout is still running.
             com.jrpetty.aztecabyss.network.ModNetworking.sendCooldown(
                     player, player.getData(ModAttachments.RUN_STATE).getCooldownUntil());

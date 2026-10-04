@@ -49,9 +49,9 @@ public final class MazeHud {
     // The mod's ink palette, same as every screen it draws.
     private static final int PANEL = 0xE60B0A10;
     private static final int EDGE = 0xFF2A2836;
-    private static final int TEXT = 0xFFD8D5E4;
-    private static final int TEXT_DIM = 0xFF7A7690;
-    private static final int TEXT_FAINT = 0xFF4A4760;
+    private static final int TEXT = UiKit.TEXT;
+    private static final int TEXT_DIM = UiKit.TEXT_DIM;
+    private static final int TEXT_FAINT = UiKit.TEXT_FAINT;
     private static final int GREEN = 0xFF63D488;
     private static final int AMBER = 0xFFE0A040;
     private static final int RED = 0xFFE05555;
@@ -119,10 +119,12 @@ public final class MazeHud {
         int ty = y + 5;
 
         // Day, and the threat multiplier at the right edge.
-        g.drawString(font, "DAY " + s.day(), tx, ty, TEXT, true);
+        // Day one is day one: the server counts from zero, every line a
+        // player reads counts from one.
+        g.drawString(font, "DAY " + (s.day() + 1), tx, ty, TEXT, true);
         String threat = "☠ " + (s.threatX10() / 10) + "." + (s.threatX10() % 10) + "×";
         g.drawString(font, threat, x + w - 6 - font.width(threat), ty,
-                s.threatX10() >= 20 ? RED : TEXT_DIM, false);
+                s.threatX10() >= 20 ? RED : TEXT_DIM, true);
         ty += 11;
 
         // The door clock. The one line somebody dies for misreading.
@@ -144,12 +146,12 @@ public final class MazeHud {
 
         // Trade.
         if (s.job().isEmpty()) {
-            g.drawString(font, "no trade · /maze job", tx, ty, TEXT_FAINT, false);
+            g.drawString(font, "no trade · see the Trade Board", tx, ty, TEXT_FAINT, true);
         } else {
             int accent = jobAccent(s.job());
             g.fill(tx, ty + 1, tx + 5, ty + 6, accent);
             g.drawString(font, jobName(s.job()) + " · lv " + s.jobLevel(),
-                    tx + 9, ty, accent, false);
+                    tx + 9, ty, accent, true);
         }
         ty += 11;
 
@@ -163,9 +165,9 @@ public final class MazeHud {
                 for (int i = 0; i < s.stingMax(); i++) {
                     pips.append(i < s.stings() ? '◆' : '◇');
                 }
-                g.drawString(font, pips.toString(), tx, ty, RED, false);
+                g.drawString(font, pips.toString(), tx, ty, RED, true);
                 g.drawString(font, " stung " + s.stings() + "/" + s.stingMax(),
-                        tx + font.width(pips.toString()), ty, TEXT_DIM, false);
+                        tx + font.width(pips.toString()), ty, TEXT_DIM, true);
             }
             ty += 11;
         }
@@ -182,15 +184,15 @@ public final class MazeHud {
                 }
                 line.append("run ").append(mmss(s.runSeconds()));
             }
-            g.drawString(font, line.toString(), tx, ty, BLUE, false);
+            g.drawString(font, line.toString(), tx, ty, BLUE, true);
             ty += 11;
         }
 
         // The settlement's ledger, and the way in to the rest of the UI.
         g.drawString(font, "larder " + s.larder() + " · chart " + s.gladePct() + "%",
-                tx, ty, TEXT_FAINT, false);
-        String hint = "[M]";
-        g.drawString(font, hint, x + w - 6 - font.width(hint), ty, TEXT_FAINT, false);
+                tx, ty, TEXT_FAINT, true);
+        String hint = "[" + ClientSetup.MAZE_HUB.getTranslatedKeyMessage().getString() + "]";
+        g.drawString(font, hint, x + w - 6 - font.width(hint), ty, TEXT_FAINT, true);
     }
 
     // ------------------------------------------------------------------

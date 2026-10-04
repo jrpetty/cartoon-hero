@@ -74,8 +74,8 @@ public final class Barricades {
      *
      * <p>Both come off a sign and neither can change while a run is going, but
      * they were being rebuilt on every tick of every barricade that still had a
-     * board on it - two {@link AABB} objects each, and on a map like the Outpost
-     * that is ten openings twenty times a second.
+     * board on it - two {@link AABB} objects each, and on a map with ten
+     * boarded windows that is ten openings twenty times a second.
      */
     private final AABB[] bite;
     private final int[] holdTicks;

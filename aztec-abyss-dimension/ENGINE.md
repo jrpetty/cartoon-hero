@@ -11,8 +11,8 @@ running.
 
 ## 0. The one idea
 
-Everything the mod currently hardcodes — the Temple, the Bridge, the Outpost, the
-Maze — becomes an instance of three data files:
+Everything the mod currently hardcodes — the Temple, the Bridge, the Maze —
+becomes an instance of three data files:
 
 | Layer | What it is | What it answers |
 |---|---|---|

@@ -4,7 +4,6 @@ import com.jrpetty.aztecabyss.network.SkillLearnPayload;
 import com.jrpetty.aztecabyss.network.SkillTreePayload;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
-import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 import net.neoforged.neoforge.network.PacketDistributor;
 
@@ -42,7 +41,7 @@ import java.util.List;
  * always what the server actually thinks - a client that guesses is a client
  * that eventually shows somebody a rank they do not have.
  */
-public class SkillTreeScreen extends Screen {
+public class SkillTreeScreen extends AbyssScreen {
 
     /** One skill, unpacked. */
     private record Row(String id, String display, int rank, int max, String[] ranks) {
@@ -56,21 +55,17 @@ public class SkillTreeScreen extends Screen {
 
     /** Which column the pointer is over, or -1. */
     private int hovered = -1;
-    /** Ticks since opening, for the one thing on screen that moves. */
-    private int age = 0;
     private boolean confirmingForget = false;
 
     // Chrome.
     private static final int CARD_W = 132;
     private static final int CARD_GAP = 10;
-    private static final int BG_TOP = 0xFF0B0A10;
-    private static final int BG_BOTTOM = 0xFF060508;
-    private static final int CARD_FILL = 0xFF14131C;
-    private static final int CARD_EDGE = 0xFF2A2836;
-    private static final int CARD_EDGE_HOT = 0xFF6B6788;
-    private static final int TEXT = 0xFFD8D5E4;
-    private static final int TEXT_DIM = 0xFF7A7690;
-    private static final int TEXT_FAINT = 0xFF4A4760;
+    private static final int CARD_FILL = UiKit.PANEL;
+    private static final int CARD_EDGE = UiKit.EDGE;
+    private static final int CARD_EDGE_HOT = UiKit.EDGE_HOT;
+    private static final int TEXT = UiKit.TEXT;
+    private static final int TEXT_DIM = UiKit.TEXT_DIM;
+    private static final int TEXT_FAINT = UiKit.TEXT_FAINT;
 
     public SkillTreeScreen(SkillTreePayload payload) {
         super(Component.literal("Trade"));
@@ -166,63 +161,40 @@ public class SkillTreeScreen extends Screen {
     }
 
     @Override
-    public boolean isPauseScreen() {
-        return false;
+    protected int glow() {
+        return UiKit.alpha(accent(), 0x22);
     }
 
     @Override
-    public void renderBackground(GuiGraphics g, int mouseX, int mouseY, float partialTick) {
-        g.fillGradient(0, 0, this.width, this.height, BG_TOP, BG_BOTTOM);
-    }
-
-    /** No blur under type. Same call every screen in this mod makes. */
-    @Override
-    protected void renderBlurredBackground(float partialTick) {
-        // Intentionally empty.
-    }
-
-    @Override
-    public void render(GuiGraphics g, int mouseX, int mouseY, float partialTick) {
-        age++;
-        this.renderBackground(g, mouseX, mouseY, partialTick);
-
+    protected void renderContent(GuiGraphics g, int mouseX, int mouseY, float partialTick) {
         int accent = accent();
         int cx = this.width / 2;
 
         // --- header -------------------------------------------------------
-        g.drawCenteredString(this.font, Component.literal("§8YOUR TRADE"), cx, 18, TEXT_FAINT);
-        g.pose().pushPose();
-        g.pose().translate(cx, 30, 0);
-        g.pose().scale(2.0f, 2.0f, 1.0f);
-        g.drawCenteredString(this.font, Component.literal(strip(jobDisplay).toUpperCase(java.util.Locale.ROOT)),
-                0, 0, accent);
-        g.pose().popPose();
-
-        // A hairline under the title, in the trade's colour. Cheap, and it makes
-        // the header read as a masthead rather than as floating text.
-        g.fill(cx - 120, 52, cx + 120, 53, (accent & 0x00FFFFFF) | 0x50000000);
+        UiKit.masthead(g, this.font, "YOUR TRADE",
+                strip(jobDisplay).toUpperCase(java.util.Locale.ROOT), cx, 18, accent);
+        // The ornament under the title, in the trade's colour, so the header
+        // reads as a masthead rather than as floating text.
+        UiKit.fret(g, cx, 51, 120, accent);
 
         // --- the points meter ---------------------------------------------
         int barW = 240;
         int barX = cx - barW / 2;
         int barY = 64;
         int into = have % need;
-        int filled = (int) (barW * (into / (float) need));
-        g.fill(barX, barY, barX + barW, barY + 5, 0xFF1A1926);
-        g.fill(barX, barY, barX + filled, barY + 5, accent);
-        g.drawString(this.font, Component.literal("§8" + into + "/" + need + " to the next point"),
-                barX, barY + 9, TEXT_FAINT, false);
+        UiKit.meter(g, barX, barY, barW, 5, into / (float) need, accent);
+        g.drawString(this.font, into + "/" + need + " to the next point",
+                barX, barY + 9, TEXT_FAINT, true);
 
         String spare = available + (available == 1 ? " point" : " points");
         // The only thing on screen that moves, and only when it matters: unspent
         // points breathe. A number you have to remember to look at is a number
         // that sits unspent for a week.
         int pulse = available > 0
-                ? 0xFF000000 | pulseRgb(accent, (float) (0.72 + 0.28 * Math.sin(age / 7.0)))
+                ? UiKit.pulse(accent, (float) (0.72 + 0.28 * Math.sin(age() / 7.0)))
                 : TEXT_FAINT;
-        g.drawString(this.font, Component.literal(available > 0 ? "◆ " + spare : "no points spare"),
-                barX + barW - this.font.width(available > 0 ? "◆ " + spare : "no points spare"),
-                barY + 9, pulse, false);
+        String spareText = available > 0 ? "◆ " + spare : "no points spare";
+        g.drawString(this.font, spareText, barX + barW - this.font.width(spareText), barY + 9, pulse, true);
 
         // --- columns ------------------------------------------------------
         int total = rows.size() * CARD_W + Math.max(0, rows.size() - 1) * CARD_GAP;
@@ -243,19 +215,9 @@ public class SkillTreeScreen extends Screen {
 
         // --- the footer line ----------------------------------------------
         String foot = hovered >= 0
-                ? "§8" + strip(rows.get(hovered).display()) + " — every rank of it"
-                : "§8Nothing here makes you stronger. It makes you better at your job.";
-        g.drawCenteredString(this.font, Component.literal(foot), cx, this.height - 46, TEXT_FAINT);
-
-        super.render(g, mouseX, mouseY, partialTick);
-    }
-
-    /** Lerps a colour toward black, for the pulse. Kept off the alpha channel. */
-    private static int pulseRgb(int argb, float k) {
-        int r = (int) (((argb >> 16) & 0xFF) * k);
-        int gr = (int) (((argb >> 8) & 0xFF) * k);
-        int b = (int) ((argb & 0xFF) * k);
-        return (r << 16) | (gr << 8) | b;
+                ? strip(rows.get(hovered).display()) + " — every rank of it"
+                : "Nothing here makes you stronger. It makes you better at your job.";
+        g.drawCenteredString(this.font, foot, cx, this.height - 46, TEXT_FAINT);
     }
 
     /**
@@ -266,19 +228,14 @@ public class SkillTreeScreen extends Screen {
      * now" and "where does this go" in the same glance.
      */
     private void drawCard(GuiGraphics g, Row r, int x, int y, int h, int accent, boolean hot) {
-        g.fill(x, y, x + CARD_W, y + h, CARD_FILL);
-        int edge = hot ? CARD_EDGE_HOT : CARD_EDGE;
-        g.fill(x, y, x + CARD_W, y + 1, edge);
-        g.fill(x, y + h - 1, x + CARD_W, y + h, edge);
-        g.fill(x, y, x + 1, y + h, edge);
-        g.fill(x + CARD_W - 1, y, x + CARD_W, y + h, edge);
+        UiKit.panel(g, x, y, CARD_W, h, hot ? UiKit.PANEL_HOT : CARD_FILL, hot ? CARD_EDGE_HOT : CARD_EDGE);
         // A cap in the trade's colour, filled to however far this column is bought.
         int capW = (int) ((CARD_W - 2) * (r.rank() / (float) r.max()));
         g.fill(x + 1, y + 1, x + 1 + capW, y + 4, accent);
 
         int cx = x + CARD_W / 2;
-        g.drawCenteredString(this.font, Component.literal(strip(r.display())), cx, y + 12,
-                r.rank() > 0 ? TEXT : TEXT_DIM);
+        g.drawCenteredString(this.font, Component.literal(strip(r.display())).withStyle(st -> st.withBold(true)),
+                cx, y + 12, r.rank() > 0 ? accent : TEXT);
 
         // Rank pips.
         int pipY = y + 26;
@@ -289,9 +246,9 @@ public class SkillTreeScreen extends Screen {
             boolean owned = i < r.rank();
             boolean next = i == r.rank();
             g.fill(px - 4, pipY, px + 4, pipY + 8, owned ? accent
-                    : next ? 0xFF3A3750 : 0xFF201F2C);
+                    : next ? 0xFF46425E : 0xFF262435);
             if (next && !owned) {
-                g.fill(px - 2, pipY + 2, px + 2, pipY + 6, 0xFF56536E);
+                g.fill(px - 2, pipY + 2, px + 2, pipY + 6, 0xFF7A769A);
             }
         }
 
@@ -300,12 +257,12 @@ public class SkillTreeScreen extends Screen {
         for (int i = 0; i < r.max(); i++) {
             boolean owned = i < r.rank();
             boolean next = i == r.rank();
-            int colour = owned ? TEXT : next ? 0xFFBFBBD0 : TEXT_FAINT;
+            int colour = owned ? TEXT : next ? TEXT_DIM : TEXT_FAINT;
             String prefix = owned ? "✔ " : next ? "▸ " : "· ";
             List<net.minecraft.util.FormattedCharSequence> lines =
                     this.font.split(Component.literal(prefix + strip(r.ranks()[i])), CARD_W - 16);
             for (net.minecraft.util.FormattedCharSequence line : lines) {
-                g.drawString(this.font, line, x + 8, textY, colour, false);
+                g.drawString(this.font, line, x + 8, textY, colour, true);
                 textY += 10;
             }
             textY += 3;

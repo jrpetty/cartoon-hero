@@ -61,9 +61,9 @@ public final class PublishedMaps {
     /**
      * Where published maps live on the X axis.
      *
-     * <p>Clear of the Temple at the origin, the Bridge at 2000 and the Outpost,
-     * with room for a very large map in every slot and a wide gap between them so
-     * nothing can ever hear or see its neighbour.
+     * <p>Clear of the Temple at the origin, the Bridge at 2000 and the ground a
+     * retired arena still stands on, with room for a very large map in every slot
+     * and a wide gap between them so nothing can ever hear or see its neighbour.
      */
     private static final int SLOT_ORIGIN_X = 20000;
     private static final int SLOT_SPACING = 2048;

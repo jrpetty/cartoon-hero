@@ -3,7 +3,6 @@ package com.jrpetty.aztecabyss.client;
 import com.jrpetty.aztecabyss.network.MazeVictoryPayload;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
-import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 
 /**
@@ -18,19 +17,14 @@ import net.minecraft.network.chat.Component;
  * <p>Deliberately quiet chrome. A win screen that screams is a slot machine;
  * this one is a record being read out.
  */
-public class MazeVictoryScreen extends Screen {
+public class MazeVictoryScreen extends AbyssScreen {
 
     private final MazeVictoryPayload prize;
-    private int age = 0;
 
-    private static final int BG_TOP = 0xFF0B0A10;
-    private static final int BG_BOTTOM = 0xFF060508;
-    private static final int PANEL_FILL = 0xFF14131C;
-    private static final int PANEL_EDGE = 0xFF2A2836;
-    private static final int TEXT = 0xFFD8D5E4;
-    private static final int TEXT_DIM = 0xFF7A7690;
-    private static final int TEXT_FAINT = 0xFF4A4760;
-    private static final int GOLD = 0xFFFFC94A;
+    private static final int TEXT = UiKit.TEXT;
+    private static final int TEXT_DIM = UiKit.TEXT_DIM;
+    private static final int TEXT_FAINT = UiKit.TEXT_FAINT;
+    private static final int GOLD = UiKit.GOLD;
 
     private static final int PANEL_W = 300;
 
@@ -62,39 +56,21 @@ public class MazeVictoryScreen extends Screen {
     }
 
     @Override
-    public boolean isPauseScreen() {
-        return false;
+    protected int glow() {
+        return 0x30FFC94A;
     }
 
     @Override
-    public void renderBackground(GuiGraphics g, int mouseX, int mouseY, float partialTick) {
-        g.fillGradient(0, 0, this.width, this.height, BG_TOP, BG_BOTTOM);
-    }
-
-    /** No blur under type. Same call every screen in this mod makes. */
-    @Override
-    protected void renderBlurredBackground(float partialTick) {
-        // Intentionally empty.
-    }
-
-    @Override
-    public void render(GuiGraphics g, int mouseX, int mouseY, float partialTick) {
-        age++;
-        this.renderBackground(g, mouseX, mouseY, partialTick);
-
+    protected void renderContent(GuiGraphics g, int mouseX, int mouseY, float partialTick) {
         int x = panelX();
         int top = panelTop();
         int cx = this.width / 2;
         int bottom = panelBottom();
 
-        g.fill(x, top, x + PANEL_W, bottom, PANEL_FILL);
-        g.fill(x, top, x + PANEL_W, top + 1, PANEL_EDGE);
-        g.fill(x, bottom - 1, x + PANEL_W, bottom, PANEL_EDGE);
-        g.fill(x, top, x + 1, bottom, PANEL_EDGE);
-        g.fill(x + PANEL_W - 1, top, x + PANEL_W, bottom, PANEL_EDGE);
+        UiKit.panel(g, x, top, PANEL_W, bottom - top);
         // A gold cap that breathes, once a second, gently. The one moving
         // thing on the screen, because this is the one screen that earned it.
-        int glow = 0xFF000000 | pulseRgb(GOLD, (float) (0.75 + 0.25 * Math.sin(age / 9.0)));
+        int glow = UiKit.pulse(GOLD, (float) (0.75 + 0.25 * Math.sin(age() / 9.0)));
         g.fill(x + 1, top + 1, x + PANEL_W - 1, top + 4, glow);
 
         String stats = prize.stats();
@@ -106,14 +82,9 @@ public class MazeVictoryScreen extends Screen {
         int seconds = MazeVictoryPayload.number(stats, 5);
         int game = MazeVictoryPayload.number(stats, 6);
 
-        g.drawCenteredString(this.font, Component.literal("§8GAME " + game + " — THE MAZE"),
-                cx, top + 12, TEXT_FAINT);
-        g.pose().pushPose();
-        g.pose().translate(cx, top + 26, 0);
-        g.pose().scale(2.0f, 2.0f, 1.0f);
-        g.drawCenteredString(this.font, Component.literal("YOU GOT OUT"), 0, 0, GOLD);
-        g.pose().popPose();
-        g.drawCenteredString(this.font, Component.literal("§7" + name), cx, top + 46, TEXT);
+        g.drawCenteredString(this.font, "GAME " + game + " — THE MAZE", cx, top + 12, TEXT_FAINT);
+        UiKit.big(g, this.font, Component.literal("YOU GOT OUT"), cx, top + 25, 2.0f, GOLD);
+        g.drawCenteredString(this.font, name, cx, top + 46, TEXT);
 
         // The run, in the numbers that were actually the run.
         int y = top + 62;
@@ -133,9 +104,9 @@ public class MazeVictoryScreen extends Screen {
 
         // The hall. The reason the screen exists: the line is permanent.
         y = top + 118;
-        g.fill(x + 12, y - 4, x + PANEL_W - 12, y - 3, PANEL_EDGE);
+        UiKit.fret(g, cx, y - 6, PANEL_W / 2 - 14, GOLD);
         g.drawCenteredString(this.font, Component.literal(
-                "§6THE HALL OF THE OUT §8— " + prize.hallTotal()
+                "§6THE HALL OF THE OUT §7— " + prize.hallTotal()
                         + (prize.hallTotal() == 1 ? " escape, ever" : " escapes, ever")),
                 cx, y, GOLD);
         y += 12;
@@ -146,30 +117,20 @@ public class MazeVictoryScreen extends Screen {
             int p = MazeVictoryPayload.number(line, 2);
             boolean you = i == 0 && who.equals(name);
             g.drawCenteredString(this.font, Component.literal(
-                    (you ? "§f▸ " : "§8") + who + " §8— " + d
+                    (you ? "§f▸ " : "§7") + who + " §7— " + d
                             + (d == 1 ? " day" : " days") + ", " + p + "% charted"),
                     cx, y, you ? TEXT : TEXT_FAINT);
             y += 12;
         }
 
-        g.drawCenteredString(this.font, Component.literal(
-                "§8Your line is written. Nothing takes it off."), cx, bottom - 14, TEXT_FAINT);
-
-        super.render(g, mouseX, mouseY, partialTick);
+        g.drawCenteredString(this.font, "Your line is written. Nothing takes it off.",
+                cx, bottom - 14, TEXT_FAINT);
     }
 
     private int stat(GuiGraphics g, int cx, int y, String label, String value) {
-        g.drawCenteredString(this.font, Component.literal("§7" + label + " §8· " + value),
+        g.drawCenteredString(this.font, Component.literal("§7" + label + " · " + value),
                 cx, y, TEXT_DIM);
         return y + 11;
-    }
-
-    /** Lerps a colour toward black, for the pulse. Kept off the alpha channel. */
-    private static int pulseRgb(int argb, float k) {
-        int r = (int) (((argb >> 16) & 0xFF) * k);
-        int gr = (int) (((argb >> 8) & 0xFF) * k);
-        int b = (int) ((argb & 0xFF) * k);
-        return (r << 16) | (gr << 8) | b;
     }
 
     @Override

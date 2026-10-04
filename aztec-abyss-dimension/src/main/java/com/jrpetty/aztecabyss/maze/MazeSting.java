@@ -280,9 +280,9 @@ public final class MazeSting {
         UUID id = player.getUUID();
         if (INFECTED.contains(id)) {
             Integer left = COUNTDOWN.get(id);
-            return left == null ? " §8| §4§lTURNING" : " §8| §4CHANGING §c" + left + "s";
+            return left == null ? " §7· §4§lTURNING" : " §7· §4CHANGING §c" + left + "s";
         }
         int n = stings(id);
-        return n == 0 ? "" : " §8| §cStung " + n + "§8/§c" + thresholdFor(level, player);
+        return n == 0 ? "" : " §7· §cStung " + n + "§7/§c" + thresholdFor(level, player);
     }
 }

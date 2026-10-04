@@ -35,7 +35,6 @@ public final class MonumentBuilder {
     public static void build(ServerLevel level) {
         buildAt(level, AztecAbyssConstants.MONUMENT_POS);
         buildAt(level, BRIDGE_MONUMENT);
-        buildAt(level, OutpostBuilder.MONUMENT);
     }
 
     /**
@@ -65,6 +64,21 @@ public final class MonumentBuilder {
             level.setBlock(new BlockPos(x, floorY, z + dz), BASE, 3);
             level.setBlock(new BlockPos(x + 1, floorY, z + dz), BASE, 3);
         }
+        // A monument raised while there were three arenas is a column wider than
+        // this one, and rebuilding over it would leave that column standing with
+        // its old signs on. Only monument blocks are cleared, never scenery.
+        for (int dz = columns * 2; dz <= columns * 2 + 3; dz++) {
+            for (int y = floorY + 1; y <= floorY + 4; y++) {
+                for (int dx = 0; dx <= 1; dx++) {
+                    BlockPos stale = new BlockPos(x + dx, y, z + dz);
+                    BlockState was = level.getBlockState(stale);
+                    if (was.is(TRIM.getBlock()) || was.is(FACE.getBlock())
+                            || was.is(Blocks.WARPED_WALL_SIGN)) {
+                        level.setBlock(stale, Blocks.AIR.defaultBlockState(), 3);
+                    }
+                }
+            }
+        }
 
         AbyssStats stats = AbyssStats.get(level.getServer());
 
@@ -78,11 +92,7 @@ public final class MonumentBuilder {
         for (int i = 0; i < maps.length; i++) {
             int cz = z + (i + 1) * 2;
             ArenaMap map = maps[i];
-            String shortName = switch (map) {
-                case BRIDGE -> "THE BRIDGE";
-                case OUTPOST -> "THE OUTPOST";
-                default -> "THE TEMPLE";
-            };
+            String shortName = map == ArenaMap.BRIDGE ? "THE BRIDGE" : "THE TEMPLE";
             writeSign(level, new BlockPos(x, floorY + 3, cz), new String[]{
                     "", "§b§l" + shortName, "§7best rounds", ""});
             writeSign(level, new BlockPos(x, floorY + 2, cz), mapLeaderboardLines(stats, i, 0));

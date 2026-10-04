@@ -13,6 +13,82 @@ behaviour that was already there · **docs**
 
 ## Unreleased
 
+### Every screen can finally be seen
+
+Since 1.20.2, vanilla's screen render paints the background itself. Every
+screen in this mod painted its background, drew its panels and text, and then
+called the vanilla render for its buttons - which painted the opaque backdrop a
+second time, over all of it. Only shadowed text, item icons and buttons
+survived. The picker's cards had no bodies, the trade sheet's columns were
+empty, the Glade's chart was a black square and "Your runs" looked blank. The
+first full client tour photographed it; nobody had ever seen these screens as
+written.
+
+- **fix** **All ten screens draw in the right order.** A shared base
+  (`AbyssScreen`) owns it: backdrop once, then the screen's own content, then
+  widgets, then tooltips. The order cannot be got wrong by a subclass any more.
+- **change** **One palette and one set of shapes** (`UiKit`) for every screen:
+  raised panels, tags, meters, a stepped-pyramid ornament under the mastheads,
+  and secondary inks chosen against the ground they sit on - the old "faint"
+  grey was seven shades off the backdrop. Body text is drawn with its shadow.
+- **change** **The portal picker, rebuilt.** The two arenas side by side as
+  cards (pitch, difficulty, your best round), and the Maze, Player Maps and Map
+  Creator as tiles of their own - no more dark-grey captions on grey buttons.
+  Cards and tiles are real widgets: Tab, Enter and the narrator all work.
+- **fix** **Records no longer overlaps itself.** The SOLO/GROUP headers sat on
+  the tab buttons and the map title on the first row. Map paging moved up
+  beside the title; runs from a map that has left the portal still get a name.
+- **change** The run recap names the arena and the kind of run, shows the
+  round large, lays its stats out in two columns and counts down on its button.
+- **change** **The arena HUD names the map you are on** ("THE LONG BRIDGE",
+  not "THE AZTEC ABYSS" everywhere) and shows how much of the wave is down as a
+  bar. The round boss bar names the map too. The squad panel stacks under it.
+- **fix** The low-health vignette's side bands faded top to bottom instead of
+  inward from the edges.
+- **fix** Animations on screens ran by frame count - twice as fast at 120 FPS.
+  They run by time now.
+
+### The Maze looks like the Maze
+
+- **fix** **Grievers were drawn as plain oversized spiders.** The skin layer
+  checked a tag that only exists on the server, so it never applied on any
+  client. It now reads the Griever team, which every client is told about.
+- **change** **A new Griever skin**, painted onto the spider's actual UV
+  layout: armoured plates, a riveted spine with glowing vents, jointed metal
+  legs, mandibles, and eight amber eyes that stay lit in the dark. Regenerate
+  with `tools/griever_texture.py`.
+- **fix** **Day one is day one.** The HUD and the hub said DAY 0 while the bar
+  and chat said Day 1.
+- **change** The maze bar drops the layout's internal name ("doors_day_0") and
+  reads "Day 1 · Doors seal in 24:51".
+- **fix** **The hub's Trade sheet and Order slate buttons typed commands on
+  your behalf**, so on a server that restricts commands they did nothing. They
+  ask the server directly now.
+- **change** Messages that told players to type `/maze …` point at the place
+  in the Glade instead (the Slate by the Box, the Trade Board, the hub key as
+  you have it bound).
+
+### The Outpost is retired
+
+- **change** **The third arena is gone** - the map, its economy, shop, Mystery
+  Box, power-ups, draughts and boarded windows. The picker shows the two arenas
+  that are finished.
+- **fix** Nothing anybody owned is lost: gear the Outpost was still holding in
+  its vault goes back to its owner the next time they log in, added to what
+  they carry, overflow dropped at their feet. A stored choice of the old map
+  becomes the Temple. Its old records stay on disk; it no longer gets a page
+  of its own in Records, and runs on it still show in "Your runs".
+- **change** The monuments lose their third column, and a monument raised
+  with three columns has the stale one cleared on its next rebuild.
+
+### The tour
+
+- **fix** Screenshots wait for the screen to have been drawn for several
+  frames - the first tour photographed two loading screens.
+- **fix** The between-rounds shot put its camera inside the floor.
+- **feat** New shots of the maze itself: from above, down a corridor, and a
+  Griever close up at night.
+
 ### The build boots a server before it ships
 
 Nothing in this project had ever run before it reached the live server: CI

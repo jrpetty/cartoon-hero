@@ -38,34 +38,12 @@ public final class AbyssCommands {
                         .then(Commands.literal("solo").executes(ctx -> leaderboard(ctx.getSource(), false)))
                         .then(Commands.literal("multiplayer").executes(ctx -> leaderboard(ctx.getSource(), true)))
                         .then(Commands.literal("mp").executes(ctx -> leaderboard(ctx.getSource(), true))))
-                .then(Commands.literal("rebuild").requires(src -> src.hasPermission(2))
-                        .executes(ctx -> rebuildOutpost(ctx.getSource())))
                 .then(Commands.literal("ready").requires(src -> src.hasPermission(2))
                         .executes(ctx -> clearCooldown(ctx.getSource(), null))
                         .then(Commands.argument("target", net.minecraft.commands.arguments.EntityArgument.player())
                                 .executes(ctx -> clearCooldown(ctx.getSource(),
                                         net.minecraft.commands.arguments.EntityArgument.getPlayer(ctx, "target")))));
         event.getDispatcher().register(root);
-    }
-
-    /**
-     * {@code /abyss rebuild} - restamps the Outpost over the top of itself.
-     *
-     * <p>The arena is built once per world, so a world that already has one keeps
-     * whatever shape it was first given. Without this, seeing a change to the map
-     * means deleting the dimension.
-     */
-    private static int rebuildOutpost(CommandSourceStack source) {
-        net.minecraft.server.level.ServerLevel abyss = source.getServer()
-                .getLevel(com.jrpetty.aztecabyss.AztecAbyssConstants.ABYSS_LEVEL_KEY);
-        if (abyss == null) {
-            source.sendFailure(Component.literal("The Abyss dimension is not loaded."));
-            return 0;
-        }
-        com.jrpetty.aztecabyss.worldgen.ArenaGenerator.forceOutpostRebuild(abyss);
-        source.sendSuccess(() -> Component.literal(
-                "§6✔ The Outpost has been rebuilt to the current plan."), true);
-        return 1;
     }
 
     private static int clearCooldown(CommandSourceStack source, ServerPlayer target) throws

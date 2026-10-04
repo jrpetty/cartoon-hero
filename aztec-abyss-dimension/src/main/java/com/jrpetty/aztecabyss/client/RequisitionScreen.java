@@ -4,7 +4,6 @@ import com.jrpetty.aztecabyss.network.RequisitionOrderPayload;
 import com.jrpetty.aztecabyss.network.RequisitionPayload;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
-import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 import net.neoforged.neoforge.network.PacketDistributor;
 
@@ -45,7 +44,7 @@ import java.util.Map;
  * client that predicts its own balance is one that will eventually show somebody
  * points they do not have.
  */
-public class RequisitionScreen extends Screen {
+public class RequisitionScreen extends AbyssScreen {
 
     /** One catalogue line, unpacked. */
     private record Row(String group, String id, String display, int count, int cost,
@@ -78,20 +77,17 @@ public class RequisitionScreen extends Screen {
     private final Map<String, List<Row>> byGroup = new LinkedHashMap<>();
 
     private int tab;
-    private int age = 0;
     /** Which line the pointer is over, or -1. */
     private int hovered = -1;
 
     // Chrome, matched to the trade sheet so the two read as one interface.
-    private static final int BG_TOP = 0xFF0B0A10;
-    private static final int BG_BOTTOM = 0xFF060508;
-    private static final int PANEL_FILL = 0xFF14131C;
-    private static final int PANEL_EDGE = 0xFF2A2836;
-    private static final int ROW_FILL = 0xFF191822;
-    private static final int ROW_HOT = 0xFF232231;
-    private static final int TEXT = 0xFFD8D5E4;
-    private static final int TEXT_DIM = 0xFF7A7690;
-    private static final int TEXT_FAINT = 0xFF4A4760;
+    private static final int PANEL_FILL = UiKit.PANEL;
+    private static final int PANEL_EDGE = UiKit.EDGE;
+    private static final int ROW_FILL = 0xFF1C1B27;
+    private static final int ROW_HOT = 0xFF272536;
+    private static final int TEXT = UiKit.TEXT;
+    private static final int TEXT_DIM = UiKit.TEXT_DIM;
+    private static final int TEXT_FAINT = UiKit.TEXT_FAINT;
     private static final int ACCENT = 0xFFE0A040;
     private static final int GOLD = 0xFFFFC94A;
     private static final int RED = 0xFFD1495B;
@@ -225,26 +221,12 @@ public class RequisitionScreen extends Screen {
     }
 
     @Override
-    public boolean isPauseScreen() {
-        return false;
+    protected int glow() {
+        return UiKit.MAZE_GLOW;
     }
 
     @Override
-    public void renderBackground(GuiGraphics g, int mouseX, int mouseY, float partialTick) {
-        g.fillGradient(0, 0, this.width, this.height, BG_TOP, BG_BOTTOM);
-    }
-
-    /** No blur under type. Same call every screen in this mod makes. */
-    @Override
-    protected void renderBlurredBackground(float partialTick) {
-        // Intentionally empty.
-    }
-
-    @Override
-    public void render(GuiGraphics g, int mouseX, int mouseY, float partialTick) {
-        age++;
-        this.renderBackground(g, mouseX, mouseY, partialTick);
-
+    protected void renderContent(GuiGraphics g, int mouseX, int mouseY, float partialTick) {
         int cx = this.width / 2;
         int x = left();
         int top = panelTop();
@@ -252,13 +234,8 @@ public class RequisitionScreen extends Screen {
         int left = pool - spent;
 
         // --- header -------------------------------------------------------
-        g.drawCenteredString(this.font, Component.literal("§8THE BOX — DAY " + day),
-                cx, 10, TEXT_FAINT);
-        g.pose().pushPose();
-        g.pose().translate(cx, 19, 0);
-        g.pose().scale(1.6f, 1.6f, 1.0f);
-        g.drawCenteredString(this.font, Component.literal("REQUISITION"), 0, 0, ACCENT);
-        g.pose().popPose();
+        g.drawCenteredString(this.font, "THE BOX — DAY " + (day + 1), cx, 8, TEXT_FAINT);
+        UiKit.big(g, this.font, Component.literal("REQUISITION"), cx, 19, 1.6f, ACCENT);
 
         // --- the pool bar -------------------------------------------------
         // One pot for the whole Glade, so this bar is everybody's. The three
@@ -270,7 +247,7 @@ public class RequisitionScreen extends Screen {
         int filled = (int) (barW * (Math.min(spent, pool) / (float) denom));
         int workW = (int) (barW * (Math.min(fromWork, pool) / (float) denom));
         int bountyW = (int) (barW * (Math.min(fromBounty, pool) / (float) denom));
-        g.fill(x, barY, x + barW, barY + 7, 0xFF1A1926);
+        g.fill(x, barY, x + barW, barY + 7, 0xFF0A0910);
         // Earned slices sit at the far end, unfilled, so the part of today's pot
         // that somebody had to work or bleed for is visible even when it is
         // already spent.
@@ -282,22 +259,21 @@ public class RequisitionScreen extends Screen {
         }
         g.fill(x, barY, x + filled, barY + 7, left <= 0 ? GOLD : ACCENT);
 
-        g.drawString(this.font, Component.literal("§7" + spent + "§8 committed of " + pool),
-                x, barY + 11, TEXT_DIM, false);
+        g.drawString(this.font, Component.literal("§f" + spent + "§7 committed of " + pool),
+                x, barY + 11, TEXT_DIM, true);
         String rightLabel = left + " left";
         int pulse = left > 0 && spent == 0
-                ? 0xFF000000 | pulseRgb(ACCENT, (float) (0.72 + 0.28 * Math.sin(age / 7.0)))
+                ? UiKit.pulse(ACCENT, (float) (0.72 + 0.28 * Math.sin(age() / 7.0)))
                 : left > 0 ? TEXT : TEXT_FAINT;
-        g.drawString(this.font, Component.literal(rightLabel),
-                x + barW - this.font.width(rightLabel), barY + 11, pulse, false);
+        g.drawString(this.font, rightLabel, x + barW - this.font.width(rightLabel), barY + 11, pulse, true);
 
         // Where the pot came from, in one line.
-        String source = "§8" + heads + " head" + (heads == 1 ? "" : "s")
+        String source = "§7" + heads + " head" + (heads == 1 ? "" : "s")
                 + (fromWork > 0 ? "  §a+" + fromWork + " worked" : "")
                 + (fromBounty > 0 ? "  §6+" + fromBounty + " bounty" : "");
         g.drawString(this.font, Component.literal(source),
                 x + barW - this.font.width(source) - this.font.width(rightLabel) - 10,
-                barY + 11, TEXT_FAINT, false);
+                barY + 11, TEXT_FAINT, true);
 
         // --- your own day -------------------------------------------------
         // The pot is shared; this line is the only thing on screen that is
@@ -307,13 +283,13 @@ public class RequisitionScreen extends Screen {
             int qx = x + barW - qBarW;
             int qy = barY + 22;
             int qFill = (int) (qBarW * Math.min(1.0f, yourUnits / (float) yourQuota));
-            g.fill(qx, qy, qx + qBarW, qy + 4, 0xFF1A1926);
+            g.fill(qx, qy, qx + qBarW, qy + 4, 0xFF0A0910);
             g.fill(qx, qy, qx + qFill, qy + 4,
                     yourUnits >= yourQuota ? 0xFF63D488 : 0xFF3E9E4E);
             String mine = strip(jobDisplay) + " — " + yourUnits + "/" + yourQuota
-                    + " " + unitName + "  §a+" + yourCredits + "§8/" + maxCredits;
-            g.drawString(this.font, Component.literal("§8" + mine),
-                    x, qy - 1, TEXT_FAINT, false);
+                    + " " + unitName + "  §a+" + yourCredits + "§7/" + maxCredits;
+            g.drawString(this.font, Component.literal("§7" + mine),
+                    x, qy - 1, TEXT_FAINT, true);
         }
 
         // --- the panel ----------------------------------------------------
@@ -322,9 +298,7 @@ public class RequisitionScreen extends Screen {
         // slate you trust.
         int stripTop = contentBottom() + 4;
         int panelBottom = stripTop + 26;
-        g.fill(px - 3, top - 4, px + PANEL_W + 3, panelBottom, PANEL_FILL);
-        g.fill(px - 3, top - 4, px + PANEL_W + 3, top - 3, PANEL_EDGE);
-        g.fill(px - 3, panelBottom - 1, px + PANEL_W + 3, panelBottom, PANEL_EDGE);
+        UiKit.panel(g, px - 3, top - 4, PANEL_W + 6, panelBottom - (top - 4), PANEL_FILL, PANEL_EDGE);
 
         hovered = -1;
         List<Row> list = shown();
@@ -347,19 +321,17 @@ public class RequisitionScreen extends Screen {
             g.renderItem(icon(r), px + 4, ry);
 
             String name = r.display();
-            String bundle = r.count() > 0 ? " §8x" + r.count() : "";
+            String bundle = r.count() > 0 ? " §7x" + r.count() : "";
             g.drawString(this.font, Component.literal("§r" + name + bundle),
-                    px + 24, ry + 5, r.glade() > 0 ? TEXT : TEXT_DIM, false);
+                    px + 24, ry + 5, r.glade() > 0 ? TEXT : TEXT_DIM, true);
 
             String price = r.cost() + "p";
-            g.drawString(this.font, Component.literal(price),
-                    px + PANEL_W - 60 - this.font.width(price), ry + 5,
-                    r.cost() <= left ? TEXT_DIM : RED, false);
+            g.drawString(this.font, price, px + PANEL_W - 60 - this.font.width(price), ry + 5,
+                    r.cost() <= left ? TEXT_DIM : RED, true);
 
             if (r.glade() > 0) {
                 String n = "x" + r.glade();
-                g.drawString(this.font, Component.literal(n),
-                        px + PANEL_W - 52, ry + 5, GOLD, false);
+                g.drawString(this.font, n, px + PANEL_W - 52, ry + 5, GOLD, true);
             }
         }
 
@@ -386,15 +358,19 @@ public class RequisitionScreen extends Screen {
         }
         if (any) {
             String total = "= " + mineCost + "p";
-            g.drawString(this.font, Component.literal(total),
-                    px + PANEL_W - 6 - this.font.width(total), stripTop + 9, GOLD, false);
+            g.drawString(this.font, total, px + PANEL_W - 6 - this.font.width(total), stripTop + 9, GOLD, true);
         } else {
-            g.drawString(this.font, Component.literal(
-                    "§8Your crate is empty. Click + on anything above."),
-                    px + 6, stripTop + 9, TEXT_FAINT, false);
+            g.drawString(this.font, "Your crate is empty. Click + on anything above.",
+                    px + 6, stripTop + 9, TEXT_FAINT, true);
         }
+    }
 
-        super.render(g, mouseX, mouseY, partialTick);
+    @Override
+    protected void renderOverlay(GuiGraphics g, int mouseX, int mouseY, float partialTick) {
+        int cx = this.width / 2;
+        int px = left() + RAIL_W + 6;
+        int left = pool - spent;
+        List<Row> list = shown();
 
         // The real tooltip of the real item, so "what even is this" is
         // answered the way the rest of the game answers it.
@@ -414,30 +390,22 @@ public class RequisitionScreen extends Screen {
         } else if (hovered >= 0 && hovered < list.size()) {
             Row r = list.get(hovered);
             if (r.yours() > 0 && r.yours() != r.glade()) {
-                foot = "§8" + r.display() + " — §f" + r.glade() + "§8 on the Glade's slate, §f"
-                        + r.yours() + "§8 of them yours";
+                foot = "§7" + r.display() + " — §f" + r.glade() + "§7 on the Glade's slate, §f"
+                        + r.yours() + "§7 of them yours";
                 g.drawCenteredString(this.font, Component.literal(foot), cx, footTextY, TEXT_FAINT);
                 return;
             }
-            foot = "§8" + (r.count() > 0 ? r.count() + " × " : "") + r.display()
+            foot = "§7" + (r.count() > 0 ? r.count() + " × " : "") + r.display()
                     + " for " + r.cost() + ", and you have " + left;
         } else {
-            foot = "§8No weapons, tools or armour — order the stock and make them.";
+            foot = "§7No weapons, tools or armour — order the stock and make them.";
         }
         g.drawCenteredString(this.font, Component.literal(foot), cx, footTextY, colour);
     }
 
     /** Colour codes out. The trade names arrive with the server's colours on. */
     private static String strip(String s) {
-        return s == null ? "" : s.replaceAll("§.", "");
-    }
-
-    /** Lerps a colour toward black, for the pulse. Kept off the alpha channel. */
-    private static int pulseRgb(int argb, float k) {
-        int r = (int) (((argb >> 16) & 0xFF) * k);
-        int gr = (int) (((argb >> 8) & 0xFF) * k);
-        int b = (int) ((argb & 0xFF) * k);
-        return (r << 16) | (gr << 8) | b;
+        return UiKit.strip(s);
     }
 
     /** Shift-click a group name to jump; kept for the keyboard-minded. */

@@ -4,7 +4,6 @@ import com.jrpetty.aztecabyss.network.TradeBoardPayload;
 import com.jrpetty.aztecabyss.network.TradeChoicePayload;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
-import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 import net.minecraft.util.FormattedCharSequence;
 import net.neoforged.neoforge.network.PacketDistributor;
@@ -25,20 +24,16 @@ import java.util.List;
  * <p>Nothing here decides anything. The confirm sends a wish; the server
  * validates the trade and does the signing on, exactly as the command did.
  */
-public class TradeBoardScreen extends Screen {
+public class TradeBoardScreen extends AbyssScreen {
 
     private final TradeBoardPayload sheet;
 
     // The shared chrome, so the board reads as part of the same interface as
     // the slate and the trade sheet.
-    private static final int BG_TOP = 0xFF0B0A10;
-    private static final int BG_BOTTOM = 0xFF060508;
-    private static final int PANEL_FILL = 0xFF14131C;
-    private static final int PANEL_EDGE = 0xFF2A2836;
-    private static final int TEXT = 0xFFD8D5E4;
-    private static final int TEXT_DIM = 0xFF7A7690;
-    private static final int TEXT_FAINT = 0xFF4A4760;
-    private static final int GOLD = 0xFFFFC94A;
+    private static final int TEXT = UiKit.TEXT;
+    private static final int TEXT_DIM = UiKit.TEXT_DIM;
+    private static final int TEXT_FAINT = UiKit.TEXT_FAINT;
+    private static final int GOLD = UiKit.GOLD;
 
     private static final int PANEL_W = 300;
 
@@ -105,58 +100,37 @@ public class TradeBoardScreen extends Screen {
     }
 
     @Override
-    public boolean isPauseScreen() {
-        return false;
+    protected int glow() {
+        return UiKit.alpha(accent(), 0x22);
     }
 
     @Override
-    public void renderBackground(GuiGraphics g, int mouseX, int mouseY, float partialTick) {
-        g.fillGradient(0, 0, this.width, this.height, BG_TOP, BG_BOTTOM);
-    }
-
-    /** No blur under type. Same call every screen in this mod makes. */
-    @Override
-    protected void renderBlurredBackground(float partialTick) {
-        // Intentionally empty.
-    }
-
-    @Override
-    public void render(GuiGraphics g, int mouseX, int mouseY, float partialTick) {
-        this.renderBackground(g, mouseX, mouseY, partialTick);
-
+    protected void renderContent(GuiGraphics g, int mouseX, int mouseY, float partialTick) {
         int x = panelX();
         int top = panelTop();
         int cx = this.width / 2;
         int bottom = top + 66 + body.size() * 10 + 74;
 
         // The panel, with the trade's colour as a spine down the left edge.
-        g.fill(x, top, x + PANEL_W, bottom, PANEL_FILL);
-        g.fill(x, top, x + PANEL_W, top + 1, PANEL_EDGE);
-        g.fill(x, bottom - 1, x + PANEL_W, bottom, PANEL_EDGE);
-        g.fill(x, top, x + 1, bottom, PANEL_EDGE);
-        g.fill(x + PANEL_W - 1, top, x + PANEL_W, bottom, PANEL_EDGE);
-        g.fill(x + 1, top, x + 4, bottom, accent());
+        UiKit.panel(g, x, top, PANEL_W, bottom - top);
+        g.fill(x + 1, top + 1, x + 4, bottom - 1, accent());
 
-        g.drawCenteredString(this.font, Component.literal("§8THE TRADE BOARD"),
-                cx, top + 10, TEXT_FAINT);
-        g.pose().pushPose();
-        g.pose().translate(cx, top + 24, 0);
-        g.pose().scale(2.0f, 2.0f, 1.0f);
-        g.drawCenteredString(this.font, Component.literal(strip(sheet.display()).toUpperCase()),
-                0, 0, accent());
-        g.pose().popPose();
+        g.drawCenteredString(this.font, "THE TRADE BOARD", cx, top + 10, TEXT_FAINT);
+        UiKit.big(g, this.font, Component.literal(strip(sheet.display()).toUpperCase(java.util.Locale.ROOT)),
+                cx, top + 23, 2.0f, accent());
+        UiKit.fret(g, cx, top + 43, PANEL_W / 2 - 20, accent());
 
         int y = top + 52;
         // Who already wears it - before the pitch, because "the Glade already
         // has two Runners and no farmer" is half of the decision.
         String takers = sheet.takers().isEmpty()
-                ? "§8Nobody on the roster yet. The Glade needs one."
-                : "§8On the roster: " + sheet.takers();
+                ? "Nobody on the roster yet. The Glade needs one."
+                : "On the roster: " + strip(sheet.takers());
         g.drawCenteredString(this.font, Component.literal(takers), cx, y, TEXT_FAINT);
         y += 14;
 
         for (FormattedCharSequence line : body) {
-            g.drawString(this.font, line, x + 14, y, TEXT_DIM, false);
+            g.drawString(this.font, line, x + 14, y, TEXT_DIM, true);
             y += 10;
         }
 
@@ -169,8 +143,6 @@ public class TradeBoardScreen extends Screen {
                 : "§7Take the trade? The Glade will be counting on you.";
         g.drawCenteredString(this.font, Component.literal(sure), cx, y + 4,
                 switching ? GOLD : TEXT);
-
-        super.render(g, mouseX, mouseY, partialTick);
     }
 
     @Override

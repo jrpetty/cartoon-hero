@@ -18,12 +18,12 @@ public final class ClientAbyssState {
     private static volatile int playersUp = 0;
     private static volatile int playersTotal = 0;
     private static volatile int myKills = 0;
-
-    /** Whether the active map has boarded ways in at all. */
-    private static volatile boolean hasGates = false;
-    /** How many of them are standing open, and what share of boards survive. */
-    private static volatile int gatesOpen = 0;
-    private static volatile int gatesPercent = 0;
+    private static volatile int mapOrdinal = -1;
+    /**
+     * The most enemies this round has had left at once - its size, as far as
+     * the client can tell - so the HUD can show how much of the wave is down.
+     */
+    private static volatile int waveTotal = 0;
 
     /** Whether the live HUD panel is shown (toggled by the keybind). */
     private static volatile boolean hudVisible = true;
@@ -38,6 +38,13 @@ public final class ClientAbyssState {
     }
 
     public static void accept(AbyssStatePayload payload) {
+        if (payload.round() != round || !payload.inRun()) {
+            waveTotal = 0;
+        }
+        waveTotal = Math.max(waveTotal, payload.enemiesRemaining());
+        if (payload.mapOrdinal() >= 0) {
+            mapOrdinal = payload.mapOrdinal();
+        }
         inRun = payload.inRun();
         round = payload.round();
         fogRound = payload.fogRound();
@@ -45,21 +52,6 @@ public final class ClientAbyssState {
         playersUp = payload.playersUp();
         playersTotal = payload.playersTotal();
         myKills = payload.myKills();
-        hasGates = payload.hasGates();
-        gatesOpen = payload.gatesOpen();
-        gatesPercent = payload.gatesPercent();
-    }
-
-    public static boolean hasGates() {
-        return hasGates;
-    }
-
-    public static int getGatesOpen() {
-        return gatesOpen;
-    }
-
-    public static int getGatesPercent() {
-        return gatesPercent;
     }
 
     public static void openRecap(RunRecapPayload payload) {
@@ -176,6 +168,16 @@ public final class ClientAbyssState {
 
     public static int getMyKills() {
         return myKills;
+    }
+
+    /** The arena the run is on, or -1 before the server has said. */
+    public static int getMapOrdinal() {
+        return mapOrdinal;
+    }
+
+    /** The round's size as the client has seen it; 0 between rounds. */
+    public static int getWaveTotal() {
+        return waveTotal;
     }
 
     public static boolean isHudVisible() {

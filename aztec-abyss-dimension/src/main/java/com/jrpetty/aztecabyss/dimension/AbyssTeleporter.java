@@ -25,12 +25,10 @@ public final class AbyssTeleporter {
     public static DimensionTransition toAbyssArrival(ServerLevel abyss, com.jrpetty.aztecabyss.worldgen.ArenaMap map) {
         BlockPos p = map.arrival();
         // Temple arrivals look south toward the pyramid; on the bridge you face
-        // north down the span at whatever is coming; in the outpost you face north
-        // across the hall, with all four of its windows in view.
-        float yaw = switch (map) {
-            case BRIDGE, OUTPOST -> net.minecraft.core.Direction.NORTH.toYRot();
-            default -> AztecAbyssConstants.ABYSS_ARRIVAL_FACING.toYRot();
-        };
+        // north down the span at whatever is coming.
+        float yaw = map == com.jrpetty.aztecabyss.worldgen.ArenaMap.BRIDGE
+                ? net.minecraft.core.Direction.NORTH.toYRot()
+                : AztecAbyssConstants.ABYSS_ARRIVAL_FACING.toYRot();
         return new DimensionTransition(
                 abyss,
                 new Vec3(p.getX() + 0.5, p.getY(), p.getZ() + 0.5),

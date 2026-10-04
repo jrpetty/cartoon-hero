@@ -14,15 +14,11 @@ import net.minecraft.resources.ResourceLocation;
  * this is a special fog round (pea-soup mist), how many enemies remain, the
  * squad's up/total headcount, and the viewer's own kill tally this run.
  *
- * {@code packed} carries three things in one int - up-count, total-count and the
- * board count on each of up to four horde gates - because the composite codec
- * tops out at six field pairs and this payload is already at all six.
- *
- * <p>Layout, low bits first: total (8) | up (8) | barricade summary (16). The
- * summary is itself packed - present flag (1) | gates standing open (4) |
- * percent of boards intact (7) - and is aggregate rather than per-gate because
- * the Outpost has ten windows, at which count a per-window gauge is unreadable
- * noise. Which one is going is carried by the callouts and the audio.
+ * {@code packed} carries the squad's up-count and total in one int, because the
+ * composite codec tops out at six field pairs and this payload is at all six.
+ * Layout, low bits first: total (8) | up (8) | arena (8). The arena is stored as
+ * ordinal + 1, so zero means "not said" - the HUD then names no map rather
+ * than the wrong one.
  */
 public record AbyssStatePayload(boolean inRun, int round, boolean fogRound,
                                 int enemiesRemaining, int packed, int myKills)
@@ -41,12 +37,13 @@ public record AbyssStatePayload(boolean inRun, int round, boolean fogRound,
                     ByteBufCodecs.VAR_INT, AbyssStatePayload::myKills,
                     AbyssStatePayload::new);
 
-    public static int pack(int up, int total, int barricadeSummary) {
-        return ((barricadeSummary & 0xFFFF) << 16) | ((up & 0xFF) << 8) | (total & 0xFF);
+    public static int pack(int up, int total, int mapOrdinal) {
+        return (((mapOrdinal + 1) & 0xFF) << 16) | ((up & 0xFF) << 8) | (total & 0xFF);
     }
 
-    private int summary() {
-        return (packed >>> 16) & 0xFFFF;
+    /** The arena the run is on, as an ordinal, or -1 when the server did not say. */
+    public int mapOrdinal() {
+        return ((packed >> 16) & 0xFF) - 1;
     }
 
     public int playersUp() {
@@ -55,21 +52,6 @@ public record AbyssStatePayload(boolean inRun, int round, boolean fogRound,
 
     public int playersTotal() {
         return packed & 0xFF;
-    }
-
-    /** Whether the active map has boarded ways in worth showing on the HUD. */
-    public boolean hasGates() {
-        return (summary() & 1) != 0;
-    }
-
-    /** How many ways in are currently standing open. */
-    public int gatesOpen() {
-        return (summary() >>> 1) & 0xF;
-    }
-
-    /** Percentage of all boards still nailed up, 0-100. */
-    public int gatesPercent() {
-        return (summary() >>> 5) & 0x7F;
     }
 
     @Override

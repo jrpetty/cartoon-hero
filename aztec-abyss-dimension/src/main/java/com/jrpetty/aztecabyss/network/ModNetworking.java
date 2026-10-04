@@ -71,14 +71,6 @@ public final class ModNetworking {
                         }
                         int id = Math.max(0, Math.min(payload.mapId(),
                                 com.jrpetty.aztecabyss.worldgen.ArenaMap.values().length - 1));
-                        // Checked on the raw index, because byId deliberately
-                        // snaps shelved maps to the Temple - a client that sends
-                        // one anyway gets told no, not silently rerouted.
-                        if (com.jrpetty.aztecabyss.worldgen.ArenaMap.values()[id].comingSoon()) {
-                            sp.displayClientMessage(net.minecraft.network.chat.Component.literal(
-                                    "§7That battlefield is being rethought. §8Coming soon."), false);
-                            return;
-                        }
                         sp.getPersistentData().putInt("aztecabyss_chosen_map", id);
                         sp.displayClientMessage(net.minecraft.network.chat.Component.literal(
                                 "§6✦ Hunt set: §e" + com.jrpetty.aztecabyss.worldgen.ArenaMap.byId(id).title()
@@ -139,6 +131,14 @@ public final class ModNetworking {
                 RequisitionPayload.STREAM_CODEC,
                 (payload, context) -> context.enqueueWork(
                         () -> ClientAbyssState.openRequisition(payload)));
+        registrar.playToServer(
+                MazeHubActionPayload.TYPE,
+                MazeHubActionPayload.STREAM_CODEC,
+                (payload, context) -> context.enqueueWork(() -> {
+                    if (context.player() instanceof ServerPlayer sp) {
+                        com.jrpetty.aztecabyss.maze.MazeEvents.onHubAction(sp, payload.action());
+                    }
+                }));
         registrar.playToServer(
                 RequisitionOrderPayload.TYPE,
                 RequisitionOrderPayload.STREAM_CODEC,
@@ -244,7 +244,7 @@ public final class ModNetworking {
         String job = jobs.jobOf(player.getUUID());
         if (job == null) {
             player.displayClientMessage(net.minecraft.network.chat.Component.literal(
-                    "§7Take a trade first. §8/maze job"), false);
+                    "§7Take a trade first — §fsign on at the Trade Board§7 by the bell."), false);
             return;
         }
         java.util.List<String> rows = new java.util.ArrayList<>();
@@ -329,19 +329,17 @@ public final class ModNetworking {
     }
 
     public static void sendState(ServerPlayer player, boolean inRun, int round, boolean fogRound) {
-        // No gate figures in this lightweight form - mark them absent rather than
-        // letting a zeroed int read as "every gate is wide open".
         PacketDistributor.sendToPlayer(player, new AbyssStatePayload(
-                inRun, round, fogRound, 0, AbyssStatePayload.pack(0, 0, 0), 0));
+                inRun, round, fogRound, 0, AbyssStatePayload.pack(0, 0, -1), 0));
     }
 
     /** Full in-run state including the live HUD figures. */
     public static void sendHud(ServerPlayer player, int round, boolean fogRound,
                                int enemiesRemaining, int playersUp, int playersTotal, int myKills,
-                               int barricadeSummary) {
+                               com.jrpetty.aztecabyss.worldgen.ArenaMap map) {
         PacketDistributor.sendToPlayer(player, new AbyssStatePayload(
                 true, round, fogRound, enemiesRemaining,
-                AbyssStatePayload.pack(playersUp, playersTotal, barricadeSummary), myKills));
+                AbyssStatePayload.pack(playersUp, playersTotal, map.ordinal()), myKills));
     }
 
     /** Pushes the player's re-entry cooldown deadline so their screen can count it down. */
@@ -403,8 +401,14 @@ public final class ModNetworking {
         // Anything with a record but no name left - a map since unpublished -
         // still shows, under its key. Losing somebody's record because the map was
         // taken off the portal would be worse than an ugly label.
+        //
+        // The one exception is the retired third arena. Its boards stay on disk
+        // untouched, but a records page for a map nobody can enter any more is a
+        // page about nothing; the runs themselves still show in "Your runs".
         for (String key : board.mapsWithRecords()) {
-            names.putIfAbsent(key, key);
+            if (!key.equals("outpost")) {
+                names.putIfAbsent(key, key);
+            }
         }
 
         for (var entry : names.entrySet()) {
@@ -443,11 +447,12 @@ public final class ModNetworking {
 
     public static void sendRecap(ServerPlayer player, int round, int kills, int revives, int survivalSeconds,
                                  int previousBest, boolean victory, boolean multiplayer, boolean extracted,
-                                 int headshots, int deaths, boolean ritual) {
+                                 int headshots, int deaths, boolean ritual,
+                                 com.jrpetty.aztecabyss.worldgen.ArenaMap map) {
         PacketDistributor.sendToPlayer(player, new RunRecapPayload(
                 round, kills, headshots, survivalSeconds,
                 RunRecapPayload.pack(previousBest, deaths, revives),
-                RunRecapPayload.packFlags(victory, multiplayer, extracted, ritual)));
+                RunRecapPayload.packFlags(victory, multiplayer, extracted, ritual, map.ordinal())));
     }
 
     /**

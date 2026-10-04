@@ -143,125 +143,111 @@ public final class AbyssClientEffects {
     }
 
     /** The co-op squad panel: each teammate's name + health bar, and a marker to anyone downed. */
-    private static void drawSquad(net.minecraft.client.gui.GuiGraphics g, Minecraft mc) {
+    private static void drawSquad(net.minecraft.client.gui.GuiGraphics g, Minecraft mc, int y) {
         java.util.List<com.jrpetty.aztecabyss.network.TeammateInfo> squad = ClientAbyssState.getSquad();
         if (squad.isEmpty() || mc.player == null) {
             return;
         }
         net.minecraft.client.gui.Font font = mc.font;
-        int x = 6;
-        int y = 82;
+        int x = 8;
         int rowH = 12;
-        int panelW = 132;
-        int panelH = 14 + squad.size() * rowH + 4;
-        g.fill(x, y, x + panelW, y + panelH, 0x99000000);
-        g.fill(x, y, x + panelW, y + 1, 0xC0B8860B);
-        g.drawString(font, net.minecraft.network.chat.Component.literal("§6§lSQUAD"), x + 4, y + 3, 0xFFFFFF, true);
+        int panelW = 150;
+        int panelH = 18 + squad.size() * rowH + 3;
+        g.fill(x, y, x + panelW, y + panelH, HUD_PANEL);
+        UiKit.outline(g, x, y, panelW, panelH, UiKit.EDGE);
+        g.fill(x, y, x + 2, y + panelH, UiKit.GOLD);
+        g.drawString(font, "SQUAD", x + 8, y + 5, UiKit.GOLD, true);
 
-        int ry = y + 15;
+        int ry = y + 18;
         for (com.jrpetty.aztecabyss.network.TeammateInfo t : squad) {
             if (t.downed()) {
                 double dx = t.x() - mc.player.getX();
                 double dz = t.z() - mc.player.getZ();
                 int dist = (int) Math.sqrt(dx * dx + dz * dz);
                 String card = Math.abs(dx) > Math.abs(dz) ? (dx > 0 ? "E" : "W") : (dz > 0 ? "S" : "N");
-                g.drawString(font, net.minecraft.network.chat.Component.literal(
-                        "§c§l⚑ " + t.name() + " §4DOWNED §7" + dist + "m " + card), x + 4, ry, 0xFFFFFF, true);
+                int blink = UiKit.pulse(UiKit.RED, 0.6f + 0.4f * (float) Math.sin(clientTick / 3.0));
+                g.drawString(font, "⚑ " + font.plainSubstrByWidth(t.name(), 60), x + 8, ry, blink, true);
+                String where = "DOWN " + dist + "m " + card;
+                g.drawString(font, where, x + panelW - 6 - font.width(where), ry, UiKit.RED, true);
             } else {
-                g.drawString(font, net.minecraft.network.chat.Component.literal("§f" + t.name()), x + 4, ry, 0xFFFFFF, true);
-                int bw = 46;
-                int bh = 6;
-                int bx = x + panelW - bw - 4;
-                int by = ry + 1;
+                g.drawString(font, font.plainSubstrByWidth(t.name(), 80), x + 8, ry, UiKit.TEXT, true);
                 float frac = Math.max(0f, Math.min(1f, t.health() / 100.0f));
-                int col = frac > 0.5f ? 0xFF33CC33 : frac > 0.25f ? 0xFFCCAA22 : 0xFFCC3333;
-                g.fill(bx - 1, by - 1, bx + bw + 1, by + bh + 1, 0xFF101010);
-                g.fill(bx, by, bx + bw, by + bh, 0xFF303030);
-                g.fill(bx, by, bx + (int) (bw * frac), by + bh, col);
+                int col = frac > 0.5f ? UiKit.GREEN : frac > 0.25f ? UiKit.AMBER : UiKit.RED;
+                UiKit.meter(g, x + panelW - 52, ry + 2, 46, 4, frac, col);
             }
             ry += rowH;
         }
     }
 
-    /**
-     * One compact bar for the state of every way in: how much of the boarding is
-     * still up, and how many are standing wide open. Aggregate on purpose - with
-     * ten windows on the Outpost a per-window readout is noise, and the callouts
-     * already name the one that's going.
-     */
-    private static String gateGauge(int percent, int open) {
-        String colour = open > 0 ? "§4" : percent <= 33 ? "§c" : percent <= 66 ? "§e" : "§a";
-        int filled = Math.round(percent / 10.0f);
-        StringBuilder sb = new StringBuilder(colour);
-        for (int i = 0; i < filled; i++) {
-            sb.append("|");
-        }
-        sb.append("§8");
-        for (int i = filled; i < 10; i++) {
-            sb.append("|");
-        }
-        sb.append(" ").append(colour).append(percent).append("%");
-        if (open > 0) {
-            sb.append(" §4✖").append(open).append(" open");
-        }
-        return sb.toString();
-    }
+    private static final int HUD_PANEL = 0xD90B0A10;
 
-    /** The live run HUD panel: round, enemies remaining, squad headcount, personal kills. */
-    private static void drawHud(net.minecraft.client.gui.GuiGraphics g, Minecraft mc) {
+    /**
+     * The live run panel: which arena, the round, how much of the wave is down,
+     * what is left of it, your kills and - in co-op - how many of the squad are
+     * still standing. Same shape as the maze's panel: a dark plate in the top
+     * left with the round's colour down its spine, quiet unless something is
+     * worth looking at.
+     *
+     * @return the y just under the panel, for the squad panel to stack below
+     */
+    private static int drawHud(net.minecraft.client.gui.GuiGraphics g, Minecraft mc) {
         net.minecraft.client.gui.Font font = mc.font;
         int round = ClientAbyssState.getRound();
         int enemies = ClientAbyssState.getEnemiesRemaining();
+        int waveTotal = ClientAbyssState.getWaveTotal();
         int up = ClientAbyssState.getPlayersUp();
         int total = ClientAbyssState.getPlayersTotal();
         int kills = ClientAbyssState.getMyKills();
+        int map = ClientAbyssState.getMapOrdinal();
+        String where = map >= 0
+                ? com.jrpetty.aztecabyss.worldgen.ArenaMap.byId(map).title().toUpperCase(java.util.Locale.ROOT)
+                : "THE AZTEC ABYSS";
 
-        java.util.List<net.minecraft.network.chat.Component> lines = new java.util.ArrayList<>();
-        lines.add(net.minecraft.network.chat.Component.literal("§6§l✦ THE AZTEC ABYSS ✦"));
+        int x = 8;
+        int y = 8;
+        int w = 150;
+        boolean fog = ClientAbyssState.isFogRound();
+        boolean squad = total > 1;
+        int h = 46 + (fog ? 11 : 0) + (squad ? 11 : 0);
+        int spine = round >= 15 ? UiKit.RED : round >= 8 ? UiKit.AMBER : UiKit.GOLD;
+
+        g.fill(x, y, x + w, y + h, HUD_PANEL);
+        UiKit.outline(g, x, y, w, h, UiKit.EDGE);
+        g.fill(x, y, x + 2, y + h, spine);
+
+        int tx = x + 8;
+        int ty = y + 5;
+        g.drawString(font, font.plainSubstrByWidth(where, w - 16), tx, ty, UiKit.TEXT_FAINT, true);
+        ty += 11;
+
         if (round <= 0) {
-            lines.add(net.minecraft.network.chat.Component.literal("§7Preparing the hunt..."));
+            g.drawString(font, "Preparing the hunt…", tx, ty, UiKit.TEXT_DIM, true);
         } else {
-            lines.add(net.minecraft.network.chat.Component.literal("§e§l⚔ §fRound §e§l" + round));
+            g.drawString(font, net.minecraft.network.chat.Component.literal("ROUND " + round)
+                    .withStyle(st -> st.withBold(true)), tx, ty, spine, true);
+            String left = enemies > 0 ? enemies + " left" : "wave clear";
+            g.drawString(font, left, x + w - 6 - font.width(left), ty,
+                    enemies > 0 ? UiKit.RED : UiKit.GREEN, true);
         }
-        if (ClientAbyssState.isFogRound()) {
-            lines.add(net.minecraft.network.chat.Component.literal("§7§o≈ A fog round — stay sharp"));
-        }
-        if (round > 0) {
-            lines.add(enemies > 0
-                    ? net.minecraft.network.chat.Component.literal("§c⚔ §fLeft: §c" + enemies)
-                    : net.minecraft.network.chat.Component.literal("§a✔ Wave clear"));
-        }
-        if (total > 1) {
-            lines.add(net.minecraft.network.chat.Component.literal("§c❤ §fSquad: §a" + up + "§7/" + total + " up"));
-        }
-        if (ClientAbyssState.hasGates()) {
-            lines.add(net.minecraft.network.chat.Component.literal("§6⌸ §fBoarding"));
-            lines.add(net.minecraft.network.chat.Component.literal(
-                    gateGauge(ClientAbyssState.getGatesPercent(), ClientAbyssState.getGatesOpen())));
-        }
-        lines.add(net.minecraft.network.chat.Component.literal("§b✦ §fKills: §b" + kills));
+        ty += 12;
 
-        int pad = 4;
-        int lineH = font.lineHeight + 2;
-        int maxW = 0;
-        for (net.minecraft.network.chat.Component c : lines) {
-            maxW = Math.max(maxW, font.width(c));
+        // How much of the wave is down - the one figure that answers "nearly
+        // there?" without arithmetic.
+        float done = waveTotal > 0 ? 1.0f - (float) enemies / waveTotal : (round > 0 ? 1.0f : 0.0f);
+        UiKit.meter(g, tx, ty, w - 14, 4, done, enemies > 0 ? UiKit.RED : UiKit.GREEN);
+        ty += 8;
+
+        if (fog) {
+            g.drawString(font, "≈ fog round — stay sharp", tx, ty, 0xFF9AA59A, true);
+            ty += 11;
         }
-        int x = 6;
-        int y = 6;
-        int boxW = maxW + pad * 2;
-        int boxH = lines.size() * lineH + pad * 2 - 2;
-        g.fill(x, y, x + boxW, y + boxH, 0x99000000);
-        g.fill(x, y, x + boxW, y + 1, 0xC0B8860B);          // gold top accent
-        g.fill(x, y + boxH - 1, x + boxW, y + boxH, 0xC0B8860B); // gold bottom accent
-        int ty = y + pad;
-        for (int idx = 0; idx < lines.size(); idx++) {
-            g.drawString(font, lines.get(idx), x + pad, ty, 0xFFFFFF, true);
-            ty += lineH;
-            if (idx == 0) {
-                g.fill(x + pad, ty - 2, x + boxW - pad, ty - 1, 0x66FFD700); // gold divider under the title
-            }
+        g.drawString(font, "✦ " + kills + (kills == 1 ? " kill" : " kills"), tx, ty, UiKit.CYAN, true);
+        if (squad) {
+            ty += 11;
+            g.drawString(font, "❤ squad " + up + "/" + total + " up", tx, ty,
+                    up < total ? UiKit.AMBER : UiKit.TEXT_DIM, true);
         }
+        return y + h + 6;
     }
 
     @SubscribeEvent
@@ -320,8 +306,8 @@ public final class AbyssClientEffects {
 
         // Live run HUD (toggle with the keybind, default H).
         if (ClientAbyssState.isInRun() && ClientAbyssState.isHudVisible()) {
-            drawHud(event.getGuiGraphics(), mc);
-            drawSquad(event.getGuiGraphics(), mc);
+            int under = drawHud(event.getGuiGraphics(), mc);
+            drawSquad(event.getGuiGraphics(), mc, under);
         }
 
         // Red flash overlay.
@@ -339,8 +325,11 @@ public final class AbyssClientEffects {
             int band = (int) (h * 0.18f * (0.5f + t));
             event.getGuiGraphics().fillGradient(0, 0, w, band, col, 0x00000000);
             event.getGuiGraphics().fillGradient(0, h - band, w, h, 0x00000000, col);
-            event.getGuiGraphics().fillGradient(0, 0, band, h, col, 0x00000000);
-            event.getGuiGraphics().fillGradient(w - band, 0, w, h, 0x00000000, col);
+            // The side bands fade sideways. GuiGraphics only shades top to
+            // bottom, so these used to fade downward instead - a red stripe
+            // down each edge, dark at the top, rather than a vignette.
+            UiKit.hGradient(event.getGuiGraphics(), 0, 0, band, h, col, col & 0x00FFFFFF);
+            UiKit.hGradient(event.getGuiGraphics(), w - band, 0, w, h, col & 0x00FFFFFF, col);
         }
     }
 }

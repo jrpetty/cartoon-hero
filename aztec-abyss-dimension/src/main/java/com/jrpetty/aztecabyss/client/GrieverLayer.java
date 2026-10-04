@@ -41,7 +41,17 @@ public class GrieverLayer extends RenderLayer<Spider, SpiderModel<Spider>> {
     private static final ResourceLocation EYES = ResourceLocation.fromNamespaceAndPath(
             com.jrpetty.aztecabyss.AztecAbyssConstants.MOD_ID, "textures/entity/griever_eyes.png");
 
-    private static final String TAG = "aztecabyss_griever";
+    /**
+     * The scoreboard team every Griever is put on when it is dressed.
+     *
+     * <p>This layer used to look for the Griever's persistent-data tag - which
+     * lives only on the server. The client's copy of the spider never has it,
+     * so the check failed for every Griever in every game and the maze's
+     * monster was drawn as a large plain spider. Team membership is sent to
+     * every client by the scoreboard itself, so it is a mark the renderer can
+     * actually see.
+     */
+    private static final String TEAM = "aztecabyss_griever";
 
     public GrieverLayer(RenderLayerParent<Spider, SpiderModel<Spider>> parent) {
         super(parent);
@@ -53,8 +63,8 @@ public class GrieverLayer extends RenderLayer<Spider, SpiderModel<Spider>> {
                        float partialTick, float ageInTicks, float netHeadYaw, float headPitch) {
         // Ordinary spiders are left completely alone. This layer is attached to
         // the shared spider renderer, so it runs for every spider in the world and
-        // the tag is the only thing that separates the maze's monster from a cave.
-        if (!entity.getPersistentData().getBoolean(TAG) || entity.isInvisible()) {
+        // the team is the only thing that separates the maze's monster from a cave.
+        if (!isGriever(entity) || entity.isInvisible()) {
             return;
         }
 
@@ -65,5 +75,19 @@ public class GrieverLayer extends RenderLayer<Spider, SpiderModel<Spider>> {
         VertexConsumer eyes = buffers.getBuffer(RenderType.eyes(EYES));
         getParentModel().renderToBuffer(pose, eyes, 15728640,
                 OverlayTexture.NO_OVERLAY, 0xFFFFFFFF);
+    }
+
+    /**
+     * Whether a spider, as the client knows it, is one of the maze's. The team
+     * first; the name as a fallback for a server where something else has
+     * reshuffled the scoreboard - "GRIEVER" is the name every one is given.
+     */
+    static boolean isGriever(Spider entity) {
+        var team = entity.getTeam();
+        if (team != null && TEAM.equals(team.getName())) {
+            return true;
+        }
+        var name = entity.getCustomName();
+        return name != null && name.getString().contains("GRIEVER");
     }
 }

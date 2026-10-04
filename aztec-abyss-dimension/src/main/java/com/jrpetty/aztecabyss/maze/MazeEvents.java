@@ -807,6 +807,20 @@ public final class MazeEvents {
     // ------------------------------------------------------------------
 
     /**
+     * A button on the hub. The same checks the commands make, without the
+     * commands: the hub must keep working on a server that has locked chat
+     * commands down, because it is the front door to everything else.
+     */
+    public static void onHubAction(ServerPlayer player, int action) {
+        if (action == com.jrpetty.aztecabyss.network.MazeHubActionPayload.SKILLS) {
+            com.jrpetty.aztecabyss.network.ModNetworking.sendSkills(player);
+        } else if (action == com.jrpetty.aztecabyss.network.MazeHubActionPayload.ORDERS
+                && player.level() instanceof ServerLevel level && isMaze(level)) {
+            com.jrpetty.aztecabyss.network.ModNetworking.sendOrders(player);
+        }
+    }
+
+    /**
      * Opens the slate.
      *
      * <p>The chat sheet is still there under {@code /maze order text}, for the

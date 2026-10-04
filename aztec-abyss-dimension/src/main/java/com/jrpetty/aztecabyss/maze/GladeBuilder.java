@@ -638,7 +638,7 @@ public final class GladeBuilder {
         level.setBlock(new BlockPos(ox + 3, y, oz + 3), Blocks.LECTERN.defaultBlockState(), 2);
         level.setBlock(new BlockPos(ox + 3, y + 2, oz + 3), Blocks.SEA_LANTERN.defaultBlockState(), 2);
         sign(level, new BlockPos(ox + 1, y + 1, oz + 3), Direction.WEST,
-                "§0THE MAP ROOM", "§0/maze map", "", "");
+                "§0THE MAP ROOM", "§0Read the chart", "§0on the table.", "");
     }
 
     /**
