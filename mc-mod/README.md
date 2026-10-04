@@ -24,12 +24,12 @@ signature active ability (select with `G`, fire with `R`).
 | **Foraging** | logs & leaves | break speed, Fortune on wood | Overgrowth — bonemeal burst around you (45s) |
 | **Combat** | killing mobs | attack damage, life steal on kills | Frenzy — Strength + Speed (50s) |
 | **Farming** | harvesting crops | max health | Hearty Meal — Regen + Saturation (60s) |
-| **Acrobatics** | fall damage | higher jumps, softer landings | Leap — dash (6s) |
-| **Fishing** | catching fish | luck, treasure catches | Maelstrom — whirlpool that drags mobs in (90s) |
+| **Acrobatics** | fall damage (pays well — falls are slow, risky XP) | higher jumps, softer landings | Leap — dash (6s) |
+| **Fishing** | catching fish (40 XP a catch, 60 for treasure) | luck, treasure catches (chance scales to level 500) | Maelstrom — whirlpool that drags mobs in (90s) |
 | **Excavation** | shovel blocks | dig speed, Fortune on shovel blocks | Excavate — mass-dig burst (180s) |
 | **Defense** | taking damage | armor + toughness, Last Stand at low HP | Bulwark — deflect damage for a few seconds (300s) |
-| **Cooking** | eating & cooking | saturation, Well Fed regen | Feast — party-wide feast buff (600s) |
-| **Alchemy** | brewing | potion duration | Panacea — cleanse + resist (180s) |
+| **Cooking** | eating, and taking cooked food out of a furnace or smoker | saturation, Well Fed regen | Feast — party-wide feast buff (600s) |
+| **Alchemy** | brewing and drinking potions | potion duration | Panacea — cleanse + resist (180s) |
 | **Archery** | bow & crossbow hits | Power Shot damage on full draws | Volley — arrow storm (150s) |
 
 Fortune never applies with Silk Touch (no dupes). Abilities are deliberately
@@ -73,12 +73,12 @@ dropdown; ESC again closes the screen.
 
 | Surface | Open with | Shows |
 | --- | --- | --- |
-| **Skills screen** | `K` / `/voxelia menu` | Card per skill with XP bars + tooltips; click a card to select its ability; Character card opens the profile |
+| **Skills screen** | `K` / `/voxelia menu` | Card per skill with its item icon, XP bar and tooltip (live perks, ability status, next talent point); locked abilities wear a padlock; click an unlocked card to select its ability; Character card opens the profile |
 | **Talent screen** | Menu ▸ Talent Tree | Skill list (with unspent-point pills), the selected skill's 5 talents, and a footer that tells you where your next point lands |
-| **Character profile** | Menu ▸ Character Profile, or `/voxelia profile` | Best skill, talents spent, XP earned, playtime, deaths, mob kills |
-| **Corner HUD** | Menu ▸ Corner HUD / HUD Corner (or `/voxelia hud`, `/voxelia hudpos`) | Per-skill levels + XP bars, selected ability with live cooldown |
+| **Character profile** | Menu ▸ Character Profile, or `/voxelia profile` | Your skin's face and title, career stats (best skill, talents, XP, playtime, kills, deaths), a tile per skill, and your nearest unlock and talent point |
+| **Corner HUD** | Menu ▸ Corner HUD / HUD Corner (or `/voxelia hud`, `/voxelia hudpos`) | Per-skill levels + XP bars, selected ability with live cooldown — or progress toward your first unlock. Steps aside while a Voxelia screen is open |
 | **Sidebar** | Menu ▸ Skill Sidebar (or `/voxelia sidebar`; off by default) | Vanilla-scoreboard-style list of all skill levels + Character line |
-| **Leaderboards** | Menu ▸ Leaderboards, or `/voxelia leaderboards` | Server top ten per skill (or overall), your own rank in the footer |
+| **Leaderboards** | Menu ▸ Leaderboards, or `/voxelia leaderboards` | Server top ten per skill (or overall) with podium medals, your own rank in the footer |
 
 New players (zero XP) get a one-line pointer to `K` on first login.
 
@@ -181,5 +181,12 @@ mc-mod/
     │                     milestone toasts, keybinds, client caches
     ├── main/templates/META-INF/neoforge.mods.toml       (expanded at build)
     ├── main/resources/   pack.mcmeta, lang, advancements
+    ├── main/java/com/voxelia/mmo/dev/  UiShowcase — dev-only screenshot harness (not in the jar)
     └── test/java/        JUnit tests (skill curve, talents, level cap, death penalty)
 ```
+
+**UI screenshots.** `./gradlew runShowcase` boots a throwaway world, seeds a
+mid-game character, screenshots every Voxelia screen into
+`run-showcase/screenshots/`, and quits. CI runs it under a virtual display on
+every push and publishes the images to the `voxelia-ui-shots` release, named by
+commit, so UI changes always come with real before/after captures.
