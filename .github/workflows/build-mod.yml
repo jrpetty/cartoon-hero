@@ -59,3 +59,79 @@ jobs:
             (Minecraft 1.21.1 / NeoForge 21.1). Drop the jar into your
             instance's mods/ folder.
           files: mc-mod/build/libs/*.jar
+
+  # Real in-game screenshots of every Voxelia screen, taken by the dev-only
+  # UiShowcase harness (./gradlew runShowcase) under a virtual X display with
+  # software OpenGL. Published per-commit so before/after images come from the
+  # same harness and can't drift from the code.
+  ui-shots:
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Install virtual display + software GL
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq xvfb libgl1-mesa-dri libglx-mesa0 mesa-utils > /dev/null
+
+      - name: Seed client options
+        working-directory: mc-mod
+        run: |
+          mkdir -p run-showcase
+          cat > run-showcase/options.txt <<'OPTS'
+          onboardAccessibility:false
+          pauseOnLostFocus:false
+          guiScale:4
+          renderDistance:8
+          simulationDistance:5
+          tutorialStep:none
+          skipMultiplayerWarning:true
+          joinedFirstServer:true
+          narrator:0
+          bobView:false
+          realmsNotifications:false
+          soundCategory_master:0.0
+          OPTS
+          sed -i 's/^ *//' run-showcase/options.txt
+
+      - name: Capture screenshots
+        working-directory: mc-mod
+        env:
+          LIBGL_ALWAYS_SOFTWARE: '1'
+        run: |
+          chmod +x ./gradlew
+          timeout 1500 xvfb-run -a -s "-screen 0 1920x1080x24" ./gradlew runShowcase --no-daemon || echo "runShowcase exited with $?"
+          ls -la run-showcase/screenshots || true
+          mkdir -p shots
+          sha=$(git rev-parse --short=7 HEAD)
+          for f in run-showcase/screenshots/*.png; do [ -f "$f" ] && cp "$f" "shots/${sha}-$(basename "$f")"; done
+          cp run-showcase/logs/latest.log "shots/${sha}-latest.log" 2>/dev/null || true
+          ls -la shots
+
+      - name: Upload screenshots (artifact)
+        uses: actions/upload-artifact@v4
+        with:
+          name: voxelia-ui-shots
+          path: mc-mod/shots/*
+          if-no-files-found: warn
+
+      - name: Publish screenshots to release
+        if: github.ref == 'refs/heads/claude/minecraft-mmo-research-1fgn7x'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: voxelia-ui-shots
+          name: Voxelia MMO UI screenshots
+          prerelease: true
+          body: >
+            Real in-game screenshots of every Voxelia screen, captured in CI by the
+            dev-only UiShowcase harness. File names start with the commit they came from.
+          files: mc-mod/shots/*

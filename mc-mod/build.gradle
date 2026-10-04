@@ -38,6 +38,14 @@ neoForge {
             server()
             programArgument '--nogui'
         }
+        // Dev-only: boots a throwaway world, screenshots every Voxelia screen, quits.
+        // See com.voxelia.mmo.dev.UiShowcase. CI runs this under a virtual display.
+        showcase {
+            client()
+            gameDirectory = project.file('run-showcase')
+            systemProperty 'voxelia.showcase', 'true'
+            programArguments.addAll('--width', '1920', '--height', '1080')
+        }
     }
 
     mods {
@@ -95,6 +103,7 @@ tasks.withType(JavaCompile).configureEach {
 }
 
 tasks.named('jar', Jar).configure {
+    exclude 'com/voxelia/mmo/dev/**' // the UI showcase harness never ships
     manifest {
         attributes([
             'Specification-Title'   : mod_id,
