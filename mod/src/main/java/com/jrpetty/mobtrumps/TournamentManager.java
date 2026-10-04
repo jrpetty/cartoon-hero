@@ -78,13 +78,9 @@ public final class TournamentManager {
         broadcast(opener.getServer(), Component.literal("* " + name(opener)
                         + " opened a MOB TRUMPS TOURNAMENT! Entry: "
                         + (entryFee == 0 ? "free" : entryFee + " emeralds")
-                        + " - winner takes the pot. ")
+                        + " - winner takes the pot. Join with ")
                 .withStyle(ChatFormatting.GOLD)
-                .append(BattleCommands.button("[Join]", "/mobtrumps tournament join",
-                        ChatFormatting.GREEN, "Enter the tournament"))
-                .append(Component.literal(" "))
-                .append(BattleCommands.button("[Start]", "/mobtrumps tournament start",
-                        ChatFormatting.YELLOW, "Host only: lock entries and begin")));
+                .append(BattleCommands.typed("/mobtrumps tournament join")));
         return 1;
     }
 
@@ -142,9 +138,8 @@ public final class TournamentManager {
                     .withStyle(ChatFormatting.GRAY));
             case REGISTERING -> player.sendSystemMessage(Component.literal("Tournament open - "
                             + ENTRANTS.size() + "/" + MAX_ENTRANTS + " entered, pot " + pot
-                            + " emeralds. ").withStyle(ChatFormatting.GOLD)
-                    .append(BattleCommands.button("[Join]", "/mobtrumps tournament join",
-                            ChatFormatting.GREEN, "Enter the tournament")));
+                            + " emeralds. Join with ").withStyle(ChatFormatting.GOLD)
+                    .append(BattleCommands.typed("/mobtrumps tournament join")));
             case RUNNING -> {
                 player.sendSystemMessage(Component.literal("Round " + roundNumber + " - pot " + pot
                         + " emeralds:").withStyle(ChatFormatting.GOLD));

@@ -1,5 +1,6 @@
 package com.jrpetty.mobtrumps;
 
+import com.jrpetty.mobtrumps.game.Battle;
 import com.jrpetty.mobtrumps.game.MobCard;
 import com.jrpetty.mobtrumps.game.MobCards;
 import net.minecraft.server.level.ServerPlayer;
@@ -9,24 +10,23 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
 
-/** Server-side storage and validation of each player's custom battle deck. */
+/**
+ * Server-side storage and validation of each player's custom battle deck.
+ *
+ * <p>A deck is exactly {@link #DECK_SIZE} cards — the hand every Top Trumps
+ * game is played with — so it can only be fielded once it is full. Decks
+ * saved when they could hold sixteen are not cut down on disk: the first
+ * {@link #DECK_SIZE} cards that are still owned are the ones that play, and
+ * the deck builder opens on exactly those, so the next save makes it so.
+ */
 public final class DeckManager {
 
-    public static final int MAX_DECK = 16; // client-side fallback cap
-    public static final int MIN_DECK = 4;
+    public static final int DECK_SIZE = Battle.HAND_SIZE;
 
     private DeckManager() {
     }
 
-    private static int maxDeck() {
-        try {
-            return Config.DECK_MAX.get();
-        } catch (IllegalStateException notLoaded) {
-            return MAX_DECK; // config not loaded yet (e.g. client before join)
-        }
-    }
-
-    /** Save a validated deck: known, collected, distinct mobs, capped at MAX_DECK. */
+    /** Save a validated deck: known, collected, distinct mobs, at most {@link #DECK_SIZE}. */
     public static void saveDeck(ServerPlayer player, List<String> requested) {
         Set<String> collected = new LinkedHashSet<>(player.getData(ModAttachments.COLLECTED.get()));
         List<String> clean = new ArrayList<>();
@@ -35,11 +35,36 @@ public final class DeckManager {
             String key = id == null ? "" : id.toLowerCase(java.util.Locale.ROOT);
             if (MobCards.byId(key) != null && collected.contains(key) && seen.add(key)) {
                 clean.add(key);
-                if (clean.size() >= maxDeck()) break;
+                if (clean.size() >= DECK_SIZE) break;
             }
         }
         player.setData(ModAttachments.DECK.get(), List.copyOf(clean));
         CollectionTracker.sync(player);
+    }
+
+    /** True once the deck holds a full hand of cards the player still owns. */
+    public static boolean isComplete(ServerPlayer player) {
+        return activeIds(player).size() >= DECK_SIZE;
+    }
+
+    /**
+     * The ids that actually play: the deck's cards the player still owns, in
+     * deck order, never more than {@link #DECK_SIZE} of them. Everything that
+     * reads the deck goes through here, so the cards, their levels and the
+     * ids the CPU avoids always describe the same hand.
+     */
+    private static List<String> activeIds(ServerPlayer player) {
+        Set<String> collected = new LinkedHashSet<>(player.getData(ModAttachments.COLLECTED.get()));
+        List<String> ids = new ArrayList<>(DECK_SIZE);
+        for (String id : player.getData(ModAttachments.DECK.get())) {
+            if (ids.size() >= DECK_SIZE) {
+                break;
+            }
+            if (collected.contains(id) && MobCards.byId(id) != null && !ids.contains(id)) {
+                ids.add(id);
+            }
+        }
+        return ids;
     }
 
     // --- named deck slots ---
@@ -83,27 +108,16 @@ public final class DeckManager {
     }
 
     /**
-     * The player's deck as cards, dropping any they no longer own. Cards whose
-     * holographic the player has unlocked are played in their boosted form.
-     */
-    /**
      * The holo upgrade level of each card in the player's deck, in the same
      * order as {@link #deckCards}. The CPU's hand is levelled to match this, so
      * a deck you have hunted hard meets an opponent that has kept up.
      */
     public static List<Integer> deckLevels(ServerPlayer player) {
-        Set<String> collected = new LinkedHashSet<>(player.getData(ModAttachments.COLLECTED.get()));
         Set<String> foils = new LinkedHashSet<>(player.getData(ModAttachments.COLLECTED_FOIL.get()));
         java.util.Map<String, Integer> kills = player.getData(ModAttachments.KILLS.get());
         List<Integer> levels = new ArrayList<>();
-        for (String id : player.getData(ModAttachments.DECK.get())) {
-            if (!collected.contains(id)) {
-                continue;
-            }
+        for (String id : activeIds(player)) {
             MobCard card = MobCards.byId(id);
-            if (card == null) {
-                continue;
-            }
             int byKills = card.tier().upgradeLevel(kills.getOrDefault(id, 0));
             levels.add(Math.max(foils.contains(id) ? 1 : 0, byKills));
         }
@@ -112,25 +126,20 @@ public final class DeckManager {
 
     /** The card ids actually in the player's deck, for dealing the CPU different mobs. */
     public static Set<String> deckIds(ServerPlayer player) {
-        Set<String> collected = new LinkedHashSet<>(player.getData(ModAttachments.COLLECTED.get()));
-        Set<String> ids = new LinkedHashSet<>();
-        for (String id : player.getData(ModAttachments.DECK.get())) {
-            if (collected.contains(id)) ids.add(id);
-        }
-        return ids;
+        return new LinkedHashSet<>(activeIds(player));
     }
 
+    /**
+     * The player's deck as cards, dropping any they no longer own. Cards whose
+     * holographic the player has unlocked are played in their boosted form.
+     */
     public static List<MobCard> deckCards(ServerPlayer player) {
-        Set<String> collected = new LinkedHashSet<>(player.getData(ModAttachments.COLLECTED.get()));
         Set<String> foils = new LinkedHashSet<>(player.getData(ModAttachments.COLLECTED_FOIL.get()));
         java.util.Map<String, Integer> kills = player.getData(ModAttachments.KILLS.get());
         List<MobCard> cards = new ArrayList<>();
-        for (String id : player.getData(ModAttachments.DECK.get())) {
-            if (collected.contains(id)) {
-                MobCard card = MobCards.byId(id);
-                // a card whose holo you own plays at your full kill-earned level
-                if (card != null) cards.add(card.effective(foils.contains(id), kills.getOrDefault(id, 0)));
-            }
+        for (String id : activeIds(player)) {
+            // a card whose holo you own plays at your full kill-earned level
+            cards.add(MobCards.byId(id).effective(foils.contains(id), kills.getOrDefault(id, 0)));
         }
         return cards;
     }

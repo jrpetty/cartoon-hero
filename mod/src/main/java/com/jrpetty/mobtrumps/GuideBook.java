@@ -75,11 +75,11 @@ public final class GuideBook {
             """
             §l§6Battling the CPU§r
 
-            §e/mobtrumps battle§r deals a deck to you and the CPU.
+            Right-click a §6Dueling Table§r and pick §aEasy§r, §eNormal§r or §cHard§r. You each hold §l6 cards§r.
 
-            On your turn, pick a stat; higher value wins both cards. Win them all!
+            On your turn, pick a stat — click it or press 1-6. Higher wins both cards. Take them all!
 
-            Difficulty: §e/mobtrumps battle easy|normal|hard§r. Hard plays the odds and bluffs.""",
+            Every finished game pays §aexperience§r, win or lose.""",
 
             """
             §l§6The Rarity rule§r
@@ -104,12 +104,12 @@ public final class GuideBook {
 
             While watching, §e/mobtrumps sidebet <player> <emeralds>§r backs a duelist — winners split the pool.
 
-            Cheer with §e/mobtrumps emote gg§r.""",
+            Duellists cheer each other on with the §eEmote§r button on their battle screens.""",
 
             """
             §l§6Decks§r
 
-            Open your §9Collection Book§r → §aDeck§r to pick your cards, then §e/mobtrumps battle deck§r.
+            A deck is your best §l6 cards§r. Pick them in the §9Collection Book§r → §aDeck§r, or with the table's §eEdit Deck§r.
 
             Share a deck: §e/mobtrumps export§r gives a code; §e/mobtrumps import <code>§r loads one.
 

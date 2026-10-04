@@ -1,38 +1,48 @@
 package com.jrpetty.mobtrumps;
 
+import com.jrpetty.mobtrumps.game.Battle;
 import com.jrpetty.mobtrumps.game.MobCard;
 import com.jrpetty.mobtrumps.game.MobCards;
+import com.jrpetty.mobtrumps.game.Stat;
 import net.minecraft.ChatFormatting;
 import net.minecraft.network.chat.Component;
-import net.minecraft.network.chat.MutableComponent;
+import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.sounds.SoundEvents;
+import net.minecraft.sounds.SoundSource;
+import net.neoforged.neoforge.network.PacketDistributor;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ThreadLocalRandom;
 
 /**
- * Draft mode: both players alternate picking cards from a shared random pool,
- * then duel with the decks they drafted. Pure skill plus a little luck.
+ * Draft mode: both players take turns picking cards from one shared random
+ * pool, then duel with the hands they drafted. Pure skill plus a little luck.
  *
- *   /mobtrumps draft <player>     - invite someone to a draft
- *   /mobtrumps draft accept|decline
- *   /mobtrumps pick <mob_id>      - take a card on your pick (clickable)
+ * <p>It starts at a dueling table — sit in Draft, and whoever challenges you
+ * drafts against you — and the whole draft is played on both players' draft
+ * screens: the pool face up, both sets of picks in view, and a clock on every
+ * pick so neither player can stall the other. A pick left to the clock takes
+ * the strongest card still in the pool.
  */
 public final class DraftManager {
 
-    private static final int PICKS_EACH = 8;
-    private static final int POOL_SIZE = PICKS_EACH * 2 + 4; // a few leftovers keep choices real
-    private static final long INVITE_TTL_MS = 60_000L;
+    /** Each player drafts a full hand. */
+    static final int PICKS_EACH = Battle.HAND_SIZE;
+    /** A few cards more than are taken, so the last pick is still a choice. */
+    static final int POOL_SIZE = PICKS_EACH * 2 + 4;
+    /** Time on the clock for one pick. */
+    static final long PICK_MS = 20_000L;
 
-    private static final Map<UUID, Invite> INVITES = new ConcurrentHashMap<>();
     private static final Map<UUID, Draft> ACTIVE = new ConcurrentHashMap<>();
-
-    private record Invite(UUID from, long expiresAt) {
-    }
+    /** Scratch set for the tick, so it allocates nothing: both players map to one draft. */
+    private static final Set<Draft> TICK_SEEN = new HashSet<>();
 
     private static final class Draft {
         final ServerPlayer a; // picks first
@@ -41,6 +51,7 @@ public final class DraftManager {
         final List<MobCard> picksA = new ArrayList<>();
         final List<MobCard> picksB = new ArrayList<>();
         boolean aToPick = true;
+        long deadline = System.currentTimeMillis() + PICK_MS;
 
         Draft(ServerPlayer a, ServerPlayer b, List<MobCard> pool) {
             this.a = a;
@@ -56,6 +67,10 @@ public final class DraftManager {
             return p.getUUID().equals(a.getUUID()) ? b : a;
         }
 
+        List<MobCard> picksOf(ServerPlayer p) {
+            return p.getUUID().equals(a.getUUID()) ? picksA : picksB;
+        }
+
         boolean done() {
             return picksA.size() >= PICKS_EACH && picksB.size() >= PICKS_EACH;
         }
@@ -68,52 +83,9 @@ public final class DraftManager {
         return ACTIVE.containsKey(player.getUUID());
     }
 
-    public static int invite(ServerPlayer from, ServerPlayer to) {
-        if (from.getUUID().equals(to.getUUID())) {
-            from.sendSystemMessage(err("You can't draft against yourself."));
-            return 0;
-        }
-        if (isDrafting(from) || isDrafting(to) || DuelManager.isInDuel(from) || DuelManager.isInDuel(to)) {
-            from.sendSystemMessage(err("Someone is already in a game."));
-            return 0;
-        }
-        INVITES.put(to.getUUID(), new Invite(from.getUUID(), System.currentTimeMillis() + INVITE_TTL_MS));
-        from.sendSystemMessage(Component.literal("Draft invite sent to " + name(to) + ".")
-                .withStyle(ChatFormatting.GREEN));
-        to.sendSystemMessage(Component.literal(name(from) + " invites you to a DRAFT: take turns "
-                        + "picking from a shared pool, then duel with what you drafted! ")
-                .withStyle(ChatFormatting.GOLD)
-                .append(BattleCommands.button("[Accept]", "/mobtrumps draft accept",
-                        ChatFormatting.GREEN, "Accept the draft"))
-                .append(Component.literal(" "))
-                .append(BattleCommands.button("[Decline]", "/mobtrumps draft decline",
-                        ChatFormatting.RED, "Decline the draft")));
-        return 1;
-    }
-
-    public static int accept(ServerPlayer to) {
-        Invite invite = INVITES.remove(to.getUUID());
-        if (invite == null || invite.expiresAt() < System.currentTimeMillis()) {
-            to.sendSystemMessage(err("No pending draft invite."));
-            return 0;
-        }
-        ServerPlayer from = to.serverLevel().getServer().getPlayerList().getPlayer(invite.from());
-        if (from == null) {
-            to.sendSystemMessage(err("The inviter is no longer online."));
-            return 0;
-        }
-        if (isDrafting(from) || isDrafting(to) || DuelManager.isInDuel(from) || DuelManager.isInDuel(to)) {
-            to.sendSystemMessage(err("Someone is already in a game."));
-            return 0;
-        }
-        begin(from, to);
-        return 1;
-    }
-
     /**
-     * Start a draft directly between two mutually-present players, skipping the
-     * invite/accept dance — used by the dueling table, where both players have
-     * already consented by clicking it. Returns false if either is busy.
+     * Start a draft between two players at a dueling table, where sitting down
+     * and challenging are both players' consent. Returns false if either is busy.
      */
     public static boolean startDirect(ServerPlayer a, ServerPlayer b) {
         if (a.getUUID().equals(b.getUUID())) {
@@ -122,120 +94,142 @@ public final class DraftManager {
         if (isDrafting(a) || isDrafting(b) || DuelManager.isInDuel(a) || DuelManager.isInDuel(b)) {
             return false;
         }
-        begin(a, b);
-        return true;
-    }
-
-    private static void begin(ServerPlayer a, ServerPlayer b) {
         List<MobCard> pool = new ArrayList<>(
                 MobCards.shuffledDeck(POOL_SIZE, ThreadLocalRandom.current()));
         Draft draft = new Draft(a, b, pool);
         ACTIVE.put(a.getUUID(), draft);
         ACTIVE.put(b.getUUID(), draft);
-        Component intro = Component.literal("=== DRAFT: " + name(a) + " vs " + name(b)
-                + " — " + PICKS_EACH + " picks each ===").withStyle(ChatFormatting.GOLD, ChatFormatting.BOLD);
-        a.sendSystemMessage(intro);
-        b.sendSystemMessage(intro);
-        promptPick(draft);
+        BattleCommands.shuffleSound(a);
+        BattleCommands.shuffleSound(b);
+        sync(draft);
+        return true;
     }
 
-    public static int decline(ServerPlayer to) {
-        Invite invite = INVITES.remove(to.getUUID());
-        if (invite == null) {
-            to.sendSystemMessage(err("No pending draft invite."));
-            return 0;
-        }
-        ServerPlayer from = to.serverLevel().getServer().getPlayerList().getPlayer(invite.from());
-        if (from != null) {
-            from.sendSystemMessage(Component.literal(name(to) + " declined the draft.")
-                    .withStyle(ChatFormatting.RED));
-        }
-        to.sendSystemMessage(Component.literal("Draft declined.").withStyle(ChatFormatting.GRAY));
-        return 1;
-    }
-
-    public static int pick(ServerPlayer player, String mobId) {
+    /** A pick or a walk-out from the draft screen. */
+    public static void handleAction(ServerPlayer player, int action, int value) {
         Draft draft = ACTIVE.get(player.getUUID());
         if (draft == null) {
-            player.sendSystemMessage(err("You're not in a draft."));
-            return 0;
+            return;
         }
-        if (!draft.picker().getUUID().equals(player.getUUID())) {
-            player.sendSystemMessage(err("It's " + name(draft.picker()) + "'s pick."));
-            return 0;
-        }
-        MobCard chosen = null;
-        for (MobCard c : draft.pool) {
-            if (c.id().equalsIgnoreCase(mobId)) {
-                chosen = c;
-                break;
+        switch (action) {
+            case DraftActionPayload.PICK -> {
+                if (!draft.picker().getUUID().equals(player.getUUID())) {
+                    return; // not your pick: the screen never offers it, so just ignore it
+                }
+                for (MobCard card : draft.pool) {
+                    if (MobCards.ordinal(card.id()) == value) {
+                        take(draft, card);
+                        return;
+                    }
+                }
+            }
+            case DraftActionPayload.LEAVE -> cancel(draft, player, " left the draft");
+            default -> {
             }
         }
-        if (chosen == null) {
-            player.sendSystemMessage(err("That card isn't in the pool."));
-            return 0;
-        }
-        draft.pool.remove(chosen);
-        (draft.aToPick ? draft.picksA : draft.picksB).add(chosen);
-        Component note = Component.literal(name(player) + " drafts ").withStyle(ChatFormatting.GRAY)
-                .append(BattleCommands.cardName(chosen));
-        draft.a.sendSystemMessage(note);
-        draft.b.sendSystemMessage(note);
-        draft.aToPick = !draft.aToPick;
+    }
 
-        if (draft.done()) {
-            finish(draft);
-        } else {
-            promptPick(draft);
+    /** Take a card off the clock when a player lets it run out (every server tick). */
+    public static void tick(MinecraftServer server) {
+        if (ACTIVE.isEmpty()) {
+            return;
         }
-        return 1;
+        long now = System.currentTimeMillis();
+        Set<Draft> seen = TICK_SEEN;
+        seen.clear();
+        List<Draft> due = new ArrayList<>();
+        for (Draft draft : ACTIVE.values()) {
+            if (seen.add(draft) && now >= draft.deadline && !draft.pool.isEmpty()) {
+                due.add(draft);
+            }
+        }
+        for (Draft draft : due) {
+            take(draft, strongest(draft.pool));
+        }
     }
 
     public static void handleLogout(ServerPlayer player) {
-        INVITES.remove(player.getUUID());
-        INVITES.entrySet().removeIf(e -> e.getValue().from().equals(player.getUUID()));
-        Draft draft = ACTIVE.remove(player.getUUID());
+        Draft draft = ACTIVE.get(player.getUUID());
         if (draft != null) {
-            ServerPlayer other = draft.other(player);
-            ACTIVE.remove(other.getUUID());
-            other.sendSystemMessage(Component.literal(name(player) + " left — draft cancelled.")
-                    .withStyle(ChatFormatting.YELLOW));
+            cancel(draft, player, " left");
         }
     }
 
-    private static void promptPick(Draft draft) {
+    private static void take(Draft draft, MobCard card) {
         ServerPlayer picker = draft.picker();
-        ServerPlayer waiter = draft.other(picker);
-        int pickNo = (draft.aToPick ? draft.picksA : draft.picksB).size() + 1;
-        MutableComponent list = Component.literal("Pick " + pickNo + "/" + PICKS_EACH
-                + " — choose a card:\n").withStyle(ChatFormatting.GRAY);
-        for (MobCard c : draft.pool) {
-            list.append(BattleCommands.button("[" + c.displayName() + "]",
-                    "/mobtrumps pick " + c.id(),
-                    MobCardItem.tierColor(c.tier()),
-                    c.tier().label() + " — hover the name in chat after drafting for stats"));
-            list.append(Component.literal(" "));
+        draft.pool.remove(card);
+        draft.picksOf(picker).add(card);
+        draft.aToPick = !draft.aToPick;
+        draft.deadline = System.currentTimeMillis() + PICK_MS;
+        picker.playNotifySound(SoundEvents.BOOK_PAGE_TURN, SoundSource.PLAYERS, 0.6F, 1.1F);
+        draft.other(picker).playNotifySound(SoundEvents.BOOK_PAGE_TURN, SoundSource.PLAYERS, 0.4F, 0.9F);
+        if (draft.done()) {
+            finish(draft);
+        } else {
+            sync(draft);
         }
-        picker.sendSystemMessage(list);
-        waiter.sendSystemMessage(Component.literal("Waiting for " + name(picker) + " to pick...")
-                .withStyle(ChatFormatting.DARK_GRAY));
+    }
+
+    /**
+     * The card a pick left to the clock takes: the one with the best single
+     * stat, by the odds of that stat beating a random card. A fair stand-in
+     * for a choice, and never a gift to the player who let the time run out.
+     */
+    private static MobCard strongest(List<MobCard> pool) {
+        MobCard best = pool.get(0);
+        double bestOdds = -1;
+        for (MobCard card : pool) {
+            Stat stat = card.bestStat();
+            double odds = MobCards.winOdds(stat, card.stat(stat));
+            if (odds > bestOdds) {
+                bestOdds = odds;
+                best = card;
+            }
+        }
+        return best;
+    }
+
+    private static void cancel(Draft draft, ServerPlayer leaver, String why) {
+        ACTIVE.remove(draft.a.getUUID());
+        ACTIVE.remove(draft.b.getUUID());
+        ServerPlayer other = draft.other(leaver);
+        PacketDistributor.sendToPlayer(leaver, DraftSyncPayload.closed());
+        PacketDistributor.sendToPlayer(other, DraftSyncPayload.closed());
+        // said over the top of the world they are dropped back into
+        other.displayClientMessage(Component.literal(name(leaver) + why + " — the draft is off.")
+                .withStyle(ChatFormatting.YELLOW), true);
+    }
+
+    private static void sync(Draft draft) {
+        long left = Math.max(0, draft.deadline - System.currentTimeMillis());
+        for (ServerPlayer p : new ServerPlayer[]{draft.a, draft.b}) {
+            boolean mine = draft.picker().getUUID().equals(p.getUUID());
+            PacketDistributor.sendToPlayer(p, DraftSyncPayload.open(name(draft.other(p)), mine,
+                    draft.picksOf(p).size() + 1, PICKS_EACH, (int) ((left + 999) / 1000),
+                    ids(draft.pool), ids(draft.picksOf(p)), ids(draft.picksOf(draft.other(p)))));
+        }
+    }
+
+    private static List<String> ids(List<MobCard> cards) {
+        List<String> out = new ArrayList<>(cards.size());
+        for (MobCard card : cards) {
+            out.add(card.id());
+        }
+        return out;
     }
 
     private static void finish(Draft draft) {
         ACTIVE.remove(draft.a.getUUID());
         ACTIVE.remove(draft.b.getUUID());
-        Component done = Component.literal("Draft complete — the duel begins!")
-                .withStyle(ChatFormatting.GOLD, ChatFormatting.BOLD);
-        draft.a.sendSystemMessage(done);
-        draft.b.sendSystemMessage(done);
-        DuelManager.startDraftDuel(draft.a, draft.b, draft.picksA, draft.picksB);
+        // the battle screen replaces the draft screen on the first deal; if
+        // the duel cannot start, the draft screens must not be left hanging
+        if (!DuelManager.startDraftDuel(draft.a, draft.b, draft.picksA, draft.picksB)) {
+            PacketDistributor.sendToPlayer(draft.a, DraftSyncPayload.closed());
+            PacketDistributor.sendToPlayer(draft.b, DraftSyncPayload.closed());
+        }
     }
 
     private static String name(ServerPlayer player) {
         return player.getGameProfile().getName();
-    }
-
-    private static Component err(String text) {
-        return Component.literal(text).withStyle(ChatFormatting.RED);
     }
 }

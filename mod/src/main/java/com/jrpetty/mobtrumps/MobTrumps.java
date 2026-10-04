@@ -45,6 +45,9 @@ public class MobTrumps {
         NeoForge.EVENT_BUS.addListener(MobDrops::onLivingDrops);
         NeoForge.EVENT_BUS.addListener((net.neoforged.neoforge.event.tick.ServerTickEvent.Post event) -> {
             DuelManager.tickTimers(event.getServer());
+            TableBattleManager.tick(event.getServer());
+            CampaignManager.tick(event.getServer());
+            DraftManager.tick(event.getServer());
             BluffManager.tick(event.getServer());
             MemoryManager.tick(event.getServer());
             ConditionTracker.tick(event.getServer());

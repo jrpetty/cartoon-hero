@@ -3,15 +3,17 @@ package com.jrpetty.mobtrumps;
 import com.jrpetty.mobtrumps.game.Battle;
 import com.jrpetty.mobtrumps.game.Difficulty;
 import com.jrpetty.mobtrumps.game.MobCard;
+import com.jrpetty.mobtrumps.game.MobCards;
 import com.jrpetty.mobtrumps.game.Stat;
+import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
 import net.neoforged.neoforge.network.PacketDistributor;
 
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ThreadLocalRandom;
@@ -21,10 +23,15 @@ import java.util.concurrent.ThreadLocalRandom;
  * on-screen {@code BattleScreen} rather than chat. The {@link Battle} game logic
  * and CPU difficulty are reused; this class owns the per-player phase machine
  * and streams each state to the client via {@link BattleSyncPayload}.
+ *
+ * <p>Both sides hold {@link Battle#HAND_SIZE} cards. The CPU takes its own
+ * turns: it "thinks" for {@link #CPU_THINK_MS} and then plays, so a game never
+ * stalls on a button whose only job was to let the computer move.
  */
 public final class TableBattleManager {
 
-    private static final int DECK_SIZE = 16;
+    /** How long the CPU appears to think before it plays its stat. */
+    static final long CPU_THINK_MS = 1_100L;
 
     private static final class Game {
         final Battle battle;
@@ -36,15 +43,24 @@ public final class TableBattleManager {
          * played or any award. Only a game fought with your OWN deck counts.
          */
         final boolean ranked;
+        final long startedMs = System.currentTimeMillis();
         int phase;
+        /** When the current phase began, for the CPU's thinking time. */
+        long phaseAt = System.currentTimeMillis();
+        int xp;
         Battle.RoundResult lastResult;
 
-        Game(Battle battle, Difficulty difficulty, boolean useDeck) {
+        Game(Battle battle, Difficulty difficulty, boolean useDeck, boolean ranked) {
             this.battle = battle;
             this.difficulty = difficulty;
             this.useDeck = useDeck;
-            this.ranked = useDeck;
+            this.ranked = ranked;
             this.phase = BattleSyncPayload.PLAYER_PICK;
+        }
+
+        void enter(int next) {
+            phase = next;
+            phaseAt = System.currentTimeMillis();
         }
     }
 
@@ -59,7 +75,7 @@ public final class TableBattleManager {
 
     /**
      * Deal a fresh battle at the chosen difficulty and open the screen. With
-     * {@code useDeck} the player fights with their own custom deck (kill-tier
+     * {@code useDeck} the player fights with their own six-card deck (kill-tier
      * boosts included); otherwise they're dealt a random hand. The CPU always
      * gets the SAME number of cards, drawn on the collector curve — mostly
      * commons, a fair spread of the rest, and never more than one legendary.
@@ -67,22 +83,22 @@ public final class TableBattleManager {
     public static void start(ServerPlayer player, Difficulty difficulty, boolean useDeck) {
         var rng = ThreadLocalRandom.current();
         List<MobCard> hand = useDeck ? DeckManager.deckCards(player) : List.of();
-        boolean deckOk = hand.size() >= DeckManager.MIN_DECK;
+        boolean deckOk = hand.size() == Battle.HAND_SIZE;
         List<Integer> levels = deckOk ? DeckManager.deckLevels(player) : List.of();
-        java.util.Set<String> mine = deckOk ? DeckManager.deckIds(player) : new java.util.HashSet<>();
+        Set<String> mine = deckOk ? DeckManager.deckIds(player) : new java.util.HashSet<>();
         if (!deckOk) {
-            hand = com.jrpetty.mobtrumps.game.MobCards.shuffledDeck(DECK_SIZE, rng);
+            hand = MobCards.shuffledDeck(Battle.HAND_SIZE, rng);
             for (MobCard c : hand) mine.add(c.id());
         }
         // the CPU brings DIFFERENT mobs, upgraded to the same degree as yours —
         // otherwise a well-hunted deck of boosted cards walks every battle
-        List<MobCard> cpuHand = com.jrpetty.mobtrumps.game.MobCards.matchLevels(
-                com.jrpetty.mobtrumps.game.MobCards.cpuDeck(hand.size(), rng, mine), levels, rng);
+        List<MobCard> cpuHand = MobCards.matchLevels(
+                MobCards.cpuDeck(hand.size(), rng, mine), levels, rng);
         Battle battle = new Battle(hand, cpuHand, rng);
         battle.setDifficulty(difficulty);
-        Game game = new Game(battle, difficulty, useDeck && deckOk);
-        game.phase = battle.getTurn() == Battle.Side.CPU
-                ? BattleSyncPayload.CPU_PICK : BattleSyncPayload.PLAYER_PICK;
+        Game game = new Game(battle, difficulty, useDeck, useDeck && deckOk);
+        game.enter(battle.getTurn() == Battle.Side.CPU
+                ? BattleSyncPayload.CPU_PICK : BattleSyncPayload.PLAYER_PICK);
         GAMES.put(player.getUUID(), game);
         BattleCommands.shuffleSound(player);
         send(player, game);
@@ -106,6 +122,11 @@ public final class TableBattleManager {
                 }
             }
             case BattleActionPayload.NEXT -> {
+                // only honoured for the state the client was actually looking
+                // at, so a double press can never skip a round unseen
+                if (statIdx != BattleActionPayload.ticket(game.phase, game.battle.getRound())) {
+                    return;
+                }
                 if (game.phase == BattleSyncPayload.CPU_PICK) {
                     resolve(player, game, game.battle.cpuChoice());
                 } else if (game.phase == BattleSyncPayload.RESULT) {
@@ -126,9 +147,27 @@ public final class TableBattleManager {
         }
     }
 
+    /** The CPU plays once it has "thought" for {@link #CPU_THINK_MS} (every server tick). */
+    public static void tick(MinecraftServer server) {
+        if (GAMES.isEmpty()) {
+            return;
+        }
+        long now = System.currentTimeMillis();
+        for (Map.Entry<UUID, Game> entry : GAMES.entrySet()) {
+            Game game = entry.getValue();
+            if (game.phase != BattleSyncPayload.CPU_PICK || now - game.phaseAt < CPU_THINK_MS) {
+                continue;
+            }
+            ServerPlayer player = server.getPlayerList().getPlayer(entry.getKey());
+            if (player != null) {
+                resolve(player, game, game.battle.cpuChoice());
+            }
+        }
+    }
+
     private static void resolve(ServerPlayer player, Game game, Stat stat) {
         game.lastResult = game.battle.playRound(stat);
-        game.phase = BattleSyncPayload.RESULT;
+        game.enter(BattleSyncPayload.RESULT);
         float pitch = switch (game.lastResult.winner()) {
             case PLAYER -> 1.3F;
             case CPU -> 0.7F;
@@ -140,8 +179,11 @@ public final class TableBattleManager {
 
     private static void advance(ServerPlayer player, Game game) {
         if (game.battle.isFinished()) {
-            game.phase = BattleSyncPayload.FINISHED;
+            game.enter(BattleSyncPayload.FINISHED);
             boolean won = game.battle.getWinner() == Battle.Side.PLAYER;
+            // every finished game pays its experience, practice deals included —
+            // only wins and awards are kept for games fought with your own deck
+            game.xp = GameRewards.payGame(player, game.startedMs, false);
             if (game.ranked) {
                 StatsTracker.bump(player, "games_played");
                 if (won) {
@@ -157,8 +199,8 @@ public final class TableBattleManager {
                         SoundEvents.UI_TOAST_CHALLENGE_COMPLETE, SoundSource.PLAYERS, 0.8F, 1.0F);
             }
         } else {
-            game.phase = game.battle.getTurn() == Battle.Side.CPU
-                    ? BattleSyncPayload.CPU_PICK : BattleSyncPayload.PLAYER_PICK;
+            game.enter(game.battle.getTurn() == Battle.Side.CPU
+                    ? BattleSyncPayload.CPU_PICK : BattleSyncPayload.PLAYER_PICK);
         }
         send(player, game);
     }
@@ -169,53 +211,21 @@ public final class TableBattleManager {
     }
 
     private static void send(ServerPlayer player, Game game) {
-        Battle b = game.battle;
         boolean reveal = game.phase == BattleSyncPayload.RESULT
                 || game.phase == BattleSyncPayload.FINISHED;
-        String playerId;
-        String cpuId = "";
-        int chosen = -1;
-        int chooser = 2;
-        int winner = 2;
-        int playerLevel = 0;
-        int cpuLevel = 0;
-        if (reveal && game.lastResult != null) {
-            playerId = game.lastResult.playerCard().id();
-            cpuId = game.lastResult.cpuCard().id();
-            playerLevel = com.jrpetty.mobtrumps.game.MobCards.levelOf(game.lastResult.playerCard());
-            cpuLevel = com.jrpetty.mobtrumps.game.MobCards.levelOf(game.lastResult.cpuCard());
-            chosen = game.lastResult.stat().ordinal();
-            chooser = sideIdx(game.lastResult.chooser());
-            winner = sideIdx(game.lastResult.winner());
-        } else {
-            MobCard top = b.playerTopCard();
-            playerId = top == null ? "" : top.id();
-            playerLevel = com.jrpetty.mobtrumps.game.MobCards.levelOf(top);
-        }
+        BattleView view = BattleView.of(game.phase, game.battle, Battle.Side.PLAYER)
+                .shown(reveal ? game.lastResult : null)
+                .difficulty(game.difficulty.ordinal())
+                .counts(game.ranked);
         if (game.phase == BattleSyncPayload.FINISHED) {
-            winner = sideIdx(b.getWinner());
+            view.summary().xp(game.xp).notes(game.ranked
+                    ? "Counts toward your wins and Arena awards"
+                    : "A random deal: practice only — build a deck to play for keeps", "");
         }
-        // 1 = the coin flip on a drawn round went to you, 2 = to the CPU
-        Battle.Side coinSide = b.lastCoin();
-        int coin = coinSide == Battle.Side.NONE ? 0 : (coinSide == Battle.Side.PLAYER ? 1 : 2);
-        List<Integer> nums = new ArrayList<>(List.of(
-                b.playerCardCount(), b.cpuCardCount(), b.potCount(), b.getRound(),
-                chosen, chooser, winner, game.difficulty.ordinal(), 0, 0, 0, 0, coin,
-                0, playerLevel, cpuLevel));
-        PacketDistributor.sendToPlayer(player,
-                new BattleSyncPayload(game.phase, playerId, cpuId, nums, ""));
+        PacketDistributor.sendToPlayer(player, view.build());
     }
 
     private static void sendClosed(ServerPlayer player) {
-        PacketDistributor.sendToPlayer(player, new BattleSyncPayload(
-                BattleSyncPayload.CLOSED, "", "", List.of(0, 0, 0, 0, -1, 2, 2, 0, 0, 0, 0), ""));
-    }
-
-    private static int sideIdx(Battle.Side side) {
-        return switch (side) {
-            case PLAYER -> 0;
-            case CPU -> 1;
-            default -> 2;
-        };
+        PacketDistributor.sendToPlayer(player, BattleView.closed());
     }
 }

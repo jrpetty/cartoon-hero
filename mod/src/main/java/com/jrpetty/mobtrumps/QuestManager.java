@@ -96,11 +96,10 @@ public final class QuestManager {
             if (claimed) {
                 line = Component.literal("  [DONE] " + q.desc()).withStyle(ChatFormatting.DARK_GRAY);
             } else if (done) {
-                line = Component.literal("  " + q.desc() + " — complete! ")
+                line = Component.literal("  " + q.desc() + " — complete! Claim "
+                                + q.reward() + " emeralds: ")
                         .withStyle(ChatFormatting.GREEN)
-                        .append(BattleCommands.button("[Claim " + q.reward() + " emeralds]",
-                                "/mobtrumps quest claim " + i, ChatFormatting.GOLD,
-                                "Collect your reward"));
+                        .append(BattleCommands.typed("/mobtrumps quest claim " + i));
             } else {
                 line = Component.literal("  " + q.desc() + "  ").withStyle(ChatFormatting.WHITE)
                         .append(Component.literal(progress + "/" + q.target())

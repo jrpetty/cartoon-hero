@@ -38,6 +38,8 @@ public final class BlackjackManager {
     /** What the hand in progress was actually staked at, so a later change cannot
      *  alter what an already-dealt hand pays out. */
     private static final Map<UUID, Integer> WAGERED = new ConcurrentHashMap<>();
+    /** When each player's hand was dealt, so a finished hand is paid by its length. */
+    private static final Map<UUID, Long> DEALT_AT = new ConcurrentHashMap<>();
 
     private BlackjackManager() {
     }
@@ -58,7 +60,11 @@ public final class BlackjackManager {
             case BlackjackActionPayload.DEAL -> deal(player);
             case BlackjackActionPayload.CALL -> call(player, statOrdinal);
             case BlackjackActionPayload.STAND -> stand(player);
-            case BlackjackActionPayload.LEAVE -> TABLES.remove(player.getUUID());
+            case BlackjackActionPayload.LEAVE -> {
+                // walking away from a hand is not finishing it: no experience
+                TABLES.remove(player.getUUID());
+                DEALT_AT.remove(player.getUUID());
+            }
             case BlackjackActionPayload.SET_STAKE -> setStake(player, statOrdinal);
             default -> {
             }
@@ -105,6 +111,7 @@ public final class BlackjackManager {
         // remember what was actually staked, so the payout cannot drift if the
         // player changes their bet before the next deal
         WAGERED.put(player.getUUID(), stake);
+        DEALT_AT.put(player.getUUID(), System.currentTimeMillis());
         TABLES.put(player.getUUID(), new Blackjack(ThreadLocalRandom.current()));
         player.serverLevel().playSound(null, player.getX(), player.getY(), player.getZ(),
                 ModSounds.SHUFFLE.get(), SoundSource.PLAYERS, 0.8F, 1.0F);
@@ -181,6 +188,9 @@ public final class BlackjackManager {
         }
         WAGERED.remove(player.getUUID());
         StatsTracker.bump(player, "twentyone_played");
+        // a hand is quick, so it is paid by its length — see GamePay
+        Long dealt = DEALT_AT.remove(player.getUUID());
+        GameRewards.payGame(player, dealt == null ? System.currentTimeMillis() : dealt, true);
     }
 
     private static String describeDealer(Blackjack game) {
@@ -235,6 +245,7 @@ public final class BlackjackManager {
     public static void handleLogout(ServerPlayer player) {
         TABLES.remove(player.getUUID());
         WAGERED.remove(player.getUUID());
+        DEALT_AT.remove(player.getUUID());
     }
 
 }

@@ -28,12 +28,16 @@ import java.util.concurrent.ThreadLocalRandom;
 /**
  * The twenty-mission campaign.
  *
- * <p>Sixteen against sixteen. The mission fields its own themed deck (see
- * {@link CampaignDecks}) and the player fields sixteen cards out of their
+ * <p>Six against six. The mission fields its own themed deck (see
+ * {@link CampaignDecks}) and the player fields six cards out of their
  * Collection Book, played at whatever holo level they have earned on each.
  * The campaign therefore does not open until the book holds
  * {@value #REQUIRED_CARDS} cards — the collection is the entry fee, and what
  * you have hunted is what you take into the fight.
+ *
+ * <p>Like the CPU table, the opponent takes its own turns after a moment's
+ * thought, and everything a mission pays — the clear, the Trophy, the reward,
+ * the next mission unlocking — is told on the result panel, not in chat.
  *
  * <p>Missions unlock in order and are cleared once. A clear that never drops a
  * single round is recorded as flawless, so a finished mission still has
@@ -46,23 +50,32 @@ public final class CampaignManager {
 
     /**
      * Cards that must be filed in the Collection Book before the campaign
-     * opens at all. You bring your own sixteen and the mission brings its own
-     * sixteen, so until the book can field a full deck there is nothing to
-     * play with.
+     * opens at all. You bring your own hand and the mission brings its own,
+     * so until the book can field a full hand there is nothing to play with.
      */
     public static final int REQUIRED_CARDS = CampaignDecks.DECK_SIZE;
 
     private static final class Run {
         final CampaignMission mission;
         final Battle battle;
+        final long startedMs = System.currentTimeMillis();
         int phase;
+        long phaseAt = System.currentTimeMillis();
         int roundsLost;
+        int xp;
+        String note = "";
+        String note2 = "";
         Battle.RoundResult lastResult;
 
         Run(CampaignMission mission, Battle battle) {
             this.mission = mission;
             this.battle = battle;
             this.phase = BattleSyncPayload.PLAYER_PICK;
+        }
+
+        void enter(int next) {
+            phase = next;
+            phaseAt = System.currentTimeMillis();
         }
     }
 
@@ -108,7 +121,7 @@ public final class CampaignManager {
                 + player.getData(ModAttachments.STORED_FOIL.get()).size();
     }
 
-    /** The campaign is shut until the book can field a full sixteen. */
+    /** The campaign is shut until the book can field a full hand. */
     public static boolean canPlay(ServerPlayer player) {
         return filedCards(player) >= REQUIRED_CARDS;
     }
@@ -125,28 +138,30 @@ public final class CampaignManager {
         if (mission == null || !isUnlocked(player, mission)) {
             return;
         }
+        // refusals land on the action bar, over the briefing the player is
+        // looking at, rather than in chat behind it
         if (DuelManager.isInDuel(player) || TableBattleManager.isInBattle(player)) {
-            player.sendSystemMessage(Component.literal("Finish your current game first.")
-                    .withStyle(ChatFormatting.RED));
+            player.displayClientMessage(Component.literal("Finish your current game first.")
+                    .withStyle(ChatFormatting.RED), true);
             return;
         }
         if (!canPlay(player)) {
-            player.sendSystemMessage(Component.literal("The campaign needs "
+            player.displayClientMessage(Component.literal("The campaign needs "
                             + REQUIRED_CARDS + " cards filed in your Collection Book — you have "
                             + filedCards(player) + ".")
-                    .withStyle(ChatFormatting.RED));
+                    .withStyle(ChatFormatting.RED), true);
             return;
         }
         var rng = ThreadLocalRandom.current();
 
-        // You bring sixteen of your own; the mission brings its own deck. What
-        // the collection changes is no longer just power, it is what you can
-        // field at all.
+        // You bring six of your own; the mission brings its own six. What the
+        // collection changes is no longer just power, it is what you can field
+        // at all.
         List<MobCard> playerHand = playerDeck(player);
         if (playerHand.size() < CampaignDecks.DECK_SIZE) {
-            player.sendSystemMessage(Component.literal(
+            player.displayClientMessage(Component.literal(
                             "Your book cannot field " + CampaignDecks.DECK_SIZE + " cards yet.")
-                    .withStyle(ChatFormatting.RED));
+                    .withStyle(ChatFormatting.RED), true);
             return;
         }
         // the opponent fields its deck as premium prints where the mission says
@@ -164,20 +179,17 @@ public final class CampaignManager {
         battle.setCardCounting(mission.counting());
 
         Run run = new Run(mission, battle);
-        run.phase = battle.getTurn() == Battle.Side.CPU
-                ? BattleSyncPayload.CPU_PICK : BattleSyncPayload.PLAYER_PICK;
+        run.enter(battle.getTurn() == Battle.Side.CPU
+                ? BattleSyncPayload.CPU_PICK : BattleSyncPayload.PLAYER_PICK);
         RUNS.put(player.getUUID(), run);
 
-        player.sendSystemMessage(Component.literal("MISSION " + mission.index() + " · "
-                        + mission.name()).withStyle(ChatFormatting.GOLD, ChatFormatting.BOLD));
-        player.sendSystemMessage(Component.literal("  " + mission.tagline())
-                .withStyle(ChatFormatting.GRAY));
+        // the mission's name rides the battle screen's header the whole game
         BattleCommands.shuffleSound(player);
         send(player, run);
     }
 
     /**
-     * The sixteen cards the player takes into a mission.
+     * The six cards the player takes into a mission.
      *
      * <p>Their saved battle deck first, filtered to what is actually filed in
      * the book — a deck entry whose card has been sold or pocketed cannot be
@@ -250,6 +262,10 @@ public final class CampaignManager {
                 }
             }
             case BattleActionPayload.NEXT -> {
+                // only for the state the client was looking at — see ticket()
+                if (statIdx != BattleActionPayload.ticket(run.phase, run.battle.getRound())) {
+                    return;
+                }
                 if (run.phase == BattleSyncPayload.CPU_PICK) {
                     resolve(player, run, run.battle.cpuChoice());
                 } else if (run.phase == BattleSyncPayload.RESULT) {
@@ -270,12 +286,31 @@ public final class CampaignManager {
         }
     }
 
+    /** The mission's opponent plays once it has thought for as long as the CPU table's does. */
+    public static void tick(net.minecraft.server.MinecraftServer server) {
+        if (RUNS.isEmpty()) {
+            return;
+        }
+        long now = System.currentTimeMillis();
+        for (Map.Entry<UUID, Run> entry : RUNS.entrySet()) {
+            Run run = entry.getValue();
+            if (run.phase != BattleSyncPayload.CPU_PICK
+                    || now - run.phaseAt < TableBattleManager.CPU_THINK_MS) {
+                continue;
+            }
+            ServerPlayer player = server.getPlayerList().getPlayer(entry.getKey());
+            if (player != null) {
+                resolve(player, run, run.battle.cpuChoice());
+            }
+        }
+    }
+
     private static void resolve(ServerPlayer player, Run run, Stat stat) {
         run.lastResult = run.battle.playRound(stat);
         if (run.lastResult.winner() == Battle.Side.CPU) {
             run.roundsLost++;
         }
-        run.phase = BattleSyncPayload.RESULT;
+        run.enter(BattleSyncPayload.RESULT);
         float pitch = switch (run.lastResult.winner()) {
             case PLAYER -> 1.3F;
             case CPU -> 0.7F;
@@ -287,20 +322,27 @@ public final class CampaignManager {
 
     private static void advance(ServerPlayer player, Run run) {
         if (run.battle.isFinished()) {
-            run.phase = BattleSyncPayload.FINISHED;
+            run.enter(BattleSyncPayload.FINISHED);
+            run.xp = GameRewards.payGame(player, run.startedMs, false);
             if (run.battle.getWinner() == Battle.Side.PLAYER) {
                 complete(player, run);
+            } else {
+                run.note = "The mission stands. Change your six and try again.";
+                run.note2 = "";
             }
             StatsTracker.bump(player, "games_played");
             AchievementManager.refresh(player);
         } else {
-            run.phase = run.battle.getTurn() == Battle.Side.CPU
-                    ? BattleSyncPayload.CPU_PICK : BattleSyncPayload.PLAYER_PICK;
+            run.enter(run.battle.getTurn() == Battle.Side.CPU
+                    ? BattleSyncPayload.CPU_PICK : BattleSyncPayload.PLAYER_PICK);
         }
         send(player, run);
     }
 
-    /** Record the clear, and hand over the Trophy on a first win. */
+    /**
+     * Record the clear, and hand over the Trophy on a first win. What it paid
+     * is written onto the run, for the result panel to tell the player.
+     */
     private static void complete(ServerPlayer player, Run run) {
         CampaignMission mission = run.mission;
         Map<String, Integer> done = new HashMap<>(progress(player));
@@ -311,27 +353,22 @@ public final class CampaignManager {
         player.setData(ModAttachments.CAMPAIGN.get(), done);
         sync(player);
 
+        String perfect = flawless && before < FLAWLESS ? " · FLAWLESS" : "";
         if (before == 0) {
-            player.sendSystemMessage(Component.literal("★ MISSION " + mission.index()
-                            + " CLEARED · " + mission.name())
-                    .withStyle(ChatFormatting.GOLD, ChatFormatting.BOLD));
-            grantTrophy(player, mission);
+            MobCard trophy = grantTrophy(player, mission);
             CampaignRewards reward = CampaignRewards.forMission(mission.index());
             reward.grant(player);
-            reward.announce(player);
+            run.note = "Mission " + mission.index() + " cleared" + perfect
+                    + (trophy == null ? "" : " · Trophy: " + trophy.displayName());
             CampaignMission next = CampaignDecks.byIndex(mission.index() + 1);
-            if (next != null) {
-                player.sendSystemMessage(Component.literal("Unlocked: " + next.name())
-                        .withStyle(ChatFormatting.GREEN));
-            } else {
-                player.sendSystemMessage(Component.literal(
-                                "The campaign is finished. Every mission is yours.")
-                        .withStyle(ChatFormatting.LIGHT_PURPLE, ChatFormatting.BOLD));
-            }
-        }
-        if (flawless && before < FLAWLESS) {
-            player.sendSystemMessage(Component.literal("FLAWLESS — not a single round dropped.")
-                    .withStyle(ChatFormatting.AQUA, ChatFormatting.BOLD));
+            String paid = reward.label();
+            run.note2 = (paid.isEmpty() ? "" : "Reward: " + paid + "  ·  ")
+                    + (next != null ? "Unlocked: " + next.name() : "Every mission is yours");
+        } else {
+            run.note = flawless && before < FLAWLESS
+                    ? "FLAWLESS — not a single round dropped"
+                    : "Mission cleared again";
+            run.note2 = "";
         }
         player.serverLevel().playSound(null, player.getX(), player.getY(), player.getZ(),
                 SoundEvents.UI_TOAST_CHALLENGE_COMPLETE, SoundSource.PLAYERS, 0.9F, 1.0F);
@@ -343,77 +380,39 @@ public final class CampaignManager {
      * The mission's Trophy card. Stat-identical to any other print of that mob —
      * its whole worth is that only clearing the mission produces one.
      */
-    private static void grantTrophy(ServerPlayer player, CampaignMission mission) {
+    private static MobCard grantTrophy(ServerPlayer player, CampaignMission mission) {
         MobCard card = MobCards.byId(mission.trophyMob());
         if (card == null) {
-            return;
+            return null;
         }
         ItemStack trophy = MobCardItem.issued(player, card, CardEdition.TROPHY);
         CardActions.give(player, trophy);
         CollectionTracker.record(player, card.id(), false);
-        player.sendSystemMessage(Component.literal("Trophy awarded: ")
-                .withStyle(ChatFormatting.GRAY)
-                .append(trophy.getHoverName().copy().withStyle(ChatFormatting.GOLD))
-                .append(Component.literal(" — a Trophy print, only ever won.")
-                        .withStyle(ChatFormatting.DARK_GRAY)));
+        return card;
     }
 
     // --- screen sync --------------------------------------------------------
 
     private static void send(ServerPlayer player, Run run) {
-        Battle b = run.battle;
         boolean reveal = run.phase == BattleSyncPayload.RESULT
                 || run.phase == BattleSyncPayload.FINISHED;
-        String playerId;
-        String cpuId = "";
-        int chosen = -1;
-        int chooser = 2;
-        int winner = 2;
-        int playerLevel = 0;
-        int cpuLevel = 0;
-        if (reveal && run.lastResult != null) {
-            playerId = run.lastResult.playerCard().id();
-            cpuId = run.lastResult.cpuCard().id();
-            playerLevel = MobCards.levelOf(run.lastResult.playerCard());
-            cpuLevel = MobCards.levelOf(run.lastResult.cpuCard());
-            chosen = run.lastResult.stat().ordinal();
-            chooser = sideIdx(run.lastResult.chooser());
-            winner = sideIdx(run.lastResult.winner());
-        } else {
-            MobCard top = b.playerTopCard();
-            playerId = top == null ? "" : top.id();
-            playerLevel = MobCards.levelOf(top);
-        }
+        // MISSION marks this as a campaign game, so closing the battle screen
+        // puts the player back on the route instead of dumping them in the
+        // world; the levels BattleView sends carry the opponent's upgraded
+        // prints, so the screen draws the numbers the round was decided on
+        BattleView view = BattleView.of(run.phase, run.battle, Battle.Side.PLAYER)
+                .shown(reveal ? run.lastResult : null)
+                .difficulty(run.mission.brain().ordinal())
+                .mission(run.mission.index())
+                .counts(true)
+                .label("M" + run.mission.index() + " " + run.mission.name());
         if (run.phase == BattleSyncPayload.FINISHED) {
-            winner = sideIdx(b.getWinner());
+            view.summary().xp(run.xp).notes(run.note, run.note2);
         }
-        Battle.Side coinSide = b.lastCoin();
-        int coin = coinSide == Battle.Side.NONE ? 0 : (coinSide == Battle.Side.PLAYER ? 1 : 2);
-        // slot 13 marks this as a campaign game, so closing the battle screen can
-        // put the player back on the route instead of dumping them in the world
-        // slots 14/15 carry the holo level each side is fielding. The opponent's
-        // cards are upgraded prints (see start()), and only their id crosses the
-        // wire — without the level the client would look up the base card and
-        // draw stats that do not match the round it just watched being decided.
-        List<Integer> nums = new ArrayList<>(List.of(
-                b.playerCardCount(), b.cpuCardCount(), b.potCount(), b.getRound(),
-                chosen, chooser, winner, run.mission.brain().ordinal(), 0, 0, 0, 0, coin,
-                run.mission.index(), playerLevel, cpuLevel));
-        PacketDistributor.sendToPlayer(player, new BattleSyncPayload(
-                run.phase, playerId, cpuId, nums,
-                "M" + run.mission.index() + " " + run.mission.name()));
+        PacketDistributor.sendToPlayer(player, view.build());
     }
 
     private static void sendClosed(ServerPlayer player) {
-        PacketDistributor.sendToPlayer(player, new BattleSyncPayload(
-                BattleSyncPayload.CLOSED, "", "", List.of(0, 0, 0, 0, -1, 2, 2, 0, 0, 0, 0, 0, 0), ""));
-    }
-
-    private static int sideIdx(Battle.Side side) {
-        return switch (side) {
-            case PLAYER -> 0;
-            case CPU -> 1;
-            default -> 2;
-        };
+        PacketDistributor.sendToPlayer(player, BattleView.closed());
     }
 }

@@ -73,6 +73,7 @@ public final class GuessWhoManager {
         UUID turn;
         UUID winner;
         boolean done;
+        final long startedMs = System.currentTimeMillis();
         /** Fragments staked on this board, or 0 for an unstaked practice game. */
         int wager;
 
@@ -349,6 +350,11 @@ public final class GuessWhoManager {
                     .withStyle(ChatFormatting.RED));
         }
         game.done = true;
+        // the game is over for everyone in it, right or wrong: both are paid
+        GameRewards.payGame(player, game.startedMs, true);
+        if (!game.solo()) {
+            GameRewards.payGame(playerOf(player, game.other(player.getUUID())), game.startedMs, true);
+        }
         sound(player, right ? SoundEvents.PLAYER_LEVELUP : SoundEvents.ITEM_BREAK,
                 right ? 1.2F : 0.8F);
         if (!game.solo()) {
@@ -401,6 +407,10 @@ public final class GuessWhoManager {
             if (other != null) {
                 other.sendSystemMessage(Component.literal(name(player) + " left the game.")
                         .withStyle(ChatFormatting.GRAY));
+                // the one left at the table is paid if a question was ever asked
+                if (!game.boardA.log.isEmpty() || !game.boardB.log.isEmpty()) {
+                    GameRewards.payGame(other, game.startedMs, true);
+                }
                 send(other);
             }
         }

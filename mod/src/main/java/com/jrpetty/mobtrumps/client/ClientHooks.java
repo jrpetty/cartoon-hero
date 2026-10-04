@@ -149,11 +149,32 @@ public final class ClientHooks {
         ClientBattle.setEmote(side, text);
     }
 
+    /** Open, refresh or close the draft screen. */
+    public static void updateDraft(com.jrpetty.mobtrumps.DraftSyncPayload payload) {
+        Minecraft mc = Minecraft.getInstance();
+        if (payload.phase() == com.jrpetty.mobtrumps.DraftSyncPayload.CLOSED) {
+            ClientDraft.clear();
+            if (mc.screen instanceof DraftScreen) {
+                mc.setScreen(null);
+            }
+            return;
+        }
+        ClientDraft.set(payload);
+        if (!(mc.screen instanceof DraftScreen)) {
+            mc.setScreen(new DraftScreen());
+        }
+    }
+
+    /** A finished game paid experience: float it over whatever is on screen. */
+    public static void showXpGain(int amount) {
+        ClientRewards.xp(amount);
+    }
+
     /** Apply a battle state snapshot, opening or closing the battle screen. */
     public static void updateBattle(com.jrpetty.mobtrumps.BattleSyncPayload payload) {
         boolean wasCampaign = ClientBattle.campaignMission() > 0;
         ClientBattle.set(payload.phase(), payload.playerCardId(), payload.cpuCardId(),
-                payload.nums(), payload.label());
+                payload.nums(), payload.label(), payload.texts());
         Minecraft mc = Minecraft.getInstance();
         int phase = payload.phase();
         if (phase == com.jrpetty.mobtrumps.BattleSyncPayload.CLOSED) {
@@ -170,6 +191,10 @@ public final class ClientHooks {
             return;
         }
         if (!(mc.screen instanceof BattleScreen)) {
+            // a finished draft hands straight over to its duel
+            if (mc.screen instanceof DraftScreen) {
+                ClientDraft.clear();
+            }
             mc.setScreen(new BattleScreen());
         }
     }

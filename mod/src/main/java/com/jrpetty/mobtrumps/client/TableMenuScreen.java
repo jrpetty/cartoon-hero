@@ -75,8 +75,9 @@ public class TableMenuScreen extends Screen {
         return false;
     }
 
+    /** A deck plays once it holds a full hand — exactly what every game deals. */
     private boolean deckReady() {
-        return ClientCollection.deck().size() >= DeckManager.MIN_DECK;
+        return ClientCollection.deck().size() >= DeckManager.DECK_SIZE;
     }
 
     @Override
@@ -140,9 +141,9 @@ public class TableMenuScreen extends Screen {
         by = modeButton(g, "cpu_2", leftX + 8, by, colW - 16, "HARD", 3,
                 "Reads the odds & bluffs", 0xFF8A3A2E, mouseX, mouseY, t);
         if (showCpuNotes) {
-            drawCenteredFitted(g, "CPU deck: same size as yours,", leftX + colW / 2, by + 2, colW - 12, TEXT_DIM);
-            drawCenteredFitted(g, "mostly commons, one legendary", leftX + colW / 2, by + 12, colW - 12, TEXT_DIM);
-            drawCenteredFitted(g, "and levelled to match your holos", leftX + colW / 2, by + 22, colW - 12, TEXT_DIM);
+            drawCenteredFitted(g, "Six cards each. The CPU's are", leftX + colW / 2, by + 2, colW - 12, TEXT_DIM);
+            drawCenteredFitted(g, "mostly commons, one legendary,", leftX + colW / 2, by + 12, colW - 12, TEXT_DIM);
+            drawCenteredFitted(g, "levelled to match your holos", leftX + colW / 2, by + 22, colW - 12, TEXT_DIM);
         }
         // a different game on the same cards, so these live under the duel
         // modes rather than in the deck row, which has no width left to give
@@ -210,7 +211,7 @@ public class TableMenuScreen extends Screen {
         // at hardcoded offsets, so "Random deal (practice)" ran straight under
         // the Edit Deck button. If the row cannot fit, the labels give way in
         // order of how much they can afford to lose.
-        String myLabel = "My Deck (" + deckN + ")";
+        String myLabel = "My Deck (" + Math.min(deckN, DeckManager.DECK_SIZE) + "/" + DeckManager.DECK_SIZE + ")";
         String randLabel = "Random deal (practice)";
         String editLabel = "Edit Deck";
         String campLabel = "Campaign " + ClientCampaign.clearedCount()
@@ -261,10 +262,12 @@ public class TableMenuScreen extends Screen {
         pill(g, "deck_rand", rowLeft + myW + gap, barY + 18, fit(randLabel, randW - 14),
                 !useMyDeck || !ready, true, mouseX, mouseY);
         // a dealt hand costs nothing to enter, so it earns nothing either
+        // every finished game pays experience; a dealt hand costs nothing to
+        // enter, so it earns nothing else
         String note = !ready
-                ? "Build a deck of " + DeckManager.MIN_DECK + "+ in the book — random deals don't count"
-                : (useMyDeck ? "Your deck: wins and awards count"
-                             : "Practice: no wins, no awards, no progress");
+                ? "Pick " + DeckManager.DECK_SIZE + " cards with Edit Deck to play for keeps — random deals are practice"
+                : (useMyDeck ? "Your deck: wins and awards count · every game pays XP"
+                             : "Practice: XP only — no wins, no awards");
         drawFitted(g, note, barX + 8, barY + 34,
                 panelW - 16, !ready ? 0xFFCB8A8A : (useMyDeck ? 0xFF8FD08F : TEXT_DIM));
 

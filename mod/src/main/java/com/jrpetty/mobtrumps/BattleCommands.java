@@ -1,7 +1,6 @@
 package com.jrpetty.mobtrumps;
 
 import com.jrpetty.mobtrumps.game.Battle;
-import com.jrpetty.mobtrumps.game.Difficulty;
 import com.jrpetty.mobtrumps.game.MobCard;
 import com.jrpetty.mobtrumps.game.Stat;
 import com.mojang.brigadier.arguments.IntegerArgumentType;
@@ -18,30 +17,23 @@ import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
-import net.minecraft.world.item.ItemStack;
 import net.neoforged.neoforge.event.RegisterCommandsEvent;
 
-import java.util.Map;
-import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ThreadLocalRandom;
 
 /**
- * The /mobtrumps command: chat-driven Top Trumps battles.
+ * The /mobtrumps command: information, collection housekeeping and a few
+ * ways to find an opponent by name.
  *
- *   /mobtrumps battle [deck_size]  - start a battle vs the CPU (default 20 cards)
- *   /mobtrumps duel <player>       - challenge another player to a duel
- *   /mobtrumps duel accept|decline - answer a challenge (clickable)
- *   /mobtrumps play <stat>         - pick a stat on your turn (clickable)
- *   /mobtrumps next                - let the CPU take its pick (clickable)
- *   /mobtrumps forfeit             - give up the current battle or duel
+ * <p>No game is played through chat. Every one of them — against the CPU, on
+ * a campaign mission, in a duel, a draft or a parlour game — starts at a
+ * Dueling Table and is played on its own screen, so nothing this command
+ * prints is a button: what is left in chat is information.
+ *
+ *   /mobtrumps duel <player>       - challenge another player (answered on screen)
+ *   /mobtrumps queue               - wait to be matched with anyone
+ *   /mobtrumps watch <player>      - spectate a duel
  */
 public final class BattleCommands {
-
-    private static final int DEFAULT_DECK = 20;
-    private static final Map<UUID, Battle> BATTLES = new ConcurrentHashMap<>();
-    /** Players whose current battle was dealt at random — practice, so it pays nothing. */
-    private static final java.util.Set<UUID> CASUAL = ConcurrentHashMap.newKeySet();
 
     private BattleCommands() {
     }
@@ -49,48 +41,10 @@ public final class BattleCommands {
     public static void onRegisterCommands(RegisterCommandsEvent event) {
         event.getDispatcher().register(Commands.literal("mobtrumps")
                 .executes(ctx -> menu(ctx.getSource().getPlayerOrException()))
+                // every game is played at a Dueling Table now; the old chat
+                // battle is gone, so the word only points the way there
                 .then(Commands.literal("battle")
-                        .executes(ctx -> startBattle(ctx.getSource(), DEFAULT_DECK, Difficulty.NORMAL))
-                        .then(Commands.literal("deck")
-                                .executes(ctx -> startDeckBattle(ctx.getSource(), Difficulty.NORMAL))
-                                .then(Commands.literal("easy")
-                                        .executes(ctx -> startDeckBattle(ctx.getSource(), Difficulty.EASY)))
-                                .then(Commands.literal("normal")
-                                        .executes(ctx -> startDeckBattle(ctx.getSource(), Difficulty.NORMAL)))
-                                .then(Commands.literal("hard")
-                                        .executes(ctx -> startDeckBattle(ctx.getSource(), Difficulty.HARD))))
-                        .then(Commands.literal("easy")
-                                .executes(ctx -> startBattle(ctx.getSource(), DEFAULT_DECK, Difficulty.EASY)))
-                        .then(Commands.literal("normal")
-                                .executes(ctx -> startBattle(ctx.getSource(), DEFAULT_DECK, Difficulty.NORMAL)))
-                        .then(Commands.literal("hard")
-                                .executes(ctx -> startBattle(ctx.getSource(), DEFAULT_DECK, Difficulty.HARD)))
-                        .then(Commands.argument("deck_size", IntegerArgumentType.integer(4, 80))
-                                .executes(ctx -> startBattle(ctx.getSource(),
-                                        IntegerArgumentType.getInteger(ctx, "deck_size"), Difficulty.NORMAL))
-                                .then(Commands.literal("easy")
-                                        .executes(ctx -> startBattle(ctx.getSource(),
-                                                IntegerArgumentType.getInteger(ctx, "deck_size"), Difficulty.EASY)))
-                                .then(Commands.literal("normal")
-                                        .executes(ctx -> startBattle(ctx.getSource(),
-                                                IntegerArgumentType.getInteger(ctx, "deck_size"), Difficulty.NORMAL)))
-                                .then(Commands.literal("hard")
-                                        .executes(ctx -> startBattle(ctx.getSource(),
-                                                IntegerArgumentType.getInteger(ctx, "deck_size"), Difficulty.HARD)))))
-                .then(Commands.literal("play")
-                        .then(Commands.argument("stat", StringArgumentType.word())
-                                .suggests((ctx, builder) -> {
-                                    for (Stat s : Stat.values()) {
-                                        builder.suggest(s.key());
-                                    }
-                                    return builder.buildFuture();
-                                })
-                                .executes(ctx -> play(ctx.getSource(),
-                                        StringArgumentType.getString(ctx, "stat")))))
-                .then(Commands.literal("next")
-                        .executes(ctx -> cpuTurn(ctx.getSource())))
-                .then(Commands.literal("forfeit")
-                        .executes(ctx -> forfeit(ctx.getSource())))
+                        .executes(ctx -> tableOnly(ctx.getSource().getPlayerOrException())))
                 .then(Commands.literal("duel")
                         .then(Commands.literal("accept")
                                 .executes(ctx -> DuelManager.accept(ctx.getSource().getPlayerOrException())))
@@ -137,16 +91,6 @@ public final class BattleCommands {
                                                 ctx.getSource().getPlayerOrException(),
                                                 EntityArgument.getPlayer(ctx, "player"),
                                                 IntegerArgumentType.getInteger(ctx, "emeralds"))))))
-                .then(Commands.literal("emote")
-                        .then(Commands.argument("emote", StringArgumentType.word())
-                                .suggests((ctx, b) -> {
-                                    for (String s : new String[]{"gg", "nice", "close", "oops", "gl", "wow"}) {
-                                        b.suggest(s);
-                                    }
-                                    return b.buildFuture();
-                                })
-                                .executes(ctx -> DuelManager.emote(ctx.getSource().getPlayerOrException(),
-                                        StringArgumentType.getString(ctx, "emote")))))
                 .then(Commands.literal("foil")
                         .executes(ctx -> combineFoil(ctx.getSource())))
                 .then(Commands.literal("store")
@@ -186,20 +130,6 @@ public final class BattleCommands {
                         .executes(ctx -> GuideBook.give(ctx.getSource().getPlayerOrException())))
                 .then(Commands.literal("categories")
                         .executes(ctx -> categories(ctx.getSource().getPlayerOrException())))
-                .then(Commands.literal("draft")
-                        .then(Commands.literal("accept")
-                                .executes(ctx -> DraftManager.accept(ctx.getSource().getPlayerOrException())))
-                        .then(Commands.literal("decline")
-                                .executes(ctx -> DraftManager.decline(ctx.getSource().getPlayerOrException())))
-                        .then(Commands.argument("player", EntityArgument.player())
-                                .executes(ctx -> DraftManager.invite(
-                                        ctx.getSource().getPlayerOrException(),
-                                        EntityArgument.getPlayer(ctx, "player")))))
-                .then(Commands.literal("pick")
-                        .then(Commands.argument("mob_id", StringArgumentType.word())
-                                .executes(ctx -> DraftManager.pick(
-                                        ctx.getSource().getPlayerOrException(),
-                                        StringArgumentType.getString(ctx, "mob_id")))))
                 .then(Commands.literal("stats")
                         .executes(ctx -> StatsTracker.dashboard(ctx.getSource().getPlayerOrException())))
                 .then(Commands.literal("profile")
@@ -293,9 +223,8 @@ public final class BattleCommands {
                         + " — final tier earns a badge + emerald payout.")
                 .withStyle(ChatFormatting.GRAY));
         StatsTracker.rankedSection(player, board);
-        player.sendSystemMessage(Component.literal("  ")
-                .append(button("[Ranked leaderboard]", "/mobtrumps top", ChatFormatting.GOLD,
-                        "See the season standings")));
+        player.sendSystemMessage(Component.literal("  The standings: ").withStyle(ChatFormatting.GRAY)
+                .append(typed("/mobtrumps top")));
         return 1;
     }
 
@@ -421,13 +350,12 @@ public final class BattleCommands {
                 + DeckManager.MAX_SLOTS + "):").withStyle(ChatFormatting.GOLD));
         for (var e : slots.entrySet()) {
             player.sendSystemMessage(Component.literal("  " + e.getKey() + " — " + e.getValue().size()
-                            + " cards ").withStyle(ChatFormatting.GRAY)
-                    .append(button("[Load]", "/mobtrumps deck load " + e.getKey(),
-                            ChatFormatting.GREEN, "Make this your active deck"))
-                    .append(Component.literal(" "))
-                    .append(button("[X]", "/mobtrumps deck delete " + e.getKey(),
-                            ChatFormatting.RED, "Delete this deck")));
+                    + " cards").withStyle(ChatFormatting.GRAY));
         }
+        player.sendSystemMessage(Component.literal("  Load one: ").withStyle(ChatFormatting.DARK_GRAY)
+                .append(typed("/mobtrumps deck load <name>"))
+                .append(Component.literal("  ·  delete: ").withStyle(ChatFormatting.DARK_GRAY))
+                .append(typed("/mobtrumps deck delete <name>")));
         return 1;
     }
 
@@ -467,327 +395,46 @@ public final class BattleCommands {
         return 1;
     }
 
+    /**
+     * {@code /mobtrumps} on its own: what the mod is and where things are.
+     * Information only — every game starts at a Dueling Table, so nothing here
+     * is a button to click.
+     */
     private static int menu(ServerPlayer player) {
         player.sendSystemMessage(Component.literal("✦ MOB TRUMPS ✦")
                 .withStyle(ChatFormatting.GOLD, ChatFormatting.BOLD));
-        player.sendSystemMessage(Component.literal("Collect all 81 mob cards and battle with them.")
+        player.sendSystemMessage(Component.literal("Collect all 81 mob cards and play them at a Dueling Table.")
                 .withStyle(ChatFormatting.GRAY));
-        player.sendSystemMessage(Component.literal("  ")
-                .append(button("[Battle the CPU]", "/mobtrumps battle", ChatFormatting.GREEN,
-                        "Start a solo Top Trumps battle"))
-                .append(Component.literal("  "))
-                .append(button("[Forfeit]", "/mobtrumps forfeit", ChatFormatting.RED,
-                        "Give up your current game")));
-        player.sendSystemMessage(Component.literal("  Duel a friend: ")
-                .withStyle(ChatFormatting.GRAY)
-                .append(Component.literal("/mobtrumps duel <player>").withStyle(ChatFormatting.AQUA))
-                .append(Component.literal(" — add ").withStyle(ChatFormatting.DARK_GRAY))
-                .append(Component.literal("wager").withStyle(ChatFormatting.AQUA))
-                .append(Component.literal(" (stake a card) or ").withStyle(ChatFormatting.DARK_GRAY))
-                .append(Component.literal("bet <emeralds>").withStyle(ChatFormatting.GREEN))
-                .append(Component.literal(" (winner takes the pot), or ").withStyle(ChatFormatting.DARK_GRAY))
-                .append(Component.literal("bo3").withStyle(ChatFormatting.AQUA))
-                .append(Component.literal("/").withStyle(ChatFormatting.DARK_GRAY))
-                .append(Component.literal("bo5").withStyle(ChatFormatting.AQUA))
-                .append(Component.literal(" (best-of series)").withStyle(ChatFormatting.DARK_GRAY)));
-        player.sendSystemMessage(Component.literal("  In-world: ")
-                .withStyle(ChatFormatting.GRAY)
-                .append(Component.literal("craft a Dueling Table").withStyle(ChatFormatting.AQUA))
-                .append(Component.literal(" (sit, sneak-click to pick bo1/bo3/bo5/draft, second "
-                                + "click starts it) or a ")
-                        .withStyle(ChatFormatting.DARK_GRAY))
-                .append(Component.literal("Card Display").withStyle(ChatFormatting.AQUA))
-                .append(Component.literal(" to mount a card on your wall")
-                        .withStyle(ChatFormatting.DARK_GRAY)));
-        player.sendSystemMessage(Component.literal("  ")
-                .append(button("[Quick match]", "/mobtrumps queue", ChatFormatting.GREEN,
-                        "Auto-match against another waiting player"))
-                .append(Component.literal("  ·  Spectate: ").withStyle(ChatFormatting.DARK_GRAY))
-                .append(Component.literal("/mobtrumps watch <player>").withStyle(ChatFormatting.AQUA))
-                .append(Component.literal(" (with side bets)").withStyle(ChatFormatting.DARK_GRAY)));
-        player.sendSystemMessage(Component.literal("  Collect cards by hunting: ")
-                .withStyle(ChatFormatting.GRAY)
-                .append(Component.literal("every mob you kill drops its card. Kill enough of one "
-                                + "mob to unlock its boosted holographic!")
-                        .withStyle(ChatFormatting.DARK_GRAY)));
-        player.sendSystemMessage(Component.literal("  Combine duplicates: ")
-                .withStyle(ChatFormatting.GRAY)
-                .append(Component.literal("/mobtrumps foil").withStyle(ChatFormatting.AQUA))
-                .append(Component.literal(" (4 dupes → 1 foil)").withStyle(ChatFormatting.DARK_GRAY)));
-        player.sendSystemMessage(Component.literal("  Build a deck: ")
-                .withStyle(ChatFormatting.GRAY)
-                .append(Component.literal("Collection Book → Deck, then /mobtrumps battle deck")
-                        .withStyle(ChatFormatting.DARK_GRAY)));
-        player.sendSystemMessage(Component.literal("  ")
-                .append(button("[Daily quests]", "/mobtrumps quests", ChatFormatting.GREEN,
-                        "Three fresh challenges every day, paid in emeralds"))
-                .append(Component.literal("  "))
-                .append(button("[Tournament]", "/mobtrumps tournament status", ChatFormatting.GOLD,
-                        "Server-wide bracket — winner takes the pot")));
-        player.sendSystemMessage(Component.literal("  Draft mode: ")
-                .withStyle(ChatFormatting.GRAY)
-                .append(Component.literal("/mobtrumps draft <player>").withStyle(ChatFormatting.AQUA))
-                .append(Component.literal(" — take turns picking a shared pool, then duel")
-                        .withStyle(ChatFormatting.DARK_GRAY)));
-        player.sendSystemMessage(Component.literal("  ")
-                .append(button("[My stats]", "/mobtrumps stats", ChatFormatting.AQUA,
-                        "Your win rate, favourite stat and nemesis"))
-                .append(Component.literal("  "))
-                .append(button("[My profile card]", "/mobtrumps profile", ChatFormatting.LIGHT_PURPLE,
-                        "You, as a Top Trumps card"))
-                .append(Component.literal("  ·  Deck slots: ").withStyle(ChatFormatting.DARK_GRAY))
-                .append(Component.literal("/mobtrumps deck save|load|list").withStyle(ChatFormatting.AQUA)));
-        player.sendSystemMessage(Component.literal("  CPU difficulty: ")
-                .withStyle(ChatFormatting.GRAY)
-                .append(Component.literal("/mobtrumps battle easy|normal|hard").withStyle(ChatFormatting.AQUA))
-                .append(Component.literal("  ·  Share decks: ").withStyle(ChatFormatting.DARK_GRAY))
-                .append(Component.literal("/mobtrumps export").withStyle(ChatFormatting.AQUA))
-                .append(Component.literal(" / ").withStyle(ChatFormatting.DARK_GRAY))
-                .append(Component.literal("import <code>").withStyle(ChatFormatting.AQUA)));
-        player.sendSystemMessage(Component.literal("  Tidy up: ")
-                .withStyle(ChatFormatting.GRAY)
-                .append(button("[Store cards]", "/mobtrumps store", ChatFormatting.AQUA,
-                        "File one of each loose card into your Collection Book"))
+        player.sendSystemMessage(line("Play: ", "right-click a Dueling Table — the CPU, the campaign, "
+                + "duels, drafts, Memory, Guess Who, Mob Bluff and Twenty-One all start there."));
+        player.sendSystemMessage(line("Collect: ", "every mob you kill can drop its card; hunt one mob "
+                + "enough and its holographic unlocks."));
+        player.sendSystemMessage(line("Your deck: ", Battle.HAND_SIZE + " cards — build it in the "
+                + "Collection Book, or from the table's Edit Deck."));
+        player.sendSystemMessage(line("Every finished game ", "pays experience — win, lose or draw."));
+        player.sendSystemMessage(Component.literal("  Commands: ").withStyle(ChatFormatting.GRAY)
+                .append(typed("guide · stats · profile · quests · top · season · record · foil · "
+                        + "store · withdraw · deck save|load|list · export · import <code>")));
+        player.sendSystemMessage(Component.literal("  By name: ").withStyle(ChatFormatting.GRAY)
+                .append(typed("/mobtrumps duel <player> [wager | bet <emeralds> | bo3 | bo5]"))
                 .append(Component.literal("  ·  ").withStyle(ChatFormatting.DARK_GRAY))
-                .append(Component.literal("/mobtrumps withdraw").withStyle(ChatFormatting.AQUA))
-                .append(Component.literal(" empties the book back out").withStyle(ChatFormatting.DARK_GRAY)));
-        player.sendSystemMessage(Component.literal("  ")
-                .append(button("[Ranked leaderboard]", "/mobtrumps top", ChatFormatting.GOLD,
-                        "See the server's top duelists"))
-                .append(Component.literal("  "))
-                .append(button("[My season]", "/mobtrumps season", ChatFormatting.LIGHT_PURPLE,
-                        "Your tier, badges and season progress"))
-                .append(Component.literal("  "))
-                .append(button("[How to play]", "/mobtrumps guide", ChatFormatting.AQUA,
-                        "Get the Mob Trumps guide book")));
-        player.sendSystemMessage(Component.literal("  Craft a Collection Book (book + emerald) to "
-                        + "track and store your cards.")
-                .withStyle(ChatFormatting.DARK_GRAY));
+                .append(typed("queue"))
+                .append(Component.literal("  ·  ").withStyle(ChatFormatting.DARK_GRAY))
+                .append(typed("watch <player>")));
         return 1;
     }
 
-    private static int startBattle(CommandSourceStack source, int deckSize, Difficulty difficulty)
-            throws CommandSyntaxException {
-        ServerPlayer player = source.getPlayerOrException();
-        Battle battle = new Battle(deckSize, ThreadLocalRandom.current());
-        CASUAL.add(player.getUUID()); // a dealt hand is practice, not a ranked game
-        battle.setDifficulty(difficulty);
-        BATTLES.put(player.getUUID(), battle);
+    private static Component line(String head, String body) {
+        return Component.literal("  " + head).withStyle(ChatFormatting.GRAY)
+                .append(Component.literal(body).withStyle(ChatFormatting.DARK_GRAY));
+    }
 
-        player.sendSystemMessage(Component.literal("=== MOB TRUMPS · " + difficulty.label() + " CPU ===")
-                .withStyle(ChatFormatting.GREEN, ChatFormatting.BOLD));
-        player.sendSystemMessage(Component.literal(
-                        "The deck is dealt: " + battle.playerCardCount() + " cards each. "
-                        + "Higher stat wins the round; win every card to win the battle!")
-                .withStyle(ChatFormatting.GRAY));
-        shuffleSound(player);
-        promptRound(player, battle);
+    /** Where every game is played now. */
+    private static int tableOnly(ServerPlayer player) {
+        player.sendSystemMessage(Component.literal("Mob Trumps is played at a Dueling Table — "
+                        + "right-click one for the CPU, the campaign, duels, drafts and every other game.")
+                .withStyle(ChatFormatting.GOLD));
         return 1;
-    }
-
-    private static int startDeckBattle(CommandSourceStack source, Difficulty difficulty)
-            throws CommandSyntaxException {
-        ServerPlayer player = source.getPlayerOrException();
-        var deck = DeckManager.deckCards(player);
-        if (deck.size() < DeckManager.MIN_DECK) {
-            player.sendSystemMessage(Component.literal("Build a deck of at least "
-                            + DeckManager.MIN_DECK + " cards first (open your Collection Book → Deck).")
-                    .withStyle(ChatFormatting.RED));
-            return 0;
-        }
-        // different mobs, levelled to match the holos you brought
-        var rng = ThreadLocalRandom.current();
-        var cpuDeck = com.jrpetty.mobtrumps.game.MobCards.matchLevels(
-                com.jrpetty.mobtrumps.game.MobCards.cpuDeck(deck.size(), rng,
-                        DeckManager.deckIds(player)),
-                DeckManager.deckLevels(player), rng);
-        Battle battle = new Battle(deck, cpuDeck, rng);
-        CASUAL.remove(player.getUUID()); // your own deck: this one counts
-        battle.setDifficulty(difficulty);
-        BATTLES.put(player.getUUID(), battle);
-        player.sendSystemMessage(Component.literal("=== MOB TRUMPS: YOUR DECK · " + difficulty.label()
-                        + " CPU ===").withStyle(ChatFormatting.GREEN, ChatFormatting.BOLD));
-        player.sendSystemMessage(Component.literal("Your " + battle.playerCardCount()
-                        + "-card deck vs a random CPU deck. Higher stat wins!")
-                .withStyle(ChatFormatting.GRAY));
-        shuffleSound(player);
-        promptRound(player, battle);
-        return 1;
-    }
-
-    private static int play(CommandSourceStack source, String statKey) throws CommandSyntaxException {
-        ServerPlayer player = source.getPlayerOrException();
-        if (DuelManager.isInDuel(player)) {
-            return DuelManager.play(player, statKey);
-        }
-        Battle battle = BATTLES.get(player.getUUID());
-        if (battle == null || battle.isFinished()) {
-            return noBattle(player);
-        }
-        if (battle.getTurn() != Battle.Side.PLAYER) {
-            player.sendSystemMessage(Component.literal("The CPU holds the pick — click [Continue].")
-                    .withStyle(ChatFormatting.RED));
-            return 0;
-        }
-        Stat stat = Stat.byKey(statKey);
-        if (stat == null) {
-            player.sendSystemMessage(Component.literal(
-                            "Unknown stat '" + statKey + "'. Pick one of: health, attack, size, speed, farmable, rarity.")
-                    .withStyle(ChatFormatting.RED));
-            return 0;
-        }
-        StatsTracker.recordPick(player, stat);
-        resolveRound(player, battle, stat);
-        return 1;
-    }
-
-    private static int cpuTurn(CommandSourceStack source) throws CommandSyntaxException {
-        ServerPlayer player = source.getPlayerOrException();
-        Battle battle = BATTLES.get(player.getUUID());
-        if (battle == null || battle.isFinished()) {
-            return noBattle(player);
-        }
-        if (battle.getTurn() != Battle.Side.CPU) {
-            player.sendSystemMessage(Component.literal("It's your pick — choose a stat on your card!")
-                    .withStyle(ChatFormatting.RED));
-            return 0;
-        }
-        resolveRound(player, battle, battle.cpuChoice());
-        return 1;
-    }
-
-    private static int forfeit(CommandSourceStack source) throws CommandSyntaxException {
-        ServerPlayer player = source.getPlayerOrException();
-        if (DuelManager.isInDuel(player)) {
-            return DuelManager.forfeit(player);
-        }
-        if (BATTLES.remove(player.getUUID()) == null) {
-            return noBattle(player);
-        }
-        player.sendSystemMessage(Component.literal("You flip the table and forfeit the battle.")
-                .withStyle(ChatFormatting.YELLOW));
-        return 1;
-    }
-
-    private static int noBattle(ServerPlayer player) {
-        player.sendSystemMessage(Component.literal("No battle running. Start one: ")
-                .withStyle(ChatFormatting.GRAY)
-                .append(button("[Battle!]", "/mobtrumps battle", ChatFormatting.GREEN,
-                        "Start a Mob Trumps battle")));
-        return 0;
-    }
-
-    // --- round flow ---
-
-    private static void resolveRound(ServerPlayer player, Battle battle, Stat stat) {
-        Battle.Side chooser = battle.getTurn();
-        Battle.RoundResult result = battle.playRound(stat);
-
-        MutableComponent reveal = Component.literal("Round " + result.round() + ": ")
-                .withStyle(ChatFormatting.GRAY)
-                .append(cardName(result.playerCard()))
-                .append(statValue(stat, result.playerCard().stat(stat)))
-                .append(Component.literal(" vs ").withStyle(ChatFormatting.DARK_GRAY))
-                .append(cardName(result.cpuCard()))
-                .append(statValue(stat, result.cpuCard().stat(stat)));
-        if (chooser == Battle.Side.CPU) {
-            reveal.append(Component.literal("  (CPU picked " + stat.label + ")")
-                    .withStyle(ChatFormatting.DARK_GRAY));
-        }
-        player.sendSystemMessage(reveal);
-
-        switch (result.winner()) {
-            case PLAYER -> {
-                player.sendSystemMessage(Component.literal("You take the round!")
-                        .withStyle(ChatFormatting.GREEN, ChatFormatting.BOLD));
-                roundSound(player, 1.3F);
-            }
-            case CPU -> {
-                player.sendSystemMessage(Component.literal("The CPU takes the round.")
-                        .withStyle(ChatFormatting.RED, ChatFormatting.BOLD));
-                roundSound(player, 0.7F);
-            }
-            case NONE -> {
-                player.sendSystemMessage(Component.literal("Tie! Both cards go into the pot.")
-                        .withStyle(ChatFormatting.YELLOW, ChatFormatting.BOLD));
-                roundSound(player, 1.0F);
-            }
-        }
-
-        if (battle.isFinished()) {
-            endBattle(player, battle);
-        } else {
-            promptRound(player, battle);
-        }
-    }
-
-    private static void promptRound(ServerPlayer player, Battle battle) {
-        player.sendSystemMessage(Component.literal(
-                        "You: " + battle.playerCardCount()
-                        + " | CPU: " + battle.cpuCardCount()
-                        + (battle.potCount() > 0 ? " | Pot: " + battle.potCount() : ""))
-                .withStyle(ChatFormatting.DARK_GRAY));
-
-        if (battle.getTurn() == Battle.Side.PLAYER) {
-            MobCard card = battle.playerTopCard();
-            player.sendSystemMessage(Component.literal("Your card: ")
-                    .withStyle(ChatFormatting.GRAY)
-                    .append(cardName(card)));
-            MutableComponent picks = Component.literal("Pick a stat: ").withStyle(ChatFormatting.GRAY);
-            for (Stat stat : Stat.values()) {
-                picks.append(button(
-                        "[" + stat.shortLabel + " " + card.stat(stat) + "]",
-                        "/mobtrumps play " + stat.key(),
-                        MobCardItem.statColor(stat),
-                        "Play " + stat.label + " (" + card.stat(stat) + ")"));
-                picks.append(Component.literal(" "));
-            }
-            player.sendSystemMessage(picks);
-        } else {
-            player.sendSystemMessage(Component.literal("The CPU holds the pick... ")
-                    .withStyle(ChatFormatting.GRAY)
-                    .append(button("[Continue >]", "/mobtrumps next",
-                            ChatFormatting.GREEN, "See the CPU's move")));
-        }
-    }
-
-    private static void endBattle(ServerPlayer player, Battle battle) {
-        BATTLES.remove(player.getUUID());
-        // a randomly dealt hand costs nothing to enter, so it earns nothing
-        boolean casual = CASUAL.remove(player.getUUID());
-        if (!casual) StatsTracker.bump(player, "games_played");
-        switch (battle.getWinner()) {
-            case PLAYER -> {
-                player.sendSystemMessage(Component.literal("VICTORY! You hold every card!")
-                        .withStyle(ChatFormatting.GOLD, ChatFormatting.BOLD));
-                if (!casual) {
-                    StatsTracker.bump(player, "battle_wins");
-                    StatsTracker.bump(player, "battle_wins_"
-                            + battle.getDifficulty().name().toLowerCase(java.util.Locale.ROOT));
-                }
-                ItemStack reward = new ItemStack(net.minecraft.world.item.Items.EMERALD, 3);
-                if (!player.getInventory().add(reward)) {
-                    player.drop(reward, false);
-                }
-                player.sendSystemMessage(Component.literal("Reward: 3 emeralds")
-                        .withStyle(ChatFormatting.YELLOW));
-                player.serverLevel().playSound(null, player.getX(), player.getY(), player.getZ(),
-                        SoundEvents.UI_TOAST_CHALLENGE_COMPLETE, SoundSource.PLAYERS, 0.8F, 1.0F);
-            }
-            case CPU -> player.sendSystemMessage(Component.literal("DEFEAT! The CPU took your whole deck...")
-                    .withStyle(ChatFormatting.RED, ChatFormatting.BOLD));
-            case NONE -> player.sendSystemMessage(Component.literal("A draw — the pot swallowed everything.")
-                    .withStyle(ChatFormatting.YELLOW, ChatFormatting.BOLD));
-        }
-        if (!casual) AchievementManager.refresh(player);
-        player.sendSystemMessage(Component.literal("Play again? ")
-                .withStyle(ChatFormatting.GRAY)
-                .append(button("[Battle!]", "/mobtrumps battle", ChatFormatting.GREEN,
-                        "Start a new Mob Trumps battle")));
-    }
-
-    private static void roundSound(ServerPlayer player, float pitch) {
-        player.playNotifySound(SoundEvents.NOTE_BLOCK_PLING.value(), SoundSource.PLAYERS, 0.6F, pitch);
     }
 
     /**
@@ -803,12 +450,13 @@ public final class BattleCommands {
 
     // --- chat component helpers ---
 
-    static Component button(String label, String command, ChatFormatting color, String hover) {
-        return Component.literal(label).withStyle(style -> style
-                .withColor(color)
-                .withBold(true)
-                .withClickEvent(new ClickEvent(ClickEvent.Action.RUN_COMMAND, command))
-                .withHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT, Component.literal(hover))));
+    /**
+     * A command to type, shown in chat as plain text. Chat never carries a
+     * clickable button: everything that can be played is played on a screen,
+     * and whatever is left in chat is information.
+     */
+    static Component typed(String command) {
+        return Component.literal(command).withStyle(ChatFormatting.AQUA);
     }
 
     /** Card name coloured by tier; hovering shows the full stat block. */

@@ -1,8 +1,5 @@
 package com.jrpetty.mobtrumps;
 
-import net.minecraft.ChatFormatting;
-import net.minecraft.network.chat.Component;
-import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.util.RandomSource;
 import net.minecraft.world.item.Item;
@@ -158,11 +155,4 @@ public record CampaignRewards(List<Payout> stacks, int books, int bookLevel) {
         }
     }
 
-    /** Announce the haul in chat. */
-    public void announce(ServerPlayer player) {
-        String text = label();
-        MutableComponent line = Component.literal("Mission reward: ").withStyle(ChatFormatting.GRAY);
-        line.append(Component.literal(text.isEmpty() ? "—" : text).withStyle(ChatFormatting.YELLOW));
-        player.sendSystemMessage(line);
-    }
 }

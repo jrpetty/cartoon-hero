@@ -65,6 +65,7 @@ public final class BluffManager {
         final String[] names;
         /** Settled once, however many people are sitting down. */
         boolean settled;
+        final long startedMs = System.currentTimeMillis();
 
         Table(int seats, int wagered, UUID[] occupants) {
             this.seats = seats;
@@ -464,6 +465,7 @@ public final class BluffManager {
             }
             boolean won = seatOf(table, id) == winner;
             StatsTracker.bump(p, won ? "bluff_wins" : "bluff_losses");
+            GameRewards.payGame(p, table.startedMs, true);
             ServerSync.markAwards(p);
             if (won) {
                 int payout = table.wagered * table.seats;

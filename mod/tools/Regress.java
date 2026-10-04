@@ -17,21 +17,111 @@ public class Regress {
                 "ordinals are 0..80, unique");
 
         System.out.println("campaign");
-        boolean sized = true, dupes = false, det = true, anchored = true;
+        boolean sized = true, dupes = false, det = true, anchored = true, trophyFirst = true, bossesKept = true;
         for (CampaignMission m : CampaignDecks.ALL) {
             List<MobCard> d = CampaignDecks.cpuDeck(m);
-            if (d.size() != 16) sized = false;
+            if (d.size() != Battle.HAND_SIZE) sized = false;
             if (new HashSet<>(d).size() != d.size()) dupes = true;
             if (!d.equals(CampaignDecks.cpuDeck(m))) det = false;
-            for (String id : MobCategories.members(m.anchor()))
-                if (MobCards.byId(id) != null && MobCategories.size(m.anchor()) <= 16
-                        && d.stream().noneMatch(c -> c.id().equals(id))) anchored = false;
+            long fromAnchor = d.stream().filter(c -> c.category() == m.anchor()).count();
+            if (fromAnchor != m.anchorCount()) anchored = false;
+            if (d.isEmpty() || !d.get(0).id().equals(m.trophyMob())) trophyFirst = false;
+            if (m.anchor() != Category.BOSS && d.stream().anyMatch(c -> c.category() == Category.BOSS))
+                bossesKept = false;
         }
+        // the rule itself, not just today's twenty decks: missions built to
+        // need legendary padding from outside any boss-adjacent set, where a
+        // boss is the likeliest pick there is, still never get one
+        boolean probesClean = true;
+        for (int i = 0; i < 12; i++) {
+            CampaignMission probe = new CampaignMission(90 + i, "probe_" + i, "Probe", "Probe",
+                    Category.VILLAGE, 1, Tier.LEGENDARY, Tier.LEGENDARY, Difficulty.HARD, true, 0, "villager");
+            if (CampaignDecks.cpuDeck(probe).stream().anyMatch(c -> c.category() == Category.BOSS))
+                probesClean = false;
+        }
+        check(probesClean, "padding never draws a boss, even where a boss is the likeliest card");
+        check(Battle.HAND_SIZE == 6, "every Top Trumps game is six cards a side");
         check(CampaignDecks.count() == 20, "20 missions");
-        check(sized, "every opponent deck is exactly 16");
+        check(sized, "every opponent deck is exactly a hand (" + Battle.HAND_SIZE + ")");
         check(!dupes, "no duplicate cards in a deck");
         check(det, "decks are deterministic");
-        check(anchored, "every anchor member present");
+        check(anchored, "every deck holds exactly its anchor share");
+        check(trophyFirst, "every deck leads with its trophy mob");
+        check(bossesKept, "no boss is ever padding");
+        // the taglines that count cards are promises the deck has to keep
+        check(CampaignDecks.byIndex(12).anchorCount() == 6, "Raid Bells is six illagers");
+        check(CampaignDecks.byIndex(19).anchorCount() == 2, "Reckoning holds two of the three bosses");
+        check(CampaignDecks.byIndex(20).anchorCount() == 3, "The Last Trump holds all three bosses");
+        check(CampaignDecks.byIndex(8).anchorCount() == 4, "The Trading Post holds four villagers");
+
+        System.out.println("hands");
+        {
+        boolean dealt = true, conserved = true, ordered = true, logged = true, story = true;
+        for (int seed = 0; seed < 400; seed++) {
+            Random r = new Random(seed);
+            Battle b = new Battle(Battle.HAND_SIZE * 2, r);
+            if (b.playerCardCount() != Battle.HAND_SIZE || b.cpuCardCount() != Battle.HAND_SIZE) dealt = false;
+            List<Battle.RoundResult> seen = new ArrayList<>();
+            while (!b.isFinished()) {
+                if (!b.playerHand().isEmpty() && !b.playerHand().get(0).equals(b.playerTopCard())) ordered = false;
+                if (b.playerHand().size() != b.playerCardCount()) ordered = false;
+                Stat st = b.getTurn() == Battle.Side.CPU ? b.cpuChoice() : Stat.values()[r.nextInt(6)];
+                seen.add(b.playRound(st));
+                if (b.playerCardCount() + b.cpuCardCount() + b.potCount() != Battle.HAND_SIZE * 2) conserved = false;
+            }
+            if (!b.history().equals(seen) || b.history().size() != b.getRound()) logged = false;
+            for (Battle.Side side : new Battle.Side[]{Battle.Side.PLAYER, Battle.Side.CPU}) {
+                BattleSummary sum = BattleSummary.of(b.history(), side);
+                if (sum.rounds() != b.getRound()) story = false;
+                if (sum.bestStreak() > sum.won() || sum.mvpWins() > sum.won()) story = false;
+                if ((sum.won() == 0) != (sum.mvp() == null)) story = false;
+                Battle.Side other = side == Battle.Side.PLAYER ? Battle.Side.CPU : Battle.Side.PLAYER;
+                if (sum.lost() != BattleSummary.of(b.history(), other).won()) story = false;
+            }
+        }
+        check(dealt, "a game deals " + Battle.HAND_SIZE + " cards to each side");
+        check(conserved, "a six-card game never creates or loses a card");
+        check(ordered, "the hand view is the play order, top card first");
+        check(logged, "the history holds every round, in order");
+        check(story, "summaries add up from both seats; no wins means no MVP");
+        // runs of wins: W W T W L W W — a draw ends a run and so does a loss,
+        // so the best is 2, where either rule missing would make it 3
+        MobCard x = MobCards.byId("creeper"), y = MobCards.byId("zombie"), z = MobCards.byId("cow");
+        Battle.Side P = Battle.Side.PLAYER, C = Battle.Side.CPU, N = Battle.Side.NONE;
+        Battle.Side[] runs = {P, P, N, P, C, P, P};
+        List<Battle.RoundResult> h = new ArrayList<>();
+        for (int i = 0; i < runs.length; i++)
+            h.add(new Battle.RoundResult(i + 1, P, Stat.ATTACK, x, z, runs[i]));
+        BattleSummary hs = BattleSummary.of(h, P);
+        check(hs.won() == 5 && hs.lost() == 1 && hs.tied() == 1, "a summary counts won 5, lost 1, tied 1");
+        check(hs.bestStreak() == 2, "a draw ends a run of wins, and so does a loss (best run 2)");
+        check(BattleSummary.of(h, C).won() == 1 && BattleSummary.of(h, C).bestStreak() == 1
+                        && BattleSummary.of(h, C).mvp() == z,
+                "the other seat reads the same rounds the other way round, its own card the MVP");
+        // the MVP is whoever SET the mark: x, y, y, x leaves y on 2 and x
+        // only drawing level with it, so y keeps it
+        List<Battle.RoundResult> mvp = List.of(
+                new Battle.RoundResult(1, P, Stat.ATTACK, x, z, P),
+                new Battle.RoundResult(2, P, Stat.ATTACK, y, z, P),
+                new Battle.RoundResult(3, P, Stat.ATTACK, y, z, P),
+                new Battle.RoundResult(4, P, Stat.ATTACK, x, z, P));
+        hs = BattleSummary.of(mvp, P);
+        check(hs.mvp() == y && hs.mvpWins() == 2, "the card that set the mark keeps MVP when another draws level");
+        check(BattleSummary.of(mvp, C).mvp() == null, "a seat that won nothing has no MVP");
+        }
+
+        System.out.println("experience");
+        // the numbers the config comment promises, pinned as numbers
+        check(GamePay.xp(25, 15_000L) == 25, "a 15-second game pays the full 25 (five zombies)");
+        check(GamePay.xp(25, 10 * 60_000L) == 25, "a long game pays no more than the full amount");
+        check(GamePay.xp(25, 7_500L) == 13, "a 7.5-second game pays half (rounded)");
+        check(GamePay.xp(25, 14_000L) < 25, "a game under 15 seconds pays less than the full amount");
+        check(GamePay.xp(25, 0) == 1 && GamePay.xp(25, -5) == 1, "a finished game always pays something");
+        check(GamePay.xp(0, 60_000L) == 0, "a rate of 0 switches it off");
+        boolean monotone = true;
+        for (long ms = 0; ms <= GamePay.FULL_PAY_MS + 1000; ms += 250)
+            if (GamePay.xp(25, ms) < GamePay.xp(25, Math.max(0, ms - 250))) monotone = false;
+        check(monotone, "a longer game never pays less");
 
         System.out.println("recycler");
         boolean flat = true, ordered = true;
@@ -281,6 +371,117 @@ public class Regress {
                         && ay < by + g6.cardH() && by < ay + g6.cardH()) overlap = true;
             }
         check(!overlap, "no two tiles overlap, so no click is ambiguous");
+
+        System.out.println("battle layout");
+        {
+        // Every window the battle screen can be opened in, both kinds of game
+        // and every card-size setting: nothing on the table may overlap or
+        // leave the felt, and the board must have room for its text.
+        String bad = null;
+        int laid = 0;
+        float smallest = 9;
+        String smallestAt = "";
+        float[] caps = {1.05f, 0.50f, 0.68f, 0.92f};
+        for (int w = 320; w <= 1280 && bad == null; w += 4) {
+            for (int h = 240; h <= 720 && bad == null; h += 4) {
+                for (boolean pvp : new boolean[]{false, true}) {
+                    for (float sizeCap : caps) {
+                        laid++;
+                        BattleLayout.Layout L = BattleLayout.solve(w, h, sizeCap, pvp);
+                        String at = " at " + w + "x" + h + (pvp ? " pvp" : " cpu") + " cap " + sizeCap;
+                        BattleLayout.Rect window = new BattleLayout.Rect(0, 0, w, h);
+                        java.util.List<BattleLayout.Rect> table = new ArrayList<>();
+                        table.add(L.myCard()); table.add(L.board()); table.add(L.oppCard());
+                        if (L.hands()) { table.add(L.myHand()); table.add(L.oppHand()); }
+                        table.add(L.myPlate()); table.add(L.oppPlate()); table.add(L.status());
+                        for (int i = 0; i < table.size() && bad == null; i++) {
+                            if (!table.get(i).inside(L.felt())) bad = "table piece " + i + " leaves the felt" + at;
+                            for (int j = i + 1; j < table.size() && bad == null; j++)
+                                if (table.get(i).overlaps(table.get(j))) bad = "pieces " + i + "/" + j + " overlap" + at;
+                        }
+                        if (bad == null && (L.felt().overlaps(L.header()) || L.felt().overlaps(L.dock())))
+                            bad = "the felt runs under a band" + at;
+                        if (bad == null && !L.rows().inside(L.board())) bad = "stat rows leave the board" + at;
+                        if (bad == null && L.rowH() < BattleLayout.ROW_MIN_H) bad = "stat rows too short" + at;
+                        if (bad == null && (!L.footer().inside(L.board()) || L.footer().h() < 12))
+                            bad = "no room for the board's footer" + at;
+                        if (bad == null && !L.panel().inside(L.felt())) bad = "result panel leaves the felt" + at;
+                        if (bad == null && L.panel().h() < 120) bad = "result panel too short" + at;
+                        if (bad == null && L.scale() < BattleLayout.MIN_SCALE) bad = "cards below the minimum" + at;
+                        // the dock: every button inside it, none touching another
+                        java.util.List<BattleLayout.Rect> dock = new ArrayList<>();
+                        dock.add(L.sizeButton()); dock.add(L.primary()); dock.add(L.leaveButton());
+                        if (L.emoteButton() != null) dock.add(L.emoteButton());
+                        if (L.autoButton() != null) dock.add(L.autoButton());
+                        for (int i = 0; i < dock.size() && bad == null; i++) {
+                            if (!dock.get(i).inside(L.dock())) bad = "dock button " + i + " leaves the dock" + at;
+                            for (int j = i + 1; j < dock.size() && bad == null; j++)
+                                if (dock.get(i).overlaps(dock.get(j))) bad = "dock buttons " + i + "/" + j + " touch" + at;
+                        }
+                        if (bad == null && L.primary().w() < 80) bad = "no room for the primary button" + at;
+                        if (bad == null && (L.emoteButton() != null) != pvp) bad = "emote button in the wrong game" + at;
+                        if (bad == null && (L.autoButton() != null) == pvp) bad = "auto-continue in the wrong game" + at;
+                        // a hand can hold every card in the game; the column must show them all
+                        if (bad == null && L.hands()) {
+                            for (int n = 1; n <= Battle.HAND_SIZE * 2 && bad == null; n++) {
+                                BattleLayout.Rect last = BattleLayout.mini(L.myHand(), L.miniScale(), n - 1, n);
+                                if (last.bottom() > L.myHand().bottom() + 1) bad = n + " cards overflow the hand column" + at;
+                            }
+                        }
+                        if (sizeCap == caps[0] && L.scale() < smallest) { smallest = L.scale(); smallestAt = w + "x" + h; }
+                    }
+                }
+            }
+        }
+        check(bad == null, laid + " window/game/size combinations lay the table out cleanly"
+                + (bad == null ? " (smallest cards " + String.format("%.2f", smallest) + " at " + smallestAt + ")" : ": " + bad));
+        // the windows people actually play in keep their hands on the table
+        for (int[] wh : new int[][]{{427, 240}, {480, 270}, {455, 256}, {640, 360}}) {
+            BattleLayout.Layout L = BattleLayout.solve(wh[0], wh[1], 1.05f, false);
+            check(L.hands() && L.scale() >= 0.55f, wh[0] + "x" + wh[1] + ": both hands shown, cards at "
+                    + String.format("%.2f", L.scale()) + " (" + L.myCard().w() + "x" + L.myCard().h() + ")");
+        }
+        }
+
+        System.out.println("draft layout");
+        {
+        String bad = null;
+        int laid = 0;
+        int picks = Battle.HAND_SIZE;
+        int poolMax = picks * 2 + 4;
+        for (int w = 320; w <= 1280 && bad == null; w += 4) {
+            for (int h = 240; h <= 720 && bad == null; h += 4) {
+                for (int n = 1; n <= poolMax && bad == null; n++) {
+                    laid++;
+                    DraftLayout.Layout L = DraftLayout.solve(w, h, n, picks);
+                    String at = " at " + w + "x" + h + " with " + n + " in the pool";
+                    DraftLayout.Rect window = new DraftLayout.Rect(0, 0, w, h);
+                    for (int i = 0; i < n && bad == null; i++) {
+                        DraftLayout.Rect c = L.poolCard(i, n);
+                        if (!c.inside(L.pool())) bad = "pool card " + i + " leaves the pool" + at;
+                        for (int j = i + 1; j < n && bad == null; j++)
+                            if (c.overlaps(L.poolCard(j, n))) bad = "pool cards " + i + "/" + j + " overlap" + at;
+                    }
+                    for (DraftLayout.Rect row : new DraftLayout.Rect[]{L.mine(), L.theirs()}) {
+                        if (bad != null) break;
+                        if (!row.inside(window) || row.overlaps(L.pool()) || row.overlaps(L.footer()))
+                            bad = "a row of picks collides" + at;
+                        DraftLayout.Rect last = L.slot(row, picks - 1);
+                        if (bad == null && (last.right() > row.right() || last.bottom() > row.bottom()))
+                            bad = "the last pick slot leaves its row" + at;
+                    }
+                    if (bad == null && L.mine().overlaps(L.theirs())) bad = "the two rows of picks overlap" + at;
+                    if (bad == null && (!L.leave().inside(L.footer()))) bad = "Leave leaves the footer" + at;
+                    if (bad == null && L.pool().overlaps(L.header())) bad = "the pool runs under the header" + at;
+                }
+            }
+        }
+        check(bad == null, laid + " window/pool combinations lay the draft out cleanly" + (bad == null ? "" : ": " + bad));
+        DraftLayout.Layout typical = DraftLayout.solve(427, 240, poolMax, picks);
+        check(typical.poolScale() >= 0.2f, "427x240: the full pool of " + poolMax + " at "
+                + String.format("%.2f", typical.poolScale()) + " (" + typical.poolCard(0, poolMax).w() + "x"
+                + typical.poolCard(0, poolMax).h() + ")");
+        }
 
                 System.out.println(fails == 0 ? "\nALL REGRESSION CHECKS PASS" : "\n*** " + fails + " FAILURES ***");
         if (fails > 0) System.exit(1);

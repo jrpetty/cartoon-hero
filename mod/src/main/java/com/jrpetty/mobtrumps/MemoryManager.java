@@ -269,6 +269,7 @@ public final class MemoryManager {
                 StatsTracker.bump(a, "memory_wins");
                 StatsTracker.bump(a, "games_played");
                 AchievementManager.refresh(a);
+                GameRewards.payGame(a, game.startedMs, true);
                 win(a);
             }
             return;
@@ -279,6 +280,7 @@ public final class MemoryManager {
             }
             StatsTracker.bump(p, "memory_played");
             StatsTracker.bump(p, "games_played");
+            GameRewards.payGame(p, game.startedMs, true);
             int mine = game.match.scoreOf(p.getUUID());
             int theirs = game.match.scoreOf(game.other(p.getUUID()));
             if (mine > theirs) {
@@ -325,6 +327,10 @@ public final class MemoryManager {
             if (other != null) {
                 other.sendSystemMessage(Component.literal(name(player) + " left the game.")
                         .withStyle(ChatFormatting.GRAY));
+                // the one left at the table is paid for a board actually played
+                if (game.match.board().moves() > 0) {
+                    GameRewards.payGame(other, game.startedMs, true);
+                }
                 send(other);
             }
         }

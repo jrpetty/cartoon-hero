@@ -13,7 +13,6 @@ public final class Config {
     // Legacy Mob Card Packs (no longer granted, but still openable if held) read these.
     public static final ModConfigSpec.IntValue CARDS_PER_PACK;
     public static final ModConfigSpec.DoubleValue FOIL_MULTIPLIER;
-    public static final ModConfigSpec.IntValue DECK_MAX;
     public static final ModConfigSpec.IntValue SEASON_DAYS;
     public static final ModConfigSpec.BooleanValue CATEGORY_REWARDS;
     public static final ModConfigSpec.DoubleValue CATEGORY_REWARD_MULTIPLIER;
@@ -21,6 +20,7 @@ public final class Config {
     public static final ModConfigSpec.IntValue CARD_WEAR_PER_HANDLING;
     public static final ModConfigSpec.IntValue SERIAL_DIGITS;
     public static final ModConfigSpec.BooleanValue RUINED_CARDS_PLAYABLE;
+    public static final ModConfigSpec.IntValue GAME_XP;
 
     static {
         ModConfigSpec.Builder b = new ModConfigSpec.Builder();
@@ -54,9 +54,13 @@ public final class Config {
                 .define("ruinedCardsPlayable", true);
         b.pop();
 
-        b.push("deck");
-        DECK_MAX = b.comment("Maximum cards in a custom battle deck.")
-                .defineInRange("maxDeckSize", 16, 4, 40);
+        b.push("rewards");
+        GAME_XP = b.comment("Experience points paid to every player who finishes a game at the",
+                        "dueling table -- win, lose or draw, in every mode. A zombie drops 5, so",
+                        "the default 25 is about five zombies' worth. A game shorter than 15",
+                        "seconds pays its share of that, so a quick hand cannot be farmed, and",
+                        "leaving or forfeiting earns nothing. 0 switches it off.")
+                .defineInRange("xpPerGame", 25, 0, 1000);
         b.pop();
 
         b.push("ranked");

@@ -3,38 +3,48 @@ package com.jrpetty.mobtrumps.game;
 /**
  * One mission in the campaign.
  *
- * <p>A mission is a single deck of {@link CampaignDecks#DECK_SIZE} cards dealt
- * between the player and the opponent — the way Top Trumps actually works. The
- * deck is the mission's identity: every member of its {@code anchor} category,
- * padded out from outside that category with cards in the mission's tier band.
- * Early missions are padded with mild strays; late ones with legendaries.
+ * <p>The opponent fields a {@link CampaignDecks#DECK_SIZE}-card deck against
+ * the same number of the player's own. The deck is the mission's identity:
+ * {@code anchorCards} members of its {@code anchor} category — always
+ * including the trophy mob, the face of the mission — with the rest brought
+ * in from outside the category, from the mission's tier band. Early missions
+ * are padded with mild strays; late ones with legendaries.
  *
- * <p>The deck is fixed and seeded on the mission id, so it is the same sixteen
+ * <p>The deck is fixed and seeded on the mission id, so it is the same six
  * cards every attempt and can be learned.
  *
- * @param index      1-20, and the unlock order
- * @param id         stable key used for saving progress and seeding the deck
- * @param name       the mission's title
- * @param tagline    one line of identity, shown on the briefing
- * @param anchor     the themed set, used whole
- * @param minTier    lowest tier the padding may be drawn from
- * @param maxTier    highest tier the padding may be drawn from
- * @param brain      how the opponent picks its stats
- * @param counting   the opponent tracks the deck and plays the remaining odds
- * @param cpuLevel   holo level the opponent's deck is fielded at, 0-3
- * @param trophyMob  the mob whose Trophy-edition card a first clear awards
+ * @param index       1-20, and the unlock order
+ * @param id          stable key used for saving progress and seeding the deck
+ * @param name        the mission's title
+ * @param tagline     one line of identity, shown on the briefing
+ * @param anchor      the themed set the deck is built around
+ * @param anchorCards how many of the deck's cards come from the anchor set
+ * @param minTier     lowest tier preferred, for anchor picks and padding alike
+ * @param maxTier     highest tier preferred, for anchor picks and padding alike
+ * @param brain       how the opponent picks its stats
+ * @param counting    the opponent tracks the deck and plays the remaining odds
+ * @param cpuLevel    holo level the opponent's deck is fielded at, 0-3
+ * @param trophyMob   the mob whose Trophy-edition card a first clear awards
  */
 public record CampaignMission(int index, String id, String name, String tagline,
-                              Category anchor, Tier minTier, Tier maxTier,
+                              Category anchor, int anchorCards, Tier minTier, Tier maxTier,
                               Difficulty brain, boolean counting,
                               int cpuLevel, String trophyMob) {
 
-    /** How many cards the padding has to supply for this mission. */
-    public int subsidyCount() {
-        return Math.max(0, deckSize() - MobCategories.size(anchor));
+    /**
+     * How many of the deck's cards come from the anchor set: the mission's
+     * own figure, capped by the deck and by how many mobs the set holds.
+     */
+    public int anchorCount() {
+        return Math.max(1, Math.min(Math.min(anchorCards, deckSize()), MobCategories.size(anchor)));
     }
 
-    /** Always sixteen. Both sides field a full deck; nobody gets extra cards. */
+    /** How many cards the padding has to supply for this mission. */
+    public int subsidyCount() {
+        return deckSize() - anchorCount();
+    }
+
+    /** Always the hand size. Both sides field a full hand; nobody gets extra cards. */
     public int deckSize() {
         return CampaignDecks.DECK_SIZE;
     }

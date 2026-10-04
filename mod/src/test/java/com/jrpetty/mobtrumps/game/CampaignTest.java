@@ -12,14 +12,14 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * The campaign's promise is that both sides bring sixteen cards, so a mission
- * is never lost to a card-count advantage — the difficulty is in the cards and
- * in how the opponent plays them. A mission that quietly built a deck of
- * fifteen would hand the player a free win and nothing would report it.
+ * The campaign's promise is that both sides bring a full hand of six, so a
+ * mission is never lost to a card-count advantage — the difficulty is in the
+ * cards and in how the opponent plays them. A mission that quietly built a
+ * deck of five would hand the player a free win and nothing would report it.
  *
- * <p>The other promise is that a mission's deck is fixed: the same sixteen
- * cards every attempt, so a mission can be learned and beaten deliberately
- * rather than rerolled until the draw is kind.
+ * <p>The other promise is that a mission's deck is fixed: the same six cards
+ * every attempt, so a mission can be learned and beaten deliberately rather
+ * than rerolled until the draw is kind.
  */
 class CampaignTest {
 
@@ -50,7 +50,9 @@ class CampaignTest {
     }
 
     @Test
-    void bothSidesAlwaysBringExactlySixteenCards() {
+    void bothSidesAlwaysBringAFullHand() {
+        assertEquals(Battle.HAND_SIZE, CampaignDecks.DECK_SIZE,
+                "a mission is played with the same hand as every other game");
         for (CampaignMission mission : CampaignDecks.ALL) {
             List<MobCard> cpu = CampaignDecks.cpuDeck(mission);
             assertEquals(CampaignDecks.DECK_SIZE, cpu.size(),
@@ -97,15 +99,29 @@ class CampaignTest {
     }
 
     @Test
-    void everyMissionUsesItsWholeAnchorCategory() {
+    void everyMissionLeadsWithItsTrophyAndHoldsItsAnchorShare() {
         for (CampaignMission mission : CampaignDecks.ALL) {
-            List<String> deck = ids(CampaignDecks.cpuDeck(mission));
-            for (String id : MobCategories.members(mission.anchor())) {
-                if (MobCards.byId(id) != null) {
-                    assertTrue(deck.contains(id),
-                            "mission " + mission.index() + " is anchored on "
-                                    + mission.anchor() + " but leaves out " + id);
-                }
+            List<MobCard> deck = CampaignDecks.cpuDeck(mission);
+            assertEquals(mission.trophyMob(), deck.get(0).id(),
+                    "mission " + mission.index() + " should lead with its trophy mob");
+            assertEquals(mission.anchor(), MobCards.byId(mission.trophyMob()).category(),
+                    "mission " + mission.index() + "'s trophy mob is not one of its own set");
+            long anchored = deck.stream().filter(c -> c.category() == mission.anchor()).count();
+            assertEquals(mission.anchorCount(), anchored,
+                    "mission " + mission.index() + " (" + mission.name() + ") should hold "
+                            + mission.anchorCount() + " " + mission.anchor() + " cards");
+        }
+    }
+
+    @Test
+    void theBossesAreSavedForTheMissionsBuiltRoundThem() {
+        for (CampaignMission mission : CampaignDecks.ALL) {
+            if (mission.anchor() == Category.BOSS) {
+                continue;
+            }
+            for (MobCard card : CampaignDecks.cpuDeck(mission)) {
+                assertTrue(card.category() != Category.BOSS,
+                        "mission " + mission.index() + " brings in " + card.id() + " as padding");
             }
         }
     }

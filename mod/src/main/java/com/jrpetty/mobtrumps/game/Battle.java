@@ -25,9 +25,19 @@ public final class Battle {
 
     public static final int MAX_ROUNDS = 500;
 
+    /**
+     * Cards each side holds when a game starts — against the CPU, in a duel,
+     * in a draft and on a campaign mission alike. Six keeps a game to a dozen
+     * or so rounds, long enough for a comeback and short enough to play
+     * another.
+     */
+    public static final int HAND_SIZE = 6;
+
     private final Deque<MobCard> playerDeck = new ArrayDeque<>();
     private final Deque<MobCard> cpuDeck = new ArrayDeque<>();
     private final List<MobCard> pot = new ArrayList<>();
+    /** Every round played, oldest first — the record the end-of-game summary reads. */
+    private final List<RoundResult> history = new ArrayList<>();
     private final RandomGenerator random;
     private Difficulty difficulty = Difficulty.NORMAL;
     /** Campaign missions can hand the opponent a memory for the deck. */
@@ -114,6 +124,24 @@ public final class Battle {
         return cpuDeck.peekFirst();
     }
 
+    /**
+     * The player's cards in the order they will be played, top card first.
+     * Won cards join at the bottom, so this is also the order a hand grows in.
+     */
+    public List<MobCard> playerHand() {
+        return List.copyOf(playerDeck);
+    }
+
+    /** The opponent's cards in play order — for the side that owns them only. */
+    public List<MobCard> cpuHand() {
+        return List.copyOf(cpuDeck);
+    }
+
+    /** Every round played so far, oldest first. */
+    public List<RoundResult> history() {
+        return Collections.unmodifiableList(history);
+    }
+
     /** Play one round with the stat picked by whoever holds the turn. */
     public RoundResult playRound(Stat stat) {
         if (finished) throw new IllegalStateException("battle is already finished");
@@ -157,7 +185,9 @@ public final class Battle {
         }
 
         checkEnd();
-        return new RoundResult(round, chooser, stat, playerCard, cpuCard, roundWinner);
+        RoundResult result = new RoundResult(round, chooser, stat, playerCard, cpuCard, roundWinner);
+        history.add(result);
+        return result;
     }
 
     public void setDifficulty(Difficulty difficulty) {

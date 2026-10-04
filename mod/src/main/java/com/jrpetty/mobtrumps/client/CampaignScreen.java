@@ -23,8 +23,9 @@ import java.util.List;
  * colour, chained together, with state readable at a glance — locked plates sit
  * dark behind their chain, the next one available breathes, cleared ones carry
  * a stamp and flawless ones a gold star. Selecting a mission opens its briefing
- * on the right: the name, its one line of identity, the sixteen cards it is
- * played with, what the opponent will do to you, and what a first clear pays.
+ * on the right: the name, its one line of identity, the six cards it is
+ * played with — face up, hover one to read it — what the opponent will do to
+ * you, and what a first clear pays.
  *
  * <p>Both columns scroll independently — the wheel follows the cursor — and the
  * briefing body is clipped so it can never spill over the Begin button, however
@@ -54,6 +55,10 @@ public class CampaignScreen extends Screen {
     /** The selected mission's deck, rebuilt only when the selection changes. */
     private int deckFor = -1;
     private List<MobCard> deck = List.of();
+    /** Where each of their cards was drawn this frame, on screen, for hovering. */
+    private final int[][] deckRects = new int[CampaignDecks.DECK_SIZE][];
+    private final java.util.Map<String, net.minecraft.world.entity.LivingEntity> entityCache =
+            new java.util.HashMap<>();
 
     public CampaignScreen() {
         super(Component.literal("Campaign"));
@@ -77,7 +82,7 @@ public class CampaignScreen extends Screen {
         ensureVisible();
     }
 
-    /** The campaign is shut until the book can field a full sixteen. */
+    /** The campaign is shut until the book can field a full hand. */
     private static boolean canPlay() {
         return ClientCollection.storedCount() >= CampaignDecks.DECK_SIZE;
     }
@@ -271,35 +276,40 @@ public class CampaignScreen extends Screen {
         g.drawString(font, m.opponentLabel(), x0 + 8, b, INK_DIM, false);
         b += 18;
 
-        // the deck: sixteen chips, anchor cards in the set colour, padding grey
-        g.drawString(font, "THEIR DECK  ·  " + deck.size() + " cards"
-                + (m.cpuLevel() > 0 ? "  ·  Holo " + "I".repeat(Math.min(3, m.cpuLevel())) : ""),
+        // the deck: their six, face up — the set's own cards framed in its
+        // colour, the ones brought in from outside it in grey
+        g.drawString(font, "THEIR SIX"
+                + (m.cpuLevel() > 0 ? "  ·  Holo " + "I".repeat(Math.min(3, m.cpuLevel())) + " prints" : ""),
                 x0 + 8, b, GOLD, false);
         b += 12;
-        int cx = x0 + 8;
-        for (MobCard card : deck) {
-            boolean anchor = card.category() == m.anchor();
-            String label = card.displayName();
-            int w = font.width(label) + 8;
-            if (cx + w > x1 - 8) {
-                cx = x0 + 8;
-                b += 12;
-            }
-            g.fill(cx, b, cx + w, b + 10,
-                    anchor ? (0x66000000 | (m.anchor().accent() & 0xFFFFFF)) : 0x40FFFFFF);
-            g.drawString(font, label, cx + 4, b + 1, anchor ? INK : 0xFFB9B2C8, false);
-            cx += w + 3;
+        int n = Math.max(1, deck.size());
+        float ds = Mth.clamp((panelW - 16 - (n - 1) * 4) / (n * (float) CardRenderer.CARD_W), 0.10f, 0.28f);
+        int dw = Math.round(CardRenderer.CARD_W * ds);
+        int dh = Math.round(CardRenderer.CARD_H * ds);
+        int dx = x0 + 8 + Math.max(0, (panelW - 16 - (n * dw + (n - 1) * 4)) / 2);
+        for (int i = 0; i < deckRects.length; i++) {
+            deckRects[i] = null;
         }
-        b += 14;
-        g.drawString(font, "coloured = " + m.anchor().label() + "  ·  grey = brought in",
+        for (int i = 0; i < deck.size() && i < deckRects.length; i++) {
+            MobCard card = deck.get(i);
+            int cx = dx + i * (dw + 4);
+            boolean anchor = card.category() == m.anchor();
+            g.fill(cx - 1, b - 1, cx + dw + 1, b + dh + 1, anchor ? m.anchor().accent() : 0xFF6C6480);
+            CardRenderer.renderCard(g, font, card, m.cpuLevel(), cx, b, ds, 0, 0, null,
+                    m.cpuLevel() > 0, false);
+            // recorded in screen space: the body is drawn scrolled by briefScroll
+            deckRects[i] = new int[]{cx, b - briefScroll, dw, dh};
+        }
+        b += dh + 4;
+        g.drawString(font, "framed = " + m.anchor().label() + "  ·  grey = brought in",
                 x0 + 8, b, 0xFF6C6480, false);
         b += 14;
         int filed = ClientCollection.storedCount();
-        g.drawString(font, "YOUR DECK  ·  " + CampaignDecks.DECK_SIZE + " from your book",
+        g.drawString(font, "YOUR SIX  ·  from your book",
                 x0 + 8, b, GOLD, false);
         b += 11;
         g.drawString(font, canPlay()
-                        ? "Your battle deck, topped up from the book, at your holo levels"
+                        ? "Your deck first, topped up from the book, at your holo levels"
                         : "You have " + filed + " of " + CampaignDecks.DECK_SIZE + " cards filed",
                 x0 + 8, b, canPlay() ? INK_DIM : 0xFFE0A05A, false);
         b += 18;
@@ -353,6 +363,36 @@ public class CampaignScreen extends Screen {
         g.renderOutline(bx, by, bw, BTN_H, ready ? (hover ? GOLD : 0x66FFFFFF) : 0xFF3A3350);
         g.drawString(font, label, bx + (bw - font.width(label)) / 2, by + 6,
                 ready ? 0xFFFFFFFF : 0xFF6C6480, true);
+
+        // --- one of their cards, full size, while it is hovered ---------------
+        for (int i = 0; i < deckRects.length && i < deck.size(); i++) {
+            int[] r = deckRects[i];
+            boolean visible = r != null && r[1] >= bodyTop && r[1] + r[3] <= bodyTop + bodyH;
+            if (visible && inRect(mouseX, mouseY, r)) {
+                previewCard(g, deck.get(i), m.cpuLevel(), mouseX, mouseY);
+                break;
+            }
+        }
+    }
+
+    /** A mission card at a readable size beside the cursor, with its mob. */
+    private void previewCard(GuiGraphics g, MobCard card, int level, int mouseX, int mouseY) {
+        float scale = Mth.clamp((height - 40) / (float) CardRenderer.CARD_H, 0.3f, 0.6f);
+        int w = Math.round(CardRenderer.CARD_W * scale);
+        int h = Math.round(CardRenderer.CARD_H * scale);
+        int x = mouseX - 14 - w;
+        if (x < 4) {
+            x = mouseX + 14;
+        }
+        x = Mth.clamp(x, 4, Math.max(4, width - w - 4));
+        int y = Mth.clamp(mouseY - h / 2, 4, Math.max(4, height - h - 4));
+        var pose = g.pose();
+        pose.pushPose();
+        pose.translate(0, 0, 300);
+        g.fill(x - 3, y - 3, x + w + 3, y + h + 3, 0xC0000000);
+        net.minecraft.world.entity.LivingEntity mob = CardRenderer.portraitEntity(minecraft, card, entityCache);
+        CardRenderer.renderCard(g, font, card, level, x, y, scale, mouseX, mouseY, mob, level > 0, true);
+        pose.popPose();
     }
 
     /** CLEARED / FLAWLESS stamp, right-aligned on the briefing's header row. */

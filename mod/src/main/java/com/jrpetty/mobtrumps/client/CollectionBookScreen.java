@@ -153,9 +153,11 @@ public class CollectionBookScreen extends Screen {
                     + "winners stop pulsing, spoils stop flying across the table and the banners "
                     + "stop overshooting. The card flip itself still plays so you can read the "
                     + "round."),
-            new Setting("battle_hints", "Battle hints", "The prompt line along the bottom of a duel",
+            new Setting("battle_hints", "Battle hints", "Prompts, and how often each stat wins",
                     "The line at the foot of the battle screen telling you to click a stat or that "
-                    + "you're waiting on your opponent. Off once you know the game by heart."),
+                    + "you're waiting on your opponent, and the bar under each stat on the board "
+                    + "showing how often that number beats a card from the whole set. Off once "
+                    + "you know the game by heart."),
             new Setting("confirm_leave", "Confirm forfeits", "Ask twice before leaving a live game",
                     "Leaving a game in progress forfeits it. With this on, the Leave button arms "
                     + "itself and asks \"Forfeit?!\" before it actually quits, so a stray click "

@@ -229,6 +229,18 @@ public final class ModNetworking {
         registrar.playToClient(BattleEmotePayload.TYPE, BattleEmotePayload.STREAM_CODEC,
                 (payload, context) -> context.enqueueWork(
                         () -> ClientHooks.showBattleEmote(payload.side(), payload.text())));
+        registrar.playToClient(DraftSyncPayload.TYPE, DraftSyncPayload.STREAM_CODEC,
+                (payload, context) -> context.enqueueWork(
+                        () -> ClientHooks.updateDraft(payload)));
+        registrar.playToServer(DraftActionPayload.TYPE, DraftActionPayload.STREAM_CODEC,
+                (payload, context) -> context.enqueueWork(() -> {
+                    if (context.player() instanceof net.minecraft.server.level.ServerPlayer sp) {
+                        DraftManager.handleAction(sp, payload.action(), payload.value());
+                    }
+                }));
+        registrar.playToClient(XpGainPayload.TYPE, XpGainPayload.STREAM_CODEC,
+                (payload, context) -> context.enqueueWork(
+                        () -> ClientHooks.showXpGain(payload.amount())));
         registrar.playToClient(TableMenuPayload.TYPE, TableMenuPayload.STREAM_CODEC,
                 (payload, context) -> context.enqueueWork(
                         () -> ClientHooks.openTableMenu(payload)));

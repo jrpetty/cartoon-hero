@@ -59,6 +59,7 @@ public final class ClientPrefs {
     private static volatile boolean reducedMotion = false;
     private static volatile boolean battleHints = true;
     private static volatile boolean confirmLeave = true;
+    private static volatile boolean autoContinue = true;
     private static boolean loaded;
 
     private ClientPrefs() {
@@ -104,6 +105,14 @@ public final class ClientPrefs {
         return confirmLeave;
     }
 
+    /**
+     * Let a CPU game move on from a round's result by itself after a moment,
+     * rather than waiting for Next. Toggled from the battle screen's dock.
+     */
+    public static boolean autoContinue() {
+        return autoContinue;
+    }
+
     // --- mutators (all persist immediately) ---------------------------------
 
     public static void cycleCardSize() {
@@ -124,6 +133,7 @@ public final class ClientPrefs {
             case "reduced_motion" -> reducedMotion = !reducedMotion;
             case "battle_hints" -> battleHints = !battleHints;
             case "confirm_leave" -> confirmLeave = !confirmLeave;
+            case "auto_continue" -> autoContinue = !autoContinue;
             default -> {
                 return;
             }
@@ -140,6 +150,7 @@ public final class ClientPrefs {
             case "reduced_motion" -> reducedMotion;
             case "battle_hints" -> battleHints;
             case "confirm_leave" -> confirmLeave;
+            case "auto_continue" -> autoContinue;
             default -> false;
         };
     }
@@ -203,6 +214,7 @@ public final class ClientPrefs {
         reducedMotion = bool(props, "reducedMotion", reducedMotion);
         battleHints = bool(props, "battleHints", battleHints);
         confirmLeave = bool(props, "confirmLeave", confirmLeave);
+        autoContinue = bool(props, "autoContinue", autoContinue);
     }
 
     /**
@@ -234,6 +246,7 @@ public final class ClientPrefs {
         props.setProperty("reducedMotion", String.valueOf(reducedMotion));
         props.setProperty("battleHints", String.valueOf(battleHints));
         props.setProperty("confirmLeave", String.valueOf(confirmLeave));
+        props.setProperty("autoContinue", String.valueOf(autoContinue));
         Path path = file();
         try {
             Files.createDirectories(path.getParent());

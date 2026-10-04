@@ -65,5 +65,8 @@ public final class ClientSetup {
         event.registerAboveAll(
                 ResourceLocation.fromNamespaceAndPath(MobTrumps.MODID, "card_scanner"),
                 ScannerClient::renderHud);
+        event.registerAboveAll(
+                ResourceLocation.fromNamespaceAndPath(MobTrumps.MODID, "game_xp"),
+                ClientRewards::renderHud);
     }
 }
