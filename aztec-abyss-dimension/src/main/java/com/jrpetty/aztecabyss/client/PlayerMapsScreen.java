@@ -75,7 +75,18 @@ public final class PlayerMapsScreen extends AbyssScreen {
     private int cardHeight(int m) {
         int lines = field(m, 3).isEmpty() ? 0
                 : this.font.split(Component.literal(field(m, 3)), cardW() - 20).size();
-        return 26 + 12 + lines * LINE_H + (field(m, 5).isEmpty() ? 0 : 12) + 8;
+        int rules = field(m, 5).isEmpty() ? 0 : 9 + 11 + rulesPitch(m).size() * LINE_H;
+        return 26 + 12 + lines * LINE_H + rules + 8;
+    }
+
+    /**
+     * The ruleset's own pitch, wrapped. It used to share one line with the
+     * ruleset's name and was cut to the card's width, so most of them ended
+     * in the middle of a sentence - usually on a dash.
+     */
+    private List<FormattedCharSequence> rulesPitch(int m) {
+        return field(m, 6).isEmpty() ? List.of()
+                : this.font.split(Component.literal(field(m, 6)), cardW() - 24);
     }
 
     private int cardTop(int m) {
@@ -197,9 +208,17 @@ public final class PlayerMapsScreen extends AbyssScreen {
         // difference between "a map" and "capture the flag, in here".
         String plays = field(m, 5);
         if (!plays.isEmpty()) {
-            String line = "plays " + plays + (field(m, 6).isEmpty() ? "" : " — " + field(m, 6));
-            g.drawString(this.font, this.font.plainSubstrByWidth(line, w - 24),
-                    x + 12, by + 2, ACCENT, true);
+            by += 4;
+            UiKit.rule(g, x + 12, x + w - 12, by, UiKit.alpha(ACCENT, 0x38));
+            by += 5;
+            g.drawString(this.font, "PLAYS", x + 12, by, UiKit.TEXT_MUTED, true);
+            g.drawString(this.font, this.font.plainSubstrByWidth(plays, w - 70),
+                    x + 14 + this.font.width("PLAYS "), by, ACCENT, true);
+            by += 11;
+            for (FormattedCharSequence line : rulesPitch(m)) {
+                g.drawString(this.font, line, x + 12, by, UiKit.TEXT_FAINT, true);
+                by += LINE_H;
+            }
         }
     }
 

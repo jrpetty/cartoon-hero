@@ -1331,7 +1331,7 @@ public final class EngineEvents {
         var box = BuildTools.selectionOf(player);
         if (box == null) {
             source.sendFailure(Component.literal(
-                    "Pick both corners with the Map Wand first — /arena wand."));
+                    "Pick both corners with the Map Wand first."));
             return 0;
         }
         long volume = BuildTools.volumeOf(box);
@@ -1364,7 +1364,7 @@ public final class EngineEvents {
                 "§7Written to §fgenerated/" + MapStore.LOCAL + "/structures/" + name + ".nbt"), false);
         if (problems.isEmpty()) {
             source.sendSuccess(() -> Component.literal(
-                    "§a✔ It validates. §7/arena test to play it."), false);
+                    "§a✔ It validates. §7Play-test it from the Creator Console."), false);
         } else {
             source.sendSuccess(() -> Component.literal(
                     "§e" + problems.size() + " thing(s) to fix before it plays well:"), false);
@@ -1394,7 +1394,8 @@ public final class EngineEvents {
         }
         player.setGameMode(net.minecraft.world.level.GameType.SURVIVAL);
         source.sendSuccess(() -> Component.literal(
-                "§a✔ Testing on §f" + rulesetId + "§a. §7/arena stop to end and go back to building."), true);
+                "§a✔ Testing on §f" + RulesetLoader.byId(rulesetId).displayTitle()
+                        + "§a. §7Right-click the air with the Map Wand — §fStop the test§7 is on the console."), true);
         return 1;
     }
 

@@ -37,16 +37,41 @@ public class MazeVictoryScreen extends AbyssScreen {
         return (this.width - PANEL_W) / 2;
     }
 
+    /** Centred, with the button under it, never higher than the top margin. */
     private int panelTop() {
-        return Math.max(24, this.height / 2 - 108);
+        return Math.max(24, (this.height - panelHeight() - 28) / 2);
+    }
+
+    private int panelHeight() {
+        return 62 + statLines() * 11 + 14 + 12 + hallLines() * 12 + 30;
     }
 
     private int hallLines() {
         return Math.min(6, prize.hall().size());
     }
 
+    /**
+     * How many lines the run's own numbers take: days always, the rest only
+     * when they are more than nothing. The hall used to sit at a fixed depth
+     * sized for all five, leaving a hole in the panel on every short run.
+     */
+    private int statLines() {
+        String stats = prize.stats();
+        int n = 1;
+        for (int i : new int[]{2, 3, 4, 5}) {
+            if (MazeVictoryPayload.number(stats, i) > 0) {
+                n++;
+            }
+        }
+        return n;
+    }
+
+    private int hallTop() {
+        return panelTop() + 62 + statLines() * 11 + 14;
+    }
+
     private int panelBottom() {
-        return panelTop() + 118 + hallLines() * 12 + 34;
+        return panelTop() + panelHeight();
     }
 
     @Override
@@ -103,7 +128,7 @@ public class MazeVictoryScreen extends AbyssScreen {
         }
 
         // The hall. The reason the screen exists: the line is permanent.
-        y = top + 118;
+        y = hallTop();
         UiKit.fret(g, cx, y - 6, PANEL_W / 2 - 14, GOLD);
         g.drawCenteredString(this.font, Component.literal(
                 "§6THE HALL OF THE OUT §7— " + prize.hallTotal()

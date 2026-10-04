@@ -299,9 +299,13 @@ public final class ClientTour {
                     mc.options.renderDistance().set(12);
                     server("aerial", sp -> {
                         sp.setGameMode(GameType.SPECTATOR);
+                        // Steep enough that the top of the frame is still maze, not
+                        // horizon: at 38 degrees the far edge was sections the
+                        // software renderer had not built yet, which came out as
+                        // wall tops hanging in the sky.
                         double c = com.jrpetty.aztecabyss.maze.MazeData.SPAWN_X + 0.5;
-                        double z = com.jrpetty.aztecabyss.maze.MazeData.SPAWN_Z + 70.5;
-                        look(sp, c, com.jrpetty.aztecabyss.maze.MazeData.FLOOR_Y + 58, z, 180.0F, 38.0F);
+                        double z = com.jrpetty.aztecabyss.maze.MazeData.SPAWN_Z + 46.5;
+                        look(sp, c, com.jrpetty.aztecabyss.maze.MazeData.FLOOR_Y + 66, z, 180.0F, 60.0F);
                     });
                 }).hold(420).shot("42_maze_aerial");
         step("maze-corridor").act(mc -> server("corridor", sp -> {
@@ -349,11 +353,16 @@ public final class ClientTour {
                     }
                     sp.addEffect(new MobEffectInstance(MobEffects.INVISIBILITY, 600, 0, false, false, false));
                     look(sp, out.getX() + 0.5, out.getY(), out.getZ() + 0.5, 180.0F, 0.0F);
-                    BlockPos ahead = openFloor(maze, door[0], door[1] - 2);
+                    // Far enough down the corridor to be photographed coming,
+                    // rather than from underneath.
+                    BlockPos ahead = openFloor(maze, door[0], door[1] - 4);
+                    if (ahead == null) {
+                        ahead = openFloor(maze, door[0], door[1] - 2);
+                    }
                     if (ahead != null) {
                         com.jrpetty.aztecabyss.maze.Griever.raiderAt(maze, ahead);
                     }
-                })).hold(120).shot("40_night_griever");
+                })).hold(50).shot("40_night_griever");
         step("griever-closeup [tour sees in the dark]").act(mc -> server("closeup", sp -> {
                     ServerLevel maze = sp.serverLevel();
                     sp.addEffect(new MobEffectInstance(MobEffects.NIGHT_VISION, 400, 0, false, false, false));
@@ -450,6 +459,37 @@ public final class ClientTour {
         step("published-home [tour ends the run]").act(mc -> server("end-run",
                         sp -> com.jrpetty.aztecabyss.engine.EngineArena.stop(true)))
                 .until(() -> inDimension(Level.OVERWORLD), 600).hold(40);
+
+        // ---- The same screens at GUI scale 4: what "Auto" gives a 1080p screen --------
+        step("scale-4").act(mc -> {
+            mc.setScreen(null);
+            mc.options.guiScale().set(4);
+            mc.resizeDisplay();
+        }).hold(20);
+        step("s4-picker").act(mc -> server("picker-s4",
+                        com.jrpetty.aztecabyss.network.ModNetworking::sendOpenMapPicker))
+                .until(() -> screenIs("MapSelectScreen"), 200).hold(30).shot("90_s4_picker");
+        step("s4-player-maps").act(mc -> press("Player maps"))
+                .until(() -> screenIs("PlayerMapsScreen"), 100).hold(20).shot("91_s4_player_maps");
+        step("s4-records").act(mc -> server("records-s4",
+                        com.jrpetty.aztecabyss.network.ModNetworking::sendLeaderboards))
+                .until(() -> screenIs("LeaderboardScreen"), 200).hold(30).shot("92_s4_records");
+        step("s4-skills").act(mc -> server("skills-s4",
+                        com.jrpetty.aztecabyss.network.ModNetworking::sendSkills))
+                .until(() -> screenIs("SkillTreeScreen"), 200).hold(30).shot("93_s4_skills");
+        step("s4-recap").act(mc -> mc.setScreen(new com.jrpetty.aztecabyss.client.RunRecapScreen(
+                        new com.jrpetty.aztecabyss.network.RunRecapPayload(7, 112, 9, 486,
+                                com.jrpetty.aztecabyss.network.RunRecapPayload.pack(5, 3, 2),
+                                com.jrpetty.aztecabyss.network.RunRecapPayload.packFlags(
+                                        false, true, true, false, 1)))))
+                .until(() -> screenIs("RunRecapScreen"), 100).hold(30).shot("94_s4_recap");
+        step("s4-gate").act(mc -> mc.setScreen(new com.jrpetty.aztecabyss.client.CreatorPasswordScreen(true)))
+                .until(() -> screenIs("CreatorPasswordScreen"), 100).hold(30).shot("95_s4_creator_gate");
+        step("scale-3").act(mc -> {
+            mc.setScreen(null);
+            mc.options.guiScale().set(3);
+            mc.resizeDisplay();
+        }).hold(20);
         step("end").act(mc -> mc.setScreen(null)).hold(20);
     }
 

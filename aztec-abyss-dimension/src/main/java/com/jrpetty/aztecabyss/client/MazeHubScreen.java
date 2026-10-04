@@ -81,6 +81,7 @@ public class MazeHubScreen extends AbyssScreen {
     private final List<net.minecraft.core.BlockPos> waypoints = new ArrayList<>();
 
     private Tab tab = Tab.STATUS;
+    private boolean confirmingLeave = false;
 
     public MazeHubScreen(MazeHubPayload payload) {
         super(Component.literal("The Glade"));
@@ -112,12 +113,31 @@ public class MazeHubScreen extends AbyssScreen {
         int y = this.height - 30;
         addRenderableWidget(Button.builder(Component.literal("Trade sheet"),
                 b -> ask(com.jrpetty.aztecabyss.network.MazeHubActionPayload.SKILLS))
-                .bounds(cx - 155, y, 96, 20).build());
+                .bounds(cx - 203, y, 96, 20).build());
         addRenderableWidget(Button.builder(Component.literal("Order slate"),
                 b -> ask(com.jrpetty.aztecabyss.network.MazeHubActionPayload.ORDERS))
-                .bounds(cx - 49, y, 96, 20).build());
+                .bounds(cx - 101, y, 96, 20).build());
+        // Going home is a button, not a command - and asks twice, because it
+        // is the one button here that takes you out of the game.
+        Button leave = Button.builder(Component.literal(confirmingLeave ? "Sure? Click again" : "Leave the maze"),
+                b -> {
+                    if (confirmingLeave) {
+                        ask(com.jrpetty.aztecabyss.network.MazeHubActionPayload.LEAVE);
+                    } else {
+                        confirmingLeave = true;
+                        this.clearWidgets();
+                        this.init();
+                    }
+                })
+                .bounds(cx + 5, y, 96, 20).build();
+        leave.active = inGlade();
+        if (!leave.active) {
+            leave.setTooltip(net.minecraft.client.gui.components.Tooltip.create(
+                    Component.literal("Only from inside the Glade.")));
+        }
+        addRenderableWidget(leave);
         addRenderableWidget(Button.builder(Component.literal("Close"),
-                b -> onClose()).bounds(cx + 57, y, 96, 20).build());
+                b -> onClose()).bounds(cx + 107, y, 96, 20).build());
     }
 
     private Button tabButton(int x, String label, Tab target) {
@@ -128,6 +148,14 @@ public class MazeHubScreen extends AbyssScreen {
         }).bounds(x, 34, 100, 20).build();
         b.active = tab != target;
         return b;
+    }
+
+    private boolean inGlade() {
+        if (minecraft == null || minecraft.player == null) {
+            return false;
+        }
+        var at = minecraft.player.blockPosition();
+        return MazeData.inGlade(at.getX() / MazeData.CELL, at.getZ() / MazeData.CELL);
     }
 
     private void ask(int action) {

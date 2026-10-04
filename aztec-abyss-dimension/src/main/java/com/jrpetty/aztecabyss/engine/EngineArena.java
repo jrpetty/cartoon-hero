@@ -245,7 +245,7 @@ public final class EngineArena {
         player.getFoodData().setFoodLevel(20);
         player.clearFire();
         player.teleportTo(level, at.getX() + 0.5, at.getY() + 1, at.getZ() + 0.5,
-                java.util.Set.of(), player.getYRot(), 0.0F);
+                java.util.Set.of(), arrivalYaw(at, player.getYRot()), 0.0F);
         int ticks = Math.max(1, rules.respawnSeconds) * 20;
         // Briefly untouchable and slow, so a spawn camp is not a strategy and the
         // player has a beat to work out where they are.
@@ -298,6 +298,44 @@ public final class EngineArena {
                 player.drop(stack, false);
             }
         }
+    }
+
+    /**
+     * Which way somebody put down at {@code at} should be looking.
+     *
+     * <p>Arrival used to keep whatever way the player happened to face, and the
+     * portal sends everybody in facing due south - so on a map whose spawn sits
+     * against its south wall the first thing anyone saw was a wall, with the
+     * horde arriving behind them. Facing the middle of the map shows them the
+     * ground they are holding. A spawn that is itself the middle faces the
+     * nearest way in instead: that is where the first thing to worry about
+     * comes from.
+     */
+    private float arrivalYaw(BlockPos at, float fallback) {
+        BlockPos centre = bounds.getCenter();
+        double dx = centre.getX() - at.getX();
+        double dz = centre.getZ() - at.getZ();
+        if (dx * dx + dz * dz < 9.0) {
+            Marker nearest = null;
+            double best = Double.MAX_VALUE;
+            for (Marker h : hordes) {
+                double d = h.pos().distSqr(at);
+                if (d < best) {
+                    best = d;
+                    nearest = h;
+                }
+            }
+            if (nearest == null) {
+                return fallback;
+            }
+            dx = nearest.pos().getX() - at.getX();
+            dz = nearest.pos().getZ() - at.getZ();
+            if (dx * dx + dz * dz < 1.0) {
+                return fallback;
+            }
+        }
+        // Minecraft measures yaw from +Z (south), turning towards -X (west).
+        return (float) Math.toDegrees(Math.atan2(dz, dx)) - 90.0F;
     }
 
     public Teams teams() {
@@ -483,7 +521,7 @@ public final class EngineArena {
 
         Marker spawnMarker = scan.first("spawn");
         if (spawnMarker == null) {
-            return "This map has no [Spawn] marker. Run /arena validate to see what else is missing.";
+            return "This map has no [Spawn] marker. Check the map to see what else is missing.";
         }
         Ruleset rules = RulesetLoader.byId(rulesetId);
         // A free-mode map is allowed to have nothing that attacks. That is the
@@ -616,7 +654,7 @@ public final class EngineArena {
         // on their own side from the first second rather than only after a death.
         BlockPos at = spawnFor(player);
         player.teleportTo(level, at.getX() + 0.5, at.getY() + 1, at.getZ() + 0.5,
-                java.util.Set.of(), player.getYRot(), 0.0F);
+                java.util.Set.of(), arrivalYaw(at, player.getYRot()), 0.0F);
         if (rules.economyEnabled) {
             Currency c = Currency.byId(rules.defaultCurrency);
             c.set(player, c.start());
@@ -659,7 +697,14 @@ public final class EngineArena {
         // out of it - a run that ends leaving somebody unable to touch anything
         // is a bug they would have to log out to fix.
         for (ServerPlayer p : current.players()) {
-            if (p.gameMode.getGameModeForPlayer() == net.minecraft.world.level.GameType.SPECTATOR) {
+            if (MapCreator.inWorkshop(p) && MapCreator.mayEnter(p)) {
+                // A play-test that ends by itself - everybody down, or the map
+                // won - ends where it began: building. It used to leave the
+                // author in survival in the Workshop, where the console no
+                // longer offered "Stop the test" because there was none to stop.
+                p.setGameMode(net.minecraft.world.level.GameType.CREATIVE);
+                p.setHealth(p.getMaxHealth());
+            } else if (p.gameMode.getGameModeForPlayer() == net.minecraft.world.level.GameType.SPECTATOR) {
                 p.setGameMode(net.minecraft.world.level.GameType.SURVIVAL);
             }
         }

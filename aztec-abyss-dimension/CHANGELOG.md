@@ -46,9 +46,35 @@ run.
   where you came from, and the end of the run sends you there.
 - **change** The welcome lines and the wand's lore describe the console and
   the exit stone instead of listing commands.
+- **fix** **A play-test that ends by itself puts you back to building.**
+  Everybody down, or the map won, left the author in survival in the
+  Workshop - and the console no longer offered *Stop the test*, because there
+  was no test to stop. They are put back in creative, healed.
+- **change** The console's Build page lays out the six steps from nothing to
+  the portal, with a tick against each one it can see is done. The check's
+  findings take their place once there are any. It used to say "press Check
+  the map", which is the fourth thing to do.
+- **change** **The stock rules are called by their name.** The console said
+  "Built-in rules" and the portal said "Classic Hold" for the same map; the
+  console uses the ruleset's own name now, and a play-test runs exactly the
+  rules the published map will.
+- **fix** The Publish page's Difficulty and Rules buttons were cut off
+  ("Rules: Built-in rul"). They have captions and show only the value. The
+  title and pitch boxes open at the start of the text, not its last forty
+  characters. "1 ways in" is "1 way in".
+- **fix** The play-test's chat line still said to type `/arena stop`.
 
 ### The arenas, start to finish
 
+- **fix** **You arrive in front of the portal frame, not inside it.** The
+  frame's diamond side was a hand's width from your left eye: a cyan wall down
+  the edge of the screen for the opening seconds of every Temple and Bridge
+  run. You now step out of it, centred on the opening.
+- **fix** **Player maps face you into the map.** Arrival kept whichever way you
+  were facing, and the portal sends everybody in facing due south - so on a map
+  whose spawn sat against its south wall, the first thing you saw was the wall,
+  with the horde coming in behind you. Spawns and respawns now face the middle
+  of the map, or the nearest way in when the spawn is the middle.
 - **fix** **Temple arrivals face the pyramid.** The arrival facing said SOUTH
   while its own comment, and the portal frame's, said "toward the temple" - so
   every run began staring at the south gate nine blocks away, with the first of
@@ -78,6 +104,10 @@ run.
   arena geometry reads at a glance, and the fog and red haze keep the mood.
 - **change** The first trip into a fresh maze shows the build's progress above
   the hotbar every second instead of one chat line and then silence.
+- **feat** **Leave the maze from the hub.** The only voluntary way out was
+  typing `/maze leave`. The Glade hub (M) has a *Leave the maze* button now,
+  which asks twice and only works from inside the Glade - out in the corridors
+  it would be a way to step out of a Griever's reach with a click.
 
 ### Every screen can finally be seen
 
@@ -113,6 +143,13 @@ written.
   inward from the edges.
 - **fix** Animations on screens ran by frame count - twice as fast at 120 FPS.
   They run by time now.
+- **fix** **Every screen fits at GUI scale 4** - what "Auto" picks on a 1080p
+  monitor. The order slate's last rows, the victory sheet and the console's
+  marker grid ran off the bottom; the slate's rows now size themselves to the
+  space there is, and the tour photographs the main screens at that scale too.
+- **change** Player Maps prints the game a map plays - the ruleset's name and
+  its whole pitch - under its own heading. It shared one line with the name
+  and was cut off at the card's edge, usually on a dash.
 
 ### The Maze looks like the Maze
 
@@ -154,6 +191,12 @@ written.
 - **fix** The between-rounds shot put its camera inside the floor.
 - **feat** New shots of the maze itself: from above, down a corridor, and a
   Griever close up at night.
+- **feat** The Map Creator, end to end: the lock, a small arena built and
+  marked, the console, the check, a play-test, saving, titling and publishing
+  it, leaving, and playing it from Player Maps.
+- **fix** The maze aerial looks down more steeply: at a shallow angle the top
+  of the frame was sections the software renderer had not built yet, which
+  came out as wall tops hanging in the sky.
 
 ### The build boots a server before it ships
 

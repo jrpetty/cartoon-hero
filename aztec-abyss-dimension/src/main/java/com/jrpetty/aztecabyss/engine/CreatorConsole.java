@@ -50,6 +50,9 @@ public final class CreatorConsole {
 
     private static final List<String> DIFFICULTIES = List.of("EASY", "MEDIUM", "HARD", "BRUTAL");
 
+    /** The ruleset a map publishes with when it names none of its own. */
+    private static final String STOCK = "aztecabyss:classic";
+
     private CreatorConsole() {
     }
 
@@ -155,7 +158,8 @@ public final class CreatorConsole {
         List<String> problems = MapScan.validate(scan);
         PROBLEMS.put(id, problems);
         STATUS.put(id, problems.isEmpty()
-                ? "§a✔ Playable — " + scan.all().size() + " markers, " + scan.count("horde") + " ways in."
+                ? "§a✔ Playable — " + scan.all().size() + (scan.all().size() == 1 ? " marker, " : " markers, ")
+                        + scan.count("horde") + (scan.count("horde") == 1 ? " way in." : " ways in.")
                 : "§6" + problems.size() + (problems.size() == 1 ? " thing" : " things") + " to fix:");
     }
 
@@ -216,15 +220,29 @@ public final class CreatorConsole {
         var box = BuildTools.selectionOf(player);
         String selection = box == null ? "" : BuildTools.spanText(box) + "|" + BuildTools.volumeOf(box);
 
+        // "built-in" is what a fresh map says, and publishing turns it into the
+        // stock ruleset - so the console calls it by that ruleset's name, and a
+        // play-test runs exactly what the portal will. It used to read "Built-in
+        // rules" here and "Classic Hold" on the portal, for the same map.
+        boolean stock = RulesetLoader.all().containsKey(STOCK);
         List<String> maps = new ArrayList<>();
         for (MapManifest m : MapManifest.listAll(server)) {
             boolean live = PublishedMaps.byName(server, m.id()) != null;
+            String rules = stock && "built-in".equals(m.ruleset()) ? STOCK : m.ruleset();
             maps.add(m.id() + "|" + clean(m.title()) + "|" + m.version() + "|" + clean(m.difficulty())
-                    + "|" + clean(m.ruleset()) + "|" + clean(m.blurb()) + "|" + (live ? 1 : 0));
+                    + "|" + clean(rules) + "|" + clean(m.blurb()) + "|" + (live ? 1 : 0));
         }
         List<String> rulesets = new ArrayList<>();
-        rulesets.add("built-in|Built-in rules");
-        RulesetLoader.all().forEach((rid, r) -> rulesets.add(rid + "|" + clean(r.displayTitle())));
+        if (stock) {
+            rulesets.add(STOCK + "|" + clean(RulesetLoader.byId(STOCK).displayTitle()));
+        } else {
+            rulesets.add("built-in|Built-in rules");
+        }
+        RulesetLoader.all().forEach((rid, r) -> {
+            if (!rid.equals(STOCK)) {
+                rulesets.add(rid + "|" + clean(r.displayTitle()));
+            }
+        });
 
         EngineArena run = EngineArena.active();
         boolean testing = run != null && EngineArena.isRunning() && run.level() == player.level()

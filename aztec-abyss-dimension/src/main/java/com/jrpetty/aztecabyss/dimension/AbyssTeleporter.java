@@ -26,14 +26,19 @@ public final class AbyssTeleporter {
         BlockPos p = map.arrival();
         // Temple arrivals look north at the pyramid; on the bridge you face
         // north too, over the fort and down the span at whatever is coming.
-        float yaw = map == com.jrpetty.aztecabyss.worldgen.ArenaMap.BRIDGE
-                ? net.minecraft.core.Direction.NORTH.toYRot()
-                : AztecAbyssConstants.ABYSS_ARRIVAL_FACING.toYRot();
+        net.minecraft.core.Direction facing = map == com.jrpetty.aztecabyss.worldgen.ArenaMap.BRIDGE
+                ? net.minecraft.core.Direction.NORTH
+                : AztecAbyssConstants.ABYSS_ARRIVAL_FACING;
+        // One step out of the frame, towards where they face, and centred on
+        // its two-wide opening. Arriving inside the frame put its diamond side
+        // a hand's width from the left eye: a cyan wall down the edge of the
+        // screen for the opening seconds of every run.
+        Vec3 at = new Vec3(p.getX() + 1.0 + facing.getStepX(), p.getY(), p.getZ() + 0.5 + facing.getStepZ());
         return new DimensionTransition(
                 abyss,
-                new Vec3(p.getX() + 0.5, p.getY(), p.getZ() + 0.5),
+                at,
                 Vec3.ZERO,
-                yaw,
+                facing.toYRot(),
                 0.0F,
                 DimensionTransition.PLAY_PORTAL_SOUND);
     }

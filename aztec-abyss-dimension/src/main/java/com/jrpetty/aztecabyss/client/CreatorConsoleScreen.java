@@ -261,11 +261,15 @@ public final class CreatorConsoleScreen extends AbyssScreen {
         EditBox title = new EditBox(this.font, colR, CONTENT_TOP + 12, colRW, 18, Component.literal("Title"));
         title.setMaxLength(40);
         title.setValue(titleDraft);
+        title.moveCursorToStart(false);
         title.setResponder(s -> titleDraft = s);
         addRenderableWidget(title);
         EditBox blurb = new EditBox(this.font, colR, CONTENT_TOP + 46, colRW, 18, Component.literal("Pitch"));
         blurb.setMaxLength(160);
         blurb.setValue(blurbDraft);
+        // From the start: a pitch is read left to right, and a box showing
+        // only its last forty characters reads as the middle of a sentence.
+        blurb.moveCursorToStart(false);
         blurb.setResponder(s -> blurbDraft = s);
         addRenderableWidget(blurb);
 
@@ -276,9 +280,9 @@ public final class CreatorConsoleScreen extends AbyssScreen {
             case "HARD" -> "BRUTAL";
             default -> "EASY";
         };
-        addRenderableWidget(Button.builder(Component.literal("Difficulty: " + row[3] + " ▸"),
+        addRenderableWidget(Button.builder(Component.literal(row[3] + " ▸"),
                         b -> send("meta", row[0], "difficulty=" + nextDiff))
-                .bounds(colR, CONTENT_TOP + 70, half, 20).build());
+                .bounds(colR, CONTENT_TOP + 80, half, 20).build());
         List<String[]> rules = rules();
         int at = 0;
         for (int i = 0; i < rules.size(); i++) {
@@ -288,9 +292,9 @@ public final class CreatorConsoleScreen extends AbyssScreen {
         }
         String nextRule = rules.get((at + 1) % rules.size())[0];
         addRenderableWidget(Button.builder(Component.literal(
-                                this.font.plainSubstrByWidth("Rules: " + ruleTitle(row[4]), half - 16) + " ▸"),
+                                this.font.plainSubstrByWidth(ruleTitle(row[4]), half - 16) + " ▸"),
                         b -> send("meta", row[0], "ruleset=" + nextRule))
-                .bounds(colR + half + 4, CONTENT_TOP + 70, half, 20).build());
+                .bounds(colR + half + 4, CONTENT_TOP + 80, half, 20).build());
 
         // Always pressable: it sends only what has changed, so pressing it with
         // nothing changed simply does nothing.
@@ -302,29 +306,31 @@ public final class CreatorConsoleScreen extends AbyssScreen {
                         send("meta", row[0], "blurb=" + blurbDraft);
                     }
                 })
-                .bounds(colR, CONTENT_TOP + 94, half, 20).build());
+                .bounds(colR, CONTENT_TOP + 104, half, 20).build());
         boolean live = row[6].equals("1");
         addRenderableWidget(Button.builder(Component.literal(live ? "Update the portal" : "Publish ▸"),
                         b -> send("publish", row[0], ""))
-                .bounds(colR + half + 4, CONTENT_TOP + 94, half, 20).build());
+                .bounds(colR + half + 4, CONTENT_TOP + 104, half, 20).build());
         if (live) {
             addRenderableWidget(Button.builder(Component.literal("Take it off the portal"),
                             b -> send("unpublish", row[0], ""))
-                    .bounds(colR, CONTENT_TOP + 118, colRW, 20).build());
+                    .bounds(colR, CONTENT_TOP + 128, colRW, 20).build());
         }
     }
 
     private void initMarkers() {
         int w = contentW();
         int x = left();
-        int cols = Math.max(2, Math.min(6, (w + 6) / 96));
+        // Five across at the usual widths: four rows of tiles, the wand under
+        // them and the description line, all above the footer even at 270 high.
+        int cols = Math.max(2, Math.min(6, (w + 6) / 82));
         int tileW = (w - (cols - 1) * 6) / cols;
         String[] kinds = BuildTools.KINDS;
         for (int i = 0; i < kinds.length; i++) {
             String kind = kinds[i];
             int tx = x + (i % cols) * (tileW + 6);
-            int ty = CONTENT_TOP + 6 + (i / cols) * 26;
-            addRenderableWidget(new TileButton(tx, ty, tileW, 22, Component.literal("[" + kind + "]"),
+            int ty = CONTENT_TOP + 6 + (i / cols) * 24;
+            addRenderableWidget(new TileButton(tx, ty, tileW, 20, Component.literal("[" + kind + "]"),
                     (g, tile, hot) -> {
                         if (hot) {
                             hoveredMarker = kind;
@@ -332,13 +338,13 @@ public final class CreatorConsoleScreen extends AbyssScreen {
                         UiKit.panel(g, tile.getX(), tile.getY(), tile.getWidth(), tile.getHeight(),
                                 hot ? UiKit.PANEL_HOT : UiKit.PANEL, hot ? ACCENT : UiKit.EDGE);
                         g.drawCenteredString(this.font, "[" + kind + "]",
-                                tile.getX() + tile.getWidth() / 2, tile.getY() + 7, hot ? ACCENT : UiKit.TEXT);
+                                tile.getX() + tile.getWidth() / 2, tile.getY() + 6, hot ? ACCENT : UiKit.TEXT);
                     },
                     () -> send("marker", kind, "")));
         }
         int rows = (kinds.length + cols - 1) / cols;
         addRenderableWidget(Button.builder(Component.literal("A fresh Map Wand"), b -> send("wand", "", ""))
-                .bounds(x, CONTENT_TOP + 10 + rows * 26, 130, 20).build());
+                .bounds(x, CONTENT_TOP + 8 + rows * 24, 130, 20).build());
     }
 
     // ------------------------------------------------------------------
@@ -429,14 +435,13 @@ public final class CreatorConsoleScreen extends AbyssScreen {
             return;
         }
         UiKit.panel(g, x, top, w, h, UiKit.PANEL_DEEP, UiKit.EDGE);
-        g.drawString(this.font, "WHAT THE CHECK FOUND", x + 10, top + 7, UiKit.TEXT_FAINT, true);
-        int y = top + 20;
+        boolean clean = data.problems().isEmpty() && data.status().contains("✔");
         if (data.problems().isEmpty()) {
-            boolean clean = data.status().contains("✔");
-            g.drawString(this.font, clean ? "Nothing to fix. It plays." : "Press Check the map to scan the marked-out area.",
-                    x + 10, y, clean ? UiKit.GREEN : UiKit.TEXT_DIM, true);
+            renderSteps(g, x, top, w, h, clean);
             return;
         }
+        g.drawString(this.font, "WHAT THE CHECK FOUND", x + 10, top + 7, UiKit.TEXT_FAINT, true);
+        int y = top + 20;
         for (String problem : data.problems()) {
             for (FormattedCharSequence line : this.font.split(Component.literal(problem), w - 20)) {
                 if (y + 10 > top + h - 4) {
@@ -447,6 +452,43 @@ public final class CreatorConsoleScreen extends AbyssScreen {
                 y += 10;
             }
             y += 2;
+        }
+    }
+
+    /**
+     * A map from nothing to the portal, as six steps with ticks against the
+     * ones the console can see are done. The panel used to say "press Check
+     * the map" and nothing else, which is the fourth thing to do, not the
+     * first - somebody new to the Workshop had to learn the rest from chat.
+     */
+    private void renderSteps(GuiGraphics g, int x, int top, int w, int h, boolean clean) {
+        boolean marked = hasSelection();
+        boolean live = false;
+        for (String[] m : maps()) {
+            live |= m[6].equals("1");
+        }
+        Object[][] steps = {
+                {"Build it", "any shape, any size, out of any blocks", marked},
+                {"Mark it out", "wand: left-click one corner, right-click the other", marked},
+                {"Sign it", "[spawn] where you start, [horde] where they come in", clean},
+                {"Check it", "Check the map, above, says what is missing", clean},
+                {"Play it", "Play-test runs it for real; the wand brings you back here", live},
+                {"Publish it", "save, title and publish it on the Publish page", live}};
+        g.drawString(this.font, clean ? "NOTHING TO FIX — IT PLAYS" : "FROM NOTHING TO THE PORTAL",
+                x + 10, top + 7, clean ? UiKit.GREEN : UiKit.TEXT_FAINT, true);
+        int y = top + 21;
+        int titleW = 0;
+        for (Object[] step : steps) {
+            titleW = Math.max(titleW, this.font.width((String) step[0]));
+        }
+        for (int i = 0; i < steps.length && y + 9 <= top + h - 4; i++) {
+            boolean done = (Boolean) steps[i][2];
+            String mark = done ? "✔" : String.valueOf(i + 1);
+            g.drawString(this.font, mark, x + 12, y, done ? UiKit.GREEN : UiKit.TEXT_MUTED, true);
+            g.drawString(this.font, (String) steps[i][0], x + 26, y, done ? UiKit.TEXT_DIM : UiKit.TEXT, true);
+            g.drawString(this.font, this.font.plainSubstrByWidth((String) steps[i][1], w - titleW - 46),
+                    x + 34 + titleW, y, done ? UiKit.TEXT_MUTED : UiKit.TEXT_FAINT, true);
+            y += 13;
         }
     }
 
@@ -503,6 +545,9 @@ public final class CreatorConsoleScreen extends AbyssScreen {
         }
         g.drawString(this.font, "TITLE", colR, CONTENT_TOP, UiKit.TEXT_FAINT, true);
         g.drawString(this.font, "PITCH", colR, CONTENT_TOP + 34, UiKit.TEXT_FAINT, true);
+        int half = colRW / 2 - 2;
+        g.drawString(this.font, "DIFFICULTY", colR, CONTENT_TOP + 69, UiKit.TEXT_FAINT, true);
+        g.drawString(this.font, "PLAYS", colR + half + 4, CONTENT_TOP + 69, UiKit.TEXT_FAINT, true);
         String id = row[0] + " · v" + row[2];
         g.drawString(this.font, id, colR + colRW - this.font.width(id), CONTENT_TOP, UiKit.TEXT_MUTED, true);
     }

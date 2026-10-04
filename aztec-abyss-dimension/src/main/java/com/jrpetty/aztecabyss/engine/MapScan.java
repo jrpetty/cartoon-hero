@@ -203,7 +203,7 @@ public final class MapScan {
                 } else if (net.minecraft.world.entity.EntityType.byString(id).isEmpty()) {
                     problems.add("§c[" + kind + "] at §f" + m.pos().getX() + ", " + m.pos().getZ()
                             + "§c: no entity called §f" + id
-                            + "§c. Run §f/arena mobs " + id.replace("minecraft:", "") + "§c.");
+                            + "§c — check the spelling, e.g. §fminecraft:zombie§c.");
                 }
             }
         }

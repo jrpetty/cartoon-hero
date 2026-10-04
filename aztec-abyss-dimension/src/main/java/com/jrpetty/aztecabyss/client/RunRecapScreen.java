@@ -121,7 +121,7 @@ public final class RunRecapScreen extends AbyssScreen {
                 data.ritualComplete() ? UiKit.PURPLE : UiKit.TEXT_FAINT));
 
         int panelW = Math.min(300, this.width - 32);
-        int colW = (panelW - 24) / 2;
+        int colW = (panelW - 30) / 2;
         int rows = (stats.size() + 1) / 2;
         int panelH = rows * 14 + 12;
         int left = cx - panelW / 2;
@@ -130,7 +130,7 @@ public final class RunRecapScreen extends AbyssScreen {
         for (int i = 0; i < stats.size(); i++) {
             int col = i / rows;
             int row = i % rows;
-            int x = left + 10 + col * (colW + 4);
+            int x = left + 10 + col * (colW + 10);
             int ry = y + 9 + row * 14;
             Stat s = stats.get(i);
             UiKit.row(g, this.font, s.label(), s.value(), x, x + colW - 6, ry, UiKit.TEXT_FAINT, s.colour());

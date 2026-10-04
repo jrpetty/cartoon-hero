@@ -95,14 +95,29 @@ public class RequisitionScreen extends AbyssScreen {
     private static final int RAIL_W = 74;
     private static final int PANEL_W = 260;
     /**
-     * Sixteen, not twenty.
+     * Row height: eighteen where there is room, down to fourteen where there
+     * is not.
      *
-     * <p>The tallest group is eight lines and the shortest useful screen is 240
-     * tall. Eight rows, a header and a footer have to fit inside that without
-     * scrolling, because a supply menu you have to scroll is a supply menu
-     * people order the top four items from.
+     * <p>The tallest group is eight lines, and eight rows, the crate strip,
+     * the buttons and the footer have to fit without scrolling - a supply menu
+     * you have to scroll is a supply menu people order the top four items
+     * from. A fixed eighteen fitted a 360-high window and ran the buttons over
+     * the crate strip at 270, which is what GUI scale "auto" gives a 1080p
+     * screen.
      */
-    private static final int ROW_H = 18;
+    private int rowH() {
+        int rows = Math.max(1, Math.max(groups.size(), longestGroup()));
+        int room = this.height - panelTop() - 4 - 26 - 6 - 20 - 14;
+        return Math.max(14, Math.min(18, room / rows));
+    }
+
+    private int longestGroup() {
+        int most = 0;
+        for (List<Row> g : byGroup.values()) {
+            most = Math.max(most, g.size());
+        }
+        return most;
+    }
 
     public RequisitionScreen(RequisitionPayload payload, int openTab) {
         super(Component.literal("Requisition"));
@@ -151,13 +166,17 @@ public class RequisitionScreen extends AbyssScreen {
         return (this.width - (RAIL_W + 6 + PANEL_W)) / 2;
     }
 
+    /**
+     * Straight under the budget lines. Centring it left a band of empty ground
+     * between the pot it is spending and the list it is spent on.
+     */
     private int panelTop() {
-        return Math.max(78, this.height / 2 - 68);
+        return 86;
     }
 
     /** How far down the content runs, rail or lines, whichever is longer. */
     private int contentBottom() {
-        return panelTop() + Math.max(groups.size(), shown().size()) * ROW_H;
+        return panelTop() + Math.max(groups.size(), shown().size()) * rowH();
     }
 
     // ------------------------------------------------------------------
@@ -173,7 +192,7 @@ public class RequisitionScreen extends AbyssScreen {
                         tab = which;
                         rebuild();
                     })
-                    .bounds(x, top + i * ROW_H, RAIL_W, ROW_H - 2).build();
+                    .bounds(x, top + i * rowH(), RAIL_W, rowH() - 2).build();
             b.active = i != tab;
             addRenderableWidget(b);
         }
@@ -182,18 +201,18 @@ public class RequisitionScreen extends AbyssScreen {
         List<Row> list = shown();
         for (int i = 0; i < list.size(); i++) {
             Row r = list.get(i);
-            int ry = top + i * ROW_H;
+            int ry = top + i * rowH();
             // Minus first, so the pair reads left to right in the order you would
             // use them: take one off, then put one on.
             Button minus = Button.builder(Component.literal("-"),
                             btn -> send(r.id(), -1))
-                    .bounds(px + PANEL_W - 36, ry, 14, ROW_H - 2).build();
+                    .bounds(px + PANEL_W - 36, ry, 14, rowH() - 2).build();
             minus.active = r.yours() > 0;
             addRenderableWidget(minus);
 
             Button plus = Button.builder(Component.literal("+"),
                             btn -> send(r.id(), 1))
-                    .bounds(px + PANEL_W - 18, ry, 14, ROW_H - 2).build();
+                    .bounds(px + PANEL_W - 18, ry, 14, rowH() - 2).build();
             plus.active = pool - spent >= r.cost();
             addRenderableWidget(plus);
         }
@@ -304,34 +323,41 @@ public class RequisitionScreen extends AbyssScreen {
         List<Row> list = shown();
         for (int i = 0; i < list.size(); i++) {
             Row r = list.get(i);
-            int ry = top + i * ROW_H;
+            int ry = top + i * rowH();
             boolean hot = mouseX >= px && mouseX <= px + PANEL_W
-                    && mouseY >= ry && mouseY <= ry + ROW_H - 2;
+                    && mouseY >= ry && mouseY <= ry + rowH() - 2;
             if (hot) {
                 hovered = i;
             }
-            g.fill(px, ry, px + PANEL_W, ry + ROW_H - 2, hot ? ROW_HOT : ROW_FILL);
+            g.fill(px, ry, px + PANEL_W, ry + rowH() - 2, hot ? ROW_HOT : ROW_FILL);
             if (r.glade() > 0) {
                 // A gold spine on anything on the slate, so a filled order is
                 // legible from the rail without reading a single number.
-                g.fill(px, ry, px + 2, ry + ROW_H - 2, GOLD);
+                g.fill(px, ry, px + 2, ry + rowH() - 2, GOLD);
             }
 
-            // The item itself, drawn where a name used to stand alone.
-            g.renderItem(icon(r), px + 4, ry);
+            // The item itself, drawn where a name used to stand alone - shrunk
+            // to the row when the rows are short, so it never sits on the next.
+            int size = Math.min(16, rowH() - 2);
+            g.pose().pushPose();
+            g.pose().translate(px + 4, ry + (rowH() - 2 - size) / 2.0f, 0);
+            g.pose().scale(size / 16.0f, size / 16.0f, 1.0f);
+            g.renderItem(icon(r), 0, 0);
+            g.pose().popPose();
 
             String name = r.display();
             String bundle = r.count() > 0 ? " §7x" + r.count() : "";
+            int ty = ry + (rowH() - 2 - 8) / 2;
             g.drawString(this.font, Component.literal("§r" + name + bundle),
-                    px + 24, ry + 5, r.glade() > 0 ? TEXT : TEXT_DIM, true);
+                    px + 24, ty, r.glade() > 0 ? TEXT : TEXT_DIM, true);
 
             String price = r.cost() + "p";
-            g.drawString(this.font, price, px + PANEL_W - 60 - this.font.width(price), ry + 5,
+            g.drawString(this.font, price, px + PANEL_W - 60 - this.font.width(price), ty,
                     r.cost() <= left ? TEXT_DIM : RED, true);
 
             if (r.glade() > 0) {
                 String n = "x" + r.glade();
-                g.drawString(this.font, n, px + PANEL_W - 52, ry + 5, GOLD, true);
+                g.drawString(this.font, n, px + PANEL_W - 52, ty, GOLD, true);
             }
         }
 

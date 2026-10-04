@@ -841,6 +841,20 @@ public final class MazeEvents {
         } else if (action == com.jrpetty.aztecabyss.network.MazeHubActionPayload.ORDERS
                 && player.level() instanceof ServerLevel level && isMaze(level)) {
             com.jrpetty.aztecabyss.network.ModNetworking.sendOrders(player);
+        } else if (action == com.jrpetty.aztecabyss.network.MazeHubActionPayload.LEAVE
+                && player.level() instanceof ServerLevel level && isMaze(level)) {
+            // From the Glade only. Out in the corridors this would be a way to
+            // step out of a Griever's reach with a button, which is exactly the
+            // thing the maze is built to deny.
+            var at = player.blockPosition();
+            if (!MazeData.inGlade(at.getX() / MazeData.CELL, at.getZ() / MazeData.CELL)) {
+                player.displayClientMessage(Component.literal(
+                        "§cYou can only leave from the Glade. §7Get back inside first."), false);
+                return;
+            }
+            returnToTeleporter(player);
+            player.displayClientMessage(Component.literal(
+                    "§7You leave the Glade. §8The maze will be there when you come back."), false);
         }
     }
 

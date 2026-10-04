@@ -139,7 +139,7 @@ public class TradeBoardScreen extends AbyssScreen {
                 && !strip(sheet.current()).equals(strip(sheet.display()));
         String sure = switching
                 ? "§eYou are a " + strip(sheet.current())
-                        + " now. §7Signing on here changes your trade."
+                        + ". §7Signing on changes your trade."
                 : "§7Take the trade? The Glade will be counting on you.";
         g.drawCenteredString(this.font, Component.literal(sure), cx, y + 4,
                 switching ? GOLD : TEXT);

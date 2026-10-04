@@ -22,6 +22,8 @@ public record MazeHubActionPayload(int action) implements CustomPacketPayload {
     public static final int SKILLS = 0;
     /** Open the requisition slate (orders). */
     public static final int ORDERS = 1;
+    /** Go home - only honoured from inside the Glade. */
+    public static final int LEAVE = 2;
 
     public static final Type<MazeHubActionPayload> TYPE =
             new Type<>(ResourceLocation.fromNamespaceAndPath(AztecAbyssConstants.MOD_ID, "maze_hub_action"));
