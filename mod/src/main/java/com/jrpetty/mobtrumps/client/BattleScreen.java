@@ -79,6 +79,8 @@ public class BattleScreen extends Screen {
     private static final int PANEL_H = 172;
     /** The MVP card's size on that canvas. */
     private static final float MVP_SCALE = 0.3f;
+    /** The gap between your number and theirs on the board, for the separator. */
+    private static final int SEP_W = 9;
 
     private final Map<String, LivingEntity> entityCache = new HashMap<>();
     private final long openedAt = System.currentTimeMillis();
@@ -586,20 +588,26 @@ public class BattleScreen extends Screen {
             int myVal = mine == null ? 0 : mine.stat(stat);
             String mv = mine == null ? "-" : String.valueOf(myVal);
             String tv = reveal ? String.valueOf(theirs.stat(stat)) : "?";
-            int theirX = r.right() - 3 - font.width(tv);
-            int sepX = r.right() - 3 - 13;
-            int myX = sepX - 3 - font.width(mv);
+            // fixed columns, each as wide as "10", the widest a stat can read,
+            // with a gap between them for the separator: right-aligned numbers
+            // of different widths otherwise ran into the separator at 10
+            int valW = font.width("10");
+            int theirRight = r.right() - 3;
+            int theirX = theirRight - font.width(tv);
+            int sepX = theirRight - valW - SEP_W;
+            int myX = sepX - font.width(mv);
             int myCol = dim ? TEXT_FAINT
                     : (played ? (winner == 0 ? YOU_ACCENT : winner == 1 ? 0xFFE0E0E0 : TIE_GOLD) : 0xFFFFFFFF);
             int thCol = !reveal ? 0xFF6E8A7E : dim ? TEXT_FAINT
                     : (played ? (winner == 1 ? OPP_ACCENT : winner == 0 ? 0xFFE0E0E0 : TIE_GOLD) : TEXT_DIM);
             g.drawString(font, mv, myX, ty, myCol, played && winner == 0);
             if (played) {
-                // which way the round went, between the two numbers
-                String arrow = winner == 0 ? "<" : winner == 1 ? ">" : "=";
-                g.drawString(font, arrow, sepX + 3, ty, winner == 2 ? TIE_GOLD : WIN_GOLD, false);
+                // which way the round went: a pointer at the number that took
+                // it. Not "<" or ">" — those read as arithmetic, which is
+                // backwards on Rarity, where the lower number wins.
+                pointer(g, sepX + (SEP_W - 4) / 2, ty, winner);
             } else {
-                g.drawString(font, ":", sepX + 4, ty, 0xFF4E6E60, false);
+                g.drawString(font, ":", sepX + (SEP_W - font.width(":")) / 2, ty, 0xFF4E6E60, false);
             }
             g.drawString(font, tv, theirX, ty, thCol, played && winner == 1);
             // how often this number wins against the whole set — a hint, so it
@@ -614,6 +622,22 @@ public class BattleScreen extends Screen {
             }
         }
         drawFooter(g, L);
+    }
+
+    /**
+     * A small solid triangle pointing at the winning number — left at yours,
+     * right at theirs — or an "=" for a drawn round. Drawn, not typed, so it
+     * cannot be mistaken for a comparison.
+     */
+    private void pointer(GuiGraphics g, int x, int y, int winner) {
+        if (winner == 2) {
+            g.drawString(font, "=", x, y, TIE_GOLD, false);
+            return;
+        }
+        for (int i = 0; i < 4; i++) {
+            int col = winner == 0 ? x + i : x + 3 - i;
+            g.fill(col, y + 3 - i, col + 1, y + 4 + i, WIN_GOLD);
+        }
     }
 
     private static int oddsColor(double odds) {

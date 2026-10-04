@@ -183,12 +183,17 @@ public class DraftScreen extends Screen {
         }
     }
 
-    /** A pool or pick card at a readable size, beside the cursor and clear of the edges. */
+    /**
+     * A pool or pick card at a readable size, beside the cursor and clear of
+     * the edges — and below the header, so it never hides whose pick it is or
+     * how long is left on the clock.
+     */
     private void preview(GuiGraphics g, MobCard card, DraftLayout.Rect beside, int mouseX, int mouseY) {
         if (card == null) {
             return;
         }
-        float scale = Mth.clamp((height - 40) / (float) DraftLayout.CARD_H, 0.3f, 0.62f);
+        int top = layout().clock().bottom() + 4;
+        float scale = Mth.clamp((height - top - 8) / (float) DraftLayout.CARD_H, 0.2f, 0.62f);
         int w = Math.round(DraftLayout.CARD_W * scale);
         int h = Math.round(DraftLayout.CARD_H * scale);
         int x = mouseX + 14;
@@ -196,7 +201,7 @@ public class DraftScreen extends Screen {
             x = mouseX - 14 - w;
         }
         x = Mth.clamp(x, 4, Math.max(4, width - w - 4));
-        int y = Mth.clamp(mouseY - h / 2, 4, Math.max(4, height - h - 4));
+        int y = Mth.clamp(mouseY - h / 2, top, Math.max(top, height - h - 4));
         var pose = g.pose();
         pose.pushPose();
         pose.translate(0, 0, 300);
