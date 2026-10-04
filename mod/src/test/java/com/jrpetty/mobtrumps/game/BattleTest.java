@@ -87,12 +87,20 @@ class BattleTest {
     }
 
     @Test
-    void whoeverRunsOutOfCardsLoses() {
+    void aSweepOrTheBiggerHandAtTheLimitWins() {
         for (int seed = 0; seed < 500; seed++) {
             Battle battle = new Battle(16, new java.util.Random(seed));
             battle.setDifficulty(Difficulty.NORMAL);
             playOut(battle, new java.util.Random(seed));
-            if (battle.getWinner() == Battle.Side.PLAYER) {
+            if (battle.decidedOnTime()) {
+                // called at the round limit: the bigger hand wins, never a draw
+                Battle.Side bigger = battle.playerCardCount() > battle.cpuCardCount()
+                        ? Battle.Side.PLAYER : Battle.Side.CPU;
+                assertTrue(battle.playerCardCount() != battle.cpuCardCount(),
+                        "seed " + seed + ": called on time with the hands level");
+                assertEquals(bigger, battle.getWinner(),
+                        "seed " + seed + ": called on time for the smaller hand");
+            } else if (battle.getWinner() == Battle.Side.PLAYER) {
                 assertEquals(0, battle.cpuCardCount(),
                         "seed " + seed + ": the player won while the opponent held cards");
             } else if (battle.getWinner() == Battle.Side.CPU) {

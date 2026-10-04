@@ -143,6 +143,12 @@ public final class ClientBattle {
     /** Games in the match: 1 for a single game, 3 or 5 for a series. */
     public static int bestOf() { return Math.max(1, num(BattleSyncPayload.BEST_OF)); }
 
+    /** Rounds before the game is called on cards held, 0 for none. */
+    public static int roundLimit() { return num(BattleSyncPayload.ROUND_LIMIT); }
+
+    /** The game was settled at the limit on cards held. */
+    public static boolean onTime() { return num(BattleSyncPayload.ON_TIME) == 1; }
+
     /** Whether this game feeds wins and awards. */
     public static boolean counts() { return num(BattleSyncPayload.COUNTS) == 1; }
 

@@ -214,6 +214,8 @@ final class BattleView {
         nums.set(BattleSyncPayload.COUNTS, counts ? 1 : 0);
         nums.set(BattleSyncPayload.HAND_COUNT, hand.size());
         nums.set(BattleSyncPayload.HISTORY_COUNT, rounds.size() - from);
+        nums.set(BattleSyncPayload.ROUND_LIMIT, battle.roundLimit());
+        nums.set(BattleSyncPayload.ON_TIME, battle.decidedOnTime() ? 1 : 0);
         for (MobCard card : hand) {
             nums.add(MobCards.levelOf(card));
         }

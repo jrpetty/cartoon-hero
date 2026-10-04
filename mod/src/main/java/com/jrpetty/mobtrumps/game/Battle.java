@@ -33,6 +33,15 @@ public final class Battle {
      */
     public static final int HAND_SIZE = 6;
 
+    /**
+     * Rounds before a game is called on cards held. A take-all game can swing
+     * back and forth for a long time; with this, a six-card game is over in
+     * ten rounds — eight on average — and whoever holds more cards wins. Level
+     * on cards at the limit plays on in sudden death: the next round anybody
+     * wins settles it.
+     */
+    public static final int ROUND_LIMIT = 10;
+
     private final Deque<MobCard> playerDeck = new ArrayDeque<>();
     private final Deque<MobCard> cpuDeck = new ArrayDeque<>();
     private final List<MobCard> pot = new ArrayList<>();
@@ -46,6 +55,8 @@ public final class Battle {
     private int round = 0;
     private boolean finished = false;
     private Side winner = Side.NONE;
+    private int roundLimit = ROUND_LIMIT;
+    private boolean onTime = false;
     /** Who won the coin flip that settled the most recent drawn round. */
     private Side lastCoin = Side.NONE;
 
@@ -100,6 +111,25 @@ public final class Battle {
 
     public int getRound() {
         return round;
+    }
+
+    /** The round limit in force, or 0 for a game played until one side has every card. */
+    public int roundLimit() {
+        return roundLimit;
+    }
+
+    public void setRoundLimit(int limit) {
+        this.roundLimit = Math.max(0, limit);
+    }
+
+    /** Past the limit with the cards level: the next decisive round ends it. */
+    public boolean suddenDeath() {
+        return !finished && roundLimit > 0 && round >= roundLimit;
+    }
+
+    /** The game ended at the round limit, on cards held, rather than by a clean sweep. */
+    public boolean decidedOnTime() {
+        return onTime;
     }
 
     public int playerCardCount() {
@@ -283,6 +313,11 @@ public final class Battle {
         } else if (cpuOut) {
             finished = true;
             winner = Side.PLAYER;
+        } else if (roundLimit > 0 && round >= roundLimit
+                && playerDeck.size() != cpuDeck.size()) {
+            finished = true; // time: the bigger hand takes it
+            onTime = true;
+            winner = playerDeck.size() > cpuDeck.size() ? Side.PLAYER : Side.CPU;
         } else if (round >= MAX_ROUNDS) {
             finished = true; // stalemate: call it on cards held
             winner = playerDeck.size() > cpuDeck.size() ? Side.PLAYER

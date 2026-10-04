@@ -823,7 +823,14 @@ public class BattleScreen extends Screen {
     private void drawHeader(GuiGraphics g, boolean pvp, String opp) {
         g.fill(0, 0, width, BattleLayout.HEADER_H, BAND);
         g.fill(0, BattleLayout.HEADER_H, width, BattleLayout.HEADER_H + 1, GOLD_DIM);
-        String chip = "ROUND " + Math.max(1, ClientBattle.round());
+        int limit = ClientBattle.roundLimit();
+        // while a stat is being chosen the round in play is the next one
+        int phaseNow = ClientBattle.phase();
+        boolean choosing = phaseNow == BattleSyncPayload.PLAYER_PICK || phaseNow == BattleSyncPayload.CPU_PICK
+                || phaseNow == BattleSyncPayload.OPPONENT_PICK;
+        int shownRound = Math.max(1, ClientBattle.round() + (choosing ? 1 : 0));
+        String chip = limit > 0 && shownRound > limit ? "SUDDEN DEATH"
+                : "ROUND " + shownRound + (limit > 0 ? " / " + limit : "");
         if (ClientBattle.bestOf() > 1) {
             int game = Math.min(ClientBattle.bestOf(), ClientBattle.myGames() + ClientBattle.oppGames() + 1);
             chip += "  ·  GAME " + game + "  ·  " + ClientBattle.myGames() + "-" + ClientBattle.oppGames();
@@ -1152,6 +1159,11 @@ public class BattleScreen extends Screen {
 
         // --- the notes: what the result meant ---
         String note = ClientBattle.note();
+        if (ClientBattle.onTime()) {
+            // the game went the distance: say how it was decided
+            note = "Round " + ClientBattle.roundLimit() + " reached — most cards wins"
+                    + (note.isEmpty() ? "" : " · " + note);
+        }
         if (gameOver && note.isEmpty()) {
             note = "Next game dealing...";
         }

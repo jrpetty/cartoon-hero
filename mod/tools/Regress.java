@@ -110,6 +110,39 @@ public class Regress {
         check(BattleSummary.of(mvp, C).mvp() == null, "a seat that won nothing has no MVP");
         }
 
+        System.out.println("round limit");
+        {
+        boolean bounded = true, settled = true, noDrawOnTime = true;
+        long total = 0;
+        int games = 4000, onTime = 0;
+        for (int seed = 0; seed < games; seed++) {
+            Random r = new Random(seed * 7L + 1);
+            Battle b = new Battle(Battle.HAND_SIZE * 2, r);
+            b.setDifficulty(Difficulty.values()[seed % 3]);
+            int levelAtLimit = -1;
+            while (!b.isFinished()) {
+                b.playRound(b.getTurn() == Battle.Side.CPU ? b.cpuChoice() : Stat.values()[r.nextInt(6)]);
+                if (b.getRound() == Battle.ROUND_LIMIT && !b.isFinished()) levelAtLimit = b.playerCardCount();
+                // past the limit only a level game carries on, and only until a round is won
+                if (b.getRound() > Battle.ROUND_LIMIT && b.getRound() > Battle.ROUND_LIMIT + 40) bounded = false;
+            }
+            if (b.getRound() > Battle.ROUND_LIMIT && b.getRound() >= Battle.MAX_ROUNDS) bounded = false;
+            if (b.decidedOnTime()) {
+                onTime++;
+                if (b.playerCardCount() == b.cpuCardCount()) settled = false;
+                if (b.getWinner() == Battle.Side.NONE) noDrawOnTime = false;
+                Battle.Side more = b.playerCardCount() > b.cpuCardCount() ? Battle.Side.PLAYER : Battle.Side.CPU;
+                if (b.getWinner() != more) settled = false;
+            }
+            total += b.getRound();
+        }
+        double avg = total / (double) games;
+        check(Battle.ROUND_LIMIT == 10, "a game is called after 10 rounds");
+        check(bounded, "past the limit, sudden death ends long before the safety cap");
+        check(settled && noDrawOnTime, "a game called on time goes to the bigger hand, never a draw");
+        check(avg <= 9.5, String.format("six-card games average %.1f rounds (%d of %d called on time)", avg, onTime, games));
+        }
+
         System.out.println("experience");
         // the numbers the config comment promises, pinned as numbers
         check(GamePay.xp(25, 15_000L) == 25, "a 15-second game pays the full 25 (five zombies)");

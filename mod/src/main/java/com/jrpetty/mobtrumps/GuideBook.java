@@ -77,7 +77,7 @@ public final class GuideBook {
 
             Right-click a §6Dueling Table§r and pick §aEasy§r, §eNormal§r or §cHard§r. You each hold §l6 cards§r.
 
-            On your turn, pick a stat — click it or press 1-6. Higher wins both cards. Take them all!
+            Pick a stat — click it or press 1-6. Higher wins both cards. Take them all, or hold the most after §l10 rounds§r.
 
             Every finished game pays §aexperience§r, win or lose.""",
 

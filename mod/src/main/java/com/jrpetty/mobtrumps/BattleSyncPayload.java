@@ -82,7 +82,11 @@ public record BattleSyncPayload(int phase, String playerCardId, String cpuCardId
     public static final int COUNTS = 27;
     public static final int HAND_COUNT = 28;
     public static final int HISTORY_COUNT = 29;
-    public static final int HEADER = 30;
+    /** Rounds before the game is called on cards held; 0 for no limit. */
+    public static final int ROUND_LIMIT = 30;
+    /** 1 when the game ended at the limit on cards held. */
+    public static final int ON_TIME = 31;
+    public static final int HEADER = 32;
 
     /** At most this many recent rounds travel in the history tail. */
     public static final int HISTORY_CAP = 24;
