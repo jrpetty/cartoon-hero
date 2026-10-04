@@ -1,26 +1,26 @@
-PASS  create-world  (60 ticks)
+PASS  create-world  (82 ticks)
 PASS  settle  (120 ticks)
 SHOT  01_picker
 PASS  picker  (40 ticks)
-PASS  picker-close  (10 ticks)
+PASS  picker-close  (11 ticks)
 PASS  temple-choose  (20 ticks)
 PASS  temple-portal-confirm  (30 ticks)
 SHOT  10_temple_arrival
 PASS  temple-enter  (160 ticks)
 SHOT  11_temple_round
 PASS  temple-round  (220 ticks)
-PASS  temple-clear [tour kills the wave]  (68 ticks)
+PASS  temple-clear [tour kills the wave]  (71 ticks)
 SHOT  12_temple_between_rounds
 PASS  temple-glyph  (80 ticks)
 SHOT  13_temple_recap
-PASS  temple-extract  (54 ticks)
+PASS  temple-extract  (64 ticks)
 PASS  recap-close  (40 ticks)
 PASS  bridge-choose  (20 ticks)
 PASS  bridge-portal-confirm  (30 ticks)
 SHOT  20_bridge_arrival
 PASS  bridge-enter  (160 ticks)
 SHOT  21_bridge_round
-PASS  bridge-round  (369 ticks)
+PASS  bridge-round  (348 ticks)
 SHOT  22_bridge_death_recap
 PASS  bridge-death [tour dies on purpose]  (40 ticks)
 PASS  recap-close-2  (60 ticks)
@@ -31,23 +31,37 @@ SHOT  24_records_your_runs
 PASS  records-runs  (30 ticks)
 PASS  records-close  (10 ticks)
 SHOT  30_maze_induction
-PASS  maze-enter  (1234 ticks)
+PASS  maze-enter  (1451 ticks)
 SHOT  31_maze_induction_runner
 PASS  maze-pick-runner  (30 ticks)
+SHOT  96_s4_induction
+PASS  induction-s4  (23 ticks)
+PASS  induction-s3  (25 ticks)
 SHOT  32_glade_day
 PASS  maze-come-up  (140 ticks)
 SHOT  33_hub_status
 PASS  hub  (40 ticks)
 SHOT  34_hub_chart
 PASS  hub-chart  (30 ticks)
-PASS  hub-close  (14 ticks)
+SHOT  97_s4_hub_chart
+PASS  hub-s4  (27 ticks)
+SHOT  97b_s4_hub_status
+PASS  hub-s4-click [a real click, through the fitted layout]  (21 ticks)
+PASS  hub-s3  (22 ticks)
+PASS  hub-close  (19 ticks)
 SHOT  35_trade_board
 PASS  trade-board  (30 ticks)
+SHOT  98_s4_trade_board
+PASS  trade-board-s4  (21 ticks)
+PASS  trade-board-s3  (22 ticks)
 SHOT  36_skills
 PASS  skills  (30 ticks)
 SHOT  37_orders
 PASS  orders  (30 ticks)
-PASS  orders-close  (12 ticks)
+SHOT  99_s4_orders
+PASS  orders-s4  (22 ticks)
+PASS  orders-s3  (21 ticks)
+PASS  orders-close  (17 ticks)
 SHOT  42_maze_aerial
 PASS  maze-aerial [tour flies]  (420 ticks)
 SHOT  43_maze_corridor
@@ -65,6 +79,9 @@ PASS  griever-closeup [tour sees in the dark]  (80 ticks)
 PASS  griever-clear  (20 ticks)
 SHOT  41_maze_victory
 PASS  maze-escape  (60 ticks)
+SHOT  9a_s4_victory
+PASS  victory-s4  (20 ticks)
+PASS  victory-s3  (14 ticks)
 PASS  victory-close  (60 ticks)
 SHOT  50_creator
 PASS  creator  (160 ticks)
@@ -84,13 +101,18 @@ PASS  creator-save  (20 ticks)
 PASS  creator-details  (40 ticks)
 SHOT  57_creator_publish
 PASS  creator-publish  (40 ticks)
+SHOT  9b_s4_console_publish
+PASS  console-s4  (20 ticks)
+SHOT  9c_s4_console_markers
+PASS  console-s4-markers [a real click]  (20 ticks)
+PASS  console-s3  (12 ticks)
 PASS  creator-leave  (40 ticks)
 SHOT  51_picker_after_runs
 PASS  picker-after  (40 ticks)
 SHOT  52_player_maps
 PASS  player-maps  (30 ticks)
 SHOT  58_published_run
-PASS  play-published  (160 ticks)
+PASS  play-published  (100 ticks)
 PASS  published-home [tour ends the run]  (40 ticks)
 PASS  scale-4  (20 ticks)
 SHOT  90_s4_picker
@@ -107,4 +129,4 @@ SHOT  95_s4_creator_gate
 PASS  s4-gate  (30 ticks)
 PASS  scale-3  (20 ticks)
 PASS  end  (20 ticks)
-[TOUR] RESULT: 69 passed, 0 failed
+[TOUR] RESULT: 83 passed, 0 failed
