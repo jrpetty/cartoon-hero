@@ -38,6 +38,19 @@ neoForge {
             programArgument '--nogui'
             systemProperty 'neoforge.enabledGameTestNamespaces', project.mod_id
         }
+        // The tour: the real client, under a virtual display in CI, playing the
+        // game start to finish and photographing it. Inert without the system
+        // property; see client/tour/ClientTour.
+        tour {
+            client()
+            gameDirectory = project.file('run/tour')
+            systemProperty 'aztecabyss.tour', 'true'
+            programArgument '--width'
+            programArgument '1920'
+            programArgument '--height'
+            programArgument '1080'
+            jvmArgument '-Xmx4G'
+        }
         // The smoke run CI uses: boots a headless dedicated server with the mod,
         // runs every @GameTest under com.jrpetty.aztecabyss.gametest, and exits
         // non-zero on any failure - or on a boot that throws. No world, no EULA,

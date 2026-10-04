@@ -151,6 +151,19 @@ public final class PortalEvents {
     }
 
     private void handleTravel(ServerPlayer player) {
+        enterFromPortal(player);
+    }
+
+    /**
+     * Everything that happens when somebody has stood in a portal long enough:
+     * the sealed-run and cooldown checks, the step-out-and-back-in
+     * confirmation, generating the arenas, and the trip in.
+     *
+     * <p>Static and public so that exactly one implementation exists. The
+     * client tour drives the game through this same method rather than a
+     * shortcut, so what it verifies is the path a player's portal takes.
+     */
+    public static void enterFromPortal(ServerPlayer player) {
         MinecraftServer server = player.getServer();
         if (server == null) {
             return;
@@ -219,7 +232,7 @@ public final class PortalEvents {
         RoundManager.onPlayerEnter(player);
     }
 
-    private void sendCooldownMessage(ServerPlayer player, RunState state) {
+    private static void sendCooldownMessage(ServerPlayer player, RunState state) {
         long remainingMs = state.getCooldownUntil() - System.currentTimeMillis();
         long hours = remainingMs / (1000 * 60 * 60);
         long minutes = (remainingMs / (1000 * 60)) % 60;
