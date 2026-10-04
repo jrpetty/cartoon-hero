@@ -17,7 +17,8 @@ public class DuelWinTrigger extends SimpleCriterionTrigger<DuelWinTrigger.Instan
         return Instance.CODEC;
     }
 
-    public void trigger(ServerPlayer player, int wins) {
+    /** Named {@code fire}, not {@code trigger}, for the reason given on CollectionTrigger. */
+    public void fire(ServerPlayer player, int wins) {
         this.trigger(player, instance -> wins >= instance.count());
     }
 

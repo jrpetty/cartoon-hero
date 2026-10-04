@@ -44,7 +44,7 @@ public final class CollectionTracker {
         if (changed) {
             sync(player);
             AchievementManager.refresh(player);
-            ModTriggers.COLLECTION.get().trigger(player,
+            ModTriggers.COLLECTION.get().fire(player,
                     player.getData(ModAttachments.COLLECTED.get()).size(),
                     player.getData(ModAttachments.COLLECTED_FOIL.get()).size());
         }
@@ -109,17 +109,17 @@ public final class CollectionTracker {
 
     /** Re-evaluate all Mob Trumps advancement triggers for a player (on login). */
     public static void revalidate(ServerPlayer player) {
-        ModTriggers.COLLECTION.get().trigger(player,
+        ModTriggers.COLLECTION.get().fire(player,
                 player.getData(ModAttachments.COLLECTED.get()).size(),
                 player.getData(ModAttachments.COLLECTED_FOIL.get()).size());
-        ModTriggers.DUEL_WIN.get().trigger(player, player.getData(ModAttachments.DUEL_WINS.get()));
+        ModTriggers.DUEL_WIN.get().fire(player, player.getData(ModAttachments.DUEL_WINS.get()));
         AchievementManager.refresh(player);
     }
 
     public static void addDuelWin(ServerPlayer player) {
         int wins = player.getData(ModAttachments.DUEL_WINS.get()) + 1;
         player.setData(ModAttachments.DUEL_WINS.get(), wins);
-        ModTriggers.DUEL_WIN.get().trigger(player, wins);
+        ModTriggers.DUEL_WIN.get().fire(player, wins);
         sync(player);
         AchievementManager.refresh(player);
     }

@@ -19,8 +19,15 @@ public class CollectionTrigger extends SimpleCriterionTrigger<CollectionTrigger.
         return Instance.CODEC;
     }
 
-    /** Call after a player's collection changes. */
-    public void trigger(ServerPlayer player, int collected, int foils) {
+    /**
+     * Call after a player's collection changes.
+     *
+     * <p>Named {@code fire} rather than overloading {@code trigger}: with the
+     * inherited {@code trigger(player, predicate)} invisible offline, a newer
+     * javac resolved the call below against this method and reported a lambda
+     * passed as an int, failing the offline syntax gate on code that compiles.
+     */
+    public void fire(ServerPlayer player, int collected, int foils) {
         this.trigger(player, instance -> instance.matches(collected, foils));
     }
 
