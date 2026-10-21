@@ -459,7 +459,7 @@ func init(map: Dictionary, loadouts: Array, econMults: Array, alliances = null, 
 			for i in count:
 				var a := rng.range(0.0, PI * 2.0)
 				var r := rng.range(TILE * 1.5, TILE * 6.0) # wide scatter
-				spawnUnit(t, "villager", start.x + cos(a) * r, start.y + sin(a) * r)
+				spawnUnit(t, "villager", start.x + JSMath.cos(a) * r, start.y + JSMath.sin(a) * r)
 		else:
 			spawnBuilding(t, "town_center", start.x, start.y, true)
 			var offsets: Array = [[-60.0, 50.0], [0.0, 64.0], [60.0, 50.0]]
@@ -840,11 +840,11 @@ func issueFormationMove(ids: Array, tx: float, ty: float, queue := false, attack
 		ay += e.y
 	ax /= n
 	ay /= n
-	var ang := atan2(ty - ay, tx - ax)
+	var ang := JSAtan.atan2(ty - ay, tx - ax)
 	if is_nan(ang) or is_inf(ang):
 		ang = 0.0
-	var ux := cos(ang)
-	var uy := sin(ang)
+	var ux := JSMath.cos(ang)
+	var uy := JSMath.sin(ang)
 	var px := -uy # rightward across the front
 	var py := ux
 	var cols := maxi(1, JS.roundi(sqrt(float(n))))
@@ -2106,7 +2106,7 @@ func stepMove(e: Entity, def: Dictionary, ignoreArrival: bool) -> bool:
 		e.path = null # wedged against a building corner — replan immediately
 		e.repathCooldown = 0.0
 	if JS.hypot(e.vx, e.vy) > 1:
-		e.facing = atan2(e.vy, e.vx)
+		e.facing = JSAtan.atan2(e.vy, e.vx)
 	return false
 
 
@@ -2139,15 +2139,15 @@ func stepAttack(e: Entity, def: Dictionary) -> void:
 			# stepMove: that follows the flow field the attack order arrived with,
 			# which points at the very unit we are backing away from, and its A*
 			# fallback crawls on a hop this short.
-			var away := atan2(e.y - target.y, e.x - target.x)
-			driveAway(e, cos(away), sin(away))
-			e.facing = atan2(target.y - e.y, target.x - e.x) # keep it covered
+			var away := JSAtan.atan2(e.y - target.y, e.x - target.x)
+			driveAway(e, JSMath.cos(away), JSMath.sin(away))
+			e.facing = JSAtan.atan2(target.y - e.y, target.x - e.x) # keep it covered
 			return # no shot this tick — the price of giving ground
 
 	if d <= contact:
 		e.vx = 0.0
 		e.vy = 0.0
-		e.facing = atan2(target.y - e.y, target.x - e.x)
+		e.facing = JSAtan.atan2(target.y - e.y, target.x - e.x)
 		if e.attackCooldown <= 0 and def.attack > 0:
 			e.attackCooldown = effectiveInterval(e)
 			if ranged:
@@ -2347,7 +2347,7 @@ func stepGather(e: Entity, def: Dictionary) -> void:
 		return
 	e.vx = 0.0
 	e.vy = 0.0
-	e.facing = atan2(node.y - e.y, node.x - e.x)
+	e.facing = JSAtan.atan2(node.y - e.y, node.x - e.x)
 	e.carryKind = kind
 	e.gatherCooldown -= SIM_DT
 	if e.gatherCooldown <= 0:
@@ -2464,6 +2464,8 @@ func stepTrade(e: Entity, def: Dictionary) -> void:
 		var legs := MathU.dist(home.x, home.y, dest.x, dest.y)
 		var bonus := 1.0 + teamUpgradeSum(e.team, "trade") / 100.0 # Caravan
 		var tiles := legs / TILE
+		# Math.pow: V8 and the platform pow can differ in the last bit; the payout
+		# is rounded to whole gold, so that can only matter on an exact .5 tie.
 		var gold := maxf(1.0, JS.round(TRADE_GOLD_PER_TILE * pow(tiles, TRADE_GOLD_EXPONENT) * bonus * p.oath.tradeMult))
 		p.resources.gold += gold
 		p.stats.gathered += gold
@@ -2524,7 +2526,7 @@ func stepBuildRepair(e: Entity, def: Dictionary) -> void:
 		return
 	e.vx = 0.0
 	e.vy = 0.0
-	e.facing = atan2(b.y - e.y, b.x - e.x)
+	e.facing = JSAtan.atan2(b.y - e.y, b.x - e.x)
 	e.animPhase += SIM_DT * 2.0
 	if b.buildState != T.BuildState.Done:
 		var pp := _p(e.team)
@@ -2869,7 +2871,7 @@ func tickProjectile(e: Entity) -> void:
 	e.order.ty = ty
 	e.x = e.projFromX + (tx - e.projFromX) * t
 	e.y = e.projFromY + (ty - e.projFromY) * t
-	e.facing = atan2(ty - e.projFromY, tx - e.projFromX)
+	e.facing = JSAtan.atan2(ty - e.projFromY, tx - e.projFromX)
 	if t >= 1:
 		e.alive = false
 		var aoe := e.amount
@@ -3590,7 +3592,7 @@ func resourceAt(wx: float, wy: float, team = null):
 			hit = absf(wx - e.x) <= e.radius + 4 and absf(wy - e.y) <= e.radius + 4
 		else:
 			var rr := maxf(e.radius + 10.0, 16.0)
-			hit = d < pow(rr, 2.0)
+			hit = d < rr * rr # `rr ** 2`: an exact square either way
 		if hit and d < bestD:
 			bestD = d
 			best = e

@@ -8,7 +8,8 @@ extends TestCase
 # sim_ai2.json / sim_ai4.json need the skirmish AI, which is ported separately.
 
 
-## Replays a fixture; returns {"matched": last tick that matched, "ticks": run, "ms": wall time}.
+## Replays a fixture; returns {"matched": last tick that matched, "ticks": run,
+## "ms": time spent inside tick()}.
 func runScenario(name: String) -> Dictionary:
 	var fx = fixture("sim_%s.json" % name)
 	if fx == null:
@@ -36,12 +37,14 @@ func runScenario(name: String) -> Dictionary:
 	var cmds: Array = fx.get("commands", []) if fx.get("commands") != null else []
 	var ci := 0
 	var ticks := int(fx.ticks)
-	var t0 := Time.get_ticks_usec()
+	var tickUs := 0
 	for i in ticks:
 		while ci < cmds.size() and int(cmds[ci][0]) == i:
 			Commands.applyCommand(w, cmds[ci][1])
 			ci += 1
+		var t0 := Time.get_ticks_usec()
 		w.tick()
+		tickUs += Time.get_ticks_usec() - t0
 		w.drainEvents()
 		result.ticks = i + 1
 		if i + 1 >= sums.size():
@@ -76,8 +79,8 @@ func runScenario(name: String) -> Dictionary:
 					failures.append("    " + line)
 		if w.winner != null:
 			break
-	result.ms = (Time.get_ticks_usec() - t0) / 1000.0
-	print("    %s: matched %d/%d ticks, %.2f ms/tick (%d entities at the end)" % [
+	result.ms = tickUs / 1000.0
+	print("    %s: matched %d/%d ticks, tick() %.3f ms/tick (%d entities at the end)" % [
 		name, result.matched, sums.size() - 1, result.ms / maxi(1, result.ticks), w.entities.size()])
 	return result
 
