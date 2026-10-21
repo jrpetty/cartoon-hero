@@ -21,6 +21,7 @@ func run(name: String, args: Array) -> void:
 		"thread": await threadCheck()
 		"gpuprobe": await gpuprobe()
 		"render": await load("res://tests/shots/render_checks.gd").new(h).run()
+		"flow": await flow()
 		_: push_error("unknown scenario " + name)
 
 
@@ -492,3 +493,43 @@ func threadCheck() -> void:
 			app.world.tick()
 		sums.append([app.world.tickCount, Commands.worldChecksum(app.world)])
 	print("thread check: threaded %s, main-thread %s -> %s" % [str(sums[0]), str(sums[1]), "SAME" if sums[0] == sums[1] else "DIFFERENT"])
+
+
+# ------------------------------------------------------------------ flow --
+
+## The whole loop by clicks and keys: menu → skirmish → in-game menu →
+## concede → post-match → menu. (With the screens module not merged yet, the
+## menu and post-match are the shell's placeholders.)
+func flow() -> void:
+	var fails := 0
+	await h.frames(5)
+	await h.shot("godot_flow_menu")
+	var W: float = app.canvasW / app.uiScale()
+	var H: float = app.canvasH / app.uiScale()
+	if app.menu == null:
+		await h.click(W / 2, H * 0.36 + 24)  # "Skirmish (1 v 1 vs AI)"
+	else:
+		push_warning("the real menu is in this build; flow only checks the placeholder path")
+		return
+	await h.frames(10)
+	print("flow: state after Skirmish = ", app.state)
+	if app.state != "match":
+		fails += 1
+	await h.tap(KEY_ESCAPE)
+	await h.frames(3)
+	print("flow: in-game menu open = ", app.ingameMenu)
+	if not app.ingameMenu:
+		fails += 1
+	await h.shot("godot_flow_ingame_menu")
+	await h.click(W / 2, H / 2 + 144 + 22)  # "Concede & Quit"
+	await h.frames(10)
+	print("flow: state after Concede = ", app.state)
+	if app.state != "postmatch":
+		fails += 1
+	await h.shot("godot_flow_postmatch")
+	await h.click(W / 2, H - 110 + 24)  # "Continue"
+	await h.frames(5)
+	print("flow: state after Continue = ", app.state)
+	if app.state != "menu":
+		fails += 1
+	print("flow: %s" % ("PASS" if fails == 0 else "FAIL (%d)" % fails))
