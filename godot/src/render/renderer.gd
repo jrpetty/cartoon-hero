@@ -707,9 +707,27 @@ func render(world: Snapshot, cam: Camera, particles: Particles, dt: float, time:
 	shakeY = (randf() - 0.5) * shakeAmp * 2
 
 	ctx.fillStyle = "#0d0b08"
-	ctx.fillRect(0, 0, W, H)
 	if not world.valid:
+		ctx.fillRect(0, 0, W, H)
 		return
+	# The backdrop shows only off the edge of the map: fill just that, not a
+	# whole screen the terrain then covers (a full-screen pass saved).
+	var mx0 := (0.0 - cam.x) * cam.zoom + W / 2 + shakeX
+	var my0 := (0.0 - cam.y) * cam.zoom + H / 2 + shakeY
+	var mx1 := (world.worldW - cam.x) * cam.zoom + W / 2 + shakeX
+	var my1 := (world.worldH - cam.y) * cam.zoom + H / 2 + shakeY
+	if terrainCache == null or mx0 > 0 or my0 > 0 or mx1 < W or my1 < H:
+		if terrainCache == null:
+			ctx.fillRect(0, 0, W, H)
+		else:
+			if my0 > 0:
+				ctx.fillRect(0, 0, W, my0 + 1)
+			if my1 < H:
+				ctx.fillRect(0, my1 - 1, W, H - my1 + 1)
+			if mx0 > 0:
+				ctx.fillRect(0, 0, mx0 + 1, H)
+			if mx1 < W:
+				ctx.fillRect(mx1 - 1, 0, W - mx1 + 1, H)
 
 	ctx.save()
 	ctx.translate(W / 2 + shakeX, H / 2 + shakeY)
@@ -1014,6 +1032,7 @@ func render(world: Snapshot, cam: Camera, particles: Particles, dt: float, time:
 	# Day/night sky over the whole battlefield (screen space, under HUD). By
 	# day it is a plain tint; at night the lights gathered above cut through it.
 	var tint := DayNight.skyTint(dayPhase)
+	var flat := Color(0, 0, 0, 0)  # a plain tint, composited in the vignette's pass
 	if tint[3] > 0.003:
 		var night := DayNight.nightAmount(dayPhase)
 		if night > 0.01 and not lights.is_empty():
@@ -1025,12 +1044,14 @@ func render(world: Snapshot, cam: Camera, particles: Particles, dt: float, time:
 			nightLayer.draw(octx, W, H, tint, night, lights, cam.zoom,
 				func(x: float, y: float) -> Vector2: return Vector2((x - camx) * z + ox, (y - camy) * z + oy))
 		else:
-			octx.fillStyle = Color8(int(tint[0]), int(tint[1]), int(tint[2]), int(clampf(tint[3], 0, 1) * 255.0 + 0.5))
-			octx.fillRect(0, 0, W, H)
+			flat = Color8(int(tint[0]), int(tint[1]), int(tint[2]), int(clampf(tint[3], 0, 1) * 255.0 + 0.5))
 
 	# Cinematic vignette — a radial falloff to 30% dark at the corners (the TS
 	# caches it per canvas size; here it is a shader quad, rebuilt on resize).
+	# The day's plain tint (a full-screen fill under it in the TS) is laid in
+	# the same pass: tint, then vignette over it, as the two blends would.
 	_vignette(W, H)
+	vignetteMat.set_shader_parameter("tint", flat)
 	octx.external(vignetteItem)
 
 	# Drag selection box (screen space).
@@ -1071,15 +1092,22 @@ func _vignette(W: float, H: float) -> void:
 ## from rgba(8,6,3,0) to rgba(8,6,3,0.30).
 const VIGNETTE_SHADER := """
 shader_type canvas_item;
+render_mode blend_premul_alpha;
 uniform vec2 size_px;
 uniform float r0;
 uniform float r1;
+uniform vec4 tint;
 varying vec2 pos;
 void vertex() { pos = VERTEX; }
 void fragment() {
 	float d = length(pos - size_px * 0.5);
 	float t = clamp((d - r0) / (r1 - r0), 0.0, 1.0);
-	COLOR = vec4(8.0 / 255.0, 6.0 / 255.0, 3.0 / 255.0, 0.30 * t);
+	float va = 0.30 * t;
+	vec3 vc = vec3(8.0, 6.0, 3.0) / 255.0;
+	// tint over the scene, then the vignette over that, as one premultiplied
+	// source: rgb = tint·a1·(1 − a2) + vc·a2, a = 1 − (1 − a1)(1 − a2).
+	vec3 rgb = tint.rgb * tint.a * (1.0 - va) + vc * va;
+	COLOR = vec4(rgb, 1.0 - (1.0 - tint.a) * (1.0 - va));
 }
 """
 

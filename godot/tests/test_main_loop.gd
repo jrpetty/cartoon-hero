@@ -337,3 +337,38 @@ func test_control_groups_and_hotkeys() -> void:
 	app.handleKey("F3")
 	check(app.paused, "F3 pauses")
 	freeApp(app)
+
+
+func test_overlays_spectating_and_menus_draw() -> void:
+	var app = makeApp()
+	app.settings.perfOverlay = true
+	app.settings.showFps = true
+	app.startMatch(config())
+	frames(app, 5)
+	app.ingameMenu = true
+	frames(app, 3)
+	app.ingameMenu = false
+	app.showScoreboard = true
+	app.showProduction = true
+	frames(app, 3)
+	app._joinTask()
+	# Placement preview over the battlefield.
+	app.placing = "house"
+	frames(app, 3)
+	app._joinTask()
+	check(app.placementInfo != null, "the placement panel has something to say")
+	app.placing = null
+	# Watch mode with the caster.
+	app.startSpectate(config())
+	frames(app, 10)
+	app._joinTask()
+	check(app.spectating and app.world.revealAll, "watching with full vision")
+	app.handleKey("2")
+	frames(app, 2)
+	app._joinTask()
+	eq(app.caster.vision, 1, "2 switches to the second realm's vision")
+	check(not app.world.revealAll, "and its fog of war")
+	app.handleKey("Escape")
+	eq(app.state, "menu", "Esc leaves the watch")
+	frames(app, 3)
+	freeApp(app)
