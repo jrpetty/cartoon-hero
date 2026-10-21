@@ -19,6 +19,7 @@ func run(name: String, args: Array) -> void:
 		"perf": await perf(args)
 		"input": await inputTest()
 		"thread": await threadCheck()
+		"gpuprobe": await gpuprobe()
 		_: push_error("unknown scenario " + name)
 
 
@@ -231,21 +232,111 @@ func perf(args: Array) -> void:
 	_report(app.frameLog, w)
 
 
+## Where a frame's time goes on this machine's (software) GPU: the same busy
+## scene, paused, measured with one thing switched off at a time.
+func gpuprobe() -> void:
+	var cfg := baseConfig(8)
+	app.startMatch(cfg)
+	var w: World = app.world
+	var center := Vector2(w.worldW / 2, w.worldH / 2)
+	var mix := [["militia", 8], ["spearman", 6], ["archer", 8], ["knight", 5], ["crossbow", 4], ["skirmisher", 4]]
+	for t in w.numTeams:
+		var s = w.map.starts[t]
+		var dir := (center - Vector2(s.x, s.y)).normalized()
+		var k := 0
+		for pair in mix:
+			for j in pair[1]:
+				w.spawnUnit(t, pair[0], center.x + dir.x * -150 + (k % 7) * 20 - 60, center.y + dir.y * -150 + (k / 7) * 20 - 50)
+				k += 1
+	app.paused = true
+	app.camera.centerOn(center.x, center.y)
+	await h.frames(40)
+	var measure := func(label: String) -> void:
+		await h.frames(5)
+		var t0 := Time.get_ticks_usec()
+		var m0: int = ArtCache.misses
+		var p0: int = ArtCache.stats().pages
+		for i in 20:
+			await h.frames(1)
+		var ms := (Time.get_ticks_usec() - t0) / 1000.0 / 20.0
+		print("   art cache: %d misses in 20 frames, %d pages" % [ArtCache.misses - m0, ArtCache.stats().pages])
+		print("gpuprobe %-28s %7.1f ms/frame   (main-thread CPU %.1f ms; segments world %d, overlay %d, ui %d)" % [label, ms, app.perf.cpuMs,
+			app.renderer.ctx._seg_i + 1, app.renderer.octx._seg_i + 1, app.ctx._seg_i + 1])
+	await measure.call("full")
+	app.visible = false
+	await measure.call("nothing drawn (app hidden)")
+	app.visible = true
+	app.uiLayer.visible = false
+	app.overlayLayer.visible = false
+	await measure.call("world layer only")
+	app.uiLayer.visible = true
+	app.overlayLayer.visible = true
+	app.renderer.aggressiveLod = true
+	await measure.call("no ground detail")
+	app.renderer.aggressiveLod = false
+	app.renderer.vignetteSize = Vector2i(-1, -1)
+	var keepVig = app.renderer.vignetteItem
+	await measure.call("full again")
+	app.settings.weather = false
+	app.world.revealAll = true
+	await measure.call("no fog")
+	app.world.revealAll = false
+	app.spectating = true
+	app.caster.clean = true
+	await measure.call("no HUD (clean caster)")
+	app.spectating = false
+	app.caster.clean = false
+	app.camera.zoom = 0.4
+	await measure.call("zoomed out (LOD blobs)")
+	app.camera.zoom = 1.0
+	await h.shot("godot_gpuprobe")
+
+
 func _report(log: Array, w: World) -> void:
+	var own := log.filter(func(f): return not f.skipped)
 	var dts: Array = log.map(func(f): return f.dt)
 	var cpu: Array = log.map(func(f): return f.cpu)
-	var ren: Array = log.map(func(f): return f.render)
-	var ui: Array = log.map(func(f): return f.ui)
-	var skipped := log.filter(func(f): return f.skipped).size()
-	print("perf frames: %d (%d drawn while a tick was in flight)" % [log.size(), skipped])
-	print("perf frame time ms: mean %.2f  p50 %.2f  p95 %.2f  p99 %.2f  max %.2f" % [_mean(dts), _pct(dts, 50), _pct(dts, 95), _pct(dts, 99), _pct(dts, 100)])
-	print("perf main-thread CPU ms: mean %.2f  p95 %.2f  max %.2f" % [_mean(cpu), _pct(cpu, 95), _pct(cpu, 100)])
-	print("perf world render ms (GDScript): mean %.2f  p95 %.2f" % [_mean(ren), _pct(ren, 95)])
-	print("perf HUD ms (GDScript): mean %.2f  p95 %.2f" % [_mean(ui), _pct(ui, 95)])
-	print("perf sim tick ms: mean %.2f  worst %.2f  (ticks %d, %d units alive)" % [app.perf.tickMs, app.perf.worstTickMs, w.tickCount,
-		w.entities.filter(func(e): return e.alive and e.kind == T.Kind.Unit).size()])
-	var hitches := dts.filter(func(d): return d > 33.4).size()
-	print("perf frames over 33 ms: %d" % hitches)
+	var col := func(rows: Array, k: String) -> Array: return rows.map(func(f): return f[k])
+	var ticks := 0
+	var worst := 0.0
+	for f in log:
+		ticks += f.ticks
+		worst = maxf(worst, f.frameWorstTick)
+	var seconds := 0.0
+	for d in dts:
+		seconds += d / 1000.0
+	# The longest run of frames the world didn't advance on screen (skipped).
+	var stall := 0.0
+	var run := 0.0
+	for f in log:
+		if f.skipped:
+			run += f.dt
+			stall = maxf(stall, run)
+		else:
+			run = 0.0
+	print("perf mode: %s, %d frames in %.1f s (%.1f fps), %d drawn while a tick was in flight" % [
+		"threaded" if app.threadSim else "main-thread sim", log.size(), seconds, log.size() / maxf(0.001, seconds), log.size() - own.size()])
+	print("perf frame interval ms: mean %.2f  p50 %.2f  p95 %.2f  p99 %.2f  max %.2f" % [_mean(dts), _pct(dts, 50), _pct(dts, 95), _pct(dts, 99), _pct(dts, 100)])
+	print("perf main-thread CPU ms per frame: mean %.2f  p50 %.2f  p95 %.2f  max %.2f" % [_mean(cpu), _pct(cpu, 50), _pct(cpu, 95), _pct(cpu, 100)])
+	print("perf   owning frames: snapshot %.2f  world render %.2f  HUD %.2f  events %.2f  input %.2f (means, ms)" % [
+		_mean(col.call(own, "snapshot")), _mean(col.call(own, "render")), _mean(col.call(own, "ui")), _mean(col.call(own, "events")), _mean(col.call(own, "input"))])
+	var skipCpu: Array = col.call(log.filter(func(f): return f.skipped), "cpu")
+	if not skipCpu.is_empty():
+		print("perf   frames drawn from the snapshot: CPU mean %.2f ms" % _mean(skipCpu))
+	print("perf sim: %d ticks (%.1f/s), %.2f ms/tick smoothed, worst tick %.2f ms, %d units alive at the end" % [
+		ticks, ticks / maxf(0.001, seconds), app.perf.tickMs, worst, w.entities.filter(func(e): return e.alive and e.kind == T.Kind.Unit).size()])
+	print("perf frames over 33 ms: %d of %d; longest the world stood still on screen: %.0f ms" % [dts.filter(func(d): return d > 33.4).size(), dts.size(), stall])
+	var worstFrames := log.duplicate()
+	worstFrames.sort_custom(func(a, b): return a.cpu > b.cpu)
+	for f in worstFrames.slice(0, 5):
+		print("perf   slow frame: cpu %.1f ms (%s) snapshot %.1f render %.1f HUD %.1f events %.1f, %d ticks, worst tick %.1f" % [
+			f.cpu, "skipped" if f.skipped else "owning", f.snapshot, f.render, f.ui, f.events, f.ticks, f.frameWorstTick])
+		var ph: Dictionary = f.get("phases", {})
+		var parts: Array = []
+		for k in ph:
+			if ph[k] >= 1.0:
+				parts.append("%s %.1f" % [k, ph[k]])
+		print("perf     render phases: %s  (cache misses %d, fallbacks %d)" % [", ".join(parts), f.get("misses", 0), f.get("fallbacks", 0)])
 
 
 static func _mean(a: Array) -> float:

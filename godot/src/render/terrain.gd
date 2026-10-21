@@ -15,9 +15,9 @@
 ##   (the TS's one fillRect per cell), and the per-pixel relief/water pass runs
 ##   as a fragment shader over the cell fields — the TS's pixel loop, line for
 ##   line, on the GPU.
-## - Ground detail (drawGroundDetail) is the same drawing, but captured once
-##   per map into meshes, chunk by chunk, and drawn every frame for free; the
-##   grass sway is a vertex shader over blade tips. See GroundDetail below.
+## - Ground detail (drawGroundDetail) is the same marks, built once per map
+##   into meshes, chunk by chunk, and drawn every frame for free; the grass
+##   sway is a vertex shader over blade tips. See GroundDetail below.
 class_name TerrainArt
 
 const Terrain = TerrainKinds.Terrain
@@ -738,11 +738,10 @@ static func cellHash(cx: int, cy: int, n: int) -> float:
 ## It fades in with zoom so nothing pops, and is skipped entirely when zoomed
 ## out — where it would be sub-pixel noise costing thousands of draws a frame.
 ##
-## This is the TS function, drawing through any Ctx (a CaptureCtx records it
-## for GroundDetail; it can also draw live). `time` drives the grass sway; a
-## capture passes 0 and sets `swayed` so each blade carries what it needs for
-## the sway shader instead.
-static func drawGroundDetail(ctx: Ctx, map: Dictionary, vx0: float, vy0: float, vx1: float, vy1: float, zoom: float, time: float, capture: CaptureCtx = null) -> void:
+## This is the TS function, line for line, drawing through a Ctx. The
+## renderer draws the same marks from GroundDetail's prebuilt meshes instead
+## (below); this live form is the reference they are checked against.
+static func drawGroundDetail(ctx: Ctx, map: Dictionary, vx0: float, vy0: float, vx1: float, vy1: float, zoom: float, time: float) -> void:
 	# Detail exists to rescue the close-up view: the cache is baked at half
 	# resolution, so it only turns to mush once you lean in past about 0.85.
 	# Below that the marks would be sub-pixel noise costing real time — and the
@@ -761,7 +760,7 @@ static func drawGroundDetail(ctx: Ctx, map: Dictionary, vx0: float, vy0: float, 
 	var c1y := mini(rows - 1, int(ceil(vy1 / TILE)))
 	if c1x < c0x or c1y < c0y:
 		return
-	if capture == null and (c1x - c0x + 1) * (c1y - c0y + 1) > 3000:
+	if (c1x - c0x + 1) * (c1y - c0y + 1) > 3000:
 		return
 
 	var PAL: Dictionary = C.PAL
@@ -796,23 +795,14 @@ static func drawGroundDetail(ctx: Ctx, map: Dictionary, vx0: float, vy0: float, 
 					var sway := sin(time * 0.7 + cx * 0.4 + cy * 0.3) * 1.1
 					for tone in 3:
 						ctx.strokeStyle = Palette.withAlpha(GRASS_TONES[tone], 0.72)
-						if capture != null:
-							# Captured blade by blade, each carrying its own sway
-							# phase and height for the shader.
-							for i in range(tone, 4, 3):
-								var px := ox + cellHash(cx, cy, i) * TILE
-								var py := oy + cellHash(cx, cy, i + 7) * TILE
-								var hgt := 3 + cellHash(cx, cy, i + 13) * 3.5
-								_capture_blade(ctx, capture, px, py, hgt, cx * 0.4 + cy * 0.3, 0.0)
-						else:
-							ctx.beginPath()
-							for i in range(tone, 4, 3):
-								var px := ox + cellHash(cx, cy, i) * TILE
-								var py := oy + cellHash(cx, cy, i + 7) * TILE
-								var hgt := 3 + cellHash(cx, cy, i + 13) * 3.5
-								ctx.moveTo(px, py)
-								ctx.lineTo(px + sway, py - hgt)
-							ctx.stroke()
+						ctx.beginPath()
+						for i in range(tone, 4, 3):
+							var px := ox + cellHash(cx, cy, i) * TILE
+							var py := oy + cellHash(cx, cy, i + 7) * TILE
+							var hgt := 3 + cellHash(cx, cy, i + 13) * 3.5
+							ctx.moveTo(px, py)
+							ctx.lineTo(px + sway, py - hgt)
+						ctx.stroke()
 				Terrain.Forest:
 					# Crowns are *lighter* than the forest floor the cache paints.
 					# Dark on dark was why the first attempt at this was invisible
@@ -855,69 +845,54 @@ static func drawGroundDetail(ctx: Ctx, map: Dictionary, vx0: float, vy0: float, 
 					var sway := sin(time * 1.1 + cx * 0.5) * 2
 					ctx.strokeStyle = "rgba(109,122,74,0.55)"
 					ctx.lineWidth = 1
-					if capture != null:
-						for i in 3:
-							var px := ox + cellHash(cx, cy, i) * TILE
-							var py := oy + cellHash(cx, cy, i + 7) * TILE
-							var hgt := 5 + cellHash(cx, cy, i + 13) * 4
-							_capture_blade(ctx, capture, px, py, hgt, cx * 0.5, 2.0)
-					else:
-						ctx.beginPath()
-						for i in 3:
-							var px := ox + cellHash(cx, cy, i) * TILE
-							var py := oy + cellHash(cx, cy, i + 7) * TILE
-							var hgt := 5 + cellHash(cx, cy, i + 13) * 4
-							ctx.moveTo(px, py)
-							ctx.lineTo(px + sway, py - hgt)
-						ctx.stroke()
+					ctx.beginPath()
+					for i in 3:
+						var px := ox + cellHash(cx, cy, i) * TILE
+						var py := oy + cellHash(cx, cy, i + 7) * TILE
+						var hgt := 5 + cellHash(cx, cy, i + 13) * 4
+						ctx.moveTo(px, py)
+						ctx.lineTo(px + sway, py - hgt)
+					ctx.stroke()
 					ctx.lineWidth = 1.3
 				_:
 					pass # water and shallows have their own glints
 	ctx.restore()
 
 
-## One swaying blade into a capture: drawn upright, tagged with its sway phase
-## (uv.x) and with how far up the blade each vertex sits (uv.y, 0..1, plus 2
-## for a marsh reed's sway rather than grass's).
-static func _capture_blade(ctx: Ctx, cap: CaptureCtx, px: float, py: float, hgt: float, phase: float, kind: float) -> void:
-	cap.blade = true
-	cap.uv_x = phase
-	cap.uv_y = kind
-	cap.blade_root = py
-	cap.blade_h = hgt
-	ctx.beginPath()
-	ctx.moveTo(px, py)
-	ctx.lineTo(px, py - hgt)
-	ctx.stroke()
-	cap.blade = false
-	cap.uv_x = 0.0
-	cap.uv_y = 0.0
-
-
-## The ground detail of one map, captured into meshes a chunk at a time and
+## The ground detail of one map, built into meshes a chunk at a time and
 ## drawn as retained canvas items (TS drawGroundDetail, per frame, made free).
 ##
-## Built lazily: a chunk is captured the first time it comes into view, a few
-## per frame, so a map load doesn't pay for the whole map. The sway is a vertex
-## shader that shears each blade's tip by the TS's own sway formula; the zoom
-## fade (`strength`) is the parent item's alpha.
+## The same marks as drawGroundDetail — the same cells, hashes, sizes and
+## colours — but each blade is one quad and each disc one quad, antialiased in
+## the fragment shader from screen-space derivatives (a stroked blade through
+## Ctx is ~30 vertices with its round caps and fringe; a filled circle ~60):
+## a view of meadow is then thousands of triangles, not hundreds of thousands.
+## The sway is the vertex shader shearing each blade's tip by the TS's own
+## formula (the blade's cell is recovered from its root); the zoom fade
+## (`strength`) is the parent item's alpha. Chunks are built the first time
+## they come into view, a few per frame, so a map load doesn't pay for the
+## whole map.
 class GroundDetail extends RefCounted:
 	const CHUNK := 12  ## cells per chunk side
 	var map: Dictionary
 	var root := RID()  ## parent item: world-space transform, strength as alpha
-	var chunks := {}  ## Vector2i -> RID item (or RID() when empty)
+	var chunks := {}  ## Vector2i -> [blade item, disc item] (RIDs; invalid when empty)
 	var meshes: Array = []
-	var mat: ShaderMaterial
+	var bladeMat: ShaderMaterial
+	var discMat: ShaderMaterial
 	var ccols := 0
 	var crows := 0
-	## Max chunks captured per frame.
+	## Max chunks built per frame.
 	var budget := 3
 
 	func _init(m: Dictionary) -> void:
 		map = m
 		root = RenderingServer.canvas_item_create()
-		mat = ShaderMaterial.new()
-		mat.shader = TerrainArt._sway_shader()
+		bladeMat = ShaderMaterial.new()
+		bladeMat.shader = TerrainArt._shader("blade", BLADE_SHADER)
+		bladeMat.set_shader_parameter("tile", float(C.TILE))
+		discMat = ShaderMaterial.new()
+		discMat.shader = TerrainArt._shader("disc", DISC_SHADER)
 		ccols = int(ceil(float(map.cols) / CHUNK))
 		crows = int(ceil(float(map.rows) / CHUNK))
 
@@ -944,34 +919,36 @@ class GroundDetail extends RefCounted:
 		return missing
 
 	func _build(key: Vector2i) -> void:
-		var TILE: float = C.TILE
-		var cap := CaptureCtx.new()
-		cap.aa = true
-		var x0 := key.x * CHUNK * TILE
-		var y0 := key.y * CHUNK * TILE
-		var x1 := x0 + (CHUNK - 1) * TILE
-		var y1 := y0 + (CHUNK - 1) * TILE
-		# Full strength: the fade is the root item's alpha.
-		TerrainArt.drawGroundDetail(cap, map, x0, y0, x1, y1, 2.0, 0.0, cap)
-		var m := cap.to_mesh()
-		if m == null:
-			chunks[key] = RID()
-			return
-		meshes.append(m)
+		var c0x := key.x * CHUNK
+		var c0y := key.y * CHUNK
+		var b := DetailMesh.new()
+		b.build(map, c0x, c0y, mini(int(map.cols) - 1, c0x + CHUNK - 1), mini(int(map.rows) - 1, c0y + CHUNK - 1))
+		var items: Array = [RID(), RID()]
+		var bm := b.blades.to_mesh()
+		if bm != null:
+			meshes.append(bm)
+			items[0] = _item(bm, bladeMat)
+		var dm := b.discs.to_mesh()
+		if dm != null:
+			meshes.append(dm)
+			items[1] = _item(dm, discMat)
+		chunks[key] = items
+
+	func _item(m: ArrayMesh, mat: ShaderMaterial) -> RID:
 		var it := RenderingServer.canvas_item_create()
 		RenderingServer.canvas_item_set_parent(it, root)
 		RenderingServer.canvas_item_set_material(it, mat.get_rid())
 		RenderingServer.canvas_item_add_mesh(it, m.get_rid())
-		chunks[key] = it
+		return it
 
 	func set_time(time: float) -> void:
-		mat.set_shader_parameter("time", time)
+		bladeMat.set_shader_parameter("time", time)
 
 	func free_all() -> void:
 		for k in chunks:
-			var it: RID = chunks[k]
-			if it.is_valid():
-				RenderingServer.free_rid(it)
+			for it in chunks[k]:
+				if (it as RID).is_valid():
+					RenderingServer.free_rid(it)
 		chunks.clear()
 		meshes.clear()
 		if root.is_valid():
@@ -982,35 +959,187 @@ class GroundDetail extends RefCounted:
 		if what == NOTIFICATION_PREDELETE:
 			# (Methods can't be called this late; free the RIDs inline.)
 			for k in chunks:
-				var it: RID = chunks[k]
-				if it.is_valid():
-					RenderingServer.free_rid(it)
+				for it in chunks[k]:
+					if (it as RID).is_valid():
+						RenderingServer.free_rid(it)
 			chunks.clear()
 			if root.is_valid():
 				RenderingServer.free_rid(root)
 
 
-static var _sway: Shader = null
+## Geometry under construction: vertices, colours, UVs, indices.
+class MeshParts extends RefCounted:
+	var verts := PackedVector2Array()
+	var cols := PackedColorArray()
+	var uvs := PackedVector2Array()
+	var idx := PackedInt32Array()
+
+	func quad(p: Array, uv: Array, col: Color) -> void:
+		var b := verts.size()
+		for i in 4:
+			verts.append(p[i])
+			uvs.append(uv[i])
+			cols.append(col)
+		idx.append_array([b, b + 1, b + 2, b, b + 2, b + 3])
+
+	func tri(a: Vector2, bb: Vector2, c: Vector2, col: Color) -> void:
+		var b := verts.size()
+		for v in [a, bb, c]:
+			verts.append(v)
+			uvs.append(Vector2.ZERO)
+			cols.append(col)
+		idx.append_array([b, b + 1, b + 2])
+
+	func to_mesh() -> ArrayMesh:
+		if idx.is_empty():
+			return null
+		var arrays := []
+		arrays.resize(Mesh.ARRAY_MAX)
+		arrays[Mesh.ARRAY_VERTEX] = verts
+		arrays[Mesh.ARRAY_COLOR] = cols
+		arrays[Mesh.ARRAY_TEX_UV] = uvs
+		arrays[Mesh.ARRAY_INDEX] = idx
+		var m := ArrayMesh.new()
+		m.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays, [], {}, Mesh.ARRAY_FLAG_USE_2D_VERTICES)
+		return m
 
 
-static func _sway_shader() -> Shader:
-	if _sway == null:
-		_sway = Shader.new()
-		_sway.code = SWAY_SHADER
-	return _sway
+## drawGroundDetail's marks for a block of cells, as blade and disc quads.
+class DetailMesh extends RefCounted:
+	var blades := MeshParts.new()
+	var discs := MeshParts.new()
+	const AA := 0.75  ## world units of fringe either side
+
+	## A stroked line from root to tip, `w` wide; kind 0 grass (sways), 1
+	## marsh (sways its own way), 2 hill (still). uv = (across + 10·kind, how
+	## far up from the root in world units).
+	func blade(rx: float, ry: float, tx: float, ty: float, w: float, kind: int, col: Color) -> void:
+		var hw := w / 2
+		var k := (hw + AA) / hw
+		var off := hw + AA
+		var up := ry - ty
+		var ko := 10.0 * kind
+		blades.quad(
+			[Vector2(rx - off, ry), Vector2(rx + off, ry), Vector2(tx + off, ty), Vector2(tx - off, ty)],
+			[Vector2(ko - k, 0), Vector2(ko + k, 0), Vector2(ko + k, up), Vector2(ko - k, up)], col)
+
+	## A filled circle.
+	func disc(cx: float, cy: float, r: float, col: Color) -> void:
+		var e := r + AA * 2
+		var k := e / r
+		discs.quad(
+			[Vector2(cx - e, cy - e), Vector2(cx + e, cy - e), Vector2(cx + e, cy + e), Vector2(cx - e, cy + e)],
+			[Vector2(-k, -k), Vector2(k, -k), Vector2(k, k), Vector2(-k, k)], col)
+
+	func build(map: Dictionary, c0x: int, c0y: int, c1x: int, c1y: int) -> void:
+		var TILE: float = C.TILE
+		var PAL: Dictionary = C.PAL
+		var cols: int = map.cols
+		var terr: PackedByteArray = map.terrain
+		var grass := [Palette.withAlpha(PAL.grassShade, 0.72), Palette.withAlpha(PAL.grassDark, 0.72), Palette.withAlpha("#84bd57", 0.72)]
+		var hill: Color = Ctx.parse_color("rgba(147,173,99,0.6)")
+		var marsh: Color = Ctx.parse_color("rgba(109,122,74,0.55)")
+		var shadowC: Color = Ctx.parse_color("rgba(22,36,15,0.72)")
+		var hiC: Color = Ctx.parse_color("rgba(143,199,106,0.4)")
+		var rockC: Color = Ctx.parse_color("rgba(181,175,163,0.5)")
+		var snowC: Color = Ctx.parse_color("rgba(255,255,255,0.45)")
+		var sandC: Color = Ctx.parse_color("rgba(181,175,163,0.4)")
+		var dirtC: Color = Ctx.parse_color("rgba(148,119,77,0.45)")
+		for cy in range(c0y, c1y + 1):
+			for cx in range(c0x, c1x + 1):
+				var t: int = terr[cy * cols + cx]
+				var ox := cx * TILE
+				var oy := cy * TILE
+				match t:
+					Terrain.Hill:
+						for i in 3:
+							var px := ox + TerrainArt.cellHash(cx, cy, i) * TILE
+							var py := oy + TerrainArt.cellHash(cx, cy, i + 7) * TILE
+							blade(px, py, px + 1, py - 3.5, 1.3, 2, hill)
+					Terrain.Grass, Terrain.GrassDark:
+						for tone in 3:
+							for i in range(tone, 4, 3):
+								var px := ox + TerrainArt.cellHash(cx, cy, i) * TILE
+								var py := oy + TerrainArt.cellHash(cx, cy, i + 7) * TILE
+								var hgt := 3 + TerrainArt.cellHash(cx, cy, i + 13) * 3.5
+								blade(px, py, px, py - hgt, 1.3, 0, grass[tone])
+					Terrain.Forest:
+						for i in 3:
+							var px := ox + 7 + TerrainArt.cellHash(cx, cy, i) * (TILE - 14)
+							var py := oy + 7 + TerrainArt.cellHash(cx, cy, i + 3) * (TILE - 14)
+							var r := 6.5 + TerrainArt.cellHash(cx, cy, i + 11) * 3
+							disc(px + 1, py + 2.5, r, shadowC)
+							disc(px, py - 1, r * 0.86, Palette.withAlpha(Palette.shade(PAL.foliage3, TerrainArt.cellHash(cx, cy, i + 5) * 0.2 - 0.04), 0.96))
+							disc(px - r * 0.32, py - r * 0.45, r * 0.3, hiC)
+					Terrain.Rock:
+						for i in 3:
+							var px := ox + 4 + TerrainArt.cellHash(cx, cy, i) * (TILE - 8)
+							var py := oy + 4 + TerrainArt.cellHash(cx, cy, i + 7) * (TILE - 8)
+							var r := 2 + TerrainArt.cellHash(cx, cy, i + 13) * 3
+							discs.tri(Vector2(px - r, py + r * 0.6), Vector2(px - r * 0.3, py - r), Vector2(px + r, py + r * 0.2), rockC)
+					Terrain.Dirt, Terrain.Sand, Terrain.Snow:
+						var col: Color = snowC if t == Terrain.Snow else (sandC if t == Terrain.Sand else dirtC)
+						for i in 2:
+							var px := ox + TerrainArt.cellHash(cx, cy, i) * TILE
+							var py := oy + TerrainArt.cellHash(cx, cy, i + 7) * TILE
+							var r := 0.9 + TerrainArt.cellHash(cx, cy, i + 13) * 1.3
+							disc(px, py, r, col)
+					Terrain.Marsh:
+						for i in 3:
+							var px := ox + TerrainArt.cellHash(cx, cy, i) * TILE
+							var py := oy + TerrainArt.cellHash(cx, cy, i + 7) * TILE
+							var hgt := 5 + TerrainArt.cellHash(cx, cy, i + 13) * 4
+							blade(px, py, px, py - hgt, 1.0, 1, marsh)
+					_:
+						pass # water and shallows have their own glints
 
 
-## Grass: tip.x += sin(time * 0.7 + cx * 0.4 + cy * 0.3) * 1.1; marsh reeds:
-## sin(time * 1.1 + cx * 0.5) * 2 (drawGroundDetail's sway). uv.x carries the
-## cell's phase; uv.y how far up the blade (0..1), plus 2 for a reed. Anything
-## that isn't a blade has uv.y = 0 and never moves.
-const SWAY_SHADER := """
+static var _shaders := {}
+
+
+static func _shader(key: String, code: String) -> Shader:
+	if not _shaders.has(key):
+		var sh := Shader.new()
+		sh.code = code
+		_shaders[key] = sh
+	return _shaders[key]
+
+
+## A blade: across-coordinate antialiasing (|a| = 1 at the stroke's edge), and
+## the sway — grass tip.x += sin(time·0.7 + cx·0.4 + cy·0.3)·1.1, a reed's
+## sin(time·1.1 + cx·0.5)·2 (drawGroundDetail's) — for the tip vertices,
+## with the blade's cell found from its root.
+const BLADE_SHADER := """
 shader_type canvas_item;
 uniform float time;
+uniform float tile;
+varying float across;
 void vertex() {
-	bool reed = UV.y > 1.5;
-	float up = reed ? UV.y - 2.0 : UV.y;
-	float s = reed ? sin(time * 1.1 + UV.x) * 2.0 : sin(time * 0.7 + UV.x) * 1.1;
-	VERTEX.x += s * up;
+	float kind = floor(UV.x / 10.0 + 0.5);
+	across = UV.x - kind * 10.0;
+	float up = UV.y;
+	if (up > 0.0001 && kind < 1.5) {
+		float hw = kind > 0.5 ? 0.5 : 0.65;
+		float rx = VERTEX.x - across * hw;
+		float ry = VERTEX.y + up;
+		float cx = floor(rx / tile);
+		float cy = floor(ry / tile);
+		VERTEX.x += kind > 0.5 ? sin(time * 1.1 + cx * 0.5) * 2.0 : sin(time * 0.7 + cx * 0.4 + cy * 0.3) * 1.1;
+	}
+}
+void fragment() {
+	float fw = max(fwidth(across), 1e-5);
+	COLOR.a *= clamp((1.0 - abs(across)) / fw + 0.5, 0.0, 1.0);
+}
+"""
+
+## A disc: radial antialiasing (|uv| = 1 at the rim); plain triangles carry
+## uv = 0 and fill solid.
+const DISC_SHADER := """
+shader_type canvas_item;
+void fragment() {
+	float d = length(UV);
+	float fw = fwidth(d);
+	if (fw > 1e-6) COLOR.a *= clamp((1.0 - d) / fw + 0.5, 0.0, 1.0);
 }
 """

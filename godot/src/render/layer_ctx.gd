@@ -51,6 +51,12 @@ func external(item: RID, modulate: Color = Color.WHITE) -> void:
 	_seg_dirty = true
 
 
+## Stop tracking an external item (call before freeing it).
+func forget(item: RID) -> void:
+	_externals.erase(item)
+	_prev_externals.erase(item)
+
+
 ## The device transform in force (user → canvas pixels).
 func device_transform() -> Transform2D:
 	return _xf

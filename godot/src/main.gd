@@ -127,7 +127,7 @@ var perf := {
 	"frameMs": 16.7, "worstFrameMs": 0.0, "tickMs": 0.0, "worstTickMs": 0.0,
 	"ticksThisFrame": 0, "ticksLastFrame": 1, "slipT": 0.0, "autoLod": false, "worstReset": 0.0,
 	# Godot: the main thread's own CPU time per frame, and its parts.
-	"cpuMs": 0.0, "renderMs": 0.0, "uiMs": 0.0, "skipped": 0,
+	"cpuMs": 0.0, "renderMs": 0.0, "uiMs": 0.0, "eventsMs": 0.0, "inputMs": 0.0, "skipped": 0,
 }
 ## Where the last thing that happened to you happened (AoE's Space key).
 var lastEvent = null
@@ -231,6 +231,11 @@ var _cursorTex := {}
 ## Frame log for benchmarks: each frame's {dt, cpu, render, ui, tick, skipped}.
 var frameLog: Array = []
 var logFrames := false
+var _frameTicks := 0
+var _frameWorstTick := 0.0
+var _lastProcUs := 0
+var _lastMisses := 0
+var _lastFallbacks := 0
 
 
 # ================================================================== setup ==
@@ -251,6 +256,9 @@ func _ready() -> void:
 	add_child(uiLayer)
 	ctx = LayerCtx.new()
 	renderer = Renderer.new(LayerCtx.new(), LayerCtx.new())
+	# New figures for the art cache get at most this much of a frame (ms);
+	# past it they stand in neutral or as blobs for a frame (see ArtCache).
+	ArtCache.frame_budget_ms = 5.0
 	for i in 10:
 		controlGroups.append([])
 	if ResourceLoader.exists("res://src/ai/skirmish_ai.gd"):
@@ -939,7 +947,10 @@ func _prewarm() -> void:
 	for t in world.numTeams:
 		renderer.snap.factions[t] = world.player(t).faction
 	Draw.setFactionResolver(renderer._factionResolver)
-	ArtCache.prewarmUnits(["villager", "militia", "spearman", "archer", "scout"], teams, camera.zoom)
+	# Every realm's villagers (all of them are on the field from the start),
+	# and the first soldiers of your own.
+	ArtCache.prewarmUnits(["villager"], teams, camera.zoom)
+	ArtCache.prewarmUnits(["militia", "spearman", "archer", "scout"], [me], camera.zoom)
 
 
 ## Write the match out: its setup, every order given, and a hash of where the
@@ -1971,12 +1982,21 @@ func _process(delta: float) -> void:
 
 func _logFrame(dt: float, t0: int, skipped: bool) -> void:
 	var cpu := (Time.get_ticks_usec() - t0) / 1000.0
+	# The real interval since the last frame (dt is clamped to 0.1 s).
+	var interval := (t0 - _lastProcUs) / 1000.0 if _lastProcUs > 0 else dt * 1000.0
+	_lastProcUs = t0
 	perf.cpuMs += (cpu - perf.cpuMs) * 0.1
 	if skipped:
 		perf.skipped += 1
 	if logFrames:
-		frameLog.append({"dt": dt * 1000.0, "cpu": cpu, "render": renderer.lastRenderMs, "snapshot": renderer.lastSnapshotMs,
-			"ui": perf.uiMs, "skipped": skipped, "tick": perf.tickMs, "worstTick": _taskWorstMs})
+		frameLog.append({"dt": interval, "cpu": cpu, "render": renderer.lastRenderMs, "snapshot": renderer.lastSnapshotMs,
+			"ui": perf.uiMs, "events": perf.eventsMs, "input": perf.inputMs, "skipped": skipped, "tick": perf.tickMs, "worstTick": _taskWorstMs,
+			"ticks": _frameTicks, "frameWorstTick": _frameWorstTick, "phases": renderer.phaseMs.duplicate(),
+			"misses": ArtCache.misses - _lastMisses, "fallbacks": ArtCache.fallbacks - _lastFallbacks})
+		_lastMisses = ArtCache.misses
+		_lastFallbacks = ArtCache.fallbacks
+	_frameTicks = 0
+	_frameWorstTick = 0.0
 
 
 func frameBody(dt: float) -> void:
@@ -2395,10 +2415,13 @@ func matchFrame(dt: float, W: float, H: float) -> void:
 				if cost > perf.worstTickMs:
 					perf.worstTickMs = cost
 				perf.ticksThisFrame += 1
+				_frameTicks += 1
+				_frameWorstTick = maxf(_frameWorstTick, cost)
 				accumulator -= SIM_DT
 				steps += 1
 			if steps == maxSteps:
 				accumulator = 0 # drop time if we can't keep up
+	var tEv := Time.get_ticks_usec()
 	var events := w.drainEvents()
 	if spectating:
 		caster.onEvents(w, events, playerNames)
@@ -2446,6 +2469,8 @@ func matchFrame(dt: float, W: float, H: float) -> void:
 		l.age += dt
 	builderLines = builderLines.filter(func(l): return l.age < 1.6)
 	renderer.builderLines = builderLines
+
+	perf.eventsMs = (Time.get_ticks_usec() - tEv) / 1000.0
 
 	# ---- ghost placement validity ----
 	var ghost = null
@@ -2624,6 +2649,7 @@ func matchFrame(dt: float, W: float, H: float) -> void:
 	ui.popScale()
 	perf.uiMs = (Time.get_ticks_usec() - tUi) / 1000.0
 
+	var tIn := Time.get_ticks_usec()
 	updateCursor(w, renderHovered)
 	hud.shiftHeld = input.shift
 
@@ -2647,6 +2673,8 @@ func matchFrame(dt: float, W: float, H: float) -> void:
 				var wx := camera.screenToWorldX(frameRight.x)
 				var wy := camera.screenToWorldY(frameRight.y)
 				issueContextCommand(wx, wy, frameRight)
+
+	perf.inputMs = (Time.get_ticks_usec() - tIn) / 1000.0
 
 	# ---- victory / defeat ----
 	if spectating:
@@ -2765,9 +2793,14 @@ func _skipFrame(dt: float) -> void:
 		accumulator += dt * gameSpeed
 	particles.update(dt)
 	combatHeat *= pow(0.5, dt / 3)
+	audio.updateMusic(dt, not ingameMenu, 0.0 if ingameMenu else combatHeat)
 	for m in markers:
 		m.age += dt
 	markers = markers.filter(func(m): return m.age < 0.7)
+	for l in builderLines:
+		l.age += dt
+	builderLines = builderLines.filter(func(l): return l.age < 1.6)
+	renderer.builderLines = builderLines
 	var W := float(canvasW)
 	var H := float(canvasH)
 	_moveCamera(dt, W, H)
@@ -2790,6 +2823,8 @@ func _joinTask() -> void:
 	WorkerThreadPool.wait_for_task_completion(_task)
 	_task = -1
 	perf.ticksThisFrame += _taskTickCount
+	_frameTicks += _taskTickCount
+	_frameWorstTick = maxf(_frameWorstTick, _taskWorstMs)
 	if _taskTickCount > 0:
 		var avg := _taskSumMs / _taskTickCount
 		perf.tickMs += (avg - perf.tickMs) * minf(1.0, 0.12 * _taskTickCount)
@@ -3086,12 +3121,14 @@ func drawPlacementPanel(W: float, H: float) -> void:
 		w = maxf(w, ctx.measureText(r.text).width)
 	w += 20
 	var h := rows.size() * 18.0 + 10
-	var x := input.mx / uiScale() + 22
-	var y := input.my / uiScale() + 18
+	# (The TS places it from the pointer in canvas pixels while drawing in the
+	# scaled interface space — off by the UI scale when that isn't 1; kept.)
+	var x := input.mx + 22
+	var y := input.my + 18
 	if x + w > W - 8:
-		x = input.mx / uiScale() - w - 16
+		x = input.mx - w - 16
 	if y + h > H - 8:
-		y = input.my / uiScale() - h - 12
+		y = input.my - h - 12
 	ctx.fillStyle = "rgba(12,9,5,0.86)"
 	ctx.beginPath(); ctx.roundRect(x, y, w, h, 6); ctx.fill()
 	ctx.strokeStyle = Palette.withAlpha(PAL.uiBad, 0.6) if info.problem != null else Palette.withAlpha(PAL.uiAccent, 0.4)

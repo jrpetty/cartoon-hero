@@ -110,6 +110,8 @@ var dayPhase := 0.18 ## 0..1 around the day/night cycle
 var aggressiveLod := false ## "Reduce effects" → simplify units sooner
 var waterCells := PackedFloat64Array() ## [x0,y0,x1,y1,...] water cell centres
 var vignetteItem := RID()
+var fxItem := RID()  ## particles, batched
+var decalItem := RID()  ## decals, batched
 var vignetteMat: ShaderMaterial = null
 var vignetteSize := Vector2i.ZERO
 var nightLayer := Nightlight.NightLayer.new()
@@ -123,6 +125,9 @@ var ghostEntity: Entity = null
 ## Per-frame costs (ms), for the performance overlay.
 var lastSnapshotMs := 0.0
 var lastRenderMs := 0.0
+## Where render()'s time went last frame, by phase (ms), for profiling.
+var phaseMs := {}
+var _pt := 0
 
 
 func _init(world_ctx: LayerCtx = null, overlay_ctx: LayerCtx = null) -> void:
@@ -207,6 +212,8 @@ func addShake(amp: float) -> void:
 func prepare(map: Dictionary) -> void:
 	terrainCache = TerrainArt.buildTerrainCache(map)
 	terrainScale = TerrainArt.terrainCacheScale(map)
+	if detail != null:
+		ctx.forget(detail.root)
 	detail = TerrainArt.GroundDetail.new(map)
 	fogLayer = null
 	fogTex = null
@@ -514,8 +521,18 @@ func drawGhost(ctx: Ctx, ghost, time: float) -> void:
 
 # ------------------------------------------------------------ decals, text --
 
+## The decals, each shape as one textured quad on a retained item (`ctx`
+## must be a LayerCtx; with a plain Ctx they draw as the TS does, shape by
+## shape). Same shapes, colours and fades as the TS: a corpse is three
+## ellipses, an arrow a stroke, a scorch an ellipse.
 func drawDecals(ctx: Ctx, dt: float, vx0: float, vy0: float, vx1: float, vy1: float) -> void:
 	var PAL: Dictionary = C.PAL
+	var batch := ctx is LayerCtx
+	if batch:
+		if not decalItem.is_valid():
+			decalItem = _fxItem()
+		RenderingServer.canvas_item_clear(decalItem)
+	var disc := _discTex().get_rid()
 	var i := decals.size() - 1
 	while i >= 0:
 		var d: FxDecal = decals[i]
@@ -528,34 +545,117 @@ func drawDecals(ctx: Ctx, dt: float, vx0: float, vy0: float, vx1: float, vy1: fl
 		if d.x < vx0 or d.x > vx1 or d.y < vy0 or d.y > vy1:
 			continue
 		var fade := minf(1, (d.life - d.age) / 2.5)
-		ctx.globalAlpha = fade
+		if not batch:
+			_drawDecalShapes(ctx, d, fade)
+			continue
 		if d.kind == "corpse":
-			ctx.fillStyle = "rgba(26, 18, 12, 0.5)"
-			ctx.beginPath()
-			ctx.ellipse(d.x, d.y + 2, d.size, d.size * 0.45, 0, 0, PI * 2)
-			ctx.fill()
 			var tc := Palette.teamColor(d.team)
-			ctx.fillStyle = Palette.withAlpha(tc.dark, 0.8)
-			ctx.beginPath()
-			ctx.ellipse(d.x, d.y, d.size * 0.7, d.size * 0.42, d.angle, 0, PI * 2)
-			ctx.fill()
-			ctx.fillStyle = Palette.withAlpha(PAL.blood, 0.35)
-			ctx.beginPath()
-			ctx.ellipse(d.x + cos(d.angle) * d.size * 0.5, d.y + sin(d.angle) * d.size * 0.3, d.size * 0.9, d.size * 0.4, d.angle, 0, PI * 2)
-			ctx.fill()
+			_ellipse(disc, d.x, d.y + 2, d.size, d.size * 0.45, 0, Color(26 / 255.0, 18 / 255.0, 12 / 255.0, 0.5 * fade))
+			_ellipse(disc, d.x, d.y, d.size * 0.7, d.size * 0.42, d.angle, Palette.withAlpha(tc.dark, 0.8 * fade))
+			_ellipse(disc, d.x + cos(d.angle) * d.size * 0.5, d.y + sin(d.angle) * d.size * 0.3, d.size * 0.9, d.size * 0.4, d.angle, Palette.withAlpha(PAL.blood, 0.35 * fade))
 		elif d.kind == "arrow":
-			ctx.strokeStyle = "rgba(90, 70, 45, 0.9)"
-			ctx.lineWidth = 1.4
-			ctx.beginPath()
-			ctx.moveTo(d.x, d.y)
-			ctx.lineTo(d.x + cos(d.angle) * d.size, d.y + sin(d.angle) * d.size - 5)
-			ctx.stroke()
+			RenderingServer.canvas_item_add_set_transform(decalItem, Transform2D.IDENTITY)
+			RenderingServer.canvas_item_add_line(decalItem, Vector2(d.x, d.y),
+				Vector2(d.x + cos(d.angle) * d.size, d.y + sin(d.angle) * d.size - 5), Color(90 / 255.0, 70 / 255.0, 45 / 255.0, 0.9 * fade), 1.4, true)
 		else:
-			ctx.fillStyle = "rgba(18, 14, 10, 0.5)"
-			ctx.beginPath()
-			ctx.ellipse(d.x, d.y, d.size, d.size * 0.6, 0, 0, PI * 2)
-			ctx.fill()
+			_ellipse(disc, d.x, d.y, d.size, d.size * 0.6, 0, Color(18 / 255.0, 14 / 255.0, 10 / 255.0, 0.5 * fade))
+	if batch:
+		(ctx as LayerCtx).external(decalItem)
+
+
+## One decal, through the Ctx, exactly as the TS draws it.
+func _drawDecalShapes(ctx: Ctx, d: FxDecal, fade: float) -> void:
+	var PAL: Dictionary = C.PAL
+	ctx.globalAlpha = fade
+	if d.kind == "corpse":
+		ctx.fillStyle = "rgba(26, 18, 12, 0.5)"
+		ctx.beginPath()
+		ctx.ellipse(d.x, d.y + 2, d.size, d.size * 0.45, 0, 0, PI * 2)
+		ctx.fill()
+		var tc := Palette.teamColor(d.team)
+		ctx.fillStyle = Palette.withAlpha(tc.dark, 0.8)
+		ctx.beginPath()
+		ctx.ellipse(d.x, d.y, d.size * 0.7, d.size * 0.42, d.angle, 0, PI * 2)
+		ctx.fill()
+		ctx.fillStyle = Palette.withAlpha(PAL.blood, 0.35)
+		ctx.beginPath()
+		ctx.ellipse(d.x + cos(d.angle) * d.size * 0.5, d.y + sin(d.angle) * d.size * 0.3, d.size * 0.9, d.size * 0.4, d.angle, 0, PI * 2)
+		ctx.fill()
+	elif d.kind == "arrow":
+		ctx.strokeStyle = "rgba(90, 70, 45, 0.9)"
+		ctx.lineWidth = 1.4
+		ctx.beginPath()
+		ctx.moveTo(d.x, d.y)
+		ctx.lineTo(d.x + cos(d.angle) * d.size, d.y + sin(d.angle) * d.size - 5)
+		ctx.stroke()
+	else:
+		ctx.fillStyle = "rgba(18, 14, 10, 0.5)"
+		ctx.beginPath()
+		ctx.ellipse(d.x, d.y, d.size, d.size * 0.6, 0, 0, PI * 2)
+		ctx.fill()
 	ctx.globalAlpha = 1
+
+
+func _ellipse(disc: RID, x: float, y: float, rx: float, ry: float, rot: float, col: Color) -> void:
+	RenderingServer.canvas_item_add_set_transform(decalItem, Transform2D(rot, Vector2(rx, ry), 0.0, Vector2(x, y)))
+	RenderingServer.canvas_item_add_texture_rect(decalItem, Rect2(-1, -1, 2, 2), disc, false, col)
+
+
+## A retained item for batched effects: textures filtered with mipmaps, so a
+## disc shrunk to a few pixels stays a soft disc.
+func _fxItem() -> RID:
+	var it := RenderingServer.canvas_item_create()
+	RenderingServer.canvas_item_set_default_texture_filter(it, RenderingServer.CANVAS_ITEM_TEXTURE_FILTER_LINEAR_WITH_MIPMAPS)
+	return it
+
+
+static var _disc: ImageTexture = null
+static var _glow: ImageTexture = null
+
+
+## A white antialiased disc filling its square (with mipmaps).
+static func _discTex() -> ImageTexture:
+	if _disc == null:
+		var n := 64
+		var img := Image.create(n, n, false, Image.FORMAT_RGBA8)
+		var r := n / 2.0
+		for y in n:
+			for x in n:
+				var d := Vector2(x + 0.5 - r, y + 0.5 - r).length()
+				img.set_pixel(x, y, Color(1, 1, 1, clampf(r - d, 0.0, 1.0)))
+		img.generate_mipmaps()
+		_disc = ImageTexture.create_from_image(img)
+	return _disc
+
+
+## A white gaussian blob (σ = a third of its radius), for glows.
+static func _glowTex() -> ImageTexture:
+	if _glow == null:
+		var n := 64
+		var img := Image.create(n, n, false, Image.FORMAT_RGBA8)
+		var r := n / 2.0
+		var sig := r / 3.0
+		for y in n:
+			for x in n:
+				var d := Vector2(x + 0.5 - r, y + 0.5 - r).length()
+				img.set_pixel(x, y, Color(1, 1, 1, exp(-d * d / (2 * sig * sig)) if d < r else 0.0))
+		img.generate_mipmaps()
+		_glow = ImageTexture.create_from_image(img)
+	return _glow
+
+
+static var _colorCache := {}
+
+
+static func _color(c) -> Color:
+	if c is Color:
+		return c
+	var k = _colorCache.get(c)
+	if k == null:
+		var p = Ctx.parse_color(c)
+		k = p if p != null else Color.WHITE
+		_colorCache[c] = k
+	return k
 
 
 func drawFloaters(ctx: Ctx, dt: float) -> void:
@@ -590,6 +690,7 @@ func drawFloaters(ctx: Ctx, dt: float) -> void:
 func render(world: Snapshot, cam: Camera, particles: Particles, dt: float, time: float, viewTeam: int,
 		markers: Array, ghost, dragBox: Dictionary, rallyFrom: Array, hoveredId: int = -1, alpha: float = 1.0) -> void:
 	var t0 := Time.get_ticks_usec()
+	_pt = t0
 	var W: float = ctx.canvas.width
 	var H: float = ctx.canvas.height
 	var PAL: Dictionary = C.PAL
@@ -650,7 +751,9 @@ func render(world: Snapshot, cam: Camera, particles: Particles, dt: float, time:
 			ctx.external(detail.root, Color(1, 1, 1, strength))
 
 	# Ground decals (corpses, arrows, scorch) sit on the terrain, under units.
+	_phase("ground")
 	drawDecals(ctx, dt, vx0, vy0, vx1, vy1)
+	_phase("decals")
 
 	# Living water: drifting glints on visible water cells. Each cell twinkles
 	# on its own phase; cheap because it's culled to the viewport.
@@ -728,6 +831,7 @@ func render(world: Snapshot, cam: Camera, particles: Particles, dt: float, time:
 		ctx.fill()
 		ctx.restore()
 
+	_phase("water+banners")
 	# The drawable entities (y-sorted when the snapshot was taken), culled to
 	# this frame's view, and tweened toward this frame's fraction between sim
 	# ticks so motion is smooth at 60fps over the 20Hz sim. The proxies take
@@ -759,6 +863,7 @@ func render(world: Snapshot, cam: Camera, particles: Particles, dt: float, time:
 	var crowdCut := 160 if aggressiveLod else 340
 	var lod := 1 if cam.zoom < zoomCut or drawables.size() > crowdCut else 0
 
+	_phase("cull")
 	# Selection rings under everything else.
 	for e: Entity in drawables:
 		if e.selected:
@@ -795,6 +900,7 @@ func render(world: Snapshot, cam: Camera, particles: Particles, dt: float, time:
 		ctx.arc(rf.rallyX, rf.rallyY, 5, 0, PI * 2)
 		ctx.fill()
 
+	_phase("rings+rally")
 	# Lights are gathered while the entities are at their drawn (interpolated)
 	# positions, so a lantern never trails the unit carrying it.
 	lights.clear()
@@ -819,6 +925,7 @@ func render(world: Snapshot, cam: Camera, particles: Particles, dt: float, time:
 			if li != null:
 				lights.append(li)
 
+	_phase("entities")
 	# Health bars for hovered, selected or recently-damaged entities. Zoomed
 	# out (lod), only the selected get one — the rest are too small to read.
 	for e: Entity in drawables:
@@ -831,27 +938,39 @@ func render(world: Snapshot, cam: Camera, particles: Particles, dt: float, time:
 			continue
 		Draw.drawHealthBar(ctx, e)
 
-	# Particles.
+	_phase("healthbars")
+	# Particles. Each a disc, and a glowing one its canvas shadow (blur 8 px:
+	# the disc blurred by a gaussian of σ = 4 px) — one or two textured quads
+	# on a retained item rather than tessellated circles and shadow layers.
+	if not fxItem.is_valid():
+		fxItem = _fxItem()
+	RenderingServer.canvas_item_clear(fxItem)
+	var disc := _discTex().get_rid()
+	var glow := _glowTex().get_rid()
+	var sigW := 4.0 / cam.zoom  # the shadow's σ, in world units
 	for p: Particles.Particle in particles.pool:
 		if not p.active:
 			continue
 		if p.x < vx0 or p.x > vx1 or p.y < vy0 or p.y > vy1:
 			continue
 		var lifeFrac := p.life / p.maxLife if p.maxLife > 0 else 0.0
-		ctx.globalAlpha = clampf(lifeFrac, 0, 1) if p.fade else 1.0
+		var a := clampf(lifeFrac, 0, 1) if p.fade else 1.0
 		var rawSize := p.size * lifeFrac if p.shrink else p.size
 		var size := maxf(0.4, rawSize) if is_finite(rawSize) else 0.4
-		ctx.fillStyle = p.color
+		var col := _color(p.color)
+		col.a *= a
 		if p.glow:
-			ctx.shadowColor = p.color
-			ctx.shadowBlur = 8
-		ctx.beginPath()
-		ctx.arc(p.x, p.y, size, 0, PI * 2)
-		ctx.fill()
-		if p.glow:
-			ctx.shadowBlur = 0
-	ctx.globalAlpha = 1
+			# A blurred disc is close to a gaussian of σ' = √(σ² + r²/4),
+			# peaking at 1 − e^(−r²/2σ²).
+			var sg := sqrt(sigW * sigW + size * size / 4.0)
+			var ext := sg * 3.0
+			var g := col
+			g.a *= 1.0 - exp(-size * size / (2.0 * sigW * sigW))
+			RenderingServer.canvas_item_add_texture_rect(fxItem, Rect2(p.x - ext, p.y - ext, ext * 2, ext * 2), glow, false, g)
+		RenderingServer.canvas_item_add_texture_rect(fxItem, Rect2(p.x - size, p.y - size, size * 2, size * 2), disc, false, col)
+	ctx.external(fxItem)
 
+	_phase("particles")
 	# Floating combat numbers above the fray.
 	drawFloaters(ctx, dt)
 
@@ -867,6 +986,7 @@ func render(world: Snapshot, cam: Camera, particles: Particles, dt: float, time:
 		ctx.arc(m.x, m.y, r, 0, PI * 2)
 		ctx.stroke()
 
+	_phase("floaters+markers")
 	# Fog of war overlay (skipped entirely for spectators — they see all).
 	fogDirtyTimer -= dt
 	if not world.revealAll and fogLayer != null:
@@ -889,6 +1009,7 @@ func render(world: Snapshot, cam: Camera, particles: Particles, dt: float, time:
 
 	ctx.restore()
 
+	_phase("fog+ghost")
 	# ---- screen-space overlays ----
 	# Day/night sky over the whole battlefield (screen space, under HUD). By
 	# day it is a plain tint; at night the lights gathered above cut through it.
@@ -923,6 +1044,7 @@ func render(world: Snapshot, cam: Camera, particles: Particles, dt: float, time:
 		var h := absf(dragBox.y1 - dragBox.y0)
 		octx.fillRect(x, y, w, h)
 		octx.strokeRect(x, y, w, h)
+	_phase("overlays")
 	lastRenderMs = (Time.get_ticks_usec() - t0) / 1000.0
 
 
@@ -969,3 +1091,9 @@ func free_gpu() -> void:
 	terrainCache = null
 	detail = null
 	fogLayer = null
+
+
+func _phase(name: String) -> void:
+	var t := Time.get_ticks_usec()
+	phaseMs[name] = (t - _pt) / 1000.0
+	_pt = t

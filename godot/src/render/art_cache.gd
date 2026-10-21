@@ -33,6 +33,12 @@ class_name ArtCache
 static var enabled := true
 ## No per-frame drawing budget (contact sheets, tools): every miss is drawn.
 static var unlimited := false
+## Also stop drawing new cells once this frame has spent this long drawing
+## them (ms) — a burst of new poses then costs a bounded slice of the frame
+## instead of up to MAX_RENDERS_PER_FRAME procedural drawings. 0 = count only.
+## (The match shell sets it.)
+static var frame_budget_ms := 0.0
+static var _frame_us := 0
 
 const PAGE_SIZE := 2048
 const MAX_PAGES := 6
@@ -96,11 +102,17 @@ static func _tick() -> void:
 	if f != _frame:
 		_frame = f
 		_renders = 0
+		_frame_us = 0
 
 
 ## Past this frame's allowance of new drawings (plus `extra`)?
 static func _over_budget(extra: int = 0) -> bool:
-	return not unlimited and _renders >= MAX_RENDERS_PER_FRAME + extra
+	if unlimited:
+		return false
+	# The time budget (stand-ins, `extra`, get as long again).
+	if frame_budget_ms > 0.0 and _frame_us > frame_budget_ms * (2000.0 if extra > 0 else 1000.0):
+		return true
+	return _renders >= MAX_RENDERS_PER_FRAME + extra
 
 
 static func _level_for(s: float) -> float:
@@ -510,6 +522,13 @@ static func drawResource(ctx: Ctx, e: Entity, time: float) -> bool:
 ## drawn around (0,0 for figures drawn in local space, the entity's position
 ## for buildings and resources, whose art uses world coordinates).
 static func _render(key, lv: float, origin: Vector2, draw_it: Callable) -> Cell:
+	var t0 := Time.get_ticks_usec()
+	var cell := _render_cell(key, lv, origin, draw_it)
+	_frame_us += Time.get_ticks_usec() - t0
+	return cell
+
+
+static func _render_cell(key, lv: float, origin: Vector2, draw_it: Callable) -> Cell:
 	_rendering = true
 	# 1. How big is it? (device pixels at this level, relative to the origin)
 	if _measure == null:

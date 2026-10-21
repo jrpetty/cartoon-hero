@@ -112,6 +112,8 @@ func tap(keycode: Key, shift: bool = false, ctrl: bool = false) -> void:
 
 
 func shot(name: String) -> void:
+	if DisplayServer.get_name() == "headless":
+		return # nothing is rendered
 	await RenderingServer.frame_post_draw
 	var img := get_viewport().get_texture().get_image()
 	var path := outDir.path_join(name + ".png")
