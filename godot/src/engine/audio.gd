@@ -21,13 +21,14 @@ var muted := false
 
 var _bank: Dictionary = {}  # name -> Array[AudioStreamWAV]
 var _music_cache: Dictionary = {}  # key -> AudioStreamWAV
+var _music_pending: Dictionary = {}  # key -> true while a worker renders it
+var _tasks: Array = []  # worker tasks still to be waited on
 var _sfx_players: Array = []
 var _music_players: Array = []
 var _next_sfx := 0
 var _next_music := 0
 var _mutex := Mutex.new()
 var _rng := RandomNumberGenerator.new()
-var _bank_task := -1
 
 const SFX_NAMES := ["select", "command", "build", "complete", "sword", "bow", "arrowHit", "siege",
 	"collapse", "death", "alert", "ui", "coin", "tick", "reveal", "levelup"]
@@ -60,15 +61,25 @@ func _ready() -> void:
 	applyVolumes()
 	# Render the effect bank in the background; play() skips anything not ready.
 	if DisplayServer.get_name() != "headless":
-		_bank_task = WorkerThreadPool.add_task(_render_bank, false, "audio bank")
+		_tasks.append(WorkerThreadPool.add_task(_render_bank, false, "audio bank"))
 
 
-## Quitting while the bank is still rendering must wait for it: the worker
-## calls into this node.
+## Finish the rendering threads before the node goes: a task still running
+## would call into a freed node at exit.
 func _exit_tree() -> void:
-	if _bank_task >= 0:
-		WorkerThreadPool.wait_for_task_completion(_bank_task)
-		_bank_task = -1
+	for id in _tasks:
+		WorkerThreadPool.wait_for_task_completion(id)
+	_tasks.clear()
+
+
+func _reap_tasks() -> void:
+	var keep: Array = []
+	for id in _tasks:
+		if WorkerThreadPool.is_task_completed(id):
+			WorkerThreadPool.wait_for_task_completion(id)
+		else:
+			keep.append(id)
+	_tasks = keep
 
 
 func _ensure_bus(bus_name: String) -> void:
@@ -321,6 +332,8 @@ func updateMusic(dt: float, playing: bool, intensity: float = 0.0) -> void:
 
 
 func _play_music(s: AudioStreamWAV) -> void:
+	if s == null:
+		return # not rendered yet: a rest
 	var p: AudioStreamPlayer = _music_players[_next_music]
 	_next_music = (_next_music + 1) % _music_players.size()
 	p.stream = s
@@ -345,10 +358,27 @@ func _swell(freq: float, ty: String, peak: float, rise: float, end: float, stop:
 	return buf
 
 
+## A rendered phrase, or null while it is still being rendered. Rendering a
+## phrase in GDScript takes up to ~0.2 s, which used to stall the frame every
+## time the music reached a chord it hadn't played yet; so a missing phrase is
+## rendered on a worker thread and this play is skipped — the music is
+## generative, and a note not ready yet is simply a rest.
 func _cached(key: String, make: Callable) -> AudioStreamWAV:
-	if not _music_cache.has(key):
-		_music_cache[key] = _to_stream(make.call())
-	return _music_cache[key]
+	_mutex.lock()
+	var s = _music_cache.get(key)
+	var start: bool = s == null and not _music_pending.has(key)
+	if start:
+		_music_pending[key] = true
+	_mutex.unlock()
+	if start:
+		_reap_tasks()
+		_tasks.append(WorkerThreadPool.add_task(func():
+			var st := _to_stream(make.call())
+			_mutex.lock()
+			_music_cache[key] = st
+			_music_pending.erase(key)
+			_mutex.unlock(), false, "music phrase"))
+	return s
 
 
 func _layChord(semis: int, heat: float, dur: float) -> void:
@@ -383,7 +413,10 @@ func _drumHit(peak: float) -> void:
 		var buf := PackedFloat32Array()
 		buf.resize(int(0.28 * RATE))
 		_add_tone_drum(buf, p)
-		_add_noise(buf, 0, 0.12, p * 0.5, 220, "lowpass", _rng)
+		# Its own noise source: this runs on a worker (see _cached).
+		var rng := RandomNumberGenerator.new()
+		rng.seed = int(p * 1000.0)
+		_add_noise(buf, 0, 0.12, p * 0.5, 220, "lowpass", rng)
 		return buf))
 
 

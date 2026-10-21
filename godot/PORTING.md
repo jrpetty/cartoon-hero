@@ -129,6 +129,31 @@ top, so screens port line by line. Fonts: SystemFont (Trebuchet MS / Georgia
 as in the browser, with fallbacks). Performance work (caching unit art to
 textures, batching) happens under that layer, not by changing the screens.
 
+## The match shell (main.gd) and the frame
+
+- `src/main.gd` is the App (scenes/main.tscn). It draws three canvas layers,
+  bottom to top: the world (`renderer.ctx`, camera space), the screen-space
+  overlays (`renderer.octx`: night, vignette, drag box, weather) and the
+  interface (`UI.ui.ctx`). They are `LayerCtx`es: a Ctx that can splice
+  retained canvas items into its paint order (`external(item)`), which is how
+  the terrain texture, the ground-detail meshes, batched particles/decals and
+  the minimap's dots and fog are drawn without re-tessellating them per frame.
+- Screens owned by other modules (`screens.gd`, `career_screen.gd`, …) are
+  loaded dynamically (`_newScreen(path, TSClassName)`: an inner class of that
+  name, else the file's class). Keep TS method names and signatures; the App
+  calls them as the TS does. A missing screen gets a small placeholder.
+- **The simulation steps on a worker thread** in single-player
+  (WorkerThreadPool). Only one thread touches the World at a time: a frame
+  that owns it (no task in flight) handles input, events, the HUD and takes
+  `Renderer.snapshot()`; then hands the due ticks to a task. The renderer
+  draws from the snapshot, never the World, so a frame can be drawn while a
+  tick runs. **Anything that reads or changes the World must run in an owning
+  frame** (input handlers, HUD, `dispatch`) — never from the renderer, and
+  never from a frame drawn while a task is in flight (`_skipFrame`). Commands
+  are applied at tick boundaries and logged with their tick, exactly as in
+  the TS; `tests/test_main_loop.gd` checks threaded and main-thread play
+  replay to the same checksum. Net matches step on the main thread.
+
 ## Done means
 
 Ported, compiles without errors (warnings ok), and has tests: parity tests

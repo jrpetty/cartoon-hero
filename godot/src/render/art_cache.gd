@@ -33,6 +33,12 @@ class_name ArtCache
 static var enabled := true
 ## No per-frame drawing budget (contact sheets, tools): every miss is drawn.
 static var unlimited := false
+## Also stop drawing new cells once this frame has spent this long drawing
+## them (ms) — a burst of new poses then costs a bounded slice of the frame
+## instead of up to MAX_RENDERS_PER_FRAME procedural drawings. 0 = count only.
+## (The match shell sets it.)
+static var frame_budget_ms := 0.0
+static var _frame_us := 0
 
 const PAGE_SIZE := 2048
 const MAX_PAGES := 6
@@ -67,6 +73,13 @@ class Cell extends RefCounted:
 
 static var _pages: Array = []
 static var _cells := {}
+## The last cell each building / resource was shown with ("B|id", "C|id",
+## "R|id"): what stands in, over budget, for a frame it has no cell for yet —
+## the same thing a moment ago — rather than drawing it procedurally, which is
+## what the budget is there to avoid. Resources also keep one per type
+## ("R|type"), for one never drawn yet (a forest coming into view): another
+## tree of the kind, for the frame or two until there's time to draw its own.
+static var _stand := {}
 static var _frame := -1
 static var _renders := 0
 static var _rendering := false
@@ -89,6 +102,7 @@ static func clear() -> void:
 		_free_page(p)
 	_pages.clear()
 	_cells.clear()
+	_stand.clear()
 
 
 static func _tick() -> void:
@@ -96,11 +110,17 @@ static func _tick() -> void:
 	if f != _frame:
 		_frame = f
 		_renders = 0
+		_frame_us = 0
 
 
 ## Past this frame's allowance of new drawings (plus `extra`)?
 static func _over_budget(extra: int = 0) -> bool:
-	return not unlimited and _renders >= MAX_RENDERS_PER_FRAME + extra
+	if unlimited:
+		return false
+	# The time budget (stand-ins, `extra`, get as long again).
+	if frame_budget_ms > 0.0 and _frame_us > frame_budget_ms * (2000.0 if extra > 0 else 1000.0):
+		return true
+	return _renders >= MAX_RENDERS_PER_FRAME + extra
 
 
 static func _level_for(s: float) -> float:
@@ -321,9 +341,10 @@ static func drawUnitBase(ctx: Ctx, e: Entity, tc: Dictionary) -> bool:
 	var key := BASE_KEY + roundi(e.radius * 4.0) * 1048576 + _index(_tc_ix, tc.main) * 256 + li
 	var cell: Cell = _cells.get(key)
 	if cell == null:
-		if _over_budget():
-			fallbacks += 1
-			return false
+		# Drawn even over the frame's budget: there's one per size and colour
+		# (a few dozen in a match), and the alternative — a procedural shadow
+		# and ring under every unit that frame — costs far more than drawing
+		# the cell once.
 		var r := e.radius
 		var draw_it := func(c: Ctx) -> void:
 			Draw.shadow(c, 1, r * 0.55, r * 0.95, r * 0.42)
@@ -419,16 +440,18 @@ static func drawBuildingArt(ctx: Ctx, e: Entity, half: float, tc: Dictionary, ti
 		e.id, e.type, Draw.gFaction, tc.main, tc.light, half, 1 if e.gateOpen else 0,
 		_building_anim(e, time), night, lv]
 	var cell: Cell = _cells.get(key)
+	var sid := "B|%d|%s|%s" % [e.id, e.type, lv]
 	if cell == null:
 		if _over_budget():
 			fallbacks += 1
-			return false
+			return _standIn(ctx, sid, Vector2(e.x, e.y))
 		var draw_it := func(c: Ctx) -> void: Draw.drawBuildingArt(c, e, half, tc, time)
 		cell = _render(key, lv, Vector2(e.x, e.y), draw_it)
 		if cell == null:
 			return false
 	else:
 		hits += 1
+	_stand[sid] = cell
 	_blit(ctx, cell, Vector2(e.x, e.y))
 	return true
 
@@ -460,10 +483,11 @@ static func drawConstruction(ctx: Ctx, e: Entity, half: float, tc: Dictionary, t
 	var key := "C|%d|%s|%s|%s|%s|%d|%d|%d|%s" % [
 		e.id, e.type, Draw.gFaction, tc.main, half, e.buildState, qp, _building_anim(e, time), lv]
 	var cell: Cell = _cells.get(key)
+	var sid := "C|%d|%s|%s" % [e.id, e.type, lv]
 	if cell == null:
 		if _over_budget():
 			fallbacks += 1
-			return false
+			return _standIn(ctx, sid, Vector2(e.x, e.y))
 		var keep := e.buildProgress
 		e.buildProgress = qp / 32.0
 		var draw_it := func(c: Ctx) -> void: Draw.drawConstruction(c, e, half, tc, time)
@@ -473,6 +497,7 @@ static func drawConstruction(ctx: Ctx, e: Entity, half: float, tc: Dictionary, t
 			return false
 	else:
 		hits += 1
+	_stand[sid] = cell
 	_blit(ctx, cell, Vector2(e.x, e.y))
 	return true
 
@@ -490,17 +515,32 @@ static func drawResource(ctx: Ctx, e: Entity, time: float) -> bool:
 	var sway := roundi(sin(time * 0.8 + e.id) * 0.8 * 1.5) if e.type == "tree" else 0
 	var key := "R|%d|%s|%d|%d|%s" % [e.id, e.type, roundi(frac * 20.0), sway, lv]
 	var cell: Cell = _cells.get(key)
+	var sid := "R|%d|%s" % [e.id, lv]
+	var kind := "R|%s|%s" % [e.type, lv]
 	if cell == null:
 		if _over_budget():
 			fallbacks += 1
-			return false
+			return _standIn(ctx, sid, Vector2(e.x, e.y)) or _standIn(ctx, kind, Vector2(e.x, e.y))
 		var draw_it := func(c: Ctx) -> void: Draw.drawResource(c, e, time)
 		cell = _render(key, lv, Vector2(e.x, e.y), draw_it)
 		if cell == null:
 			return false
 	else:
 		hits += 1
+	_stand[sid] = cell
+	if frac >= 1.0 or not _stand.has(kind):
+		_stand[kind] = cell
 	_blit(ctx, cell, Vector2(e.x, e.y))
+	return true
+
+
+## Over budget: blit what this entity last looked like, if anything.
+static func _standIn(ctx: Ctx, sid: String, at: Vector2) -> bool:
+	var cell: Cell = _stand.get(sid)
+	if cell == null:
+		return false
+	stand_ins += 1
+	_blit(ctx, cell, at)
 	return true
 
 
@@ -510,6 +550,13 @@ static func drawResource(ctx: Ctx, e: Entity, time: float) -> bool:
 ## drawn around (0,0 for figures drawn in local space, the entity's position
 ## for buildings and resources, whose art uses world coordinates).
 static func _render(key, lv: float, origin: Vector2, draw_it: Callable) -> Cell:
+	var t0 := Time.get_ticks_usec()
+	var cell := _render_cell(key, lv, origin, draw_it)
+	_frame_us += Time.get_ticks_usec() - t0
+	return cell
+
+
+static func _render_cell(key, lv: float, origin: Vector2, draw_it: Callable) -> Cell:
 	_rendering = true
 	# 1. How big is it? (device pixels at this level, relative to the origin)
 	if _measure == null:
@@ -592,6 +639,9 @@ static func _allocate(w: int, h: int) -> Array:
 			continue
 		for k in p.keys:
 			_cells.erase(k)
+		for sid in _stand.keys():
+			if _stand[sid].page == p:
+				_stand.erase(sid)
 		p.keys.clear()
 		p.shelves.clear()
 		p.bottom = 0
