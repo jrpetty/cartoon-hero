@@ -14,7 +14,7 @@ import path from "path";
 const MODULES = [
   "content/balance", "content/units", "content/buildings", "content/tech", "content/factions",
   "content/oaths", "content/boons", "content/commanders", "content/abilities", "content/battle_styles",
-  "content/daynight", "ai/difficulty", "maps/terrain_kinds", "render/palette", "meta/rarity",
+  "content/daynight", "ai/difficulty", "maps/terrain_kinds", "maps/generator", "maps/symmetry", "maps/custom", "maps/script", "render/palette", "meta/rarity",
   "meta/catalog", "meta/chests", "meta/progression", "meta/achievements", "sim/unit_tiers",
   "sim/warband_commanders", "sim/warband_difficulty", "sim/traits", "sim/augments", "sim/items",
 ];

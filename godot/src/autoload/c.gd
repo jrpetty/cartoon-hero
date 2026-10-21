@@ -76,6 +76,14 @@ var TERRAIN_DEFS: Array  # maps/terrain_kinds
 var TERRAIN_SIGHT: Dictionary  # maps/terrain_kinds
 var TERRAIN_SPEED: Dictionary  # maps/terrain_kinds
 var Terrain: Dictionary  # maps/terrain_kinds
+var PRESETS: Array  # maps/generator
+var SYMMETRIES: Array  # maps/symmetry
+var MAP_FORMAT_VERSION: float  # maps/custom
+var MAP_SIZES: Array  # maps/custom
+var MAX_SEATS: float  # maps/custom
+var NOMAD_RULES: Array  # maps/custom
+var EXAMPLE_SCRIPT: String  # maps/script
+var SCRIPT_COMMANDS: Array  # maps/script
 var PAL: Dictionary  # render/palette
 var RARITIES: Array  # meta/rarity
 var RARITY_WEIGHTS: Array  # meta/rarity
