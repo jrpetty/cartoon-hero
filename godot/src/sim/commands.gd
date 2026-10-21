@@ -147,9 +147,22 @@ static func _toInt32(n) -> int:
 	return JS.i32(int(fmod(t, 4294967296.0)))
 
 
+## `(acc ^ (n | 0)) >>> 0`, then `Math.imul(acc, 16777619) >>> 0`. Only the low
+## 32 bits of each step matter, and a u32 times 16777619 (< 2^25) fits in a
+## 64-bit int, so plain masking gives exactly what imul does.
 static func mix(acc: int, n) -> int:
-	acc = (acc ^ _toInt32(n)) & 0xFFFFFFFF
-	return JS.u32(JS.imul(acc, 16777619))
+	var v: int
+	if n is int:
+		v = n
+	else:
+		var f: float = n
+		if is_nan(f) or is_inf(f):
+			v = 0
+		elif absf(f) < 9.0e18:
+			v = int(f) # truncates toward zero, as ToInt32 does
+		else:
+			v = int(fmod(JS.trunc(f), 4294967296.0))
+	return (((acc ^ v) & 0xFFFFFFFF) * 16777619) & 0xFFFFFFFF
 
 
 static func worldChecksum(world: World) -> int:

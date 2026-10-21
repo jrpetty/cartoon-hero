@@ -58,6 +58,58 @@ static func makeWorld(seed: int = 7, players: int = 2, mode: String = "conquest"
 	return w
 
 
+## A world built with any of World.init's options:
+##   {seed, map: [preset, seed, players], players, loadouts, econ, alliances,
+##    commanders, nomad, boons, mode, factions}
+## Defaults: World(7) on the 2-player Open Plains fixture map, as many players
+## as the map has starts.
+static func build(opts: Dictionary = {}) -> World:
+	var m: Array = opts.get("map", ["open_plains", 7, 2])
+	var map := mapFor(m[0], m[1], m[2])
+	var players: int = opts.get("players", m[2])
+	var w := World.new(opts.get("seed", 7))
+	var loadouts: Array = opts.get("loadouts", [])
+	var econ: Array = opts.get("econ", [])
+	for i in players:
+		if loadouts.size() <= i:
+			loadouts.append({})
+		if econ.size() <= i:
+			econ.append(1.0)
+	w.init(map, loadouts, econ, opts.get("alliances"), opts.get("commanders"), opts.get("nomad", false),
+		opts.get("boons"), opts.get("mode", "conquest"), opts.get("factions"))
+	return w
+
+
+## The first living entity matching `pred`, or null.
+static func find(w: World, pred: Callable):
+	for e in w.entities:
+		if pred.call(e):
+			return e
+	return null
+
+
+static func tcOf(w: World, team: int = 0) -> Entity:
+	return find(w, func(e): return e.alive and e.team == team and e.type == "town_center")
+
+
+## Place a building of `type` for `team` on the first spot that takes it, in
+## rings around (x, y) — the TS tests' "find an open spot" loops.
+static func placeNear(w: World, team: int, type: String, x: float, y: float, r0: float = 140.0, r1: float = 620.0, step: float = 36.0, angles: int = 16, done: bool = true) -> Entity:
+	var r := r0
+	while r <= r1:
+		for a in angles:
+			var ang := (float(a) / angles) * PI * 2.0
+			var b = w.placeBuilding(team, type, x + cos(ang) * r, y + sin(ang) * r)
+			if b != null:
+				if done:
+					b.buildState = T.BuildState.Done
+					b.buildProgress = 1.0
+					b.hp = b.maxHp
+				return b
+		r += step
+	return null
+
+
 static func run(w: World, seconds: float) -> void:
 	var ticks := int(ceil(seconds * w.SIM_HZ))
 	for i in ticks:
