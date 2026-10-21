@@ -1158,18 +1158,25 @@ func _grad_colors(g: CanvasGradient, verts: PackedVector2Array, mult: float) -> 
 	return cols
 
 
+## A linear gradient's parameter as a plane over device space:
+## t = p.x · x + p.y · y + z.
+func _lin_plane(g: CanvasGradient) -> Vector3:
+	var inv := _xf.affine_inverse()
+	var d := Vector2(g.x1 - g.x0, g.y1 - g.y0)
+	var dd := d.length_squared()
+	if dd <= 0.0:
+		return Vector3.ZERO
+	var gk := Vector2(inv.x.dot(d), inv.y.dot(d)) / dd
+	return Vector3(gk.x, gk.y, (inv.origin - Vector2(g.x0, g.y0)).dot(d) / dd)
+
+
 ## Colours of a linear gradient at device-space vertices, in one pass: t is an
 ## affine function of the device position (t = p·k + c), so no per-vertex
 ## inverse transform. Returns [colours, min t, max t].
 func _lin_colors(g: CanvasGradient, verts: PackedVector2Array, mult: float) -> Array:
-	var inv := _xf.affine_inverse()
-	var d := Vector2(g.x1 - g.x0, g.y1 - g.y0)
-	var dd := d.length_squared()
-	var gk := Vector2.ZERO
-	var gc := 0.0
-	if dd > 0.0:
-		gk = Vector2(inv.x.dot(d), inv.y.dot(d)) / dd
-		gc = (inv.origin - Vector2(g.x0, g.y0)).dot(d) / dd
+	var pl := _lin_plane(g)
+	var gk := Vector2(pl.x, pl.y)
+	var gc := pl.z
 	var n := verts.size()
 	var cols := PackedColorArray()
 	cols.resize(n)
@@ -1197,9 +1204,11 @@ static func _needs_split(g: CanvasGradient, tmin: float, tmax: float) -> bool:
 		return false
 	var first := g.offsets[0]
 	var last := g.offsets[n - 1]
-	if tmin < first - 0.04 and tmax > first:
+	# Per-vertex colours already clamp at the vertices; only a long clamped
+	# stretch (or a stop in the middle, below) shows the difference.
+	if tmin < first - 0.3 and tmax > first:
 		return true
-	if tmax > last + 0.04 and tmin < last:
+	if tmax > last + 0.3 and tmin < last:
 		return true
 	for i in range(1, n - 1):
 		if g.offsets[i] > tmin and g.offsets[i] < tmax:
@@ -1418,14 +1427,15 @@ static func _ring_table(n: int, a0: float) -> PackedVector2Array:
 ## ends). Split the triangles along those iso-lines so every triangle lies
 ## between two neighbouring stops.
 func _refine_linear(verts: PackedVector2Array, idx: PackedInt32Array, g: CanvasGradient) -> Array:
-	var inv := _xf.affine_inverse()
+	var pl := _lin_plane(g)
+	var gk := Vector2(pl.x, pl.y)
 	var nv := verts.size()
 	var ts := PackedFloat64Array()
 	ts.resize(nv)
 	var tmin := INF
 	var tmax := -INF
 	for i in nv:
-		var t := g.t_at(inv * verts[i])
+		var t := verts[i].dot(gk) + pl.z
 		ts[i] = t
 		tmin = minf(tmin, t)
 		tmax = maxf(tmax, t)
@@ -1881,6 +1891,11 @@ func _stroke_line(src: PackedVector2Array, closed: bool, paint, w: float, cap: S
 			continue
 		var m := (nin + nout) / maxf(1.0 + dot, 1e-6)
 		var mlen := m.length()
+		if join == "miter" and mlen <= minf(miterLimit, 2.0):
+			# A gentle turn (a flattened curve, most joins): the miter is the
+			# whole story.
+			C.append(pc); OL.append(m); OR.append(-m); A.append(1.0)
+			continue
 		# Which side is outside the turn.
 		var outer_left := (nin + nout).dot(dout - din) < 0.0
 		# Inner side: the miter point, limited so it can't overshoot short segments.

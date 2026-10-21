@@ -45,6 +45,34 @@ func _ready() -> void:
 		for i in 20:
 			ctx.fillStyle = "#3a6fd8"; ctx.fillRect(10, 10, 20, 8)
 	_bench("20x fillRect", 100, g5)
+	var torso := func(c: Ctx):
+		var r := 9.0
+		c.beginPath()
+		c.moveTo(-r * 0.5, r * 0.42)
+		c.quadraticCurveTo(-r * 0.6, -r * 0.5, 0, -r * 0.58)
+		c.quadraticCurveTo(r * 0.6, -r * 0.5, r * 0.5, r * 0.42)
+		c.quadraticCurveTo(0, r * 0.6, -r * 0.5, r * 0.42)
+		c.closePath()
+	var g8 := func():
+		ctx.begin(rid, 800, 600)
+		for i in 20:
+			ctx.fillStyle = Draw.grad(ctx, 0, -5, 0, 4, "#7da3ec", "#274a90"); torso.call(ctx); ctx.fill()
+	_bench("20x torso gradient fill (quadratics)", 100, g8)
+	var g9 := func():
+		ctx.begin(rid, 800, 600)
+		for i in 20:
+			torso.call(ctx); ctx.strokeStyle = "rgba(20,16,10,0.42)"; ctx.lineWidth = 1.8; ctx.stroke()
+	_bench("20x torso outline stroke", 100, g9)
+	var g10 := func():
+		ctx.begin(rid, 800, 600)
+		for i in 20:
+			ctx.strokeStyle = "#ffffff"; ctx.lineWidth = 1.3; ctx.lineCap = "butt"; ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(10, 3); ctx.stroke()
+	_bench("20x 2-point solid butt line", 100, g10)
+	var g11 := func():
+		ctx.begin(rid, 800, 600)
+		for i in 20:
+			ctx.strokeStyle = "#ffffff"; ctx.lineWidth = 2.2; ctx.lineCap = "round"; ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(10, 3); ctx.stroke()
+	_bench("20x 2-point solid round line", 100, g11)
 	var g6 := func():
 		for i in 20:
 			Palette.shade("#3a6fd8", 0.2)
