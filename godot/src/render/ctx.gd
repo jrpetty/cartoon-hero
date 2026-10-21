@@ -273,6 +273,12 @@ var _segs: Array = []  ## pooled child canvas items, one per clip/blend state
 var _seg_i := -1
 var _seg_dirty := true
 var _seg_premul := false
+var _seg_radial := false
+## Fill concentric radial gradients through the radial shader (exact per
+## pixel, and cheap) instead of subdividing the shape until per-vertex colours
+## approximate them — which cost ~10 ms for a 50-pixel glow in GDScript. The
+## CPU rasteriser the tests use turns it off (it only sees _emit).
+var radial_textures := true
 
 # Shared caches.
 static var _color_cache := {}
@@ -291,6 +297,10 @@ static var _ring_cache := {}
 static var _strip_cache := {}
 static var _arc_cache := {}
 static var _add_material := RID()
+static var _radial_material := RID()
+## Gradient ramps for the radial shader, by stops and radii (see _ramp).
+static var _ramps := {}
+const RAMP_W := 256
 static var _premul_material := RID()
 static var _dest_out_material := RID()
 static var _dest_out_shader := RID()
@@ -374,13 +384,14 @@ func reset() -> void:
 ## The canvas item the next command goes into. A new one (from the pool)
 ## whenever the clip, the composite operation or the premultiplied-blit mode
 ## changes, so each keeps its own clip rect / material and the order holds.
-func _segment(premul: bool = false) -> RID:
-	if premul != _seg_premul:
+func _segment(premul: bool = false, radial: bool = false) -> RID:
+	if premul != _seg_premul or radial != _seg_radial:
 		_seg_dirty = true
 	if not _seg_dirty:
 		return _seg
 	_seg_dirty = false
 	_seg_premul = premul
+	_seg_radial = radial
 	_seg_i += 1
 	if _seg_i >= _segs.size():
 		var s := RenderingServer.canvas_item_create()
@@ -394,12 +405,35 @@ func _segment(premul: bool = false) -> RID:
 	var mat := RID()
 	if premul:
 		mat = _get_premul_material()
+	elif radial:
+		mat = _get_radial_material()
 	elif _composite == "lighter":
 		mat = _get_add_material()
 	elif _composite == "destination-out":
 		mat = _get_dest_out_material()
 	RenderingServer.canvas_item_set_material(_seg, mat)
+	RenderingServer.canvas_item_set_default_texture_filter(_seg,
+		RenderingServer.CANVAS_ITEM_TEXTURE_FILTER_LINEAR if radial else RenderingServer.CANVAS_ITEM_TEXTURE_FILTER_DEFAULT)
 	return _seg
+
+
+## Radial gradients, per pixel: the shader takes each fragment's offset from
+## the gradient's centre (in units of its larger radius, carried in UV) and
+## looks its colour up in a one-row ramp of the gradient (the texture), times
+## the vertex alpha (globalAlpha, and the antialiasing fringe). See
+## _radial_fast.
+static func _get_radial_material() -> RID:
+	if not _radial_material.is_valid():
+		var sh := Shader.new()
+		sh.code = "shader_type canvas_item;\nvarying vec4 v_col;\nvoid vertex() { v_col = COLOR; }\n" \
+			+ "void fragment() {\n\tfloat s = clamp(length(UV), 0.0, 1.0);\n" \
+			+ "\tCOLOR = texture(TEXTURE, vec2((s * %.1f + 0.5) / %.1f, 0.5)) * v_col;\n}\n" % [RAMP_W - 1, RAMP_W]
+		var m := ShaderMaterial.new()
+		m.shader = sh
+		_keep.append(sh)
+		_keep.append(m)
+		_radial_material = m.get_rid()
+	return _radial_material
 
 
 static func _get_premul_material() -> RID:
@@ -1096,6 +1130,71 @@ func _emit(verts: PackedVector2Array, cols: PackedColorArray, idx: PackedInt32Ar
 	RenderingServer.canvas_item_add_triangle_array(_segment(), idx, verts, cols)
 
 
+## Whether a fill in `g` can go through the radial shader: concentric circles
+## (what nearly every glow, pool and vignette is), radii that differ, plain
+## source-over compositing (the material slot is the shader's), and a real
+## target. Anything else takes the subdividing path.
+func _radial_fast(g) -> bool:
+	return radial_textures and not measure_only and g is CanvasGradient and g.radial \
+		and _composite == "source-over" and g.offsets.size() > 0 \
+		and absf(g.x1 - g.x0) < 1e-9 and absf(g.y1 - g.y0) < 1e-9 and absf(g.r1 - g.r0) > 1e-9
+
+
+## The gradient as a one-row texture over s = distance / max(r0, r1) in 0..1:
+## texel s holds the colour at t = (s·R − r0) / (r1 − r0), so past the outer
+## edge (s clamped to 1) it is the clamped end stop either way round.
+static func _ramp(g: CanvasGradient) -> RID:
+	var R := maxf(g.r0, g.r1)
+	var k0 := g.r0 / R
+	var k1 := g.r1 / R
+	var key := "%s|%s|%s|%s" % [k0, k1, g.offsets, g.colors]
+	var tex = _ramps.get(key)
+	if tex == null:
+		var img := Image.create(RAMP_W, 1, false, Image.FORMAT_RGBA8)
+		for i in RAMP_W:
+			var s := float(i) / (RAMP_W - 1)
+			img.set_pixel(i, 0, g.at((s - k0) / (k1 - k0)))
+		tex = ImageTexture.create_from_image(img)
+		if _ramps.size() > 512:
+			_ramps.clear()
+		_ramps[key] = tex
+	return tex.get_rid()
+
+
+## Emit triangles in a radial gradient through the shader: `cols` carry only
+## the alpha (globalAlpha, fringe), the UVs the user-space offset from the
+## centre over the larger radius.
+func _emit_radial(verts: PackedVector2Array, cols: PackedColorArray, idx: PackedInt32Array, g: CanvasGradient) -> void:
+	if verts.is_empty() or idx.is_empty():
+		return
+	RenderingServer.canvas_item_add_triangle_array(_segment(false, true), idx, verts, cols, _radial_uvs(verts, g),
+		PackedInt32Array(), PackedFloat32Array(), _ramp(g))
+
+
+## Device-space vertices → the radial shader's UVs: the offset from the
+## gradient's centre in user space, over the larger radius.
+func _radial_uvs(verts: PackedVector2Array, g: CanvasGradient) -> PackedVector2Array:
+	var inv := _xf.affine_inverse()
+	var c := Vector2(g.x0, g.y0)
+	var k := 1.0 / maxf(g.r0, g.r1)
+	var uvs := PackedVector2Array()
+	uvs.resize(verts.size())
+	for i in verts.size():
+		uvs[i] = (inv * verts[i] - c) * k
+	return uvs
+
+
+## Per-vertex colours for _emit_radial: white at globalAlpha for the first
+## `n_in`, transparent for the next `n_out` (an antialiasing fringe).
+func _radial_alphas(n_in: int, n_out: int) -> PackedColorArray:
+	var cols := PackedColorArray()
+	cols.resize(n_in + n_out)
+	cols.fill(Color(1, 1, 1, globalAlpha))
+	for i in range(n_in, n_in + n_out):
+		cols[i] = Color(1, 1, 1, 0)
+	return cols
+
+
 ## Measure mode: grow `bounds` by every point of `polys`, plus a margin.
 func _grow_pts(polys: Array, margin: float) -> void:
 	var first := true
@@ -1390,6 +1489,9 @@ func _fill_simple(p: PackedVector2Array, idx: PackedInt32Array, paint) -> void:
 	var radial: bool = paint is CanvasGradient and paint.radial
 	if not aa:
 		var c = _solid(paint, 1.0)
+		if radial and _radial_fast(paint):
+			_emit_radial(p, _radial_alphas(n, 0), idx, paint)
+			return
 		if radial:
 			var rf := _refine(p, idx, paint)
 			p = rf[0]
@@ -1416,6 +1518,10 @@ func _fill_rings(verts: PackedVector2Array, idx: PackedInt32Array, n: int, paint
 		return
 	var all_idx := idx.duplicate()
 	var cols := PackedColorArray()
+	if paint.radial and _radial_fast(paint):
+		all_idx.append_array(_ring(n))
+		_emit_radial(verts, _radial_alphas(n, n), all_idx, paint)
+		return
 	if paint.radial:
 		# A radial gradient varies inside triangles whose corners all sit on
 		# the rim (a circle's fan): subdivide so the colour has somewhere to
@@ -1647,6 +1753,15 @@ func _fill_general(polys: Array, paint, rule: String) -> void:
 	var verts: PackedVector2Array = tri[0]
 	var idx: PackedInt32Array = tri[1]
 	var c = _solid(paint, 1.0)
+	if c == null and _radial_fast(paint):
+		_emit_radial(verts, _radial_alphas(verts.size(), 0), idx, paint)
+		if aa:
+			for p in polys:
+				var n: int = p.size()
+				var fv := PackedVector2Array(p)
+				fv.append_array(_aa_outline(p).slice(n))
+				_emit_radial(fv, _radial_alphas(n, n), _ring(n), paint)
+		return
 	if c == null and not verts.is_empty():
 		var rf := _refine(verts, idx, paint) if paint.radial else _refine_linear(verts, idx, paint)
 		verts = rf[0]

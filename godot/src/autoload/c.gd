@@ -114,6 +114,7 @@ var ITEMS: Dictionary  # sim/items
 var ITEM_IDS: Array  # sim/items
 var MAX_ITEMS: float  # sim/items
 var RECIPES: Dictionary  # sim/items
+var CAROUSEL_SIZE: float  # sim/carousel
 var BOON_CACHE_COST: float  # meta/boon_cache
 var FACTION_PRICE: float  # meta/profile
 var DEFAULT_SETTINGS: Dictionary  # meta/settings

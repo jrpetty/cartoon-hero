@@ -21,9 +21,19 @@ class Capture extends Ctx:
 			a += absf((t[1] - t[0]).cross(t[2] - t[0])) * 0.5
 		return a
 
+	## The radial shader path: keep its triangles too, with their UVs.
+	var radial_uvs: Array = []
+
+	func _emit_radial(verts: PackedVector2Array, cols: PackedColorArray, idx: PackedInt32Array, g: Ctx.CanvasGradient) -> void:
+		for i in range(0, idx.size(), 3):
+			tris.append([verts[idx[i]], verts[idx[i + 1]], verts[idx[i + 2]]])
+		colors.append(cols)
+		radial_uvs.append(_radial_uvs(verts, g))
+
 	func clear_capture() -> void:
 		tris.clear()
 		colors.clear()
+		radial_uvs.clear()
 
 
 static func cap() -> Capture:
@@ -358,6 +368,7 @@ func test_linear_gradient() -> void:
 
 func test_radial_gradient() -> void:
 	var c := cap()
+	c.radial_textures = false # the subdividing path (non-concentric gradients still take it)
 	var g := c.createRadialGradient(0, 0, 0, 0, 0, 10)
 	g.addColorStop(0, "#ffffff")
 	g.addColorStop(1, "#000000")
@@ -369,6 +380,39 @@ func test_radial_gradient() -> void:
 	for col in (c.colors[0] as PackedColorArray):
 		brightest = maxf(brightest, col.r)
 	check(brightest > 0.7, "refined: interior vertices near the centre are bright (%.2f)" % brightest)
+
+
+func test_radial_gradient_through_the_shader() -> void:
+	# Concentric gradients go through the radial shader: the shape is emitted
+	# as is (no subdivision), each vertex carrying its user-space offset from
+	# the centre over the larger radius, and the colours come from a ramp.
+	var c := cap()
+	c.translate(100, 50)
+	c.scale(2, 2)
+	var g := c.createRadialGradient(0, 0, 2, 0, 0, 10)
+	g.addColorStop(0, "#ffffff")
+	g.addColorStop(1, "#000000")
+	check(c._radial_fast(g), "concentric takes the shader path")
+	c.fillStyle = g
+	c.beginPath(); c.arc(0, 0, 10, 0, TAU); c.fill()
+	eq(c.radial_uvs.size(), 1, "one shader draw")
+	near(c.area(), PI * 400, 2.0, "covers the (scaled) circle")
+	var far := 0.0
+	for uv in (c.radial_uvs[0] as PackedVector2Array):
+		far = maxf(far, uv.length())
+	near(far, 1.0, 0.02, "the rim maps to |uv| = 1 through the transform (the polygon sits a hair outside, to keep its area)")
+	# The ramp: s = distance / r1, t = (s·r1 − r0) / (r1 − r0).
+	var img := RenderingServer.texture_2d_get(Ctx._ramp(g))
+	near(img.get_pixel(0, 0).r, 1.0, 0.01, "inside r0 is the first stop")
+	near(img.get_pixel(Ctx.RAMP_W - 1, 0).r, 0.0, 0.01, "the rim is the last stop")
+	var mid := int(round(0.6 * (Ctx.RAMP_W - 1))) # s 0.6 → t 0.5
+	near(img.get_pixel(mid, 0).r, 0.5, 0.02, "halfway between the radii is halfway")
+	# Off-centre circles, equal radii and other composite modes stay on the
+	# subdividing path.
+	check(not c._radial_fast(c.createRadialGradient(0, 0, 1, 3, 0, 10)), "non-concentric")
+	check(not c._radial_fast(c.createRadialGradient(0, 0, 5, 0, 0, 5)), "equal radii paint nothing")
+	c.globalCompositeOperation = "lighter"
+	check(not c._radial_fast(g), "additive")
 
 
 # -------------------------------------------------------------- clip / text --

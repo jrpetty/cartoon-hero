@@ -16,7 +16,7 @@ const MODULES = [
   "content/oaths", "content/boons", "content/commanders", "content/abilities", "content/battle_styles",
   "content/daynight", "ai/difficulty", "maps/terrain_kinds", "maps/generator", "maps/symmetry", "maps/custom", "maps/script", "render/palette", "meta/rarity",
   "meta/catalog", "meta/keybinds", "meta/chests", "meta/progression", "meta/achievements", "sim/unit_tiers",
-  "sim/warband_commanders", "sim/warband_difficulty", "sim/traits", "sim/augments", "sim/items",
+  "sim/warband_commanders", "sim/warband_difficulty", "sim/traits", "sim/augments", "sim/items", "sim/carousel",
   "meta/boon_cache", "meta/profile", "meta/settings", "meta/history", "meta/career", "meta/playstyle", "meta/rival",
 ];
 
