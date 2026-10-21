@@ -626,6 +626,12 @@ class SetupScreen extends RefCounted:
 				all.append(1)
 			config.teams = all
 
+	## `this.teamPreset === id`, for presets that are a word or a count.
+	static func _samePreset(a, b) -> bool:
+		if (a is int or a is float) and (b is int or b is float):
+			return float(a) == float(b)
+		return a is String and b is String and a == b
+
 	func presetTeams(n: int) -> Array:
 		var p = teamPreset
 		if p is String and (p == "ffa" or p == "custom"):
@@ -792,7 +798,7 @@ class SetupScreen extends RefCounted:
 			var pr: Array = presets[i]
 			var id = pr[0]
 			var can: bool = not survival and (not (id is int) or id <= n) and not (id is String and id == "coop" and n < 3)
-			if ui.button(pr[1], x + 18 + i * (pw + 6), y + 46, pw, 28, {"accent": typeof(teamPreset) == typeof(id) and teamPreset == id, "size": 12, "disabled": not can, "tooltip": [pr[1], pr[2]]}):
+			if ui.button(pr[1], x + 18 + i * (pw + 6), y + 46, pw, 28, {"accent": _samePreset(teamPreset, id), "size": 12, "disabled": not can, "tooltip": [pr[1], pr[2]]}):
 				teamPreset = id
 				config.teams = presetTeams(n)
 				teams = config.teams
