@@ -2347,6 +2347,10 @@ func _draw_text(text: String, x: float, y: float, max_width: float, outline: boo
 		var asc := f.get_ascent(fs)
 		_grow_bounds(F * PackedVector2Array([pos + Vector2(0, -asc), pos + Vector2(w, f.get_descent(fs))]))
 		return
+	var paint = _stroke_paint if outline else _fill_paint
+	if paint is CanvasGradient:
+		_draw_text_gradient(text, f, fs, F, pos, paint, outline)
+		return
 	var seg := _segment()
 	var outline_px := maxi(1, roundi(lineWidth * _scale))
 	var plain := absf(F.x.x - 1.0) < 1e-3 and absf(F.y.y - 1.0) < 1e-3 and absf(F.x.y) < 1e-6 and absf(F.y.x) < 1e-6
@@ -2367,6 +2371,55 @@ func _draw_text(text: String, x: float, y: float, max_width: float, outline: boo
 	else:
 		f.draw_string(seg, pos, text, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, col)
 	RenderingServer.canvas_item_add_set_transform(seg, Transform2D.IDENTITY)
+
+
+## Text in a gradient (the menu title). A string draws in one colour, so it is
+## drawn once per thin band across the gradient — each band clipped to itself
+## and coloured with the gradient at its middle — which reads as the smooth
+## gradient the canvas paints.
+func _draw_text_gradient(text: String, f: Font, fs: int, F: Transform2D, pos: Vector2, g: CanvasGradient, outline: bool) -> void:
+	var w := f.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
+	var asc := f.get_ascent(fs)
+	var desc := f.get_descent(fs)
+	var box := Rect2(F * (pos + Vector2(0, -asc)), Vector2.ZERO)
+	for corner in [pos + Vector2(w, -asc), pos + Vector2(0, desc), pos + Vector2(w, desc)]:
+		box = box.expand(F * corner)
+	box = box.grow(1.0)
+	# Bands across whichever way the gradient runs more steeply over the text.
+	var across_y := true
+	if not g.radial:
+		var pl := _lin_plane(g)
+		across_y = absf(pl.y) * box.size.y >= absf(pl.x) * box.size.x
+	var extent := box.size.y if across_y else box.size.x
+	var n := clampi(ceili(extent / 2.0), 1, 64)
+	var keep_on := _clip_on
+	var keep_rect := _clip_rect
+	var inv := _xf.affine_inverse()
+	var outline_px := maxi(1, roundi(lineWidth * _scale))
+	for i in n:
+		var band: Rect2
+		if across_y:
+			band = Rect2(box.position.x, box.position.y + box.size.y * i / n, box.size.x, box.size.y / n)
+		else:
+			band = Rect2(box.position.x + box.size.x * i / n, box.position.y, box.size.x / n, box.size.y)
+		var r := band.intersection(keep_rect) if keep_on else band
+		if r.size.x <= 0.0 or r.size.y <= 0.0:
+			continue
+		var c := g.at(g.t_at(inv * band.get_center()))
+		c.a *= globalAlpha
+		_clip_on = true
+		_clip_rect = r
+		_seg_dirty = true
+		var seg := _segment()
+		RenderingServer.canvas_item_add_set_transform(seg, F)
+		if outline:
+			f.draw_string_outline(seg, pos, text, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, outline_px, c)
+		else:
+			f.draw_string(seg, pos, text, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, c)
+		RenderingServer.canvas_item_add_set_transform(seg, Transform2D.IDENTITY)
+	_clip_on = keep_on
+	_clip_rect = keep_rect
+	_seg_dirty = true
 
 
 func measureText(text: String) -> TextMetrics:
