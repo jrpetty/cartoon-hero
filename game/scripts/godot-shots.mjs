@@ -130,7 +130,11 @@ try {
   await run(() => { window.__app.weather.type = "clear"; });
 
   // 8. The caster view over a 4-realm watch game.
-  await run((cfg) => { const a = window.__app; a.startSpectate(cfg); a.ais = []; a.paused = true; }, baseConfig(4));
+  await run((cfg) => {
+    const a = window.__app; a.startSpectate(cfg); a.ais = []; a.paused = true;
+    // The director off and the camera fixed, so both builds frame the same view.
+    a.caster.auto = false; a.camera.centerOn(a.world.worldW / 2, a.world.worldH / 2);
+  }, baseConfig(4));
   await ticks(40);
   await frames(20);
   await shot("ts_09_caster");

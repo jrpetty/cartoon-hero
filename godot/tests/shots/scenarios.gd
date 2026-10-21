@@ -161,6 +161,9 @@ func shots() -> void:
 	app.startSpectate(baseConfig(4))
 	app.ais = []
 	app.paused = true
+	# The director off and the camera fixed, so both builds frame the same view.
+	app.caster.auto = false
+	app.camera.centerOn(app.world.worldW / 2, app.world.worldH / 2)
 	ticks(40)
 	await h.frames(20)
 	await h.shot("godot_09_caster")
