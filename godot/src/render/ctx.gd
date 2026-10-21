@@ -289,6 +289,9 @@ static var _color_cache := {}
 static var _geo_cache := {}
 const _GEO_CACHE_MAX := 20000
 static var geo_cache_enabled := true
+## Per-context switch: off for subclasses that capture geometry through _emit
+## (the test rasteriser), since a cache hit replays without calling it.
+var geo_cache := true
 var _rec = null  # while recording a cache miss: Array of [verts, cols, idx]
 static var _font_spec_cache := {}
 static var _sysfont_cache := {}
@@ -915,15 +918,44 @@ func roundRect(x: float, y: float, w: float, h: float, radii = 0.0) -> void:
 	if tl + tr + br + bl <= 0.0:
 		rect(x, y, w, h)
 		return
-	_corner(x + w - tr, y + tr, tr, -PI / 2, 0.0, Vector2(x + w, y))
-	_corner(x + w - br, y + h - br, br, 0.0, PI / 2, Vector2(x + w, y + h))
-	_corner(x + bl, y + h - bl, bl, PI / 2, PI, Vector2(x, y + h))
-	_corner(x + tl, y + tl, tl, PI, PI * 1.5, Vector2(x, y))
+	# The outline in local space (origin at x, y) is the same for every
+	# rectangle of this size, radii and device scale: build it once, then
+	# place it with one transform instead of adding it point by point.
+	var key := hash([w, h, tl, tr, br, bl, _scale, tolerance])
+	var tpl = _rr_cache.get(key)
+	if tpl == null:
+		tpl = PackedVector2Array()
+		_rr_corner(tpl, w - tr, tr, tr, -PI / 2, 0.0, Vector2(w, 0.0))
+		_rr_corner(tpl, w - br, h - br, br, 0.0, PI / 2, Vector2(w, h))
+		_rr_corner(tpl, bl, h - bl, bl, PI / 2, PI, Vector2(0.0, h))
+		_rr_corner(tpl, tl, tl, tl, PI, PI * 1.5, Vector2.ZERO)
+		if _rr_cache.size() > 4096:
+			_rr_cache.clear()
+		_rr_cache[key] = tpl
+	_cur = (_xf * Transform2D(0.0, Vector2(x, y))) * tpl
 	_cur_flags = _F_CONVEX
 	_finish_cur(true)
 	_cur.append(start)
 	_cur_start = start
 	_has_cur = true
+
+
+static var _rr_cache := {}
+
+
+## A roundRect corner into a local-space outline (as _corner, untransformed).
+func _rr_corner(out: PackedVector2Array, cx: float, cy: float, r: float, a0: float, a1: float, sharp: Vector2) -> void:
+	var pts: PackedVector2Array
+	if r <= 0.0:
+		pts = PackedVector2Array([sharp])
+	else:
+		var n := _arc_segments(r, a1 - a0)
+		pts = Transform2D(a0, Vector2(r, r), 0.0, Vector2(cx, cy)) * _unit_arc(n, a1 - a0)
+	for p in pts:
+		var m := out.size()
+		if m > 0 and out[m - 1].distance_squared_to(p) < 1e-10:
+			continue
+		out.append(p)
 
 
 func _corner(cx: float, cy: float, r: float, a0: float, a1: float, sharp: Vector2) -> void:
@@ -1362,41 +1394,76 @@ static func _ring(n: int) -> PackedInt32Array:
 # =================================================================== fill ==
 
 ## fill() / fill("nonzero") / fill("evenodd").
-static func _paint_key(paint) -> int:
+## A paint's key. Gradients are positioned in user space and mapped through
+## the transform in force; key them by that, relative to the shape's offset.
+func _paint_key(paint, o: Vector2) -> int:
 	if paint is CanvasGradient:
-		return hash([paint.radial, paint.x0, paint.y0, paint.r0, paint.x1, paint.y1, paint.r1, paint.offsets, paint.colors])
+		var g: CanvasGradient = paint
+		return hash([g.radial, g.x0, g.y0, g.r0, g.x1, g.y1, g.r1, g.offsets, g.colors, _xf.origin - o, _xf.x, _xf.y])
 	return hash(paint)
 
 
-## The cache key for a fill (kind 0) or stroke (kind 1) of `shapes`.
+## Offset of the cached geometry being replayed/recorded.
+var _geo_o := Vector2.ZERO
+
+## The cache key for a fill (kind 0) or stroke (kind 1) of `shapes`. Shapes
+## are keyed relative to a whole-pixel origin (their first point, floored), so
+## the same shape drawn somewhere else — a unit walking, a panel sliding —
+## reuses its geometry, replayed under a translation. (Not while a non-
+## rectangular clip is in force: that cut is positional.)
 func _geo_key(kind: int, shapes: Array, extra: Array, paint) -> int:
 	var n := 0
+	var o := Vector2.ZERO
+	var found := false
 	for p in shapes:
 		n += p.size()
-	var h := hash([kind, shapes, extra, _paint_key(paint), _globalAlpha, _composite, aa, shadows,
+		if not found and p.size() > 0:
+			o = p[0].floor()
+			found = true
+	# Translation-invariant keys were tried and turned few misses into hits
+	# (what changes frame to frame is mostly colour and size), so shapes are
+	# keyed where they are.
+	o = Vector2.ZERO
+	_geo_o = o
+	var rel: Array = shapes
+	if o != Vector2.ZERO:
+		var T := Transform2D(0.0, -o)
+		rel = []
+		for p in shapes:
+			rel.append(T * p)
+	var h := hash([kind, rel, extra, _paint_key(paint, o), _globalAlpha, _composite, aa, shadows,
 		_shadow_col, shadowBlur, shadowOffsetX, shadowOffsetY, _scale, _clip_poly, tolerance])
 	return h | (n << 32)
 
 
-## Replay cached geometry for `key`; true if there was some.
+## Replay cached geometry for `key` at the current offset; true if there was some.
 func _geo_replay(key: int) -> bool:
 	var hit = _geo_cache.get(key)
 	if hit == null:
 		return false
+	var seg := _segment()
+	if _geo_o != Vector2.ZERO:
+		RenderingServer.canvas_item_add_set_transform(seg, Transform2D(0.0, _geo_o))
 	for g in hit:
-		RenderingServer.canvas_item_add_triangle_array(_segment(), g[2], g[0], g[1])
+		RenderingServer.canvas_item_add_triangle_array(seg, g[2], g[0], g[1])
+	if _geo_o != Vector2.ZERO:
+		RenderingServer.canvas_item_add_set_transform(seg, Transform2D.IDENTITY)
 	return true
 
 
 func _geo_store(key: int) -> void:
 	if _geo_cache.size() >= _GEO_CACHE_MAX:
 		_geo_cache.clear()
+	if _geo_o != Vector2.ZERO:
+		var T := Transform2D(0.0, -_geo_o)
+		for g in _rec:
+			g[0] = T * g[0]
 	_geo_cache[key] = _rec
 	_rec = null
 
 
 func fill(rule: String = "nonzero") -> void:
-	if geo_cache_enabled and not measure_only and _rec == null:
+	if geo_cache_enabled and geo_cache and not measure_only and _rec == null:
 		var shapes: Array = _subs.duplicate()
 		shapes.append(_cur)
 		var key := _geo_key(0, shapes, [rule, _subs_flags, _cur_flags], _fill_paint)
@@ -1870,7 +1937,7 @@ static func _tessellate(polys: Array, evenodd: bool) -> Array:
 # ================================================================= stroke ==
 
 func stroke() -> void:
-	if geo_cache_enabled and not measure_only and _rec == null:
+	if geo_cache_enabled and geo_cache and not measure_only and _rec == null:
 		var shapes: Array = _subs.duplicate()
 		shapes.append(_cur)
 		var key := _geo_key(1, shapes, [_subs_closed, _subs_flags, _cur_flags, _lineWidth, lineCap, lineJoin, miterLimit, _dash, lineDashOffset], _stroke_paint)
@@ -2477,7 +2544,9 @@ func _text_frame(text: String, x: float, y: float, max_width: float) -> Array:
 	var f := font_for(spec)
 	var fs := clampi(roundi(px * _scale), 1, 1024)
 	var k := px / fs
-	var w := f.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
+	# The width only matters for centred/right/end text or a max width.
+	var need_w := max_width > 0.0 or direction == "rtl" or not (textAlign == "left" or textAlign == "start")
+	var w := f.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x if need_w else 0.0
 	var sx := 1.0
 	if max_width > 0.0 and w * k > max_width:
 		sx = max_width / (w * k)

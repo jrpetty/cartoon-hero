@@ -18,6 +18,7 @@ func _init(width: int, height: int) -> void:
 	aa = false
 	shadows = false
 	radial_textures = false # the shader path never reaches _emit
+	geo_cache = false # nor does a geometry-cache hit
 	canvas.width = w
 	canvas.height = h
 

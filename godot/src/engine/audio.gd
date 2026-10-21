@@ -27,6 +27,7 @@ var _next_sfx := 0
 var _next_music := 0
 var _mutex := Mutex.new()
 var _rng := RandomNumberGenerator.new()
+var _bank_task := -1
 
 const SFX_NAMES := ["select", "command", "build", "complete", "sword", "bow", "arrowHit", "siege",
 	"collapse", "death", "alert", "ui", "coin", "tick", "reveal", "levelup"]
@@ -59,7 +60,15 @@ func _ready() -> void:
 	applyVolumes()
 	# Render the effect bank in the background; play() skips anything not ready.
 	if DisplayServer.get_name() != "headless":
-		WorkerThreadPool.add_task(_render_bank, false, "audio bank")
+		_bank_task = WorkerThreadPool.add_task(_render_bank, false, "audio bank")
+
+
+## Quitting while the bank is still rendering must wait for it: the worker
+## calls into this node.
+func _exit_tree() -> void:
+	if _bank_task >= 0:
+		WorkerThreadPool.wait_for_task_completion(_bank_task)
+		_bank_task = -1
 
 
 func _ensure_bus(bus_name: String) -> void:
