@@ -252,6 +252,13 @@ var hillR := 0.0
 var territory = null ## PackedInt32Array or null
 var territoryCols := 0
 
+## Every skirmish AI brain playing in this world (ai/skirmish_ai.ts keeps them
+## in a module-level `WeakMap<World, SkirmishAI[]>`, AI_ROSTER), so teammates
+## can pool what they have scouted. Held as WeakRefs, in the order the AIs were
+## made: a strong reference would make World <-> SkirmishAI a cycle that
+## RefCounted never frees, where the TS WeakMap lets both be collected.
+var aiRoster: Array = []
+
 
 func _init(seed: int) -> void:
 	rng = RNG.new(seed)
