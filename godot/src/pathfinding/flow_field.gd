@@ -59,6 +59,25 @@ func build(gx: float, gy: float) -> void:
 
 	var cols := grid.cols
 	var rows := grid.rows
+	if Native.available():
+		var r: Array = Native.flow_build(grid.blocked, cols, rows, grid.idx(gcx, gcy))
+		cost = r[0]
+		dirX = r[1]
+		dirY = r[2]
+		return
+	# The blocked grid with a one-cell blocked border, so neighbour tests are a
+	# single array read with no bounds checks or calls (Godot-only speed-up; the
+	# answers are exactly NavGrid.isBlocked's).
+	var W := cols + 2
+	var pb := PackedByteArray()
+	pb.resize(W * (rows + 2))
+	pb.fill(1)
+	var blk := grid.blocked
+	for y in rows:
+		var src := y * cols
+		var dst := (y + 1) * W + 1
+		for x in cols:
+			pb[dst + x] = 1 if blk[src + x] == 1 else 0
 	# Dijkstra with a binary heap and a closed set. The closed set is load-
 	# bearing: without it, float round-up in the cost store can make a
 	# relaxation look like an improvement forever and grow the heap unboundedly.
@@ -71,16 +90,19 @@ func build(gx: float, gy: float) -> void:
 	# swaps are exactly the TS ones, so the pop order is the same.
 	var hc := PackedFloat64Array([0.0])
 	var hi := PackedInt32Array([start])
+	var hn := 1  # heap size; the arrays only ever grow (no resize per pop)
+	var NDX := PackedInt32Array([1, -1, 0, 0, 1, 1, -1, -1])
+	var NDY := PackedInt32Array([0, 0, 1, -1, 1, -1, 1, -1])
+	var NW := PackedFloat64Array([1.0, 1.0, 1.0, 1.0, 1.4142, 1.4142, 1.4142, 1.4142])
 
-	while hc.size() > 0:
+	while hn > 0:
 		# pop
 		var c := hc[0]
 		var i := hi[0]
-		var last := hc.size() - 1
+		var last := hn - 1
 		var lastC := hc[last]
 		var lastI := hi[last]
-		hc.resize(last)
-		hi.resize(last)
+		hn = last
 		if last > 0:
 			hc[0] = lastC
 			hi[0] = lastI
@@ -109,27 +131,29 @@ func build(gx: float, gy: float) -> void:
 			continue
 		var cx := i % cols
 		var cy := i / cols
-		for nb in NEI:
-			var dx: int = nb[0]
-			var dy: int = nb[1]
-			var w: float = nb[2]
-			var nx := cx + dx
-			var ny := cy + dy
-			if grid.isBlocked(nx, ny):
+		var pi := (cy + 1) * W + cx + 1
+		for k in 8:
+			var dx := NDX[k]
+			var dy := NDY[k]
+			if pb[pi + dy * W + dx] == 1:
 				continue
-			if dx != 0 and dy != 0:
-				if grid.isBlocked(cx + dx, cy) and grid.isBlocked(cx, cy + dy):
-					continue
-			var ni := ny * cols + nx
+			if k >= 4 and pb[pi + dx] == 1 and pb[pi + dy * W] == 1:
+				continue
+			var ni := i + dy * cols + dx
 			if closed[ni] != 0:
 				continue
-			var nc := c + w
+			var nc := c + NW[k]
 			if nc < cost[ni]:
 				cost[ni] = nc
 				# push
-				hc.push_back(nc)
-				hi.push_back(ni)
-				var ci := hc.size() - 1
+				if hn < hc.size():
+					hc[hn] = nc
+					hi[hn] = ni
+				else:
+					hc.push_back(nc)
+					hi.push_back(ni)
+				var ci := hn
+				hn += 1
 				while ci > 0:
 					var pp := (ci - 1) >> 1
 					if hc[pp] <= hc[ci]:
@@ -143,6 +167,7 @@ func build(gx: float, gy: float) -> void:
 					ci = pp
 
 	# Derive directions: point toward the lowest-cost neighbor.
+	var inv_sqrt2 := 1.0 / JS.hypot(1.0, 1.0)
 	for cy in rows:
 		for cx in cols:
 			var i := cy * cols + cx
@@ -151,27 +176,33 @@ func build(gx: float, gy: float) -> void:
 			var best := cost[i]
 			var bx := 0
 			var by := 0
-			for nb in NEI:
-				var dx: int = nb[0]
-				var dy: int = nb[1]
+			var pi := (cy + 1) * W + cx + 1
+			for k in 8:
+				var dx := NDX[k]
+				var dy := NDY[k]
 				var nx := cx + dx
 				var ny := cy + dy
 				if nx < 0 or ny < 0 or nx >= cols or ny >= rows:
 					continue
 				# Never point diagonally through a blocked corner — followers would
 				# clip into the wall.
-				if dx != 0 and dy != 0 and (grid.isBlocked(cx + dx, cy) or grid.isBlocked(cx, cy + dy)):
+				if k >= 4 and (pb[pi + dx] == 1 or pb[pi + dy * W] == 1):
 					continue
-				var nc := cost[ny * cols + nx]
+				var nc := cost[i + dy * cols + dx]
 				if nc < best:
 					best = nc
 					bx = dx
 					by = dy
-			var len := JS.hypot(bx, by)
-			if len == 0.0:
-				len = 1.0
-			dirX[i] = bx / len
-			dirY[i] = by / len
+			if bx == 0 and by == 0:
+				dirX[i] = 0.0
+				dirY[i] = 0.0
+			elif bx == 0 or by == 0:
+				dirX[i] = bx
+				dirY[i] = by
+			else:
+				# bx / hypot(bx, by), exactly as before, for the two diagonal cases.
+				dirX[i] = bx * inv_sqrt2
+				dirY[i] = by * inv_sqrt2
 
 
 ## Sample the field at a world position; returns a unit direction [x, y]

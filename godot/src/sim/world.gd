@@ -252,6 +252,13 @@ var hillR := 0.0
 var territory = null ## PackedInt32Array or null
 var territoryCols := 0
 
+## Every skirmish AI brain playing in this world (ai/skirmish_ai.ts keeps them
+## in a module-level `WeakMap<World, SkirmishAI[]>`, AI_ROSTER), so teammates
+## can pool what they have scouted. Held as WeakRefs, in the order the AIs were
+## made: a strong reference would make World <-> SkirmishAI a cycle that
+## RefCounted never frees, where the TS WeakMap lets both be collected.
+var aiRoster: Array = []
+
 
 func _init(seed: int) -> void:
 	rng = RNG.new(seed)
@@ -1378,8 +1385,16 @@ func ageRequirementProgress(team: int, ageIndex: int) -> Dictionary:
 		return {"have": 0, "need": 0}
 	var age: Dictionary = AGES[ageIndex]
 	var have := 0
-	for id in age.requiresAny:
-		if hasBuilding(team, id):
+	# One pass over the entities for all the required types, rather than one
+	# hasBuilding() scan per type (Godot-only speed-up, same answer).
+	var want: Array = age.requiresAny
+	var found := {}
+	if not want.is_empty():
+		for e: Entity in entities:
+			if e.team == team and e.kind == T.Kind.Building and e.alive and e.buildState == T.BuildState.Done and want.has(e.type):
+				found[e.type] = true
+	for id in want:
+		if found.has(id):
 			have += 1
 	return {"have": mini(have, int(age.requiresCount)), "need": int(age.requiresCount)}
 

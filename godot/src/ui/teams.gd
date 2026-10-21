@@ -8,8 +8,8 @@
 ## against 5–8, three teams of three and a pair, two-a-side four ways — and any
 ## seat can then be moved by hand.
 ##
-## A `Teams` value (TS `type Teams = number[]`) is an Array of ints: a seat's
-## team, 0 fights alone; seats sharing 1..8 are allies.
+## A `Teams` value is an Array of ints, one per seat: 0 fights alone; seats
+## sharing 1..8 are allies.
 class_name Teams
 extends RefCounted
 
@@ -69,9 +69,9 @@ static func sides(teams: Array) -> Array:
 	for seat in teams.size():
 		var t := int(teams[seat])
 		var key := ("t%d" % t) if t >= 1 else ("s%d" % seat)
-		if not groups.has(key):
-			groups[key] = []
-		groups[key].append(seat)
+		var g: Array = groups.get(key, [])
+		g.append(seat)
+		groups[key] = g
 	return groups.values()
 
 
@@ -81,8 +81,8 @@ static func formatLabel(teams: Array) -> String:
 	if s.all(func(g): return g.size() == 1):
 		return "1 v 1" if teams.size() == 2 else "%d-player free-for-all" % teams.size()
 	var sizes: Array = s.map(func(g): return g.size())
-	sizes = JS.sort_by_cmp(sizes, func(a, b): return b - a)
-	return " v ".join(sizes.map(func(n): return str(n)))
+	JS.sort_by_cmp(sizes, func(a, b): return b - a)
+	return " v ".join(PackedStringArray(sizes.map(func(n): return str(n))))
 
 
 ## A match needs at least two sides.
@@ -92,7 +92,7 @@ static func teamsValid(teams: Array) -> bool:
 
 ## Resize to `players` seats, keeping what can be kept.
 static func resizeTeams(teams: Array, players: int) -> Array:
-	var out := teams.slice(0, players)
+	var out: Array = teams.slice(0, players)
 	while out.size() < players:
 		out.append(0)
 	return out

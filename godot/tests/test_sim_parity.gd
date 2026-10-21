@@ -5,7 +5,7 @@ extends TestCase
 # every tick. On a divergence the next recorded snapshot is diffed entity by
 # entity, which says *what* went wrong.
 #
-# sim_ai2.json / sim_ai4.json need the skirmish AI, which is ported separately.
+# sim_ai2.json / sim_ai4.json need the skirmish AI: they are test_ai_parity.
 
 
 ## Replays a fixture; returns {"matched": last tick that matched, "ticks": run,
