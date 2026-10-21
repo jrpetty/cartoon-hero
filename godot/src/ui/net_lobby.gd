@@ -857,10 +857,13 @@ func _heading(t: String) -> void:
 	var y := _blk(14)
 	var sy := _top + y
 	if _live and _on_screen(sy, 19):
-		var x := _x0
 		var base: float = sy + _lm(12)[0]
-		for ch in t.to_upper():
-			x += _text(ch, x, base, 12, "#c9a24a", true) + 1.5
+		# letter-spacing: 1.5px — each letter where the run's own advances put
+		# it, plus 1.5 per letter before it (measuring letters one by one
+		# would round each advance and drift).
+		var up := t.to_upper()
+		for i in up.length():
+			_text(up[i], _x0 + _tw(up.substr(0, i), 12, true) + 1.5 * i, base, 12, "#c9a24a", true)
 		ctx.fillStyle = "#4a3c22"
 		ctx.fillRect(_x0, sy + 18, _cw, 1)
 	_end(19, 6)
