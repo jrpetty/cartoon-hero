@@ -1,20 +1,26 @@
-## Base for the visual sheets: draw once through Ctx, wait for the frame to
-## render, save the viewport to the PNG named after `--` on the command line,
-## and quit. Run with a real renderer (not --headless), e.g.
+## Base for the visual sheets: draw once through Ctx into an offscreen
+## viewport the size of the sheet, wait for it to render, save it as a PNG,
+## and quit. Needs a real renderer (not --headless), e.g.
 ##
 ##   xvfb-run -a -s "-screen 0 1920x1080x24" godot --rendering-driver opengl3 \
-##     --path godot res://tests/visual/ctx_shapes.tscn -- tests/visual/godot_ctx_shapes.png
-extends Node2D
+##     --path godot res://tests/visual/ctx_shapes.tscn -- tests/visual/out/godot_ctx_shapes.png
+##
+## Paths after `--` are relative to the godot/ folder.
+extends Node
 
 var ctx := Ctx.new()
-var _frames := 0
 var sheet_size := Vector2i(640, 480)
+var out_path := "tests/visual/out/sheet.png"
+var _vp: SubViewport
+var _canvas: Node2D
+var _frames := 0
+var _painted := false
 
 
-func _ready() -> void:
-	get_window().size = sheet_size
-	get_viewport().size = sheet_size
-	RenderingServer.set_default_clear_color(Color(0, 0, 0, 1))
+## Override to set `sheet_size` / `out_path` from the command line before
+## the viewport is made.
+func setup(_args: PackedStringArray) -> void:
+	pass
 
 
 ## Override: draw the sheet.
@@ -22,8 +28,27 @@ func paint(_c: Ctx) -> void:
 	pass
 
 
-func _draw() -> void:
-	ctx.begin(self, sheet_size.x, sheet_size.y)
+func _ready() -> void:
+	var args := OS.get_cmdline_user_args()
+	if args.size() > 0:
+		out_path = args[args.size() - 1]
+	setup(args)
+	_vp = SubViewport.new()
+	_vp.size = sheet_size
+	_vp.transparent_bg = false
+	_vp.render_target_update_mode = SubViewport.UPDATE_ALWAYS
+	add_child(_vp)
+	_canvas = Node2D.new()
+	_vp.add_child(_canvas)
+	_canvas.draw.connect(_on_draw)
+	_canvas.queue_redraw()
+
+
+func _on_draw() -> void:
+	if _painted:
+		return
+	_painted = true
+	ctx.begin(_canvas, sheet_size.x, sheet_size.y)
 	var t0 := Time.get_ticks_usec()
 	paint(ctx)
 	print("paint: %.2f ms" % ((Time.get_ticks_usec() - t0) / 1000.0))
@@ -32,12 +57,11 @@ func _draw() -> void:
 
 func _process(_dt: float) -> void:
 	_frames += 1
-	if _frames == 4:
-		var args := OS.get_cmdline_user_args()
-		var out: String = args[0] if args.size() > 0 else "user://sheet.png"
-		if not out.begins_with("res://") and not out.begins_with("user://") and not out.begins_with("/"):
+	if _frames == 5:
+		var out := out_path
+		if not out.begins_with("/"):
 			out = ProjectSettings.globalize_path("res://").path_join(out)
-		var img := get_viewport().get_texture().get_image()
+		var img := _vp.get_texture().get_image()
 		img.save_png(out)
 		print("wrote ", out)
 		get_tree().quit()

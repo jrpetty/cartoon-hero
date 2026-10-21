@@ -1,5 +1,5 @@
 // Ctx primitives for the Godot port: the same calls as godot/tests/visual/ctx_shapes.gd.
-// node scripts/godot-visual-ctx.mjs ../godot/tests/visual/ts_ctx_shapes.png
+// node scripts/godot-visual-ctx.mjs ../godot/tests/visual/out/ts_ctx_shapes.png
 import { createCanvas } from "@napi-rs/canvas";
 import { writeFileSync } from "node:fs";
 import { aliasFonts } from "./godot-visual-fonts.mjs";
