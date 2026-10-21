@@ -33,7 +33,7 @@ func poll() -> void:
 				onOpen.call()
 		while ws.get_available_packet_count() > 0:
 			var text := ws.get_packet().get_string_from_utf8()
-			var msg = JSON.parse_string(text)
+			var msg = WireJSON.parse(text)
 			if msg != null and onData.is_valid():
 				onData.call(msg)
 	elif st == WebSocketPeer.STATE_CLOSED:
@@ -44,7 +44,7 @@ func poll() -> void:
 
 func send(msg) -> void:
 	if ws.get_ready_state() == WebSocketPeer.STATE_OPEN:
-		ws.send_text(JSON.stringify(msg, "", false, true))
+		ws.send_text(WireJSON.stringify(msg))
 
 
 var connected: bool:
