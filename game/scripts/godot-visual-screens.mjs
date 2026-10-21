@@ -328,15 +328,38 @@ const base = [
 ];
 const states = [];
 for (const s of base) for (const [W, H, suf] of SIZES) states.push({ time: 1.25, dt: 1 / 60, frames: 3, ...s, name: s.name + suf, W, H });
+// Narrow windows, where the screens change layout rather than just shrink.
+const at = (name, W, H, as) => ({ ...states.find((s) => s.name === name), name: as, W, H });
+states.push(at("menu", 960, 640, "menu_narrow"));
+states.push(at("factions_book", 900, 600, "factions_book_narrow"));
+states.push(at("career_overview", 960, 700, "career_overview_narrow"));
+states.push(at("nemesis", 760, 820, "nemesis_narrow"));
+states.push(at("setup_2v2", 900, 700, "setup_2v2_narrow"));
 // A hover state or two, so the hover rim and a tooltip are compared too.
 states.push({ ...states.find((s) => s.name === "menu"), name: "menu_hover", mouse: { mx: 1012, my: 560 } });
-states.push({ ...states.find((s) => s.name === "career_matches"), name: "career_matches_hover", mouse: { mx: 700, my: 205 } });
+states.push({ ...states.find((s) => s.name === "career_matches"), name: "career_matches_hover", mouse: { mx: 700, my: 232 } });
 
 const reports = { duel: duelReport(), ffa4: standingsReport([0, 1, 2, 3]), team2v2: standingsReport([0, 0, 1, 1]), team4v4: standingsReport([0, 0, 0, 0, 1, 1, 1, 1]) };
 const graphs = { duel: graphOf(22, null), ffa4: graphOf(31, [0, 1, 2, 3]), team2v2: graphOf(26, [0, 1, 2, 3]) };
 writeFileSync(join(outDir, "spec.json"), JSON.stringify({ fixtures, states, reports, graphs, rewards: rewardsWin, awards }, null, 0));
 
 // ------------------------------------------------------------------ render --
+/**
+ * A browser draws a glyph its font lacks (✦ ⚔ ✓ ⟵, the emoji) from another
+ * font; Skia only falls back through the families the font string lists. The
+ * port's fonts fall back to the system's (DejaVu Sans, Noto Color Emoji), so
+ * the same two are appended to every font this context is given.
+ */
+function withGlyphFallback(ctx) {
+  const proto = Object.getPrototypeOf(ctx);
+  const d = Object.getOwnPropertyDescriptor(proto, "font");
+  Object.defineProperty(ctx, "font", {
+    get() { return d.get.call(this); },
+    set(v) { d.set.call(this, `${v}, 'DejaVu Sans', 'Noto Color Emoji'`); },
+    configurable: true,
+  });
+}
+
 function setFields(obj, fields) {
   for (const [k, v] of Object.entries(fields ?? {})) obj[k] = v;
 }
@@ -405,6 +428,7 @@ for (const s of states) {
   const args = structuredClone(s.args ?? {});
   const canvas = createCanvas(s.W, s.H);
   const ctx = canvas.getContext("2d");
+  withGlyphFallback(ctx);
   M.screens.setMouseDown(false);
   for (let f = 0; f < s.frames; f++) {
     const last = f === s.frames - 1;

@@ -54,6 +54,11 @@ func _process(_dt: float) -> void:
 		return
 	_i += 1
 	if _i >= states.size():
+		# Let the audio autoload finish rendering its effect bank on its worker
+		# thread first; quitting under it prints errors from a freed object.
+		if audio._bank.size() < audio.SFX_NAMES.size() and Time.get_ticks_msec() < 60000:
+			_i -= 1
+			return
 		get_tree().quit()
 		return
 	_paint(states[_i])
