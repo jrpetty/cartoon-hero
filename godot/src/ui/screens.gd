@@ -1581,7 +1581,7 @@ class PostMatchScreen extends RefCounted:
 
 	## Returns "continue" or null.
 	func draw(W: float, H: float, time: float, dt: float, won: bool, report: Dictionary, rewards: Dictionary,
-			profile: Profile, xpBefore: float, levelsGained: int, graph = null, awards: Array = []) -> Variant:
+			profile: Profile, xpBefore: float, levelsGained: float, graph = null, awards: Array = []) -> Variant:
 		var ui := UI.ui
 		var PAL: Dictionary = C.PAL
 		Screens.drawMenuBackground(W, H, time)
@@ -1656,7 +1656,7 @@ class PostMatchScreen extends RefCounted:
 		ui.panel(x1, lvlY, right, 62, {"light": true})
 		ui.text("Level %s" % JS.num(info.level), x1 + 18, lvlY + 22, {"size": 14, "bold": true, "color": PAL.uiAccent})
 		if levelsGained > 0 and xpAnim >= 1:
-			ui.text("LEVEL UP! +%d" % levelsGained, x1 + right - 18, lvlY + 22, {
+			ui.text("LEVEL UP! +%s" % JS.num(levelsGained), x1 + right - 18, lvlY + 22, {
 				"size": 13, "bold": true, "align": "right", "color": "#ffe9b0",
 			})
 		ui.bar(x1 + 18, lvlY + 38, right - 36, 10, float(info.into) / info.need, PAL.uiAccent)
