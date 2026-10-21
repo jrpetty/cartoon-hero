@@ -52,7 +52,12 @@ static var _terrainByWord: Dictionary = {}
 
 
 ## Terrain by the name an author would write.
-static func TERRAIN_BY_WORD() -> Dictionary:
+static var TERRAIN_BY_WORD: Dictionary:
+	get:
+		return _buildTerrainByWord()
+
+
+static func _buildTerrainByWord() -> Dictionary:
 	if _terrainByWord.is_empty():
 		var out := {}
 		# The palette's own display names, so anything shown in the editor's ground
@@ -224,7 +229,7 @@ class _Run:
 
 	func terrainArg(c: Dictionary, what: String):
 		var word := _arg0(c).to_lower()
-		var t = MapScript.TERRAIN_BY_WORD().get(word)
+		var t = MapScript.TERRAIN_BY_WORD.get(word)
 		if t == null:
 			errors.append({"line": c.line, "text": "%s wants a terrain, got \"%s\"" % [what, _arg0(c)]})
 			return null

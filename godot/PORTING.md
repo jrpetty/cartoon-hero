@@ -67,6 +67,11 @@ The simulation must produce the same result as the TS build from the same seed
   `fmod(a, b)`. `Math.min/max` → `minf/maxf` (or `min/max` for ints).
   `Math.trunc` → `JS.trunc`. `x | 0`, `>>> 0`, `Math.imul` → `JS.i32`,
   `JS.u32`, `JS.imul`, `JS.ushr`.
+- `Math.sin` / `Math.cos` → `JSMath.sin` / `JSMath.cos` (V8's fdlibm,
+  bit-exact; Godot's `sin`/`cos` differ from V8 in the last bit for ~3% of
+  angles, which is enough to fork a seeded map or a lockstep sim). Cosmetic
+  code (particles, UI animation) can keep the builtins. V8 also uses fdlibm
+  for `atan2`, `exp`, `log`, `pow`…; those are not ported yet.
 - **Sorting**: `arr.sort(cmp)` in JS is stable; Godot's `sort_custom` is NOT.
   Always `JS.sort_by_cmp(arr, func(a, b): return <number>)` (same comparator
   as the TS) or `JS.stable_sort(arr, less)`.

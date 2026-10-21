@@ -30,9 +30,11 @@ const AMOUNT := {"tree": 160.0, "gold_mine": 1000.0, "berries": 250.0}
 
 
 ## The presets (MapPreset dictionaries: id, name, desc, size, forestry, water,
-## and optionally chokes, mountains, hills, woodland, biome).
-static func PRESETS() -> Array:
-	return C.PRESETS
+## and optionally chokes, mountains, hills, woodland, biome) — C.PRESETS, also
+## reachable here as in the TS (`MapGen.PRESETS`).
+static var PRESETS: Array:
+	get:
+		return C.PRESETS
 
 
 ## `alliances` is an Array of alliance ids per team, or null.

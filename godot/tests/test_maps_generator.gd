@@ -234,6 +234,7 @@ func test_map_data_has_the_ts_shape() -> void:
 	eq(map.resources[0].keys(), ["type", "x", "y", "amount"], "ResourceSpawn keys")
 	eq(map.starts[0].keys(), ["x", "y"], "start keys")
 	eq(map.startResources.keys(), ["food", "wood", "gold"], "startResources keys")
+	eq(MapGen.PRESETS.size(), C.PRESETS.size(), "MapGen.PRESETS reads C.PRESETS")
 	# Nomad maps scatter the starts.
 	var nm := MapGen.generateMap("open_plains", 99, 4, true)
 	eq(nm.nomad, true, "nomad flag")
