@@ -17,6 +17,7 @@ const MODULES = [
   "content/daynight", "ai/difficulty", "maps/terrain_kinds", "render/palette", "meta/rarity",
   "meta/catalog", "meta/chests", "meta/progression", "meta/achievements", "sim/unit_tiers",
   "sim/warband_commanders", "sim/warband_difficulty", "sim/traits", "sim/augments", "sim/items",
+  "meta/boon_cache", "meta/profile", "meta/settings", "meta/history", "meta/career", "meta/playstyle", "meta/rival",
 ];
 
 const out: Record<string, Record<string, unknown>> = {};

@@ -103,6 +103,18 @@ var ITEMS: Dictionary  # sim/items
 var ITEM_IDS: Array  # sim/items
 var MAX_ITEMS: float  # sim/items
 var RECIPES: Dictionary  # sim/items
+var BOON_CACHE_COST: float  # meta/boon_cache
+var FACTION_PRICE: float  # meta/profile
+var DEFAULT_SETTINGS: Dictionary  # meta/settings
+var FULL_REPORT_KEEP: float  # meta/history
+var HISTORY_LIMIT: float  # meta/history
+var DEFENSE_WEIGHT: Dictionary  # meta/career
+var LOG_LIMIT: float  # meta/career
+var ARCHETYPES: Array  # meta/playstyle
+var MATCH_STYLES: Dictionary  # meta/playstyle
+var MIN_GAMES: float  # meta/playstyle
+var RANK_DIFFICULTY: Array  # meta/rival
+var RANK_NAMES: Array  # meta/rival
 
 
 func _init() -> void:

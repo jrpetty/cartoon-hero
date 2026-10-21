@@ -161,12 +161,39 @@ static func sort_by_cmp(arr: Array, cmp: Callable) -> Array:
 	return stable_sort(arr, func(a, b): return cmp.call(a, b) < 0)
 
 
-## Number.prototype.toFixed(digits).
+## Number.prototype.toFixed(digits), digits 0..20.
+##
+## JS rounds the *exact* value of the double, halves up: (20.15).toFixed(1) is
+## "20.1", because 20.15 is really 20.1499999…, while rounding 20.15 * 10 in
+## floating point lands on 201.5 and gives "20.2". So x * 10^digits is formed
+## exactly, as a sum of two doubles, and only then rounded. (A negative x is
+## "-" + toFixed(-x), so -0.001 gives "-0.00", as in JS.)
 static func to_fixed(x: float, digits: int) -> String:
-	var p := pow(10.0, digits)
-	var r := JS.round(absf(x) * p) / p
-	var s := ("%." + str(digits) + "f") % r
-	return ("-" + s) if x < 0.0 and r != 0.0 else s
+	if is_nan(x):
+		return "NaN"
+	var ax := absf(x)
+	if ax >= 1e21:
+		return num(x)
+	var neg := x < 0.0
+	var p := pow(10.0, digits)  # exact for digits <= 22
+	# Dekker's two-product: ax * p == hi + lo exactly.
+	var hi := ax * p
+	var c := 134217729.0 * ax
+	var ah := c - (c - ax)
+	var al := ax - ah
+	c = 134217729.0 * p
+	var bh := c - (c - p)
+	var bl := p - bh
+	var lo := ((ah * bh - hi) + ah * bl + al * bh) + al * bl
+	var q := floorf(hi)
+	var frac := hi - q  # exact; and lo is too small to move it past the half unless it is exactly 0.5
+	if frac > 0.5 or (frac == 0.5 and lo >= 0.0):
+		q += 1.0
+	var s := String.num_uint64(int(q)) if q < 9.2e18 else num(q)
+	if digits > 0:
+		s = s.lpad(digits + 1, "0")
+		s = s.substr(0, s.length() - digits) + "." + s.substr(s.length() - digits)
+	return ("-" + s) if neg else s
 
 
 ## `${n}` / String(n): integers print without a decimal point.
