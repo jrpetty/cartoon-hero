@@ -20,6 +20,7 @@ func run(name: String, args: Array) -> void:
 		"input": await inputTest()
 		"thread": await threadCheck()
 		"gpuprobe": await gpuprobe()
+		"render": await load("res://tests/shots/render_checks.gd").new(h).run()
 		_: push_error("unknown scenario " + name)
 
 
