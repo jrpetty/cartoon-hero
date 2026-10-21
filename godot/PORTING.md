@@ -78,6 +78,14 @@ The simulation must produce the same result as the TS build from the same seed
 - Float literals with more than 15 significant digits are parsed inexactly by
   GDScript; compute them instead (`PI`, `TAU`, `1.0/3.0`).
 - JSON numbers from `C` are floats (as in JS). Cast `int(...)` to index.
+- **Godot's JSON reader is not correctly rounded**: about one non-integer
+  double in eight that JS writes (shortest round-trip text) reads back an ulp
+  or more off, subnormals as 0. Anything that must equal the browser's value
+  — the multiplayer wire, fixture values compared exactly — goes through
+  `WireJSON.parse` (`src/net/wire_json.gd`), which reads every number the
+  way `JSON.parse` does. Godot's full-precision writer
+  (`JSON.stringify(v, "", false, true)`, `WireJSON.stringify`) is read back
+  exactly by JS.
 - Iteration order matters: JS objects/Maps/Sets iterate in insertion order,
   and so do GDScript Dictionaries — keep the same insertion order. (JS objects
   put integer-like keys first, ascending; mind it if a TS object is keyed by

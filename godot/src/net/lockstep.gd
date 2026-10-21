@@ -84,10 +84,14 @@ func localCommand(cmd: Dictionary) -> void:
 func authorTurn() -> Dictionary:
 	var tick := nextAuthorTick + inputDelay
 	# Apply locally exactly what peers will apply: the command as it reads back
-	# off the wire (a JSON round trip), not the in-memory original.
+	# off the wire (a JSON round trip), not the in-memory original. WireJSON
+	# reads numbers the way a browser does, so a float survives this exactly
+	# (as it does in the TS, which applies the original) — what changes is
+	# only the shape: ints become floats, then normalizeCommand puts back the
+	# ones the sim indexes with.
 	var cmds: Array = []
 	for c in pending:
-		cmds.append(normalizeCommand(JSON.parse_string(JSON.stringify(c, "", false, true))))
+		cmds.append(normalizeCommand(WireJSON.parse(WireJSON.stringify(c))))
 	pending = []
 	submit(tick, localTeam, cmds)
 	nextAuthorTick += 1

@@ -1,0 +1,105 @@
+{
+  "_comment": "The online lobby in known states, for the TS | Godot comparison. Both sides open a NetLobby, give it a fake socket, feed it these server messages through its own onMessage, set the listed fields, and render. Read by game/scripts/godot-visual-lobby.mjs and godot/tests/visual/lobby_editor/lobby_sheet.gd.",
+  "storage": { "bb_player_name": "Aldric", "bb_server_url": "play.bannerandblade.example" },
+  "opts": { "name": "Aldric", "factions": ["kingdom", "legion", "norse", "shogunate"], "faction": "legion" },
+  "maps": [
+    { "preset": "highlands", "seed": 41, "players": 4, "name": "Twin Peaks", "desc": "Two passes and a gold seam between them.", "author": "Aldric" },
+    { "preset": "riverlands", "seed": 7, "players": 2, "name": "Ford of Ash", "desc": "", "author": "Aldric" }
+  ],
+  "scenes": [
+    { "name": "home", "messages": [] },
+    {
+      "name": "hub", "fromHub": true, "serverUrl": "wss://play.bannerandblade.example",
+      "messages": [
+        { "t": "rooms", "online": 23, "me": { "name": "Aldric", "rating": 1084, "wins": 7, "losses": 3, "games": 10 },
+          "rooms": [
+            { "name": "Friday Night", "host": "Brenna", "players": 3, "observers": 1, "max": 8, "map": "Highlands", "format": "2 v 1", "locked": false, "started": false, "ranked": false, "quick": false },
+            { "name": "Vault", "host": "Keeper", "players": 1, "observers": 0, "max": 2, "map": "Open Plains", "format": "", "locked": true, "started": false, "ranked": false, "quick": false },
+            { "name": "Quick 1 v 1 #12", "host": "Ana", "players": 2, "observers": 0, "max": 2, "map": "Gauntlet", "format": "1 v 1", "locked": false, "started": true, "ranked": true, "quick": true }
+          ] },
+        { "t": "leaderboard", "top": [
+          { "name": "Ragna", "rating": 1312, "wins": 40, "losses": 12, "games": 52 },
+          { "name": "Tomoe", "rating": 1240, "wins": 31, "losses": 15, "games": 46 },
+          { "name": "Aldric", "rating": 1084, "wins": 7, "losses": 3, "games": 10 },
+          { "name": "Brenna", "rating": 1016, "wins": 5, "losses": 5, "games": 10 },
+          { "name": "Ana", "rating": 990, "wins": 3, "losses": 4, "games": 7 },
+          { "name": "Bo", "rating": 941, "wins": 1, "losses": 4, "games": 5 }
+        ] }
+      ]
+    },
+    {
+      "name": "hub_queue", "fromHub": true, "serverUrl": "wss://play.bannerandblade.example",
+      "messages": [
+        { "t": "rooms", "online": 4, "me": null, "rooms": [
+            { "name": "Vault", "host": "Keeper", "players": 1, "observers": 0, "max": 2, "map": "Open Plains", "format": "", "locked": true, "started": false, "ranked": false, "quick": false }
+          ] },
+        { "t": "leaderboard", "top": [] },
+        { "t": "queue", "mode": "2v2", "waiting": 3, "need": 4 }
+      ],
+      "set": { "joiningLocked": "Vault", "statusLine": "Wrong room password." }
+    },
+    {
+      "name": "room", "fromHub": true, "serverUrl": "wss://play.bannerandblade.example",
+      "messages": [
+        { "t": "welcome", "slot": 0, "room": "Friday Night", "max": 8, "observer": false, "protocol": 2 },
+        { "t": "lobby", "room": "Friday Night", "host": 0, "started": false, "layout": 2, "max": 8, "ranked": false, "quick": "", "locked": false,
+          "map": { "id": "highlands", "name": "Highlands", "author": "" },
+          "players": [
+            { "slot": 0, "name": "Aldric", "team": 1, "side": 0, "faction": "legion", "ready": true, "observer": false },
+            { "slot": 1, "name": "Brenna", "team": 2, "side": 1, "faction": "norse", "ready": false, "observer": false },
+            { "slot": 2, "name": "Cato", "team": 1, "side": 0, "faction": "", "ready": true, "observer": false },
+            { "slot": 3, "name": "Dagny", "team": 2, "side": 1, "faction": "khanate", "ready": false, "observer": false },
+            { "slot": 4, "name": "Caster", "team": 0, "side": 0, "faction": "", "ready": false, "observer": true }
+          ] },
+        { "t": "chat", "slot": 1, "name": "Brenna", "text": "evening all" },
+        { "t": "chat", "slot": 3, "name": "Dagny", "text": "glhf — Highlands again?" }
+      ]
+    },
+    {
+      "name": "room_teams", "fromHub": true, "serverUrl": "wss://play.bannerandblade.example",
+      "messages": [
+        { "t": "welcome", "slot": 2, "room": "Lads Night", "max": 8, "observer": false, "protocol": 2 },
+        { "t": "lobby", "room": "Lads Night", "host": 0, "started": false, "layout": 3, "max": 8, "ranked": false, "quick": "", "locked": true,
+          "map": { "id": "cm_1a2b3c4d5e6f", "name": "Twin Peaks", "author": "Aldric", "minPlayers": 2, "maxPlayers": 4 },
+          "players": [
+            { "slot": 0, "name": "Brenna", "team": 1, "side": 0, "faction": "kingdom", "ready": true, "observer": false },
+            { "slot": 1, "name": "Cato", "team": 1, "side": 0, "faction": "", "ready": true, "observer": false },
+            { "slot": 2, "name": "Aldric", "team": 2, "side": 1, "faction": "legion", "ready": false, "observer": false },
+            { "slot": 3, "name": "Dagny", "team": 3, "side": 0, "faction": "shogunate", "ready": true, "observer": false },
+            { "slot": 4, "name": "Eirik", "team": 0, "side": 0, "faction": "ascendancy", "ready": false, "observer": false }
+          ] }
+      ]
+    },
+    {
+      "name": "picker", "fromHub": true, "serverUrl": "wss://play.bannerandblade.example",
+      "messages": [
+        { "t": "welcome", "slot": 0, "room": "Friday Night", "max": 8, "observer": false, "protocol": 2 },
+        { "t": "lobby", "room": "Friday Night", "host": 0, "started": false, "layout": 2, "max": 8, "ranked": false, "quick": "", "locked": false,
+          "map": { "id": "riverlands", "name": "Riverlands", "author": "" },
+          "players": [
+            { "slot": 0, "name": "Aldric", "team": 1, "side": 0, "faction": "legion", "ready": true, "observer": false },
+            { "slot": 1, "name": "Brenna", "team": 2, "side": 1, "faction": "norse", "ready": false, "observer": false },
+            { "slot": 2, "name": "Cato", "team": 1, "side": 0, "faction": "", "ready": true, "observer": false }
+          ] },
+        { "t": "maps", "maps": [
+          { "id": "cm_0a1b2c3d4e5f", "name": "Salt Flats", "author": "Ragna", "desc": "Wide open, one oasis.", "minPlayers": 2, "maxPlayers": 8, "cols": 160, "published": 1760000000000 },
+          { "id": "cm_9f8e7d6c5b4a", "name": "Knife Fight", "author": "Tomoe", "desc": "", "minPlayers": 2, "maxPlayers": 2, "cols": 64, "published": 1750000000000 }
+        ] }
+      ],
+      "set": { "picking": true }
+    },
+    {
+      "name": "room_quick", "fromHub": true, "serverUrl": "wss://play.bannerandblade.example",
+      "messages": [
+        { "t": "welcome", "slot": 1, "room": "Quick 1 v 1 #12", "max": 2, "observer": false, "protocol": 2 },
+        { "t": "lobby", "room": "Quick 1 v 1 #12", "host": 0, "started": false, "layout": 2, "max": 2, "ranked": true, "quick": "1v1", "locked": false,
+          "map": { "id": "gauntlet", "name": "Gauntlet", "author": "" },
+          "players": [
+            { "slot": 0, "name": "Ana", "team": 1, "side": 0, "faction": "norse", "ready": false, "observer": false },
+            { "slot": 1, "name": "Aldric", "team": 2, "side": 1, "faction": "legion", "ready": false, "observer": false }
+          ] },
+        { "t": "countdown", "ms": 30000 }
+      ]
+    }
+  ]
+}
