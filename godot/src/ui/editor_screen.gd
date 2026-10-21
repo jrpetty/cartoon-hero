@@ -922,30 +922,13 @@ func drawCanvas(x: float, y: float, w: float, h: float, m: Dictionary, mouseDown
 	var c1 := mini(cols - 1, ceili(toCellX.call(x + w)))
 	var r0 := maxi(0, floori(toCellY.call(y)))
 	var r1 := mini(rows - 1, ceili(toCellY.call(y + h)))
-	# A run of same-ground cells along a row is one rect: each cell is drawn
-	# z+1 wide, so the run's union is exactly (n·z + 1) — the same pixels, a
-	# fraction of the calls.
-	for cy in range(r0, r1 + 1):
-		var sy := y + h / 2 + (cy - camY) * z
-		var cx := c0
-		while cx <= c1:
-			var t := terrain[cy * cols + cx]
-			var run := 1
-			while cx + run <= c1 and terrain[cy * cols + cx + run] == t:
-				run += 1
-			ctx.fillStyle = SWATCH.get(t, "#6f9c4a")
-			ctx.fillRect(x + w / 2 + (cx - camX) * z, sy, run * z + 1, z + 1)
-			cx += run
-	# Resources.
-	for r in m.resources:
-		var sx: float = toScreenX.call(r.x / TILE)
-		var sy: float = toScreenY.call(r.y / TILE)
-		if sx < x - 8 or sx > x + w + 8 or sy < y - 8 or sy > y + h + 8:
-			continue
-		ctx.fillStyle = RES_COLOUR.get(r.type, "#2f6b32")
-		ctx.beginPath()
-		ctx.arc(sx + z / 2, sy + z / 2, maxf(1.6, z * 0.42), 0, PI * 2)
-		ctx.fill()
+	# The cells and the resource nodes: the TS fills a rect per cell and an
+	# arc per node, thousands a frame, which a canvas does in a blink and Ctx
+	# does not — so they're filled into an image the size of the view (the
+	# same rects and dots, natively) and that is drawn, rebuilt only when the
+	# ground, the nodes or the view change. The seats, the border and every
+	# overlay are drawn as ever.
+	ctx.drawImage(_bakedCanvas(x, y, w, h, m, c0, c1, r0, r1), x, y, w, h)
 	# Spawn points, numbered by seat.
 	var teams: Array = PAL.teams
 	for i in m.spawns.size():
@@ -1061,6 +1044,102 @@ func drawCanvas(x: float, y: float, w: float, h: float, m: Dictionary, mouseDown
 	ui.text("right-drag to pan · wheel to zoom · 1–9 pick ground · [ ] brush size · Ctrl+Z undo",
 		x + 10, y + h - 10, {"size": 10.5, "color": "#6f6a5c"})
 	ctx.restore()
+
+
+var _canvasImg: Image = null
+var _canvasTex: ImageTexture = null
+var _canvasKey := ""
+static var _stamps := {}
+
+
+## The view's cells and resource nodes as a texture (see drawCanvas). The
+## rects are the TS's — run by run along each row, z+1 wide so neighbours
+## overlap by a pixel — and each node is the TS's arc, as an antialiased dot.
+func _bakedCanvas(x: float, y: float, w: float, h: float, m: Dictionary, c0: int, c1: int, r0: int, r1: int) -> ImageTexture:
+	var ds := UI.ui.ctx.device_scale()
+	var iw := maxi(1, ceili(w * ds))
+	var ih := maxi(1, ceili(h * ds))
+	var key := "%d|%d|%s|%s|%s|%d|%d" % [iw, ih, var_to_str(camX), var_to_str(camY), var_to_str(zoom), hash(m.terrain), hash(m.resources)]
+	if key == _canvasKey and _canvasTex != null:
+		return _canvasTex
+	if _canvasImg == null or _canvasImg.get_width() != iw or _canvasImg.get_height() != ih:
+		_canvasImg = Image.create(iw, ih, false, Image.FORMAT_RGBA8)
+		_canvasTex = null
+	var img := _canvasImg
+	img.fill(Color("#0b0906"))
+	var z := zoom * ds
+	var cols := int(m.cols)
+	var terrain: PackedByteArray = m.terrain
+	var colors := {}
+	for t in SWATCH:
+		colors[t] = Color(SWATCH[t])
+	var fallback := Color("#6f9c4a")
+	# Cell (cx, cy) spans [ox + cx·z, ox + cx·z + z + 1) in image pixels.
+	var ox := w * ds / 2 - camX * z
+	var oy := h * ds / 2 - camY * z
+	for cy in range(r0, r1 + 1):
+		var py0 := roundi(oy + cy * z)
+		var py1 := roundi(oy + cy * z + z + ds)
+		var cx := c0
+		while cx <= c1:
+			var t := terrain[cy * cols + cx]
+			var run := 1
+			while cx + run <= c1 and terrain[cy * cols + cx + run] == t:
+				run += 1
+			var px0 := roundi(ox + cx * z)
+			var px1 := roundi(ox + cx * z + run * z + ds)
+			img.fill_rect(Rect2i(px0, py0, px1 - px0, py1 - py0), colors.get(t, fallback))
+			cx += run
+	# Resources: the TS's arc at the cell's centre, radius max(1.6, z·0.42).
+	var TILE := float(C.TILE)
+	var rad := maxf(1.6, zoom * 0.42) * ds
+	for r in m.resources:
+		var cxp: float = ox + r.x / TILE * z + z / 2
+		var cyp: float = oy + r.y / TILE * z + z / 2
+		if cxp < -rad or cyp < -rad or cxp > iw + rad or cyp > ih + rad:
+			continue
+		var stamp := _stamp(RES_COLOUR.get(r.type, "#2f6b32"), rad, fposmod(cxp, 1.0), fposmod(cyp, 1.0))
+		var half := stamp.get_width() / 2
+		img.blend_rect(stamp, Rect2i(Vector2i.ZERO, stamp.get_size()), Vector2i(floori(cxp) - half, floori(cyp) - half))
+	if _canvasTex == null:
+		_canvasTex = ImageTexture.create_from_image(img)
+	else:
+		_canvasTex.update(img)
+	_canvasKey = key
+	return _canvasTex
+
+
+## An antialiased dot of radius `r`, its centre at (fx, fy) within the
+## middle pixel (quantised to quarters): what a canvas arc fill covers.
+static func _stamp(color: String, r: float, fx: float, fy: float) -> Image:
+	var qx := floori(fx * 4)
+	var qy := floori(fy * 4)
+	var key := "%s|%s|%d|%d" % [color, var_to_str(r), qx, qy]
+	var img: Image = _stamps.get(key)
+	if img != null:
+		return img
+	var half := ceili(r) + 1
+	var n := half * 2 + 1
+	img = Image.create(n, n, false, Image.FORMAT_RGBA8)
+	var c := Color(color)
+	var cx := half + (qx + 0.5) / 4.0
+	var cy := half + (qy + 0.5) / 4.0
+	for py in n:
+		for px in n:
+			# Coverage by 4×4 supersampling.
+			var cov := 0
+			for sy in 4:
+				for sx in 4:
+					var dx := px + (sx + 0.5) / 4.0 - cx
+					var dy := py + (sy + 0.5) / 4.0 - cy
+					if dx * dx + dy * dy <= r * r:
+						cov += 1
+			if cov > 0:
+				img.set_pixel(px, py, Color(c.r, c.g, c.b, cov / 16.0))
+	if _stamps.size() > 512:
+		_stamps.clear()
+	_stamps[key] = img
+	return img
 
 
 # ---- tool rail ----

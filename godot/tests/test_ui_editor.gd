@@ -543,3 +543,18 @@ func exactFixture(name: String):
 		failures.append("missing fixture " + name)
 		return null
 	return WireJSON.parse(f.get_as_text())
+
+
+## How long a frame of the editor takes on a stocked generated map (the
+## canvas draws every visible cell, node and seat each frame).
+func test_an_editor_frame_on_a_real_map() -> void:
+	var h := Harness.new()
+	h.s.open(CustomMaps.customFromGenerated("highlands", 41, 4))
+	h.s.sym = "quad"
+	h.frame({"mx": 700, "my": 330})
+	var t0 := Time.get_ticks_usec()
+	for i in 10:
+		h.frame({"mx": 700, "my": 330})
+	var ms := (Time.get_ticks_usec() - t0) / 10000.0
+	print("      (editor frame: %.2f ms, %d resources)" % [ms, h.s.map.resources.size()])
+	check(ms < 60.0, "an editor frame took %.2f ms" % ms)
