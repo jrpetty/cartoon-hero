@@ -90,6 +90,9 @@ var RARITY_WEIGHTS: Array  # meta/rarity
 var CATALOG: Array  # meta/catalog
 var COLLECTIBLE_UNIT_IDS: Array  # meta/catalog
 var VARIANT_BY_KEY: Dictionary  # meta/catalog
+var ACTIONS: Array  # meta/keybinds
+var ACTION_BY_ID: Dictionary  # meta/keybinds
+var KEYBIND_GROUPS: Array  # meta/keybinds
 var CHESTS: Array  # meta/chests
 var CHEST_BY_ID: Dictionary  # meta/chests
 var ACHIEVEMENTS: Array  # meta/achievements
