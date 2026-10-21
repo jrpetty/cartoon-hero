@@ -1,0 +1,56 @@
+# Fly.io — the whole site (game + multiplayer) as one app.
+#
+#   fly launch --no-deploy --copy-config      # claim a name once
+#   fly volumes create bb_data --size 1       # ratings, match history, community maps
+#   fly secrets set ADMIN_TOKEN=<long random string>   # turns on /admin
+#   fly deploy
+#
+# Fly terminates TLS, so the site is https:// and the game's same-origin
+# WebSocket is wss:// automatically — players just open the address.
+app = "banner-and-blade"
+primary_region = "lhr"
+
+# Containers are stopped with SIGTERM; the server records running matches,
+# writes its data and exits within a few seconds.
+kill_signal = "SIGTERM"
+kill_timeout = 10
+
+[deploy]
+  # One machine holding one volume: replace it in place.
+  strategy = "immediate"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[mounts]
+  source = "bb_data"
+  destination = "/data"
+
+[http_service]
+  internal_port = 8787
+  force_https = true
+  # One always-on machine: matches are held in memory, and a live site should
+  # answer at once. (Rooms and matches can't move between machines — scale up
+  # the machine, not out.)
+  auto_stop_machines = "off"
+  auto_start_machines = true
+  min_machines_running = 1
+
+  [http_service.concurrency]
+    type = "connections"
+    soft_limit = 800
+    hard_limit = 1000
+
+  [http_service.http_options.response]
+    pristine = true          # don't let the proxy touch the Upgrade handshake
+
+  [[http_service.checks]]
+    grace_period = "10s"
+    interval = "30s"
+    method = "GET"
+    path = "/healthz"
+    timeout = "3s"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "512mb"

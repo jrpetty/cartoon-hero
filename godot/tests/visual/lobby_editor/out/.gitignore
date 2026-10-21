@@ -1,0 +1,5 @@
+# Element boxes from the TS render, for lining layouts up, and the single
+# renders (each cmp_*.png holds TS | Godot | difference); rebuilt by make.sh.
+ts_lobby_*.json
+ts_*.png
+godot_*.png

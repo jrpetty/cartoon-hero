@@ -1,0 +1,410 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Banner &amp; Blade — Admin</title>
+<style>
+  :root {
+    --bg: #120d07; --panel: #1e1710; --panel2: #271e14; --line: #3d3020; --text: #eadfc6; --dim: #a89c82; --faint: #6f6553;
+    --gold: #e8c060; --gold2: #b08a36; --good: #7fcf7a; --bad: #e0786a; --blue: #6fa0e8; --warn: #e0a85a;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: radial-gradient(ellipse at 50% -10%, #2c2012, var(--bg) 60%); background-attachment: fixed; color: var(--text); font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  header { position: sticky; top: 0; z-index: 5; display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between; padding: 12px 20px; background: rgba(14,10,5,0.94); border-bottom: 1px solid var(--line); backdrop-filter: blur(6px); }
+  h1 { margin: 0; font: 700 22px Georgia, serif; color: #ffe9b0; }
+  h1 small { font: 12px system-ui; color: var(--dim); margin-left: 8px; }
+  h2 { font: 700 12px system-ui; letter-spacing: 1.5px; text-transform: uppercase; color: var(--gold); margin: 0 0 10px; }
+  main { max-width: 1500px; margin: 0 auto; padding: 16px 20px 60px; }
+  .row { display: grid; gap: 14px; margin-bottom: 14px; }
+  .kpis { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
+  .two { grid-template-columns: repeat(auto-fit, minmax(420px, 1fr)); }
+  .card { background: linear-gradient(180deg, var(--panel2), var(--panel)); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; box-shadow: 0 4px 16px rgba(0,0,0,0.35); min-width: 0; }
+  .kpi .v { font: 700 28px Georgia, serif; color: #fff0cc; }
+  .kpi .l { font-size: 11.5px; color: var(--dim); text-transform: uppercase; letter-spacing: .8px; }
+  .kpi .s { font-size: 12px; color: var(--faint); }
+  .live .v { color: var(--good); }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; text-transform: uppercase; letter-spacing: .6px; padding: 6px 8px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+  td { padding: 6px 8px; border-bottom: 1px solid rgba(61,48,32,0.5); vertical-align: middle; }
+  td.n, th.n { text-align: right; font-variant-numeric: tabular-nums; }
+  tr:hover td { background: rgba(255,255,255,0.025); }
+  .scroll { overflow-x: auto; }
+  .tall { max-height: 460px; overflow-y: auto; }
+  .bar { position: relative; height: 8px; background: rgba(255,255,255,0.06); border-radius: 4px; min-width: 70px; }
+  .bar > i { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 4px; background: var(--gold); }
+  .bar.center::after { content: ""; position: absolute; left: 50%; top: -3px; bottom: -3px; width: 1px; background: var(--faint); }
+  .dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 6px; vertical-align: -1px; }
+  .tag { display: inline-block; font-size: 10.5px; font-weight: 700; padding: 1px 6px; border-radius: 8px; background: rgba(232,192,96,0.15); color: var(--gold); margin-left: 4px; }
+  .tag.g { background: rgba(127,207,122,0.15); color: var(--good); }
+  .tag.r { background: rgba(224,120,106,0.15); color: var(--bad); }
+  .muted { color: var(--dim); }
+  .faint { color: var(--faint); font-size: 12px; }
+  button, select, input { font: inherit; color: var(--text); background: #2a2116; border: 1px solid #5a4a2a; border-radius: 7px; padding: 7px 12px; }
+  button { cursor: pointer; font-weight: 600; }
+  button.primary { background: linear-gradient(180deg, #e0bc62, #b08a36); color: #1e170c; border-color: #e0bc62; }
+  button.danger { color: var(--bad); border-color: #6a3a30; padding: 3px 9px; font-size: 12px; }
+  .seg button { border-radius: 0; margin-left: -1px; }
+  .seg button:first-child { border-radius: 7px 0 0 7px; }
+  .seg button:last-child { border-radius: 0 7px 7px 0; }
+  .seg button.on { background: var(--gold2); color: #1e170c; }
+  .status { font-size: 12.5px; color: var(--dim); }
+  .status .pulse { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--good); margin-right: 6px; box-shadow: 0 0 0 0 rgba(127,207,122,0.7); animation: pulse 2s infinite; }
+  .status.stale .pulse { background: var(--bad); animation: none; }
+  @keyframes pulse { 70% { box-shadow: 0 0 0 8px rgba(127,207,122,0); } 100% { box-shadow: 0 0 0 0 rgba(127,207,122,0); } }
+  svg text { fill: var(--dim); font-size: 10.5px; font-family: system-ui, sans-serif; }
+  .heat td { text-align: center; font-variant-numeric: tabular-nums; font-size: 12.5px; }
+  .legend { display: flex; flex-wrap: wrap; gap: 12px; font-size: 12px; color: var(--dim); margin-top: 6px; }
+  .legend span::before { content: ""; display: inline-block; width: 10px; height: 3px; margin-right: 5px; vertical-align: middle; background: var(--c); }
+  #login { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(8,6,3,0.92); z-index: 10; }
+  #login .card { width: 380px; max-width: 92vw; }
+  #login input { width: 100%; margin: 10px 0; }
+  .err { color: var(--bad); font-size: 13px; min-height: 18px; }
+  .note { font-size: 12.5px; color: var(--dim); margin-top: 8px; }
+  @media (max-width: 700px) { .two { grid-template-columns: 1fr; } header { padding: 10px 12px; } main { padding: 12px; } }
+</style>
+</head>
+<body>
+<div id="login">
+  <div class="card">
+    <h1>Admin</h1>
+    <p class="muted">Enter the admin token — the value you set with <code>fly secrets set ADMIN_TOKEN=…</code>.</p>
+    <input id="tok" type="password" autocomplete="current-password" placeholder="Admin token">
+    <label class="faint"><input id="remember" type="checkbox" style="width:auto;margin:0 6px 0 0">Remember on this device</label>
+    <div class="err" id="loginErr"></div>
+    <button class="primary" id="go" style="margin-top:8px;width:100%">Open dashboard</button>
+  </div>
+</div>
+
+<header>
+  <h1>Banner &amp; Blade <small>admin</small></h1>
+  <div class="seg" id="range">
+    <button data-r="24h">24 h</button><button data-r="7d" class="on">7 days</button><button data-r="30d">30 days</button><button data-r="all">All time</button>
+  </div>
+  <div style="display:flex;gap:10px;align-items:center">
+    <span class="status" id="status"><span class="pulse"></span>connecting…</span>
+    <button id="csv">Export CSV</button>
+    <button id="logout">Log out</button>
+  </div>
+</header>
+
+<main>
+  <h2>Right now</h2>
+  <div class="row kpis" id="liveKpis"></div>
+
+  <h2 id="rangeTitle">Last 7 days</h2>
+  <div class="row kpis" id="kpis"></div>
+
+  <div class="row two">
+    <div class="card"><h2>Players online &amp; games running</h2><div id="onlineChart"></div><div class="legend"><span style="--c:var(--good)">online</span><span style="--c:var(--gold)">in games</span><span style="--c:var(--blue)">live games</span></div></div>
+    <div class="card"><h2>Matches per day (30 days)</h2><div id="dayChart"></div><div class="legend"><span style="--c:var(--gold)">matches</span><span style="--c:var(--good)">unique players</span></div></div>
+  </div>
+
+  <div class="row">
+    <div class="card"><h2>Factions — who plays what, who wins</h2>
+      <div class="scroll"><table id="factionTable"></table></div>
+      <p class="note">Win rate counts every player on the winning side. <b>1 v 1 win</b> is the cleanest read of balance: only duels, one faction against another. "Chosen" is how often players picked it rather than taking Random. Completed games only for wins and lengths.</p>
+    </div>
+  </div>
+
+  <div class="row two">
+    <div class="card"><h2>Faction pick share</h2><div id="pickChart"></div></div>
+    <div class="card"><h2>1 v 1 match-ups — row faction's win rate vs column</h2><div class="scroll"><table class="heat" id="heat"></table></div><p class="note">Number under each rate is games played. Green favours the row faction, red the column.</p></div>
+  </div>
+
+  <div class="row two">
+    <div class="card"><h2>Maps</h2><div class="scroll tall"><table id="mapTable"></table></div></div>
+    <div class="card"><h2>How long games last</h2><div id="lengthChart"></div><div class="scroll"><table id="kindTable" style="margin-top:10px"></table></div></div>
+  </div>
+
+  <div class="row two">
+    <div class="card"><h2>Formats</h2><div class="scroll"><table id="formatTable"></table></div><h2 style="margin-top:14px">Length by player count</h2><div class="scroll"><table id="playersLenTable"></table></div></div>
+    <div class="card"><h2>When people play (UTC hour, matches started)</h2><div id="hourChart"></div><h2 style="margin-top:14px">Matches per hour (48 h)</h2><div id="perHourChart"></div></div>
+  </div>
+
+  <div class="row two">
+    <div class="card"><h2>Players</h2><div class="row kpis" id="playerKpis" style="margin-bottom:8px"></div><h2>Rating spread (rated players)</h2><div id="ratingChart"></div></div>
+    <div class="card"><h2>Leaderboard</h2><div class="scroll tall"><table id="topTable"></table></div><h2 style="margin-top:14px">Most active</h2><div class="scroll"><table id="activeTable"></table></div></div>
+  </div>
+
+  <div class="row">
+    <div class="card"><h2>Rooms right now</h2><div class="scroll"><table id="roomTable"></table></div></div>
+  </div>
+
+  <div class="row">
+    <div class="card"><h2>Recent matches</h2><div class="scroll tall"><table id="matchTable"></table></div></div>
+  </div>
+
+  <div class="row two">
+    <div class="card"><h2>Server health</h2><div class="scroll"><table id="healthTable"></table></div></div>
+    <div class="card"><h2>Announce to everyone online</h2>
+      <p class="muted" style="margin-top:0">Shows in the online hub and as an alert inside running matches.</p>
+      <div style="display:flex;gap:8px"><input id="announce" maxlength="300" style="flex:1" placeholder="Server restarting for an update in 5 minutes…"><button class="primary" id="send">Send</button></div>
+      <div class="note" id="announceNote"></div>
+      <h2 style="margin-top:18px">Community maps</h2><div class="scroll"><table id="communityTable"></table></div>
+    </div>
+  </div>
+</main>
+
+<script>
+(() => {
+  const FACTIONS = {
+    kingdom: { name: "The Kingdom", color: "#5b8fe0" }, legion: { name: "The Legion", color: "#d8574a" },
+    norse: { name: "The Jarls", color: "#7fb0c8" }, shogunate: { name: "The Shogunate", color: "#e0786a" },
+    khanate: { name: "The Khanate", color: "#d8a83a" }, ascendancy: { name: "The Ascendancy", color: "#3ad8c8" },
+  };
+  const KIND = { custom: "Custom room", "quick-1v1": "Quick 1 v 1", "quick-2v2": "Quick 2 v 2", "quick-ffa4": "Quick 4-FFA" };
+  const $ = (id) => document.getElementById(id);
+  const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  const fmt = (n) => (n ?? 0).toLocaleString();
+  const fac = (id) => FACTIONS[id] ? `<span class="dot" style="background:${FACTIONS[id].color}"></span>${FACTIONS[id].name}` : `<span class="muted">${esc(id || "?")}</span>`;
+  const facShort = (id) => FACTIONS[id] ? `<span class="dot" style="background:${FACTIONS[id].color}" title="${FACTIONS[id].name}"></span>` : `<span class="dot" style="background:#555"></span>`;
+  const dur = (s) => { s = Math.round(s); const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), x = s % 60; return h ? `${h}h ${m}m` : m ? `${m}m ${String(x).padStart(2, "0")}s` : `${x}s`; };
+  const ago = (t) => { const s = Math.round((Date.now() - t) / 1000); return s < 60 ? `${s}s ago` : s < 3600 ? `${Math.round(s / 60)}m ago` : s < 86400 ? `${Math.round(s / 3600)}h ago` : `${Math.round(s / 86400)}d ago`; };
+  const RANGE_TITLE = { "24h": "Last 24 hours", "7d": "Last 7 days", "30d": "Last 30 days", all: "All time" };
+
+  let token = sessionStorage.getItem("bb_admin") || localStorage.getItem("bb_admin") || "";
+  let range = "7d";
+  let lastOk = 0;
+
+  async function api(path, opts = {}) {
+    const res = await fetch(path, { ...opts, headers: { ...(opts.headers || {}), authorization: `Bearer ${token}`, "content-type": "application/json" } });
+    if (res.status === 401 || res.status === 429 || res.status === 503) {
+      const body = await res.json().catch(() => ({}));
+      showLogin(body.error || "Not authorised.");
+      throw new Error("auth");
+    }
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return path.endsWith(".csv") ? res.text() : res.json();
+  }
+
+  function showLogin(msg) { $("login").style.display = "flex"; $("loginErr").textContent = msg || ""; }
+  $("go").onclick = async () => {
+    token = $("tok").value.trim();
+    try {
+      await api("/admin/api/live");
+      sessionStorage.setItem("bb_admin", token);
+      if ($("remember").checked) localStorage.setItem("bb_admin", token);
+      $("login").style.display = "none";
+      refreshAll();
+    } catch (e) { if (e.message !== "auth") $("loginErr").textContent = "Couldn't reach the server."; }
+  };
+  $("tok").onkeydown = (e) => { if (e.key === "Enter") $("go").click(); };
+  $("logout").onclick = () => { sessionStorage.removeItem("bb_admin"); localStorage.removeItem("bb_admin"); token = ""; showLogin(""); };
+  for (const b of $("range").querySelectorAll("button")) b.onclick = () => {
+    range = b.dataset.r;
+    for (const x of $("range").querySelectorAll("button")) x.classList.toggle("on", x === b);
+    $("rangeTitle").textContent = RANGE_TITLE[range];
+    loadStats();
+  };
+  $("csv").onclick = async () => {
+    const text = await api("/admin/api/matches.csv");
+    const url = URL.createObjectURL(new Blob([text], { type: "text/csv" }));
+    const a = Object.assign(document.createElement("a"), { href: url, download: "banner-and-blade-matches.csv" });
+    document.body.append(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+  };
+  $("send").onclick = async () => {
+    const text = $("announce").value.trim();
+    if (!text) return;
+    const r = await api("/admin/api/announce", { method: "POST", body: JSON.stringify({ text }) });
+    $("announceNote").textContent = `Sent to ${r.sent} connected player${r.sent === 1 ? "" : "s"}.`;
+    $("announce").value = "";
+  };
+
+  // ---------- tiny SVG charts ----------
+  function lineChart(el, series, { h = 180, xs, xLabel } = {}) {
+    const W = el.clientWidth || 600, H = h, P = { l: 34, r: 8, t: 10, b: 22 };
+    const n = xs.length;
+    const max = Math.max(1, ...series.flatMap((s) => s.values));
+    const x = (i) => P.l + (n <= 1 ? 0 : (i / (n - 1)) * (W - P.l - P.r));
+    const y = (v) => H - P.b - (v / max) * (H - P.t - P.b);
+    let g = "";
+    for (let k = 0; k <= 4; k++) { const v = (max * k) / 4; g += `<line x1="${P.l}" x2="${W - P.r}" y1="${y(v)}" y2="${y(v)}" stroke="#3d3020" stroke-width="1"/><text x="${P.l - 6}" y="${y(v) + 3}" text-anchor="end">${Math.round(v)}</text>`; }
+    const ticks = Math.min(6, n);
+    for (let k = 0; k < ticks; k++) { const i = Math.round((k / Math.max(1, ticks - 1)) * (n - 1)); if (xs[i] !== undefined) g += `<text x="${x(i)}" y="${H - 6}" text-anchor="middle">${xLabel(xs[i])}</text>`; }
+    for (const s of series) {
+      if (!n) break;
+      const pts = s.values.map((v, i) => `${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(" ");
+      if (s.fill) g += `<polygon points="${P.l},${H - P.b} ${pts} ${x(n - 1)},${H - P.b}" fill="${s.color}" opacity="0.12"/>`;
+      g += `<polyline points="${pts}" fill="none" stroke="${s.color}" stroke-width="2" stroke-linejoin="round"/>`;
+    }
+    if (!n) g += `<text x="${W / 2}" y="${H / 2}" text-anchor="middle">No data yet</text>`;
+    el.innerHTML = `<svg width="100%" height="${H}" viewBox="0 0 ${W} ${H}">${g}</svg>`;
+  }
+  function barChart(el, items, { h = 170, color = "var(--gold)", label = (d) => d.label, value = (d) => d.value, line, lineColor = "var(--good)" } = {}) {
+    const W = el.clientWidth || 600, H = h, P = { l: 30, r: 8, t: 12, b: 24 };
+    const n = items.length;
+    const max = Math.max(1, ...items.map(value), ...(line ? items.map(line) : []));
+    const bw = (W - P.l - P.r) / Math.max(1, n);
+    const y = (v) => H - P.b - (v / max) * (H - P.t - P.b);
+    let g = "";
+    for (let k = 0; k <= 4; k++) { const v = (max * k) / 4; g += `<line x1="${P.l}" x2="${W - P.r}" y1="${y(v)}" y2="${y(v)}" stroke="#3d3020"/><text x="${P.l - 5}" y="${y(v) + 3}" text-anchor="end">${Math.round(v)}</text>`; }
+    items.forEach((d, i) => {
+      const v = value(d), x0 = P.l + i * bw + bw * 0.14, w = bw * 0.72;
+      g += `<rect x="${x0}" y="${y(v)}" width="${w}" height="${Math.max(0, H - P.b - y(v))}" rx="2" fill="${d.color || color}"><title>${esc(label(d))}: ${v}</title></rect>`;
+      if (n <= 16 || i % Math.ceil(n / 12) === 0) g += `<text x="${x0 + w / 2}" y="${H - 8}" text-anchor="middle">${esc(label(d))}</text>`;
+    });
+    if (line && n) g += `<polyline fill="none" stroke="${lineColor}" stroke-width="2" points="${items.map((d, i) => `${P.l + i * bw + bw / 2},${y(line(d))}`).join(" ")}"/>`;
+    el.innerHTML = `<svg width="100%" height="${H}" viewBox="0 0 ${W} ${H}">${g}</svg>`;
+  }
+  const bar = (v, max = 100, color = "var(--gold)") => `<div class="bar"><i style="width:${Math.max(0, Math.min(100, (v / (max || 1)) * 100))}%;background:${color}"></i></div>`;
+  const winBar = (v, n) => n ? `<div style="display:flex;gap:8px;align-items:center"><div class="bar center" style="flex:1"><i style="width:${v}%;background:${v >= 55 ? "var(--good)" : v <= 45 ? "var(--bad)" : "var(--gold)"}"></i></div><span style="min-width:44px;text-align:right">${v}%</span></div>` : `<span class="faint">—</span>`;
+  const kpi = (label, value, sub = "", cls = "") => `<div class="card kpi ${cls}"><div class="l">${label}</div><div class="v">${value}</div><div class="s">${sub}</div></div>`;
+
+  // ---------- live ----------
+  async function loadLive() {
+    const L = await api("/admin/api/live");
+    lastOk = Date.now();
+    const q = L.queued || {};
+    $("liveKpis").innerHTML = [
+      kpi("Online now", fmt(L.online), `peak ${fmt(L.counters.peakOnline)} ${L.counters.peakAt ? ago(L.counters.peakAt) : ""}`, "live"),
+      kpi("In matches", fmt(L.inGames), `${fmt(L.games)} live game${L.games === 1 ? "" : "s"} · ${fmt(L.watching)} watching`, "live"),
+      kpi("In lobbies", fmt(L.inLobbies), `${fmt(L.lobbies)} open room${L.lobbies === 1 ? "" : "s"}`),
+      kpi("Browsing hub", fmt(L.browsing), "not in a room or queue"),
+      kpi("Queued", fmt((q["1v1"] || 0) + (q["2v2"] || 0) + (q["ffa4"] || 0)), `1v1 ${q["1v1"] || 0} · 2v2 ${q["2v2"] || 0} · FFA ${q["ffa4"] || 0}`),
+      kpi("Connections", fmt(L.counters.connections), "since the server started"),
+      kpi("Uptime", dur(L.server.uptime), `started ${new Date(L.server.bootAt).toLocaleString()}`),
+      kpi("Server load", `${L.server.lagMs} ms`, `event-loop lag · ${L.server.rssMB} MB RAM`),
+    ].join("");
+
+    $("roomTable").innerHTML = `<tr><th>Room</th><th>State</th><th>Map</th><th>Format</th><th>Players</th><th>Factions</th><th class="n">Time</th><th></th></tr>` +
+      (L.rooms.length ? L.rooms.map((r) => `<tr><td>${r.locked ? "🔒 " : ""}<b>${esc(r.name)}</b>${r.ranked ? '<span class="tag">RANKED</span>' : ""}<div class="faint">host ${esc(r.host)}</div></td>
+        <td>${r.started ? '<span class="tag g">IN BATTLE</span>' : '<span class="tag">LOBBY</span>'}</td><td>${esc(r.map)}</td><td>${esc(r.format || "—")}</td>
+        <td>${r.players}/${r.max}${r.observers ? ` <span class="faint">+${r.observers} 👁</span>` : ""}<div class="faint">${r.names.map(esc).join(", ")}</div></td>
+        <td>${r.factions.map(facShort).join("")}</td><td class="n">${r.started ? dur(r.elapsed) : dur(r.age)}</td>
+        <td><button class="danger" data-close="${esc(r.name)}">Close</button></td></tr>`).join("") : `<tr><td colspan="8" class="muted">No rooms open.</td></tr>`);
+    for (const b of $("roomTable").querySelectorAll("[data-close]")) b.onclick = async () => {
+      if (!confirm(`Close "${b.dataset.close}"? Everyone in it goes back to the hub${b.closest("tr").innerHTML.includes("IN BATTLE") ? " and the match ends" : ""}.`)) return;
+      await api("/admin/api/close-room", { method: "POST", body: JSON.stringify({ name: b.dataset.close }) });
+      loadLive();
+    };
+
+    const c = L.counters, sv = L.server;
+    const rows = [
+      ["Messages / min", fmt(sv.msgsPerMin)], ["Traffic in / min", `${fmt(sv.kbPerMin)} KB`], ["Turns relayed (since start)", fmt(c.relayed)],
+      ["Event-loop lag (now / recent max)", `${sv.lagMs} ms / ${sv.lagMaxMs} ms`], ["Memory (RSS / heap)", `${sv.rssMB} MB / ${sv.heapMB} MB`],
+      ["Rooms created / quick matches made", `${fmt(c.roomsCreated)} / ${fmt(c.quickMatched)}`], ["Chat lines", fmt(c.chats)], ["Kicks", fmt(c.kicks)],
+      ["Maps published", fmt(c.published)], ["Desyncs reported", fmt(c.desyncs)], ["Rate-limited messages", fmt(c.rateLimited)],
+      ["Dead connections dropped", fmt(c.heartbeatDrops)], ["Errors", `${fmt(c.errors)}${c.lastError ? ` — <span class="faint">${esc(c.lastError)}</span>` : ""}`],
+      ["Players on record / community maps", `${fmt(sv.storage.players)} / ${fmt(sv.storage.communityMaps)}`], ["Matches in memory", fmt(sv.storage.matchesInMemory)],
+      ["Match log", `<span class="faint">${esc(sv.storage.matchesFile)}</span>`], ["Node / protocol", `${esc(sv.node)} / v${sv.protocol}`],
+    ];
+    $("healthTable").innerHTML = rows.map(([k, v]) => `<tr><td class="muted">${k}</td><td class="n">${v}</td></tr>`).join("");
+  }
+
+  // ---------- range stats ----------
+  let S = null;
+  async function loadStats() {
+    S = await api(`/admin/api/stats?range=${range}`);
+    lastOk = Date.now();
+    const o = S.overview, P = S.players;
+    $("kpis").innerHTML = [
+      kpi("Matches", fmt(o.matches), `${fmt(o.ranked)} ranked · ${fmt(o.custom)} custom`),
+      kpi("Completed", `${o.completionRate}%`, `${fmt(o.abandoned)} abandoned · ${fmt(o.disputed)} disputed`),
+      kpi("Average length", `${o.avgMinutes}m`, `median ${o.medianMinutes}m · longest ${o.longestMinutes}m`),
+      kpi("Players per match", o.avgPlayers, `${fmt(o.playerSlots)} seats filled`),
+      kpi("Active players", fmt(P.active7d), `${fmt(P.active24h)} today · ${fmt(P.active30d)} in 30 d`),
+      kpi("New players", fmt(P.new7d), `${fmt(P.new24h)} today · ${fmt(P.returning7d)} returning`),
+      kpi("Quit rate", `${o.quitRate}%`, "matches someone left early"),
+      kpi("Desync rate", `${o.desyncRate}%`, "should stay at 0"),
+    ].join("");
+
+    // Online over time (samples) and matches per day.
+    const sm = S.activity.samples;
+    lineChart($("onlineChart"), [
+      { values: sm.map((x) => x.online), color: "var(--good)", fill: true },
+      { values: sm.map((x) => x.inGames), color: "var(--gold)" },
+      { values: sm.map((x) => x.games), color: "var(--blue)" },
+    ], { xs: sm.map((x) => x.t), xLabel: (t) => { const d = new Date(t); return sm.length && sm[sm.length - 1].t - sm[0].t > 36e5 * 30 ? `${d.getMonth() + 1}/${d.getDate()}` : `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`; } });
+    barChart($("dayChart"), S.activity.perDay, { label: (d) => { const x = new Date(d.t); return `${x.getUTCMonth() + 1}/${x.getUTCDate()}`; }, value: (d) => d.matches, line: (d) => d.unique });
+    barChart($("perHourChart"), S.activity.perHour, { h: 130, label: (d) => `${new Date(d.t).getHours()}h`, value: (d) => d.matches, color: "var(--blue)" });
+    barChart($("hourChart"), S.activity.hourOfDay, { h: 150, label: (d) => String(d.hour), value: (d) => d.matches, color: "var(--gold2)" });
+
+    // Factions.
+    const maxPick = Math.max(1, ...S.factions.map((f) => f.pickRate));
+    $("factionTable").innerHTML = `<tr><th>Faction</th><th class="n">Picks</th><th>Pick share</th><th class="n">Chosen</th><th class="n">Games</th><th class="n">Wins</th><th style="min-width:160px">Win rate</th><th style="min-width:160px">1 v 1 win</th><th class="n">Avg length</th><th class="n">Avg win at</th></tr>` +
+      S.factions.map((f) => `<tr><td>${fac(f.faction)}</td><td class="n">${fmt(f.picks)}</td><td><div style="display:flex;gap:8px;align-items:center">${bar(f.pickRate, maxPick, FACTIONS[f.faction]?.color)}<span style="min-width:44px;text-align:right">${f.pickRate}%</span></div></td>
+        <td class="n">${f.picks ? f.chosenRate + "%" : "—"}</td><td class="n">${fmt(f.games)}</td><td class="n">${fmt(f.wins)}</td><td>${winBar(f.winRate, f.games)}</td>
+        <td>${winBar(f.duelWinRate, f.duels)}<div class="faint">${f.duels} duel${f.duels === 1 ? "" : "s"}</div></td><td class="n">${f.games ? f.avgMinutes + "m" : "—"}</td><td class="n">${f.wins ? f.avgWinMinutes + "m" : "—"}</td></tr>`).join("");
+    barChart($("pickChart"), S.factions.map((f) => ({ label: (FACTIONS[f.faction]?.name || f.faction).replace(/^The /, ""), value: f.picks, color: FACTIONS[f.faction]?.color })), { h: 190 });
+
+    // Match-ups.
+    const ids = Object.keys(FACTIONS);
+    $("heat").innerHTML = `<tr><th></th>${ids.map((b) => `<th style="text-align:center;padding:6px 4px;text-transform:none">${facShort(b)}<div style="font-size:10.5px">${FACTIONS[b].name.replace(/^The /, "")}</div></th>`).join("")}</tr>` +
+      ids.map((a) => `<tr><th style="white-space:nowrap;text-transform:none;font-size:12.5px;color:var(--text)">${facShort(a)}${FACTIONS[a].name.replace(/^The /, "")}</th>${ids.map((b) => {
+        if (a === b) return `<td class="faint">—</td>`;
+        const c = S.matchup[a][b];
+        if (!c.games) return `<td class="faint">·</td>`;
+        const r = Math.round((c.wins / c.games) * 100);
+        const hue = r >= 50 ? `rgba(127,207,122,${Math.min(0.55, (r - 50) / 60)})` : `rgba(224,120,106,${Math.min(0.55, (50 - r) / 60)})`;
+        return `<td style="background:${hue}">${r}%<div class="faint">${c.games}</div></td>`;
+      }).join("")}</tr>`).join("");
+
+    // Maps.
+    const maxShare = Math.max(1, ...S.maps.map((m) => m.share));
+    $("mapTable").innerHTML = `<tr><th>Map</th><th class="n">Plays</th><th>Share</th><th class="n">Completed</th><th class="n">Avg length</th><th class="n">Avg players</th></tr>` +
+      (S.maps.length ? S.maps.map((m) => `<tr><td><b>${esc(m.name)}</b>${m.custom ? `<span class="tag">CUSTOM</span><div class="faint">by ${esc(m.author || "?")}</div>` : ""}</td><td class="n">${fmt(m.plays)}</td>
+        <td><div style="display:flex;gap:8px;align-items:center">${bar(m.share, maxShare)}<span style="min-width:44px;text-align:right">${m.share}%</span></div></td>
+        <td class="n">${fmt(m.completed)}</td><td class="n">${m.completed ? m.avgMinutes + "m" : "—"}</td><td class="n">${m.avgPlayers}</td></tr>`).join("") : `<tr><td colspan="6" class="muted">No matches yet.</td></tr>`);
+
+    // Lengths.
+    barChart($("lengthChart"), S.lengths.histogram, { label: (d) => d.label + "m", value: (d) => d.count, h: 170 });
+    $("kindTable").innerHTML = `<tr><th>Kind</th><th class="n">Matches</th><th class="n">Average</th><th class="n">Median</th></tr>` +
+      S.lengths.byKind.map((k) => `<tr><td>${esc(KIND[k.kind] || k.kind)}</td><td class="n">${fmt(k.games)}</td><td class="n">${k.avgMinutes}m</td><td class="n">${k.medianMinutes}m</td></tr>`).join("");
+    $("playersLenTable").innerHTML = `<tr><th>Players</th><th class="n">Completed</th><th class="n">Average length</th></tr>` +
+      S.lengths.byPlayers.map((k) => `<tr><td>${k.players}</td><td class="n">${fmt(k.games)}</td><td class="n">${k.avgMinutes}m</td></tr>`).join("");
+    $("formatTable").innerHTML = `<tr><th>Format</th><th class="n">Matches</th><th>Share</th></tr>` +
+      S.formats.map((f) => `<tr><td>${esc(f.format)}</td><td class="n">${fmt(f.count)}</td><td>${bar(f.share)}</td></tr>`).join("");
+
+    // Players.
+    $("playerKpis").innerHTML = [
+      kpi("On record", fmt(P.total), "every browser that has played online"),
+      kpi("Rated", fmt(P.rated), `average rating ${P.avgRating || "—"}`),
+      kpi("Matches each", P.avgMatchesPerPlayer, "average, all time"),
+    ].join("");
+    barChart($("ratingChart"), P.ratingHistogram, { label: (d) => d.label, value: (d) => d.count, h: 150, color: "var(--blue)" });
+    $("topTable").innerHTML = `<tr><th>#</th><th>Player</th><th class="n">Rating</th><th class="n">W–L</th><th class="n">Win %</th></tr>` +
+      (P.top.length ? P.top.map((p, i) => `<tr><td>${i + 1}</td><td>${esc(p.name)}</td><td class="n"><b>${p.rating}</b></td><td class="n">${p.wins}–${p.losses}</td><td class="n">${p.games ? Math.round((p.wins / p.games) * 100) : 0}%</td></tr>`).join("") : `<tr><td colspan="5" class="muted">No ranked games yet.</td></tr>`);
+    $("activeTable").innerHTML = `<tr><th>Player</th><th class="n">Matches</th><th class="n">Rating</th><th class="n">Last seen</th></tr>` +
+      P.mostActive.map((p) => `<tr><td>${esc(p.name)}</td><td class="n">${fmt(p.played)}</td><td class="n">${p.rating}</td><td class="n">${p.lastSeen ? ago(p.lastSeen) : "—"}</td></tr>`).join("");
+    $("communityTable").innerHTML = `<tr><th>Map</th><th>Author</th><th class="n">Players</th><th class="n">Published</th></tr>` +
+      (S.community.newest.length ? S.community.newest.map((m) => `<tr><td>${esc(m.name)}</td><td>${esc(m.author)}</td><td class="n">${m.minPlayers}–${m.maxPlayers}</td><td class="n">${ago(m.published)}</td></tr>`).join("") : `<tr><td colspan="4" class="muted">None published yet.</td></tr>`) +
+      `<tr><td colspan="4" class="faint">${fmt(S.community.maps)} in the pool</td></tr>`;
+  }
+
+  async function loadMatches() {
+    const ms = await api("/admin/api/matches?n=60");
+    const OUT = { won: '<span class="tag g">WON</span>', abandoned: '<span class="tag r">ABANDONED</span>', disputed: '<span class="tag r">DISPUTED</span>' };
+    $("matchTable").innerHTML = `<tr><th>#</th><th>Started</th><th>Kind</th><th>Map</th><th>Format</th><th>Sides (winners bold)</th><th>Result</th><th class="n">Length</th><th class="n">Quit</th></tr>` +
+      (ms.length ? ms.map((m) => {
+        const sides = {};
+        for (const t of m.teams) (sides[t.alliance] ||= []).push(t);
+        const sideHtml = Object.entries(sides).map(([a, ts]) => {
+          const w = String(m.winner) === a;
+          return `<span style="${w ? "font-weight:700;color:#fff0cc" : "color:var(--dim)"}">${ts.map((t) => `${facShort(t.faction)}${esc(t.name)}`).join(" + ")}</span>`;
+        }).join(' <span class="faint">vs</span> ');
+        return `<tr><td class="faint">${m.n}</td><td>${ago(m.startedAt)}</td><td>${esc(KIND[m.kind] || m.kind)}${m.ranked ? '<span class="tag">R</span>' : ""}</td><td>${esc(m.map.name)}</td><td>${esc(m.format)}</td>
+          <td>${sideHtml}</td><td>${OUT[m.outcome] || esc(m.outcome)}${m.desync ? '<span class="tag r">DESYNC</span>' : ""}</td><td class="n">${dur(m.gameSec)}</td><td class="n">${m.quitters || ""}</td></tr>`;
+      }).join("") : `<tr><td colspan="9" class="muted">No matches recorded yet.</td></tr>`);
+  }
+
+  function refreshAll() { loadLive().catch(() => {}); loadStats().catch(() => {}); loadMatches().catch(() => {}); }
+  setInterval(() => { if (token && $("login").style.display === "none") loadLive().catch(() => {}); }, 3000);
+  setInterval(() => { if (token && $("login").style.display === "none") { loadStats().catch(() => {}); loadMatches().catch(() => {}); } }, 15000);
+  setInterval(() => {
+    const st = $("status");
+    const age = lastOk ? Math.round((Date.now() - lastOk) / 1000) : null;
+    st.classList.toggle("stale", age === null || age > 12);
+    st.innerHTML = `<span class="pulse"></span>${age === null ? "connecting…" : age > 12 ? `no update for ${age}s` : `live · updated ${age}s ago`}`;
+  }, 1000);
+  window.addEventListener("resize", () => { if (S) loadStats().catch(() => {}); });
+
+  if (token) {
+    $("login").style.display = "none";
+    api("/admin/api/live").then(() => refreshAll()).catch(() => {});
+  } else showLogin("");
+})();
+</script>
+</body>
+</html>

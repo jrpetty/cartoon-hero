@@ -1,0 +1,20 @@
+#!/usr/bin/env python
+# Builds the BBNative GDExtension. Needs godot-cpp (tag godot-4.5-stable or
+# newer) at ./godot-cpp or $GODOT_CPP:
+#   git clone --depth 1 --branch godot-4.5-stable https://github.com/godotengine/godot-cpp.git
+#   scons platform=linux target=template_release
+#   scons platform=windows target=template_release use_mingw=yes
+# Output lands in ../bin/, where bb_native.gdextension expects it.
+import os
+
+cpp = os.environ.get("GODOT_CPP", "godot-cpp")
+env = SConscript(os.path.join(cpp, "SConstruct"))
+env.Append(CPPPATH=["src/"])
+# Bit-exact floating point: never fuse multiply-adds or reassociate.
+env.Append(CCFLAGS=["-ffp-contract=off", "-fno-fast-math"])
+sources = Glob("src/*.cpp")
+library = env.SharedLibrary(
+    "../bin/libbbnative{}{}".format(env["suffix"], env["SHLIBSUFFIX"]),
+    source=sources,
+)
+Default(library)

@@ -1,0 +1,13 @@
+node_modules
+dist
+*.local
+.DS_Store
+
+# generated preview artifacts
+shots/
+scripts/*.bundle.mjs
+server/community-maps.json
+server/players.json
+server/public/
+server/matches.jsonl
+server/samples.jsonl

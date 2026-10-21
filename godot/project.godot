@@ -1,0 +1,43 @@
+; Banner & Blade — Godot port of the TypeScript game in ../game.
+; See PORTING.md for how the two codebases map onto each other.
+
+config_version=5
+
+[application]
+
+config/name="Banner & Blade"
+config/description="A deterministic real-time strategy game."
+run/main_scene="res://scenes/main.tscn"
+config/features=PackedStringArray("4.7", "GL Compatibility")
+
+[autoload]
+
+C="*res://src/autoload/c.gd"
+Storage="*res://src/autoload/storage.gd"
+audio="*res://src/engine/audio.gd"
+Bench="*res://src/autoload/bench.gd"
+
+[display]
+
+window/size/viewport_width=1600
+window/size/viewport_height=900
+window/stretch/mode="disabled"
+window/stretch/aspect="expand"
+window/vsync/vsync_mode=1
+
+[debug]
+
+gdscript/warnings/integer_division=0
+gdscript/warnings/narrowing_conversion=0
+gdscript/warnings/unused_parameter=0
+gdscript/warnings/unused_variable=0
+gdscript/warnings/shadowed_variable=0
+gdscript/warnings/shadowed_variable_base_class=0
+gdscript/warnings/return_value_discarded=0
+
+[rendering]
+
+renderer/rendering_method="gl_compatibility"
+renderer/rendering_method.mobile="gl_compatibility"
+textures/canvas_textures/default_texture_filter=1
+anti_aliasing/quality/msaa_2d=1

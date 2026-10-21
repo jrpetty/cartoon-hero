@@ -1,0 +1,3 @@
+# The three-panel TS | Godot | difference images (about a megabyte each) are
+# rebuilt by ../make_shots.sh; the shots themselves are committed.
+cmp_*.png

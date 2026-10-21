@@ -1,0 +1,3 @@
+# The stacked TS / Godot / difference images are rebuilt by make_screens.sh;
+# the pairs, the spec and summary.txt are committed.
+cmp_*.png

@@ -1,0 +1,3 @@
+# The three-panel comparisons of the two big unit sheets (2-3 MB each) are
+# rebuilt by make_sheets.sh; the sheets themselves are committed.
+cmp_units_*.png

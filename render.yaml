@@ -1,0 +1,18 @@
+# Render Blueprint — the Banner & Blade website (game + multiplayer server).
+# New → Blueprint → this repo. Render terminates TLS, so the site is https://
+# and online play is wss:// with nothing to configure.
+services:
+  - type: web
+    name: banner-and-blade
+    runtime: docker
+    dockerfilePath: ./game/Dockerfile
+    dockerContext: ./game
+    healthCheckPath: /healthz
+    plan: starter            # the free plan sleeps; a sleeping site drops live matches
+    disk:                    # ratings and community maps survive deploys
+      name: bb-data
+      mountPath: /data
+      sizeGB: 1
+    envVars:
+      - key: NODE_ENV
+        value: production
