@@ -19,6 +19,9 @@ extends RefCounted
 
 static var _tokens: RegEx = null
 static var _pow10: PackedFloat64Array = PackedFloat64Array()
+## Off, `parse` is plain JSON.parse_string — only for showing what goes wrong
+## without the exact reading (test_net_crossplay does).
+static var exact := true
 
 
 ## JSON.stringify, the way the wire wants it: insertion order, full precision.
@@ -29,6 +32,35 @@ static func stringify(v) -> String:
 ## JSON.parse with JS number semantics. Returns null on malformed text (like
 ## JSON.parse_string).
 static func parse(text: String):
+	if not exact:
+		var plain = JSON.parse_string(text)
+		misreads += _diff(plain, _parseExact(text))
+		return plain
+	return _parseExact(text)
+
+
+## With `exact` off: how many numbers Godot's reader has got wrong so far.
+static var misreads := 0
+
+
+static func _diff(a, b) -> int:
+	if (typeof(a) == TYPE_FLOAT or typeof(a) == TYPE_INT) and (typeof(b) == TYPE_FLOAT or typeof(b) == TYPE_INT):
+		return 0 if float(a) == float(b) else 1
+	if a is Array and b is Array and a.size() == b.size():
+		var n := 0
+		for i in a.size():
+			n += _diff(a[i], b[i])
+		return n
+	if a is Dictionary and b is Dictionary:
+		var n := 0
+		for k in a:
+			if b.has(k):
+				n += _diff(a[k], b[k])
+		return n
+	return 0
+
+
+static func _parseExact(text: String):
 	var json := JSON.new()
 	if json.parse(text) != OK:
 		return null

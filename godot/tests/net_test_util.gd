@@ -249,3 +249,29 @@ static func run_match(sessions: Array, ticks: int, ms: int = 60000) -> bool:
 
 static func lock_tick(ns: NetSession) -> int:
 	return ns.lock.currentTick if ns.lock != null else 0
+
+
+## A hash of every living entity's exact position (all 64 bits of x and y).
+## worldChecksum rounds to hundredths, so an ulp of difference — a coordinate
+## read differently off the wire — hides from it for a long time; this
+## doesn't. Same as exactHash in game/scripts/netplay-client.ts.
+static func exactHash(world: World) -> int:
+	var h := 2166136261
+	for e in world.entities:
+		if not e.alive:
+			continue
+		var bytes := PackedFloat64Array([float(e.id), e.x, e.y, e.hp]).to_byte_array()
+		for b in bytes:
+			h = JS.u32(JS.imul(h ^ b, 16777619))
+	return h
+
+
+## Step a session one tick at a time (as stepReady does, up to `max`),
+## noting the exact hash on every 40th tick.
+static func stepNoting(ns: NetSession, max: int, exact: Dictionary) -> void:
+	for _i in max:
+		if ns.stepReady(1) == 0:
+			return
+		var t: int = ns.lock.currentTick
+		if t % 40 == 0:
+			exact[t] = exactHash(ns.lock.world)
