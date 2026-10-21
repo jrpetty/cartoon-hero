@@ -1141,8 +1141,8 @@ static func drawSiegeWorkshop(ctx: Ctx, e: Entity, half: float) -> void:
 static func drawUnit(ctx: Ctx, e: Entity, time: float, lod: int = 0) -> void:
 	var tc := tcol(e.team)
 	useLook(e.team, e.type, e.id, time)
-	var def: Dictionary = C.UNITS.get(e.type, {})
-	var hero: bool = def.get("hero", false)
+	var def = C.UNITS.get(e.type)
+	var hero: bool = def != null and def.get("hero", false)
 	# Level-of-detail blob: a single filled body (+ a flag dot for the champion).
 	# Used when zoomed out / in big crowds, where the full art is sub-pixel.
 	if lod > 0:

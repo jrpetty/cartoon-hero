@@ -33,6 +33,10 @@ var _misses_before := 0
 var last_tick := 0
 var use_cache := false
 var zoom := 1.0
+## Units in groups of 15 sharing type, team and facing (a battle's
+## formations) instead of every unit different (the worst case).
+var formation := false
+var fighters := {}
 var rng := RandomNumberGenerator.new()
 
 
@@ -44,6 +48,8 @@ func _ready() -> void:
 				use_cache = true
 			"--frames":
 				total_frames = int(args[i + 1])
+			"--formation":
+				formation = true
 			"--zoom":
 				zoom = float(args[i + 1])
 	ArtCache.enabled = use_cache
@@ -58,22 +64,24 @@ func _ready() -> void:
 		var e := Entity.new()
 		e.id = 100 + i
 		e.kind = T.Kind.Unit
-		e.type = types[i % types.size()]
+		var g := i / 15 if formation else i
+		e.type = types[g % types.size()]
 		e.radius = float(C.UNITS[e.type].radius)
-		e.team = i % 4
+		e.team = g % 4
 		e.x = 60 + rng.randf() * 1480
 		e.y = 140 + rng.randf() * 720
-		e.facing = rng.randf_range(-PI, PI)
+		e.facing = rng.randf_range(-PI, PI) if not formation else fposmod(g * 2.399, TAU) - PI
 		e.animPhase = rng.randf() * 10
 		e.attackInterval = 1.0 + rng.randf()
 		e.hp = 100
 		e.maxHp = 100
-		match i % 3:
+		match g % 3:
 			0:  # walking
 				e.vx = cos(e.facing) * 40
 				e.vy = sin(e.facing) * 40
 			1:  # fighting
 				e.attackCooldown = rng.randf() * e.attackInterval
+				fighters[e.id] = true
 		units.append(e)
 	for i in BUILDING_COUNT:
 		var bt: Array = BUILDING_TYPES[i % BUILDING_TYPES.size()]
@@ -101,7 +109,7 @@ func _process(dt: float) -> void:
 	for e in units:
 		var moving: bool = e.vx != 0.0 or e.vy != 0.0
 		e.animPhase += (1.0 / 60.0) * (3.0 if moving else 1.0)
-		if not moving and e.id % 3 == 1:
+		if fighters.has(e.id):
 			e.attackCooldown -= 1.0 / 60.0
 			if e.attackCooldown < 0:
 				e.attackCooldown += e.attackInterval
@@ -158,7 +166,7 @@ func _draw() -> void:
 func _report() -> void:
 	var d := _stats(draw_us)
 	var f := _stats(frame_us)
-	print("art_bench cache=%s zoom=%.2f units=%d buildings=%d frames=%d" % [use_cache, zoom, UNIT_COUNT, BUILDING_COUNT, draw_us.size()])
+	print("art_bench cache=%s zoom=%.2f formation=%s units=%d buildings=%d frames=%d" % [use_cache, zoom, formation, UNIT_COUNT, BUILDING_COUNT, draw_us.size()])
 	print("  draw (GDScript, per frame): mean %.2f ms  median %.2f ms  p95 %.2f ms   (+ y-sort %.2f ms, not included)" % [d[0], d[1], d[2], sort_us / 1000.0 / maxi(1, frames)])
 	print("  frame time (incl. llvmpipe raster): mean %.2f ms  median %.2f ms  p95 %.2f ms" % [f[0], f[1], f[2]])
 	if use_cache:

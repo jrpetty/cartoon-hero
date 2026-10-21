@@ -239,7 +239,7 @@ static func _unit_key(e: Entity, tc: Dictionary, q: Vector4i, fb: int, li: int, 
 	var idq := e.id % 4 if Draw.gLook.helm == "nasal" else 0
 	var k := _index(_type_ix, e.type) & 63
 	k = k * 8 + (_index(_faction_ix, Draw.gFaction) & 7)
-	k = k * 128 + (_index(_tc_ix, str(tc.main) + str(tc.light)) & 127)
+	k = k * 128 + (_index(_tc_ix, tc.main) & 127)
 	k = k * 128 + (roundi(e.radius * 4.0) & 127)
 	k = k * 32 + fb
 	k = k * 16 + (qs + 8)
@@ -256,6 +256,8 @@ static func _unit_key(e: Entity, tc: Dictionary, q: Vector4i, fb: int, li: int, 
 const CARRY_IX := {"wood": 1, "gold": 2, "food": 3}
 static var _type_ix := {}
 static var _faction_ix := {}
+## Team colours by their main shade (light and dark derive from it in every
+## palette, so it identifies the set).
 static var _tc_ix := {}
 
 
@@ -316,7 +318,7 @@ static func drawUnitBase(ctx: Ctx, e: Entity, tc: Dictionary) -> bool:
 		return false
 	var lv: float = LEVELS[li]
 	_tick()
-	var key := BASE_KEY + roundi(e.radius * 4.0) * 1048576 + _index(_tc_ix, str(tc.main) + str(tc.light)) * 256 + li
+	var key := BASE_KEY + roundi(e.radius * 4.0) * 1048576 + _index(_tc_ix, tc.main) * 256 + li
 	var cell: Cell = _cells.get(key)
 	if cell == null:
 		if _over_budget():
