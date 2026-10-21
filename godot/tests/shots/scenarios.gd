@@ -22,6 +22,7 @@ func run(name: String, args: Array) -> void:
 		"gpuprobe": await gpuprobe()
 		"render": await load("res://tests/shots/render_checks.gd").new(h).run()
 		"flow": await flow()
+		"realflow": await realflow()
 		_: push_error("unknown scenario " + name)
 
 
@@ -536,3 +537,26 @@ func flow() -> void:
 	if app.state != "menu":
 		fails += 1
 	print("flow: %s" % ("PASS" if fails == 0 else "FAIL (%d)" % fails))
+
+
+## The whole game with the real screens: menu, skirmish setup, a match
+## against the AI for a while, then post-match.
+func realflow() -> void:
+	await h.frames(8)
+	await h.shot("godot_real_menu")
+	app.state = "setup"
+	await h.frames(5)
+	await h.shot("godot_real_setup")
+	var cfg: Dictionary = app.setup.config.duplicate(true) if app.setup != null else Screens.defaultSkirmishConfig()
+	app.startMatch(cfg)
+	await h.frames(20)
+	print("realflow: state = ", app.state, " ais = ", app.ais.size() if "ais" in app else -1)
+	for i in 40:
+		await h.frames(30)
+	await h.shot("godot_real_match")
+	var vills := 0
+	for e in app.world.entities:
+		if e.alive and e.team == 1 and e.type == "villager":
+			vills += 1
+	print("realflow: AI villagers after ~40 s: ", vills, " world time ", app.world.time)
+	print("realflow: %s" % ("PASS" if app.state == "match" and vills > 3 else "FAIL"))
