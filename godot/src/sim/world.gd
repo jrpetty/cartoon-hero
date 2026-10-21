@@ -190,6 +190,8 @@ var TERRAIN_SIGHT: PackedFloat64Array
 var TERRAIN_BUILDABLE: PackedByteArray
 var TERRAIN_FOREST: int
 var TERRAIN_SHALLOW: int
+## Unit types with a charge (UNITS[type].charge set), looked up every tick.
+var CHARGE_TYPES: Dictionary = {}
 
 var entities: Array = [] ## of Entity
 var byId: Dictionary = {} ## EntityId -> Entity
@@ -302,6 +304,9 @@ func _init(seed: int) -> void:
 		TERRAIN_BUILDABLE.append(int(C.TERRAIN_BUILDABLE[str(i)]))
 	TERRAIN_FOREST = int(C.Terrain["Forest"])
 	TERRAIN_SHALLOW = int(C.Terrain["Shallow"])
+	for id in UNITS:
+		if float(UNITS[id].get("charge", 0.0)) != 0.0:
+			CHARGE_TYPES[id] = true
 
 
 ## A blank entity carrying an id from *this* world's sequence.
@@ -1827,15 +1832,13 @@ func tick() -> void:
 	# Snapshot positions so the renderer can interpolate between ticks (smooth
 	# 60fps motion over the 20Hz sim). Done before anything moves this tick.
 	for e: Entity in entities:
-		if not e.alive:
-			continue
+		if not e.alive or e.kind == T.Kind.Resource:
+			continue # (resource nodes never move, so prevX/prevY already equal x/y)
 		# A charger's run-up: distance covered last tick, bled away while it
 		# stands, so a Lancer that has been idling isn't still "charging".
-		if e.kind == T.Kind.Unit:
-			var ud = UNITS.get(e.type)
-			if ud != null and ud.get("charge", 0):
-				var moved := JS.hypot(e.x - e.prevX, e.y - e.prevY)
-				e.chargeRun = minf(CHARGE_RUN * 2.0, e.chargeRun + moved) if moved > 0.5 else maxf(0.0, e.chargeRun - 80.0 * SIM_DT)
+		if e.kind == T.Kind.Unit and CHARGE_TYPES.has(e.type):
+			var moved := JS.hypot(e.x - e.prevX, e.y - e.prevY)
+			e.chargeRun = minf(CHARGE_RUN * 2.0, e.chargeRun + moved) if moved > 0.5 else maxf(0.0, e.chargeRun - 80.0 * SIM_DT)
 		e.prevX = e.x
 		e.prevY = e.y
 
@@ -1849,13 +1852,22 @@ func tick() -> void:
 	for e: Entity in entities:
 		if not e.alive:
 			continue
-		e.attackCooldown = maxf(0.0, e.attackCooldown - dt)
-		e.abilityCooldown = maxf(0.0, e.abilityCooldown - dt)
-		e.abilityActive = maxf(0.0, e.abilityActive - dt)
-		e.slowTimer = maxf(0.0, e.slowTimer - dt)
-		e.rallyTimer = maxf(0.0, e.rallyTimer - dt)
-		e.guardTimer = maxf(0.0, e.guardTimer - dt)
-		e.hitFlash = maxf(0.0, e.hitFlash - dt * 3.0)
+		# max(0, t - dt) leaves a timer that is already 0 at 0, so those (nearly
+		# all of them, nearly always) are left alone rather than rewritten.
+		if e.attackCooldown != 0.0:
+			e.attackCooldown = maxf(0.0, e.attackCooldown - dt)
+		if e.abilityCooldown != 0.0:
+			e.abilityCooldown = maxf(0.0, e.abilityCooldown - dt)
+		if e.abilityActive != 0.0:
+			e.abilityActive = maxf(0.0, e.abilityActive - dt)
+		if e.slowTimer != 0.0:
+			e.slowTimer = maxf(0.0, e.slowTimer - dt)
+		if e.rallyTimer != 0.0:
+			e.rallyTimer = maxf(0.0, e.rallyTimer - dt)
+		if e.guardTimer != 0.0:
+			e.guardTimer = maxf(0.0, e.guardTimer - dt)
+		if e.hitFlash != 0.0:
+			e.hitFlash = maxf(0.0, e.hitFlash - dt * 3.0)
 		match e.kind:
 			T.Kind.Unit:
 				tickUnit(e)
@@ -2618,21 +2630,37 @@ func findEnemyInRange(e: Entity, range: float):
 	var near := spatial.query(e.x, e.y, range)
 	var best: Entity = null
 	var bestD := INF
-	var bit := 1 << e.team
-	for n: Entity in near:
+	var et := e.team
+	var bit := 1 << et
+	var ex := e.x
+	var ey := e.y
+	var nTeams := numTeams
+	# The TS checks, in a cheaper order (each is a pure filter, so the order
+	# can't change the answer): kind first, since most of a crowd is trees.
+	for n in near:
+		var nk: int = n.kind
+		if nk != T.Kind.Unit and nk != T.Kind.Building:
+			continue
 		if not n.alive or n.hp <= 0:
 			continue
-		if not areHostile(e.team, n.team):
+		# areHostile(et, nt), inlined: neither Neutral, not the same team, and
+		# not sharing an alliance.
+		var nt: int = n.team
+		if nt == T.Team.Neutral or et == T.Team.Neutral or nt == et:
 			continue
-		if n.kind != T.Kind.Unit and n.kind != T.Kind.Building:
+		if nt < nTeams and et < nTeams and alliances[et] == alliances[nt]:
 			continue
 		# You cannot pick a fight with something you cannot see. Without this a
 		# longbowman would shoot a unit hidden in a wood from two hundred units
 		# away, and the concealment would be decoration on the minimap.
-		if n.kind == T.Kind.Unit and (n.spottedBy & bit) == 0:
+		if nk == T.Kind.Unit and (n.spottedBy & bit) == 0:
 			continue
 		# Prefer units over buildings slightly.
-		var d := MathU.dist2(e.x, e.y, n.x, n.y) * (1.8 if n.kind == T.Kind.Building else 1.0)
+		var dx: float = ex - n.x
+		var dy: float = ey - n.y
+		var d := dx * dx + dy * dy
+		if nk == T.Kind.Building:
+			d *= 1.8
 		if d < bestD:
 			bestD = d
 			best = n
@@ -3630,15 +3658,18 @@ func countOf(team: int, type: String) -> int:
 
 ## Periodically drop long-dead entities to keep iteration fast.
 func compact() -> void:
+	# Who is sitting in a living building's garrison — collected once, rather
+	# than scanning every entity for every dead unit as the TS does; the same
+	# set either way.
+	var inGarrison := {}
+	for b: Entity in entities:
+		if b.alive:
+			for id in b.garrison:
+				inGarrison[id] = true
 	var keep: Array = []
 	for e: Entity in entities:
 		# Garrisoned units are alive=false but must be kept.
-		var garrisoned := false
-		if not e.alive and e.kind == T.Kind.Unit:
-			for b: Entity in entities:
-				if b.alive and b.garrison.has(e.id):
-					garrisoned = true
-					break
+		var garrisoned := not e.alive and e.kind == T.Kind.Unit and inGarrison.has(e.id)
 		if e.alive or garrisoned:
 			keep.append(e)
 		else:

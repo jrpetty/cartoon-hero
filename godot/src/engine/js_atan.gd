@@ -77,33 +77,38 @@ const HUGE := 1.0e300
 
 
 ## Math.atan
+##
+## fdlibm compares the high word of |x| against thresholds whose low word is
+## zero; for any non-NaN x, "high word < H" is exactly "|x| < the double whose
+## words are (H, 0)", and every threshold here is such a double (0.4375, 2^-27,
+## 0.6875, 1.1875, 2.4375, 2^66). So the comparisons are made on the floats
+## themselves — the same branches, without taking the number apart.
 static func atan(x: float) -> float:
-	var hx := _hi(x)
-	var ix := hx & 0x7FFFFFFF
+	if is_nan(x):
+		return x + x
+	var ax := absf(x)
+	var neg := x < 0.0
 	var id := -1
-	if ix >= 0x44100000: # if |x| >= 2^66
-		var low := _lo(x)
-		if ix > 0x7FF00000 or (ix == 0x7FF00000 and low != 0):
-			return x + x # NaN
-		if hx > 0:
-			return ATANHI[3] + ATANLO[3]
-		return -ATANHI[3] - ATANLO[3]
-	if ix < 0x3FDC0000: # |x| < 0.4375
-		if ix < 0x3E400000: # |x| < 2^-27
+	if ax >= TWO66: # |x| >= 2^66
+		if neg:
+			return -ATANHI[3] - ATANLO[3]
+		return ATANHI[3] + ATANLO[3]
+	if ax < 0.4375: # |x| < 0.4375
+		if ax < TWO_M27: # |x| < 2^-27
 			if HUGE + x > 1.0:
 				return x # raise inexact
 		id = -1
 	else:
-		x = absf(x)
-		if ix < 0x3FF30000: # |x| < 1.1875
-			if ix < 0x3FE60000: # 7/16 <= |x| < 11/16
+		x = ax
+		if ax < 1.1875:
+			if ax < 0.6875: # 7/16 <= |x| < 11/16
 				id = 0
 				x = (2.0 * x - 1.0) / (2.0 + x)
 			else: # 11/16 <= |x| < 19/16
 				id = 1
 				x = (x - 1.0) / (x + 1.0)
 		else:
-			if ix < 0x40038000: # |x| < 2.4375
+			if ax < 2.4375: # |x| < 2.4375
 				id = 2
 				x = (x - 1.5) / (1.0 + 1.5 * x)
 			else: # 2.4375 <= |x| < 2^66
@@ -118,11 +123,34 @@ static func atan(x: float) -> float:
 	if id < 0:
 		return x - x * (s1 + s2)
 	var zz: float = ATANHI[id] - ((x * (s1 + s2) - ATANLO[id]) - x)
-	return -zz if hx < 0 else zz
+	return -zz if neg else zz
+
+
+# Powers of two from their bits (long literals don't parse exactly).
+static var TWO66 := _words(0x44100000, 0)
+static var TWO_M27 := _words(0x3E400000, 0)
+static var TWO50 := _words(0x43100000, 0)
+## The smallest normal double, 2^-1022.
+static var MIN_NORMAL := _words(0x00100000, 0)
 
 
 ## Math.atan2
 static func atan2(y: float, x: float) -> float:
+	# The common case, without taking the numbers apart: both normal, finite
+	# and non-zero, x not exactly 1, and |y/x| within 2^±50 — then fdlibm's
+	# exponent difference k lies in [-51, 50], so neither of its extreme-ratio
+	# branches can be taken and it computes atan(|y/x|) and fixes the quadrant,
+	# exactly as below.
+	var ax := absf(x)
+	var ay := absf(y)
+	if ax >= MIN_NORMAL and ay >= MIN_NORMAL and ax < INF and ay < INF and x != 1.0 \
+			and ay < ax * TWO50 and ax < ay * TWO50:
+		var z := JSAtan.atan(ay / ax)
+		if x > 0.0:
+			return z if y > 0.0 else -z
+		if y > 0.0:
+			return PI_ - (z - PI_LO)
+		return (z - PI_LO) - PI_
 	var hx := _hi(x)
 	var lx := _lo(x)
 	var ix := hx & 0x7FFFFFFF
