@@ -1,0 +1,56 @@
+## net/ws.ts — client transport for the hosted relay server, over Godot's
+## WebSocketPeer. Same message protocol as the browser build (JSON text
+## frames), so Godot and browser players share the server's lobbies.
+##
+## Godot sockets are polled: call `poll()` every frame (the main loop does).
+class_name WSLink
+extends RefCounted
+
+var ws := WebSocketPeer.new()
+var onData: Callable
+var onOpen: Callable
+var onClose: Callable
+var _was_open := false
+var _closed := false
+
+
+func _init(url: String) -> void:
+	ws.inbound_buffer_size = 1 << 22
+	ws.outbound_buffer_size = 1 << 22
+	if ws.connect_to_url(url) != OK:
+		_closed = true
+
+
+func poll() -> void:
+	if _closed:
+		return
+	ws.poll()
+	var st := ws.get_ready_state()
+	if st == WebSocketPeer.STATE_OPEN:
+		if not _was_open:
+			_was_open = true
+			if onOpen.is_valid():
+				onOpen.call()
+		while ws.get_available_packet_count() > 0:
+			var text := ws.get_packet().get_string_from_utf8()
+			var msg = JSON.parse_string(text)
+			if msg != null and onData.is_valid():
+				onData.call(msg)
+	elif st == WebSocketPeer.STATE_CLOSED:
+		_closed = true
+		if onClose.is_valid():
+			onClose.call()
+
+
+func send(msg) -> void:
+	if ws.get_ready_state() == WebSocketPeer.STATE_OPEN:
+		ws.send_text(JSON.stringify(msg, "", false, true))
+
+
+var connected: bool:
+	get:
+		return ws.get_ready_state() == WebSocketPeer.STATE_OPEN
+
+
+func close() -> void:
+	ws.close()
