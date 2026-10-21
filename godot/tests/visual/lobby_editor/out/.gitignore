@@ -1,0 +1,2 @@
+# Element boxes from the TS render, for lining layouts up; rebuilt by make.sh.
+ts_lobby_*.json

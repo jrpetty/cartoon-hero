@@ -12,17 +12,25 @@ var onOpen: Callable
 var onClose: Callable
 var _was_open := false
 var _closed := false
+var _failed := false
 
 
 func _init(url: String) -> void:
 	ws.inbound_buffer_size = 1 << 22
 	ws.outbound_buffer_size = 1 << 22
 	if ws.connect_to_url(url) != OK:
-		_closed = true
+		_failed = true
 
 
 func poll() -> void:
 	if _closed:
+		return
+	# A URL that couldn't even be dialled closes on the first poll, as a
+	# browser WebSocket fires onerror/onclose for one.
+	if _failed:
+		_closed = true
+		if onClose.is_valid():
+			onClose.call()
 		return
 	ws.poll()
 	var st := ws.get_ready_state()

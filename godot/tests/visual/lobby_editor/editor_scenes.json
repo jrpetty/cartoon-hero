@@ -1,0 +1,24 @@
+{
+  "_comment": "The map editor in known states, for the TS | Godot comparison. Both sides save the listed maps, make an EditorScreen, open a map (or not), set the listed fields, and draw the given number of frames with the mouse where it says. Read by game/scripts/godot-visual-editor.mjs and godot/tests/visual/lobby_editor/editor_sheet.gd.",
+  "maps": [
+    { "preset": "riverlands", "seed": 7, "players": 2, "name": "Ford of Ash", "desc": "", "publish": false },
+    { "preset": "highlands", "seed": 41, "players": 4, "name": "Twin Peaks", "desc": "Two passes and a gold seam between them.", "publish": true, "author": "Aldric" }
+  ],
+  "scenes": [
+    { "name": "library", "set": { "rollSeed": 4242, "scriptSeed": 777 }, "mouse": [-100, -100], "frames": 1 },
+    { "name": "library_script", "set": { "rollSeed": 4242, "scriptSeed": 777, "showScript": true,
+        "scriptBuf": "size 128\nbiome temperate\nground grass\nblob nonsense count 3\nspawns 2 ring 0.7\nresources tree count 40",
+        "scriptMsgs": [ { "line": 4, "text": "wants a terrain (grass, forest, water, …)", "bad": true } ] },
+      "mouse": [-100, -100], "frames": 1 },
+    { "name": "terrain", "open": { "preset": "highlands", "seed": 41, "players": 4, "name": "Twin Peaks" },
+      "set": { "tool": "terrain", "sym": "quad", "brush": 5, "paint": 7 }, "mouse": [700, 330], "frames": 2 },
+    { "name": "region", "open": { "preset": "highlands", "seed": 41, "players": 4, "name": "Twin Peaks" },
+      "set": { "tool": "region", "sym": "rot180" }, "copy": [20, 20, 34, 30], "mouse": [900, 600], "frames": 2 },
+    { "name": "scatter", "open": { "preset": "riverlands", "seed": 7, "players": 2, "name": "Ford of Ash" },
+      "set": { "tool": "scatter", "sym": "mirrorX", "brush": 6, "scatterDensity": 0.4, "resource": "gold_mine" }, "mouse": [600, 450], "frames": 2 },
+    { "name": "blank", "open": { "blank": 96, "biome": "arid", "name": "New Map" },
+      "set": { "tool": "spawn", "sym": "radial6" }, "mouse": [820, 300], "frames": 2 },
+    { "name": "published", "open": { "preset": "highlands", "seed": 41, "players": 4, "name": "Twin Peaks", "publish": true },
+      "set": { "tool": "erase", "sym": "none" }, "nomad": "forced", "mouse": [1200, 22], "frames": 2 }
+  ]
+}
