@@ -5,17 +5,14 @@ extends TestCase
 # order; each tick: world.tick(), every AI update(SIM_DT), drainEvents()),
 # compared by worldChecksum after every tick. On a divergence the next recorded
 # snapshot is diffed entity by entity, which says *what* went wrong.
-
-
-## The fixture's map: from maps.json when it is recorded there, else generated
-## (MapGen is parity-checked against the TS generator in test_maps_parity).
-static func mapOf(preset: String, seed: int, players: int) -> Dictionary:
-	var f := FileAccess.open("res://tests/fixtures/maps.json", FileAccess.READ)
-	var maps = JSON.parse_string(f.get_as_text())
-	for entry in maps:
-		if entry.id == preset and int(entry.seed) == seed and int(entry.n) == players:
-			return SimTestUtil.toMapData(entry.map)
-	return MapGen.generateMap(preset, seed, players)
+#
+# The ai_*.json fixtures (game/scripts/godot_ai_parity.ts) cover the rest of
+# the brain — eight seats, alliances, Regicide, Survival, nomad starts,
+# factions and commanders, a rival's adaptation, a blind AI, a ford to bridge —
+# and also record an AI digest every tick (each brain's RNG state and key
+# decisions), which catches a different choice before the world shows it.
+# (The eight-seat, twelve-minute ai_highlands8 match is test_ai_perf, which
+# times it as well.)
 
 
 ## Replays an AI fixture; returns {"matched": last tick that matched, "ticks":
@@ -26,7 +23,7 @@ func runAIScenario(name: String) -> Dictionary:
 		return {}
 	var players := int(fx.players)
 	var seed := int(fx.seed)
-	var map := mapOf(fx.preset, seed, players)
+	var map := AITestUtil.mapOf(fx.preset, seed, players)
 	var w := World.new(seed)
 	var loadouts: Array = []
 	var econ: Array = []
@@ -112,3 +109,35 @@ func test_ai4_lord_ffa_matches_ts_every_tick() -> void:
 		return
 	var r := runAIScenario("ai4")
 	eq(r.get("matched", -1), (fx.checksums as Array).size() - 1, "ai4: last matching tick")
+
+
+func _scenario(name: String) -> void:
+	var fx = fixture("ai_%s.json" % name)
+	if fx == null:
+		return
+	var r := AITestUtil.runScenario(fx, name, failures)
+	eq(r.get("matched", -1), (fx.checksums as Array).size() - 1, "%s: last matching tick" % name)
+
+
+func test_teams_2v2_factions_commanders_match_ts_every_tick() -> void:
+	_scenario("teams")
+
+
+func test_regicide_matches_ts_every_tick() -> void:
+	_scenario("regicide")
+
+
+func test_nomad_start_matches_ts_every_tick() -> void:
+	_scenario("nomad")
+
+
+func test_rival_adaptation_and_blind_ai_match_ts_every_tick() -> void:
+	_scenario("rival")
+
+
+func test_survival_allies_match_ts_every_tick() -> void:
+	_scenario("survival")
+
+
+func test_ford_and_bridges_match_ts_every_tick() -> void:
+	_scenario("ford")
