@@ -146,6 +146,8 @@ static func _v(seed: int, n: int) -> float:
 
 
 static func drawResource(ctx: Ctx, e: Entity, time: float) -> void:
+	if ArtCache.enabled and ArtCache.drawResource(ctx, e, time):
+		return
 	var PAL: Dictionary = C.PAL
 	var frac := maxf(0.25, minf(1, e.amount / 125))
 	var seed := JS.u32(e.id * 2654435761)
@@ -1144,6 +1146,8 @@ static func drawUnit(ctx: Ctx, e: Entity, time: float, lod: int = 0) -> void:
 	# Level-of-detail blob: a single filled body (+ a flag dot for the champion).
 	# Used when zoomed out / in big crowds, where the full art is sub-pixel.
 	if lod > 0:
+		if ArtCache.enabled and ArtCache.drawUnitLod(ctx, e, tc, hero):
+			return
 		ctx.fillStyle = Palette.withAlpha("#0a0805", 0.28)
 		ctx.beginPath()
 		ctx.ellipse(e.x, e.y + e.radius * 0.55, e.radius * 0.9, e.radius * 0.4, 0, 0, PI * 2)
@@ -1349,8 +1353,25 @@ static func capsule(ctx: Ctx, x0: float, y0: float, x1: float, y1: float, w: flo
 	ctx.stroke()
 
 
+## Art-cache hooks (Godot only): while set, figures are drawn at this gait
+## step / gallop phase — the centre of the cache bucket being rendered —
+## instead of the entity's own, so every unit sharing a cached pose shows the
+## same representative frame.
+static var gGaitOverride = null
+static var gGallopOverride = null
+
+
+## sin(animPhase × hz) — a horse's gallop phase (inline in the TS).
+static func _gallop(e: Entity, hz: float) -> float:
+	if gGallopOverride != null:
+		return gGallopOverride
+	return sin(e.animPhase * hz)
+
+
 ## Walk phase: legs/arms swing strongly when moving, sway gently when idle.
 static func gait(e: Entity) -> float:
+	if gGaitOverride != null:
+		return gGaitOverride
 	var moving := sqrt(e.vx * e.vx + e.vy * e.vy) > 4
 	return sin(e.animPhase * 9) if moving else sin(e.animPhase * 2.2) * 0.2
 
@@ -1751,7 +1772,7 @@ static func drawLongbow(ctx: Ctx, e: Entity, tc: Dictionary, atkFrac: float) -> 
 static func drawCataphract(ctx: Ctx, e: Entity, tc: Dictionary, moving: bool, time: float, lunge: float) -> void:
 	var PAL: Dictionary = C.PAL
 	var r := e.radius
-	var gallop := sin(e.animPhase * 10) * 1.1 if moving else 0.0
+	var gallop := _gallop(e, 10) * 1.1 if moving else 0.0
 	# Barded horse: a blockier body than the Knight's, in steel over team colour.
 	ctx.fillStyle = grad(ctx, 0, r * 0.1, 0, r * 0.95, PAL.steel, PAL.steelDark)
 	ctx.beginPath()
@@ -1931,7 +1952,7 @@ static func horse(ctx: Ctx, e: Entity, moving: bool, opts: Dictionary) -> void:
 		var h := FactionFigures.factionHorse(gLook, coat, sx)
 		coat = h.coat
 		sx = h.sx
-	var gallop := sin(e.animPhase * float(opts.get("gallopHz", 11))) * 1.3 if moving else 0.0
+	var gallop := _gallop(e, float(opts.get("gallopHz", 11))) * 1.3 if moving else 0.0
 	ctx.save()
 	ctx.rotate(e.facing)
 	# The Ascendancy ride sleds, not horses.

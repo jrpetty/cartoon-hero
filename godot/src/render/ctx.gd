@@ -44,8 +44,12 @@ class CanvasGradient extends RefCounted:
 	var r1 := 0.0
 	var offsets := PackedFloat32Array()
 	var colors := PackedColorArray()
+	## The measure pass's stand-in: ignores its stops (nothing is painted).
+	var frozen := false
 
 	func addColorStop(offset: float, color) -> void:
+		if frozen:
+			return
 		var c = Ctx.parse_color(color) if color is String else color
 		if not (c is Color) or offset < 0.0 or offset > 1.0:
 			push_error("CanvasGradient.addColorStop: bad stop %s %s" % [offset, color])
@@ -268,6 +272,7 @@ var _seg := RID()
 var _segs: Array = []  ## pooled child canvas items, one per clip/blend state
 var _seg_i := -1
 var _seg_dirty := true
+var _seg_premul := false
 
 # Shared caches.
 static var _color_cache := {}
@@ -278,6 +283,7 @@ static var _ring_cache := {}
 static var _strip_cache := {}
 static var _arc_cache := {}
 static var _add_material := RID()
+static var _premul_material := RID()
 static var _dest_out_material := RID()
 static var _dest_out_shader := RID()
 
@@ -357,10 +363,16 @@ func reset() -> void:
 	beginPath()
 
 
-func _segment() -> RID:
+## The canvas item the next command goes into. A new one (from the pool)
+## whenever the clip, the composite operation or the premultiplied-blit mode
+## changes, so each keeps its own clip rect / material and the order holds.
+func _segment(premul: bool = false) -> RID:
+	if premul != _seg_premul:
+		_seg_dirty = true
 	if not _seg_dirty:
 		return _seg
 	_seg_dirty = false
+	_seg_premul = premul
 	_seg_i += 1
 	if _seg_i >= _segs.size():
 		var s := RenderingServer.canvas_item_create()
@@ -372,12 +384,23 @@ func _segment() -> RID:
 	RenderingServer.canvas_item_set_clip(_seg, _clip_on)
 	RenderingServer.canvas_item_set_custom_rect(_seg, _clip_on, _clip_rect if _clip_on else Rect2())
 	var mat := RID()
-	if globalCompositeOperation == "lighter":
+	if premul:
+		mat = _get_premul_material()
+	elif _composite == "lighter":
 		mat = _get_add_material()
-	elif globalCompositeOperation == "destination-out":
+	elif _composite == "destination-out":
 		mat = _get_dest_out_material()
 	RenderingServer.canvas_item_set_material(_seg, mat)
 	return _seg
+
+
+static func _get_premul_material() -> RID:
+	if not _premul_material.is_valid():
+		var m := CanvasItemMaterial.new()
+		m.blend_mode = CanvasItemMaterial.BLEND_MODE_PREMULT_ALPHA
+		_keep.append(m)
+		_premul_material = m.get_rid()
+	return _premul_material
 
 
 static func _get_add_material() -> RID:
@@ -728,9 +751,11 @@ func beginPath() -> void:
 	_subs.clear()
 	_subs_closed.clear()
 	_subs_flags.clear()
+	_subs_shape.clear()
 	_cur = PackedVector2Array()
 	_cur_flags = 0
 	_cur_arcs = 0
+	_cur_shape = null
 	_has_cur = false
 
 
@@ -739,9 +764,19 @@ func _finish_cur(closed: bool) -> void:
 		_subs.append(_cur)
 		_subs_closed.append(closed)
 		_subs_flags.append(_cur_flags)
+		_subs_shape.append(_cur_shape if _cur_flags & _F_CONVEX else null)
 	_cur = PackedVector2Array()
 	_cur_flags = 0
 	_cur_arcs = 0
+	_cur_shape = null
+
+
+## A whole ellipse (or circle) subpath remembers what it is, so fill and
+## stroke can build its antialiased rings straight from the cached unit
+## circle instead of walking it point by point:
+## [transform at add time, rotation, centre, rx, ry, segments, start angle, is circle, scale].
+var _cur_shape = null
+var _subs_shape: Array = []
 
 
 func _add(p: Vector2) -> void:
@@ -947,8 +982,11 @@ func ellipse(x: float, y: float, rx: float, ry: float, rot: float, a0: float, a1
 		_has_cur = true
 	if fresh and _cur_arcs == 0:
 		_cur_flags = _F_CONVEX
+		if absf(sweep) >= TAU - 1e-9 and n > 2:
+			_cur_shape = [_xf, rot + a0 if rx == ry else rot, Vector2(x, y), rx, ry, n, a0, rx == ry, _scale]
 	else:
 		_cur_flags &= ~_F_CONVEX
+		_cur_shape = null
 	_cur_arcs += 1
 	if _cur_arcs >= 2:
 		_cur_flags |= _F_COMPLEX
@@ -1029,6 +1067,40 @@ func _emit(verts: PackedVector2Array, cols: PackedColorArray, idx: PackedInt32Ar
 	RenderingServer.canvas_item_add_triangle_array(_segment(), idx, verts, cols)
 
 
+## Measure mode: grow `bounds` by every point of `polys`, plus a margin.
+func _grow_pts(polys: Array, margin: float) -> void:
+	var first := true
+	var mn := Vector2.ZERO
+	var mx := Vector2.ZERO
+	for p in polys:
+		for v in p:
+			if first:
+				mn = v
+				mx = v
+				first = false
+			else:
+				mn = mn.min(v)
+				mx = mx.max(v)
+	if first:
+		return
+	var off := Vector2(shadowOffsetX, shadowOffsetY) if shadows and _shadow_col.a > 0.0 else Vector2.ZERO
+	var r := Rect2(mn - Vector2(margin, margin), mx - mn + Vector2(margin, margin) * 2.0)
+	if off != Vector2.ZERO:
+		r = r.merge(Rect2(r.position + off, r.size))
+	if bounds_valid:
+		bounds = bounds.merge(r)
+	else:
+		bounds = r
+		bounds_valid = true
+
+
+## How far a shadow reaches past the shape (device px), for measuring.
+func _shadow_reach() -> float:
+	if not shadows or _shadow_col.a <= 0.0 or shadowBlur <= 0.0:
+		return 0.0
+	return shadowBlur * 1.15
+
+
 func _grow_bounds(verts: PackedVector2Array) -> void:
 	var mn := verts[0]
 	var mx := verts[0]
@@ -1054,6 +1126,8 @@ func _solid(paint, mult: float) -> Variant:
 
 
 func _grad_colors(g: CanvasGradient, verts: PackedVector2Array, mult: float) -> PackedColorArray:
+	if not g.radial:
+		return _lin_colors(g, verts, mult)[0]
 	var inv := _xf.affine_inverse()
 	var cols := PackedColorArray()
 	cols.resize(verts.size())
@@ -1063,6 +1137,55 @@ func _grad_colors(g: CanvasGradient, verts: PackedVector2Array, mult: float) -> 
 		c.a *= am
 		cols[i] = c
 	return cols
+
+
+## Colours of a linear gradient at device-space vertices, in one pass: t is an
+## affine function of the device position (t = p·k + c), so no per-vertex
+## inverse transform. Returns [colours, min t, max t].
+func _lin_colors(g: CanvasGradient, verts: PackedVector2Array, mult: float) -> Array:
+	var inv := _xf.affine_inverse()
+	var d := Vector2(g.x1 - g.x0, g.y1 - g.y0)
+	var dd := d.length_squared()
+	var gk := Vector2.ZERO
+	var gc := 0.0
+	if dd > 0.0:
+		gk = Vector2(inv.x.dot(d), inv.y.dot(d)) / dd
+		gc = (inv.origin - Vector2(g.x0, g.y0)).dot(d) / dd
+	var n := verts.size()
+	var cols := PackedColorArray()
+	cols.resize(n)
+	var am := globalAlpha * mult
+	var tmin := INF
+	var tmax := -INF
+	var simple := g.offsets.size() == 2 and g.offsets[0] == 0.0 and g.offsets[1] == 1.0
+	var c0 := g.colors[0] if g.colors.size() > 0 else Color(0, 0, 0, 0)
+	var c1 := g.colors[1] if g.colors.size() > 1 else c0
+	for i in n:
+		var t := verts[i].dot(gk) + gc
+		tmin = minf(tmin, t)
+		tmax = maxf(tmax, t)
+		var c := c0.lerp(c1, clampf(t, 0.0, 1.0)) if simple else g.at(t)
+		c.a *= am
+		cols[i] = c
+	return [cols, tmin, tmax]
+
+
+## Whether a linear gradient over vertices spanning t in [tmin, tmax] needs its
+## triangles split (a stop inside the span, or a real stretch of clamping).
+static func _needs_split(g: CanvasGradient, tmin: float, tmax: float) -> bool:
+	var n := g.offsets.size()
+	if n == 0:
+		return false
+	var first := g.offsets[0]
+	var last := g.offsets[n - 1]
+	if tmin < first - 0.04 and tmax > first:
+		return true
+	if tmax > last + 0.04 and tmin < last:
+		return true
+	for i in range(1, n - 1):
+		if g.offsets[i] > tmin and g.offsets[i] < tmax:
+			return true
+	return false
 
 
 static func _fan(n: int) -> PackedInt32Array:
@@ -1105,15 +1228,26 @@ static func _ring(n: int) -> PackedInt32Array:
 func fill(rule: String = "nonzero") -> void:
 	var polys: Array = []
 	var flags: Array = []
+	var shape = null
 	for i in _subs.size():
 		var p: PackedVector2Array = _subs[i]
 		if p.size() >= 3:
 			polys.append(p)
 			flags.append(_subs_flags[i])
+			shape = _subs_shape[i]
 	if _cur.size() >= 3:
 		polys.append(_cur)
 		flags.append(_cur_flags)
+		shape = _cur_shape if _cur_flags & _F_CONVEX else null
 	if polys.is_empty():
+		return
+	if measure_only:
+		_grow_pts(polys, 0.5 + _shadow_reach())
+		return
+	# One whole ellipse, nothing unusual in force: build it from the unit circle.
+	if polys.size() == 1 and shape != null and aa and _clip_poly.is_empty() and not (_fill_paint is CanvasGradient and _fill_paint.radial) \
+			and not (shadows and _shadow_col.a > 0.0 and (shadowBlur > 0.0 or shadowOffsetX != 0.0 or shadowOffsetY != 0.0)):
+		_fill_ellipse(shape, _fill_paint)
 		return
 	for i in polys.size():
 		var p: PackedVector2Array = polys[i]
@@ -1182,28 +1316,81 @@ func _fill_simple(p: PackedVector2Array, idx: PackedInt32Array, paint) -> void:
 		_emit(p, PackedColorArray([c]) if c != null else _grad_colors(paint, p, 1.0), idx)
 		return
 	var verts := _aa_outline(p)
+	_fill_rings(verts, idx, n, paint)
+
+
+## Fill a polygon given as `verts` = n inner (shrunk) points then n outer
+## (grown) points, with `idx` triangulating the inner ones: the core in the
+## paint, the fringe ring fading out.
+func _fill_rings(verts: PackedVector2Array, idx: PackedInt32Array, n: int, paint) -> void:
+	var c = _solid(paint, 1.0)
+	if c != null:
+		var all := idx.duplicate()
+		all.append_array(_ring(n))
+		_emit(verts, _two_tone(c, n, n), all)
+		return
 	var all_idx := idx.duplicate()
-	if radial:
+	var cols := PackedColorArray()
+	if paint.radial:
 		# A radial gradient varies inside triangles whose corners all sit on
 		# the rim (a circle's fan): subdivide so the colour has somewhere to
 		# change. New vertices go after the fringe ring's.
 		var rf := _refine(verts, all_idx, paint)
 		verts = rf[0]
 		all_idx = rf[1]
-	elif paint is CanvasGradient:
-		var rl := _refine_linear(verts, all_idx, paint)
-		verts = rl[0]
-		all_idx = rl[1]
-	all_idx.append_array(_ring(n))
-	var cols: PackedColorArray
-	var c = _solid(paint, 1.0)
-	if c != null:
-		cols = _two_tone(c, n, n)
-	else:
 		cols = _grad_colors(paint, verts, 1.0)
-		for i in range(n, 2 * n):
-			cols[i].a = 0.0
+	else:
+		var lc := _lin_colors(paint, verts, 1.0)
+		cols = lc[0]
+		if _needs_split(paint, lc[1], lc[2]):
+			var rl := _refine_linear(verts, all_idx, paint)
+			verts = rl[0]
+			all_idx = rl[1]
+			cols = _lin_colors(paint, verts, 1.0)[0]
+	for i in range(n, 2 * n):
+		cols[i].a = 0.0
+	all_idx.append_array(_ring(n))
 	_emit(verts, cols, all_idx)
+
+
+## A whole ellipse: inner and outer rings straight from the unit circle.
+func _fill_ellipse(sh: Array, paint) -> void:
+	var xf: Transform2D = sh[0]
+	var c: Vector2 = sh[2]
+	var rx: float = sh[3]
+	var ry: float = sh[4]
+	var n: int = sh[5]
+	var h: float = 0.5 / maxf(sh[8], 1e-6)
+	var unit := _unit_ring(n, sh[6], sh[7])
+	var verts: PackedVector2Array = (xf * Transform2D(sh[1], Vector2(maxf(rx - h, 0.0), maxf(ry - h, 0.0)), 0.0, c)) * unit
+	verts.append_array((xf * Transform2D(sh[1], Vector2(rx + h, ry + h), 0.0, c)) * unit)
+	_fill_rings(verts, _fan(n), n, paint)
+
+
+## n points round the unit circle (a closed ring, no repeated end), starting
+## at angle 0 — or, for an ellipse, at a0 (its start angle can't be folded
+## into the rotation).
+static func _unit_ring(n: int, a0: float, circle: bool) -> PackedVector2Array:
+	return _ring_table(n, 0.0 if circle else a0)
+
+
+static var _ring_tables := {}
+
+
+static func _ring_table(n: int, a0: float) -> PackedVector2Array:
+	var key := Vector2(n, a0)
+	var pts = _ring_tables.get(key)
+	if pts != null:
+		return pts
+	pts = PackedVector2Array()
+	pts.resize(n)
+	for k in n:
+		var a := a0 + TAU * k / n
+		pts[k] = Vector2(cos(a), sin(a))
+	if _ring_tables.size() > 2048:
+		_ring_tables.clear()
+	_ring_tables[key] = pts
+	return pts
 
 
 ## Linear gradients are linear in position, so per-vertex colours are exact —
@@ -1483,17 +1670,91 @@ static func _tessellate(polys: Array, evenodd: bool) -> Array:
 func stroke() -> void:
 	var lines: Array = []
 	var closed: Array = []
+	var shapes: Array = []
 	for i in _subs.size():
 		var p: PackedVector2Array = _subs[i]
 		if p.size() >= 2:
 			lines.append(p)
 			closed.append(_subs_closed[i])
+			shapes.append(_subs_shape[i])
 	if _cur.size() >= 2:
 		lines.append(_cur)
 		closed.append(false)
+		shapes.append(_cur_shape if _cur_flags & _F_CONVEX else null)
 	if lines.is_empty():
 		return
-	_stroke_lines(lines, closed, _stroke_paint, lineWidth * _scale)
+	if measure_only:
+		# Half-width out from the centre line, with room for a miter tip.
+		_grow_pts(lines, lineWidth * _scale + 0.5 + _shadow_reach())
+		return
+	var w := lineWidth * _scale
+	# Whole ellipses with nothing unusual in force: rings from the unit circle.
+	if aa and _dash.is_empty() and _clip_poly.is_empty() and not (shadows and _shadow_col.a > 0.0 and (shadowBlur > 0.0 or shadowOffsetX != 0.0 or shadowOffsetY != 0.0)) \
+			and not (_stroke_paint is CanvasGradient and _stroke_paint.radial):
+		var rest: Array = []
+		var rest_closed: Array = []
+		for i in lines.size():
+			if shapes[i] != null:
+				_stroke_ellipse(shapes[i], _stroke_paint, w)
+			else:
+				rest.append(lines[i])
+				rest_closed.append(closed[i])
+		if not rest.is_empty():
+			_stroke_lines(rest, rest_closed, _stroke_paint, w)
+		return
+	_stroke_lines(lines, closed, _stroke_paint, w)
+
+
+## Stroke a whole ellipse: four rings (core out/in, fringe out/in) from the
+## unit circle, indexed by a cached template.
+func _stroke_ellipse(sh: Array, paint, w: float) -> void:
+	var alpha_mult := 1.0
+	var hw := w * 0.5
+	if w < 1.0:
+		alpha_mult = w
+		hw = 0.5
+	var s: float = maxf(sh[8], 1e-6)
+	var hc := (hw - 0.5) / s
+	var hf := (hw + 0.5) / s
+	var xf: Transform2D = sh[0]
+	var rot: float = sh[1]
+	var c: Vector2 = sh[2]
+	var rx: float = sh[3]
+	var ry: float = sh[4]
+	var n: int = sh[5]
+	var unit := _unit_ring(n, sh[6], sh[7])
+	var verts: PackedVector2Array = (xf * Transform2D(rot, Vector2(rx + hc, ry + hc), 0.0, c)) * unit
+	verts.append_array((xf * Transform2D(rot, Vector2(maxf(rx - hc, 0.0), maxf(ry - hc, 0.0)), 0.0, c)) * unit)
+	verts.append_array((xf * Transform2D(rot, Vector2(rx + hf, ry + hf), 0.0, c)) * unit)
+	verts.append_array((xf * Transform2D(rot, Vector2(maxf(rx - hf, 0.0), maxf(ry - hf, 0.0)), 0.0, c)) * unit)
+	var cols: PackedColorArray
+	var sc = _solid(paint, alpha_mult)
+	if sc != null:
+		cols = _two_tone(sc, 2 * n, 2 * n)
+	else:
+		cols = _grad_colors(paint, verts, alpha_mult)
+		for i in range(2 * n, 4 * n):
+			cols[i].a = 0.0
+	_emit(verts, cols, _ring_strip(n))
+
+
+static var _ring_strip_cache := {}
+
+
+## Indices for four rings of n points laid out ring after ring: the core
+## between rings 0 and 1, the fringes between 2–0 and 1–3.
+static func _ring_strip(n: int) -> PackedInt32Array:
+	var idx = _ring_strip_cache.get(n)
+	if idx != null:
+		return idx
+	idx = PackedInt32Array()
+	for i in n:
+		var j := (i + 1) % n
+		idx.append_array([i, n + i, n + j, i, n + j, j])
+		idx.append_array([2 * n + i, i, j, 2 * n + i, j, 2 * n + j])
+		idx.append_array([n + i, 3 * n + i, 3 * n + j, n + i, 3 * n + j, n + j])
+	_ring_strip_cache[n] = idx
+	return idx
 
 
 func _stroke_lines(lines: Array, closed: Array, paint, w: float) -> void:
@@ -1807,6 +2068,9 @@ func fillRect(x: float, y: float, w: float, h: float) -> void:
 	if w == 0.0 or h == 0.0:
 		return
 	var p := PackedVector2Array([_xf * Vector2(x, y), _xf * Vector2(x + w, y), _xf * Vector2(x + w, y + h), _xf * Vector2(x, y + h)])
+	if measure_only:
+		_grow_pts([p], 0.5 + _shadow_reach())
+		return
 	if not _clip_poly.is_empty() or (shadows and _shadow_col.a > 0.0 and (shadowBlur > 0.0 or shadowOffsetX != 0.0 or shadowOffsetY != 0.0)):
 		_fill_polys([p], [_F_CONVEX], _fill_paint, "nonzero")
 		return
@@ -1815,6 +2079,9 @@ func fillRect(x: float, y: float, w: float, h: float) -> void:
 
 func strokeRect(x: float, y: float, w: float, h: float) -> void:
 	var p := PackedVector2Array([_xf * Vector2(x, y), _xf * Vector2(x + w, y), _xf * Vector2(x + w, y + h), _xf * Vector2(x, y + h)])
+	if measure_only:
+		_grow_pts([p], lineWidth * _scale + 0.5)
+		return
 	_stroke_lines([p], [true], _stroke_paint, lineWidth * _scale)
 
 
@@ -2099,10 +2366,44 @@ func drawImage(img: Texture2D, a: float, b: float, c = null, d = null, e = null,
 ## Draw a region of a texture (by RID) into a user-space rect.
 func blit(tex: RID, src: Rect2, dst: Rect2, modulate: Color = Color.WHITE) -> void:
 	modulate.a *= globalAlpha
+	_blit(tex, src, dst, modulate, false)
+
+
+## Blit from a texture holding premultiplied alpha (what a transparent 2D
+## viewport renders — the art cache's atlas pages). Consecutive premultiplied
+## blits share one segment, so a frame of cached sprites batches.
+func blit_premul(tex: RID, src: Rect2, dst: Rect2) -> void:
+	var a := globalAlpha
+	_blit(tex, src, dst, Color(a, a, a, a), true)
+
+
+## The uniform scale of the current transform (device pixels per user unit).
+func device_scale() -> float:
+	return _scale
+
+
+## Blit an art-cache cell: `src` (atlas pixels, premultiplied) holds art drawn
+## at `level` pixels per unit with its origin at `origin` inside the cell; this
+## puts that origin at user-space point `at`. When the cell's level is the
+## device scale, the origin is snapped to a whole pixel so texels land 1:1.
+func blit_cell(tex: RID, src: Rect2, at: Vector2, origin: Vector2, level: float) -> void:
+	var a := globalAlpha
+	var k := _scale / level
+	if measure_only or absf(_xf.x.y) > 1e-9 or absf(_xf.y.x) > 1e-9 or _xf.x.x <= 0.0 or _xf.y.y <= 0.0:
+		_blit(tex, src, Rect2(at - origin / level, src.size / level), Color(a, a, a, a), true)
+		return
+	var p := _xf * at
+	if absf(k - 1.0) < 0.01:
+		p = p.round()
+		k = 1.0
+	RenderingServer.canvas_item_add_texture_rect_region(_segment(true), Rect2(p - origin * k, src.size * k), tex, src, Color(a, a, a, a))
+
+
+func _blit(tex: RID, src: Rect2, dst: Rect2, modulate: Color, premul: bool) -> void:
 	if measure_only:
 		_grow_bounds(_xf * _rect_poly(dst))
 		return
-	var seg := _segment()
+	var seg := _segment(premul)
 	if absf(_xf.x.y) < 1e-9 and absf(_xf.y.x) < 1e-9 and _xf.x.x > 0.0 and _xf.y.y > 0.0:
 		var p0 := _xf * dst.position
 		var p1 := _xf * dst.end
@@ -2115,7 +2416,16 @@ func blit(tex: RID, src: Rect2, dst: Rect2, modulate: Color = Color.WHITE) -> vo
 
 # ============================================================== gradients ==
 
+static var _measure_grad: CanvasGradient = null
+
+
 func createLinearGradient(x0: float, y0: float, x1: float, y1: float) -> CanvasGradient:
+	if measure_only:
+		if _measure_grad == null:
+			_measure_grad = CanvasGradient.new()
+			_measure_grad.addColorStop(0, Color.BLACK)
+			_measure_grad.frozen = true
+		return _measure_grad
 	var g := CanvasGradient.new()
 	g.x0 = x0
 	g.y0 = y0

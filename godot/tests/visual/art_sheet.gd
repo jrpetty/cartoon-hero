@@ -30,6 +30,7 @@ func setup(args: PackedStringArray) -> void:
 		return
 	sheet_size = Vector2i(int(spec.W), int(spec.H))
 	ArtCache.enabled = use_cache
+	ArtCache.unlimited = true
 
 
 func paint(c: Ctx) -> void:
