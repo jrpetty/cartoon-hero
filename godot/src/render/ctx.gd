@@ -276,6 +276,14 @@ var _seg_premul := false
 
 # Shared caches.
 static var _color_cache := {}
+## Finished fill/stroke geometry by a key of everything that shapes it (the
+## device-space path, the paint, the state that matters). Immediate-mode UI
+## redraws the same panels and buttons every frame; with this a repeat costs a
+## hash and one submit instead of tessellation, antialiasing and stroking.
+static var _geo_cache := {}
+const _GEO_CACHE_MAX := 20000
+static var geo_cache_enabled := true
+var _rec = null  # while recording a cache miss: Array of [verts, cols, idx]
 static var _font_spec_cache := {}
 static var _sysfont_cache := {}
 static var _fan_cache := {}
@@ -1083,6 +1091,8 @@ func _emit(verts: PackedVector2Array, cols: PackedColorArray, idx: PackedInt32Ar
 	if measure_only:
 		_grow_bounds(verts)
 		return
+	if _rec != null:
+		_rec.append([verts, cols, idx])
 	RenderingServer.canvas_item_add_triangle_array(_segment(), idx, verts, cols)
 
 
@@ -1253,7 +1263,54 @@ static func _ring(n: int) -> PackedInt32Array:
 # =================================================================== fill ==
 
 ## fill() / fill("nonzero") / fill("evenodd").
+static func _paint_key(paint) -> int:
+	if paint is CanvasGradient:
+		return hash([paint.radial, paint.x0, paint.y0, paint.r0, paint.x1, paint.y1, paint.r1, paint.offsets, paint.colors])
+	return hash(paint)
+
+
+## The cache key for a fill (kind 0) or stroke (kind 1) of `shapes`.
+func _geo_key(kind: int, shapes: Array, extra: Array, paint) -> int:
+	var n := 0
+	for p in shapes:
+		n += p.size()
+	var h := hash([kind, shapes, extra, _paint_key(paint), _globalAlpha, _composite, aa, shadows,
+		_shadow_col, shadowBlur, shadowOffsetX, shadowOffsetY, _scale, _clip_poly, tolerance])
+	return h | (n << 32)
+
+
+## Replay cached geometry for `key`; true if there was some.
+func _geo_replay(key: int) -> bool:
+	var hit = _geo_cache.get(key)
+	if hit == null:
+		return false
+	for g in hit:
+		RenderingServer.canvas_item_add_triangle_array(_segment(), g[2], g[0], g[1])
+	return true
+
+
+func _geo_store(key: int) -> void:
+	if _geo_cache.size() >= _GEO_CACHE_MAX:
+		_geo_cache.clear()
+	_geo_cache[key] = _rec
+	_rec = null
+
+
 func fill(rule: String = "nonzero") -> void:
+	if geo_cache_enabled and not measure_only and _rec == null:
+		var shapes: Array = _subs.duplicate()
+		shapes.append(_cur)
+		var key := _geo_key(0, shapes, [rule, _subs_flags, _cur_flags], _fill_paint)
+		if _geo_replay(key):
+			return
+		_rec = []
+		_fill_uncached(rule)
+		_geo_store(key)
+		return
+	_fill_uncached(rule)
+
+
+func _fill_uncached(rule: String = "nonzero") -> void:
 	var polys: Array = []
 	var flags: Array = []
 	var shape = null
@@ -1698,6 +1755,20 @@ static func _tessellate(polys: Array, evenodd: bool) -> Array:
 # ================================================================= stroke ==
 
 func stroke() -> void:
+	if geo_cache_enabled and not measure_only and _rec == null:
+		var shapes: Array = _subs.duplicate()
+		shapes.append(_cur)
+		var key := _geo_key(1, shapes, [_subs_closed, _subs_flags, _cur_flags, _lineWidth, lineCap, lineJoin, miterLimit, _dash, lineDashOffset], _stroke_paint)
+		if _geo_replay(key):
+			return
+		_rec = []
+		_stroke_uncached()
+		_geo_store(key)
+		return
+	_stroke_uncached()
+
+
+func _stroke_uncached() -> void:
 	var lines: Array = []
 	var closed: Array = []
 	var shapes: Array = []
