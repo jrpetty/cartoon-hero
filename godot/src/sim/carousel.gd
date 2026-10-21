@@ -9,7 +9,10 @@
 class_name Carousel
 
 ## How many options ride out — enough that even the last picker has a choice.
-const CAROUSEL_SIZE := 6
+## (Data, so it comes from `C`.)
+static var CAROUSEL_SIZE: int:
+	get:
+		return int(C.CAROUSEL_SIZE)
 
 
 ## Draft rounds: one every fifth round, offset from camps and augment picks.
@@ -29,8 +32,11 @@ static func bandForRound(round: int) -> Array:
 	return [4, 5]
 
 
-## Roll the ring of units, each carrying a component.
-static func rollCarousel(rng: RNG, round: int, size: int = CAROUSEL_SIZE) -> Array:
+## Roll the ring of units, each carrying a component. (`size` -1 = CAROUSEL_SIZE,
+## the TS default.)
+static func rollCarousel(rng: RNG, round: int, size: int = -1) -> Array:
+	if size < 0:
+		size = CAROUSEL_SIZE
 	var band := bandForRound(round)
 	var out: Array = []
 	for i in size:
