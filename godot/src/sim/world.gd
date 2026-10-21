@@ -1385,8 +1385,16 @@ func ageRequirementProgress(team: int, ageIndex: int) -> Dictionary:
 		return {"have": 0, "need": 0}
 	var age: Dictionary = AGES[ageIndex]
 	var have := 0
-	for id in age.requiresAny:
-		if hasBuilding(team, id):
+	# One pass over the entities for all the required types, rather than one
+	# hasBuilding() scan per type (Godot-only speed-up, same answer).
+	var want: Array = age.requiresAny
+	var found := {}
+	if not want.is_empty():
+		for e: Entity in entities:
+			if e.team == team and e.kind == T.Kind.Building and e.alive and e.buildState == T.BuildState.Done and want.has(e.type):
+				found[e.type] = true
+	for id in want:
+		if found.has(id):
 			have += 1
 	return {"have": mini(have, int(age.requiresCount)), "need": int(age.requiresCount)}
 

@@ -145,6 +145,11 @@ static func findPath(grid: NavGrid, sx: float, sy: float, tx: float, ty: float, 
 	var cols := grid.cols
 	var rows := grid.rows
 	var blocked := grid.blocked
+	if Native.available():
+		var cells := Native.astar_search(blocked, cols, rows, scx, scy, tcx, tcy, maxNodes)
+		if cells.is_empty():
+			return null
+		return reconstructCells(grid, cells, tx, ty)
 	var n := cols * rows
 	ensureCapacity(n)
 	# Stamps live in a Uint32Array in TS, so the counter has to stay inside it.
@@ -217,6 +222,11 @@ static func reconstruct(grid: NavGrid, end: int, tx: float, ty: float) -> Array:
 		cells.append(c)
 		c = cameFrom[c]
 	cells.reverse()
+	return reconstructCells(grid, cells, tx, ty)
+
+
+## Cells (start..goal) to smoothed world waypoints.
+static func reconstructCells(grid: NavGrid, cells, tx: float, ty: float) -> Array:
 	# Convert to world coords, then smooth via line-of-sight.
 	var pts: Array = []
 	for ci in cells:
