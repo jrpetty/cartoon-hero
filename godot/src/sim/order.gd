@@ -1,6 +1,8 @@
 ## An order (sim/types.ts `Order`). TS builds these as object literals; here
 ## `Order.make(kind, tx, ty, target)` does the same. `queue` is the shift-queue
-## (empty = none, which TS writes as `undefined`); `slot` marks a formation move.
+## (empty = none, which TS writes as `undefined`); `slot` marks a formation move;
+## `flow` is the shared FlowField of a group move (TS attaches both as
+## `(order as any).slot/.flow`).
 class_name Order
 extends RefCounted
 
@@ -10,6 +12,7 @@ var ty: float = 0.0
 var target: int = -1
 var queue: Array = []
 var slot: bool = false
+var flow = null  ## FlowField or null
 
 
 static func make(k: int, x: float = 0.0, y: float = 0.0, tgt: int = -1, q: Array = []) -> Order:
@@ -30,4 +33,5 @@ static func idle() -> Order:
 func copy() -> Order:
 	var o := Order.make(kind, tx, ty, target, queue)
 	o.slot = slot
+	o.flow = flow
 	return o
