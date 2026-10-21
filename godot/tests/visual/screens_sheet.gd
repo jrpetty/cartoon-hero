@@ -20,6 +20,7 @@ var _vp: SubViewport
 var _canvas: Node2D
 var _i := -1
 var _wait := 0
+var _ms := 0.0  ## how long the last frame of the state took to draw
 
 
 func _ready() -> void:
@@ -70,7 +71,7 @@ func _save() -> void:
 	var img := _vp.get_texture().get_image()
 	var out := ProjectSettings.globalize_path(DIR + "godot_%s.png" % s.name)
 	img.save_png(out)
-	print("godot ", s.name)
+	print("godot %s (%.1f ms a frame)" % [s.name, _ms])
 
 
 ## JSON gives every number as a float; the screens' own literals are ints.
@@ -183,8 +184,10 @@ func _paint(s: Dictionary) -> void:
 		ctx.fillRect(0, 0, W, H)
 		var mouse: Dictionary = s.mouse if last and s.get("mouse") != null else {"mx": -99, "my": -99}
 		UI.ui.begin(ctx, {"mx": mouse.mx, "my": mouse.my, "clicked": false, "rightClicked": false, "alt": false})
+		var t0 := Time.get_ticks_usec()
 		_draw_screen(s, scr, profile, args)
 		UI.ui.flushTooltip(W, H)
 		ctx.end()
+		_ms = (Time.get_ticks_usec() - t0) / 1000.0
 		if f == 0:
 			_set_fields(scr, s.get("after"))

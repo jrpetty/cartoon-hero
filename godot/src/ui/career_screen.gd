@@ -173,11 +173,26 @@ func style() -> Dictionary:
 
 
 ## Re-read storage at most twice a second (it's parsed JSON).
+##
+## Godot: parsing and folding a long career log (and the playstyle read built
+## on it) takes tens of milliseconds here — a hitch twice a second — so on
+## each half-second check the career is only rebuilt when what is stored has
+## changed. The numbers are the same; `at` moves only when they are rebuilt.
 func data() -> Dictionary:
 	var now := JS.now_ms()
-	if cache == null or cache.key != filter or now - cache.at > 500:
-		cache = {"key": filter, "at": now, "data": Career.careerFor(filter)}
+	if cache == null or cache.key != filter or now - cache.checked > 500:
+		var raw := _stored()
+		if cache == null or cache.key != filter or cache.raw != raw:
+			cache = {"key": filter, "at": now, "checked": now, "raw": raw, "data": Career.careerFor(filter)}
+		else:
+			cache.checked = now
 	return cache.data
+
+
+## What the career is built from, as stored.
+static func _stored() -> Array:
+	var s := Career.store()
+	return [s.getItem(Career.LOG_KEY), s.getItem(Career.TOTALS_KEY)] if s != null else []
 
 
 ## Open straight on the replay list (coming back from watching one).
@@ -1251,17 +1266,24 @@ func matchList(ms: Array, x: float, y: float, w: float) -> float:
 # download on the web, a file in the Downloads folder elsewhere, and a native
 # file dialog to open one.
 
-static func _filesModule():
-	if ResourceLoader.exists("res://src/ui/files.gd"):
-		return load("res://src/ui/files.gd")
+## The ui/files.ts port, if there is one and it has `fn` (as a static).
+static func _filesModule(fn: String):
+	if not ResourceLoader.exists("res://src/ui/files.gd"):
+		return null
+	var m = load("res://src/ui/files.gd")
+	if m is GDScript:
+		for meth in (m as GDScript).get_script_method_list():
+			if meth.name == fn:
+				return m
 	return null
 
 
-## Offer `text` to the player as a file called `name`.
+## Offer `text` to the player as a file called `name` (ui/files.ts
+## downloadText).
 static func _downloadText(name: String, text: String) -> bool:
-	var m = _filesModule()
-	if m != null and m.has_method("downloadText"):
-		return m.downloadText(name, text)
+	var m = _filesModule("downloadText")
+	if m != null:
+		return bool(m.call("downloadText", name, text))
 	if OS.has_feature("web"):
 		JavaScriptBridge.download_buffer(text.to_utf8_buffer(), name, "application/json")
 		return true
@@ -1277,12 +1299,9 @@ static func _downloadText(name: String, text: String) -> bool:
 
 
 ## Ask the player to choose a file; `done` is called with { name, text } or
-## null if they cancel.
+## null if they cancel (ui/files.ts pickTextFile resolves its promise the same
+## way).
 static func _pickTextFile(accept: String, done: Callable) -> void:
-	var m = _filesModule()
-	if m != null and m.has_method("pickTextFile"):
-		m.pickTextFile(accept, done)
-		return
 	var tree := Engine.get_main_loop() as SceneTree
 	if tree == null:
 		done.call(null)

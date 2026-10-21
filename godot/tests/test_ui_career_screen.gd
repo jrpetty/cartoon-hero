@@ -181,3 +181,24 @@ func test_formats_like_the_ts() -> void:
 	# 2026-10-21 12:00 UTC, as an en-US browser writes the date (in local time).
 	var d := CareerScreen.localDate(1_792_584_000_000.0)
 	eq(CareerScreen.localeDate(1_792_584_000_000.0), "%d/%d/%d" % [d.month, d.day, d.year])
+
+
+func test_rebuilds_the_career_when_a_match_is_recorded() -> void:
+	# The career is rebuilt only when what is stored changes (Godot: re-parsing
+	# a long log twice a second is a hitch) — and it must still pick up a game
+	# finished while the screen is open, on the next check.
+	U.fresh_store()
+	record_forty()
+	var s := CareerScreen.new()
+	var p := Profile.new()
+	frame(s, p)
+	var played: float = s.data().career.all.played
+	var at: float = s.cache.at
+	s.cache.checked -= 1000
+	frame(s, p)
+	eq(s.cache.at, at, "nothing changed: not rebuilt")
+	Career.recordCareer(U.career_match())
+	s.cache.checked -= 1000
+	frame(s, p)
+	eq(s.data().career.all.played, played + 1, "the new game counts")
+	check(s.cache.at != at or s.cache.raw != [], "rebuilt")

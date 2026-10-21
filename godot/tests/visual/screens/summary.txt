@@ -60,8 +60,8 @@ factions_owned_small         mean |diff| 3.10 / 255, pixels off by >40: 2.60%
 menu                         mean |diff| 0.92 / 255, pixels off by >40: 0.58%
 menu_hover                   mean |diff| 0.96 / 255, pixels off by >40: 0.62%
 menu_narrow                  mean |diff| 1.48 / 255, pixels off by >40: 1.11%
-menu_reveal                  mean |diff| 0.63 / 255, pixels off by >40: 0.21%
-menu_reveal_small            mean |diff| 1.16 / 255, pixels off by >40: 0.64%
+menu_reveal                  mean |diff| 0.66 / 255, pixels off by >40: 0.25%
+menu_reveal_small            mean |diff| 1.24 / 255, pixels off by >40: 0.71%
 menu_small                   mean |diff| 1.54 / 255, pixels off by >40: 1.18%
 nemesis                      mean |diff| 1.93 / 255, pixels off by >40: 1.45%
 nemesis_narrow               mean |diff| 2.58 / 255, pixels off by >40: 1.96%
@@ -93,10 +93,10 @@ settings_controls_small      mean |diff| 2.23 / 255, pixels off by >40: 2.00%
 settings_game                mean |diff| 0.76 / 255, pixels off by >40: 0.64%
 settings_game_small          mean |diff| 1.46 / 255, pixels off by >40: 1.23%
 setup_1v1                    mean |diff| 2.13 / 255, pixels off by >40: 1.69%
-setup_1v1_small              mean |diff| 2.12 / 255, pixels off by >40: 1.78%
-setup_2v2                    mean |diff| 2.21 / 255, pixels off by >40: 1.79%
-setup_2v2_narrow             mean |diff| 2.54 / 255, pixels off by >40: 2.17%
-setup_2v2_small              mean |diff| 2.18 / 255, pixels off by >40: 1.82%
+setup_1v1_small              mean |diff| 2.13 / 255, pixels off by >40: 1.78%
+setup_2v2                    mean |diff| 2.22 / 255, pixels off by >40: 1.79%
+setup_2v2_narrow             mean |diff| 2.55 / 255, pixels off by >40: 2.17%
+setup_2v2_small              mean |diff| 2.18 / 255, pixels off by >40: 1.83%
 setup_8p_4teams              mean |diff| 2.01 / 255, pixels off by >40: 1.60%
 setup_8p_4teams_small        mean |diff| 2.12 / 255, pixels off by >40: 1.62%
 setup_custom_teams           mean |diff| 2.16 / 255, pixels off by >40: 1.77%
