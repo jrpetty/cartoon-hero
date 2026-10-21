@@ -17,6 +17,7 @@ func _init(width: int, height: int) -> void:
 	img = Image.create(w, h, false, Image.FORMAT_RGBA8)
 	aa = false
 	shadows = false
+	radial_textures = false # the shader path never reaches _emit
 	canvas.width = w
 	canvas.height = h
 
