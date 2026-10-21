@@ -33,6 +33,12 @@ public:
 	static PackedInt32Array astar_search(const PackedByteArray &blocked, int cols, int rows,
 			int scx, int scy, int tcx, int tcy, int max_nodes);
 
+	// The whole of astar.gd findPath() after its start/goal fix-ups: search,
+	// reconstruct to world points, line-of-sight smoothing. Returns the
+	// flattened [x0,y0,x1,y1,...] path, or an empty array (GDScript: null).
+	static PackedFloat64Array astar_find(const PackedByteArray &blocked, int cols, int rows, double tile,
+			int scx, int scy, int tcx, int tcy, int max_nodes, double tx, double ty);
+
 	static int version();
 };
 

@@ -146,10 +146,10 @@ static func findPath(grid: NavGrid, sx: float, sy: float, tx: float, ty: float, 
 	var rows := grid.rows
 	var blocked := grid.blocked
 	if Native.available():
-		var cells := Native.astar_search(blocked, cols, rows, scx, scy, tcx, tcy, maxNodes)
-		if cells.is_empty():
+		var flat := Native.astar_find(blocked, cols, rows, grid.TILE, scx, scy, tcx, tcy, maxNodes, tx, ty)
+		if flat.is_empty():
 			return null
-		return reconstructCells(grid, cells, tx, ty)
+		return Array(flat)
 	var n := cols * rows
 	ensureCapacity(n)
 	# Stamps live in a Uint32Array in TS, so the counter has to stay inside it.

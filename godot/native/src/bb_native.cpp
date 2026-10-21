@@ -12,10 +12,11 @@ using namespace godot;
 void BBNative::_bind_methods() {
 	ClassDB::bind_static_method("BBNative", D_METHOD("flow_build", "blocked", "cols", "rows", "start"), &BBNative::flow_build);
 	ClassDB::bind_static_method("BBNative", D_METHOD("astar_search", "blocked", "cols", "rows", "scx", "scy", "tcx", "tcy", "max_nodes"), &BBNative::astar_search);
+	ClassDB::bind_static_method("BBNative", D_METHOD("astar_find", "blocked", "cols", "rows", "tile", "scx", "scy", "tcx", "tcy", "max_nodes", "tx", "ty"), &BBNative::astar_find);
 	ClassDB::bind_static_method("BBNative", D_METHOD("version"), &BBNative::version);
 }
 
-int BBNative::version() { return 1; }
+int BBNative::version() { return 2; }
 
 static const int NDX[8] = { 1, -1, 0, 0, 1, 1, -1, -1 };
 static const int NDY[8] = { 0, 0, 1, -1, 1, -1, 1, -1 };
@@ -310,4 +311,107 @@ PackedInt32Array BBNative::astar_search(const PackedByteArray &blocked, int cols
 		}
 	}
 	return result;
+}
+
+// ------------------------------------------------- path smoothing --
+// V8's Math.hypot (scaled Kahan sum), as JS.hypot in GDScript.
+static double js_hypot(double a, double b) {
+	double x = std::fabs(a), y = std::fabs(b);
+	if (std::isnan(a) || std::isnan(b)) {
+		if (std::isinf(a) || std::isinf(b)) return std::numeric_limits<double>::infinity();
+		return std::numeric_limits<double>::quiet_NaN();
+	}
+	double m = x > y ? x : y;
+	if (std::isinf(m)) return std::numeric_limits<double>::infinity();
+	if (m == 0.0) return 0.0;
+	double s = 0.0, comp = 0.0;
+	double n = x / m;
+	double summand = n * n - comp;
+	double prelim = s + summand;
+	comp = (prelim - s) - summand;
+	s = prelim;
+	n = y / m;
+	summand = n * n - comp;
+	prelim = s + summand;
+	comp = (prelim - s) - summand;
+	s = prelim;
+	return std::sqrt(s) * m;
+}
+
+struct GridView {
+	const uint8_t *blk;
+	int cols, rows;
+	double tile;
+	bool blocked_world(double wx, double wy) const {
+		int64_t cx = (int64_t)std::floor(wx / tile);
+		int64_t cy = (int64_t)std::floor(wy / tile);
+		if (cx < 0 || cy < 0 || cx >= cols || cy >= rows) return true;
+		return blk[cy * cols + cx] == 1;
+	}
+};
+
+// astar.gd lineClear (clearance 11).
+static bool line_clear(const GridView &g, double x0, double y0, double x1, double y1) {
+	const double clearance = 11.0;
+	double dx = x1 - x0;
+	double dy = y1 - y0;
+	double len = js_hypot(dx, dy);
+	if (len == 0.0) len = 1.0;
+	int64_t steps = (int64_t)std::ceil(len / 12.0);
+	double px = (-dy / len) * clearance;
+	double py = (dx / len) * clearance;
+	for (int64_t i = 0; i <= steps; i++) {
+		double t = (double)i / (double)steps;
+		double cx = x0 + dx * t;
+		double cy = y0 + dy * t;
+		if (g.blocked_world(cx, cy)) return false;
+		if (g.blocked_world(cx + px, cy + py)) return false;
+		if (g.blocked_world(cx - px, cy - py)) return false;
+	}
+	return true;
+}
+
+PackedFloat64Array BBNative::astar_find(const PackedByteArray &blocked, int cols, int rows, double tile,
+		int scx, int scy, int tcx, int tcy, int max_nodes, double tx, double ty) {
+	PackedFloat64Array out;
+	PackedInt32Array cells = astar_search(blocked, cols, rows, scx, scy, tcx, tcy, max_nodes);
+	const int64_t nc = cells.size();
+	if (nc == 0) return out;
+	std::vector<double> pts;
+	pts.reserve((size_t)nc * 2);
+	const int32_t *cp = cells.ptr();
+	for (int64_t k = 0; k < nc; k++) {
+		int cx = cp[k] % cols;
+		int cy = cp[k] / cols;
+		pts.push_back((double)cx * tile + tile / 2.0);
+		pts.push_back((double)cy * tile + tile / 2.0);
+	}
+	pts[pts.size() - 2] = tx;
+	pts[pts.size() - 1] = ty;
+	GridView g{ blocked.ptr(), cols, rows, tile };
+	std::vector<double> res;
+	if (pts.size() <= 4) {
+		res = pts;
+	} else {
+		res.push_back(pts[0]);
+		res.push_back(pts[1]);
+		double ax = pts[0], ay = pts[1];
+		size_t i = 2;
+		while (i < pts.size() - 2) {
+			double nx = pts[i + 2], ny = pts[i + 3];
+			if (!line_clear(g, ax, ay, nx, ny)) {
+				res.push_back(pts[i]);
+				res.push_back(pts[i + 1]);
+				ax = pts[i];
+				ay = pts[i + 1];
+			}
+			i += 2;
+		}
+		res.push_back(pts[pts.size() - 2]);
+		res.push_back(pts[pts.size() - 1]);
+	}
+	out.resize((int64_t)res.size());
+	double *w = out.ptrw();
+	for (size_t k = 0; k < res.size(); k++) w[k] = res[k];
+	return out;
 }
