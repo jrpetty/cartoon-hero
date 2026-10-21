@@ -226,6 +226,7 @@ var _rallyFrom: Array = []
 var _lastGhost = null
 var _lastDrag := {"active": false, "x0": 0.0, "y0": 0.0, "x1": 0.0, "y1": 0.0}
 var _aiClass = null
+var _screensMod = null
 var _aiWarned := false
 var _cursorTex := {}
 ## Frame log for benchmarks: each frame's {dt, cpu, render, ui, tick, skipped}.
@@ -277,6 +278,7 @@ func _ready() -> void:
 
 ## The other screens, each if it exists in this build (see the header).
 func _makeScreens() -> void:
+	_screensMod = _module(SCREENS)
 	menu = _newScreen(SCREENS, "MenuScreen")
 	setup = _newScreen(SCREENS, "SetupScreen")
 	armory = _newScreen(SCREENS, "ArmoryScreen")
@@ -289,6 +291,9 @@ func _makeScreens() -> void:
 	settingsScreen = _newScreen("res://src/ui/settings_screen.gd", "SettingsScreen")
 	warbandScreen = _newScreen("res://src/ui/warband_screen.gd", "WarbandScreen")
 	lobby = _newScreen("res://src/ui/net_lobby.gd", "NetLobby")
+	# The TS lobby is a DOM overlay; a Godot one needs a node to hang off.
+	if lobby != null and "host" in lobby:
+		lobby.host = self
 
 
 ## A module's class by its TS name: an inner class of that name if the file
@@ -312,11 +317,10 @@ static func _newScreen(path: String, name: String):
 
 
 ## A static function of the screens module, if it exists (setMouseDown).
-static func _screensCall(fn: String, args: Array = []):
-	var s = _module(SCREENS)
-	if s == null or not s.has_method(fn):
+func _screensCall(fn: String, args: Array = []):
+	if _screensMod == null or not _screensMod.has_method(fn):
 		return null
-	return s.callv(fn, args)
+	return _screensMod.callv(fn, args)
 
 
 func _notification(what: int) -> void:
@@ -324,6 +328,31 @@ func _notification(what: int) -> void:
 		input.handleBlur()
 	elif what == NOTIFICATION_WM_CLOSE_REQUEST or what == NOTIFICATION_PREDELETE:
 		_joinTask()
+
+
+## On the way out: the sim thread joined, and every RenderingServer item freed
+## while the server is still up — including what static references (the
+## shared UI, Draw's resolvers, the art cache) would otherwise keep alive past
+## its shutdown and free a second time.
+func _exit_tree() -> void:
+	_joinTask()
+	world = null
+	ais = []
+	if UI.ui.ctx == ctx:
+		UI.ui.ctx = null
+	Draw.setFactionResolver(null)
+	Draw.setTeamColorResolver(null)
+	renderer.free_gpu()
+	hud.free_gpu()
+	ArtCache.clear()
+	# Static textures and shaders, released now rather than at script unload.
+	Renderer._disc = null
+	Renderer._glow = null
+	Nightlight.NightLayer._blob = null
+	Nightlight.NightLayer._warm = null
+	Nightlight.NightLayer._hole_mat = null
+	TerrainArt._relief = null
+	TerrainArt._shaders = {}
 
 
 func resize() -> void:
@@ -356,7 +385,10 @@ func resize() -> void:
 
 # ============================================================ input wiring ==
 
-func _input(event: InputEvent) -> void:
+## Unhandled, not raw, input: a Godot Control laid over the game (the online
+## lobby, a file dialog) takes its events first — the TS build's DOM overlays
+## did the same to the canvas.
+func _unhandled_input(event: InputEvent) -> void:
 	# The world is busy on the sim thread: hold every event until it is ours
 	# again (the next owning frame), in order.
 	if _taskBusy():

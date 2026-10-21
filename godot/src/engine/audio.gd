@@ -22,6 +22,7 @@ var muted := false
 var _bank: Dictionary = {}  # name -> Array[AudioStreamWAV]
 var _music_cache: Dictionary = {}  # key -> AudioStreamWAV
 var _music_pending: Dictionary = {}  # key -> true while a worker renders it
+var _tasks: Array = []  # worker tasks still to be waited on
 var _sfx_players: Array = []
 var _music_players: Array = []
 var _next_sfx := 0
@@ -60,7 +61,25 @@ func _ready() -> void:
 	applyVolumes()
 	# Render the effect bank in the background; play() skips anything not ready.
 	if DisplayServer.get_name() != "headless":
-		WorkerThreadPool.add_task(_render_bank, false, "audio bank")
+		_tasks.append(WorkerThreadPool.add_task(_render_bank, false, "audio bank"))
+
+
+## Finish the rendering threads before the node goes: a task still running
+## would call into a freed node at exit.
+func _exit_tree() -> void:
+	for id in _tasks:
+		WorkerThreadPool.wait_for_task_completion(id)
+	_tasks.clear()
+
+
+func _reap_tasks() -> void:
+	var keep: Array = []
+	for id in _tasks:
+		if WorkerThreadPool.is_task_completed(id):
+			WorkerThreadPool.wait_for_task_completion(id)
+		else:
+			keep.append(id)
+	_tasks = keep
 
 
 func _ensure_bus(bus_name: String) -> void:
@@ -352,12 +371,13 @@ func _cached(key: String, make: Callable) -> AudioStreamWAV:
 		_music_pending[key] = true
 	_mutex.unlock()
 	if start:
-		WorkerThreadPool.add_task(func():
+		_reap_tasks()
+		_tasks.append(WorkerThreadPool.add_task(func():
 			var st := _to_stream(make.call())
 			_mutex.lock()
 			_music_cache[key] = st
 			_music_pending.erase(key)
-			_mutex.unlock(), false, "music phrase")
+			_mutex.unlock(), false, "music phrase"))
 	return s
 
 

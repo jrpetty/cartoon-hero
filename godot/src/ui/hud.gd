@@ -520,6 +520,18 @@ void fragment() {
 """
 
 
+## Free the retained minimap items (on the way out).
+func free_gpu() -> void:
+	for it in [dotsItem, fogItem]:
+		if (it as RID).is_valid():
+			RenderingServer.free_rid(it)
+	dotsItem = RID()
+	fogItem = RID()
+	if minimapBase != null:
+		minimapBase.free_layer()
+	minimapBase = null
+
+
 func cost(c: Dictionary) -> String:
 	var parts: Array = []
 	if float(c.get("food", 0)) != 0:

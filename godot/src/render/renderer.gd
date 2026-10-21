@@ -1112,13 +1112,30 @@ void fragment() {
 """
 
 
+## Free everything this renderer holds on the RenderingServer, now (the
+## game calls it on the way out, while the server is still up).
 func free_gpu() -> void:
-	if vignetteItem.is_valid():
-		RenderingServer.free_rid(vignetteItem)
-		vignetteItem = RID()
+	for it in [vignetteItem, fxItem, decalItem]:
+		if (it as RID).is_valid():
+			ctx.forget(it)
+			octx.forget(it)
+			RenderingServer.free_rid(it)
+	vignetteItem = RID()
+	fxItem = RID()
+	decalItem = RID()
+	if terrainCache != null and terrainCache.layer != null:
+		terrainCache.layer.free_layer()
 	terrainCache = null
+	if detail != null:
+		ctx.forget(detail.root)
+		detail.free_all()
 	detail = null
+	if fogLayer != null:
+		fogLayer.free_layer()
 	fogLayer = null
+	if nightLayer.layer != null:
+		nightLayer.layer.free_layer()
+		nightLayer.layer = null
 
 
 func _phase(name: String) -> void:

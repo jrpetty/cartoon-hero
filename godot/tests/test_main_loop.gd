@@ -162,7 +162,7 @@ func test_frames_drawn_mid_tick_leave_the_world_alone() -> void:
 	var ev := InputEventKey.new()
 	ev.keycode = KEY_H
 	ev.pressed = true
-	app._input(ev)
+	app._unhandled_input(ev)
 	check(app._queued.size() == queuedBefore + 1 or not app._taskBusy(), "input waits for the world")
 	app._process(DT)
 	app._joinTask()
@@ -183,7 +183,7 @@ static func win(app, x: float, y: float) -> Vector2:
 static func motion(app, x: float, y: float) -> void:
 	var ev := InputEventMouseMotion.new()
 	ev.position = win(app, x, y)
-	app._input(ev)
+	app._unhandled_input(ev)
 
 
 static func press(app, x: float, y: float, idx: int, down: bool) -> void:
@@ -191,7 +191,7 @@ static func press(app, x: float, y: float, idx: int, down: bool) -> void:
 	ev.position = win(app, x, y)
 	ev.button_index = idx
 	ev.pressed = down
-	app._input(ev)
+	app._unhandled_input(ev)
 
 
 static func click(app, x: float, y: float, idx: int = MOUSE_BUTTON_LEFT) -> void:
@@ -215,7 +215,7 @@ static func keyTap(app, code: Key, unicode: int) -> void:
 		ev.physical_keycode = code
 		ev.unicode = unicode
 		ev.pressed = down
-		app._input(ev)
+		app._unhandled_input(ev)
 		frames(app, 1)
 	app._joinTask()
 
