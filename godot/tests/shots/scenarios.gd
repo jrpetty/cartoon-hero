@@ -218,6 +218,9 @@ func perf(args: Array) -> void:
 					tree = e
 		if tree != null:
 			w.issueGather(vil, tree.id)
+	# The whole battle on screen, not just what your own scouts see: the
+	# point is to draw every army.
+	w.revealAll = true
 	var units := w.entities.filter(func(e): return e.alive and e.kind == T.Kind.Unit).size()
 	print("perf: %d realms, %d units, threaded=%s" % [w.numTeams, units, str(app.threadSim)])
 	app.camera.centerOn(center.x, center.y)
