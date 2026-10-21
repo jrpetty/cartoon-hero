@@ -904,6 +904,17 @@ func _arc_segments(r: float, sweep: float) -> int:
 	return clampi(ceili(absf(sweep) / step), 1, 256)
 
 
+## Flattened arcs are drawn as polygons whose vertices sit a touch outside
+## the circle — by sqrt(δ / sin δ) for an angular step δ — so each segment
+## covers the same area as the true sector instead of being a chord inside it
+## (an inscribed 9-gon is 8% short of a small head's area).
+static func _area_k(step: float) -> float:
+	var d := absf(step)
+	if d < 1e-6:
+		return 1.0
+	return sqrt(d / sin(d)) if d < PI else 1.0
+
+
 ## Points of a unit-circle arc from angle 0 through `sweep`, n segments
 ## (n + 1 points). Cached: most arcs in the art have constant sweeps.
 static func _unit_arc(n: int, sweep: float) -> PackedVector2Array:
@@ -913,9 +924,13 @@ static func _unit_arc(n: int, sweep: float) -> PackedVector2Array:
 		return pts
 	pts = PackedVector2Array()
 	pts.resize(n + 1)
+	# Interior points only — the ends meet straight edges (a rounded
+	# rect's sides) and must stay put — unless it's the whole circle.
+	var f := _area_k(sweep / n)
+	var whole := absf(sweep) >= TAU - 1e-9
 	for k in n + 1:
 		var a := sweep * k / n
-		pts[k] = Vector2(cos(a), sin(a))
+		pts[k] = Vector2(cos(a), sin(a)) * (f if whole or (k > 0 and k < n) else 1.0)
 	if _arc_cache.size() > 4096:
 		_arc_cache.clear()
 	_arc_cache[key] = pts
@@ -931,9 +946,13 @@ static func _unit_arc_from(n: int, a0: float, sweep: float) -> PackedVector2Arra
 		return pts
 	pts = PackedVector2Array()
 	pts.resize(n + 1)
+	# Interior points only — the ends meet straight edges (a rounded
+	# rect's sides) and must stay put — unless it's the whole circle.
+	var f := _area_k(sweep / n)
+	var whole := absf(sweep) >= TAU - 1e-9
 	for k in n + 1:
 		var a := a0 + sweep * k / n
-		pts[k] = Vector2(cos(a), sin(a))
+		pts[k] = Vector2(cos(a), sin(a)) * (f if whole or (k > 0 and k < n) else 1.0)
 	if _arc_cache.size() > 4096:
 		_arc_cache.clear()
 	_arc_cache[key] = pts
@@ -1384,9 +1403,10 @@ static func _ring_table(n: int, a0: float) -> PackedVector2Array:
 		return pts
 	pts = PackedVector2Array()
 	pts.resize(n)
+	var f := _area_k(TAU / n)
 	for k in n:
 		var a := a0 + TAU * k / n
-		pts[k] = Vector2(cos(a), sin(a))
+		pts[k] = Vector2(cos(a), sin(a)) * f
 	if _ring_tables.size() > 2048:
 		_ring_tables.clear()
 	_ring_tables[key] = pts
@@ -1824,11 +1844,13 @@ func _stroke_line(src: PackedVector2Array, closed: bool, paint, w: float, cap: S
 		match cap:
 			"round":
 				var k := _cap_steps(hf, arc_tol)
+				var kf := _area_k(PI * 0.5 / k)
 				for s in k + 1:
 					var phi := PI * 0.5 * (1.0 - float(s) / k)
 					var cs := cos(phi)
 					var sn := sin(phi)
-					C.append(p[0]); OL.append(n0 * cs - d0 * sn); OR.append(-n0 * cs - d0 * sn); A.append(1.0)
+					var g := kf if s < k else 1.0
+					C.append(p[0]); OL.append((n0 * cs - d0 * sn) * g); OR.append((-n0 * cs - d0 * sn) * g); A.append(1.0)
 			"square":
 				var c0 := p[0] - d0 * hw
 				if aa:
@@ -1874,13 +1896,15 @@ func _stroke_line(src: PackedVector2Array, closed: bool, paint, w: float, cap: S
 		if join == "round":
 			var ang := acos(clampf(dot, -1.0, 1.0))
 			var k := maxi(1, ceili(ang / (2.0 * acos(clampf(1.0 - arc_tol / maxf(hf, 0.01), -1.0, 1.0)))))
+			var kf := _area_k(ang / k)
 			for s in k + 1:
 				var t := float(s) / k
+				var g := kf if s > 0 and s < k else 1.0
 				if outer_left:
-					var o := nin.slerp(nout, t)
+					var o := nin.slerp(nout, t) * g
 					C.append(pc); OL.append(o); OR.append(-mi); A.append(1.0)
 				else:
-					var o := (-nin).slerp(-nout, t)
+					var o := (-nin).slerp(-nout, t) * g
 					C.append(pc); OL.append(mi); OR.append(o); A.append(1.0)
 		else:  # bevel (or a miter past its limit)
 			if outer_left:
@@ -1897,11 +1921,13 @@ func _stroke_line(src: PackedVector2Array, closed: bool, paint, w: float, cap: S
 		match cap:
 			"round":
 				var k := _cap_steps(hf, arc_tol)
+				var kf := _area_k(PI * 0.5 / k)
 				for s in k + 1:
 					var phi := PI * 0.5 * float(s) / k
 					var cs := cos(phi)
 					var sn := sin(phi)
-					C.append(pe); OL.append(ne * cs + de * sn); OR.append(-ne * cs + de * sn); A.append(1.0)
+					var g := kf if s > 0 else 1.0
+					C.append(pe); OL.append((ne * cs + de * sn) * g); OR.append((-ne * cs + de * sn) * g); A.append(1.0)
 			"square":
 				var ce := pe + de * hw
 				C.append(ce); OL.append(ne); OR.append(-ne); A.append(1.0)
