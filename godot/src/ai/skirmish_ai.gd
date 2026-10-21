@@ -130,6 +130,23 @@ var TILE: float
 var UNITS: Dictionary
 var BUILDINGS: Dictionary
 
+# Caches the TS does without (V8 can afford to filter every entity in the
+# world for each of the few dozen questions a think step asks; GDScript
+# cannot). They change no answer:
+#  * our own units and buildings, in entity order, also grouped by type —
+#    taken once per tick, then extended with whatever has been appended to
+#    `world.entities` since (a building we just placed). Every filter the TS
+#    applies (alive, kind, type, buildState) is still applied when asked; an
+#    entity's team, kind and type never change after it spawns.
+#  * which teams are hostile to us, per tick (alliances are fixed at init).
+var _idxTick := -1
+var _idxSrc: Array = []
+var _idxSize := 0
+var _own: Array = []
+var _ownByType: Dictionary = {}
+var _hostileTick := -1
+var _hostile := PackedByteArray()
+
 
 func _init(world_: World, team_: int, diff_: Dictionary) -> void:
 	world = world_
@@ -239,10 +256,11 @@ func turtles() -> bool:
 func strengthNear(x: float, y: float, r: float, mine: bool) -> float:
 	var s := 0.0
 	var r2 := r * r
+	var hostile := _hostileMask()
 	for e: Entity in world.entities:
 		if not e.alive or e.kind != T.Kind.Unit:
 			continue
-		if e.team != team if mine else not isHostile(e.team):
+		if (e.team != team) if mine else (hostile[e.team] == 0):
 			continue
 		if e.type == "villager":
 			continue
@@ -274,26 +292,183 @@ func update(dt: float) -> void:
 
 # ------------------------------------------------------------- helpers --
 
+## Bring the own-entity cache up to date (see the note on `_idxTick`).
+func _index() -> void:
+	var ents: Array = world.entities
+	if world.tickCount != _idxTick or not is_same(ents, _idxSrc) or ents.size() < _idxSize:
+		_idxTick = world.tickCount
+		_idxSrc = ents
+		_idxSize = 0
+		_own = []
+		_ownByType = {}
+	var n := ents.size()
+	if _idxSize == n:
+		return
+	for i in range(_idxSize, n):
+		var e: Entity = ents[i]
+		if e.team != team or (e.kind != T.Kind.Unit and e.kind != T.Kind.Building):
+			continue
+		_own.append(e)
+		var list = _ownByType.get(e.type)
+		if list == null:
+			_ownByType[e.type] = [e]
+		else:
+			list.append(e)
+	_idxSize = n
+
+
+## Our units and buildings (alive or not) of `type`, or all of them, in entity order.
+func _ownOf(type: String) -> Array:
+	_index()
+	if type == "":
+		return _own
+	return _ownByType.get(type, [])
+
+
 func myUnits(type: String = "") -> Array:
 	var out: Array = []
-	for e: Entity in world.entities:
-		if e.alive and e.team == team and e.kind == T.Kind.Unit and (type == "" or e.type == type):
+	for e: Entity in _ownOf(type):
+		if e.alive and e.kind == T.Kind.Unit:
 			out.append(e)
 	return out
 
 
 func myBuildings(type: String = "", doneOnly: bool = true) -> Array:
 	var out: Array = []
-	for e: Entity in world.entities:
-		if e.alive and e.team == team and e.kind == T.Kind.Building and (type == "" or e.type == type) \
-				and (not doneOnly or e.buildState == T.BuildState.Done):
+	for e: Entity in _ownOf(type):
+		if e.alive and e.kind == T.Kind.Building and (not doneOnly or e.buildState == T.BuildState.Done):
 			out.append(e)
 	return out
 
 
+## `myBuildings(type, doneOnly).length` without building the list.
+func _countBuildings(type: String, doneOnly: bool) -> int:
+	var n := 0
+	for e: Entity in _ownOf(type):
+		if e.alive and e.kind == T.Kind.Building and (not doneOnly or e.buildState == T.BuildState.Done):
+			n += 1
+	return n
+
+
+## world.countOf(team, type) for a unit or building type: how many of ours
+## are alive (nothing else of ours — a projectile — shares those type names).
+func _countOwn(type: String) -> int:
+	var n := 0
+	for e: Entity in _ownOf(type):
+		if e.alive:
+			n += 1
+	return n
+
+
+## world.ageRequirementMet(team, ageIndex), answered from our own buildings:
+## the age needs `requiresCount` distinct types from `requiresAny` standing
+## finished (World.hasBuilding: alive, ours, a Building, Done).
+func _ageRequirementMet(ageIndex: int) -> bool:
+	var AGES: Array = world.AGES
+	if ageIndex < 0 or ageIndex >= AGES.size():
+		return true # {have: 0, need: 0}
+	var age: Dictionary = AGES[ageIndex]
+	var have := 0
+	for id: String in age.requiresAny:
+		if _countBuildings(id, true) > 0:
+			have += 1
+	var need := int(age.requiresCount)
+	return mini(have, need) >= need
+
+
+## Hostility to us by team id (0..Neutral), refreshed each tick.
+func _hostileMask() -> PackedByteArray:
+	if _hostileTick != world.tickCount or _hostile.is_empty():
+		_hostileTick = world.tickCount
+		_hostile.resize(T.Team.Neutral + 1)
+		for t in T.Team.Neutral + 1:
+			_hostile[t] = 1 if world.areHostile(team, t) else 0
+	return _hostile
+
+
 ## A foe is any hostile team (respects 2v2 alliances).
 func isHostile(t: int) -> bool:
-	return world.areHostile(team, t)
+	if t < 0 or t > T.Team.Neutral:
+		return world.areHostile(team, t)
+	return _hostileMask()[t] == 1
+
+
+## Entities bucketed on a grid a little coarser than `r`, to answer "is any
+## of them closer than `r` to (x, y)?" — the TS `list.some((b) => dist(x, y,
+## b.x, b.y) < r)` — by looking only in the 3×3 cells around the point (with
+## cells wider than `r`, nothing closer can be further away than that).
+class _Buckets extends RefCounted:
+	var r: float
+	var cell: float
+	var cells := {}
+
+	func _init(ents: Array, r_: float) -> void:
+		r = r_
+		cell = r_ * 1.01
+		for b: Entity in ents:
+			var key := _key(floori(b.x / cell), floori(b.y / cell))
+			var list = cells.get(key)
+			if list == null:
+				cells[key] = [b]
+			else:
+				list.append(b)
+
+	static func _key(cx: int, cy: int) -> int:
+		return (cx + 1048576) * 2097152 + (cy + 1048576)
+
+	func anyCloser(x: float, y: float) -> bool:
+		if cells.is_empty():
+			return false
+		var cx := floori(x / cell)
+		var cy := floori(y / cell)
+		for dy in range(-1, 2):
+			for dx in range(-1, 2):
+				var list = cells.get(_key(cx + dx, cy + dy))
+				if list == null:
+					continue
+				for b: Entity in list:
+					if SkirmishAI._closer(x, y, b.x, b.y, r):
+						return true
+		return false
+
+
+## `dist(ax, ay, bx, by) < r`, bit for bit — the squared distance settles
+## every case that isn't within a hair of `r` without the (slow, in GDScript)
+## exact Math.hypot.
+static func _closer(ax: float, ay: float, bx: float, by: float, r: float) -> bool:
+	var dx := ax - bx
+	var dy := ay - by
+	var d2 := dx * dx + dy * dy
+	var r2 := r * r
+	if d2 < r2 * 0.999999999:
+		return true
+	if d2 > r2 * 1.000000001:
+		return false
+	return JS.hypot(dx, dy) < r
+
+
+## `dist(ax, ay, bx, by)` when it might be below `bound`, else INF — for
+## nearest-of searches, which only need the exact distance of a contender.
+static func _distIfBelow(ax: float, ay: float, bx: float, by: float, bound: float) -> float:
+	var dx := ax - bx
+	var dy := ay - by
+	if is_finite(bound) and dx * dx + dy * dy > bound * bound * 1.000000001:
+		return INF
+	return JS.hypot(dx, dy)
+
+
+## Stable sort of entities by distance to (x, y) — the TS
+## `.sort((a, b) => dist(a.x, a.y, x, y) - dist(b.x, b.y, x, y))`, with each
+## distance worked out once.
+static func _sortByDist(arr: Array, x: float, y: float) -> Array:
+	var keyed: Array = []
+	for e: Entity in arr:
+		keyed.append([JS.hypot(e.x - x, e.y - y), e])
+	JS.stable_sort(keyed, func(a, b): return a[0] < b[0])
+	var out: Array = []
+	for k in keyed:
+		out.append(k[1])
+	return out
 
 
 ## The rival we're focusing: the nearest non-defeated enemy by base distance.
@@ -316,11 +491,13 @@ func enemyTeam() -> int:
 
 
 func base() -> Entity:
-	var tcs := myBuildings("town_center")
-	if tcs.size() > 0:
-		return tcs[0]
-	var all := myBuildings()
-	return all[0] if all.size() > 0 else null
+	for e: Entity in _ownOf("town_center"):
+		if e.alive and e.kind == T.Kind.Building and e.buildState == T.BuildState.Done:
+			return e
+	for e: Entity in _ownOf(""):
+		if e.alive and e.kind == T.Kind.Building and e.buildState == T.BuildState.Done:
+			return e
+	return null
 
 
 # --------------------------------------------------- team coordination --
@@ -393,7 +570,7 @@ func allyAssaulting() -> bool:
 ## Plant a Town Center. Picks the best nearby spot with access to wood, gold
 ## AND food (the nomad-settling aim) rather than just the villagers' centroid.
 func foundTownCenter(p: World.PlayerState) -> void:
-	if myBuildings("town_center", false).size() > 0:
+	if _countBuildings("town_center", false) > 0:
 		return # already founding
 	var vills := myUnits("villager")
 	if vills.size() == 0 or not world.canAfford(p.resources, BUILDINGS.town_center.cost):
@@ -417,7 +594,7 @@ func foundTownCenter(p: World.PlayerState) -> void:
 static func _nearestOf(arr: Array, x: float, y: float, cap: float) -> float:
 	var m := cap
 	for e: Entity in arr:
-		var d := JS.hypot(e.x - x, e.y - y)
+		var d := _distIfBelow(e.x, e.y, x, y, m)
 		if d < m:
 			m = d
 	return m
@@ -479,10 +656,10 @@ func bestSettleSpot(cx: float, cy: float) -> Dictionary:
 ## Cost of the next age the AI is ready to research, or null if not ready.
 func ageUpCost(p: World.PlayerState) -> Variant:
 	var vills := myUnits("villager").size()
-	if p.age == 0 and diff.maxAge >= 1 and world.ageRequirementMet(team, 1) and \
+	if p.age == 0 and diff.maxAge >= 1 and _ageRequirementMet(1) and \
 			vills >= floor(villagerGoal() * 0.55):
 		return world.AGES[1].cost
-	if p.age == 1 and diff.maxAge >= 2 and world.ageRequirementMet(team, 2) and \
+	if p.age == 1 and diff.maxAge >= 2 and _ageRequirementMet(2) and \
 			vills >= floor(villagerGoal() * 0.6):
 		return world.AGES[2].cost
 	if empireReady(p, vills):
@@ -494,7 +671,7 @@ func ageUpCost(p: World.PlayerState) -> Variant:
 ## economy, and enough match behind us that the army has had its Crown-age
 ## fights. Going up any earlier spends 1500 resources an army needs more.
 func empireReady(p: World.PlayerState, vills: int) -> bool:
-	return p.age == 2 and diff.maxAge >= 3 and world.ageRequirementMet(team, 3) and \
+	return p.age == 2 and diff.maxAge >= 3 and _ageRequirementMet(3) and \
 		vills >= floor(villagerGoal() * 0.7) and gameTime >= 11.0 * 60.0
 
 
@@ -519,7 +696,7 @@ func assignBuilder(b: Entity, count: int = 1) -> void:
 			villagers.append(v)
 	var bx := b.x
 	var by := b.y
-	JS.sort_by_cmp(villagers, func(u, v): return MathU.dist(u.x, u.y, bx, by) - MathU.dist(v.x, v.y, bx, by))
+	villagers = _sortByDist(villagers, bx, by)
 	var picked := villagers.slice(0, count)
 	if picked.size() > 0:
 		var ids: Array = []
@@ -547,12 +724,12 @@ func foodNode(v: Entity, claimed: Dictionary) -> Entity:
 			var w = world.byId.get(e.farmWorker) if e.farmWorker >= 0 else null
 			if w != null and w.alive and w.id != v.id:
 				continue # someone is working it
-			var d := MathU.dist(v.x, v.y, e.x, e.y)
+			var d := _distIfBelow(v.x, v.y, e.x, e.y, fd)
 			if d < fd:
 				fd = d
 				farm = e
 		elif e.kind == T.Kind.Resource and e.type == "berries" and e.amount > 0.0:
-			var d := MathU.dist(v.x, v.y, e.x, e.y)
+			var d := _distIfBelow(v.x, v.y, e.x, e.y, bd)
 			if d < bd:
 				bd = d
 				berry = e
@@ -571,7 +748,7 @@ func nearestResource(type: String, x: float, y: float) -> Entity:
 			e.team == team and e.buildState == T.BuildState.Done
 		if not isFarm and (e.kind != T.Kind.Resource or e.type != type or e.amount <= 0.0):
 			continue
-		var d := MathU.dist(x, y, e.x, e.y)
+		var d := _distIfBelow(x, y, e.x, e.y, bestD)
 		if d < bestD:
 			bestD = d
 			best = e
@@ -581,6 +758,7 @@ func nearestResource(type: String, x: float, y: float) -> Entity:
 # --------------------------------------------------------------- intel --
 
 func updateIntel() -> void:
+	var hostile := _hostileMask()
 	# Decay memory, then add what's currently visible to our fog.
 	var decay := 0.92
 	seen.infantry = seen.infantry * decay
@@ -592,7 +770,7 @@ func updateIntel() -> void:
 	var nCav := 0
 	var nSie := 0
 	for e: Entity in world.entities:
-		if not e.alive or not isHostile(e.team) or e.kind != T.Kind.Unit:
+		if not e.alive or hostile[e.team] == 0 or e.kind != T.Kind.Unit:
 			continue
 		# visibleTo, not fogAt: a unit hidden in a wood is not intelligence.
 		# Reading the raw fog here would let the AI count an ambush it cannot
@@ -619,7 +797,7 @@ func updateIntel() -> void:
 	# Count the enemy's fortifications we've laid eyes on — drives siege.
 	var walls := 0
 	for e: Entity in world.entities:
-		if not e.alive or not isHostile(e.team) or e.kind != T.Kind.Building:
+		if not e.alive or hostile[e.team] == 0 or e.kind != T.Kind.Building:
 			continue
 		if world.fogAt(team, e.x, e.y) == 0:
 			continue
@@ -707,7 +885,7 @@ func economy() -> void:
 		if h.buildState != T.BuildState.Done:
 			housesBuilding += 1
 	var headroom := p.popCap - p.popUsed
-	var wantAhead := 12 + myBuildings("town_center").size() * 6 # grow faster with more bases
+	var wantAhead := 12 + _countBuildings("town_center", true) * 6 # grow faster with more bases
 	if headroom < wantAhead and housesBuilding < 2 and p.popCap < world.POP_CAP_HARD:
 		var h := placeNear("house", base.x, base.y, 3.0, 8.0)
 		if h != null:
@@ -737,8 +915,8 @@ func economy() -> void:
 	#     research below used to be.
 	if world.tickCount % 40 == 0:
 		var skirmishers: Array = []
-		for e: Entity in world.entities:
-			if e.alive and e.team == team and e.kind == T.Kind.Unit and e.stance != T.Stance.Skirmish:
+		for e: Entity in _ownOf(""):
+			if e.alive and e.kind == T.Kind.Unit and e.stance != T.Stance.Skirmish:
 				var def = UNITS.get(e.type)
 				if (def.range if def != null else 0.0) > 40.0:
 					skirmishers.append(e.id)
@@ -775,7 +953,7 @@ func economy() -> void:
 			break
 
 	# 8. Expansion town center.
-	if diff.expands and p.age >= 2 and myBuildings("town_center").size() < 2 and \
+	if diff.expands and p.age >= 2 and _countBuildings("town_center", true) < 2 and \
 			p.resources.wood > 500.0:
 		var start: Dictionary = world.map.starts[team]
 		var cX := world.worldW / 2.0
@@ -790,7 +968,7 @@ func economy() -> void:
 	buildDefenses(base)
 
 	# 9. Castle for late-game defense/elite production.
-	if diff.buildsCastle and p.age >= 2 and myBuildings("castle").size() == 0 and \
+	if diff.buildsCastle and p.age >= 2 and _countBuildings("castle", true) == 0 and \
 			world.canAfford(p.resources, BUILDINGS.castle.cost):
 		var start: Dictionary = world.map.starts[team]
 		var cX := world.worldW / 2.0
@@ -855,7 +1033,7 @@ func buildDefenses(base: Entity) -> void:
 		for v: Entity in myUnits("villager"):
 			if v.order.kind != T.OrderKind.Build:
 				vills.append(v)
-		JS.sort_by_cmp(vills, func(a, b): return MathU.dist(a.x, a.y, fx, fy) - MathU.dist(b.x, b.y, fx, fy))
+		vills = _sortByDist(vills, fx, fy)
 		vills = vills.slice(0, 4)
 		for i in builders.size():
 			# vills[i % 0] is undefined in the TS: nobody to send.
@@ -996,7 +1174,7 @@ func rebuildStep(base: Entity) -> void:
 	for type: String in REBUILDABLE:
 		if not everBuilt.has(type):
 			continue
-		if myBuildings(type, false).size() > 0:
+		if _countBuildings(type, false) > 0:
 			continue # still have one (or building)
 		var def = BUILDINGS.get(type)
 		if def == null or not world.canAfford(p.resources, def.cost):
@@ -1022,7 +1200,7 @@ func maybeBuildCamps(base: Entity) -> void:
 		var campType: String = c[1]
 		var kind: String = c[2]
 		var cap: int = c[3]
-		if myBuildings(campType, false).size() >= cap:
+		if _countBuildings(campType, false) >= cap:
 			continue # don't blanket the map
 		# Go out onto the map: find the nearest resource node of this type that
 		# isn't yet served by a drop-off, and plant a camp there. As patches near
@@ -1032,7 +1210,7 @@ func maybeBuildCamps(base: Entity) -> void:
 		for e: Entity in world.entities:
 			if not e.alive or e.kind != T.Kind.Resource or e.type != resType or e.amount <= 0.0:
 				continue
-			var d := MathU.dist(e.x, e.y, base.x, base.y)
+			var d := _distIfBelow(e.x, e.y, base.x, base.y, minf(bestD, TILE * 42.0))
 			if d >= bestD or d > TILE * 42.0:
 				continue # keep expansion within reach
 			var drop = world.findNearestDropoff(team, e.x, e.y, kind)
@@ -1069,7 +1247,7 @@ func marketStep(base: Entity, villagerCount: int) -> void:
 
 	# Build one when the bank is lopsided enough to be worth fixing, or simply
 	# once the economy is big enough that trade routes start paying.
-	if markets.size() == 0 and myBuildings("market", false).size() == 0 \
+	if markets.size() == 0 and _countBuildings("market", false) == 0 \
 			and r.wood > 260.0 and (surplus > 700.0 or villagerCount >= 16):
 		var m := placeNear("market", base.x, base.y, 4.0, 8.0)
 		if m != null:
@@ -1134,7 +1312,7 @@ func maybeBuildFarms(base: Entity, villagerCount: int) -> void:
 	var berryFood := 0.0
 	for e: Entity in world.entities:
 		if e.alive and e.kind == T.Kind.Resource and e.type == "berries" and e.amount > 0.0 and \
-				MathU.dist(e.x, e.y, base.x, base.y) < TILE * 18.0:
+				_closer(e.x, e.y, base.x, base.y, TILE * 18.0):
 			berryFood += e.amount
 	var lowBerries := berryFood < 700.0
 	# Food pressure: plenty of wood and no food is the signature of an economy
@@ -1145,7 +1323,7 @@ func maybeBuildFarms(base: Entity, villagerCount: int) -> void:
 
 	# A mill anchors a compact farm economy — build it once the eco is rolling
 	# or the berries are thinning, so the transition is ready.
-	if myBuildings("mill", false).size() == 0 and p.age >= 1 and p.resources.wood > 150.0 and \
+	if _countBuildings("mill", false) == 0 and p.age >= 1 and p.resources.wood > 150.0 and \
 			(lowBerries or foodStarved or villagerCount >= 12):
 		var newMill := placeNear("mill", base.x, base.y, 3.0, 6.0)
 		if newMill != null:
@@ -1167,7 +1345,7 @@ func maybeBuildFarms(base: Entity, villagerCount: int) -> void:
 	var cx := mill.x if mill != null else base.x
 	var cy := mill.y if mill != null else base.y
 	for n in 2:
-		if myBuildings("farm", false).size() >= farmTarget or p.resources.wood <= 80.0:
+		if _countBuildings("farm", false) >= farmTarget or p.resources.wood <= 80.0:
 			break
 		var farm := placeNear("farm", cx, cy, 2.0, 6.0)
 		if farm != null:
@@ -1178,7 +1356,7 @@ func maybeBuildFarms(base: Entity, villagerCount: int) -> void:
 
 ## `have(t)` in buildOrder.
 func _have(t: String) -> bool:
-	return myBuildings(t, false).size() > 0
+	return _countBuildings(t, false) > 0
 
 
 func buildOrder(p: World.PlayerState, base: Entity, villagerCount: int) -> void:
@@ -1190,13 +1368,13 @@ func buildOrder(p: World.PlayerState, base: Entity, villagerCount: int) -> void:
 	# Second Banner qualifier (advancing now needs any 2 of a set) — a Mill is a
 	# cheap, always-useful drop-off that satisfies it.
 	if p.age == 0 and _have("barracks") and not _have("mill") and \
-			not world.ageRequirementMet(team, 1) and p.resources.wood >= 110.0:
+			not _ageRequirementMet(1) and p.resources.wood >= 110.0:
 		var b := placeNear("mill", base.x, base.y, 3.0, 7.0)
 		if b != null:
 			assignBuilder(b)
 
 	# Advance to Banner.
-	if p.age == 0 and diff.maxAge >= 1 and world.ageRequirementMet(team, 1) and \
+	if p.age == 0 and diff.maxAge >= 1 and _ageRequirementMet(1) and \
 			villagerCount >= floor(villagerGoal() * 0.55):
 		var tcs := myBuildings("town_center")
 		if tcs.size() > 0:
@@ -1217,7 +1395,7 @@ func buildOrder(p: World.PlayerState, base: Entity, villagerCount: int) -> void:
 			if b != null:
 				assignBuilder(b)
 		# A defensive tower at the front.
-		if myBuildings("watch_tower", false).size() < (0 if diff.id == "squire" else 2) and \
+		if _countBuildings("watch_tower", false) < (0 if diff.id == "squire" else 2) and \
 				p.resources.wood > 220.0:
 			var cX := world.worldW / 2.0
 			var cY := world.worldH / 2.0
@@ -1228,7 +1406,7 @@ func buildOrder(p: World.PlayerState, base: Entity, villagerCount: int) -> void:
 				assignBuilder(t)
 
 	# Advance to Crown (needs any 2 Banner buildings — we build several).
-	if p.age == 1 and diff.maxAge >= 2 and world.ageRequirementMet(team, 2) and \
+	if p.age == 1 and diff.maxAge >= 2 and _ageRequirementMet(2) and \
 			villagerCount >= floor(villagerGoal() * 0.6):
 		var tcs := myBuildings("town_center")
 		if tcs.size() > 0:
@@ -1256,10 +1434,10 @@ func buildOrder(p: World.PlayerState, base: Entity, villagerCount: int) -> void:
 				milTypes.append(t)
 		var milCount := 0
 		for t: String in milTypes:
-			milCount += myBuildings(t, false).size()
+			milCount += _countBuildings(t, false)
 		var target := mini(8, 2 + floori(villagerCount / 11.0))
 		if milTypes.size() > 0 and milCount < target:
-			JS.sort_by_cmp(milTypes, func(a, b): return myBuildings(a, false).size() - myBuildings(b, false).size())
+			JS.sort_by_cmp(milTypes, func(a, b): return _countBuildings(a, false) - _countBuildings(b, false))
 			var b := placeNear(milTypes[0], base.x, base.y, 4.0, 12.0)
 			if b != null:
 				assignBuilder(b)
@@ -1270,8 +1448,8 @@ func buildOrder(p: World.PlayerState, base: Entity, villagerCount: int) -> void:
 func armyUnits() -> Array:
 	# Scouts are utility (kept out of battle lines); villagers/monks aren't army.
 	var out: Array = []
-	for e: Entity in world.entities:
-		if e.alive and e.team == team and e.kind == T.Kind.Unit and \
+	for e: Entity in _ownOf(""):
+		if e.alive and e.kind == T.Kind.Unit and \
 				e.type != "villager" and e.type != "monk" and e.type != "scout":
 			out.append(e)
 	return out
@@ -1279,23 +1457,24 @@ func armyUnits() -> Array:
 
 ## Regicide: our own King, if he still lives.
 func myKing() -> Entity:
-	for e: Entity in world.entities:
-		if e.alive and e.type == "king" and e.team == team:
+	for e: Entity in _ownOf("king"):
+		if e.alive:
 			return e
 	return null
 
 
 ## Regicide: the nearest enemy King we could march on.
 func enemyKing() -> Entity:
+	var hostile := _hostileMask()
 	var b := base()
 	var ox: float = b.x if b != null else world.map.starts[team].x
 	var oy: float = b.y if b != null else world.map.starts[team].y
 	var best: Entity = null
 	var bestD := INF
 	for e: Entity in world.entities:
-		if not e.alive or e.type != "king" or not isHostile(e.team):
+		if not e.alive or e.type != "king" or hostile[e.team] == 0:
 			continue
-		var d := MathU.dist(ox, oy, e.x, e.y)
+		var d := _distIfBelow(ox, oy, e.x, e.y, bestD)
 		if d < bestD:
 			bestD = d
 			best = e
@@ -1308,7 +1487,7 @@ func ensureRaiders() -> void:
 	if (not diff.harasses and style != "rush") or savingForAge:
 		return
 	var p := world.player(team)
-	if p.age < 1 or world.countOf(team, "raider") >= 2:
+	if p.age < 1 or _countOwn("raider") >= 2:
 		return
 	if p.popUsed >= p.popCap or not world.canAfford(p.resources, UNITS.raider.cost):
 		return
@@ -1322,7 +1501,7 @@ func ensureRaiders() -> void:
 func trainScout() -> void:
 	if not diff.scouts or gameTime > 360.0:
 		return
-	if world.countOf(team, "scout") > 0:
+	if _countOwn("scout") > 0:
 		return
 	var p := world.player(team)
 	if p.popUsed >= p.popCap:
@@ -1394,12 +1573,12 @@ func kingDefense() -> bool:
 	# so we don't strip a wave that's already out the door).
 	var guards := 0
 	for u: Entity in army:
-		if MathU.dist(u.x, u.y, king.x, king.y) < 220.0:
+		if _closer(u.x, u.y, king.x, king.y, 220.0):
 			guards += 1
 	if guards < 3:
 		var spare: Array = []
 		for u: Entity in army:
-			if u.order.kind != T.OrderKind.Attack and MathU.dist(u.x, u.y, king.x, king.y) >= 220.0:
+			if u.order.kind != T.OrderKind.Attack and not _closer(u.x, u.y, king.x, king.y, 220.0):
 				spare.append(u)
 		spare = spare.slice(0, 3 - guards)
 		if spare.size() > 0:
@@ -1620,7 +1799,7 @@ func baseComposition() -> Dictionary:
 		base.catapult = 0.1
 		base.ram = 0.06
 		base.horseman = 0.05 # anti-siege melee cav
-		if seenWalls >= 4 and myBuildings("siege_workshop").size() > 0:
+		if seenWalls >= 4 and _countBuildings("siege_workshop", true) > 0:
 			base.ram += 0.14
 			base.catapult += 0.12
 	else:
@@ -1635,7 +1814,7 @@ func baseComposition() -> Dictionary:
 		base.trebuchet = 0.05
 		base.horseman = 0.05
 		# The enemy is walling up — bring the wall-breakers.
-		if seenWalls >= 4 and myBuildings("siege_workshop").size() > 0:
+		if seenWalls >= 4 and _countBuildings("siege_workshop", true) > 0:
 			base.ram += 0.14
 			base.trebuchet += 0.1
 			base.catapult += 0.08
@@ -1761,21 +1940,21 @@ func scoutStep() -> void:
 
 ## Returns true if we are busy defending.
 func defendStep() -> bool:
-	var buildings := myBuildings("", false)
+	var hostile := _hostileMask()
+	var buildings := _Buckets.new(myBuildings("", false), 320.0)
 	var threatX := 0.0
 	var threatY := 0.0
 	var threats := 0
 	for e: Entity in world.entities:
-		if not e.alive or not isHostile(e.team) or e.kind != T.Kind.Unit:
+		if not e.alive or hostile[e.team] == 0 or e.kind != T.Kind.Unit:
 			continue
 		if e.type == "villager":
 			continue
-		for b: Entity in buildings:
-			if MathU.dist(e.x, e.y, b.x, b.y) < 320.0:
-				threatX += e.x
-				threatY += e.y
-				threats += 1
-				break
+		# (TS: any of our buildings within 320 — `buildings.some(...)`.)
+		if buildings.anyCloser(e.x, e.y):
+			threatX += e.x
+			threatY += e.y
+			threats += 1
 	if threats < 2:
 		return allyDefendStep()
 	threatX /= threats
@@ -1786,7 +1965,7 @@ func defendStep() -> bool:
 	# Villagers caught in the raid take cover and scatter.
 	var panicked: Array = []
 	for v: Entity in myUnits("villager"):
-		if v.abilityCooldown <= 0.0 and MathU.dist(v.x, v.y, threatX, threatY) < 360.0:
+		if v.abilityCooldown <= 0.0 and _closer(v.x, v.y, threatX, threatY, 360.0):
 			panicked.append(v.id)
 	if panicked.size() > 0:
 		world.useAbility(panicked)
@@ -1819,6 +1998,7 @@ func defendStep() -> bool:
 ## already mid-attack) so we don't abandon an assault we've already launched,
 ## and rate-limit so the relief column doesn't jitter in place.
 func allyDefendStep() -> bool:
+	var hostile := _hostileMask()
 	if not hasAlly():
 		return false
 	if gameTime - lastAllyHelpTime < 8.0:
@@ -1834,22 +2014,21 @@ func allyDefendStep() -> bool:
 		var p := world.player(t)
 		if p == null or p.defeated:
 			continue
-		var allyBuildings: Array = []
+		var allyList: Array = []
 		for e: Entity in world.entities:
 			if e.alive and e.team == t and e.kind == T.Kind.Building:
-				allyBuildings.append(e)
+				allyList.append(e)
+		var allyBuildings := _Buckets.new(allyList, 340.0)
 		var tx := 0.0
 		var ty := 0.0
 		var n := 0
 		for e: Entity in world.entities:
-			if not e.alive or not isHostile(e.team) or e.kind != T.Kind.Unit or e.type == "villager":
+			if not e.alive or hostile[e.team] == 0 or e.kind != T.Kind.Unit or e.type == "villager":
 				continue
-			for b: Entity in allyBuildings:
-				if MathU.dist(e.x, e.y, b.x, b.y) < 340.0:
-					tx += e.x
-					ty += e.y
-					n += 1
-					break
+			if allyBuildings.anyCloser(e.x, e.y):
+				tx += e.x
+				ty += e.y
+				n += 1
 		if n > bestThreats:
 			bestThreats = n
 			bestX = tx / n
@@ -1877,6 +2056,7 @@ func allyDefendStep() -> bool:
 ## to scout and commit rather than idling at the edge. Units already swinging
 ## are left on their target, so this presses the attack without thrashing.
 func pressAttack() -> void:
+	var hostile := _hostileMask()
 	var army := armyUnits()
 	if army.size() == 0:
 		return
@@ -1913,11 +2093,11 @@ func pressAttack() -> void:
 	var blocker: Entity = null
 	var blockD := 150.0
 	for e: Entity in world.entities:
-		if not e.alive or not isHostile(e.team) or e.kind != T.Kind.Building:
+		if not e.alive or hostile[e.team] == 0 or e.kind != T.Kind.Building:
 			continue
 		if world.fogAt(team, e.x, e.y) == 0:
 			continue
-		var d := MathU.dist(cx, cy, e.x, e.y)
+		var d := _distIfBelow(cx, cy, e.x, e.y, blockD)
 		if d < blockD:
 			blockD = d
 			blocker = e
@@ -1930,7 +2110,7 @@ func pressAttack() -> void:
 	var best: Entity = null
 	var bestScore := -INF
 	for e: Entity in world.entities:
-		if not e.alive or e.team == team or not isHostile(e.team):
+		if not e.alive or e.team == team or hostile[e.team] == 0:
 			continue
 		if e.kind != T.Kind.Unit and e.kind != T.Kind.Building:
 			continue
@@ -1961,6 +2141,7 @@ func pressAttack() -> void:
 ## target changes, so it's cheap to call every cycle. Returns true when it took
 ## over a fight (so the caller skips the generic base-press this cycle).
 func focusFireStep() -> bool:
+	var hostile := _hostileMask()
 	if not diff.focusFire:
 		return false
 	var army := armyUnits()
@@ -1977,9 +2158,9 @@ func focusFireStep() -> bool:
 	var best: Entity = null
 	var bestScore := -INF
 	for e: Entity in world.entities:
-		if not e.alive or e.kind != T.Kind.Unit or not isHostile(e.team) or e.type == "villager":
+		if not e.alive or e.kind != T.Kind.Unit or hostile[e.team] == 0 or e.type == "villager":
 			continue
-		var d := MathU.dist(cx, cy, e.x, e.y)
+		var d := _distIfBelow(cx, cy, e.x, e.y, 260.0)
 		if d > 260.0:
 			continue # only what we're actually fighting
 		if not world.visibleTo(team, e):
@@ -2006,6 +2187,7 @@ func focusFireStep() -> bool:
 
 
 func attackStep() -> void:
+	var hostile := _hostileMask()
 	var army := armyUnits()
 	var armyPop := 0.0
 	for u: Entity in army:
@@ -2081,7 +2263,7 @@ func attackStep() -> void:
 	if enemyBuildings.size() > 0 and base != null:
 		var bx := base.x
 		var by := base.y
-		JS.sort_by_cmp(enemyBuildings, func(a, b): return MathU.dist(a.x, a.y, bx, by) - MathU.dist(b.x, b.y, bx, by))
+		enemyBuildings = _sortByDist(enemyBuildings, bx, by)
 		tx = enemyBuildings[0].x
 		ty = enemyBuildings[0].y
 
@@ -2113,13 +2295,13 @@ func attackStep() -> void:
 	if siege.size() > 0:
 		var forts: Array = []
 		for e: Entity in world.entities:
-			if e.alive and e.kind == T.Kind.Building and isHostile(e.team) and \
+			if e.alive and e.kind == T.Kind.Building and hostile[e.team] == 1 and \
 					world.fogAt(team, e.x, e.y) != 0 and FORT_TYPES.has(e.type):
 				forts.append(e)
 		if forts.size() > 0:
 			var ttx := tx
 			var tty := ty
-			JS.sort_by_cmp(forts, func(a, b): return MathU.dist(a.x, a.y, ttx, tty) - MathU.dist(b.x, b.y, ttx, tty))
+			forts = _sortByDist(forts, ttx, tty)
 			world.issueAttack(_ids(siege), forts[0].id)
 			melee = []
 			for u: Entity in army:
@@ -2203,8 +2385,8 @@ func bridgeStep() -> void:
 		return
 	# Don't start a second one while the first is still going up — an AI that
 	# queues four bridges at a ford has spent four hundred wood on one crossing.
-	for e: Entity in world.entities:
-		if e.alive and e.team == team and e.type == "bridge" and e.buildState != T.BuildState.Done:
+	for e: Entity in _ownOf("bridge"):
+		if e.alive and e.buildState != T.BuildState.Done:
 			return
 
 	var target: Dictionary = world.map.starts[focusEnemy()]
@@ -2238,6 +2420,7 @@ func _idleOf(t: String) -> Array:
 
 ## Raid: send fast units to butcher the enemy's villagers / eco.
 func harassStep() -> void:
+	var hostile := _hostileMask()
 	if not diff.harasses and style != "rush":
 		return
 	var cool := 55.0 if style == "rush" else 85.0
@@ -2261,28 +2444,28 @@ func harassStep() -> void:
 	if readsGround:
 		var spans: Array = []
 		for e: Entity in world.entities:
-			if e.alive and e.kind == T.Kind.Building and e.type == "bridge" and isHostile(e.team) and \
+			if e.alive and e.kind == T.Kind.Building and e.type == "bridge" and hostile[e.team] == 1 and \
 					world.fogAt(team, e.x, e.y) != 0:
 				spans.append(e)
 		var home := base()
 		if spans.size() > 0 and home != null:
 			var hx := home.x
 			var hy := home.y
-			JS.sort_by_cmp(spans, func(a, b): return MathU.dist(a.x, a.y, hx, hy) - MathU.dist(b.x, b.y, hx, hy))
+			spans = _sortByDist(spans, hx, hy)
 			world.issueAttack(ids, spans[0].id)
 			say("burn their bridge.", spans[0].x, spans[0].y, 20.0)
 			return
 	# Prefer a visible enemy villager; otherwise sweep their base eco.
 	var vills: Array = []
 	for e: Entity in world.entities:
-		if e.alive and e.kind == T.Kind.Unit and isHostile(e.team) and e.type == "villager" and \
+		if e.alive and e.kind == T.Kind.Unit and hostile[e.team] == 1 and e.type == "villager" and \
 				world.visibleTo(team, e):
 			vills.append(e)
 	var base := base()
 	if vills.size() > 0 and base != null:
 		var bx := base.x
 		var by := base.y
-		JS.sort_by_cmp(vills, func(a, b): return MathU.dist(a.x, a.y, bx, by) - MathU.dist(b.x, b.y, bx, by))
+		vills = _sortByDist(vills, bx, by)
 		world.issueAttack(ids, vills[0].id)
 		return
 	var start: Dictionary = world.map.starts[enemyTeam()]
