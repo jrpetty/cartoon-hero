@@ -36,8 +36,15 @@ func behindSeconds(simHz: float) -> float:
 
 ## Build the lockstep driver over a freshly-inited world and wire the wire.
 func attach(world, inputDelay: int = 5) -> void:
-	lock = Lockstep.new(world, localTeam, teams, inputDelay, func(turn): transport.send({"t": "turn", "turn": turn}))
+	# A method, not a lambda: a lambda would hold this session from its own
+	# Lockstep (session → lock → lambda → session), a cycle reference
+	# counting never frees — a whole World leaked per online match.
+	lock = Lockstep.new(world, localTeam, teams, inputDelay, _send_turn)
 	transport.onData = _on_data
+
+
+func _send_turn(turn) -> void:
+	transport.send({"t": "turn", "turn": turn})
 
 
 func _on_data(m) -> void:
