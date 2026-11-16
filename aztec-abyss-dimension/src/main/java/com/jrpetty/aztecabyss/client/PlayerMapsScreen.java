@@ -197,6 +197,17 @@ public final class PlayerMapsScreen extends AbyssScreen {
 
         int by = y + 26;
         g.drawString(this.font, "by " + field(m, 4), x + 12, by, UiKit.TEXT_FAINT, true);
+        // The furthest anybody has got: a shelf of maps is also a shelf of
+        // challenges, and "round 12, by somebody you know" is the pitch no
+        // author can write.
+        String record = field(m, 7);
+        int slash = record.indexOf('/');
+        String recordText = slash > 0
+                ? "record: round " + record.substring(0, slash) + " · " + record.substring(slash + 1)
+                : "no record yet - be the first";
+        recordText = this.font.plainSubstrByWidth(recordText, w / 2);
+        g.drawString(this.font, recordText, x + w - 10 - this.font.width(recordText), by,
+                slash > 0 ? UiKit.GOLD : UiKit.TEXT_MUTED, true);
         by += 12;
         if (!field(m, 3).isEmpty()) {
             for (FormattedCharSequence line : this.font.split(Component.literal(field(m, 3)), w - 20)) {

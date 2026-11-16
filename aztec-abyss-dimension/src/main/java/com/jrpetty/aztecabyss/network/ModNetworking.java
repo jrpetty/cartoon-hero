@@ -215,6 +215,24 @@ public final class ModNetworking {
                 }));
     }
 
+    /**
+     * A player map's record for its card, as {@code "round|name"}, or empty when
+     * nobody has played it yet. Solo and group boards both count: the record
+     * is the furthest anybody has got, however many came along.
+     */
+    private static String mapRecord(net.minecraft.server.MinecraftServer server, String key) {
+        var board = com.jrpetty.aztecabyss.data.Leaderboards.get(server);
+        com.jrpetty.aztecabyss.data.Leaderboards.Row best = null;
+        for (boolean group : new boolean[]{false, true}) {
+            for (var row : board.top(key, group, 1)) {
+                if (best == null || row.score() > best.score()) {
+                    best = row;
+                }
+            }
+        }
+        return best == null ? "" : best.score() + "/" + best.name().replace('|', '/');
+    }
+
     /** The trade board: one post, described in full, for the sign-up screen. */
     public static void sendTradeBoard(ServerPlayer player, String job) {
         if (player.getServer() == null) {
@@ -404,7 +422,8 @@ public final class ModNetworking {
                 // pitch, resolved here because the client cannot look them up.
                 var rules = com.jrpetty.aztecabyss.engine.RulesetLoader.byId(e.ruleset());
                 custom.add(e.name() + "|" + e.title() + "|" + e.difficulty() + "|" + e.blurb()
-                        + "|" + e.author() + "|" + rules.displayTitle() + "|" + rules.blurb);
+                        + "|" + e.author() + "|" + rules.displayTitle() + "|" + rules.blurb
+                        + "|" + mapRecord(player.getServer(), "custom:" + e.name()));
             }
         }
         PacketDistributor.sendToPlayer(player, new OpenMapPickerPayload(

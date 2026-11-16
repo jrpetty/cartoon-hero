@@ -33,6 +33,9 @@ behaviour that was already there · **docs**
   points you finished on and your personal best on that map. Stopping a
   play-test by hand gets none. The recap arrives after the trip home, so the
   loading screen can no longer swallow it.
+- **feat** **Every card in Player Maps shows the map's record**: the furthest
+  round anybody has reached on it and who, solo or in a group, or "no record
+  yet - be the first".
 
 ### The Map Creator, without a single command
 
