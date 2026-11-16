@@ -305,7 +305,7 @@ public final class AbyssClientEffects {
         int h = event.getGuiGraphics().guiHeight();
 
         // Live run HUD (toggle with the keybind, default H).
-        if (ClientAbyssState.isInRun() && ClientAbyssState.isHudVisible()) {
+        if (ClientAbyssState.isInRun() && ClientAbyssState.isHudVisible() && !EngineHud.showing()) {
             int under = drawHud(event.getGuiGraphics(), mc);
             drawSquad(event.getGuiGraphics(), mc, under);
         }

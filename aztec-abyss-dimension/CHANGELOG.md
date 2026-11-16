@@ -13,6 +13,27 @@ behaviour that was already there · **docs**
 
 ## Unreleased
 
+### Player maps play like the built-in arenas
+
+- **feat** **A run panel for player maps and play-tests.** A map played on the
+  engine showed nothing but a boss bar, and on a map with a points economy -
+  most of them - that meant a whole run without ever seeing your points: your
+  balance only appeared while you looked at a shop sign. The same dark plate
+  the Temple and the Bridge use now sits in the top left: the map's name, the
+  round (and the last round, on a finite ruleset), how much of the wave is
+  left with a bar, the countdown between rounds, your points in the map's own
+  currency, your kills, the squad, and the objective. Lobby, countdown and
+  script-driven maps get their own wording. The H key hides it like the arena
+  panel, and it takes itself down if the server stops sending it.
+- **feat** **A recap at the end of a player map's run.** It ended on "The run
+  is over." in chat. A run that comes to something - everybody down, the last
+  round cleared, banked at an extraction, a script calling it won or lost -
+  now gets the same end-of-run screen as the arenas, with the map's name, the
+  round reached (or the time lasted, on a map with no rounds), kills, the
+  points you finished on and your personal best on that map. Stopping a
+  play-test by hand gets none. The recap arrives after the trip home, so the
+  loading screen can no longer swallow it.
+
 ### The Map Creator, without a single command
 
 Every authoring tool was an `/arena` command, and every one of them is

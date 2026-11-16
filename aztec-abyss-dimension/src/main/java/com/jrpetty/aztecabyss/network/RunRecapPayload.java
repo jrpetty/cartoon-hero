@@ -15,7 +15,12 @@ import net.minecraft.resources.ResourceLocation;
  * payload stays within {@link StreamCodec#composite}'s 6-field limit.)
  */
 public record RunRecapPayload(int round, int kills, int headshots, int survivalSeconds,
-                              int packed, int flags) implements CustomPacketPayload {
+                              int packed, int flags, String place, int score) implements CustomPacketPayload {
+
+    /** A recap from one of the built-in arenas, which are named by ordinal in {@code flags}. */
+    public RunRecapPayload(int round, int kills, int headshots, int survivalSeconds, int packed, int flags) {
+        this(round, kills, headshots, survivalSeconds, packed, flags, "", -1);
+    }
 
     private static final int FLAG_VICTORY = 1;
     private static final int FLAG_MULTIPLAYER = 2;
@@ -28,15 +33,36 @@ public record RunRecapPayload(int round, int kills, int headshots, int survivalS
     public static final Type<RunRecapPayload> TYPE =
             new Type<>(ResourceLocation.fromNamespaceAndPath(AztecAbyssConstants.MOD_ID, "run_recap"));
 
-    public static final StreamCodec<RegistryFriendlyByteBuf, RunRecapPayload> STREAM_CODEC =
-            StreamCodec.composite(
-                    ByteBufCodecs.VAR_INT, RunRecapPayload::round,
-                    ByteBufCodecs.VAR_INT, RunRecapPayload::kills,
-                    ByteBufCodecs.VAR_INT, RunRecapPayload::headshots,
-                    ByteBufCodecs.VAR_INT, RunRecapPayload::survivalSeconds,
-                    ByteBufCodecs.VAR_INT, RunRecapPayload::packed,
-                    ByteBufCodecs.VAR_INT, RunRecapPayload::flags,
-                    RunRecapPayload::new);
+    /**
+     * Written by hand: eight fields is past what {@code StreamCodec.composite}
+     * takes. {@code place} names a player's map (empty for a built-in arena)
+     * and {@code score} is the points a map's economy left you with, or -1.
+     */
+    public static final StreamCodec<RegistryFriendlyByteBuf, RunRecapPayload> STREAM_CODEC = StreamCodec.of(
+            (buf, p) -> {
+                ByteBufCodecs.VAR_INT.encode(buf, p.round());
+                ByteBufCodecs.VAR_INT.encode(buf, p.kills());
+                ByteBufCodecs.VAR_INT.encode(buf, p.headshots());
+                ByteBufCodecs.VAR_INT.encode(buf, p.survivalSeconds());
+                ByteBufCodecs.VAR_INT.encode(buf, p.packed());
+                ByteBufCodecs.VAR_INT.encode(buf, p.flags());
+                ByteBufCodecs.STRING_UTF8.encode(buf, p.place());
+                ByteBufCodecs.VAR_INT.encode(buf, p.score());
+            },
+            buf -> new RunRecapPayload(
+                    ByteBufCodecs.VAR_INT.decode(buf),
+                    ByteBufCodecs.VAR_INT.decode(buf),
+                    ByteBufCodecs.VAR_INT.decode(buf),
+                    ByteBufCodecs.VAR_INT.decode(buf),
+                    ByteBufCodecs.VAR_INT.decode(buf),
+                    ByteBufCodecs.VAR_INT.decode(buf),
+                    ByteBufCodecs.STRING_UTF8.decode(buf),
+                    ByteBufCodecs.VAR_INT.decode(buf)));
+
+    /** True for a run on a player's map rather than a built-in arena. */
+    public boolean playerMap() {
+        return !place.isEmpty();
+    }
 
     /**
      * The four outcome bits, plus the arena the run was on in bits 8-15 -

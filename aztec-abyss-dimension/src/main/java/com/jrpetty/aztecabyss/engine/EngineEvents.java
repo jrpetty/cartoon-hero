@@ -1393,6 +1393,9 @@ public final class EngineEvents {
             return 0;
         }
         player.setGameMode(net.minecraft.world.level.GameType.SURVIVAL);
+        if (EngineArena.active() != null) {
+            EngineArena.active().setTitle("Play-test");
+        }
         source.sendSuccess(() -> Component.literal(
                 "§a✔ Testing on §f" + RulesetLoader.byId(rulesetId).displayTitle()
                         + "§a. §7Right-click the air with the Map Wand — §fStop the test§7 is on the console."), true);

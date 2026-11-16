@@ -35,9 +35,16 @@ public final class RunRecapScreen extends AbyssScreen {
     private int ticks;
 
     public RunRecapScreen(RunRecapPayload data) {
-        super(Component.literal(data.victory() ? "The Abyss is Silent"
-                : data.extracted() ? "You Escaped" : "You Fell"));
+        super(Component.literal(headline(data)));
         this.data = data;
+    }
+
+    /** What the run came to, in the screen's big letters. */
+    private static String headline(RunRecapPayload data) {
+        if (data.victory()) {
+            return data.playerMap() ? "MAP CLEARED" : "THE ABYSS IS SILENT";
+        }
+        return data.extracted() ? "YOU ESCAPED" : "YOU FELL";
     }
 
     private int accent() {
@@ -59,7 +66,11 @@ public final class RunRecapScreen extends AbyssScreen {
 
     private Component leaveLabel() {
         int secondsLeft = Math.max(0, (MAX_TICKS - ticks) / 20);
-        return Component.literal("Return to the Overworld  (" + secondsLeft + "s)");
+        // A player's map sends you home itself, or leaves you in the Workshop
+        // you were testing in; "return to the overworld" would be a promise
+        // this button does not keep.
+        return Component.literal((data.playerMap() ? "Continue" : "Return to the Overworld")
+                + "  (" + secondsLeft + "s)");
     }
 
     @Override
@@ -79,11 +90,13 @@ public final class RunRecapScreen extends AbyssScreen {
         int cx = this.width / 2;
         int accent = accent();
 
-        String where = data.mapOrdinal() >= 0
+        String where = data.playerMap() ? UiKit.strip(data.place()).toUpperCase(Locale.ROOT)
+                : data.mapOrdinal() >= 0
                 ? ArenaMap.byId(data.mapOrdinal()).title().toUpperCase(Locale.ROOT)
                 : "THE AZTEC ABYSS";
-        String eyebrow = where + " · " + (data.multiplayer() ? "CO-OP RUN" : "SOLO RUN");
-        String title = data.victory() ? "THE ABYSS IS SILENT" : data.extracted() ? "YOU ESCAPED" : "YOU FELL";
+        String eyebrow = this.font.plainSubstrByWidth(where, Math.max(80, this.width - 140))
+                + " · " + (data.multiplayer() ? "CO-OP RUN" : "SOLO RUN");
+        String title = headline(data);
         // The sheet is about 150 high; centred in the room above the button
         // rather than pinned to the top of a tall window.
         int y = UiKit.masthead(g, this.font, eyebrow, title, cx,
@@ -92,13 +105,19 @@ public final class RunRecapScreen extends AbyssScreen {
 
         // The headline: the round, big, because it is the number the run is.
         y += 12;
-        g.drawCenteredString(this.font, data.extracted() ? "EXTRACTED AT ROUND" : "REACHED ROUND",
+        // A map with no rounds - a script-driven one - is scored by time.
+        boolean timed = data.playerMap() && data.round() <= 0;
+        g.drawCenteredString(this.font, timed ? "LASTED"
+                        : data.extracted() ? "EXTRACTED AT ROUND" : "REACHED ROUND",
                 cx, y, UiKit.TEXT_FAINT);
-        UiKit.big(g, this.font, Component.literal(String.valueOf(data.round())), cx, y + 11, 3.0f, accent);
+        UiKit.big(g, this.font, Component.literal(timed ? fmtTime(data.survivalSeconds())
+                : String.valueOf(data.round())), cx, y + 11, 3.0f, accent);
         y += 40;
 
         boolean best = data.round() > data.previousBest();
-        if (best) {
+        if (timed) {
+            g.drawCenteredString(this.font, "Records on this map are kept by round.", cx, y, UiKit.TEXT_DIM);
+        } else if (best) {
             g.drawCenteredString(this.font,
                     Component.literal("★ NEW PERSONAL BEST ★").withStyle(s -> s.withBold(true)),
                     cx, y, UiKit.GREEN);
@@ -112,6 +131,17 @@ public final class RunRecapScreen extends AbyssScreen {
         List<Stat> stats = new ArrayList<>();
         stats.add(new Stat("Survived", fmtTime(data.survivalSeconds()), UiKit.TEXT));
         stats.add(new Stat("Kills", String.valueOf(data.kills()), UiKit.GREEN));
+        if (data.playerMap()) {
+            // A player's map has none of the Abyss's own ledgers - no
+            // headshot count, no lifetime deaths, no ritual - so the sheet
+            // carries what it does have instead of a column of zeroes.
+            if (data.score() >= 0) {
+                stats.add(new Stat("Points left", String.valueOf(data.score()), UiKit.GOLD));
+            }
+            stats.add(new Stat("Squad", data.multiplayer() ? "co-op" : "solo", UiKit.TEXT_DIM));
+            renderSheet(g, stats, cx, y, accent);
+            return;
+        }
         stats.add(new Stat("Headshots", String.valueOf(data.headshots()), UiKit.GOLD));
         if (data.multiplayer()) {
             stats.add(new Stat("Revives", String.valueOf(data.revives()), UiKit.BLUE));
@@ -119,7 +149,11 @@ public final class RunRecapScreen extends AbyssScreen {
         stats.add(new Stat("Lifetime deaths", String.valueOf(data.deaths()), 0xFFE08A8A));
         stats.add(new Stat("Hidden ritual", data.ritualComplete() ? "SOLVED" : "unsolved",
                 data.ritualComplete() ? UiKit.PURPLE : UiKit.TEXT_FAINT));
+        renderSheet(g, stats, cx, y, accent);
+    }
 
+    /** The stats as a two-column sheet under the headline. */
+    private void renderSheet(GuiGraphics g, List<Stat> stats, int cx, int y, int accent) {
         int panelW = Math.min(300, this.width - 32);
         int colW = (panelW - 30) / 2;
         int rows = (stats.size() + 1) / 2;

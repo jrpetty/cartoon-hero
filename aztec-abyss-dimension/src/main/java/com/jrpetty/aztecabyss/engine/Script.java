@@ -1186,6 +1186,7 @@ public final class Script {
                             : net.minecraft.sounds.SoundEvents.WARDEN_DEATH,
                     net.minecraft.sounds.SoundSource.PLAYERS, 1.0F, won ? 1.3F : 0.6F);
         }
+        EngineArena.markOutcome(won ? EngineArena.OUTCOME_WON : EngineArena.OUTCOME_FELL);
         EngineArena.stop(false);
     }
 

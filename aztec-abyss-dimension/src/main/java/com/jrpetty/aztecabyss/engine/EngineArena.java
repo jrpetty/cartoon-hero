@@ -338,6 +338,135 @@ public final class EngineArena {
         return (float) Math.toDegrees(Math.atan2(dz, dx)) - 90.0F;
     }
 
+    /**
+     * The end-of-run sheet, for a run that came to something: everybody down,
+     * the last round cleared, banked at an extraction, or the script calling
+     * it. A run stopped by hand - "Stop the test", leaving the Workshop - gets
+     * none; nobody wants a scoreboard for pressing a button.
+     *
+     * <p>The bests are read before the result is filed, so "personal best" is
+     * the best from before this run and a new record can be called one.
+     */
+    private void sendRecaps() {
+        if (outcome == OUTCOME_ENDED || level.getServer() == null) {
+            return;
+        }
+        boolean group = participants.size() > 1;
+        int seconds = (int) ((level.getGameTime() - startedTick) / 20L);
+        for (ServerPlayer p : players()) {
+            boolean won = outcome == OUTCOME_WON && (winner == null || winner.equals(p.getUUID()));
+            int score = rules.economyEnabled ? Currency.byId(rules.defaultCurrency).balance(p) : -1;
+            int best = Math.min(1023, bestsBefore.getOrDefault(p.getUUID(), 0));
+            net.neoforged.neoforge.network.PacketDistributor.sendToPlayer(p,
+                    new com.jrpetty.aztecabyss.network.RunRecapPayload(Math.max(0, round),
+                            kills.getOrDefault(p.getUUID(), 0), 0, seconds,
+                            com.jrpetty.aztecabyss.network.RunRecapPayload.pack(best, 0, 0),
+                            com.jrpetty.aztecabyss.network.RunRecapPayload.packFlags(
+                                    won, group, outcome == OUTCOME_EXTRACTED, false, -1),
+                            title, score));
+        }
+    }
+
+    /** Each player's best on this map from before this run, read before it is filed. */
+    private final java.util.Map<UUID, Integer> bestsBefore = new java.util.HashMap<>();
+
+    private void captureBests() {
+        if (level.getServer() == null) {
+            return;
+        }
+        String key = mapKey == null || mapKey.isBlank() ? "engine:" + rules.id : mapKey;
+        var board = com.jrpetty.aztecabyss.data.Leaderboards.get(level.getServer());
+        boolean group = participants.size() > 1;
+        for (UUID id : participants) {
+            bestsBefore.put(id, board.bestOf(key, group, id));
+        }
+    }
+
+    /** Names the map on the run panel. */
+    public void setTitle(String title) {
+        if (title != null && !title.isBlank()) {
+            this.title = title;
+        }
+    }
+
+    private static final int HUD_GOLD = 0xFFFFC94A;
+    private static final int HUD_AMBER = 0xFFE0A040;
+    private static final int HUD_RED = 0xFFE5534B;
+    private static final int HUD_GREEN = 0xFF5FD38A;
+    private static final int HUD_CYAN = 0xFF4FD4E4;
+
+    /**
+     * Sends everybody in the run their panel: the map, where the run is, and
+     * the figures that are theirs - points, kills - which is why it is built
+     * per player rather than broadcast.
+     */
+    private void sendHud(List<ServerPlayer> present) {
+        String headline;
+        String right = "";
+        int progress = -1;
+        int accent;
+        if (PHASE_LOBBY.equals(phase)) {
+            headline = "WAITING";
+            right = present.size() + " here";
+            accent = HUD_CYAN;
+        } else if (PHASE_COUNTDOWN.equals(phase)) {
+            headline = "GET READY";
+            accent = HUD_CYAN;
+        } else if (rules.free) {
+            headline = barText.isEmpty() ? "IN PLAY" : barText.replaceAll("\u00a7.", "");
+            right = MazeStyleTime.of(elapsed / 20);
+            accent = HUD_GOLD;
+        } else if (breather > 0) {
+            headline = round <= 0 ? "GET READY" : "ROUND " + round + " CLEAR";
+            right = "next in " + Math.max(1, breather / 20) + "s";
+            progress = 1000 - Math.min(1000, breather * 1000 / Math.max(1, breatherFor(round)));
+            accent = HUD_GREEN;
+        } else {
+            boolean finite = !rules.endless && rules.finalRound > 0;
+            headline = "ROUND " + round + (finite ? " / " + rules.finalRound : "");
+            int left = alive.size() + leftToSpawn;
+            right = left > 0 ? left + " left" : "clear";
+            int total = Math.max(1, countFor(round));
+            progress = Math.max(0, Math.min(1000, 1000 - left * 1000 / total));
+            accent = round >= 15 ? HUD_RED : round >= 8 ? HUD_AMBER : HUD_GOLD;
+        }
+
+        int up = 0;
+        for (ServerPlayer p : present) {
+            if (!fallen.contains(p.getUUID())) {
+                up++;
+            }
+        }
+        String objectiveLine = objective == null ? "" : objective.hud().replaceFirst("^ \u00a78\\| ", "");
+        for (ServerPlayer p : players()) {
+            List<String> lines = new ArrayList<>();
+            if (fallen.contains(p.getUUID())) {
+                lines.add("\u00a7cYou are down \u00a77- watching the rest");
+            }
+            if (rules.economyEnabled) {
+                Currency c = Currency.byId(rules.defaultCurrency);
+                lines.add(c.format(c.balance(p)) + " \u00a77" + c.name());
+            }
+            int k = kills.getOrDefault(p.getUUID(), 0);
+            if (PHASE_ACTIVE.equals(phase) && !rules.free) {
+                lines.add("\u00a7b\u2726 " + k + (k == 1 ? " kill" : " kills"));
+            }
+            if (participants.size() > 1) {
+                lines.add((up < participants.size() ? "\u00a76" : "\u00a77") + "squad " + up + "/"
+                        + participants.size() + " up");
+            }
+            if (!objectiveLine.isEmpty()) {
+                lines.add(objectiveLine);
+            }
+            if (!barText.isEmpty() && !rules.free) {
+                lines.add(barText);
+            }
+            net.neoforged.neoforge.network.PacketDistributor.sendToPlayer(p,
+                    new com.jrpetty.aztecabyss.network.EngineHudPayload(title, headline, right, progress,
+                            accent, lines));
+        }
+    }
+
     public Teams teams() {
         if (teams == null) {
             teams = new Teams(level);
@@ -413,6 +542,26 @@ public final class EngineArena {
      * wherever the world put them, with the round continuing around them.
      */
     private final java.util.Set<UUID> fallen = new java.util.HashSet<>();
+    /** Kills per player this run, for the run panel. */
+    private final java.util.Map<UUID, Integer> kills = new java.util.HashMap<>();
+    /** What the run panel calls this map: its title on the portal, or "Play-test". */
+    private String title;
+
+    /** How a run ended, for the recap. Ended by hand gets no recap at all. */
+    public static final int OUTCOME_ENDED = 0;
+    public static final int OUTCOME_FELL = 1;
+    public static final int OUTCOME_WON = 2;
+    public static final int OUTCOME_EXTRACTED = 3;
+    private int outcome = OUTCOME_ENDED;
+    /** The last one standing, when a free-for-all ended that way; null otherwise. */
+    private UUID winner;
+
+    /** Says how the run is about to end, for the recap. Called just before {@link #stop}. */
+    public static void markOutcome(int how) {
+        if (current != null) {
+            current.outcome = how;
+        }
+    }
 
     /**
      * Which player object currently holds the bar, per participant.
@@ -475,6 +624,7 @@ public final class EngineArena {
         this.spawn = spawn;
         this.hordes = hordes;
         this.bounds = bounds;
+        this.title = mapName;
         this.bar = new ServerBossEvent(Component.literal(mapName),
                 BossEvent.BossBarColor.RED, BossEvent.BossBarOverlay.PROGRESS);
         this.director = new Director(rules);
@@ -671,6 +821,8 @@ public final class EngineArena {
         if (current == null) {
             return;
         }
+        EngineArena ending = current;
+        ending.captureBests();
         if (announce) {
             for (ServerPlayer p : current.players()) {
                 p.displayClientMessage(Component.literal("§7The run is over."), false);
@@ -709,6 +861,10 @@ public final class EngineArena {
             }
         }
         current.bar.removeAllPlayers();
+        for (ServerPlayer p : current.players()) {
+            net.neoforged.neoforge.network.PacketDistributor.sendToPlayer(p,
+                    com.jrpetty.aztecabyss.network.EngineHudPayload.cleared());
+        }
         // A published map is somewhere the portal sent you, so the end of the
         // run sends you back. It used to leave everybody standing in the Abyss
         // at the map's slot, two thousand blocks from anything, with no way
@@ -725,6 +881,10 @@ public final class EngineArena {
                 com.jrpetty.aztecabyss.round.RoundManager.returnHome(p);
             }
         }
+        // Last, after the trip home: the client puts up its loading screen on
+        // a change of dimension, and that would have replaced a recap sent
+        // before it. Packets arrive in order, so this one lands on top.
+        ending.sendRecaps();
     }
 
     /**
@@ -871,6 +1031,9 @@ public final class EngineArena {
             stop(false);
             return;
         }
+        if (level.getGameTime() % 10L == 0L) {
+            sendHud(present);
+        }
         // Anyone who has died is out, and stays out - respawning does not put you
         // back in a run you already lost.
         for (ServerPlayer p : present) {
@@ -901,6 +1064,7 @@ public final class EngineArena {
                         ? "§c§lDOWN. §r§7You lasted §f" + MazeStyleTime.of(elapsed / 20) + "§7."
                         : "§c§lDOWN. §r§7You reached round §f" + round + "§7."), false);
             }
+            outcome = OUTCOME_FELL;
             stop(false);
             return;
         }
@@ -1156,6 +1320,7 @@ public final class EngineArena {
                     "§6§lOUT. §r§7Banked on round §f" + reached + "§7."), false);
         }
         Script.fire(this, level, rules.id, "extracted", null);
+        outcome = OUTCOME_EXTRACTED;
         stop(false);
     }
 
@@ -1246,6 +1411,7 @@ public final class EngineArena {
                 p.displayClientMessage(Component.literal(
                         "§6§lCLEARED. §r§7Round §f" + round + "§7 was the last."), false);
             }
+            outcome = OUTCOME_WON;
             stop(false);
             return;
         }
@@ -2253,6 +2419,8 @@ public final class EngineArena {
                             java.util.Locale.ROOT) + " WINS")));
         }
         Script.fire(this, level, rules.id, "run_won", winner);
+        outcome = OUTCOME_WON;
+        this.winner = winner.getUUID();
         stop(false);
     }
 
@@ -2331,6 +2499,7 @@ public final class EngineArena {
             }
             Script.fire(this, level, rules.id, "objective_failed", null);
             if (objective.failEndsRun()) {
+                outcome = OUTCOME_FELL;
                 stop(false);
             }
         }
@@ -3103,6 +3272,7 @@ public final class EngineArena {
                 || !mob.getPersistentData().getBoolean("aztecabyss_engine_mob")) {
             return;
         }
+        a.kills.merge(killer.getUUID(), 1, Integer::sum);
         if (a.rules.economyEnabled) {
             int paid = a.rules.pointsKill;
             if (EnginePowerUps.doublePoints(a.level)) {

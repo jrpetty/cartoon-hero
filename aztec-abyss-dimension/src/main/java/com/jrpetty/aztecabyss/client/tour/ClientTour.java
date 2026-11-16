@@ -474,9 +474,14 @@ public final class ClientTour {
                 .until(() -> inDimension(AztecAbyssConstants.ABYSS_LEVEL_KEY)
                         && com.jrpetty.aztecabyss.engine.EngineArena.isRunning(), 1200)
                 .hold(100).shot("58_published_run");
-        step("published-home [tour ends the run]").act(mc -> server("end-run",
-                        sp -> com.jrpetty.aztecabyss.engine.EngineArena.stop(true)))
-                .until(() -> inDimension(Level.OVERWORLD), 600).hold(40);
+        step("published-home [tour banks the run]").act(mc -> server("end-run", sp -> {
+                    com.jrpetty.aztecabyss.engine.EngineArena.markOutcome(
+                            com.jrpetty.aztecabyss.engine.EngineArena.OUTCOME_EXTRACTED);
+                    com.jrpetty.aztecabyss.engine.EngineArena.stop(false);
+                }))
+                .until(() -> inDimension(Level.OVERWORLD) && screenIs("RunRecapScreen"), 600)
+                .hold(40).shot("59_published_recap");
+        step("published-recap-close").act(mc -> mc.setScreen(null)).hold(20);
 
         // ---- The same screens at GUI scale 4: what "Auto" gives a 1080p screen --------
         step("scale-4").act(mc -> {

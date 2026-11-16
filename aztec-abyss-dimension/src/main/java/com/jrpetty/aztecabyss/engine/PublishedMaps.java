@@ -347,6 +347,7 @@ public final class PublishedMaps {
         if (error == null && EngineArena.active() != null) {
             // Records file under the map, not under the ruleset it happens to use.
             EngineArena.active().setMapKey("custom:" + entry.name());
+            EngineArena.active().setTitle(entry.title());
         }
         if (error != null) {
             player.displayClientMessage(net.minecraft.network.chat.Component.literal(

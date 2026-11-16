@@ -182,6 +182,11 @@ public final class ModNetworking {
                     }
                 }));
         registrar.playToClient(
+                EngineHudPayload.TYPE,
+                EngineHudPayload.STREAM_CODEC,
+                (payload, context) -> context.enqueueWork(
+                        () -> com.jrpetty.aztecabyss.client.EngineHud.accept(payload)));
+        registrar.playToClient(
                 MazeStatePayload.TYPE,
                 MazeStatePayload.STREAM_CODEC,
                 (payload, context) -> context.enqueueWork(

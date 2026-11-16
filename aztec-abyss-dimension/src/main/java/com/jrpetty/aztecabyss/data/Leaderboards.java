@@ -141,6 +141,16 @@ public final class Leaderboards extends SavedData {
         return rows.subList(0, Math.min(limit, rows.size()));
     }
 
+    /** This player's best score on the board, or 0 if they are not on it. */
+    public int bestOf(String mapKey, boolean isGroup, UUID player) {
+        for (Row r : (isGroup ? group : solo).getOrDefault(mapKey.toLowerCase(Locale.ROOT), List.of())) {
+            if (r.player().equals(player)) {
+                return r.score();
+            }
+        }
+        return 0;
+    }
+
     /** Where this player stands, 1-based, or 0 if they are not on it. */
     public int placeOf(String mapKey, boolean isGroup, UUID player) {
         List<Row> rows = (isGroup ? group : solo)
