@@ -449,7 +449,7 @@ public final class EngineArena {
             }
             int k = kills.getOrDefault(p.getUUID(), 0);
             if (PHASE_ACTIVE.equals(phase) && !rules.free) {
-                lines.add("\u00a7b\u2726 " + k + (k == 1 ? " kill" : " kills"));
+                lines.add("\u00a7b\u2694 " + k + (k == 1 ? " kill" : " kills"));
             }
             if (participants.size() > 1) {
                 lines.add((up < participants.size() ? "\u00a76" : "\u00a77") + "squad " + up + "/"
